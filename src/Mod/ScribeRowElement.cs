@@ -113,28 +113,39 @@ public sealed class ScribeRowElement : GuiElement
     public static double RowHeightFixed(ICoreClientAPI capi, ScribeBlock block, double rowWidthFixed, CairoFont font, ScribeClientConfig config)
     {
         var layout = RowTextLayout.For(rowWidthFixed, block.IsTask, font, config);
-        double scaledTextHeight = capi.Gui.Text.GetMultilineTextHeight(font, block.Text, scaled(layout.TextWidth));
+        double scaledTextHeight = MeasureWrappedTextHeightScaled(capi, block.Text, font, scaled(layout.TextWidth));
         double textHeightFixed = scaledTextHeight / RuntimeEnv.GUIScale;
 
         double minHeight = ScribeBlockRowCell.RowHeight(block, config);
         double contentHeight = TopPadFixed(config) + textHeightFixed + BottomOverheadFixed(config);
-
-#if DEBUG
-        // TEMP DIAGNOSTIC (task 4.6): capture the real numbers behind the Shift+Enter row-sizing bug,
-        // since two rounds of static-reasoning fixes each moved the symptom. Logs only when the text
-        // contains a newline (so ordinary rows don't spam). Remove once the correct fix lands.
-        if (block.Text.Contains('\n'))
-        {
-            capi.Logger.Notification(
-                "[scribe 4.6] text={0} | multilineH(scaled)={1:0.0} lineH(scaled)={2:0.0} => lines≈{3:0.00} | textHfixed={4:0.0} minH={5:0.0} contentH={6:0.0} rowH={7:0.0}",
-                System.Text.Json.JsonSerializer.Serialize(block.Text),
-                scaledTextHeight, capi.Gui.Text.GetLineHeight(font),
-                scaledTextHeight / System.Math.Max(1.0, capi.Gui.Text.GetLineHeight(font)),
-                textHeightFixed, minHeight, contentHeight, System.Math.Max(minHeight, contentHeight));
-        }
-#endif
-
         return System.Math.Max(minHeight, contentHeight);
+    }
+
+    /// <summary>
+    /// Scaled pixel height of <paramref name="text"/> wrapped to <paramref name="scaledWidth"/>,
+    /// measured PER newline-delimited segment so that trailing/blank lines are counted.
+    ///
+    /// The engine's <c>GetMultilineTextHeight</c> drops a trailing newline's empty line from its
+    /// count (decompile + in-game measurement 2026-07-22: <c>"a\n"</c> measured the same height as
+    /// <c>"a"</c>). That made a row not grow the instant Shift+Enter added an empty last line, and
+    /// left the caret on that empty line rendering below the input box (task 4.6). Splitting on
+    /// <c>'\n'</c> and summing <c>max(1, wrappedLineCount(segment))</c> counts every visual line --
+    /// including an empty trailing segment (which measures 0 lines, floored to 1) -- while still
+    /// wrapping long segments correctly. Verified against the in-game log: multi-segment texts with
+    /// no trailing newline sum to the same count the engine reported (e.g. 4 lines for
+    /// <c>"New task\nsdf\ndsd\ndsad"</c>), and a trailing newline now adds exactly one line.
+    /// </summary>
+    private static double MeasureWrappedTextHeightScaled(ICoreClientAPI capi, string text, CairoFont font, double scaledWidth)
+    {
+        string[] segments = text.Split('\n');
+        int totalLines = 0;
+        foreach (string segment in segments)
+        {
+            // Empty segment (blank line / trailing newline) measures 0 lines -> floor at 1 so the
+            // empty line still reserves height.
+            totalLines += System.Math.Max(1, capi.Gui.Text.GetQuantityTextLines(font, segment, scaledWidth));
+        }
+        return totalLines * capi.Gui.Text.GetLineHeight(font);
     }
 
     public override void ComposeElements(Context ctxStatic, ImageSurface surfaceStatic)
