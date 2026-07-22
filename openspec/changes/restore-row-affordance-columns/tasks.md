@@ -60,7 +60,14 @@
       can't be tested from `Core.Tests` (which must stay API-free per the load-bearing invariant), and
       there is no Mod-side test project (one would need the game DLL, which CI lacks). Standing that up
       is out of proportion for this change; layout correctness is covered by the 6.3 manual playtest.
-- [ ] 6.3 Restage Debug (`bash build/restage.sh Debug`) and manually test in-game: (a) hover a task row
+- [x] 6.3 CONFIRMED in-game 2026-07-22 (playtest 2026-07-22T11-10-44): all parts (a)-(h) pass — hover
+      show/hide with no flicker, note rows omit pin, read view has no icons, stub clicks safe, no
+      label↔input jump, hover doesn't disturb the caret, gutter click doesn't float the input, columns
+      scale, icons clip with no scroll bleed. Tester raised a VISUAL-REFINEMENT follow-up (button
+      height on multi-line rows, overlay-not-column, minimal Notion-style chrome, larger icons,
+      dedicated left drag column, input top/bottom margin) — captured as a separate change, out of
+      scope for this restoration. Original steps:
+      Restage Debug (`bash build/restage.sh Debug`) and manually test in-game: (a) hover a task row
       → pin + delete + grip appear, move off → hide, no recompose flicker; (b) hover a note row →
       delete + grip only (no pin), at the same X as tasks; (c) read view → no icons on hover, checkbox
       still toggles; (d) click delete/pin → log fires, no crash, pin flips visually then reverts on next
