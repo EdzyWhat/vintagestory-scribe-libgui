@@ -21,6 +21,36 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## refine-row-affordance-visuals
+
+> Notion-style redraw of the per-row pin/delete/grip buttons: thin ink outline over an OPAQUE
+> parchment background that occludes the text they overlay on hover, larger icons, single-line
+> height, pin/delete as a hover OVERLAY (text runs full-width), drag grip moved to a far-left column
+> reserved in both views, and symmetric focused-input margin vs. the ruling. Committed `c15e5f2`,
+> restaged Debug 2026-07-22. Fully relaunch the client first. One task (6.2) split into 10 parts.
+
+- [ ] `568a9827` **Chrome + icon look.** In editor view, hover a row → buttons are a thin outline
+      over an opaque parchment fill (NO brown pill), and the icon fills most of the button (not a tiny
+      glyph). *(6.2 parts 1)*
+- [ ] `568a9827` **Single-line height + overlay.** On a tall WRAPPED note: pin/delete/grip sit on the
+      TOP line, not stretched down the row. On a long single-line row: text uses full width, and
+      hovering floats pin/delete over the text's right end — their opaque background cleanly hides the
+      text directly beneath them. *(6.2 parts 2,3)*
+- [ ] `568a9827` **Overlay click vs. text click.** Click an overlaid pin/delete → the stub log fires
+      (no crash). Click text to the LEFT of the pin/delete cluster → the row focuses/edits normally.
+      *(6.2 part 4)*
+- [ ] `568a9827` **Input margin symmetry.** Focus a row and type → the focus highlight has an equal
+      small margin at top AND bottom, not butting against the ruling. A short (min-height) task centers
+      its single line rather than sitting bottom-heavy. *(6.2 part 5)*
+- [ ] `568a9827` **Far-left grip + no toggle shift.** The grip is at the row's far LEFT, left of the
+      checkbox (checkbox/text shifted right in the editor). Toggle Read↔Edit on the same lectern → the
+      checkbox does NOT jump horizontally (read view reserves the same drag column, draws no grip).
+      *(6.2 parts 6,7)*
+- [ ] `568a9827` **Scale + state + scroll.** Sweep the text-size slider min↔max → buttons, outline,
+      icon, drag column, and margins all scale, no crash at the smallest size. Pin a task, then click
+      elsewhere → the pin stays pinned (On survives an unrelated mouse-up). Scroll a row past the clip
+      edge → overlay icons and the input clip natively, nothing bleeds below the list. *(6.2 parts 8,9,10)*
+
 ## lectern-gui-quick-edit-affordances
 
 > Note: much of this change's read-view toggle work was delivered by the archived
