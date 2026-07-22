@@ -79,6 +79,18 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         each moved the symptom without fixing it, so switching to a diagnostic-log approach to capture
         the ACTUAL measured line-count/heights in-game before the next fix. Retest after the numbers
         are captured and the real fix lands.
+      - **Root cause found 2026-07-22** (user clarified: interior Shift+Enter ALWAYS worked; only a
+        TRAILING newline failed): the culprit was never the height measurement — it was
+        `ScribeDocument.SetBlockText`, which `Trim()`s a task's text on EVERY live keystroke. A
+        just-typed trailing `"foo\n"` was stored as `"foo"` before any height code ran, so the row
+        measured one line and never grew until the next real char (which made the `\n` interior and
+        survived the trim). The three prior fixes were all downstream of that trim, which is why the
+        symptom was identical each build. Fix: `SetBlockText` gains `trimTask` (default true; the live
+        editor passes false) so the trailing newline survives live editing and the row grows; trailing
+        whitespace is still trimmed at COMMIT (`NormalizeRowOnCommit`) per the 4.7 design. The round-3
+        per-segment height measure (`MeasureWrappedTextHeightScaled`) and `Autoheight=false` both stay
+        — they're now correct AND actually reached. Core.Tests 38/38 (3 new cases lock in the
+        trim/no-trim + blank-guard behavior). Diagnostics removed. Retest.
 - [x] `bf0a3e2a` **(4.7) Trailing trim + newline round-trip.** Add a trailing Shift+Enter (blank
       last line) and commit — confirm the row does NOT stay tall/empty (trailing trimmed) while a
       newline placed BETWEEN two words survives. Switch to read view (interior newline renders as a

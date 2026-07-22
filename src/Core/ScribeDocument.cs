@@ -33,14 +33,19 @@ public sealed class ScribeDocument
     /// Changes a block's text. For Task blocks blank text is rejected; Text sections may be
     /// set to empty. The Done flag and kind are unchanged.
     /// </summary>
-    public bool SetBlockText(int index, string? text)
+    /// <param name="trimTask">When true (the default, for committed edits), a task's text is trimmed
+    /// of surrounding whitespace. The live in-place editor passes <c>false</c> so a trailing newline
+    /// the player just typed (Shift+Enter at the end of a line) survives long enough for the row to
+    /// grow to fit it; that path trims only on commit (GuiDialogScribeLectern.NormalizeRowOnCommit).
+    /// A blank/whitespace-only task is still rejected either way.</param>
+    public bool SetBlockText(int index, string? text, bool trimTask = true)
     {
         if (!IsValidIndex(index)) return false;
         var block = _blocks[index];
         if (block.IsTask)
         {
             if (string.IsNullOrWhiteSpace(text)) return false;
-            block.Text = text.Trim();
+            block.Text = trimTask ? text.Trim() : text;
         }
         else
         {

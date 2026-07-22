@@ -783,7 +783,12 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
     private void OnEditInputTextChanged(string text)
     {
         if (focusedEditIndex is not { } index || scratchDocument is null) return;
-        scratchDocument.SetBlockText(index, text);
+        // Live edit: preserve the text exactly as typed (trimTask: false) so a trailing newline from
+        // a just-pressed Shift+Enter survives -- otherwise SetBlockText's default Trim() strips it
+        // before the row can grow, and the row wouldn't resize until the next real char (task 4.6,
+        // root cause found 2026-07-22). Trailing whitespace/newlines are trimmed on COMMIT instead
+        // (NormalizeRowOnCommit), which is the correct place per the 4.7 trailing-trim design.
+        scratchDocument.SetBlockText(index, text, trimTask: false);
         isDirty = true;
 
         // Multi-line grow/shrink (lectern-multiline-edit-input): as typing wraps onto a new line or

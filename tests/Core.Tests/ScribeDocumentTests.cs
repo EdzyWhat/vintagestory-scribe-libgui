@@ -122,6 +122,44 @@ public class ScribeDocumentTests
     }
 
     [Fact]
+    public void SetBlockText_TrimsTaskByDefault()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("Find copper");
+
+        doc.SetBlockText(0, "  Find tin\n");
+
+        // Default (committed edit) trims surrounding whitespace incl. a trailing newline.
+        Assert.Equal("Find tin", doc.Blocks[0].Text);
+    }
+
+    [Fact]
+    public void SetBlockText_PreservesTrailingNewlineWhenNotTrimming()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("Find copper");
+
+        // The live in-place editor passes trimTask: false so a just-typed trailing newline
+        // (Shift+Enter at line end) survives long enough for the row to grow (task 4.6).
+        bool ok = doc.SetBlockText(0, "Find tin\n", trimTask: false);
+
+        Assert.True(ok);
+        Assert.Equal("Find tin\n", doc.Blocks[0].Text);
+    }
+
+    [Fact]
+    public void SetBlockText_StillRejectsWhitespaceOnlyTask_WhenNotTrimming()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("Find copper");
+
+        // The blank/whitespace-only guard holds regardless of trimTask -- a task can't become
+        // all-blank even on the live edit path.
+        Assert.False(doc.SetBlockText(0, "\n", trimTask: false));
+        Assert.Equal("Find copper", doc.Blocks[0].Text);
+    }
+
+    [Fact]
     public void SetBlockText_AllowsBlankForTextSection()
     {
         var doc = new ScribeDocument();
