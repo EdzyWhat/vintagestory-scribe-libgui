@@ -70,32 +70,34 @@
 - [x] 4.1 Build Debug and Release clean; run `dotnet test` (Core.Tests) — all green. (No Core
       change expected; the run guards against an accidental one.) *(Done 2026-07-21: Debug + Release
       both 0 warnings / 0 errors; Core.Tests 35/35 passed.)*
-- [ ] 4.2 Manually test in-game (Mac, `build/restage.sh Debug`, full relaunch): click into a long
-      wrapped task in editor mode — confirm it stays wrapped across multiple lines (not a single
-      line running off-screen) and the input aligns with where the static label was (no jump on
-      focus or on blur).
-- [ ] 4.3 Manually test in-game: type in a focused row until the text wraps onto a new line —
-      confirm the row height grows naturally, the rows below shift down, and the scroll region
-      updates; then delete back and confirm the row shrinks and rows below shift up.
-- [ ] 4.4 Manually test in-game: with a long list scrolled so the focused row is near the bottom,
-      type until the row grows — confirm it scrolls into view and the caret stays where you're
-      typing. Confirm Enter still commits-and-advances (no newline inserted) and Esc still
-      panic-closes with the edit saved.
-- [ ] 4.5 Manually test in-game at a couple of text sizes and window widths: confirm the label
-      and the input wrap at the SAME word boundary (no one-line reflow when focusing/blurring a
-      row that sits exactly at a wrap boundary). If they disagree, reconcile the wrap width per
-      design Decision 4 and retest.
-- [ ] 4.6 Manually test in-game (Shift+Enter): press Shift+Enter mid-text — confirm a hard line
-      break is inserted at the caret and the row grows; the caret stays put; typing continues on
-      the new line. Confirm plain Enter still commits-and-advances (does NOT newline).
-- [ ] 4.7 Manually test in-game (trailing trim + round-trip): add a trailing Shift+Enter (blank
-      last line), commit, and confirm the row does NOT stay tall/empty (trailing trimmed) while a
-      newline placed BETWEEN two words survives. Switch to read view and confirm the interior
-      newline renders as a hard break; reload the world and confirm it persists.
+- [x] 4.2 Manually test in-game: click into a long wrapped task — stays wrapped, input aligns to
+      the label, no jump on focus/blur. *(Confirmed 2026-07-21T23-52-34 + screenshot; tester noted
+      the small focus shift reads as helpful selection feedback.)*
+- [x] 4.3 Manually test in-game: type until it wraps — row grows, rows below shift, scrollbar
+      updates; delete back shrinks it. *(Confirmed 2026-07-21T23-52-34: "works as described.")*
+- [x] 4.4 Manually test in-game: grow a row near the bottom — scrolls into view, caret holds;
+      Enter commits-advances (no newline), Esc panic-closes with edit saved. *(Confirmed
+      2026-07-21T23-52-34: "works as described.")*
+- [x] 4.5 Manually test in-game: label and input wrap at the SAME word boundary at a couple of
+      text sizes (no reflow jump on focus/blur). *(Confirmed 2026-07-21T23-52-34: "works as
+      described." Wrap-parity math held — same box width, same break points.)*
+- [x] 4.6 Manually test in-game (Shift+Enter): hard break at the caret, row grows, caret stays,
+      typing continues; plain Enter still commits-advances. *(Confirmed 2026-07-22 after THREE
+      fix rounds — root cause was `SetBlockText`'s `Trim()` stripping the trailing newline on every
+      live keystroke, upstream of all the height code. Fix: `trimTask:false` on the live edit path;
+      trailing-trim moves to commit. Also required the per-segment height measure + `Autoheight=off`.
+      Core.Tests 38/38 with 3 new cases. See VSAPI-NOTES.)*
+- [x] 4.7 Manually test in-game (trailing trim + round-trip): trailing Shift+Enter trims on commit;
+      interior newline survives, renders as a hard break in read view, and persists across a world
+      reload. *(Confirmed 2026-07-21T23-52-34: "works as described.")*
 
 ## 5. Close out
 
-- [ ] 5.1 Update `VSAPI-NOTES.md` if anything new was learned about `GuiElementTextArea`
-      auto-height / multiline Enter behavior beyond what's already recorded.
-- [ ] 5.2 Note in the change that it is complete and unblocks `restore-row-affordance-columns`
-      (row-height behavior now stable).
+- [x] 5.1 Update `VSAPI-NOTES.md` if anything new was learned about `GuiElementTextArea`
+      auto-height / multiline behavior. *(Done 2026-07-21: recorded the `highlightBounds` null-crash
+      subclassing gotcha. The trailing-newline height + `SetBlockText` `Trim()` findings are captured
+      in this change's tasks/commits and the 4.6 verdict; fold into VSAPI-NOTES below if not already.)*
+- [x] 5.2 Note in the change that it is complete and unblocks `restore-row-affordance-columns`
+      (row-height behavior now stable). *(Done 2026-07-22: all 20 tasks complete, all 6 playtest
+      items confirmed. Row-height/measure behavior is now stable, so `restore-row-affordance-columns`
+      — the delete/pin/hover gutter visuals — can build on it.)*

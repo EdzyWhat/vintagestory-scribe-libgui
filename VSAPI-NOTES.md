@@ -508,6 +508,24 @@ build yourself. **Fix: call `base.ComposeTextElements` but pass a THROWAWAY
 build their own textures + set `highlightBounds` off `Bounds` regardless. Net: borderless
 look, no crash, text + faint focus highlight both work. See `ScribeRowTextInput`.
 
+**Symptom: a multi-line editable row doesn't grow when you add a TRAILING newline (Shift+Enter
+at line end), but interior newlines work fine.** Two distinct facts, both confirmed by in-game
+measurement 2026-07-22 (took three wrong fixes before instrumenting — measure, don't reason):
+- **`TextDrawUtil.GetMultilineTextHeight` (→ `GetQuantityTextLines` → `Lineize`) does NOT count a
+  trailing newline's empty line.** `"a"` and `"a\n"` measure the *same* height; `"a\nb"` measures
+  2. `GuiElementTextArea.Autoheight` uses this same measure, so the element won't self-size for a
+  dangling `\n` either. To count empty/trailing lines, measure **per `\n`-segment** and sum
+  `max(1, GetQuantityTextLines(segment))` (`"a\n"` → `["a",""]` → 1+1 = 2). See
+  `ScribeRowElement.MeasureWrappedTextHeightScaled`.
+- **The real trap, though, was upstream:** if your model setter trims text (Scribe's
+  `ScribeDocument.SetBlockText` did `text.Trim()` on every live keystroke for task rows), a
+  just-typed trailing `\n` is **deleted before any height code sees it** — so no height fix
+  downstream can ever work, and the symptom is byte-identical across every "fix." The tell was
+  "interior newline works, trailing doesn't": `Trim()` only removes the *trailing* one. Fix:
+  don't trim on the live edit path (Scribe added a `trimTask:false` overload); trim only at
+  commit. **Lesson: when a text edit doesn't take effect, `grep` the data path (setter/normalizer)
+  before touching the renderer.**
+
 ## Held-item writing (books / notebooks / tablets)
 
 > Facts gathered during the 2026-07-21 roadmap-exploration pass (see `docs/specs/`), from

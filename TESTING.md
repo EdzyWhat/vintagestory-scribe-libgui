@@ -53,7 +53,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       blur). *(4.5)*
       - **Confirmed 2026-07-21** (playtest 2026-07-21T23-52-34): "Works as described." Label and
         input wrap at the same boundary; no reflow jump on focus/blur.
-- [ ] `52081f30` **(4.6) Shift+Enter inserts a newline.** Press Shift+Enter mid-text — confirm a
+- [x] `52081f30` **(4.6) Shift+Enter inserts a newline.** Press Shift+Enter mid-text — confirm a
       hard line break is inserted at the caret, the row grows, the caret stays put, and typing
       continues on the new line. Confirm plain Enter still commits-and-advances (does NOT newline). *(4.6)*
       - **Still broken 2026-07-21** (playtest 2026-07-21T23-52-34): "The new line is created, but the
@@ -91,6 +91,9 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         per-segment height measure (`MeasureWrappedTextHeightScaled`) and `Autoheight=false` both stay
         — they're now correct AND actually reached. Core.Tests 38/38 (3 new cases lock in the
         trim/no-trim + blank-guard behavior). Diagnostics removed. Retest.
+      - **Confirmed 2026-07-22** (user, in-session): trailing Shift+Enter now grows the row by one line
+        immediately, caret sits on the new empty line inside the box, typing continues. All three fixes
+        compose (SetBlockText trimTask:false + per-segment measure + Autoheight off).
 - [x] `bf0a3e2a` **(4.7) Trailing trim + newline round-trip.** Add a trailing Shift+Enter (blank
       last line) and commit — confirm the row does NOT stay tall/empty (trailing trimmed) while a
       newline placed BETWEEN two words survives. Switch to read view (interior newline renders as a
