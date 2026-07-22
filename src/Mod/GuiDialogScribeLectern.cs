@@ -871,7 +871,10 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
         string trimmed = current.TrimEnd();
         if (trimmed != current)
         {
-            scratchDocument.SetBlockText(index, trimmed);
+            // trimTask: false -- we already chose TrimEnd() only (interior + leading whitespace kept
+            // intentionally, per this method's contract). SetBlockText's default would re-apply a full
+            // Trim() and silently strip the leading indent we just decided to preserve.
+            scratchDocument.SetBlockText(index, trimmed, trimTask: false);
             isDirty = true;
         }
     }
