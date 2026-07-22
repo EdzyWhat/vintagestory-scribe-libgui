@@ -15,17 +15,32 @@ namespace Scribe;
 /// surface (or hit-testing against a scaled <c>Bounds.absX/absY</c>) apply <c>GuiElement.scaled(...)</c>
 /// to these values at the point of use, exactly as the rest of the dialog does.
 ///
-/// Layout, left to right: <c>[ checkbox (tasks only) ][ gap ][ text ][ pin (tasks only) ][ delete ][ grip ]</c>.
-/// The pin/delete/grip gutters are reserved only when <c>reserveAffordances</c> is true (the editor
-/// view) -- the read view exposes no per-row controls beyond the checkbox, so it passes false and its
-/// text fills to the right edge. The gutters are anchored to the RIGHT edge and accumulate leftward, so
-/// a note (which has no pin column) puts its delete/grip at the same X as a task's -- the columns line
-/// up down the list. All column widths (checkbox and gutters) scale with the text-size preference so
-/// the affordances stay in step with the row's text and height (restore-row-affordance-columns).
+/// Layout, left to right: <c>[ grip ][ checkbox (tasks only) ][ gap ][ text .......... ]</c>, with the
+/// pin/delete buttons floating as a hover OVERLAY on the right end of the text rather than reserving
+/// gutter width (refine-row-affordance-visuals):
+///
+/// - The <b>drag-handle (grip)</b> column is on the FAR LEFT, left of the checkbox. It is reserved in
+///   both views when <see cref="ScribeClientConfig.DragColumnAlwaysReserved"/> is true (the default) --
+///   the read view draws no grip in it, but reserving the same width keeps the checkbox and text at the
+///   same X in both views (no shift on the Read<->Edit toggle). Its width scales with the text-size
+///   preference like the checkbox.
+/// - The <b>text</b> runs to the row's right edge (<see cref="TextWidth"/> = full remaining width) --
+///   it is NOT narrowed to make room for pin/delete.
+/// - The <b>pin/delete</b> buttons are hover-only overlays. <see cref="PinX"/>/<see cref="DeleteX"/> are
+///   right-anchored overlay anchors (accumulating leftward: <c>[ ... text ... ][ pin ][ delete ]</c>) so
+///   they float over the text's right end; because the text keeps full width, they occlude whatever text
+///   is beneath them (each button draws an opaque background). Reserved only when
+///   <c>reserveAffordances</c> is true (editor view); the read view exposes no pin/delete.
+///
+/// Pin is task-only, so on a note <see cref="PinWidth"/> is 0 and delete lands at the same X it would on
+/// a task -- the overlay cluster lines up down the list. All widths scale with the text-size preference.
 /// </summary>
 public readonly struct RowTextLayout
 {
-    /// <summary>Left edge (unscaled) of the checkbox column. Tasks only; 0 for a note.</summary>
+    /// <summary>Left edge (unscaled) of the checkbox column. Sits just right of the far-left drag
+    /// column (so it is <see cref="DragHandleWidth"/> from the row's left edge, not 0, whenever that
+    /// column is reserved). Tasks only; for a note there is no checkbox but the value still marks the
+    /// column start.</summary>
     public double CheckboxX { get; }
 
     /// <summary>Width/height (unscaled, square) of the checkbox glyph column. 0 for a note. Scales
@@ -39,31 +54,34 @@ public readonly struct RowTextLayout
     /// for a note.</summary>
     public double TextX { get; }
 
-    /// <summary>Available text width (unscaled) from <see cref="TextX"/> to the start of the pin
-    /// gutter (or the row's right edge when affordances are not reserved).</summary>
+    /// <summary>Available text width (unscaled) from <see cref="TextX"/> to the row's RIGHT edge.
+    /// The text is no longer narrowed for the pin/delete gutters -- those float as a hover overlay
+    /// over the text's right end (refine-row-affordance-visuals), so the text always runs full width.</summary>
     public double TextWidth { get; }
 
-    /// <summary>Left edge (unscaled) of the pin-icon gutter. Tasks only, and only when affordances
-    /// are reserved (editor view); 0 otherwise. When present it sits just right of the text column.</summary>
+    /// <summary>Left edge (unscaled) of the pin overlay button. Tasks only, and only when affordances
+    /// are reserved (editor view); 0 otherwise. Right-anchored (an overlay anchor, not a reserved
+    /// gutter): the pin floats over the text's right end at this X.</summary>
     public double PinX { get; }
 
-    /// <summary>Width (unscaled) of the pin-icon gutter. 0 for a note or when affordances are not
+    /// <summary>Width (unscaled) of the pin overlay button. 0 for a note or when affordances are not
     /// reserved. Scales with the text-size preference.</summary>
     public double PinWidth { get; }
 
-    /// <summary>Left edge (unscaled) of the delete-icon gutter. 0 when affordances are not reserved.</summary>
+    /// <summary>Left edge (unscaled) of the delete overlay button -- right-anchored, just right of
+    /// the pin. 0 when affordances are not reserved.</summary>
     public double DeleteX { get; }
 
-    /// <summary>Width (unscaled) of the delete-icon gutter. 0 when affordances are not reserved.
+    /// <summary>Width (unscaled) of the delete overlay button. 0 when affordances are not reserved.
     /// Scales with the text-size preference.</summary>
     public double DeleteWidth { get; }
 
-    /// <summary>Left edge (unscaled) of the drag-handle (grip) gutter -- the rightmost column.
-    /// 0 when affordances are not reserved.</summary>
+    /// <summary>Left edge (unscaled) of the drag-handle (grip) column -- the FAR-LEFT column at x=0.
+    /// Reserved (both views) per <see cref="ScribeClientConfig.DragColumnAlwaysReserved"/>.</summary>
     public double DragHandleX { get; }
 
-    /// <summary>Width (unscaled) of the drag-handle gutter. 0 when affordances are not reserved.
-    /// Scales with the text-size preference.</summary>
+    /// <summary>Width (unscaled) of the far-left drag-handle column. Scales with the text-size
+    /// preference; 0 only when the column is not reserved.</summary>
     public double DragHandleWidth { get; }
 
     /// <summary>The font the row's text is drawn in (already sized for the current text-size
@@ -94,33 +112,41 @@ public readonly struct RowTextLayout
     /// <paramref name="config"/> the same instance used elsewhere for the row, so the reserved
     /// columns match the measured text width (a mismatch would clip a glyph or overlap the text).
     ///
-    /// <paramref name="reserveAffordances"/> is true for the editor view (reserve the pin/delete/grip
-    /// gutters, narrowing the text column) and false for the read view (text fills to the right edge).
+    /// <paramref name="reserveAffordances"/> is true for the editor view (compute the pin/delete
+    /// overlay anchors) and false for the read view (no pin/delete). The far-left drag column is
+    /// reserved in BOTH views when <see cref="ScribeClientConfig.DragColumnAlwaysReserved"/> is set,
+    /// so the checkbox/text X match across the Read<->Edit toggle regardless of this flag.
     /// </summary>
     public static RowTextLayout For(double rowWidth, bool isTask, CairoFont font, ScribeClientConfig config, bool reserveAffordances = false)
     {
+        // Far-left drag column (grip). Reserved in both views per DragColumnAlwaysReserved so the
+        // checkbox/text sit at the same X in read and editor view -- the read view just draws no grip
+        // in it. Width scales with the text-size preference, like the checkbox.
+        double dragHandleWidth = config.DragColumnAlwaysReserved ? config.DragHandleWidth * config.TextSizeScale : 0;
+        double dragHandleX = 0;
+
+        double checkboxX = dragHandleWidth;
         double checkboxSize = isTask ? config.ToggleWidth * config.TextSizeScale : 0;
         // Gap between the checkbox and the text so the label/input isn't flush against the box
-        // (tasks only -- a note has no checkbox, so its text starts at the row's left edge).
+        // (tasks only -- a note has no checkbox, so its text starts right after the drag column).
         double checkboxTextGap = isTask ? config.CheckboxTextGap * config.TextSizeScale : 0;
-        double textX = checkboxSize + checkboxTextGap;
+        double textX = checkboxX + checkboxSize + checkboxTextGap;
 
-        // Right-side affordance gutters (editor view only). Widths scale with the text-size
-        // preference, mirroring the checkbox. Anchored to the right edge and accumulating leftward:
-        // [ ... text ... ][ pin ][ delete ][ grip ]. Pin is task-only, so on a note pinWidth is 0 and
-        // delete/grip land at the same X as they would on a task -- the columns line up down the list.
-        double dragHandleWidth = reserveAffordances ? config.DragHandleWidth * config.TextSizeScale : 0;
+        // Text runs to the row's right edge -- NOT narrowed for pin/delete. Those are hover overlays.
+        double textWidth = rowWidth - textX;
+
+        // Pin/delete overlay anchors (editor view only). Widths scale with the text-size preference.
+        // Right-anchored and accumulating leftward: [ ... text ... ][ pin ][ delete ]. Pin is
+        // task-only, so on a note pinWidth is 0 and delete lands at the same X as on a task -- the
+        // overlay cluster lines up down the list.
         double deleteWidth = reserveAffordances ? config.DeleteWidth * config.TextSizeScale : 0;
         double pinWidth = (reserveAffordances && isTask) ? config.PinWidth * config.TextSizeScale : 0;
 
-        double dragHandleX = rowWidth - dragHandleWidth;
-        double deleteX = dragHandleX - deleteWidth;
+        double deleteX = rowWidth - deleteWidth;
         double pinX = deleteX - pinWidth;
 
-        double textWidth = pinX - textX;
-
         return new RowTextLayout(
-            0, checkboxSize, textX, textWidth,
+            checkboxX, checkboxSize, textX, textWidth,
             pinX, pinWidth, deleteX, deleteWidth,
             dragHandleX, dragHandleWidth, font);
     }

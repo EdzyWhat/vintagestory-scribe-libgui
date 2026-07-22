@@ -135,6 +135,55 @@ public sealed class ScribeClientConfig
     /// <summary>Width of a task row's pin-icon column.</summary>
     public double PinWidth = 32;
 
+    /// <summary>When true (the default), the drag-handle column is reserved in BOTH views -- the
+    /// read view draws no grip in it, but reserving the same width keeps the checkbox and text at
+    /// the same X position across the Read<->Edit toggle (no horizontal shift). Set false to let the
+    /// read view reclaim that width. See <see cref="RowTextLayout"/> and
+    /// <c>refine-row-affordance-visuals</c>.</summary>
+    public bool DragColumnAlwaysReserved = true;
+
+    // ---------------- Affordance buttons (pin/delete/grip, ScribeHoverIconButton) ----------------
+    //
+    // The per-row affordance buttons are drawn by the mod as minimal "Notion-style" controls
+    // (refine-row-affordance-visuals): a thin outline over an OPAQUE background that occludes the
+    // text they overlay on hover, with an icon filling most of the button. These replace Vintage
+    // Story's default GuiElementToggleButton brown chrome + small icon. Kept as flat RGBA fields so
+    // the on-disk JSON stays hand-editable, matching the ruling-color knobs above.
+
+    /// <summary>Opaque button-background fill (a warm parchment tone). Alpha stays ~1.0 so the
+    /// button hides the text directly beneath it on hover (the occlusion behavior the user asked for,
+    /// matching Notion). Tune to match the lectern backdrop.</summary>
+    public double AffordanceBgR = 0.88;
+    public double AffordanceBgG = 0.82;
+    public double AffordanceBgB = 0.70;
+    public double AffordanceBgA = 1.0;
+
+    /// <summary>Thin outline stroke color (ink-tone, low alpha) -- the minimal chrome that replaces
+    /// the default filled/embossed button background.</summary>
+    public double AffordanceOutlineR = 0.15;
+    public double AffordanceOutlineG = 0.11;
+    public double AffordanceOutlineB = 0.08;
+    public double AffordanceOutlineA = 0.55;
+
+    /// <summary>Outline thickness in unscaled pixels; scaled by <see cref="TextSizeScale"/> at draw
+    /// time (floored at 1px) so it tracks the button size.</summary>
+    public double AffordanceOutlineThickness = 1.5;
+
+    /// <summary>Icon (glyph) color, ink-tone to match the parchment aesthetic -- NOT white.</summary>
+    public double AffordanceIconColorR = 0.15;
+    public double AffordanceIconColorG = 0.11;
+    public double AffordanceIconColorB = 0.08;
+    public double AffordanceIconColorA = 0.9;
+
+    /// <summary>Fraction (0-1) of the button each dimension the icon spans. Near 1 makes the glyph
+    /// fill most of the button -- the item-4 "larger icons" fix versus the base button's fixed
+    /// <c>scaled(4)</c> inset that shrank the glyph.</summary>
+    public double AffordanceIconFill = 0.78;
+
+    /// <summary>Corner radius (unscaled) of the button's rounded-rect outline/background; scaled at
+    /// draw time.</summary>
+    public double AffordanceCornerRadius = 3;
+
     // ---------------- Editor toolbar (controls below the row list) ----------------
 
     /// <summary>Shared height for the text-size label/slider row, the collapse-toggle button,

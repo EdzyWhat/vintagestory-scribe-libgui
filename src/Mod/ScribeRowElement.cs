@@ -94,6 +94,12 @@ public sealed class ScribeRowElement : GuiElement
     private static double BottomOverheadFixed(ScribeClientConfig config) =>
         config.RulingPadding * config.TextSizeScale + config.RulingThickness * config.TextSizeScale;
 
+    /// <summary>Public view of the bottom-overhead band (bottom padding + ruling) in FIXED layout
+    /// units (text-size-scaled, the same space <c>ElementBounds.Fixed</c> uses), so the dialog can
+    /// shrink the floating input's bounds height to leave a bottom margin above the ruling that
+    /// matches the top padding (refine-row-affordance-visuals item 6).</summary>
+    public static double BottomOverheadBandFixed(ScribeClientConfig config) => BottomOverheadFixed(config);
+
     /// <summary>
     /// Computes a row's full height in UNSCALED fixed units (the space <c>ElementBounds.Fixed</c>
     /// expects), floored at the row's minimum. This is the SINGLE source of row height, shared by
@@ -121,6 +127,24 @@ public sealed class ScribeRowElement : GuiElement
         double minHeight = ScribeBlockRowCell.RowHeight(block, config);
         double contentHeight = TopPadFixed(config) + textHeightFixed + BottomOverheadFixed(config);
         return System.Math.Max(minHeight, contentHeight);
+    }
+
+    /// <summary>
+    /// Height in FIXED (layout) units of a SINGLE text line at the current text size -- the top
+    /// padding + one line + bottom overhead, floored at <see cref="ScribeClientConfig.MinRowHeight"/>.
+    /// Independent of the row's actual (possibly multi-line) text, so the hover affordance buttons
+    /// (pin/delete/grip) can be sized to one line and top-aligned on the row rather than stretched to
+    /// the full multi-line row height (refine-row-affordance-visuals item 2). The <see
+    /// cref="ScribeClientConfig.MinRowHeight"/> floor is the same crash guard <see cref="RowHeightFixed"/>
+    /// uses -- it keeps the icon renderer from computing a negative glyph size at tiny text sizes.
+    /// </summary>
+    public static double SingleLineRowHeightFixed(ICoreClientAPI capi, CairoFont font, ScribeClientConfig config)
+    {
+        // Measure one line against a very wide (but finite -- scaled() must not overflow) column so
+        // the single measurement word never wraps to a second line.
+        double oneLineHeightFixed = MeasureWrappedTextHeightFixed(capi, "A", font, 100000);
+        double contentHeight = TopPadFixed(config) + oneLineHeightFixed + BottomOverheadFixed(config);
+        return System.Math.Max(config.MinRowHeight, contentHeight);
     }
 
     /// <summary>
@@ -167,6 +191,24 @@ public sealed class ScribeRowElement : GuiElement
         return totalLines * capi.Gui.Text.GetLineHeight(font);
     }
 
+    /// <summary>
+    /// The SCALED y-offset at which this row's content (text + checkbox) begins, so that a row taller
+    /// than its content -- because <see cref="RowHeightFixed"/> floored it at
+    /// <see cref="ScribeClientConfig.MinRowHeight"/> -- centers its single line in the slack rather
+    /// than top-anchoring it and leaving all the extra space below (which read as an asymmetric gap
+    /// above the ruling; refine-row-affordance-visuals item 6). When the content fills the row (a
+    /// multi-line note), the slack is ~0 and this is just the top padding, unchanged. The checkbox
+    /// glyph and the text share this one offset so they stay aligned.
+    /// </summary>
+    private double ContentTopScaled(RowTextLayout layout)
+    {
+        double topPadFixed = TopPadFixed(config);
+        double textHeightFixed = MeasureWrappedTextHeightFixed(api, text, font, layout.TextWidth);
+        double contentHeightFixed = topPadFixed + textHeightFixed + BottomOverheadFixed(config);
+        double slackFixed = System.Math.Max(0, Bounds.fixedHeight - contentHeightFixed);
+        return scaled(topPadFixed + slackFixed / 2);
+    }
+
     public override void ComposeElements(Context ctxStatic, ImageSurface surfaceStatic)
     {
         // Deliberately ignore the shared static ctx/surface -- drawing there is exactly what made
@@ -183,14 +225,14 @@ public sealed class ScribeRowElement : GuiElement
 
         var layout = RowTextLayout.For(Bounds.fixedWidth, isTask, font, config, reserveAffordances: mode == ScribeRowMode.Edit);
 
-        double topPad = scaled(TopPadFixed(config));
+        double contentTop = ContentTopScaled(layout);
 
         if (isTask)
         {
-            DrawCheckboxGlyph(ctx, done, scaled(layout.CheckboxX), topPad, scaled(layout.CheckboxSize));
+            DrawCheckboxGlyph(ctx, done, scaled(layout.CheckboxX), contentTop, scaled(layout.CheckboxSize));
         }
 
-        // Text sits below the top padding, in the reserved text column. Read-view text wraps to the
+        // Text sits below the content-top offset, in the text column. Read-view text wraps to the
         // available text width, matching the old AddStaticText behavior (tasks are typically single
         // line; a long note wraps and the row was measured tall enough to hold it). In edit mode a
         // focused row suppresses its own text draw (the floating input paints it instead) -- the
@@ -199,7 +241,7 @@ public sealed class ScribeRowElement : GuiElement
         {
             font.SetupContext(ctx);
             api.Gui.Text.AutobreakAndDrawMultilineTextAt(
-                ctx, font, text, scaled(layout.TextX), topPad, scaled(layout.TextWidth));
+                ctx, font, text, scaled(layout.TextX), contentTop, scaled(layout.TextWidth));
         }
 
         DrawRuling(ctx, width, height);
@@ -266,7 +308,10 @@ public sealed class ScribeRowElement : GuiElement
         }
     }
 
-    private static void RoundedRect(Context ctx, double x, double y, double w, double h, double r)
+    /// <summary>Traces a rounded-rectangle path (no fill/stroke -- the caller decides). The single
+    /// rounded-rect primitive shared by the checkbox glyph here and the minimal affordance buttons
+    /// (<see cref="ScribeHoverIconButton"/>), so their corner geometry can never drift apart.</summary>
+    internal static void RoundedRect(Context ctx, double x, double y, double w, double h, double r)
     {
         ctx.NewPath();
         ctx.Arc(x + w - r, y + r, r, -System.Math.PI / 2, 0);
@@ -305,7 +350,9 @@ public sealed class ScribeRowElement : GuiElement
         double glyphSize = colSize * config.ReadCheckboxGlyphFill;
         double glyphInset = (colSize - glyphSize) / 2;
         double glyphX = colX + glyphInset;
-        double glyphY = Bounds.absY + scaled(TopPadFixed(config)) + glyphInset;
+        // Use the same content-top offset the glyph is DRAWN at (ContentTopScaled centers content in
+        // a floored row), so the hitbox tracks the glyph when a short row centers its single line.
+        double glyphY = Bounds.absY + ContentTopScaled(layout) + glyphInset;
 
         double expand = glyphSize * (config.ReadCheckboxHitboxScale - 1) / 2;
         double hitLeft = System.Math.Max(Bounds.absX, glyphX - expand);
@@ -317,13 +364,19 @@ public sealed class ScribeRowElement : GuiElement
     }
 
     /// <summary>
-    /// True if <paramref name="args"/> falls in this row's right-side affordance gutter (the
-    /// pin/delete/grip columns), which exist only in the editor view. The full-width row element
-    /// overlaps those columns and is dispatched BEFORE the icon buttons (added after it), so without
-    /// this the row would consume the click and the icons would never see it. Callers use this to
-    /// YIELD the click (leave it unhandled) so the overlapping icon button wins -- the same pattern
-    /// the focused text column already uses to yield to the floating input. The boundary is the left
-    /// edge of the pin gutter (<see cref="RowTextLayout.PinX"/>); everything right of it is gutter.
+    /// True if <paramref name="args"/> falls under this row's right-side pin/delete overlay cluster,
+    /// which exists only in the editor view. The pin/delete buttons now float as a hover overlay over
+    /// the (full-width) text rather than sitting in a reserved gutter, but they are still added to the
+    /// composer AFTER this full-width row element, so the row is dispatched first: without this, the
+    /// row would consume a click on that right-end strip and the overlay buttons would never see it.
+    /// Callers use this to YIELD the click (leave it unhandled) so the overlapping button wins -- the
+    /// same pattern the focused text column uses to yield to the floating input. The boundary is the
+    /// left edge of the pin overlay (<see cref="RowTextLayout.PinX"/>, which equals
+    /// <c>rowWidth - (pinWidth + deleteWidth)</c>, the cluster's left edge); everything right of it is
+    /// under the cluster. The cluster is deliberately narrow (right edge only), so text left of it
+    /// still focuses/edits normally. Accepted tradeoff: because the buttons exist in the layout even
+    /// while hover-hidden, this right-end strip is not text-clickable -- it matches what the player
+    /// sees when hovering.
     /// </summary>
     private bool IsInIconGutter(MouseEvent args)
     {

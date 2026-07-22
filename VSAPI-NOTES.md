@@ -375,6 +375,27 @@ construction, or its seeded `On` value gets wiped on the very next unrelated cli
 persisted state; leave it `false` only for momentary actions with no state to preserve.
 See `ScribeHoverIconButton`'s constructor doc comment in `ScribeBlockRowCell.cs`.
 
+**Symptom: you want to restyle a `GuiElementToggleButton`'s chrome (drop the brown pill,
+enlarge the icon) and can't find a color/inset seam.**
+
+There isn't one. `GuiElementToggleButton.ComposeElements` bakes its whole look in two
+PRIVATE methods, `ComposeReleasedButton`/`ComposePressedButton` (confirmed via `ilspycmd`
+against `VintagestoryAPI.dll`): brown fill = `GuiStyle.DialogDefaultBgColor` +
+`EmbossRoundRectangleElement`, and the icon is drawn *small* by a hardcoded inset —
+`DrawIcon(ctx, icon, absPad + scaled(4), absPad + scaled(4), InnerWidth - scaled(9),
+InnerHeight - scaled(9), Font.Color)`. That fixed `scaled(4)`/`scaled(9)` inset is exactly
+why the glyph looks tiny, and none of it is overridable in place.
+
+**Fix pattern:** the only public virtual seam is `ComposeElements` itself, so override it
+*without calling base* and bake your own texture(s). Keep the base for its `On`/`Toggleable`
+hit-test + mouse plumbing. Because `On` is typically seeded AFTER compose (the pin's
+`block.Pinned` is applied post-`.Compose()`), bake TWO textures (off/on) like the base does
+and pick between them at render time in `RenderInteractiveElements` — a single baked texture
+can't reflect a state set later. `ScribeHoverIconButton` (`ScribeBlockRowCell.cs`) is the
+worked example: opaque rounded-rect fill (occludes overlaid text) + thin outline + a
+near-full-bounds `DrawIcon` (pass `size ≈ InnerWidth` to get a large glyph, since the SVG
+rasterizes to exactly the w/h you pass — see the icon-rendering section below).
+
 ## Localization (`Lang`)
 
 **Symptom: every player-facing string renders as its own raw lang key (e.g.

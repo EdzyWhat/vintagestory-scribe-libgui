@@ -1,3 +1,4 @@
+using Cairo;
 using Vintagestory.API.Client;
 using Vintagestory.API.Config;
 using Scribe.Core;
@@ -33,19 +34,29 @@ public sealed class ScribeDragHandleElement : GuiElementStaticText
 }
 
 /// <summary>
-/// An icon button that only renders while the mouse is over a given hover region (typically
-/// the whole row, not just this icon's own small bounds) -- used for the delete/pin icons so
-/// they stay hidden until the player's mouse is somewhere over that row (design.md decision
-/// 6). Overrides <see cref="RenderInteractiveElements"/> to skip drawing entirely when the
-/// mouse isn't over <see cref="HoverRegion"/>, mirroring the technique
-/// <c>GuiElementDialogTitleBar.RenderInteractiveElements</c> already uses for its own
-/// close/menu-icon hover-glow (checking live mouse position every frame, confirmed via
-/// decompile) -- but hiding the whole icon rather than just adding a glow on top of it, and a
-/// caller-supplied region rather than the element's own (much smaller) bounds. This is a
-/// render-time check, not a composer <c>AddIf</c>/recompose: the icon element itself still
-/// exists and can still be clicked/handle mouse events normally, it just isn't drawn most
-/// frames -- no recompose means no focus/caret reset risk (see the same concern already
-/// solved for note-height changes via <c>RecomposeEditorViewPreservingFocus</c>).
+/// A minimal "Notion-style" icon button for a row's per-row affordances (pin/delete/grip). It
+/// only renders while the mouse is over a given hover region (typically the whole row, not just
+/// this icon's own small bounds), so the icons stay hidden until the player's mouse is somewhere
+/// over that row. The render-time hover check mirrors the technique
+/// <c>GuiElementDialogTitleBar.RenderInteractiveElements</c> uses for its own close/menu-icon
+/// hover-glow (checking live mouse position every frame, confirmed via decompile) -- but hides
+/// the whole icon rather than adding a glow, and tests a caller-supplied region rather than the
+/// element's own (much smaller) bounds. Because it's a render-time skip, not a composer
+/// <c>AddIf</c>/recompose, the element still exists and handles mouse events normally when hidden
+/// -- no recompose means no focus/caret reset risk.
+///
+/// <para><b>Custom chrome (refine-row-affordance-visuals).</b> The base
+/// <see cref="GuiElementToggleButton"/> bakes a heavy brown pill (<c>DialogDefaultBgColor</c> +
+/// <c>EmbossRoundRectangleElement</c>) with a small icon inset by a fixed <c>scaled(4)</c> in
+/// PRIVATE <c>ComposeReleasedButton</c>/<c>ComposePressedButton</c> methods -- there is no seam to
+/// restyle them. So this class OVERRIDES <see cref="ComposeElements"/> without calling base and
+/// bakes its own textures instead: an opaque parchment-tone background (so the button occludes the
+/// text it overlays on hover, matching Notion), a thin ink-tone outline, and a large icon filling
+/// <see cref="ScribeClientConfig.AffordanceIconFill"/> of the button. It keeps the base's
+/// <c>On</c>/<c>Toggleable</c> hit-test + state plumbing (the pin needs a stateful toggle), and
+/// mirrors the base's two-texture approach (released vs. pressed) so the pin's on/off is chosen at
+/// render time -- the seeded <c>On</c> state is applied AFTER compose, so a single baked texture
+/// couldn't reflect it.</para>
 /// </summary>
 public sealed class ScribeHoverIconButton : GuiElementToggleButton
 {
@@ -53,22 +64,116 @@ public sealed class ScribeHoverIconButton : GuiElementToggleButton
     /// small click target.</summary>
     public ElementBounds? HoverRegion;
 
+    private readonly ScribeClientConfig config;
+    private readonly bool showActiveState;
+
+    // Own textures baked in ComposeElements (the base's releasedTexture/pressedTexture are private).
+    // "off" is the released/unpinned look; "on" adds a filled-in accent for a pinned pin.
+    private LoadedTexture offTexture;
+    private LoadedTexture onTexture;
+
     /// <summary><paramref name="toggleable"/> must be <c>true</c> for any icon whose <c>On</c>
     /// state represents persisted model state (e.g. the pin icon's <c>block.Pinned</c>):
     /// the base class's <c>OnMouseUp</c> unconditionally resets <c>On = false</c> whenever
     /// <c>Toggleable</c> is <c>false</c> (confirmed via decompile), which would silently wipe
     /// a just-seeded pinned-state on the very next mouse-up anywhere in the dialog, not only
     /// clicks on this icon. A momentary fire-once icon with no state to preserve (e.g.
-    /// delete) should keep this <c>false</c>.</summary>
-    public ScribeHoverIconButton(ICoreClientAPI capi, string icon, System.Action<bool> onToggle, ElementBounds bounds, bool toggleable = false)
+    /// delete) should keep this <c>false</c>.
+    ///
+    /// <para><paramref name="showActiveState"/> gives the button a distinct filled "on" look when
+    /// <c>On</c> is true -- pass true for the stateful pin, false for momentary buttons (delete,
+    /// grip) that have no meaningful on-state to depict.</para></summary>
+    public ScribeHoverIconButton(ICoreClientAPI capi, string icon, System.Action<bool> onToggle, ElementBounds bounds, ScribeClientConfig config, bool toggleable = false, bool showActiveState = false)
         : base(capi, icon, "", CairoFont.WhiteDetailText(), onToggle, bounds, toggleable)
     {
+        this.config = config;
+        this.showActiveState = showActiveState;
+        offTexture = new LoadedTexture(capi);
+        onTexture = new LoadedTexture(capi);
+    }
+
+    /// <summary>Bakes the two button textures (off/on) onto our own surfaces, bypassing the base's
+    /// brown-chrome compose entirely. All geometry derives from <c>Bounds.InnerWidth/InnerHeight</c>
+    /// so the drawn pill matches the clickable <c>Bounds</c> the base still hit-tests.</summary>
+    public override void ComposeElements(Context ctxStatic, ImageSurface surfaceStatic)
+    {
+        Bounds.CalcWorldBounds();
+        BakeButton(ref offTexture, active: false);
+        BakeButton(ref onTexture, active: showActiveState);
+    }
+
+    private void BakeButton(ref LoadedTexture texture, bool active)
+    {
+        int width = (int)Bounds.InnerWidth;
+        int height = (int)Bounds.InnerHeight;
+        if (width <= 0 || height <= 0) return;
+
+        var surface = new ImageSurface(Format.Argb32, width, height);
+        var ctx = new Context(surface);
+
+        double radius = GuiElement.scaled(config.AffordanceCornerRadius);
+        double lineWidth = System.Math.Max(1.0, GuiElement.scaled(config.AffordanceOutlineThickness));
+        // Inset the pill by half the stroke so the outline sits fully inside the surface (a stroke
+        // straddles its path, so half of a path on the very edge would be clipped away).
+        double half = lineWidth / 2;
+        double pw = width - lineWidth;
+        double ph = height - lineWidth;
+
+        // Opaque background -- occludes the text beneath the button on hover (the Notion behavior).
+        // An "active" (pinned) button tints its fill toward the ink color so the on-state reads.
+        ScribeRowElement.RoundedRect(ctx, half, half, pw, ph, radius);
+        if (active)
+        {
+            ctx.SetSourceRGBA(config.AffordanceIconColorR, config.AffordanceIconColorG, config.AffordanceIconColorB, config.AffordanceIconColorA);
+        }
+        else
+        {
+            ctx.SetSourceRGBA(config.AffordanceBgR, config.AffordanceBgG, config.AffordanceBgB, config.AffordanceBgA);
+        }
+        ctx.FillPreserve();
+
+        // Thin outline (ink-tone) -- the minimal chrome replacing the base's emboss.
+        ctx.SetSourceRGBA(config.AffordanceOutlineR, config.AffordanceOutlineG, config.AffordanceOutlineB, config.AffordanceOutlineA);
+        ctx.LineWidth = lineWidth;
+        ctx.Stroke();
+
+        // Large icon: inset only enough to hit AffordanceIconFill of the button (the item-4 fix vs.
+        // the base's fixed scaled(4) inset that shrank the glyph). On an active button the fill is
+        // dark, so draw the icon in the background tone for contrast; otherwise ink-tone.
+        double iconInset = width * (1 - config.AffordanceIconFill) / 2;
+        double iconSize = width - 2 * iconInset;
+        double iconInsetY = (height - iconSize) / 2;
+        double[] iconColor = active
+            ? new[] { config.AffordanceBgR, config.AffordanceBgG, config.AffordanceBgB, config.AffordanceBgA }
+            : new[] { config.AffordanceIconColorR, config.AffordanceIconColorG, config.AffordanceIconColorB, config.AffordanceIconColorA };
+        if (!string.IsNullOrEmpty(icon))
+        {
+            api.Gui.Icons.DrawIcon(ctx, icon, iconInset, iconInsetY, iconSize, iconSize, iconColor);
+        }
+
+        generateTexture(surface, ref texture);
+        ctx.Dispose();
+        surface.Dispose();
     }
 
     public override void RenderInteractiveElements(float deltaTime)
     {
         if (HoverRegion is not null && !HoverRegion.PointInside(api.Input.MouseX, api.Input.MouseY)) return;
-        base.RenderInteractiveElements(deltaTime);
+
+        int textureId = (On && showActiveState ? onTexture : offTexture).TextureId;
+        if (textureId == 0) return;
+
+        // Blit inside the dialog's BeginClip scissor (this is the interactive pass), so a button on a
+        // row scrolled past the viewport edge clips natively rather than bleeding out.
+        api.Render.Render2DTexturePremultipliedAlpha(
+            textureId, Bounds.renderX, Bounds.renderY, Bounds.InnerWidth, Bounds.InnerHeight);
+    }
+
+    public override void Dispose()
+    {
+        base.Dispose();
+        offTexture.Dispose();
+        onTexture.Dispose();
     }
 }
 
@@ -209,7 +314,7 @@ public static class ScribeBlockRowCell
         if (block.IsTask)
         {
             var pinBounds = ElementBounds.Fixed(x, rowBounds.fixedY, config.PinWidth, rowBounds.fixedHeight);
-            var pinButton = new ScribeHoverIconButton(composer.Api, "wpCircle", _ => onTogglePin?.Invoke(index), pinBounds, toggleable: true)
+            var pinButton = new ScribeHoverIconButton(composer.Api, "wpCircle", _ => onTogglePin?.Invoke(index), pinBounds, config, toggleable: true, showActiveState: true)
             {
                 HoverRegion = rowBounds,
             };
@@ -219,7 +324,7 @@ public static class ScribeBlockRowCell
         }
 
         var deleteBounds = ElementBounds.Fixed(x, rowBounds.fixedY, config.DeleteWidth, rowBounds.fixedHeight);
-        var deleteButton = new ScribeHoverIconButton(composer.Api, "eraser", _ => onDelete(index), deleteBounds)
+        var deleteButton = new ScribeHoverIconButton(composer.Api, "eraser", _ => onDelete(index), deleteBounds, config)
         {
             HoverRegion = rowBounds,
         };

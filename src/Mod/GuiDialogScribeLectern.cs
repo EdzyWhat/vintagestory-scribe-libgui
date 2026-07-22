@@ -660,10 +660,16 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
                 // at the row's full height. The base single-line input vertically centers its text
                 // within these bounds, which closely tracks the label's top-padded single line for
                 // a task-height row; exact baseline is a flagged playtest item (design.md risk).
-                // Uses the shared `layout` above, so the input's TextX/TextWidth match the narrowed
-                // static label (the row reserves the pin/delete/grip gutters) -- keeps the
-                // label<->input handoff jump-free (design.md Decision 5).
-                var inputBounds = ElementBounds.Fixed(layout.TextX, rowYs[i], layout.TextWidth, rowHeights[i]);
+                // Uses the shared `layout` above, so the input's TextX/TextWidth match the static
+                // label -- keeps the label<->input handoff jump-free (design.md Decision 5). The text
+                // now runs full width (pin/delete are a hover overlay, not a reserved gutter).
+                //
+                // Height stops short of the ruling by BottomOverheadFixed so the focus highlight has a
+                // bottom margin matching the top pad, instead of butting against the ruling
+                // (refine-row-affordance-visuals item 6). Safe because the input is Autoheight=false,
+                // so trimming the bounds height doesn't reflow its text.
+                double inputHeight = rowHeights[i] - ScribeRowElement.BottomOverheadBandFixed(clientConfig);
+                var inputBounds = ElementBounds.Fixed(layout.TextX, rowYs[i], layout.TextWidth, inputHeight);
                 editInput = new ScribeRowTextInput(
                     capi, inputBounds, OnEditInputTextChanged, RowFont(),
                     onCommitAndAdvance: OnEditCommitAndAdvance,
@@ -680,13 +686,20 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
             // child of contentBounds like the rows, so it scrolls + clips natively. HoverRegion is
             // the SAME rowBounds instance the row uses, so it appears whenever the mouse is anywhere
             // over the row and tracks the scroll for free. Uses the registered custom SVG codes.
+            // Buttons are one text-line tall and top-aligned on the row, so on a wrapped multi-line
+            // row they sit on the first line rather than stretching the full row height
+            // (refine-row-affordance-visuals item 2). Single-line height is independent of the block's
+            // actual text, so all three buttons share it and line up.
+            double buttonHeight = ScribeRowElement.SingleLineRowHeightFixed(capi, RowFont(), clientConfig);
+
             if (block.IsTask)
             {
-                var pinBounds = ElementBounds.Fixed(layout.PinX, rowYs[i], layout.PinWidth, rowHeights[i]);
+                var pinBounds = ElementBounds.Fixed(layout.PinX, rowYs[i], layout.PinWidth, buttonHeight);
                 // toggleable: true is mandatory for a stateful icon -- the base GuiElementToggleButton
                 // resets On=false on ANY dialog mouse-up when not toggleable, wiping the seeded
                 // pinned state (see ScribeHoverIconButton's ctor doc). On is seeded post-Compose below.
-                var pinButton = new ScribeHoverIconButton(capi, "scribepin", _ => OnEditViewTogglePin(i), pinBounds, toggleable: true)
+                // showActiveState: true gives the pinned pin a distinct filled look.
+                var pinButton = new ScribeHoverIconButton(capi, "scribepin", _ => OnEditViewTogglePin(i), pinBounds, clientConfig, toggleable: true, showActiveState: true)
                 {
                     HoverRegion = rowBounds,
                 };
@@ -694,20 +707,20 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
                 SingleComposer.AddHoverText(Lang.Get("scribe:scribe-gui-pin"), CairoFont.WhiteSmallText(), (int)clientConfig.HoverTextWidth, pinBounds.FlatCopy());
             }
 
-            var deleteBounds = ElementBounds.Fixed(layout.DeleteX, rowYs[i], layout.DeleteWidth, rowHeights[i]);
-            var deleteButton = new ScribeHoverIconButton(capi, "scribeclose", _ => OnEditViewDeleteRow(i), deleteBounds)
+            var deleteBounds = ElementBounds.Fixed(layout.DeleteX, rowYs[i], layout.DeleteWidth, buttonHeight);
+            var deleteButton = new ScribeHoverIconButton(capi, "scribeclose", _ => OnEditViewDeleteRow(i), deleteBounds, clientConfig)
             {
                 HoverRegion = rowBounds,
             };
             SingleComposer.AddInteractiveElement(deleteButton, ScribeBlockRowCell.DeleteKey(i));
             SingleComposer.AddHoverText(Lang.Get("scribe:scribe-gui-delete"), CairoFont.WhiteSmallText(), (int)clientConfig.HoverTextWidth, deleteBounds.FlatCopy());
 
-            // Grip: renders the scribegrip SVG and hover-hides for free via ScribeHoverIconButton.
-            // No-op callback -- the actual drag-to-reorder interaction (and its lift-ghost/insertion
-            // feedback) is owned by the parked lectern-drag-reorder-feedback change, which will adopt
-            // ScribeDragHandleElement's drag plumbing on top of this restored column.
-            var gripBounds = ElementBounds.Fixed(layout.DragHandleX, rowYs[i], layout.DragHandleWidth, rowHeights[i]);
-            var gripButton = new ScribeHoverIconButton(capi, "scribegrip", _ => { }, gripBounds)
+            // Grip: renders the scribegrip SVG in the far-left column and hover-hides for free via
+            // ScribeHoverIconButton. No-op callback -- the actual drag-to-reorder interaction (and its
+            // lift-ghost/insertion feedback) is owned by the parked lectern-drag-reorder-feedback
+            // change, which will adopt ScribeDragHandleElement's drag plumbing on top of this column.
+            var gripBounds = ElementBounds.Fixed(layout.DragHandleX, rowYs[i], layout.DragHandleWidth, buttonHeight);
+            var gripButton = new ScribeHoverIconButton(capi, "scribegrip", _ => { }, gripBounds, clientConfig)
             {
                 HoverRegion = rowBounds,
             };
