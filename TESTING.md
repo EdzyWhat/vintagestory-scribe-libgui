@@ -73,6 +73,12 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         and that fires on every `SetValue` — shrinking the input back to 1 line after the recompose
         sized it. Caret on line 2 then draws under the 1-line box. Fix: disable the input's `Autoheight`
         (row growth is driven by our recompose, not the element self-sizing). Retest after the fix.
+      - **Still broken 2026-07-22** (playtest 2026-07-22T00-17-46 + screenshot
+        2026-07-22T00-17-14-52081f30.png): now the row is TOO TALL — a large empty gap below the caret
+        before the ruling. Two rounds of guessing at how the engine counts a trailing newline have
+        each moved the symptom without fixing it, so switching to a diagnostic-log approach to capture
+        the ACTUAL measured line-count/heights in-game before the next fix. Retest after the numbers
+        are captured and the real fix lands.
 - [x] `bf0a3e2a` **(4.7) Trailing trim + newline round-trip.** Add a trailing Shift+Enter (blank
       last line) and commit — confirm the row does NOT stay tall/empty (trailing trimmed) while a
       newline placed BETWEEN two words survives. Switch to read view (interior newline renders as a
