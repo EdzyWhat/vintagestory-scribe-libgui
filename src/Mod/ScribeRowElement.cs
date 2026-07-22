@@ -113,12 +113,35 @@ public sealed class ScribeRowElement : GuiElement
     public static double RowHeightFixed(ICoreClientAPI capi, ScribeBlock block, double rowWidthFixed, CairoFont font, ScribeClientConfig config)
     {
         var layout = RowTextLayout.For(rowWidthFixed, block.IsTask, font, config);
+        // Measure the wrapped text height. The engine's GetMultilineTextHeight does not count a
+        // TRAILING newline as an extra (empty) line, so a row that ends in "\n" -- e.g. right after
+        // Shift+Enter, before any char is typed on the new line -- would measure the SAME height as
+        // without it, and the row wouldn't grow until the next keypress (playtest 2026-07-21T23-52-34,
+        // task 4.6). Add one line-height per trailing newline so the empty new line is reserved
+        // immediately. (Interior newlines are already counted; only a dangling trailing run is missed.
+        // Trailing newlines are trimmed on commit -- NormalizeRowOnCommit -- so this only affects the
+        // live mid-edit height, which is exactly when the row must reflect the new empty line.)
         double scaledTextHeight = capi.Gui.Text.GetMultilineTextHeight(font, block.Text, scaled(layout.TextWidth));
+        int trailingNewlines = CountTrailingNewlines(block.Text);
+        if (trailingNewlines > 0)
+        {
+            scaledTextHeight += trailingNewlines * capi.Gui.Text.GetLineHeight(font);
+        }
         double textHeightFixed = scaledTextHeight / RuntimeEnv.GUIScale;
 
         double minHeight = ScribeBlockRowCell.RowHeight(block, config);
         double contentHeight = TopPadFixed(config) + textHeightFixed + BottomOverheadFixed(config);
         return System.Math.Max(minHeight, contentHeight);
+    }
+
+    /// <summary>Counts newline characters in the trailing run at the end of <paramref name="text"/>
+    /// (e.g. "a\n\n" -> 2, "a\nb" -> 0). Used to reserve height for empty trailing lines the engine's
+    /// line-count doesn't include -- see <see cref="RowHeightFixed"/>.</summary>
+    private static int CountTrailingNewlines(string text)
+    {
+        int count = 0;
+        for (int i = text.Length - 1; i >= 0 && text[i] == '\n'; i--) count++;
+        return count;
     }
 
     public override void ComposeElements(Context ctxStatic, ImageSurface surfaceStatic)

@@ -27,28 +27,50 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > `GuiElementTextArea`), and Shift+Enter inserts a hard newline. Code committed + restaged
 > Debug 2026-07-21; these six are the in-game verification. Fully relaunch the client first.
 
-- [ ] `3df65ce4` **(4.2) Focus keeps a long row wrapped.** In editor mode, click into a task
+- [x] `3df65ce4` **(4.2) Focus keeps a long row wrapped.** In editor mode, click into a task
       whose text is long enough to wrap over multiple lines — confirm it STAYS wrapped across
       lines (not collapsed to one line running off the left/right edge), and the input sits
       exactly where the static label was with no jump on focus OR on blur. *(4.2)*
-- [ ] `da9afea0` **(4.3) Typing grows/shrinks the row.** Type in a focused row until the text
+      - **Confirmed 2026-07-21** (playtest 2026-07-21T23-52-34 + screenshot
+        2026-07-21T23-49-01-3df65ce4.png): long rows stay wrapped across lines in the focused
+        input, checkboxes aligned. Tester noted a small (couple-px) text shift on focus but
+        judged it a POSITIVE — extra visual feedback that the right row is selected, given the
+        caret is faint. No collapse to one line. Wrap-on-focus works.
+- [x] `da9afea0` **(4.3) Typing grows/shrinks the row.** Type in a focused row until the text
       overflows onto a new line — confirm the row height grows, the rows below shift down, and
       the scrollbar updates; then delete back and confirm the row shrinks and rows below shift up. *(4.3)*
-- [ ] `fb36a059` **(4.4) Grow near the bottom + caret hold.** With a long list scrolled so the
+      - **Confirmed 2026-07-21** (playtest 2026-07-21T23-52-34): "Works as described." Typing that
+        wraps grows the row and shifts rows below; deleting back shrinks it.
+- [x] `fb36a059` **(4.4) Grow near the bottom + caret hold.** With a long list scrolled so the
       focused row is near the bottom, type until the row grows — confirm it scrolls into view and
       the caret stays where you're typing. Confirm plain Enter still commits-and-advances (NO
       newline) and Esc still closes with the edit saved. *(4.4)*
-- [ ] `a15d70fd` **(4.5) Wrap parity, label vs input.** At a couple of text sizes and window
+      - **Confirmed 2026-07-21** (playtest 2026-07-21T23-52-34): "Works as described." Grow near the
+        bottom scrolls into view, caret holds, plain Enter commits-and-advances, Esc closes+saves.
+- [x] `a15d70fd` **(4.5) Wrap parity, label vs input.** At a couple of text sizes and window
       widths, focus then blur a row whose text sits right at a wrap boundary — confirm the label
       and the input break onto a new line at the SAME word (no one-line reflow/jump on focus or
       blur). *(4.5)*
+      - **Confirmed 2026-07-21** (playtest 2026-07-21T23-52-34): "Works as described." Label and
+        input wrap at the same boundary; no reflow jump on focus/blur.
 - [ ] `52081f30` **(4.6) Shift+Enter inserts a newline.** Press Shift+Enter mid-text — confirm a
       hard line break is inserted at the caret, the row grows, the caret stays put, and typing
       continues on the new line. Confirm plain Enter still commits-and-advances (does NOT newline). *(4.6)*
-- [ ] `bf0a3e2a` **(4.7) Trailing trim + newline round-trip.** Add a trailing Shift+Enter (blank
+      - **Still broken 2026-07-21** (playtest 2026-07-21T23-52-34): "The new line is created, but the
+        row does not grow to resize as expected until another character keypress." The newline IS
+        inserted (Shift+Enter works), but the row lags one keystroke before growing. Root cause: the
+        height-change gate in `OnEditInputTextChanged` measures `block.Text` via `GetMultilineTextHeight`,
+        which does not count a TRAILING newline (empty last line) as an added line — so a just-inserted
+        trailing `\n` measures the same height, and only the next real char (making the last line
+        non-empty) triggers the grow. Fix: count trailing newlines in the row-height measurement.
+        Retest after the fix.
+- [x] `bf0a3e2a` **(4.7) Trailing trim + newline round-trip.** Add a trailing Shift+Enter (blank
       last line) and commit — confirm the row does NOT stay tall/empty (trailing trimmed) while a
       newline placed BETWEEN two words survives. Switch to read view (interior newline renders as a
       hard break), then reload the world and confirm it persisted. *(4.7)*
+      - **Confirmed 2026-07-21** (playtest 2026-07-21T23-52-34): "Works as described." Trailing blank
+        line is trimmed on commit; an interior newline survives, renders as a hard break in read view,
+        and persists across a world reload.
 
 ## lectern-edit-in-place-rows
 
