@@ -1,7 +1,7 @@
 ---
 name: what-to-test
 description: Surface a short, concrete list of in-game conditions to test in Vintage Story, pulled from the remaining manual-test tasks in any in-progress OpenSpec change; persist/regenerate that list as TESTING.md at the repo root so it survives across sessions, with agent-recorded verdicts (not raw checkboxes) as the only source of truth; and use freshly captured screenshots as evidence against it. Items carry one of four lifecycle verdicts -- Confirmed, Still broken, Backlogged, Obsolete -- and verdict-carrying items are retained across regeneration (they don't vanish when their task is done or removed). Use when the user asks "what should I test", "what should I check in-game", "give me a testing checklist", "what's left to verify", "update the testing checklist", wants to review/process submitted playtest reports, wants an item marked completed/backlogged/obsolete, or mentions a "screenshot"/"screen"/"pic" while discussing testing, a bug, or a feature (a new capture from the game's screenshot folder to triage and check against the checklist).
-version: "1.1"
+version: "1.2"
 ---
 
 # What should I test?
@@ -16,6 +16,30 @@ registered on this machine) or the work lives in one, pass `--store <id>` on `li
 
 ## Steps
 
+0. **Restage-freshness check (do this FIRST, before listing anything).** The whole point of this
+   skill is to send the user to test in-game — but the game only loads the mod DLLs at launch, from
+   the staged copy in `~/Library/Application Support/VintagestoryData/Mods/scribe/`, NOT from the
+   repo. If code was committed without restaging, the user tests a stale build (this has actually
+   happened — a 4-commit-stale build was playtested as if current). Guard against it:
+
+   ```bash
+   # newest staged mod DLL mtime vs. the last commit that touched src/Mod
+   stat -f %m "$HOME/Library/Application Support/VintagestoryData/Mods/scribe/Scribe.dll" 2>/dev/null
+   git -C <repo> log -1 --format=%ct -- src/Mod
+   ```
+   Also check for uncommitted `src/Mod` edits (`git status --porcelain src/Mod`). The staged build is
+   **stale** if the DLL mtime predates the last `src/Mod` commit, OR there are uncommitted `src/Mod`
+   changes not yet restaged.
+
+   - **If stale:** lead the whole response with a loud warning — e.g.
+     `⚠️ Staged build is STALE (staged <time> ago, but src/Mod changed since) — restage before testing or you'll be looking at old code.`
+     — and offer to restage now (`bash build/restage.sh Debug`). Do NOT bury this under the item
+     list; a stale build makes every item below meaningless. If the user is only *reviewing* results
+     (not about to go test), a one-line note is enough.
+   - **If fresh:** no need to mention it (or a terse "staged build is current" if it reassures).
+   - This check is cheap (two `stat`/`git` calls) and belongs to Vintage Story specifically; skip it
+     for non-VS projects.
+
 1. **Find in-progress changes.**
    ```bash
    openspec list --json
@@ -28,13 +52,19 @@ registered on this machine) or the work lives in one, pass `--store <id>` on `li
      silently drop unrelated in-progress work the user might also want to hear about.
    - If there are none, skip straight to the last step below (nothing to pull from OpenSpec).
 
-2. **Resolve each candidate change's `tasks.md`.**
-   ```bash
-   openspec status --change "<name>" --json
-   ```
-   Read `artifactPaths.tasks.existingOutputPaths[0]`. If the `tasks` artifact doesn't
-   exist yet (change is still blocked earlier in planning), skip that change — there's
+2. **Resolve each candidate change's `tasks.md`.** The canonical way is
+   `openspec status --change "<name>" --json` → `artifactPaths.tasks.existingOutputPaths[0]`. If the
+   `tasks` artifact doesn't exist yet (change still blocked earlier in planning), skip that change —
    nothing to test yet, not an error.
+
+   **Speed note (this skill is run often and the per-change `openspec status` call is ~0.6s each,
+   which adds up across many in-progress changes):** the tasks file is conventionally
+   `openspec/changes/<name>/tasks.md`. You MAY read that path directly and skip the per-change
+   `status` call when it exists — falling back to `openspec status` only if the direct path is
+   missing (a non-standard layout). Prefer reading the several `tasks.md` files in one batched set of
+   tool calls over serial `status` invocations. If the conversation is already focused on ONE change
+   (the common case right after implementing it), resolve just that one and don't fan out over all
+   in-progress changes at all — mention the others exist but only expand them if asked.
 
 3. **Read each resolved `tasks.md` and extract unchecked items (`- [ ]`)**, including
    their full continuation text (a task's description often wraps onto indented
@@ -212,6 +242,33 @@ checked off or removed from `tasks.md` — retention is by "has a verdict on fil
    Mention to the user that `TESTING.md` was written/updated, and if any items were
    retained purely on their verdict (completed/backlog/obsolete no longer in `tasks.md`),
    it's worth a one-line note so they know nothing was silently dropped.
+
+### Retiring an archived change's history (keep `TESTING.md` lean)
+
+The retention rule above keeps every verdict-carrying item forever, which is correct for LIVE
+changes but lets `TESTING.md` bloat with the full verdict-chains of changes that are long done —
+each regeneration then re-reads and re-merges hundreds of dead lines, which is the main thing that
+makes this skill slow. So when a change is **archived** (its dir has moved to
+`openspec/changes/archive/`), its group graduates out of the active file:
+
+- **Trigger:** a `TESTING.md` group whose change no longer exists under `openspec/changes/<name>/`
+  (only under `archive/`) AND whose items are all in terminal states (`Confirmed` or `Obsolete` —
+  nothing still `Still broken` awaiting a retest, and no `Backlogged` item that could still become
+  testable).
+- **Where it goes:** append the whole group, verbatim (heading + items + verdict lines), to
+  `playtest-history/TESTING-archive.md` at the repo root (create it if missing, with a one-line
+  header explaining it's retired history the app does not read). This sits alongside the app's
+  existing `playtest-history/` convention (screenshots + `HISTORY.md` from `promote_screenshot.py`)
+  and is deliberately OUTSIDE the app's live `TESTING.md` read path.
+- **Then remove that group from `TESTING.md`.** The verdicts also still live in the archived
+  `tasks.md`, so nothing is lost — this is purely moving dead history out of the hot file.
+- **Do NOT retire** a group that still has a `Still broken` (needs retest) or `Backlogged` item, or
+  whose change is still in-progress — those are live. A single lingering broken item keeps the whole
+  group in `TESTING.md`.
+- **Tell the user** which groups were retired and to where (one line), so the shrink is transparent.
+
+This is a merge-time housekeeping step: do it as part of a regeneration when you notice retired-change
+groups present, not as a separate destructive pass.
 
 ### Recording a verdict
 
