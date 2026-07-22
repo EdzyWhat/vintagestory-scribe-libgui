@@ -21,6 +21,22 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## tighten-row-measure-and-trim-layering
+
+> Behavior-preserving cleanup (Core is now trim-agnostic; one shared wrapped-text-height
+> primitive). Applied + committed `587c548`; Core.Tests 37/37 and Mod Debug+Release both
+> clean. This one item is the optional in-game confirmation that it's visibly a no-op.
+> Restage Debug and fully relaunch first.
+
+- [x] `3dab634a` **(5.3) Refactor is a visible no-op.** Restage Debug, open a lectern, and
+      confirm two things unchanged by the cleanup: (a) the empty-list edit hint (open a fresh
+      lectern with no rows) still renders at the right height/wrapping; (b) commit a task ending
+      in a trailing Shift+Enter blank line and one with an interior newline — the trailing blank
+      trims on commit while the interior break survives into read view, exactly as before. *(5.3)*
+      - **Confirmed 2026-07-22** (playtest report 2026-07-22T09-29-44): "Empty list hint is good.
+        Trailing trims on commit. All good." Both halves verified — the empty-list hint renders
+        correctly and commit-time trailing-trim behaves as before. The refactor is a visible no-op.
+
 ## lectern-multiline-edit-input
 
 > Focused editor rows now wrap and grow like their static label (rebased on

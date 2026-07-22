@@ -56,7 +56,7 @@
       test, +1 theory case). *(Done.)*
 - [x] 5.2 Built `src/Mod` Debug + Release — both 0 warnings / 0 errors; the removed parameter and
       removed helper leave no dangling reference. *(Done.)*
-- [ ] 5.3 (Optional, Mac-testable) `./build/restage.sh Debug` and spot-check the lectern: empty-list
+- [x] 5.3 (Optional, Mac-testable) `./build/restage.sh Debug` and spot-check the lectern: empty-list
       hint still renders correctly; commit-time trailing-trim + interior-newline behavior unchanged
-      (i.e. this refactor is visibly a no-op). *(Left for the next in-game session — this is a
-      behavior-preserving refactor covered by the Core tests + clean build.)*
+      (i.e. this refactor is visibly a no-op). *(Confirmed in-game 2026-07-22, playtest
+      2026-07-22T09-29-44: empty-list hint good, trailing trims on commit — visible no-op.)*
