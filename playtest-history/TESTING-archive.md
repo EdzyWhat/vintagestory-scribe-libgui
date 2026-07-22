@@ -6,6 +6,43 @@ Obsolete). The playtest app does NOT read this file -- it exists only so the liv
 `TESTING.md` stays lean while nothing is lost (the verdicts also survive in each change's
 archived `tasks.md`).
 
+## restore-row-affordance-columns
+
+> Per-row delete/pin (hover-conditional) + drag-handle grip restored to the EDITOR view on the
+> ScribeRowElement architecture — visuals + hit-testing + hover only; delete/pin are STUBS that log
+> (real messaging is a later change). Committed `8e4733e`, restaged Debug 2026-07-22. Fully relaunch
+> the client first. The whole check is one task (6.3) split into parts for scanning; the flagged risk
+> parts are (e), (f), and (h). Archived 2026-07-22; the visual-refinement follow-up is
+> `refine-row-affordance-visuals`.
+
+- [x] `23b99917` **Hover shows icons.** In editor view, hover a task row → pin + delete + grip
+      icons appear; move the mouse off → they hide. Confirm NO flicker/jump when they show/hide.
+      Then hover a note row → delete + grip only (no pin), sitting at the same X as on task rows. *(6.3 a,b)*
+      - **Confirmed 2026-07-22** (playtest 2026-07-22T11-10-44): "No flicker or jump." Icons appear on
+        hover and hide on leave as designed.
+- [x] `23b99917` **Read view has none.** In the plain read view, hover rows → NO icons appear;
+      the checkbox still toggles a task done. *(6.3 c)*
+      - **Confirmed 2026-07-22** (playtest 2026-07-22T11-10-44): "No icons in read view."
+- [x] `23b99917` **Stub clicks are safe.** Click delete, then click pin → each logs (no crash);
+      the pin icon flips visually but reverts to its real state on the next recompose (it's a stub,
+      nothing persists yet). *(6.3 d)*
+      - **Confirmed 2026-07-22** (playtest 2026-07-22T11-10-44): "Functions as described." No crash;
+        stub log fires.
+- [x] `23b99917` **Editing near the icons.** Focus a row and type: the text column is a bit
+      narrower now (gutters reserved), and there's no jump as the label hands off to the input. While
+      typing, hover another row's icons — your caret/text must be undisturbed. Then click a gutter
+      icon while editing — it must NOT float the input onto that row. *(6.3 e,f — flagged risks)*
+      - **Confirmed 2026-07-22** (playtest 2026-07-22T11-10-44): "Hovering doesn't disturb focus." The
+        gutter click does not float the input onto the row (the critical check). Tester notes clicking a
+        gutter icon takes focus OFF the input — that's the flagged blur-on-icon-click behavior the design
+        anticipated; harmless for the stub, revisit if the real pin wants to preserve the caret.
+- [x] `23b99917` **Scale + scroll.** Sweep the text-size slider across its range → the icon
+      columns and icons grow/shrink with the row (no crash at the smallest size). With a list long
+      enough to scroll and icons showing, scroll → icons track their row and clip at the box edge,
+      with NOTHING bleeding below the list. *(6.3 g,h — (h) is a flagged risk)*
+      - **Confirmed 2026-07-22** (playtest 2026-07-22T11-10-44): "icons clip as expected." No scroll
+        bleed (the scissor-clobber risk did not materialize), scales without crashing.
+
 ## tighten-row-measure-and-trim-layering
 
 > Behavior-preserving cleanup (Core is now trim-agnostic; one shared wrapped-text-height
