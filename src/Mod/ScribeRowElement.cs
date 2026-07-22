@@ -110,9 +110,12 @@ public sealed class ScribeRowElement : GuiElement
     /// Measuring at the unscaled width and skipping the divide double-applied the scale and left the
     /// row slightly too short at any non-1.0 GUIScale (Retina) -- clipping the final wrapped line.
     /// </summary>
-    public static double RowHeightFixed(ICoreClientAPI capi, ScribeBlock block, double rowWidthFixed, CairoFont font, ScribeClientConfig config)
+    public static double RowHeightFixed(ICoreClientAPI capi, ScribeBlock block, double rowWidthFixed, CairoFont font, ScribeClientConfig config, bool reserveAffordances = false)
     {
-        var layout = RowTextLayout.For(rowWidthFixed, block.IsTask, font, config);
+        // reserveAffordances (editor view) narrows the text column to make room for the pin/delete/grip
+        // gutters, so a row measures taller there than in the read view -- each view must measure
+        // against its own text width or the label/input would clip or the row overlap its neighbour.
+        var layout = RowTextLayout.For(rowWidthFixed, block.IsTask, font, config, reserveAffordances);
         double textHeightFixed = MeasureWrappedTextHeightFixed(capi, block.Text, font, layout.TextWidth);
 
         double minHeight = ScribeBlockRowCell.RowHeight(block, config);
@@ -178,7 +181,7 @@ public sealed class ScribeRowElement : GuiElement
         var surface = new ImageSurface(Format.Argb32, width, height);
         var ctx = new Context(surface);
 
-        var layout = RowTextLayout.For(Bounds.fixedWidth, isTask, font, config);
+        var layout = RowTextLayout.For(Bounds.fixedWidth, isTask, font, config, reserveAffordances: mode == ScribeRowMode.Edit);
 
         double topPad = scaled(TopPadFixed(config));
 
@@ -296,7 +299,7 @@ public sealed class ScribeRowElement : GuiElement
     {
         if (!isTask || onToggleClicked is null) return false;
 
-        var layout = RowTextLayout.For(Bounds.fixedWidth, isTask, font, config);
+        var layout = RowTextLayout.For(Bounds.fixedWidth, isTask, font, config, reserveAffordances: mode == ScribeRowMode.Edit);
         double colX = Bounds.absX + scaled(layout.CheckboxX);
         double colSize = scaled(layout.CheckboxSize);
         double glyphSize = colSize * config.ReadCheckboxGlyphFill;
@@ -311,6 +314,22 @@ public sealed class ScribeRowElement : GuiElement
         double hitBottom = System.Math.Min(Bounds.absY + Bounds.InnerHeight, glyphY + glyphSize + expand);
 
         return args.X >= hitLeft && args.X <= hitRight && args.Y >= hitTop && args.Y <= hitBottom;
+    }
+
+    /// <summary>
+    /// True if <paramref name="args"/> falls in this row's right-side affordance gutter (the
+    /// pin/delete/grip columns), which exist only in the editor view. The full-width row element
+    /// overlaps those columns and is dispatched BEFORE the icon buttons (added after it), so without
+    /// this the row would consume the click and the icons would never see it. Callers use this to
+    /// YIELD the click (leave it unhandled) so the overlapping icon button wins -- the same pattern
+    /// the focused text column already uses to yield to the floating input. The boundary is the left
+    /// edge of the pin gutter (<see cref="RowTextLayout.PinX"/>); everything right of it is gutter.
+    /// </summary>
+    private bool IsInIconGutter(MouseEvent args)
+    {
+        if (mode != ScribeRowMode.Edit) return false;
+        var layout = RowTextLayout.For(Bounds.fixedWidth, isTask, font, config, reserveAffordances: true);
+        return args.X >= Bounds.absX + scaled(layout.PinX);
     }
 
     public override void OnMouseDownOnElement(ICoreClientAPI api, MouseEvent args)
@@ -329,6 +348,13 @@ public sealed class ScribeRowElement : GuiElement
         if (mode == ScribeRowMode.Edit && suppressText && !IsCheckboxHit(args))
         {
             return; // leave args.Handled false: the overlapping input wins this mouse-down
+        }
+
+        // Editor gutter (pin/delete/grip): yield to the overlapping icon button (added after this
+        // row, so it must win the down) unless the checkbox was hit. Same yield idiom as above.
+        if (mode == ScribeRowMode.Edit && IsInIconGutter(args) && !IsCheckboxHit(args))
+        {
+            return; // leave args.Handled false: the overlapping icon button wins this mouse-down
         }
 
         base.OnMouseDownOnElement(api, args); // sets args.Handled = true
@@ -351,6 +377,11 @@ public sealed class ScribeRowElement : GuiElement
 
         // Read view: nothing but the checkbox is interactive; a text click is inert.
         if (mode != ScribeRowMode.Edit) return;
+
+        // Editor gutter click: the overlapping icon button handles it (this row yielded the
+        // mouse-down to it). Do NOT fall through to onRequestEdit, or clicking pin/delete/grip would
+        // also float the input onto the row.
+        if (IsInIconGutter(args)) return;
 
         // Editor view, text-column click: ask the dialog to float the single live edit input onto
         // this row. For the ALREADY-focused row this is a no-op (the dialog early-returns and the

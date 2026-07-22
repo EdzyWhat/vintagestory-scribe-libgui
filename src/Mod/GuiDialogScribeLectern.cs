@@ -391,9 +391,9 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
             // ScribeRowElement.RowHeightFixed is the single source of row height, shared with the
             // element's own drawing so the baked surface is always tall enough for the text (it
             // handles the scaled-vs-fixed unit conversion that a naive measure got wrong -- see
-            // its doc comment).
+            // its doc comment). Read view reserves no affordance gutters, so text fills the full width.
             rowYs[i] = contentY;
-            rowHeights[i] = ScribeRowElement.RowHeightFixed(capi, blocks[i], listWidth, RowFont(), clientConfig);
+            rowHeights[i] = ScribeRowElement.RowHeightFixed(capi, blocks[i], listWidth, RowFont(), clientConfig, reserveAffordances: false);
             contentY += rowHeights[i] + rowSpacing;
         }
 
@@ -571,7 +571,9 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
         for (int i = 0; i < blocks.Count; i++)
         {
             rowYs[i] = contentY;
-            rowHeights[i] = ScribeRowElement.RowHeightFixed(capi, blocks[i], listWidth, RowFont(), clientConfig);
+            // Editor view reserves the pin/delete/grip gutters, so its text column is narrower and a
+            // row measures taller than the same block does in the read view.
+            rowHeights[i] = ScribeRowElement.RowHeightFixed(capi, blocks[i], listWidth, RowFont(), clientConfig, reserveAffordances: true);
             contentY += rowHeights[i] + rowSpacing;
         }
 
@@ -620,6 +622,10 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
             var block = blocks[i];
             bool isFocusedRow = focusedEditIndex == i;
             var rowBounds = ElementBounds.Fixed(0, rowYs[i], listWidth, rowHeights[i]);
+            // Shared horizontal layout for this row -- the row element, the floating input, and the
+            // pin/delete/grip affordance columns below all read from this one metric so they stay
+            // aligned. reserveAffordances: true (editor view reserves the right-side gutters).
+            var layout = RowTextLayout.For(listWidth, block.IsTask, RowFont(), clientConfig, reserveAffordances: true);
 
             SingleComposer.AddInteractiveElement(
                 new ScribeRowElement(
@@ -654,7 +660,9 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
                 // at the row's full height. The base single-line input vertically centers its text
                 // within these bounds, which closely tracks the label's top-padded single line for
                 // a task-height row; exact baseline is a flagged playtest item (design.md risk).
-                var layout = RowTextLayout.For(listWidth, block.IsTask, RowFont(), clientConfig);
+                // Uses the shared `layout` above, so the input's TextX/TextWidth match the narrowed
+                // static label (the row reserves the pin/delete/grip gutters) -- keeps the
+                // label<->input handoff jump-free (design.md Decision 5).
                 var inputBounds = ElementBounds.Fixed(layout.TextX, rowYs[i], layout.TextWidth, rowHeights[i]);
                 editInput = new ScribeRowTextInput(
                     capi, inputBounds, OnEditInputTextChanged, RowFont(),
@@ -664,6 +672,46 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
                 SingleComposer.AddInteractiveElement(editInput, "rowEditInput");
                 editInputIndex = i;
             }
+
+            // Per-row affordance icons (restore-row-affordance-columns): hover-conditional pin
+            // (task rows only) + delete, plus a drag-handle grip. Added AFTER the row element (and
+            // the floating input) so they render on top and win the mouse-down over the full-width
+            // row, which yields gutter clicks to them (ScribeRowElement.IsInIconGutter). Each is a
+            // child of contentBounds like the rows, so it scrolls + clips natively. HoverRegion is
+            // the SAME rowBounds instance the row uses, so it appears whenever the mouse is anywhere
+            // over the row and tracks the scroll for free. Uses the registered custom SVG codes.
+            if (block.IsTask)
+            {
+                var pinBounds = ElementBounds.Fixed(layout.PinX, rowYs[i], layout.PinWidth, rowHeights[i]);
+                // toggleable: true is mandatory for a stateful icon -- the base GuiElementToggleButton
+                // resets On=false on ANY dialog mouse-up when not toggleable, wiping the seeded
+                // pinned state (see ScribeHoverIconButton's ctor doc). On is seeded post-Compose below.
+                var pinButton = new ScribeHoverIconButton(capi, "scribepin", _ => OnEditViewTogglePin(i), pinBounds, toggleable: true)
+                {
+                    HoverRegion = rowBounds,
+                };
+                SingleComposer.AddInteractiveElement(pinButton, ScribeBlockRowCell.PinKey(i));
+                SingleComposer.AddHoverText(Lang.Get("scribe:scribe-gui-pin"), CairoFont.WhiteSmallText(), (int)clientConfig.HoverTextWidth, pinBounds.FlatCopy());
+            }
+
+            var deleteBounds = ElementBounds.Fixed(layout.DeleteX, rowYs[i], layout.DeleteWidth, rowHeights[i]);
+            var deleteButton = new ScribeHoverIconButton(capi, "scribeclose", _ => OnEditViewDeleteRow(i), deleteBounds)
+            {
+                HoverRegion = rowBounds,
+            };
+            SingleComposer.AddInteractiveElement(deleteButton, ScribeBlockRowCell.DeleteKey(i));
+            SingleComposer.AddHoverText(Lang.Get("scribe:scribe-gui-delete"), CairoFont.WhiteSmallText(), (int)clientConfig.HoverTextWidth, deleteBounds.FlatCopy());
+
+            // Grip: renders the scribegrip SVG and hover-hides for free via ScribeHoverIconButton.
+            // No-op callback -- the actual drag-to-reorder interaction (and its lift-ghost/insertion
+            // feedback) is owned by the parked lectern-drag-reorder-feedback change, which will adopt
+            // ScribeDragHandleElement's drag plumbing on top of this restored column.
+            var gripBounds = ElementBounds.Fixed(layout.DragHandleX, rowYs[i], layout.DragHandleWidth, rowHeights[i]);
+            var gripButton = new ScribeHoverIconButton(capi, "scribegrip", _ => { }, gripBounds)
+            {
+                HoverRegion = rowBounds,
+            };
+            SingleComposer.AddInteractiveElement(gripButton, ScribeBlockRowCell.DragHandleKey(i));
         }
 
         rowListContentBounds = contentBounds;
@@ -705,6 +753,15 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
         SingleComposer.AddSmallButton(Lang.Get("scribe:scribe-gui-switch-to-read"), OnClickSwitchToRead, switchBounds, key: "switchModeButton");
 
         SingleComposer.EndChildElements().Compose();
+
+        // Seed each task row's pin toggle to its persisted state -- only AFTER Compose() (the toggle
+        // button is toggleable, so its On isn't reset on mouse-up, but it still starts at the ctor
+        // default until seeded). Delete/grip are momentary, nothing to seed.
+        for (int i = 0; i < blocks.Count; i++)
+        {
+            if (!blocks[i].IsTask) continue;
+            SingleComposer.GetToggleButton(ScribeBlockRowCell.PinKey(i)).On = blocks[i].Pinned;
+        }
 
         SetupRowListScrollbar(contentY);
 
@@ -759,6 +816,27 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
         RequestRecompose();
     }
 
+    /// <summary>STUB (restore-row-affordance-columns): a row's delete affordance was clicked. This
+    /// change restores the icon + hit-testing only; the actual server-authoritative delete is a
+    /// later change. For now just log so the affordance is verifiably wired.</summary>
+    private void OnEditViewDeleteRow(int index)
+    {
+        // TODO(follow-up): scratchDocument?.DeleteBlock(index); isDirty = true; RequestRecompose();
+        // ScribeDocument.DeleteBlock already exists; the deferred-recompose machinery
+        // (pendingRecomposeAction) handles the mid-dispatch reentrancy the real handler needs.
+        capi.Logger.VerboseDebug("[scribe] delete affordance clicked (stub): row {0}", index);
+    }
+
+    /// <summary>STUB (restore-row-affordance-columns): a task row's pin affordance was clicked. The
+    /// button is toggleable so it flips visually, but block.Pinned is untouched -- the next recompose
+    /// re-seeds On from block.Pinned. Real pin persistence is a later change.</summary>
+    private void OnEditViewTogglePin(int index)
+    {
+        // TODO(follow-up): scratchDocument?.TogglePinned(index); isDirty = true; RequestRecompose();
+        // ScribeDocument.TogglePinned already exists.
+        capi.Logger.VerboseDebug("[scribe] pin affordance clicked (stub): row {0}", index);
+    }
+
     /// <summary>A row's text column was clicked: float the single live input onto it, then recompose
     /// so the input moves and the newly focused row suppresses its label (task 3.2/3.3). A click on
     /// the ALREADY-focused row early-returns here -- that row's mouse-down already fell through to
@@ -806,7 +884,7 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
         if (index >= 0 && index < scratchDocument.Blocks.Count)
         {
             double newHeight = ScribeRowElement.RowHeightFixed(
-                capi, scratchDocument.Blocks[index], clientConfig.RowListWidth, RowFont(), clientConfig);
+                capi, scratchDocument.Blocks[index], clientConfig.RowListWidth, RowFont(), clientConfig, reserveAffordances: true);
             if (editRowMeasuredHeight is not { } prev || System.Math.Abs(prev - newHeight) > 0.5)
             {
                 editRowMeasuredHeight = newHeight;

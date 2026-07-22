@@ -93,15 +93,19 @@
 
 ## 6. Icon-column scaling
 
-- [ ] 6.1 In `ScribeBlockRowCell`, apply `* clientConfig.TextSizeScale` to
-      `DragHandleWidth`, `PinWidth`, and `DeleteWidth` at their use sites, mirroring
-      `ToggleWidth`'s existing scaling convention.
-- [ ] 6.2 Re-check `ScribeBlockRowCell.TextWidth`'s row-width budget math accounts for the
-      now-variable (not fixed) icon-column widths when computing remaining text width.
-- [ ] 6.3 Manually test in-game: change the text-size preference across its range;
-      confirm the drag-handle, pin, and delete icon columns visibly shrink/grow along with
-      the row text and checkbox, and that text width still fills the freed-up space rather
-      than leaving a gap.
+> RESCOPED 2026-07-22 by `restore-row-affordance-columns`: the icon columns were dropped when the
+> row-list rework replaced `ScribeBlockRowCell.Compose` with `ScribeRowElement`, then restored (with
+> `TextSizeScale` scaling built in) on the new architecture in `RowTextLayout.For`. The two code tasks
+> below targeted the now-dead `ScribeBlockRowCell.TextWidth`, so they are OBSOLETE; the scaling they
+> asked for is already delivered. The manual test (6.3) is superseded by
+> `restore-row-affordance-columns` task 6.3(g).
+
+- [~] 6.1 OBSOLETE: targeted `ScribeBlockRowCell` (dead post-rework). Icon-column `TextSizeScale`
+      scaling is delivered in `RowTextLayout.For` by `restore-row-affordance-columns`.
+- [~] 6.2 OBSOLETE: `ScribeBlockRowCell.TextWidth` is dead; the live budget math lives in
+      `RowTextLayout.For` (`textWidth = pinX - textX`), handled by `restore-row-affordance-columns`.
+- [~] 6.3 SUPERSEDED by `restore-row-affordance-columns` task 6.3(g) (same text-size-sweep check on
+      the live `ScribeRowElement` rows).
 
 ## 7. Verification
 
