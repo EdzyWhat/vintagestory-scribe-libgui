@@ -64,6 +64,15 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         trailing `\n` measures the same height, and only the next real char (making the last line
         non-empty) triggers the grow. Fix: count trailing newlines in the row-height measurement.
         Retest after the fix.
+      - **Still broken 2026-07-22** (playtest 2026-07-22T00-02-12 + screenshot
+        2026-07-22T00-01-46-52081f30.png): the row SLOT now grows (empty space appears below the
+        text), but the **caret renders below/outside the input box** — the input element itself is
+        still one line tall. Cause: two competing height measures. `RowHeightFixed` (my trailing-\n
+        fix) sizes the row SLOT to 2 lines, but `GuiElementTextArea.Autoheight` re-measures the INPUT
+        element in its `internal TextChanged` using the raw `GetMultilineTextHeight` (no trailing-\n),
+        and that fires on every `SetValue` — shrinking the input back to 1 line after the recompose
+        sized it. Caret on line 2 then draws under the 1-line box. Fix: disable the input's `Autoheight`
+        (row growth is driven by our recompose, not the element self-sizing). Retest after the fix.
 - [x] `bf0a3e2a` **(4.7) Trailing trim + newline round-trip.** Add a trailing Shift+Enter (blank
       last line) and commit — confirm the row does NOT stay tall/empty (trailing trimmed) while a
       newline placed BETWEEN two words survives. Switch to read view (interior newline renders as a

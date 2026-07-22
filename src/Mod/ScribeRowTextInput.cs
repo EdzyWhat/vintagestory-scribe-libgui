@@ -81,6 +81,16 @@ public sealed class ScribeRowTextInput : GuiElementTextArea
         this.onCommitAndAdvance = onCommitAndAdvance;
         this.onCommitAndRetreat = onCommitAndRetreat;
         this.onBlur = onBlur;
+
+        // Disable GuiElementTextArea's self-sizing. The row's height is owned by the dialog: each
+        // compose sizes this input's bounds to the shared ScribeRowElement.RowHeightFixed, and any
+        // height change (wrap or newline) is driven by OnEditInputTextChanged -> recompose. Left ON,
+        // Autoheight re-measures the element in the base's internal TextChanged() (fired on every
+        // SetValue) using the raw GetMultilineTextHeight -- which does NOT count a trailing newline --
+        // so a Shift+Enter'd row shrank the INPUT back to one line even though the row slot grew,
+        // leaving the caret rendering below the box (playtest 2026-07-22T00-02-12, task 4.6). With it
+        // off, the input keeps the height compose gave it and the two measures can't diverge.
+        Autoheight = false;
     }
 
     /// <summary>
