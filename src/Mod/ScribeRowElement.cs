@@ -113,13 +113,29 @@ public sealed class ScribeRowElement : GuiElement
     public static double RowHeightFixed(ICoreClientAPI capi, ScribeBlock block, double rowWidthFixed, CairoFont font, ScribeClientConfig config)
     {
         var layout = RowTextLayout.For(rowWidthFixed, block.IsTask, font, config);
-        double scaledTextHeight = MeasureWrappedTextHeightScaled(capi, block.Text, font, scaled(layout.TextWidth));
-        double textHeightFixed = scaledTextHeight / RuntimeEnv.GUIScale;
+        double textHeightFixed = MeasureWrappedTextHeightFixed(capi, block.Text, font, layout.TextWidth);
 
         double minHeight = ScribeBlockRowCell.RowHeight(block, config);
         double contentHeight = TopPadFixed(config) + textHeightFixed + BottomOverheadFixed(config);
         return System.Math.Max(minHeight, contentHeight);
     }
+
+    /// <summary>
+    /// Height in FIXED (layout) units of <paramref name="text"/> wrapped to a text column of
+    /// <paramref name="fixedWidth"/> fixed units. The single wrapped-text-height primitive shared by
+    /// row measurement and any other caller that needs to size a text block (e.g. the empty-list
+    /// edit hint), so there is one correct measure rather than several divergent ones.
+    ///
+    /// Owns the scaled-vs-fixed unit handling so callers never touch GUIScale: the engine measures
+    /// text in SCALED (absolute) pixels -- <c>CairoFont.SetupContext</c> applies <c>scaled()</c> to
+    /// the font, and line count depends on the box width the text is measured against -- so we
+    /// measure against the SCALED width and divide the scaled height back down by GUIScale before
+    /// returning it in fixed units. Measuring at the unscaled width and skipping the divide
+    /// double-applied the scale and left content slightly too short at any non-1.0 GUIScale (Retina),
+    /// clipping the final wrapped line.
+    /// </summary>
+    internal static double MeasureWrappedTextHeightFixed(ICoreClientAPI capi, string text, CairoFont font, double fixedWidth) =>
+        MeasureWrappedTextHeightScaled(capi, text, font, scaled(fixedWidth)) / RuntimeEnv.GUIScale;
 
     /// <summary>
     /// Scaled pixel height of <paramref name="text"/> wrapped to <paramref name="scaledWidth"/>,

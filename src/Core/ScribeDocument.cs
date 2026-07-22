@@ -14,11 +14,13 @@ public sealed class ScribeDocument
     /// <summary>The blocks, in order. Read-only to callers; mutate via the methods below.</summary>
     public IReadOnlyList<ScribeBlock> Blocks => _blocks;
 
-    /// <summary>Adds a checkbox task to the end. Text is trimmed; blank text is rejected.</summary>
+    /// <summary>Adds a checkbox task to the end. Blank/whitespace-only text is rejected; otherwise
+    /// the text is stored verbatim. Whitespace normalization (trimming) is the editing layer's
+    /// responsibility, not the model's -- see <see cref="SetBlockText"/>.</summary>
     public bool AddTask(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return false;
-        _blocks.Add(new ScribeBlock(ScribeBlockKind.Task, text.Trim()));
+        _blocks.Add(new ScribeBlock(ScribeBlockKind.Task, text));
         return true;
     }
 
@@ -30,22 +32,21 @@ public sealed class ScribeDocument
     }
 
     /// <summary>
-    /// Changes a block's text. For Task blocks blank text is rejected; Text sections may be
-    /// set to empty. The Done flag and kind are unchanged.
+    /// Changes a block's text. For Task blocks blank/whitespace-only text is rejected; Text sections
+    /// may be set to empty. Otherwise the text is stored verbatim -- the model does NOT trim
+    /// surrounding whitespace. Whitespace normalization (e.g. stripping a trailing blank line from a
+    /// committed edit) is the editing layer's job (GuiDialogScribeLectern.NormalizeRowOnCommit), so
+    /// the live in-place editor can keep a just-typed trailing newline long enough for the row to
+    /// grow. The Done flag and kind are unchanged.
     /// </summary>
-    /// <param name="trimTask">When true (the default, for committed edits), a task's text is trimmed
-    /// of surrounding whitespace. The live in-place editor passes <c>false</c> so a trailing newline
-    /// the player just typed (Shift+Enter at the end of a line) survives long enough for the row to
-    /// grow to fit it; that path trims only on commit (GuiDialogScribeLectern.NormalizeRowOnCommit).
-    /// A blank/whitespace-only task is still rejected either way.</param>
-    public bool SetBlockText(int index, string? text, bool trimTask = true)
+    public bool SetBlockText(int index, string? text)
     {
         if (!IsValidIndex(index)) return false;
         var block = _blocks[index];
         if (block.IsTask)
         {
             if (string.IsNullOrWhiteSpace(text)) return false;
-            block.Text = trimTask ? text.Trim() : text;
+            block.Text = text;
         }
         else
         {

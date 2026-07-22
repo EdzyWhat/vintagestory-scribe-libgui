@@ -116,15 +116,6 @@ public static class ScribeBlockRowCell
         return rowWidth - dragHandleWidth - toggleWidth - pinWidth - config.DeleteWidth;
     }
 
-    /// <summary>Measures how tall <paramref name="text"/> actually renders when wrapped to
-    /// <paramref name="textWidth"/>, floored at <paramref name="minHeight"/> so short content
-    /// keeps the usual comfortable minimum row height and only grows for content that wraps
-    /// past it. Uses the engine's own wrap-aware measurement (<c>TextDrawUtil.GetMultilineTextHeight</c>,
-    /// the same mechanism <c>GuiElementTextArea.TextChanged()</c> uses internally) instead of a
-    /// fixed constant, so rows never overlap the row below regardless of text length.</summary>
-    public static double MeasureWrappedHeight(ICoreClientAPI capi, string text, CairoFont font, double textWidth, double minHeight) =>
-        System.Math.Max(minHeight, capi.Gui.Text.GetMultilineTextHeight(font, text, textWidth));
-
     public static string ToggleKey(int index) => $"scribeRow{index}Toggle";
     public static string TextKey(int index) => $"scribeRow{index}Text";
     public static string DeleteKey(int index) => $"scribeRow{index}Delete";

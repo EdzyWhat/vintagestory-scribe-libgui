@@ -400,7 +400,11 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
         double hintHeight = 0;
         if (blocks.Count == 0)
         {
-            hintHeight = ScribeBlockRowCell.MeasureWrappedHeight(capi, Lang.Get("scribe:scribe-gui-edit-hint"), RowFont(), listWidth, clientConfig.ControlRowHeight);
+            // Full-width hint (no reserved columns), floored at ControlRowHeight. Uses the single
+            // shared wrapped-text-height primitive so there is one correct measure in the codebase.
+            hintHeight = System.Math.Max(
+                clientConfig.ControlRowHeight,
+                ScribeRowElement.MeasureWrappedTextHeightFixed(capi, Lang.Get("scribe:scribe-gui-edit-hint"), RowFont(), listWidth));
             contentY = hintHeight + rowSpacing;
         }
 
@@ -783,12 +787,11 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
     private void OnEditInputTextChanged(string text)
     {
         if (focusedEditIndex is not { } index || scratchDocument is null) return;
-        // Live edit: preserve the text exactly as typed (trimTask: false) so a trailing newline from
-        // a just-pressed Shift+Enter survives -- otherwise SetBlockText's default Trim() strips it
-        // before the row can grow, and the row wouldn't resize until the next real char (task 4.6,
-        // root cause found 2026-07-22). Trailing whitespace/newlines are trimmed on COMMIT instead
+        // Live edit: store the text exactly as typed so a trailing newline from a just-pressed
+        // Shift+Enter survives long enough for the row to grow (task 4.6). SetBlockText stores task
+        // text verbatim; trailing whitespace/newlines are trimmed on COMMIT instead
         // (NormalizeRowOnCommit), which is the correct place per the 4.7 trailing-trim design.
-        scratchDocument.SetBlockText(index, text, trimTask: false);
+        scratchDocument.SetBlockText(index, text);
         isDirty = true;
 
         // Multi-line grow/shrink (lectern-multiline-edit-input): as typing wraps onto a new line or
@@ -871,10 +874,10 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
         string trimmed = current.TrimEnd();
         if (trimmed != current)
         {
-            // trimTask: false -- we already chose TrimEnd() only (interior + leading whitespace kept
-            // intentionally, per this method's contract). SetBlockText's default would re-apply a full
-            // Trim() and silently strip the leading indent we just decided to preserve.
-            scratchDocument.SetBlockText(index, trimmed, trimTask: false);
+            // This is the sole normalization site: SetBlockText stores task text verbatim (the model
+            // no longer trims), so the TrimEnd() above -- interior and leading whitespace kept
+            // intentionally -- is exactly what lands.
+            scratchDocument.SetBlockText(index, trimmed);
             isDirty = true;
         }
     }
