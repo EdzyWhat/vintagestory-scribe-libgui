@@ -3,8 +3,13 @@
 - [x] 1.1 Add `InspectOverlayMode` (`int`, default `0`) to `ScribeClientConfig.cs` with a doc-comment
       explaining the `0`/`1`/`2` convention (mirrors `GuiComposer.Outlines`), that it ships in Release
       (not `#if DEBUG`), and that it applies on lectern reopen (config is re-read on open).
-- [x] 1.2 Add `InspectOverlayMode` to `src/Mod/assets/scribe/config/configlib-patches.json` as an
-      int/dropdown (0–2) so it's toggleable in the in-game ConfigLib panel on this Mac.
+- [x] 1.2 **REVERTED — do NOT expose in the ConfigLib manifest.** Adding `InspectOverlayMode` as the
+      manifest's first `"type": "integer"` entry broke ConfigLib's ENTIRE Mod Settings window (it wouldn't
+      open, persisting across a full relaunch) — playtest 2026-07-22T17-45-13. ConfigLib parsed the patch
+      without a logged error, so the fault is in its ImGui `ConfigWindow` drawing the integer control, not
+      parsing. Removed the entry. Toggle `InspectOverlayMode` by editing `scribe-client-config.json`
+      directly instead — the dialog re-reads config on every open, so edit + reopen the lectern is a
+      complete toggle path that also doesn't depend on ConfigLib's ImGui window (dead on this Mac anyway).
 
 ## 2. Overlay helper (`src/Mod/ScribeInspectOverlay.cs`, new)
 

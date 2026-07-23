@@ -27,8 +27,9 @@ design rationale lives in `docs/explorations/gui-inspect-overlay.md`.
   `GuiComposer.Outlines` convention: `0`=off, `1`=outlines+labels, `2`=outlines only. Ships in
   Release (NOT `#if DEBUG` — the whole point is inspecting on the Mac where Debug/ImGui is dead);
   one int-check per frame when off; no hotkey, no `ScribeModSystem` change.
-- Expose `InspectOverlayMode` in the ConfigLib manifest so it's toggleable in-game on this Mac
-  (the one live-editing path that works here) — reopening the lectern applies it.
+- Toggle `InspectOverlayMode` by editing `scribe-client-config.json` and reopening the lectern (the
+  dialog re-reads config on every open). *(A ConfigLib-panel toggle was tried but reverted — adding it
+  as the manifest's first `"integer"` setting broke ConfigLib's whole settings window; see design.md.)*
 
 ## Capabilities
 
@@ -50,7 +51,8 @@ design rationale lives in `docs/explorations/gui-inspect-overlay.md`.
 - **Modified:** `src/Mod/GuiDialogScribeLectern.cs` — `BuildInspectBoxes()` + `RenderInspectOverlay(dt)`
   called at the end of `OnRenderGUI` guarded by `InspectOverlayMode >= 1`; dispose the label cache in
   `OnGuiClosed`. `src/Mod/ScribeClientConfig.cs` — add `InspectOverlayMode`.
-  `src/Mod/assets/scribe/config/configlib-patches.json` — add the toggle.
+  `src/Mod/assets/scribe/config/configlib-patches.json` — left unchanged (the toggle entry was tried
+  and reverted; see design.md).
 - **Read-only:** `RowTextLayout.cs`, `ScribeRowElement.cs` — the formulas the driver labels re-derive.
 - **No `src/Core/` change** (pure Mod-side — respects the Core-must-not-reference-VSAPI invariant),
   no new dependency (vanilla `IRenderAPI` only), no hotkey, no lang key, no network/persistence change.

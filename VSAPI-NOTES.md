@@ -509,6 +509,30 @@ note above) and structural bounds LIVE each frame so the overlay self-heals afte
 `ScribeInspectOverlay` + `GuiDialogScribeLectern.BuildInspectBoxes` are the worked example
 (add-gui-inspect-overlay). This is the native substitute for the dead VSImGui path on this Mac.
 
+**Symptom: adding a setting to `configlib-patches.json` makes ConfigLib's ENTIRE "Mod Settings"
+window fail to open — and it stays broken across a full game relaunch until the setting's on-disk
+value is reset.**
+
+Observed when `InspectOverlayMode` was added as the scribe manifest's FIRST `"type": "integer"`
+setting (the other four are `"float"`), flat-array form, with a `"range": {min,max}`
+(add-gui-inspect-overlay, playtest 2026-07-22T17-45-13). ConfigLib *parsed* it without a logged error
+(`[Config lib] Configs loaded: 1`; only a cosmetic `Lang key not found: scribe:<code>` for the missing
+`ingui` label), so the fault is NOT parsing — it's ConfigLib's **ImGui-based** `ConfigWindow` throwing
+while it builds/draws the integer control (`DrawIntegerMinMaxSetting` → `ImGui.SliderInt`/`DragInt`),
+which aborts drawing the whole window. It persists across relaunch because the window rebuilds from the
+same stored setting every time. Note the config window is the SAME ImGui tech that can't render on Apple
+Silicon (OpenGL 4.1 vs 4.3 — see the VSImGui section) — a float setting happening to work is not proof
+an int one will.
+
+**Fix pattern:** don't rely on the ConfigLib panel for a setting you can't verify renders. For a
+client-only knob, toggle it by editing the mod's config JSON directly and reopening the dialog if the
+dialog re-reads config on open (the scribe lectern does, at `GuiDialogScribeLectern` ctor). That path
+needs no manifest entry and doesn't touch ConfigLib's ImGui window at all. Confirmed `"float"` +
+`"range"` entries in the flat-array form DO work in the panel; the `"integer"` combination is what broke
+it — treat a new ConfigLib setting type as unproven until seen rendering in-game. (ConfigLib supports
+both a nested-by-type `settings.integer.CODE` object form and the flat `[{code,type,...}]` array form —
+`Config.FromJsonDefinition` branches on `settings.IsArray()`; ours is the array form.)
+
 ## Text-input caret / selection conventions
 
 **Symptom: before building a custom in-place editor, need to know whether the built-in

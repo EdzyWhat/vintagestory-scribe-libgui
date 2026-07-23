@@ -104,6 +104,16 @@ texture cache (keyed by string), which the dialog owns and disposes in `OnGuiClo
   (which suppresses its static label and hosts the input) specially to avoid confusion.
 - **Reflection fragility** — only if `IncludeUnknownElements` is enabled → keep try/catch + off by
   default; the known-keys path is reliable.
+- **ConfigLib manifest `"integer"` setting broke the Mod Settings window** (playtest 2026-07-22T17-45-13)
+  → REMOVED the manifest entry; toggle `InspectOverlayMode` by editing `scribe-client-config.json`
+  directly instead. Adding the setting as the manifest's first-ever `"type": "integer"` entry (the other
+  four are `"float"`) made ConfigLib's *entire* settings window fail to open — and it stayed broken
+  across a full relaunch until the on-disk value was reset. ConfigLib parsed the patch without a logged
+  error (`[Config lib] Configs loaded: 1`), so the failure is in how its ImGui-based `ConfigWindow`
+  builds/draws the integer control (`DrawIntegerMinMaxSetting`), not in parsing. The dialog re-reads
+  config on every open, so a plain JSON edit + reopen is a complete, lower-risk toggle path — and it
+  doesn't depend on ConfigLib's ImGui window at all (which is itself the dead-on-this-Mac tech). The
+  overlay feature is unaffected; only its in-panel toggle was dropped.
 
 ## Migration Plan
 
@@ -116,9 +126,11 @@ deleted (it's an explicit temporary holding pen).
 
 ## Open Questions
 
-- Does ConfigLib apply an `InspectOverlayMode` change on panel-close, or only on the next lectern
-  reopen? (Ties to the still-open ConfigLib live-path tasks in `add-configlib-integration`.) Either
-  is fine — reopen always works — but worth confirming during verification.
+- **Why does a `"type": "integer"` manifest entry break ConfigLib's window** while `"float"` entries
+  don't? (See the Risks entry above.) Not blocking — the JSON-edit toggle sidesteps it — but if we ever
+  want the setting back in the panel, the likely candidates are (a) the array-form + integer-type combo
+  is an under-tested ConfigLib path, or (b) an `ImGui.SliderInt`/`DragInt` call rejecting something on
+  the OpenGL 4.1 path. Would need a ConfigLib-side repro to confirm.
 - Companion (separate, optional change `add-configlib-expand-knobs`): the manifest exposes only ~4
   of ~30 knobs today; the overlay *reveals* which knob drives a box, ConfigLib *edits* it. Left out
   of this change to keep scope tight.

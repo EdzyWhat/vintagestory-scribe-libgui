@@ -15,8 +15,8 @@ MUST perform at most a single integer check per frame for the overlay.
 
 #### Scenario: Toggle applies on lectern reopen
 
-- **WHEN** the player sets `InspectOverlayMode` to `1` (via the ConfigLib panel or by editing the
-  config JSON) and reopens the lectern
+- **WHEN** the player sets `InspectOverlayMode` to `1` (by editing the config JSON) and reopens the
+  lectern
 - **THEN** the overlay renders over the real dialog
 - **AND** setting it back to `0` and reopening the lectern removes the overlay
 
