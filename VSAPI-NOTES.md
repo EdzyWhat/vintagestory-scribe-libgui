@@ -396,6 +396,25 @@ worked example: opaque rounded-rect fill (occludes overlaid text) + thin outline
 near-full-bounds `DrawIcon` (pass `size ≈ InnerWidth` to get a large glyph, since the SVG
 rasterizes to exactly the w/h you pass — see the icon-rendering section below).
 
+**Symptom: per-row buttons composed in a `for (int i = ...)` loop all fire their click handler
+with the SAME (wrong) index -- every pin/delete button acts on the last row, or on none (an
+out-of-range `blocks.Count`), and the action silently no-ops.**
+
+Not a VS API quirk -- a C# closure-capture trap that bites hard here because the dialog composes
+one interactive element per row in an index loop. A `for (int i = 0; i < n; i++)` declares ONE
+shared `i`; a lambda `_ => Handler(i)` closes over that *variable*, not its per-iteration value, so
+after the loop finishes every captured lambda sees `i == n`. (This is the one thing `for` does that
+`foreach` doesn't -- `foreach` captures a fresh loop variable per iteration since C# 5.) In
+`GuiDialogScribeLectern` the pin/delete handlers `_ => OnEditViewTogglePin(i)` did exactly this →
+`TogglePinned(blocks.Count)` → `IsValidIndex` fail → no-op, which read as "the buttons do nothing."
+
+**Fix pattern:** snapshot the index into a per-iteration local inside the loop body
+(`int rowIndex = i;`) and capture THAT in the lambdas. Alternatively route the click through the
+element's own stored-field index the way the row checkbox does (`ScribeRowElement.blockIndex` +
+a method-group handler) -- that path is immune because there's no closure over the loop variable.
+Seeding loops that use `i` *immediately* (e.g. `GetToggleButton(PinKey(i)).On = ...`) are fine --
+the trap is only deferred execution (a stored lambda) closing over the shared variable.
+
 ## Localization (`Lang`)
 
 **Symptom: every player-facing string renders as its own raw lang key (e.g.
@@ -771,6 +790,76 @@ supported through this path, and per-state hover recolor is free (pass a differe
 vector-draws a cross via `capi.Gui.Icons.DrawCross(ctx, x, y, 4.0, w)` — a clean X with zero art.
 
 See `docs/specs/scribe-icon-svgs.md` (art + wiring) and `docs/specs/lectern-gui-polish.md` item 8.
+
+## Custom button pressed-state and stateful toggles (`GuiElementToggleButton`)
+
+**Symptom: you want a transient "pressed/depressed" look on a custom icon button while it's held,
+but overriding `OnMouseDownOnElement`/`OnMouseUpOnElement` to track a `pressed` bool fights the base
+class and/or the row's click-yielding.**
+
+`GuiElementToggleButton.OnMouseUp` (decompiled against `VintagestoryAPI.dll`, 2026-07-22)
+unconditionally resets `On = false` whenever `Toggleable == false` — on ANY dialog mouse-up, not just
+one on this button (this is why Scribe's pin passes `toggleable: true`; see `ScribeHoverIconButton`
+ctor doc). Adding your own mouse overrides on top of that, plus the fact that Scribe rows deliberately
+*yield* the mouse-down to the overlapping button (`ScribeRowElement.OnMouseDownOnElement` returns
+without setting `args.Handled`), makes event-driven press tracking fragile.
+
+**Fix pattern:** compute the pressed look **statelessly at render time** instead of tracking events.
+In `RenderInteractiveElements`, draw a translucent overlay when `api.Input.MouseButton.Left` is true
+AND `Bounds.PointInside(api.Input.MouseX, api.Input.MouseY)`. `IInputAPI.MouseButton` is a
+`MouseButtonState { bool Left, Middle, Right }` (live, polled each frame). This needs no override, and
+self-clears the instant the button is released or the pointer leaves the bounds — matching "clears on
+release or leave" for free. Bake the overlay as its own `LoadedTexture` (clipped to the same rounded
+rect as the button) and blit it over the off/on texture. See `ScribeHoverIconButton`
+(`src/Mod/ScribeBlockRowCell.cs`).
+
+**Related — persisting a stateful toggle across recompose:** a custom button's `On` is re-seeded from
+the model after each `Compose()` (Scribe seeds `pinButton.On = block.Pinned`). So the toggle only
+"sticks" if the click handler mutates the backing model, not just the widget. For an editor-view
+toggle that already runs through an autosave path (Scribe's `scratchDocument` + `isDirty` +
+`MarkDirty`), you do **not** need a dedicated network message — the whole-document autosave serializes
+the flag (codec) and the server's `MarkDirty(redrawOnClient: true)` re-syncs it to other clients'
+read view, exactly like the done-toggle. A separate `Toggle*Message` is only needed for a *lock-free*
+read-view action that has no editor/autosave to ride (Scribe's `ScribeToggleTaskMessage`). See
+`GuiDialogScribeLectern.OnEditViewTogglePin` vs. `OnReadViewToggleTask`.
+
+## Editor row vertical box model (why a gap persists under the input at `RulingPadding = 0`)
+
+**Symptom: you set `RulingPadding = 0` expecting the focused input to sit flush above the ruling, but
+a visible gap remains between the input's bottom and the ruling line.** (Playtest 2026-07-22T15-27-35,
+item `3b7d714d`.) This is a box-model question, not a single knob — here is the whole vertical stack.
+
+A row's height and the pieces inside it are all in FIXED (unscaled layout) units until draw time. The
+bands, top to bottom, for one editor row (`src/Mod/ScribeRowElement.cs` unless noted):
+
+1. **Top pad** — `TopPadFixed = RulingPadding * TextSizeScale` (L~91). Space above the text.
+2. **Text** — measured height of the wrapped text (`MeasureWrappedTextHeightFixed`).
+3. **Bottom overhead** — `BottomOverheadFixed = RulingPadding*scale + RulingThickness*scale` (L~94):
+   the bottom pad PLUS the ruling line's own thickness.
+
+`RowHeightFixed` (L~119) = `max(MinRowHeight, TopPad + textHeight + BottomOverhead)`. A short/floored
+row has leftover **slack**; `ContentTopScaled` (L~218) pushes content down by `TopPad + slack/2` so a
+single line centers in the row rather than top-anchoring (this is why the checkbox/text sit where they
+do, and what `CheckboxGlyphMetricsFixed` mirrors for the grip).
+
+The ruling itself is drawn by `DrawRuling` (L~258) as a Cairo stroke at `y = height - thickness` — i.e.
+flush to the row's **bottom edge**, inside the bottom-overhead band.
+
+**The floating edit input** (`GuiDialogScribeLectern.cs` ~L671): its height is set to
+`rowHeight - BottomOverheadBandFixed(config)`, where `BottomOverheadBandFixed == BottomOverheadFixed`
+(bottom pad + ruling thickness). So the input deliberately stops a whole `BottomOverhead` band ABOVE
+the row bottom — that band is the gap you see. **At `RulingPadding = 0` the band is not zero**: it
+still contains `RulingThickness * TextSizeScale` (plus the input's own internal text centering within
+its bounds). So zeroing `RulingPadding` removes the *pad* but not the *ruling-thickness* slice or the
+input's internal vertical centering.
+
+**Levers, if the goal is "input hugs the ruling":** (a) change the input-height subtraction from the
+full `BottomOverheadFixed` to just the ruling thickness (keeps the line visible, drops the pad slice);
+(b) the input is a single-line box that vertically centers its text, so even a flush box shows padding
+above/below the glyph — shrinking the box or top-aligning its text is a separate lever; (c) reintroduce
+a small deliberate margin if flush looks cramped. Decide the target look before changing, since these
+trade off against the symmetric top/bottom margin the earlier pass added on purpose. No code change was
+made for this in the round-3 pass — this note is the writeup to decide against.
 
 ## Entry template
 

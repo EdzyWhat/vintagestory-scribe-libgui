@@ -449,7 +449,8 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
                     text: block.Text,
                     font: RowFont(),
                     config: clientConfig,
-                    onToggleClicked: block.IsTask ? OnReadViewToggleTask : null),
+                    onToggleClicked: block.IsTask ? OnReadViewToggleTask : null,
+                    pinned: block.Pinned),
                 ScribeBlockRowCell.TextKey(i));
         }
 
@@ -620,12 +621,23 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
         for (int i = 0; i < blocks.Count; i++)
         {
             var block = blocks[i];
+            // Capture the loop index in a per-iteration local before closing over it in the
+            // pin/delete click handlers below. A C# `for (int i = ...)` declares ONE shared `i`;
+            // a lambda that closes over `i` directly sees its POST-loop value (blocks.Count), so
+            // every button would call its handler with an out-of-range index and no-op. `foreach`
+            // captures per-iteration, but this loop needs the numeric index, so we snapshot it here.
+            // (The row element's checkbox is immune -- it routes through the element's own blockIndex
+            // field, not a closure.)
+            int rowIndex = i;
             bool isFocusedRow = focusedEditIndex == i;
             var rowBounds = ElementBounds.Fixed(0, rowYs[i], listWidth, rowHeights[i]);
             // Shared horizontal layout for this row -- the row element, the floating input, and the
             // pin/delete/grip affordance columns below all read from this one metric so they stay
-            // aligned. reserveAffordances: true (editor view reserves the right-side gutters).
-            var layout = RowTextLayout.For(listWidth, block.IsTask, RowFont(), clientConfig, reserveAffordances: true);
+            // aligned. reserveAffordances: true (editor view reserves the right-side gutters). The
+            // measured SQUARE affordance size is threaded in so the pin/delete overlay anchors match
+            // the square button bounds placed below (refine-row-affordance-visuals-2).
+            double affordanceSize = ScribeRowElement.AffordanceButtonSizeFixed(capi, RowFont(), clientConfig);
+            var layout = RowTextLayout.For(listWidth, block.IsTask, RowFont(), clientConfig, reserveAffordances: true, affordanceSize: affordanceSize);
 
             SingleComposer.AddInteractiveElement(
                 new ScribeRowElement(
@@ -640,7 +652,8 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
                     config: clientConfig,
                     onToggleClicked: block.IsTask ? OnEditViewToggleTask : null,
                     onRequestEdit: OnRequestEditRow,
-                    suppressText: isFocusedRow),
+                    suppressText: isFocusedRow,
+                    pinned: block.Pinned),
                 ScribeBlockRowCell.TextKey(i));
 
             // No separate divider element: each ScribeRowElement bakes its own lined-paper ruling
@@ -690,37 +703,85 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
             // row they sit on the first line rather than stretching the full row height
             // (refine-row-affordance-visuals item 2). Single-line height is independent of the block's
             // actual text, so all three buttons share it and line up.
-            double buttonHeight = ScribeRowElement.SingleLineRowHeightFixed(capi, RowFont(), clientConfig);
+            // Pin/delete buttons are SQUARE (equal width and height = the measured affordanceSize) so
+            // they don't stretch down a wrapped row and don't shrink to a speck at the smallest text
+            // size (refine-row-affordance-visuals-2). They abut as ONE grouped pill: the pin rounds its
+            // left corners, the delete its right corners, and their shared straight edge reads as a
+            // divider (AffordanceGroupSide). On a note (no pin) the delete stands alone.
+            double buttonSize = affordanceSize;
+
+            // Vertically CENTER the (now sub-row-height) group on the row's first text line rather than
+            // top-aligning it, so it lines up with the input box instead of hugging the ruling (playtest
+            // 2026-07-22T16-21-57). For a task, center on the checkbox glyph midline (same line the grip
+            // centers on); for a note (no checkbox) center within the single-line height.
+            double buttonY;
+            if (block.IsTask)
+            {
+                var (cbCenterYFixed, _) = ScribeRowElement.CheckboxGlyphMetricsFixed(
+                    capi, block, listWidth, rowHeights[i], RowFont(), clientConfig);
+                buttonY = rowYs[i] + cbCenterYFixed - buttonSize / 2;
+            }
+            else
+            {
+                double lineH = ScribeRowElement.SingleLineRowHeightFixed(capi, RowFont(), clientConfig);
+                buttonY = rowYs[i] + (lineH - buttonSize) / 2;
+            }
 
             if (block.IsTask)
             {
-                var pinBounds = ElementBounds.Fixed(layout.PinX, rowYs[i], layout.PinWidth, buttonHeight);
+                var pinBounds = ElementBounds.Fixed(layout.PinX, buttonY, layout.PinWidth, buttonSize);
                 // toggleable: true is mandatory for a stateful icon -- the base GuiElementToggleButton
                 // resets On=false on ANY dialog mouse-up when not toggleable, wiping the seeded
                 // pinned state (see ScribeHoverIconButton's ctor doc). On is seeded post-Compose below.
-                // showActiveState: true gives the pinned pin a distinct filled look.
-                var pinButton = new ScribeHoverIconButton(capi, "scribepin", _ => OnEditViewTogglePin(i), pinBounds, clientConfig, toggleable: true, showActiveState: true)
+                // showActiveState: true gives the pinned pin a distinct filled look. groupSide: Left so
+                // it rounds only its left corners (grouped with the delete on its right).
+                var pinButton = new ScribeHoverIconButton(capi, "scribepin", _ => OnEditViewTogglePin(rowIndex), pinBounds, clientConfig, toggleable: true, showActiveState: true, groupSide: AffordanceGroupSide.Left)
                 {
                     HoverRegion = rowBounds,
+                    // Under the AlwaysShowButton indicator, a pinned task's pin stays visible at rest
+                    // (bypasses the hover gate) so the pin reads without hovering. Seeded from the
+                    // block here; the On state is seeded post-Compose below.
+                    AlwaysVisible = block.Pinned && (clientConfig.PinnedIndicatorMode == PinnedIndicatorMode.AlwaysShowButton || clientConfig.PinnedIndicatorMode == PinnedIndicatorMode.Both),
                 };
                 SingleComposer.AddInteractiveElement(pinButton, ScribeBlockRowCell.PinKey(i));
                 SingleComposer.AddHoverText(Lang.Get("scribe:scribe-gui-pin"), CairoFont.WhiteSmallText(), (int)clientConfig.HoverTextWidth, pinBounds.FlatCopy());
             }
 
-            var deleteBounds = ElementBounds.Fixed(layout.DeleteX, rowYs[i], layout.DeleteWidth, buttonHeight);
-            var deleteButton = new ScribeHoverIconButton(capi, "scribeclose", _ => OnEditViewDeleteRow(i), deleteBounds, clientConfig)
+            // Delete rounds its right corners when grouped with a pin (a task), or all four when it
+            // stands alone (a note has no pin).
+            var deleteBounds = ElementBounds.Fixed(layout.DeleteX, buttonY, layout.DeleteWidth, buttonSize);
+            var deleteGroupSide = block.IsTask ? AffordanceGroupSide.Right : AffordanceGroupSide.Standalone;
+            var deleteButton = new ScribeHoverIconButton(capi, "scribeclose", _ => OnEditViewDeleteRow(rowIndex), deleteBounds, clientConfig, groupSide: deleteGroupSide)
             {
                 HoverRegion = rowBounds,
             };
             SingleComposer.AddInteractiveElement(deleteButton, ScribeBlockRowCell.DeleteKey(i));
             SingleComposer.AddHoverText(Lang.Get("scribe:scribe-gui-delete"), CairoFont.WhiteSmallText(), (int)clientConfig.HoverTextWidth, deleteBounds.FlatCopy());
 
-            // Grip: renders the scribegrip SVG in the far-left column and hover-hides for free via
-            // ScribeHoverIconButton. No-op callback -- the actual drag-to-reorder interaction (and its
-            // lift-ghost/insertion feedback) is owned by the parked lectern-drag-reorder-feedback
-            // change, which will adopt ScribeDragHandleElement's drag plumbing on top of this column.
-            var gripBounds = ElementBounds.Fixed(layout.DragHandleX, rowYs[i], layout.DragHandleWidth, buttonHeight);
-            var gripButton = new ScribeHoverIconButton(capi, "scribegrip", _ => { }, gripBounds, clientConfig)
+            // Grip: renders the scribegrip SVG in the far-left column as a BARE icon (drawChrome: false)
+            // -- no fill or outline box, visually distinct from the chromed pin/delete. Its glyph fills
+            // its (square) bounds, so we size those bounds to make the glyph slightly TALLER than the
+            // checkbox glyph and vertically CENTER it on the checkbox's midline rather than top-aligning
+            // it on the row (playtest 2026-07-22T15-27-35: it was a touch short and off-center). The
+            // checkbox metrics come from ScribeRowElement so the two can't drift. On a note (no checkbox)
+            // fall back to filling the column top-aligned. Hover-hides for free; no-op callback -- the
+            // real drag-to-reorder interaction is owned by the parked lectern-drag-reorder-feedback change.
+            double gripColWidth = layout.DragHandleWidth;
+            ElementBounds gripBounds;
+            if (block.IsTask)
+            {
+                var (cbCenterYFixed, cbGlyphFixed) = ScribeRowElement.CheckboxGlyphMetricsFixed(
+                    capi, block, listWidth, rowHeights[i], RowFont(), clientConfig);
+                double gripGlyph = cbGlyphFixed * 1.1; // slightly taller than the checkbox glyph
+                double gripX = layout.DragHandleX + (gripColWidth - gripGlyph) / 2; // center in the column
+                double gripY = rowYs[i] + cbCenterYFixed - gripGlyph / 2;           // center on checkbox midline
+                gripBounds = ElementBounds.Fixed(gripX, gripY, gripGlyph, gripGlyph);
+            }
+            else
+            {
+                gripBounds = ElementBounds.Fixed(layout.DragHandleX, rowYs[i], gripColWidth, buttonSize);
+            }
+            var gripButton = new ScribeHoverIconButton(capi, "scribegrip", _ => { }, gripBounds, clientConfig, drawChrome: false)
             {
                 HoverRegion = rowBounds,
             };
@@ -840,14 +901,19 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
         capi.Logger.VerboseDebug("[scribe] delete affordance clicked (stub): row {0}", index);
     }
 
-    /// <summary>STUB (restore-row-affordance-columns): a task row's pin affordance was clicked. The
-    /// button is toggleable so it flips visually, but block.Pinned is untouched -- the next recompose
-    /// re-seeds On from block.Pinned. Real pin persistence is a later change.</summary>
+    /// <summary>Editor-view task pin-toggle click: flip the pinned flag on the scratch document
+    /// (lock-gated edit path -- the editor holds the lock) and mark dirty so the autosave/commit
+    /// persists it. Exactly mirrors <see cref="OnEditViewToggleTask"/>: the whole-document autosave
+    /// already serializes <c>Pinned</c> (codec v3) and re-syncs it to other clients' read view via the
+    /// server's <c>MarkDirty</c>, so no dedicated pin message is needed (unlike the read-view done
+    /// toggle, which is lock-free and has no editor to autosave). A recompose re-bakes the row and
+    /// re-seeds the pin button's <c>On</c> from the now-updated <c>block.Pinned</c>, so the visual
+    /// survives instead of reverting (refine-row-affordance-visuals-2).</summary>
     private void OnEditViewTogglePin(int index)
     {
-        // TODO(follow-up): scratchDocument?.TogglePinned(index); isDirty = true; RequestRecompose();
-        // ScribeDocument.TogglePinned already exists.
-        capi.Logger.VerboseDebug("[scribe] pin affordance clicked (stub): row {0}", index);
+        scratchDocument?.TogglePinned(index);
+        isDirty = true;
+        RequestRecompose();
     }
 
     /// <summary>A row's text column was clicked: float the single live input onto it, then recompose

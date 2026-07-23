@@ -117,7 +117,13 @@ public readonly struct RowTextLayout
     /// reserved in BOTH views when <see cref="ScribeClientConfig.DragColumnAlwaysReserved"/> is set,
     /// so the checkbox/text X match across the Read<->Edit toggle regardless of this flag.
     /// </summary>
-    public static RowTextLayout For(double rowWidth, bool isTask, CairoFont font, ScribeClientConfig config, bool reserveAffordances = false)
+    /// <param name="affordanceSize">Square pin/delete button size in FIXED units, when the caller has
+    /// computed it (via <see cref="ScribeRowElement.AffordanceButtonSizeFixed"/>). When &gt; 0 it is used
+    /// as BOTH the pin and delete width so the two buttons are square and equal (and abut as one group);
+    /// the pin/delete overlay anchors are derived from it. When 0 (read-view / height-only callers that
+    /// have no <c>capi</c> to measure a line) the legacy per-config widths are used -- those callers only
+    /// need the text/checkbox columns, which don't depend on the affordance width.</param>
+    public static RowTextLayout For(double rowWidth, bool isTask, CairoFont font, ScribeClientConfig config, bool reserveAffordances = false, double affordanceSize = 0)
     {
         // Far-left drag column (grip). Reserved in both views per DragColumnAlwaysReserved so the
         // checkbox/text sit at the same X in read and editor view -- the read view just draws no grip
@@ -135,12 +141,17 @@ public readonly struct RowTextLayout
         // Text runs to the row's right edge -- NOT narrowed for pin/delete. Those are hover overlays.
         double textWidth = rowWidth - textX;
 
-        // Pin/delete overlay anchors (editor view only). Widths scale with the text-size preference.
-        // Right-anchored and accumulating leftward: [ ... text ... ][ pin ][ delete ]. Pin is
-        // task-only, so on a note pinWidth is 0 and delete lands at the same X as on a task -- the
+        // Pin/delete overlay anchors (editor view only). The two buttons are SQUARE and EQUAL: when the
+        // caller passes a measured affordanceSize (the single-line-height/min-size square, see
+        // ScribeRowElement.AffordanceButtonSizeFixed) both widths are that size; otherwise fall back to
+        // the per-config widths (height-only/read callers that don't render the buttons). Right-anchored
+        // and accumulating leftward, ABUTTED so they read as one group: [ ... text ... ][ pin | delete ].
+        // Pin is task-only, so on a note pinWidth is 0 and delete lands at the same X as on a task -- the
         // overlay cluster lines up down the list.
-        double deleteWidth = reserveAffordances ? config.DeleteWidth * config.TextSizeScale : 0;
-        double pinWidth = (reserveAffordances && isTask) ? config.PinWidth * config.TextSizeScale : 0;
+        double squareSize = affordanceSize > 0 ? affordanceSize : config.DeleteWidth * config.TextSizeScale;
+        double deleteWidth = reserveAffordances ? squareSize : 0;
+        double pinSquare = affordanceSize > 0 ? affordanceSize : config.PinWidth * config.TextSizeScale;
+        double pinWidth = (reserveAffordances && isTask) ? pinSquare : 0;
 
         double deleteX = rowWidth - deleteWidth;
         double pinX = deleteX - pinWidth;

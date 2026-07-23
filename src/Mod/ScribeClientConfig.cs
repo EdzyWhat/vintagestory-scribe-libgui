@@ -71,8 +71,15 @@ public sealed class ScribeClientConfig
 
     /// <summary>Base (unscaled) vertical padding between a row's text and its ruling line, above
     /// and below the line. Scaled by <see cref="TextSizeScale"/> at the point of use so the gap
-    /// tracks font size (design.md Decision 3 / spec "ruling padding scales with text size").</summary>
-    public double RulingPadding = 4;
+    /// tracks font size (design.md Decision 3 / spec "ruling padding scales with text size").
+    ///
+    /// <para>Defaulted to 0 in refine-row-affordance-visuals-2 so the ruling hugs the row content
+    /// (the playtester asked for "just the line, no internal padding") -- kept as a tunable knob
+    /// because that change flagged the spacing as an area to revisit. The focused input keeps its
+    /// symmetric margin regardless of this value: its height is shrunk by
+    /// <c>ScribeRowElement.BottomOverheadBandFixed</c>, which still includes the ruling thickness,
+    /// so the highlight never butts directly against the line even at padding 0.</para></summary>
+    public double RulingPadding = 0;
 
     /// <summary>How much of the read-view checkbox column the drawn glyph fills (0-1). The glyph is
     /// centered in the column (<see cref="ToggleWidth"/> wide); a value below 1 insets it. Tuned up
@@ -129,8 +136,10 @@ public sealed class ScribeClientConfig
     /// <summary>Width of a row's delete-icon column.</summary>
     public double DeleteWidth = 32;
 
-    /// <summary>Width of a row's drag-handle column (editor view only).</summary>
-    public double DragHandleWidth = 24;
+    /// <summary>Width of a row's far-left drag-handle (grip) column. Matches <see cref="ToggleWidth"/>
+    /// so the grip and checkbox columns read as equal-width, and so the bare (chrome-less) grip glyph
+    /// has room to render at least as tall as the checkbox (refine-row-affordance-visuals-2).</summary>
+    public double DragHandleWidth = 28;
 
     /// <summary>Width of a task row's pin-icon column.</summary>
     public double PinWidth = 32;
@@ -184,6 +193,62 @@ public sealed class ScribeClientConfig
     /// draw time.</summary>
     public double AffordanceCornerRadius = 3;
 
+    /// <summary>Pressed/depressed overlay color as RGBA (0-1), drawn over the WHOLE pin/delete button
+    /// while the mouse is held down on it (refine-row-affordance-visuals-2). A DARK tint at moderate
+    /// alpha so the press reads clearly on the opaque parchment fill and is distinct from the pin's
+    /// filled "on" (pinned) look -- the first pass used a ~10% white wash that was invisible over the
+    /// parchment while it visibly lightened the dark ink glyph, so the whole button looked untouched
+    /// and only the icon changed (playtest 2026-07-22T15-27-35). Clipped to the button's rounded rect
+    /// at render time; cleared on mouse-up/leave.</summary>
+    public double AffordancePressedR = 0.0;
+    public double AffordancePressedG = 0.0;
+    public double AffordancePressedB = 0.0;
+    public double AffordancePressedA = 0.18;
+
+    /// <summary>Minimum on-screen size (unscaled px) for the SQUARE pin/delete buttons. The buttons
+    /// are sized to <c>max(MinAffordanceButtonSize, singleLineHeight)</c> and stay square (equal
+    /// width and height), so at the smallest text-size setting they don't shrink to an illegible
+    /// speck (refine-row-affordance-visuals-2). Mirrors the <see cref="MinRowHeight"/> floor idea:
+    /// the value is a floor on the drawn button, applied after <c>TextSizeScale</c>.</summary>
+    public double MinAffordanceButtonSize = 22;
+
+    /// <summary>Multiplier on the square pin/delete button size, so the grouped button reads as the
+    /// same height as a single-row input box rather than the full single-line row height (which made
+    /// the group look anchored to the ruling -- playtest 2026-07-22T16-21-57). The user's rough target
+    /// was ~85%; the buttons stay square (width tracks height) and are vertically centered on the row's
+    /// single text line. Tune to taste. Applied on top of the <see cref="MinAffordanceButtonSize"/>
+    /// floor.</summary>
+    public double AffordanceButtonSizeFactor = 0.85;
+
+    // ---------------- Pinned-task indicator (refine-row-affordance-visuals-2) ----------------
+
+    /// <summary>How a pinned task is shown at rest (without hovering the row), so a pinned task is
+    /// distinguishable from an unpinned one even when its hover-revealed pin button is hidden. The
+    /// pin button itself is normally hover-gated like the other affordances; this selects an
+    /// always-visible cue on top of that. Chosen in-game after comparing the variants (the first
+    /// pass's small top-right dot was unnoticeable -- playtest 2026-07-22T15-27-35 -- so the resting
+    /// indicator is now a whole-row background tint):
+    /// <list type="bullet">
+    /// <item><c>None</c> -- no resting indicator (pin only visible on hover).</item>
+    /// <item><c>RowTint</c> -- the whole pinned row gets a subtle background tint (both views).</item>
+    /// <item><c>AlwaysShowButton</c> -- a pinned row's pin button stays visible in its filled "on"
+    /// look, bypassing the hover gate (editor view).</item>
+    /// <item><c>Both</c> -- row tint and always-shown button together.</item>
+    /// </list></summary>
+    public PinnedIndicatorMode PinnedIndicatorMode = PinnedIndicatorMode.RowTint;
+
+    /// <summary>Color as RGBA (0-1) of the <see cref="PinnedIndicatorMode.RowTint"/> wash -- a tint
+    /// filled across the whole row surface for a pinned task, UNDER the text/checkbox/ruling so it
+    /// marks the row without fighting them.
+    ///
+    /// <para>TEMPORARILY LOUD (playtest 2026-07-22T16-21-57: at alpha 0.12 the tint was invisible and
+    /// "nothing looked pinned"). Set to an unmistakable amber at 0.35 to PROVE the render path works;
+    /// once confirmed in-game, dial the alpha (and/or hue) back to a tasteful ~0.10-0.15 wash.</para></summary>
+    public double PinnedRowTintR = 0.95;
+    public double PinnedRowTintG = 0.75;
+    public double PinnedRowTintB = 0.20;
+    public double PinnedRowTintA = 0.35;
+
     // ---------------- Editor toolbar (controls below the row list) ----------------
 
     /// <summary>Shared height for the text-size label/slider row, the collapse-toggle button,
@@ -224,4 +289,25 @@ public sealed class ScribeClientConfig
 
     /// <summary>Width of the tooltip box shown on hover over a row's pin/delete icon.</summary>
     public double HoverTextWidth = 150;
+}
+
+/// <summary>How a pinned task is indicated at rest (mouse not over the row), so a pinned task is
+/// distinguishable even while its hover-revealed pin button is hidden. Selected via
+/// <see cref="ScribeClientConfig.PinnedIndicatorMode"/>; the variants are compared in-game before
+/// settling on one (refine-row-affordance-visuals-2). Serialized to JSON by name via the config's
+/// Newtonsoft round-trip -- an unknown/legacy value falls back to the field default.</summary>
+public enum PinnedIndicatorMode
+{
+    /// <summary>No resting indicator -- the pin is only visible while hovering the row.</summary>
+    None,
+
+    /// <summary>The whole pinned row gets a subtle background tint (both read and editor views).</summary>
+    RowTint,
+
+    /// <summary>A pinned row's pin button stays visible in its filled "on" look, bypassing the
+    /// hover gate (editor view only -- the read view has no pin button).</summary>
+    AlwaysShowButton,
+
+    /// <summary>Both the row tint and the always-shown pin button.</summary>
+    Both,
 }

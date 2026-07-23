@@ -153,6 +153,18 @@ public sealed class ScribeRowTextInput : GuiElementTextArea
         }
 
         base.RenderInteractiveElements(deltaTime);
+
+        // TEMPORARY DEBUG (refine-row-affordance-visuals-2, ruling-spacing tuning): outline the focused
+        // input's bounds in stark magenta so the input box edges are unmistakable while measuring the
+        // gap to the ruling above/below (playtest 2026-07-22T16-21-57 asked for a starker focus color to
+        // measure distances). REMOVE once the single-line-centered-between-rulings spacing is dialed in.
+        if (HasFocus)
+        {
+            const int debugMagenta = unchecked((int)0xFFFF00FF); // ARGB: opaque magenta
+            api.Render.RenderRectangle(
+                (float)Bounds.renderX, (float)Bounds.renderY, 60f,
+                (float)Bounds.InnerWidth, (float)Bounds.InnerHeight, debugMagenta);
+        }
     }
 
     public override void OnFocusLost()

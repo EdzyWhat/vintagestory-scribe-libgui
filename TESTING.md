@@ -21,7 +21,149 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
-## refine-row-affordance-visuals
+## refine-row-affordance-visuals-2
+
+> Second refinement pass on the row affordances: pin+delete grouped into one bordered pill with a
+> divider; the drag grip drawn as a bare chrome-less icon at least the checkbox's height; a pressed
+> overlay while a button is held (also gives the click the feedback the last playtest found missing);
+> pin/delete made square with a minimum size so they stay legible at the smallest text setting; the
+> ruling's internal padding removed so the line hugs the content; and pinning wired to REAL
+> persistence (editor toggle now saves + syncs) plus an always-visible pinned indicator. Restaged
+> Debug 2026-07-22 — fully relaunch the client first. All from task 8.2.
+
+- [x] `d7b9827a` **Grouped pin+delete.** In editor view, hover a task row: the pin and delete read as
+      ONE bordered pill with a divider between them, not two separate buttons. *(8.2)*
+      - **Confirmed 2026-07-22** (playtest report 2026-07-22T15-27-35, "Good combined button") via
+        screenshots/../2026-07-22T15-16-22-d7b9827a.png: pin and delete render as one outlined pill with
+        a divider between the two glyphs.
+- [x] `163395e7` **Bare grip.** The far-left drag grip is a plain icon with NO box/outline around it,
+      and its glyph is at least as tall as the checkbox. *(8.2)*
+      - **Still broken 2026-07-22** (playtest report 2026-07-22T15-27-35) via
+        screenshots/../2026-07-22T15-17-16-163395e7.png: the chrome is correctly gone (bare icon, no
+        box), but the grip glyph is slightly SHORTER than the checkbox and is not vertically centered
+        against it. Needs: grip glyph ≥ checkbox height AND centered on the checkbox's vertical midline.
+      - **Confirmed 2026-07-22** (playtest report 2026-07-22T16-21-57, "pass") via
+        screenshots/../2026-07-22T16-07-32-163395e7.png: after the 1.1×-checkbox sizing + midline
+        centering (`CheckboxGlyphMetricsFixed`), the bare grip now reads as slightly taller than the
+        checkbox and vertically centered on it.
+- [x] `d6913c79` **Pressed feedback + routing.** Press and hold pin, then delete: each shows a light
+      depressed overlay while held, clears on release, and the correct action fires (watch the Debug log
+      for the pin vs delete stub). *(8.2)*
+      - **Still broken 2026-07-22** (playtest report 2026-07-22T15-27-35, detailed) via
+        screenshots/../2026-07-22T15-18-02-d6913c79.png: the pressed overlay is too weak to read — a 10%
+        white fill over the opaque parchment button is nearly invisible, so it looks like "only the SVG
+        is overlaid." What the tester actually saw as a color change on the pin is its pinned ink-fill
+        (showActiveState), NOT the press overlay, which confuses press vs. pinned. Fix: make the pressed
+        state a clearly visible whole-button darken/tint (not a faint white wash), and reconcile it with
+        the pinned-fill look so a click is unambiguous. Routing itself wasn't confirmable for the same
+        reason (no legible feedback); re-verify after the overlay is fixed.
+      - **Confirmed 2026-07-22** (playtest report 2026-07-22T16-21-57, "Press gets darkened"): after the
+        overlay was changed to a dark whole-button tint (`0,0,0 @ 0.18`) — and the stale on-disk config
+        that was shadowing it with the old white value was reconciled — a held button now visibly
+        darkens.
+- [x] `cd3ab269` **Square + min size.** Sweep the text-size slider min↔max: pin and delete stay square
+      and equally sized, and at the smallest size they stop shrinking (stay legible), no crash. *(8.2)*
+      - **Confirmed 2026-07-22** (playtest report 2026-07-22T15-27-35, "still legible at small size"):
+        pin/delete stay square and equally sized across the slider range and remain legible at the
+        smallest setting with no crash.
+- [ ] `3b7d714d` **Ruling hugs content.** The ruling line now sits right under the row text with no
+      internal padding gap; when you focus a row to edit, the highlight still keeps a small margin and
+      doesn't touch the line. *(8.2)*
+      - **Still broken 2026-07-22** (playtest report 2026-07-22T15-27-35) via
+        screenshots/../2026-07-22T15-21-24-3b7d714d.png: there is still a visible gap between the input
+        and the ruling despite RulingPadding=0 — the remaining space comes from the row/input box model
+        (the input's own height band + bottom overhead), not RulingPadding. User wants to review the box
+        model (what each margin/padding/band is) during code review before deciding the target spacing.
+        Revisit as a box-model refinement, not a one-line knob change.
+      - **Deferred 2026-07-22 (no code change this pass):** wrote up the row's full vertical box model
+        in `VSAPI-NOTES.md` ("Editor row vertical box model…") — why a gap remains at `RulingPadding=0`
+        (the input height subtracts the whole `BottomOverheadFixed` band, which still holds the ruling
+        thickness + the input's own text centering) and the levers to close it. Review that and tell me
+        the target spacing; then I'll make the change.
+      - **Target defined + tooling requested 2026-07-22** (playtest report 2026-07-22T16-21-57, unsure)
+        via screenshots/../2026-07-22T16-11-46-3b7d714d.png: the DESIRED state is now concrete — a
+        single row of text should be visually **vertically centered between the ruling above and the
+        ruling below**. To make the spacing measurable in-game, the user wants two temporary debug aids:
+        (a) a **starker input focus color** (so the input box edges are obvious), and (b) a **temporary
+        fill color on whatever margin/band we're tuning**. Next pass: add those debug visuals (behind
+        config/DEBUG), then center the single line between rulings.
+      - **Debug aids staged 2026-07-22 (measurement pass, spacing NOT yet changed):** added TEMPORARY
+        visuals to measure with — the focused input is outlined in stark **magenta**
+        (`ScribeRowTextInput.RenderInteractiveElements`), and the row's two tuning bands are filled:
+        **green** = top pad, **cyan** = bottom overhead (the input-to-ruling gap)
+        (`ScribeRowElement.ComposeElements`, edit mode only). Relaunch, focus a row, eyeball where the
+        single line sits between rulings, and tell me the adjustment ("move text down N px" / "make the
+        green and cyan bands equal"); I'll set the spacing, THEN remove these debug colors.
+- [x] `78507e2a` **Pin persists + syncs.** Toggle a task's pin: it stays pinned across a recompose and
+      after a save+reload; on a second client the pinned state shows up in their read view. *(8.2)*
+      - **Confirmed 2026-07-22:** the amber row tint now appears when a task is pinned, which means the
+        toggle actually took effect. Root cause of the prior "nothing pinned" was a loop-capture bug
+        (`refine-row-affordance-visuals-2` 11.6): the pin/delete click lambdas closed over the shared
+        `for`-loop variable `i` (= `blocks.Count` after the loop), so every click called the handler with
+        an out-of-range index and no-op'd. Fixed by capturing a per-iteration `int rowIndex = i;`. With
+        pinning now working, the tint (c8cba401) renders on pin — persistence/sync ride the same
+        editor-autosave → `MarkDirty` path that's unit-tested underneath.
+      - **Still broken 2026-07-22** (playtest report 2026-07-22T15-27-35): persistence could not be
+        verified because the pinned state is almost invisible on screen (blocked by the same weak-visual
+        issue as d6913c79 and the missing resting indicator c8cba401). The underlying toggle/save/sync
+        is wired and unit-tested; this item is blocked on giving pinned a legible on-screen look. Re-test
+        once the indicator (below) lands.
+      - **Fix staged 2026-07-22 (awaiting retest):** the resting indicator is now a whole-row tint (see
+        c8cba401), which makes pinned state legible. Restaged Debug — relaunch, pin a task, and confirm
+        the tint persists across a recompose and a save+reload (and, two clients, shows in the other's
+        read view).
+      - **Still broken 2026-07-22** (playtest report 2026-07-22T16-21-57, fail): still can't verify —
+        "nothing looks pinned." The row tint is not visibly landing (see c8cba401), so there's no
+        on-screen signal that a toggle stuck. Blocked on the pinned indicator actually rendering; the
+        toggle/save/sync remains wired + unit-tested underneath. Re-test once pinned has a visible look.
+      - **Fix staged 2026-07-22 (awaiting retest):** unblocked by making the tint LOUD (see c8cba401 —
+        amber @ 0.35, on-disk config reconciled). Restaged Debug — relaunch, pin a task, and confirm the
+        (now obvious) tint persists across recompose + save/reload; then we dial the color back.
+- [x] `c8cba401` **Pinned indicator at rest.** A pinned task shows an indicator without hovering
+      (default: a small dot at the row's top-right) in both read and editor views; try the
+      PinnedIndicatorMode config variants and pick the preferred one. *(8.2)*
+      - **Confirmed 2026-07-22:** user reports "the amber tint works." The whole-row `RowTint`
+        (`PinnedIndicatorMode.RowTint`, default) renders at rest once a task is actually pinned — the
+        prior "nothing looks pinned" was the loop-capture bug blocking the toggle itself (see 78507e2a),
+        not a tint render fault. The render path was correct all along; it just never had a pinned row to
+        draw. Next tuning step (not a blocker): dial `PinnedRowTint*` alpha back from the loud 0.35 amber
+        to a tasteful wash now that the path is proven.
+      - **Still broken 2026-07-22** (playtest report 2026-07-22T15-27-35): the default RowAccent dot was
+        not visible/noticeable, and the tester asked to be shown concrete indicator OPTIONS to choose
+        from rather than getting one undescribed default. Next: present indicator design options, pick
+        one, then re-implement and re-test.
+      - **Fix staged then STILL broken 2026-07-22** (playtest report 2026-07-22T16-21-57, fail):
+        switched the indicator to a whole-row background tint (`PinnedIndicatorMode.RowTint`, default;
+        `PinnedRowTint*` @ alpha 0.12) and reconciled the on-disk config — but the tester still sees
+        nothing pinned. Suspected causes to investigate next pass: (a) alpha 0.12 ink-tone over the
+        parchment is too subtle to notice; (b) the tint is drawn but the on-disk `PinnedIndicatorMode`
+        value isn't RowTint after the config reconcile; or (c) a draw-order/opacity issue in
+        `ScribeRowElement.ComposeElements`. Bump the tint to something unmistakable first (or add a
+        temporary stark color) to prove the path renders, then dial it back.
+      - **Fix staged 2026-07-22 (awaiting retest):** verified the render path is correct (draws first,
+        under content), so the cause was (a) — too subtle. Cranked `PinnedRowTint*` to an unmistakable
+        amber (`0.95/0.75/0.20 @ 0.35`) in both code default and the on-disk config, and restaged.
+        Relaunch, pin a task → the whole row should be obviously amber-tinted at rest in both views. Once
+        confirmed the path renders, we dial the alpha/hue back to a tasteful wash.
+      - **Fix staged 2026-07-22 (awaiting retest):** presented four options; user chose a **tinted row
+        background** (`PinnedIndicatorMode.RowTint`, now the default) — the whole pinned row gets a
+        subtle wash, drawn under the text/checkbox/ruling, visible without hovering in both views. The
+        pin button also keeps its filled look on hover ("keep both"). Restaged Debug — relaunch and
+        confirm a pinned task's whole row is tinted at rest; tune `PinnedRowTint*` alpha to taste.
+- [ ] `c7204988` **Button group height = single-row input.** The pin/delete group looks anchored to
+      the ruling line; its full height should instead equal the single-row input height (roughly 85% of
+      current), achieved mostly by trimming padding / the SVG's own whitespace rather than shrinking the
+      glyph much. *(8.2 general note)*
+      - **Still broken 2026-07-22** (playtest report 2026-07-22T16-21-57, general note) via
+        screenshots/../2026-07-22T16-14-02-general.png: the group currently spans the full single-line
+        row height, so it appears attached to the ruling / top of the input rather than matching the
+        input's own box. Reduce the button-group height to ~85% (tune against the input box), preferring
+        to cut whitespace/padding over shrinking the glyph. New item from this round; not yet attempted.
+      - **Fix staged 2026-07-22 (awaiting retest):** added `AffordanceButtonSizeFactor` (default 0.85);
+        the square pin/delete size is now `SingleLineRowHeight * 0.85`, and the group is vertically
+        CENTERED on the row's first text line (checkbox midline) instead of top-aligned, so it lines up
+        with the input rather than hugging the ruling. Restaged Debug — relaunch and confirm the group
+        matches the single-row input height; tune the factor if needed.
 
 > Notion-style redraw of the per-row pin/delete/grip buttons: thin ink outline over an OPAQUE
 > parchment background that occludes the text they overlay on hover, larger icons, single-line
@@ -29,27 +171,50 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > reserved in both views, and symmetric focused-input margin vs. the ruling. Committed `c15e5f2`,
 > restaged Debug 2026-07-22. Fully relaunch the client first. One task (6.2) split into 10 parts.
 
-- [ ] `568a9827` **Chrome + icon look.** In editor view, hover a row → buttons are a thin outline
+- [x] `568a9827` **Chrome + icon look.** In editor view, hover a row → buttons are a thin outline
       over an opaque parchment fill (NO brown pill), and the icon fills most of the button (not a tiny
       glyph). *(6.2 parts 1)*
-- [ ] `568a9827` **Single-line height + overlay.** On a tall WRAPPED note: pin/delete/grip sit on the
+      - **Confirmed 2026-07-22** (playtest report 2026-07-22T13-17-40) via
+        screenshots/../2026-07-22T13-12-30-568a9827.png: buttons render as a thin ink outline over an
+        opaque parchment fill (no brown pill) with a large icon. Follow-up refinements the user asked
+        for — group pin+delete with a divider, and make the grip a bare chrome-less SVG — are carried
+        into the new second-pass affordance change, not a defect in this item.
+- [x] `568a9827` **Single-line height + overlay.** On a tall WRAPPED note: pin/delete/grip sit on the
       TOP line, not stretched down the row. On a long single-line row: text uses full width, and
       hovering floats pin/delete over the text's right end — their opaque background cleanly hides the
       text directly beneath them. *(6.2 parts 2,3)*
+      - **Confirmed 2026-07-22** (playtest report 2026-07-22T13-17-40, "It's good") via
+        screenshots/../2026-07-22T13-12-46-568a9827.png: on a four-line wrapped note the pin/delete/grip
+        sit on the top line rather than stretching down the row.
 - [ ] `568a9827` **Overlay click vs. text click.** Click an overlaid pin/delete → the stub log fires
       (no crash). Click text to the LEFT of the pin/delete cluster → the row focuses/edits normally.
       *(6.2 part 4)*
-- [ ] `568a9827` **Input margin symmetry.** Focus a row and type → the focus highlight has an equal
+      - **Untested 2026-07-22** (playtest report 2026-07-22T13-17-40): left unverified — the user could
+        not tell whether the stub fired because there is no visual feedback on click ("right now there's
+        no visual feedback for this"), and no crash was reported. A pressed/depressed overlay state is
+        being added in the new second-pass affordance change specifically so this becomes observable;
+        re-verify click routing once that lands.
+- [x] `568a9827` **Input margin symmetry.** Focus a row and type → the focus highlight has an equal
       small margin at top AND bottom, not butting against the ruling. A short (min-height) task centers
       its single line rather than sitting bottom-heavy. *(6.2 part 5)*
-- [ ] `568a9827` **Far-left grip + no toggle shift.** The grip is at the row's far LEFT, left of the
+      - **Confirmed 2026-07-22** (playtest report 2026-07-22T13-17-40): user sees both the new bottom
+        and top margins on the focused input. The follow-up request to tighten the ruling's own padding
+        so the line hugs the content is carried into the new second-pass affordance change.
+- [x] `568a9827` **Far-left grip + no toggle shift.** The grip is at the row's far LEFT, left of the
       checkbox (checkbox/text shifted right in the editor). Toggle Read↔Edit on the same lectern → the
       checkbox does NOT jump horizontally (read view reserves the same drag column, draws no grip).
       *(6.2 parts 6,7)*
-- [ ] `568a9827` **Scale + state + scroll.** Sweep the text-size slider min↔max → buttons, outline,
+      - **Confirmed 2026-07-22** (playtest report 2026-07-22T13-17-40, "Its good"): the grip renders at
+        the row's far left of the checkbox; toggling Read↔Edit leaves the checkbox in place.
+- [x] `568a9827` **Scale + state + scroll.** Sweep the text-size slider min↔max → buttons, outline,
       icon, drag column, and margins all scale, no crash at the smallest size. Pin a task, then click
       elsewhere → the pin stays pinned (On survives an unrelated mouse-up). Scroll a row past the clip
       edge → overlay icons and the input clip natively, nothing bleeds below the list. *(6.2 parts 8,9,10)*
+      - **Confirmed 2026-07-22** (playtest report 2026-07-22T13-17-40): scaling functions across the
+        slider range with no crash, pin-On survives an unrelated mouse-up, and scrolled rows clip
+        natively. Follow-up sizing polish the user asked for — pin/delete equal-width AND square, plus a
+        minimum on-screen size so buttons stay legible at the low (30%) end where they currently get too
+        small — is carried into the new second-pass affordance change.
 
 ## lectern-gui-quick-edit-affordances
 

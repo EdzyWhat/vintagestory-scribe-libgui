@@ -54,3 +54,31 @@ fi
 
 echo "Staged: $(find "$STAGE" -type f | wc -l | tr -d ' ') files"
 echo "Fully quit and relaunch the game client to pick up the new build (lang/assets load once at boot, not per-world-join)."
+
+# Config-drift guard: the mod reads its client settings from an on-disk JSON that WINS over the
+# code defaults - a key present in that file with a stale value silently shadows any new default in
+# ScribeClientConfig.cs (this bit us once: a pressed-overlay default changed white->dark in code, but
+# the old white value sat in the JSON, so the fix looked broken in-game). Warn when the on-disk config
+# predates a change to the defaults, so a playtester knows to reset/reconcile it before trusting the
+# visuals. Non-fatal (never blocks a stage) and best-effort - a missing config, or git/stat hiccup,
+# just skips the warning. Config edits take effect on REOPENING the lectern (no restage needed).
+CONFIG_JSON="$HOME/Library/Application Support/VintagestoryData/ModConfig/scribe-client-config.json"
+DEFAULTS_SRC="src/Mod/ScribeClientConfig.cs"
+if [[ -f "$CONFIG_JSON" && -f "$DEFAULTS_SRC" ]]; then
+  cfg_mtime=$(stat -f %m "$CONFIG_JSON" 2>/dev/null || echo 0)
+  # Last commit that touched the defaults (0 if not yet committed / not in git).
+  defaults_commit=$(git log -1 --format=%ct -- "$DEFAULTS_SRC" 2>/dev/null || echo 0)
+  # Uncommitted edits to the defaults that are staged into this build but not yet on disk.
+  defaults_dirty=$(git status --porcelain -- "$DEFAULTS_SRC" 2>/dev/null || echo "")
+
+  if [[ -n "$defaults_dirty" || ( "$defaults_commit" != 0 && "$cfg_mtime" -lt "$defaults_commit" ) ]]; then
+    echo ""
+    echo "⚠️  CONFIG DRIFT: on-disk scribe-client-config.json may be shadowing new code defaults."
+    echo "    $CONFIG_JSON"
+    echo "    was written before the latest ScribeClientConfig.cs change, so any default you changed"
+    echo "    could be overridden by a stale value already in that file. Before testing the visuals:"
+    echo "      - reset:     mv the JSON aside (back it up) and let the mod rewrite fresh defaults, OR"
+    echo "      - reconcile: edit just the drifted keys in the JSON, keeping your real tuning."
+    echo "    (Takes effect on reopening the lectern - no restage needed for a config-only edit.)"
+  fi
+fi

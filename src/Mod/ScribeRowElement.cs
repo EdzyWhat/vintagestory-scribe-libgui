@@ -31,6 +31,7 @@ public sealed class ScribeRowElement : GuiElement
     private readonly int blockIndex;
     private readonly bool isTask;
     private readonly bool done;
+    private readonly bool pinned;
     private readonly string text;
     private readonly CairoFont font;
     private readonly ScribeClientConfig config;
@@ -69,13 +70,15 @@ public sealed class ScribeRowElement : GuiElement
         ScribeClientConfig config,
         System.Action<int>? onToggleClicked,
         System.Action<int>? onRequestEdit = null,
-        bool suppressText = false)
+        bool suppressText = false,
+        bool pinned = false)
         : base(capi, bounds)
     {
         this.mode = mode;
         this.blockIndex = blockIndex;
         this.isTask = isTask;
         this.done = done;
+        this.pinned = pinned;
         this.text = text;
         this.font = font;
         this.config = config;
@@ -145,6 +148,50 @@ public sealed class ScribeRowElement : GuiElement
         double oneLineHeightFixed = MeasureWrappedTextHeightFixed(capi, "A", font, 100000);
         double contentHeight = TopPadFixed(config) + oneLineHeightFixed + BottomOverheadFixed(config);
         return System.Math.Max(config.MinRowHeight, contentHeight);
+    }
+
+    /// <summary>
+    /// The SQUARE size (in FIXED layout units) of the pin/delete affordance buttons: the single-line
+    /// row height scaled by <see cref="ScribeClientConfig.AffordanceButtonSizeFactor"/> (so the group
+    /// reads as the single-row INPUT height, ~85%, rather than the full row height that made it look
+    /// anchored to the ruling -- playtest 2026-07-22T16-21-57), floored at
+    /// <see cref="ScribeClientConfig.MinAffordanceButtonSize"/> so the buttons stay legible at the
+    /// smallest text-size setting. Used for BOTH the button width and height so pin/delete are square
+    /// and equal, and threaded into <see cref="RowTextLayout.For"/> so the overlay anchors and the
+    /// dialog's button bounds derive from the one value (they can't drift). The floor mirrors the
+    /// <see cref="ScribeClientConfig.MinRowHeight"/> pattern -- a fixed-unit minimum on the drawn box.
+    /// </summary>
+    public static double AffordanceButtonSizeFixed(ICoreClientAPI capi, CairoFont font, ScribeClientConfig config) =>
+        System.Math.Max(config.MinAffordanceButtonSize,
+            SingleLineRowHeightFixed(capi, font, config) * config.AffordanceButtonSizeFactor);
+
+    /// <summary>
+    /// The drawn checkbox glyph's vertical center and glyph size, in FIXED (layout) units, for a task
+    /// row of the given text/width/height -- so another element (the far-left grip) can size and
+    /// vertically center itself against the checkbox rather than the whole row. Mirrors exactly the
+    /// math <see cref="DrawCheckboxGlyph"/> + <see cref="ContentTopScaled"/> draw the glyph at (content
+    /// top = top pad + centering slack; glyph inset within its column by
+    /// <see cref="ScribeClientConfig.ReadCheckboxGlyphFill"/>), so the two can't drift
+    /// (refine-row-affordance-visuals-2). Returns center-Y measured from the row's top.
+    /// </summary>
+    public static (double centerYFixed, double glyphSizeFixed) CheckboxGlyphMetricsFixed(
+        ICoreClientAPI capi, ScribeBlock block, double rowWidthFixed, double rowHeightFixed, CairoFont font, ScribeClientConfig config)
+    {
+        var layout = RowTextLayout.For(rowWidthFixed, block.IsTask, font, config, reserveAffordances: true);
+
+        // Fixed-unit form of ContentTopScaled: top pad + half the slack a floored/short row leaves.
+        double topPadFixed = TopPadFixed(config);
+        double textHeightFixed = MeasureWrappedTextHeightFixed(capi, block.Text, font, layout.TextWidth);
+        double contentHeightFixed = topPadFixed + textHeightFixed + BottomOverheadFixed(config);
+        double slackFixed = System.Math.Max(0, rowHeightFixed - contentHeightFixed);
+        double contentTopFixed = topPadFixed + slackFixed / 2;
+
+        // Glyph inset within its column, matching DrawCheckboxGlyph.
+        double colSizeFixed = layout.CheckboxSize;
+        double glyphSizeFixed = colSizeFixed * config.ReadCheckboxGlyphFill;
+        double insetFixed = (colSizeFixed - glyphSizeFixed) / 2;
+        double centerYFixed = contentTopFixed + insetFixed + glyphSizeFixed / 2;
+        return (centerYFixed, glyphSizeFixed);
     }
 
     /// <summary>
@@ -225,6 +272,18 @@ public sealed class ScribeRowElement : GuiElement
 
         var layout = RowTextLayout.For(Bounds.fixedWidth, isTask, font, config, reserveAffordances: mode == ScribeRowMode.Edit);
 
+        // Resting pinned indicator (RowTint / Both): a subtle whole-row background wash for a pinned
+        // task, drawn FIRST (under the checkbox/text/ruling) so the row reads as pinned at rest in BOTH
+        // views without hovering, and scrolls/clips with the row via its own texture. Replaces the
+        // first pass's top-right dot, which was too small to notice (playtest 2026-07-22T15-27-35).
+        if (pinned && isTask
+            && (config.PinnedIndicatorMode == PinnedIndicatorMode.RowTint || config.PinnedIndicatorMode == PinnedIndicatorMode.Both))
+        {
+            ctx.SetSourceRGBA(config.PinnedRowTintR, config.PinnedRowTintG, config.PinnedRowTintB, config.PinnedRowTintA);
+            ctx.Rectangle(0, 0, width, height);
+            ctx.Fill();
+        }
+
         double contentTop = ContentTopScaled(layout);
 
         if (isTask)
@@ -245,6 +304,25 @@ public sealed class ScribeRowElement : GuiElement
         }
 
         DrawRuling(ctx, width, height);
+
+        // TEMPORARY DEBUG (refine-row-affordance-visuals-2, ruling-spacing tuning): tint the two
+        // vertical bands we're tuning so the margins are visible while measuring (playtest
+        // 2026-07-22T16-21-57 asked for a temporary coloring of the margin under inspection). The
+        // input height = rowHeight - BottomOverheadFixed, so the BOTTOM band (cyan) is exactly the gap
+        // between the input's bottom and the row bottom (ruling sits at its base); the TOP band
+        // (green) is the top pad above the content. Goal: a single line centered between the rulings.
+        // REMOVE once the spacing is dialed in.
+        if (mode == ScribeRowMode.Edit)
+        {
+            double topBand = scaled(TopPadFixed(config));
+            double bottomBand = scaled(BottomOverheadFixed(config));
+            ctx.SetSourceRGBA(0.0, 0.8, 0.0, 0.30); // green: top pad
+            ctx.Rectangle(0, 0, width, topBand);
+            ctx.Fill();
+            ctx.SetSourceRGBA(0.0, 0.7, 0.9, 0.30); // cyan: bottom overhead (input-to-ruling gap)
+            ctx.Rectangle(0, height - bottomBand, width, bottomBand);
+            ctx.Fill();
+        }
 
         generateTexture(surface, ref rowTexture);
         ctx.Dispose();
@@ -381,7 +459,11 @@ public sealed class ScribeRowElement : GuiElement
     private bool IsInIconGutter(MouseEvent args)
     {
         if (mode != ScribeRowMode.Edit) return false;
-        var layout = RowTextLayout.For(Bounds.fixedWidth, isTask, font, config, reserveAffordances: true);
+        // Pass the same measured square affordance size the dialog places the buttons at, so the yield
+        // boundary (the cluster's left edge = PinX) tracks the real button cluster rather than the
+        // legacy per-config widths.
+        double affordanceSize = AffordanceButtonSizeFixed(api, font, config);
+        var layout = RowTextLayout.For(Bounds.fixedWidth, isTask, font, config, reserveAffordances: true, affordanceSize: affordanceSize);
         return args.X >= Bounds.absX + scaled(layout.PinX);
     }
 

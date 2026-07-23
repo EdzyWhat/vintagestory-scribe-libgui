@@ -1,7 +1,7 @@
 ---
 name: what-to-test
 description: Surface a short, concrete list of in-game conditions to test in Vintage Story, pulled from the remaining manual-test tasks in any in-progress OpenSpec change; persist/regenerate that list as TESTING.md at the repo root so it survives across sessions, with agent-recorded verdicts (not raw checkboxes) as the only source of truth; and use freshly captured screenshots as evidence against it. Items carry one of four lifecycle verdicts -- Confirmed, Still broken, Backlogged, Obsolete -- and verdict-carrying items are retained across regeneration (they don't vanish when their task is done or removed). Use when the user asks "what should I test", "what should I check in-game", "give me a testing checklist", "what's left to verify", "update the testing checklist", wants to review/process submitted playtest reports, wants an item marked completed/backlogged/obsolete, or mentions a "screenshot"/"screen"/"pic" while discussing testing, a bug, or a feature (a new capture from the game's screenshot folder to triage and check against the checklist).
-version: "1.2"
+version: "1.3"
 ---
 
 # What should I test?
@@ -39,6 +39,40 @@ registered on this machine) or the work lives in one, pass `--store <id>` on `li
    - **If fresh:** no need to mention it (or a terse "staged build is current" if it reassures).
    - This check is cheap (two `stat`/`git` calls) and belongs to Vintage Story specifically; skip it
      for non-VS projects.
+
+0b. **Config-drift check (do this SECOND, right after the restage check).** Same class of gotcha as a
+   stale build: the mod reads its client settings from an on-disk JSON at
+   `~/Library/Application Support/VintagestoryData/ModConfig/scribe-client-config.json`, and **that file
+   wins over the code defaults** — an absent key falls back to the `ScribeClientConfig.cs` default, but a
+   *present* key with a stale value silently shadows any new default (this actually happened: a pressed-
+   overlay default was changed in code from white to dark, but the old white value sat in the on-disk
+   JSON, so the tester kept seeing white and the fix looked broken). Guard against it:
+
+   ```bash
+   CFG="$HOME/Library/Application Support/VintagestoryData/ModConfig/scribe-client-config.json"
+   stat -f %m "$CFG" 2>/dev/null                                   # config file mtime
+   git -C <repo> log -1 --format=%ct -- src/Mod/ScribeClientConfig.cs  # last time a default could have changed
+   ```
+   The config is **potentially stale** if the file exists AND its mtime predates the last commit that
+   touched `ScribeClientConfig.cs` (a default may have drifted underneath it), OR there are uncommitted
+   edits to `ScribeClientConfig.cs` not yet reflected on disk.
+
+   - **If potentially stale:** warn (below the restage warning, above the item list) — e.g.
+     `⚠️ On-disk scribe-client-config.json (written <time>) predates ScribeClientConfig.cs changes — new code defaults may be shadowed by stale JSON values. Reset or reconcile before trusting the visuals.`
+     Then offer the user a choice, because the file also holds THEIR real tuning (text size, layout knobs)
+     — do NOT blind-delete:
+     1. **Reset to defaults** — back the file up first so tuning is recoverable, then remove it; the mod
+        rewrites it with current defaults on next load:
+        `mv "$CFG" "$CFG.bak-$(stamp)"` (pass a real timestamp; `Date.now()` isn't available in scripts).
+     2. **Reconcile** — read the file, and for any key whose code default changed, update just that key in
+        place (and add/rename keys for fields that were added/removed in the change), leaving the user's
+        deliberate tuning (e.g. `TextSizeScale`) untouched. Prefer this when the user has clearly tuned
+        values they want to keep.
+   - **If the file doesn't exist:** nothing to shadow — the mod will write fresh defaults on next open;
+     no warning needed.
+   - **If fresh (config newer than the code):** no need to mention it.
+   - Config changes are read when the dialog is (re)opened, so the fix takes effect on **reopening the
+     lectern** — no rebuild/restage needed for a config-only edit. VS-specific; skip for non-VS projects.
 
 1. **Find in-progress changes.**
    ```bash

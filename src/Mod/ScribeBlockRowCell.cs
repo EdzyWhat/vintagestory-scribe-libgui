@@ -64,13 +64,34 @@ public sealed class ScribeHoverIconButton : GuiElementToggleButton
     /// small click target.</summary>
     public ElementBounds? HoverRegion;
 
+    /// <summary>When true, this button renders even while the mouse is not over its
+    /// <see cref="HoverRegion"/> -- used for a pinned task's pin button under the
+    /// <see cref="PinnedIndicatorMode.AlwaysShowButton"/> indicator, so the pin stays visible at
+    /// rest instead of only on hover (refine-row-affordance-visuals-2). Default false keeps the
+    /// normal hover-gated behavior for every other affordance.</summary>
+    public bool AlwaysVisible;
+
     private readonly ScribeClientConfig config;
     private readonly bool showActiveState;
 
+    /// <summary>Whether to bake the button's chrome (opaque fill + outline). The pin/delete buttons
+    /// pass true; the grip passes false so it renders as a bare SVG with no box around it
+    /// (refine-row-affordance-visuals-2).</summary>
+    private readonly bool drawChrome;
+
+    /// <summary>Which corners this button rounds, so an abutted pin+delete pair reads as ONE grouped
+    /// pill with a divider down the middle: the pin rounds its left corners only, the delete its
+    /// right corners only, and their shared straight edges form the divider
+    /// (refine-row-affordance-visuals-2). <see cref="AffordanceGroupSide.Standalone"/> rounds all
+    /// four (a lone button, e.g. delete on a note row).</summary>
+    private readonly AffordanceGroupSide groupSide;
+
     // Own textures baked in ComposeElements (the base's releasedTexture/pressedTexture are private).
-    // "off" is the released/unpinned look; "on" adds a filled-in accent for a pinned pin.
+    // "off" is the released/unpinned look; "on" adds a filled-in accent for a pinned pin;
+    // "pressed" is the translucent overlay blitted over either while the button is held.
     private LoadedTexture offTexture;
     private LoadedTexture onTexture;
+    private LoadedTexture pressedTexture;
 
     /// <summary><paramref name="toggleable"/> must be <c>true</c> for any icon whose <c>On</c>
     /// state represents persisted model state (e.g. the pin icon's <c>block.Pinned</c>):
@@ -83,23 +104,28 @@ public sealed class ScribeHoverIconButton : GuiElementToggleButton
     /// <para><paramref name="showActiveState"/> gives the button a distinct filled "on" look when
     /// <c>On</c> is true -- pass true for the stateful pin, false for momentary buttons (delete,
     /// grip) that have no meaningful on-state to depict.</para></summary>
-    public ScribeHoverIconButton(ICoreClientAPI capi, string icon, System.Action<bool> onToggle, ElementBounds bounds, ScribeClientConfig config, bool toggleable = false, bool showActiveState = false)
+    public ScribeHoverIconButton(ICoreClientAPI capi, string icon, System.Action<bool> onToggle, ElementBounds bounds, ScribeClientConfig config, bool toggleable = false, bool showActiveState = false, bool drawChrome = true, AffordanceGroupSide groupSide = AffordanceGroupSide.Standalone)
         : base(capi, icon, "", CairoFont.WhiteDetailText(), onToggle, bounds, toggleable)
     {
         this.config = config;
         this.showActiveState = showActiveState;
+        this.drawChrome = drawChrome;
+        this.groupSide = groupSide;
         offTexture = new LoadedTexture(capi);
         onTexture = new LoadedTexture(capi);
+        pressedTexture = new LoadedTexture(capi);
     }
 
-    /// <summary>Bakes the two button textures (off/on) onto our own surfaces, bypassing the base's
-    /// brown-chrome compose entirely. All geometry derives from <c>Bounds.InnerWidth/InnerHeight</c>
-    /// so the drawn pill matches the clickable <c>Bounds</c> the base still hit-tests.</summary>
+    /// <summary>Bakes the button textures onto our own surfaces, bypassing the base's brown-chrome
+    /// compose entirely. All geometry derives from <c>Bounds.InnerWidth/InnerHeight</c> so the drawn
+    /// pill matches the clickable <c>Bounds</c> the base still hit-tests. The pressed overlay is a
+    /// third texture blitted on top while the button is held (refine-row-affordance-visuals-2).</summary>
     public override void ComposeElements(Context ctxStatic, ImageSurface surfaceStatic)
     {
         Bounds.CalcWorldBounds();
         BakeButton(ref offTexture, active: false);
         BakeButton(ref onTexture, active: showActiveState);
+        BakePressedOverlay(ref pressedTexture);
     }
 
     private void BakeButton(ref LoadedTexture texture, bool active)
@@ -111,44 +137,57 @@ public sealed class ScribeHoverIconButton : GuiElementToggleButton
         var surface = new ImageSurface(Format.Argb32, width, height);
         var ctx = new Context(surface);
 
-        double radius = GuiElement.scaled(config.AffordanceCornerRadius);
-        double lineWidth = System.Math.Max(1.0, GuiElement.scaled(config.AffordanceOutlineThickness));
-        // Inset the pill by half the stroke so the outline sits fully inside the surface (a stroke
-        // straddles its path, so half of a path on the very edge would be clipped away).
-        double half = lineWidth / 2;
-        double pw = width - lineWidth;
-        double ph = height - lineWidth;
-
-        // Opaque background -- occludes the text beneath the button on hover (the Notion behavior).
-        // An "active" (pinned) button tints its fill toward the ink color so the on-state reads.
-        ScribeRowElement.RoundedRect(ctx, half, half, pw, ph, radius);
-        if (active)
+        // A chrome-less button (the grip) skips the fill + outline entirely and draws only its icon,
+        // so it reads as a bare SVG with no box around it.
+        if (drawChrome)
         {
-            ctx.SetSourceRGBA(config.AffordanceIconColorR, config.AffordanceIconColorG, config.AffordanceIconColorB, config.AffordanceIconColorA);
-        }
-        else
-        {
-            ctx.SetSourceRGBA(config.AffordanceBgR, config.AffordanceBgG, config.AffordanceBgB, config.AffordanceBgA);
-        }
-        ctx.FillPreserve();
+            double radius = GuiElement.scaled(config.AffordanceCornerRadius);
+            double lineWidth = System.Math.Max(1.0, GuiElement.scaled(config.AffordanceOutlineThickness));
+            // Inset the pill by half the stroke so the outline sits fully inside the surface (a stroke
+            // straddles its path, so half of a path on the very edge would be clipped away).
+            double half = lineWidth / 2;
+            double pw = width - lineWidth;
+            double ph = height - lineWidth;
 
-        // Thin outline (ink-tone) -- the minimal chrome replacing the base's emboss.
-        ctx.SetSourceRGBA(config.AffordanceOutlineR, config.AffordanceOutlineG, config.AffordanceOutlineB, config.AffordanceOutlineA);
-        ctx.LineWidth = lineWidth;
-        ctx.Stroke();
+            // Opaque background -- occludes the text beneath the button on hover (the Notion behavior).
+            // An "active" (pinned) button tints its fill toward the ink color so the on-state reads.
+            GroupedRect(ctx, half, half, pw, ph, radius);
+            if (active)
+            {
+                ctx.SetSourceRGBA(config.AffordanceIconColorR, config.AffordanceIconColorG, config.AffordanceIconColorB, config.AffordanceIconColorA);
+            }
+            else
+            {
+                ctx.SetSourceRGBA(config.AffordanceBgR, config.AffordanceBgG, config.AffordanceBgB, config.AffordanceBgA);
+            }
+            ctx.FillPreserve();
 
-        // Large icon: inset only enough to hit AffordanceIconFill of the button (the item-4 fix vs.
-        // the base's fixed scaled(4) inset that shrank the glyph). On an active button the fill is
-        // dark, so draw the icon in the background tone for contrast; otherwise ink-tone.
-        double iconInset = width * (1 - config.AffordanceIconFill) / 2;
-        double iconSize = width - 2 * iconInset;
+            // Thin outline (ink-tone) -- the minimal chrome replacing the base's emboss. For a grouped
+            // button, GroupedRect leaves the shared inner edge as a straight line, so the pin's right
+            // outline and the delete's left outline sit on top of each other and read as one divider.
+            ctx.SetSourceRGBA(config.AffordanceOutlineR, config.AffordanceOutlineG, config.AffordanceOutlineB, config.AffordanceOutlineA);
+            ctx.LineWidth = lineWidth;
+            ctx.Stroke();
+        }
+
+        // Large icon, sized off the SMALLER of the two dimensions so it stays a centered square on a
+        // square (or any-shaped) button. Inset only enough to hit AffordanceIconFill (the item-4 fix
+        // vs. the base's fixed scaled(4) inset that shrank the glyph). On an active button the fill is
+        // dark, so draw the icon in the background tone for contrast; on a chrome-less button there is
+        // no fill, so the icon always uses the ink tone.
+        // A chrome-less button (grip) has no box eating space, so its icon fills the full square --
+        // this is what makes the bare grip glyph at least as tall as the checkbox column beside it.
+        double minSide = System.Math.Min(width, height);
+        double iconFill = drawChrome ? config.AffordanceIconFill : 1.0;
+        double iconSize = minSide * iconFill;
+        double iconInsetX = (width - iconSize) / 2;
         double iconInsetY = (height - iconSize) / 2;
-        double[] iconColor = active
+        double[] iconColor = (active && drawChrome)
             ? new[] { config.AffordanceBgR, config.AffordanceBgG, config.AffordanceBgB, config.AffordanceBgA }
             : new[] { config.AffordanceIconColorR, config.AffordanceIconColorG, config.AffordanceIconColorB, config.AffordanceIconColorA };
         if (!string.IsNullOrEmpty(icon))
         {
-            api.Gui.Icons.DrawIcon(ctx, icon, iconInset, iconInsetY, iconSize, iconSize, iconColor);
+            api.Gui.Icons.DrawIcon(ctx, icon, iconInsetX, iconInsetY, iconSize, iconSize, iconColor);
         }
 
         generateTexture(surface, ref texture);
@@ -156,9 +195,66 @@ public sealed class ScribeHoverIconButton : GuiElementToggleButton
         surface.Dispose();
     }
 
+    /// <summary>Bakes the translucent pressed overlay -- a light, low-alpha fill clipped to the same
+    /// (grouped) rounded rect as the button, so a held button reads as momentarily depressed. Blitted
+    /// on top of the off/on texture in <see cref="RenderInteractiveElements"/> while held.</summary>
+    private void BakePressedOverlay(ref LoadedTexture texture)
+    {
+        int width = (int)Bounds.InnerWidth;
+        int height = (int)Bounds.InnerHeight;
+        if (width <= 0 || height <= 0) return;
+
+        var surface = new ImageSurface(Format.Argb32, width, height);
+        var ctx = new Context(surface);
+
+        // Clip to the button's shape (chrome-less grip clips to the full rect so its bare icon still
+        // gets a subtle press tint) then fill with the light overlay tone.
+        double radius = drawChrome ? GuiElement.scaled(config.AffordanceCornerRadius) : 0;
+        GroupedRect(ctx, 0, 0, width, height, radius);
+        ctx.SetSourceRGBA(config.AffordancePressedR, config.AffordancePressedG, config.AffordancePressedB, config.AffordancePressedA);
+        ctx.Fill();
+
+        generateTexture(surface, ref texture);
+        ctx.Dispose();
+        surface.Dispose();
+    }
+
+    /// <summary>Traces the button's outline path, rounding only the corners on this button's outer
+    /// side of the group (so an abutted pin+delete pair shares a straight inner edge that reads as a
+    /// divider). A standalone button rounds all four corners like the shared
+    /// <see cref="ScribeRowElement.RoundedRect"/> primitive.</summary>
+    private void GroupedRect(Context ctx, double x, double y, double w, double h, double r)
+    {
+        if (groupSide == AffordanceGroupSide.Standalone || r <= 0)
+        {
+            ScribeRowElement.RoundedRect(ctx, x, y, w, h, r);
+            return;
+        }
+
+        bool roundLeft = groupSide == AffordanceGroupSide.Left;
+        bool roundRight = groupSide == AffordanceGroupSide.Right;
+        ctx.NewPath();
+        // Top edge, then down the right side.
+        ctx.MoveTo(x + (roundLeft ? r : 0), y);
+        ctx.LineTo(x + w - (roundRight ? r : 0), y);
+        if (roundRight) ctx.Arc(x + w - r, y + r, r, -System.Math.PI / 2, 0);
+        // Right side down to the bottom.
+        ctx.LineTo(x + w, y + h - (roundRight ? r : 0));
+        if (roundRight) ctx.Arc(x + w - r, y + h - r, r, 0, System.Math.PI / 2);
+        // Bottom edge leftward.
+        ctx.LineTo(x + (roundLeft ? r : 0), y + h);
+        if (roundLeft) ctx.Arc(x + r, y + h - r, r, System.Math.PI / 2, System.Math.PI);
+        // Left side back up to the top.
+        ctx.LineTo(x, y + (roundLeft ? r : 0));
+        if (roundLeft) ctx.Arc(x + r, y + r, r, System.Math.PI, System.Math.PI * 1.5);
+        ctx.ClosePath();
+    }
+
     public override void RenderInteractiveElements(float deltaTime)
     {
-        if (HoverRegion is not null && !HoverRegion.PointInside(api.Input.MouseX, api.Input.MouseY)) return;
+        // Hover-gate as usual, unless this button is flagged always-visible (a pinned pin under the
+        // AlwaysShowButton indicator).
+        if (!AlwaysVisible && HoverRegion is not null && !HoverRegion.PointInside(api.Input.MouseX, api.Input.MouseY)) return;
 
         int textureId = (On && showActiveState ? onTexture : offTexture).TextureId;
         if (textureId == 0) return;
@@ -167,6 +263,17 @@ public sealed class ScribeHoverIconButton : GuiElementToggleButton
         // row scrolled past the viewport edge clips natively rather than bleeding out.
         api.Render.Render2DTexturePremultipliedAlpha(
             textureId, Bounds.renderX, Bounds.renderY, Bounds.InnerWidth, Bounds.InnerHeight);
+
+        // Pressed overlay: computed statelessly from live input -- the left button is held AND the
+        // pointer is inside THIS button's own bounds. This needs no mouse-event override (which would
+        // fight the base toggle's OnMouseUp handling) and self-clears the instant the button is
+        // released or the pointer leaves, matching the spec's "clears on release or leave".
+        if (pressedTexture.TextureId != 0 && api.Input.MouseButton.Left
+            && Bounds.PointInside(api.Input.MouseX, api.Input.MouseY))
+        {
+            api.Render.Render2DTexturePremultipliedAlpha(
+                pressedTexture.TextureId, Bounds.renderX, Bounds.renderY, Bounds.InnerWidth, Bounds.InnerHeight);
+        }
     }
 
     public override void Dispose()
@@ -174,7 +281,23 @@ public sealed class ScribeHoverIconButton : GuiElementToggleButton
         base.Dispose();
         offTexture.Dispose();
         onTexture.Dispose();
+        pressedTexture.Dispose();
     }
+}
+
+/// <summary>Which side of a grouped affordance a <see cref="ScribeHoverIconButton"/> is on, so an
+/// abutted pin+delete pair rounds only its outer corners and shares a straight inner edge that reads
+/// as a divider (refine-row-affordance-visuals-2).</summary>
+public enum AffordanceGroupSide
+{
+    /// <summary>A lone button -- round all four corners.</summary>
+    Standalone,
+
+    /// <summary>Left member of the group (the pin) -- round the left corners only.</summary>
+    Left,
+
+    /// <summary>Right member of the group (the delete) -- round the right corners only.</summary>
+    Right,
 }
 
 /// <summary>
