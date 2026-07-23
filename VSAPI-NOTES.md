@@ -483,6 +483,32 @@ VSImGui entirely (Mod.csproj `Configuration == 'Debug'` Condition) -- so even on
 hardware the sliders only exist in a Debug stage. ConfigLib's own settings panel is pure
 VS GUI (no ImGui) and works on any platform as an alternative live-ish editing path.
 
+**Question: how do you draw a debug/inspector overlay (outlines, tinted bands, labels) over a
+dialog on this Mac, given VSImGui is dead here?**
+
+Use the engine's own primitives — all macOS-safe (plain GUI-shader draws, no OpenGL 4.3):
+
+- **Outline a box:** `capi.Render.RenderRectangle(float x, float y, float z, float w, float h, int color)`
+  strokes a rectangle outline (a `whiteRectangleRef` `LineStrip` mesh; confirmed in
+  `VintagestoryLib.dll` `RenderAPIGame`). It decodes `color` via `ColorUtil.ToRGBAVec4f`, so pack it
+  with `ColorUtil.ColorFromRgba(r,g,b,a)` (0–255 ints). It only STROKES — there is no fill variant.
+- **Fill a band** (RenderRectangle can't): bake a 1×1 opaque-white texture once
+  (`capi.Gui.LoadOrUpdateCairoTexture(surface, false, ref tex)`) and blit it stretched with a tint via
+  `capi.Render.Render2DTexture(tex.TextureId, x, y, w, h, z, new Vec4f(r,g,b,a))`.
+- **Labels:** `capi.Gui.TextTexture.GenTextTexture(text, CairoFont, TextBackground)` → cache the
+  `LoadedTexture` by string → `capi.Render.Render2DLoadedTexture(tex, x, y, z)`. **Dispose** every
+  `LoadedTexture` (and the white pixel) on `OnGuiClosed` — they're GL textures and leak otherwise
+  (`LoadedTexture` warns about a missing Dispose in its finalizer; guard with `TextureId != 0`, not a
+  `Loaded` property — there isn't one).
+
+Draw the overlay from the END of `OnRenderGUI` (after `base.OnRenderGUI`) at `z ≈ 600` (above the
+dialog's ~500). Do it as a **screen-space draw pass, not composed child elements** — a child gets torn
+down on every recompose AND clipped by any `BeginClip` scissor, so it couldn't label the viewport or
+chrome. Read `SingleComposer.GetElement(key)?.Bounds` (base getter — see the `InvalidCastException`
+note above) and structural bounds LIVE each frame so the overlay self-heals after a recompose.
+`ScribeInspectOverlay` + `GuiDialogScribeLectern.BuildInspectBoxes` are the worked example
+(add-gui-inspect-overlay). This is the native substitute for the dead VSImGui path on this Mac.
+
 ## Text-input caret / selection conventions
 
 **Symptom: before building a custom in-place editor, need to know whether the built-in

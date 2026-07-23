@@ -164,6 +164,16 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
     /// <see cref="OnRowListScroll"/>.</summary>
     private ElementBounds? rowListContentBounds;
 
+    /// <summary>The diagnostic inspect overlay (add-gui-inspect-overlay). Lazily created the first time
+    /// <see cref="clientConfig"/>'s <c>InspectOverlayMode</c> is &gt;= 1 during a render, and disposed in
+    /// <see cref="OnGuiClosed"/> (it owns GL label textures). Null while the overlay has never been on.</summary>
+    private ScribeInspectOverlay? inspectOverlay;
+
+    /// <summary>The last row-list clip bounds composed, kept so the inspect overlay can outline the
+    /// scrollable viewport itself (a structural box that is not one of the keyed elements). Set at the
+    /// bottom of each ComposeXxxView; only one view is live at a time so one field suffices.</summary>
+    private ElementBounds? rowListClipBounds;
+
     /// <summary>The row list's current scroll offset, in the same units <c>AddVerticalScrollbar</c>
     /// reports. Read by ComposeReadView/ComposeEditorView at the start of every compose (not just
     /// the first) so a culling-triggered recompose (see <see cref="OnRowListScroll"/>) preserves
@@ -257,6 +267,109 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
         }
 
         base.OnRenderGUI(deltaTime);
+
+        // Diagnostic inspect overlay: draws AFTER the dialog so its outlines/labels sit on top, and
+        // OUTSIDE the row-list clip (it's a plain screen-space draw pass, not a composed child, so the
+        // BeginClip scissor never touches it -- letting it label the viewport and chrome too). Guarded
+        // so the whole thing costs one int check when off (add-gui-inspect-overlay).
+        if (clientConfig.InspectOverlayMode >= 1)
+        {
+            RenderInspectOverlay(deltaTime);
+        }
+    }
+
+    /// <summary>Builds the current frame's inspect-box list live (reading <see cref="SingleComposer"/>
+    /// and the structural bounds fresh, so it self-heals after any recompose) and hands it to
+    /// <see cref="inspectOverlay"/> to outline + label. Called only when <c>InspectOverlayMode &gt;= 1</c>.</summary>
+    private void RenderInspectOverlay(float deltaTime)
+    {
+        if (SingleComposer is null) return;
+        inspectOverlay ??= new ScribeInspectOverlay(capi);
+        var boxes = BuildInspectBoxes();
+        inspectOverlay.Render(boxes, clientConfig.InspectOverlayMode);
+    }
+
+    /// <summary>Resolves every box the inspect overlay outlines for the CURRENT view, reading bounds
+    /// live each frame. Keyed elements resolve via the base <c>GetElement(key)?.Bounds</c> (never the
+    /// kind-specific getters -- those throw on the wrong element kind, VSAPI-NOTES); <c>?.</c> cleanly
+    /// skips keys absent in the current view. Structural boxes (viewport, dialog bg) and the gaps (which
+    /// are not elements) are appended from the bounds the dialog already holds + the config values.</summary>
+    private System.Collections.Generic.List<ScribeInspectOverlay.InspectBox> BuildInspectBoxes()
+    {
+        var boxes = new System.Collections.Generic.List<ScribeInspectOverlay.InspectBox>();
+
+        void AddKeyed(string key, ScribeInspectOverlay.InspectCategory category, string? driver = null)
+        {
+            var b = SingleComposer?.GetElement(key)?.Bounds;
+            if (b is null) return;
+            boxes.Add(new ScribeInspectOverlay.InspectBox(
+                b.renderX, b.renderY, b.OuterWidth, b.OuterHeight,
+                key, driver ?? ScribeInspectOverlay.DriverForFixedKey(key), category));
+        }
+
+        void AddStructural(ElementBounds? b, string key, ScribeInspectOverlay.InspectCategory category, string? driver)
+        {
+            if (b is null) return;
+            boxes.Add(new ScribeInspectOverlay.InspectBox(
+                b.renderX, b.renderY, b.OuterWidth, b.OuterHeight, key, driver, category));
+        }
+
+        // Structural chrome + viewport (the boxes that aren't keyed interactive elements).
+        AddStructural(rowListClipBounds, "rowListViewport", ScribeInspectOverlay.InspectCategory.Viewport,
+            $"RowListWidth={clientConfig.RowListWidth:0} x VisibleListHeight={clientConfig.VisibleListHeight:0}");
+        AddStructural(rowListContentBounds, "rowListContent", ScribeInspectOverlay.InspectCategory.Viewport,
+            "sum of row heights + ScaledRowSpacing");
+
+        // Fixed controls (present in one or both views; absent keys are skipped).
+        AddKeyed("rowListScrollbar", ScribeInspectOverlay.InspectCategory.Control);
+        AddKeyed("switchModeButton", ScribeInspectOverlay.InspectCategory.Control);
+        AddKeyed("textSizeSlider", ScribeInspectOverlay.InspectCategory.Control);
+        AddKeyed("toolPanelToggleButton", ScribeInspectOverlay.InspectCategory.Control);
+        AddKeyed("addTaskButton", ScribeInspectOverlay.InspectCategory.Control);
+        AddKeyed("rowEditInput", ScribeInspectOverlay.InspectCategory.Affordance);
+
+        // Per-row elements + gap bands. Read the live blocks for the current view.
+        var blocks = IsEditorMode ? scratchDocument?.Blocks : lectern.Document.Blocks;
+        if (blocks is not null)
+        {
+            double listWidth = clientConfig.RowListWidth;
+            var font = RowFont();
+            double affordanceSize = ScribeRowElement.AffordanceButtonSizeFixed(capi, font, clientConfig);
+
+            for (int i = 0; i < blocks.Count; i++)
+            {
+                var layout = RowTextLayout.For(listWidth, blocks[i].IsTask, font, clientConfig,
+                    reserveAffordances: IsEditorMode, affordanceSize: affordanceSize);
+
+                AddKeyed(ScribeBlockRowCell.TextKey(i), ScribeInspectOverlay.InspectCategory.Row,
+                    $"TextX={layout.TextX:0} w={layout.TextWidth:0}");
+                AddKeyed(ScribeBlockRowCell.PinKey(i), ScribeInspectOverlay.InspectCategory.Affordance,
+                    $"PinX={layout.PinX:0} AffordanceButtonSizeFixed={affordanceSize:0.#}");
+                AddKeyed(ScribeBlockRowCell.DeleteKey(i), ScribeInspectOverlay.InspectCategory.Affordance,
+                    $"DeleteX={layout.DeleteX:0} AffordanceButtonSizeFixed={affordanceSize:0.#}");
+                AddKeyed(ScribeBlockRowCell.DragHandleKey(i), ScribeInspectOverlay.InspectCategory.Affordance,
+                    $"DragHandleX={layout.DragHandleX:0} w={layout.DragHandleWidth:0}");
+            }
+
+            // Gap bands between consecutive rows (ScaledRowSpacing). Drawn from the two rows' live
+            // bounds: the band spans the vertical space between one row's bottom and the next's top.
+            for (int i = 0; i < blocks.Count - 1; i++)
+            {
+                var top = SingleComposer?.GetElement(ScribeBlockRowCell.TextKey(i))?.Bounds;
+                var below = SingleComposer?.GetElement(ScribeBlockRowCell.TextKey(i + 1))?.Bounds;
+                if (top is null || below is null) continue;
+                double gapTop = top.renderY + top.OuterHeight;
+                double gapBottom = below.renderY;
+                if (gapBottom > gapTop)
+                {
+                    boxes.Add(new ScribeInspectOverlay.InspectBox(
+                        top.renderX, gapTop, top.OuterWidth, gapBottom - gapTop,
+                        "gap", $"ScaledRowSpacing={ScaledRowSpacing:0.#}", ScribeInspectOverlay.InspectCategory.Gap));
+                }
+            }
+        }
+
+        return boxes;
     }
 
     /// <summary>
@@ -419,6 +532,7 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
         // interactive-pass row textures natively (no cull, no recompose-on-scroll).
         var clipBounds = ElementBounds.Fixed(0, y, listWidth, clientConfig.VisibleListHeight);
         var scrollbarBounds = ElementStdBounds.VerticalScrollbar(clipBounds);
+        rowListClipBounds = clipBounds; // kept for the inspect overlay's viewport outline
         var contentBounds = ElementBounds.Fixed(0, 0, listWidth, contentY);
 
         SingleComposer = capi.Gui.CreateCompo("scribeLectern", dialogBounds)
@@ -604,6 +718,7 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
 
         var clipBounds = ElementBounds.Fixed(0, y, listWidth, clientConfig.VisibleListHeight);
         var scrollbarBounds = ElementStdBounds.VerticalScrollbar(clipBounds);
+        rowListClipBounds = clipBounds; // kept for the inspect overlay's viewport outline
         var contentBounds = ElementBounds.Fixed(0, 0, listWidth, contentY);
 
         SingleComposer = capi.Gui.CreateCompo("scribeLectern", dialogBounds)
@@ -1193,6 +1308,10 @@ public sealed class GuiDialogScribeLectern : GuiDialogBlockEntity
         }
 
         StopAutosaveTick();
+
+        // Free the inspect overlay's GL label/white-pixel textures (add-gui-inspect-overlay).
+        inspectOverlay?.Dispose();
+        inspectOverlay = null;
 
 #if DEBUG
         UnregisterDebugSliders();

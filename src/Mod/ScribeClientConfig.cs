@@ -249,6 +249,28 @@ public sealed class ScribeClientConfig
     public double PinnedRowTintB = 0.20;
     public double PinnedRowTintA = 0.35;
 
+    // ---------------- GUI inspect overlay (add-gui-inspect-overlay) ----------------
+
+    /// <summary>Diagnostic "inspect element" overlay for the lectern dialog: outlines and labels
+    /// every composed box (rows, columns, checkbox, affordances, controls, viewport, chrome) plus
+    /// the inter-element gaps, drawn on top of the real dialog in both views. Mirrors the engine's
+    /// own <c>GuiComposer.Outlines</c> convention:
+    /// <list type="bullet">
+    /// <item><c>0</c> -- off (default). No inspect geometry; the only per-frame cost is this int check.</item>
+    /// <item><c>1</c> -- outlines + labels (element key, pixel size, and driving config field/formula
+    /// where known; gap bands labeled with their config field).</item>
+    /// <item><c>2</c> -- outlines only (no labels) -- the escape hatch for when labels crowd at small
+    /// text size.</item>
+    /// </list>
+    ///
+    /// <para>Deliberately NOT gated behind <c>#if DEBUG</c>: the whole point is inspecting the GUI on
+    /// platforms where the Debug/VSImGui tuning path is dead (Apple Silicon caps at OpenGL 4.1; VSImGui
+    /// needs 4.3). It ships in Release and is toggled live via the ConfigLib panel (or by editing the
+    /// on-disk JSON) -- the dialog re-reads config on every open, so changing this value and reopening
+    /// the lectern shows/hides the overlay. The overlay uses the macOS-safe
+    /// <c>IRenderAPI.RenderRectangle</c> (a plain LineStrip, no 4.3 dependency).</para></summary>
+    public int InspectOverlayMode = 0;
+
     // ---------------- Editor toolbar (controls below the row list) ----------------
 
     /// <summary>Shared height for the text-size label/slider row, the collapse-toggle button,

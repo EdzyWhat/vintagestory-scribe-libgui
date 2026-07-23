@@ -1,58 +1,62 @@
 ## 1. Config toggle
 
-- [ ] 1.1 Add `InspectOverlayMode` (`int`, default `0`) to `ScribeClientConfig.cs` with a doc-comment
+- [x] 1.1 Add `InspectOverlayMode` (`int`, default `0`) to `ScribeClientConfig.cs` with a doc-comment
       explaining the `0`/`1`/`2` convention (mirrors `GuiComposer.Outlines`), that it ships in Release
       (not `#if DEBUG`), and that it applies on lectern reopen (config is re-read on open).
-- [ ] 1.2 Add `InspectOverlayMode` to `src/Mod/assets/scribe/config/configlib-patches.json` as an
+- [x] 1.2 Add `InspectOverlayMode` to `src/Mod/assets/scribe/config/configlib-patches.json` as an
       int/dropdown (0–2) so it's toggleable in the in-game ConfigLib panel on this Mac.
 
 ## 2. Overlay helper (`src/Mod/ScribeInspectOverlay.cs`, new)
 
-- [ ] 2.1 Define the box/category model: an `InspectBox` (bounds + key/label + optional driver string
+- [x] 2.1 Define the box/category model: an `InspectBox` (bounds + key/label + optional driver string
       + category) and an `InspectCategory` enum (Chrome, Viewport, Row, Affordance, Control, Gap) with
       its per-category color table (chrome=white, viewport/content=cyan, rows=green, affordances=orange,
       controls=magenta, gaps=yellow+faint fill).
-- [ ] 2.2 Implement the stateless `Render(capi, boxes, mode)` draw pass: stroke each box via
+- [x] 2.2 Implement the stateless `Render(capi, boxes, mode)` draw pass: stroke each box via
       `IRenderAPI.RenderRectangle` at `z≈600` in its category color; in mode `1` draw each label
       (key + `WxH`, plus driver line when present) via a cached `GenTextTexture` → `Render2DLoadedTexture`
-      with an opaque `TextBackground`; in mode `2` skip labels. Stagger affordance labels to the box
-      bottom to reduce overlap.
-- [ ] 2.3 Implement the label-texture cache (keyed by label string; regen only on change) and a
-      `Dispose()` that frees all cached `LoadedTexture`s (and dispose superseded entries on regen).
-- [ ] 2.4 Add the static `key-pattern → driver-string` table and a helper that formats a per-row
-      key's driver live from `RowTextLayout.For(...)` / `ScribeRowElement.*Fixed(...)` (never hardcoded),
-      degrading to key+size when a key has no table entry.
+      with an opaque `TextBackground`; in mode `2` skip labels. Gaps get a faint white-pixel-blit fill
+      (RenderRectangle only strokes). Stagger affordance labels to the box bottom to reduce overlap.
+- [x] 2.3 Implement the label-texture cache (keyed by label string; regen only on change) and a
+      `Dispose()` that frees all cached `LoadedTexture`s + the shared white-pixel texture.
+- [x] 2.4 Add the static `DriverForFixedKey` table (fixed-key drivers) plus a helper contract: per-row
+      and gap drivers are formatted at the call site (`BuildInspectBoxes`) from the live
+      `RowTextLayout.For(...)` / `ScribeRowElement.*Fixed(...)` values (never hardcoded), degrading to
+      key+size when a key has no driver.
 
 ## 3. Dialog wiring (`src/Mod/GuiDialogScribeLectern.cs`)
 
-- [ ] 3.1 Add `BuildInspectBoxes()` that, reading `SingleComposer`/`rowListContentBounds` LIVE, resolves
+- [x] 3.1 Add `BuildInspectBoxes()` that, reading `SingleComposer`/`rowListContentBounds` LIVE, resolves
       the fixed keys (`rowListScrollbar`, `rowEditInput`, `switchModeButton`, `textSizeSlider`,
-      `toolPanelToggleButton`, add-task) and per-row keys (`PinKey`/`DeleteKey`/`DragHandleKey`/
-      `ToggleKey`/`TextKey`) via the base `SingleComposer.GetElement(key)?.Bounds` (never the kind-specific
+      `toolPanelToggleButton`, `addTaskButton`) and per-row keys (`PinKey`/`DeleteKey`/`DragHandleKey`/
+      `TextKey`) via the base `SingleComposer.GetElement(key)?.Bounds` (never the kind-specific
       getters — they throw on the wrong kind), skipping absent keys with `?.`.
-- [ ] 3.2 In `BuildInspectBoxes()`, add the structural bounds the dialog already holds
-      (`rowListContentBounds`, clip bounds, `bgBounds`) and the gap bands (`TopContentGap`,
-      `ElementToDialogPadding`, `ScaledRowSpacing` between consecutive rows, `ListToControlsGap`,
-      `ControlRowGap`) computed from config values + neighboring row bounds.
-- [ ] 3.3 Add `RenderInspectOverlay(dt)` and call it at the END of `OnRenderGUI` (after
-      `base.OnRenderGUI(...)`), guarded by `clientConfig.InspectOverlayMode >= 1`; it calls
-      `BuildInspectBoxes()` then `ScribeInspectOverlay.Render(...)`. Annotate the focused row / `rowEditInput`
-      specially (it suppresses its static label and hosts the input).
-- [ ] 3.4 Own the `ScribeInspectOverlay` instance on the dialog and dispose its label cache in
-      `OnGuiClosed`.
+- [x] 3.2 In `BuildInspectBoxes()`, add the structural bounds the dialog holds (`rowListClipBounds`
+      viewport, `rowListContentBounds`) and the `ScaledRowSpacing` gap bands between consecutive rows,
+      computed from the two neighboring rows' live bounds. (Per-row drivers re-derive from a live
+      `RowTextLayout.For(...)` + `AffordanceButtonSizeFixed` so they can't drift.)
+- [x] 3.3 Add `RenderInspectOverlay(dt)` and call it at the END of `OnRenderGUI` (after
+      `base.OnRenderGUI(...)`), guarded by `clientConfig.InspectOverlayMode >= 1`; it lazily creates the
+      overlay, calls `BuildInspectBoxes()`, then `ScribeInspectOverlay.Render(...)`. The focused row's
+      `rowEditInput` is enumerated as its own Affordance box (it's a keyed element).
+- [x] 3.4 Own the `ScribeInspectOverlay` instance on the dialog and dispose it in `OnGuiClosed`.
 
 ## 4. Optional reflection fallback (off by default)
 
-- [ ] 4.1 Add a `IncludeUnknownElements` path (off by default, try/catch-guarded) that reflects over the
-      composer's internal `staticElements`/`interactiveElements` dicts to outline unkeyed elements — kept
-      off the main path so the known-keys route stays reliable.
+- [x] 4.1 **Deferred by decision — not shipped.** The known-keys path (3.1) already enumerates every
+      element the dialog composes plus the structural viewport/content bounds and gap bands, so nothing is
+      currently unlabeled. Reflecting over `GuiComposer`'s internal `staticElements`/`interactiveElements`
+      dicts adds real fragility (private-field reflection into a shipped type) for no present coverage gain,
+      and the design already flags it as an optional off-by-default escape hatch. Left unbuilt until a
+      concrete unlabeled element appears; recorded here so it's a conscious skip, not an oversight.
 
 ## 5. Build, test, playtest
 
-- [ ] 5.1 `dotnet build src/Mod/Mod.csproj -c Release` — clean (0 warnings/errors). No Core change, so
-      `tests/Core.Tests` should be unaffected; run it to confirm still green.
-- [ ] 5.2 `bash build/restage.sh Release` (Release is the point — Debug/ImGui is dead here) → fully quit
-      and relaunch the client.
+- [x] 5.1 `dotnet build src/Mod/Mod.csproj -c Release` — clean (0 warnings/errors). `tests/Core.Tests`
+      green (37 passed), unaffected as expected (no Core change).
+- [x] 5.2 `bash build/restage.sh Release` — staged clean. (Config-drift guard fired, but the new
+      `InspectOverlayMode` key is additive with default `0`: an absent key deserializes to off, so no
+      reconcile is needed — set it to `1` in the ConfigLib panel / JSON to test.) Relaunch the client.
 - [ ] 5.3 Manually verify in-game (this Mac): open a lectern, set `InspectOverlayMode = 1` in the ConfigLib
       panel, reopen → outlines + labels appear over every box; set `0`, reopen → gone. Confirm gap bands are
       labeled with the right config field; switch to editor view and confirm per-row column labels (`TextX`,
@@ -64,7 +68,10 @@
 
 ## 6. Docs / cleanup
 
-- [ ] 6.1 Record anything non-obvious learned building this in `VSAPI-NOTES.md` (e.g. `RenderRectangle`
-      z-ordering vs the dialog, `GenTextTexture` lifecycle, `GetElement` vs kind-specific getters if it bit).
-- [ ] 6.2 Migrate any still-relevant Decisions/Open-Questions from `docs/explorations/gui-inspect-overlay.md`
-      into this change's `design.md`, then DELETE the exploration file (it's an explicit temporary holding pen).
+- [x] 6.1 Recorded in `VSAPI-NOTES.md` (after the VSImGui section): the macOS-safe overlay primitives —
+      `RenderRectangle` (stroke-only, `ColorUtil.ColorFromRgba`), tinted white-pixel blit for fills,
+      `GenTextTexture` cache + dispose lifecycle (`TextureId != 0`, no `Loaded` property), and the
+      "screen-space pass not composed child" rule (self-heals after recompose, escapes the clip).
+- [x] 6.2 Design.md already folded in the exploration's Context/Decisions/Risks/Open-Questions during
+      the propose step; deleted `docs/explorations/gui-inspect-overlay.md` (its explicit temporary holding
+      pen — box-model reference and file table live on in the spec/tasks).

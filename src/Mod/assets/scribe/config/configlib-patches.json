@@ -29,6 +29,13 @@
       "default": 500,
       "comment": "Row-list width, shared by the lectern's read and editor views.",
       "range": { "min": 100, "max": 800 }
+    },
+    {
+      "code": "InspectOverlayMode",
+      "type": "integer",
+      "default": 0,
+      "comment": "Lectern GUI inspect overlay: 0 = off, 1 = outlines + labels (key, size, driving config field), 2 = outlines only. Applies on reopening the lectern.",
+      "range": { "min": 0, "max": 2 }
     }
   ]
 }
