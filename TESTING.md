@@ -21,6 +21,27 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## add-gui-inspect-overlay
+
+> A config-toggled "inspect element" overlay for the lectern GUI (the macOS-safe replacement for the
+> dead VSImGui tuning path). `InspectOverlayMode` = 0 off / 1 outlines+labels / 2 outlines-only.
+> Ships in Release; toggle it in the ConfigLib panel (or edit `scribe-client-config.json`) and reopen
+> the lectern. Draws box outlines, gap bands, and labels (element key + pixel size + driving config
+> field) over the real dialog. Restaged Release — relaunch to test.
+
+- [ ] `c44137dd` **Turn the overlay on.** Open a lectern, set `InspectOverlayMode = 1` in the ConfigLib
+      panel (or the config JSON) and reopen the lectern → outlines + labels appear over every box; set it
+      back to `0` and reopen → the overlay is gone. Check the yellow gap bands are labeled with the right
+      config field (e.g. `ScaledRowSpacing`). Switch to editor view: confirm the per-row column labels
+      (`TextX`, the pin/delete affordance square) read sensible numbers and the focused edit input box is
+      outlined. *(add-gui-inspect-overlay 5.3)*
+- [ ] `4ffdc7a1` **Overlay under stress.** With the overlay on, set `InspectOverlayMode = 2` → outlines
+      only, no labels (use this when labels crowd at 30% text size). Scroll a long list and drag the
+      text-size slider → outlines should track the boxes live as they move/resize. Then cross-check: read a
+      labeled number off the overlay, compare it to the matching value in `scribe-client-config.json`; edit
+      that one value in the ConfigLib panel, reopen the lectern, and confirm the overlay now shows the new
+      number (proves the whole diagnose-and-tune loop works on this Mac). *(add-gui-inspect-overlay 5.4)*
+
 ## refine-row-affordance-visuals-2
 
 > Second refinement pass on the row affordances: pin+delete grouped into one bordered pill with a
