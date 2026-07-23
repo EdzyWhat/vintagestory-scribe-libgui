@@ -305,25 +305,6 @@ public sealed class ScribeRowElement : GuiElement
 
         DrawRuling(ctx, width, height);
 
-        // TEMPORARY DEBUG (refine-row-affordance-visuals-2, ruling-spacing tuning): tint the two
-        // vertical bands we're tuning so the margins are visible while measuring (playtest
-        // 2026-07-22T16-21-57 asked for a temporary coloring of the margin under inspection). The
-        // input height = rowHeight - BottomOverheadFixed, so the BOTTOM band (cyan) is exactly the gap
-        // between the input's bottom and the row bottom (ruling sits at its base); the TOP band
-        // (green) is the top pad above the content. Goal: a single line centered between the rulings.
-        // REMOVE once the spacing is dialed in.
-        if (mode == ScribeRowMode.Edit)
-        {
-            double topBand = scaled(TopPadFixed(config));
-            double bottomBand = scaled(BottomOverheadFixed(config));
-            ctx.SetSourceRGBA(0.0, 0.8, 0.0, 0.30); // green: top pad
-            ctx.Rectangle(0, 0, width, topBand);
-            ctx.Fill();
-            ctx.SetSourceRGBA(0.0, 0.7, 0.9, 0.30); // cyan: bottom overhead (input-to-ruling gap)
-            ctx.Rectangle(0, height - bottomBand, width, bottomBand);
-            ctx.Fill();
-        }
-
         generateTexture(surface, ref rowTexture);
         ctx.Dispose();
         surface.Dispose();
