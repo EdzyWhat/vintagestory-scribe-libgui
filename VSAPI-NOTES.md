@@ -1087,6 +1087,24 @@ cursor still fires `onEnter`, which is a robust, scroll-correct drop-target sign
 one row-level `MouseRegion.onEnter`; keep the drag-handle itself always-mounted (don't hover-gate it) so
 the captured element isn't unmounted mid-drag. See `ScribeEditRowState` + `ScribeLecternEditorContentState`.
 
+**Symptom (add-lectern-row-affordances-libgui): moving the mouse over an editor row reverts its
+in-progress (unsaved) text to the last-committed value — yet switching to read view shows the NEW text.**
+Reconciliation is by (runtime type + `Key` + sibling position): `Widget.CanUpdate`
+(`Widgets/Framework/Widget.cs:75`) returns true only when `oldWidget.GetType() == newWidget.GetType()`
+and keys are equal; `Element.UpdateChild` (`Widgets/Framework/Element.cs:205`) otherwise **unmounts the
+old subtree and mounts a new one**. So if a `SetState` (e.g. hover toggling `hovered`) makes a build swap
+a child's widget TYPE at a given position — here the row flipped `MouseRegion.child` between a bare
+`Padding` (rowBody) and a `Stack` — the whole subtree under it is torn down and rebuilt, destroying any
+`State` in it. For an editable field that means its `ScribeMultilineFieldState` (which holds the live
+`text`/caret) is disposed and a fresh field mounts, re-seeded from the STALE `InitialText`/`Data.Text`
+snapshot — the field writes through per keystroke via `OnChanged` but deliberately does NOT rebuild the
+editor, so the scratch document is correct (read view is right) while the remounted field shows old text.
+**Fix pattern:** keep the widget tree STRUCTURALLY STABLE across state changes that shouldn't remount a
+stateful descendant — a stable child must keep the same type AND sibling index every build. Make wrappers
+unconditional (always `Stack`, always `Container` even with a transparent fill) and let only leaf/trailing
+children (the hover buttons) mount/unmount. Give a stateful widget a stable `Key` if its position can
+shift. See `ScribeEditRowState.Build` (the "STRUCTURAL STABILITY" comment).
+
 ## Entry template
 
 ```

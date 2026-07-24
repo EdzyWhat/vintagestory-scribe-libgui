@@ -1239,22 +1239,31 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                 mainAxisSize: MainAxisSize.Max,
                 children: children));
 
-        // Drop-target highlight / resting pinned tint, drawn behind the row content.
+        // Drop-target highlight / resting pinned tint, drawn behind the row content. The Container is
+        // ALWAYS present (fill may be transparent Vector4.Zero) — see the structural-stability note below
+        // — so toggling the fill is a cheap property update, not a widget-type swap.
         Vector4 rowFill = Widget.IsDropTarget
             ? colors.StateSelected
             : (Widget.Data.IsTask && Widget.Data.Pinned ? style.PinnedTint : Vector4.Zero);
 
-        if (rowFill != Vector4.Zero)
-        {
-            rowBody = new Container(
-                style: new BoxStyle { Color = rowFill },
-                child: rowBody);
-        }
+        rowBody = new Container(
+            style: new BoxStyle { Color = rowFill },
+            child: rowBody);
 
         // Delete + pin float on the RIGHT of the row as real buttons (2026-07-24 feedback), shown only
         // on hover. A Stack sizes to the non-positioned rowBody and lays the Positioned buttons on top,
         // so they overlay the text's right edge without reserving a column or reflowing it. Pin is
         // task-only. Right-anchored, pin left of delete.
+        //
+        // STRUCTURAL STABILITY (fixes the hover-reverts-in-progress-text bug): the row is ALWAYS a
+        // Stack whose index-0 child is ALWAYS this Container(rowBody), regardless of hover/pin/drop
+        // state. LibGUI reconciles by (type + key + position): if hover instead swapped the MouseRegion's
+        // child between a bare `rowBody` and a `Stack` (different types), the reconciler would unmount the
+        // whole subtree — including the row's ScribeMultilineField, destroying its State and the live
+        // caret/text-in-progress, then remount a fresh field re-seeded from the STALE Data.Text snapshot
+        // (the field writes through on each keystroke but never triggers an editor rebuild). That made
+        // moving the mouse over a row appear to revert unsaved edits. Keeping index 0 identical lets the
+        // field UPDATE in place; only the trailing Positioned buttons mount/unmount on hover.
         var stackChildren = new List<Widget> { rowBody };
         if (hovered)
         {
@@ -1281,7 +1290,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             }
         }
 
-        Widget row = stackChildren.Count == 1 ? rowBody : new Stack(stackChildren);
+        Widget row = new Stack(stackChildren);
 
         // Row-level hover tracking (see `hovered`). onEnter/onExit reveal the hover-conditional
         // controls; the same enter events during a drag are forwarded as the drop-target signal

@@ -92,6 +92,12 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       the list is a cheap fix. *(new — verify row-height parity, 2026-07-24)*
       - *Untested 2026-07-24:* user deferred this ("will test after 7c22da1a works") — the parity check is
         hard to judge while the edit→read switch resets scroll. Retest once `7c22da1a` is fixed.
+      - **Still broken 2026-07-24** (user playtest, submission 2026-07-24T08-27-05, screenshots
+        2026-07-24T08-18-32/39-18cd5c60): a small but real per-row vertical offset remains. User (Retina
+        display) measured ~4px in Photoshop → ≈2 logical px, since VS isn't Retina-aware. The whole row
+        (not just the checkbox) sits ~2px lower in edit vs. read — the edit row content is lower, or the
+        read row content is higher. Recommend measuring checkbox positions across the two views. Needs a
+        fix (align the read row's content vertical origin to the editor field's).
 - [x] `fa4d457f` **Window width matches Handbook.** Open the lectern and the vanilla survival Handbook
       and compare widths — the lectern window should now be the same width (567px). *(new — 2026-07-24)*
       - **Confirmed 2026-07-24** (user playtest): "They match."
@@ -147,6 +153,24 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         with NO gesture wrapper (a pure spacer: invisible and uninteractable). Read/edit rows are now
         column-identical: `[grip][checkbox][text]`. Retest: open a task in read then edit view — the
         checkbox/text should sit at the same x-position in both, and the views should align on switch.
+      - **Confirmed 2026-07-24** (user playtest, submission 2026-07-24T08-27-05): "Works." The read view
+        now reserves the grip column, so the horizontal columns align across the view switch. (The small
+        *vertical* per-row offset is tracked separately under `18cd5c60`.)
+- [ ] `87a2074f` **Hover keeps in-progress text.** Click a row to edit it and type new characters (do NOT
+      commit), then move the mouse over that row (or another row). Confirm the visible text stays as your
+      in-progress edit and does NOT snap back to the last-saved value. Also confirm the caret position is
+      undisturbed. *(new — 2026-07-24 general note; regression from the hover-buttons work)*
+      - **Still broken 2026-07-24** (user playtest, submission 2026-07-24T08-27-05 general note): moving
+        the mouse over a row while editing appeared to revert unsaved text (e.g. "12345" → "123"), though
+        read view showed the data was actually saved correctly. Root cause: hover toggled the row's child
+        widget TYPE (`Padding` ↔ `Stack`), so LibGUI's type-based reconciler unmounted the whole subtree
+        including the `ScribeMultilineField`, destroying its live-text State and remounting from the stale
+        `Data.Text` snapshot.
+      - **Fix applied 2026-07-24 (awaiting retest):** made the editor row's tree structurally stable —
+        always a `Stack` whose index-0 child is always `Container(rowBody)` (transparent fill when no
+        tint), so hover only mounts/unmounts the trailing floating buttons and the field UPDATES in place
+        instead of remounting. See `ScribeEditRowState.Build` + the VSAPI-NOTES.md LibGUI reconciliation
+        entry. Retest: type an uncommitted edit, wiggle the mouse over the row — text and caret hold.
 
 ## migrate-editor-view-libgui
 
