@@ -42,14 +42,13 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Confirmed 2026-07-23** (user playtest): wrap/grow/shrink + keep-in-view work. NOTE: there is no
         row-DELETE affordance in the editor view currently (a row can't be removed) — deferred to an
         upcoming delta, not a defect of this test (wrap/grow itself passes).
-- [ ] `b3e11029` **Editor key model (REVISED).** Tab = commit + move to next row (no tab glyph);
+- [x] `b3e11029` **Editor key model (REVISED).** Tab = commit + move to next row (no tab glyph);
       Shift+Tab = commit + move to previous row; Enter = commit + insert a NEW task directly beneath the
       current one and focus it; Shift+Enter = insert a hard line break (row grows); Esc = commit + close.
       *(migrate-editor-view-libgui 5.4)*
-      - **Still broken 2026-07-23 (needs retest — model was just swapped):** the original model
-        (Enter=advance / Tab=nothing) was Confirmed working, but per user request the model was changed in
-        code to Tab=advance / Enter=new-task-below (new Core `InsertTask`, 6 unit tests). Restage + retest
-        the revised bindings. NOT a defect — a deliberate change awaiting first-hand confirmation.
+      - **Confirmed 2026-07-23** (user playtest, revised model): Tab moves between tasks and Enter spawns a
+        new task — the swapped bindings (Tab=advance / Enter=new-task-below, Core `InsertTask`) work as
+        specified.
 - [x] `b3e11029` **Caret + selection (macOS).** Arrow keys move the caret; Alt/Option+←/→ skips by word;
       Cmd+←/→ jumps to line start/end; holding Shift with any of these extends the selection. Cmd+A/C/X/V
       select-all/copy/cut/paste work. *(migrate-editor-view-libgui 5.4)*

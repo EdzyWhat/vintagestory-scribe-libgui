@@ -72,7 +72,7 @@
 - [x] 5.2 `dotnet test tests/Core.Tests` is green (37/37; no Core change).
 - [x] 5.3 `bash build/restage.sh Release` and `bash build/restage.sh Debug` stage successfully; asserted
   `Gui.dll` is NOT in the staged Mods folder (only `Scribe.dll` + `Scribe.Core.dll`).
-- [ ] 5.4 In-game editor playtest (record verdicts via the testing checklist): switch read→editor stays in
+- [x] 5.4 In-game editor playtest (record verdicts via the testing checklist): switch read→editor stays in
   the LibGUI dialog; type/wrap/grow a row; Tab=commit-advance, Shift+Tab=retreat, Enter=new-task-below,
   Shift+Enter=break, Esc=commit-close; macOS Cmd/Alt carets + Shift-selection; clipboard; commit syncs to other viewers;
   keystrokes don't leak to the game; finishing editing returns to the LibGUI read view; walk-away
