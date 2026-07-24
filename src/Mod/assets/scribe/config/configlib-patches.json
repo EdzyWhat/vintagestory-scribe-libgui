@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "file": "scribe-client-config.json",
+  "settings": [
+    {
+      "code": "RowFontSize",
+      "type": "float",
+      "default": 15.0,
+      "comment": "Task-row font size (points), shared by the lectern's read and editor views.",
+      "range": { "min": 8.0, "max": 40.0 }
+    },
+    {
+      "code": "RowVerticalPadding",
+      "type": "float",
+      "default": 4.0,
+      "comment": "Each task row's top/bottom padding (pixels); this is where inter-row spacing lives.",
+      "range": { "min": 0.0, "max": 30.0 }
+    },
+    {
+      "code": "RowHorizontalPadding",
+      "type": "float",
+      "default": 2.0,
+      "comment": "Each task row's left/right padding (pixels), shared by both views.",
+      "range": { "min": 0.0, "max": 30.0 }
+    },
+    {
+      "code": "RowCheckboxTextGap",
+      "type": "float",
+      "default": 6.0,
+      "comment": "Horizontal gap between a task row's checkbox and its text/input (pixels).",
+      "range": { "min": 0.0, "max": 30.0 }
+    },
+    {
+      "code": "RowCheckboxSize",
+      "type": "float",
+      "default": 22.0,
+      "comment": "Task-row checkbox size (pixels), shared by both views.",
+      "range": { "min": 8.0, "max": 48.0 }
+    },
+    {
+      "code": "FieldInnerPaddingX",
+      "type": "float",
+      "default": 8.0,
+      "comment": "Editor field's internal horizontal padding (pixels); the read view matches this inset.",
+      "range": { "min": 0.0, "max": 30.0 }
+    },
+    {
+      "code": "FieldInnerPaddingY",
+      "type": "float",
+      "default": 6.0,
+      "comment": "Editor field's internal vertical padding (pixels); the read view matches this for height parity.",
+      "range": { "min": 0.0, "max": 30.0 }
+    }
+  ]
+}

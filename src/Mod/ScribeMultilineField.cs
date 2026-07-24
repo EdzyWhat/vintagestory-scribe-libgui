@@ -50,8 +50,8 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox
     private Vector4 textColor = Vector4.One;
     private Vector4 caretColor = Vector4.One;
     private Vector4 selectionColor = new(0.4f, 0.55f, 0.9f, 0.4f);
-    private const float PadX = 8f;
-    private const float PadY = 6f;
+    private float padX = 8f;
+    private float padY = 6f;
 
     // Cached wrap result from the last PerformLayout, reused by PaintInternal so layout and paint
     // agree on the exact line breaks (and their source offsets).
@@ -63,6 +63,8 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox
     public int SelectionAnchor { get => selectionAnchor; set => SetProperty(ref selectionAnchor, value, repaint: true); }
     public bool FieldHasFocus { get => hasFocus; set => SetProperty(ref hasFocus, value, repaint: true); }
     public float FontSize { get => fontSize; set => SetProperty(ref fontSize, value, relayout: true); }
+    public float PadX { get => padX; set => SetProperty(ref padX, value, relayout: true); }
+    public float PadY { get => padY; set => SetProperty(ref padY, value, relayout: true); }
     public Vector4 TextColor { get => textColor; set => SetProperty(ref textColor, value, repaint: true); }
     public Vector4 CaretColor { get => caretColor; set => SetProperty(ref caretColor, value, repaint: true); }
     public Vector4 SelectionColor { get => selectionColor; set => SetProperty(ref selectionColor, value, repaint: true); }
@@ -222,14 +224,16 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox
 internal sealed class ScribeMultilineFieldRenderWidget : RenderObjectWidget
 {
     public ScribeMultilineFieldRenderWidget(string text, int caret, int selectionAnchor, bool hasFocus,
-        float fontSize, Vector4 textColor, Vector4 caretColor, Vector4 selectionColor, Vector4 boxColor,
-        Vector4 borderColor, float borderThickness, Vector4 cornerRadii)
+        float fontSize, float padX, float padY, Vector4 textColor, Vector4 caretColor, Vector4 selectionColor,
+        Vector4 boxColor, Vector4 borderColor, float borderThickness, Vector4 cornerRadii)
     {
         Text = text;
         Caret = caret;
         SelectionAnchor = selectionAnchor;
         HasFocus = hasFocus;
         FontSize = fontSize;
+        PadX = padX;
+        PadY = padY;
         TextColor = textColor;
         CaretColor = caretColor;
         SelectionColor = selectionColor;
@@ -244,6 +248,8 @@ internal sealed class ScribeMultilineFieldRenderWidget : RenderObjectWidget
     public int SelectionAnchor { get; }
     public bool HasFocus { get; }
     public float FontSize { get; }
+    public float PadX { get; }
+    public float PadY { get; }
     public Vector4 TextColor { get; }
     public Vector4 CaretColor { get; }
     public Vector4 SelectionColor { get; }
@@ -262,6 +268,8 @@ internal sealed class ScribeMultilineFieldRenderWidget : RenderObjectWidget
         ro.SelectionAnchor = SelectionAnchor;
         ro.FieldHasFocus = HasFocus;
         ro.FontSize = FontSize;
+        ro.PadX = PadX;
+        ro.PadY = PadY;
         ro.TextColor = TextColor;
         ro.CaretColor = CaretColor;
         ro.SelectionColor = SelectionColor;
@@ -283,6 +291,8 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         string initialText = "",
         FocusNode? focusNode = null,
         float fontSize = 15f,
+        float padX = 8f,
+        float padY = 6f,
         bool autoFocus = false,
         Action<string>? onChanged = null,
         Action? onCommitAndAdvance = null,
@@ -295,6 +305,8 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         InitialText = initialText;
         FocusNode = focusNode;
         FontSize = fontSize;
+        PadX = padX;
+        PadY = padY;
         AutoFocus = autoFocus;
         OnChanged = onChanged;
         OnCommitAndAdvance = onCommitAndAdvance;
@@ -306,6 +318,12 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
     public string InitialText { get; }
     public FocusNode? FocusNode { get; }
     public float FontSize { get; }
+    /// <summary>Internal horizontal padding for the field's text box (pixels). Fed from
+    /// <see cref="ScribeRowStyle.FieldPadX"/> so the read view can match the same inset.</summary>
+    public float PadX { get; }
+    /// <summary>Internal vertical padding for the field's text box (pixels). Fed from
+    /// <see cref="ScribeRowStyle.FieldPadY"/> so single-line row heights match across views.</summary>
+    public float PadY { get; }
     /// <summary>Request focus as soon as this field mounts. LibGUI has no focus-traversal API, so the
     /// editor content coordinates focus among rows manually; a freshly built row that should be
     /// focused (e.g. after Add Task or entering editor mode) sets this to focus itself on mount.</summary>
@@ -611,6 +629,8 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 selectionAnchor: anchor,
                 hasFocus: focusNode.HasFocus,
                 fontSize: Widget.FontSize,
+                padX: Widget.PadX,
+                padY: Widget.PadY,
                 textColor: colors.OnSurface,
                 caretColor: colors.Primary,
                 selectionColor: colors.Primary with { W = 0.35f },
