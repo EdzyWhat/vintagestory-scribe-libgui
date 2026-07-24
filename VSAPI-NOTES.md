@@ -913,9 +913,11 @@ made for this in the round-3 pass — this note is the writeup to decide against
 
 ## LibGUI (vslibgui) — if/when adopted
 
-LibGUI is a third-party, Flutter-style reactive UI framework (SkiaSharp-rendered) being *assessed*
-as a replacement for our native `GuiComposer` GUI — it is **not adopted**; the decision is spike-gated
-in `openspec/changes/explore-libgui-adoption/`. Its model is documented in
+LibGUI is a third-party, Flutter-style reactive UI framework (SkiaSharp-rendered) that **has been
+adopted** (modid `gui`, production hard dep) as the replacement for our native `GuiComposer` GUI — the
+decision was spike-gated in the archived `explore-libgui-adoption` and is GO. The lectern read view
+migrated in `adopt-libgui-foundation` and the editor view in `migrate-editor-view-libgui`; the native
+`GuiComposer` lectern dialog and its helpers have been deleted. Its model is documented in
 `docs/libgui-reference.md`, and the Scribe→LibGUI rebuild plan in `docs/libgui-migration-guide.md`.
 Local, gitignored clones exist for lookups: **wiki at `./.wiki/`**, **source at `./reference/vslibgui/`**
 — `ripgrep` them before assuming a top-level summary is complete (the wiki and source already
@@ -1012,6 +1014,52 @@ blanket `*.dll` stage/package copy never ships it.** Verified for the `gui` hard
 `src/Mod/bin/{Debug,Release}/net10.0/` and therefore from the staged Mods folder — the installed
 `gui` mod provides it at runtime, exactly like the game DLLs and ConfigLib. Don't add the LibGUI
 DLLs to any explicit ship list.
+
+**Symptom (migrate-editor-view-libgui): a focused editable row loses focus/caret when it scrolls
+(or grows) off-screen inside a `ListView`.** LibGUI's `ListView` **virtualizes** — its private
+`ListViewContentElement.UpdateVisibleItemsVariable` mounts only rows in `[firstVisible-1,
+lastVisible+1]` and calls `Unmount()` on the rest, which destroys their `Element`/`State` and thus
+their `FocusNode`. Fine for the display/read view; fatal for an editor, where (a) cross-row keyboard
+nav (Enter→next row) needs to `RequestFocus` a row that may be off-screen, and (b) a focused row that
+grows past the viewport would be unmounted mid-type. **Fix:** render the editor as a NON-virtualized
+`SingleChildScrollView` + `Column` of ALL rows (every row stays mounted, `FocusNode`s persist). A
+lectern doc is a small checklist, so non-virtualized costs nothing. The read view keeps `ListView`.
+
+**Fact (migrate-editor-view-libgui): LibGUI's `KeyboardEvent` drops the Command (⌘) modifier — only
+Shift/Ctrl/Alt survive.** `GuiBase.OnKeyDown/OnKeyPress` build the LibGUI `KeyboardEvent` from VS's
+`KeyEvent` passing only `shift/ctrl/alt` (`reference/vslibgui/.../GuiBase.cs` ~959-1032); VS's own
+`KeyEvent.CommandPressed` is never propagated. So a LibGUI widget cannot see Cmd, and the macOS caret
+idioms (Cmd+←/→ = line ends, Cmd+A/C/X/V) can't be handled inside the field. **Fix:** translate Cmd
+one layer up, in the dialog's `public override void OnKeyDown(KeyEvent args)` — the VS `KeyEvent` is
+**mutable** (`KeyCode`/`CtrlPressed`/`CommandPressed` all have setters), so rewrite Cmd+←/→ →
+Home/End and Cmd+{A,C,X,V} → Ctrl+{A,C,X,V}, clear `CommandPressed`, THEN call `base.OnKeyDown(args)`
+(which does the mapping). Alt/Option *is* delivered as `Alt`, so Alt+Arrow word-skip works in the
+field directly. (Mirrors the native `ScribeRowTextInput.TranslateMacCaretModifiers`, moved up a level.)
+
+**Fact (migrate-editor-view-libgui): no focus-traversal API — a parent coordinates focus manually.**
+`FocusManager` tracks a single `PrimaryFocus` and offers only `RequestFocus(node)` / `RequestFocus(null)`;
+there is no next/previous traversal, `FocusScope`, or sibling/parent links on `FocusNode`. To move
+focus across editor rows (Enter/Shift+Tab), the dialog owns one `FocusNode` per row and calls
+`RequestFocus` on the target. `FocusNode.RequestFocus()` resolves its manager via `Owner?.Owner?.FocusManager`,
+so a node must have its `Owner` set (to the widget's `Element`) before focus takes — a node whose
+`Owner` is unset silently never focuses (this also gives you `node.Owner` as the row's `Element` for
+`Scrollable.EnsureVisible`).
+
+**Fact (migrate-editor-view-libgui): keep-a-row-in-view is `Scrollable.EnsureVisible(Element)`, called
+AFTER layout.** `Gui.Widgets.Scroll.Scrollable.EnsureVisible(Element target, ...)` (public static)
+walks up to the nearest scrollable ancestor and jumps/animates its `ScrollController` so the target is
+fully visible. It reads the target's live post-layout geometry, so call it once layout has run for the
+new size — deferring to the dialog's `OnRenderGUI(deltaTime)` (after `base.OnRenderGUI`) works. Reach
+the row's `Element` via its owned `FocusNode.Owner`.
+
+**Fact (migrate-editor-view-libgui): clipboard + selection are public; use `context.GetClipboard()` and
+`PaintingContext.DrawBox`.** A widget reads/writes the system clipboard via
+`BuildContext.GetClipboard()` / `Element.Owner!.GetClipboard()` → `IClipboard.GetText()/SetText()`
+(the concrete `GameClipboard` is `internal`, but the accessor is public). There is no dedicated
+selection-rect draw call — draw the selection highlight as a filled `PaintingContext.DrawBox` behind
+the text (same as the internal `RenderTextField`). There is also no public word-wrap helper
+(`TextLayoutHelper.BreakIntoLines` is `internal`); wrap by splitting on `\n` and greedily measuring
+words with the public `TextLayoutHelper.MeasureText`.
 
 ## Entry template
 

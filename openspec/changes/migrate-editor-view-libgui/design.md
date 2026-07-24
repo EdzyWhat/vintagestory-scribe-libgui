@@ -53,13 +53,21 @@ dialog to hand back to, so "done editing" is just a state flip back to the read 
 *Alternative considered:* a second LibGUI dialog for the editor — rejected; two block-entity dialogs
 re-introduces the same open/close/lifecycle coordination the seam suffered from, for no benefit.
 
-**D2 — Editor rows reuse the read view's self-stateful + `ValueKey`-keyed pattern.** Each editor row is a
-`StatefulWidget` keyed by block index, containing a checkbox + the multi-line field. Same reason as change
-1's D4: LibGUI's `ListView` caches children by index and won't rebuild them on a parent `SetState`, and the
-field must own its live editing state (text, caret, selection, focus) across list rebuilds. `variableHeight`
-`ListView` (proven real in change 1) measures each row to its wrapped height.
-*Alternative considered:* parent-owned controlled rows — rejected (spike proved they go stale in a
-`ListView`; the field's transient caret/selection state especially cannot live in the parent).
+**D2 — Editor rows are self-stateful + keyed, in a NON-virtualized scroll container.** Each editor row is a
+`StatefulWidget` keyed by block index, containing a checkbox + the multi-line field, and the field owns its
+live editing state (text, caret, selection, focus). The read view uses `ListView`, but the editor view must
+NOT: LibGUI's `ListView` **virtualizes** — its `ListViewContentElement.UpdateVisibleItemsVariable` mounts
+only rows in `[firstVisible-1, lastVisible+1]` and unmounts the rest, destroying their `Element`/`State`/
+`FocusNode` (confirmed by reading `reference/vslibgui/.../Scroll/ListView.cs`). That breaks two editor
+requirements: (a) cross-row keyboard nav (Enter→next row) can't `RequestFocus` an off-screen row whose
+`FocusNode` doesn't exist yet, and (b) a focused row that grows past the viewport would unmount and lose
+focus/caret mid-type. So the editor view renders as a `SingleChildScrollView` + `Column` of ALL rows (every
+row stays mounted, `FocusNode`s persist), with `Scrollable.EnsureVisible(focusedRow.Element)` for keep-in-view.
+A lectern document is a small checklist (dozens of rows at most), so non-virtualized has no practical cost.
+*Alternative considered:* virtualized `ListView` like the read view — rejected; virtualization silently
+destroys off-screen focus state, which the editor's focus-coordination and keep-in-view logic depend on.
+*Note:* this revises the proposal's "editable `ListView`" wording; the spec delta is mechanism-agnostic on
+the scroll container (it requires continuous scroll within a viewport, no page-turn), so both comply.
 
 **D3 — Promote `SpikeScribeMultilineField.cs` to a production widget rather than adopt LibGUI's `TextField`.**
 LibGUI's stock `TextField` is single-line and `internal`. The spike field already reimplements the needed

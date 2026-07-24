@@ -21,6 +21,36 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## migrate-editor-view-libgui
+
+> Second migration step: the lectern's EDITOR view is now rendered by the SAME LibGUI dialog as the
+> read view — the native `GuiComposer` editor (and its `ScribeRowElement`/`ScribeRowTextInput`/etc.
+> helpers) is deleted. Read↔editor is an internal view swap in one dialog, so "Done editing" returns
+> straight to the LibGUI read view (fixes the change-1 backlogged return path). New production
+> `ScribeMultilineField` (wrapping/auto-growing/focus-holding, built on LibGUI's public API). Editing
+> still commits through the lock-gated autosave path. Restaged Release + Debug 2026-07-23 — fully
+> relaunch the client first. Visuals are still deferred (stock checkbox, no ruling/custom glyph).
+
+- [ ] `b3e11029` **Editor opens in LibGUI.** From the read view click "Edit" → the editor opens IN THE
+      SAME dialog (LibGUI-rendered, parchment theme), not a separate native-looking window. Each task
+      row shows a checkbox + an editable text field. *(migrate-editor-view-libgui 5.4)*
+- [ ] `b3e11029` **Type, wrap, grow.** Click a row and type past the line width → text wraps onto a new
+      line and the row grows to fit, pushing rows below down; delete it back → the row shrinks. A row
+      that grows past the bottom stays scrolled into view with the caret visible. *(migrate-editor-view-libgui 5.4)*
+- [ ] `b3e11029` **Editor key model.** Enter = commit + move to next row (NO newline inserted);
+      Shift+Enter = insert a hard line break (row grows); Shift+Tab = commit + move to previous row;
+      Esc = commit + close the dialog. *(migrate-editor-view-libgui 5.4)*
+- [ ] `b3e11029` **Caret + selection (macOS).** Arrow keys move the caret; Alt/Option+←/→ skips by word;
+      Cmd+←/→ jumps to line start/end; holding Shift with any of these extends the selection. Cmd+A/C/X/V
+      select-all/copy/cut/paste work. *(migrate-editor-view-libgui 5.4)*
+- [ ] `b3e11029` **Commit syncs + no key leak.** Edit a row → the change autosaves and a second client
+      (or reopening) sees it. While a field is focused, typing movement keys (WASD) does NOT move the
+      player or trigger hotbar/hotkeys. *(migrate-editor-view-libgui 5.4)*
+- [ ] `b3e11029` **Return to LibGUI read view.** Click "Done editing" (or close + reopen) → lands on the
+      LibGUI read view showing the fresh edits (not a native read view), with no lock/stale-content
+      weirdness. In SURVIVAL, walk out of range while editing → the dialog auto-closes (edit committed).
+      *(migrate-editor-view-libgui 5.4)*
+
 ## adopt-libgui-foundation
 
 > First migration step off the native GuiComposer: the lectern's READ view is now rendered by a
@@ -48,13 +78,11 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       read view returns showing the fresh edit. Confirm no lock/stale-content weirdness across the
       hand-off. *(6.4)*
       - **Confirmed 2026-07-23 (forward path):** read view "Edit" opens the working native editor.
-      - **Backlogged 2026-07-23 (return path — deferred to the editor-view migration):** the native
-        editor's own "Done Editing" recomposes back to the NATIVE read view in place (its
-        `OnClickSwitchToRead` does a local `EnterMode(false, …)`, never round-tripping through
-        `HandleServerReply`), so it does NOT land on the LibGUI read view. User's call: leave it — the
-        editor view is itself being rebuilt on LibGUI next, and the whole loop becomes LibGUI then, so
-        re-plumbing the native editor's return path now is throwaway work. Revisit when the editor-view
-        change lands.
+      - **Obsolete 2026-07-23 (return path):** superseded by `migrate-editor-view-libgui`, which deleted
+        the native editor entirely — there is no native "Done Editing" recompose left to test. The
+        read↔editor round-trip now lives wholly in the LibGUI dialog and is retested under
+        `migrate-editor-view-libgui` item `b3e11029` (return-to-LibGUI-read-view). The old
+        backlogged-return-path concern no longer applies as written.
 - [ ] `1b3f72f2` **Survival walk-away auto-close.** In SURVIVAL, open the lectern (read view) then
       walk out of range without closing → the dialog auto-closes (LibGUI's `InteractionRange` override
       pins it to the fixed survival reach, mirroring the native fix). *(6.4)*
