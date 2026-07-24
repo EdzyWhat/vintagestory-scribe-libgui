@@ -1,3 +1,11 @@
+## Status: SUPERSEDED by adopt-libgui-foundation (2026-07-23)
+
+**Implemented, but retired; not carried into the LibGUI rebuild.** This first Notion-style affordance
+pass redrew the per-row pin/delete/grip buttons as custom-drawn `ScribeHoverIconButton`/`ScribeRowElement`
+controls — native `GuiComposer` machinery LibGUI replaces wholesale with flex `Row` + `IconButton` +
+theme states. Superseded together with its follow-up `refine-row-affordance-visuals-2`. Archived
+without syncing its `lectern-gui-shell` delta into `openspec/specs/`. Kept for the record only.
+
 ## Why
 
 `restore-row-affordance-columns` brought the per-row pin/delete/grip affordances back and playtested

@@ -1,3 +1,12 @@
+## Status: SUPERSEDED by adopt-libgui-foundation (2026-07-23)
+
+**Implemented, but retired; not carried into the LibGUI rebuild.** This overlay outlines the native
+`GuiComposer` element bounds / `BuildInspectBoxes` keyed elements of the old absolute-bounds lectern
+dialog — none of which exist in a LibGUI declarative widget tree. LibGUI ships its own built-in live
+inspector (`/ui tree|bounds|paint|heatmap`), which is the replacement. Decision 2026-07-23: the
+inspect overlay is NOT being tackled under LibGUI. Archived without syncing its `debug-inspect-overlay`
+delta into `openspec/specs/` (that capability was never a live spec). Kept for the record only.
+
 ## Why
 
 Refining the lectern's custom-drawn GUI is a slow screenshot-and-relaunch loop: from pixels you

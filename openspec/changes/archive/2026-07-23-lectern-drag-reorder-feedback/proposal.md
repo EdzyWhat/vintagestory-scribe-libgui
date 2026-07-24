@@ -1,3 +1,12 @@
+## Status: SUPERSEDED by adopt-libgui-foundation (2026-07-23)
+
+**Never implemented (0/18); the ON-HOLD note below is now resolved as superseded.** The drag-reorder
+lift-ghost / insertion-indicator / drop-settle feedback here was to be built on the native
+custom-drawn `ScribeRowElement` row infrastructure — the exact machinery LibGUI replaces. Drag-reorder
+returns under LibGUI via `ValueKey` row identity as part of the future "affordance columns +
+drag-reorder" change (migration guide step 3). Archived without syncing its `lectern-gui-shell` delta
+into `openspec/specs/`. Kept for the record only.
+
 > **ON HOLD (2026-07-20):** folded into the `lectern-row-list-rework` exploration — the
 > lift-ghost/insertion-indicator/drop-settle here will build on the unified custom-drawn row
 > infrastructure that exploration is scoping, rather than on the current rows. Do not

@@ -1,3 +1,11 @@
+## Status: SUPERSEDED by adopt-libgui-foundation (2026-07-23)
+
+**Barely started (1/18 tasks); abandoned, not carried into the LibGUI rebuild.** Its read-view
+task-toggle is re-proven by the LibGUI read view; its remaining work (read/editor row-list
+width-unification, icon-column scaling) targets the native `GuiComposer` view split that LibGUI
+replaces wholesale. Archived without syncing its `lectern-gui-shell` delta into `openspec/specs/`.
+Kept for the record only.
+
 ## Why
 
 Playtesting the `skeuomorphic-lectern-gui` redesign (via the playtest-checklist app,

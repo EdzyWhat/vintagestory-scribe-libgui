@@ -21,6 +21,46 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## adopt-libgui-foundation
+
+> First migration step off the native GuiComposer: the lectern's READ view is now rendered by a
+> LibGUI dialog (`GuiDialogScribeLecternLibGui`), opened through the real interaction + packet flow.
+> It's read-only — "switch to editor" hands off to the still-native editor (unchanged). Behavior-
+> first: LibGUI stock checkbox + plain rows on the code-defined parchment theme; skeuomorphic
+> visuals (ruling, custom glyph, text-size scaling) are deferred to later changes. Restaged Release
+> 2026-07-23 — fully relaunch the client first. Note the read view is a deliberate visual downgrade
+> vs. the old native read view; that's expected this change.
+
+- [x] `1b3f72f2` **Read view opens + renders.** Plain right-click a lectern → a LibGUI dialog opens
+      showing the live document (tasks + notes) with the parchment theme actually rendering on Apple
+      Silicon (not a blank/black window). Confirm close, title-bar drag, and minimize/expand all work.
+      *(6.4)*
+      - **Confirmed 2026-07-23** (user playtest): read view opens on plain right-click and renders the
+        live document on the parchment theme; all window chrome (close, drag, minimize/expand) works.
+- [x] `1b3f72f2` **Read-view checkbox toggles lock-free.** Click a task's checkbox in the read view →
+      it flips immediately and the done state persists after a resync (reopen to confirm). Confirm the
+      rest of the row is inert (clicking/hovering the text does nothing — no edit field, drag, or
+      icons). Ideally verify a second client can toggle while you hold the editor lock. *(6.4)*
+      - **Confirmed 2026-07-23** (user playtest): read-view checkboxes function and persist across a
+        resync.
+- [ ] `1b3f72f2` **Switch to editor + back.** From the LibGUI read view, click "Edit" → the working
+      NATIVE editor view opens with full editing. Edit something, switch back to read → the LibGUI
+      read view returns showing the fresh edit. Confirm no lock/stale-content weirdness across the
+      hand-off. *(6.4)*
+      - **Confirmed 2026-07-23 (forward path):** read view "Edit" opens the working native editor.
+      - **Backlogged 2026-07-23 (return path — deferred to the editor-view migration):** the native
+        editor's own "Done Editing" recomposes back to the NATIVE read view in place (its
+        `OnClickSwitchToRead` does a local `EnterMode(false, …)`, never round-tripping through
+        `HandleServerReply`), so it does NOT land on the LibGUI read view. User's call: leave it — the
+        editor view is itself being rebuilt on LibGUI next, and the whole loop becomes LibGUI then, so
+        re-plumbing the native editor's return path now is throwaway work. Revisit when the editor-view
+        change lands.
+- [ ] `1b3f72f2` **Survival walk-away auto-close.** In SURVIVAL, open the lectern (read view) then
+      walk out of range without closing → the dialog auto-closes (LibGUI's `InteractionRange` override
+      pins it to the fixed survival reach, mirroring the native fix). *(6.4)*
+      - **Backlogged 2026-07-23:** user not testing in survival yet. Code path is in place (mirrors the
+        confirmed native fix); parked until a survival session.
+
 ## add-gui-inspect-overlay
 
 > A config-toggled "inspect element" overlay for the lectern GUI (the macOS-safe replacement for the
@@ -44,6 +84,11 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Still broken 2026-07-22 (regression, separate item — see `a1b2c3d4` below):** setting the value
         via the ConfigLib **panel** broke ConfigLib's whole Mod Settings window. The overlay itself is fine;
         the panel-toggle path was reverted (now JSON-only).
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. The overlay outlines native
+        `GuiComposer` element bounds / `BuildInspectBoxes` keyed elements, which don't exist in a LibGUI
+        widget tree; LibGUI's built-in `/ui tree|bounds|paint|heatmap` is the replacement. User decided
+        `add-gui-inspect-overlay` is NOT being tackled under LibGUI. Change bannered SUPERSEDED + archived
+        without syncing.
 - [x] `a1b2c3d4` **ConfigLib panel regression (fixed by revert).** After setting `InspectOverlayMode = 1`,
       the ConfigLib "Mod Settings" window would no longer open at all — persisting across a full quit +
       relaunch. *(add-gui-inspect-overlay 1.2)*
@@ -53,6 +98,8 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         control, not parsing. Removed the manifest entry (toggle is now JSON-edit + reopen) and reset the
         stale on-disk value to 0; restaged Release. Recorded in VSAPI-NOTES.md. Relaunch and confirm Mod
         Settings opens normally again.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild (see `c44137dd`). This regression was a
+        side effect of the native overlay's ConfigLib-panel toggle, which is retired with the overlay.
 - [ ] `4ffdc7a1` **Overlay under stress.** With the overlay on (set via config JSON), set
       `InspectOverlayMode = 2` → outlines only, no labels (use this when labels crowd at 30% text size).
       Scroll a long list and drag the text-size slider → outlines should track the boxes live as they
@@ -62,6 +109,8 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       *(add-gui-inspect-overlay 5.4)*
       - **Still to test 2026-07-22:** not reached in playtest 2026-07-22T17-45-13 (the ConfigLib regression
         interrupted the session). Retest after relaunch, now toggling via the config JSON.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild (see `c44137dd`). The diagnose-and-tune
+        loop this stress-tests is native-`GuiComposer`-specific; retired with the overlay.
 
 ## refine-row-affordance-visuals-2
 
@@ -78,6 +127,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Confirmed 2026-07-22** (playtest report 2026-07-22T15-27-35, "Good combined button") via
         screenshots/../2026-07-22T15-16-22-d7b9827a.png: pin and delete render as one outlined pill with
         a divider between the two glyphs.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
 - [x] `163395e7` **Bare grip.** The far-left drag grip is a plain icon with NO box/outline around it,
       and its glyph is at least as tall as the checkbox. *(8.2)*
       - **Still broken 2026-07-22** (playtest report 2026-07-22T15-27-35) via
@@ -88,6 +138,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         screenshots/../2026-07-22T16-07-32-163395e7.png: after the 1.1×-checkbox sizing + midline
         centering (`CheckboxGlyphMetricsFixed`), the bare grip now reads as slightly taller than the
         checkbox and vertically centered on it.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
 - [x] `d6913c79` **Pressed feedback + routing.** Press and hold pin, then delete: each shows a light
       depressed overlay while held, clears on release, and the correct action fires (watch the Debug log
       for the pin vs delete stub). *(8.2)*
@@ -103,11 +154,13 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         overlay was changed to a dark whole-button tint (`0,0,0 @ 0.18`) — and the stale on-disk config
         that was shadowing it with the old white value was reconciled — a held button now visibly
         darkens.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
 - [x] `cd3ab269` **Square + min size.** Sweep the text-size slider min↔max: pin and delete stay square
       and equally sized, and at the smallest size they stop shrinking (stay legible), no crash. *(8.2)*
       - **Confirmed 2026-07-22** (playtest report 2026-07-22T15-27-35, "still legible at small size"):
         pin/delete stay square and equally sized across the slider range and remain legible at the
         smallest setting with no crash.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
 - [ ] `3b7d714d` **Ruling hugs content.** The ruling line now sits right under the row text with no
       internal padding gap; when you focus a row to edit, the highlight still keeps a small margin and
       doesn't touch the line. *(8.2)*
@@ -136,6 +189,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         (`ScribeRowElement.ComposeElements`, edit mode only). Relaunch, focus a row, eyeball where the
         single line sits between rulings, and tell me the adjustment ("move text down N px" / "make the
         green and cyan bands equal"); I'll set the spacing, THEN remove these debug colors.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. The lined-paper ruling this item tunes was dropped from the roadmap entirely (decision 2026-07-23, cleaner modern direction) — see adopt-libgui-foundation.
 - [x] `78507e2a` **Pin persists + syncs.** Toggle a task's pin: it stays pinned across a recompose and
       after a save+reload; on a second client the pinned state shows up in their read view. *(8.2)*
       - **Confirmed 2026-07-22:** the amber row tint now appears when a task is pinned, which means the
@@ -161,6 +215,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Fix staged 2026-07-22 (awaiting retest):** unblocked by making the tint LOUD (see c8cba401 —
         amber @ 0.35, on-disk config reconciled). Restaged Debug — relaunch, pin a task, and confirm the
         (now obvious) tint persists across recompose + save/reload; then we dial the color back.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. This item tests pin persist/sync THROUGH the native pin affordance visuals, which are gone; the pin persistence/sync capability itself survives (Core-tested) and gets a fresh item when LibGUI affordances return.
 - [x] `c8cba401` **Pinned indicator at rest.** A pinned task shows an indicator without hovering
       (default: a small dot at the row's top-right) in both read and editor views; try the
       PinnedIndicatorMode config variants and pick the preferred one. *(8.2)*
@@ -192,6 +247,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         subtle wash, drawn under the text/checkbox/ruling, visible without hovering in both views. The
         pin button also keeps its filled look on hover ("keep both"). Restaged Debug — relaunch and
         confirm a pinned task's whole row is tinted at rest; tune `PinnedRowTint*` alpha to taste.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
 - [ ] `c7204988` **Button group height = single-row input.** The pin/delete group looks anchored to
       the ruling line; its full height should instead equal the single-row input height (roughly 85% of
       current), achieved mostly by trimming padding / the SVG's own whitespace rather than shrinking the
@@ -206,6 +262,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         CENTERED on the row's first text line (checkbox midline) instead of top-aligned, so it lines up
         with the input rather than hugging the ruling. Restaged Debug — relaunch and confirm the group
         matches the single-row input height; tune the factor if needed.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
 
 > Notion-style redraw of the per-row pin/delete/grip buttons: thin ink outline over an OPAQUE
 > parchment background that occludes the text they overlay on hover, larger icons, single-line
@@ -221,6 +278,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         opaque parchment fill (no brown pill) with a large icon. Follow-up refinements the user asked
         for — group pin+delete with a divider, and make the grip a bare chrome-less SVG — are carried
         into the new second-pass affordance change, not a defect in this item.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
 - [x] `568a9827` **Single-line height + overlay.** On a tall WRAPPED note: pin/delete/grip sit on the
       TOP line, not stretched down the row. On a long single-line row: text uses full width, and
       hovering floats pin/delete over the text's right end — their opaque background cleanly hides the
@@ -228,6 +286,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Confirmed 2026-07-22** (playtest report 2026-07-22T13-17-40, "It's good") via
         screenshots/../2026-07-22T13-12-46-568a9827.png: on a four-line wrapped note the pin/delete/grip
         sit on the top line rather than stretching down the row.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
 - [ ] `568a9827` **Overlay click vs. text click.** Click an overlaid pin/delete → the stub log fires
       (no crash). Click text to the LEFT of the pin/delete cluster → the row focuses/edits normally.
       *(6.2 part 4)*
@@ -236,18 +295,21 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         no visual feedback for this"), and no crash was reported. A pressed/depressed overlay state is
         being added in the new second-pass affordance change specifically so this becomes observable;
         re-verify click routing once that lands.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
 - [x] `568a9827` **Input margin symmetry.** Focus a row and type → the focus highlight has an equal
       small margin at top AND bottom, not butting against the ruling. A short (min-height) task centers
       its single line rather than sitting bottom-heavy. *(6.2 part 5)*
       - **Confirmed 2026-07-22** (playtest report 2026-07-22T13-17-40): user sees both the new bottom
         and top margins on the focused input. The follow-up request to tighten the ruling's own padding
         so the line hugs the content is carried into the new second-pass affordance change.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
 - [x] `568a9827` **Far-left grip + no toggle shift.** The grip is at the row's far LEFT, left of the
       checkbox (checkbox/text shifted right in the editor). Toggle Read↔Edit on the same lectern → the
       checkbox does NOT jump horizontally (read view reserves the same drag column, draws no grip).
       *(6.2 parts 6,7)*
       - **Confirmed 2026-07-22** (playtest report 2026-07-22T13-17-40, "Its good"): the grip renders at
         the row's far left of the checkbox; toggling Read↔Edit leaves the checkbox in place.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
 - [x] `568a9827` **Scale + state + scroll.** Sweep the text-size slider min↔max → buttons, outline,
       icon, drag column, and margins all scale, no crash at the smallest size. Pin a task, then click
       elsewhere → the pin stays pinned (On survives an unrelated mouse-up). Scroll a row past the clip
@@ -257,6 +319,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         natively. Follow-up sizing polish the user asked for — pin/delete equal-width AND square, plus a
         minimum on-screen size so buttons stay legible at the low (30%) end where they currently get too
         small — is carried into the new second-pass affordance change.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
 
 ## lectern-gui-quick-edit-affordances
 
@@ -275,6 +338,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         the row is inert. Delivered by `ScribeToggleTaskMessage` /
         `BlockEntityScribeLectern.ToggleTaskFromReader` (lock-free), archived under
         `lectern-custom-row-list-read-view`.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. read-view task toggle is re-proven by the LibGUI read view (confirmed 2026-07-23, adopt-libgui-foundation).
 - [x] `b3613621` **(6.3) Checkbox scales with text size.** Change the text-size preference
       across its range; confirm the checkbox grows and shrinks with the text, not staying a
       fixed size.
@@ -282,6 +346,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         the row text, ruling padding, and checkbox glyph all resized consistently and
         proportionally (read view via `RowTextLayout`'s `ToggleWidth * TextSizeScale`; editor
         view's switch already scaled from the skeuomorphic work).
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. native `RowTextLayout` checkbox scaling; text-size scaling is deferred LibGUI visual work, not this native item.
 - [ ] `1130aaae` **(5.3) One row-list width across both views.** Switch between read and
       editor view on the same lectern; confirm the row list is a single consistent width in
       both, not two different widths.
@@ -289,12 +354,14 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         separate (editor view untouched), so the two views are still different widths by
         design until the rework's S2 unifies them. Can't pass yet; revisit when S2 lands (or
         mark obsolete if this change is re-scoped into the rework).
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. gated on a native read/editor width-unification that was never built; LibGUI supersedes the whole native view split.
 - [ ] `0b55bba9` **(7.4) Combined read/edit affordances retest.** Restage and retest the
       read-view toggle, the unified row-list width, and checkbox scaling together, plus a
       scroll pass for row-rendering regressions.
       - **Backlogged 2026-07-21:** gated on the single-width work above (5.3), which isn't
         built. The toggle and scaling halves are already confirmed individually; this combined
         gate can't be run until width unification lands (rework S2).
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. gated on the same never-built native unification (5.3); superseded by the LibGUI rebuild.
 
 ## add-lectern-block
 
@@ -365,6 +432,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       and confirm the dialog updates live to match. Confirm `scribe-client-config.json` on disk
       does NOT change until you press the "Save" button.
       - **Confirmed 2026-07-20** (playtest report): "All functional."
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. the VSImGui Debug sliders are dead on Apple Silicon and tune native `GuiComposer` layout knobs (`VisibleListHeight`/`RowSpacing`/etc.) that LibGUI replaces with its theme/flex model.
 - [ ] `c2729a2d` **(5.1) Diagnose the frozen-chrome symptom.** *This item predates the scroll
       fixes and was written to diagnose them; re-evaluate whether it's still needed now that
       3.4a is in.* Using the live Debug sliders, drag `VisibleListHeight` and `RowSpacing` and
@@ -377,6 +445,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         static+interactive architecture; the row-list rework replaces that rendering approach
         wholesale (S1 already unified the read view; S2 does the editor), so the slider-based
         frozen-chrome diagnosis no longer applies. Retired rather than deleted.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. already retired; the native frozen-chrome diagnostic it ran has no analog in the LibGUI widget tree.
 - [ ] `8c7c2b2a` **(4.4) No regression from the new references.** Fully relaunch the client
       after restaging and confirm the lectern still opens and behaves normally, with no errors
       from the added VSImGui/ConfigLib references.
@@ -385,6 +454,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       installed, open ConfigLib's in-game settings panel, change an exposed "Lectern Layout"
       field, and save. Confirm the lectern reflects the new value.
       - **Confirmed 2026-07-20** (playtest report): lectern reflects the saved value.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. tunes native `ScribeClientConfig` layout fields via the ConfigLib panel; those layout knobs move to LibGUI's ThemeData/`libgui.json` under the deferred theme-extraction change.
 - [ ] `d83db914` **(3.5) Loads without ConfigLib.** With ConfigLib NOT installed, confirm the
       mod still loads and the lectern opens normally, with no missing-dependency warning.
       - **Confirmed 2026-07-20** (playtest report): loads and opens normally.

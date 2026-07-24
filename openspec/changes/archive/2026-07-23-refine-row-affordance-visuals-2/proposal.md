@@ -1,3 +1,14 @@
+## Status: SUPERSEDED by adopt-libgui-foundation (2026-07-23)
+
+**Implemented, but retired; not carried into the LibGUI rebuild.** Every requirement here tunes the
+native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the per-row pin/delete/grip
+affordances and the lined-paper ruling — the single biggest deletion under LibGUI, which replaces them
+with flex `Row` + `IconButton` + theme states (and drops the ruling entirely, decision 2026-07-23).
+The affordance capability returns as its own future LibGUI change. The pin persistence/sync work
+underneath survives (Core-tested) and is reused unchanged. Archived without syncing its
+`lectern-gui-shell` delta into `openspec/specs/` (those native read/row requirements are being
+replaced by adopt-libgui-foundation, not merged). Kept for the record only.
+
 ## Why
 
 `refine-row-affordance-visuals` landed the Notion-style row affordances and playtested green, but
