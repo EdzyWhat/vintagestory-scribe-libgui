@@ -254,6 +254,32 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         FocusEditorRow(prev);
     }
 
+    /// <summary>Enter: commit the focused row, then insert a new placeholder task directly beneath it
+    /// and focus it (so the player types straight into the new row). Rebuilds because the row set
+    /// changed. If the insert is rejected (shouldn't happen — placeholder is non-blank), falls back to
+    /// advancing focus so Enter is never a dead key.</summary>
+    private void EditorInsertTaskBelow(int index)
+    {
+        if (scratch is null) return;
+        NormalizeRowOnCommit(index);
+        FlushIfDirty();
+
+        int insertAt = index + 1;
+        if (scratch.InsertTask(insertAt, Lang.Get("scribe:scribe-gui-newtask-placeholder")))
+        {
+            isDirty = true;
+            SyncFocusNodesToScratch();
+            autoFocusRowOnRebuild = insertAt;
+            focusedEditIndex = insertAt;
+            pendingEnsureVisible = true;
+            ForceRebuild();
+        }
+        else
+        {
+            FocusEditorRow(Math.Min(index + 1, scratch.Blocks.Count - 1));
+        }
+    }
+
     /// <summary>Editor checkbox toggle: mutate the scratch document and mark dirty (lock-gated, unlike
     /// the read view's lock-free toggle). The row flips its own checkbox optimistically.</summary>
     private void ToggleEditorTask(int index)
@@ -474,6 +500,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             onTextChanged: NotifyTextChanged,
             onCommitAndAdvance: EditorAdvanceFrom,
             onCommitAndRetreat: EditorRetreatFrom,
+            onInsertTaskBelow: EditorInsertTaskBelow,
             onToggleTask: ToggleEditorTask,
             onAddTask: OnClickAddTask,
             onSwitchToRead: OnClickSwitchToRead);
@@ -660,6 +687,7 @@ internal sealed class ScribeLecternEditorContent : StatefulWidget
         Action<int, string> onTextChanged,
         Action<int> onCommitAndAdvance,
         Action<int> onCommitAndRetreat,
+        Action<int> onInsertTaskBelow,
         Action<int> onToggleTask,
         Action onAddTask,
         Action onSwitchToRead)
@@ -670,6 +698,7 @@ internal sealed class ScribeLecternEditorContent : StatefulWidget
         OnTextChanged = onTextChanged;
         OnCommitAndAdvance = onCommitAndAdvance;
         OnCommitAndRetreat = onCommitAndRetreat;
+        OnInsertTaskBelow = onInsertTaskBelow;
         OnToggleTask = onToggleTask;
         OnAddTask = onAddTask;
         OnSwitchToRead = onSwitchToRead;
@@ -681,6 +710,7 @@ internal sealed class ScribeLecternEditorContent : StatefulWidget
     public Action<int, string> OnTextChanged { get; }
     public Action<int> OnCommitAndAdvance { get; }
     public Action<int> OnCommitAndRetreat { get; }
+    public Action<int> OnInsertTaskBelow { get; }
     public Action<int> OnToggleTask { get; }
     public Action OnAddTask { get; }
     public Action OnSwitchToRead { get; }
@@ -714,6 +744,7 @@ internal sealed class ScribeLecternEditorContentState : State<ScribeLecternEdito
                     onTextChanged: Widget.OnTextChanged,
                     onCommitAndAdvance: Widget.OnCommitAndAdvance,
                     onCommitAndRetreat: Widget.OnCommitAndRetreat,
+                    onInsertTaskBelow: Widget.OnInsertTaskBelow,
                     onToggleTask: Widget.OnToggleTask,
                     key: new ValueKey<int>(b.Index)))
                 .ToList();
@@ -766,6 +797,7 @@ internal sealed class ScribeEditRow : StatefulWidget
         Action<int, string> onTextChanged,
         Action<int> onCommitAndAdvance,
         Action<int> onCommitAndRetreat,
+        Action<int> onInsertTaskBelow,
         Action<int> onToggleTask,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
@@ -776,6 +808,7 @@ internal sealed class ScribeEditRow : StatefulWidget
         OnTextChanged = onTextChanged;
         OnCommitAndAdvance = onCommitAndAdvance;
         OnCommitAndRetreat = onCommitAndRetreat;
+        OnInsertTaskBelow = onInsertTaskBelow;
         OnToggleTask = onToggleTask;
     }
 
@@ -785,6 +818,7 @@ internal sealed class ScribeEditRow : StatefulWidget
     public Action<int, string> OnTextChanged { get; }
     public Action<int> OnCommitAndAdvance { get; }
     public Action<int> OnCommitAndRetreat { get; }
+    public Action<int> OnInsertTaskBelow { get; }
     public Action<int> OnToggleTask { get; }
 
     public override State CreateState() => new ScribeEditRowState();
@@ -825,7 +859,8 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             autoFocus: Widget.AutoFocus,
             onChanged: text => Widget.OnTextChanged(index, text),
             onCommitAndAdvance: () => Widget.OnCommitAndAdvance(index),
-            onCommitAndRetreat: () => Widget.OnCommitAndRetreat(index))));
+            onCommitAndRetreat: () => Widget.OnCommitAndRetreat(index),
+            onInsertTaskBelow: () => Widget.OnInsertTaskBelow(index))));
 
         return new Padding(
             EdgeInsets.Symmetric(vertical: 4, horizontal: 2),

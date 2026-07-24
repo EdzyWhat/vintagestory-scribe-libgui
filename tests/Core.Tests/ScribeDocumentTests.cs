@@ -241,6 +241,57 @@ public class ScribeDocumentTests
         Assert.Equal(new[] { "A", "C" }, doc.Blocks.Select(b => b.Text));
     }
 
+    // --- Insert ---
+
+    [Fact]
+    public void InsertTask_InsertsUnderCurrentAndShiftsRest()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("A");
+        doc.AddTask("C");
+
+        bool ok = doc.InsertTask(1, "B"); // new task under index 0 (the "A" row)
+
+        Assert.True(ok);
+        Assert.Equal(new[] { "A", "B", "C" }, doc.Blocks.Select(b => b.Text));
+        Assert.True(doc.Blocks[1].IsTask);
+        Assert.False(doc.Blocks[1].Done);
+    }
+
+    [Fact]
+    public void InsertTask_AtCount_Appends()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("A");
+
+        Assert.True(doc.InsertTask(doc.Blocks.Count, "B"));
+        Assert.Equal(new[] { "A", "B" }, doc.Blocks.Select(b => b.Text));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void InsertTask_RejectsBlankText(string blank)
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("A");
+
+        Assert.False(doc.InsertTask(1, blank));
+        Assert.Single(doc.Blocks);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(2)] // one block present → count is 1, so 2 is past the append slot
+    public void InsertTask_OnInvalidIndex_FailsSafely(int badIndex)
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("A");
+
+        Assert.False(doc.InsertTask(badIndex, "B"));
+        Assert.Single(doc.Blocks);
+    }
+
     // --- Reorder ---
 
     [Fact]

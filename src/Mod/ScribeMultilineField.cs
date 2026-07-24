@@ -287,6 +287,7 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         Action<string>? onChanged = null,
         Action? onCommitAndAdvance = null,
         Action? onCommitAndRetreat = null,
+        Action? onInsertTaskBelow = null,
         Action? onBlur = null,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
@@ -298,6 +299,7 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         OnChanged = onChanged;
         OnCommitAndAdvance = onCommitAndAdvance;
         OnCommitAndRetreat = onCommitAndRetreat;
+        OnInsertTaskBelow = onInsertTaskBelow;
         OnBlur = onBlur;
     }
 
@@ -309,11 +311,14 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
     /// focused (e.g. after Add Task or entering editor mode) sets this to focus itself on mount.</summary>
     public bool AutoFocus { get; }
     public Action<string>? OnChanged { get; }
-    /// <summary>Enter (no Shift): the field has committed its text via <see cref="OnChanged"/>; the
+    /// <summary>Tab (no Shift): the field has committed its text via <see cref="OnChanged"/>; the
     /// parent should normalize + flush the row and move focus to the next row.</summary>
     public Action? OnCommitAndAdvance { get; }
     /// <summary>Shift+Tab: same as advance but focus moves to the previous row.</summary>
     public Action? OnCommitAndRetreat { get; }
+    /// <summary>Enter (no Shift): commit this row, then insert a NEW task directly beneath it and focus
+    /// it. Shift+Enter still inserts a hard line break within the row.</summary>
+    public Action? OnInsertTaskBelow { get; }
     /// <summary>Focus lost without an Enter/Shift+Tab (e.g. click-away): commit the row's edit.</summary>
     public Action? OnBlur { get; }
 
@@ -454,19 +459,22 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 }
                 else
                 {
-                    // Enter commits and advances — never inserts a newline.
-                    Widget.OnCommitAndAdvance?.Invoke();
+                    // Enter commits this row and inserts a NEW task directly beneath it (never a
+                    // newline within the row). Row navigation is Tab's job now.
+                    Widget.OnInsertTaskBelow?.Invoke();
                 }
                 Handled(e);
                 break;
 
             case (int)GlKeys.Tab when e.Shift:
+                // Shift+Tab commits and retreats to the previous row.
                 Widget.OnCommitAndRetreat?.Invoke();
                 Handled(e);
                 break;
 
             case (int)GlKeys.Tab:
-                // Plain Tab is a no-op (don't insert a tab glyph; Tab isn't used for traversal here).
+                // Tab commits and advances to the next row (never inserts a tab glyph).
+                Widget.OnCommitAndAdvance?.Invoke();
                 Handled(e);
                 break;
 

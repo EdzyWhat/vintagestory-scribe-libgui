@@ -24,6 +24,21 @@ public sealed class ScribeDocument
         return true;
     }
 
+    /// <summary>
+    /// Inserts a checkbox task at <paramref name="index"/>, shifting later blocks down (so passing
+    /// <c>currentIndex + 1</c> puts the new task directly under the current one — the editor's
+    /// Enter=new-task gesture). <paramref name="index"/> may equal <see cref="Blocks"/>.Count to append.
+    /// Blank/whitespace-only text is rejected; an out-of-range index fails safely. Text is stored
+    /// verbatim (see <see cref="AddTask"/>).
+    /// </summary>
+    public bool InsertTask(int index, string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        if (index < 0 || index > _blocks.Count) return false;
+        _blocks.Insert(index, new ScribeBlock(ScribeBlockKind.Task, text));
+        return true;
+    }
+
     /// <summary>Adds a freeform text section to the end. Blank/empty text is allowed.</summary>
     public bool AddTextSection(string? text)
     {
