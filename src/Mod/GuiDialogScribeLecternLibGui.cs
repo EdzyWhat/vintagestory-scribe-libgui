@@ -44,6 +44,16 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     /// and reopening the lectern applies new values, with no shared mutable state.</summary>
     private readonly ScribeRowStyle rowStyle;
 
+    /// <summary>One scroll controller shared by BOTH views' scroll regions, owned by the dialog rather
+    /// than each view's <c>State</c>. Because a view switch is a <see cref="GuiBase.ForceRebuild"/> that
+    /// tears down the outgoing view's <c>State</c> (which would dispose a State-owned controller and
+    /// lose the offset), sharing one dialog-lived controller keeps the scroll position across the
+    /// switch — and since row heights are unified across views (<see cref="ScribeRowStyle"/>), the same
+    /// offset shows the same rows. Passed into the <c>ListView</c>/<c>SingleChildScrollView</c>, which
+    /// then do NOT dispose it (they only dispose their own internal fallback); the dialog disposes it in
+    /// <see cref="OnGuiClosed"/>. An offset past a shorter view's max is clamped on layout.</summary>
+    private readonly ScrollController sharedScrollController = new();
+
     // ---- View state ----
     private bool isEditorMode;
 
@@ -581,6 +591,9 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             StopAutosaveTick();
             DisposeFocusNodes();
         }
+        // The dialog owns the shared scroll controller (see its field); dispose it once here rather
+        // than in either view's State, which come and go with each view-switch ForceRebuild.
+        sharedScrollController.Dispose();
         base.OnGuiClosed();
     }
 
@@ -613,7 +626,8 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
                 .ToList(),
             onToggleTask: OnReadViewToggleTask,
             onSwitchToEditor: RequestEditorAccess,
-            style: rowStyle);
+            style: rowStyle,
+            scrollController: sharedScrollController);
 
     private Widget BuildEditorContent()
     {
@@ -638,7 +652,8 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             onReorderBlock: ReorderEditorBlock,
             onAddTask: OnClickAddTask,
             onSwitchToRead: OnClickSwitchToRead,
-            style: rowStyle);
+            style: rowStyle,
+            scrollController: sharedScrollController);
     }
 
     /// <summary>Read-view task checkbox click: fire-and-forget a lock-free toggle to the server. The
@@ -677,41 +692,29 @@ internal sealed class ScribeLecternReadContent : StatefulWidget
         IReadOnlyList<ScribeReadRowData> blocks,
         Action<int> onToggleTask,
         Action onSwitchToEditor,
-        ScribeRowStyle style)
+        ScribeRowStyle style,
+        ScrollController scrollController)
     {
         Blocks = blocks;
         OnToggleTask = onToggleTask;
         OnSwitchToEditor = onSwitchToEditor;
         Style = style;
+        ScrollController = scrollController;
     }
 
     public IReadOnlyList<ScribeReadRowData> Blocks { get; }
     public Action<int> OnToggleTask { get; }
     public Action OnSwitchToEditor { get; }
     public ScribeRowStyle Style { get; }
+    /// <summary>Dialog-owned scroll controller shared by both views (see the dialog field); NOT disposed
+    /// here — the dialog owns its lifetime so the scroll offset survives the view-switch rebuild.</summary>
+    public ScrollController ScrollController { get; }
 
     public override State CreateState() => new ScribeLecternReadContentState();
 }
 
 internal sealed class ScribeLecternReadContentState : State<ScribeLecternReadContent>
 {
-    // Owned scroll controller, shared between the ListView and its Scrollbar so the visible track
-    // reflects and drives the same scroll offset (the Scrollbar and ListView must share one
-    // controller — see LibGUI's ScrollPage example). Disposed with this State.
-    private ScrollController scrollController = null!;
-
-    public override void InitState()
-    {
-        base.InitState();
-        scrollController = new ScrollController();
-    }
-
-    public override void Dispose()
-    {
-        scrollController.Dispose();
-        base.Dispose();
-    }
-
     public override Widget Build(BuildContext context)
     {
         var colors = Theme.Of(context).ColorScheme;
@@ -735,8 +738,12 @@ internal sealed class ScribeLecternReadContentState : State<ScribeLecternReadCon
         else
         {
             var style = Widget.Style;
+            // AutoHide off: keep the bar permanently visible (matches the pre-LibGUI native GUI). This
+            // also sidesteps the flicker where a ForceRebuild (delete/pin/reorder) nudged the controller
+            // and re-triggered the auto-hide fade-in/out (task 5.7). AutoHide is an init-only property,
+            // not a ctor param, so it's set in an object initializer.
             rowList = new Scrollbar(
-                controller: scrollController,
+                controller: Widget.ScrollController,
                 child: new ListView(
                     children: Widget.Blocks
                         .Select(b => (Widget)new ScribeReadRow(b, Widget.OnToggleTask, style, new ValueKey<int>(b.Index)))
@@ -745,7 +752,8 @@ internal sealed class ScribeLecternReadContentState : State<ScribeLecternReadCon
                     // single-line row's true height so the scrollbar doesn't jump: font line + field pad + row pad.
                     estimatedItemHeight: style.FontSize * 1.2f + style.FieldPadY * 2 + style.RowVerticalPadding * 2,
                     variableHeight: true,
-                    controller: scrollController));
+                    controller: Widget.ScrollController))
+            { AutoHide = false };
         }
 
         return new Padding(
@@ -878,7 +886,8 @@ internal sealed class ScribeLecternEditorContent : StatefulWidget
         Action<int, int> onReorderBlock,
         Action onAddTask,
         Action onSwitchToRead,
-        ScribeRowStyle style)
+        ScribeRowStyle style,
+        ScrollController scrollController)
     {
         Blocks = blocks;
         FocusNodes = focusNodes;
@@ -894,6 +903,7 @@ internal sealed class ScribeLecternEditorContent : StatefulWidget
         OnAddTask = onAddTask;
         OnSwitchToRead = onSwitchToRead;
         Style = style;
+        ScrollController = scrollController;
     }
 
     public IReadOnlyList<ScribeEditRowData> Blocks { get; }
@@ -912,18 +922,16 @@ internal sealed class ScribeLecternEditorContent : StatefulWidget
     public Action OnAddTask { get; }
     public Action OnSwitchToRead { get; }
     public ScribeRowStyle Style { get; }
+    /// <summary>Dialog-owned scroll controller shared by both views (see the dialog field); NOT disposed
+    /// here — the dialog owns its lifetime so the scroll offset survives the view-switch rebuild. The
+    /// same controller <see cref="Scrollable.EnsureVisible"/> drives when a focused row grows/moves.</summary>
+    public ScrollController ScrollController { get; }
 
     public override State CreateState() => new ScribeLecternEditorContentState();
 }
 
 internal sealed class ScribeLecternEditorContentState : State<ScribeLecternEditorContent>
 {
-    // Owned scroll controller, shared between the SingleChildScrollView and its Scrollbar (see the
-    // read content's note). Also the controller Scrollable.EnsureVisible drives when a focused row
-    // grows or focus moves — passing it explicitly keeps that behavior identical to before, when the
-    // scroll view created an internal one. Disposed with this State.
-    private ScrollController scrollController = null!;
-
     // ---- Drag-reorder state (this State owns the row list, so a drag updates via SetState here —
     // NOT the dialog's ForceRebuild, which would unmount the grip mid-drag and drop the pointer
     // capture the reorder depends on). dragFromIndex is the row a grip-drag started on; dragOverIndex
@@ -969,18 +977,6 @@ internal sealed class ScribeLecternEditorContentState : State<ScribeLecternEdito
         }
     }
 
-    public override void InitState()
-    {
-        base.InitState();
-        scrollController = new ScrollController();
-    }
-
-    public override void Dispose()
-    {
-        scrollController.Dispose();
-        base.Dispose();
-    }
-
     public override Widget Build(BuildContext context)
     {
         var colors = Theme.Of(context).ColorScheme;
@@ -1017,11 +1013,13 @@ internal sealed class ScribeLecternEditorContentState : State<ScribeLecternEdito
                     key: new ValueKey<int>(b.Index)))
                 .ToList();
 
-            // Wrapped in a Scrollbar so a tall editor list shows a draggable track (task 8.15).
+            // Wrapped in a Scrollbar so a tall editor list shows a draggable track (task 8.15). AutoHide
+            // off (see read view): permanently visible, matching the native GUI, and avoids the
+            // ForceRebuild-driven fade flicker (task 5.7).
             scrollBody = new Scrollbar(
-                controller: scrollController,
+                controller: Widget.ScrollController,
                 child: new SingleChildScrollView(
-                    controller: scrollController,
+                    controller: Widget.ScrollController,
                     child: new Column(
                         // spacing 0: all inter-row separation lives in each row's own vertical padding, so
                         // the editor Column matches the read ListView (which adds no inter-row gap) and rows
@@ -1029,7 +1027,8 @@ internal sealed class ScribeLecternEditorContentState : State<ScribeLecternEdito
                         spacing: 0,
                         crossAxisAlignment: CrossAxisAlignment.Stretch,
                         mainAxisSize: MainAxisSize.Min,
-                        children: rows)));
+                        children: rows)))
+            { AutoHide = false };
         }
 
         return new Padding(

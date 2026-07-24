@@ -27,24 +27,53 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > onto the LibGUI editor rows (the model already supported all three; they were unwired). New trailing
 > control columns `[checkbox][text][pin][delete][grip]`, right-anchored, hover-conditional (grip always
 > shown). Pin/delete use `VsIcon`+hover; drag uses the grip's `GestureDetector` + row-level `MouseRegion`
-> drag-over; pinned tasks get a resting row tint in BOTH views; drop target gets a highlight. NOT yet
-> restaged/committed as of this list — restage Debug + fully relaunch before testing.
+> drag-over; pinned tasks get a resting row tint in BOTH views; drop target gets a highlight.
+> Committed `38780a4` + restaged Debug 2026-07-23.
 
-- [ ] `a23c52b1` **Delete a task.** In the editor, hover a row → click the red delete (X) icon; confirm
+- [x] `a23c52b1` **Delete a task.** In the editor, hover a row → click the red delete (X) icon; confirm
       the row vanishes and the rest keep order. Delete the row you're actively editing, and delete the
       LAST remaining row (→ empty-state hint, no crash). Reload the world; confirm deletions persisted.
       *(5.2)*
-- [ ] `b7a318f6` **Pin / unpin.** Hover a task row → click the pin icon; confirm the row gets a resting
+      - **Confirmed 2026-07-23** (user playtest, submission 2026-07-23T23-42-23): "Works." Delete
+        control removes rows, order preserved, persists across reload.
+- [x] `b7a318f6` **Pin / unpin.** Hover a task row → click the pin icon; confirm the row gets a resting
       tint (visible without hovering) in BOTH the editor and the read view. Unpin → tint gone. Confirm a
       text-section row shows NO pin control. Reload; confirm pinned state persisted. *(5.3)*
-- [ ] `08cae46d` **Drag-reorder.** Press a row's grip (right-most icon) and drag over another row →
+      - **Confirmed 2026-07-23** (user playtest, same submission): "Works." Resting tint shows in both
+        views, unpins cleanly, persists across reload.
+- [x] `08cae46d` **Drag-reorder.** Press a row's grip (right-most icon) and drag over another row →
       confirm the drop-target row highlights; release → the row lands there and others shift. Release in
       place → nothing changes. Repeat with the list scrolled. Reload; confirm the new order persisted.
       *(5.4)*
-- [ ] `ec215283` **Controls-present regression.** With the new controls on every row, confirm the old
+      - **Confirmed 2026-07-23** (user playtest, same submission): "Works." Grip-drag reorders with drop
+        highlight, drop lands where released, persists across reload.
+- [x] `ec215283` **Controls-present regression.** With the new controls on every row, confirm the old
       editor behaviors still work: click-to-edit, text selection, checkbox toggle, Enter/Tab row nav, and
       autosave. Note whether the caret jumping to end-of-text after a reorder/delete rebuild is bothersome.
       *(5.5)*
+      - **Confirmed 2026-07-23** (user playtest, same submission): "Works." All prior editor behaviors
+        intact with the controls present; caret-to-end residue not reported as bothersome.
+- [ ] `9f65bd6f` **Scrollbar flickers on control click.** Click a pin/delete/grip control → the scrollbar
+      animates in from the side, then fades back out; clicking the checkbox or typing in the field does
+      NOT trigger it. Decide whether to suppress it (cosmetic only). *(new — from 5.5 general note)*
+      - **Still broken 2026-07-23:** cosmetic side effect, not a functional fault. Cause (from
+        `reference/vslibgui/.../Scrollbar.cs`): the auto-hide scrollbar re-shows on its controller's
+        `OnChanged` (`_Show()`), and pin/delete/reorder each call `ForceRebuild()`, which re-lays-out the
+        `SingleChildScrollView`/`ListView` and pokes the shared `ScrollController` → the bar fades in then
+        idle-fades out. Checkbox (local `SetState`) and text-edit (field-only rebuild) never `ForceRebuild`,
+        so they don't.
+      - **Fix applied 2026-07-24 (awaiting retest):** set `AutoHide = false` on both scrollbars, so the
+        bar is permanently visible (matches the pre-LibGUI native GUI) and the fade animation is never
+        driven — `Build` reads a hard `visibility = 1f` and `_Show()` is skipped when `AutoHide` is false.
+        Retest: click pin/delete/grip → the bar should NOT animate; it just stays put.
+- [ ] `7c22da1a` **Scroll position survives view switch.** With enough rows to scroll, scroll down in the
+      read view, then switch to the editor (and back) → confirm you're still looking at the same part of
+      the list, not jumped back to the top. *(new — shared scroll controller, 2026-07-24)*
+- [ ] `18cd5c60` **Read/edit row heights match.** Compare a single-line task's height in read vs. editor
+      view — they should be pixel-identical (that's what makes the shared scroll offset line up). With a
+      long list, scroll to the bottom in both and watch for a fractional per-row drift accumulating, or a
+      few pixels of the last row cut off. If there's a small consistent cutoff, a little bottom padding on
+      the list is a cheap fix. *(new — verify row-height parity, 2026-07-24)*
 
 ## migrate-editor-view-libgui
 
