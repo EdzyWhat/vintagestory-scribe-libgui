@@ -129,49 +129,67 @@ in this capability.
 - **WHEN** the lectern's editor or read view is composed
 - **THEN** no assignment-related column, label, or control appears anywhere in the dialog
 
-### Requirement: Read-view rows are custom-drawn in the interactive render pass
-The lectern read view SHALL render each task/note row as a single custom-drawn element in the
-interactive render pass (not as static-baked chrome), so that the row list is clipped natively
-by the dialog's scroll clip region. No row content SHALL bleed outside the clipped scroll region
-at its top or bottom edge.
+### Requirement: Read view is rendered by a LibGUI dialog
+The lectern's read view SHALL be rendered by a dialog built on the LibGUI framework (modid `gui`),
+subclassing LibGUI's `GuiDialogBlockEntityBase`, rather than by the native `GuiComposer`-based
+`GuiDialogScribeLectern` read view. The dialog SHALL open from the normal lectern interaction path and
+receive its document state through the existing server-authoritative flow (the `scribe` network channel
+and its packets), NOT by directly reusing an in-memory `Document` reference and NOT via any debug/chat
+command. The dialog's block-entity lifecycle — open, close via the window's close control, title-bar
+drag, and minimize/expand — SHALL work as the native dialog's did.
 
-#### Scenario: Rows are clipped, not culled, at the scroll boundary
-- **WHEN** the read view's document has more rows than fit the visible content area and the
-  player scrolls so a row straddles the top or bottom edge of the scroll region
-- **THEN** that row is drawn partially — clipped exactly at the region boundary — rather than
-  popping fully in or out of existence, and no part of any row paints outside the region
+#### Scenario: Right-clicking a lectern opens the LibGUI read view
+- **WHEN** a player interacts with a placed lectern to view it
+- **THEN** a LibGUI-rendered dialog opens showing the lectern's document, populated from the
+  server-synced document state
+- **AND** the dialog can be closed, dragged by its title bar, and minimized/expanded
 
-#### Scenario: Scrolling is continuous and sub-row
-- **WHEN** the player scrolls the read view by any increment (wheel, thumb drag, or track)
-- **THEN** the rows slide continuously by the scrolled amount, including partial-row offsets,
-  with no snap-to-row-boundary and no full recompose required per scroll step
+#### Scenario: No debug command is involved in the real open path
+- **WHEN** the read view opens in normal play
+- **THEN** it opens through the lectern's interaction + packet flow, not through a `.scribespike` (or any
+  other) chat command, and it does not depend on the throwaway spike dialog
 
-### Requirement: Read-view rows render a structural lined-paper ruling
-Each read-view row SHALL draw a lined-paper ruling as a structural part of the row (drawn per
-row and scrolling with the row), rather than relying on separately-baked divider chrome. The
-spacing (padding) between the row text and its ruling SHALL scale with the current text-size
-preference. The ruling SHALL be authored so its visual can be replaced (e.g. with an image)
-without changing the row's layout logic.
+### Requirement: Read view renders the document as a scrollable widget tree
+The read view SHALL render the document as a LibGUI widget tree — a window frame containing a free-text
+section and a scrollable list of task/note rows — laid out declaratively (flex/`Column`/`ListView`/`Row`)
+rather than by absolute-bounds composition. A document with more rows than fit the visible height SHALL
+remain fully reachable by scrolling the list, with no row rendered permanently off-screen and no row
+content painting outside the scroll viewport. The list SHALL scroll continuously (no page-turn
+navigation).
 
-#### Scenario: Ruling scrolls with its row
-- **WHEN** the player scrolls the read view
-- **THEN** each row's ruling moves together with that row's text and checkbox as one unit,
-  staying aligned to the row it belongs to
+#### Scenario: A long document remains fully reachable
+- **WHEN** a lectern's document has more tasks and/or note sections than fit the visible content area
+- **THEN** the row list scrolls, and every row remains reachable by scrolling — no row is rendered
+  permanently off-screen, and no row paints outside the scroll viewport
 
-#### Scenario: Ruling padding scales with text size
-- **WHEN** the player changes the text-size preference to a larger or smaller value
-- **THEN** the padding between a row's text and its ruling grows or shrinks in proportion,
-  rather than staying a fixed pixel gap
+#### Scenario: No page-turn controls are present
+- **WHEN** the read view is rendered
+- **THEN** the row list is a single continuously scrollable list with no "Prev"/"Next" page-turn
+  controls or page-count indicator
 
-### Requirement: Read-view checkbox is a custom-drawn glyph
-Task rows in the read view SHALL render their checkbox as a custom-drawn glyph rather than the
-engine's default `GuiElementSwitch` control. The glyph SHALL continue to scale with the
-text-size preference (consistent with the existing checkbox-scaling requirement).
+### Requirement: Read-view rows are self-stateful and keyed
+Because LibGUI's `ListView` caches its child widgets by index and does not rebuild them when the parent
+calls `SetState`, each interactive read-view row SHALL be a self-stateful widget that manages its own
+visual state, and rows SHALL carry a stable `ValueKey` identity so the list can track them across
+document changes and (in later changes) reorders. A row SHALL NOT depend on the parent rebuilding it to
+reflect its own state changes.
 
-#### Scenario: Checkbox shows done and not-done states
-- **WHEN** a task row is drawn in the read view
-- **THEN** its checkbox glyph reflects the task's current done state (a checked vs. unchecked
-  appearance), drawn by the mod rather than the default engine switch
+#### Scenario: A row reflects its own state change without a parent rebuild
+- **WHEN** a read-view row's interactive control changes that row's displayed state (e.g. its checkbox
+  is clicked)
+- **THEN** the row updates its own display via its own state, without relying on the parent list
+  rebuilding it
+
+### Requirement: Read view switches to editing via the existing native editor
+While the editor view is not yet migrated to LibGUI, the LibGUI read view SHALL remain read-only and
+SHALL provide a control that switches to editing by opening the existing native `GuiDialogScribeLectern`
+editor view. Switching between viewing and editing SHALL keep full edit functionality available (this is
+an interim seam; a later change replaces the native editor with a LibGUI editor view).
+
+#### Scenario: Switching to editor opens the working native editor
+- **WHEN** the player activates the read view's "switch to editor" control
+- **THEN** the existing native editor view opens with full editing functionality (unchanged from before
+  the migration)
 
 ### Requirement: Read-view checkbox toggles task done state without the editor lock
 The read view's task checkbox SHALL be interactive: clicking it toggles that task's done state.
@@ -179,13 +197,14 @@ Because the read view holds no editor lock, toggling done SHALL be an always-all
 action that does NOT require acquiring the single-editor lock, applied server-authoritatively
 and re-synced to all viewers. A player SHALL be able to toggle a task's done state from the read
 view even while another player holds the editor lock. No other part of a read-view row SHALL be
-interactive — the read view exposes no text editing, drag, or per-row icon controls.
+interactive — the read view exposes no text editing, drag, or per-row icon controls. The checkbox
+MAY be rendered with LibGUI's stock checkbox widget; its skeuomorphic custom-glyph appearance is not
+required by this requirement.
 
 #### Scenario: Clicking a read-view checkbox toggles done
 - **WHEN** the player clicks a task row's checkbox in the read view
 - **THEN** that task's done state flips, the change is applied server-authoritatively (without
-  requiring the editor lock) and synced back, and the checkbox glyph updates to reflect the new
-  state
+  requiring the editor lock) and synced back, and the checkbox updates to reflect the new state
 
 #### Scenario: Toggling done works while someone else is editing
 - **WHEN** a player clicks a read-view task checkbox while a different player holds the lectern's
