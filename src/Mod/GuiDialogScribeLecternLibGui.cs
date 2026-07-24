@@ -1280,12 +1280,16 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         {
             float btn = style.ControlSize;
             float gap = 4f;
-            // Nudge the buttons down from their resting inset to center on a one-line row (see
-            // ScribeRowControlNudge).
-            float btnTop = gap + ScribeRowControlNudge.FloatingButtonTop;
+            // Actual drawn box width of a button (ScribeRowButton shrinks its chrome by BoxShrink); used
+            // to space the pin against the delete's real edge, not its nominal column.
+            float boxW = btn - ScribeRowButton.BoxShrink;
+            // Button margins (2026-07-24 feedback: +1px right, +1px top on top of the resting inset). Top
+            // also carries the one-line centering nudge (see ScribeRowControlNudge).
+            float btnRight = gap + 1f;
+            float btnTop = gap + ScribeRowControlNudge.FloatingButtonTop + 1f;
             // delete: right-most; pin: to its left (task rows only).
             stackChildren.Add(new Positioned(
-                right: gap, top: btnTop,
+                right: btnRight, top: btnTop,
                 child: new ScribeRowButton(
                     iconName: "scribeclose",
                     iconColor: colors.Error,
@@ -1294,7 +1298,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             if (Widget.Data.IsTask)
             {
                 stackChildren.Add(new Positioned(
-                    right: gap + btn + gap, top: btnTop,
+                    right: btnRight + boxW + gap, top: btnTop,
                     child: new ScribeRowButton(
                         iconName: "scribepin",
                         // Pinned reads "active" (accent); unpinned is muted.
@@ -1395,9 +1399,18 @@ internal sealed class ScribeRowButton : StatefulWidget
 
     public string IconName { get; }
     public Vector4 IconColor { get; }
-    /// <summary>Outer button box side length. The glyph is inset from this by the button's padding.</summary>
+    /// <summary>Nominal control-column side length (matches the grip/checkbox column). The DRAWN box is
+    /// <see cref="BoxShrink"/> px smaller in each dimension (see <see cref="BoxShrink"/>); the glyph is
+    /// still sized from this nominal value so shrinking the box doesn't shrink the icon.</summary>
     public float Size { get; }
     public Action OnTap { get; }
+
+    /// <summary>How much smaller (px, each dimension) the button's drawn chrome is than its nominal
+    /// <see cref="Size"/> (2026-07-24 feedback: "2px smaller in height, 2px smaller in width"). The icon
+    /// glyph is computed from the full <see cref="Size"/> and kept fixed, so this only tightens the
+    /// padding/box around it — it shrinks the SKIN, not the SVG. Exposed so the row that lays the buttons
+    /// out can position the pin against the actual (shrunk) box width.</summary>
+    public const float BoxShrink = 2f;
 
     public override State CreateState() => new ScribeRowButtonState();
 }
@@ -1422,8 +1435,16 @@ internal sealed class ScribeRowButtonState : State<ScribeRowButton>
             Math.Clamp(baseBg.Z + lift, 0f, 1f),
             1f);
 
+        // The glyph is sized from the FULL nominal Size so shrinking the box below leaves the icon
+        // untouched (2026-07-24 feedback). Shrinking the drawn box by BoxShrink then tightens the padding
+        // that surrounds the glyph — the "skin", not the SVG.
         float pad = MathF.Max(3f, Widget.Size * 0.18f); // small padding; glyph fills the rest
         float glyph = Widget.Size - pad * 2f;
+
+        // Drawn box is BoxShrink px smaller in each dimension; the padding absorbs the difference so the
+        // glyph stays centered at its nominal size. Half the shrink comes off each side of the padding.
+        float box = Widget.Size - ScribeRowButton.BoxShrink;
+        float drawnPad = MathF.Max(0f, (box - glyph) / 2f);
 
         return new GestureDetector(
             onTap: _ => Widget.OnTap(),
@@ -1435,12 +1456,12 @@ internal sealed class ScribeRowButtonState : State<ScribeRowButton>
                 style: new BoxStyle
                 {
                     Color = bg,
-                    Width = Widget.Size,
-                    Height = Widget.Size,
+                    Width = box,
+                    Height = box,
                     CornerRadius = new Vector4(3f),
                     BorderThickness = 1f,
                     BorderColor = colors.Border,
-                    Padding = EdgeInsets.All(pad),
+                    Padding = EdgeInsets.All(drawnPad),
                 },
                 child: new VsIcon(Widget.IconName, glyph, Widget.IconColor)));
     }
