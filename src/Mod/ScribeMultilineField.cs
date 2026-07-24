@@ -477,6 +477,9 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
             case (int)GlKeys.A when e.Ctrl:
                 anchor = 0;
                 caret = text.Length;
+                MarkNeedsBuild(); // repaint the selection now — unlike MoveCaret/Commit paths, this one
+                                  // has no other rebuild trigger, so without it the select-all is
+                                  // invisible until the next hover/keystroke forces a rebuild.
                 Handled(e);
                 break;
 

@@ -171,6 +171,15 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         tint), so hover only mounts/unmounts the trailing floating buttons and the field UPDATES in place
         instead of remounting. See `ScribeEditRowState.Build` + the VSAPI-NOTES.md LibGUI reconciliation
         entry. Retest: type an uncommitted edit, wiggle the mouse over the row — text and caret hold.
+- [ ] `06f741c3` **Select-all repaints immediately.** Focus a row with text, press Cmd+A (macOS) /
+      Ctrl+A (Windows). Confirm the whole-field selection highlight appears RIGHT AWAY, without needing
+      to hover the row or press another key first. *(new — 2026-07-24 general note)*
+      - **Still broken 2026-07-24** (user report): Cmd/Ctrl+A changed the selection to the whole field
+        (verified — a following keystroke replaced everything) but drew NO highlight until the user
+        hovered the row or pressed another key. Root cause: the Ctrl+A handler mutated `anchor`/`caret`
+        but was the one selection path that never called `MarkNeedsBuild()`, so no repaint was scheduled.
+      - **Fix applied 2026-07-24 (awaiting retest):** added `MarkNeedsBuild()` to the Ctrl+A case in
+        `ScribeMultilineField.OnKeyDown`. Retest: Cmd/Ctrl+A shows the selection highlight instantly.
 
 ## migrate-editor-view-libgui
 
