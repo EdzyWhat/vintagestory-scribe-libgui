@@ -22,6 +22,47 @@ public sealed class ScribeClientConfig
     /// just while tuning layout.</summary>
     public float TextSizeScale = 1f;
 
+    // ---------------- LibGUI task-row sizing (unify-row-sizing-libgui) ----------------
+    //
+    // These float fields drive the LibGUI lectern's task-row layout so a single-line task
+    // occupies pixel-identical space in the read and editor views (see
+    // GuiDialogScribeLecternLibGui.ScribeRowStyle). They are consumed via
+    // ScribeRowStyle.FromConfig, which multiplies the scalable ones by TextSizeScale at a
+    // single chokepoint. Distinct from the older `Row*`/`Task*` doubles below, which are dead
+    // leftovers from the native GUI the LibGUI rebuild replaced -- do not confuse the two.
+
+    /// <summary>Unified task-row font size (points), used by both the read-view text and the
+    /// editor-view input. The editor value wins the unification (15). Scaled by
+    /// <see cref="TextSizeScale"/>.</summary>
+    public float RowFontSize = 15f;
+
+    /// <summary>Each row's own top/bottom padding (pixels). This is where inter-row separation
+    /// lives now that the editor list's inter-row gap is removed (the read ListView never added
+    /// one). Scaled by <see cref="TextSizeScale"/>.</summary>
+    public float RowVerticalPadding = 4f;
+
+    /// <summary>Each row's left/right padding (pixels), shared by both views. Not scaled (a fixed
+    /// left/right inset reads consistently regardless of text size).</summary>
+    public float RowHorizontalPadding = 2f;
+
+    /// <summary>Horizontal gap between a row's checkbox and its text/input (pixels). Scaled by
+    /// <see cref="TextSizeScale"/>.</summary>
+    public float RowCheckboxTextGap = 6f;
+
+    /// <summary>Checkbox widget size (pixels), shared by both views. Scaled by
+    /// <see cref="TextSizeScale"/>.</summary>
+    public float RowCheckboxSize = 22f;
+
+    /// <summary>The editor field's internal horizontal padding (pixels). The read row insets its
+    /// text by the same amount so the text's left edge lines up across a view switch. Scaled by
+    /// <see cref="TextSizeScale"/>.</summary>
+    public float FieldInnerPaddingX = 8f;
+
+    /// <summary>The editor field's internal vertical padding (pixels). The read row insets its
+    /// text vertically by the same amount so single-line row heights match across a view switch.
+    /// Scaled by <see cref="TextSizeScale"/>.</summary>
+    public float FieldInnerPaddingY = 6f;
+
     /// <summary>Lower bound for the text-size slider, in percent. Mirrors
     /// <see cref="MaxTextSizePercent"/> so the low end is tunable rather than hardcoded (the
     /// slider's floor and the constructor's clamp both read this).</summary>

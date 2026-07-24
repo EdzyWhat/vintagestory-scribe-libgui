@@ -43,6 +43,21 @@
     </Reference>
   </ItemGroup>
 
+  <!-- ConfigLib (modid `configlib`): OPTIONAL soft dependency (unify-row-sizing-libgui). Scribe
+       calls no ConfigLib API; the integration is a no-code assets/scribe/config/configlib-patches.json
+       manifest that ConfigLib discovers at startup and uses to expose the lectern's row-sizing floats
+       in its in-game settings panel (reading/writing the same scribe-client-config.json the mod loads).
+       No modinfo dependency: the manifest is simply unread when ConfigLib isn't installed, and the
+       lectern works normally without it. No usable NuGet package exists; referenced against the DLL
+       vendored under lib/ (see lib/README.md). Private=false: never copied into our output; the mod
+       loader provides it if installed, same as the game DLLs above. -->
+  <ItemGroup>
+    <Reference Include="configlib">
+      <HintPath>lib/configlib.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
   <!-- LibGUI (modid `gui`): Scribe's first HARD mod dependency, gating the lectern GUI's
        migration off the native GuiComposer onto LibGUI's declarative widget tree
        (adopt-libgui-foundation; permitted by the live `gui-foundation-policy` spec because the

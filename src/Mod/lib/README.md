@@ -2,12 +2,12 @@
 
 This folder is gitignored — these DLLs must be re-extracted on any machine that builds
 this project, following the steps below. They are vendored here instead of referenced via
-NuGet because LibGUI has no usable published package at the version actually installed and
-tested against.
+NuGet because neither LibGUI nor ConfigLib has a usable published package at the version
+actually installed and tested against.
 
 ## Source and versions
 
-Extracted from the game mod `.zip` under the local Vintage Story Mods folder
+Extracted from the game mod `.zip`s under the local Vintage Story Mods folder
 (`~/Library/Application Support/VintagestoryData/Mods/` on macOS):
 
 - `gui_2.0.0.zip` (LibGUI, modid `gui` — Scribe's hard dependency; see `Mod.csproj`) → the 7
@@ -16,6 +16,11 @@ Extracted from the game mod `.zip` under the local Vintage Story Mods folder
   referenced for compile (`Mod.csproj`); the other six are its runtime companions, extracted so a
   build machine has the whole set the installed mod provides. (`OpenTK.Mathematics.dll` and
   `SkiaSharp.dll`, which LibGUI's public API also surfaces, come from the game's `Lib/`, not here.)
+- `configlib_1.12.0.zip` (ConfigLib, modid `configlib` — Scribe's OPTIONAL soft dependency;
+  unify-row-sizing-libgui) → `configlib.dll`. Referenced for compile in `Mod.csproj` only so the
+  build resolves; Scribe calls no ConfigLib API (the integration is the no-code
+  `assets/scribe/config/configlib-patches.json` manifest). `Private=false`, so it's never copied
+  into Scribe's output; the mod loader provides it if installed, and the mod runs fine without it.
 
 ## Re-extraction steps
 
@@ -26,13 +31,15 @@ MODS="$HOME/Library/Application Support/VintagestoryData/Mods"
 unzip -o "$MODS/gui_2.0.0.zip" -d gui_extract \
   Gui.dll ExCSS.dll ShimSkiaSharp.dll SkiaSharp.HarfBuzz.dll \
   Svg.Custom.dll Svg.Model.dll Svg.Skia.dll HarfBuzzSharp.dll
+unzip -o "$MODS/configlib_1.12.0.zip" -d configlib_extract configlib.dll
 
 cp gui_extract/{Gui.dll,ExCSS.dll,ShimSkiaSharp.dll,SkiaSharp.HarfBuzz.dll,Svg.Custom.dll,Svg.Model.dll,Svg.Skia.dll,HarfBuzzSharp.dll} src/Mod/lib/
+cp configlib_extract/configlib.dll src/Mod/lib/
 ```
 
-If you install a newer version of the mod, re-extract and update the version number above
-(and re-verify any API assumptions in the LibGUI dialog still hold — this is not a stable
-published package with a change log to check against).
+If you install a newer version of either mod, re-extract and update the version numbers above
+(and re-verify any API assumptions still hold — these are not stable published packages with
+change logs to check against).
 
 ## Upstream references
 
@@ -46,3 +53,10 @@ authoritative source short of the DLLs themselves.
 - Wiki: https://github.com/ripls56/vslibgui.wiki.git
 - Local clones (gitignored, per the project's LibGUI modding-references guardrail):
   `./.wiki/` (wiki) and `./reference/vslibgui/` (source).
+
+**ConfigLib** (the optional `configlib` soft dependency)
+- Mod portal (manifest schema + examples): https://mods.vintagestory.at/configlib#tab-description
+- Source: https://github.com/maltiez2/vsmod_configlib
+- Wiki (the `configlib-patches.json` manifest / `"file"`-key form): https://github.com/maltiez2/vsmod_configlib/wiki
+- Note: expose only FLOAT settings — an integer setting once threw while drawing and broke the
+  entire ConfigLib panel (see `VSAPI-NOTES.md`).

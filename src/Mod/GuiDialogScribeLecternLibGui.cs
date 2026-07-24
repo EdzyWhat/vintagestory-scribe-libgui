@@ -36,6 +36,11 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
 {
     private readonly BlockEntityScribeLectern lectern;
 
+    /// <summary>Row-sizing style for this dialog instance, loaded from client config when the dialog
+    /// opens (see the constructor). Loading per-open means editing <c>scribe-client-config.json</c>
+    /// and reopening the lectern applies new values, with no shared mutable state.</summary>
+    private readonly ScribeRowStyle rowStyle;
+
     // ---- View state ----
     private bool isEditorMode;
 
@@ -61,6 +66,13 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         : base(pos, capi)
     {
         this.lectern = lectern;
+
+        // Load row-sizing config fresh per open (matches this dialog's per-open lifecycle) so a
+        // hand-edit of the JSON -- or a ConfigLib panel change -- is picked up on the next open.
+        // Falls back to defaults when the file doesn't exist yet.
+        var config = capi.LoadModConfig<ScribeClientConfig>(ScribeModSystem.ClientConfigFileName)
+                     ?? new ScribeClientConfig();
+        rowStyle = ScribeRowStyle.FromConfig(config);
     }
 
     protected override WindowConfig CreateWindowConfig() => new()
@@ -482,7 +494,8 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
                 .Select((b, i) => new ScribeReadRowData(i, b.IsTask, b.Done, b.Text))
                 .ToList(),
             onToggleTask: OnReadViewToggleTask,
-            onSwitchToEditor: RequestEditorAccess);
+            onSwitchToEditor: RequestEditorAccess,
+            style: rowStyle);
 
     private Widget BuildEditorContent()
     {
@@ -503,7 +516,8 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             onInsertTaskBelow: EditorInsertTaskBelow,
             onToggleTask: ToggleEditorTask,
             onAddTask: OnClickAddTask,
-            onSwitchToRead: OnClickSwitchToRead);
+            onSwitchToRead: OnClickSwitchToRead,
+            style: rowStyle);
     }
 
     /// <summary>Read-view task checkbox click: fire-and-forget a lock-free toggle to the server. The
@@ -541,16 +555,19 @@ internal sealed class ScribeLecternReadContent : StatefulWidget
     public ScribeLecternReadContent(
         IReadOnlyList<ScribeReadRowData> blocks,
         Action<int> onToggleTask,
-        Action onSwitchToEditor)
+        Action onSwitchToEditor,
+        ScribeRowStyle style)
     {
         Blocks = blocks;
         OnToggleTask = onToggleTask;
         OnSwitchToEditor = onSwitchToEditor;
+        Style = style;
     }
 
     public IReadOnlyList<ScribeReadRowData> Blocks { get; }
     public Action<int> OnToggleTask { get; }
     public Action OnSwitchToEditor { get; }
+    public ScribeRowStyle Style { get; }
 
     public override State CreateState() => new ScribeLecternReadContentState();
 }
@@ -577,11 +594,14 @@ internal sealed class ScribeLecternReadContentState : State<ScribeLecternReadCon
         }
         else
         {
+            var style = Widget.Style;
             rowList = new ListView(
                 children: Widget.Blocks
-                    .Select(b => (Widget)new ScribeReadRow(b, Widget.OnToggleTask, new ValueKey<int>(b.Index)))
+                    .Select(b => (Widget)new ScribeReadRow(b, Widget.OnToggleTask, style, new ValueKey<int>(b.Index)))
                     .ToList(),
-                estimatedItemHeight: 34f,
+                // Scroll estimate only (variableHeight measures the real height); keep it close to a
+                // single-line row's true height so the scrollbar doesn't jump: font line + field pad + row pad.
+                estimatedItemHeight: style.FontSize * 1.2f + style.FieldPadY * 2 + style.RowVerticalPadding * 2,
                 variableHeight: true);
         }
 
@@ -607,15 +627,17 @@ internal sealed class ScribeLecternReadContentState : State<ScribeLecternReadCon
 /// </summary>
 internal sealed class ScribeReadRow : StatefulWidget
 {
-    public ScribeReadRow(ScribeReadRowData data, Action<int> onToggleTask, Gui.Widgets.Framework.Key? key = null)
+    public ScribeReadRow(ScribeReadRowData data, Action<int> onToggleTask, ScribeRowStyle style, Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
         Data = data;
         OnToggleTask = onToggleTask;
+        Style = style;
     }
 
     public ScribeReadRowData Data { get; }
     public Action<int> OnToggleTask { get; }
+    public ScribeRowStyle Style { get; }
 
     public override State CreateState() => new ScribeReadRowState();
 }
@@ -633,7 +655,8 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
     public override Widget Build(BuildContext context)
     {
         var colors = Theme.Of(context).ColorScheme;
-        TextStyle textStyle = new() { FontSize = 14, Color = colors.OnSurface, SoftWrap = true };
+        var style = Widget.Style;
+        TextStyle textStyle = new() { FontSize = style.FontSize, Color = colors.OnSurface, SoftWrap = true };
 
         var children = new List<Widget>();
 
@@ -646,16 +669,21 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                     SetState(() => done = !done);
                     Widget.OnToggleTask(Widget.Data.Index);
                 },
-                size: 22));
+                size: style.CheckboxSize));
         }
 
-        children.Add(new Expanded(child: new Text(Widget.Data.Text, textStyle)));
+        // Inset the read text by the editor field's internal padding so a single-line read row is the
+        // same height as the editor field (vertical) and its text's left edge aligns (horizontal) across
+        // a view switch. No border here -- only the editor field draws one (inside its own padding).
+        children.Add(new Expanded(child: new Padding(
+            EdgeInsets.Symmetric(vertical: style.FieldPadY, horizontal: style.FieldPadX),
+            child: new Text(Widget.Data.Text, textStyle))));
 
         return new Padding(
-            EdgeInsets.Symmetric(vertical: 4, horizontal: 2),
+            EdgeInsets.Symmetric(vertical: style.RowVerticalPadding, horizontal: style.RowHorizontalPadding),
             child: new Row(
-                spacing: 6,
-                crossAxisAlignment: CrossAxisAlignment.Center,
+                spacing: style.CheckboxTextGap,
+                crossAxisAlignment: CrossAxisAlignment.Start,
                 mainAxisSize: MainAxisSize.Max,
                 children: children));
     }
@@ -690,7 +718,8 @@ internal sealed class ScribeLecternEditorContent : StatefulWidget
         Action<int> onInsertTaskBelow,
         Action<int> onToggleTask,
         Action onAddTask,
-        Action onSwitchToRead)
+        Action onSwitchToRead,
+        ScribeRowStyle style)
     {
         Blocks = blocks;
         FocusNodes = focusNodes;
@@ -702,6 +731,7 @@ internal sealed class ScribeLecternEditorContent : StatefulWidget
         OnToggleTask = onToggleTask;
         OnAddTask = onAddTask;
         OnSwitchToRead = onSwitchToRead;
+        Style = style;
     }
 
     public IReadOnlyList<ScribeEditRowData> Blocks { get; }
@@ -714,6 +744,7 @@ internal sealed class ScribeLecternEditorContent : StatefulWidget
     public Action<int> OnToggleTask { get; }
     public Action OnAddTask { get; }
     public Action OnSwitchToRead { get; }
+    public ScribeRowStyle Style { get; }
 
     public override State CreateState() => new ScribeLecternEditorContentState();
 }
@@ -746,12 +777,16 @@ internal sealed class ScribeLecternEditorContentState : State<ScribeLecternEdito
                     onCommitAndRetreat: Widget.OnCommitAndRetreat,
                     onInsertTaskBelow: Widget.OnInsertTaskBelow,
                     onToggleTask: Widget.OnToggleTask,
+                    style: Widget.Style,
                     key: new ValueKey<int>(b.Index)))
                 .ToList();
 
             scrollBody = new SingleChildScrollView(
                 child: new Column(
-                    spacing: 6,
+                    // spacing 0: all inter-row separation lives in each row's own vertical padding, so
+                    // the editor Column matches the read ListView (which adds no inter-row gap) and rows
+                    // stay pixel-aligned across a view switch.
+                    spacing: 0,
                     crossAxisAlignment: CrossAxisAlignment.Stretch,
                     mainAxisSize: MainAxisSize.Min,
                     children: rows));
@@ -799,6 +834,7 @@ internal sealed class ScribeEditRow : StatefulWidget
         Action<int> onCommitAndRetreat,
         Action<int> onInsertTaskBelow,
         Action<int> onToggleTask,
+        ScribeRowStyle style,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
@@ -810,6 +846,7 @@ internal sealed class ScribeEditRow : StatefulWidget
         OnCommitAndRetreat = onCommitAndRetreat;
         OnInsertTaskBelow = onInsertTaskBelow;
         OnToggleTask = onToggleTask;
+        Style = style;
     }
 
     public ScribeEditRowData Data { get; }
@@ -820,6 +857,7 @@ internal sealed class ScribeEditRow : StatefulWidget
     public Action<int> OnCommitAndRetreat { get; }
     public Action<int> OnInsertTaskBelow { get; }
     public Action<int> OnToggleTask { get; }
+    public ScribeRowStyle Style { get; }
 
     public override State CreateState() => new ScribeEditRowState();
 }
@@ -837,6 +875,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
     public override Widget Build(BuildContext context)
     {
         int index = Widget.Data.Index;
+        var style = Widget.Style;
 
         var children = new List<Widget>();
 
@@ -849,13 +888,15 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                     SetState(() => done = !done);
                     Widget.OnToggleTask(index);
                 },
-                size: 22));
+                size: style.CheckboxSize));
         }
 
         children.Add(new Expanded(child: new ScribeMultilineField(
             initialText: Widget.Data.Text,
             focusNode: Widget.FocusNode,
-            fontSize: 15f,
+            fontSize: style.FontSize,
+            padX: style.FieldPadX,
+            padY: style.FieldPadY,
             autoFocus: Widget.AutoFocus,
             onChanged: text => Widget.OnTextChanged(index, text),
             onCommitAndAdvance: () => Widget.OnCommitAndAdvance(index),
@@ -863,9 +904,9 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             onInsertTaskBelow: () => Widget.OnInsertTaskBelow(index))));
 
         return new Padding(
-            EdgeInsets.Symmetric(vertical: 4, horizontal: 2),
+            EdgeInsets.Symmetric(vertical: style.RowVerticalPadding, horizontal: style.RowHorizontalPadding),
             child: new Row(
-                spacing: 6,
+                spacing: style.CheckboxTextGap,
                 crossAxisAlignment: CrossAxisAlignment.Start,
                 mainAxisSize: MainAxisSize.Max,
                 children: children));
