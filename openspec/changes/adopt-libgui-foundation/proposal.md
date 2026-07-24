@@ -28,9 +28,10 @@ columns, and theme extraction follow as their own changes.
   so editing never breaks during migration. Change 2 replaces the native editor with a LibGUI editor view.
 - **Behavior first, read-view visuals deferred.** The LibGUI read view lands functional (document renders,
   Done reflects + toggles lock-free, scrolls, rest of row inert, parchment theme) using LibGUI's stock
-  `Checkbox` and plain rows. The skeuomorphic read-view visuals — lined-paper ruling, custom checkbox
-  glyph, and text-size-proportional scaling — are **deferred** to the later affordance/theme changes and
-  their requirements are relaxed accordingly here.
+  `Checkbox` and plain rows. The custom checkbox glyph and text-size-proportional scaling are
+  **deferred** to the later affordance/theme changes; the lined-paper ruling is **dropped from the
+  roadmap** (decision 2026-07-23, cleaner modern direction), not deferred. Their requirements are
+  relaxed accordingly here.
 - **Establish the LibGUI row patterns now:** interactive list rows are self-stateful widgets keyed by
   `ValueKey` (LibGUI's `ListView` caches children by index and does not rebuild them on parent `SetState`),
   and the parchment `ColorScheme`/`ThemeData` is code-defined (theme-JSON extraction is a later change).
@@ -51,10 +52,11 @@ columns, and theme extraction follow as their own changes.
   region", a per-step "recompose" model, the custom `ScribeRowElement`/`GuiElementSwitch` distinction —
   which LibGUI replaces with a declarative widget tree (`WindowFrame`/`Column`/`ListView`/`Row`) whose
   scroll region does the clipping. The **observable** read-view behavior is preserved: a long document
-  stays fully reachable by scrolling, rows show a lined-paper ruling that scrolls with the row, the
-  checkbox reflects Done state, clicking it toggles Done without the editor lock (server-authoritative),
-  the rest of a read row is inert, and read/editor views share one row-list width. Editor-view
-  requirements are **left unchanged** by this change (reworked in the follow-up editor-view change).
+  stays fully reachable by scrolling, the checkbox reflects Done state, clicking it toggles Done without
+  the editor lock (server-authoritative), the rest of a read row is inert, and read/editor views share
+  one row-list width. The lined-paper ruling is **not** preserved — it's dropped from the roadmap
+  (decision 2026-07-23, cleaner modern direction), not carried over. Editor-view requirements are
+  **left unchanged** by this change (reworked in the follow-up editor-view change).
 
 ## Impact
 

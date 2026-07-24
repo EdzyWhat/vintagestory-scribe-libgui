@@ -102,11 +102,12 @@ scrollable widget tree."
 until its own migration change.
 
 ### Requirement: Read-view rows render a structural lined-paper ruling
-**Reason**: The skeuomorphic lined-paper ruling and its text-size-proportional padding are a read-view
-*visual* concern deferred out of this behavior-first migration step. The read view lands functional
-without the ruling; the ruling is re-introduced under the LibGUI theme/affordance work.
-**Migration**: None for players (a temporary visual downgrade on this fork). The ruling requirement will
-be re-added, expressed against LibGUI widgets/paint, in the later theme-extraction change.
+**Reason**: The skeuomorphic lined-paper ruling was a native-read-view mechanism. It is **dropped for
+good** in the LibGUI direction (decision 2026-07-23): the LibGUI lectern is taking a cleaner, more
+modern visual direction, so the lined-paper ruling is removed from the roadmap rather than deferred.
+The read view lands (and stays) functional without it.
+**Migration**: None for players. The ruling is NOT re-introduced by any later LibGUI change — do not
+re-add it. (This is a reversal of the earlier "deferred, will be re-added" framing.)
 
 ### Requirement: Read-view checkbox is a custom-drawn glyph
 **Reason**: Requiring a custom-drawn checkbox glyph "rather than the engine's default `GuiElementSwitch`"

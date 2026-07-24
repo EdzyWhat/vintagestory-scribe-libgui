@@ -30,8 +30,10 @@ persistence layer are untouched — this is a Mod-layer view swap.
 **Non-Goals:**
 - Migrating the **editor view** to LibGUI (custom multi-line field port, variable-height rows, keyboard
   model, autosave) — that is change 2.
-- Reproducing read-view **skeuomorphic visuals** (lined-paper ruling, custom checkbox glyph, text-size
-  scaling) — deferred to the theme/affordance changes; relaxed in this change's spec delta.
+- Reproducing read-view **skeuomorphic visuals** — the custom checkbox glyph and text-size scaling are
+  deferred to the theme/affordance changes; the **lined-paper ruling is dropped entirely** (decision
+  2026-07-23: the LibGUI lectern goes in a cleaner, more modern direction), not deferred. Relaxed in
+  this change's spec delta.
 - The keypress-leak fix (`CaptureAllInputs()` vs `default:` swallow) — no typing in read view; resolved in
   the editor-view change.
 - Theme-JSON hot-reload (the one unchecked spike gate) — gates only the later theme-extraction change.
@@ -93,8 +95,10 @@ are deleted now.
 - **LibGUI's Harmony/`VanillaDialogCleanup` patches vanilla dialogs globally** (a click sound already leaked
   onto Scribe's native toggle button). Benign now; monitor as a compatibility vector with other GUI mods and
   across VS updates (LibGUI is pinned to 1.22.x and hijacks the ortho render stage).
-- **Read-view visual downgrade** (no ruling/custom glyph/scaling) → temporary and fork-only; the native
-  original remains the fallback and the visuals return in the theme/affordance changes.
+- **Read-view visual downgrade** (no custom glyph/scaling) → temporary and fork-only; the native
+  original remains the fallback and those visuals return in the theme/affordance changes. The
+  **lined-paper ruling does NOT return** — it's dropped from the roadmap (decision 2026-07-23, cleaner
+  modern direction), not part of the downgrade-then-restore set.
 
 ## Migration Plan
 
