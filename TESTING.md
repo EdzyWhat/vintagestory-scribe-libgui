@@ -53,7 +53,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       *(5.5)*
       - **Confirmed 2026-07-23** (user playtest, same submission): "Works." All prior editor behaviors
         intact with the controls present; caret-to-end residue not reported as bothersome.
-- [ ] `9f65bd6f` **Scrollbar flickers on control click.** Click a pin/delete/grip control → the scrollbar
+- [x] `9f65bd6f` **Scrollbar flickers on control click.** Click a pin/delete/grip control → the scrollbar
       animates in from the side, then fades back out; clicking the checkbox or typing in the field does
       NOT trigger it. Decide whether to suppress it (cosmetic only). *(new — from 5.5 general note)*
       - **Still broken 2026-07-23:** cosmetic side effect, not a functional fault. Cause (from
@@ -107,6 +107,19 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         edit→read landing. Retest: single-line task is the same height in read vs. edit; scroll to the
         bottom of a long list in both and confirm no accumulating drift / last-row cutoff. (VSAPI-NOTES.md
         has the metrics gotcha.)
+      - **Still broken 2026-07-24 (residual, scroll-dependent):** user clarified the font-family fix left a
+        smaller residual — ZERO difference at the TOP of the list, ~2px at the BOTTOM, with read content
+        sitting ~2px lower. That scroll-position dependence pointed at a max-scroll mismatch, not a per-row
+        delta.
+      - **Fix applied 2026-07-24 (awaiting retest):** the read view's virtualized `ListView` derives its
+        total content height (→ the shared controller's max-scroll) from `estimatedItemHeight` for every
+        row not yet mounted. That estimate was `FontSize * 1.2f + pads`, which UNDER-counts the true metric
+        line height (`Descent − Ascent + Leading + pads`); the editor's non-virtualized
+        `SingleChildScrollView` sums EXACT heights. Jumping/dragging to the bottom leaves middle rows
+        unmeasured, so read bottomed out at a smaller offset → content ~2px lower. Fixed by setting
+        `estimatedItemHeight` to the SAME measured single-line height the editor field uses
+        (`MeasureText("Ag","sans-serif",FontSize).Y + FieldPadY*2 + RowVerticalPadding*2`). Retest: scroll
+        (wheel AND scrollbar-drag) to the bottom of a long list in read vs. edit — they should now line up.
 - [x] `fa4d457f` **Window width matches Handbook.** Open the lectern and the vanilla survival Handbook
       and compare widths — the lectern window should now be the same width (567px). *(new — 2026-07-24)*
       - **Confirmed 2026-07-24** (user playtest): "They match."

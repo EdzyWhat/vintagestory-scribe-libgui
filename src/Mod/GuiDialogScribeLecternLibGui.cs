@@ -789,9 +789,18 @@ internal sealed class ScribeLecternReadContentState : State<ScribeLecternReadCon
                     children: Widget.Blocks
                         .Select(b => (Widget)new ScribeReadRow(b, Widget.OnToggleTask, style, new ValueKey<int>(b.Index)))
                         .ToList(),
-                    // Scroll estimate only (variableHeight measures the real height); keep it close to a
-                    // single-line row's true height so the scrollbar doesn't jump: font line + field pad + row pad.
-                    estimatedItemHeight: style.FontSize * 1.2f + style.FieldPadY * 2 + style.RowVerticalPadding * 2,
+                    // Scroll estimate for rows not yet mounted (variableHeight measures the real height
+                    // of mounted rows). This MUST equal a true single-line row height, because the
+                    // ListView derives its total content height — and thus the shared controller's
+                    // max-scroll — from this estimate for every un-rendered row. A too-small estimate
+                    // (the old `FontSize * 1.2f` stand-in undercounts the real metric line height) made
+                    // the read view bottom out at a smaller offset than the editor's exact-summed
+                    // SingleChildScrollView, so after jumping/dragging to the bottom the read content sat
+                    // ~2px lower than the editor (fixes 18cd5c60). Use the SAME measured line height the
+                    // editor field uses (same "sans-serif" family — see ScribeMultilineFieldRender) plus
+                    // the identical field + row vertical padding.
+                    estimatedItemHeight: TextLayoutHelper.MeasureText("Ag", "sans-serif", style.FontSize, FontWeight.Normal).Y
+                        + style.FieldPadY * 2 + style.RowVerticalPadding * 2,
                     variableHeight: true,
                     controller: Widget.ScrollController))
             { AutoHide = false };
