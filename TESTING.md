@@ -84,6 +84,10 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       from the press point to the cursor (highlight visible), including dragging across a wrapped line and
       dragging past the field's bounds (capture holds). Then confirm the selection works: Ctrl+C/X/V act
       on it and typing replaces it. *(new — drag-select, 2026-07-24)*
+- [ ] `7a162d5f` **Double/triple-click select.** Double-click a word → the whole word highlights; triple-
+      click → the whole logical line/paragraph highlights (expected to span multiple visual rows if the
+      line wraps — that's correct, not a bug). Confirm copy/cut/paste and type-over act on the selection.
+      *(new — word/line select, 2026-07-24)*
 
 ## migrate-editor-view-libgui
 

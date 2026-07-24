@@ -399,8 +399,19 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
     private bool hadFocus;
     /// <summary>True between an onPress and its onRelease: a click-drag is selecting text, so onMove
     /// extends the selection to the cursor. The event dispatcher auto-captures the field on press, so
-    /// moves keep arriving even when the cursor leaves the field's bounds mid-drag.</summary>
+    /// moves keep arriving even when the cursor leaves the field's bounds mid-drag. Cleared for a
+    /// double/triple click (which selects a word/line outright and should not then drag).</summary>
     private bool isSelecting;
+
+    // ---- Multi-click tracking (double-click = word select, triple-click = line select) ----
+    /// <summary>Max gap between clicks to count as part of the same multi-click, matching LibGUI's own
+    /// <c>TextField</c> (400ms).</summary>
+    private static readonly TimeSpan MultiClickWindow = TimeSpan.FromMilliseconds(400);
+    private DateTime lastClickTime = DateTime.MinValue;
+    private int lastClickOffset = -1;
+    /// <summary>1 = single, 2 = double (word), 3 = triple (line). Increments while clicks land at the
+    /// same offset within <see cref="MultiClickWindow"/>; resets to 1 otherwise, and caps at 3.</summary>
+    private int clickCount;
 
     public override void InitState()
     {
@@ -685,20 +696,68 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
         return Math.Clamp(textRender.OffsetAtPosition(local), 0, text.Length);
     }
 
-    /// <summary>Press: focus the field, move the caret to the clicked position (so a click inside an
-    /// already-focused field repositions the caret, not just focuses), and begin a click-drag selection.
-    /// Mirrors LibGUI's own <c>TextField.OnPointerDown</c>, extended to this wrapping multi-line field.
-    /// Collapses any existing selection to the clicked caret (the drag will re-extend it).</summary>
+    /// <summary>Press: focus the field and act on the click. A single click moves the caret to the click
+    /// point (repositioning it in an already-focused field, not just focusing) and begins a click-drag
+    /// selection. A double click at the same spot selects the word under it; a triple click selects the
+    /// whole logical line. Mirrors LibGUI's own <c>TextField.OnPointerDown</c> (word select on
+    /// double-click), extended here with triple-click line select and multi-line word/line boundaries.</summary>
     private void OnFieldPress(PointerEvent e)
     {
         focusNode.RequestFocus();
 
         if (OffsetAt(e) is not { } offset) return;
-        caret = offset;
-        anchor = offset;      // collapsed; onMove extends from here
-        isSelecting = true;
+
+        // Multi-click detection: same offset within the window bumps the count (capped at 3), else reset.
+        var now = DateTime.Now;
+        bool sameSpotInTime = lastClickOffset == offset && (now - lastClickTime) <= MultiClickWindow;
+        clickCount = sameSpotInTime ? Math.Min(clickCount + 1, 3) : 1;
+        lastClickTime = now;
+        lastClickOffset = offset;
+
+        switch (clickCount)
+        {
+            case 2: // word select
+                (anchor, caret) = WordBoundaryAt(offset);
+                isSelecting = false; // a word is selected outright; don't also start a drag
+                break;
+            case 3: // line select
+                anchor = LineStart(offset);
+                caret = LineEnd(offset);
+                isSelecting = false;
+                break;
+            default: // single click: caret + begin drag-select
+                caret = offset;
+                anchor = offset; // collapsed; onMove extends from here
+                isSelecting = true;
+                break;
+        }
+
         MarkNeedsBuild();
     }
+
+    /// <summary>Word boundaries (start, end) around <paramref name="pos"/>, matching LibGUI's
+    /// <c>TextField.FindWordBoundary</c>: a word char (letter/digit/underscore) expands to the full run
+    /// of word chars; a non-word char selects just that one character. Returns (pos, pos) for empty text.</summary>
+    private (int start, int end) WordBoundaryAt(int pos)
+    {
+        if (text.Length == 0) return (0, 0);
+        pos = Math.Clamp(pos, 0, text.Length - 1);
+
+        int start = pos, end = pos;
+        if (IsWordChar(text[pos]))
+        {
+            while (start > 0 && IsWordChar(text[start - 1])) start--;
+            while (end < text.Length - 1 && IsWordChar(text[end + 1])) end++;
+            end++; // end is exclusive
+        }
+        else
+        {
+            end = pos + 1; // select the single non-word character
+        }
+        return (start, end);
+    }
+
+    private static bool IsWordChar(char c) => char.IsLetterOrDigit(c) || c == '_';
 
     /// <summary>Drag while selecting: extend the selection by moving the caret to the cursor and leaving
     /// the anchor at the press point. The dispatcher's press-capture keeps these firing even if the
