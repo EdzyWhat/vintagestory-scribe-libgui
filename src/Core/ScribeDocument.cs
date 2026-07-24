@@ -35,7 +35,7 @@ public sealed class ScribeDocument
     /// Changes a block's text. For Task blocks blank/whitespace-only text is rejected; Text sections
     /// may be set to empty. Otherwise the text is stored verbatim -- the model does NOT trim
     /// surrounding whitespace. Whitespace normalization (e.g. stripping a trailing blank line from a
-    /// committed edit) is the editing layer's job (GuiDialogScribeLectern.NormalizeRowOnCommit), so
+    /// committed edit) is the editing layer's job (the lectern dialog's NormalizeRowOnCommit), so
     /// the live in-place editor can keep a just-typed trailing newline long enough for the row to
     /// grow. The Done flag and kind are unchanged.
     /// </summary>
