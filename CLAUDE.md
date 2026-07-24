@@ -55,3 +55,9 @@ these first, in order:
   E.g. `BlockEntity/BESign.cs` (text-editing dialog + `Controls.ShiftKey` right-click modifier),
   `Gui/GuiDialogBlockEntityText.cs`, `Gui/GuiDialogTrader.cs` (`AddCellList`/`IGuiElementCell`
   usage — note cell lists are mouse-only and can't host a live `GuiElementTextInput`).
+- **LibGUI** (only if we adopt it — assessed in `openspec/changes/explore-libgui-adoption/`,
+  summarized in `docs/libgui-reference.md`): local gitignored clones live at `./.wiki/` (wiki) and
+  `./reference/vslibgui/` (source). Search all `.md` under `./.wiki/` with `ripgrep`, and prefer
+  the source over the wiki when they disagree, before assuming a top-level summary is complete.
+  When you resolve a complex LibGUI layout bug or correct a LibGUI misconception, append a note to
+  the `## LibGUI` section of `VSAPI-NOTES.md`.

@@ -13,6 +13,12 @@ Extracted from the game mod `.zip`s under the local Vintage Story Mods folder
 
 - `vsimgui_1.2.7.zip` → `VSImGui.dll`, `VSImGui_DebugTools.dll`, `ImGui.NET.dll`
 - `configlib_1.12.0.zip` → `configlib.dll`
+- `gui_2.0.0.zip` (LibGUI, modid `gui` — Scribe's hard dependency; see `Mod.csproj`) → the 7
+  vendored managed DLLs: `Gui.dll`, `ExCSS.dll`, `ShimSkiaSharp.dll`, `SkiaSharp.HarfBuzz.dll`,
+  `Svg.Custom.dll`, `Svg.Model.dll`, `Svg.Skia.dll`, `HarfBuzzSharp.dll`. Only `Gui.dll` is
+  referenced for compile (`Mod.csproj`); the other six are its runtime companions, extracted so a
+  build machine has the whole set the installed mod provides. (`OpenTK.Mathematics.dll` and
+  `SkiaSharp.dll`, which LibGUI's public API also surfaces, come from the game's `Lib/`, not here.)
 
 ## Re-extraction steps
 
@@ -23,9 +29,13 @@ MODS="$HOME/Library/Application Support/VintagestoryData/Mods"
 unzip -o "$MODS/vsimgui_1.2.7.zip" -d vsimgui_extract \
   VSImGui.dll VSImGui_DebugTools.dll ImGui.NET.dll
 unzip -o "$MODS/configlib_1.12.0.zip" -d configlib_extract configlib.dll
+unzip -o "$MODS/gui_2.0.0.zip" -d gui_extract \
+  Gui.dll ExCSS.dll ShimSkiaSharp.dll SkiaSharp.HarfBuzz.dll \
+  Svg.Custom.dll Svg.Model.dll Svg.Skia.dll HarfBuzzSharp.dll
 
 cp vsimgui_extract/{VSImGui.dll,VSImGui_DebugTools.dll,ImGui.NET.dll} src/Mod/lib/
 cp configlib_extract/configlib.dll src/Mod/lib/
+cp gui_extract/{Gui.dll,ExCSS.dll,ShimSkiaSharp.dll,SkiaSharp.HarfBuzz.dll,Svg.Custom.dll,Svg.Model.dll,Svg.Skia.dll,HarfBuzzSharp.dll} src/Mod/lib/
 ```
 
 If you install a newer version of either mod, re-extract and update the version numbers

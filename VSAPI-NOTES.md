@@ -911,6 +911,108 @@ a small deliberate margin if flush looks cramped. Decide the target look before 
 trade off against the symmetric top/bottom margin the earlier pass added on purpose. No code change was
 made for this in the round-3 pass — this note is the writeup to decide against.
 
+## LibGUI (vslibgui) — if/when adopted
+
+LibGUI is a third-party, Flutter-style reactive UI framework (SkiaSharp-rendered) being *assessed*
+as a replacement for our native `GuiComposer` GUI — it is **not adopted**; the decision is spike-gated
+in `openspec/changes/explore-libgui-adoption/`. Its model is documented in
+`docs/libgui-reference.md`, and the Scribe→LibGUI rebuild plan in `docs/libgui-migration-guide.md`.
+Local, gitignored clones exist for lookups: **wiki at `./.wiki/`**, **source at `./reference/vslibgui/`**
+— `ripgrep` them before assuming a top-level summary is complete (the wiki and source already
+disagree on one Scribe-critical point — `ListView` variable-height rows).
+
+When we resolve a complex LibGUI layout bug or correct a LibGUI misconception, append a note here
+(same symptom-indexed style as the rest of this file), so it isn't re-derived. Known facts so far:
+
+**Fact: `ListView` supports variable-height rows despite the wiki saying otherwise.** The wiki's
+*Scrolling* page shows only uniform `itemHeight` ("all items must have the same height"). The source
+(`reference/vslibgui/Gui/Gui/Widgets/Scroll/ListView.cs:44` and `:88`) has `estimatedItemHeight` +
+`variableHeight: true` constructors backed by an `ItemHeightCache`. Scribe's *display* rows can use
+this; but see the two facts below for why editable rows are a different story.
+
+**Fact (spike, 2026-07-23): `TextField` is SINGLE-LINE. LibGUI has no multi-line text input.**
+`RenderTextField` (`reference/vslibgui/Gui/Gui/Core/Input/RenderTextField.cs`) measures a single line
+(one `MeasureText` + one `lineHeight`), does no newline/soft-wrap handling, and exposes no
+`maxLines`/`multiline` flag. `MaxLines` exists only on the *read-only* display widgets (`Text`,
+`VtmlText`, `RichText`), not the editable `TextField`. So Scribe's core interaction — a wrapping,
+growing, editable task/note row — is NOT achievable with the stock LibGUI input widget. Adopting
+LibGUI would require **building a custom multi-line editable RenderObject** (the same
+from-scratch text-editing work the native GUI already solved in `ScribeRowTextInput`), which
+materially changes the "LibGUI gives us editable rows for free" premise. This is the biggest single
+finding of the spike; it does not fail gate A/B/C/E but it reframes the migration cost.
+
+**CORRECTION (spike, 2026-07-23): interactive widgets DO work inside a `ListView`.** An earlier
+note here claimed they didn't (theory: the list's scroll `GestureDetector` swallows the press).
+An in-game probe disproved it — a `TextField` inside a `ListView` took focus, typed, and supported
+mouse text-selection. Do not repeat the wrong claim.
+
+**Fact (spike, 2026-07-23): a `ListView` caches its child widgets by index and does NOT rebuild
+them on a parent `SetState`.** `ListViewContentElement` only clears `_cachedWidgets` when the data
+identity or item count changes (`ListView.cs` `Update`, ~`:462`). A probe with a `Checkbox`/`Button`
+using the parent-owned *controlled-component* pattern (value/onChanged from parent state) showed the
+child never updating — the button's click counter stayed at 0 and the checkbox wouldn't toggle,
+even though the taps registered (animation + sound fired). **Fix pattern:** interactive children of a
+`ListView` must own their own state (be `StatefulWidget`s that `SetState` themselves), OR the list's
+data identity/count must change to force a rebuild. This matters directly for Scribe's editable row
+list, where each row is both scrollable content and an interactive field.
+
+**Fix pattern: a `TextField` with a `BoxStyle` that sets no `Height` collapses to a thin line.**
+`RenderTextField : RenderConstrainedBox`; with no child and no explicit `Height`, `PerformLayout`
+sizes to 0 (`RenderConstrainedBox.cs:104-117`). Always give a `TextField`'s `BoxStyle` an explicit
+`Height` (the showcase uses 35).
+
+**Fix pattern (custom editable widget): set `FocusNode.Owner = Element` in `InitState`, or the field
+never focuses.** `FocusNode.RequestFocus()` resolves its `FocusManager` via `Owner?.Owner?.FocusManager`
+(`Focus.cs`). A custom `StatefulWidget` field that creates its own `FocusNode` but doesn't assign
+`Owner` silently fails to focus — and since key handlers gate on `HasFocus`, nothing types. LibGUI's
+own `TextFieldState.InitState` sets `FocusNode.Owner = Element`; mirror that.
+
+**Fact (spike, 2026-07-23): LibGUI text fields LEAK keypresses to the game (WASD moves the player,
+E opens inventory while typing).** `GuiBase.OnKeyDown` only stops a key reaching the game if the
+focused widget marks the `KeyboardEvent` `Handled` (`GuiBase` does `args.Handled |= e.Handled`). But
+`TextFieldState.OnKeyDown` has **no `default:` catch-all** — letter/movement keys are inserted via the
+separate `OnKeyChar`/KeyPress path, so their *KeyDown* passes through unhandled and the game consumes
+it. This affects LibGUI's *own* `TextField` too, not just our custom field. **Two fixes:** (a) blunt —
+override `CaptureAllInputs() => true` on the dialog (VS default false; not overridden by `GuiBase`) so
+the dialog swallows all input while open — simplest for a text-editing dialog; (b) precise — in the
+field's `OnKeyDown`, when focused, mark `e.Handled = true` for any key that should be "consumed by the
+editor" (i.e. a `default:` that swallows). Scribe's native `GuiDialogScribeLectern`/`ScribeRowTextInput`
+already solved this class of problem; the real migration must reproduce it.
+
+**Watch: macOS is a single `osx` RID in LibGUI's native loader** (`NativeLibraryLoader.cs`) — no
+`osx-arm64` split for the bundled HarfBuzz `.dylib`. Same class of native-render risk that makes
+VSImGui dead on Apple Silicon (see the VSImGui section above). The spike's primary gate is "does it
+render on this Mac at all."
+
+**Fact (adopt-libgui-foundation): a `ListView`'s child cache only clears on item-count (or data-
+identity) change — a plain parent rebuild does NOT rebuild the rows.** `ListViewContent.Update`
+(`reference/vslibgui/Gui/Gui/Widgets/Scroll/ListView.cs:456`) clears `_cachedWidgets` only when
+`DataIdentity` changes by reference OR `ItemCount` differs; the stock `ListView` constructors never
+set `DataIdentity`, so it's item-count-only in practice. Consequence for an already-open read view
+that must reflect an EXTERNAL state change (another viewer toggled a task, an editor autosaved):
+`SetState` on the parent is not enough — the same-count row at that index keeps its cached widget.
+Two options that DO work: (a) make each row a self-stateful `StatefulWidget` keyed by `ValueKey` so
+it owns and flips its own state (what Scribe's rows do, for the local-click case); (b) for a full
+external resync, call `GuiBase.ForceRebuild()` — it unmounts the whole tree and rebuilds from
+scratch, so every row is recreated from current data. Scribe's `RefreshReadView` uses `ForceRebuild`.
+
+**Fact (adopt-libgui-foundation): `Gui.Widgets.Framework.Key` collides by simple name with a VS
+`Key` type in scope.** In a Scribe dialog file that `using`s the VS client namespaces, a bare `Key?`
+parameter resolves to the wrong `Key` and fails to convert to/from `ValueKey<int>`. Fully-qualify
+the widget key type as `Gui.Widgets.Framework.Key?` on any ctor that forwards a key to a widget base.
+
+**Fix pattern (adopt-libgui-foundation): XML-comment `--` breaks `.csproj`.** MSBuild rejects `--`
+(and a trailing `-`) inside an XML `<!-- -->` comment (`error MSB4025: An XML comment cannot contain
+'--'`). The C# double-dash-as-em-dash habit from our `.cs` doc comments does not carry over to
+`Mod.csproj` — use `:` / `;` / a single `-` there instead.
+
+**Fact (adopt-libgui-foundation): `Private=false` keeps a referenced DLL out of `bin/`, so the
+blanket `*.dll` stage/package copy never ships it.** Verified for the `gui` hard dep: with
+`<Private>false</Private>` on the `Gui` reference, `Gui.dll` is absent from
+`src/Mod/bin/{Debug,Release}/net10.0/` and therefore from the staged Mods folder — the installed
+`gui` mod provides it at runtime, exactly like the game DLLs and ConfigLib. Don't add the LibGUI
+DLLs to any explicit ship list.
+
 ## Entry template
 
 ```

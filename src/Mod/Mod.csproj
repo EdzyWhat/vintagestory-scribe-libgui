@@ -55,6 +55,36 @@
     </Reference>
   </ItemGroup>
 
+  <!-- LibGUI (modid `gui`): Scribe's first HARD mod dependency, gating the lectern GUI's
+       migration off the native GuiComposer onto LibGUI's declarative widget tree
+       (adopt-libgui-foundation; permitted by the live `gui-foundation-policy` spec because the
+       explore-libgui-adoption spike cleared every make-or-break gate). Unlike ConfigLib (an
+       optional soft dep) this is always required: players install the `gui` mod separately,
+       like ConfigLib. No usable NuGet package exists; referenced against the DLLs vendored under
+       lib/ (see lib/README.md for the source gui_2.0.0.zip and re-extraction steps).
+       Private=false: never copy these into our own output; the installed `gui` mod provides them
+       at runtime, same reasoning as the game DLLs above. Only Gui.dll is referenced for compile;
+       the Svg/Skia/HarfBuzz companions resolve at runtime from the installed mod. -->
+  <ItemGroup>
+    <Reference Include="Gui">
+      <HintPath>lib/Gui.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- LibGUI's public API surfaces OpenTK.Mathematics types (Vector2/Vector4). Resolve from
+         the game's Lib/ like the other game DLLs (Private=false: the game provides it). -->
+    <Reference Include="OpenTK.Mathematics">
+      <HintPath>$(VintageStoryPath)/Lib/OpenTK.Mathematics.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- LibGUI's PaintingContext (touched by any custom RenderObject) surfaces SkiaSharp types
+         (SKCanvas on .Canvas, SKShader on DrawBox's optional arg). The game ships SkiaSharp.dll in
+         Lib/; resolve it there (Private=false: the game provides it). -->
+    <Reference Include="SkiaSharp">
+      <HintPath>$(VintageStoryPath)/Lib/SkiaSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
   <!-- VSImGui: debug-only developer diagnostic tool, must never reach a Release build
        (design.md decisions 1-2, add-imgui-configlib-tuning). Condition on this ItemGroup
        itself, not just #if DEBUG at call sites, so a Release build has zero VSImGui

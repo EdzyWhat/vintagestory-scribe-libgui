@@ -26,7 +26,14 @@ public sealed class BlockEntityScribeLectern : BlockEntity
     /// <summary>Server-side only: the UID of the player currently editing, if any.</summary>
     private string? lockHolderUid;
 
-    private GuiDialogScribeLectern? clientDialog;
+    /// <summary>Client-side: the LibGUI READ-view dialog, when open (adopt-libgui-foundation). The
+    /// read view is served by LibGUI; the editor view is still the native dialog below. Only one of
+    /// the two is ever open at a time -- switching views closes one and opens the other.</summary>
+    private GuiDialogScribeLecternLibGui? readDialog;
+
+    /// <summary>Client-side: the native EDITOR-view dialog, when open. Retained as the editor during
+    /// the migration interim (design D2) until the follow-up change ports the editor to LibGUI.</summary>
+    private GuiDialogScribeLectern? editorDialog;
 
     public override void Initialize(ICoreAPI api)
     {
@@ -63,7 +70,11 @@ public sealed class BlockEntityScribeLectern : BlockEntity
             ? doc
             : new ScribeDocument();
 
-        clientDialog?.RefreshReadView();
+        // Reflect an authoritative resync in whichever view is open. The LibGUI read view rebuilds
+        // from the now-current Document; the native editor's RefreshReadView is a no-op while in
+        // editor mode (it never overwrites the editor's scratch copy).
+        readDialog?.RefreshReadView();
+        editorDialog?.RefreshReadView();
     }
 
     /// <summary>
@@ -209,7 +220,14 @@ public sealed class BlockEntityScribeLectern : BlockEntity
         SendReply(sapi, toPlayer, granted: false, editorMode: true, refusalReason: "scribe:scribe-gui-save-failed");
     }
 
-    /// <summary>Client-side: handles the server's reply to an open request, mode-switch request, or autosave tick.</summary>
+    /// <summary>
+    /// Client-side: handles the server's reply to an open request, mode-switch request, or autosave
+    /// tick. Routes by view: the READ view is the LibGUI dialog (<see cref="readDialog"/>), the
+    /// EDITOR view is still the native dialog (<see cref="editorDialog"/>) during the migration
+    /// interim (design D2). A grant opens/keeps the matching view and closes the other; only one is
+    /// ever open at a time. A post-autosave ack (editor already open, same mode) is handled by the
+    /// native editor's own reply path, so this method only needs to act on a genuine view change.
+    /// </summary>
     public void HandleServerReply(ScribeEditDocumentMessage message)
     {
         if (Api is not ICoreClientAPI capi)
@@ -222,35 +240,74 @@ public sealed class BlockEntityScribeLectern : BlockEntity
             Document = doc;
         }
 
-        if (clientDialog is not null && clientDialog.IsOpened())
-        {
-            // A dialog is already open for this lectern: this reply is either a mode-switch
-            // grant/refusal or a post-autosave-tick ack, not a fresh open.
-            if (!message.Granted)
-            {
-                capi.TriggerIngameError(this, "scribe-lectern-locked", Lang.Get(message.RefusalReason ?? "scribe:scribe-gui-locked"));
-                return;
-            }
+        bool editorOpen = editorDialog is not null && editorDialog.IsOpened();
+        bool readOpen = readDialog is not null && readDialog.IsOpened();
 
-            if (message.EditorMode != clientDialog.IsEditorMode)
-            {
-                clientDialog.SwitchMode(message.EditorMode, message.DocumentBytes);
-            }
-
-            return;
-        }
-
-        // No dialog open yet: this is the reply to a fresh right-click.
         if (!message.Granted)
         {
+            // Editor access refused (someone else holds the lock). If a view is already open, just
+            // surface the error and stay where we are. On a fresh right-click with nothing open,
+            // fall back to opening the read view so the requester still sees the document.
             capi.TriggerIngameError(this, "scribe-lectern-locked", Lang.Get(message.RefusalReason ?? "scribe:scribe-gui-locked"));
-            // Editor access was refused, but we still have the current document — open read-only.
-            clientDialog = new GuiDialogScribeLectern(capi, this, isEditorMode: false, message.DocumentBytes);
-            clientDialog.TryOpen();
+            if (!editorOpen && !readOpen)
+            {
+                OpenReadView(capi);
+            }
             return;
         }
 
-        clientDialog = new GuiDialogScribeLectern(capi, this, message.EditorMode, message.DocumentBytes);
-        clientDialog.TryOpen();
+        if (message.EditorMode)
+        {
+            // Editor granted: close the read view if it was open (e.g. "switch to editor") and open
+            // the native editor. If the editor is already open, this is a post-autosave ack in the
+            // same mode -- nothing to switch.
+            if (editorOpen) return;
+            CloseReadView();
+            editorDialog = new GuiDialogScribeLectern(capi, this, isEditorMode: true, message.DocumentBytes);
+            editorDialog.TryOpen();
+            return;
+        }
+
+        // Read granted: close the editor if it was open (switch-to-read) and open/keep the LibGUI
+        // read view.
+        if (readOpen) return;
+        CloseEditor();
+        OpenReadView(capi);
+    }
+
+    /// <summary>Opens the LibGUI read view, wiring its "switch to editor" control back through the
+    /// normal server access-request flow (design D2): the request round-trips to the server, and a
+    /// granted reply opens the native editor via <see cref="HandleServerReply"/>.</summary>
+    private void OpenReadView(ICoreClientAPI capi)
+    {
+        readDialog = new GuiDialogScribeLecternLibGui(Pos, this, capi, onSwitchToEditor: () =>
+        {
+            capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeRequestAccessMessage
+            {
+                PosX = Pos.X,
+                PosY = Pos.Y,
+                PosZ = Pos.Z,
+                WantEditor = true,
+            });
+        });
+        readDialog.TryOpen();
+    }
+
+    private void CloseReadView()
+    {
+        if (readDialog is not null && readDialog.IsOpened())
+        {
+            readDialog.TryClose();
+        }
+        readDialog = null;
+    }
+
+    private void CloseEditor()
+    {
+        if (editorDialog is not null && editorDialog.IsOpened())
+        {
+            editorDialog.TryClose();
+        }
+        editorDialog = null;
     }
 }

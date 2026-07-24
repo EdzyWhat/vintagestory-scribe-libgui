@@ -30,7 +30,9 @@ dotnet build src/Mod/Mod.csproj --configuration Release
 # Scribe.Core.dll as a separate assembly (not merged/ILRepacked), so it must ship alongside
 # the mod DLL or the game fails to load the block entity class at runtime with a
 # FileNotFoundException. VintagestoryAPI.dll itself is excluded from the build output
-# (Private=false in Mod.csproj), so a blanket *.dll copy is safe.
+# (Private=false in Mod.csproj), so a blanket *.dll copy is safe. Same holds for the `gui`
+# (LibGUI) hard dep and its companions, and for configlib: all are Private=false, so Gui.dll
+# (etc.) never lands in bin/ and is NOT shipped here -- the separately-installed mod provides it.
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 cp "$MODINFO" "$STAGE/"

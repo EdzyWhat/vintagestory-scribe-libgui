@@ -58,6 +58,9 @@ if ($LASTEXITCODE -ne 0) { Write-Error "dotnet build failed ($LASTEXITCODE)" }
 
 New-Item -ItemType Directory -Force -Path $Stage | Out-Null
 Copy-Item $ModInfo -Destination $Stage -Force
+# Blanket copy of the build output DLLs (Scribe.dll + Scribe.Core.dll). The `gui` (LibGUI) hard
+# dep, ConfigLib, and the game DLLs are all Private=false, so they never land in bin/ and are NOT
+# staged here -- the separately-installed mods/game provide them at runtime (verified: no Gui.dll).
 Copy-Item "src/Mod/bin/$Configuration/net10.0/*.dll" -Destination $Stage -Force
 
 $StageAssets = Join-Path $Stage 'assets'

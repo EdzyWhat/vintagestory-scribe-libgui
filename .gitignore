@@ -42,5 +42,16 @@ src/Mod/lib/*
 # ephemeral local reports queued for Claude to review, not meant to be committed
 .playtest-submissions/
 
+# LibGUI (vslibgui) local references for the explore-libgui-adoption change: the wiki cloned
+# to .wiki/ (so `rg <term> ./.wiki/` works verbatim) and the full source to reference/vslibgui/.
+# Upstream repos, not ours -- read-only research material, never committed. Re-clone with:
+#   git clone --depth 1 https://github.com/ripls56/vslibgui.wiki.git .wiki
+#   git clone --depth 1 https://github.com/ripls56/vslibgui.git reference/vslibgui
+.wiki/
+reference/vslibgui/
+
 # playtest-history/ is NOT ignored -- it's a curated, committed record of promoted
 # playtest screenshots (see vs-playtest-checklist's promote_screenshot.py).
+
+.handoff.md
+.auto-resume.md
