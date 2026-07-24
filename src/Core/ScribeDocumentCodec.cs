@@ -19,6 +19,21 @@ public static class ScribeDocumentCodec
     private static readonly byte[] Magic = "SCRB"u8.ToArray();
     private const byte Version = 3; // v1 was flat tasks + a single note; v2 is ordered blocks; v3 adds Pinned/AssignedToUid.
 
+    /// <summary>
+    /// Hard upper bound on the number of blocks a single document may hold. A document is edited by
+    /// whoever holds the lectern's edit lock and submitted to the server as raw bytes, so it is
+    /// trusted-but-client input: the server persists and re-syncs whatever deserializes. These caps
+    /// bound that trust so a malformed or hostile payload can't bloat a block entity's saved tree
+    /// attributes (and every client's re-sync) without limit. Enforced in <see cref="TryDeserialize"/>,
+    /// which fails the whole payload (returns false) when either is exceeded — the codec is the single
+    /// chokepoint for both the network path and world-persistence load, so one check covers both.
+    /// Generous relative to any realistic hand-authored checklist.
+    /// </summary>
+    public const int MaxBlocks = 1000;
+
+    /// <summary>Hard upper bound on a single block's text length, in characters. See <see cref="MaxBlocks"/>.</summary>
+    public const int MaxTextLength = 10_000;
+
     public static byte[] Serialize(ScribeDocument doc)
     {
         using var ms = new MemoryStream();
@@ -58,7 +73,10 @@ public static class ScribeDocumentCodec
             if (version != Version) return false;
 
             int blockCount = r.ReadInt32();
-            if (blockCount < 0 || blockCount > bytes.Length) return false; // sanity bound
+            // Reject a negative count, a count that can't physically fit in the buffer (a tiny
+            // payload claiming billions of blocks — an allocation guard), or one over the hard
+            // MaxBlocks cap on document size.
+            if (blockCount < 0 || blockCount > bytes.Length || blockCount > MaxBlocks) return false;
 
             var blocks = new List<ScribeBlock>(blockCount);
             for (int i = 0; i < blockCount; i++)
@@ -70,6 +88,7 @@ public static class ScribeDocumentCodec
                 bool hasAssignedToUid = r.ReadBoolean();
                 string? assignedToUid = hasAssignedToUid ? r.ReadString() : null;
                 string text = r.ReadString();
+                if (text.Length > MaxTextLength) return false; // per-block text-length cap
                 blocks.Add(new ScribeBlock(kind, text, done, depth, pinned, assignedToUid));
             }
 

@@ -57,9 +57,29 @@ server — a LOCAL suite only, not run on cloud CI.
 
 - [x] 5.1 Implement `GuiDialogScribeLectern` (a `GuiDialogBlockEntity`) rendering the document's ordered blocks
 - [x] 5.2 Each block row: task rows have a complete-toggle + editable text + delete; text-section rows have editable text + delete; plus "add task" / "add text section" controls
+      -> PARTIALLY SUPERSEDED by the LibGUI rebuild: the per-row **delete** affordance was dropped
+         during `migrate-editor-view-libgui` (deferred as a "per-row icon control", never rebuilt)
+         and does NOT exist in `GuiDialogScribeLecternLibGui`. The complete-toggle + editable text
+         survive. Text-section creation was intentionally removed per 8.18. Per-row delete is being
+         rebuilt under a NEW dedicated change (delete + reorder + pin affordances on LibGUI). Core
+         `ScribeDocument.DeleteBlock` remains and is unit-tested.
 - [x] 5.3 Collapsible tool panel with a per-option **visibility-predicate hook** (the gating mechanism); wire NO real gates in v1 (all options visible)
+      -> SUPERSEDED by the LibGUI rebuild: the collapsible tool panel has no LibGUI equivalent and
+         was not carried over (silently dropped in migration). Orphaned config knobs
+         (`ToolPanelToggleWidth`, the "Editor toolbar" block in `ScribeClientConfig`) linger unused
+         and are being removed under task 8.15's cleanup. The visibility-predicate gating hook is
+         not currently present; re-introduce it with the future affordances change if still wanted.
 - [x] 5.4 Reorder mode: mouse-drag reordering of block rows in the list (consistent with VS's mouse-driven crafting grid/blacksmithing/clayforming interactions), calling Core `MoveBlock(from, to)` on drop
+      -> SUPERSEDED by the LibGUI rebuild: mouse-drag reorder was NOT ported to
+         `GuiDialogScribeLecternLibGui` (deferred at migration, explicitly planned to return under
+         LibGUI). There is currently NO way to reorder rows. Being rebuilt under the NEW dedicated
+         delete/reorder/pin change. Core `ScribeDocument.MoveBlock` remains and is unit-tested.
 - [x] 5.5 Text size control as a **client-side display preference** (scales GUI font; stored in local mod config, NOT in the document, NOT synced)
+      -> REDESIGNED (not regressed) by the LibGUI rebuild: the in-GUI text-size SLIDER was
+         intentionally replaced by config-file scaling. `ScribeClientConfig.TextSizeScale` is read
+         once per dialog-open and applied at the single `ScribeRowStyle.FromConfig` chokepoint
+         (`unify-row-sizing-libgui`). The preference still lives in local mod config, not the
+         document, not synced -- it's just edited via JSON / a ConfigLib panel now, not a slider.
 - [x] 5.6 Edit-mode toggle keybind: GUI opens in a resting state; pressing the key enters edit mode with an immersive "pull out the pen/stylus" beat
       -> superseded during planning: no hotkey. Plain right-click opens a lock-free read
          view; shift+right-click (or the in-GUI toggle button) opens/switches to the
@@ -83,13 +103,25 @@ shift+right-click (or the in-GUI toggle button) opens/switches to the lock-holdi
 **editor view**.
 
 - [ ] 7.1 Build the mod and copy it into `~/Library/Application Support/VintagestoryData/Mods`; launch the game
-- [ ] 7.2 Place a lectern (from creative inventory); plain right-click opens a read view with no edit controls; shift+right-click opens the editor view; add tasks, complete one, edit the note, and confirm edits autosave (no explicit Save button — check a moment after typing, before closing, that the change already round-tripped)
-- [ ] 7.3 Save and reload the world; confirm the lectern's tasks and note persist
-- [ ] 7.4 Toggle check: from the editor view, click the in-GUI toggle to switch to read view (confirm the just-typed edit is reflected, not stale); from the read view, click the toggle to request the editor view back
+- [x] 7.2 Place a lectern (from creative inventory); plain right-click opens a read view with no edit controls; shift+right-click opens the editor view; add tasks, complete one, edit the note, and confirm edits autosave (no explicit Save button — check a moment after typing, before closing, that the change already round-tripped)
+      -> Confirmed 2026-07-21 (TESTING.md `c9c26fc3`).
+- [x] 7.3 Save and reload the world; confirm the lectern's tasks and note persist
+      -> Confirmed 2026-07-21 (TESTING.md `97938f33`).
+- [x] 7.4 Toggle check: from the editor view, click the in-GUI toggle to switch to read view (confirm the just-typed edit is reflected, not stale); from the read view, click the toggle to request the editor view back
+      -> Confirmed 2026-07-21 (TESTING.md `89290239`).
 - [ ] 7.5 Multiplayer check: run a local headless server (`dotnet ".../VintagestoryServer.dll" --dataPath ~/vsdata`) with the mod, connect a second client, confirm an edit by one session is seen live in the other session's *read* view, and that two separate lecterns hold independent documents
 - [ ] 7.6 Lock check: with the editor view open in one session, confirm a second session's shift+right-click (or toggle-to-editor) is refused with the "one person at a time" message but still shows current content read-only; confirm a second session's plain right-click (read view) is granted normally even while the editor lock is held elsewhere; confirm closing the editor view or disconnecting releases the lock for the next requester
 - [ ] 7.7 Reorder + tool panel check: in the editor view, mouse-drag a row to reorder it; collapse/expand the tool panel; adjust the text-size slider and confirm the font scales and the preference persists across reopen
-- [ ] 7.8 Walk-away check: open the editor view, make an edit, walk out of interaction range without closing the GUI; confirm the dialog auto-closes and the edit was flushed (reopen and see it persisted) rather than lost
+      -> STALE: this was Confirmed 2026-07-21 (TESTING.md `32876056`) against the NATIVE GUI, but
+         all three features it exercises are gone/redesigned in the LibGUI rebuild (see 5.3/5.4/5.5):
+         drag-reorder and the tool panel do not exist in `GuiDialogScribeLecternLibGui`, and the
+         text-size slider was replaced by config-file scaling. Left UNCHECKED deliberately -- the
+         reorder half will be re-verified under the new delete/reorder/pin change; text-size
+         persistence via config is covered by the row-sizing work.
+- [x] 7.8 Walk-away check: open the editor view, make an edit, walk out of interaction range without closing the GUI; confirm the dialog auto-closes and the edit was flushed (reopen and see it persisted) rather than lost
+      -> Confirmed 2026-07-21 in Creative (TESTING.md `9c04c5c7`); the LibGUI dialog pins
+         `InteractionRange` to `DefaultPickingRange + 0.5` so walk-away auto-close fires in every
+         game mode. Survival open/walk-away not yet exercised in-game (verified by analysis).
 
 ## 8. Playtesting bugfixes (found during group 7)
 
@@ -130,6 +162,14 @@ packaging fix) — these three are what's left from the first real playtest.
       `PickingRange = 100`, but reported the read view specifically still does not close even
       past 100 blocks. Confirm whether this is a real read-view-specific bug or the same
       expected-distance behavior, and fix if it's real.
+      -> LIKELY OBSOLETE under the LibGUI rebuild: this described a NATIVE two-dialog artifact
+         (separate read vs. editor dialogs with divergent range handling). The LibGUI rebuild uses a
+         SINGLE dialog for both views with one `InteractionRange => DefaultPickingRange + 0.5`
+         override (`GuiDialogScribeLecternLibGui`), so a read-view-specific range difference can't
+         exist as described -- the read view auto-closes on the same pinned distance the editor view
+         does (which 7.8 confirmed). Needs a quick in-game confirm (creative, walk past the close
+         threshold in read view -> dialog closes); if confirmed, mark Obsolete in TESTING.md. No code
+         change expected.
 - [x] 8.4 CRITICAL, blocks 8.2: `HitTestRowIndex` (`GuiDialogScribeLectern.cs`) calls
       `SingleComposer.GetTextInput(...)` unconditionally for every row, but text-section rows are
       registered as `GuiElementTextArea` (via `AddTextArea`), not `GuiElementTextInput` --
@@ -145,21 +185,51 @@ packaging fix) — these three are what's left from the first real playtest.
       which focuses element 0 -- typing in row 3 then clicking delete on row 5 (or touching the
       slider/panel toggle) silently yanks focus/caret to whatever is index 0 in the new layout.
       Pass `focusFirstElement: false` (or otherwise preserve focus) on recompose.
-- [ ] 8.6 A failed autosave (lock lost mid-edit) only shows a one-time toast
+      -> LARGELY RESOLVED by the LibGUI rebuild (the native `SingleComposer`/`focusFirstElement`
+         mechanism this describes no longer exists). `ForceRebuild` PRESERVES keyboard focus: the
+         dialog owns its `FocusNode`s in `editorFocusNodes` (outside the widget tree) and the
+         `FocusManager` is a `GuiBase` field untouched by rebuild, so the focused node stays focused
+         across a recompose. Verified against `reference/vslibgui`. Residue: `ForceRebuild` recreates
+         each field's `State`, so `ScribeMultilineFieldState.InitState` re-seeds the caret to
+         end-of-text on the focused row. Checkbox toggles use incremental `SetState` (no
+         `ForceRebuild`), so they don't disturb the caret at all. The remaining caret-to-end residue
+         is minor; if it proves bothersome in play, preserve/restore the caret offset across
+         `ForceRebuild` (as `EnterEditorMode`/add-task already track the focused index). Confirm
+         in-game during the Part-B (delete/reorder) testing, since those paths rebuild too.
+- [x] 8.6 A failed autosave (lock lost mid-edit) only shows a one-time toast
       (`scribe-gui-save-failed`) with no retry/re-request path; `isDirty` is already cleared by
       the time the failure ack arrives, so further edits that don't happen to coincide with a
       *new* mutation are silently never resent. Low priority (currently hard to reach in normal
       play), but worth a recovery path eventually.
-- [ ] 8.7 `BlockEntityScribeLectern.ApplyEdit` accepts client-submitted `DocumentBytes` with no
+      -> done: added a bounded recovery path. `GuiDialogScribeLecternLibGui.HandleSaveFailed()`
+         (called from `BlockEntityScribeLectern.HandleServerReply` only for the
+         `scribe:scribe-gui-save-failed` ack) re-requests the editor lock while keeping the unsaved
+         scratch intact (via a `recoveringLostLock` flag). A recovery re-grant lands back in
+         `EnterEditorMode`, which detects the flag, keeps the scratch (instead of reseeding from the
+         authoritative doc, which would discard the edit), and re-flushes the pending edit. Bounded
+         by `MaxSaveFailureRetries` (3) so a lock genuinely held by another player can't spin the
+         re-request/resend loop forever -- after the cap it stops with the edits still visible and
+         the one-time toast already shown. The counter resets on lock re-acquire and on leaving the
+         editor. A bare edit resend alone can't work (the server's `ApplyEdit` requires holding the
+         lock), which is why recovery goes through re-requesting access, not just re-setting
+         `isDirty`. Mod.csproj builds clean.
+- [x] 8.7 `BlockEntityScribeLectern.ApplyEdit` accepts client-submitted `DocumentBytes` with no
       server-side cap on block count or per-block text length beyond the codec's weak sanity
       check. Add a reasonable size/length bound server-side before persisting, since this is
       trusted client input from whoever holds the edit lock.
+      -> done: added `ScribeDocumentCodec.MaxBlocks` (1000) and `MaxTextLength` (10 000 chars)
+         constants enforced in `TryDeserialize` -- the single chokepoint for BOTH the network edit
+         path and world-persistence load, so one check covers both. An over-cap payload fails
+         deserialization; `ApplyEdit` then returns false and the existing save-failed ack fires (no
+         separate server-side check needed). Kept entirely in Core (no VS API dependency). Added 4
+         Core.Tests (`TryDeserialize_At/OverBlockCountCap`, `.../TextLengthCap`); Core.Tests now
+         47/47 green.
 - [x] 8.8 Editor-view (and read-view) top spacing: the title bar sat right on top of the first
       row with no gap (screenshot: `screenshots/debug/2026-07-18_12-22-56_*.png`) -- content
       inside `BeginChildElements` started at y=0, flush against the title bar.
       -> done: added a `TopContentGap` (12px) constant, both compose methods now start their
          `y` cursor there instead of 0. Mod.csproj builds clean.
-- [ ] 8.9 "Add Task" placeholder text is a bad user-facing default (currently literally the lang
+- [x] 8.9 "Add Task" placeholder text is a bad user-facing default (currently literally the lang
       key `scribe-gui-newtask-placeholder`, but even resolved it reads awkwardly). Pick a
       friendlier placeholder (e.g. "New task" is already the intended value -- confirm it reads
       well now that 8.12 is fixed, or pick something better like an empty string with a grey
@@ -171,6 +241,12 @@ packaging fix) — these three are what's left from the first real playtest.
          task starts genuinely empty -- this needs a Core semantics change to `AddTask`
          (currently rejects blank text, a tested invariant) and wasn't done solo without user
          sign-off.
+      -> RESOLVED (option a, user sign-off 2026-07-23): keep the seeded "New task" text and close
+         this. The awkward display 8.9 originally flagged was 8.12's domain-prefix bug (now fixed);
+         "New task" reads fine. The faded-hint alternative (option b) doesn't port cleanly anyway --
+         the LibGUI editor uses the custom `ScribeMultilineField`, which has no placeholder-hint
+         support, and it would require relaxing Core `AddTask`'s tested blank-text invariant for a
+         marginal gain. Not worth it. No code change.
 - [x] 8.10 Text-size slider changes the font but not the text input/text area's own height --
       at larger scales, the bottom half of each row's letters gets clipped. Fix: grow row height
       in step with `TextSizeScale` rather than the current fixed `TaskRowHeight`/
@@ -261,12 +337,27 @@ packaging fix) — these three are what's left from the first real playtest.
          value down to the new cap on load. Real scrollable-region support is a separate,
          larger follow-up -- not done here, tracked below as 8.15. Mod.csproj builds clean;
          Core.Tests still 27/27.
-- [ ] 8.15 No scrollable/clipped region exists in either view -- rows are stacked by absolute Y
+- [x] 8.15 No scrollable/clipped region exists in either view -- rows are stacked by absolute Y
       with no scrollbar, so content can render off-screen with no way to reach it once enough
       rows/text-size combine to exceed the visible dialog height. 8.14 capped the text-size
       slider as a stopgap; the underlying missing-scrollbar issue is unaddressed. Investigate
       `GuiComposer`'s clipped-region support (see `GuiDialogTrader`'s scrollbar usage, referenced
       in this file's own class doc comment) and add a real scrollable list region.
+      -> PREMISE CORRECTED + done under the LibGUI rebuild. The "absolute-Y stacking, no scroll
+         region" premise was NATIVE-GUI-only: the LibGUI read view already used a scrollable
+         `ListView` and the editor a `SingleChildScrollView`, both of which wheel-scroll to
+         off-screen content (verified against `reference/vslibgui`). What was genuinely missing was a
+         VISIBLE scrollbar. Fix: wrapped both scroll regions in LibGUI's opt-in `Scrollbar` widget
+         sharing an owned `ScrollController` (the read content State and editor content State each
+         own one, disposed with the State) -- `Scrollbar` requires the child scroll view to share its
+         controller (LibGUI `ScrollPage` pattern). `Scrollable.EnsureVisible` still works (it walks
+         up to the nearest scrollable ancestor; the added Stack/Padding wrappers are above the scroll
+         view, not between it and the rows). Also removed the now-moot 150% stopgap: deleted the dead
+         `MinTextSizePercent`/`MaxTextSizePercent` fields and the whole orphaned "Editor toolbar"
+         config block (`ControlRowHeight`..`HoverTextWidth`, all native-GUI-only, unreferenced by
+         LibGUI) from `ScribeClientConfig`, and fixed `TextSizeScale`'s stale XML doc that still
+         pointed at the deleted `GuiDialogScribeLectern.OnTextSizeSliderChanged`. Mod.csproj builds
+         clean. In-game confirm of the visible/draggable bar in both views is a manual playtest item.
 - [x] 8.16 Rename `scribe-gui-addtext` label from "Add Text" to "Add Note" (matches the rest of
       the UI's "note" terminology) -- done in `en.json`; no code changes needed, just tracking
       the UX-copy fix alongside the others found in this playtesting pass.

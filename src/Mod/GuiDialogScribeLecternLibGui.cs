@@ -4,11 +4,14 @@ using System.Linq;
 using Gui;                       // GuiDialogBlockEntityBase, WindowConfig
 using Gui.Rendering;             // EdgeInsets
 using Gui.Rendering.Text;        // TextStyle, FontWeight
-using Gui.Widgets.Basic;         // Text, WindowFrame
+using Gui.Widgets.Basic;         // Text, WindowFrame, VsIcon, Container, Button
+using Gui.Widgets.Events;        // PointerEvent
 using Gui.Widgets.Framework;     // Widget, StatefulWidget, State, Theme, ValueKey, Key
-using Gui.Widgets.Input;         // Checkbox, FocusNode
-using Gui.Widgets.Layout;        // Column, Row, Expanded, Padding, SizedBox, CrossAxisAlignment, MainAxisAlignment
-using Gui.Widgets.Scroll;        // ListView, SingleChildScrollView, Scrollable
+using Gui.Widgets.Input;         // Checkbox, FocusNode, GestureDetector, MouseRegion
+using Gui.Widgets.Gestures;      // ScrollController
+using Gui.Widgets.Layout;        // Column, Row, Expanded, Padding, SizedBox, Center, CrossAxisAlignment, MainAxisAlignment
+using Gui.Widgets.Painting;      // BoxStyle
+using Gui.Widgets.Scroll;        // ListView, SingleChildScrollView, Scrollable, Scrollbar
 using Gui.Core.Layout;           // MainAxisSize
 using OpenTK.Mathematics;        // Vector2
 using Scribe.Core;
@@ -61,6 +64,17 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     /// <summary>Set when a focus move or a row growth needs the focused row scrolled into view; acted
     /// on in <see cref="OnRenderGUI"/> AFTER layout has run (EnsureVisible reads live geometry).</summary>
     private bool pendingEnsureVisible;
+
+    // ---- Lost-lock autosave recovery (task 8.6) ----
+    /// <summary>Max consecutive autosave failures to auto-recover from before giving up, so a lock
+    /// permanently held elsewhere can't spin the re-request/resend loop forever.</summary>
+    private const int MaxSaveFailureRetries = 3;
+    /// <summary>Count of consecutive lost-lock autosave failures; reset to 0 the moment the lock is
+    /// re-acquired (a successful recovery re-grant) or a fresh editor session begins.</summary>
+    private int saveFailureRetries;
+    /// <summary>True between a save-failed ack and its recovery re-grant, so <see cref="EnterEditorMode"/>
+    /// keeps the unsaved scratch instead of reseeding it from the authoritative document.</summary>
+    private bool recoveringLostLock;
 
     public GuiDialogScribeLecternLibGui(BlockPos pos, BlockEntityScribeLectern lectern, ICoreClientAPI capi)
         : base(pos, capi)
@@ -147,6 +161,21 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     /// into the editor tree (or lets <c>TryOpen</c> build it if the dialog isn't open yet).</summary>
     public void EnterEditorMode(byte[]? documentBytes)
     {
+        if (recoveringLostLock && scratch is not null)
+        {
+            // This grant is the recovery re-acquire after a lost-lock save failure (task 8.6): the
+            // lock is ours again, so keep the player's unsaved scratch and re-flush it rather than
+            // reseeding from the authoritative document (which would silently discard their edits).
+            recoveringLostLock = false;
+            saveFailureRetries = 0;
+            isEditorMode = true;
+            StartAutosaveTick();
+            isDirty = true;   // force the pending edit to be re-sent on the next flush
+            FlushIfDirty();
+            if (IsOpened()) ForceRebuild();
+            return;
+        }
+
         scratch = ScribeDocumentCodec.TryDeserialize(documentBytes, out var doc) && doc is not null
             ? doc
             : new ScribeDocument();
@@ -154,6 +183,8 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         isEditorMode = true;
         focusedEditIndex = null;
         autoFocusRowOnRebuild = null;
+        saveFailureRetries = 0;
+        recoveringLostLock = false;
         SyncFocusNodesToScratch();
         StartAutosaveTick();
 
@@ -200,7 +231,36 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         isDirty = false;
         focusedEditIndex = null;
         autoFocusRowOnRebuild = null;
+        saveFailureRetries = 0;
+        recoveringLostLock = false;
         DisposeFocusNodes();
+    }
+
+    /// <summary>
+    /// Called by <see cref="BlockEntityScribeLectern.HandleServerReply"/> when an autosave was rejected
+    /// because this client lost the editor lock (task 8.6). The failing <see cref="FlushIfDirty"/>
+    /// already cleared <see cref="isDirty"/> optimistically, so without recovery the unsaved edit
+    /// would be silently dropped. Instead we re-request the editor lock (keeping the scratch intact via
+    /// <see cref="recoveringLostLock"/>); a re-grant lands back in <see cref="EnterEditorMode"/>, which
+    /// re-flushes the pending edit. Bounded by <see cref="MaxSaveFailureRetries"/> so a lock genuinely
+    /// held by another player can't spin this forever — after the cap we stop, leaving the edits visible
+    /// in the (now read-only-until-relock) scratch and the one-time error toast already shown.
+    /// Returns true if a recovery re-request was sent, false if the cap was hit.
+    /// </summary>
+    public bool HandleSaveFailed()
+    {
+        if (!isEditorMode) return false;
+
+        if (saveFailureRetries >= MaxSaveFailureRetries)
+        {
+            recoveringLostLock = false;
+            return false;
+        }
+
+        saveFailureRetries++;
+        recoveringLostLock = true;
+        RequestEditorAccess();
+        return true;
     }
 
     /// <summary>"Switch to editor" button in the read view: request editor access from the server
@@ -301,6 +361,64 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         {
             isDirty = true;
         }
+    }
+
+    /// <summary>Per-row delete: remove the block from the scratch document and rebuild. Mirrors
+    /// <see cref="OnClickAddTask"/> (mutate scratch -> mark dirty -> resync focus nodes -> rebuild),
+    /// with focus cleanup so no path is left focusing a removed row: if the focused row was deleted
+    /// or shifted, clear/adjust <see cref="focusedEditIndex"/> before the rebuild (spec "deleting the
+    /// focused row does not break focus"). An empty document falls back to the editor's empty-state
+    /// hint, which needs no focus.</summary>
+    private void DeleteEditorBlock(int index)
+    {
+        if (scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
+        if (!scratch.DeleteBlock(index)) return;
+
+        isDirty = true;
+
+        // Fix up the focused index across the deletion: the focused row is gone (clear), or sat after
+        // the deleted one (shift up by one), or before it (unchanged).
+        if (focusedEditIndex is { } f)
+        {
+            if (f == index) focusedEditIndex = null;
+            else if (f > index) focusedEditIndex = f - 1;
+        }
+
+        SyncFocusNodesToScratch();
+        pendingEnsureVisible = false;
+        ForceRebuild();
+    }
+
+    /// <summary>Per-row pin toggle (task rows only; the pin control is absent on text-section rows).
+    /// Flips the scratch block's pinned flag and marks dirty; the autosave/commit path serializes it.
+    /// The row reflects the new state via its own rebuild, so no full ForceRebuild is required — but
+    /// the resting-tint indicator (read + editor) is driven off the block's Pinned snapshot, so a
+    /// rebuild keeps both views consistent.</summary>
+    private void TogglePinnedEditorTask(int index)
+    {
+        if (scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
+        if (!scratch.TogglePinned(index)) return; // no-op on a text section or bad index
+
+        isDirty = true;
+        ForceRebuild();
+    }
+
+    /// <summary>Drag-reorder drop: move the block from <paramref name="from"/> to <paramref name="to"/>
+    /// in the scratch document and rebuild. A move-to-same index is a safe no-op
+    /// (<see cref="ScribeDocument.MoveBlock"/> returns true without changing anything, so no edit is
+    /// sent). Keeps the moved row focused across the rebuild.</summary>
+    private void ReorderEditorBlock(int from, int to)
+    {
+        if (scratch is null) return;
+        if (from == to) return; // released in place -> no edit (spec "Dropping in place changes nothing")
+        if (!scratch.MoveBlock(from, to)) return;
+
+        isDirty = true;
+        focusedEditIndex = to;
+        SyncFocusNodesToScratch();
+        autoFocusRowOnRebuild = to;
+        pendingEnsureVisible = true;
+        ForceRebuild();
     }
 
     /// <summary>"Add task" button: append a placeholder task, grow the focus-node list, and rebuild
@@ -491,7 +609,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             // reference), so a later mutation of the authoritative document can't alias into a built
             // row — a re-sync rebuilds instead.
             blocks: lectern.Document.Blocks
-                .Select((b, i) => new ScribeReadRowData(i, b.IsTask, b.Done, b.Text))
+                .Select((b, i) => new ScribeReadRowData(i, b.IsTask, b.Done, b.Pinned, b.Text))
                 .ToList(),
             onToggleTask: OnReadViewToggleTask,
             onSwitchToEditor: RequestEditorAccess,
@@ -500,7 +618,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     private Widget BuildEditorContent()
     {
         var blocks = scratch!.Blocks
-            .Select((b, i) => new ScribeEditRowData(i, b.IsTask, b.Done, b.Text))
+            .Select((b, i) => new ScribeEditRowData(i, b.IsTask, b.Done, b.Pinned, b.Text))
             .ToList();
 
         int? autoFocus = autoFocusRowOnRebuild;
@@ -515,6 +633,9 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             onCommitAndRetreat: EditorRetreatFrom,
             onInsertTaskBelow: EditorInsertTaskBelow,
             onToggleTask: ToggleEditorTask,
+            onDeleteBlock: DeleteEditorBlock,
+            onTogglePinned: TogglePinnedEditorTask,
+            onReorderBlock: ReorderEditorBlock,
             onAddTask: OnClickAddTask,
             onSwitchToRead: OnClickSwitchToRead,
             style: rowStyle);
@@ -543,7 +664,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
 /// A read-only row model: a value snapshot of one <see cref="ScribeBlock"/> plus its index. Passed
 /// to <see cref="ScribeReadRow"/> so a row never holds a live block reference.
 /// </summary>
-internal readonly record struct ScribeReadRowData(int Index, bool IsTask, bool Done, string Text);
+internal readonly record struct ScribeReadRowData(int Index, bool IsTask, bool Done, bool Pinned, string Text);
 
 /// <summary>
 /// The read view's content tree: the document rendered as a scrollable <see cref="ListView"/> of
@@ -574,6 +695,23 @@ internal sealed class ScribeLecternReadContent : StatefulWidget
 
 internal sealed class ScribeLecternReadContentState : State<ScribeLecternReadContent>
 {
+    // Owned scroll controller, shared between the ListView and its Scrollbar so the visible track
+    // reflects and drives the same scroll offset (the Scrollbar and ListView must share one
+    // controller — see LibGUI's ScrollPage example). Disposed with this State.
+    private ScrollController scrollController = null!;
+
+    public override void InitState()
+    {
+        base.InitState();
+        scrollController = new ScrollController();
+    }
+
+    public override void Dispose()
+    {
+        scrollController.Dispose();
+        base.Dispose();
+    }
+
     public override Widget Build(BuildContext context)
     {
         var colors = Theme.Of(context).ColorScheme;
@@ -582,7 +720,9 @@ internal sealed class ScribeLecternReadContentState : State<ScribeLecternReadCon
 
         // The scrollable row list. Each row is a self-stateful widget keyed by its block index so the
         // ListView tracks it across document changes (design D4). variableHeight so a wrapped
-        // multi-line note row measures to its real height.
+        // multi-line note row measures to its real height. Wrapped in a Scrollbar so a list taller
+        // than the viewport shows a draggable track (wheel scroll worked before; the visible bar
+        // did not exist — task 8.15).
         Widget rowList;
         if (Widget.Blocks.Count == 0)
         {
@@ -595,14 +735,17 @@ internal sealed class ScribeLecternReadContentState : State<ScribeLecternReadCon
         else
         {
             var style = Widget.Style;
-            rowList = new ListView(
-                children: Widget.Blocks
-                    .Select(b => (Widget)new ScribeReadRow(b, Widget.OnToggleTask, style, new ValueKey<int>(b.Index)))
-                    .ToList(),
-                // Scroll estimate only (variableHeight measures the real height); keep it close to a
-                // single-line row's true height so the scrollbar doesn't jump: font line + field pad + row pad.
-                estimatedItemHeight: style.FontSize * 1.2f + style.FieldPadY * 2 + style.RowVerticalPadding * 2,
-                variableHeight: true);
+            rowList = new Scrollbar(
+                controller: scrollController,
+                child: new ListView(
+                    children: Widget.Blocks
+                        .Select(b => (Widget)new ScribeReadRow(b, Widget.OnToggleTask, style, new ValueKey<int>(b.Index)))
+                        .ToList(),
+                    // Scroll estimate only (variableHeight measures the real height); keep it close to a
+                    // single-line row's true height so the scrollbar doesn't jump: font line + field pad + row pad.
+                    estimatedItemHeight: style.FontSize * 1.2f + style.FieldPadY * 2 + style.RowVerticalPadding * 2,
+                    variableHeight: true,
+                    controller: scrollController));
         }
 
         return new Padding(
@@ -679,13 +822,26 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
             EdgeInsets.Symmetric(vertical: style.FieldPadY, horizontal: style.FieldPadX),
             child: new Text(Widget.Data.Text, textStyle))));
 
-        return new Padding(
+        Widget rowBody = new Padding(
             EdgeInsets.Symmetric(vertical: style.RowVerticalPadding, horizontal: style.RowHorizontalPadding),
             child: new Row(
                 spacing: style.CheckboxTextGap,
                 crossAxisAlignment: CrossAxisAlignment.Start,
                 mainAxisSize: MainAxisSize.Max,
                 children: children));
+
+        // Resting pinned indicator (lectern-gui-shell "Pinned tasks show a resting indicator"): a
+        // pinned task carries the same subtle tint the editor row uses, drawn under the row content, so
+        // it reads as pinned without hovering. Unpinned tasks and text sections get no tint. The read
+        // view exposes no pin *toggle* (pinning is a lock-gated authoring action, design D4) — only this.
+        if (Widget.Data.IsTask && Widget.Data.Pinned)
+        {
+            rowBody = new Container(
+                style: new BoxStyle { Color = style.PinnedTint },
+                child: rowBody);
+        }
+
+        return rowBody;
     }
 }
 
@@ -696,7 +852,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
 /// <summary>A value snapshot of one editable block plus its index. The live text lives in the
 /// dialog's scratch document (the field writes through on every keystroke); this is only the seed
 /// for building the row.</summary>
-internal readonly record struct ScribeEditRowData(int Index, bool IsTask, bool Done, string Text);
+internal readonly record struct ScribeEditRowData(int Index, bool IsTask, bool Done, bool Pinned, string Text);
 
 /// <summary>
 /// The editor view's content tree. Unlike the read view it uses a NON-virtualized
@@ -717,6 +873,9 @@ internal sealed class ScribeLecternEditorContent : StatefulWidget
         Action<int> onCommitAndRetreat,
         Action<int> onInsertTaskBelow,
         Action<int> onToggleTask,
+        Action<int> onDeleteBlock,
+        Action<int> onTogglePinned,
+        Action<int, int> onReorderBlock,
         Action onAddTask,
         Action onSwitchToRead,
         ScribeRowStyle style)
@@ -729,6 +888,9 @@ internal sealed class ScribeLecternEditorContent : StatefulWidget
         OnCommitAndRetreat = onCommitAndRetreat;
         OnInsertTaskBelow = onInsertTaskBelow;
         OnToggleTask = onToggleTask;
+        OnDeleteBlock = onDeleteBlock;
+        OnTogglePinned = onTogglePinned;
+        OnReorderBlock = onReorderBlock;
         OnAddTask = onAddTask;
         OnSwitchToRead = onSwitchToRead;
         Style = style;
@@ -742,6 +904,11 @@ internal sealed class ScribeLecternEditorContent : StatefulWidget
     public Action<int> OnCommitAndRetreat { get; }
     public Action<int> OnInsertTaskBelow { get; }
     public Action<int> OnToggleTask { get; }
+    public Action<int> OnDeleteBlock { get; }
+    public Action<int> OnTogglePinned { get; }
+    /// <summary>Reorder a block from one index to another (drag drop). See
+    /// <see cref="ScribeLecternEditorContentState"/> for the drag mechanics.</summary>
+    public Action<int, int> OnReorderBlock { get; }
     public Action OnAddTask { get; }
     public Action OnSwitchToRead { get; }
     public ScribeRowStyle Style { get; }
@@ -751,6 +918,69 @@ internal sealed class ScribeLecternEditorContent : StatefulWidget
 
 internal sealed class ScribeLecternEditorContentState : State<ScribeLecternEditorContent>
 {
+    // Owned scroll controller, shared between the SingleChildScrollView and its Scrollbar (see the
+    // read content's note). Also the controller Scrollable.EnsureVisible drives when a focused row
+    // grows or focus moves — passing it explicitly keeps that behavior identical to before, when the
+    // scroll view created an internal one. Disposed with this State.
+    private ScrollController scrollController = null!;
+
+    // ---- Drag-reorder state (this State owns the row list, so a drag updates via SetState here —
+    // NOT the dialog's ForceRebuild, which would unmount the grip mid-drag and drop the pointer
+    // capture the reorder depends on). dragFromIndex is the row a grip-drag started on; dragOverIndex
+    // is the row the cursor is currently over (the prospective drop). Both null when no drag active.
+    private int? dragFromIndex;
+    private int? dragOverIndex;
+
+    /// <summary>Grip pressed: begin a drag from this row. The event dispatcher auto-captures the grip's
+    /// element on press, so the subsequent moves/release keep arriving here even as the cursor crosses
+    /// sibling rows (the same mechanism Scrollbar's thumb relies on).</summary>
+    private void OnRowDragStart(int index)
+    {
+        SetState(() =>
+        {
+            dragFromIndex = index;
+            dragOverIndex = index;
+        });
+    }
+
+    /// <summary>A row reports the cursor entered it during a drag. The dispatcher fires enter/exit on
+    /// the drag-hovered row even while another element (the grip) holds capture, so this is a robust
+    /// drop-target signal that needs no manual hit-test geometry.</summary>
+    private void OnRowDragOver(int index)
+    {
+        if (dragFromIndex is null) return;
+        if (dragOverIndex == index) return;
+        SetState(() => dragOverIndex = index);
+    }
+
+    /// <summary>Grip released: commit the reorder if the drop row differs from the start, then clear
+    /// the drag. The actual MoveBlock + rebuild happens in the dialog (OnReorderBlock).</summary>
+    private void OnRowDragEnd()
+    {
+        if (dragFromIndex is { } from && dragOverIndex is { } to)
+        {
+            dragFromIndex = null;
+            dragOverIndex = null;
+            Widget.OnReorderBlock(from, to); // no-op inside if from == to
+        }
+        else
+        {
+            SetState(() => { dragFromIndex = null; dragOverIndex = null; });
+        }
+    }
+
+    public override void InitState()
+    {
+        base.InitState();
+        scrollController = new ScrollController();
+    }
+
+    public override void Dispose()
+    {
+        scrollController.Dispose();
+        base.Dispose();
+    }
+
     public override Widget Build(BuildContext context)
     {
         var colors = Theme.Of(context).ColorScheme;
@@ -772,24 +1002,34 @@ internal sealed class ScribeLecternEditorContentState : State<ScribeLecternEdito
                     data: b,
                     focusNode: b.Index < Widget.FocusNodes.Count ? Widget.FocusNodes[b.Index] : null,
                     autoFocus: Widget.AutoFocusIndex == b.Index,
+                    isDropTarget: dragFromIndex is not null && dragOverIndex == b.Index,
                     onTextChanged: Widget.OnTextChanged,
                     onCommitAndAdvance: Widget.OnCommitAndAdvance,
                     onCommitAndRetreat: Widget.OnCommitAndRetreat,
                     onInsertTaskBelow: Widget.OnInsertTaskBelow,
                     onToggleTask: Widget.OnToggleTask,
+                    onDelete: Widget.OnDeleteBlock,
+                    onTogglePinned: Widget.OnTogglePinned,
+                    onDragStart: OnRowDragStart,
+                    onDragOver: OnRowDragOver,
+                    onDragEnd: OnRowDragEnd,
                     style: Widget.Style,
                     key: new ValueKey<int>(b.Index)))
                 .ToList();
 
-            scrollBody = new SingleChildScrollView(
-                child: new Column(
-                    // spacing 0: all inter-row separation lives in each row's own vertical padding, so
-                    // the editor Column matches the read ListView (which adds no inter-row gap) and rows
-                    // stay pixel-aligned across a view switch.
-                    spacing: 0,
-                    crossAxisAlignment: CrossAxisAlignment.Stretch,
-                    mainAxisSize: MainAxisSize.Min,
-                    children: rows));
+            // Wrapped in a Scrollbar so a tall editor list shows a draggable track (task 8.15).
+            scrollBody = new Scrollbar(
+                controller: scrollController,
+                child: new SingleChildScrollView(
+                    controller: scrollController,
+                    child: new Column(
+                        // spacing 0: all inter-row separation lives in each row's own vertical padding, so
+                        // the editor Column matches the read ListView (which adds no inter-row gap) and rows
+                        // stay pixel-aligned across a view switch.
+                        spacing: 0,
+                        crossAxisAlignment: CrossAxisAlignment.Stretch,
+                        mainAxisSize: MainAxisSize.Min,
+                        children: rows)));
         }
 
         return new Padding(
@@ -829,11 +1069,17 @@ internal sealed class ScribeEditRow : StatefulWidget
         ScribeEditRowData data,
         FocusNode? focusNode,
         bool autoFocus,
+        bool isDropTarget,
         Action<int, string> onTextChanged,
         Action<int> onCommitAndAdvance,
         Action<int> onCommitAndRetreat,
         Action<int> onInsertTaskBelow,
         Action<int> onToggleTask,
+        Action<int> onDelete,
+        Action<int> onTogglePinned,
+        Action<int> onDragStart,
+        Action<int> onDragOver,
+        Action onDragEnd,
         ScribeRowStyle style,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
@@ -841,22 +1087,36 @@ internal sealed class ScribeEditRow : StatefulWidget
         Data = data;
         FocusNode = focusNode;
         AutoFocus = autoFocus;
+        IsDropTarget = isDropTarget;
         OnTextChanged = onTextChanged;
         OnCommitAndAdvance = onCommitAndAdvance;
         OnCommitAndRetreat = onCommitAndRetreat;
         OnInsertTaskBelow = onInsertTaskBelow;
         OnToggleTask = onToggleTask;
+        OnDelete = onDelete;
+        OnTogglePinned = onTogglePinned;
+        OnDragStart = onDragStart;
+        OnDragOver = onDragOver;
+        OnDragEnd = onDragEnd;
         Style = style;
     }
 
     public ScribeEditRowData Data { get; }
     public FocusNode? FocusNode { get; }
     public bool AutoFocus { get; }
+    /// <summary>True while a drag is in progress and this row is the current drop target — the row
+    /// paints a highlight so the player sees where the dragged row would land.</summary>
+    public bool IsDropTarget { get; }
     public Action<int, string> OnTextChanged { get; }
     public Action<int> OnCommitAndAdvance { get; }
     public Action<int> OnCommitAndRetreat { get; }
     public Action<int> OnInsertTaskBelow { get; }
     public Action<int> OnToggleTask { get; }
+    public Action<int> OnDelete { get; }
+    public Action<int> OnTogglePinned { get; }
+    public Action<int> OnDragStart { get; }
+    public Action<int> OnDragOver { get; }
+    public Action OnDragEnd { get; }
     public ScribeRowStyle Style { get; }
 
     public override State CreateState() => new ScribeEditRowState();
@@ -865,6 +1125,14 @@ internal sealed class ScribeEditRow : StatefulWidget
 internal sealed class ScribeEditRowState : State<ScribeEditRow>
 {
     private bool done;
+    /// <summary>True while the pointer is over this row: the delete and (task-only) pin controls are
+    /// hidden until then (lectern-gui-shell "Row icons are hover-conditional"). Tracked with a
+    /// row-level <see cref="MouseRegion"/>; hit-testing is innermost-first and enter/exit propagate up
+    /// the hierarchy, so this region does NOT steal click-to-focus from the inner field, and during a
+    /// grip-drag capture the dispatcher keeps firing enter/exit on the row under the cursor — the same
+    /// signal that drives <see cref="ScribeLecternEditorContentState.OnRowDragOver"/>. The grip itself
+    /// is NOT hover-gated (it stays mounted so a drag it started can't lose pointer capture mid-move).</summary>
+    private bool hovered;
 
     public override void InitState()
     {
@@ -876,6 +1144,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
     {
         int index = Widget.Data.Index;
         var style = Widget.Style;
+        var colors = Theme.Of(context).ColorScheme;
 
         var children = new List<Widget>();
 
@@ -903,12 +1172,171 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             onCommitAndRetreat: () => Widget.OnCommitAndRetreat(index),
             onInsertTaskBelow: () => Widget.OnInsertTaskBelow(index))));
 
-        return new Padding(
+        // Trailing affordance columns, right-anchored after the text (native layout intent
+        // [checkbox][text][pin][delete][grip]). Pin is task-only; on a text section its column is
+        // omitted so the delete/grip of a note still line up under a task's. Each column is a
+        // fixed-width slot so revealing a glyph on hover does NOT reflow the text width.
+        if (Widget.Data.IsTask)
+        {
+            children.Add(new ScribeRowControlSlot(
+                size: style.ControlSize,
+                child: hovered
+                    ? new ScribeHoverVsIcon(
+                        iconName: "scribepin",
+                        size: style.ControlSize,
+                        // A pinned task's control reads "active" (accent); an unpinned one is muted.
+                        color: Widget.Data.Pinned ? colors.Primary : colors.OnSurfaceVariant,
+                        onTap: () => Widget.OnTogglePinned(index))
+                    : null));
+        }
+
+        children.Add(new ScribeRowControlSlot(
+            size: style.ControlSize,
+            child: hovered
+                ? new ScribeHoverVsIcon(
+                    iconName: "scribeclose",
+                    size: style.ControlSize,
+                    color: colors.Error,
+                    onTap: () => Widget.OnDelete(index))
+                : null));
+
+        // The grip is always present (spec: "a grip control is present in a reserved column"), NOT
+        // hover-gated: removing it on pointer-exit mid-drag would unmount the element the dispatcher
+        // captured on press and kill the reorder. onPress/onMove-hover/onRelease drive the drag.
+        children.Add(new ScribeRowControlSlot(
+            size: style.ControlSize,
+            child: new GestureDetector(
+                onPress: _ => Widget.OnDragStart(index),
+                onRelease: _ => Widget.OnDragEnd(),
+                child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant))));
+
+        // The row body. A drag drop-target gets a highlight fill (spec allows "a highlighted target");
+        // a pinned task carries the resting tint under all content. Both are painted by the row-level
+        // Container so they sit behind the text/controls.
+        Widget rowBody = new Padding(
             EdgeInsets.Symmetric(vertical: style.RowVerticalPadding, horizontal: style.RowHorizontalPadding),
             child: new Row(
                 spacing: style.CheckboxTextGap,
                 crossAxisAlignment: CrossAxisAlignment.Start,
                 mainAxisSize: MainAxisSize.Max,
                 children: children));
+
+        Vector4 rowFill = Widget.IsDropTarget
+            ? colors.StateSelected
+            : (Widget.Data.IsTask && Widget.Data.Pinned ? style.PinnedTint : Vector4.Zero);
+
+        if (rowFill != Vector4.Zero)
+        {
+            rowBody = new Container(
+                style: new BoxStyle { Color = rowFill },
+                child: rowBody);
+        }
+
+        // Row-level hover tracking (see `hovered`). onEnter/onExit reveal the hover-conditional
+        // controls; the same enter events during a drag are forwarded as the drop-target signal
+        // (the parent ignores OnDragOver unless a drag is active), so one region serves both.
+        return new MouseRegion(
+            onEnter: _ =>
+            {
+                if (!hovered) SetState(() => hovered = true);
+                Widget.OnDragOver(index);
+            },
+            onExit: _ => { if (hovered) SetState(() => hovered = false); },
+            child: rowBody);
+    }
+}
+
+// ============================================================================
+// Shared per-row control primitives (add-lectern-row-affordances-libgui)
+// ============================================================================
+
+/// <summary>A fixed-square slot for one trailing row control (pin/delete/grip). Fixing the width means
+/// revealing a hover-only glyph does not reflow the row's text column, and a task's controls line up
+/// vertically with a note's (whose pin slot is omitted). An empty slot (<paramref name="child"/> null)
+/// reserves the same space so the layout is stable whether or not the row is hovered.</summary>
+internal sealed class ScribeRowControlSlot : StatelessWidget
+{
+    private readonly float size;
+    private readonly Widget? child;
+
+    public ScribeRowControlSlot(float size, Widget? child)
+    {
+        this.size = size;
+        this.child = child;
+    }
+
+    public override Widget Build(BuildContext context) =>
+        new SizedBox(width: size, height: size, child: child is null ? null : new Center(child));
+}
+
+/// <summary>A bare (non-interactive) VS icon glyph rendered by registered <c>CustomIcons</c> code via
+/// <see cref="VsIcon"/>. Used for the grip, whose pointer handling lives in a wrapping
+/// <see cref="GestureDetector"/> rather than the glyph itself.
+///
+/// <para>NOTE: this deliberately uses <see cref="VsIcon"/> (icon-by-code) rather than LibGUI's
+/// <see cref="Icon"/>/<see cref="IconButton"/> (SVG-by-path). <see cref="Icon"/> loads its SVG through
+/// <c>SkiaAssetLoader.LoadSvg</c>, which calls <c>Assets.TryGet</c> WITHOUT <c>loadAsset: true</c> — and
+/// VS nulls out every non-patched asset's <c>Data</c> after startup, so that path would fail to draw
+/// our icons. <see cref="VsIcon"/> routes through <c>IconUtil.DrawIconInt</c> → the mod's self-healing
+/// <c>CustomIcons</c> delegate (which re-resolves the asset on demand), which is why the icons were
+/// registered that way (see <c>ScribeModSystem.RegisterSvgIcon</c> / VSAPI-NOTES.md).</para></summary>
+internal sealed class ScribeVsIconGlyph : StatelessWidget
+{
+    private readonly string iconName;
+    private readonly float size;
+    private readonly Vector4 color;
+
+    public ScribeVsIconGlyph(string iconName, float size, Vector4 color)
+    {
+        this.iconName = iconName;
+        this.size = size;
+        this.color = color;
+    }
+
+    public override Widget Build(BuildContext context) => new VsIcon(iconName, size, color);
+}
+
+/// <summary>A clickable VS-icon control with hover feedback (a brightened glyph while hovered), built on
+/// <see cref="VsIcon"/> + <see cref="GestureDetector"/>. This is the icon-by-code counterpart to LibGUI's
+/// <see cref="IconButton"/> (which only accepts an SVG-by-path <see cref="Icon"/> — unusable here, see
+/// <see cref="ScribeVsIconGlyph"/>). Used for the pin and delete controls.</summary>
+internal sealed class ScribeHoverVsIcon : StatefulWidget
+{
+    public ScribeHoverVsIcon(string iconName, float size, Vector4 color, Action onTap, Gui.Widgets.Framework.Key? key = null)
+        : base(key)
+    {
+        IconName = iconName;
+        Size = size;
+        Color = color;
+        OnTap = onTap;
+    }
+
+    public string IconName { get; }
+    public float Size { get; }
+    public Vector4 Color { get; }
+    public Action OnTap { get; }
+
+    public override State CreateState() => new ScribeHoverVsIconState();
+}
+
+internal sealed class ScribeHoverVsIconState : State<ScribeHoverVsIcon>
+{
+    private bool hovered;
+
+    public override Widget Build(BuildContext context)
+    {
+        // Brighten on hover for click affordance (mirrors IconButton's +0.15 RGB nudge), clamped so a
+        // near-white icon doesn't overflow. Alpha is left unchanged.
+        Vector4 c = Widget.Color;
+        Vector4 display = hovered
+            ? new Vector4(
+                Math.Min(1f, c.X + 0.2f), Math.Min(1f, c.Y + 0.2f), Math.Min(1f, c.Z + 0.2f), c.W)
+            : c;
+
+        return new GestureDetector(
+            onTap: _ => Widget.OnTap(),
+            onEnter: _ => { if (!hovered) SetState(() => hovered = true); },
+            onExit: _ => { if (hovered) SetState(() => hovered = false); },
+            child: new VsIcon(Widget.IconName, Widget.Size, display));
     }
 }

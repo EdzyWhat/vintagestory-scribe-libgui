@@ -1061,6 +1061,32 @@ the text (same as the internal `RenderTextField`). There is also no public word-
 (`TextLayoutHelper.BreakIntoLines` is `internal`); wrap by splitting on `\n` and greedily measuring
 words with the public `TextLayoutHelper.MeasureText`.
 
+**Fact (add-lectern-row-affordances-libgui): `IconButton`/`Icon` load SVGs by PATH and will fail to
+draw our custom icons; use `VsIcon` (icon-by-CODE) instead.** LibGUI's `Icon` (and therefore
+`IconButton`, which only accepts an `Icon`) resolves its SVG via `SkiaAssetLoader.LoadSvg(domain, path)`
+(`reference/vslibgui/.../Rendering/SkiaAssetLoader.cs:82`), which calls `Assets.TryGet(loc)` WITHOUT
+`loadAsset: true`. VS nulls out every non-patched asset's `.Data` after startup (`AssetManager.UnloadAssets()`
+— see the "Icon-button glyphs" note above), so that lookup returns null `Data` and the icon silently
+fails to render. `VsIcon(iconName, size, color)` (`Widgets/Basic/VsIcon.cs`) instead routes through
+`IconUtil.DrawIconInt` → the `CustomIcons[code]` delegate, i.e. the mod's own self-healing registration
+(`ScribeModSystem.RegisterSvgIcon`, which re-resolves the asset on every draw). **Fix pattern:** for a
+registered `scribe*` glyph, use `VsIcon` by code; for a clickable one build `GestureDetector + VsIcon`
+yourself (see `ScribeHoverVsIcon`/`ScribeVsIconGlyph` in `GuiDialogScribeLecternLibGui.cs`) rather than
+reaching for `IconButton`.
+
+**Fact (add-lectern-row-affordances-libgui): a row-level `MouseRegion` is the right hover primitive —
+it neither steals inner clicks nor breaks during a drag capture.** `Element.HitTest`
+(`Widgets/Framework/Element.cs:243`) builds the hit path innermost-first and `EventDispatcher.FindTarget`
+returns the FIRST (innermost) active target, so an inner field's `GestureDetector` still wins a click even
+though an outer row `MouseRegion` is also "active" — the outer region only receives enter/exit (dispatched
+UP the hierarchy via `DispatchToHierarchy`). Crucially, `DispatchPointerMove` keeps running normal
+enter/exit hit-testing on the pointer's location even while another element holds pointer capture
+(`EventDispatcher.cs:141`, the `_dragHoveredElement` block) — so during a grip-drag the row under the
+cursor still fires `onEnter`, which is a robust, scroll-correct drop-target signal needing NO
+`GlobalToLocal`/content-space-Y math. **Fix pattern:** hover-reveal AND drag-over drop targeting can share
+one row-level `MouseRegion.onEnter`; keep the drag-handle itself always-mounted (don't hover-gate it) so
+the captured element isn't unmounted mid-drag. See `ScribeEditRowState` + `ScribeLecternEditorContentState`.
+
 ## Entry template
 
 ```

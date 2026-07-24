@@ -241,6 +241,16 @@ public sealed class BlockEntityScribeLectern : BlockEntity
             // Surface the error; if nothing is open yet (a fresh right-click), fall back to the read
             // view so the requester still sees the document.
             capi.TriggerIngameError(this, "scribe-lectern-locked", Lang.Get(message.RefusalReason ?? "scribe:scribe-gui-locked"));
+
+            // A save-failed ack (autosave rejected because our lock was lost) is recoverable: ask the
+            // open editor to re-request the lock and re-flush its unsaved edit rather than silently
+            // dropping it (task 8.6). Bounded internally so a lock held elsewhere can't spin forever.
+            if (open && message.RefusalReason == "scribe:scribe-gui-save-failed"
+                && dialog!.HandleSaveFailed())
+            {
+                return;
+            }
+
             if (!open)
             {
                 OpenDialog(capi);

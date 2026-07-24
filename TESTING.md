@@ -21,6 +21,31 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## add-lectern-row-affordances-libgui
+
+> Third editor tier: wires the per-row **delete**, **pin/unpin**, and **mouse-drag reorder** controls
+> onto the LibGUI editor rows (the model already supported all three; they were unwired). New trailing
+> control columns `[checkbox][text][pin][delete][grip]`, right-anchored, hover-conditional (grip always
+> shown). Pin/delete use `VsIcon`+hover; drag uses the grip's `GestureDetector` + row-level `MouseRegion`
+> drag-over; pinned tasks get a resting row tint in BOTH views; drop target gets a highlight. NOT yet
+> restaged/committed as of this list — restage Debug + fully relaunch before testing.
+
+- [ ] `a23c52b1` **Delete a task.** In the editor, hover a row → click the red delete (X) icon; confirm
+      the row vanishes and the rest keep order. Delete the row you're actively editing, and delete the
+      LAST remaining row (→ empty-state hint, no crash). Reload the world; confirm deletions persisted.
+      *(5.2)*
+- [ ] `b7a318f6` **Pin / unpin.** Hover a task row → click the pin icon; confirm the row gets a resting
+      tint (visible without hovering) in BOTH the editor and the read view. Unpin → tint gone. Confirm a
+      text-section row shows NO pin control. Reload; confirm pinned state persisted. *(5.3)*
+- [ ] `08cae46d` **Drag-reorder.** Press a row's grip (right-most icon) and drag over another row →
+      confirm the drop-target row highlights; release → the row lands there and others shift. Release in
+      place → nothing changes. Repeat with the list scrolled. Reload; confirm the new order persisted.
+      *(5.4)*
+- [ ] `ec215283` **Controls-present regression.** With the new controls on every row, confirm the old
+      editor behaviors still work: click-to-edit, text selection, checkbox toggle, Enter/Tab row nav, and
+      autosave. Note whether the caret jumping to end-of-text after a reorder/delete rebuild is bothersome.
+      *(5.5)*
+
 ## migrate-editor-view-libgui
 
 > Second migration step: the lectern's EDITOR view is now rendered by the SAME LibGUI dialog as the
@@ -471,6 +496,33 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Backlogged 2026-07-19** (playtest report 2026-07-19T10-56-08): user deferred alongside
         7.5 — "complex task, move to the bottom of the roadmap, but before mod release." Same
         two-client setup requirement; parked until closer to release.
+- [ ] `a15scrl01` **(8.15) Visible scrollbar in both views.** Add enough tasks (or raise
+      `TextSizeScale` in `scribe-client-config.json`) that the list exceeds the dialog height. In the
+      READ view a draggable scrollbar track should appear on the right; drag its thumb and click the
+      track to jump. Switch to the EDITOR view and confirm the same. Wheel-scroll should still work in
+      both, and a focused editor row that grows past the bottom should still auto-scroll into view.
+      - **To test 2026-07-23:** new — wrapped both scroll regions in LibGUI's `Scrollbar` sharing an
+        owned `ScrollController`. Wheel scroll already worked; this adds the visible/draggable track.
+- [ ] `a07cap001` **(8.7) Oversized-edit rejection.** (Hard to hit in normal play — optional.) An
+      edit exceeding `ScribeDocumentCodec.MaxBlocks` (1000 blocks) or `MaxTextLength` (10 000 chars
+      in one block) should be rejected by the server: the edit doesn't persist and the existing
+      "changes could not be saved" toast fires. Normal-sized checklists are unaffected.
+      - **To test 2026-07-23:** new — server-side caps enforced in the codec (Core-tested, 47/47).
+        Low-priority manual check; the unit tests already cover the boundary.
+- [ ] `a03dist01` **(8.3) Read-view walk-away auto-close.** In Creative, open a lectern's READ view
+      and walk well past the close threshold (~5 blocks) without closing it → the dialog should
+      auto-close (same as the editor view / 7.8), confirming the old read-view-specific
+      no-auto-close bug is gone under the single LibGUI dialog.
+      - **Likely Obsolete 2026-07-23:** the bug was a native two-dialog artifact; the LibGUI rebuild
+        uses one dialog with a single pinned `InteractionRange` for both views. Confirm once, then
+        mark Obsolete if it closes correctly. No code change was made.
+- [ ] `a05caret1` **(8.5) Focus/caret across a rebuild.** Type into a row, then trigger a structural
+      rebuild (click "Add task"). Focus should stay usable (the new/expected row is focused, game
+      input doesn't leak). Toggling a checkbox should NOT disturb the caret in another focused row.
+      - **Largely resolved 2026-07-23:** `ForceRebuild` preserves keyboard focus via dialog-owned
+        FocusNodes (native "focus jumps to element 0" bug is gone). Known minor residue: the caret
+        re-seeds to end-of-text on the focused row after a `ForceRebuild`. Confirm whether that
+        residue is bothersome during the delete/reorder (Part-B) testing, which also rebuilds.
 
 ## add-imgui-configlib-tuning
 

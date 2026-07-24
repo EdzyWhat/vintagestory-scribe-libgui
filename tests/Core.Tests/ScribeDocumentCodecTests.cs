@@ -103,4 +103,60 @@ public class ScribeDocumentCodecTests
         Assert.False(ok);
         Assert.Null(restored);
     }
+
+    [Fact]
+    public void TryDeserialize_AtBlockCountCap_Succeeds()
+    {
+        var original = new ScribeDocument();
+        for (int i = 0; i < ScribeDocumentCodec.MaxBlocks; i++) original.AddTask($"task {i}");
+
+        byte[] bytes = ScribeDocumentCodec.Serialize(original);
+        bool ok = ScribeDocumentCodec.TryDeserialize(bytes, out ScribeDocument? restored);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        Assert.Equal(ScribeDocumentCodec.MaxBlocks, restored!.Blocks.Count);
+    }
+
+    [Fact]
+    public void TryDeserialize_OverBlockCountCap_FailsSafely()
+    {
+        // Serialize is uncapped (it trusts an in-memory document); a payload over MaxBlocks can only
+        // arrive from a hostile/buggy client, so the read path must reject it.
+        var original = new ScribeDocument();
+        for (int i = 0; i < ScribeDocumentCodec.MaxBlocks + 1; i++) original.AddTask($"task {i}");
+
+        byte[] bytes = ScribeDocumentCodec.Serialize(original);
+        bool ok = ScribeDocumentCodec.TryDeserialize(bytes, out ScribeDocument? restored);
+
+        Assert.False(ok);
+        Assert.Null(restored);
+    }
+
+    [Fact]
+    public void TryDeserialize_AtTextLengthCap_Succeeds()
+    {
+        var original = new ScribeDocument();
+        original.AddTask(new string('a', ScribeDocumentCodec.MaxTextLength));
+
+        byte[] bytes = ScribeDocumentCodec.Serialize(original);
+        bool ok = ScribeDocumentCodec.TryDeserialize(bytes, out ScribeDocument? restored);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        Assert.Equal(ScribeDocumentCodec.MaxTextLength, restored!.Blocks[0].Text.Length);
+    }
+
+    [Fact]
+    public void TryDeserialize_OverTextLengthCap_FailsSafely()
+    {
+        var original = new ScribeDocument();
+        original.AddTask(new string('a', ScribeDocumentCodec.MaxTextLength + 1));
+
+        byte[] bytes = ScribeDocumentCodec.Serialize(original);
+        bool ok = ScribeDocumentCodec.TryDeserialize(bytes, out ScribeDocument? restored);
+
+        Assert.False(ok);
+        Assert.Null(restored);
+    }
 }

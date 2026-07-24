@@ -16,10 +16,11 @@ public sealed class ScribeClientConfig
 {
     // ---------------- Text size ----------------
 
-    /// <summary>Current font-size multiplier, 1.0 = 100%. Player-adjustable in-GUI via the
-    /// text-size slider (see <c>GuiDialogScribeLectern.OnTextSizeSliderChanged</c>) -- unlike
-    /// every other field below, this one is meant to change routinely during normal play, not
-    /// just while tuning layout.</summary>
+    /// <summary>Current font-size multiplier, 1.0 = 100%. Applied at the single
+    /// <see cref="ScribeRowStyle.FromConfig"/> chokepoint (unify-row-sizing-libgui). The LibGUI
+    /// rebuild has no in-GUI text-size slider -- this is edited via the on-disk JSON (or a ConfigLib
+    /// panel) and picked up on the next dialog open. Unlike the layout knobs, this one is meant to
+    /// change routinely during normal play, not just while tuning layout.</summary>
     public float TextSizeScale = 1f;
 
     // ---------------- LibGUI task-row sizing (unify-row-sizing-libgui) ----------------
@@ -62,15 +63,6 @@ public sealed class ScribeClientConfig
     /// text vertically by the same amount so single-line row heights match across a view switch.
     /// Scaled by <see cref="TextSizeScale"/>.</summary>
     public float FieldInnerPaddingY = 6f;
-
-    /// <summary>Lower bound for the text-size slider, in percent. Mirrors
-    /// <see cref="MaxTextSizePercent"/> so the low end is tunable rather than hardcoded (the
-    /// slider's floor and the constructor's clamp both read this).</summary>
-    public int MinTextSizePercent = 30;
-
-    /// <summary>Upper bound for the text-size slider, in percent. A loose sanity bound now that
-    /// the row list scrolls to handle overflow, not a tight guard against it.</summary>
-    public int MaxTextSizePercent = 150;
 
     // ---------------- Row-list viewport ----------------
 
@@ -310,47 +302,6 @@ public sealed class ScribeClientConfig
     /// shows/hides the overlay. The overlay uses the macOS-safe <c>IRenderAPI.RenderRectangle</c>
     /// (a plain LineStrip, no 4.3 dependency).</para></summary>
     public int InspectOverlayMode = 0;
-
-    // ---------------- Editor toolbar (controls below the row list) ----------------
-
-    /// <summary>Shared height for the text-size label/slider row, the collapse-toggle button,
-    /// and the switch-mode button.</summary>
-    public double ControlRowHeight = 30;
-
-    /// <summary>Vertical gap between successive control rows below the row list (text-size row,
-    /// collapse-toggle row, icon-toolbar row).</summary>
-    public double ControlRowGap = 38;
-
-    /// <summary>Gap between the row list's own bottom edge and the first control row below it
-    /// (editor view only -- the read view has no stacked control rows below its list, just its
-    /// own single switch-mode button spaced by <see cref="RowSpacing"/>).</summary>
-    public double ListToControlsGap = 6;
-
-    /// <summary>Width of the "Text Size" label preceding the text-size slider.</summary>
-    public double TextSizeLabelWidth = 110;
-
-    /// <summary>Horizontal gap between the "Text Size" label and the slider that follows it.</summary>
-    public double TextSizeLabelToSliderGap = 5;
-
-    /// <summary>Width of the collapse/expand tool-panel toggle button.</summary>
-    public double ToolPanelToggleWidth = 140;
-
-    /// <summary>Width of one icon-toolbar button (e.g. Add Task).</summary>
-    public double ToolbarIconWidth = 36;
-
-    /// <summary>Height of one icon-toolbar button.</summary>
-    public double ToolbarIconHeight = 32;
-
-    /// <summary>Horizontal spacing between successive icon-toolbar buttons.</summary>
-    public double ToolbarIconSpacing = 42;
-
-    /// <summary>Width of the editor view's "Switch to Read" mode-switch button (the read view's
-    /// own "Switch to Editor" button instead spans the full row-list width, so it has no
-    /// separate width knob here).</summary>
-    public double SwitchButtonWidth = 180;
-
-    /// <summary>Width of the tooltip box shown on hover over a row's pin/delete icon.</summary>
-    public double HoverTextWidth = 150;
 }
 
 /// <summary>How a pinned task is indicated at rest (mouse not over the row), so a pinned task is
