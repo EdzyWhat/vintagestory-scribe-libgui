@@ -42,6 +42,16 @@ internal readonly record struct ScribeVisualLine(string Text, int Start);
 /// auto-sizing its height to the wrapped line count.</summary>
 internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox
 {
+    /// <summary>Font family used for BOTH measuring and drawing this field's text. It MUST match the
+    /// family the read view's stock LibGUI <see cref="Gui.Widgets.Basic.Text"/> uses (its
+    /// <c>TextStyle</c> default), or the two views resolve different typefaces with different line
+    /// metrics and a single-line row ends up a couple of pixels taller in one view than the other —
+    /// which then also makes the pixel-based scroll-offset restore across a view switch land on a
+    /// slightly different row. Passing "" here (the old value) resolved to a DIFFERENT system typeface
+    /// than "sans-serif", which was the ~2px read/edit row-height mismatch. Keep this in sync with
+    /// <c>TextStyle()</c>'s default `FontFamily`.</summary>
+    private const string FontFamily = "sans-serif";
+
     private string text = "";
     private int caret;
     private int selectionAnchor;
@@ -120,7 +130,7 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox
         for (int i = 0; i < visualLines.Count; i++)
         {
             float y = PadY + i * lineHeight + ascent;
-            context.DrawText(visualLines[i].Text, new Vector2(PadX, y), fontSize, textColor, "", FontWeight.Normal);
+            context.DrawText(visualLines[i].Text, new Vector2(PadX, y), fontSize, textColor, FontFamily, FontWeight.Normal);
         }
 
         // Caret: map the flat caret offset onto (line, column) of the wrapped text, then draw a bar.
@@ -135,7 +145,7 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox
     }
 
     private float MeasureWidth(string s) =>
-        s.Length == 0 ? 0f : TextLayoutHelper.MeasureText(s, "", fontSize, FontWeight.Normal).X;
+        s.Length == 0 ? 0f : TextLayoutHelper.MeasureText(s, FontFamily, fontSize, FontWeight.Normal).X;
 
     // Greedy word-wrap to a pixel width, honoring explicit '\n', recording each visual line's source
     // offset so the caret/selection can map flat offsets onto (line, column). Public API only
@@ -159,7 +169,7 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox
             foreach (var word in paragraph.Split(' '))
             {
                 string candidate = current.Length == 0 ? word : current + " " + word;
-                float w = TextLayoutHelper.MeasureText(candidate, "", fontSize, FontWeight.Normal).X;
+                float w = TextLayoutHelper.MeasureText(candidate, FontFamily, fontSize, FontWeight.Normal).X;
                 if (w <= maxWidth || current.Length == 0)
                 {
                     if (current.Length == 0)
@@ -190,7 +200,7 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox
 
     private static float MeasureLineHeight(float fontSize)
     {
-        float h = TextLayoutHelper.MeasureText("Ag", "", fontSize, FontWeight.Normal).Y;
+        float h = TextLayoutHelper.MeasureText("Ag", FontFamily, fontSize, FontWeight.Normal).Y;
         return h > 0 ? h : fontSize * 1.2f;
     }
 

@@ -98,6 +98,15 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         (not just the checkbox) sits ~2px lower in edit vs. read — the edit row content is lower, or the
         read row content is higher. Recommend measuring checkbox positions across the two views. Needs a
         fix (align the read row's content vertical origin to the editor field's).
+      - **Fix applied 2026-07-24 (awaiting retest):** root cause was a FONT-FAMILY mismatch, not padding.
+        The read view draws with LibGUI's stock `Text` (family `"sans-serif"`, the `TextStyle` default);
+        the editor's custom `ScribeMultilineFieldRender` measured/drew with `""`, which resolves to a
+        DIFFERENT system typeface with different line metrics — the ~2px per-row delta. Fixed by giving the
+        field a `FontFamily = "sans-serif"` const used for both `MeasureText` and `DrawText` (all four
+        call sites). Since scroll restore preserves a pixel offset, this should also tighten `7c22da1a`'s
+        edit→read landing. Retest: single-line task is the same height in read vs. edit; scroll to the
+        bottom of a long list in both and confirm no accumulating drift / last-row cutoff. (VSAPI-NOTES.md
+        has the metrics gotcha.)
 - [x] `fa4d457f` **Window width matches Handbook.** Open the lectern and the vanilla survival Handbook
       and compare widths — the lectern window should now be the same width (567px). *(new — 2026-07-24)*
       - **Confirmed 2026-07-24** (user playtest): "They match."
@@ -116,7 +125,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       line wraps — that's correct, not a bug). Confirm copy/cut/paste and type-over act on the selection.
       *(new — word/line select, 2026-07-24)*
       - **Confirmed 2026-07-24** (user playtest): "Works."
-- [ ] `2a4d49e6` **Lectern raises to front on focus.** Other VS windows (handbook, inventory) come to the
+- [x] `2a4d49e6` **Lectern raises to front on focus.** Other VS windows (handbook, inventory) come to the
       front when clicked/focused — the last-clicked window sits on top. The lectern stays behind other
       windows even when focused; it should raise to front too. *(new — from 2026-07-24 general note)*
       - **Still broken 2026-07-24** (user playtest general note): lectern does not raise to front on focus.
@@ -126,14 +135,18 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         dialogs stack among themselves. The observed "stays behind" doesn't match a naive reading of that
         pipeline order, so the real interaction needs more investigation before a fix — didn't want to
         destabilize all dialog z-ordering with a guess. Left open.
-- [ ] `0aa3309c` **Move grip to far left of row.** The drag-reorder grip column currently sits on the
+      - **Confirmed 2026-07-24** (user playtest): lectern now raises to front on focus. No targeted fix
+        was made — the user believes it was collaterally resolved by the `87a2074f` structural-stability
+        change (the editor row no longer unmounts/remounts its subtree on hover, which likely stops the
+        churn that was disturbing dialog stacking). Working now.
+- [x] `0aa3309c` **Move grip to far left of row.** The drag-reorder grip column currently sits on the
       right (`[checkbox][text][pin][delete][grip]`); it should be on the far LEFT of the row instead.
       *(new — design change from 2026-07-24 general note)*
       - **Fix applied 2026-07-24 (awaiting retest):** the grip is now the first child of the editor row's
         Row (far left): `[grip][checkbox][text]`. Still always-visible (not hover-gated) so its drag keeps
         pointer capture. Retest: grip sits on the left and still drag-reorders.
       - **Confirmed 2026-07-24** (user playtest, submission 2026-07-24T07-53-46): "Works."
-- [ ] `df6e3996` **Float delete/pin as real buttons.** Delete and pin should not occupy their own reserved
+- [x] `df6e3996` **Float delete/pin as real buttons.** Delete and pin should not occupy their own reserved
       columns — they should float on top of the row they relate to, with real button chrome: a border,
       small padding, a solid (non-transparent) background, using theme colors plus hover/click states.
       *(new — design change from 2026-07-24 general note)*
@@ -156,7 +169,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Confirmed 2026-07-24** (user playtest, submission 2026-07-24T08-27-05): "Works." The read view
         now reserves the grip column, so the horizontal columns align across the view switch. (The small
         *vertical* per-row offset is tracked separately under `18cd5c60`.)
-- [ ] `87a2074f` **Hover keeps in-progress text.** Click a row to edit it and type new characters (do NOT
+- [x] `87a2074f` **Hover keeps in-progress text.** Click a row to edit it and type new characters (do NOT
       commit), then move the mouse over that row (or another row). Confirm the visible text stays as your
       in-progress edit and does NOT snap back to the last-saved value. Also confirm the caret position is
       undisturbed. *(new — 2026-07-24 general note; regression from the hover-buttons work)*
@@ -171,7 +184,9 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         tint), so hover only mounts/unmounts the trailing floating buttons and the field UPDATES in place
         instead of remounting. See `ScribeEditRowState.Build` + the VSAPI-NOTES.md LibGUI reconciliation
         entry. Retest: type an uncommitted edit, wiggle the mouse over the row — text and caret hold.
-- [ ] `06f741c3` **Select-all repaints immediately.** Focus a row with text, press Cmd+A (macOS) /
+      - **Confirmed 2026-07-24** (user playtest): "Works." Hovering a row no longer reverts in-progress
+        edits; caret/text hold. (Also likely fixed the `2a4d49e6` raise-to-front issue as a side effect.)
+- [x] `06f741c3` **Select-all repaints immediately.** Focus a row with text, press Cmd+A (macOS) /
       Ctrl+A (Windows). Confirm the whole-field selection highlight appears RIGHT AWAY, without needing
       to hover the row or press another key first. *(new — 2026-07-24 general note)*
       - **Still broken 2026-07-24** (user report): Cmd/Ctrl+A changed the selection to the whole field
@@ -180,6 +195,8 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         but was the one selection path that never called `MarkNeedsBuild()`, so no repaint was scheduled.
       - **Fix applied 2026-07-24 (awaiting retest):** added `MarkNeedsBuild()` to the Ctrl+A case in
         `ScribeMultilineField.OnKeyDown`. Retest: Cmd/Ctrl+A shows the selection highlight instantly.
+      - **Confirmed 2026-07-24** (user playtest): "Works." Cmd/Ctrl+A now shows the whole-field selection
+        highlight immediately.
 
 ## migrate-editor-view-libgui
 

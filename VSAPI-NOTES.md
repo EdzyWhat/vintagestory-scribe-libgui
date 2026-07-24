@@ -1105,6 +1105,20 @@ unconditional (always `Stack`, always `Container` even with a transparent fill) 
 children (the hover buttons) mount/unmount. Give a stateful widget a stable `Key` if its position can
 shift. See `ScribeEditRowState.Build` (the "STRUCTURAL STABILITY" comment).
 
+**Symptom (add-lectern-row-affordances-libgui): a single-line row is ~2 logical px taller in the editor
+view than in the read view, and a scroll offset restored across a view switch lands a bit off.** The read
+view draws text with LibGUI's stock `Text` widget, whose `TextStyle` DEFAULTS to `FontFamily = "sans-serif"`
+(`Rendering/Text/TextStyle.cs` ctor). Our custom `ScribeMultilineFieldRender` measured and drew with
+`fontFamily: ""`. Both compute single-line height with the SAME formula — `metrics.Descent - metrics.Ascent
++ metrics.Leading` (`RenderText.PerformLayout:58` and `TextLayoutHelper.MeasureText:165`) — so the height
+difference wasn't the formula; it was that `""` and `"sans-serif"` resolve (via `FontRegistry.ResolveFontFamily`,
+which falls back to the literal name as a system-font lookup) to DIFFERENT typefaces with different metrics.
+A couple-px per-row delta compounds down a list, and because the cross-view scroll restore preserves a raw
+PIXEL offset (`ScrollController.JumpTo`), mismatched row heights also make the restored offset land on a
+slightly different row. **Fix pattern:** any custom text RenderObject that must visually match a stock `Text`
+MUST use the same `FontFamily` string for both `MeasureText` and `DrawText` — mirror `TextStyle`'s default
+(`"sans-serif"`), never `""`. See `ScribeMultilineFieldRender.FontFamily`.
+
 ## Entry template
 
 ```
