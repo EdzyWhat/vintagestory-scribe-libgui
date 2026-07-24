@@ -80,13 +80,18 @@ rename out of the `Spike` namespace.
 out of our control, and the reimplementation is already proven.
 
 **D4 — Port the keyboard model from `ScribeRowTextInput.cs`, expressed against the field's own key
-handlers.** Enter (no Shift) = commit-and-advance, no line break inserted; Shift+Enter = hard line break
-(grows the row); Shift+Tab = commit-and-retreat; Esc = commit-and-close (panic close, not revert). Caret:
-Left/Right/Home/End, word-skip (Ctrl / Alt-Option), line-end (Ctrl / Cmd), Shift extends selection;
-clipboard cut/copy/paste. macOS Cmd/Alt combinations map onto the same movement logic (the native code
-solved that the engine otherwise ignores Alt and only honors Ctrl).
-*Alternative considered:* a reduced keyboard model — rejected; parity with the native editor is a hard
-requirement (the whole point is no regression on the swap).
+handlers.** Row commit/navigation: **Tab** = commit-and-advance (no tab glyph), **Shift+Tab** =
+commit-and-retreat, **Enter** = commit-then-insert-a-new-task-below-and-focus-it, **Shift+Enter** = hard
+line break (grows the row), **Esc** = commit-and-close (panic close, not revert). Caret: Left/Right/Home/End,
+word-skip (Ctrl / Alt-Option), line-end (Ctrl / Cmd), Shift extends selection; clipboard cut/copy/paste.
+macOS Cmd/Alt combinations map onto the same movement logic (the native code solved that the engine
+otherwise ignores Alt and only honors Ctrl).
+*Revision (2026-07-23, post-playtest):* the model originally shipped as Enter=commit-advance / Tab=no-op
+(native parity). Per user request it was swapped to the above (Tab=advance, Enter=new-task-below) — a
+todo-app-idiomatic model where Enter rapidly builds a list. This added `ScribeDocument.InsertTask(index,
+text)` to Core (with unit tests). Shift+Enter (hard break) and Esc (close) are unchanged.
+*Alternative considered:* a reduced keyboard model — rejected; parity/idiom coverage is a hard requirement
+(the whole point is no regression on the swap).
 
 **D5 — Commit through the existing lock-gated `ScribeEditDocumentMessage` path, unchanged.** Editing still
 requires the single-editor lock (acquired on entering editor mode, released on leaving), and commits flow

@@ -16,9 +16,10 @@
   carries `CommandPressed` — before LibGUI maps it; Alt is delivered so word-skip works in the field directly.)
 - [x] 1.5 Port clipboard support (cut/copy/paste) and selection replacement (Ctrl+A/C/X/V via
   `context.GetClipboard()`).
-- [x] 1.6 Implement the key semantics: Enter (no Shift) = commit-and-advance with NO line break inserted;
-  Shift+Enter = insert hard line break (grow the row); Shift+Tab = commit-and-retreat; Esc =
-  commit-and-close (Esc bubbles unhandled → dialog closes; the blur-commit on close saves the edit).
+- [x] 1.6 Implement the key semantics (see design D4, revised post-playtest 2026-07-23): Tab = commit +
+  advance (no tab glyph); Shift+Tab = commit + retreat; Enter (no Shift) = commit + insert a new task
+  beneath the current row and focus it (Core `InsertTask`, unit-tested); Shift+Enter = insert hard line
+  break (grow the row); Esc = commit + close (bubbles unhandled → dialog closes; blur-commit saves the edit).
 - [x] 1.7 Implement commit-time normalization: trim trailing blank lines and trailing whitespace while
   preserving interior newlines.
 
@@ -72,8 +73,8 @@
 - [x] 5.3 `bash build/restage.sh Release` and `bash build/restage.sh Debug` stage successfully; asserted
   `Gui.dll` is NOT in the staged Mods folder (only `Scribe.dll` + `Scribe.Core.dll`).
 - [ ] 5.4 In-game editor playtest (record verdicts via the testing checklist): switch read→editor stays in
-  the LibGUI dialog; type/wrap/grow a row; Enter=commit-advance, Shift+Enter=break, Shift+Tab=retreat,
-  Esc=commit-close; macOS Cmd/Alt carets + Shift-selection; clipboard; commit syncs to other viewers;
+  the LibGUI dialog; type/wrap/grow a row; Tab=commit-advance, Shift+Tab=retreat, Enter=new-task-below,
+  Shift+Enter=break, Esc=commit-close; macOS Cmd/Alt carets + Shift-selection; clipboard; commit syncs to other viewers;
   keystrokes don't leak to the game; finishing editing returns to the LibGUI read view; walk-away
   auto-close still fires in survival while editing.
 

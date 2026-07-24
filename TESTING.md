@@ -31,25 +31,45 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > still commits through the lock-gated autosave path. Restaged Release + Debug 2026-07-23 — fully
 > relaunch the client first. Visuals are still deferred (stock checkbox, no ruling/custom glyph).
 
-- [ ] `b3e11029` **Editor opens in LibGUI.** From the read view click "Edit" → the editor opens IN THE
+- [x] `b3e11029` **Editor opens in LibGUI.** From the read view click "Edit" → the editor opens IN THE
       SAME dialog (LibGUI-rendered, parchment theme), not a separate native-looking window. Each task
       row shows a checkbox + an editable text field. *(migrate-editor-view-libgui 5.4)*
-- [ ] `b3e11029` **Type, wrap, grow.** Click a row and type past the line width → text wraps onto a new
+      - **Confirmed 2026-07-23** (user playtest, submission 2026-07-23T19-04-07): "Works." Editor opens
+        in the same LibGUI dialog with checkbox + editable field per row.
+- [x] `b3e11029` **Type, wrap, grow.** Click a row and type past the line width → text wraps onto a new
       line and the row grows to fit, pushing rows below down; delete it back → the row shrinks. A row
       that grows past the bottom stays scrolled into view with the caret visible. *(migrate-editor-view-libgui 5.4)*
-- [ ] `b3e11029` **Editor key model.** Enter = commit + move to next row (NO newline inserted);
-      Shift+Enter = insert a hard line break (row grows); Shift+Tab = commit + move to previous row;
-      Esc = commit + close the dialog. *(migrate-editor-view-libgui 5.4)*
-- [ ] `b3e11029` **Caret + selection (macOS).** Arrow keys move the caret; Alt/Option+←/→ skips by word;
+      - **Confirmed 2026-07-23** (user playtest): wrap/grow/shrink + keep-in-view work. NOTE: there is no
+        row-DELETE affordance in the editor view currently (a row can't be removed) — deferred to an
+        upcoming delta, not a defect of this test (wrap/grow itself passes).
+- [ ] `b3e11029` **Editor key model (REVISED).** Tab = commit + move to next row (no tab glyph);
+      Shift+Tab = commit + move to previous row; Enter = commit + insert a NEW task directly beneath the
+      current one and focus it; Shift+Enter = insert a hard line break (row grows); Esc = commit + close.
+      *(migrate-editor-view-libgui 5.4)*
+      - **Still broken 2026-07-23 (needs retest — model was just swapped):** the original model
+        (Enter=advance / Tab=nothing) was Confirmed working, but per user request the model was changed in
+        code to Tab=advance / Enter=new-task-below (new Core `InsertTask`, 6 unit tests). Restage + retest
+        the revised bindings. NOT a defect — a deliberate change awaiting first-hand confirmation.
+- [x] `b3e11029` **Caret + selection (macOS).** Arrow keys move the caret; Alt/Option+←/→ skips by word;
       Cmd+←/→ jumps to line start/end; holding Shift with any of these extends the selection. Cmd+A/C/X/V
       select-all/copy/cut/paste work. *(migrate-editor-view-libgui 5.4)*
+      - **Confirmed 2026-07-23** (user playtest): "Works." macOS caret nav, word-skip, line-end,
+        Shift-selection, and Cmd+A/C/X/V clipboard all functional (the Cmd-translation layer holds).
 - [ ] `b3e11029` **Commit syncs + no key leak.** Edit a row → the change autosaves and a second client
       (or reopening) sees it. While a field is focused, typing movement keys (WASD) does NOT move the
       player or trigger hotbar/hotkeys. *(migrate-editor-view-libgui 5.4)*
-- [ ] `b3e11029` **Return to LibGUI read view.** Click "Done editing" (or close + reopen) → lands on the
+      - **Confirmed 2026-07-23 (no key leak, single-client autosave):** user playtest — editing autosaves
+        and reopening shows the fresh edit; focused-field typing does not leak to game movement/hotbar.
+      - **Backlogged 2026-07-23 (multiplayer sync):** second-client live-sync not tested — parked pending a
+        multiplayer roadmap exploration (to be built/consolidated separately).
+- [x] `b3e11029` **Return to LibGUI read view.** Click "Done editing" (or close + reopen) → lands on the
       LibGUI read view showing the fresh edits (not a native read view), with no lock/stale-content
       weirdness. In SURVIVAL, walk out of range while editing → the dialog auto-closes (edit committed).
       *(migrate-editor-view-libgui 5.4)*
+      - **Confirmed 2026-07-23** (user playtest): "Functionality works." Done-editing returns to the LibGUI
+        read view with fresh edits, no lock/stale weirdness — the change-1 backlogged return path is fixed.
+      - **Backlogged 2026-07-23 (survival walk-away):** the survival-specific auto-close-while-editing case
+        is not yet tested (mirrors the read-view survival item); code path is in place.
 
 ## adopt-libgui-foundation
 

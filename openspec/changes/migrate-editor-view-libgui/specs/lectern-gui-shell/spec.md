@@ -70,25 +70,32 @@ key handling.
 ## MODIFIED Requirements
 
 ### Requirement: Editor rows navigate and commit by keyboard
-The editor SHALL let the player move between rows from the keyboard while editing. Pressing Enter (without
-Shift) SHALL commit the current row's edit and move focus to the next row WITHOUT inserting a line break;
-pressing Shift+Enter SHALL insert a hard line break into the row's text (growing the row) rather than
-committing; pressing Shift+Tab SHALL commit and move focus to the previous row. Committing an edit (by
-Enter, Shift+Tab, or losing focus) SHALL apply the change through the existing lock-gated server edit path
+The editor SHALL let the player move between rows and add rows from the keyboard while editing. Pressing
+Tab (without Shift) SHALL commit the current row's edit and move focus to the next row WITHOUT inserting a
+tab glyph; pressing Shift+Tab SHALL commit and move focus to the previous row. Pressing Enter (without
+Shift) SHALL commit the current row's edit and insert a NEW task directly beneath it, moving focus to that
+new row, WITHOUT inserting a line break into the current row; pressing Shift+Enter SHALL instead insert a
+hard line break into the row's text (growing the row) rather than committing. Committing an edit (by Tab,
+Shift+Tab, Enter, or losing focus) SHALL apply the change through the existing lock-gated server edit path
 (`ScribeEditDocumentMessage`), server-authoritatively. Pressing Esc SHALL commit the focused row (via the
 same blur-commit path) and close the dialog — a fast panic-close, not an in-place revert. On commit, the
 row's text SHALL be normalized by trimming trailing blank lines and trailing whitespace while preserving
 interior newlines, and the read view SHALL render those interior newlines as hard line breaks.
 
-#### Scenario: Enter commits and advances
-- **WHEN** the player finishes typing in a row and presses Enter (without Shift)
+#### Scenario: Tab commits and advances
+- **WHEN** the player finishes typing in a row and presses Tab (without Shift)
 - **THEN** the row's new text is committed through the server edit path and focus moves to the next row,
-  and no line break is inserted into the row's text
+  and no tab glyph is inserted into the row's text
+
+#### Scenario: Enter commits and inserts a new task below
+- **WHEN** the player presses Enter (without Shift) while editing a row
+- **THEN** the row's edit is committed, a new empty task is inserted directly beneath it, focus moves to
+  that new task, and no line break is inserted into the original row's text
 
 #### Scenario: Shift+Enter inserts a hard line break
 - **WHEN** the player presses Shift+Enter while editing a row
 - **THEN** a line break is inserted at the caret, the row's height grows to fit the new line, and focus
-  stays in the row (no commit-and-advance)
+  stays in the row (no commit, no new row)
 
 #### Scenario: Shift+Tab commits and retreats
 - **WHEN** the player presses Shift+Tab while editing a row
