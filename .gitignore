@@ -21,11 +21,10 @@ obj/
 VintagestoryData/
 Mods/
 
-# Third-party mod DLLs extracted from installed game mods (VSImGui/ConfigLib) for
-# Mod.csproj's <Reference> HintPaths -- no usable NuGet package exists for either at the
-# installed version, so these are vendored locally rather than restored via NuGet. See
-# openspec/changes/add-imgui-configlib-tuning/tasks.md task 1.1 for the exact source
-# .zip/version and re-extraction steps.
+# Third-party mod DLLs extracted from the installed LibGUI (`gui`) mod for Mod.csproj's
+# <Reference> HintPaths -- no usable NuGet package exists at the installed version, so
+# these are vendored locally rather than restored via NuGet. See src/Mod/lib/README.md
+# for the exact source .zip/version and re-extraction steps.
 src/Mod/lib/*
 !src/Mod/lib/README.md
 

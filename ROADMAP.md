@@ -216,9 +216,13 @@ specs (each documents its assumed default) but they shape sequencing and scope.
 ### Done / superseded (kept only as history)
 
 - **Optional in-game settings panel (ConfigLib, soft dep)** — adopted 2026-07-19
-  (`add-imgui-configlib-tuning`).
-- **ImGui debug-tuning overlay** — adopted 2026-07-19 (`add-imgui-configlib-tuning`); Debug-only,
-  Release-excluded, and can't render on Apple Silicon (see VSAPI-NOTES).
+  (`add-imgui-configlib-tuning`), then **removed 2026-07-23**: the LibGUI rebuild stopped
+  consuming the layout fields it exposed, leaving the panel inert; the reference and
+  `configlib-patches.json` manifest were stripped as dead wiring.
+- **ImGui debug-tuning overlay** — adopted 2026-07-19 (`add-imgui-configlib-tuning`; Debug-only,
+  Release-excluded), then **removed 2026-07-23**: never rendered on Apple Silicon, and the
+  native `GuiComposer` layout knobs it tuned were replaced by LibGUI's theme/flex model. The
+  `#if DEBUG` slider code and DLL references are gone.
 - **ToastLib for the HUD** — investigated and rejected 2026-07-19 (stale for 1.22.x, ImGui
   dep, no persist-and-update primitive). v5 uses a native `HudElement` instead.
 - **Configurable text-size minimum** — done 2026-07-20 (`MinTextSizePercent`; range retuned to

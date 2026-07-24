@@ -10,8 +10,7 @@ namespace Scribe;
 /// <see cref="ScribeBlockRowCell"/>. Moved here so the GUI's spacing/sizing can be re-tuned by
 /// editing this file's on-disk JSON (<c>ScribeModSystem.ClientConfigFileName</c>, under the
 /// game's mod-config folder) and relaunching, instead of editing source and rebuilding --
-/// useful while visually refining the custom-drawn dialog. See ROADMAP.md's parked ConfigLib
-/// idea for eventually exposing these as a live in-game settings panel instead of a relaunch.
+/// useful while visually refining the dialog.
 /// </summary>
 public sealed class ScribeClientConfig
 {
@@ -264,11 +263,11 @@ public sealed class ScribeClientConfig
     /// </list>
     ///
     /// <para>Deliberately NOT gated behind <c>#if DEBUG</c>: the whole point is inspecting the GUI on
-    /// platforms where the Debug/VSImGui tuning path is dead (Apple Silicon caps at OpenGL 4.1; VSImGui
-    /// needs 4.3). It ships in Release and is toggled live via the ConfigLib panel (or by editing the
-    /// on-disk JSON) -- the dialog re-reads config on every open, so changing this value and reopening
-    /// the lectern shows/hides the overlay. The overlay uses the macOS-safe
-    /// <c>IRenderAPI.RenderRectangle</c> (a plain LineStrip, no 4.3 dependency).</para></summary>
+    /// platforms where an ImGui-style tuning overlay is dead (Apple Silicon caps at OpenGL 4.1;
+    /// VSImGui needs 4.3). It ships in Release and is toggled by editing the on-disk JSON -- the
+    /// dialog re-reads config on every open, so changing this value and reopening the lectern
+    /// shows/hides the overlay. The overlay uses the macOS-safe <c>IRenderAPI.RenderRectangle</c>
+    /// (a plain LineStrip, no 4.3 dependency).</para></summary>
     public int InspectOverlayMode = 0;
 
     // ---------------- Editor toolbar (controls below the row list) ----------------

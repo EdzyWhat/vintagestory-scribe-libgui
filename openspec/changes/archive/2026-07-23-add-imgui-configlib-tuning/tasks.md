@@ -57,12 +57,17 @@
       — slider drags must only mutate the in-memory `clientConfig`, never write to disk
       directly.
       Done: Button registered in `RegisterDebugSliders`, its id also tracked/removed.
-- [ ] 2.6 Manual test: open the lectern in a Debug build, press VSImGui's toggle hotkey
+- [x] 2.6 Manual test: open the lectern in a Debug build, press VSImGui's toggle hotkey
       (`imguitoggle`, confirm the actual bound key in-game since it may differ from
       defaults) to show the overlay, drag each bound slider, confirm the lectern dialog
       recomposes live and matches the new value; confirm `scribe-client-config.json` on
       disk is unchanged until "Save" is pressed; close the lectern dialog and confirm the
       sliders are removed/no longer appear in the overlay.
+      Confirmed 2026-07-20 ("all functional"), then **overtaken by events 2026-07-23**:
+      superseded by the LibGUI rebuild. VSImGui's Debug sliders are dead on Apple Silicon
+      (OpenGL 4.1 cap) and tuned native `GuiComposer` knobs (`VisibleListHeight`/
+      `RowSpacing`/etc.) that the LibGUI dialog no longer consumes (0 refs in
+      `GuiDialogScribeLecternLibGui.cs`). No slider-registration code remains in source.
 
 ## 3. ConfigLib manifest (optional soft dependency)
 
@@ -95,15 +100,23 @@
       never calls into ConfigLib's API directly, so there's nothing to soft-gate at the
       C# level. Update design.md if this task finds otherwise.
       Confirmed: no Scribe code calls ConfigLib's API; nothing to gate.
-- [ ] 3.4 Manual test: with ConfigLib + VSImGui both installed as game mods, edit an
+- [x] 3.4 Manual test: with ConfigLib + VSImGui both installed as game mods, edit an
       exposed field via ConfigLib's in-game settings panel (opened however ConfigLib
       exposes its GUI — confirm the exact access point live), save, then open the lectern
       and confirm the new value took effect (may require a relaunch if `ScribeClientConfig`
       is only loaded once per dialog-open, not file-watched — confirm which is actually
       true and note it if it's the latter).
-- [ ] 3.5 Manual test: with ConfigLib NOT installed, confirm the mod loads and the lectern
+      Confirmed 2026-07-20 (lectern reflected the saved value), then **overtaken by events
+      2026-07-23**: the exposed layout fields are no longer consumed by the LibGUI dialog,
+      so editing them via the ConfigLib panel now changes nothing on screen. The panel
+      still round-trips to `scribe-client-config.json` correctly — the fields it edits are
+      just dead. (Those layout knobs move to LibGUI's ThemeData/`libgui.json` under the
+      deferred theme-extraction work.)
+- [x] 3.5 Manual test: with ConfigLib NOT installed, confirm the mod loads and the lectern
       opens normally with no missing-dependency warning (the `configlib-patches.json`
       asset should simply go unread).
+      Confirmed 2026-07-20 (playtest report): loads and opens normally with neither optional
+      mod installed. Still valid — the manifest asset is inert without ConfigLib present.
 
 ## 4. Verification
 
@@ -116,12 +129,12 @@
 - [x] 4.3 `dotnet test tests/Core.Tests/Core.Tests.csproj` — all green (no Core changes
       expected, this is a regression check).
       Done: 35/35 passed.
-- [ ] 4.4 `bash build/restage.sh` (Release) and confirm the mod loads for a player-like
+- [x] 4.4 `bash build/restage.sh` (Release) and confirm the mod loads for a player-like
       setup with neither optional mod installed — no change in behavior from before this
       change.
-      Restage itself done (7 files staged, including the new configlib-patches.json
-      asset) — **needs your live confirmation**: relaunch the client and confirm the
-      lectern still opens/behaves normally, since this can't be observed from the shell.
+      Restage done (7 files staged, including the new configlib-patches.json asset).
+      Confirmed 2026-07-20 (playtest report): client relaunched, lectern opens and behaves
+      normally with no errors from the added VSImGui/ConfigLib references. Still valid.
 - [x] 4.5 Update `ROADMAP.md`'s parked ConfigLib/ImGui entries to reflect that both are now
       adopted (not just researched), pointing at this change, and correct the prior
       "available as a NuGet package" assumption if `ROADMAP.md` states it.
@@ -130,8 +143,14 @@
 
 ## 5. Diagnostic use (outside this change's own scope, but the point of building it)
 
-- [ ] 5.1 Once tasks 1-4 are done, use the live Debug window to investigate the open
+- [x] 5.1 Once tasks 1-4 are done, use the live Debug window to investigate the open
       missing-chrome question (only the last composed editor-view row rendering full
       drag-handle/checkbox/input chrome) — drag `VisibleListHeight`/`RowSpacing` and
       observe whether the affected row range shifts with the visible window's edges. Any
       resulting bug fix is its own follow-up, not part of this change.
+      **Overtaken by events — the diagnostic is moot.** Retired 2026-07-21: the missing/
+      frozen-chrome symptom was resolved by the row-list rework (rows now move as one unit;
+      no separate static/interactive pieces to diagnose). Superseded again 2026-07-23 by
+      the LibGUI rebuild: the native `GuiComposer` row-composition path this diagnostic
+      probed has no analog in the LibGUI widget tree, and the sliders it relied on are dead
+      on Apple Silicon. There is nothing left to diagnose with this tool.
