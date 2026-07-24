@@ -62,32 +62,77 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         `SingleChildScrollView`/`ListView` and pokes the shared `ScrollController` → the bar fades in then
         idle-fades out. Checkbox (local `SetState`) and text-edit (field-only rebuild) never `ForceRebuild`,
         so they don't.
-      - **Fix applied 2026-07-24 (awaiting retest):** set `AutoHide = false` on both scrollbars, so the
-        bar is permanently visible (matches the pre-LibGUI native GUI) and the fade animation is never
-        driven — `Build` reads a hard `visibility = 1f` and `_Show()` is skipped when `AutoHide` is false.
-        Retest: click pin/delete/grip → the bar should NOT animate; it just stays put.
+      - **Fix applied 2026-07-24:** set `AutoHide = false` on both scrollbars, so the bar is permanently
+        visible (matches the pre-LibGUI native GUI) and the fade animation is never driven — `Build` reads
+        a hard `visibility = 1f` and `_Show()` is skipped when `AutoHide` is false.
+      - **Confirmed 2026-07-24** (user playtest, submission 2026-07-24T07-24-24): "Works. The scrollbar
+        does not unnecessarily animate. It is always shown, as expected."
 - [ ] `7c22da1a` **Scroll position survives view switch.** With enough rows to scroll, scroll down in the
       read view, then switch to the editor (and back) → confirm you're still looking at the same part of
       the list, not jumped back to the top. *(new — shared scroll controller, 2026-07-24)*
+      - **Still broken 2026-07-24** (user playtest, submission 2026-07-24T07-24-24): only ONE direction
+        works. read→edit ("Edit" button) preserves the scroll offset; edit→read ("Done editing") resets to
+        the top. Confirmed cause (from `reference/vslibgui/.../ListView.cs:189`): the read view's
+        virtualized `ListView.HandleScrollUpdate` clamps the shared controller's offset to a `maxScroll`
+        derived from `_contentHeight`, which on the first post-swap layout is still the estimate (small),
+        so the offset gets clamped toward 0. The editor's non-virtualized `SingleChildScrollView` measures
+        full content immediately, so read→edit survives.
+      - **Fix applied 2026-07-24 (awaiting retest):** `OnClickSwitchToRead` now captures the offset before
+        the rebuild (`CaptureScrollForRestore`), and `OnRenderGUI` re-applies it via `JumpTo` for up to 5
+        frames after the swap — long enough for the ListView's content height to settle so the offset
+        sticks; a genuinely shorter list clamps to its real max and stops. Retest: scroll down in edit,
+        "Done editing" → read view should stay at the same spot, not jump to top.
 - [ ] `18cd5c60` **Read/edit row heights match.** Compare a single-line task's height in read vs. editor
       view — they should be pixel-identical (that's what makes the shared scroll offset line up). With a
       long list, scroll to the bottom in both and watch for a fractional per-row drift accumulating, or a
       few pixels of the last row cut off. If there's a small consistent cutoff, a little bottom padding on
       the list is a cheap fix. *(new — verify row-height parity, 2026-07-24)*
-- [ ] `fa4d457f` **Window width matches Handbook.** Open the lectern and the vanilla survival Handbook
+      - *Untested 2026-07-24:* user deferred this ("will test after 7c22da1a works") — the parity check is
+        hard to judge while the edit→read switch resets scroll. Retest once `7c22da1a` is fixed.
+- [x] `fa4d457f` **Window width matches Handbook.** Open the lectern and the vanilla survival Handbook
       and compare widths — the lectern window should now be the same width (567px). *(new — 2026-07-24)*
-- [ ] `21982461` **Click repositions caret.** In the editor, click into a row to focus it and type, then
+      - **Confirmed 2026-07-24** (user playtest): "They match."
+- [x] `21982461` **Click repositions caret.** In the editor, click into a row to focus it and type, then
       click somewhere else within that SAME (already-focused) field — the caret should jump to the click
       point. Test on a wrapped second/third line too (click lands on the right line and column), and
       clicking past the end of a line's text lands the caret at the line end. *(new — 2026-07-24)*
-- [ ] `2fbd2852` **Click-drag selects text.** Press and drag inside an editor field → a selection grows
+      - **Confirmed 2026-07-24** (user playtest): "Works."
+- [x] `2fbd2852` **Click-drag selects text.** Press and drag inside an editor field → a selection grows
       from the press point to the cursor (highlight visible), including dragging across a wrapped line and
       dragging past the field's bounds (capture holds). Then confirm the selection works: Ctrl+C/X/V act
       on it and typing replaces it. *(new — drag-select, 2026-07-24)*
-- [ ] `7a162d5f` **Double/triple-click select.** Double-click a word → the whole word highlights; triple-
+      - **Confirmed 2026-07-24** (user playtest): "Works."
+- [x] `7a162d5f` **Double/triple-click select.** Double-click a word → the whole word highlights; triple-
       click → the whole logical line/paragraph highlights (expected to span multiple visual rows if the
       line wraps — that's correct, not a bug). Confirm copy/cut/paste and type-over act on the selection.
       *(new — word/line select, 2026-07-24)*
+      - **Confirmed 2026-07-24** (user playtest): "Works."
+- [ ] `2a4d49e6` **Lectern raises to front on focus.** Other VS windows (handbook, inventory) come to the
+      front when clicked/focused — the last-clicked window sits on top. The lectern stays behind other
+      windows even when focused; it should raise to front too. *(new — from 2026-07-24 general note)*
+      - **Still broken 2026-07-24** (user playtest general note): lectern does not raise to front on focus.
+        NOT fixed yet — deferred after investigation. All LibGUI dialogs render in ONE `PostSkiaPipeline`
+        pass (`RenderOrder => 1`), not by per-dialog `DrawOrder`, so cross-framework stacking vs. vanilla
+        dialogs (Handbook uses `DrawOrder => 0.2`, ours inherits `0.1`) isn't governed the way vanilla
+        dialogs stack among themselves. The observed "stays behind" doesn't match a naive reading of that
+        pipeline order, so the real interaction needs more investigation before a fix — didn't want to
+        destabilize all dialog z-ordering with a guess. Left open.
+- [ ] `0aa3309c` **Move grip to far left of row.** The drag-reorder grip column currently sits on the
+      right (`[checkbox][text][pin][delete][grip]`); it should be on the far LEFT of the row instead.
+      *(new — design change from 2026-07-24 general note)*
+      - **Fix applied 2026-07-24 (awaiting retest):** the grip is now the first child of the editor row's
+        Row (far left): `[grip][checkbox][text]`. Still always-visible (not hover-gated) so its drag keeps
+        pointer capture. Retest: grip sits on the left and still drag-reorders.
+- [ ] `df6e3996` **Float delete/pin as real buttons.** Delete and pin should not occupy their own reserved
+      columns — they should float on top of the row they relate to, with real button chrome: a border,
+      small padding, a solid (non-transparent) background, using theme colors plus hover/click states.
+      *(new — design change from 2026-07-24 general note)*
+      - **Fix applied 2026-07-24 (awaiting retest):** delete + pin (task-only) now float on the right of
+        the row via a `Stack` + `Positioned` overlay (no reserved columns; text uses full width). New
+        `ScribeRowButton`: a bordered, opaque, rounded button (theme `SurfaceHigh` fill with resting→hover→
+        press brightening, `Border` color) wrapping the `VsIcon` glyph. Shown on row hover. Retest: buttons
+        float over the row's right edge as real buttons with hover/press feedback; text no longer reserves
+        space for them.
 
 ## migrate-editor-view-libgui
 
@@ -552,13 +597,17 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       "changes could not be saved" toast fires. Normal-sized checklists are unaffected.
       - **To test 2026-07-23:** new — server-side caps enforced in the codec (Core-tested, 47/47).
         Low-priority manual check; the unit tests already cover the boundary.
-- [ ] `a03dist01` **(8.3) Read-view walk-away auto-close.** In Creative, open a lectern's READ view
+- [x] `a03dist01` **(8.3) Read-view walk-away auto-close.** In Creative, open a lectern's READ view
       and walk well past the close threshold (~5 blocks) without closing it → the dialog should
       auto-close (same as the editor view / 7.8), confirming the old read-view-specific
       no-auto-close bug is gone under the single LibGUI dialog.
       - **Likely Obsolete 2026-07-23:** the bug was a native two-dialog artifact; the LibGUI rebuild
         uses one dialog with a single pinned `InteractionRange` for both views. Confirm once, then
         mark Obsolete if it closes correctly. No code change was made.
+      - **Confirmed 2026-07-24** (user playtest general note, submission 2026-07-24T07-24-24): in Creative,
+        walking ~5 blocks from the lectern auto-closes it — the old read-view-specific no-auto-close bug
+        is gone. (User: "in creative, walking away from the lectern (past about 5 blocks) automatically
+        closes it… that roadmap/backlog item is complete now.")
 - [ ] `a05caret1` **(8.5) Focus/caret across a rebuild.** Type into a row, then trigger a structural
       rebuild (click "Add task"). Focus should stay usable (the new/expected row is focused, game
       input doesn't leak). Toggling a checkbox should NOT disturb the caret in another focused row.

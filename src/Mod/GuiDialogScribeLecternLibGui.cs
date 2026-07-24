@@ -75,6 +75,18 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     /// on in <see cref="OnRenderGUI"/> AFTER layout has run (EnsureVisible reads live geometry).</summary>
     private bool pendingEnsureVisible;
 
+    /// <summary>Scroll offset captured just before a switch-to-read rebuild, to be re-applied after the
+    /// read view lays out. Needed because the read view's virtualized <c>ListView</c> re-derives its
+    /// content height (hence <c>MaxScrollExtent</c>) from <c>estimatedItemHeight</c> on the FIRST layout
+    /// after the swap, so the shared controller's offset gets clamped toward the top before the real row
+    /// heights are known — the edit→read half of the "scroll survives the switch" behavior. (read→edit
+    /// doesn't need this: the editor's non-virtualized scroll view measures full content immediately.)
+    /// Null when no restore is pending. See <see cref="OnRenderGUI"/> for the re-apply.</summary>
+    private float? pendingRestoreScrollOffset;
+    /// <summary>Frames spent trying to re-apply <see cref="pendingRestoreScrollOffset"/>; bounds the
+    /// retry so a genuinely-shorter list (target past the real max) gives up instead of looping.</summary>
+    private int scrollRestoreFrames;
+
     // ---- Lost-lock autosave recovery (task 8.6) ----
     /// <summary>Max consecutive autosave failures to auto-recover from before giving up, so a lock
     /// permanently held elsewhere can't spin the re-request/resend loop forever.</summary>
@@ -231,8 +243,18 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         if (focusedEditIndex is { } idx) NormalizeRowOnCommit(idx);
         FlushIfDirty();
         SendReleaseLockPacket();
+        CaptureScrollForRestore();
         LeaveEditorMode();
         ForceRebuild();
+    }
+
+    /// <summary>Snapshot the current scroll offset so it can be re-applied after the next view's first
+    /// layout (see <see cref="pendingRestoreScrollOffset"/>). Called before a switch-to-read rebuild so
+    /// the read view's ListView content-height re-derivation can't strand the offset at the top.</summary>
+    private void CaptureScrollForRestore()
+    {
+        pendingRestoreScrollOffset = sharedScrollController.Offset;
+        scrollRestoreFrames = 0;
     }
 
     /// <summary>Tear down the editor state (stop autosave, drop scratch + focus nodes) and return to
@@ -582,6 +604,21 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         {
             Scrollable.EnsureVisible(element);
             pendingEnsureVisible = false;
+        }
+
+        // Re-apply a scroll offset captured across a view switch (see pendingRestoreScrollOffset). The
+        // read view's ListView settles its content height over the first frame(s) after the swap, so a
+        // single JumpTo can still be clamped; re-apply until the offset sticks or we've given a few
+        // frames (a genuinely shorter list clamps to its real max and stops differing, so this also
+        // self-terminates when the target is simply unreachable).
+        if (pendingRestoreScrollOffset is { } want)
+        {
+            sharedScrollController.JumpTo(want);
+            scrollRestoreFrames++;
+            if (Math.Abs(sharedScrollController.Offset - want) < 0.5f || scrollRestoreFrames >= 5)
+            {
+                pendingRestoreScrollOffset = null;
+            }
         }
     }
 
@@ -1151,6 +1188,14 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
 
         var children = new List<Widget>();
 
+        // Grip on the FAR LEFT of the row (2026-07-24 feedback). Always present (not hover-gated): it
+        // stays mounted so a drag it started can't lose the dispatcher's pointer capture mid-move.
+        // onPress/onMove-hover(row)/onRelease drive the reorder.
+        children.Add(new GestureDetector(
+            onPress: _ => Widget.OnDragStart(index),
+            onRelease: _ => Widget.OnDragEnd(),
+            child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant)));
+
         if (Widget.Data.IsTask)
         {
             children.Add(new Checkbox(
@@ -1175,47 +1220,8 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             onCommitAndRetreat: () => Widget.OnCommitAndRetreat(index),
             onInsertTaskBelow: () => Widget.OnInsertTaskBelow(index))));
 
-        // Trailing affordance columns, right-anchored after the text (native layout intent
-        // [checkbox][text][pin][delete][grip]). Pin is task-only; on a text section its column is
-        // omitted so the delete/grip of a note still line up under a task's. Each column is a
-        // fixed-width slot so revealing a glyph on hover does NOT reflow the text width.
-        if (Widget.Data.IsTask)
-        {
-            children.Add(new ScribeRowControlSlot(
-                size: style.ControlSize,
-                child: hovered
-                    ? new ScribeHoverVsIcon(
-                        iconName: "scribepin",
-                        size: style.ControlSize,
-                        // A pinned task's control reads "active" (accent); an unpinned one is muted.
-                        color: Widget.Data.Pinned ? colors.Primary : colors.OnSurfaceVariant,
-                        onTap: () => Widget.OnTogglePinned(index))
-                    : null));
-        }
-
-        children.Add(new ScribeRowControlSlot(
-            size: style.ControlSize,
-            child: hovered
-                ? new ScribeHoverVsIcon(
-                    iconName: "scribeclose",
-                    size: style.ControlSize,
-                    color: colors.Error,
-                    onTap: () => Widget.OnDelete(index))
-                : null));
-
-        // The grip is always present (spec: "a grip control is present in a reserved column"), NOT
-        // hover-gated: removing it on pointer-exit mid-drag would unmount the element the dispatcher
-        // captured on press and kill the reorder. onPress/onMove-hover/onRelease drive the drag.
-        children.Add(new ScribeRowControlSlot(
-            size: style.ControlSize,
-            child: new GestureDetector(
-                onPress: _ => Widget.OnDragStart(index),
-                onRelease: _ => Widget.OnDragEnd(),
-                child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant))));
-
-        // The row body. A drag drop-target gets a highlight fill (spec allows "a highlighted target");
-        // a pinned task carries the resting tint under all content. Both are painted by the row-level
-        // Container so they sit behind the text/controls.
+        // Row body: [grip][checkbox][text]. Delete/pin no longer reserve columns here — they float on
+        // top of the row (see below), so the text can use the full width.
         Widget rowBody = new Padding(
             EdgeInsets.Symmetric(vertical: style.RowVerticalPadding, horizontal: style.RowHorizontalPadding),
             child: new Row(
@@ -1224,6 +1230,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                 mainAxisSize: MainAxisSize.Max,
                 children: children));
 
+        // Drop-target highlight / resting pinned tint, drawn behind the row content.
         Vector4 rowFill = Widget.IsDropTarget
             ? colors.StateSelected
             : (Widget.Data.IsTask && Widget.Data.Pinned ? style.PinnedTint : Vector4.Zero);
@@ -1235,6 +1242,38 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                 child: rowBody);
         }
 
+        // Delete + pin float on the RIGHT of the row as real buttons (2026-07-24 feedback), shown only
+        // on hover. A Stack sizes to the non-positioned rowBody and lays the Positioned buttons on top,
+        // so they overlay the text's right edge without reserving a column or reflowing it. Pin is
+        // task-only. Right-anchored, pin left of delete.
+        var stackChildren = new List<Widget> { rowBody };
+        if (hovered)
+        {
+            float btn = style.ControlSize;
+            float gap = 4f;
+            // delete: right-most; pin: to its left (task rows only).
+            stackChildren.Add(new Positioned(
+                right: gap, top: gap,
+                child: new ScribeRowButton(
+                    iconName: "scribeclose",
+                    iconColor: colors.Error,
+                    size: btn,
+                    onTap: () => Widget.OnDelete(index))));
+            if (Widget.Data.IsTask)
+            {
+                stackChildren.Add(new Positioned(
+                    right: gap + btn + gap, top: gap,
+                    child: new ScribeRowButton(
+                        iconName: "scribepin",
+                        // Pinned reads "active" (accent); unpinned is muted.
+                        iconColor: Widget.Data.Pinned ? colors.Primary : colors.OnSurfaceVariant,
+                        size: btn,
+                        onTap: () => Widget.OnTogglePinned(index))));
+            }
+        }
+
+        Widget row = stackChildren.Count == 1 ? rowBody : new Stack(stackChildren);
+
         // Row-level hover tracking (see `hovered`). onEnter/onExit reveal the hover-conditional
         // controls; the same enter events during a drag are forwarded as the drop-target signal
         // (the parent ignores OnDragOver unless a drag is active), so one region serves both.
@@ -1245,32 +1284,13 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                 Widget.OnDragOver(index);
             },
             onExit: _ => { if (hovered) SetState(() => hovered = false); },
-            child: rowBody);
+            child: row);
     }
 }
 
 // ============================================================================
 // Shared per-row control primitives (add-lectern-row-affordances-libgui)
 // ============================================================================
-
-/// <summary>A fixed-square slot for one trailing row control (pin/delete/grip). Fixing the width means
-/// revealing a hover-only glyph does not reflow the row's text column, and a task's controls line up
-/// vertically with a note's (whose pin slot is omitted). An empty slot (<paramref name="child"/> null)
-/// reserves the same space so the layout is stable whether or not the row is hovered.</summary>
-internal sealed class ScribeRowControlSlot : StatelessWidget
-{
-    private readonly float size;
-    private readonly Widget? child;
-
-    public ScribeRowControlSlot(float size, Widget? child)
-    {
-        this.size = size;
-        this.child = child;
-    }
-
-    public override Widget Build(BuildContext context) =>
-        new SizedBox(width: size, height: size, child: child is null ? null : new Center(child));
-}
 
 /// <summary>A bare (non-interactive) VS icon glyph rendered by registered <c>CustomIcons</c> code via
 /// <see cref="VsIcon"/>. Used for the grip, whose pointer handling lives in a wrapping
@@ -1299,47 +1319,72 @@ internal sealed class ScribeVsIconGlyph : StatelessWidget
     public override Widget Build(BuildContext context) => new VsIcon(iconName, size, color);
 }
 
-/// <summary>A clickable VS-icon control with hover feedback (a brightened glyph while hovered), built on
-/// <see cref="VsIcon"/> + <see cref="GestureDetector"/>. This is the icon-by-code counterpart to LibGUI's
-/// <see cref="IconButton"/> (which only accepts an SVG-by-path <see cref="Icon"/> — unusable here, see
-/// <see cref="ScribeVsIconGlyph"/>). Used for the pin and delete controls.</summary>
-internal sealed class ScribeHoverVsIcon : StatefulWidget
+/// <summary>A floating per-row action button (delete / pin) with real button chrome: a bordered,
+/// solid-background square with theme-derived resting/hover/press fills, wrapping a <see cref="VsIcon"/>
+/// glyph. Unlike the earlier bare hover-glyph, this reads as a proper button (2026-07-24 feedback) so it
+/// floats legibly ON TOP of the row's text via the row's Stack. Uses <see cref="VsIcon"/> (icon-by-code)
+/// for the glyph — NOT LibGUI's <see cref="IconButton"/>/<see cref="Icon"/>, whose SVG-by-path
+/// <c>LoadSvg</c> fails on our post-startup-unloaded assets (see <see cref="ScribeVsIconGlyph"/>).</summary>
+internal sealed class ScribeRowButton : StatefulWidget
 {
-    public ScribeHoverVsIcon(string iconName, float size, Vector4 color, Action onTap, Gui.Widgets.Framework.Key? key = null)
+    public ScribeRowButton(string iconName, Vector4 iconColor, float size, Action onTap, Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
         IconName = iconName;
+        IconColor = iconColor;
         Size = size;
-        Color = color;
         OnTap = onTap;
     }
 
     public string IconName { get; }
+    public Vector4 IconColor { get; }
+    /// <summary>Outer button box side length. The glyph is inset from this by the button's padding.</summary>
     public float Size { get; }
-    public Vector4 Color { get; }
     public Action OnTap { get; }
 
-    public override State CreateState() => new ScribeHoverVsIconState();
+    public override State CreateState() => new ScribeRowButtonState();
 }
 
-internal sealed class ScribeHoverVsIconState : State<ScribeHoverVsIcon>
+internal sealed class ScribeRowButtonState : State<ScribeRowButton>
 {
     private bool hovered;
+    private bool pressed;
 
     public override Widget Build(BuildContext context)
     {
-        // Brighten on hover for click affordance (mirrors IconButton's +0.15 RGB nudge), clamped so a
-        // near-white icon doesn't overflow. Alpha is left unchanged.
-        Vector4 c = Widget.Color;
-        Vector4 display = hovered
-            ? new Vector4(
-                Math.Min(1f, c.X + 0.2f), Math.Min(1f, c.Y + 0.2f), Math.Min(1f, c.Z + 0.2f), c.W)
-            : c;
+        var colors = Theme.Of(context).ColorScheme;
+
+        // Solid (opaque) background from the theme's raised-surface tone, brightening resting -> hover ->
+        // press so the button reads as interactive. SurfaceHigh is the raised-element tone; nudge it up
+        // for hover/press. Kept opaque (W=1) so it fully covers the row text it floats over.
+        Vector4 baseBg = colors.SurfaceHigh with { W = 1f };
+        float lift = pressed ? -0.06f : hovered ? 0.10f : 0f;
+        Vector4 bg = new(
+            Math.Clamp(baseBg.X + lift, 0f, 1f),
+            Math.Clamp(baseBg.Y + lift, 0f, 1f),
+            Math.Clamp(baseBg.Z + lift, 0f, 1f),
+            1f);
+
+        float pad = MathF.Max(3f, Widget.Size * 0.18f); // small padding; glyph fills the rest
+        float glyph = Widget.Size - pad * 2f;
 
         return new GestureDetector(
             onTap: _ => Widget.OnTap(),
             onEnter: _ => { if (!hovered) SetState(() => hovered = true); },
-            onExit: _ => { if (hovered) SetState(() => hovered = false); },
-            child: new VsIcon(Widget.IconName, Widget.Size, display));
+            onExit: _ => { if (hovered || pressed) SetState(() => { hovered = false; pressed = false; }); },
+            onPress: _ => { if (!pressed) SetState(() => pressed = true); },
+            onRelease: _ => { if (pressed) SetState(() => pressed = false); },
+            child: new Container(
+                style: new BoxStyle
+                {
+                    Color = bg,
+                    Width = Widget.Size,
+                    Height = Widget.Size,
+                    CornerRadius = new Vector4(3f),
+                    BorderThickness = 1f,
+                    BorderColor = colors.Border,
+                    Padding = EdgeInsets.All(pad),
+                },
+                child: new VsIcon(Widget.IconName, glyph, Widget.IconColor)));
     }
 }
