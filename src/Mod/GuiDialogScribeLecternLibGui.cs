@@ -852,6 +852,15 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
 
         var children = new List<Widget>();
 
+        // Reserve the same far-left grip column the editor row draws (f07783f7), so read and edit rows
+        // are column-identical and align seamlessly across a view switch. It's the actual grip glyph
+        // (keeps the reserved width in lockstep with the editor's grip if ControlSize changes) but drawn
+        // at zero opacity and with NO gesture wrapper -- purely a spacer, uninteractable and invisible.
+        // The read view exposes no reorder (dragging is a lock-gated authoring action, design D4).
+        children.Add(new Opacity(
+            opacity: 0f,
+            child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant)));
+
         if (Widget.Data.IsTask)
         {
             children.Add(new Checkbox(

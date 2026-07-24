@@ -142,6 +142,11 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       read/edit rows column-identical (so the views align seamlessly on switch — the height difference the
       user flagged), the read row should reserve the SAME left grip-column space, just uninteractable and
       opacity 0. *(new — from 2026-07-24 general note; unblocks the `18cd5c60` parity retest)*
+      - **Fix applied 2026-07-24 (awaiting retest):** the read row now leads with the same far-left grip
+        column the editor draws — the actual `scribegrip` glyph at `ControlSize`, wrapped in `Opacity(0)`
+        with NO gesture wrapper (a pure spacer: invisible and uninteractable). Read/edit rows are now
+        column-identical: `[grip][checkbox][text]`. Retest: open a task in read then edit view — the
+        checkbox/text should sit at the same x-position in both, and the views should align on switch.
 
 ## migrate-editor-view-libgui
 
