@@ -82,6 +82,9 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         frames after the swap — long enough for the ListView's content height to settle so the offset
         sticks; a genuinely shorter list clamps to its real max and stops. Retest: scroll down in edit,
         "Done editing" → read view should stay at the same spot, not jump to top.
+      - **Confirmed 2026-07-24** (user playtest, submission 2026-07-24T07-53-46): "Works." Scroll position
+        now survives edit→read too. (User: "Will work better when the drag-row column fix is also
+        implemented → since there'd be less height difference" — see the read-view grip-column parity item.)
 - [ ] `18cd5c60` **Read/edit row heights match.** Compare a single-line task's height in read vs. editor
       view — they should be pixel-identical (that's what makes the shared scroll offset line up). With a
       long list, scroll to the bottom in both and watch for a fractional per-row drift accumulating, or a
@@ -123,6 +126,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Fix applied 2026-07-24 (awaiting retest):** the grip is now the first child of the editor row's
         Row (far left): `[grip][checkbox][text]`. Still always-visible (not hover-gated) so its drag keeps
         pointer capture. Retest: grip sits on the left and still drag-reorders.
+      - **Confirmed 2026-07-24** (user playtest, submission 2026-07-24T07-53-46): "Works."
 - [ ] `df6e3996` **Float delete/pin as real buttons.** Delete and pin should not occupy their own reserved
       columns — they should float on top of the row they relate to, with real button chrome: a border,
       small padding, a solid (non-transparent) background, using theme colors plus hover/click states.
@@ -133,6 +137,11 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         press brightening, `Border` color) wrapping the `VsIcon` glyph. Shown on row hover. Retest: buttons
         float over the row's right edge as real buttons with hover/press feedback; text no longer reserves
         space for them.
+      - **Confirmed 2026-07-24** (user playtest, submission 2026-07-24T07-53-46): "Works."
+- [ ] `f07783f7` **Read view reserves the grip column.** The read view has no drag-reorder, but to keep
+      read/edit rows column-identical (so the views align seamlessly on switch — the height difference the
+      user flagged), the read row should reserve the SAME left grip-column space, just uninteractable and
+      opacity 0. *(new — from 2026-07-24 general note; unblocks the `18cd5c60` parity retest)*
 
 ## migrate-editor-view-libgui
 
