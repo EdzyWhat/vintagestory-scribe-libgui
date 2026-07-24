@@ -397,6 +397,10 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
     private FocusNode focusNode = null!;
     private FocusNode? internalFocusNode;
     private bool hadFocus;
+    /// <summary>True between an onPress and its onRelease: a click-drag is selecting text, so onMove
+    /// extends the selection to the cursor. The event dispatcher auto-captures the field on press, so
+    /// moves keep arriving even when the cursor leaves the field's bounds mid-drag.</summary>
+    private bool isSelecting;
 
     public override void InitState()
     {
@@ -664,37 +668,60 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
 
     private void MarkNeedsBuild() => SetState(() => { });
 
-    /// <summary>Click handler: focus the field AND move the caret to the clicked position (so a click
-    /// inside an already-focused field repositions the caret, not just focuses — mirrors LibGUI's own
-    /// <c>TextField.OnPointerDown</c>, extended to this wrapping multi-line field). The click point is
-    /// mapped into the text render object's local space via <c>GlobalToLocal</c>, then onto a flat caret
-    /// offset by <see cref="ScribeMultilineFieldRender.OffsetAtPosition"/> (the inverse of the caret
-    /// paint math). Collapses any selection to the clicked caret.</summary>
+    /// <summary>Maps a pointer event to a flat caret offset in the source text, or null if the render
+    /// geometry isn't reachable. <c>Element.RenderObject</c> resolves (through the GestureDetector's
+    /// proxy box) to the proxy wrapping our text render object as its single child; the proxy lays the
+    /// child out at (0,0) with the same size, so the proxy-local point is directly usable by the child's
+    /// <see cref="ScribeMultilineFieldRender.OffsetAtPosition"/> (the inverse of the caret paint math).</summary>
+    private int? OffsetAt(PointerEvent e)
+    {
+        if (Element?.RenderObject is not { } proxy) return null;
+        var textRender = proxy is ScribeMultilineFieldRender direct
+            ? direct
+            : proxy.Children.Count > 0 ? proxy.Children[0] as ScribeMultilineFieldRender : null;
+        if (textRender is null) return null;
+
+        Vector2 local = proxy.GlobalToLocal(new Vector2(e.X, e.Y));
+        return Math.Clamp(textRender.OffsetAtPosition(local), 0, text.Length);
+    }
+
+    /// <summary>Press: focus the field, move the caret to the clicked position (so a click inside an
+    /// already-focused field repositions the caret, not just focuses), and begin a click-drag selection.
+    /// Mirrors LibGUI's own <c>TextField.OnPointerDown</c>, extended to this wrapping multi-line field.
+    /// Collapses any existing selection to the clicked caret (the drag will re-extend it).</summary>
     private void OnFieldPress(PointerEvent e)
     {
         focusNode.RequestFocus();
 
-        // Element.RenderObject resolves (through the GestureDetector's proxy box) to the proxy that
-        // wraps our text render object as its single child. The proxy lays the child out at (0,0) with
-        // the same size, so the proxy-local click point is directly usable by the child's geometry.
-        if (Element?.RenderObject is not { } proxy) return;
-        var textRender = proxy is ScribeMultilineFieldRender direct
-            ? direct
-            : proxy.Children.Count > 0 ? proxy.Children[0] as ScribeMultilineFieldRender : null;
-        if (textRender is null) return;
-
-        Vector2 local = proxy.GlobalToLocal(new Vector2(e.X, e.Y));
-        int offset = textRender.OffsetAtPosition(local);
-        caret = Math.Clamp(offset, 0, text.Length);
-        anchor = caret;
+        if (OffsetAt(e) is not { } offset) return;
+        caret = offset;
+        anchor = offset;      // collapsed; onMove extends from here
+        isSelecting = true;
         MarkNeedsBuild();
     }
+
+    /// <summary>Drag while selecting: extend the selection by moving the caret to the cursor and leaving
+    /// the anchor at the press point. The dispatcher's press-capture keeps these firing even if the
+    /// cursor leaves the field's bounds.</summary>
+    private void OnFieldMove(PointerEvent e)
+    {
+        if (!isSelecting) return;
+        if (OffsetAt(e) is not { } offset) return;
+        if (offset == caret) return; // no caret movement -> no rebuild
+        caret = offset;              // anchor unchanged: [min,max] is the live selection
+        MarkNeedsBuild();
+    }
+
+    /// <summary>Release: end the click-drag. The caret/anchor already hold the final selection.</summary>
+    private void OnFieldRelease(PointerEvent e) => isSelecting = false;
 
     public override Widget Build(BuildContext context)
     {
         var colors = Theme.Of(context).ColorScheme;
         return new GestureDetector(
             onPress: OnFieldPress,
+            onMove: OnFieldMove,
+            onRelease: OnFieldRelease,
             child: new ScribeMultilineFieldRenderWidget(
                 text: text,
                 caret: caret,

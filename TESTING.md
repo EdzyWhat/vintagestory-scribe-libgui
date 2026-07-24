@@ -80,6 +80,10 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       click somewhere else within that SAME (already-focused) field — the caret should jump to the click
       point. Test on a wrapped second/third line too (click lands on the right line and column), and
       clicking past the end of a line's text lands the caret at the line end. *(new — 2026-07-24)*
+- [ ] `2fbd2852` **Click-drag selects text.** Press and drag inside an editor field → a selection grows
+      from the press point to the cursor (highlight visible), including dragging across a wrapped line and
+      dragging past the field's bounds (capture holds). Then confirm the selection works: Ctrl+C/X/V act
+      on it and typing replaces it. *(new — drag-select, 2026-07-24)*
 
 ## migrate-editor-view-libgui
 
