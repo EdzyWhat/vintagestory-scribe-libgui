@@ -77,19 +77,29 @@
 
 ## 6. Manual in-game verification (playtest)
 
-- [ ] 6.1 Open a lectern with several single-line tasks; switch read↔editor repeatedly and
+- [x] 6.1 Open a lectern with several single-line tasks; switch read↔editor repeatedly and
       confirm each task stays at the same vertical position with no jump (single-line parity).
-- [ ] 6.2 Confirm the read view draws no field border while the editor field does, and the
+      Confirmed 2026-07-23 (playtest): tasks stay pinned across view switches.
+- [x] 6.2 Confirm the read view draws no field border while the editor field does, and the
       text left edge and top edge line up across the switch.
+      Confirmed 2026-07-23 (playtest): read view borderless, text edges align across the switch.
 - [ ] 6.3 Edit a row-sizing value in `scribe-client-config.json`, reopen the lectern, and
       confirm the rows render at the new size (edit-file-then-reopen loop).
+      **Backlogged to PC 2026-07-23** (author will verify on PC alongside 6.4).
 - [ ] 6.4 With ConfigLib installed, open its settings panel, change a row-sizing float, save,
       reopen the lectern, and confirm the new size applies. Confirm the panel opens without
       error (float-only settings).
-- [ ] 6.5 With ConfigLib NOT installed, confirm the mod loads and the lectern opens normally
+      **Blocked/backlogged to PC 2026-07-23:** opening ConfigLib's "Mod Settings" panel freezes
+      game input on the author's Apple Silicon Mac (ESC, mouse-look). Manifest is confirmed
+      float-only, so this is not the old integer-panel bug — likely the OpenGL 4.1/4.3 ImGui
+      wall (see the configlib-panel-freeze-mac memory + VSAPI-NOTES). Verify on PC (OpenGL >= 4.3).
+- [x] 6.5 With ConfigLib NOT installed, confirm the mod loads and the lectern opens normally
       with no missing-dependency warning.
-- [ ] 6.6 Look at the checkbox-vs-first-line alignment under `Start`; if the 22px checkbox
+      Confirmed 2026-07-23 (playtest): loads and opens normally.
+- [x] 6.6 Look at the checkbox-vs-first-line alignment under `Start`; if the 22px checkbox
       reads too tall against the line, dial `RowCheckboxSize` in-game (do not revert read row
       to `Center`). Record the chosen value.
-- [ ] 6.7 Check a multi-line task in both views: confirm wrap parity is acceptable (best-effort,
+      Confirmed 2026-07-23 (playtest): alignment reads fine at the default `RowCheckboxSize = 22`.
+- [x] 6.7 Check a multi-line task in both views: confirm wrap parity is acceptable (best-effort,
       not a blocker).
+      Confirmed 2026-07-23 (playtest): multi-line wrap parity acceptable.
