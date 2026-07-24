@@ -856,21 +856,26 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         // are column-identical and align seamlessly across a view switch. It's the actual grip glyph
         // (keeps the reserved width in lockstep with the editor's grip if ControlSize changes) but drawn
         // at zero opacity and with NO gesture wrapper -- purely a spacer, uninteractable and invisible.
-        // The read view exposes no reorder (dragging is a lock-gated authoring action, design D4).
-        children.Add(new Opacity(
-            opacity: 0f,
-            child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant)));
+        // The read view exposes no reorder (dragging is a lock-gated authoring action, design D4). Nudged
+        // down by the same amount as the editor grip so the reserved column matches row-for-row.
+        children.Add(new Padding(
+            EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop),
+            child: new Opacity(
+                opacity: 0f,
+                child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant))));
 
         if (Widget.Data.IsTask)
         {
-            children.Add(new Checkbox(
-                value: done,
-                onChanged: _ =>
-                {
-                    SetState(() => done = !done);
-                    Widget.OnToggleTask(Widget.Data.Index);
-                },
-                size: style.CheckboxSize));
+            children.Add(new Padding(
+                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop),
+                child: new Checkbox(
+                    value: done,
+                    onChanged: _ =>
+                    {
+                        SetState(() => done = !done);
+                        Widget.OnToggleTask(Widget.Data.Index);
+                    },
+                    size: style.CheckboxSize)));
         }
 
         // Inset the read text by the editor field's internal padding so a single-line read row is the
@@ -1199,22 +1204,28 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
 
         // Grip on the FAR LEFT of the row (2026-07-24 feedback). Always present (not hover-gated): it
         // stays mounted so a drag it started can't lose the dispatcher's pointer capture mid-move.
-        // onPress/onMove-hover(row)/onRelease drive the reorder.
-        children.Add(new GestureDetector(
-            onPress: _ => Widget.OnDragStart(index),
-            onRelease: _ => Widget.OnDragEnd(),
-            child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant)));
+        // onPress/onMove-hover(row)/onRelease drive the reorder. Nudged down to center on a one-line
+        // input (see ScribeRowControlNudge); the top margin sits OUTSIDE the GestureDetector so the
+        // drag hit-target still covers the visible glyph.
+        children.Add(new Padding(
+            EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop),
+            child: new GestureDetector(
+                onPress: _ => Widget.OnDragStart(index),
+                onRelease: _ => Widget.OnDragEnd(),
+                child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant))));
 
         if (Widget.Data.IsTask)
         {
-            children.Add(new Checkbox(
-                value: done,
-                onChanged: _ =>
-                {
-                    SetState(() => done = !done);
-                    Widget.OnToggleTask(index);
-                },
-                size: style.CheckboxSize));
+            children.Add(new Padding(
+                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop),
+                child: new Checkbox(
+                    value: done,
+                    onChanged: _ =>
+                    {
+                        SetState(() => done = !done);
+                        Widget.OnToggleTask(index);
+                    },
+                    size: style.CheckboxSize)));
         }
 
         children.Add(new Expanded(child: new ScribeMultilineField(
@@ -1269,9 +1280,12 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         {
             float btn = style.ControlSize;
             float gap = 4f;
+            // Nudge the buttons down from their resting inset to center on a one-line row (see
+            // ScribeRowControlNudge).
+            float btnTop = gap + ScribeRowControlNudge.FloatingButtonTop;
             // delete: right-most; pin: to its left (task rows only).
             stackChildren.Add(new Positioned(
-                right: gap, top: gap,
+                right: gap, top: btnTop,
                 child: new ScribeRowButton(
                     iconName: "scribeclose",
                     iconColor: colors.Error,
@@ -1280,7 +1294,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             if (Widget.Data.IsTask)
             {
                 stackChildren.Add(new Positioned(
-                    right: gap + btn + gap, top: gap,
+                    right: gap + btn + gap, top: btnTop,
                     child: new ScribeRowButton(
                         iconName: "scribepin",
                         // Pinned reads "active" (accent); unpinned is muted.
@@ -1304,6 +1318,31 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             onExit: _ => { if (hovered) SetState(() => hovered = false); },
             child: row);
     }
+}
+
+/// <summary>Fixed, unscaled top-margin nudges that visually center a row's shorter controls on a
+/// SINGLE-LINE text input, without moving them when the text wraps to multiple lines.
+///
+/// <para>The row lays its children out with <see cref="CrossAxisAlignment.Start"/> (top-aligned) so a
+/// multi-line input keeps the controls pinned to its first line. That means the controls do NOT auto-
+/// center — a one-line input is ~24px tall while the grip/checkbox glyphs are ~22px and the floating
+/// pin/delete buttons ~22px, so each reads a hair high. We nudge each control DOWN by a fixed top
+/// margin to sit centered on a one-line row. Because the nudge is smaller than the (input − control)
+/// slack, it never grows the row height.</para>
+///
+/// <para><b>These are hand-tuned for the current font size (15) and control size (22).</b> They are
+/// deliberately NOT scaled by <c>TextSizeScale</c>: centering is `(inputHeight − controlHeight) / 2`,
+/// which is not linear in the scale, so a single multiplier wouldn't stay centered. If the font size
+/// or control size ever becomes user-adjustable, replace these constants with a computed offset from
+/// the measured input/control heights (2026-07-24 feedback).</para></summary>
+internal static class ScribeRowControlNudge
+{
+    /// <summary>Down-nudge for the drag grip and the task checkbox (both ~22px on a ~24px input).</summary>
+    public const float CheckboxAndGripTop = 2f;
+
+    /// <summary>Additional down-nudge for the floating pin/delete buttons, on top of their resting
+    /// <see cref="ScribeEditRowState"/> inset, to center them on a one-line row.</summary>
+    public const float FloatingButtonTop = 3f;
 }
 
 // ============================================================================
