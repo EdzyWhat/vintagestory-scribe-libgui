@@ -74,6 +74,12 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       long list, scroll to the bottom in both and watch for a fractional per-row drift accumulating, or a
       few pixels of the last row cut off. If there's a small consistent cutoff, a little bottom padding on
       the list is a cheap fix. *(new — verify row-height parity, 2026-07-24)*
+- [ ] `fa4d457f` **Window width matches Handbook.** Open the lectern and the vanilla survival Handbook
+      and compare widths — the lectern window should now be the same width (567px). *(new — 2026-07-24)*
+- [ ] `21982461` **Click repositions caret.** In the editor, click into a row to focus it and type, then
+      click somewhere else within that SAME (already-focused) field — the caret should jump to the click
+      point. Test on a wrapped second/third line too (click lands on the right line and column), and
+      clicking past the end of a line's text lands the caret at the line end. *(new — 2026-07-24)*
 
 ## migrate-editor-view-libgui
 

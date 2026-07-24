@@ -218,6 +218,52 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox
         int last = Math.Max(0, visualLines.Count - 1);
         return (last, visualLines.Count > 0 ? visualLines[last].Text.Length : 0);
     }
+
+    /// <summary>Inverse of the caret paint math: map a click point in the render object's LOCAL space
+    /// (post-<c>GlobalToLocal</c>) onto the nearest flat caret offset in the source text. Picks the
+    /// visual line by Y (clamped to the first/last line), then within that line walks characters and
+    /// returns the boundary nearest the click X (so clicking in the left half of a glyph lands the caret
+    /// before it, the right half after). Returns the source offset of that (line, column), so the caret
+    /// sits exactly where CaretToLineCol/PaintInternal would draw it. Uses the cached <see cref="visualLines"/>
+    /// from the last layout, so it must be called after a layout pass (always true for a click on a
+    /// mounted field).</summary>
+    public int OffsetAtPosition(Vector2 local)
+    {
+        if (visualLines.Count == 0) return 0;
+
+        // Which wrapped line: the click Y minus the top pad, divided by line height, clamped in range.
+        int line = (int)Math.Floor((local.Y - PadY) / lineHeight);
+        line = Math.Clamp(line, 0, visualLines.Count - 1);
+
+        string lineText = visualLines[line].Text;
+        int lineStart = visualLines[line].Start;
+        float targetX = local.X - PadX;
+
+        // Left of the text → line start. Otherwise find the character boundary whose X is closest to the
+        // click, measuring the prefix width up to each boundary (same MeasureWidth the paint path uses).
+        if (targetX <= 0f) return lineStart;
+
+        int bestCol = 0;
+        float bestDist = Math.Abs(targetX); // distance to the boundary before the first character (x=0)
+        for (int col = 1; col <= lineText.Length; col++)
+        {
+            float x = MeasureWidth(lineText.Substring(0, col));
+            float dist = Math.Abs(targetX - x);
+            if (dist < bestDist)
+            {
+                bestDist = dist;
+                bestCol = col;
+            }
+            else if (x > targetX)
+            {
+                // Widths are monotonically increasing, so once we've passed the click and started
+                // getting farther, the nearest boundary is behind us — stop.
+                break;
+            }
+        }
+
+        return lineStart + bestCol;
+    }
 }
 
 /// <summary>RenderObjectWidget bridge: pushes text/caret/selection/focus/colors into the render object.</summary>
@@ -618,11 +664,37 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
 
     private void MarkNeedsBuild() => SetState(() => { });
 
+    /// <summary>Click handler: focus the field AND move the caret to the clicked position (so a click
+    /// inside an already-focused field repositions the caret, not just focuses — mirrors LibGUI's own
+    /// <c>TextField.OnPointerDown</c>, extended to this wrapping multi-line field). The click point is
+    /// mapped into the text render object's local space via <c>GlobalToLocal</c>, then onto a flat caret
+    /// offset by <see cref="ScribeMultilineFieldRender.OffsetAtPosition"/> (the inverse of the caret
+    /// paint math). Collapses any selection to the clicked caret.</summary>
+    private void OnFieldPress(PointerEvent e)
+    {
+        focusNode.RequestFocus();
+
+        // Element.RenderObject resolves (through the GestureDetector's proxy box) to the proxy that
+        // wraps our text render object as its single child. The proxy lays the child out at (0,0) with
+        // the same size, so the proxy-local click point is directly usable by the child's geometry.
+        if (Element?.RenderObject is not { } proxy) return;
+        var textRender = proxy is ScribeMultilineFieldRender direct
+            ? direct
+            : proxy.Children.Count > 0 ? proxy.Children[0] as ScribeMultilineFieldRender : null;
+        if (textRender is null) return;
+
+        Vector2 local = proxy.GlobalToLocal(new Vector2(e.X, e.Y));
+        int offset = textRender.OffsetAtPosition(local);
+        caret = Math.Clamp(offset, 0, text.Length);
+        anchor = caret;
+        MarkNeedsBuild();
+    }
+
     public override Widget Build(BuildContext context)
     {
         var colors = Theme.Of(context).ColorScheme;
         return new GestureDetector(
-            onPress: _ => focusNode.RequestFocus(),
+            onPress: OnFieldPress,
             child: new ScribeMultilineFieldRenderWidget(
                 text: text,
                 caret: caret,

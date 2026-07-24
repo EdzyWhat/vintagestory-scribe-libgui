@@ -101,7 +101,11 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
 
     protected override WindowConfig CreateWindowConfig() => new()
     {
-        Size = new Vector2(420, 520),
+        // 567px wide to match the vanilla survival Handbook's dialog: its detail view composes to a
+        // 567px outer width (500px content clip -> FixedGrow(6) = 506 -> ForkBoundingParent(5,_,36,_)
+        // = 547 -> +2x10 ElementToDialogPadding = 567; confirmed by decompiling
+        // Vintagestory.GameContent.GuiDialogHandbook). Height unchanged.
+        Size = new Vector2(567, 520),
         Draggable = true,
         Resizable = true,
     };
