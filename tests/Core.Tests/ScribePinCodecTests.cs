@@ -134,6 +134,57 @@ public class ScribePinCodecTests
         Assert.True(settings.HudCollapsed);                              // untouched field preserved
     }
 
+    // ---- HUD position preferences (add-pinned-task-hud 4.4) ----
+
+    [Fact]
+    public void Settings_DefaultInstance_AnchorsTopRightAt250Wide()
+    {
+        var settings = new ScribePlayerSettings();
+
+        Assert.Equal(ScribeHudAnchor.TopRight, settings.HudAnchor);
+        Assert.Equal(250, settings.HudRowWidth);
+        Assert.Equal(0, settings.HudOffsetX);
+        Assert.Equal(0, settings.HudOffsetY);
+    }
+
+    [Fact]
+    public void Settings_NormalizeAnchor_FallsUnknownBackToTopRight()
+    {
+        Assert.Equal(ScribeHudAnchor.BottomLeft,
+            ScribePlayerSettings.NormalizeAnchor(ScribeHudAnchor.BottomLeft));
+        Assert.Equal(ScribeHudAnchor.TopRight,
+            ScribePlayerSettings.NormalizeAnchor((ScribeHudAnchor)99));
+    }
+
+    [Theory]
+    [InlineData(0, ScribePlayerSettings.MinHudRowWidth)]        // below min → clamped up
+    [InlineData(-40, ScribePlayerSettings.MinHudRowWidth)]      // negative → clamped up
+    [InlineData(5000, ScribePlayerSettings.MaxHudRowWidth)]     // above max → clamped down
+    [InlineData(300, 300)]                                      // in range → unchanged
+    public void Settings_ClampHudRowWidth_BoundsTheValue(int stored, int expected)
+    {
+        Assert.Equal(expected, ScribePlayerSettings.ClampHudRowWidth(stored));
+    }
+
+    [Fact]
+    public void Settings_Normalized_ClampsWidthAndAnchorInPlace()
+    {
+        var settings = new ScribePlayerSettings
+        {
+            HudAnchor = (ScribeHudAnchor)99,
+            HudRowWidth = 5000,
+            HudOffsetX = -37,   // offsets are free-form nudges; not clamped
+            HudOffsetY = 42,
+        };
+
+        settings.Normalized();
+
+        Assert.Equal(ScribeHudAnchor.TopRight, settings.HudAnchor);
+        Assert.Equal(ScribePlayerSettings.MaxHudRowWidth, settings.HudRowWidth);
+        Assert.Equal(-37, settings.HudOffsetX);   // untouched
+        Assert.Equal(42, settings.HudOffsetY);    // untouched
+    }
+
     // ---- fail-safe paths ----
 
     [Fact]

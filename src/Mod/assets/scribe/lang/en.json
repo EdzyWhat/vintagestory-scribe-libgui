@@ -17,5 +17,14 @@
 	"scribe-gui-collapse": "Collapse",
 	"scribe-gui-expand": "Expand",
 	"scribe-gui-edit-hint": "This lectern is empty. Click Edit to add tasks or notes.",
-	"scribe-gui-save-failed": "Your changes could not be saved — the lectern is no longer locked to you."
+	"scribe-gui-save-failed": "Your changes could not be saved — the lectern is no longer locked to you.",
+
+	"scribe-hud-title": "Pinned",
+	"scribe-hud-more": "+{0} more",
+	"scribe-completion-sink": "Keep (sink to bottom)",
+	"scribe-completion-unpin": "Unpin",
+	"scribe-completion-delete": "Delete task",
+
+	"inputgroup-scribe": "Scribe",
+	"hotkey-scribepinhud": "Scribe Mod: Toggle pinned-task HUD"
 }

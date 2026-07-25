@@ -60,6 +60,28 @@ indicate that additional pins exist rather than growing without bound.
 - **WHEN** the player's maximum-HUD-rows setting changes and is synced
 - **THEN** the HUD shows up to the new maximum on its next refresh
 
+### Requirement: The HUD's screen position is configurable
+The system SHALL anchor the HUD to one of seven screen positions — top-left, top-middle, top-right,
+middle-left, middle-right, bottom-left, bottom-right — defaulting to top-right, as a client-local
+per-player preference. Each anchor SHALL support a configurable pixel X/Y offset so the HUD can be
+nudged clear of other on-screen overlays (the minimap, coordinate overlay, and block-info overlay).
+The default top-right anchor SHALL be pre-offset far enough to the left that the HUD does not render
+underneath the default top-right minimap. The HUD's task-row area SHALL be a fixed width. Selecting the
+anchor and offsets from an in-mod settings UI is out of scope for this change (the values are
+config-editable now; the UI is a later change).
+
+#### Scenario: The default position clears the minimap
+- **WHEN** the player has pins and has not changed the HUD position preference
+- **THEN** the HUD renders anchored top-right, offset left of the default minimap, not beneath it
+
+#### Scenario: Changing the anchor is honored
+- **WHEN** the player changes the HUD anchor preference (e.g. to bottom-right) and reloads
+- **THEN** the HUD renders at the new anchor on its next show
+
+#### Scenario: An offset nudges the HUD clear of an overlay
+- **WHEN** the player sets a nonzero X/Y offset for the active anchor
+- **THEN** the HUD is displaced by that offset from the anchored corner/edge
+
 ### Requirement: The HUD auto-shows when there are pins and is collapsible
 The system SHALL show the HUD automatically whenever the player has at least one pin, and SHALL hide it
 entirely when the player has zero pins. Separately from that automatic hidden-at-zero behavior, the

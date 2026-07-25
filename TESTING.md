@@ -21,6 +21,63 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## add-pinned-task-hud
+
+> On-screen pinned-task HUD built on LibGUI (`HudScribePins : GuiBase`, `EnumDialogType.HUD`): renders
+> THIS player's own pins (top-right, glow-over-world, no plate) as an auto-ordered checklist — not-done
+> above done, completed sinks after a ~2s undo window. Completion reuses `ScribeCompleteTaskMessage`
+> carrying the client's completion policy (Sink/Unpin/Delete). Auto-shows on ≥1 pin / hides at zero;
+> rebindable `scribepinhud` hotkey (default P) + on-HUD chevron toggle a persisted, client-local
+> collapse. Preferences (`CompletionPolicy`/`HudMaxRows`/`HudCollapsed`) live in `scribe-hud-config.json`.
+> Built + Core-green 2026-07-25; NOT yet restaged/committed as of this writing — restage before testing.
+
+- [x] `f3df9416` **Pin shows on HUD.** Pin a task at a lectern → a top-right HUD appears showing that
+      task's text + done state, legible over a busy world background via the text glow (no background
+      plate). *(add-pinned-task-hud 7.3)*
+      - **Confirmed 2026-07-25** (user playtest, submission 2026-07-25T09-52-31): "Works." The HUD
+        appears on pinning a task, showing text + done state legibly over the world.
+- [ ] `8439e474` **Completion policies.** Complete a HUD task under each policy (set in
+      `scribe-hud-config.json`): Sink → row mutes and after ~2s sinks to the bottom (re-toggle within
+      2s undoes); Unpin → completion removes the row; Delete → completion deletes the underlying task.
+      *(add-pinned-task-hud 7.4)*
+      - **Backlogged 2026-07-25** (user playtest, submission 2026-07-25T09-52-31): deferred until the
+        in-mod Settings Tab lands — hand-editing `scribe-hud-config.json` to switch policy per test is
+        too fiddly. The Sink default path is exercised implicitly by 7.3/7.7; Unpin/Delete await the
+        settings UI (a separate future change). Retest then.
+- [x] `9805a162` **Break lectern, pin survives.** Break the lectern hosting a pinned task → the pin
+      stays on the HUD (player-owned) and is still completable from its snapshot; re-place the lectern →
+      its source is restored. *(add-pinned-task-hud 7.5)*
+      - **Confirmed 2026-07-25** (user playtest, submission 2026-07-25T09-52-31): "Works." Breaking the
+        host lectern leaves the pin on the HUD (player-owned, grief-proof); re-place restores the source.
+- [x] `12dcaaa7` **Row cap + "+N more".** With more pins than `HudMaxRows`, confirm exactly max rows
+      render plus a "+N more" indicator; edit `HudMaxRows` in `scribe-hud-config.json`, reload, and
+      confirm the HUD honors the new cap. *(add-pinned-task-hud 7.6)*
+      - **Confirmed 2026-07-25** (user playtest, submission 2026-07-25T09-52-31): "Works." Exactly
+        `HudMaxRows` rows render with a "+N more" indicator; editing the cap in the config + reload is honored.
+- [x] `16464b57` **Auto-show + collapse persist.** HUD auto-shows on the first pin and hides at zero
+      pins; the toggle hotkey (default P) AND the on-HUD chevron collapse/expand it (animated); the
+      collapsed state persists across a relog and carries to a DIFFERENT world (client-local,
+      cross-world). *(add-pinned-task-hud 7.7)*
+      - **Confirmed 2026-07-25** (user playtest, submission 2026-07-25T09-52-31): "Works." Auto-show/hide,
+        hotkey + on-HUD chevron collapse, and cross-session/cross-world persistence all function.
+        Screenshot `.playtest-submissions/screenshots/2026-07-25T09-49-08-16464b57.png` shows the
+        `scribepinhud` hotkey registered ("Toggle pinned-task HUD" → P, searchable under "pin").
+      - **Follow-up (addressed 2026-07-25):** user asked to rename the hotkey label from "Toggle
+        pinned-task HUD" to "Scribe Mod: Toggle pinned-task HUD" — done in `en.json`
+        (`hotkey-scribepinhud`); re-verify the new label shows in Controls after the next relaunch.
+- [x] `2394a823` **Default clears minimap.** With fresh config (no `scribe-hud-config.json`), pin a
+      task → the HUD appears top-right but OFFSET LEFT of the 250×250 minimap, not underneath it; long
+      task text wraps within a fixed ~250px width rather than stretching wide. *(add-pinned-task-hud 4.5)*
+      - **Confirmed 2026-07-25** (user playtest, submission 2026-07-25T09-52-31): "Works." The default
+        top-right anchor sits left of the minimap (not under it) and text wraps within the fixed width.
+- [ ] `49d5003c` **Anchor/offset/width config.** Edit `scribe-hud-config.json`: set `HudAnchor` (e.g.
+      `BottomRight` / `TopLeft` / `MiddleRight`), tweak `HudOffsetX`/`HudOffsetY`, and change
+      `HudRowWidth`; reload → the HUD moves to that corner/edge, shifts by the offset (toward center),
+      and the row area resizes to the new width. Confirm it never runs off-screen. *(add-pinned-task-hud 4.5)*
+      - **Backlogged 2026-07-25** (user playtest, submission 2026-07-25T09-52-31): "The default is in the
+        right place." Non-default anchors/offsets not exercised yet; the user will assess when testing on
+        PC. Deferred, not broken — the default path is confirmed under `2394a823`.
+
 ## add-lectern-row-affordances-libgui
 
 > Third editor tier: wires the per-row **delete**, **pin/unpin**, and **mouse-drag reorder** controls

@@ -37,6 +37,12 @@ unloaded chunk is still visible and actionable.
   `ScribePlayerSettings.HudCollapsed`.
 - Add a **configurable maximum number of HUD rows** (default 3) as a per-player preference; pins beyond
   the max are not shown (with a small "+N more" affordance).
+- The HUD's **screen position is configurable**: a 7-position anchor enum (topLeft / topMiddle /
+  topRight / middleLeft / middleRight / bottomLeft / bottomRight, default **topRight**) with per-anchor
+  X/Y **offsets** to clear vanilla overlays (minimap / coordinate overlay / block-info overlay), and a
+  **fixed row width** (default 250px). The default top-right is pre-offset left of the minimap so it
+  isn't drawn under it. Code-defaulted and JSON-editable now; a settings-UI picker is deferred (same
+  bucket as the max-rows / completion-policy pickers).
 - **Player preferences are client-local, not per-world.** The three player preferences
   (`CompletionPolicy`, `HudMaxRows`, `HudCollapsed`) are stored in a **client-local JSON config**
   (`StoreModConfig`/`LoadModConfig`, the `ScribeClientConfig` pattern) — per-player, identical across
@@ -67,8 +73,9 @@ are per-player and identity-addressed as shipped.
   own pinned tasks (text/done snapshot), sourced from the synced per-player pin set. Covers the HUD's
   visibility rules (auto-show on ≥1 pin, rebindable toggle, persisted collapse), its bounded row count
   (configurable max), its automatic ordering (completed tasks sink to the bottom after a brief undo
-  window), complete-by-identity from a row under the player's completion policy, and its live refresh
-  when the pin set changes.
+  window), complete-by-identity from a row under the player's completion policy, its live refresh
+  when the pin set changes, and its configurable screen position (7-position anchor + per-anchor
+  offsets + fixed row width, default top-right offset clear of the minimap).
 
 ### Modified Capabilities
 - `player-pins`: (1) player preferences (a **maximum-HUD-rows** display preference, default 3, and a
@@ -87,9 +94,12 @@ are per-player and identity-addressed as shipped.
 - **Core (`src/Core/`)**: keep the `ScribePlayerSettings` POCO — `HudMaxRows` (default 3, clamp
   bounds), `CompletionPolicy` enum (`Sink`/`Unpin`/`Delete`, default `Sink`), `HudCollapsed` — as the
   in-memory shape the client config serializes; retain the `NormalizePolicy`/`ClampHudMaxRows` guards
-  (moved to the config-load path). Add a game-agnostic **ordering helper** (given a pin list + done
-  states, return the display order with done tasks sunk to the bottom). Unit-tested; no VS API
-  reference. **Remove the settings binary codec** (`SPSE`/`SPSS`, `SerializeSettings`/`ReadSettings`/
+  (moved to the config-load path). Add **HUD-position preferences** to the POCO: a `ScribeHudAnchor`
+  enum (`TopLeft`/`TopMiddle`/`TopRight`/`MiddleLeft`/`MiddleRight`/`BottomLeft`/`BottomRight`, default
+  `TopRight`), per-anchor `HudOffsetX`/`HudOffsetY`, and a fixed `HudRowWidth` (default 250), each
+  normalized/clamped on load like the existing fields. Add a game-agnostic **ordering helper** (given a
+  pin list + done states, return the display order with done tasks sunk to the bottom). Unit-tested; no
+  VS API reference. **Remove the settings binary codec** (`SPSE`/`SPSS`, `SerializeSettings`/`ReadSettings`/
   `WriteSettings` + the old-bool migration) from `ScribePinCodec` — settings are now Newtonsoft JSON,
   not a codec blob; the pin codec is untouched (separate magic/version).
 - **Mod (`src/Mod/`)**: narrow `ScribePinStore.RefreshSnapshots` to reconcile **only the acting

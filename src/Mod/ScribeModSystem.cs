@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Scribe.Core;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
+using Vintagestory.API.Config;
 using Vintagestory.API.MathTools;
 using Vintagestory.API.Server;
 
@@ -48,6 +49,15 @@ public sealed class ScribeModSystem : ModSystem
     /// same push as <see cref="myPins"/>. The HUD consumes this for each pin's text/done snapshot;
     /// the lectern only needs the <see cref="myPins"/> key set for its tint.</summary>
     private IReadOnlyList<ScribePinnedRef> myPinList = Array.Empty<ScribePinnedRef>();
+
+    /// <summary>Rebindable hotkey code that toggles the pinned-task HUD's collapse state (design D6).
+    /// Registered client-side; its handler flips the HUD's client-local collapse preference.</summary>
+    public const string HudHotkeyCode = "scribepinhud";
+
+    /// <summary>The client-side pinned-task HUD element (null on a pure server). Constructed in
+    /// <see cref="StartClientSide"/>; it self-opens/closes off <see cref="MyPinsChanged"/> and owns its
+    /// own event/tick lifetime, disposed in <see cref="Dispose"/>.</summary>
+    private HudScribePins? pinHud;
 
     /// <summary>Client-side player preferences (completion policy, HUD rows/collapse), persisted as
     /// client-local JSON (<see cref="HudConfigFileName"/>) and loaded in <see cref="StartClientSide"/>;
@@ -97,6 +107,30 @@ public sealed class ScribeModSystem : ModSystem
         api.Network.GetChannel(NetworkChannelName)
             .SetMessageHandler<ScribeEditDocumentMessage>(OnClientReceivedEditReply)
             .SetMessageHandler<ScribePinnedSetMessage>(OnClientReceivedPinnedSet);
+
+        // The pinned-task HUD self-shows once the player's pin set arrives (it subscribes to
+        // MyPinsChanged in its ctor), so it can be constructed here regardless of current pin count —
+        // it stays closed until there is ≥1 pin. It owns its own subscription + tick; we dispose it.
+        pinHud = new HudScribePins(api, this);
+
+        // Rebindable collapse/expand hotkey (design D6). GUIOrOtherControls so it fires even while a
+        // dialog is open; default P, no modifiers. The HUD flips its client-local collapse preference.
+        api.Input.RegisterHotKey(HudHotkeyCode, Lang.Get("scribe:hotkey-scribepinhud"), GlKeys.P,
+            HotkeyType.GUIOrOtherControls);
+        api.Input.SetHotKeyHandler(HudHotkeyCode, _ =>
+        {
+            pinHud?.ToggleCollapsed();
+            return true;
+        });
+    }
+
+    /// <summary>Dispose the client-side HUD (its own <see cref="MyPinsChanged"/> subscription + tick).
+    /// The server side holds no unmanaged/disposable state of its own here.</summary>
+    public override void Dispose()
+    {
+        pinHud?.Dispose();
+        pinHud = null;
+        base.Dispose();
     }
 
     /// <summary>Client-side: whether THIS player has pinned the given task, from the server-pushed

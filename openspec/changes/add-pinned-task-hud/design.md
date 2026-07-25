@@ -193,6 +193,22 @@ future in-mod "Settings Tab" will drive the same client config (and `HudMaxRows`
 through the same path. Alternative rejected: a server-synced collapse flag — needless network + per-
 world scope for a personal, cross-world UI preference.
 
+### D7: Configurable 7-position anchor + per-anchor offset, fixed row width (config-driven)
+The HUD's position is a client-local preference (D4 family): a 7-value anchor enum
+{topLeft, topMiddle, topRight, middleLeft, middleRight, bottomLeft, bottomRight}, default topRight, plus
+a per-anchor pixel X/Y offset, persisted in `scribe-hud-config.json` alongside the other preferences.
+The anchor selects which screen corner/edge the shrink-wrapped window is pinned to (re-applied each
+frame in `OnRenderGUI`, generalizing the current top-right-only `AnchorTopRight`); the offset nudges it
+clear of overlapping vanilla HUDs (minimap 250×250 top-right + 10px pad, the coordinate overlay, the
+block-info overlay). topRight's default offset shifts the window left by ~the minimap footprint
+(~260px) so it sits beside, not under, the map. The task-row area is a fixed width (default 250px) via a
+constrained `Column` (LibGUI RenderFlex), so a long task wraps within that width instead of the window
+growing arbitrarily wide. All three (anchor, offsets, width) are code-defaulted and JSON-editable now;
+the in-mod Settings Tab that will let players pick them from a dropdown is a deferred future change
+(same bucket as the max-rows / completion-policy pickers). Alternative rejected: auto-detecting the live
+vanilla-HUD bounds to offset around them — those bounds/visibility aren't cleanly exposed and would
+break if VS changes them; manual knobs are robust.
+
 ## Risks / Trade-offs
 
 - **Rebuild cost on refresh** → LibGUI rebuilds are cheap (only the dirty subtree; clean frames replay
@@ -230,8 +246,10 @@ config; a reverted build would fall back to its own server settings defaults (it
 
 ## Open Questions
 
-- **Anchor/position**: default **right-top** (clear of hotbar/coordinates), with an offset resolved
-  in-game. Whether to expose anchor as a user setting is deferred to a later change (leaning "later").
+- **Anchor/position (RESOLVED — see D7)**: a 7-position anchor enum (default top-right) with per-anchor
+  X/Y offsets and a fixed row width, all config-driven in `scribe-hud-config.json`; the default
+  top-right is pre-offset left of the minimap so it isn't drawn under it. An in-mod picker UI stays
+  deferred to a later change.
 - **Completed-text mute level & sink feel**: exact opacity/color for a muted done row and the sink
   animation timing/curve — settle in-game, not a spec decision.
 - **`Delete` policy safety**: does completing under the Delete policy need a confirm, or is the ~2s
