@@ -159,7 +159,7 @@ public class PinScenarios : AtlasScenarioBase
     [AtlasScenario(RollbackWorld = true)]
     public async Task Completing_a_pin_with_no_source_records_done_in_the_store()
     {
-        var player = await World.JoinPlayer("SourcelessCompleter");
+        var player = await World.JoinPlayer("SrclessCompleter");
         var pos = World.Spawn.Offset(5, 0, 0);
         var (_, docId, taskId) = await SeedLectern(player, pos);
 
@@ -179,7 +179,7 @@ public class PinScenarios : AtlasScenarioBase
     [AtlasScenario(RollbackWorld = true)]
     public async Task Unpin_works_after_the_lectern_is_removed()
     {
-        var player = await World.JoinPlayer("SourcelessUnpinner");
+        var player = await World.JoinPlayer("SrclessUnpinner");
         var pos = World.Spawn.Offset(5, 0, 0);
         var (_, docId, taskId) = await SeedLectern(player, pos);
 
