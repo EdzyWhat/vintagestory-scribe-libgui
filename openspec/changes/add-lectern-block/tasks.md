@@ -102,7 +102,9 @@ Written for the two-view design: plain right-click opens a lock-free **read view
 shift+right-click (or the in-GUI toggle button) opens/switches to the lock-holding
 **editor view**.
 
-- [ ] 7.1 Build the mod and copy it into `~/Library/Application Support/VintagestoryData/Mods`; launch the game
+- [x] 7.1 Build the mod and copy it into `~/Library/Application Support/VintagestoryData/Mods`; launch the game
+      -> Done: the build+restage+relaunch loop is exercised every session (`build/restage.sh` → full
+         client relaunch); the mod loads and runs in-game, which every later group-7/8 verdict relies on.
 - [x] 7.2 Place a lectern (from creative inventory); plain right-click opens a read view with no edit controls; shift+right-click opens the editor view; add tasks, complete one, edit the note, and confirm edits autosave (no explicit Save button — check a moment after typing, before closing, that the change already round-tripped)
       -> Confirmed 2026-07-21 (TESTING.md `c9c26fc3`).
 - [x] 7.3 Save and reload the world; confirm the lectern's tasks and note persist
@@ -112,12 +114,13 @@ shift+right-click (or the in-GUI toggle button) opens/switches to the lock-holdi
 - [ ] 7.5 Multiplayer check: run a local headless server (`dotnet ".../VintagestoryServer.dll" --dataPath ~/vsdata`) with the mod, connect a second client, confirm an edit by one session is seen live in the other session's *read* view, and that two separate lecterns hold independent documents
 - [ ] 7.6 Lock check: with the editor view open in one session, confirm a second session's shift+right-click (or toggle-to-editor) is refused with the "one person at a time" message but still shows current content read-only; confirm a second session's plain right-click (read view) is granted normally even while the editor lock is held elsewhere; confirm closing the editor view or disconnecting releases the lock for the next requester
 - [ ] 7.7 Reorder + tool panel check: in the editor view, mouse-drag a row to reorder it; collapse/expand the tool panel; adjust the text-size slider and confirm the font scales and the preference persists across reopen
-      -> STALE: this was Confirmed 2026-07-21 (TESTING.md `32876056`) against the NATIVE GUI, but
-         all three features it exercises are gone/redesigned in the LibGUI rebuild (see 5.3/5.4/5.5):
-         drag-reorder and the tool panel do not exist in `GuiDialogScribeLecternLibGui`, and the
-         text-size slider was replaced by config-file scaling. Left UNCHECKED deliberately -- the
-         reorder half will be re-verified under the new delete/reorder/pin change; text-size
-         persistence via config is covered by the row-sizing work.
+      -> OBSOLETE (as written): this was Confirmed 2026-07-21 (TESTING.md `32876056`) against the NATIVE
+         GUI, but all three features it exercised are gone/redesigned in the LibGUI rebuild, so the task
+         no longer applies as phrased. Coverage moved elsewhere: drag-reorder was re-verified and
+         Confirmed under `add-lectern-row-affordances-libgui` (archived 2026-07-24, task 5.4 / TESTING.md
+         `08cae46d`); the tool panel does not exist in `GuiDialogScribeLecternLibGui`; the text-size
+         slider was replaced by config-file scaling, covered by the unify-row-sizing work. Left unchecked
+         deliberately (obsolete is a terminal non-done state), not pending.
 - [x] 7.8 Walk-away check: open the editor view, make an edit, walk out of interaction range without closing the GUI; confirm the dialog auto-closes and the edit was flushed (reopen and see it persisted) rather than lost
       -> Confirmed 2026-07-21 in Creative (TESTING.md `9c04c5c7`); the LibGUI dialog pins
          `InteractionRange` to `DefaultPickingRange + 0.5` so walk-away auto-close fires in every
@@ -157,7 +160,7 @@ packaging fix) — these three are what's left from the first real playtest.
       -> done: removed `isReorderMode`/`OnClickToggleReorder`/the toolbar entry/the dead
          `scribe-gui-reorder` lang key; `ScribeBlockRowCell.Compose` always gets
          `showDragHandle: true`. Mod.csproj builds clean.
-- [ ] 8.3 Investigate the read view's walk-away auto-close at extreme distance in creative mode:
+- [x] 8.3 Investigate the read view's walk-away auto-close at extreme distance in creative mode:
       user confirmed the editor view's auto-close is explained by creative's
       `PickingRange = 100`, but reported the read view specifically still does not close even
       past 100 blocks. Confirm whether this is a real read-view-specific bug or the same
@@ -180,7 +183,7 @@ packaging fix) — these three are what's left from the first real playtest.
       bounds via a kind-agnostic accessor).
       -> done: switched to `SingleComposer.GetElement(key)?.Bounds` (base `GuiElement`, no
          kind-specific cast). Mod.csproj builds clean.
-- [ ] 8.5 Every structural editor-view mutation (add/delete/toggle-reorder-mode/panel-collapse/
+- [x] 8.5 Every structural editor-view mutation (add/delete/toggle-reorder-mode/panel-collapse/
       slider-change) rebuilds `SingleComposer` from scratch and calls the default `.Compose()`,
       which focuses element 0 -- typing in row 3 then clicking delete on row 5 (or touching the
       slider/panel toggle) silently yanks focus/caret to whatever is index 0 in the new layout.
