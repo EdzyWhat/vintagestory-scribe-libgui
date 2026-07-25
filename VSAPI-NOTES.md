@@ -1119,6 +1119,25 @@ slightly different row. **Fix pattern:** any custom text RenderObject that must 
 MUST use the same `FontFamily` string for both `MeasureText` and `DrawText` — mirror `TextStyle`'s default
 (`"sans-serif"`), never `""`. See `ScribeMultilineFieldRender.FontFamily`.
 
+**Symptom (a05caret1): clicking a per-row control (delete / pin / drag grip) while a text field is focused
+makes the caret vanish — focus is lost and nothing re-homes it.** LibGUI clears focus on EVERY pointer
+press whose hit path contains no focusable element: `EventDispatcher.DispatchPointerDown`
+(`reference/vslibgui/Gui/Gui/Widgets/Gestures/EventDispatcher.cs:249`) does
+`if (!hasFocusTarget) root.Owner?.FocusManager?.RequestFocus(null);`, where `hasFocusTarget` is true only
+when some element on the path is `IFocusable` (or its `State` is). A control built from `GestureDetector`
++ `VsIcon` is NOT `IFocusable`, so pressing it blurs the focused field on pointer-DOWN, before its
+`onTap`/`onRelease` (which fire on pointer-UP) ever run. The blur happens regardless of what the tap then
+does — so any handler that doesn't explicitly re-grant focus leaves the caret gone. Three faces of the one
+bug: delete rebuilt without re-arming focus; pin didn't rebuild locally at all (its repaint arrives later,
+async, via the server pin-set push → `OnMyPinsChanged`); reorder's release-in-place (`from == to`)
+early-returned. Note `DispatchPointerUp` has no focus logic, so an `onRelease` handler CAN safely re-grant.
+**Fix pattern:** any control that sits over a focusable field and isn't itself `IFocusable` must re-home
+focus in its handler — either `FocusNode.RequestFocus()` directly (no rebuild) or, across a `ForceRebuild`,
+set the dialog's one-shot `autoFocusRowOnRebuild` to the row that should keep/receive the caret. A blur does
+NOT clear our `focusedEditIndex` (its listener fires only on focus GAINED), so that field still names the
+row to restore. See `DeleteEditorBlock`, `TogglePinnedEditorTask`/`OnMyPinsChanged`, and `ReorderEditorBlock`
+in `GuiDialogScribeLecternLibGui.cs`.
+
 ## Dev-diagnosis toolkit
 
 The local iterate/diagnose loop for this project (Apple Silicon, where VSImGui sliders and the

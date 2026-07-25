@@ -139,10 +139,23 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
 
     /// <summary>A fresh pin-set/settings push arrived: rebuild so the pin indicators reflect it. A
     /// no-op while not open. In editor mode the pin state is per-player (not part of the scratch doc),
-    /// so repainting it does not disturb the in-progress text edit.</summary>
+    /// so repainting it does not disturb the in-progress text edit.
+    ///
+    /// <para>Focus preservation: the per-row pin control isn't <c>IFocusable</c>, so pressing it made
+    /// LibGUI's <c>EventDispatcher.DispatchPointerDown</c> clear focus (it blurs on any press whose hit
+    /// path holds no focusable element) — and this rebuild lands asynchronously, after the server
+    /// re-pushes the set, so nothing re-homed the caret and it vanished. Re-arm the one-shot
+    /// <see cref="autoFocusRowOnRebuild"/> for the still-focused row (blur does not clear
+    /// <see cref="focusedEditIndex"/> — its listener only fires on focus GAINED) so the caret returns to
+    /// the row being edited. Covers this player's own pin toggle AND any external pin change mid-edit.</para></summary>
     private void OnMyPinsChanged()
     {
-        if (IsOpened()) ForceRebuild();
+        if (!IsOpened()) return;
+        if (isEditorMode && focusedEditIndex is { } idx && idx < editorFocusNodes.Count)
+        {
+            autoFocusRowOnRebuild = idx;
+        }
+        ForceRebuild();
     }
 
     protected override WindowConfig CreateWindowConfig() => new()
@@ -423,7 +436,13 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     }
 
     /// <summary>Editor checkbox toggle: mutate the scratch document and mark dirty (lock-gated, unlike
-    /// the read view's lock-free toggle). The row flips its own checkbox optimistically.</summary>
+    /// the read view's lock-free toggle). The row flips its own checkbox optimistically.
+    ///
+    /// <para>Focus preservation (8.5 "toggling a checkbox should NOT disturb the caret in another focused
+    /// row"): the checkbox isn't <c>IFocusable</c>, so pressing it blurs whatever field was focused via
+    /// LibGUI's <c>DispatchPointerDown</c> focus-clear (same root cause as the delete/pin/reorder controls
+    /// — a05caret1). No rebuild happens here (the checkbox flips optimistically in its own State, leaving
+    /// the focused field's State mounted), so re-request focus directly on the row that held it.</para></summary>
     private void ToggleEditorTask(int index)
     {
         if (scratch is null) return;
@@ -431,6 +450,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         {
             isDirty = true;
         }
+        if (focusedEditIndex is { } held && held < editorFocusNodes.Count) FocusEditorRow(held);
     }
 
     /// <summary>Per-row delete: remove the block from the scratch document and rebuild. Mirrors
@@ -452,6 +472,23 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         {
             if (f == index) focusedEditIndex = null;
             else if (f > index) focusedEditIndex = f - 1;
+        }
+
+        // Re-home the caret after the rebuild. Pressing the (non-IFocusable) delete button already blurred
+        // the field via LibGUI's DispatchPointerDown focus-clear, so even a surviving edited row needs its
+        // focus re-requested — nothing re-grants it otherwise, which is why the caret vanished (a05caret1).
+        // If we deleted the focused row, land on the neighbor per design Q1: the row above (index-1), or the
+        // new first row when the top row was deleted; an emptied document gets no focus (empty-state hint).
+        if (scratch.Blocks.Count > 0)
+        {
+            int target = focusedEditIndex ?? Math.Max(0, index - 1);
+            target = Math.Min(target, scratch.Blocks.Count - 1);
+            focusedEditIndex = target;
+            autoFocusRowOnRebuild = target;
+        }
+        else
+        {
+            focusedEditIndex = null;
         }
 
         SyncFocusNodesToScratch();
@@ -496,7 +533,15 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     private void ReorderEditorBlock(int from, int to)
     {
         if (scratch is null) return;
-        if (from == to) return; // released in place -> no edit (spec "Dropping in place changes nothing")
+        if (from == to)
+        {
+            // Released in place (or a grip click that never dragged): no edit — but the grip press already
+            // blurred the focused field via LibGUI's DispatchPointerDown focus-clear (the grip isn't
+            // IFocusable), so re-home the caret to the row that was being edited or nothing else will
+            // (a05caret1). No rebuild is needed to move the doc; RequestFocus alone re-grants focus.
+            if (focusedEditIndex is { } held && held < editorFocusNodes.Count) FocusEditorRow(held);
+            return;
+        }
         if (!scratch.MoveBlock(from, to)) return;
 
         isDirty = true;
