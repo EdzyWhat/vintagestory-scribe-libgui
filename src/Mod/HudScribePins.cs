@@ -5,7 +5,7 @@ using Gui;                       // GuiBase, WindowConfig
 using Gui.Rendering;             // EdgeInsets
 using Gui.Rendering.Text;        // TextStyle
 using Gui.Widgets.Animations;    // AnimatedOpacity, Curves
-using Gui.Widgets.Basic;         // Text, Container
+using Gui.Widgets.Basic;         // Text, Container, VsIcon
 using Gui.Widgets.Events;        // PointerEvent
 using Gui.Widgets.Framework;     // Widget, StatelessWidget, BuildContext, Theme, ValueKey, Key
 using Gui.Widgets.Input;         // Checkbox, GestureDetector
@@ -58,14 +58,15 @@ public sealed class HudScribePins : GuiBase
     /// clears it. A player who has hidden/moved their minimap can zero this out via the config.</summary>
     private const float DefaultTopRightMinimapClearanceX = 260f;
 
-    /// <summary>How long a just-completed row stays in its original (un-sunk) slot before sinking, an
-    /// undo window in which re-toggling the checkbox reverts the completion (design D-Order). Client
+    /// <summary>The shared "pin window" (design D7): how long a just-checked completion is held on the
+    /// HUD before it is SENT to the server, during which unchecking the row is a true undo (nothing was
+    /// sent). All completion policies share this one duration (the user's <c>pinHudWaitTime</c>). Client
     /// UI state only — never Core or server state.</summary>
-    private const double UndoWindowMs = 2000;
+    private const double PinHudWaitMs = 1500;
 
-    /// <summary>Low-frequency safety re-read / undo-timer cadence. The authoritative refresh is the
-    /// event-driven rebuild on <see cref="ScribeModSystem.MyPinsChanged"/> (design D2); this tick only
-    /// expires the undo window and re-reads defensively, so it can be cheap.</summary>
+    /// <summary>Low-frequency safety re-read / window cadence. The authoritative refresh is the
+    /// event-driven rebuild on <see cref="ScribeModSystem.MyPinsChanged"/> (design D2); this tick expires
+    /// the pin windows (firing the deferred sends) and re-reads defensively, so it can be cheap.</summary>
     private const int TickIntervalMs = 250;
 
     /// <summary>Hard cap on rendered rows regardless of the (clamped) preference, so a bad config value
@@ -76,20 +77,26 @@ public sealed class HudScribePins : GuiBase
     private readonly ScribeModSystem modSystem;
 
     /// <summary>Client-local monotonic clock, accumulated from the tick delta (Core/base elapsed clocks
-    /// aren't exposed), used to stamp and expire the per-pin undo windows in <see cref="sinkExpiryMs"/>.</summary>
+    /// aren't exposed), used to stamp and expire the per-pin windows in <see cref="pendingCompletions"/>.</summary>
     private double elapsedMs;
 
     private long tickListenerId;
 
     /// <summary>Optimistic done-state per pin, applied the instant a checkbox is clicked so the check
-    /// mark flips without waiting for the server round-trip. Cleared for a pin once the server push
-    /// agrees (see <see cref="OnMyPinsChanged"/>), after which the snapshot alone drives the row.</summary>
+    /// mark flips without waiting for the (deferred) server round-trip. Cleared for a pin once the server
+    /// push agrees (see <see cref="OnMyPinsChanged"/>), after which the snapshot alone drives the row.</summary>
     private readonly Dictionary<(Guid, Guid), bool> optimisticDone = new();
 
-    /// <summary>For each pin currently inside its undo window, the <see cref="elapsedMs"/> value at
-    /// which it should sink. While present-and-unexpired, the pin is ordered as if not-done (kept in
-    /// place); on expiry the tick rebuilds and it sinks. Cleared early if the player undoes.</summary>
-    private readonly Dictionary<(Guid, Guid), double> sinkExpiryMs = new();
+    /// <summary>A completion the player checked off but that has NOT yet been sent to the server (design
+    /// D7 deferred send): the policy to apply and the <see cref="elapsedMs"/> value at which the window
+    /// expires and the send fires. While present-and-unexpired the pin is held in place (not sunk) and
+    /// animates its pending outcome; unchecking within the window removes the entry (a true undo — nothing
+    /// was sent); on expiry <see cref="OnTick"/> sends the completion and removes the entry.</summary>
+    private readonly Dictionary<(Guid, Guid), PendingCompletion> pendingCompletions = new();
+
+    /// <summary>A completion held on the HUD during its pin window (design D7): the player's chosen policy
+    /// at click time and the clock value at which the deferred send fires.</summary>
+    private readonly record struct PendingCompletion(ScribeCompletionPolicy Policy, double ExpiryMs);
 
     public HudScribePins(ICoreClientAPI capi, ScribeModSystem modSystem) : base(capi)
     {
@@ -169,11 +176,13 @@ public sealed class HudScribePins : GuiBase
         var settings = modSystem.MySettings;
         var anchor = ScribePlayerSettings.NormalizeAnchor(settings.HudAnchor);
 
-        // Default the top-right X offset to the minimap clearance ONLY when the player left it at 0
-        // (never touched it); any explicit value — including a deliberate 0 to sit flush — is honored.
-        float offX = settings.HudOffsetX;
-        if (anchor == ScribeHudAnchor.TopRight && settings.HudOffsetX == 0)
-            offX = DefaultTopRightMinimapClearanceX;
+        // Offsets are RELATIVE to the anchor's pre-baked offset (add-settings-tab D8): the player's stored
+        // value is ADDED to the anchor's sensible built-in default, so a stored 0 sits at that default
+        // (e.g. clear of the top-right minimap) and any value nudges further from it. This replaced the
+        // old "apply the clearance only when offset==0" special-case, which made 0 ambiguous (default vs.
+        // deliberately-flush). Only TopRight has a non-zero pre-bake (the minimap clearance on X).
+        float prebakeX = anchor == ScribeHudAnchor.TopRight ? DefaultTopRightMinimapClearanceX : 0f;
+        float offX = prebakeX + settings.HudOffsetX;
         float offY = settings.HudOffsetY;
 
         // Left/center/right along X; top/center/bottom along Y. Left & top edges add the offset (moving
@@ -247,18 +256,22 @@ public sealed class HudScribePins : GuiBase
         }
     }
 
-    /// <summary>Low-frequency tick: expire any elapsed undo windows (so completed rows sink) and act as
-    /// a cheap safety re-read. Only rebuilds when something actually changed and the HUD is open.</summary>
+    /// <summary>Low-frequency tick: fire any pin windows that have elapsed — sending the deferred
+    /// completion to the server (design D7) — and act as a cheap safety re-read. Only rebuilds when a
+    /// window actually expired and the HUD is open (the subsequent server re-push lands in
+    /// <see cref="OnMyPinsChanged"/> and rebuilds again with the authoritative result).</summary>
     private void OnTick(float dt)
     {
         elapsedMs += dt * 1000.0;
 
         bool anyExpired = false;
-        foreach (var key in sinkExpiryMs.Keys.ToList())
+        foreach (var key in pendingCompletions.Keys.ToList())
         {
-            if (elapsedMs >= sinkExpiryMs[key])
+            var pending = pendingCompletions[key];
+            if (elapsedMs >= pending.ExpiryMs)
             {
-                sinkExpiryMs.Remove(key);
+                pendingCompletions.Remove(key);
+                SendCompletion(key.Item1, key.Item2, pending.Policy);
                 anyExpired = true;
             }
         }
@@ -268,48 +281,91 @@ public sealed class HudScribePins : GuiBase
 
     // ---------------- Row state helpers ----------------
 
-    /// <summary>The done-state to DISPLAY for a pin: the optimistic override if a click is in flight,
-    /// else the authoritative snapshot.</summary>
+    /// <summary>The done-state to DISPLAY for a pin: the optimistic override if a completion is in flight
+    /// (pending or just-sent), else the authoritative snapshot.</summary>
     private bool DisplayedDone(ScribePinnedRef pin)
         => optimisticDone.TryGetValue((pin.OwnerDocId, pin.TaskId), out bool d) ? d : pin.LastKnownDone;
 
-    /// <summary>Whether a pin is inside its (unexpired) undo window — kept in place rather than sunk.</summary>
-    private bool InUndoWindow(ScribePinnedRef pin)
-        => sinkExpiryMs.TryGetValue((pin.OwnerDocId, pin.TaskId), out double expiry) && elapsedMs < expiry;
+    /// <summary>The pending (not-yet-sent) completion for a pin, or null if none is in its window.</summary>
+    private PendingCompletion? PendingFor(ScribePinnedRef pin)
+        => pendingCompletions.TryGetValue((pin.OwnerDocId, pin.TaskId), out var p) ? p : null;
 
-    /// <summary>Whether a pin sinks to the bottom right now: done AND past its undo window. This is the
-    /// HUD's undo-aware overlay on the Core <see cref="ScribePinOrdering"/> sink rule.</summary>
-    private bool SunkForOrder(ScribePinnedRef pin) => DisplayedDone(pin) && !InUndoWindow(pin);
+    /// <summary>Whether a pin sinks to the bottom right now (HUD's undo-aware overlay on the Core
+    /// <see cref="ScribePinOrdering"/> sink rule). A pin sinks only when it is done AND its policy is
+    /// <see cref="ScribeCompletionPolicy.Sink"/> AND it is past its pin window. Under
+    /// <see cref="ScribeCompletionPolicy.Keep"/> a done pin never sinks (it holds its place); Unpin/Delete
+    /// pins are removed after the window so ordering is moot for them. During the window the pin is held
+    /// in place (not sunk) so the sink animates as it settles on expiry.</summary>
+    private bool SunkForOrder(ScribePinnedRef pin)
+    {
+        if (!DisplayedDone(pin)) return false;
+        // Within its pin window a done pin is always held in place (not sunk), so the sink can animate as
+        // it settles when the window expires — regardless of the pending policy.
+        if (PendingFor(pin) is not null) return false;
+        // Sent + confirmed done: it only remains visible under a non-removing policy (Sink/Keep — Unpin/
+        // Delete removed it). Sink de-prioritizes it; Keep holds its place. We don't persist which policy
+        // completed it, so the player's current policy is the proxy (matches the resting-order intent).
+        return modSystem.MySettings.CompletionPolicy == ScribeCompletionPolicy.Sink;
+    }
+
+    /// <summary>Whether a pin is inside a pending window whose policy will REMOVE it (Unpin/Delete), so
+    /// the row should fade its text out over the window as a preview of the destructive outcome (design
+    /// D7). Sink/Keep don't fade (they persist); they get the mute/settle treatment instead.</summary>
+    private bool IsFadingOut(ScribePinnedRef pin)
+        => PendingFor(pin) is { } pending
+           && pending.Policy is ScribeCompletionPolicy.Unpin or ScribeCompletionPolicy.Delete;
 
     /// <summary>
-    /// A row checkbox was clicked. Flip optimistically, drive the undo window, and send the completion
-    /// request carrying the player's current policy (the server applies Sink/Unpin/Delete and re-pushes).
+    /// A row checkbox was clicked. Deferred-send model (design D7): checking a row does NOT send the
+    /// completion immediately — it flips optimistically and records a <see cref="PendingCompletion"/> with
+    /// the player's current policy, held for <see cref="PinHudWaitMs"/>. <see cref="OnTick"/> fires the
+    /// actual <see cref="ScribeCompleteTaskMessage"/> when the window expires. Unchecking within the
+    /// window removes the pending entry and clears the optimistic flag — a TRUE undo, because nothing was
+    /// sent to the server (important for the destructive Unpin/Delete policies).
     /// </summary>
     private void OnToggleRow(Guid docId, Guid taskId, bool currentlyDone)
     {
         var key = (docId, taskId);
         bool nowDone = !currentlyDone;
 
-        optimisticDone[key] = nowDone;
         if (nowDone)
         {
-            // Completing: hold it in place for the undo window, then let the tick sink it.
-            sinkExpiryMs[key] = elapsedMs + UndoWindowMs;
+            // Complete: flip optimistically and hold the send until the window expires.
+            optimisticDone[key] = true;
+            pendingCompletions[key] = new PendingCompletion(
+                modSystem.MySettings.CompletionPolicy, elapsedMs + PinHudWaitMs);
         }
         else
         {
-            // Un-completing (undo within the window, or unchecking a sunk row): cancel any sink.
-            sinkExpiryMs.Remove(key);
+            // Undo within the window (or unchecking an already-completed row). If a send was still
+            // pending, cancel it outright — nothing reached the server, so this fully reverts.
+            if (pendingCompletions.Remove(key))
+            {
+                optimisticDone.Remove(key);
+            }
+            else
+            {
+                // No pending send (the window already elapsed and the completion was sent): this is a
+                // genuine un-complete. Flip optimistically and send it immediately (there's no window to
+                // hold — the row is already done server-side).
+                optimisticDone[key] = false;
+                SendCompletion(docId, taskId, modSystem.MySettings.CompletionPolicy);
+            }
         }
 
+        if (IsOpened()) ForceRebuild();
+    }
+
+    /// <summary>Fire the deferred completion request for a pin, carrying the policy captured when the
+    /// player checked it (design D7). The server applies Sink/Keep/Unpin/Delete and re-pushes.</summary>
+    private void SendCompletion(Guid docId, Guid taskId, ScribeCompletionPolicy policy)
+    {
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeCompleteTaskMessage
         {
             DocId = docId.ToByteArray(),
             TaskId = taskId.ToByteArray(),
-            Policy = (byte)modSystem.MySettings.CompletionPolicy,
+            Policy = (byte)policy,
         });
-
-        if (IsOpened()) ForceRebuild();
     }
 
     /// <summary>Collapse control (on-HUD chevron; the rebindable hotkey calls the same path): flip the
@@ -335,7 +391,8 @@ public sealed class HudScribePins : GuiBase
         int max = Math.Min(modSystem.MySettings.HudMaxRows, MaxRenderedRows);
         var shown = ordered.Take(max)
             .Select(p => new HudPinRow(
-                p.OwnerDocId, p.TaskId, p.LastKnownText, DisplayedDone(p), SunkForOrder(p)))
+                p.OwnerDocId, p.TaskId, p.LastKnownText, DisplayedDone(p), SunkForOrder(p),
+                FadingOut: IsFadingOut(p)))
             .ToList();
 
         // Indicative "+N more" only (design "+N more affordance"): pins beyond the visible cap.
@@ -346,8 +403,25 @@ public sealed class HudScribePins : GuiBase
             moreCount: moreCount,
             collapsed: modSystem.MySettings.HudCollapsed,
             rowWidth: ScribePlayerSettings.ClampHudRowWidth(modSystem.MySettings.HudRowWidth),
+            rowFontSize: ScribeRowConstants.BaseHudFontSize
+                * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.HudFontScale),
+            checkboxSize: ScribeRowConstants.BaseHudCheckboxSize
+                * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.HudFontScale),
             onToggleRow: OnToggleRow,
-            onToggleCollapsed: ToggleCollapsed);
+            onToggleCollapsed: ToggleCollapsed,
+            onOpenSettings: OpenSettings);
+    }
+
+    /// <summary>The HUD gear (add-settings-tab 5.4): open the minimal standalone settings dialog hosting
+    /// the shared <see cref="ScribeSettingsContent"/> form (design D2's HUD-gear target — the HUD is an
+    /// always-on overlay with no central region to swap, so it opens a small window instead of an
+    /// in-place swap). Reuses one instance so repeated gear taps toggle it rather than stacking.</summary>
+    private ScribeSettingsDialog? settingsDialog;
+
+    private void OpenSettings()
+    {
+        settingsDialog ??= new ScribeSettingsDialog(capi, modSystem);
+        if (!settingsDialog.IsOpened()) settingsDialog.TryOpen();
     }
 
     // ---------------- Lifecycle ----------------
@@ -361,6 +435,8 @@ public sealed class HudScribePins : GuiBase
             capi.Event.UnregisterGameTickListener(tickListenerId);
             tickListenerId = 0;
         }
+        settingsDialog?.Dispose();
+        settingsDialog = null;
         base.Dispose();
     }
 }
@@ -369,9 +445,11 @@ public sealed class HudScribePins : GuiBase
 // HUD content tree
 // ============================================================================
 
-/// <summary>A value snapshot of one HUD row: identity, last-known text, its displayed done-state, and
-/// whether it is currently sunk (muted, ordered at the bottom). Carries no live pin reference.</summary>
-internal readonly record struct HudPinRow(Guid DocId, Guid TaskId, string Text, bool Done, bool Sunk);
+/// <summary>A value snapshot of one HUD row: identity, last-known text, its displayed done-state,
+/// whether it is currently sunk (muted, ordered at the bottom), and whether it is fading out inside a
+/// pending destructive-completion window (Unpin/Delete about to send — design D7). Carries no live pin
+/// reference.</summary>
+internal readonly record struct HudPinRow(Guid DocId, Guid TaskId, string Text, bool Done, bool Sunk, bool FadingOut);
 
 /// <summary>
 /// The HUD's widget tree: a collapse-header chevron over a column of pin rows (or, when collapsed,
@@ -386,9 +464,6 @@ internal sealed class HudPinsContent : StatelessWidget
     /// text legible over any world background without a background plate (design D1).</summary>
     private const float GlowWidth = 0.6f;
 
-    /// <summary>Font size for a HUD row's task text.</summary>
-    private const float RowFontSize = 16f;
-
     /// <summary>Opacity of a sunk (completed, past-undo) row — muted but still readable/undoable.</summary>
     private const float SunkOpacity = 0.5f;
 
@@ -396,23 +471,32 @@ internal sealed class HudPinsContent : StatelessWidget
     private readonly int moreCount;
     private readonly bool collapsed;
     private readonly float rowWidth;
+    private readonly float rowFontSize;
+    private readonly float checkboxSize;
     private readonly Action<Guid, Guid, bool> onToggleRow;
     private readonly Action onToggleCollapsed;
+    private readonly Action onOpenSettings;
 
     public HudPinsContent(
         IReadOnlyList<HudPinRow> rows,
         int moreCount,
         bool collapsed,
         float rowWidth,
+        float rowFontSize,
+        float checkboxSize,
         Action<Guid, Guid, bool> onToggleRow,
-        Action onToggleCollapsed)
+        Action onToggleCollapsed,
+        Action onOpenSettings)
     {
         this.rows = rows;
         this.moreCount = moreCount;
         this.collapsed = collapsed;
         this.rowWidth = rowWidth;
+        this.rowFontSize = rowFontSize;
+        this.checkboxSize = checkboxSize;
         this.onToggleRow = onToggleRow;
         this.onToggleCollapsed = onToggleCollapsed;
+        this.onOpenSettings = onOpenSettings;
     }
 
     public override Widget Build(BuildContext context)
@@ -458,7 +542,9 @@ internal sealed class HudPinsContent : StatelessWidget
     }
 
     /// <summary>The collapse-toggle header: a clickable chevron (▾ expanded, ▸ collapsed) plus a small
-    /// title. Present in both states so a collapsed HUD stays re-expandable (design D6).</summary>
+    /// title, and a gear that opens the settings surface (add-settings-tab 5.4). Present in both states
+    /// so a collapsed HUD stays re-expandable AND its settings stay reachable (design D6). The gear sits
+    /// in its own GestureDetector so tapping it opens settings without also toggling the collapse.</summary>
     private Widget BuildHeader(ColorScheme colors, Vector4 glow)
     {
         string chevron = collapsed ? "▸" : "▾"; // ▸ / ▾
@@ -470,7 +556,9 @@ internal sealed class HudPinsContent : StatelessWidget
             GlowColor = glow,
         };
 
-        return new GestureDetector(
+        // Chevron + title toggle collapse; the trailing gear opens settings. Separate GestureDetectors
+        // so the two targets don't overlap (a gear tap must not also flip the collapse state).
+        var collapseToggle = new GestureDetector(
             onTap: _ => onToggleCollapsed(),
             child: new Row(
                 spacing: 4,
@@ -481,22 +569,50 @@ internal sealed class HudPinsContent : StatelessWidget
                     new Text(chevron, titleStyle),
                     new Text(Lang.Get("scribe:scribe-hud-title"), titleStyle),
                 }));
+
+        var gear = new GestureDetector(
+            onTap: _ => onOpenSettings(),
+            child: new Padding(
+                EdgeInsets.Only(left: 6),
+                child: new VsIcon("scribegear", 16f, colors.OnSurfaceVariant)));
+
+        return new Row(
+            spacing: 4,
+            mainAxisSize: MainAxisSize.Min,
+            crossAxisAlignment: CrossAxisAlignment.Center,
+            children: new Widget[] { collapseToggle, gear });
     }
 
+    /// <summary>Target opacity a destructive-pending (Unpin/Delete) row fades toward over its window, as
+    /// a preview of removal (design D7). Not fully 0 so the row (and its still-clickable checkbox for
+    /// undo) stays visible until the send actually removes it.</summary>
+    private const float FadingOutOpacity = 0.15f;
+
     /// <summary>One HUD row: [checkbox][text], the lectern read row minus chrome (no grip spacer, no
-    /// pinned tint, no per-row buttons — design D1). A sunk row mutes via a fading
-    /// <see cref="AnimatedOpacity"/> to <see cref="SunkOpacity"/>.</summary>
+    /// pinned tint, no per-row buttons — design D1). Opacity animates by state: a destructive-pending row
+    /// (Unpin/Delete in its window) fades toward <see cref="FadingOutOpacity"/> over the window; a sunk
+    /// row mutes to <see cref="SunkOpacity"/>; else full. The checkbox stays fully opaque and clickable so
+    /// undo is always available (design D7) — only the TEXT fades, via a nested AnimatedOpacity.</summary>
     private Widget BuildRow(HudPinRow row, ColorScheme colors, Vector4 glow)
     {
         var textStyle = new TextStyle
         {
-            FontSize = RowFontSize,
+            FontSize = rowFontSize,
             // A sunk (completed) row uses the muted variant; an active row uses the bright surface tone.
             Color = row.Sunk ? colors.OnSurfaceVariant : colors.OnSurface,
             GlowWidth = GlowWidth,
             GlowColor = glow,
             SoftWrap = true,
         };
+
+        // The text fades toward FadingOutOpacity over the window for a destructive-pending row (preview of
+        // removal). The animation duration matches the pin window so the fade tracks the countdown; a
+        // non-fading row is fully opaque. Only the text fades — the checkbox stays clickable for undo.
+        Widget text = new AnimatedOpacity(
+            opacity: row.FadingOut ? FadingOutOpacity : 1f,
+            duration: TimeSpan.FromMilliseconds(row.FadingOut ? 1500 : 200),
+            curve: Curves.EaseOut,
+            child: new Text(row.Text, textStyle));
 
         Widget rowBody = new Row(
             spacing: 6,
@@ -509,13 +625,14 @@ internal sealed class HudPinsContent : StatelessWidget
                 new Checkbox(
                     value: row.Done,
                     onChanged: _ => onToggleRow(row.DocId, row.TaskId, row.Done),
-                    size: 20),
-                // Expanded so the (SoftWrap) text wraps within the remaining fixed width. The ValueKey
-                // stabilizes row identity across rebuilds for the opacity animation.
-                new Expanded(child: new Text(row.Text, textStyle)),
+                    size: checkboxSize),
+                // Expanded so the (SoftWrap) text wraps within the remaining fixed width.
+                new Expanded(child: text),
             });
 
-        // Fade the mute in/out rather than snapping, so completing a task reads as a gentle settle.
+        // A sunk row mutes the WHOLE row (checkbox + text) to SunkOpacity, faded rather than snapped so a
+        // completing task reads as a gentle settle. The ValueKey stabilizes row identity across rebuilds
+        // for the animation.
         return new AnimatedOpacity(
             opacity: row.Sunk ? SunkOpacity : 1f,
             duration: TimeSpan.FromMilliseconds(250),

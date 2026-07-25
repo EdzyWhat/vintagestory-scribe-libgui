@@ -50,12 +50,22 @@ public sealed class ScribePlayerSettings
     /// moved clear of another on-screen overlay (minimap / coordinate / block-info). Positive moves the
     /// HUD toward screen-center from a right anchor and rightward from a left/middle anchor; the Mod
     /// layer owns the exact sign convention per anchor. Defaults to a Mod-supplied value (0 here; the
-    /// Mod layer's default top-right resolver applies the minimap clearance).</summary>
+    /// Mod layer's default top-right resolver applies the minimap clearance). Clamped to
+    /// <see cref="MinHudOffset"/>..<see cref="MaxHudOffset"/> on load.</summary>
     public int HudOffsetX { get; set; }
 
     /// <summary>Vertical pixel nudge applied to the HUD from its <see cref="HudAnchor"/> (see
-    /// <see cref="HudOffsetX"/>). Defaults to 0.</summary>
+    /// <see cref="HudOffsetX"/>). Defaults to 0. Clamped like <see cref="HudOffsetX"/>.</summary>
     public int HudOffsetY { get; set; }
+
+    /// <summary>Inclusive lower bound the codec clamps <see cref="HudOffsetX"/>/<see cref="HudOffsetY"/>
+    /// to on read, so a hand-edited nudge can't fling the HUD far off its anchor. The offset is applied
+    /// RELATIVE to the anchor's built-in pre-baked offset (the Mod layer's <c>ApplyAnchor</c>), so this
+    /// bounds how far the player can nudge from that sensible default in either direction.</summary>
+    public const int MinHudOffset = -300;
+
+    /// <summary>Inclusive upper bound clamped on load (see <see cref="MinHudOffset"/>).</summary>
+    public const int MaxHudOffset = 300;
 
     /// <summary>Fixed pixel width of the HUD's task-row area (default 250); a long task wraps within
     /// this width instead of the HUD growing arbitrarily wide. Clamped to a sane range on load.</summary>
@@ -72,9 +82,44 @@ public sealed class ScribePlayerSettings
     /// across the whole screen.</summary>
     public const int MaxHudRowWidth = 1000;
 
+    /// <summary>Text-size multiplier for the pinned-task HUD's row text (default <c>1.0</c> = no
+    /// change). Snapped to a discrete 5% notch within its range (<c>0.80, 0.85, … , 1.20</c>), entered
+    /// in the UI as a percent. A MULTIPLIER (not an absolute point size) so it stacks on top of the
+    /// game's global Interface → GUI Scale rather than fighting it. The Mod layer multiplies its base
+    /// HUD font size by this. Clamped and snapped to the nearest notch on load.</summary>
+    public float HudFontScale { get; set; } = DefaultFontScale;
+
+    /// <summary>Text-size multiplier for the block/item window text (the Lectern now; Desk/Notebook
+    /// later), default <c>1.0</c>. Same 5% notch granularity and multiplier semantics as
+    /// <see cref="HudFontScale"/>. Supersedes the retired <c>ScribeClientConfig.TextSizeScale</c>; the
+    /// Mod layer multiplies its base window font size by this at the single <c>ScribeRowStyle</c>
+    /// chokepoint. Clamped and snapped on load.</summary>
+    public float WindowFontScale { get; set; } = DefaultFontScale;
+
+    /// <summary>Default font-scale multiplier (no scaling) for a player who has never changed it.</summary>
+    public const float DefaultFontScale = 1.0f;
+
+    /// <summary>Inclusive lower bound (-20%) the codec clamps both font scales to on read.</summary>
+    public const float MinFontScale = 0.8f;
+
+    /// <summary>Inclusive upper bound (+20%) clamped on load.</summary>
+    public const float MaxFontScale = 1.2f;
+
     /// <summary>Clamps a loaded HUD row count to the safe range. Applied when reading the client
     /// preference config so a hand-edited or corrupted value can't produce an out-of-range state.</summary>
     public static int ClampHudMaxRows(int value) => Math.Clamp(value, MinHudMaxRows, MaxHudMaxRows);
+
+    /// <summary>Clamps a loaded HUD offset (X or Y) to the safe range (see <see cref="MinHudOffset"/>).</summary>
+    public static int ClampHudOffset(int value) => Math.Clamp(value, MinHudOffset, MaxHudOffset);
+
+    /// <summary>Clamps a loaded font-scale multiplier to <see cref="MinFontScale"/>..<see cref="MaxFontScale"/>
+    /// AND snaps it to the nearest 0.05 notch, so a hand-edited value settles onto one of the defined 5%
+    /// notches (<c>0.80, 0.85, … , 1.20</c>) rather than an arbitrary in-between scale.</summary>
+    public static float ClampFontScale(float value)
+    {
+        float clamped = Math.Clamp(value, MinFontScale, MaxFontScale);
+        return MathF.Round(clamped * 20f) / 20f;
+    }
 
     /// <summary>Clamps a loaded HUD row width to the safe range (see <see cref="HudRowWidth"/>).</summary>
     public static int ClampHudRowWidth(int value) => Math.Clamp(value, MinHudRowWidth, MaxHudRowWidth);
@@ -93,14 +138,20 @@ public sealed class ScribePlayerSettings
         Enum.IsDefined(typeof(ScribeCompletionPolicy), value) ? value : ScribeCompletionPolicy.Sink;
 
     /// <summary>Normalizes this instance's fields in place after a load from an untrusted source
-    /// (hand-edited JSON): clamps <see cref="HudMaxRows"/> and falls an unknown
-    /// <see cref="CompletionPolicy"/> back to the default. Returns this for chaining.</summary>
+    /// (hand-edited JSON): clamps each numeric preference to its safe range (row count, row width, the
+    /// HUD offsets, and both font scales — snapping each scale to its nearest notch) and falls an
+    /// unknown <see cref="CompletionPolicy"/>/<see cref="HudAnchor"/> back to its default. Returns this
+    /// for chaining.</summary>
     public ScribePlayerSettings Normalized()
     {
         HudMaxRows = ClampHudMaxRows(HudMaxRows);
         CompletionPolicy = NormalizePolicy(CompletionPolicy);
         HudAnchor = NormalizeAnchor(HudAnchor);
         HudRowWidth = ClampHudRowWidth(HudRowWidth);
+        HudOffsetX = ClampHudOffset(HudOffsetX);
+        HudOffsetY = ClampHudOffset(HudOffsetY);
+        HudFontScale = ClampFontScale(HudFontScale);
+        WindowFontScale = ClampFontScale(WindowFontScale);
         return this;
     }
 }

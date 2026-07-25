@@ -23,16 +23,17 @@ namespace Scribe;
 public sealed class ScribeModSystem : ModSystem
 {
     public const string NetworkChannelName = "scribe";
-    public const string ClientConfigFileName = "scribe-client-config.json";
 
     /// <summary>Savegame key for the persisted pin store. (Per-player display/behavior preferences are
     /// NOT persisted server-side — they are client-local JSON; see <see cref="HudConfigFileName"/>.)</summary>
     private const string PinStoreSaveKey = "scribe:pins:v1";
 
-    /// <summary>Client-local JSON file holding this player's HUD/pin preferences (completion policy,
-    /// HUD rows, collapse) — per-player, cross-world, never server-synced. Separate from
-    /// <see cref="ClientConfigFileName"/> so persisting a runtime toggle can't clobber its hand-edited
-    /// layout-tuning knobs (that config is re-read fresh per dialog open, with no write path).</summary>
+    /// <summary>Client-local JSON file holding ALL of this player's Scribe preferences — completion
+    /// policy, HUD rows/anchor/offsets/width/collapse, and the HUD/window font-size scales — per-player,
+    /// cross-world, never server-synced. As of add-settings-tab this is the SINGLE client-local
+    /// preference store: the former <c>scribe-client-config.json</c> row-tuning file was retired and its
+    /// one live knob (the font size) folded in here as the two font scales. An existing
+    /// <c>scribe-client-config.json</c> on disk is simply left unread (harmless).</summary>
     public const string HudConfigFileName = "scribe-hud-config.json";
 
     private ICoreClientAPI? capi;
@@ -197,6 +198,7 @@ public sealed class ScribeModSystem : ModSystem
         RegisterSvgIcon(api, "scribegrip", new AssetLocation("scribe", "textures/icons/grip.svg"));
         RegisterSvgIcon(api, "scribeclose", new AssetLocation("scribe", "textures/icons/close.svg"));
         RegisterSvgIcon(api, "scribeedit", new AssetLocation("scribe", "textures/icons/edit.svg"));
+        RegisterSvgIcon(api, "scribegear", new AssetLocation("scribe", "textures/icons/gear.svg"));
     }
 
     /// <summary>
@@ -476,8 +478,11 @@ public sealed class ScribeModSystem : ModSystem
                     changed |= pinStore.RemovePin(player.PlayerUID, docId, taskId);
                     break;
                 case ScribeCompletionPolicy.Sink:
+                case ScribeCompletionPolicy.Keep:
                 default:
-                    // Keep the (now-done) pin; the HUD mutes + sinks it client-side.
+                    // Non-destructive policies: keep the (now-done) pin. The HUD applies the client-side
+                    // difference — Sink mutes + sinks it to the bottom; Keep leaves it in place. The
+                    // server does not distinguish them (nothing is removed for either).
                     break;
             }
         }

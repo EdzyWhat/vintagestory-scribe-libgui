@@ -39,11 +39,6 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
 {
     private readonly BlockEntityScribeLectern lectern;
 
-    /// <summary>Row-sizing style for this dialog instance, loaded from client config when the dialog
-    /// opens (see the constructor). Loading per-open means editing <c>scribe-client-config.json</c>
-    /// and reopening the lectern applies new values, with no shared mutable state.</summary>
-    private readonly ScribeRowStyle rowStyle;
-
     /// <summary>One scroll controller shared by BOTH views' scroll regions, owned by the dialog rather
     /// than each view's <c>State</c>. Because a view switch is a <see cref="GuiBase.ForceRebuild"/> that
     /// tears down the outgoing view's <c>State</c> (which would dispose a State-owned controller and
@@ -56,6 +51,18 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
 
     // ---- View state ----
     private bool isEditorMode;
+
+    /// <summary>Third central-region state (beside read/editor): the settings view, reached by the gear
+    /// in the chrome and dismissed by its Back control (add-settings-tab D2). Settings is lock-free, so
+    /// entering it from the editor first commits + releases the lock (see <see cref="OnClickOpenSettings"/>).
+    /// <see cref="wasEditorBeforeSettings"/> records which view to return to on Back.</summary>
+    private bool isSettingsMode;
+    private bool wasEditorBeforeSettings;
+
+    /// <summary>Scroll controller for the settings view's form, owned by the dialog (like
+    /// <see cref="sharedScrollController"/>) so a live write-through rebuild of the settings form doesn't
+    /// reset its scroll position. Disposed in <see cref="OnGuiClosed"/>.</summary>
+    private readonly ScrollController settingsScrollController = new();
 
     // ---- Editor state (null / inert while in read mode) ----
     /// <summary>Editor-view-only scratch copy; never aliased to <see cref="BlockEntityScribeLectern.Document"/>.</summary>
@@ -119,13 +126,6 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     {
         this.lectern = lectern;
         modSystem = capi.ModLoader.GetModSystem<ScribeModSystem>();
-
-        // Load row-sizing config fresh per open (matches this dialog's per-open lifecycle) so a
-        // hand-edit of the JSON -- or a ConfigLib panel change -- is picked up on the next open.
-        // Falls back to defaults when the file doesn't exist yet.
-        var config = capi.LoadModConfig<ScribeClientConfig>(ScribeModSystem.ClientConfigFileName)
-                     ?? new ScribeClientConfig();
-        rowStyle = ScribeRowStyle.FromConfig(config);
 
         // Repaint the per-player pin indicators whenever this player's pushed pin set changes (a pin
         // added/removed/orphaned, or a snapshot refresh). Unsubscribed in OnGuiClosed.
@@ -267,13 +267,17 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         }
     }
 
-    /// <summary>Enter (or stay in) the read view. Called on a read-access grant.</summary>
+    /// <summary>Enter (or stay in) the read view. Called on a read-access grant. Also clears the settings
+    /// view state, so a read grant (including the multiplayer fallback when a Back-from-settings editor
+    /// re-request is denied) always lands in the read view rather than a stranded settings frame.</summary>
     public void EnterReadMode()
     {
         if (isEditorMode)
         {
             LeaveEditorMode();
         }
+        isSettingsMode = false;
+        wasEditorBeforeSettings = false;
         if (IsOpened())
         {
             ForceRebuild();
@@ -293,6 +297,41 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         CaptureScrollForRestore();
         LeaveEditorMode();
         ForceRebuild();
+    }
+
+    /// <summary>Gear control: swap the central region to the settings view (add-settings-tab D2). If we
+    /// were editing, commit the pending edit and release the lock first (reusing the
+    /// <see cref="OnClickSwitchToRead"/> sequencing) so the settings view is lock-free — then remember to
+    /// return to the editor on Back. From the read view there's no lock to release.</summary>
+    private void OnClickOpenSettings()
+    {
+        wasEditorBeforeSettings = isEditorMode;
+        if (isEditorMode)
+        {
+            if (focusedEditIndex is { } idx) NormalizeRowOnCommit(idx);
+            FlushIfDirty();
+            SendReleaseLockPacket();
+            LeaveEditorMode();
+        }
+        isSettingsMode = true;
+        ForceRebuild();
+    }
+
+    /// <summary>Back control on the settings view: return to whichever view was showing before. Read is
+    /// lock-free (just rebuild); returning to the editor re-requests editor access (the lock was released
+    /// when settings opened), which round-trips back through <see cref="EnterEditorMode"/>.</summary>
+    private void OnClickCloseSettings()
+    {
+        isSettingsMode = false;
+        if (wasEditorBeforeSettings)
+        {
+            wasEditorBeforeSettings = false;
+            RequestEditorAccess(); // re-grant lands in EnterEditorMode + rebuilds into the editor
+        }
+        else
+        {
+            ForceRebuild();
+        }
     }
 
     /// <summary>Snapshot the current scroll offset so it can be re-applied after the next view's first
@@ -754,6 +793,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         // The dialog owns the shared scroll controller (see its field); dispose it once here rather
         // than in either view's State, which come and go with each view-switch ForceRebuild.
         sharedScrollController.Dispose();
+        settingsScrollController.Dispose();
         base.OnGuiClosed();
     }
 
@@ -771,10 +811,44 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
 
     protected override Widget Build() =>
         new WindowFrame(
-            title: Lang.Get("scribe:scribe-gui-title"),
+            // Title reflects the active view — "Scribe Settings" while the gear view is showing, else the
+            // lectern title (add-settings-tab round 1). WindowFrame reads its title live per build.
+            title: Lang.Get(isSettingsMode ? "scribe:settings-title" : "scribe:scribe-gui-title"),
             onClose: () => TryClose(),
             fillHeight: true,
-            child: isEditorMode ? BuildEditorContent() : BuildReadContent());
+            child: BuildCentralRegion());
+
+    /// <summary>The dialog's central content region: the settings view (when the gear is active), else
+    /// the read or editor view — each read/editor view carries a small chrome row with the gear that
+    /// opens settings (add-settings-tab D2; <c>WindowFrame</c> has no trailing-action slot, so the gear
+    /// lives in a header row just under the title bar rather than in the title bar itself).</summary>
+    private Widget BuildCentralRegion()
+    {
+        if (isSettingsMode)
+        {
+            return new ScribeSettingsView(
+                settings: modSystem.MySettings,
+                onMutate: modSystem.UpdateMySettings,
+                onBack: OnClickCloseSettings,
+                scrollController: settingsScrollController);
+        }
+
+        Widget content = isEditorMode ? BuildEditorContent() : BuildReadContent();
+        return new Column(
+            spacing: 6,
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Max,
+            children: new Widget[]
+            {
+                new ScribeGearHeader(onOpenSettings: OnClickOpenSettings),
+                new Expanded(child: content),
+            });
+    }
+
+    /// <summary>The live row style for this build, derived from the player's current settings (NOT cached
+    /// at open — add-settings-tab D4), so a window-font-scale change from the settings view repaints the
+    /// open dialog on the next rebuild.</summary>
+    private ScribeRowStyle RowStyle => ScribeRowStyle.FromSettings(modSystem.MySettings);
 
     private Widget BuildReadContent() =>
         new ScribeLecternReadContent(
@@ -787,7 +861,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
                 .ToList(),
             onToggleTask: OnReadViewCompleteTask,
             onSwitchToEditor: RequestEditorAccess,
-            style: rowStyle,
+            style: RowStyle,
             scrollController: sharedScrollController);
 
     private Widget BuildEditorContent()
@@ -813,7 +887,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             onReorderBlock: ReorderEditorBlock,
             onAddTask: OnClickAddTask,
             onSwitchToRead: OnClickSwitchToRead,
-            style: rowStyle,
+            style: RowStyle,
             scrollController: sharedScrollController);
     }
 
@@ -989,7 +1063,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         // The read view exposes no reorder (dragging is a lock-gated authoring action, design D4). Nudged
         // down by the same amount as the editor grip so the reserved column matches row-for-row.
         children.Add(new Padding(
-            EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop),
+            EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
             child: new Opacity(
                 opacity: 0f,
                 child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant))));
@@ -997,7 +1071,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         if (Widget.Data.IsTask)
         {
             children.Add(new Padding(
-                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop),
+                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
                 child: new Checkbox(
                     value: done,
                     onChanged: _ =>
@@ -1030,7 +1104,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         if (Widget.Data.IsTask && Widget.Data.Pinned)
         {
             rowBody = new Container(
-                style: new BoxStyle { Color = style.PinnedTint },
+                style: new BoxStyle { Color = ScribeRowConstants.PinnedTint(colors) },
                 child: rowBody);
         }
 
@@ -1338,7 +1412,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         // input (see ScribeRowControlNudge); the top margin sits OUTSIDE the GestureDetector so the
         // drag hit-target still covers the visible glyph.
         children.Add(new Padding(
-            EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop),
+            EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
             child: new GestureDetector(
                 onPress: _ => Widget.OnDragStart(index),
                 onRelease: _ => Widget.OnDragEnd(),
@@ -1347,7 +1421,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         if (Widget.Data.IsTask)
         {
             children.Add(new Padding(
-                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop),
+                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
                 child: new Checkbox(
                     value: done,
                     onChanged: _ =>
@@ -1385,7 +1459,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         // — so toggling the fill is a cheap property update, not a widget-type swap.
         Vector4 rowFill = Widget.IsDropTarget
             ? colors.StateSelected
-            : (Widget.Data.IsTask && Widget.Data.Pinned ? style.PinnedTint : Vector4.Zero);
+            : (Widget.Data.IsTask && Widget.Data.Pinned ? ScribeRowConstants.PinnedTint(colors) : Vector4.Zero);
 
         rowBody = new Container(
             style: new BoxStyle { Color = rowFill },
@@ -1413,10 +1487,11 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             // Actual drawn box width of a button (ScribeRowButton shrinks its chrome by BoxShrink); used
             // to space the pin against the delete's real edge, not its nominal column.
             float boxW = btn - ScribeRowButton.BoxShrink;
-            // Button margins (2026-07-24 feedback: +1px right, +1px top on top of the resting inset). Top
-            // also carries the one-line centering nudge (see ScribeRowControlNudge).
+            // Right inset: resting gap +1px (2026-07-24 feedback). Top is the COMPUTED centering offset
+            // (see ScribeRowControlNudge.FloatingButtonTop), which now vertically centers the button box
+            // on the one-line input at any font scale rather than the old font-15 constant.
             float btnRight = gap + 1f;
-            float btnTop = gap + ScribeRowControlNudge.FloatingButtonTop + 1f;
+            float btnTop = ScribeRowControlNudge.FloatingButtonTop(style);
             // delete: right-most; pin: to its left (task rows only).
             stackChildren.Add(new Positioned(
                 right: btnRight, top: btnTop,
@@ -1454,29 +1529,58 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
     }
 }
 
-/// <summary>Fixed, unscaled top-margin nudges that visually center a row's shorter controls on a
-/// SINGLE-LINE text input, without moving them when the text wraps to multiple lines.
+/// <summary>Top-margin nudges that visually center a row's shorter controls on a SINGLE-LINE text
+/// input, without moving them when the text wraps to multiple lines.
 ///
 /// <para>The row lays its children out with <see cref="CrossAxisAlignment.Start"/> (top-aligned) so a
 /// multi-line input keeps the controls pinned to its first line. That means the controls do NOT auto-
-/// center — a one-line input is ~24px tall while the grip/checkbox glyphs are ~22px and the floating
-/// pin/delete buttons ~22px, so each reads a hair high. We nudge each control DOWN by a fixed top
-/// margin to sit centered on a one-line row. Because the nudge is smaller than the (input − control)
-/// slack, it never grows the row height.</para>
+/// center — a one-line input is a couple of pixels taller than the grip/checkbox glyphs and the
+/// floating pin/delete buttons, so each reads a hair high. We nudge each control DOWN by a top margin
+/// to sit centered on a one-line row. Because the nudge is smaller than the (input − control) slack, it
+/// never grows the row height.</para>
 ///
-/// <para><b>These are hand-tuned for the current font size (15) and control size (22).</b> They are
-/// deliberately NOT scaled by <c>TextSizeScale</c>: centering is `(inputHeight − controlHeight) / 2`,
-/// which is not linear in the scale, so a single multiplier wouldn't stay centered. If the font size
-/// or control size ever becomes user-adjustable, replace these constants with a computed offset from
-/// the measured input/control heights (2026-07-24 feedback).</para></summary>
+/// <para>Now that the window font size is user-adjustable (add-settings-tab D4), these are COMPUTED from
+/// the measured single-line input height and the control's size at the current scale — centering is
+/// <c>(inputHeight − controlHeight) / 2</c>, which is not linear in the scale, so a single multiplier of
+/// the old font-15 constants wouldn't stay centered. The single-line input height mirrors
+/// <c>ScribeMultilineFieldRender</c>'s own formula (measured line height of "Ag" in the same
+/// "sans-serif" family + the field's vertical padding), so the computed offset tracks the real field at
+/// any scale.</para></summary>
 internal static class ScribeRowControlNudge
 {
-    /// <summary>Down-nudge for the drag grip and the task checkbox (both ~22px on a ~24px input).</summary>
-    public const float CheckboxAndGripTop = 2f;
+    /// <summary>Font family used to measure the single-line input height. MUST match
+    /// <c>ScribeMultilineFieldRender.FontFamily</c> (and the read <c>Text</c> default) so the measured
+    /// height equals the field's actual single-line height.</summary>
+    private const string FontFamily = "sans-serif";
 
-    /// <summary>Additional down-nudge for the floating pin/delete buttons, on top of their resting
-    /// <see cref="ScribeEditRowState"/> inset, to center them on a one-line row.</summary>
-    public const float FloatingButtonTop = 3f;
+    /// <summary>Measured single-line input height at the style's current font size: the "Ag" line height
+    /// (same family the field/read text use) plus the field's top+bottom internal padding — mirroring
+    /// <c>ScribeMultilineFieldRender.PerformLayout</c>'s <c>lineCount * lineHeight + PadY*2</c> for one
+    /// line.</summary>
+    private static float SingleLineInputHeight(ScribeRowStyle style)
+    {
+        float lineHeight = TextLayoutHelper.MeasureText("Ag", FontFamily, style.FontSize, FontWeight.Normal).Y;
+        if (lineHeight <= 0) lineHeight = style.FontSize * 1.2f; // same fallback as the field
+        return lineHeight + style.FieldPadY * 2f;
+    }
+
+    /// <summary>Down-nudge for the drag grip and the task checkbox (both <see cref="ScribeRowStyle.CheckboxSize"/>
+    /// tall) so they center on a one-line input. Computed, not constant, so it stays centered at any font
+    /// scale.</summary>
+    public static float CheckboxAndGripTop(ScribeRowStyle style)
+        => MathF.Max(0f, (SingleLineInputHeight(style) - style.CheckboxSize) / 2f);
+
+    /// <summary>Absolute top offset (from the row's top edge) that centers a floating pin/delete button's
+    /// DRAWN box on the one-line input. The button box is <see cref="ScribeRowButton.BoxShrink"/> px
+    /// shorter than <see cref="ScribeRowStyle.ControlSize"/>; the input sits <c>RowVerticalPadding</c>
+    /// below the row top (the row's own vertical padding), so the button's box centers on the input's
+    /// vertical midpoint. Computed so it tracks the font scale.</summary>
+    public static float FloatingButtonTop(ScribeRowStyle style)
+    {
+        float boxHeight = style.ControlSize - ScribeRowButton.BoxShrink;
+        float inputCenter = style.RowVerticalPadding + SingleLineInputHeight(style) / 2f;
+        return MathF.Max(0f, inputCenter - boxHeight / 2f);
+    }
 }
 
 // ============================================================================
@@ -1594,5 +1698,92 @@ internal sealed class ScribeRowButtonState : State<ScribeRowButton>
                     Padding = EdgeInsets.All(drawnPad),
                 },
                 child: new VsIcon(Widget.IconName, glyph, Widget.IconColor)));
+    }
+}
+
+// ============================================================================
+// Settings entry point + settings view (add-settings-tab)
+// ============================================================================
+
+/// <summary>A slim chrome row shown above the read/editor content carrying the gear that opens the
+/// settings view (add-settings-tab D2). <c>WindowFrame</c> exposes no trailing-action slot, so the gear
+/// sits here just under the title bar rather than in the title bar itself. Right-aligned so it reads as
+/// a chrome affordance rather than content. Present in both the read and editor views (the parent only
+/// omits it while the settings view itself is showing).</summary>
+internal sealed class ScribeGearHeader : StatelessWidget
+{
+    private readonly Action onOpenSettings;
+
+    public ScribeGearHeader(Action onOpenSettings)
+    {
+        this.onOpenSettings = onOpenSettings;
+    }
+
+    public override Widget Build(BuildContext context)
+    {
+        var colors = Theme.Of(context).ColorScheme;
+        return new Padding(
+            EdgeInsets.Only(right: 10, top: 2),
+            child: new Row(
+                mainAxisAlignment: MainAxisAlignment.End,
+                mainAxisSize: MainAxisSize.Max,
+                children: new Widget[]
+                {
+                    new ScribeRowButton(
+                        iconName: "scribegear",
+                        iconColor: colors.OnSurfaceVariant,
+                        size: 24f,
+                        onTap: onOpenSettings),
+                }));
+    }
+}
+
+/// <summary>The Lectern's settings view: a Back header (returns to the prior read/editor view) over the
+/// host-agnostic <see cref="ScribeSettingsContent"/> form. Kept a thin wrapper so the shared settings
+/// form stays host-agnostic (the standalone HUD-gear dialog hosts the same <see cref="ScribeSettingsContent"/>
+/// without this Back chrome — it uses its own window close).</summary>
+internal sealed class ScribeSettingsView : StatelessWidget
+{
+    private readonly ScribePlayerSettings settings;
+    private readonly Action<Action<ScribePlayerSettings>> onMutate;
+    private readonly Action onBack;
+    private readonly ScrollController scrollController;
+
+    public ScribeSettingsView(
+        ScribePlayerSettings settings,
+        Action<Action<ScribePlayerSettings>> onMutate,
+        Action onBack,
+        ScrollController scrollController)
+    {
+        this.settings = settings;
+        this.onMutate = onMutate;
+        this.onBack = onBack;
+        this.scrollController = scrollController;
+    }
+
+    public override Widget Build(BuildContext context)
+    {
+        var colors = Theme.Of(context).ColorScheme;
+        return new Column(
+            spacing: 6,
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Max,
+            children: new Widget[]
+            {
+                new Padding(
+                    EdgeInsets.Only(left: 10, top: 4),
+                    child: new Row(
+                        mainAxisAlignment: MainAxisAlignment.Start,
+                        mainAxisSize: MainAxisSize.Max,
+                        children: new Widget[]
+                        {
+                            new Button(
+                                child: new Text(
+                                    Lang.Get("scribe:settings-back"),
+                                    new TextStyle { FontSize = 14, Color = colors.OnPrimary }),
+                                onTap: _ => onBack()),
+                        })),
+                new Expanded(child: new ScribeSettingsContent(settings, onMutate, scrollController)),
+            });
     }
 }

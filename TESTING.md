@@ -21,6 +21,68 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## add-settings-tab
+
+> In-mod per-player Settings surface (LibGUI). A gear opens `ScribeSettingsContent` — a two-section
+> (Behavior / Appearance) form with instant write-through — swapped into the lectern's central region
+> (`ScribeSettingsView`, gear in a header row under the title bar) or hosted in a standalone
+> `ScribeSettingsDialog` from the HUD gear. Adds HUD + window font-size scales (5 notches, live). Retired
+> `ScribeClientConfig`; row sizing now derives live from `ScribePlayerSettings` per build.
+
+- [x] `a12b3476` **Completion policy switch.** In Settings → Behavior, set completion policy to each of
+      Keep/Unpin/Delete; complete a pinned task after each and confirm it sinks / unpins / deletes the
+      task on the next completion. *(add-settings-tab 7.1)*
+      - **Confirmed 2026-07-25** (playtest submission): all three policies behave on the next completion —
+        Keep sinks, Unpin removes the pin, Delete removes the task. Follow-up polish requested (new scope,
+        not this task): tune the undo/sink delay to 1.5s and apply the same delay to unpin+delete; add a
+        "keep, no sink" policy; add fade-out (unpin/delete) + AnimatedSlide (sink) animations.
+- [x] `641819e9` **HUD anchor/offset/width.** Pick each non-default HUD anchor, set non-zero X/Y offsets
+      and a non-default row width; confirm the HUD repositions and wraps correctly, then restart and
+      confirm the values persisted. *(add-settings-tab 7.2)*
+      - **Confirmed 2026-07-25** (playtest submission): anchor/offset/width reposition + wrap correctly and
+        persist across restart. Follow-up requested (new scope): row width → numeric field (not slider),
+        range 100–1000 step 5; offsets should be RELATIVE to the pre-baked anchor offset (respect the
+        minimap clearance), clamp ±300 step 5.
+- [x] `89a6dba1` **Live font scales + caret.** Change HUD text size (HUD updates instantly) and window
+      text size (open lectern updates instantly); if you can trigger a window-font change while a row is
+      focused, confirm the caret survives the rebuild. *(add-settings-tab 7.3)*
+      - **Confirmed 2026-07-25** (playtest submission): "Works" — HUD and window scales update live.
+        Follow-up requested (new scope): make font size a numeric field stepping by 5 (not 10); live-update
+        the Settings form's own text as the scale changes; scale the checkboxes/other elements with the
+        font size too.
+- [x] `73b9f530` **Gear + view swap.** Click the gear in both read and editor views — settings replaces
+      the central region and the chrome stays; entering from the editor commits your edit and releases the
+      lock; Back returns to the prior view; the HUD gear opens the standalone settings window. *(add-settings-tab 7.4)*
+      - **Confirmed 2026-07-25** (playtest submission): "Works" — gear swaps the region in both views,
+        editor entry commits+releases the lock, Back returns, HUD gear opens the standalone window.
+        Follow-up requested (new scope): swap in the `gear-filled` icon from ~/Downloads; verify the
+        release-lock-then-Back sequence can't leave a second editor stuck (multiplayer test).
+- [x] `7fe6408b` **Tooltips, lang, scale 1.0.** Hover each setting's label for helptext; confirm no raw
+      `scribe:...` keys show anywhere; with both scales at Default, confirm lectern rows look pixel-identical
+      to before. *(add-settings-tab 7.5)*
+      - **Confirmed 2026-07-25** (playtest submission): "Works" — helptext shows, no raw keys, scale 1.0
+        reproduces the prior layout.
+- [x] `06d9f8d0` **Old config ignored.** With a leftover `scribe-client-config.json` on disk, open the
+      lectern and confirm no load error in the log and the file is simply ignored. *(add-settings-tab 7.6)*
+      - **Confirmed 2026-07-25** (playtest submission): "Works" — leftover `scribe-client-config.json` on
+        disk causes no load error and is ignored.
+- [ ] `1b57beda` **Deferred window + policies.** Complete a HUD task under each policy: the ~1.5s window
+      previews the outcome (text fades for unpin/delete, row mutes/settles for sink); unchecking within the
+      window fully undoes it (task stays, nothing sent); letting it elapse applies the completion. `Keep`
+      leaves the checked task in place (no sink). *(add-settings-tab 9.1)*
+- [ ] `df9b1b06` **Numeric fields.** Font size, HUD row width, and HUD max rows are numeric fields (no
+      slider); each clamps to range, steps by its increment (+/- buttons), and never hijacks scrolling.
+      Font is a percent in 5% steps. *(add-settings-tab 9.2)*
+- [ ] `27c0af03` **Relative offsets.** HUD X/Y offsets are relative to the anchor's built-in position
+      (0 = default, clear of the minimap on TopRight); values up to ±300 apply and persist. *(add-settings-tab 9.3)*
+- [ ] `ac377d10` **Live re-scale.** Changing window font size live-rescales the settings form's own text +
+      checkboxes; changing HUD font size live-rescales the HUD checkbox. *(add-settings-tab 9.4)*
+- [ ] `52cfbc4e` **Title + filled gear.** The window title reads "Scribe Settings" in the settings view;
+      the filled gear icon renders. *(add-settings-tab 9.5)*
+- [ ] `a581fcab` **Multiplayer Back safety.** Enter the editor, open settings (releasing the lock), have a
+      second player grab the editor, then hit Back — you land in the read view, not a stuck settings frame.
+      *(add-settings-tab 9.6)*
+
 ## add-pinned-task-hud
 
 > On-screen pinned-task HUD built on LibGUI (`HudScribePins : GuiBase`, `EnumDialogType.HUD`): renders

@@ -391,6 +391,14 @@ public sealed class BlockEntityScribeLectern : BlockEntity
                 OpenDialog(capi);
                 dialog!.EnterReadMode();
             }
+            else
+            {
+                // Editor access denied while the dialog is already open — e.g. a Back-from-settings that
+                // re-requested the editor lock but another player grabbed it first (add-settings-tab round
+                // 1). Fall back to the read view so the dialog can't be stranded on a stale view; the error
+                // toast above already told the player why. (The save-failed recovery returned earlier.)
+                dialog!.EnterReadMode();
+            }
             return;
         }
 

@@ -1,14 +1,14 @@
-using OpenTK.Mathematics;   // Vector4 (PinnedTint)
+using Scribe.Core;
 
 namespace Scribe;
 
 /// <summary>
 /// Immutable, already-scaled sizing values for one lectern task row, shared by the read and
 /// editor views so a single-line task occupies pixel-identical space in both (see
-/// <see cref="GuiDialogScribeLecternLibGui"/>). Carries only sizes (plus the one pinned-tint color
-/// the rows can't derive from the LibGUI <c>Theme</c>); other colors still come from the Theme.
-/// Passed by value down the widget tree (read/editor content -> rows -> field), which keeps each
-/// widget testable with a literal style and no config/game dependency.
+/// <see cref="GuiDialogScribeLecternLibGui"/>). Carries only sizes; colors (including the resting
+/// pinned-row tint, which is now derived from the LibGUI <c>Theme</c> at build time — add-settings-tab
+/// D1b) come from the Theme at the widget. Passed by value down the widget tree (read/editor content ->
+/// rows -> field), which keeps each widget testable with a literal style and no config/game dependency.
 /// </summary>
 internal readonly record struct ScribeRowStyle(
     float FontSize,
@@ -18,36 +18,30 @@ internal readonly record struct ScribeRowStyle(
     float CheckboxSize,
     float FieldPadX,
     float FieldPadY,
-    float ControlSize,
-    Vector4 PinnedTint)
+    float ControlSize)
 {
     /// <summary>
-    /// Builds a row style from client config. THIS IS THE SINGLE PLACE where the text-size scale
-    /// is applied: the scalable values are multiplied by <see cref="ScribeClientConfig.TextSizeScale"/>
-    /// (default <c>1f</c>, so this is a behavioral no-op today). A future font-size / UI-scale
-    /// feature hooks in here -- e.g. read the factor from a live control instead of config, or split
-    /// it into font vs UI scales -- without touching any widget.
+    /// Builds a row style from the player's consolidated settings. THIS IS THE SINGLE PLACE where the
+    /// window font-size scale is applied: the scalable values are multiplied by
+    /// <see cref="ScribePlayerSettings.WindowFontScale"/> (default <c>1f</c>, so a fresh player is a
+    /// behavioral no-op), on top of the base sizes in <see cref="ScribeRowConstants"/>. The scale comes
+    /// straight from the live settings, so re-deriving the style per dialog build repaints an open
+    /// dialog when the player changes the scale in the settings view (add-settings-tab D4).
     /// </summary>
-    public static ScribeRowStyle FromConfig(ScribeClientConfig c)
+    public static ScribeRowStyle FromSettings(ScribePlayerSettings s)
     {
-        float s = c.TextSizeScale;
+        float scale = ScribePlayerSettings.ClampFontScale(s.WindowFontScale);
         return new ScribeRowStyle(
-            FontSize: c.RowFontSize * s,
-            RowVerticalPadding: c.RowVerticalPadding * s,
-            RowHorizontalPadding: c.RowHorizontalPadding, // fixed left/right inset; not scaled
-            CheckboxTextGap: c.RowCheckboxTextGap * s,
-            CheckboxSize: c.RowCheckboxSize * s,
-            FieldPadX: c.FieldInnerPaddingX * s,
-            FieldPadY: c.FieldInnerPaddingY * s,
+            FontSize: ScribeRowConstants.BaseWindowFontSize * scale,
+            RowVerticalPadding: ScribeRowConstants.RowVerticalPadding * scale,
+            RowHorizontalPadding: ScribeRowConstants.RowHorizontalPadding, // fixed left/right inset; not scaled
+            CheckboxTextGap: ScribeRowConstants.RowCheckboxTextGap * scale,
+            CheckboxSize: ScribeRowConstants.RowCheckboxSize * scale,
+            FieldPadX: ScribeRowConstants.FieldInnerPaddingX * scale,
+            FieldPadY: ScribeRowConstants.FieldInnerPaddingY * scale,
             // Per-row control glyphs (grip/pin/delete) scale with the row like the checkbox does, so
             // they grow/shrink with the text-size preference (lectern-gui-shell "scales with text size").
             // Sized to the checkbox so the affordance column reads as a sibling of the checkbox column.
-            ControlSize: c.RowCheckboxSize * s,
-            // The resting pinned-row tint (PinnedIndicatorMode.RowTint). Sourced from config (not the
-            // LibGUI Theme, which has no pinned semantic) so the four flat JSON knobs stay the single
-            // place to tune it, matching the native indicator's intent.
-            PinnedTint: new Vector4(
-                (float)c.PinnedRowTintR, (float)c.PinnedRowTintG,
-                (float)c.PinnedRowTintB, (float)c.PinnedRowTintA));
+            ControlSize: ScribeRowConstants.RowCheckboxSize * scale);
     }
 }

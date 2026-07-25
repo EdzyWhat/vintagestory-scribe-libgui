@@ -23,4 +23,12 @@ public enum ScribeCompletionPolicy : byte
     /// <summary>Completing the task deletes the underlying task from its document. Destructive; the
     /// pin necessarily goes with the task.</summary>
     Delete = 2,
+
+    /// <summary>Completing the task keeps it pinned AND leaves it in place on the HUD — unlike
+    /// <see cref="Sink"/>, a completed <c>Keep</c> task is NOT de-prioritized to the bottom, so the
+    /// player keeps a persistent checked record in its original slot. Server-side this behaves exactly
+    /// like <see cref="Sink"/> (nothing is removed); the only difference is HUD display ordering, which
+    /// the Mod layer applies. Appended as value 3 to preserve the wire/serialized values of the
+    /// original three.</summary>
+    Keep = 3,
 }
