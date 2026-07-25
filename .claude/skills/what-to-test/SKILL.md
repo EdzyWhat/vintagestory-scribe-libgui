@@ -234,6 +234,23 @@ Each item's leading code (`` `7d808ca9` ``) is a short fingerprint: `sha256(task
 meant to be human-meaningful — it exists purely so regeneration can detect whether a
 `tasks.md` item changed underneath a `TESTING.md` entry.
 
+**The fingerprint MUST be exactly 8 lowercase hex chars (`^[0-9a-f]{8}$`) — always the
+computed `sha256(...)[:8]`, NEVER a hand-authored mnemonic/readable code** (e.g. don't
+write `` `a05caret1` `` because it "means task 8.5 caret"). This is not stylistic: the
+playtest app parses items with a strict regex (`- \[[ x]\] `[0-9a-f]{8}` …`), so a code
+that isn't 8 hex chars **fails to parse as an item** — the app silently treats that whole
+line as body text of the *previous* valid item and vacuums its `- **verdict**` sub-bullets
+into that neighbor's timeline. The malformed item vanishes from every tab and the innocent
+neighbor above it gets mis-bucketed by the absorbed verdicts. Compute the hash; never
+improvise the code.
+
+**One `tasks.md` task may map to SEVERAL `TESTING.md` items.** A compound task (e.g. one
+line covering delete + pin + reorder + checkbox) can be split into several granular retest
+items so each is confirmed independently in the app. Each split item gets its OWN computed
+fingerprint (hash the task-id plus that item's OWN distinct text, so the codes differ) and
+carries the same source task-id tag `(change-name task-id)`. Regeneration keys on
+fingerprint, not task-id, so multiple items sharing a task-id is fine.
+
 ### Generating / regenerating `TESTING.md`
 
 Regeneration is a **merge, not a rebuild.** The file is the union of two sets, keyed by
@@ -257,6 +274,15 @@ checked off or removed from `tasks.md` — retention is by "has a verdict on fil
    - **Not retained** = any item with no annotation, or a bare `[x]` with no annotation
      (nothing actually confirms it). These are dropped from the old file and re-derived
      only if they reappear in the fresh active set.
+2b. **Validate + repair item codes before merging.** For every item read from the existing
+   file, check its code matches `^[0-9a-f]{8}$`. If one doesn't (a hand-authored mnemonic,
+   a wrong length, uppercase, etc.), it's malformed — the app silently drops it and misfiles
+   its neighbor (see the fingerprint rule above). Repair it: recompute the correct
+   `sha256(task-id + " " + normalized item text)[:8]` from the item's CURRENT text and
+   replace the code, carrying the item's verdict lines forward verbatim (the text is
+   unchanged, so its verdict still applies — this is a pure code-format repair, distinct
+   from the step-3 "fingerprint changed because the *text* changed → drop the verdict" rule).
+   Flag each repair to the user in the write-back summary.
 3. Merge by fingerprint:
    - A fingerprint in **both** retained and fresh active → keep the retained version
      (its verdict wins; don't overwrite a recorded result with a blank fresh item).

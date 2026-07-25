@@ -677,7 +677,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Backlogged 2026-07-19** (playtest report 2026-07-19T10-56-08): user deferred alongside
         7.5 — "complex task, move to the bottom of the roadmap, but before mod release." Same
         two-client setup requirement; parked until closer to release.
-- [x] `a15scrl01` **(8.15) Visible scrollbar in both views.** Add enough tasks (or raise
+- [x] `942d549b` **(8.15) Visible scrollbar in both views.** Add enough tasks (or raise
       `TextSizeScale` in `scribe-client-config.json`) that the list exceeds the dialog height. In the
       READ view a draggable scrollbar track should appear on the right; drag its thumb and click the
       track to jump. Switch to the EDITOR view and confirm the same. Wheel-scroll should still work in
@@ -686,13 +686,13 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         owned `ScrollController`. Wheel scroll already worked; this adds the visible/draggable track.
       - **Confirmed 2026-07-24** (user playtest): "Works." Visible scrollbar present and usable in both
         read and editor views.
-- [ ] `a07cap001` **(8.7) Oversized-edit rejection.** (Hard to hit in normal play — optional.) An
+- [ ] `fe168d81` **(8.7) Oversized-edit rejection.** (Hard to hit in normal play — optional.) An
       edit exceeding `ScribeDocumentCodec.MaxBlocks` (1000 blocks) or `MaxTextLength` (10 000 chars
       in one block) should be rejected by the server: the edit doesn't persist and the existing
       "changes could not be saved" toast fires. Normal-sized checklists are unaffected.
       - **To test 2026-07-23:** new — server-side caps enforced in the codec (Core-tested, 47/47).
         Low-priority manual check; the unit tests already cover the boundary.
-- [x] `a03dist01` **(8.3) Read-view walk-away auto-close.** In Creative, open a lectern's READ view
+- [x] `c47fb334` **(8.3) Read-view walk-away auto-close.** In Creative, open a lectern's READ view
       and walk well past the close threshold (~5 blocks) without closing it → the dialog should
       auto-close (same as the editor view / 7.8), confirming the old read-view-specific
       no-auto-close bug is gone under the single LibGUI dialog.
@@ -703,20 +703,42 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         walking ~5 blocks from the lectern auto-closes it — the old read-view-specific no-auto-close bug
         is gone. (User: "in creative, walking away from the lectern (past about 5 blocks) automatically
         closes it… that roadmap/backlog item is complete now.")
-- [ ] `a05caret1` **(8.5) Focus/caret across a rebuild.** Type into a row, then trigger a structural
-      rebuild (click "Add task"). Focus should stay usable (the new/expected row is focused, game
-      input doesn't leak). Toggling a checkbox should NOT disturb the caret in another focused row.
-      - **Largely resolved 2026-07-23:** `ForceRebuild` preserves keyboard focus via dialog-owned
-        FocusNodes (native "focus jumps to element 0" bug is gone). Known minor residue: the caret
-        re-seeds to end-of-text on the focused row after a `ForceRebuild`. Confirm whether that
-        residue is bothersome during the delete/reorder (Part-B) testing, which also rebuilds.
-      - **Still broken 2026-07-24** (user playtest, submission 2026-07-24T20-46-16): the row-affordance
-        controls strip input focus without re-homing the caret. With a row's input focused: clicking
-        **delete** on that row removes all focus and, once the row is gone, there is no visible caret
-        anywhere; clicking **pin** removes focus from the input (no visible caret); **reorder** does the
-        same. Expected: after delete, focus/caret should land on a sensible surviving row (per design Q1
-        neighbor-focus); after pin/reorder (which don't remove the edited row), the focused row should
-        KEEP its caret. The controls' `onTap` isn't restoring focus after the `ForceRebuild`.
+> **(8.5) Focus/caret across a rebuild** was one compound item; it is split into the four
+> per-behavior retests below (delete / pin / grip-click / checkbox) so each can be confirmed on its
+> own in the app. All four share ONE root cause and ONE fix (2026-07-24): LibGUI's
+> `EventDispatcher.DispatchPointerDown` clears focus on ANY press whose hit path holds no `IFocusable`
+> element (`reference/vslibgui/.../EventDispatcher.cs:249`); the grip/delete/pin controls and the
+> checkbox are all `GestureDetector`+`VsIcon`/`Checkbox` (none `IFocusable`), so pressing one blurred
+> the focused field on pointer-DOWN before `onTap` ran, and nothing re-homed the caret. Fixed in
+> `GuiDialogScribeLecternLibGui.cs` (per-path, see each item) and recorded in `VSAPI-NOTES.md`
+> (LibGUI section). All four are marked **Still broken** pending the user's live retest of the fix.
+
+- [ ] `4fd84f95` **(8.5) Delete re-homes caret.** Focus a row and type, then click the red delete (X)
+      on that row → focus/caret should land on a surviving neighbor: the row above, or the new first
+      row if the top row was deleted; an emptied document shows the hint with no caret (design Q1). *(add-lectern-block 8.5)*
+      - **Still broken 2026-07-24** (user playtest, submission 2026-07-24T20-46-16): clicking delete on
+        the focused row removed all focus and left no visible caret anywhere.
+      - **Fix applied 2026-07-24 (awaiting retest):** `DeleteEditorBlock` now sets `autoFocusRowOnRebuild`
+        to the neighbor (row above, or new first row; empty doc → no focus). Shared root cause above.
+- [ ] `bcfe86a0` **(8.5) Pin keeps caret.** Focus a row and type, then click the pin icon on that row
+      → the caret should stay on that same row (pin does not remove the row). *(add-lectern-block 8.5)*
+      - **Still broken 2026-07-24** (user playtest, submission 2026-07-24T20-46-16): clicking pin removed
+        focus from the input; no visible caret.
+      - **Fix applied 2026-07-24 (awaiting retest):** `OnMyPinsChanged` re-arms `autoFocusRowOnRebuild`
+        for the focused row before its async rebuild. Shared root cause above.
+- [ ] `57e32da3` **(8.5) Grip-click keeps caret.** Focus a row and type, then press and release the drag
+      grip WITHOUT dragging (release in place) → the caret should stay on the edited row. *(add-lectern-block 8.5)*
+      - **Still broken 2026-07-24** (user playtest, submission 2026-07-24T20-46-16): interacting with the
+        reorder grip stripped focus from the input the same way delete/pin did.
+      - **Fix applied 2026-07-24 (awaiting retest):** `ReorderEditorBlock`'s release-in-place path
+        (`from == to`) now re-requests focus directly. Shared root cause above.
+- [ ] `2df57ace` **(8.5) Checkbox keeps other caret.** Type in row A, then toggle the checkbox on a
+      different row B → row A's caret and in-progress text should be undisturbed. *(add-lectern-block 8.5)*
+      - **Still broken 2026-07-24** (inferred from the shared root cause; the checkbox is also non-`IFocusable`,
+        so pressing it blurs a focused sibling row the same way — this is the other half of 8.5's original
+        "toggling a checkbox should NOT disturb the caret in another focused row" criterion).
+      - **Fix applied 2026-07-24 (awaiting retest):** `ToggleEditorTask` re-requests focus on the held row
+        (no rebuild needed — the checkbox flips optimistically). Shared root cause above.
       - **Also found — Cmd+A→Delete→Tab does not delete the row** (side note, same session): selecting
         all text in a row (Cmd/Ctrl+A), pressing Delete to empty it, then Tab or Shift+Tab does NOT remove
         the now-empty row. This is the empty-task auto-delete-on-commit behavior that `add-empty-task-lifecycle`
