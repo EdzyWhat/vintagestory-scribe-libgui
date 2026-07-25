@@ -1,4 +1,5 @@
 using ProtoBuf;
+using Scribe.Core;
 
 namespace Scribe;
 
@@ -10,11 +11,15 @@ namespace Scribe;
 /// carries only <c>(DocId, TaskId)</c>).
 ///
 /// Lock-free, like the old read-view toggle: any viewer may tick a task off even while another
-/// player holds the editor lock. The server resolves the document via the store's live
-/// DocId→position index, toggles the task's done flag on its own authoritative document, and — per
-/// the completing player's <c>CompleteUnpins</c> setting — may then remove that player's pin. An
-/// unresolvable/orphaned target completes nothing and simply removes the pin (the "check it off and
-/// it leaves my list" gesture stays uniform whether or not the source still exists).
+/// player holds the editor lock. The per-player pin store is authoritative for a pinned task's
+/// done-state: the server toggles the acting player's pin done, writes through to the source
+/// document's task when it resolves (reconciling only the acting player), then applies the completion
+/// policy the client carried in <see cref="Policy"/> (Sink keeps the pin; Unpin removes it; Delete
+/// removes the task + pin). An unresolvable/destroyed source still completes via the store alone.
+///
+/// The completion policy is a client-local preference (no longer server-side state), so the client
+/// sends its current policy here and the server normalizes it (unknown → Sink) before applying —
+/// see <see cref="ScribePlayerSettings.NormalizePolicy"/>.
 /// </summary>
 [ProtoContract]
 public sealed class ScribeCompleteTaskMessage
@@ -26,4 +31,11 @@ public sealed class ScribeCompleteTaskMessage
     /// <summary>The task's <c>TaskId</c> as 16 raw bytes.</summary>
     [ProtoMember(2)]
     public byte[]? TaskId { get; set; }
+
+    /// <summary>The acting player's current completion policy, sent as its raw byte so protobuf-net
+    /// round-trips it robustly. Defaults to 0 (<see cref="ScribeCompletionPolicy.Sink"/>), so an
+    /// absent/old value is the safe non-destructive default; the server normalizes any unrecognized
+    /// value back to Sink.</summary>
+    [ProtoMember(3)]
+    public byte Policy { get; set; }
 }

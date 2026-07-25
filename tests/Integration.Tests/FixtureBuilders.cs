@@ -34,13 +34,11 @@ public class FixtureBuilders : AtlasScenarioBase
         lectern.ApplyEdit(player.Player, ScribeDocumentCodec.Serialize(doc));
 
         // Pin the (now-done) first task for this player through the real server path, so the
-        // persistence fixture also captures a per-player pin that must survive a restart.
+        // persistence fixture also captures a per-player pin that must survive a restart. (Per-player
+        // preferences are NOT server state anymore — they're client-local JSON — so there is nothing
+        // settings-related to seed into the save here.)
         var mod = World.Api.ModLoader.GetModSystem<Scribe.ScribeModSystem>();
         mod.SetPinForPlayer(player.Player, lectern.Document.DocId, lectern.Document.Blocks[0].TaskId, pinned: true);
-
-        // Store a NON-DEFAULT setting for this player (CompleteUnpins defaults to true) so the
-        // persistence fixture also captures per-player settings that must survive a restart.
-        mod.PinStore!.SetSettings(player.Player.PlayerUID, new ScribePlayerSettings { CompleteUnpins = false });
 
         await World.Ticks(2);
     }

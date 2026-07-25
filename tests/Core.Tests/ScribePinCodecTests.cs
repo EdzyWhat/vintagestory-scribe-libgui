@@ -77,48 +77,61 @@ public class ScribePinCodecTests
         AssertPinEqual(store["player-2"][1], restored["player-2"][1]);
     }
 
-    // ---- SPSE / SPSS: settings round-trip + defaults ----
+    // ---- Player-preference defaults + normalize guards ----
+    //
+    // Settings are no longer a codec blob — they persist as client-local JSON (add-pinned-task-hud
+    // settings-storage pivot), so there is no serialize/deserialize round-trip to cover here. What
+    // survives in Core are the default values and the clamp/normalize guards applied when loading the
+    // (hand-editable, untrusted) config; those are exercised directly below.
 
     [Fact]
-    public void Settings_RoundTrip_PreservesFields()
+    public void Settings_DefaultInstance_SinksAndShowsThreeRows()
     {
-        var settings = new ScribePlayerSettings { CompleteUnpins = false, HudCollapsed = true };
-
-        byte[] bytes = ScribePinCodec.SerializeSettings(settings);
-        bool ok = ScribePinCodec.TryDeserializeSettings(bytes, out var restored);
-
-        Assert.True(ok);
-        Assert.NotNull(restored);
-        Assert.False(restored!.CompleteUnpins);
-        Assert.True(restored.HudCollapsed);
-    }
-
-    [Fact]
-    public void Settings_DefaultInstance_HasCompleteUnpinsEnabled()
-    {
-        // A player who never changed a setting: complete-to-unpin on, HUD not collapsed.
+        // A player who never changed a setting: Sink policy, HUD not collapsed, 3 rows.
         var settings = new ScribePlayerSettings();
 
-        Assert.True(settings.CompleteUnpins);
+        Assert.Equal(ScribeCompletionPolicy.Sink, settings.CompletionPolicy);
         Assert.False(settings.HudCollapsed);
+        Assert.Equal(3, settings.HudMaxRows);
+    }
+
+    [Theory]
+    [InlineData(0, 1)]                 // below min → clamped up
+    [InlineData(-5, 1)]                // negative → clamped up
+    [InlineData(1000, 20)]            // above max → clamped down
+    [InlineData(5, 5)]                 // in range → unchanged
+    public void Settings_ClampHudMaxRows_BoundsTheValue(int stored, int expected)
+    {
+        Assert.Equal(expected, ScribePlayerSettings.ClampHudMaxRows(stored));
     }
 
     [Fact]
-    public void SettingsStore_RoundTrip_PreservesPerPlayerSettings()
+    public void Settings_NormalizePolicy_FallsUnknownBackToSink()
     {
-        var store = new Dictionary<string, ScribePlayerSettings>
+        // A defined value passes through; an undefined enum value (cast from a hand-broken JSON) falls
+        // back to the safe non-destructive default.
+        Assert.Equal(ScribeCompletionPolicy.Delete,
+            ScribePlayerSettings.NormalizePolicy(ScribeCompletionPolicy.Delete));
+        Assert.Equal(ScribeCompletionPolicy.Sink,
+            ScribePlayerSettings.NormalizePolicy((ScribeCompletionPolicy)99));
+    }
+
+    [Fact]
+    public void Settings_Normalized_ClampsRowsAndPolicyInPlace()
+    {
+        var settings = new ScribePlayerSettings
         {
-            ["player-1"] = new() { CompleteUnpins = false },
-            ["player-2"] = new() { HudCollapsed = true },
+            HudMaxRows = 1000,
+            CompletionPolicy = (ScribeCompletionPolicy)99,
+            HudCollapsed = true,
         };
 
-        byte[] bytes = ScribePinCodec.SerializeSettingsStore(store);
-        bool ok = ScribePinCodec.TryDeserializeSettingsStore(bytes, out var restored);
+        var result = settings.Normalized();
 
-        Assert.True(ok);
-        Assert.NotNull(restored);
-        Assert.False(restored!["player-1"].CompleteUnpins);
-        Assert.True(restored["player-2"].HudCollapsed);
+        Assert.Same(settings, result);                                   // mutates + returns this
+        Assert.Equal(ScribePlayerSettings.MaxHudMaxRows, settings.HudMaxRows);
+        Assert.Equal(ScribeCompletionPolicy.Sink, settings.CompletionPolicy);
+        Assert.True(settings.HudCollapsed);                              // untouched field preserved
     }
 
     // ---- fail-safe paths ----
@@ -142,10 +155,10 @@ public class ScribePinCodecTests
     [Fact]
     public void TryDeserializeList_WrongMagic_FailsSafely()
     {
-        // A settings blob is not a pin list — the magic must gate it out.
-        byte[] settingsBytes = ScribePinCodec.SerializeSettings(new ScribePlayerSettings());
+        // A blob with a different 4-byte magic is not a pin list — the magic must gate it out.
+        byte[] wrongMagic = System.Text.Encoding.UTF8.GetBytes("SPSE");
 
-        Assert.False(ScribePinCodec.TryDeserializeList(settingsBytes, out var restored));
+        Assert.False(ScribePinCodec.TryDeserializeList(wrongMagic, out var restored));
         Assert.Null(restored);
     }
 

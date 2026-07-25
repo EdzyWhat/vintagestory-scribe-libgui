@@ -1,6 +1,7 @@
 using Atlas.Api;
 using Atlas.XUnit;
 using Scribe;
+using Scribe.Core;
 
 namespace Integration.Tests;
 
@@ -44,8 +45,8 @@ public class PersistenceScenarios : AtlasScenarioBase
         var player = await World.JoinPlayer("FixtureBuilder");
         Assert.True(mod.PinStore!.IsPinned(player.Player.PlayerUID, lectern.Document.DocId, blocks[0].TaskId));
 
-        // 7.2: the non-default per-player setting seeded in the fixture (CompleteUnpins = false)
-        // survives the restart too — settings persist alongside the pins in the save game blob.
-        Assert.False(mod.PinStore!.GetSettings(player.Player.PlayerUID).CompleteUnpins);
+        // (Per-player preferences are no longer server/save-game state — they're client-local JSON —
+        // so there is nothing settings-related to assert surviving the restart here. Pins persist;
+        // preferences live with the client.)
     }
 }

@@ -4,8 +4,9 @@ using Vintagestory.API.MathTools;
 namespace Scribe;
 
 /// <summary>
-/// Server-side owner of every player's pin set and Scribe settings, plus a live index mapping a
-/// document's <c>DocId</c> to the block position that currently hosts it. Mirrors the vanilla
+/// Server-side owner of every player's pin set, plus a live index mapping a document's <c>DocId</c>
+/// to the block position that currently hosts it. (Per-player display/behavior preferences are NOT
+/// held here — they are client-local JSON, never server state.) Mirrors the vanilla
 /// <c>WaypointMapLayer</c> pattern (per-player server-authoritative references persisted with the
 /// save game); the <see cref="ScribeModSystem"/> owns persistence I/O and the network push, calling
 /// into this store and pushing whichever players a mutation reports as affected.
@@ -15,9 +16,13 @@ namespace Scribe;
 /// <item>The durable reference is <c>(DocId, TaskId)</c>, never a block position. The
 /// <see cref="_docPositions"/> index is only a runtime resolver for snapshotting a pin's text/done;
 /// an index miss means "unresolvable right now," never "deleted".</item>
-/// <item>Orphaning is soft and happens ONLY on explicit permanent-deletion signals
-/// (<see cref="OrphanAll"/> from block removal, or a task vanishing in <see cref="RefreshSnapshots"/>)
-/// — never on chunk unload or a resolution miss.</item>
+/// <item>A pin is <b>auto-cleared</b> — removed from the owner's set — only on a TRUE task deletion:
+/// a task vanishing from THAT player's own saved edit (<see cref="ReconcileSnapshotsForActor"/>).
+/// Breaking the lectern block is
+/// NOT a deletion (the dropped item carries the document, and a re-place restores it), and neither is
+/// a chunk unload or a resolution miss — in those cases the pin stays live-but-unresolvable and the
+/// last-known snapshot keeps it renderable. (The add-pinned-task-hud change replaced the earlier
+/// soft-orphan-and-keep behavior, so nothing uncompletable lingers on the HUD.)</item>
 /// <item>Unpin (<see cref="RemovePin"/>) needs no block resolution, so it works when the owning
 /// lectern is broken or unloaded.</item>
 /// </list>
@@ -27,7 +32,6 @@ namespace Scribe;
 public sealed class ScribePinStore
 {
     private readonly Dictionary<string, List<ScribePinnedRef>> _pins = new();
-    private readonly Dictionary<string, ScribePlayerSettings> _settings = new();
     private readonly Dictionary<Guid, BlockPos> _docPositions = new();
 
     // ---------------- Reads ----------------
@@ -36,11 +40,6 @@ public sealed class ScribePinStore
     /// methods below.</summary>
     public IReadOnlyList<ScribePinnedRef> Get(string playerUid)
         => _pins.TryGetValue(playerUid, out var list) ? list : (IReadOnlyList<ScribePinnedRef>)Array.Empty<ScribePinnedRef>();
-
-    /// <summary>The player's settings, or a fresh default instance (complete-to-unpin on) if they
-    /// have never changed one. Never returns null.</summary>
-    public ScribePlayerSettings GetSettings(string playerUid)
-        => _settings.TryGetValue(playerUid, out var s) ? s : new ScribePlayerSettings();
 
     /// <summary>Whether the player currently has a pin for this task.</summary>
     public bool IsPinned(string playerUid, Guid docId, Guid taskId)
@@ -120,70 +119,61 @@ public sealed class ScribePinStore
         return removed > 0;
     }
 
-    // ---------------- Settings ----------------
-
-    /// <summary>Replaces the player's settings. Returns true (the caller re-pushes the owner).</summary>
-    public bool SetSettings(string playerUid, ScribePlayerSettings settings)
+    /// <summary>Sets the completed state of the player's pin for this task, since the store is
+    /// authoritative for a pinned task's done-state (see <see cref="ScribePinStore"/> invariants). Needs
+    /// no block resolution, so completing works when the owning block is broken or unloaded. A no-op
+    /// (returns false) when the player has no such pin or its state already matches; returns true if the
+    /// pin's <see cref="ScribePinnedRef.LastKnownDone"/> changed.</summary>
+    public bool SetPinDone(string playerUid, Guid docId, Guid taskId, bool done)
     {
-        _settings[playerUid] = settings;
+        if (Find(playerUid, docId, taskId) is not { } pin) return false;
+        if (pin.LastKnownDone == done) return false;
+        pin.LastKnownDone = done;
         return true;
     }
 
-    // ---------------- Snapshot refresh + soft-orphan ----------------
+    /// <summary>The completed state of the player's pin for this task, or null if they have no such
+    /// pin. Used by the completion op to decide the next done-state (toggle) authoritatively from the
+    /// store rather than the possibly-unresolvable source document.</summary>
+    public bool? GetPinDone(string playerUid, Guid docId, Guid taskId)
+        => Find(playerUid, docId, taskId)?.LastKnownDone;
+
+    // ---------------- Snapshot reconcile (acting player only) ----------------
 
     /// <summary>
-    /// After a document is edited, refresh every pin (across all players) that references it: update
-    /// the last-known text/done snapshot from the authoritative document, and soft-orphan any pin
-    /// whose task has vanished from the document (a saved deletion). Never un-orphans and never
-    /// touches pins for other documents. Returns the uids whose set changed, so the caller re-pushes
-    /// exactly those players.
+    /// Reconcile the <b>acting player's</b> pins into a document after THAT player edited it — the
+    /// grief-proof rule (see <see cref="ScribePinStore"/> invariants + the add-pinned-task-hud change):
+    /// a pin is the player's own copy, so only the player's own edit may change or remove it. For each
+    /// of <paramref name="actingPlayerUid"/>'s pins into <paramref name="docId"/>: refresh its
+    /// text/done snapshot from the authoritative document, and REMOVE it if the player deleted that task
+    /// (its <c>TaskId</c> is gone from the document). Other players' pins into the same document are
+    /// deliberately untouched — their copies only change from their own actions. Returns the acting
+    /// player's uid if their set changed (so the caller re-pushes just them), else empty.
     /// </summary>
-    public IReadOnlyList<string> RefreshSnapshots(Guid docId, ScribeDocument document)
+    public IReadOnlyList<string> ReconcileSnapshotsForActor(string actingPlayerUid, Guid docId, ScribeDocument document)
     {
-        var affected = new List<string>();
-        foreach (var (uid, list) in _pins)
-        {
-            bool changed = false;
-            foreach (var pin in list)
-            {
-                if (pin.OwnerDocId != docId) continue;
+        if (!_pins.TryGetValue(actingPlayerUid, out var list)) return Array.Empty<string>();
 
-                var block = document.FindByTaskId(pin.TaskId);
-                if (block is null)
-                {
-                    // The task is gone from a saved edit → soft-orphan (keep the last-known snapshot).
-                    if (!pin.Orphaned) { pin.Orphaned = true; changed = true; }
-                }
-                else if (pin.LastKnownText != block.Text || pin.LastKnownDone != block.Done)
-                {
-                    pin.LastKnownText = block.Text;
-                    pin.LastKnownDone = block.Done;
-                    changed = true;
-                }
-            }
-            if (changed) affected.Add(uid);
-        }
-        return affected;
-    }
+        bool changed = false;
+        // Remove the actor's pins whose task the actor deleted from this doc.
+        int removed = list.RemoveAll(p => p.OwnerDocId == docId && document.FindByTaskId(p.TaskId) is null);
+        if (removed > 0) changed = true;
 
-    /// <summary>
-    /// Soft-orphan every pin (across all players) referencing this document — the block was broken or
-    /// removed. Keeps each pin and its last-known snapshot; the player clears it themselves. Returns
-    /// the uids whose set changed.
-    /// </summary>
-    public IReadOnlyList<string> OrphanAll(Guid docId)
-    {
-        var affected = new List<string>();
-        foreach (var (uid, list) in _pins)
+        // Refresh the surviving pins' snapshots from the authoritative document.
+        foreach (var pin in list)
         {
-            bool changed = false;
-            foreach (var pin in list)
+            if (pin.OwnerDocId != docId) continue;
+            var block = document.FindByTaskId(pin.TaskId);
+            if (block is null) continue; // just removed above; defensive
+            if (pin.LastKnownText != block.Text || pin.LastKnownDone != block.Done)
             {
-                if (pin.OwnerDocId == docId && !pin.Orphaned) { pin.Orphaned = true; changed = true; }
+                pin.LastKnownText = block.Text;
+                pin.LastKnownDone = block.Done;
+                changed = true;
             }
-            if (changed) affected.Add(uid);
         }
-        return affected;
+
+        return changed ? new[] { actingPlayerUid } : Array.Empty<string>();
     }
 
     // ---------------- v3 legacy-pin migration ----------------
@@ -209,25 +199,17 @@ public sealed class ScribePinStore
     /// <summary>Serializes the whole pin store to the savegame blob form.</summary>
     public byte[] SerializePins() => ScribePinCodec.SerializeStore(_pins);
 
-    /// <summary>Serializes the whole settings store to the savegame blob form.</summary>
-    public byte[] SerializeSettings() => ScribePinCodec.SerializeSettingsStore(_settings);
-
-    /// <summary>Replaces the in-memory pin + settings state from persisted blobs (called on world
-    /// load). A null/malformed blob leaves that half empty rather than throwing — a corrupt save
-    /// degrades to "no pins" instead of crashing the load. The live position index is NOT persisted;
-    /// it is rebuilt as block entities initialize.</summary>
-    public void LoadFrom(byte[]? pinBytes, byte[]? settingsBytes)
+    /// <summary>Replaces the in-memory pin state from the persisted blob (called on world load). A
+    /// null/malformed blob leaves the store empty rather than throwing — a corrupt save degrades to
+    /// "no pins" instead of crashing the load. The live position index is NOT persisted; it is rebuilt
+    /// as block entities initialize.</summary>
+    public void LoadFrom(byte[]? pinBytes)
     {
         _pins.Clear();
-        _settings.Clear();
 
         if (ScribePinCodec.TryDeserializeStore(pinBytes, out var pins) && pins is not null)
         {
             foreach (var (uid, list) in pins) _pins[uid] = list;
-        }
-        if (ScribePinCodec.TryDeserializeSettingsStore(settingsBytes, out var settings) && settings is not null)
-        {
-            foreach (var (uid, s) in settings) _settings[uid] = s;
         }
     }
 

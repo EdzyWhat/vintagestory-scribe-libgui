@@ -75,13 +75,17 @@ public sealed class BlockEntityScribeLectern : BlockEntity
         {
             sapi.Event.PlayerDisconnect -= OnPlayerDisconnect;
 
-            // The block was genuinely removed (broken/replaced/exchanged) — NOT a chunk unload (that
-            // path is OnBlockUnloaded, which we deliberately do not touch). Forget the live position
-            // and soft-orphan every player's pins into this document, re-pushing the affected players.
+            // The block was removed (broken/replaced/exchanged). Forget the live position so the
+            // document is unresolvable until a re-place re-registers it — but do NOT clear the pins:
+            // breaking a lectern to relocate it drops an item carrying the document, and OnBlockPlaced
+            // restores the same DocId so the pins resolve again (see that method + the
+            // break→re-place integration scenario). A pin is removed only by the OWNER's own action —
+            // their completion policy, or deleting the task in their own edit (see
+            // ScribePinStore.ReconcileSnapshotsForActor) — never on block removal or a chunk unload.
+            // Snapshots keep the pin renderable on the HUD meanwhile.
             if (PinStore is { } store && registeredDocId is { } docId)
             {
                 store.UnregisterDoc(docId);
-                if (ModSystem is { } mod) mod.PushPinsTo(store.OrphanAll(docId));
             }
             registeredDocId = null;
         }
@@ -230,7 +234,8 @@ public sealed class BlockEntityScribeLectern : BlockEntity
             Document = doc;
             RegisterDocInStore(); // an edit never changes the DocId, but keep the index authoritative
             MarkDirty(redrawOnClient: true);
-            RefreshPinSnapshots();
+            // Only the editing player's own pins reconcile to their edit (grief-proof, player-owned).
+            ReconcileActorPins(fromPlayer.PlayerUID);
         }
 
         return true;
@@ -249,34 +254,59 @@ public sealed class BlockEntityScribeLectern : BlockEntity
     }
 
     /// <summary>
-    /// Server-side: toggle a task's done state on behalf of a read-view (or future HUD) viewer,
-    /// addressed by its stable <see cref="ScribeBlock.TaskId"/> — the identity-addressed completion
-    /// path (<see cref="ScribeCompleteTaskMessage"/>). Unlike <see cref="ApplyEdit"/> this does NOT
-    /// require the editor lock: ticking a task off is an always-allowed action any viewer may perform,
-    /// even while another player holds the lock. Mutates the authoritative document in place (not a
-    /// client-submitted copy), so it only ever changes the one flag and cannot clobber a concurrent
-    /// editor's in-flight text edits beyond that. A TaskId with no matching (or non-task) block is a
-    /// no-op. Refreshes pin snapshots so every pinner's last-known done state tracks the change.
+    /// Server-side: set a task's done state to an explicit value on the authoritative document,
+    /// addressed by its stable <see cref="ScribeBlock.TaskId"/> — the write-through target of the
+    /// identity-addressed completion path (<see cref="ScribeCompleteTaskMessage"/>). Unlike
+    /// <see cref="ApplyEdit"/> this does NOT require the editor lock: ticking a task off is an
+    /// always-allowed action any viewer may perform, even while another player holds the lock. Mutates
+    /// the authoritative document in place (not a client-submitted copy), so it only ever changes the
+    /// one flag and cannot clobber a concurrent editor's in-flight text edits beyond that. A TaskId with
+    /// no matching (or non-task) block is a no-op. Does NOT touch pins — the caller (<c>ScribeModSystem</c>)
+    /// owns the acting player's pin done-state (the store is authoritative) and reconciles it separately;
+    /// other players' pins are deliberately left alone (grief-proof, player-owned pins).
     /// </summary>
-    public void ToggleTaskByIdFromReader(Guid taskId)
+    public void SetTaskDoneFromReader(Guid taskId, bool done)
     {
         if (Api is not ICoreServerAPI) return;
 
         var block = Document.FindByTaskId(taskId);
         if (block is null || !block.IsTask) return;
+        if (block.Done == done) return;
 
-        block.Done = !block.Done;
+        block.Done = done;
         MarkDirty(redrawOnClient: true);
-        RefreshPinSnapshots();
     }
 
-    /// <summary>Server-side: after a document mutation, refresh every affected player's pin snapshots
-    /// (and soft-orphan any pin whose task vanished from a saved edit), then re-push those players.</summary>
-    private void RefreshPinSnapshots()
+    /// <summary>
+    /// Server-side: delete a task from the authoritative document by its stable
+    /// <see cref="ScribeBlock.TaskId"/> — the write-through for the <c>Delete</c> completion policy.
+    /// Lock-free like <see cref="SetTaskDoneFromReader"/>. Returns whether a task was removed. Does NOT
+    /// touch pins (the caller reconciles the acting player's pin; others' pins are untouched).
+    /// </summary>
+    public bool DeleteTaskFromReader(Guid taskId)
+    {
+        if (Api is not ICoreServerAPI) return false;
+
+        for (int i = 0; i < Document.Blocks.Count; i++)
+        {
+            if (Document.Blocks[i].TaskId == taskId && Document.Blocks[i].IsTask)
+            {
+                Document.DeleteBlock(i);
+                MarkDirty(redrawOnClient: true);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>Server-side: after THIS player saves an edit, reconcile only the acting player's pins
+    /// into the edited document (grief-proof: a pin is the owner's own copy — only their own edit
+    /// changes/removes it), then re-push that player.</summary>
+    private void ReconcileActorPins(string actingPlayerUid)
     {
         if (PinStore is { } store && ModSystem is { } mod)
         {
-            mod.PushPinsTo(store.RefreshSnapshots(Document.DocId, Document));
+            mod.PushPinsTo(store.ReconcileSnapshotsForActor(actingPlayerUid, Document.DocId, Document));
         }
     }
 

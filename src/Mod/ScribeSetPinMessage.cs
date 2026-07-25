@@ -13,7 +13,7 @@ namespace Scribe;
 /// has been broken or its chunk is unloaded. A <b>pin</b> resolves the owning block (via the store's
 /// live DocId→position index) only to capture a text/done snapshot. Lock-free either way: pinning
 /// never touches the document, its edit lock, or autosave (see
-/// <see cref="BlockEntityScribeLectern.ToggleTaskByIdFromReader"/> for the sibling lock-free path).
+/// <see cref="BlockEntityScribeLectern.SetTaskDoneFromReader"/> for the sibling lock-free path).
 /// </summary>
 [ProtoContract]
 public sealed class ScribeSetPinMessage

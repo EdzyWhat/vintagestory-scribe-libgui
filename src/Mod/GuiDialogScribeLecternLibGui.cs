@@ -818,15 +818,16 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     }
 
     /// <summary>Read-view task checkbox click: complete the task by its stable identity via the
-    /// lock-free <see cref="ScribeCompleteTaskMessage"/> (the read view holds no editor lock). The
-    /// server toggles the done flag and, per this player's complete-to-unpin setting, may remove their
-    /// pin — the "check it off and it leaves my list" gesture the future HUD reuses.</summary>
+    /// lock-free <see cref="ScribeCompleteTaskMessage"/> (the read view holds no editor lock). If the
+    /// player has pinned this task, the server completes it store-first under their completion policy;
+    /// otherwise it just toggles the shared document's done flag — the same gesture the HUD reuses.</summary>
     private void OnReadViewCompleteTask(Guid taskId)
     {
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeCompleteTaskMessage
         {
             DocId = lectern.Document.DocId.ToByteArray(),
             TaskId = taskId.ToByteArray(),
+            Policy = (byte)modSystem.MySettings.CompletionPolicy,
         });
     }
 }

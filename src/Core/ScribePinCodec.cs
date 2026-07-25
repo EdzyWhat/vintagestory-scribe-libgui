@@ -8,11 +8,13 @@ namespace Scribe.Core;
 /// binary format (returns false on anything malformed rather than throwing), so Core needs no
 /// external dependency and the same bytes are trusted-but-client input the server re-persists.
 ///
-/// Four blob shapes, each with its own 4-byte magic and 1-byte version:
+/// Two blob shapes, each with its own 4-byte magic and 1-byte version:
 ///   SPIN — one player's <see cref="ScribePinnedRef"/> list (the server→client per-player push).
 ///   SPST — the whole pin store, <c>Dictionary&lt;playerUid, List&lt;ScribePinnedRef&gt;&gt;</c> (savegame blob).
-///   SPSE — one player's <see cref="ScribePlayerSettings"/> (the server→client per-player push).
-///   SPSS — the whole settings store, <c>Dictionary&lt;playerUid, ScribePlayerSettings&gt;</c> (savegame blob).
+///
+/// Per-player <see cref="ScribePlayerSettings"/> are NOT serialized here: they are client-local
+/// display/behavior preferences persisted as JSON via the mod's client config (never server-synced),
+/// so the former SPSE/SPSS settings blobs were removed with the server settings layer.
 ///
 /// Guids are written as 16 raw bytes (protobuf-agnostic and compact). Caps bound every read so a
 /// malformed or hostile payload can't allocate without limit.
@@ -21,9 +23,9 @@ public static class ScribePinCodec
 {
     private static readonly byte[] ListMagic = "SPIN"u8.ToArray();
     private static readonly byte[] StoreMagic = "SPST"u8.ToArray();
-    private static readonly byte[] SettingsMagic = "SPSE"u8.ToArray();
-    private static readonly byte[] SettingsStoreMagic = "SPSS"u8.ToArray();
-    private const byte Version = 1;
+
+    /// <summary>Version of the pin-list blobs (SPIN/SPST). Unchanged — pins didn't change shape.</summary>
+    private const byte PinVersion = 1;
 
     /// <summary>Hard upper bound on the number of pins a single player may hold, enforced on every
     /// list/store read so a malformed or hostile payload cannot grow a persisted/synced set without
@@ -45,7 +47,7 @@ public static class ScribePinCodec
         using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
         {
             w.Write(ListMagic);
-            w.Write(Version);
+            w.Write(PinVersion);
             WritePinList(w, pins);
         }
         return ms.ToArray();
@@ -59,7 +61,7 @@ public static class ScribePinCodec
         {
             using var ms = new MemoryStream(bytes, writable: false);
             using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: true);
-            if (!ReadHeader(r, ListMagic)) return false;
+            if (ReadHeader(r, ListMagic) != PinVersion) return false;
             if (!TryReadPinList(r, bytes.Length, out var list)) return false;
             pins = list;
             return true;
@@ -79,7 +81,7 @@ public static class ScribePinCodec
         using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
         {
             w.Write(StoreMagic);
-            w.Write(Version);
+            w.Write(PinVersion);
             w.Write(store.Count);
             foreach (var (uid, pins) in store)
             {
@@ -98,7 +100,7 @@ public static class ScribePinCodec
         {
             using var ms = new MemoryStream(bytes, writable: false);
             using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: true);
-            if (!ReadHeader(r, StoreMagic)) return false;
+            if (ReadHeader(r, StoreMagic) != PinVersion) return false;
 
             int playerCount = r.ReadInt32();
             if (playerCount < 0 || playerCount > bytes.Length || playerCount > MaxPlayers) return false;
@@ -121,96 +123,15 @@ public static class ScribePinCodec
         }
     }
 
-    // ---- SPSE: one player's settings (network) ----
-
-    public static byte[] SerializeSettings(ScribePlayerSettings settings)
-    {
-        using var ms = new MemoryStream();
-        using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
-        {
-            w.Write(SettingsMagic);
-            w.Write(Version);
-            WriteSettings(w, settings);
-        }
-        return ms.ToArray();
-    }
-
-    public static bool TryDeserializeSettings(byte[]? bytes, out ScribePlayerSettings? settings)
-    {
-        settings = null;
-        if (bytes is null) return false;
-        try
-        {
-            using var ms = new MemoryStream(bytes, writable: false);
-            using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: true);
-            if (!ReadHeader(r, SettingsMagic)) return false;
-            settings = ReadSettings(r);
-            return true;
-        }
-        catch (Exception ex) when (ex is EndOfStreamException or IOException or FormatException)
-        {
-            settings = null;
-            return false;
-        }
-    }
-
-    // ---- SPSS: the whole settings store (savegame) ----
-
-    public static byte[] SerializeSettingsStore(IReadOnlyDictionary<string, ScribePlayerSettings> store)
-    {
-        using var ms = new MemoryStream();
-        using (var w = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
-        {
-            w.Write(SettingsStoreMagic);
-            w.Write(Version);
-            w.Write(store.Count);
-            foreach (var (uid, settings) in store)
-            {
-                w.Write(uid);
-                WriteSettings(w, settings);
-            }
-        }
-        return ms.ToArray();
-    }
-
-    public static bool TryDeserializeSettingsStore(byte[]? bytes, out Dictionary<string, ScribePlayerSettings>? store)
-    {
-        store = null;
-        if (bytes is null) return false;
-        try
-        {
-            using var ms = new MemoryStream(bytes, writable: false);
-            using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: true);
-            if (!ReadHeader(r, SettingsStoreMagic)) return false;
-
-            int playerCount = r.ReadInt32();
-            if (playerCount < 0 || playerCount > bytes.Length || playerCount > MaxPlayers) return false;
-
-            var result = new Dictionary<string, ScribePlayerSettings>(playerCount);
-            for (int i = 0; i < playerCount; i++)
-            {
-                string uid = r.ReadString();
-                if (uid.Length > MaxUidLength) return false;
-                result[uid] = ReadSettings(r);
-            }
-            store = result;
-            return true;
-        }
-        catch (Exception ex) when (ex is EndOfStreamException or IOException or FormatException)
-        {
-            store = null;
-            return false;
-        }
-    }
-
     // ---- shared helpers ----
 
-    private static bool ReadHeader(BinaryReader r, byte[] expectedMagic)
+    /// <summary>Reads the 4-byte magic + 1-byte version. Returns the version, or -1 if the magic
+    /// doesn't match (caller then decides which versions it accepts).</summary>
+    private static int ReadHeader(BinaryReader r, byte[] expectedMagic)
     {
         var magic = r.ReadBytes(expectedMagic.Length);
-        if (!magic.AsSpan().SequenceEqual(expectedMagic)) return false;
-        byte version = r.ReadByte();
-        return version == Version;
+        if (!magic.AsSpan().SequenceEqual(expectedMagic)) return -1;
+        return r.ReadByte();
     }
 
     private static void WritePinList(BinaryWriter w, IReadOnlyList<ScribePinnedRef> pins)
@@ -254,18 +175,6 @@ public static class ScribePinCodec
         pins = list;
         return true;
     }
-
-    private static void WriteSettings(BinaryWriter w, ScribePlayerSettings settings)
-    {
-        w.Write(settings.CompleteUnpins);
-        w.Write(settings.HudCollapsed);
-    }
-
-    private static ScribePlayerSettings ReadSettings(BinaryReader r) => new()
-    {
-        CompleteUnpins = r.ReadBoolean(),
-        HudCollapsed = r.ReadBoolean(),
-    };
 
     /// <summary>Reads exactly <paramref name="count"/> bytes or throws <see cref="EndOfStreamException"/>
     /// (caught as a malformed-input failure). Guards against <see cref="BinaryReader.ReadBytes"/>

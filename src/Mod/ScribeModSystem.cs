@@ -14,18 +14,25 @@ namespace Scribe;
 /// lock bookkeeping) happens in <see cref="StartClientSide"/>/<see cref="StartServerSide"/>.
 ///
 /// Also owns the per-player pin layer: the server-side <see cref="ScribePinStore"/> (pins +
-/// settings + a live DocId→position index), its save-game persistence, the identity-addressed
-/// pin/complete handlers, and the per-player push of a player's own pins/settings to their client.
-/// The client caches its own pushed set so the lectern GUI can query <see cref="IsPinnedForMe"/>.
+/// a live DocId→position index), its save-game persistence, the identity-addressed pin/complete
+/// handlers, and the per-player push of a player's own pins to their client. The client caches its
+/// own pushed set so the lectern GUI can query <see cref="IsPinnedForMe"/>. Per-player display/
+/// behavior preferences are NOT server state — they are client-local JSON (<see cref="MySettings"/>).
 /// </summary>
 public sealed class ScribeModSystem : ModSystem
 {
     public const string NetworkChannelName = "scribe";
     public const string ClientConfigFileName = "scribe-client-config.json";
 
-    /// <summary>Savegame keys for the persisted pin store and settings store.</summary>
+    /// <summary>Savegame key for the persisted pin store. (Per-player display/behavior preferences are
+    /// NOT persisted server-side — they are client-local JSON; see <see cref="HudConfigFileName"/>.)</summary>
     private const string PinStoreSaveKey = "scribe:pins:v1";
-    private const string SettingsStoreSaveKey = "scribe:settings:v1";
+
+    /// <summary>Client-local JSON file holding this player's HUD/pin preferences (completion policy,
+    /// HUD rows, collapse) — per-player, cross-world, never server-synced. Separate from
+    /// <see cref="ClientConfigFileName"/> so persisting a runtime toggle can't clobber its hand-edited
+    /// layout-tuning knobs (that config is re-read fresh per dialog open, with no write path).</summary>
+    public const string HudConfigFileName = "scribe-hud-config.json";
 
     private ICoreClientAPI? capi;
     private ICoreServerAPI? sapi;
@@ -37,11 +44,19 @@ public sealed class ScribeModSystem : ModSystem
     /// (docId, taskId) for O(1) <see cref="IsPinnedForMe"/> lookups from the GUI.</summary>
     private readonly HashSet<(Guid, Guid)> myPins = new();
 
-    /// <summary>Client-side cache of THIS player's settings (defaults until the first push).</summary>
-    private ScribePlayerSettings mySettings = new();
+    /// <summary>Client-side cache of THIS player's full pin list (in server order), populated by the
+    /// same push as <see cref="myPins"/>. The HUD consumes this for each pin's text/done snapshot;
+    /// the lectern only needs the <see cref="myPins"/> key set for its tint.</summary>
+    private IReadOnlyList<ScribePinnedRef> myPinList = Array.Empty<ScribePinnedRef>();
 
-    /// <summary>Raised on the client whenever a fresh pin set or settings push arrives, so an open
-    /// lectern dialog can repaint its per-player pin indicators. </summary>
+    /// <summary>Client-side player preferences (completion policy, HUD rows/collapse), persisted as
+    /// client-local JSON (<see cref="HudConfigFileName"/>) and loaded in <see cref="StartClientSide"/>;
+    /// never server-synced. The Core POCO doubles as the config's serialized shape. Non-null on the
+    /// client after <see cref="StartClientSide"/>.</summary>
+    private ScribePlayerSettings? mySettings;
+
+    /// <summary>Raised on the client whenever a fresh pin set push arrives, so an open lectern dialog
+    /// (and the HUD) can repaint its per-player pin indicators.</summary>
     public event Action? MyPinsChanged;
 
     public override void Start(ICoreAPI api)
@@ -61,8 +76,7 @@ public sealed class ScribeModSystem : ModSystem
             .RegisterMessageType<ScribeRequestAccessMessage>()
             .RegisterMessageType<ScribeSetPinMessage>()
             .RegisterMessageType<ScribeCompleteTaskMessage>()
-            .RegisterMessageType<ScribePinnedSetMessage>()
-            .RegisterMessageType<ScribePlayerSettingsMessage>();
+            .RegisterMessageType<ScribePinnedSetMessage>();
     }
 
     /// <summary>Server-side accessor for the pin store, so the block entity can register/orphan its
@@ -74,12 +88,15 @@ public sealed class ScribeModSystem : ModSystem
         base.StartClientSide(api);
         capi = api;
 
+        // Load this player's client-local HUD/pin preferences (per-player, cross-world, never synced).
+        // A missing/corrupt file loads as defaults; Normalize() clamps any hand-edited out-of-range value.
+        mySettings = (api.LoadModConfig<ScribePlayerSettings>(HudConfigFileName) ?? new ScribePlayerSettings()).Normalized();
+
         RegisterCustomIcons(api);
 
         api.Network.GetChannel(NetworkChannelName)
             .SetMessageHandler<ScribeEditDocumentMessage>(OnClientReceivedEditReply)
-            .SetMessageHandler<ScribePinnedSetMessage>(OnClientReceivedPinnedSet)
-            .SetMessageHandler<ScribePlayerSettingsMessage>(OnClientReceivedPlayerSettings);
+            .SetMessageHandler<ScribePinnedSetMessage>(OnClientReceivedPinnedSet);
     }
 
     /// <summary>Client-side: whether THIS player has pinned the given task, from the server-pushed
@@ -87,8 +104,28 @@ public sealed class ScribeModSystem : ModSystem
     /// before the first push (a safe default — nothing shows as pinned until the server confirms).</summary>
     public bool IsPinnedForMe(Guid docId, Guid taskId) => myPins.Contains((docId, taskId));
 
-    /// <summary>Client-side: THIS player's current settings (defaults until the first server push).</summary>
-    public ScribePlayerSettings MySettings => mySettings;
+    /// <summary>Client-side: THIS player's HUD/pin preferences (client-local; defaults until
+    /// <see cref="StartClientSide"/> loads the config). The HUD reads these directly. Falls back to a
+    /// fresh default instance if queried before load (e.g. server side), so it is never null.</summary>
+    public ScribePlayerSettings MySettings => mySettings ??= new ScribePlayerSettings();
+
+    /// <summary>Client-side: mutate this player's preferences and persist them to the client-local JSON
+    /// config. The HUD/lectern refresh off <see cref="MyPinsChanged"/>, which this fires so an open HUD
+    /// re-reads the changed preference (e.g. a collapse toggle) with no network round-trip.</summary>
+    public void UpdateMySettings(Action<ScribePlayerSettings> mutate)
+    {
+        if (capi is null) return; // client-only
+        var settings = MySettings;
+        mutate(settings);
+        settings.Normalized();
+        capi.StoreModConfig(settings, HudConfigFileName);
+        MyPinsChanged?.Invoke();
+    }
+
+    /// <summary>Client-side: THIS player's full pin list (empty until the first push), in server order,
+    /// each carrying its <c>LastKnownText</c>/<c>LastKnownDone</c> snapshot. The HUD renders from this;
+    /// callers must not mutate it.</summary>
+    public IReadOnlyList<ScribePinnedRef> MyPins => myPinList;
 
     private void OnClientReceivedPinnedSet(ScribePinnedSetMessage message)
     {
@@ -96,17 +133,13 @@ public sealed class ScribeModSystem : ModSystem
         if (ScribePinCodec.TryDeserializeList(message.PinnedRefBytes, out var pins) && pins is not null)
         {
             foreach (var pin in pins) myPins.Add((pin.OwnerDocId, pin.TaskId));
+            myPinList = pins;
+        }
+        else
+        {
+            myPinList = Array.Empty<ScribePinnedRef>();
         }
         MyPinsChanged?.Invoke();
-    }
-
-    private void OnClientReceivedPlayerSettings(ScribePlayerSettingsMessage message)
-    {
-        if (ScribePinCodec.TryDeserializeSettings(message.SettingsBytes, out var settings) && settings is not null)
-        {
-            mySettings = settings;
-            MyPinsChanged?.Invoke();
-        }
     }
 
     /// <summary>
@@ -187,22 +220,19 @@ public sealed class ScribeModSystem : ModSystem
     {
         if (sapi is null || pinStore is null) return;
         var pinBytes = sapi.WorldManager.SaveGame.GetData(PinStoreSaveKey);
-        var settingsBytes = sapi.WorldManager.SaveGame.GetData(SettingsStoreSaveKey);
-        pinStore.LoadFrom(pinBytes, settingsBytes);
+        pinStore.LoadFrom(pinBytes);
     }
 
     private void OnGameWorldSave()
     {
         if (sapi is null || pinStore is null) return;
         sapi.WorldManager.SaveGame.StoreData(PinStoreSaveKey, pinStore.SerializePins());
-        sapi.WorldManager.SaveGame.StoreData(SettingsStoreSaveKey, pinStore.SerializeSettings());
     }
 
     private void OnPlayerNowPlaying(IServerPlayer player)
     {
         DrainLegacyPinsFor(player);
         PushPinsTo(player);
-        PushSettingsTo(player);
     }
 
     /// <summary>
@@ -310,8 +340,11 @@ public sealed class ScribeModSystem : ModSystem
             Trace("complete-task from {0}: MALFORMED packet (docId/taskId not 16 bytes) — ignored", fromPlayer.PlayerName);
             return;
         }
-        Trace("complete-task received from {0}: doc={1} task={2}", fromPlayer.PlayerName, docId, taskId);
-        CompleteTaskForPlayer(fromPlayer, docId, taskId);
+        // The completion policy is a client-local preference carried in the packet; normalize an
+        // unknown/hostile byte back to the safe default before applying (Sink).
+        var policy = ScribePlayerSettings.NormalizePolicy((ScribeCompletionPolicy)message.Policy);
+        Trace("complete-task received from {0}: doc={1} task={2} policy={3}", fromPlayer.PlayerName, docId, taskId, policy);
+        CompleteTaskForPlayer(fromPlayer, docId, taskId, policy);
     }
 
     /// <summary>
@@ -350,95 +383,104 @@ public sealed class ScribeModSystem : ModSystem
     }
 
     /// <summary>
-    /// Server-side complete-a-task by identity (the read-view checkbox / future HUD checkbox). Two
-    /// distinct phases, split so each is independently observable in the log (7.8 part d diagnosis):
+    /// Server-side complete-a-task by identity (the read-view checkbox / HUD checkbox), for a task the
+    /// player has pinned. The per-player pin store is authoritative for a pinned task's done-state, so
+    /// the flow is store-first with write-through:
     /// <list type="number">
-    /// <item><b>Complete</b> — resolve the document via the live index and toggle its done flag
-    /// lock-free (<see cref="CompleteTaskStep"/>).</item>
-    /// <item><b>Conditional unpin</b> — per the completing player's CompleteUnpins setting, remove their
-    /// pin, but only when the task is now DONE (unchecking a completed task must not also unpin), or
-    /// unconditionally when the target is orphaned/unresolvable so "check it off and it leaves my list"
-    /// stays uniform whether or not the source still exists (<see cref="ConditionalUnpinStep"/>).</item>
+    /// <item><b>Toggle in the store</b> — flip the acting player's pin's done-state (the authoritative
+    /// value), so completion works even when the source is unresolvable/destroyed.</item>
+    /// <item><b>Write through to the source</b> — when the owning document resolves, set its task's done
+    /// to match (reconciling ONLY the acting player; other players' pins are their own copies).</item>
+    /// <item><b>Apply the completion policy</b> — <c>Sink</c> keeps the (now-done) pin; <c>Unpin</c>
+    /// removes the pin; <c>Delete</c> removes the task from the source (when resolvable) and the pin.
+    /// Removal/unpin fires only on a transition INTO done, so unchecking a done task never removes it.</item>
     /// </list>
-    /// Public for the same reason as <see cref="SetPinForPlayer"/> — the block-entity layer and the
-    /// integration suite drive the exact production path.
+    /// The <paramref name="policy"/> is the acting player's client-local completion preference, carried
+    /// in the completion request and already normalized by the caller; it is no longer server-side
+    /// state. Re-pushes the acting player once at the end when their set changed. Public for the same
+    /// reason as <see cref="SetPinForPlayer"/> — the block-entity layer and the integration suite drive
+    /// the exact production path.
     /// </summary>
-    public void CompleteTaskForPlayer(IServerPlayer player, Guid docId, Guid taskId)
+    public void CompleteTaskForPlayer(IServerPlayer player, Guid docId, Guid taskId,
+        ScribeCompletionPolicy policy = ScribeCompletionPolicy.Sink)
     {
         if (sapi is null || pinStore is null) return;
 
-        bool resolved = CompleteTaskStep(player, docId, taskId);
-        ConditionalUnpinStep(player, docId, taskId, resolved);
-    }
-
-    /// <summary>
-    /// Phase 1 of completion: toggle the task's done flag on the authoritative document, if it resolves.
-    /// Returns whether the owning document was resolvable right now (true) or is orphaned/unloaded
-    /// (false) — the caller uses that to decide the unpin rule. Toggling also refreshes pin snapshots
-    /// and re-pushes affected players (see <see cref="BlockEntityScribeLectern.ToggleTaskByIdFromReader"/>).
-    /// </summary>
-    private bool CompleteTaskStep(IServerPlayer player, Guid docId, Guid taskId)
-    {
-        if (sapi is null || pinStore is null) return false;
-
-        if (!pinStore.TryResolvePos(docId, out var pos))
+        // The store owns the pinned task's done-state; toggle from there (not the possibly-gone source).
+        bool? current = pinStore.GetPinDone(player.PlayerUID, docId, taskId);
+        if (current is null)
         {
-            Trace("  complete: doc {0} not in live index (orphaned/unloaded) — nothing to toggle", docId);
-            return false;
+            // Not pinned by this player — this is a plain read-view checkbox on an unpinned document
+            // task. Toggle the shared document directly (legacy behavior); no store/policy involvement.
+            CompleteUnpinnedTaskAtSource(player, docId, taskId);
+            return;
         }
-        if (sapi.World.BlockAccessor.GetBlockEntity<BlockEntityScribeLectern>(pos) is not { } lectern)
-        {
-            Trace("  complete: doc {0} indexed at {1} but no lectern BE there — nothing to toggle", docId, pos);
-            return false;
-        }
+        bool nowDone = !current.Value;
 
-        bool before = lectern.Document.FindByTaskId(taskId)?.Done ?? false;
-        lectern.ToggleTaskByIdFromReader(taskId);
-        var after = lectern.Document.FindByTaskId(taskId);
-        if (after is null)
-        {
-            Trace("  complete: task {0} not found in doc {1} — no toggle applied", taskId, docId);
-        }
-        else
-        {
-            Trace("  complete: task {0} done {1} -> {2}", taskId, before, after.Done);
-        }
-        return true;
-    }
+        bool changed = pinStore.SetPinDone(player.PlayerUID, docId, taskId, nowDone);
+        Trace("  complete: {0}'s pin on task {1} done {2} -> {3}", player.PlayerName, taskId, current.Value, nowDone);
 
-    /// <summary>
-    /// Phase 2 of completion: remove the completing player's pin per their CompleteUnpins setting. When
-    /// the document resolved, unpin only if the task is now DONE (so unchecking a done task does not
-    /// unpin). When it did NOT resolve (orphaned/unloaded), unpin unconditionally — actioning an
-    /// unreachable task's checkbox is defined as "clear it from my list". Re-pushes the player only when
-    /// their set actually changed.
-    /// </summary>
-    private void ConditionalUnpinStep(IServerPlayer player, Guid docId, Guid taskId, bool resolved)
-    {
-        if (sapi is null || pinStore is null) return;
+        // Write through to the shared source document when it resolves (best-effort; a gone source just
+        // skips this). Reconciles only the acting player — other pinners keep their own copies.
+        bool resolved = TryResolveLectern(docId, out var lectern);
+        if (resolved) lectern!.SetTaskDoneFromReader(taskId, nowDone);
 
-        if (resolved)
+        // Apply the completion policy — only on a transition INTO done (unchecking never removes).
+        if (nowDone)
         {
-            bool wantsUnpin = pinStore.GetSettings(player.PlayerUID).CompleteUnpins;
-            bool nowDone = pinStore.TryResolvePos(docId, out var pos)
-                && sapi.World.BlockAccessor.GetBlockEntity<BlockEntityScribeLectern>(pos) is { } lectern
-                && lectern.Document.FindByTaskId(taskId) is { Done: true };
-            if (!wantsUnpin || !nowDone)
+            switch (policy)
             {
-                Trace("  unpin: skipped (completeUnpins={0}, nowDone={1})", wantsUnpin, nowDone);
-                return;
+                case ScribeCompletionPolicy.Unpin:
+                    changed |= pinStore.RemovePin(player.PlayerUID, docId, taskId);
+                    Trace("  policy Unpin: removed {0}'s pin on task {1}", player.PlayerName, taskId);
+                    break;
+                case ScribeCompletionPolicy.Delete:
+                    if (resolved && lectern!.DeleteTaskFromReader(taskId))
+                        Trace("  policy Delete: removed task {0} from source doc {1}", taskId, docId);
+                    else
+                        Trace("  policy Delete: source unresolvable for task {0} — pin removed only", taskId);
+                    changed |= pinStore.RemovePin(player.PlayerUID, docId, taskId);
+                    break;
+                case ScribeCompletionPolicy.Sink:
+                default:
+                    // Keep the (now-done) pin; the HUD mutes + sinks it client-side.
+                    break;
             }
         }
 
-        if (pinStore.RemovePin(player.PlayerUID, docId, taskId))
+        if (changed) PushPinsTo(player);
+    }
+
+    /// <summary>Resolves a docId to its currently-hosting lectern block entity via the live index, if
+    /// one is loaded. Returns false (and null) when the source is unloaded or destroyed — the
+    /// completion path then relies on the store alone.</summary>
+    private bool TryResolveLectern(Guid docId, out BlockEntityScribeLectern? lectern)
+    {
+        lectern = null;
+        if (sapi is null || pinStore is null) return false;
+        if (!pinStore.TryResolvePos(docId, out var pos)) return false;
+        lectern = sapi.World.BlockAccessor.GetBlockEntity<BlockEntityScribeLectern>(pos);
+        return lectern is not null;
+    }
+
+    /// <summary>Completes (toggles) an UNPINNED document task straight on the shared source — the plain
+    /// read-view checkbox on a task nobody has pinned. No store or completion-policy involvement (there
+    /// is no pin). A no-op when the source is unresolvable (nothing to toggle without a document).</summary>
+    private void CompleteUnpinnedTaskAtSource(IServerPlayer player, Guid docId, Guid taskId)
+    {
+        if (!TryResolveLectern(docId, out var lectern))
         {
-            Trace("  unpin: removed {0}'s pin on task {1}{2}", player.PlayerName, taskId, resolved ? "" : " (orphaned target)");
-            PushPinsTo(player);
+            Trace("  complete(unpinned): doc {0} unresolvable — nothing to toggle", docId);
+            return;
         }
-        else
+        var block = lectern!.Document.FindByTaskId(taskId);
+        if (block is null || !block.IsTask)
         {
-            Trace("  unpin: {0} had no pin on task {1} — nothing removed", player.PlayerName, taskId);
+            Trace("  complete(unpinned): task {0} not found in doc {1}", taskId, docId);
+            return;
         }
+        lectern.SetTaskDoneFromReader(taskId, !block.Done);
+        Trace("  complete(unpinned): task {0} toggled to done={1}", taskId, !block.Done);
     }
 
     /// <summary>Re-push a single player their own full pin set (server → client). Called on join and
@@ -448,14 +490,6 @@ public sealed class ScribeModSystem : ModSystem
         if (sapi is null || pinStore is null) return;
         var bytes = ScribePinCodec.SerializeList(pinStore.Get(player.PlayerUID));
         sapi.Network.GetChannel(NetworkChannelName).SendPacket(new ScribePinnedSetMessage { PinnedRefBytes = bytes }, player);
-    }
-
-    /// <summary>Re-push a single player their own settings (server → client).</summary>
-    public void PushSettingsTo(IServerPlayer player)
-    {
-        if (sapi is null || pinStore is null) return;
-        var bytes = ScribePinCodec.SerializeSettings(pinStore.GetSettings(player.PlayerUID));
-        sapi.Network.GetChannel(NetworkChannelName).SendPacket(new ScribePlayerSettingsMessage { SettingsBytes = bytes }, player);
     }
 
     /// <summary>Re-push each listed player their own pin set. The block entity calls this after a
