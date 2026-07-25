@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Opt-in pre-push gate. Runs the Core tests + Atlas integration suite (via build/verify.sh
+# --no-restage) before allowing a push that updates `main`, and blocks the push if either
+# suite fails. Pushes that do NOT touch `main` (work-in-progress branches) pass straight
+# through -- the gate exists to protect `main`, not to slow down feature-branch iteration.
+#
+# This file is version-controlled under build/hooks/ but git does NOT clone hooks into
+# .git/hooks/, so it must be installed once per clone:  ./build/install-hooks.sh
+# Escape hatch: `git push --no-verify` skips all pre-push hooks.
+#
+# Git invokes a pre-push hook with the remote name ($1) and URL ($2) as arguments, and feeds
+# one line per pushed ref on stdin:
+#     <local ref> <local sha> <remote ref> <remote sha>
+# We scan those lines for any update to refs/heads/main and only gate when one is present.
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+# Decide whether this push updates main by reading the ref lines git provides on stdin.
+gates_main() {
+  local local_ref local_sha remote_ref remote_sha
+  while read -r local_ref local_sha remote_ref remote_sha; do
+    if [[ "$remote_ref" == "refs/heads/main" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+if gates_main; then
+  echo "[pre-push] push updates main -> running Core + Atlas gate (git push --no-verify to skip)..."
+  if ! "$REPO_ROOT/build/verify.sh" --no-restage; then
+    echo "[pre-push] gate FAILED -- push to main refused. Fix the failing stage or use --no-verify." >&2
+    exit 1
+  fi
+  echo "[pre-push] gate passed -- allowing push to main."
+else
+  echo "[pre-push] push does not update main -> skipping the suite gate."
+fi

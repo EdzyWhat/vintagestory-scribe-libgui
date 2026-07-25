@@ -21,6 +21,12 @@ public enum ScribeBlockKind : byte
 /// is only meaningful for Task blocks. <see cref="Depth"/> is reserved for a future
 /// sub-item hierarchy (0 = top level today); it is carried through persistence now so
 /// enabling nesting later needs no format change.
+///
+/// <see cref="TaskId"/> is a stable per-block identifier assigned at creation and preserved
+/// across every mutation and through serialization. Nothing in the document references a block
+/// by list position durably (the index shifts on move/insert/delete); external references (the
+/// per-player pin store) name a block by its owning document's <see cref="ScribeDocument.DocId"/>
+/// plus this id. Pinning is no longer a field on the block — it moved to a per-player store.
 /// </summary>
 public sealed class ScribeBlock
 {
@@ -33,22 +39,24 @@ public sealed class ScribeBlock
     /// <summary>Indent/nesting level. Reserved for future hierarchy; always 0 for now.</summary>
     public int Depth { get; set; }
 
-    /// <summary>Pinned-to-HUD flag. Only meaningful when <see cref="Kind"/> is Task. v1 only
-    /// stores/toggles this; on-screen HUD rendering is a future tier's job.</summary>
-    public bool Pinned { get; set; }
+    /// <summary>Stable identifier for this block. Assigned once at construction (a fresh
+    /// <see cref="Guid"/> when not supplied) and never changed by any mutation, so an external
+    /// reference to this block survives reorder/insert/delete of its siblings. Serialized as 16
+    /// raw bytes by <see cref="ScribeDocumentCodec"/>.</summary>
+    public Guid TaskId { get; }
 
     /// <summary>Reserved for a future assignment capability (player/group UID). Unset by
     /// default; no mutation method exists yet and nothing in this codebase reads it.</summary>
     public string? AssignedToUid { get; set; }
 
-    public ScribeBlock(ScribeBlockKind kind, string text, bool done = false, int depth = 0, bool pinned = false, string? assignedToUid = null)
+    public ScribeBlock(ScribeBlockKind kind, string text, bool done = false, int depth = 0, string? assignedToUid = null, Guid? taskId = null)
     {
         Kind = kind;
         Text = text;
         Done = done;
         Depth = depth;
-        Pinned = pinned;
         AssignedToUid = assignedToUid;
+        TaskId = taskId ?? Guid.NewGuid();
     }
 
     public bool IsTask => Kind == ScribeBlockKind.Task;

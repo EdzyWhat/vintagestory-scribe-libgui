@@ -183,48 +183,49 @@ public class ScribeDocumentTests
         Assert.False(doc.ToggleTask(0));
     }
 
-    // --- Toggle pinned (tasks only) ---
+    // --- Stable identifiers ---
 
     [Fact]
-    public void TogglePinned_UnpinnedBecomesPinned()
+    public void NewDocument_HasNonEmptyDocId()
     {
         var doc = new ScribeDocument();
-        doc.AddTask("Build a forge");
 
-        Assert.True(doc.TogglePinned(0));
-        Assert.True(doc.Blocks[0].Pinned);
+        Assert.NotEqual(Guid.Empty, doc.DocId);
     }
 
     [Fact]
-    public void TogglePinned_PinnedBecomesUnpinned()
+    public void AddedBlocks_GetDistinctNonEmptyTaskIds()
     {
         var doc = new ScribeDocument();
-        doc.AddTask("Build a forge");
-        doc.TogglePinned(0);
+        doc.AddTask("A");
+        doc.AddTask("B");
+        doc.AddTextSection("note");
 
-        doc.TogglePinned(0);
-
-        Assert.False(doc.Blocks[0].Pinned);
+        Assert.All(doc.Blocks, b => Assert.NotEqual(Guid.Empty, b.TaskId));
+        Assert.Equal(3, doc.Blocks.Select(b => b.TaskId).Distinct().Count());
     }
 
     [Fact]
-    public void TogglePinned_OnTextSection_Fails()
+    public void FindByTaskId_ReturnsMatchingBlock()
     {
         var doc = new ScribeDocument();
-        doc.AddTextSection("not a task");
+        doc.AddTask("A");
+        doc.AddTask("B");
+        var id = doc.Blocks[1].TaskId;
 
-        Assert.False(doc.TogglePinned(0));
+        var found = doc.FindByTaskId(id);
+
+        Assert.NotNull(found);
+        Assert.Equal("B", found!.Text);
     }
 
-    [Theory]
-    [InlineData(-1)]
-    [InlineData(0)]
-    [InlineData(5)]
-    public void TogglePinned_OnInvalidIndex_FailsSafely(int badIndex)
+    [Fact]
+    public void FindByTaskId_ReturnsNullWhenAbsent()
     {
         var doc = new ScribeDocument();
+        doc.AddTask("A");
 
-        Assert.False(doc.TogglePinned(badIndex));
+        Assert.Null(doc.FindByTaskId(Guid.NewGuid()));
     }
 
     // --- Delete ---
@@ -239,6 +240,35 @@ public class ScribeDocumentTests
 
         Assert.True(doc.DeleteBlock(1));
         Assert.Equal(new[] { "A", "C" }, doc.Blocks.Select(b => b.Text));
+    }
+
+    [Fact]
+    public void DeleteBlock_ReportsRemovedTaskId()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("A");
+        doc.AddTask("B");
+        var idB = doc.Blocks[1].TaskId;
+
+        bool ok = doc.DeleteBlock(1, out Guid? deletedTaskId);
+
+        Assert.True(ok);
+        Assert.Equal(idB, deletedTaskId);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(5)]
+    public void DeleteBlock_AtInvalidIndex_ReportsNoRemoval(int badIndex)
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("A");
+
+        bool ok = doc.DeleteBlock(badIndex, out Guid? deletedTaskId);
+
+        Assert.False(ok);
+        Assert.Null(deletedTaskId);
+        Assert.Single(doc.Blocks);
     }
 
     // --- Insert ---

@@ -6,6 +6,10 @@ obj/
 *.user
 *.suo
 
+# Coverage output (produced by `dotnet test --collect` locally and in CI; never committed)
+coverage/
+[Cc]overageReport/
+
 # IDEs
 .vs/
 .idea/
@@ -49,6 +53,13 @@ src/Mod/lib/*
 #   git clone --depth 1 https://github.com/ripls56/vslibgui.git reference/vslibgui
 .wiki/
 reference/vslibgui/
+
+# Atlas (integration-test harness) local references: source + wiki cloned for ground-truth
+# lookups when the mods.vintagestory.at page is thin. Upstream repos, not ours -- re-clone with:
+#   git clone --depth 1 https://github.com/Pixnop/Atlas.git reference/atlas
+#   git clone --depth 1 https://github.com/Pixnop/Atlas.wiki.git reference/atlas-wiki
+reference/atlas/
+reference/atlas-wiki/
 
 # playtest-history/ is NOT ignored -- it's a curated, committed record of promoted
 # playtest screenshots (see vs-playtest-checklist's promote_screenshot.py).

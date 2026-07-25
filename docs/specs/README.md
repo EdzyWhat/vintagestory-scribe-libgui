@@ -46,6 +46,20 @@ change** (today the codec hard-rejects any version ≠ current); write that read
 *all* planned future fields, not just its own. Only `v6` currently specs this migration —
 `chronicle` assumes it silently.
 
+**v4 has landed** (`add-document-task-identity`, 2026-07-24) — it, not v6/chronicle, was the
+first migration to ship, so it owns the version-aware read (the codec now accepts v4 *and*
+v3, rejecting older). The exact on-disk layout, which any v5 field appends *after*:
+
+- Header: `[4 bytes magic "SCRB"][1 byte version=4][16 bytes DocId][int blockCount]`
+- Per block: `[16 bytes TaskId][byte kind][bool done][int depth][bool hasAssignedToUid][string assignedToUid?][string text]`
+- v4 vs v3: v3 had no DocId/TaskId and carried a per-block `bool pinned` after `depth`; v4
+  dropped `pinned` (pinning moved to the per-player store) and added the two ids. The v3 read
+  path generates fresh ids and surfaces the previously-pinned tasks' ids via the migration seam
+  `TryDeserialize(bytes, out doc, out IReadOnlyList<Guid> legacyPinnedTaskIds)`.
+
+So v6/chronicle now bump **3 → 4 → 5** (append their fields after v4's per-block `text`), and
+they no longer own the read-migration — v4 already made the reader version-tolerant.
+
 ### 2. One timestamp/stamp representation — `ChronicleStamp`
 
 `chronicle-and-integrations.md` defines `ChronicleStamp` (Year, DayOfYear, TotalHours,

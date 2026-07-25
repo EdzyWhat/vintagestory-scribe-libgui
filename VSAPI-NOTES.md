@@ -1119,6 +1119,73 @@ slightly different row. **Fix pattern:** any custom text RenderObject that must 
 MUST use the same `FontFamily` string for both `MeasureText` and `DrawText` — mirror `TextStyle`'s default
 (`"sans-serif"`), never `""`. See `ScribeMultilineFieldRender.FontFamily`.
 
+## Dev-diagnosis toolkit
+
+The local iterate/diagnose loop for this project (Apple Silicon, where VSImGui sliders and the
+ConfigLib panel are both dead — see "VSImGui debug overlay" and the ConfigLib-freeze memory).
+This section is the standing reference for the tools; the change that established them is
+`openspec/changes/improve-testing-and-diagnosis`.
+
+**Log helper — watch the `[scribe]` trace live.** `build/scribe-log.sh` follows the game logs and
+filters to Scribe-relevant lines: the mod's `[scribe]`-prefixed **server** trace (emitted at
+Notification level by `ScribeModSystem.Trace`) plus asset/mod-load errors. Use it when
+diagnosing whether a server-authoritative round-trip actually landed — e.g. the pin/complete
+network flow. `--client` also follows `client-main.log`; `--all` drops the filter. Logs live at
+`VintagestoryData/Logs/` (`VINTAGESTORY_DATA` overrides). Note the current game writes
+`*-main.log`; older docs say `*-main.txt` — the helper resolves whichever exists.
+
+**Dev-world launch profile.** For a consistent diagnostic baseline, start playtests from a flat
+creative superflat world with developer mode on, rather than hand-toggling each session:
+
+- **World:** New world → world type **Superflat** (or preset "Flat"), game mode **Creative**.
+  Flat + creative = no terrain/survival noise around the lectern under test, instant block
+  access, and free break/replace for the pin break→replace checks.
+- **Developer mode:** enable it so dev-only commands and extended diagnostics are available.
+  In `VintagestoryData/clientsettings.json` set `"developerMode": true` (or toggle it in
+  Settings → once on, it persists). This is the gate for the finer debug toggles below.
+- **Extended debug info:** `.debug wireframe`, the F3-style overlays, and `.clientconfig
+  extendedDebugInfo true` surface render/selection state; the **error reporter** dialog
+  (`.clientconfig ` toggles / Settings → "Show error reporter") makes a mid-session exception
+  visible instead of silently spamming the log.
+- Pair with `build/scribe-log.sh` in a side terminal so the server trace and the in-game world
+  are visible together.
+
+**Fast in-game reload (avoid a full relaunch).** These reload assets in the *running* client —
+they do NOT reload mod C#:
+
+- `.reload textures` / `.reload shapes` / `.reload shaders` / `.reload lang` — re-read that asset
+  category from disk. Good for icon SVGs, block shapes, and lang-file edits (our custom icons live
+  at `assets/scribe/textures/icons/`; lang at `assets/scribe/lang/`). Asset-only edits then need
+  no relaunch — but a restage copies assets into the Mods folder, so run `build/restage.sh`
+  (or the assets step of it) first, then `.reload`.
+- `CTRL+F1` — reload the current world client-side (re-runs chunk/world load) without dropping to
+  the main menu; faster than a relaunch when you only need the world rebuilt.
+
+**C# Hot Reload does NOT work for this mod setup — do not sink time into it.** Confirmed from the
+game's own runtime config, not guesswork: `/Applications/Vintage Story.app/Vintagestory.runtimeconfig.json`
+sets `"System.Reflection.Metadata.MetadataUpdater.IsSupported": false`. That flag is exactly what
+.NET Hot Reload / Edit-and-Continue requires; with it false the runtime refuses metadata updates,
+so no `dotnet watch`/IDE Hot Reload session can apply a code change into the running game —
+independent of how the `ModLoader` loads the mod DLL. Any C# change therefore requires a rebuild +
+restage + **full client relaunch** (mod assemblies and lang/assets load once at boot). The
+`.reload` commands above are the only in-session shortcut, and only for assets. If a future VS
+build flips that flag to `true`, revisit — until then, the loop is: `build/verify.sh` (or
+`restage.sh`) → relaunch → `build/scribe-log.sh`.
+
+## Atlas integration harness — next-adoption notes
+
+We already depend on Atlas (the headless-server integration suite, `tests/Integration.Tests`);
+these are 0.11.0 capabilities we do NOT yet use but should adopt as the suite grows (source +
+wiki cloned to `reference/atlas` / `reference/atlas-wiki`, gitignored):
+
+- **`ExecuteCommand` result assertions** — drive and assert on in-game chat/server commands from a
+  scenario (not just block/entity state). Worth adopting to test the completion/pin flow through a
+  command surface, and any future admin/debug command the mod adds, end-to-end.
+- **`atlas diff` differential regression** — snapshot a world/state and assert the *delta* across a
+  run, rather than hand-asserting each field. Worth adopting for persistence/migration scenarios
+  (e.g. v3→v4) where "nothing else changed" is the real invariant and is tedious to assert field by
+  field. See `reference/atlas-wiki/` (`CLI.md`, `Writing-Scenarios.md`).
+
 ## Entry template
 
 ```

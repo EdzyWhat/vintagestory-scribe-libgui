@@ -383,3 +383,71 @@ archived `tasks.md`).
         regressions. Feature request logged separately (not a defect): drag-reorder currently
         moves rows only on drop; a smooth "rows spread to show the drop target" animation
         while dragging would give better feedback — tracked in ROADMAP.md.
+
+## add-imgui-configlib-tuning
+
+- [ ] `8a356779` **(2.6) Debug sliders recompose live.** In a Debug build, open the lectern
+      and press VSImGui's toggle hotkey to show the overlay. Drag each "Lectern Layout" slider
+      and confirm the dialog updates live to match. Confirm `scribe-client-config.json` on disk
+      does NOT change until you press the "Save" button.
+      - **Confirmed 2026-07-20** (playtest report): "All functional."
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. the VSImGui Debug sliders are dead on Apple Silicon and tune native `GuiComposer` layout knobs (`VisibleListHeight`/`RowSpacing`/etc.) that LibGUI replaces with its theme/flex model.
+- [ ] `c2729a2d` **(5.1) Diagnose the frozen-chrome symptom.** *This item predates the scroll
+      fixes and was written to diagnose them; re-evaluate whether it's still needed now that
+      3.4a is in.* Using the live Debug sliders, drag `VisibleListHeight` and `RowSpacing` and
+      watch the edit-view rows: the goal is to see whether the parts of a row that used to
+      freeze in place (checkbox outlines, text-box borders, drag handles) now move together
+      with the rest of the row as the list resizes.
+      - **Obsolete 2026-07-21** (playtest report 2026-07-21T08-13-42): user confirms a row's
+        elements now move together as one unit with no separate static/interactive pieces, and
+        asked to disregard this item. It was a diagnostic written against the pre-rework mixed
+        static+interactive architecture; the row-list rework replaces that rendering approach
+        wholesale (S1 already unified the read view; S2 does the editor), so the slider-based
+        frozen-chrome diagnosis no longer applies. Retired rather than deleted.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. already retired; the native frozen-chrome diagnostic it ran has no analog in the LibGUI widget tree.
+- [ ] `8c7c2b2a` **(4.4) No regression from the new references.** Fully relaunch the client
+      after restaging and confirm the lectern still opens and behaves normally, with no errors
+      from the added VSImGui/ConfigLib references.
+      - **Confirmed 2026-07-20** (playtest report): opens and behaves normally.
+- [ ] `171935d3` **(3.4) ConfigLib panel edits apply.** With both ConfigLib and VSImGui
+      installed, open ConfigLib's in-game settings panel, change an exposed "Lectern Layout"
+      field, and save. Confirm the lectern reflects the new value.
+      - **Confirmed 2026-07-20** (playtest report): lectern reflects the saved value.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. tunes native `ScribeClientConfig` layout fields via the ConfigLib panel; those layout knobs move to LibGUI's ThemeData/`libgui.json` under the deferred theme-extraction change.
+- [ ] `d83db914` **(3.5) Loads without ConfigLib.** With ConfigLib NOT installed, confirm the
+      mod still loads and the lectern opens normally, with no missing-dependency warning.
+      - **Confirmed 2026-07-20** (playtest report): loads and opens normally.
+
+## add-pinned-task-foundation
+
+- [x] `7f3826e7` **(7.8) Per-player pin + complete loop.** Restage and relaunch first. Then, on
+      a lectern with a couple of tasks: (a) pin/unpin a task in the editor and confirm the resting
+      pin tint/glyph reflects YOUR pin state; (b) relog and confirm the pin state persists; (c)
+      break the lectern and re-place it, and confirm the pin still shows (same document identity);
+      (d) in the READ view, check a task's checkbox and confirm it completes AND (default setting)
+      the pin is removed from your list. *(add-pinned-task-foundation 7.8)*
+      - **Still broken 2026-07-24** (user playtest, submission 2026-07-24T15-27-15): parts (a) pin/unpin
+        tint, (b) persist across relog, and (c) break→replace all **work**. Part (d) fails: checking a
+        task in read view does NOT complete it or remove the pin. User's key clarification — the pin and
+        checkbox visibly *activate in the UI*, but the underlying mutation (completion, pin removal) never
+        takes effect, in EITHER read or edit mode; and completing sometimes resets the scroll to the top
+        despite nothing being deleted. Reads as a client-optimistic toggle with the server action not
+        landing (or not being reflected back): the `ScribeCompleteTaskMessage` / `ScribeSetPinMessage`
+        round-trip isn't applying server-side, or its `ScribePinnedSetMessage` re-push isn't repainting.
+        The Atlas suite proves the server handlers work when driven directly (SetPinForPlayer /
+        CompleteTaskForPlayer), so the gap is likely in the GUI→network wiring or the client cache
+        repaint, not the store logic. Needs investigation before retest.
+      - **Confirmed 2026-07-24** (user playtest, after restage of the complete-vs-unpin split + `[scribe]`
+        server tracing). Part (d) now works end-to-end, verified at every layer:
+          - Server trace (`build/scribe-log.sh`) on a read-view checkbox click:
+            `complete-task received … / complete: task … done False -> True / unpin: removed …'s pin` —
+            completion and the conditional unpin both fired on the authoritative document.
+          - **Completion persists**: closing and reopening the lectern shows the task still checked (the
+            server `done` change synced back and stuck — not just the optimistic client flip).
+          - **Pin repaint lands**: the completed task's resting pin tint/glyph disappeared in the GUI, so the
+            `ScribePinnedSetMessage` re-push repainted the client cache.
+        The earlier "Still broken" was against a build predating this restage; the fused op is now split into
+        `CompleteTaskStep` + `ConditionalUnpinStep` (semantics unchanged) and the whole GUI→network→server→
+        resync→repaint chain is closed. Parts (a)/(b)/(c) remain confirmed. (The scroll-reset-on-complete
+        also reported in that submission is tracked separately as `92d41071` under
+        add-lectern-row-affordances-libgui — not re-observed this session, awaiting a deliberate retest.)

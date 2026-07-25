@@ -11,6 +11,15 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
+  <!-- Where the installed Vintage Story mods live, so the hard `gui` (LibGUI) dependency can be
+       staged for Atlas (see the gui-staging ItemGroup below). Defaults to the macOS install path
+       this project already assumes for extracting src/Mod/lib/ (see src/Mod/lib/README.md);
+       override on another OS with -p:VintagestoryDataMods=... . LOCAL ONLY, like the whole suite. -->
+  <PropertyGroup>
+    <VintagestoryDataMods Condition="'$(VintagestoryDataMods)' == ''">$(HOME)/Library/Application Support/VintagestoryData/Mods</VintagestoryDataMods>
+    <ScribeGuiModZip>$(VintagestoryDataMods)/gui_2.0.0.zip</ScribeGuiModZip>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
@@ -48,5 +57,21 @@
   <ItemGroup>
     <None Include="fixtures/**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <!-- Stage the hard `gui` (LibGUI) dependency for Atlas. Atlas boots the headless server with
+       ONLY the staged mods on its mod path (the mod-under-test from atlas-mods.generated.txt plus
+       whatever [assembly: AtlasMods(...)] declares) - it does NOT see the player's installed Mods
+       folder. Without gui, scribe's `gui@2.0.0` dependency is unresolved, the mod loader skips
+       scribe, and every scenario fails at SetBlock("scribe:scribelectern") with "Unknown block
+       code". The installed gui zip is client-side (requiredOnServer:false) but the server's
+       dependency resolver still needs it present. We copy the installed zip into the test output
+       dir and reference it by the resulting relative name in AssemblyInfo.cs's [assembly:
+       AtlasMods("gui_2.0.0.zip")] (AtlasMods paths resolve against the test assembly's dir). -->
+  <ItemGroup Condition="Exists('$(ScribeGuiModZip)')">
+    <None Include="$(ScribeGuiModZip)" CopyToOutputDirectory="PreserveNewest" Link="gui_2.0.0.zip" />
+  </ItemGroup>
+  <Target Name="WarnMissingGuiMod" BeforeTargets="Build" Condition="!Exists('$(ScribeGuiModZip)')">
+    <Warning Text="gui mod zip not found at '$(ScribeGuiModZip)'. Atlas cannot stage scribe's hard `gui` dependency, so every integration scenario will fail at SetBlock with 'Unknown block code scribe:scribelectern'. Install the `gui` (LibGUI) mod, or set -p:VintagestoryDataMods=&lt;your Mods folder&gt;." />
+  </Target>
 
 </Project>

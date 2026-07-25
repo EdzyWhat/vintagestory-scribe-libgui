@@ -85,7 +85,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Confirmed 2026-07-24** (user playtest, submission 2026-07-24T07-53-46): "Works." Scroll position
         now survives edit→read too. (User: "Will work better when the drag-row column fix is also
         implemented → since there'd be less height difference" — see the read-view grip-column parity item.)
-- [ ] `18cd5c60` **Read/edit row heights match.** Compare a single-line task's height in read vs. editor
+- [x] `18cd5c60` **Read/edit row heights match.** Compare a single-line task's height in read vs. editor
       view — they should be pixel-identical (that's what makes the shared scroll offset line up). With a
       long list, scroll to the bottom in both and watch for a fractional per-row drift accumulating, or a
       few pixels of the last row cut off. If there's a small consistent cutoff, a little bottom padding on
@@ -120,6 +120,9 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         `estimatedItemHeight` to the SAME measured single-line height the editor field uses
         (`MeasureText("Ag","sans-serif",FontSize).Y + FieldPadY*2 + RowVerticalPadding*2`). Retest: scroll
         (wheel AND scrollbar-drag) to the bottom of a long list in read vs. edit — they should now line up.
+      - **Confirmed 2026-07-24** (user playtest, submission 2026-07-24T15-27-15): "Works." The matched
+        ListView estimate resolved the residual scroll-dependent drift; read/edit rows line up top and
+        bottom.
 - [x] `fa4d457f` **Window width matches Handbook.** Open the lectern and the vanilla survival Handbook
       and compare widths — the lectern window should now be the same width (567px). *(new — 2026-07-24)*
       - **Confirmed 2026-07-24** (user playtest): "They match."
@@ -210,6 +213,19 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         `ScribeMultilineField.OnKeyDown`. Retest: Cmd/Ctrl+A shows the selection highlight instantly.
       - **Confirmed 2026-07-24** (user playtest): "Works." Cmd/Ctrl+A now shows the whole-field selection
         highlight immediately.
+
+- [x] `92d41071` **Scroll resets on complete.** With enough rows to scroll, scroll down in the read view,
+      then check a task's checkbox to complete it (nothing deleted). Confirm the scroll position holds —
+      it should NOT jump back to the top. Try a few completions at different scroll offsets. *(observed
+      during add-pinned-task-foundation 7.8 part d; scroll behavior owned by this change)*
+      - **Still broken 2026-07-24** (user playtest, submission 2026-07-24T15-27-15): completing a task in
+        read view "sometimes resets the scroll to the top despite nothing being deleted." Not re-observed
+        after the 2026-07-24 complete-vs-unpin restage, but never confirmed fixed either — kept on the
+        active list for a deliberate retest. Likely the same virtualized-`ListView` content-height
+        re-clamp family as the view-switch scroll drift (`7c22da1a`): a `MarkDirty(redrawOnClient:true)`
+        resync rebuilds the read view and the offset re-clamps against a stale content-height estimate.
+      - **Confirmed 2026-07-24** (user playtest retest, submission 2026-07-24T20-46-16): "Works." Completing
+        a task at various scroll offsets no longer jumps the view to the top; scroll position holds.
 
 ## migrate-editor-view-libgui
 
@@ -661,13 +677,15 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Backlogged 2026-07-19** (playtest report 2026-07-19T10-56-08): user deferred alongside
         7.5 — "complex task, move to the bottom of the roadmap, but before mod release." Same
         two-client setup requirement; parked until closer to release.
-- [ ] `a15scrl01` **(8.15) Visible scrollbar in both views.** Add enough tasks (or raise
+- [x] `a15scrl01` **(8.15) Visible scrollbar in both views.** Add enough tasks (or raise
       `TextSizeScale` in `scribe-client-config.json`) that the list exceeds the dialog height. In the
       READ view a draggable scrollbar track should appear on the right; drag its thumb and click the
       track to jump. Switch to the EDITOR view and confirm the same. Wheel-scroll should still work in
       both, and a focused editor row that grows past the bottom should still auto-scroll into view.
       - **To test 2026-07-23:** new — wrapped both scroll regions in LibGUI's `Scrollbar` sharing an
         owned `ScrollController`. Wheel scroll already worked; this adds the visible/draggable track.
+      - **Confirmed 2026-07-24** (user playtest): "Works." Visible scrollbar present and usable in both
+        read and editor views.
 - [ ] `a07cap001` **(8.7) Oversized-edit rejection.** (Hard to hit in normal play — optional.) An
       edit exceeding `ScribeDocumentCodec.MaxBlocks` (1000 blocks) or `MaxTextLength` (10 000 chars
       in one block) should be rejected by the server: the edit doesn't persist and the existing
@@ -692,37 +710,36 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         FocusNodes (native "focus jumps to element 0" bug is gone). Known minor residue: the caret
         re-seeds to end-of-text on the focused row after a `ForceRebuild`. Confirm whether that
         residue is bothersome during the delete/reorder (Part-B) testing, which also rebuilds.
+      - **Still broken 2026-07-24** (user playtest, submission 2026-07-24T20-46-16): the row-affordance
+        controls strip input focus without re-homing the caret. With a row's input focused: clicking
+        **delete** on that row removes all focus and, once the row is gone, there is no visible caret
+        anywhere; clicking **pin** removes focus from the input (no visible caret); **reorder** does the
+        same. Expected: after delete, focus/caret should land on a sensible surviving row (per design Q1
+        neighbor-focus); after pin/reorder (which don't remove the edited row), the focused row should
+        KEEP its caret. The controls' `onTap` isn't restoring focus after the `ForceRebuild`.
+      - **Also found — Cmd+A→Delete→Tab does not delete the row** (side note, same session): selecting
+        all text in a row (Cmd/Ctrl+A), pressing Delete to empty it, then Tab or Shift+Tab does NOT remove
+        the now-empty row. This is the empty-task auto-delete-on-commit behavior that `add-empty-task-lifecycle`
+        is meant to deliver (not yet implemented, 0/32) — logged here so it's not re-derived; retest under
+        that change once its tasks land. (Tracked as `f34ea553` under add-empty-task-lifecycle.)
 
-## add-imgui-configlib-tuning
+## add-empty-task-lifecycle
 
-- [ ] `8a356779` **(2.6) Debug sliders recompose live.** In a Debug build, open the lectern
-      and press VSImGui's toggle hotkey to show the overlay. Drag each "Lectern Layout" slider
-      and confirm the dialog updates live to match. Confirm `scribe-client-config.json` on disk
-      does NOT change until you press the "Save" button.
-      - **Confirmed 2026-07-20** (playtest report): "All functional."
-      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. the VSImGui Debug sliders are dead on Apple Silicon and tune native `GuiComposer` layout knobs (`VisibleListHeight`/`RowSpacing`/etc.) that LibGUI replaces with its theme/flex model.
-- [ ] `c2729a2d` **(5.1) Diagnose the frozen-chrome symptom.** *This item predates the scroll
-      fixes and was written to diagnose them; re-evaluate whether it's still needed now that
-      3.4a is in.* Using the live Debug sliders, drag `VisibleListHeight` and `RowSpacing` and
-      watch the edit-view rows: the goal is to see whether the parts of a row that used to
-      freeze in place (checkbox outlines, text-box borders, drag handles) now move together
-      with the rest of the row as the list resizes.
-      - **Obsolete 2026-07-21** (playtest report 2026-07-21T08-13-42): user confirms a row's
-        elements now move together as one unit with no separate static/interactive pieces, and
-        asked to disregard this item. It was a diagnostic written against the pre-rework mixed
-        static+interactive architecture; the row-list rework replaces that rendering approach
-        wholesale (S1 already unified the read view; S2 does the editor), so the slider-based
-        frozen-chrome diagnosis no longer applies. Retired rather than deleted.
-      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. already retired; the native frozen-chrome diagnostic it ran has no analog in the LibGUI widget tree.
-- [ ] `8c7c2b2a` **(4.4) No regression from the new references.** Fully relaunch the client
-      after restaging and confirm the lectern still opens and behaves normally, with no errors
-      from the added VSImGui/ConfigLib references.
-      - **Confirmed 2026-07-20** (playtest report): opens and behaves normally.
-- [ ] `171935d3` **(3.4) ConfigLib panel edits apply.** With both ConfigLib and VSImGui
-      installed, open ConfigLib's in-game settings panel, change an exposed "Lectern Layout"
-      field, and save. Confirm the lectern reflects the new value.
-      - **Confirmed 2026-07-20** (playtest report): lectern reflects the saved value.
-      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. tunes native `ScribeClientConfig` layout fields via the ConfigLib panel; those layout knobs move to LibGUI's ThemeData/`libgui.json` under the deferred theme-extraction change.
-- [ ] `d83db914` **(3.5) Loads without ConfigLib.** With ConfigLib NOT installed, confirm the
-      mod still loads and the lectern opens normally, with no missing-dependency warning.
-      - **Confirmed 2026-07-20** (playtest report): loads and opens normally.
+> Not yet implemented (0/32). These items capture pre-implementation observations from playtests so
+> they're not re-derived; each becomes a confirming retest once the change lands. Backlogged, not
+> broken — the current behavior is the intended pre-change behavior.
+
+- [ ] `05727f66` **New tasks init empty.** Click "Add task" (or Enter to spawn one) → the new row
+      should start EMPTY, ready to type, rather than pre-filled with placeholder text you must clear
+      first. *(add-empty-task-lifecycle — pending)*
+      - **Backlogged 2026-07-24** (user playtest, submission 2026-07-24T20-58-43): new task rows are
+        currently created with "New task" text, not empty. This is expected — `OnClickAddTask` seeds
+        `scribe-gui-newtask-placeholder` by design until `add-empty-task-lifecycle` (0/32) replaces it
+        with empty-init. Retest when that change is implemented.
+- [ ] `f34ea553` **Emptied row auto-deletes on commit.** In an existing task, select all (Cmd/Ctrl+A),
+      press Delete to empty it, then Tab / Shift+Tab (or click away) to commit → the now-empty row
+      should be removed, not left as a blank task. *(add-empty-task-lifecycle — pending)*
+      - **Backlogged 2026-07-24** (user playtest, submissions 2026-07-24T20-46-16 and 2026-07-24T20-58-43):
+        Cmd+A → Delete → Shift+Tab does nothing — the emptied row persists. Expected pre-change; the
+        auto-delete-on-commit lifecycle is what `add-empty-task-lifecycle` (0/32) delivers. Retest when
+        implemented.

@@ -16,8 +16,9 @@ architecture, not this file.
   planned exception, and only as an optional soft dependency gated by `IsModEnabled`. Ask
   before adding any NuGet/mod package.
 - **Don't touch `.github/workflows/*.yml` or `Directory.Build.props`** without asking —
-  CI only builds/tests `Core` (no game DLL on cloud runners); changes here can silently
-  break release automation.
+  cloud CI runs the `Core` suite + coverage (no game install on runners); the Atlas suite is
+  gated locally by the opt-in pre-push hook (`build/install-hooks.sh`). Cloud-running Atlas is
+  feasible-but-deferred, not impossible. Changes here can silently break release automation.
 - **Persistence/sync follows the vanilla Sign block pattern** (`ToTreeAttributes` /
   `FromTreeAttributes`, `SendBlockEntityPacket`, `MarkDirty`, server-authoritative). Match
   this pattern for new synced state rather than inventing a new one.

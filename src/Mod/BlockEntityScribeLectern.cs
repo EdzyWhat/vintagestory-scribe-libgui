@@ -19,12 +19,28 @@ namespace Scribe;
 /// </summary>
 public sealed class BlockEntityScribeLectern : BlockEntity
 {
-    private const string DocumentAttributeKey = "scribeDocument";
+    private const string DocumentAttributeKey = ScribeDocumentAttributes.DocumentAttributeKey;
 
     public ScribeDocument Document { get; private set; } = new();
 
     /// <summary>Server-side only: the UID of the player currently editing, if any.</summary>
     private string? lockHolderUid;
+
+    /// <summary>Server-side: DocId this block entity has registered in the pin store's live index, so
+    /// it can unregister exactly that id on removal even if <see cref="Document"/> was later replaced.
+    /// Null until the first server-side register.</summary>
+    private Guid? registeredDocId;
+
+    /// <summary>Server-side: task ids the codec surfaced as previously-pinned when a v3 document was
+    /// loaded, awaiting a one-time drain into a player's pin store (see
+    /// <see cref="TakeLegacyPinnedTaskIds"/>). Empty for a v4 document.</summary>
+    private IReadOnlyList<Guid> legacyPinnedTaskIds = System.Array.Empty<Guid>();
+
+    /// <summary>Server-side: true when this block entity loaded a v3 document (no persisted ids), so
+    /// it must be marked dirty on first server init to re-save as v4 — otherwise its generated
+    /// DocId/TaskIds regenerate every load and pins can't stick (the single most important sequencing
+    /// detail in the design).</summary>
+    private bool needsV4Resave;
 
     /// <summary>Client-side: the single LibGUI dialog serving BOTH views (migrate-editor-view-libgui).
     /// Read and editor are internal view states of this one dialog, so switching between them is a
@@ -38,6 +54,16 @@ public sealed class BlockEntityScribeLectern : BlockEntity
         if (api is ICoreServerAPI sapi)
         {
             sapi.Event.PlayerDisconnect += OnPlayerDisconnect;
+
+            // Register this document's live DocId → position mapping so pins can resolve it, and
+            // re-save a v3-loaded document as v4 so its freshly-generated ids persist (else they
+            // regenerate every load and pins can't stick).
+            RegisterDocInStore();
+            if (needsV4Resave)
+            {
+                needsV4Resave = false;
+                MarkDirty();
+            }
         }
     }
 
@@ -48,6 +74,16 @@ public sealed class BlockEntityScribeLectern : BlockEntity
         if (Api is ICoreServerAPI sapi)
         {
             sapi.Event.PlayerDisconnect -= OnPlayerDisconnect;
+
+            // The block was genuinely removed (broken/replaced/exchanged) — NOT a chunk unload (that
+            // path is OnBlockUnloaded, which we deliberately do not touch). Forget the live position
+            // and soft-orphan every player's pins into this document, re-pushing the affected players.
+            if (PinStore is { } store && registeredDocId is { } docId)
+            {
+                store.UnregisterDoc(docId);
+                if (ModSystem is { } mod) mod.PushPinsTo(store.OrphanAll(docId));
+            }
+            registeredDocId = null;
         }
     }
 
@@ -62,14 +98,68 @@ public sealed class BlockEntityScribeLectern : BlockEntity
         base.FromTreeAttributes(tree, worldForResolving);
 
         var bytes = tree.GetBytes(DocumentAttributeKey);
-        Document = ScribeDocumentCodec.TryDeserialize(bytes, out var doc) && doc is not null
+        // A v3 document had no persisted ids: the codec generates fresh ones and surfaces which tasks
+        // were pinned so they can be migrated. Remember both so Initialize re-saves as v4 (ids stick)
+        // and the mod system can drain the legacy pins on the owner's next join.
+        needsV4Resave = ScribeDocumentCodec.IsPriorVersion(bytes);
+        Document = ScribeDocumentCodec.TryDeserialize(bytes, out var doc, out var legacyPinned) && doc is not null
             ? doc
             : new ScribeDocument();
+        legacyPinnedTaskIds = legacyPinned;
+
+        // A resync may have replaced the document (a different DocId is unusual for a lectern, but the
+        // break→replace path can restore a saved doc). Keep the live index pointing at the current one.
+        RegisterDocInStore();
 
         // Reflect an authoritative resync in the open dialog. RefreshReadView rebuilds the read view
         // from the now-current Document; it is a no-op while the dialog is in editor mode (the editor
         // edits a private scratch copy that an external resync must not clobber).
         dialog?.RefreshReadView();
+    }
+
+    /// <summary>Restores a document carried on a placed item stack (break→re-place), so the same
+    /// content and ids come back and pins reattach. Empty-doc fallback when the stack carries none
+    /// (a freshly-crafted lectern). Server-authoritative; the client gets it via the normal resync.</summary>
+    public override void OnBlockPlaced(ItemStack? byItemStack)
+    {
+        base.OnBlockPlaced(byItemStack);
+
+        if (Api is not ICoreServerAPI) return;
+        if (byItemStack is not null && ScribeDocumentAttributes.TryReadFrom(byItemStack, out var doc) && doc is not null)
+        {
+            Document = doc;
+            RegisterDocInStore();
+            MarkDirty();
+        }
+    }
+
+    /// <summary>Server-side: (re)point the pin store's live index at this document's current position.
+    /// No-op on the client or before the store exists. Unregisters a stale prior mapping if the
+    /// document's DocId changed under us (break→replace restoring a different saved doc).</summary>
+    private void RegisterDocInStore()
+    {
+        if (PinStore is not { } store) return;
+        if (registeredDocId is { } prior && prior != Document.DocId)
+        {
+            store.UnregisterDoc(prior);
+        }
+        registeredDocId = Document.DocId;
+        store.RegisterDoc(Document.DocId, Pos);
+    }
+
+    /// <summary>Server-side accessor for the mod system's pin store (null on the client or before the
+    /// server side started).</summary>
+    private ScribePinStore? PinStore => ModSystem?.PinStore;
+
+    private ScribeModSystem? ModSystem => Api?.ModLoader.GetModSystem<ScribeModSystem>();
+
+    /// <summary>Hands off (and clears) the v3 legacy-pinned task ids for a one-time migration drain.
+    /// Returns empty after the first call or for a v4 document.</summary>
+    public IReadOnlyList<Guid> TakeLegacyPinnedTaskIds()
+    {
+        var ids = legacyPinnedTaskIds;
+        legacyPinnedTaskIds = System.Array.Empty<Guid>();
+        return ids;
     }
 
     /// <summary>
@@ -138,7 +228,9 @@ public sealed class BlockEntityScribeLectern : BlockEntity
         if (documentBytes is not null && ScribeDocumentCodec.TryDeserialize(documentBytes, out var doc) && doc is not null)
         {
             Document = doc;
+            RegisterDocInStore(); // an edit never changes the DocId, but keep the index authoritative
             MarkDirty(redrawOnClient: true);
+            RefreshPinSnapshots();
         }
 
         return true;
@@ -157,21 +249,34 @@ public sealed class BlockEntityScribeLectern : BlockEntity
     }
 
     /// <summary>
-    /// Server-side: toggles a single task's done state on behalf of a read-view viewer. Unlike
-    /// <see cref="ApplyEdit"/> this does NOT require the editor lock — ticking a task off is an
-    /// always-allowed action any viewer may perform, even while another player holds the lock
-    /// (see <see cref="ScribeToggleTaskMessage"/>). Mutates the authoritative document in place
-    /// (not a client-submitted copy), so it only ever changes the one flag and cannot clobber a
-    /// concurrent editor's in-flight text edits beyond that. A bad or non-task index is a no-op
-    /// (<see cref="ScribeDocument.ToggleTask"/> returns false), in which case nothing is persisted.
+    /// Server-side: toggle a task's done state on behalf of a read-view (or future HUD) viewer,
+    /// addressed by its stable <see cref="ScribeBlock.TaskId"/> — the identity-addressed completion
+    /// path (<see cref="ScribeCompleteTaskMessage"/>). Unlike <see cref="ApplyEdit"/> this does NOT
+    /// require the editor lock: ticking a task off is an always-allowed action any viewer may perform,
+    /// even while another player holds the lock. Mutates the authoritative document in place (not a
+    /// client-submitted copy), so it only ever changes the one flag and cannot clobber a concurrent
+    /// editor's in-flight text edits beyond that. A TaskId with no matching (or non-task) block is a
+    /// no-op. Refreshes pin snapshots so every pinner's last-known done state tracks the change.
     /// </summary>
-    public void ToggleTaskFromReader(int index)
+    public void ToggleTaskByIdFromReader(Guid taskId)
     {
         if (Api is not ICoreServerAPI) return;
 
-        if (Document.ToggleTask(index))
+        var block = Document.FindByTaskId(taskId);
+        if (block is null || !block.IsTask) return;
+
+        block.Done = !block.Done;
+        MarkDirty(redrawOnClient: true);
+        RefreshPinSnapshots();
+    }
+
+    /// <summary>Server-side: after a document mutation, refresh every affected player's pin snapshots
+    /// (and soft-orphan any pin whose task vanished from a saved edit), then re-push those players.</summary>
+    private void RefreshPinSnapshots()
+    {
+        if (PinStore is { } store && ModSystem is { } mod)
         {
-            MarkDirty(redrawOnClient: true);
+            mod.PushPinsTo(store.RefreshSnapshots(Document.DocId, Document));
         }
     }
 

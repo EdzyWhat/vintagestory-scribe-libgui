@@ -27,8 +27,11 @@ context: |
     SendBlockEntityPacket, MarkDirty). Private blocks gate on ownerUID; public blocks don't.
 
   Process & tooling:
-  - Git repo, MIT license, GitHub Actions CI (builds/tests Core only — cloud runners have no
-    game DLL), tag-driven release automation packaging the mod zip.
+  - Git repo, MIT license, GitHub Actions CI (runs the Core suite + coverage; cloud runners
+    have no game install). The Atlas integration suite is gated LOCALLY via an opt-in pre-push
+    hook using this machine's install — cloud-running it is feasible (CDN server download) but
+    deferred, so don't treat "cloud can't test the game" as a hard limit. Tag-driven release
+    automation packages the mod zip.
   - Secondary goal is the author rebuilding dev skills (Git, CI, spec-driven development),
     so favor clear, well-explained, conventional solutions.
 

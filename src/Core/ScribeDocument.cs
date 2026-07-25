@@ -14,6 +14,18 @@ public sealed class ScribeDocument
     /// <summary>The blocks, in order. Read-only to callers; mutate via the methods below.</summary>
     public IReadOnlyList<ScribeBlock> Blocks => _blocks;
 
+    /// <summary>Stable identifier for this document. Assigned once when the document is created
+    /// (a fresh <see cref="Guid"/>) and preserved through serialization, so a reference to a task
+    /// in this document — a per-player pin — keeps resolving even after the document's owning
+    /// block is broken and re-placed elsewhere (the id rides inside the serialized bytes). Set by
+    /// the codec on the deserialization path via <see cref="SetDocId"/>.</summary>
+    public Guid DocId { get; private set; } = Guid.NewGuid();
+
+    /// <summary>Overwrites the document id with a persisted one. Used only by the codec when
+    /// rebuilding a document from bytes that carry an id (the current format); callers never
+    /// reassign a document's identity.</summary>
+    internal void SetDocId(Guid docId) => DocId = docId;
+
     /// <summary>Adds a checkbox task to the end. Blank/whitespace-only text is rejected; otherwise
     /// the text is stored verbatim. Whitespace normalization (trimming) is the editing layer's
     /// responsibility, not the model's -- see <see cref="SetBlockText"/>.</summary>
@@ -80,22 +92,35 @@ public sealed class ScribeDocument
         return true;
     }
 
-    /// <summary>Flips the pinned flag of a Task block. Fails on a Text section or bad index.</summary>
-    public bool TogglePinned(int index)
+    /// <summary>Removes the block at <paramref name="index"/>, preserving the order of the rest,
+    /// and reports the removed block's <see cref="ScribeBlock.TaskId"/> so a caller can react to
+    /// that specific task's removal (e.g. orphan a pin referencing it). On an invalid index the
+    /// document is unchanged and <paramref name="deletedTaskId"/> is null.</summary>
+    public bool DeleteBlock(int index, out Guid? deletedTaskId)
     {
-        if (!IsValidIndex(index)) return false;
-        var block = _blocks[index];
-        if (!block.IsTask) return false;
-        block.Pinned = !block.Pinned;
+        if (!IsValidIndex(index))
+        {
+            deletedTaskId = null;
+            return false;
+        }
+        deletedTaskId = _blocks[index].TaskId;
+        _blocks.RemoveAt(index);
         return true;
     }
 
-    /// <summary>Removes the block at <paramref name="index"/>, preserving the order of the rest.</summary>
-    public bool DeleteBlock(int index)
+    /// <summary>Removes the block at <paramref name="index"/>, preserving the order of the rest.
+    /// Thin overload for callers that don't need the removed task's id.</summary>
+    public bool DeleteBlock(int index) => DeleteBlock(index, out _);
+
+    /// <summary>Returns the block with the given <see cref="ScribeBlock.TaskId"/>, or null if no
+    /// block in this document has that id.</summary>
+    public ScribeBlock? FindByTaskId(Guid taskId)
     {
-        if (!IsValidIndex(index)) return false;
-        _blocks.RemoveAt(index);
-        return true;
+        foreach (var block in _blocks)
+        {
+            if (block.TaskId == taskId) return block;
+        }
+        return null;
     }
 
     /// <summary>Moves the block at <paramref name="from"/> to position <paramref name="to"/>.</summary>

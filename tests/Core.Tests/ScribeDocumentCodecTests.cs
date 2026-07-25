@@ -28,12 +28,11 @@ public class ScribeDocumentCodecTests
     }
 
     [Fact]
-    public void RoundTrip_PreservesPinnedAndAssignedToUid()
+    public void RoundTrip_PreservesAssignedToUid()
     {
         var original = new ScribeDocument();
         original.AddTask("Find copper");
         original.AddTask("Find tin");
-        original.TogglePinned(0); // pinned, AssignedToUid still null
         original.Blocks[1].AssignedToUid = "player-1234";
 
         byte[] bytes = ScribeDocumentCodec.Serialize(original);
@@ -41,10 +40,117 @@ public class ScribeDocumentCodecTests
 
         Assert.True(ok);
         Assert.NotNull(restored);
-        Assert.True(restored!.Blocks[0].Pinned);
-        Assert.Null(restored.Blocks[0].AssignedToUid);
-        Assert.False(restored.Blocks[1].Pinned);
+        Assert.Null(restored!.Blocks[0].AssignedToUid);
         Assert.Equal("player-1234", restored.Blocks[1].AssignedToUid);
+    }
+
+    [Fact]
+    public void RoundTrip_PreservesDocIdAndTaskIds()
+    {
+        var original = new ScribeDocument();
+        original.AddTask("Find copper");
+        original.AddTextSection("Tin is rarer than copper.");
+        original.AddTask("Find tin");
+
+        byte[] bytes = ScribeDocumentCodec.Serialize(original);
+        bool ok = ScribeDocumentCodec.TryDeserialize(bytes, out ScribeDocument? restored);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        Assert.Equal(original.DocId, restored!.DocId);
+        Assert.Equal(
+            original.Blocks.Select(b => b.TaskId),
+            restored.Blocks.Select(b => b.TaskId));
+    }
+
+    [Fact]
+    public void TaskIds_AreStableAcrossMutations()
+    {
+        // Reordering, inserting, deleting other blocks, and editing text must not change the
+        // surviving blocks' ids (an external pin references a task by (DocId, TaskId)).
+        var doc = new ScribeDocument();
+        doc.AddTask("A");
+        doc.AddTask("B");
+        doc.AddTask("C");
+        var idA = doc.Blocks[0].TaskId;
+        var idB = doc.Blocks[1].TaskId;
+        var idC = doc.Blocks[2].TaskId;
+        var docId = doc.DocId;
+
+        doc.MoveBlock(0, 2);          // A to the end
+        doc.InsertTask(0, "D");       // new block at the front
+        doc.SetBlockText(1, "B-edited");
+        doc.ToggleTask(1);
+        doc.DeleteBlock(doc.Blocks.Count - 1); // delete whatever is last now
+
+        // DocId unchanged; the surviving originals keep their ids; the insert got a distinct one.
+        Assert.Equal(docId, doc.DocId);
+        var survivingIds = doc.Blocks.Select(b => b.TaskId).ToList();
+        Assert.Contains(idB, survivingIds);
+        Assert.Contains(idC, survivingIds);
+        var inserted = doc.Blocks.Single(b => b.Text == "D");
+        Assert.NotEqual(idA, inserted.TaskId);
+        Assert.NotEqual(idB, inserted.TaskId);
+        Assert.NotEqual(idC, inserted.TaskId);
+        // No duplicate ids anywhere.
+        Assert.Equal(survivingIds.Count, survivingIds.Distinct().Count());
+    }
+
+    [Fact]
+    public void TryDeserialize_V3Bytes_Succeeds_AndSurfacesLegacyPinnedIds()
+    {
+        // Hand-build a v3 payload (the immediately prior format): DocId/TaskId absent, a per-block
+        // `pinned` bool present. Two tasks, the second pinned.
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms))
+        {
+            w.Write("SCRB"u8.ToArray());
+            w.Write((byte)3);
+            w.Write(2); // blockCount
+            // block 0 — not pinned
+            w.Write((byte)ScribeBlockKind.Task);
+            w.Write(false); // done
+            w.Write(0);     // depth
+            w.Write(false); // pinned
+            w.Write(false); // hasAssignedToUid
+            w.Write("Find copper");
+            // block 1 — pinned
+            w.Write((byte)ScribeBlockKind.Task);
+            w.Write(true);  // done
+            w.Write(0);     // depth
+            w.Write(true);  // pinned
+            w.Write(false); // hasAssignedToUid
+            w.Write("Find tin");
+        }
+
+        bool ok = ScribeDocumentCodec.TryDeserialize(ms.ToArray(), out ScribeDocument? restored, out var legacyPinned);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        Assert.Equal(2, restored!.Blocks.Count);
+        Assert.Equal("Find copper", restored.Blocks[0].Text);
+        Assert.True(restored.Blocks[1].Done);
+        // A fresh DocId was generated (not the empty Guid) and every block got a fresh TaskId.
+        Assert.NotEqual(Guid.Empty, restored.DocId);
+        Assert.All(restored.Blocks, b => Assert.NotEqual(Guid.Empty, b.TaskId));
+        // Exactly the pinned block's (freshly generated) id is surfaced for migration, and it
+        // matches the id now on that block.
+        var pinnedId = Assert.Single(legacyPinned);
+        Assert.Equal(restored.Blocks[1].TaskId, pinnedId);
+    }
+
+    [Fact]
+    public void TryDeserialize_V4Bytes_SurfaceNoLegacyPinnedIds()
+    {
+        var original = new ScribeDocument();
+        original.AddTask("Find copper");
+
+        byte[] bytes = ScribeDocumentCodec.Serialize(original);
+        bool ok = ScribeDocumentCodec.TryDeserialize(bytes, out ScribeDocument? restored, out var legacyPinned);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        Assert.Empty(legacyPinned);
     }
 
     [Fact]
@@ -70,11 +176,11 @@ public class ScribeDocumentCodecTests
     }
 
     [Fact]
-    public void TryDeserialize_EarlierVersionBytes_FailsSafely()
+    public void TryDeserialize_UnsupportedOlderVersionBytes_FailsSafely()
     {
-        // Hand-build a v2-shaped payload (no Pinned/AssignedToUid fields) to simulate bytes
-        // written before this version bump -- the codec must reject it outright, not
-        // misread the missing fields as defaults.
+        // The reader accepts only the current version (4) and the immediately prior one (3).
+        // A v2-shaped payload is older than that and must be rejected outright, not misread by
+        // reading v3/v4 fields (ids, pinned) that aren't present.
         using var ms = new MemoryStream();
         using (var w = new BinaryWriter(ms))
         {

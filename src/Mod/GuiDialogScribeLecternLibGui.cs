@@ -87,6 +87,19 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     /// retry so a genuinely-shorter list (target past the real max) gives up instead of looping.</summary>
     private int scrollRestoreFrames;
 
+    /// <summary>Set after a structural row removal (a delete) so <see cref="OnRenderGUI"/> re-clamps the
+    /// shared controller's offset down to the new, smaller <c>MaxScrollExtent</c> once layout reports the
+    /// reduced content height. Needed because LibGUI only auto-corrects the scroll offset via its
+    /// wheel-slop clamp (<c>ScrollWheelHandler.ClampOffset</c>), which ignores an overshoot of 50px or
+    /// less — so deleting a single ~30px row while scrolled near the bottom strands the viewport past the
+    /// new max, leaving dead space below the last row. Honored over a few frames because the editor's
+    /// <c>SingleChildScrollView</c> only reports the shrunk <c>ContentSize</c> on the layout pass after
+    /// the rebuild (same settling reason as <see cref="pendingRestoreScrollOffset"/>).</summary>
+    private bool pendingClampToExtent;
+    /// <summary>Frames spent honoring <see cref="pendingClampToExtent"/>; bounds it to the content-size
+    /// settling window so it doesn't run every frame forever.</summary>
+    private int clampToExtentFrames;
+
     // ---- Lost-lock autosave recovery (task 8.6) ----
     /// <summary>Max consecutive autosave failures to auto-recover from before giving up, so a lock
     /// permanently held elsewhere can't spin the re-request/resend loop forever.</summary>
@@ -98,10 +111,14 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     /// keeps the unsaved scratch instead of reseeding it from the authoritative document.</summary>
     private bool recoveringLostLock;
 
+    /// <summary>The mod system, cached for per-player pin queries and the pin/complete network sends.</summary>
+    private readonly ScribeModSystem modSystem;
+
     public GuiDialogScribeLecternLibGui(BlockPos pos, BlockEntityScribeLectern lectern, ICoreClientAPI capi)
         : base(pos, capi)
     {
         this.lectern = lectern;
+        modSystem = capi.ModLoader.GetModSystem<ScribeModSystem>();
 
         // Load row-sizing config fresh per open (matches this dialog's per-open lifecycle) so a
         // hand-edit of the JSON -- or a ConfigLib panel change -- is picked up on the next open.
@@ -109,6 +126,23 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         var config = capi.LoadModConfig<ScribeClientConfig>(ScribeModSystem.ClientConfigFileName)
                      ?? new ScribeClientConfig();
         rowStyle = ScribeRowStyle.FromConfig(config);
+
+        // Repaint the per-player pin indicators whenever this player's pushed pin set changes (a pin
+        // added/removed/orphaned, or a snapshot refresh). Unsubscribed in OnGuiClosed.
+        modSystem.MyPinsChanged += OnMyPinsChanged;
+    }
+
+    /// <summary>Whether THIS player has pinned the given task in this lectern's document. Drives the
+    /// resting pin tint and the pin-glyph accent in both views, sourced from the server-pushed cache
+    /// rather than any document field (pinning is per-player, not document state).</summary>
+    private bool IsPinnedForMe(Guid taskId) => modSystem.IsPinnedForMe(lectern.Document.DocId, taskId);
+
+    /// <summary>A fresh pin-set/settings push arrived: rebuild so the pin indicators reflect it. A
+    /// no-op while not open. In editor mode the pin state is per-player (not part of the scratch doc),
+    /// so repainting it does not disturb the in-progress text edit.</summary>
+    private void OnMyPinsChanged()
+    {
+        if (IsOpened()) ForceRebuild();
     }
 
     protected override WindowConfig CreateWindowConfig() => new()
@@ -422,21 +456,37 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
 
         SyncFocusNodesToScratch();
         pendingEnsureVisible = false;
+        // The list just got shorter: re-clamp the scroll offset to the new extent after layout so a
+        // near-bottom delete doesn't leave dead space below the last row (LibGUI's own clamp ignores a
+        // sub-50px overshoot — see pendingClampToExtent).
+        RequestClampToExtent();
         ForceRebuild();
     }
 
     /// <summary>Per-row pin toggle (task rows only; the pin control is absent on text-section rows).
-    /// Flips the scratch block's pinned flag and marks dirty; the autosave/commit path serializes it.
-    /// The row reflects the new state via its own rebuild, so no full ForceRebuild is required — but
-    /// the resting-tint indicator (read + editor) is driven off the block's Pinned snapshot, so a
-    /// rebuild keeps both views consistent.</summary>
+    /// Pinning is a per-player action now, NOT document state: fire a lock-free
+    /// <see cref="ScribeSetPinMessage"/> keyed by the task's stable id, toggled against the client's
+    /// own pin cache. It never touches the scratch document, the edit lock, or autosave. The server
+    /// re-pushes this player's set, which lands in <see cref="OnMyPinsChanged"/> and repaints the row.</summary>
     private void TogglePinnedEditorTask(int index)
     {
         if (scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
-        if (!scratch.TogglePinned(index)) return; // no-op on a text section or bad index
+        var block = scratch.Blocks[index];
+        if (!block.IsTask) return; // no pin control on a text section
+        SendSetPin(block.TaskId, !IsPinnedForMe(block.TaskId));
+    }
 
-        isDirty = true;
-        ForceRebuild();
+    /// <summary>Fire-and-forget a pin/unpin for a task by stable identity. The document's DocId plus
+    /// the task's TaskId fully address the pin; no block position is sent (so the same shape works
+    /// from a future HUD). The server derives the snapshot from its own document.</summary>
+    private void SendSetPin(Guid taskId, bool pinned)
+    {
+        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeSetPinMessage
+        {
+            DocId = lectern.Document.DocId.ToByteArray(),
+            TaskId = taskId.ToByteArray(),
+            Pinned = pinned,
+        });
     }
 
     /// <summary>Drag-reorder drop: move the block from <paramref name="from"/> to <paramref name="to"/>
@@ -620,6 +670,29 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
                 pendingRestoreScrollOffset = null;
             }
         }
+
+        // Re-clamp after a delete once layout has reported the shrunk content height (see
+        // pendingClampToExtent). We run the FULL settling window rather than stopping as soon as the
+        // offset is within bounds: ContentSize is only reported on the layout pass(es) after the rebuild
+        // and may still be the pre-delete (larger) value on the first frame — so an early "already within
+        // max" check would terminate before the shrink is ever reflected. Clamping while already in
+        // bounds is a harmless no-op (JumpTo only moves when Offset > max), so running all frames is safe.
+        // Skipped while a restore is still pending so the two don't fight.
+        if (pendingClampToExtent && pendingRestoreScrollOffset is null)
+        {
+            float max = sharedScrollController.MaxScrollExtent;
+            if (sharedScrollController.Offset > max) sharedScrollController.JumpTo(max);
+            if (++clampToExtentFrames >= 5) pendingClampToExtent = false;
+        }
+    }
+
+    /// <summary>Ask <see cref="OnRenderGUI"/> to clamp the shared scroll offset down to the new
+    /// <c>MaxScrollExtent</c> after the next layout — used when a row removal shrinks the content so the
+    /// viewport can't be left stranded past the (now smaller) bottom.</summary>
+    private void RequestClampToExtent()
+    {
+        pendingClampToExtent = true;
+        clampToExtentFrames = 0;
     }
 
     public override void OnGuiClosed()
@@ -632,6 +705,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             StopAutosaveTick();
             DisposeFocusNodes();
         }
+        modSystem.MyPinsChanged -= OnMyPinsChanged;
         // The dialog owns the shared scroll controller (see its field); dispose it once here rather
         // than in either view's State, which come and go with each view-switch ForceRebuild.
         sharedScrollController.Dispose();
@@ -661,11 +735,12 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         new ScribeLecternReadContent(
             // Snapshot the block list for this build into value copies (never a live block
             // reference), so a later mutation of the authoritative document can't alias into a built
-            // row — a re-sync rebuilds instead.
+            // row — a re-sync rebuilds instead. Pinned is a per-player query (IsPinnedForMe), not a
+            // document field, so each row carries its TaskId and is tinted from the client cache.
             blocks: lectern.Document.Blocks
-                .Select((b, i) => new ScribeReadRowData(i, b.IsTask, b.Done, b.Pinned, b.Text))
+                .Select((b, i) => new ScribeReadRowData(i, b.IsTask, b.Done, IsPinnedForMe(b.TaskId), b.TaskId, b.Text))
                 .ToList(),
-            onToggleTask: OnReadViewToggleTask,
+            onToggleTask: OnReadViewCompleteTask,
             onSwitchToEditor: RequestEditorAccess,
             style: rowStyle,
             scrollController: sharedScrollController);
@@ -673,7 +748,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     private Widget BuildEditorContent()
     {
         var blocks = scratch!.Blocks
-            .Select((b, i) => new ScribeEditRowData(i, b.IsTask, b.Done, b.Pinned, b.Text))
+            .Select((b, i) => new ScribeEditRowData(i, b.IsTask, b.Done, IsPinnedForMe(b.TaskId), b.TaskId, b.Text))
             .ToList();
 
         int? autoFocus = autoFocusRowOnRebuild;
@@ -697,17 +772,16 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             scrollController: sharedScrollController);
     }
 
-    /// <summary>Read-view task checkbox click: fire-and-forget a lock-free toggle to the server. The
-    /// read view holds no editor lock, so this uses the dedicated <see cref="ScribeToggleTaskMessage"/>
-    /// rather than the lock-gated edit path.</summary>
-    private void OnReadViewToggleTask(int index)
+    /// <summary>Read-view task checkbox click: complete the task by its stable identity via the
+    /// lock-free <see cref="ScribeCompleteTaskMessage"/> (the read view holds no editor lock). The
+    /// server toggles the done flag and, per this player's complete-to-unpin setting, may remove their
+    /// pin — the "check it off and it leaves my list" gesture the future HUD reuses.</summary>
+    private void OnReadViewCompleteTask(Guid taskId)
     {
-        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeToggleTaskMessage
+        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeCompleteTaskMessage
         {
-            PosX = lectern.Pos.X,
-            PosY = lectern.Pos.Y,
-            PosZ = lectern.Pos.Z,
-            BlockIndex = index,
+            DocId = lectern.Document.DocId.ToByteArray(),
+            TaskId = taskId.ToByteArray(),
         });
     }
 }
@@ -720,7 +794,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
 /// A read-only row model: a value snapshot of one <see cref="ScribeBlock"/> plus its index. Passed
 /// to <see cref="ScribeReadRow"/> so a row never holds a live block reference.
 /// </summary>
-internal readonly record struct ScribeReadRowData(int Index, bool IsTask, bool Done, bool Pinned, string Text);
+internal readonly record struct ScribeReadRowData(int Index, bool IsTask, bool Done, bool Pinned, Guid TaskId, string Text);
 
 /// <summary>
 /// The read view's content tree: the document rendered as a scrollable <see cref="ListView"/> of
@@ -731,7 +805,7 @@ internal sealed class ScribeLecternReadContent : StatefulWidget
 {
     public ScribeLecternReadContent(
         IReadOnlyList<ScribeReadRowData> blocks,
-        Action<int> onToggleTask,
+        Action<Guid> onToggleTask,
         Action onSwitchToEditor,
         ScribeRowStyle style,
         ScrollController scrollController)
@@ -744,7 +818,8 @@ internal sealed class ScribeLecternReadContent : StatefulWidget
     }
 
     public IReadOnlyList<ScribeReadRowData> Blocks { get; }
-    public Action<int> OnToggleTask { get; }
+    /// <summary>Complete a task by its stable id (the read view completes by identity, not index).</summary>
+    public Action<Guid> OnToggleTask { get; }
     public Action OnSwitchToEditor { get; }
     public ScribeRowStyle Style { get; }
     /// <summary>Dialog-owned scroll controller shared by both views (see the dialog field); NOT disposed
@@ -828,7 +903,7 @@ internal sealed class ScribeLecternReadContentState : State<ScribeLecternReadCon
 /// </summary>
 internal sealed class ScribeReadRow : StatefulWidget
 {
-    public ScribeReadRow(ScribeReadRowData data, Action<int> onToggleTask, ScribeRowStyle style, Gui.Widgets.Framework.Key? key = null)
+    public ScribeReadRow(ScribeReadRowData data, Action<Guid> onToggleTask, ScribeRowStyle style, Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
         Data = data;
@@ -837,7 +912,7 @@ internal sealed class ScribeReadRow : StatefulWidget
     }
 
     public ScribeReadRowData Data { get; }
-    public Action<int> OnToggleTask { get; }
+    public Action<Guid> OnToggleTask { get; }
     public ScribeRowStyle Style { get; }
 
     public override State CreateState() => new ScribeReadRowState();
@@ -882,7 +957,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                     onChanged: _ =>
                     {
                         SetState(() => done = !done);
-                        Widget.OnToggleTask(Widget.Data.Index);
+                        Widget.OnToggleTask(Widget.Data.TaskId);
                     },
                     size: style.CheckboxSize)));
         }
@@ -924,7 +999,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
 /// <summary>A value snapshot of one editable block plus its index. The live text lives in the
 /// dialog's scratch document (the field writes through on every keystroke); this is only the seed
 /// for building the row.</summary>
-internal readonly record struct ScribeEditRowData(int Index, bool IsTask, bool Done, bool Pinned, string Text);
+internal readonly record struct ScribeEditRowData(int Index, bool IsTask, bool Done, bool Pinned, Guid TaskId, string Text);
 
 /// <summary>
 /// The editor view's content tree. Unlike the read view it uses a NON-virtualized
