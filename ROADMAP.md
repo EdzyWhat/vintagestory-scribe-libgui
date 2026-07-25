@@ -83,6 +83,16 @@ age (the saw); anything past that is cosmetic.
   accepted Creative-only quirk left as-is: opening a lectern from beyond ~5 blocks (possible only
   in Creative's inflated reach) flashes it open then auto-closes — harmless, not the mod's
   intended endpoint. Survival is unaffected by analysis (open-reach 4.5 < close threshold 5.0).
+- **In-game user feedback / error surface** *(requested 2026-07-24, playtest submission
+  2026-07-24T22-41-15).* There is no user-facing way to surface an edit error today: the server
+  silently rejects an oversized edit (over `ScribeDocumentCodec.MaxBlocks`/`MaxTextLength`) and the
+  client shows nothing (confirmed in TESTING.md `fe168d81` / add-lectern-block 8.7 — rejection works,
+  feedback is absent). Build a lightweight in-Vintage-Story message/notice surface so the player is
+  told *what* went wrong and *what the limit is* when an edit is refused, with room to reuse it for
+  other edit issues (lost lock, save failure, etc.). User also wants a per-task soft length limit
+  (~1000 chars) surfaced through the same channel. NOTE: the earlier ToastLib approach was rejected
+  (see Done/superseded); pick a mechanism that fits the LibGUI rebuild (an in-dialog inline notice or
+  a native `HudElement`, not ToastLib). Promote to an OpenSpec change when picked up.
 - **Lectern GUI polish** → `docs/specs/lectern-gui-polish.md`. Merges: face-the-player on
   placement, "Edit" → "Edit Tasks" relabel, damped icon-gutter widths at large text size,
   the side-rail option bar + fold-switch-into-toggle + skeuomorphic collapse control chain,
