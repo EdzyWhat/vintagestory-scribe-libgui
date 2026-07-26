@@ -115,6 +115,17 @@ on a different dialog. If it's ever worth truly fixing (e.g. accessibility), the
 would be `GuiElementDialogTitleBar.unscaledCloseIconSize` / its hit-rect math, but that's
 vanilla engine code we can't patch from mod code — not actionable from here.
 
+**Recurred under LibGUI (2026-07-26, scribe-notebook-frame).** The LibGUI Lectern's custom
+title-bar close button (a `ScribeRowButton` inside `Align(BottomCenter)`/`Row`/`SizedBox`, wrapped
+in a `Tooltip`) showed the SAME symptom, reported as the clickable area sitting slightly above/left
+of the drawn glyph on a Retina Mac. Traced every layer in `reference/vslibgui/`: hit-testing applies
+each child offset via `Element.HitTest → RenderObject.GlobalToChild`, which mirrors paint's
+`PaintChildren` translate, and the `Tooltip` wrapper's `CompositedTransformTarget → RenderTarget :
+RenderProxyBox` is a clean 0,0 passthrough — so there is NO layout-math offset in the LibGUI tree
+either. Same conclusion as the native case: a Retina/`GUIScale` rendering-vs-hitbox artifact, not our
+bug. Same settling diagnostic (hover-coordinate log at 100% GUIScale on a non-Retina display); same
+"don't guess-patch it" verdict.
+
 **Diagnostic technique that worked, for next time:** a click-based test is ambiguous once
 a successful click closes the dialog mid-test (you lose the ability to compare "before"
 state). Prefer a throttled hover-position log (`OnMouseMove`, logged via

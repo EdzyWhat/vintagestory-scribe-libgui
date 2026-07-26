@@ -21,6 +21,30 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## refine-settings-and-window-chrome
+
+> Feature pass on the Lectern/Settings chrome (from the 2026-07-26 playtest): a passive drag-grip icon left
+> of the Lectern close button (the band was already draggable but not discoverable); numeric settings fields
+> now clamp on UNFOCUS (not per-keystroke) so select-all-and-retype works, with a red range line shown only
+> after a clamp; Scribe Settings split from 2 into 3 divider-separated sections (Mod Behavior / Window
+> Appearance / HUD Appearance); the settings form painted on an opaque theme-surface panel; and both gear
+> buttons TOGGLE the window open/closed. Core is unchanged (clamp statics reused). Restaged Debug 2026-07-26
+> — fully relaunch first.
+
+- [ ] `59d7ccbf` **Title-bar drag grip.** The Lectern title bar shows a grip icon left of the close button
+      with a "drag to move" tooltip on hover; the whole title-bar band still drags the window.
+      *(refine-settings-and-window-chrome 7.3)*
+- [ ] `bb25e8d3` **Numeric retype + clamp-on-blur.** In Scribe Settings, select-all a numeric field (e.g.
+      HUD row width, Pixel Art Size) and type a fresh value with no mid-edit snap; click away with an
+      out-of-range value → it clamps AND a red range line appears beneath; a next in-range edit clears it;
+      values persist across relog. +/- and arrows still step live. *(refine-settings-and-window-chrome 7.4)*
+- [ ] `52f2e92e` **Three sections + panel.** Scribe Settings shows three divider-separated sections (Mod
+      Behavior / Window Appearance / HUD Appearance) with each control under the right section, and the form
+      sits on an opaque theme-surface panel (not a transparent gap). *(refine-settings-and-window-chrome 7.5)*
+- [ ] `c2c153d1` **Settings gear toggles.** Clicking the Lectern right-column gear opens the settings window
+      and clicking it again CLOSES it; the HUD gear toggles the same way.
+      *(refine-settings-and-window-chrome 7.6)*
+
 ## scribe-notebook-frame
 
 > Real notebook art (1024×1160) replaces the flat-tan placeholder, and the Lectern is restructured into a
@@ -45,9 +69,19 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         themselves confirmed working in 2026-07-26T12-04-59 "Works"): the close button's CLICKABLE area
         doesn't coincide with its drawn border — the hit region sits above and to the left of the visible
         button (may be macOS-specific). Drag/close functionally work, but the misaligned hitbox is a real
-        defect. Also requested (changes, not defects): (a) add a drag-grip icon to the LEFT of the close
-        button so the draggable area is discoverable (the whole band is draggable but players won't intuit
-        it); (b) add 4px padding-left on the title text.
+        defect.
+      - **Investigated 2026-07-26 (no code fix — deferred):** traced every layer of the close button's widget
+        tree in `reference/vslibgui/` (`Align`/`RenderPositionedBox`, `Row`, `SizedBox`, the `Tooltip`'s
+        `CompositedTransformTarget` → `RenderTarget : RenderProxyBox` clean passthrough). Hit-testing applies
+        each child offset via `Element.HitTest` → `GlobalToChild`, matching paint's `PaintChildren` — no
+        static layout error to fix. This is the SAME visual-vs-clickable mismatch VSAPI-NOTES already records
+        for the native close button (confirmed via live mouse-coord logging to be a Retina/`GUIScale`
+        rendering-vs-hitbox artifact). Settling diagnostic: hover-coordinate log at 100% GUIScale on a
+        non-Retina display. Left as a known deferred item rather than guess-patching LibGUI internals.
+      - **Fix applied 2026-07-26 (awaiting retest) — title padding + drag affordance are separate:** (b) 4px
+        `padding-left` on the title text is DONE (restaged Debug). (a) the drag-grip discoverability icon is
+        deferred into the `refine-settings-and-window-chrome` feature proposal (title-bar chrome), not this
+        bugfix pass.
 - [x] `c74d74a8` **Three-column frame legible.** The scrolling read/editor content sits in the center column,
       framed by the left spacer and the right icon column, all inside the art; task/note text stays legible
       over the backdrop. *(scribe-notebook-frame 6.3)*

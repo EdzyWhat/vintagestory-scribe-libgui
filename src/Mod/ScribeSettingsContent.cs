@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Gui.Rendering;             // EdgeInsets
 using Gui.Rendering.Text;        // TextStyle, FontWeight
-using Gui.Widgets.Basic;         // Text
+using Gui.Widgets.Basic;         // Text, Divider
 using Gui.Widgets.Framework;     // Widget, StatelessWidget, BuildContext, Theme, ValueKey
 using Gui.Widgets.Gestures;      // ScrollController
 using Gui.Widgets.Input;         // Dropdown, DropdownItem, NumericField, Checkbox
@@ -58,16 +58,22 @@ internal sealed class ScribeSettingsContent : StatelessWidget
         // the whole form re-renders at the new size on the write-through rebuild UpdateMySettings fires.
         float scale = ScribePlayerSettings.ClampFontScale(settings.WindowFontScale);
 
+        // Three sections separated by a horizontal Divider (refine-settings-and-window-chrome D4): Mod
+        // Behavior, Window Appearance, HUD Appearance. Each control is sorted into the section it governs.
         var body = new Column(
             spacing: 14 * scale,
             crossAxisAlignment: CrossAxisAlignment.Stretch,
             mainAxisSize: MainAxisSize.Min,
             children: new Widget[]
             {
-                SectionTitle(Lang.Get("scribe:settings-section-behavior"), colors, scale),
-                BuildBehaviorSection(colors, scale),
-                SectionTitle(Lang.Get("scribe:settings-section-appearance"), colors, scale),
-                BuildAppearanceSection(colors, scale),
+                SectionTitle(Lang.Get("scribe:settings-section-modbehavior"), colors, scale),
+                BuildModBehaviorSection(colors, scale),
+                new Divider(),
+                SectionTitle(Lang.Get("scribe:settings-section-windowappearance"), colors, scale),
+                BuildWindowAppearanceSection(colors, scale),
+                new Divider(),
+                SectionTitle(Lang.Get("scribe:settings-section-hudappearance"), colors, scale),
+                BuildHudAppearanceSection(colors, scale),
             });
 
         // Wrapped in a scroll view + bar so the form fits a shorter host without clipping (design D2).
@@ -83,7 +89,9 @@ internal sealed class ScribeSettingsContent : StatelessWidget
 
     // ---------------- Sections ----------------
 
-    private Widget BuildBehaviorSection(ColorScheme colors, float scale)
+    /// <summary>Mod Behavior: how the mod behaves regardless of surface — completion policy and the HUD
+    /// collapse toggle (a behavior switch, not an appearance one).</summary>
+    private Widget BuildModBehaviorSection(ColorScheme colors, float scale)
     {
         return new Column(
             spacing: 12 * scale,
@@ -113,7 +121,9 @@ internal sealed class ScribeSettingsContent : StatelessWidget
             });
     }
 
-    private Widget BuildAppearanceSection(ColorScheme colors, float scale)
+    /// <summary>Window Appearance: how Scribe's block windows (the Lectern) look — the pixel-art theme
+    /// toggle, the notebook's Pixel Art Size, and the window text scale.</summary>
+    private Widget BuildWindowAppearanceSection(ColorScheme colors, float scale)
     {
         return new Column(
             spacing: 12 * scale,
@@ -121,14 +131,42 @@ internal sealed class ScribeSettingsContent : StatelessWidget
             mainAxisSize: MainAxisSize.Min,
             children: new Widget[]
             {
-                // The pixel-art master toggle (scribe-themed-toggle): flips the Lectern + HUD between
-                // Scribe's light "pixel-art" look and the player's own global GUI theme, live. Bundles the
-                // light theme (now) and illustrated art (later). Hugs its label like HudCollapsed.
+                // The pixel-art master toggle (scribe-themed-toggle): flips the Lectern between Scribe's
+                // light "pixel-art" look (with notebook art) and the player's own global GUI theme, live.
+                // Hugs its label like HudCollapsed.
                 HuggingCheckbox(
                     "settings-pixelartdisplay", colors, scale,
                     value: settings.PixelArtDisplay,
                     onChanged: v => onMutate(s => s.PixelArtDisplay = v)),
 
+                // Pixel Art Size (W): the single driving width of the Lectern's proportional layout
+                // (scribe-notebook-frame). Steps by 10; clamps + snaps to the 10px grid on blur via the Core
+                // static, and re-lays-out the open Lectern live.
+                LabeledControl(
+                    "settings-pixelartsize", colors, scale,
+                    IntField("pixelartsize", settings.PixelArtSize, step: 10,
+                        onChanged: v => onMutate(s => s.PixelArtSize = v),
+                        clamp: ScribePlayerSettings.ClampPixelArtSize,
+                        rangeText: Lang.Get("scribe:settings-range-pixelartsize"))),
+
+                // Window text scale (moved here from the old HUD-font pairing so it sits with the other
+                // window-appearance controls). Entered as a percent; clamps + snaps to a 5% notch on blur.
+                LabeledControl(
+                    "settings-windowfontscale", colors, scale,
+                    FontScaleField("windowfontscale", settings.WindowFontScale, v => onMutate(s => s.WindowFontScale = v))),
+            });
+    }
+
+    /// <summary>HUD Appearance: how the pinned-task HUD looks — anchor, row cap, row width, position
+    /// offsets, and its text scale.</summary>
+    private Widget BuildHudAppearanceSection(ColorScheme colors, float scale)
+    {
+        return new Column(
+            spacing: 12 * scale,
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Min,
+            children: new Widget[]
+            {
                 LabeledControl(
                     "settings-hudanchor", colors, scale,
                     new Dropdown<ScribeHudAnchor>(
@@ -136,21 +174,24 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         items: AnchorItems(),
                         onChanged: v => onMutate(s => s.HudAnchor = v))),
 
-                // Numeric fields (not sliders — sliders hijack scroll, design D8), each clamped in
-                // onChanged (Core Normalized() is the single clamp source) and KEYED by its current value
-                // so a clamp that changed the value remounts the (uncontrolled) field showing the clamped
-                // result on the next write-through rebuild.
+                // Numeric fields (not sliders — sliders hijack scroll, design D8). Each clamps + shows its
+                // range feedback ON BLUR inside the field (refine-settings-and-window-chrome), using the Core
+                // Clamp* static; the ValueKey still remounts the field to the committed value after a write.
                 //
                 // Max HUD rows + HUD row width share one row as two columns (scribe-settings-followups 3.1).
                 PairedControls(colors, scale,
                     LabeledControl(
                         "settings-hudmaxrows", colors, scale,
                         IntField("hudmaxrows", settings.HudMaxRows, step: 1,
-                            onChanged: v => onMutate(s => s.HudMaxRows = v))),
+                            onChanged: v => onMutate(s => s.HudMaxRows = v),
+                            clamp: ScribePlayerSettings.ClampHudMaxRows,
+                            rangeText: Lang.Get("scribe:settings-range-hudmaxrows"))),
                     LabeledControl(
                         "settings-hudrowwidth", colors, scale,
                         IntField("hudrowwidth", settings.HudRowWidth, step: 5,
-                            onChanged: v => onMutate(s => s.HudRowWidth = v)))),
+                            onChanged: v => onMutate(s => s.HudRowWidth = v),
+                            clamp: ScribePlayerSettings.ClampHudRowWidth,
+                            rangeText: Lang.Get("scribe:settings-range-hudrowwidth")))),
 
                 // HUD X/Y offsets on ONE row (design D5); each is a ±300 pixel nudge relative to the
                 // anchor's pre-baked offset (design D8), stepping by 5.
@@ -169,23 +210,11 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                                 v => onMutate(s => s.HudOffsetY = v), colors, scale)),
                         })),
 
-                // HUD font scale + window font scale share one row as two columns
-                // (scribe-settings-followups 3.2).
-                PairedControls(colors, scale,
-                    LabeledControl(
-                        "settings-hudfontscale", colors, scale,
-                        FontScaleField("hudfontscale", settings.HudFontScale, v => onMutate(s => s.HudFontScale = v))),
-                    LabeledControl(
-                        "settings-windowfontscale", colors, scale,
-                        FontScaleField("windowfontscale", settings.WindowFontScale, v => onMutate(s => s.WindowFontScale = v)))),
-
-                // Pixel Art Size (W): the single driving width of the Lectern's proportional layout
-                // (scribe-notebook-frame). Numeric field stepping by 10, clamped + snapped to the 10px grid
-                // in Core's Normalized(); the open Lectern re-lays-out live on the write-through rebuild.
+                // HUD text scale (its former window-font pair moved to Window Appearance). Percent; clamps +
+                // snaps to a 5% notch on blur.
                 LabeledControl(
-                    "settings-pixelartsize", colors, scale,
-                    IntField("pixelartsize", settings.PixelArtSize, step: 10,
-                        onChanged: v => onMutate(s => s.PixelArtSize = v))),
+                    "settings-hudfontscale", colors, scale,
+                    FontScaleField("hudfontscale", settings.HudFontScale, v => onMutate(s => s.HudFontScale = v))),
             });
     }
 
@@ -212,9 +241,13 @@ internal sealed class ScribeSettingsContent : StatelessWidget
     /// writes through, so repeated +/- or arrow presses keep focus (scribe-settings-followups focus fix).
     /// (Typing a value whose running prefix is below the min briefly clamps mid-type; +/- and arrows are
     /// the primary path.)</summary>
-    private Widget NumericField(string id, int keyValue, float initialValue, float step, Action<float> onChanged) =>
+    private Widget NumericField(string id, int keyValue, float initialValue, float step, Action<float> onChanged,
+        Func<float, float>? clamp = null, string? rangeText = null) =>
+        // A key-only SizedBox (no width/height → null constraints, so the child sizes itself): the field now
+        // renders its own range-feedback line beneath the input on a clamp, so it must be free to grow taller
+        // than the old fixed 34px. The ValueKey still remounts the uncontrolled field when the
+        // persisted/clamped value changes (settling it after a blur commit).
         new SizedBox(
-            height: 34,
             key: new ValueKey<int>(keyValue),
             child: new ScribeNumericField(
                 initialValue: initialValue,
@@ -223,15 +256,22 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                 style: new BoxStyle { Height = 34, Width = 120 },
                 focusNode: focus.NodeFor(id),
                 autoFocus: focus.ShouldFocus(id),
-                onStepped: () => focus.ArmAutoFocus(id)));
+                onStepped: () => focus.ArmAutoFocus(id),
+                clamp: clamp,
+                rangeText: rangeText));
 
     /// <summary>An integer numeric field stepping by <paramref name="step"/> that writes its rounded value
-    /// through on change.</summary>
-    private Widget IntField(string id, int value, float step, Action<int> onChanged) =>
+    /// through on change. Clamp/range feedback happen on blur inside the field (the clamp is the Core
+    /// <c>Clamp*</c> static composed to operate on the rounded int).</summary>
+    private Widget IntField(string id, int value, float step, Action<int> onChanged,
+        Func<int, int>? clamp = null, string? rangeText = null) =>
         NumericField(id, keyValue: value, initialValue: value, step: step,
-            onChanged: v => onChanged((int)MathF.Round(v)));
+            onChanged: v => onChanged((int)MathF.Round(v)),
+            clamp: clamp is null ? null : v => clamp((int)MathF.Round(v)),
+            rangeText: rangeText);
 
-    /// <summary>A labeled ±300px offset field: a small caption over an <see cref="IntField"/> (step 5).</summary>
+    /// <summary>A labeled ±300px offset field: a small caption over an <see cref="IntField"/> (step 5). Clamps
+    /// to the Core offset range on blur.</summary>
     private Widget OffsetField(string id, string caption, int value, Action<int> onChanged, ColorScheme colors, float scale)
     {
         return new Column(
@@ -241,7 +281,9 @@ internal sealed class ScribeSettingsContent : StatelessWidget
             children: new Widget[]
             {
                 new Text(caption, new TextStyle { FontSize = 13 * scale, Color = colors.OnSurfaceVariant }),
-                IntField(id, value, step: 5, onChanged: onChanged),
+                IntField(id, value, step: 5, onChanged: onChanged,
+                    clamp: ScribePlayerSettings.ClampHudOffset,
+                    rangeText: Lang.Get("scribe:settings-range-hudoffset")),
             });
     }
 
@@ -253,7 +295,12 @@ internal sealed class ScribeSettingsContent : StatelessWidget
     {
         int pct = (int)MathF.Round(scaleValue * 100f);
         return NumericField(id, keyValue: pct, initialValue: pct, step: 5,
-            onChanged: v => onChanged(MathF.Round(v) / 100f));
+            onChanged: v => onChanged(MathF.Round(v) / 100f),
+            // The field works in PERCENT (80–120); clamp in percent space by round-tripping through the Core
+            // multiplier clamp (which also snaps to the 5% notch), so a blurred out-of-range percent settles
+            // onto a valid notch percent.
+            clamp: v => MathF.Round(ScribePlayerSettings.ClampFontScale(v / 100f) * 100f),
+            rangeText: Lang.Get("scribe:settings-range-fontscale"));
     }
 
     // ---------------- Layout helpers ----------------

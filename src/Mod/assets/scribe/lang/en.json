@@ -19,6 +19,7 @@
 	"scribe-gui-edit-hint": "This lectern is empty. Click Edit to add tasks or notes.",
 	"scribe-gui-save-failed": "Your changes could not be saved — the lectern is no longer locked to you.",
 	"scribe-gui-close": "Close",
+	"scribe-gui-drag": "Drag to move",
 	"scribe-gui-nav-settings": "Scribe Settings",
 	"scribe-gui-nav-read": "Read view",
 	"scribe-gui-nav-edit": "Edit view",
@@ -32,8 +33,15 @@
 	"scribe-completion-delete": "Delete task",
 
 	"settings-title": "Scribe Settings",
-	"settings-section-behavior": "Behavior",
-	"settings-section-appearance": "Appearance",
+	"settings-section-modbehavior": "Mod Behavior",
+	"settings-section-windowappearance": "Window Appearance",
+	"settings-section-hudappearance": "HUD Appearance",
+
+	"settings-range-hudmaxrows": "Must be 1–20",
+	"settings-range-hudrowwidth": "Must be 80–1000",
+	"settings-range-hudoffset": "Must be -300 to 300",
+	"settings-range-fontscale": "Must be 80–120%",
+	"settings-range-pixelartsize": "Must be 300–1000",
 
 	"settings-completionpolicy": "On completing a task",
 	"settings-completionpolicy-help": "What happens to a pinned task when you check it off: keep it pinned (it sinks to the bottom of the HUD), unpin it, or delete the underlying task.",

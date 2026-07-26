@@ -1,7 +1,8 @@
 using Gui;                       // GuiBase, WindowConfig
-using Gui.Widgets.Basic;         // WindowFrame
-using Gui.Widgets.Framework;     // Widget
+using Gui.Widgets.Basic;         // WindowFrame, Container
+using Gui.Widgets.Framework;     // Widget, ThemeData
 using Gui.Widgets.Gestures;      // ScrollController
+using Gui.Widgets.Painting;      // BoxStyle
 using OpenTK.Mathematics;        // Vector2
 using Vintagestory.API.Client;
 using Vintagestory.API.Config;   // Lang
@@ -70,11 +71,18 @@ public sealed class ScribeSettingsDialog : GuiBase
             title: Lang.Get("scribe:settings-title"),
             onClose: () => TryClose(),
             fillHeight: true,
-            child: new ScribeSettingsContent(
-                settings: modSystem.MySettings,
-                onMutate: modSystem.UpdateMySettings,
-                scrollController: scrollController,
-                focus: numericFocus));
+            // Paint the theme's default surface behind the form so the inputs sit on a real panel instead of
+            // a transparent gap (refine-settings-and-window-chrome D5). ThemeData.Default is the player's
+            // global LibGUI theme — the same one the WindowFrame chrome follows — so this stays consistent
+            // with the window's theme inheritance (unchanged from scribe-themed-toggle); only the body fill
+            // is added. fillHeight makes the frame stretch its child, so the Container fills the body.
+            child: new Container(
+                style: new BoxStyle { Color = ThemeData.Default.ColorScheme.Surface },
+                child: new ScribeSettingsContent(
+                    settings: modSystem.MySettings,
+                    onMutate: modSystem.UpdateMySettings,
+                    scrollController: scrollController,
+                    focus: numericFocus)));
 
     public override void Dispose()
     {

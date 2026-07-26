@@ -849,6 +849,22 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     {
         base.OnRenderGUI(deltaTime);
 
+        // Keep the window (hence the OuterArtBox art canvas) sized to the live Pixel Art Size (task 7.1).
+        // The base only sets the window Size in CreateWindowConfig, which TryOpen runs ONCE per open — so a
+        // live W change re-lays-out the content tree (via ForceRebuild) but leaves the window's _layoutSize
+        // at the opened W, clamping the art Container to the stale size while the inner SizedBoxes grow past
+        // it. Re-apply WindowSize from the current W and call the base SyncLayoutSize() (documented for a
+        // programmatic WindowSize change) so the root re-lays-out at the new tight constraints. Done here (a
+        // safe post-layout point) rather than in Build() to avoid mutating size mid-rebuild. No-op when W is
+        // unchanged (SyncLayoutSize early-returns if _layoutSize already equals WindowSize).
+        var liveLayout = new LecternLayout(modSystem.MySettings.PixelArtSize);
+        var wantSize = new Vector2(liveLayout.W, liveLayout.H);
+        if (WindowSize != wantSize)
+        {
+            WindowSize = wantSize;
+            SyncLayoutSize();
+        }
+
         // An editor row's collapse completed (its callback fired from inside the animation pump, where
         // unmounting the tree would be re-entrant); retire it now with a rebuild (scribe-list-collapse).
         if (needsEditorCollapseCleanup)
@@ -1027,11 +1043,28 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             mainAxisSize: MainAxisSize.Max,
             children: new Widget[]
             {
-                new Text(Lang.Get("scribe:scribe-gui-title"),
-                    new TextStyle { FontSize = titleFont, Weight = FontWeight.Bold, Color = colors.OnSurface }),
-                // Close button: the delete SVG at 1.4× the per-row delete control size (design D3), tooltipped.
-                TitleButton("scribeclose", "scribe-gui-close", colors.Error,
-                    size: ScribeRowConstants.RowCheckboxSize * 1.4f, onTap: () => TryClose()),
+                // 4px left padding so the title isn't flush against the row's left edge (task 7.3).
+                new Padding(
+                    EdgeInsets.Only(left: 4),
+                    child: new Text(Lang.Get("scribe:scribe-gui-title"),
+                        new TextStyle { FontSize = titleFont, Weight = FontWeight.Bold, Color = colors.OnSurface })),
+                // Trailing group: a passive drag-grip cue LEFT of the close button
+                // (refine-settings-and-window-chrome). The grip has NO gesture handler — the whole TitleBar
+                // band is already the drag zone via WindowConfig.DragHandleHeight; the grip only signals that
+                // discoverably (players won't intuit an invisible drag band). A "drag to move" tooltip labels
+                // it. Close reuses the delete SVG at 1.4× the per-row delete size (design D3).
+                new Row(
+                    crossAxisAlignment: CrossAxisAlignment.Center,
+                    mainAxisSize: MainAxisSize.Min,
+                    spacing: 6,
+                    children: new Widget[]
+                    {
+                        WithTooltip("scribe-gui-drag",
+                            new ScribeVsIconGlyph("scribegrip", ScribeRowConstants.RowCheckboxSize * 1.1f,
+                                colors.OnSurfaceVariant)),
+                        TitleButton("scribeclose", "scribe-gui-close", colors.Error,
+                            size: ScribeRowConstants.RowCheckboxSize * 1.4f, onTap: () => TryClose()),
+                    }),
             });
 
         return new SizedBox(

@@ -140,14 +140,17 @@ public sealed class ScribeModSystem : ModSystem
         });
     }
 
-    /// <summary>Open (or re-focus) the single standalone Scribe settings window. Called from both the HUD
+    /// <summary>Toggle the single standalone Scribe settings window open/closed. Called from both the HUD
     /// gear and the Lectern gear so there is exactly ONE settings surface (scribe-themed-toggle pivot
-    /// 2026-07-25). Lazily builds the dialog on first use and reuses it thereafter. Client-only.</summary>
+    /// 2026-07-25); clicking either gear a second time now CLOSES it rather than being a no-op
+    /// (refine-settings-and-window-chrome). Lazily builds the dialog on first use and reuses it thereafter.
+    /// Client-only.</summary>
     public void OpenSettings()
     {
         if (capi is null) return; // client-only
         settingsDialog ??= new ScribeSettingsDialog(capi, this);
-        if (!settingsDialog.IsOpened()) settingsDialog.TryOpen();
+        if (settingsDialog.IsOpened()) settingsDialog.TryClose();
+        else settingsDialog.TryOpen();
     }
 
     /// <summary>Dispose the client-side HUD (its own <see cref="MyPinsChanged"/> subscription + tick), the
