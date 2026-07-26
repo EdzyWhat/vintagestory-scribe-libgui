@@ -16,14 +16,17 @@ recolors with no teardown. Grepping `src/` for `new Theme(` / `ThemeData` return
 change introduces the first per-dialog theme in the mod.
 
 Most body content auto-recolors from `Theme.Of(context)`: rows, `ScribeMultilineField`
-(`textColor:colors.OnSurface`, caret/selection from `Primary`), `ScribeRowButton`, the settings form, and
-every existing `new Text(...)` (each already passes an explicit theme color). Three things do **not**
-follow the wrap: (1) `WindowFrame`/`WindowTitleBar` read `ThemeData.Default` at *construction*, not from
-context (`WindowTitleBar.cs:56`), so the title bar must get explicit `titleBarColor:` / `textColor:`
-(`Vector4?` params on `WindowFrame`); (2) the HUD glow halo is a hardcoded dark constant
-(`HudScribePins.cs:503`, `new Vector4(0,0,0,0.9)`); (3) a bare `new Text(...)` defaults to white
-(`TextStyle` default `Color = Vector4.One`) — but every existing Scribe text widget already passes a theme
-color, so only *new* bare text would be at risk.
+(`textColor:colors.OnSurface`, caret/selection from `Primary`), `ScribeRowButton`, and
+every existing `new Text(...)` (each already passes an explicit theme color). Two things do **not**
+follow the wrap on the surface that IS wrapped (the Lectern): (1) `WindowFrame`/`WindowTitleBar` read
+`ThemeData.Default` at *construction*, not from context (`WindowTitleBar.cs:231`), so the title bar must
+get explicit `titleBarColor:` / `textColor:` (`Vector4?` params on `WindowFrame`); (2) a bare
+`new Text(...)` defaults to white (`TextStyle` default `Color = Vector4.One`) — but every existing Scribe text widget already passes a theme
+color, so only *new* bare text would be at risk. Note `ThemeData.Default` is not a hardcoded dark
+constant: LibGUI's `GuiModSystem.LoadThemeConfig` sets it from the player's `libgui.json`
+(`reference/vslibgui/.../GuiModSystem.cs:277`), so it IS the player's global theme — which is why "off"
+means "follow my global theme," not "force stock dark." The HUD and the settings window are deliberately
+NOT wrapped, so they read this global default unchanged.
 
 The setting plumbing is already in place. `ScribePlayerSettings` (`src/Core/`) is a plain mutable class of
 client-local display prefs, never server-synced (`CompletionPolicy`, `HudCollapsed`, `HudMaxRows`,
@@ -44,12 +47,15 @@ this toggle.
 ## Goals / Non-Goals
 
 **Goals:**
-- Add a persisted, client-local `ThemedBackgrounds` preference (default on) as pure Core data.
+- Add a persisted, client-local `PixelArtDisplay` preference (default on) as pure Core data.
 - Ship a net-new light `ThemeData` (dark text on light parchment) and a `ScribeTheme.For(bool)` selector
-  returning it or the stock `ThemeData.Default` fallback.
-- Apply the chosen theme per dialog (Lectern, HUD, standalone settings dialog) via a `new Theme(...)`
-  wrap, and handle the surfaces the wrap does not reach (title bar, HUD halo) explicitly.
-- Guarantee a mandatory zero-art fallback: with the toggle off, every surface renders the stock dark
+  returning it or the player's global `ThemeData.Default` theme.
+- Apply the chosen theme to the Lectern via a `new Theme(...)` wrap, and handle the surface the wrap does
+  not reach (the title bar) explicitly.
+- Leave the pinned-task HUD and the standalone settings window on the player's global theme (not governed
+  by the toggle).
+- Consolidate settings to one standalone window reachable from both the Lectern and HUD gears.
+- Guarantee a mandatory zero-art fallback: with the toggle off, the Lectern renders the player's global
   LibGUI look and depends on no asset.
 
 **Non-Goals:**
@@ -57,13 +63,14 @@ this toggle.
 - Animated navigation tabs replacing the gear header (`scribe-animated-tabs`).
 - The slide-out pin-editor pagelet and its cross-document sync (`scribe-pin-editor`).
 - Any server-side, per-world, or cross-player theming — the preference is strictly client-local.
-- A per-surface theme control — one toggle governs all Scribe surfaces.
+- Theming the HUD or settings window — those always follow the player's global theme.
+- A per-surface theme control — one toggle governs the Lectern's theme.
 
 ## Decisions
 
-### D1: The `ThemedBackgrounds` bool lives in Core as pure data
+### D1: The `PixelArtDisplay` bool lives in Core as pure data
 
-Add `public bool ThemedBackgrounds { get; set; } = true;` to `src/Core/ScribePlayerSettings.cs`. It is a
+Add `public bool PixelArtDisplay { get; set; } = true;` to `src/Core/ScribePlayerSettings.cs`. It is a
 plain scalar with no clamp and no VS API reference, so Core stays unit-testable and the architectural rule
 (Core never references the game API) holds. Persistence, normalization, and live propagation are inherited
 free from `UpdateMySettings` → `Normalized()` → `StoreModConfig("scribe-hud-config.json")` →
@@ -71,11 +78,12 @@ free from `UpdateMySettings` → `Normalized()` → `StoreModConfig("scribe-hud-
 - *Rationale:* mirrors every existing display pref; the free propagation event is exactly what makes the
   live cross-surface toggle (D5) cost nothing.
 
-### D2: Per-dialog `new Theme(...)` wrap, not a global `ThemeData.Default` swap
+### D2: Per-dialog `new Theme(...)` wrap on the Lectern only, not a global `ThemeData.Default` swap
 
-Wrap each dialog's `Build()` output in `new Theme(ScribeTheme.For(modSystem.MySettings.ThemedBackgrounds),
-child: <window>)` rather than mutating the global `ThemeData.Default` (which `GuiBase.BuildRootTree` bakes
-in at `GuiBase.cs:1426`).
+Wrap the **Lectern** dialog's `Build()` output in
+`new Theme(ScribeTheme.For(modSystem.MySettings.PixelArtDisplay), child: <window>)` rather than mutating
+the global `ThemeData.Default` (which `GuiBase.BuildRootTree` bakes in at `GuiBase.cs:1426`). The HUD and
+the settings window are NOT wrapped — they render on the global default (see D4/D6).
 - *Rationale:* `GuiBase` exposes no theme override hook, and the wrap is the framework-supported switch —
   `UpdateShouldNotify` compares `ThemeData` by reference, so a different instance plus a rebuild recolors
   every descendant that reads `Theme.Of(context)` with no teardown.
@@ -89,65 +97,74 @@ in at `GuiBase.cs:1426`).
 New `src/Mod/ScribeTheme.cs` defines `static readonly ThemeData Light` = `new ThemeData(new ColorScheme {
 Surface=<light>, OnSurface=<dark>, Background=<lighter>, OnBackground=<dark>, Primary=<warm accent>, … all
 17 roles })`, and exposes the fallback simply as the framework's `ThemeData.Default`. A helper
-`ScribeTheme.For(bool themed) => themed ? Light : ThemeData.Default` is the single selector every dialog
-calls. Per-widget style structs (`ButtonStyle`, `CheckboxStyle`, …) cascade automatically from the scheme
+`ScribeTheme.For(bool pixelArt) => pixelArt ? Light : ThemeData.Default` is the single selector the
+Lectern calls; the `ThemeData.Default` branch is the player's global theme, not a forced dark preset. Per-widget style structs (`ButtonStyle`, `CheckboxStyle`, …) cascade automatically from the scheme
 when omitted, so only the 17 `ColorScheme` roles need authoring.
-- *Rationale:* one selector keeps the light/fallback choice in exactly one place; using the untouched
-  `ThemeData.Default` as the fallback is what makes the zero-art fallback free and mandatory.
-- *Alternatives rejected:* authoring a second dark theme for the fallback (pointless — the shipped default
-  already is the intended fallback); overriding every per-widget style struct by hand (unnecessary given
-  the automatic cascade).
+- *Rationale:* one selector keeps the light/global choice in exactly one place; using the untouched
+  `ThemeData.Default` (the player's global theme) as the off-state is what makes the zero-art fallback
+  free and mandatory.
+- *Alternatives rejected:* authoring a second dark theme for the off-state (pointless — the player's
+  global theme already is the intended fallback); overriding every per-widget style struct by hand
+  (unnecessary given the automatic cascade).
 
-### D4: The toggle bundles theme + (future) backgrounds as one "themed mode"
+### D4: The toggle governs the Lectern only — the HUD and settings window follow the global theme
 
-`ThemedBackgrounds` is intentionally the single switch for both the light theme (this phase) and the
-illustrated backgrounds (the follow-on `scribe-gui-backdrops` phase). On = light theme (+ later, art
-backgrounds); off = stock dark theme with plain flat panels and no art.
-- *Rationale:* the user specified these are one feature — the toggle *is* the dark/light switch, and the
-  art always rides with the light theme. A single preference avoids an incoherent "light theme but dark
-  fallback backgrounds" state and gives the later backgrounds phase a switch that already exists.
-- *Alternatives rejected:* two separate settings (theme vs backgrounds) — permits nonsensical
-  combinations and doubles the settings surface for no user benefit.
+`PixelArtDisplay` is intentionally the single switch for the Lectern's light theme (this phase) and its
+illustrated backgrounds (the follow-on `scribe-gui-backdrops` phase). On = Lectern light theme (+ later,
+art backgrounds); off = the Lectern follows the player's global theme, plain, no art. The pinned-task HUD
+and the standalone settings window are NOT governed by this toggle — they always render on the player's
+global theme (clarification 2026-07-25: the earlier plan had the HUD and settings track the toggle too;
+the user scoped it to the Lectern, since the HUD sits over the world and the settings window is "the
+remainder" the player controls via their own `libgui.json`).
+- *Rationale:* the user specified the pixel-art look is a Lectern (document-surface) concept; the HUD and
+  settings are chrome that should honor the player's own global theme choice. A single preference still
+  gives the later backgrounds phase a switch that already exists.
+- *Alternatives rejected:* wrapping every Scribe surface (the HUD toggled with the setting in an early
+  build — rejected on the user's feedback); two separate settings (theme vs backgrounds) — permits
+  nonsensical combinations for no user benefit.
 
-### D5: Live cross-surface propagation reuses `MyPinsChanged`; the setting is read fresh each build
+### D5: Live propagation to the open Lectern reuses `MyPinsChanged`; the setting is read fresh each build
 
-The Lectern, HUD, and settings dialog already subscribe to `MyPinsChanged` and `ForceRebuild()`; each
-reads `modSystem.MySettings.ThemedBackgrounds` fresh inside `Build()` and re-wraps in the current theme.
-Because `UpdateMySettings` fires `MyPinsChanged`, toggling the checkbox relights every open surface with
-no restart and no reopen — following the `WindowFontScale` "read fresh each build" precedent
-(`GuiDialogScribeLecternLibGui.cs:845`).
+The Lectern already subscribes to `MyPinsChanged` and `ForceRebuild()`; it reads
+`modSystem.MySettings.PixelArtDisplay` fresh inside `Build()` and re-wraps in the current theme. Because
+`UpdateMySettings` fires `MyPinsChanged`, toggling the checkbox (in the settings window, itself rebuilt
+by the same event) relights the open Lectern with no restart and no reopen — following the
+`WindowFontScale` "read fresh each build" precedent (`GuiDialogScribeLecternLibGui.cs:845`).
 - *Rationale:* zero new machinery; the same event already fans layout changes out live.
 
-### D6: Explicit `WindowFrame` title-bar colors; the settings surface via its host
+### D6: Explicit Lectern `WindowFrame` title-bar colors; one settings window from two gears
 
-Each `WindowFrame` gets explicit `titleBarColor:` / `textColor:` (`Vector4?` params) computed in `Build()`
-from `ScribeTheme.For(...)`'s scheme, because `WindowTitleBar` reads `ThemeData.Default` at construction
-(`WindowTitleBar.cs:56`) and will not follow the wrap. The in-Lectern settings *view* recolors with the
-Lectern (it is central-region content under the Lectern's `Theme` wrap); the standalone HUD-gear settings
-dialog (`ScribeSettingsDialog`) wraps its own `Build()` and sets its own title-bar colors.
-- *Rationale:* the title bar is the one framed element guaranteed not to follow the wrap; computing its
-  colors from the active scheme keeps it consistent with the body in both modes.
+The Lectern's `WindowFrame` gets explicit `titleBarColor:` / `textColor:` (`Vector4?` params) computed in
+`Build()` from `ScribeTheme.For(...)`'s scheme, because `WindowTitleBar` reads `ThemeData.Default` at
+construction (`WindowTitleBar.cs:231`) and will not follow the wrap. There is ONE settings surface — a
+standalone `ScribeSettingsDialog` owned by `ScribeModSystem.OpenSettings()` — opened by BOTH the Lectern
+gear and the HUD gear; the former in-Lectern settings *view* (a third central-region state) was removed.
+The settings window is not theme-wrapped and sets no explicit title-bar colors, so it follows the global
+theme end to end. Opening it from the Lectern floats a separate window over the editor, so the Lectern
+keeps its lock and in-progress edit (no commit/release needed, unlike the old in-place swap).
+- *Rationale:* the title bar is the one framed element guaranteed not to follow the wrap; a single
+  settings window avoids duplicating the form and keeps settings reachable from either surface.
 
 ## Risks / Trade-offs
 
 - **[Risk] The `WindowFrame` title bar does not follow the `Theme` wrap** (reads `ThemeData.Default` at
-  construction, `WindowTitleBar.cs:56`) → **Mitigation:** pass explicit `titleBarColor:` / `textColor:` to
-  every themed `WindowFrame`, computed from the active scheme each `Build()`; verify the title stays
-  legible in both modes in-game.
-- **[Risk] The HUD glow halo is a hardcoded dark constant** (`HudScribePins.cs:503`,
-  `new Vector4(0,0,0,0.9)`) and will not invert with the theme → **Mitigation:** make the halo color
-  theme-conditional (light halo in light mode, dark in fallback); verify HUD text legibility over both.
+  construction, `WindowTitleBar.cs:231`) → **Mitigation:** pass explicit `titleBarColor:` / `textColor:`
+  to the Lectern's `WindowFrame`, computed from the active scheme each `Build()`; verify the title stays
+  legible in both modes in-game. *(Confirmed 2026-07-25.)*
 - **[Risk] A bare `new Text(...)` defaults to white** (`TextStyle` default `Color = Vector4.One`) and
   would vanish on a light surface → **Mitigation:** all existing Scribe text already passes a theme color;
   any *new* text widget introduced with the wrap must pass `Color = colors.OnSurface/OnBackground`. Watch
-  for this when touching the settings form and title.
+  for this when touching the Lectern title. *(Confirmed 2026-07-25: no white-on-light text.)*
+- **[Risk] Scoping creep — an early build wrapped the HUD too**, so it toggled with the setting when it
+  should always follow the global theme → **Resolved 2026-07-25:** removed the HUD's `Theme` wrap (and the
+  halo inversion that came with it); only the Lectern is wrapped. Confirmed in playtest.
 - **[Risk] Light-theme contrast is unverifiable outside the game** (the Core suite cannot reach `src/Mod`
   GUI code or the VS API) → **Mitigation:** verification is in-game only — confirm dark-on-light contrast
-  for rows, fields, buttons, the title bar, and the HUD halo across the Lectern, HUD, and settings dialog;
-  record the legibility verdict in `VSAPI-NOTES.md`.
+  for rows, fields, buttons, and the title bar on the Lectern; record the legibility verdict in
+  `VSAPI-NOTES.md`. *(All in-game items confirmed 2026-07-25.)*
 - **[Trade-off] Bundling theme + backgrounds under one toggle** means the two cannot be exercised
   independently → accepted per the user's "one setting" decision (D4); the light theme alone is fully
   testable now, and the backgrounds phase adds art behind the same switch.
-- **[Constraint] Core purity:** the `ThemedBackgrounds` bool must stay in `src/Core/ScribePlayerSettings.cs`
-  as pure data; all theme/GUI code (`ScribeTheme.cs`, the wraps, the halo) lives in `src/Mod`. `src/Core`
+- **[Constraint] Core purity:** the `PixelArtDisplay` bool must stay in `src/Core/ScribePlayerSettings.cs`
+  as pure data; all theme/GUI code (`ScribeTheme.cs`, the Lectern wrap) lives in `src/Mod`. `src/Core`
   must never reference the VS API.

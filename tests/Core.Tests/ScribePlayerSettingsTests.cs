@@ -25,6 +25,16 @@ public class ScribePlayerSettingsTests
         Assert.Equal(1.0f, s.WindowFontScale);
     }
 
+    [Fact]
+    public void Default_PixelArtDisplay_IsOn()
+    {
+        // A fresh profile (no saved preference) gets the pixel-art (light theme) look for the core views;
+        // Normalized() leaves a bool untouched (nothing to clamp), so a stored value round-trips unchanged.
+        Assert.True(new ScribePlayerSettings().PixelArtDisplay);
+        Assert.True(new ScribePlayerSettings().Normalized().PixelArtDisplay);
+        Assert.False(new ScribePlayerSettings { PixelArtDisplay = false }.Normalized().PixelArtDisplay);
+    }
+
     [Theory]
     [InlineData(2.5f, 1.2f)]   // above max -> clamp to max notch
     [InlineData(1.5f, 1.2f)]

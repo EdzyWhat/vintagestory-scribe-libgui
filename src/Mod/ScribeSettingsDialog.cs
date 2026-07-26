@@ -60,6 +60,12 @@ public sealed class ScribeSettingsDialog : GuiBase
     }
 
     protected override Widget Build() =>
+        // The standalone settings window is deliberately "the remainder" (scribe-themed-toggle pivot
+        // 2026-07-25): it is NOT wrapped in Scribe's pixel-art light theme. It inherits the player's
+        // global LibGUI theme (the stock dark default unless they set their own via a community
+        // libgui.json), so the Pixel-Art Display toggle here governs the Lectern + HUD but not the
+        // window it lives in. No explicit WindowFrame colors either — the frame reads ThemeData.Default,
+        // which is exactly the global theme we want it to follow.
         new WindowFrame(
             title: Lang.Get("scribe:settings-title"),
             onClose: () => TryClose(),

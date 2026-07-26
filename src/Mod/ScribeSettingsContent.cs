@@ -121,6 +121,14 @@ internal sealed class ScribeSettingsContent : StatelessWidget
             mainAxisSize: MainAxisSize.Min,
             children: new Widget[]
             {
+                // The pixel-art master toggle (scribe-themed-toggle): flips the Lectern + HUD between
+                // Scribe's light "pixel-art" look and the player's own global GUI theme, live. Bundles the
+                // light theme (now) and illustrated art (later). Hugs its label like HudCollapsed.
+                HuggingCheckbox(
+                    "settings-pixelartdisplay", colors, scale,
+                    value: settings.PixelArtDisplay,
+                    onChanged: v => onMutate(s => s.PixelArtDisplay = v)),
+
                 LabeledControl(
                     "settings-hudanchor", colors, scale,
                     new Dropdown<ScribeHudAnchor>(

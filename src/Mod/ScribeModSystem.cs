@@ -60,6 +60,13 @@ public sealed class ScribeModSystem : ModSystem
     /// own event/tick lifetime, disposed in <see cref="Dispose"/>.</summary>
     private HudScribePins? pinHud;
 
+    /// <summary>The single standalone Scribe settings window (scribe-themed-toggle pivot 2026-07-25).
+    /// There is now ONE settings surface, opened via <see cref="OpenSettings"/> from BOTH the HUD gear and
+    /// the Lectern gear (the former in-Lectern settings view was removed). Lazily constructed on first
+    /// open and reused across opens (so it keeps its scroll/focus state); disposed in
+    /// <see cref="Dispose"/>. Null until first opened, and on a pure server.</summary>
+    private ScribeSettingsDialog? settingsDialog;
+
     /// <summary>Client-side player preferences (completion policy, HUD rows/collapse), persisted as
     /// client-local JSON (<see cref="HudConfigFileName"/>) and loaded in <see cref="StartClientSide"/>;
     /// never server-synced. The Core POCO doubles as the config's serialized shape. Non-null on the
@@ -125,12 +132,24 @@ public sealed class ScribeModSystem : ModSystem
         });
     }
 
-    /// <summary>Dispose the client-side HUD (its own <see cref="MyPinsChanged"/> subscription + tick).
-    /// The server side holds no unmanaged/disposable state of its own here.</summary>
+    /// <summary>Open (or re-focus) the single standalone Scribe settings window. Called from both the HUD
+    /// gear and the Lectern gear so there is exactly ONE settings surface (scribe-themed-toggle pivot
+    /// 2026-07-25). Lazily builds the dialog on first use and reuses it thereafter. Client-only.</summary>
+    public void OpenSettings()
+    {
+        if (capi is null) return; // client-only
+        settingsDialog ??= new ScribeSettingsDialog(capi, this);
+        if (!settingsDialog.IsOpened()) settingsDialog.TryOpen();
+    }
+
+    /// <summary>Dispose the client-side HUD (its own <see cref="MyPinsChanged"/> subscription + tick) and
+    /// the shared settings window. The server side holds no unmanaged/disposable state of its own here.</summary>
     public override void Dispose()
     {
         pinHud?.Dispose();
         pinHud = null;
+        settingsDialog?.Dispose();
+        settingsDialog = null;
         base.Dispose();
     }
 

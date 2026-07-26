@@ -26,6 +26,17 @@ public sealed class ScribePlayerSettings
     /// show/hide hotkey.</summary>
     public bool HudCollapsed { get; set; }
 
+    /// <summary>Whether the Lectern dialog's views (read, editor, and later the pinned view) render in the
+    /// mod's net-new "pixel-art" look — the light parchment theme (dark ink on light paper) plus, in a
+    /// later phase, illustrated backgrounds. Default <c>true</c> (on). When off, those views fall back to
+    /// the player's global LibGUI theme (the stock dark default unless the player set their own),
+    /// depending on no art. This governs ONLY the Lectern dialog: the pinned-task HUD and the standalone
+    /// settings window are deliberately NOT toggled — they always follow the player's global theme
+    /// (clarification 2026-07-25). A per-player, client-local display preference: never server-synced,
+    /// carried by no block/document/pin data. A plain bool needing no clamp, so <see cref="Normalized"/>
+    /// leaves it untouched.</summary>
+    public bool PixelArtDisplay { get; set; } = true;
+
     /// <summary>Maximum number of pinned tasks the HUD shows at once (default 3); pins beyond this
     /// are summarized ("+N more"). A per-player display preference; the Mod layer owns the HUD and
     /// clamps this to a sane range on read (see <see cref="ScribePinCodec"/>).</summary>

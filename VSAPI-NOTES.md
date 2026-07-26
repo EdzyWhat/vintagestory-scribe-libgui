@@ -1138,6 +1138,53 @@ NOT clear our `focusedEditIndex` (its listener fires only on focus GAINED), so t
 row to restore. See `DeleteEditorBlock`, `TogglePinnedEditorTask`/`OnMyPinsChanged`, and `ReorderEditorBlock`
 in `GuiDialogScribeLecternLibGui.cs`.
 
+**Fact (scribe-themed-toggle): a per-dialog theme = wrap the dialog's `Build()` output in
+`new Theme(themeData, child: …)`; `GuiBase` gives no theme override hook.** `GuiBase.BuildRootTree`
+always wraps content in the global `Theme(ThemeData.Default…)`, and exposes no way to override it. The
+supported switch is to wrap a dialog's OWN `Build()` output in `new Theme(chosenThemeData, child)`: every
+descendant that reads `Theme.Of(context)` (rows, fields, buttons, the settings form) recolors, because
+`Theme.UpdateShouldNotify` compares `ThemeData` **by reference** (`Theme.cs:645`) — so passing a
+*different instance* plus a rebuild recolors with no teardown. Read the theme flag fresh each `Build()`
+(like `WindowFontScale`) so a `ForceRebuild` on the settings-changed event relights live. See
+`ScribeTheme.For(bool)` and the wraps in `GuiDialogScribeLecternLibGui`, `ScribeSettingsDialog`,
+`HudScribePins`.
+
+**Fact (scribe-themed-toggle): `ColorScheme.Default()` is the ONLY preset LibGUI ships, and it is DARK
+(parchment) — but `ThemeData.Default` is the PLAYER'S GLOBAL theme, not that constant.** LibGUI's
+`GuiModSystem.LoadThemeConfig` sets `ThemeData.Default` from the player's `libgui.json`
+(`reference/vslibgui/.../GuiModSystem.cs:277`), falling back to `ColorScheme.Default()` only when the
+player authored no theme. So returning `ThemeData.Default` for an "off" toggle means "follow my global
+game theme," NOT "force stock dark." A light theme is net-new — you author all 17 `ColorScheme` roles
+yourself (`reference/vslibgui/.../Framework/Theme.cs:83`). The per-widget style structs (`ButtonStyle`,
+`CheckboxStyle`, `DropdownStyle`, …) cascade from the scheme via their `Default(colors, …)` factories in
+the `ThemeData` ctor, so you only author the scheme, not the structs. Two roles need *semantic*, not
+mechanical, inversion when going light: `StateHover`/`StateSelected` are translucent overlays that must
+DARKEN a light surface (dark ink tint at low alpha) where the dark theme lightens; and keep
+`SurfaceHigh` lighter than `SurfaceLow` (raised vs recessed) rather than blindly swapping the dark
+values. See `ScribeTheme.Light`.
+
+**Fact (scribe-themed-toggle): two things do NOT follow the `Theme` wrap and must be set explicitly.**
+(1) `WindowFrame`/`WindowTitleBar` read `ThemeData.Default.ColorScheme` at CONSTRUCTION
+(`WindowTitleBar.cs:231-233`), not from context — so a themed dialog must pass explicit
+`titleBarColor:`/`textColor:` (`Vector4?` params) computed from the active scheme, or the title bar
+stays stuck on the dark default while the body goes light. (2) A bare `new Text(...)` defaults to white
+(`TextStyle` default `Color = Vector4.One`) and would vanish on a light surface — every Scribe text
+widget already passes an explicit theme color, so only NEW bare text is at risk.
+
+**Scoping note (scribe-themed-toggle, 2026-07-25): the toggle themes the Lectern ONLY.** Only the Lectern
+dialog is wrapped in `ScribeTheme.For(pixelArt)`; the pinned-task HUD and the standalone settings window
+are deliberately left UNWRAPPED so they always follow the player's global theme. An early build wrapped
+the HUD too (and inverted its glow halo per the flag) — that was wrong and was removed; the HUD keeps its
+original dark glow halo constant since it always renders on the (light-text) global theme. There is one
+settings window (`ScribeSettingsDialog`, owned by `ScribeModSystem.OpenSettings()`), opened by both the
+Lectern gear and the HUD gear.
+
+**In-game legibility verdict: CONFIRMED 2026-07-25** (playtest submissions 2026-07-25T20-12-27 and
+21-06-50): the light Lectern reads as dark ink on light parchment with a legible light title bar and no
+white-on-light text; OFF falls back to the global theme; the toggle relights the open Lectern live and
+persists across a relog; the HUD and settings window correctly do NOT change with the toggle; both gears
+open the one settings window.
+
 ## Dev-diagnosis toolkit
 
 The local iterate/diagnose loop for this project (Apple Silicon, where VSImGui sliders and the

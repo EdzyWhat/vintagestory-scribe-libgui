@@ -27,7 +27,6 @@
 	"scribe-completion-delete": "Delete task",
 
 	"settings-title": "Scribe Settings",
-	"settings-back": "Back",
 	"settings-section-behavior": "Behavior",
 	"settings-section-appearance": "Appearance",
 
@@ -35,6 +34,9 @@
 	"settings-completionpolicy-help": "What happens to a pinned task when you check it off: keep it pinned (it sinks to the bottom of the HUD), unpin it, or delete the underlying task.",
 	"settings-hudcollapsed": "Collapse the HUD",
 	"settings-hudcollapsed-help": "Minimize the pinned-task HUD to just its header. Same as the HUD's collapse chevron and its toggle hotkey.",
+
+	"settings-pixelartdisplay": "Pixel-Art Display",
+	"settings-pixelartdisplay-help": "Show the Lectern in Scribe's light \"parchment\" look (dark ink on a light page, with themed art). Turn off to use your own game GUI theme for it instead. The pinned-task HUD and this settings window always use your own game theme.",
 
 	"settings-hudanchor": "HUD position",
 	"settings-hudanchor-help": "Which screen corner or edge the pinned-task HUD is anchored to.",

@@ -52,23 +52,6 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     // ---- View state ----
     private bool isEditorMode;
 
-    /// <summary>Third central-region state (beside read/editor): the settings view, reached by the gear
-    /// in the chrome and dismissed by its Back control (add-settings-tab D2). Settings is lock-free, so
-    /// entering it from the editor first commits + releases the lock (see <see cref="OnClickOpenSettings"/>).
-    /// <see cref="wasEditorBeforeSettings"/> records which view to return to on Back.</summary>
-    private bool isSettingsMode;
-    private bool wasEditorBeforeSettings;
-
-    /// <summary>Scroll controller for the settings view's form, owned by the dialog (like
-    /// <see cref="sharedScrollController"/>) so a live write-through rebuild of the settings form doesn't
-    /// reset its scroll position. Disposed in <see cref="OnGuiClosed"/>.</summary>
-    private readonly ScrollController settingsScrollController = new();
-
-    /// <summary>Host-owned focus state for the settings form's numeric fields, so focus survives the
-    /// write-through <see cref="ForceRebuild"/> each edit triggers (scribe-settings-followups focus fix).
-    /// Same persistent-node pattern as <see cref="editorFocusNodes"/>. Disposed with the dialog.</summary>
-    private readonly ScribeNumericFocusRegistry settingsNumericFocus = new();
-
     // ---- Editor state (null / inert while in read mode) ----
     /// <summary>Editor-view-only scratch copy; never aliased to <see cref="BlockEntityScribeLectern.Document"/>.</summary>
     private ScribeDocument? scratch;
@@ -290,17 +273,13 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         }
     }
 
-    /// <summary>Enter (or stay in) the read view. Called on a read-access grant. Also clears the settings
-    /// view state, so a read grant (including the multiplayer fallback when a Back-from-settings editor
-    /// re-request is denied) always lands in the read view rather than a stranded settings frame.</summary>
+    /// <summary>Enter (or stay in) the read view. Called on a read-access grant.</summary>
     public void EnterReadMode()
     {
         if (isEditorMode)
         {
             LeaveEditorMode();
         }
-        isSettingsMode = false;
-        wasEditorBeforeSettings = false;
         if (IsOpened())
         {
             ForceRebuild();
@@ -320,41 +299,6 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         CaptureScrollForRestore();
         LeaveEditorMode();
         ForceRebuild();
-    }
-
-    /// <summary>Gear control: swap the central region to the settings view (add-settings-tab D2). If we
-    /// were editing, commit the pending edit and release the lock first (reusing the
-    /// <see cref="OnClickSwitchToRead"/> sequencing) so the settings view is lock-free — then remember to
-    /// return to the editor on Back. From the read view there's no lock to release.</summary>
-    private void OnClickOpenSettings()
-    {
-        wasEditorBeforeSettings = isEditorMode;
-        if (isEditorMode)
-        {
-            if (focusedEditIndex is { } idx) NormalizeRowOnCommit(idx);
-            FlushIfDirty();
-            SendReleaseLockPacket();
-            LeaveEditorMode();
-        }
-        isSettingsMode = true;
-        ForceRebuild();
-    }
-
-    /// <summary>Back control on the settings view: return to whichever view was showing before. Read is
-    /// lock-free (just rebuild); returning to the editor re-requests editor access (the lock was released
-    /// when settings opened), which round-trips back through <see cref="EnterEditorMode"/>.</summary>
-    private void OnClickCloseSettings()
-    {
-        isSettingsMode = false;
-        if (wasEditorBeforeSettings)
-        {
-            wasEditorBeforeSettings = false;
-            RequestEditorAccess(); // re-grant lands in EnterEditorMode + rebuilds into the editor
-        }
-        else
-        {
-            ForceRebuild();
-        }
     }
 
     /// <summary>Snapshot the current scroll offset so it can be re-applied after the next view's first
@@ -853,8 +797,6 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         // The dialog owns the shared scroll controller (see its field); dispose it once here rather
         // than in either view's State, which come and go with each view-switch ForceRebuild.
         sharedScrollController.Dispose();
-        settingsScrollController.Dispose();
-        settingsNumericFocus.Dispose();
         // Drop any in-flight collapse ghosts + their controllers so a reopen starts clean (scribe-list-collapse).
         departingEditorRows.Clear();
         editorCollapseRegistry.Dispose();
@@ -873,31 +815,35 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
 
     // ---------------- Build ----------------
 
-    protected override Widget Build() =>
-        new WindowFrame(
-            // Title reflects the active view — "Scribe Settings" while the gear view is showing, else the
-            // lectern title (add-settings-tab round 1). WindowFrame reads its title live per build.
-            title: Lang.Get(isSettingsMode ? "scribe:settings-title" : "scribe:scribe-gui-title"),
-            onClose: () => TryClose(),
-            fillHeight: true,
-            child: BuildCentralRegion());
+    protected override Widget Build()
+    {
+        // Read the Pixel-Art Display preference fresh each build (scribe-themed-toggle D5), mirroring how
+        // RowStyle reads WindowFontScale fresh — so toggling the setting relights this dialog on the
+        // MyPinsChanged rebuild with no reopen. On = Scribe's light theme; off = the player's global
+        // LibGUI theme. The wrap recolors every descendant that reads Theme.Of(context); the title bar
+        // does NOT follow the wrap (WindowFrame reads ThemeData.Default at construction,
+        // WindowTitleBar.cs:231), so its colors are passed explicitly from the same scheme (task 4.2).
+        bool pixelArt = modSystem.MySettings.PixelArtDisplay;
+        var colors = ScribeTheme.For(pixelArt).ColorScheme;
 
-    /// <summary>The dialog's central content region: the settings view (when the gear is active), else
-    /// the read or editor view — each read/editor view carries a small chrome row with the gear that
-    /// opens settings (add-settings-tab D2; <c>WindowFrame</c> has no trailing-action slot, so the gear
-    /// lives in a header row just under the title bar rather than in the title bar itself).</summary>
+        return new Theme(
+            ScribeTheme.For(pixelArt),
+            child: new WindowFrame(
+                title: Lang.Get("scribe:scribe-gui-title"),
+                onClose: () => TryClose(),
+                fillHeight: true,
+                titleBarColor: colors.Surface,
+                textColor: colors.OnSurface,
+                child: BuildCentralRegion()));
+    }
+
+    /// <summary>The dialog's central content region: the read or editor view, each carrying a small chrome
+    /// row with the gear. As of the scribe-themed-toggle pivot (2026-07-25) the gear opens the SINGLE
+    /// standalone settings window (<see cref="ScribeModSystem.OpenSettings"/>) shared with the HUD gear —
+    /// the former in-Lectern settings view (a third central-region state) was removed. <c>WindowFrame</c>
+    /// has no trailing-action slot, so the gear lives in a header row just under the title bar.</summary>
     private Widget BuildCentralRegion()
     {
-        if (isSettingsMode)
-        {
-            return new ScribeSettingsView(
-                settings: modSystem.MySettings,
-                onMutate: modSystem.UpdateMySettings,
-                onBack: OnClickCloseSettings,
-                scrollController: settingsScrollController,
-                focus: settingsNumericFocus);
-        }
-
         Widget content = isEditorMode ? BuildEditorContent() : BuildReadContent();
         return new Column(
             spacing: 6,
@@ -905,7 +851,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             mainAxisSize: MainAxisSize.Max,
             children: new Widget[]
             {
-                new ScribeGearHeader(onOpenSettings: OnClickOpenSettings),
+                new ScribeGearHeader(onOpenSettings: modSystem.OpenSettings),
                 new Expanded(child: content),
             });
     }
@@ -1883,7 +1829,7 @@ internal sealed class ScribeRowButtonState : State<ScribeRowButton>
 }
 
 // ============================================================================
-// Settings entry point + settings view (add-settings-tab)
+// Settings entry point (add-settings-tab; gear opens the shared standalone window post-2026-07-25 pivot)
 // ============================================================================
 
 /// <summary>A slim chrome row shown above the read/editor content carrying the gear that opens the
@@ -1916,58 +1862,5 @@ internal sealed class ScribeGearHeader : StatelessWidget
                         size: 24f,
                         onTap: onOpenSettings),
                 }));
-    }
-}
-
-/// <summary>The Lectern's settings view: a Back header (returns to the prior read/editor view) over the
-/// host-agnostic <see cref="ScribeSettingsContent"/> form. Kept a thin wrapper so the shared settings
-/// form stays host-agnostic (the standalone HUD-gear dialog hosts the same <see cref="ScribeSettingsContent"/>
-/// without this Back chrome — it uses its own window close).</summary>
-internal sealed class ScribeSettingsView : StatelessWidget
-{
-    private readonly ScribePlayerSettings settings;
-    private readonly Action<Action<ScribePlayerSettings>> onMutate;
-    private readonly Action onBack;
-    private readonly ScrollController scrollController;
-    private readonly ScribeNumericFocusRegistry focus;
-
-    public ScribeSettingsView(
-        ScribePlayerSettings settings,
-        Action<Action<ScribePlayerSettings>> onMutate,
-        Action onBack,
-        ScrollController scrollController,
-        ScribeNumericFocusRegistry focus)
-    {
-        this.settings = settings;
-        this.onMutate = onMutate;
-        this.onBack = onBack;
-        this.scrollController = scrollController;
-        this.focus = focus;
-    }
-
-    public override Widget Build(BuildContext context)
-    {
-        var colors = Theme.Of(context).ColorScheme;
-        return new Column(
-            spacing: 6,
-            crossAxisAlignment: CrossAxisAlignment.Stretch,
-            mainAxisSize: MainAxisSize.Max,
-            children: new Widget[]
-            {
-                new Padding(
-                    EdgeInsets.Only(left: 10, top: 4),
-                    child: new Row(
-                        mainAxisAlignment: MainAxisAlignment.Start,
-                        mainAxisSize: MainAxisSize.Max,
-                        children: new Widget[]
-                        {
-                            new Button(
-                                child: new Text(
-                                    Lang.Get("scribe:settings-back"),
-                                    new TextStyle { FontSize = 14, Color = colors.OnPrimary }),
-                                onTap: _ => onBack()),
-                        })),
-                new Expanded(child: new ScribeSettingsContent(settings, onMutate, scrollController, focus)),
-            });
     }
 }

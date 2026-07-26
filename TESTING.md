@@ -21,6 +21,72 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## scribe-themed-toggle
+
+> A persisted, client-local `PixelArtDisplay` preference (default ON) that themes Scribe's three CORE
+> views — Lectern read + editor and the pinned-task HUD — in a net-new LIGHT parchment look (dark ink on
+> light paper via `ScribeTheme.Light`, all 17 `ColorScheme` roles), live. When OFF those views follow the
+> player's GLOBAL LibGUI theme (their `libgui.json`, stock dark by default). The single standalone
+> settings window is "the remainder" — it always follows the global theme and is NOT parchment-themed.
+> **Pivot 2026-07-25:** the former in-Lectern settings *tab* was removed; the Lectern gear now opens the
+> SAME standalone settings window the HUD gear does (via `ScribeModSystem.OpenSettings`). Toggle lives in
+> Settings → Appearance ("Pixel-Art Display"). Restaged Release 2026-07-25. Fully relaunch first. Colors
+> are a first pass — likely to need tuning once seen in-game (also browsable as `scribe_parchment` in the
+> libGUI-Theme-Library gallery).
+
+- [x] `f8a44302` **Pixel-Art ON — Lectern light.** With Pixel-Art Display ON, open the Lectern (read and
+      editor): both render dark text on light parchment; the title bar is light and text is legible
+      everywhere. *(scribe-themed-toggle 6.1)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T20-12-27): the Lectern renders dark ink on
+        light parchment with a legible light title bar when ON. (The Lectern-light behavior is unchanged by
+        the 2026-07-25 scope correction that removed the HUD from the toggle; re-confirmed from the same
+        first-hand evidence.)
+- [x] `99db7d7f` **Pixel-Art OFF — Lectern follows global.** Uncheck Pixel-Art Display: the Lectern
+      read+editor switch to your global game GUI theme (stock dark unless you set a custom `libgui.json`),
+      plain and legible, depending on no art. *(scribe-themed-toggle 6.2)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T21-06-50): "Works." With Pixel-Art off the
+        Lectern falls back to the global theme, legible.
+- [x] `aca023ac` **Live toggle relights the Lectern.** With the Lectern open, toggle Pixel-Art Display in
+      the settings window: the Lectern flips between the light parchment look and your global theme
+      instantly, no reopen/restart. *(scribe-themed-toggle 6.3)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T21-06-50): "Works." Toggling relights the
+        open Lectern live, no reopen/restart.
+- [x] `e5413b99` **Persists + defaults on.** Set Pixel-Art Display, relog: it reads back at the last value
+      (written to `scribe-hud-config.json`). On a fresh profile (no config) it defaults ON.
+      *(scribe-themed-toggle 6.4)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T21-06-50): "Works." The setting persists
+        across a relog and defaults on.
+- [x] `1e371fe4` **No white-on-light text.** In themed (light) mode, check that no text renders
+      white-on-light — inspect the title-bar text and every settings-form label specifically.
+      *(scribe-themed-toggle 6.5)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T20-12-27): "Works." No white-on-light
+        text; title-bar text and settings-form labels are legible in light mode.
+- [x] `baa8e3c5` **One settings window, two openers.** Click the gear in the Lectern AND the gear on the
+      HUD: both open the SAME standalone settings window (not an in-lectern tab). Opening from the Lectern
+      does not disturb the editor lock or lose an in-progress edit behind it. *(scribe-themed-toggle 8.1)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T21-06-50): "Works." Both the Lectern gear
+        and the HUD gear open the same standalone settings window; no editor-lock/in-progress-edit
+        disturbance behind it.
+- [x] `dbd9c7c1` **Settings window ignores Pixel-Art.** Toggle Pixel-Art Display on/off: the settings
+      window itself stays on your global game theme both ways. It is deliberately not parchment-themed.
+      *(scribe-themed-toggle 8.2)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T21-06-50): "Works." The settings window
+        stays on the global theme regardless of the toggle.
+- [x] `ddbabbf7` **HUD never toggles.** Toggle Pixel-Art Display on/off with the HUD showing: the HUD pins
+      do NOT change theme — they always render on your global game theme regardless of the setting.
+      *(scribe-themed-toggle 8.3)*
+      - **Still broken 2026-07-25** (user report): the launched build had the HUD toggling with the setting
+        when it shouldn't. **Fix applied 2026-07-25:** removed the HUD's `Theme` wrap and the halo
+        inversion — the HUD now always follows the global theme. Restaged Release.
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T21-06-50): "Works." The HUD no longer
+        changes theme when Pixel-Art Display is toggled — it stays on the global theme.
+- **PIVOT RESOLVED 2026-07-25:** the 2026-07-25T20-12-27 pivot is implemented and then CORRECTED per the
+  user's follow-up: `ThemedBackgrounds` → `PixelArtDisplay`; the light theme is scoped to the **Lectern
+  only** (read/editor, later the pinned view) — NOT the HUD; the HUD and the settings window both follow
+  the player's global theme; in-Lectern settings tab removed and its gear repointed at the shared
+  standalone window. Items 6.1/6.2/6.3 were recast for this scope (old verdicts dropped where behavior
+  changed; 6.1's Lectern-light half re-confirmed from the same evidence).
+
 ## scribe-list-collapse
 
 > Deletion-collapse animation for Scribe lists (`ScribeCollapsible` + `ScribeHeightFactorRender` +

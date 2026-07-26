@@ -573,6 +573,11 @@ public sealed class HudScribePins : GuiBase
         int max = Math.Min(modSystem.MySettings.HudMaxRows, MaxRenderedRows);
         int moreCount = Math.Max(0, liveCount - max);
 
+        // The HUD is NOT governed by Pixel-Art Display (scribe-themed-toggle clarification 2026-07-25):
+        // only the Lectern dialog (read/editor, later the pinned view) toggles between Scribe's light
+        // theme and the global one. The HUD pins always render on the player's global LibGUI theme, so
+        // there is deliberately NO Theme wrap here — HudPinsContent reads ThemeData.Default via
+        // Theme.Of(context) like any un-wrapped widget.
         return new HudPinsContent(
             rows: shown,
             moreCount: moreCount,
@@ -586,19 +591,7 @@ public sealed class HudScribePins : GuiBase
                 * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.HudFontScale),
             onToggleRow: OnToggleRow,
             onToggleCollapsed: ToggleCollapsed,
-            onOpenSettings: OpenSettings);
-    }
-
-    /// <summary>The HUD gear (add-settings-tab 5.4): open the minimal standalone settings dialog hosting
-    /// the shared <see cref="ScribeSettingsContent"/> form (design D2's HUD-gear target — the HUD is an
-    /// always-on overlay with no central region to swap, so it opens a small window instead of an
-    /// in-place swap). Reuses one instance so repeated gear taps toggle it rather than stacking.</summary>
-    private ScribeSettingsDialog? settingsDialog;
-
-    private void OpenSettings()
-    {
-        settingsDialog ??= new ScribeSettingsDialog(capi, modSystem);
-        if (!settingsDialog.IsOpened()) settingsDialog.TryOpen();
+            onOpenSettings: modSystem.OpenSettings);
     }
 
     // ---------------- Lifecycle ----------------
@@ -612,8 +605,6 @@ public sealed class HudScribePins : GuiBase
             capi.Event.UnregisterGameTickListener(tickListenerId);
             tickListenerId = 0;
         }
-        settingsDialog?.Dispose();
-        settingsDialog = null;
         collapseRegistry.Dispose();
         base.Dispose();
     }
