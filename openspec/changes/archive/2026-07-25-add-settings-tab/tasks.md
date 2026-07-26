@@ -96,49 +96,57 @@
 
 ## 8. Follow-up refinements (playtest round 1)
 
-- [ ] 8.1 Core: add `ScribeCompletionPolicy.Keep` (=3) — completing keeps the pin and does NOT sink it;
+- [x] 8.1 Core: add `ScribeCompletionPolicy.Keep` (=3) — completing keeps the pin and does NOT sink it;
   server-side treat it like `Sink` in `ScribeModSystem.CompleteTaskForPlayer` (no removal). Widen
   `MinHudOffset`/`MaxHudOffset` to ±300. Change `ClampFontScale` to snap to the nearest 0.05 (still clamp
   `[0.8,1.2]`).
-- [ ] 8.2 Core tests: update `ScribePlayerSettingsTests` for the 0.05 snap (e.g. 0.83→0.85, 0.86→0.85,
+- [x] 8.2 Core tests: update `ScribePlayerSettingsTests` for the 0.05 snap (e.g. 0.83→0.85, 0.86→0.85,
   1.16→1.15), the ±300 offset clamp, and a `Keep` policy normalization case; run the Core suite.
-- [ ] 8.3 HUD: replace `UndoWindowMs` with a shared `PinHudWaitMs` (1500). Defer the completion send —
+- [x] 8.3 HUD: replace `UndoWindowMs` with a shared `PinHudWaitMs` (1500). Defer the completion send —
   `OnToggleRow` records a pending `{policy, expiry}` (generalize `sinkExpiryMs` → `pendingCompletion`),
   flips optimistically, and rebuilds; unchecking within the window cancels it (true undo, nothing sent);
   `OnTick` sends the `ScribeCompleteTaskMessage` (with its stored policy) on expiry. Read-view checkbox
   stays immediate.
-- [ ] 8.4 HUD: policy-aware ordering (`SunkForOrder` never sinks a `Keep` pin); animate the pending
+- [x] 8.4 HUD: policy-aware ordering (`SunkForOrder` never sinks a `Keep` pin); animate the pending
   window — `AnimatedOpacity` fade of the row TEXT toward ~0.15 for unpin/delete (checkbox stays opaque for
   undo), and the existing mute-fade for sink. The `AnimatedSlide` for sink was intentionally NOT added:
   sinking is a `Column` reorder, and LibGUI's implicit pixel-offset `AnimatedSlide` can't animate a row
   across a position change (a zero offset animates nothing), so a slide here would be a no-op. The
   mute-fade remains the sink cue; a real reorder animation is left to the custom-checkbox/animation change.
-- [ ] 8.5 HUD: scale the row checkbox with `HudFontScale` (base × scale) instead of the hardcoded 20.
-- [ ] 8.6 Settings form: convert the font scale (percent 80–120 step 5), HUD row width (100–1000 step 5),
+- [x] 8.5 HUD: scale the row checkbox with `HudFontScale` (base × scale) instead of the hardcoded 20.
+- [x] 8.6 Settings form: convert the font scale (percent 80–120 step 5), HUD row width (100–1000 step 5),
   and HUD max rows (1–20 step 1) from sliders to `NumericField`, each clamped in `onChanged` and keyed by
   a `ValueKey` of its current value so a clamp re-displays the clamped result; offsets ±300 step 5.
-- [ ] 8.7 Settings form: scale the form's own `Text`/`Checkbox` with `WindowFontScale` (× base) so it
+- [x] 8.7 Settings form: scale the form's own `Text`/`Checkbox` with `WindowFontScale` (× base) so it
   re-renders live on the write-through rebuild.
-- [ ] 8.8 HUD `ApplyAnchor`: interpret `HudOffsetX/Y` as relative to the anchor's pre-baked offset
+- [x] 8.8 HUD `ApplyAnchor`: interpret `HudOffsetX/Y` as relative to the anchor's pre-baked offset
   (`prebaked(anchor) + userOffset`), dropping the "apply minimap clearance only when offset==0" case.
-- [ ] 8.9 Chrome: `WindowFrame` title = "Scribe Settings" while `isSettingsMode`. Replace `gear.svg` with
+- [x] 8.9 Chrome: `WindowFrame` title = "Scribe Settings" while `isSettingsMode`. Replace `gear.svg` with
   the flattened `~/Downloads/gear-filled.svg` (single path, `fill="#000000"`); code `scribegear` unchanged.
-- [ ] 8.10 Multiplayer Back safety: in `BlockEntityScribeLectern.HandleServerReply`, an editor-access
+- [x] 8.10 Multiplayer Back safety: in `BlockEntityScribeLectern.HandleServerReply`, an editor-access
   denial while the dialog is open (and not the save-failed recovery) falls back to `EnterReadMode()`.
-- [ ] 8.11 Lang: add `scribe-completion-keep`; update `settings-hudoffset-help` (relative, ±300); adjust
+- [x] 8.11 Lang: add `scribe-completion-keep`; update `settings-hudoffset-help` (relative, ±300); adjust
   any label wording for the percent/numeric-field change.
 
 ## 9. In-game verification (round 1 refinements)
 
-- [ ] 9.1 Complete a HUD task under each policy: the ~1.5s window shows the pending animation (fade for
+- [x] 9.1 Complete a HUD task under each policy: the ~1.5s window shows the pending animation (fade for
   unpin/delete, settle for sink); unchecking within the window fully undoes it (task stays); letting it
   elapse applies the completion. `Keep` keeps the checked task in place (no sink).
-- [ ] 9.2 Font size, HUD row width, and HUD max rows are numeric fields (no slider); each clamps to its
+- [x] 9.2 Font size, HUD row width, and HUD max rows are numeric fields (no slider); each clamps to its
   range, steps by its increment, and never hijacks scrolling. Font entered as a percent, 5% steps.
-- [ ] 9.3 HUD X/Y offsets are relative to the anchor's built-in position (0 = default, clear of the
+- [x] 9.3 HUD X/Y offsets are relative to the anchor's built-in position (0 = default, clear of the
   minimap on TopRight); values up to ±300 apply and persist.
-- [ ] 9.4 Changing window font size live-rescales the settings form's own text + checkboxes; HUD font size
+- [x] 9.4 Changing window font size live-rescales the settings form's own text + checkboxes; HUD font size
   live-rescales the HUD checkbox.
-- [ ] 9.5 The window title reads "Scribe Settings" in the settings view; the filled gear icon renders.
+- [x] 9.5 The window title reads "Scribe Settings" in the settings view; the filled gear icon renders.
 - [ ] 9.6 (Multiplayer) Enter the editor, open settings (releasing the lock), have a second player grab
   the editor, then hit Back — you land in the read view, not a stuck settings frame.
+  → Backlogged 2026-07-25 (playtest submission 2026-07-25T13-50-39): deferred pending a two-client setup.
+  Not a defect — the Back-loses-lock → read-view fallback code path (8.10) is in place; archived with this
+  one verification parked.
+
+> Round-1 verification (9.1–9.5) confirmed in playtest 2026-07-25 (see root TESTING.md). New-scope
+> follow-ups the user raised on confirmed items — gradual unpin/delete fade, sink-reorder-and-stay,
+> settings-form two-column layout, HUD-gear sizing, arrow-key numeric stepping, label renames — are NOT
+> part of this change; they are carried into the `scribe-settings-followups` change.
