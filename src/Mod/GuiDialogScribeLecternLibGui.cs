@@ -64,6 +64,11 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     /// reset its scroll position. Disposed in <see cref="OnGuiClosed"/>.</summary>
     private readonly ScrollController settingsScrollController = new();
 
+    /// <summary>Host-owned focus state for the settings form's numeric fields, so focus survives the
+    /// write-through <see cref="ForceRebuild"/> each edit triggers (scribe-settings-followups focus fix).
+    /// Same persistent-node pattern as <see cref="editorFocusNodes"/>. Disposed with the dialog.</summary>
+    private readonly ScribeNumericFocusRegistry settingsNumericFocus = new();
+
     // ---- Editor state (null / inert while in read mode) ----
     /// <summary>Editor-view-only scratch copy; never aliased to <see cref="BlockEntityScribeLectern.Document"/>.</summary>
     private ScribeDocument? scratch;
@@ -81,6 +86,24 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     /// <summary>Set when a focus move or a row growth needs the focused row scrolled into view; acted
     /// on in <see cref="OnRenderGUI"/> AFTER layout has run (EnsureVisible reads live geometry).</summary>
     private bool pendingEnsureVisible;
+
+    /// <summary>Editor rows that have been deleted from the scratch document but are still collapsing their
+    /// height to zero before leaving the list (scribe-list-collapse), keyed by the block's stable
+    /// <see cref="ScribeBlock.TaskId"/> (unique per block — tasks AND text sections), valued by the deleted
+    /// row's last-known snapshot and the display index it held (so it collapses IN PLACE). The row renders as
+    /// a static, non-interactive snapshot (its scratch block and focus node are already gone). The entry is
+    /// removed when its collapse completes (<see cref="OnEditorRowCollapsed"/>).</summary>
+    private readonly Dictionary<Guid, (ScribeEditRowData Row, int Index)> departingEditorRows = new();
+
+    /// <summary>Host-owned collapse controllers for <see cref="departingEditorRows"/>, keyed by TaskId so a
+    /// collapse RESUMES (not restarts) across the dialog's <see cref="ForceRebuild"/> remounts
+    /// (scribe-list-collapse). Disposed with the dialog.</summary>
+    private readonly ScribeCollapseRegistry editorCollapseRegistry = new();
+
+    /// <summary>Set when an editor row's collapse completes, so its removal + rebuild is deferred to the next
+    /// <see cref="OnRenderGUI"/> — the completion callback fires from inside the animation pump, where
+    /// unmounting + rebuilding the tree would be re-entrant.</summary>
+    private bool needsEditorCollapseCleanup;
 
     /// <summary>Scroll offset captured just before a switch-to-read rebuild, to be re-applied after the
     /// read view lays out. Needed because the read view's virtualized <c>ListView</c> re-derives its
@@ -501,7 +524,23 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     private void DeleteEditorBlock(int index)
     {
         if (scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
-        if (!scratch.DeleteBlock(index)) return;
+
+        // Snapshot the row BEFORE removing it, so it can keep rendering as a static, non-interactive ghost
+        // while it collapses its height to zero (scribe-list-collapse). The scratch deletion still happens
+        // immediately below, so the data model + autosave stay correct at once; only the visual removal is
+        // deferred until the collapse completes. Its DISPLAY index (live scratch index offset by any rows
+        // already departing above it) lets the ghost collapse in place rather than jumping.
+        var deleted = scratch.Blocks[index];
+        var snapshot = new ScribeEditRowData(index, deleted.IsTask, deleted.Done,
+            IsPinnedForMe(deleted.TaskId), deleted.TaskId, deleted.Text);
+        int displayIndex = index + departingEditorRows.Values.Count(d => d.Index <= index);
+        departingEditorRows[deleted.TaskId] = (snapshot, displayIndex);
+
+        if (!scratch.DeleteBlock(index))
+        {
+            departingEditorRows.Remove(deleted.TaskId); // deletion refused: don't leave a ghost behind
+            return;
+        }
 
         isDirty = true;
 
@@ -532,11 +571,24 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
 
         SyncFocusNodesToScratch();
         pendingEnsureVisible = false;
-        // The list just got shorter: re-clamp the scroll offset to the new extent after layout so a
-        // near-bottom delete doesn't leave dead space below the last row (LibGUI's own clamp ignores a
-        // sub-50px overshoot — see pendingClampToExtent).
-        RequestClampToExtent();
+        // The re-clamp to the shrunk extent is DEFERRED to when the collapse completes (see
+        // OnEditorRowCollapsed): during the collapse the ghost still occupies (shrinking) height, so the
+        // content extent doesn't actually shrink until the row reaches zero — clamping now would fight the
+        // collapsing height (scribe-list-collapse). LibGUI's own clamp ignores a sub-50px overshoot, so the
+        // deferred clamp is still needed once the row is gone (see pendingClampToExtent).
         ForceRebuild();
+    }
+
+    /// <summary>A deleted editor row finished collapsing to zero height (scribe-list-collapse): retire its
+    /// ghost and, now that the content is genuinely shorter, re-clamp the scroll extent. Deferred out of the
+    /// animation callback via <see cref="needsEditorCollapseCleanup"/> so we don't unmount + rebuild the tree
+    /// re-entrantly from inside the ticker pump.</summary>
+    private void OnEditorRowCollapsed(Guid taskId)
+    {
+        if (!departingEditorRows.Remove(taskId)) return;
+        editorCollapseRegistry.Release(taskId.ToString("N"));
+        RequestClampToExtent();
+        needsEditorCollapseCleanup = true;
     }
 
     /// <summary>Per-row pin toggle (task rows only; the pin control is absent on text-section rows).
@@ -733,6 +785,14 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     {
         base.OnRenderGUI(deltaTime);
 
+        // An editor row's collapse completed (its callback fired from inside the animation pump, where
+        // unmounting the tree would be re-entrant); retire it now with a rebuild (scribe-list-collapse).
+        if (needsEditorCollapseCleanup)
+        {
+            needsEditorCollapseCleanup = false;
+            if (IsOpened()) ForceRebuild();
+        }
+
         if (pendingEnsureVisible && isEditorMode && focusedEditIndex is { } idx
             && idx < editorFocusNodes.Count && editorFocusNodes[idx].Owner is { } element)
         {
@@ -794,6 +854,10 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         // than in either view's State, which come and go with each view-switch ForceRebuild.
         sharedScrollController.Dispose();
         settingsScrollController.Dispose();
+        settingsNumericFocus.Dispose();
+        // Drop any in-flight collapse ghosts + their controllers so a reopen starts clean (scribe-list-collapse).
+        departingEditorRows.Clear();
+        editorCollapseRegistry.Dispose();
         base.OnGuiClosed();
     }
 
@@ -830,7 +894,8 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
                 settings: modSystem.MySettings,
                 onMutate: modSystem.UpdateMySettings,
                 onBack: OnClickCloseSettings,
-                scrollController: settingsScrollController);
+                scrollController: settingsScrollController,
+                focus: settingsNumericFocus);
         }
 
         Widget content = isEditorMode ? BuildEditorContent() : BuildReadContent();
@@ -873,6 +938,12 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         int? autoFocus = autoFocusRowOnRebuild;
         autoFocusRowOnRebuild = null; // one-shot
 
+        // Rows that were deleted but are still collapsing out (scribe-list-collapse), each with the display
+        // index it held so the editor content can splice it back in place as a static, collapsing ghost.
+        var departing = departingEditorRows.Values
+            .Select(d => new ScribeDepartingEditorRow(d.Row, d.Index))
+            .ToList();
+
         return new ScribeLecternEditorContent(
             blocks: blocks,
             focusNodes: editorFocusNodes,
@@ -888,7 +959,10 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             onAddTask: OnClickAddTask,
             onSwitchToRead: OnClickSwitchToRead,
             style: RowStyle,
-            scrollController: sharedScrollController);
+            scrollController: sharedScrollController,
+            departingRows: departing,
+            collapseRegistry: editorCollapseRegistry,
+            onDepartingCollapsed: OnEditorRowCollapsed);
     }
 
     /// <summary>Read-view task checkbox click: complete the task by its stable identity via the
@@ -1122,6 +1196,79 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
 internal readonly record struct ScribeEditRowData(int Index, bool IsTask, bool Done, bool Pinned, Guid TaskId, string Text);
 
 /// <summary>
+/// A static, non-interactive snapshot of a deleted editor row, shown while it collapses out of the list
+/// (scribe-list-collapse). The row's scratch block and focus node are already gone, so this renders a
+/// FROZEN copy — the same [grip-spacer][checkbox][text] column an editor row uses (so it aligns and
+/// collapses seamlessly), but with no editable field, no gestures, and no delete/pin/drag controls. It is
+/// never focused and never mutates anything; the <see cref="ScribeCollapsible"/> wrapping it animates its
+/// height to zero and then removes it.
+/// </summary>
+internal sealed class ScribeFrozenEditorRow : StatelessWidget
+{
+    private readonly ScribeEditRowData data;
+    private readonly ScribeRowStyle style;
+
+    public ScribeFrozenEditorRow(ScribeEditRowData data, ScribeRowStyle style)
+    {
+        this.data = data;
+        this.style = style;
+    }
+
+    public override Widget Build(BuildContext context)
+    {
+        var colors = Theme.Of(context).ColorScheme;
+        TextStyle textStyle = new() { FontSize = style.FontSize, Color = colors.OnSurface, SoftWrap = true };
+
+        var children = new List<Widget>
+        {
+            // Grip-column spacer (invisible, uninteractable), matching the editor row's far-left grip so
+            // the ghost's columns line up with its neighbors as it collapses.
+            new Padding(
+                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
+                child: new Opacity(
+                    opacity: 0f,
+                    child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant))),
+        };
+
+        if (data.IsTask)
+        {
+            // A frozen (disabled) checkbox reflecting the row's last done-state — no onChanged, so it can't
+            // be toggled while it collapses.
+            children.Add(new Padding(
+                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
+                child: new Checkbox(value: data.Done, onChanged: null, size: style.CheckboxSize)));
+        }
+
+        // Inset the text by the editor field's internal padding so the frozen row's text sits exactly where
+        // the live field's text did (matches ScribeReadRow), avoiding a horizontal jump as it collapses.
+        children.Add(new Expanded(child: new Padding(
+            EdgeInsets.Symmetric(vertical: style.FieldPadY, horizontal: style.FieldPadX),
+            child: new Text(data.Text, textStyle))));
+
+        Widget rowBody = new Padding(
+            EdgeInsets.Symmetric(vertical: style.RowVerticalPadding, horizontal: style.RowHorizontalPadding),
+            child: new Row(
+                spacing: style.CheckboxTextGap,
+                crossAxisAlignment: CrossAxisAlignment.Start,
+                mainAxisSize: MainAxisSize.Max,
+                children: children));
+
+        if (data.IsTask && data.Pinned)
+        {
+            rowBody = new Container(
+                style: new BoxStyle { Color = ScribeRowConstants.PinnedTint(colors) },
+                child: rowBody);
+        }
+
+        return rowBody;
+    }
+}
+
+/// <summary>A deleted editor row that is collapsing out of the list (scribe-list-collapse): its last-known
+/// data snapshot and the DISPLAY index it should collapse in place at.</summary>
+internal readonly record struct ScribeDepartingEditorRow(ScribeEditRowData Row, int Index);
+
+/// <summary>
 /// The editor view's content tree. Unlike the read view it uses a NON-virtualized
 /// <see cref="SingleChildScrollView"/> + <see cref="Column"/> of ALL rows (design D2): LibGUI's
 /// <see cref="ListView"/> unmounts off-screen rows, which would destroy an off-screen row's focus
@@ -1146,7 +1293,10 @@ internal sealed class ScribeLecternEditorContent : StatefulWidget
         Action onAddTask,
         Action onSwitchToRead,
         ScribeRowStyle style,
-        ScrollController scrollController)
+        ScrollController scrollController,
+        IReadOnlyList<ScribeDepartingEditorRow> departingRows,
+        ScribeCollapseRegistry collapseRegistry,
+        Action<Guid> onDepartingCollapsed)
     {
         Blocks = blocks;
         FocusNodes = focusNodes;
@@ -1163,6 +1313,9 @@ internal sealed class ScribeLecternEditorContent : StatefulWidget
         OnSwitchToRead = onSwitchToRead;
         Style = style;
         ScrollController = scrollController;
+        DepartingRows = departingRows;
+        CollapseRegistry = collapseRegistry;
+        OnDepartingCollapsed = onDepartingCollapsed;
     }
 
     public IReadOnlyList<ScribeEditRowData> Blocks { get; }
@@ -1185,6 +1338,15 @@ internal sealed class ScribeLecternEditorContent : StatefulWidget
     /// here — the dialog owns its lifetime so the scroll offset survives the view-switch rebuild. The
     /// same controller <see cref="Scrollable.EnsureVisible"/> drives when a focused row grows/moves.</summary>
     public ScrollController ScrollController { get; }
+    /// <summary>Deleted rows still collapsing out of the list (scribe-list-collapse), spliced back in at
+    /// their display index as static, non-interactive ghosts by <see cref="ScribeLecternEditorContentState.Build"/>.</summary>
+    public IReadOnlyList<ScribeDepartingEditorRow> DepartingRows { get; }
+    /// <summary>Host-owned collapse controllers for the departing rows (keyed by TaskId), so a collapse
+    /// resumes across the dialog's ForceRebuild remounts.</summary>
+    public ScribeCollapseRegistry CollapseRegistry { get; }
+    /// <summary>Fired (with the row's TaskId) when a departing row's collapse completes, so the dialog can
+    /// remove its ghost and re-clamp the scroll extent.</summary>
+    public Action<Guid> OnDepartingCollapsed { get; }
 
     public override State CreateState() => new ScribeLecternEditorContentState();
 }
@@ -1271,6 +1433,25 @@ internal sealed class ScribeLecternEditorContentState : State<ScribeLecternEdito
                     style: Widget.Style,
                     key: new ValueKey<int>(b.Index)))
                 .ToList();
+
+            // Splice each deleted-but-collapsing row back in at the display index it held, as a static,
+            // non-interactive ghost that collapses its height to zero then removes itself
+            // (scribe-list-collapse). Its scratch block + focus node are gone, so it renders as a frozen
+            // read-style row (no field, no drag/delete controls) wrapped in ScribeCollapsible. Keyed by
+            // TaskId (OUTSIDE the collapsible) so its identity is stable across rebuilds and never collides
+            // with a live index-keyed row. Insert ascending, clamped to the current list length.
+            foreach (var d in Widget.DepartingRows.OrderBy(d => d.Index))
+            {
+                int at = Math.Clamp(d.Index, 0, rows.Count);
+                Guid taskId = d.Row.TaskId;
+                rows.Insert(at, new ScribeCollapsible(
+                    id: taskId.ToString("N"),
+                    collapsing: true,
+                    registry: Widget.CollapseRegistry,
+                    onCollapsed: () => Widget.OnDepartingCollapsed(taskId),
+                    child: new ScribeFrozenEditorRow(d.Row, Widget.Style),
+                    key: new ValueKey<Guid>(taskId)));
+            }
 
             // Wrapped in a Scrollbar so a tall editor list shows a draggable track (task 8.15). AutoHide
             // off (see read view): permanently visible, matching the native GUI, and avoids the
@@ -1748,17 +1929,20 @@ internal sealed class ScribeSettingsView : StatelessWidget
     private readonly Action<Action<ScribePlayerSettings>> onMutate;
     private readonly Action onBack;
     private readonly ScrollController scrollController;
+    private readonly ScribeNumericFocusRegistry focus;
 
     public ScribeSettingsView(
         ScribePlayerSettings settings,
         Action<Action<ScribePlayerSettings>> onMutate,
         Action onBack,
-        ScrollController scrollController)
+        ScrollController scrollController,
+        ScribeNumericFocusRegistry focus)
     {
         this.settings = settings;
         this.onMutate = onMutate;
         this.onBack = onBack;
         this.scrollController = scrollController;
+        this.focus = focus;
     }
 
     public override Widget Build(BuildContext context)
@@ -1783,7 +1967,7 @@ internal sealed class ScribeSettingsView : StatelessWidget
                                     new TextStyle { FontSize = 14, Color = colors.OnPrimary }),
                                 onTap: _ => onBack()),
                         })),
-                new Expanded(child: new ScribeSettingsContent(settings, onMutate, scrollController)),
+                new Expanded(child: new ScribeSettingsContent(settings, onMutate, scrollController, focus)),
             });
     }
 }

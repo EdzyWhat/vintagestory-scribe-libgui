@@ -31,6 +31,11 @@ public sealed class ScribeSettingsDialog : GuiBase
     /// leave a disposed controller for the next open.</summary>
     private readonly ScrollController scrollController = new();
 
+    /// <summary>Host-owned focus state for the form's numeric fields, so focus survives the write-through
+    /// <see cref="ForceRebuild"/> each edit triggers (scribe-settings-followups focus fix). Lives for the
+    /// dialog's lifetime (reused across gear taps) and is disposed in <see cref="Dispose"/>.</summary>
+    private readonly ScribeNumericFocusRegistry numericFocus = new();
+
     public ScribeSettingsDialog(ICoreClientAPI capi, ScribeModSystem modSystem) : base(capi)
     {
         this.modSystem = modSystem;
@@ -62,12 +67,14 @@ public sealed class ScribeSettingsDialog : GuiBase
             child: new ScribeSettingsContent(
                 settings: modSystem.MySettings,
                 onMutate: modSystem.UpdateMySettings,
-                scrollController: scrollController));
+                scrollController: scrollController,
+                focus: numericFocus));
 
     public override void Dispose()
     {
         modSystem.MyPinsChanged -= OnMyPinsChanged;
         scrollController.Dispose();
+        numericFocus.Dispose();
         base.Dispose();
     }
 }

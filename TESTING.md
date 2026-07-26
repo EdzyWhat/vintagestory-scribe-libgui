@@ -21,6 +21,29 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## scribe-list-collapse
+
+> Deletion-collapse animation for Scribe lists (`ScribeCollapsible` + `ScribeHeightFactorRender` +
+> host-owned `ScribeCollapseRegistry`). A removed row's height animates smoothly to zero (rows below slide
+> up) then it's removed on completion, instead of vanishing in one frame. Wired into the HUD (unpin/delete)
+> and the lectern editor (delete). Self-ticking so it animates under `ForceRebuild`; controller is
+> host-owned + keyed by identity so it resumes across remounts. Reorder-glide is out of scope (deferred).
+
+- [ ] `536fbadf` **HUD delete/unpin collapse.** Complete a HUD task under Delete and under Unpin; after
+      the fade window the row's height collapses smoothly and the rows below slide up (no instant
+      vanish/snap). *(scribe-list-collapse 5.1)*
+- [ ] `7f885cf7` **Rapid HUD removals.** Complete/delete several HUD rows in quick succession; each
+      collapses independently, none strands a half-height gap. *(scribe-list-collapse 5.2)*
+- [ ] `a6b4fc0e` **Re-pin during collapse.** Unpin a HUD task (it collapses), then immediately re-pin it
+      from the lectern; it reappears at full height, not stuck invisible. *(scribe-list-collapse 5.3)*
+- [ ] `fe0e18fc` **Lectern row delete collapse.** Hover a lectern editor row and click delete; it
+      collapses smoothly and rows below slide up. Delete several fast; each collapses independently.
+      *(scribe-list-collapse 5.4)*
+- [ ] `eb9e379c` **Delete at scroll bottom.** Scroll the editor to the bottom and delete the last row; no
+      dead-space flash, the viewport settles once the collapse finishes. *(scribe-list-collapse 5.5)*
+- [ ] `58707ebd` **Collapse under rebuild.** Delete a HUD row while another pin's fade window is still
+      running; the collapse still completes smoothly (resume-from-elapsed registry). *(scribe-list-collapse 5.6)*
+
 ## add-settings-tab
 
 > In-mod per-player Settings surface (LibGUI). A gear opens `ScribeSettingsContent` — a two-section
@@ -66,22 +89,43 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       lectern and confirm no load error in the log and the file is simply ignored. *(add-settings-tab 7.6)*
       - **Confirmed 2026-07-25** (playtest submission): "Works" — leftover `scribe-client-config.json` on
         disk causes no load error and is ignored.
-- [ ] `1b57beda` **Deferred window + policies.** Complete a HUD task under each policy: the ~1.5s window
+- [x] `1b57beda` **Deferred window + policies.** Complete a HUD task under each policy: the ~1.5s window
       previews the outcome (text fades for unpin/delete, row mutes/settles for sink); unchecking within the
       window fully undoes it (task stays, nothing sent); letting it elapse applies the completion. `Keep`
       leaves the checked task in place (no sink). *(add-settings-tab 9.1)*
-- [ ] `df9b1b06` **Numeric fields.** Font size, HUD row width, and HUD max rows are numeric fields (no
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T13-50-39): "All four work" — each policy
+        previews and applies/undoes correctly. Two refinements requested (new scope, not defects in this
+        test): (a) under Sink/Keep policy, a completed task should actually REORDER to the end of the list
+        once its sink animation finishes and STAY there even if later unchecked — currently unchecking
+        reverts it to its prior slot; (b) the unpin/delete fade is not gradual — opacity instantly jumps to
+        ~40% instead of linearly ramping 100%→0% over the 1.5s window.
+- [x] `df9b1b06` **Numeric fields.** Font size, HUD row width, and HUD max rows are numeric fields (no
       slider); each clamps to range, steps by its increment (+/- buttons), and never hijacks scrolling.
       Font is a percent in 5% steps. *(add-settings-tab 9.2)*
-- [ ] `27c0af03` **Relative offsets.** HUD X/Y offsets are relative to the anchor's built-in position
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T13-50-39): "Works." Numeric fields clamp,
+        step by increment via +/- buttons, and don't hijack scroll. (General-note follow-up, new scope:
+        up/down arrow keys should also step the field by its increment.)
+- [x] `27c0af03` **Relative offsets.** HUD X/Y offsets are relative to the anchor's built-in position
       (0 = default, clear of the minimap on TopRight); values up to ±300 apply and persist. *(add-settings-tab 9.3)*
-- [ ] `ac377d10` **Live re-scale.** Changing window font size live-rescales the settings form's own text +
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T13-50-39): "Works." Offsets are relative to
+        the anchor's built-in position and apply/persist across the ±300 range.
+- [x] `ac377d10` **Live re-scale.** Changing window font size live-rescales the settings form's own text +
       checkboxes; changing HUD font size live-rescales the HUD checkbox. *(add-settings-tab 9.4)*
-- [ ] `52cfbc4e` **Title + filled gear.** The window title reads "Scribe Settings" in the settings view;
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T13-50-39): live re-scale works for the
+        settings form text/checkboxes (window font) and the HUD checkbox (HUD font). Follow-up requested
+        (new scope): on each window-font change, recompute the window's scroll-area height (font size
+        changes row heights) and force the scroll to the bottom.
+- [x] `52cfbc4e` **Title + filled gear.** The window title reads "Scribe Settings" in the settings view;
       the filled gear icon renders. *(add-settings-tab 9.5)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T13-50-39): "Works." Title reads "Scribe
+        Settings" in the settings view and the filled gear icon renders. (General-note follow-up, new scope:
+        the gear on the HUD pinned list is ~25% too big.)
 - [ ] `a581fcab` **Multiplayer Back safety.** Enter the editor, open settings (releasing the lock), have a
       second player grab the editor, then hit Back — you land in the read view, not a stuck settings frame.
       *(add-settings-tab 9.6)*
+      - **Backlogged 2026-07-25** (playtest submission 2026-07-25T13-50-39): "Deferred until multiplayer
+        testing." Needs a two-client setup; parked, not broken — the code path (Back-loses-lock → read-view
+        fallback) is in place.
 
 ## add-pinned-task-hud
 

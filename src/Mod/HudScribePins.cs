@@ -98,6 +98,47 @@ public sealed class HudScribePins : GuiBase
     /// at click time and the clock value at which the deferred send fires.</summary>
     private readonly record struct PendingCompletion(ScribeCompletionPolicy Policy, double ExpiryMs);
 
+    /// <summary>Pins that completed-and-settled under the Sink policy this session, by identity
+    /// (scribe-settings-followups 2.1). Once a Sink window expires, the pin lands here and STAYS ordered at
+    /// the bottom for the rest of the session — even if the player later unchecks it — so a completed task
+    /// keeps its resting place instead of jumping back to its old slot on an uncheck. Client-local,
+    /// session-only (not persisted, not synced — design D3): a relog re-derives order from done-state.</summary>
+    private readonly HashSet<(Guid, Guid)> sunkOrder = new();
+
+    /// <summary>Pins whose destructive completion (Unpin/Delete) has been SENT and that are now waiting for
+    /// the server's removal push (scribe-settings-followups 1.1 flicker fix). Between the window expiring
+    /// (send) and the server re-pushing the pin set, the pin is still in <see cref="ScribeModSystem.MyPins"/>
+    /// but is no longer <see cref="IsFadingOut"/>, so without this it would rebuild at FULL opacity for a
+    /// frame — a visible flash. Rows in this set are filtered OUT of the rendered live list; the collapsing
+    /// snapshot in <see cref="departing"/> is what's shown instead. Cleared when the server push confirms the
+    /// removal — but the live pin stays suppressed while it is ALSO in <see cref="departing"/> (i.e. still
+    /// collapsing), so there is no post-collapse flash regardless of whether the collapse or the server push
+    /// finishes first.</summary>
+    private readonly HashSet<(Guid, Guid)> awaitingRemoval = new();
+
+    /// <summary>Rows collapsing their height to zero before leaving the HUD (scribe-list-collapse). Keyed by
+    /// identity, valued by a last-known <see cref="HudPinRow"/> snapshot (with the display index it held) so
+    /// the row keeps rendering — and collapsing IN PLACE — even after the server's removal push drops the pin
+    /// from <see cref="ScribeModSystem.MyPins"/>. A departing row renders its text at zero opacity (it already
+    /// faded during the window) with its checkbox intact, so the collapse just closes the empty row. The
+    /// entry is removed ONLY when its collapse completes (<see cref="OnDepartingCollapsed"/>), never on a
+    /// server push — so a server round-trip faster OR slower than the collapse never truncates the animation.</summary>
+    private readonly Dictionary<(Guid, Guid), DepartingRow> departing = new();
+
+    /// <summary>A HUD row that is collapsing out of the list: its last-known <see cref="HudPinRow"/> snapshot
+    /// and the display index it held when it began departing (so it collapses in place rather than jumping).</summary>
+    private readonly record struct DepartingRow(HudPinRow Row, int Index);
+
+    /// <summary>Host-owned collapse controllers for <see cref="departing"/> rows, keyed by identity so a
+    /// collapse RESUMES (not restarts) across the HUD's <see cref="ForceRebuild"/> remounts
+    /// (scribe-list-collapse). Disposed with the HUD.</summary>
+    private readonly ScribeCollapseRegistry collapseRegistry = new();
+
+    /// <summary>Set when a row's collapse completes, so the row's removal + rebuild is deferred to the next
+    /// <see cref="OnRenderGUI"/> — the completion callback fires from inside the ticker pump, so we must not
+    /// unmount + rebuild the tree re-entrantly there.</summary>
+    private bool needsCollapseCleanup;
+
     public HudScribePins(ICoreClientAPI capi, ScribeModSystem modSystem) : base(capi)
     {
         this.modSystem = modSystem;
@@ -149,6 +190,14 @@ public sealed class HudScribePins : GuiBase
     /// <inheritdoc />
     public override void OnRenderGUI(float deltaTime)
     {
+        // A row's collapse completed (its callback fired from inside the animation pump, where unmounting the
+        // tree would be re-entrant); retire it now with a rebuild (scribe-list-collapse).
+        if (needsCollapseCleanup)
+        {
+            needsCollapseCleanup = false;
+            if (IsOpened()) ForceRebuild();
+        }
+
         // Keep positioned every frame (handles a game-window resize, which needn't re-run layout). Uses
         // the last laid-out WindowSize; on the very first frame that is the shrink-wrap estimate,
         // self-correcting once real content lays out.
@@ -224,6 +273,10 @@ public sealed class HudScribePins : GuiBase
     private void OnMyPinsChanged()
     {
         ReconcileOptimisticWithServer();
+        // Reconcile the collapsing/removing rows against the authoritative pin set: note removals the server
+        // has now confirmed, and cancel the departure of any task the player re-pinned so it comes back at
+        // full height instead of being stuck suppressed (scribe-list-collapse).
+        ReconcileDeparting();
 
         bool hasPins = modSystem.MyPins.Count > 0;
         if (hasPins && !IsOpened())
@@ -256,6 +309,68 @@ public sealed class HudScribePins : GuiBase
         }
     }
 
+    /// <summary>Start collapsing a destructive-completed row out of the HUD (scribe-list-collapse). Snapshots
+    /// the row (with its current display index, so it collapses IN PLACE) into <see cref="departing"/> and
+    /// suppresses the live pin via <see cref="awaitingRemoval"/> so only the collapsing snapshot renders.
+    /// Its collapse controller is lazily created (and started) by the <see cref="ScribeCollapsible"/> on its
+    /// first build.</summary>
+    private void BeginDeparting((Guid, Guid) key)
+    {
+        // Find the row's snapshot + display index from the current ordering, so the collapsing ghost sits
+        // exactly where the live row was rather than jumping to the end of the list.
+        var shown = BuildOrderedRows();
+        int index = shown.FindIndex(r => (r.DocId, r.TaskId) == key);
+        if (index < 0) return; // not currently visible (e.g. past the row cap) — nothing to animate
+
+        departing[key] = new DepartingRow(shown[index], index);
+        awaitingRemoval.Add(key);
+    }
+
+    /// <summary>Reconcile the collapsing/removing rows with a fresh authoritative pin push. A task the player
+    /// re-pinned (back in <see cref="ScribeModSystem.MyPins"/>) has its departure cancelled so it reappears at
+    /// full height; a task the server confirms as gone stays suppressed only while it is still collapsing (so
+    /// there's no post-collapse flash) and is fully cleaned up once its collapse has finished.</summary>
+    private void ReconcileDeparting()
+    {
+        if (awaitingRemoval.Count == 0 && departing.Count == 0) return;
+
+        var live = modSystem.MyPins.Select(p => (p.OwnerDocId, p.TaskId)).ToHashSet();
+
+        // A re-pinned (live again) task must not keep collapsing/suppressed: cancel its departure entirely.
+        foreach (var key in departing.Keys.ToList())
+        {
+            if (live.Contains(key)) CancelDeparting(key);
+        }
+
+        // Stop suppressing any live pin that is no longer collapsing (defensive: a pin that somehow survived
+        // its destructive send and isn't departing should show again).
+        awaitingRemoval.RemoveWhere(k => live.Contains(k) && !departing.ContainsKey(k));
+    }
+
+    /// <summary>Cancel a row's departure (re-pinned before/while collapsing): drop its collapse controller,
+    /// its snapshot, and its live-pin suppression so it renders normally again.</summary>
+    private void CancelDeparting((Guid, Guid) key)
+    {
+        departing.Remove(key);
+        awaitingRemoval.Remove(key);
+        collapseRegistry.Release(DepartKey(key));
+    }
+
+    /// <summary>A departing row finished collapsing to zero height: retire it fully. Deferred out of the
+    /// ticker/callback via <see cref="needsCollapseCleanup"/> so we never unmount + rebuild the tree
+    /// re-entrantly from inside the animation pump.</summary>
+    private void OnDepartingCollapsed((Guid, Guid) key)
+    {
+        if (!departing.ContainsKey(key)) return;
+        departing.Remove(key);
+        awaitingRemoval.Remove(key);
+        collapseRegistry.Release(DepartKey(key));
+        needsCollapseCleanup = true;
+    }
+
+    /// <summary>Stable string key for a pin identity, used to key its collapse controller in the registry.</summary>
+    private static string DepartKey((Guid, Guid) key) => $"{key.Item1:N}:{key.Item2:N}";
+
     /// <summary>Low-frequency tick: fire any pin windows that have elapsed — sending the deferred
     /// completion to the server (design D7) — and act as a cheap safety re-read. Only rebuilds when a
     /// window actually expired and the HUD is open (the subsequent server re-push lands in
@@ -271,6 +386,16 @@ public sealed class HudScribePins : GuiBase
             if (elapsedMs >= pending.ExpiryMs)
             {
                 pendingCompletions.Remove(key);
+                // A Sink completion settles to the bottom now and holds that place for the session
+                // (scribe-settings-followups 2.1): record it so a later uncheck can't pull it back up.
+                if (pending.Policy == ScribeCompletionPolicy.Sink) sunkOrder.Add(key);
+                // A destructive completion (Unpin/Delete) will remove the pin server-side; instead of
+                // dropping its row in one frame, start collapsing its height to zero in place, then remove
+                // it when the collapse completes (scribe-list-collapse). Its text already faded to ~0 over
+                // the window, so the collapse just closes the empty space — no flash. Snapshot it (with its
+                // current display index) so it keeps rendering even after the server push drops the live pin.
+                if (pending.Policy is ScribeCompletionPolicy.Unpin or ScribeCompletionPolicy.Delete)
+                    BeginDeparting(key);
                 SendCompletion(key.Item1, key.Item2, pending.Policy);
                 anyExpired = true;
             }
@@ -290,14 +415,18 @@ public sealed class HudScribePins : GuiBase
     private PendingCompletion? PendingFor(ScribePinnedRef pin)
         => pendingCompletions.TryGetValue((pin.OwnerDocId, pin.TaskId), out var p) ? p : null;
 
-    /// <summary>Whether a pin sinks to the bottom right now (HUD's undo-aware overlay on the Core
-    /// <see cref="ScribePinOrdering"/> sink rule). A pin sinks only when it is done AND its policy is
-    /// <see cref="ScribeCompletionPolicy.Sink"/> AND it is past its pin window. Under
-    /// <see cref="ScribeCompletionPolicy.Keep"/> a done pin never sinks (it holds its place); Unpin/Delete
-    /// pins are removed after the window so ordering is moot for them. During the window the pin is held
-    /// in place (not sunk) so the sink animates as it settles on expiry.</summary>
+    /// <summary>Whether a pin sinks to the bottom for ORDERING (HUD's undo-aware overlay on the Core
+    /// <see cref="ScribePinOrdering"/> sink rule). True if the pin already settled under Sink this session
+    /// (in <see cref="sunkOrder"/>) — which holds the bottom for the session even after an uncheck
+    /// (scribe-settings-followups 2.2) — OR it is currently done under the Sink policy past its window.
+    /// Under <see cref="ScribeCompletionPolicy.Keep"/> a done pin never sinks (it holds its place);
+    /// Unpin/Delete pins are removed after the window so ordering is moot for them. During the window the
+    /// pin is held in place (not sunk) so the sink animates as it settles on expiry.</summary>
     private bool SunkForOrder(ScribePinnedRef pin)
     {
+        // A task that already settled under Sink this session keeps its bottom position for the session,
+        // regardless of its current done-state (an uncheck must NOT pull it back up — 2.2).
+        if (sunkOrder.Contains((pin.OwnerDocId, pin.TaskId))) return true;
         if (!DisplayedDone(pin)) return false;
         // Within its pin window a done pin is always held in place (not sunk), so the sink can animate as
         // it settles when the window expires — regardless of the pending policy.
@@ -307,6 +436,12 @@ public sealed class HudScribePins : GuiBase
         // completed it, so the player's current policy is the proxy (matches the resting-order intent).
         return modSystem.MySettings.CompletionPolicy == ScribeCompletionPolicy.Sink;
     }
+
+    /// <summary>Whether a row should render MUTED (the completed, resting-at-bottom look). Tied to actually
+    /// being done — a sunk row that the player later unchecks holds its bottom position (via
+    /// <see cref="SunkForOrder"/>) but reads as an active row again, not a muted-done one
+    /// (scribe-settings-followups 2.2).</summary>
+    private bool SunkVisual(ScribePinnedRef pin) => DisplayedDone(pin) && SunkForOrder(pin);
 
     /// <summary>Whether a pin is inside a pending window whose policy will REMOVE it (Unpin/Delete), so
     /// the row should fade its text out over the window as a preview of the destructive outcome (design
@@ -377,30 +512,72 @@ public sealed class HudScribePins : GuiBase
 
     // ---------------- Build ----------------
 
-    /// <inheritdoc />
-    protected override Widget Build()
+    /// <summary>The live, ordered, capped rows to display — the authoritative pin set minus any rows that are
+    /// collapsing out (in <see cref="awaitingRemoval"/>), ordered by the Core rule plus the HUD's undo-window
+    /// and durable-sink overlays, then capped. Shared by <see cref="Build"/> and <see cref="BeginDeparting"/>
+    /// (so a departing row is snapshotted at the exact display index it held).</summary>
+    private List<HudPinRow> BuildOrderedRows()
     {
-        var pins = modSystem.MyPins;
+        // Hide rows whose destructive completion was sent and are now collapsing out, so they don't flash
+        // back to full opacity — the collapsing snapshot in `departing` is rendered in their place instead
+        // (scribe-list-collapse; supersedes the scribe-settings-followups 1.1 instant-hide).
+        var pins = awaitingRemoval.Count == 0
+            ? modSystem.MyPins
+            : modSystem.MyPins.Where(p => !awaitingRemoval.Contains((p.OwnerDocId, p.TaskId))).ToList();
+
+        // Drop any settled-sink identities the server has since removed, so the session set can't grow
+        // unbounded or resurrect a stale ordering (scribe-settings-followups 2.3).
+        if (sunkOrder.Count > 0)
+        {
+            var live = modSystem.MyPins.Select(p => (p.OwnerDocId, p.TaskId)).ToHashSet();
+            sunkOrder.RemoveWhere(k => !live.Contains(k));
+        }
 
         // Core ordering (not-done above done, stable) with the HUD's undo-window overlay: an in-window
-        // completed pin is ordered as if not-done so it stays put until it sinks.
+        // completed pin is ordered as if not-done so it stays put until it sinks; a settled-sink pin holds
+        // the bottom for the session even once unchecked (scribe-settings-followups 2.2).
         var ordered = pins.Where(p => !SunkForOrder(p))
             .Concat(pins.Where(SunkForOrder))
             .ToList();
 
         int max = Math.Min(modSystem.MySettings.HudMaxRows, MaxRenderedRows);
-        var shown = ordered.Take(max)
+        return ordered.Take(max)
             .Select(p => new HudPinRow(
-                p.OwnerDocId, p.TaskId, p.LastKnownText, DisplayedDone(p), SunkForOrder(p),
-                FadingOut: IsFadingOut(p)))
+                p.OwnerDocId, p.TaskId, p.LastKnownText, DisplayedDone(p), SunkVisual(p),
+                FadingOut: IsFadingOut(p), Departing: false))
             .ToList();
+    }
 
-        // Indicative "+N more" only (design "+N more affordance"): pins beyond the visible cap.
-        int moreCount = Math.Max(0, pins.Count - max);
+    /// <inheritdoc />
+    protected override Widget Build()
+    {
+        var shown = BuildOrderedRows();
+
+        // Splice each collapsing row back in at the display index it held when it began departing, so it
+        // collapses IN PLACE (rather than jumping to the end) even after the server push drops the live pin
+        // (scribe-list-collapse). Insert in ascending index order, clamped to the current list length.
+        if (departing.Count > 0)
+        {
+            foreach (var d in departing.Values.OrderBy(d => d.Index))
+            {
+                int at = Math.Clamp(d.Index, 0, shown.Count);
+                shown.Insert(at, d.Row with { Departing = true });
+            }
+        }
+
+        // Indicative "+N more" only (design "+N more affordance"): pins beyond the visible cap. Departing
+        // rows are already-completed removals, so they don't count toward the overflow tally.
+        int liveCount = awaitingRemoval.Count == 0
+            ? modSystem.MyPins.Count
+            : modSystem.MyPins.Count(p => !awaitingRemoval.Contains((p.OwnerDocId, p.TaskId)));
+        int max = Math.Min(modSystem.MySettings.HudMaxRows, MaxRenderedRows);
+        int moreCount = Math.Max(0, liveCount - max);
 
         return new HudPinsContent(
             rows: shown,
             moreCount: moreCount,
+            collapseRegistry: collapseRegistry,
+            onDepartingCollapsed: (docId, taskId) => OnDepartingCollapsed((docId, taskId)),
             collapsed: modSystem.MySettings.HudCollapsed,
             rowWidth: ScribePlayerSettings.ClampHudRowWidth(modSystem.MySettings.HudRowWidth),
             rowFontSize: ScribeRowConstants.BaseHudFontSize
@@ -437,6 +614,7 @@ public sealed class HudScribePins : GuiBase
         }
         settingsDialog?.Dispose();
         settingsDialog = null;
+        collapseRegistry.Dispose();
         base.Dispose();
     }
 }
@@ -446,10 +624,12 @@ public sealed class HudScribePins : GuiBase
 // ============================================================================
 
 /// <summary>A value snapshot of one HUD row: identity, last-known text, its displayed done-state,
-/// whether it is currently sunk (muted, ordered at the bottom), and whether it is fading out inside a
-/// pending destructive-completion window (Unpin/Delete about to send — design D7). Carries no live pin
-/// reference.</summary>
-internal readonly record struct HudPinRow(Guid DocId, Guid TaskId, string Text, bool Done, bool Sunk, bool FadingOut);
+/// whether it is currently sunk (muted, ordered at the bottom), whether it is fading out inside a
+/// pending destructive-completion window (Unpin/Delete about to send — design D7), and whether it is
+/// DEPARTING (its window elapsed and it is now collapsing its height to zero before removal —
+/// scribe-list-collapse). Carries no live pin reference.</summary>
+internal readonly record struct HudPinRow(
+    Guid DocId, Guid TaskId, string Text, bool Done, bool Sunk, bool FadingOut, bool Departing);
 
 /// <summary>
 /// The HUD's widget tree: a collapse-header chevron over a column of pin rows (or, when collapsed,
@@ -469,6 +649,8 @@ internal sealed class HudPinsContent : StatelessWidget
 
     private readonly IReadOnlyList<HudPinRow> rows;
     private readonly int moreCount;
+    private readonly ScribeCollapseRegistry collapseRegistry;
+    private readonly Action<Guid, Guid> onDepartingCollapsed;
     private readonly bool collapsed;
     private readonly float rowWidth;
     private readonly float rowFontSize;
@@ -480,6 +662,8 @@ internal sealed class HudPinsContent : StatelessWidget
     public HudPinsContent(
         IReadOnlyList<HudPinRow> rows,
         int moreCount,
+        ScribeCollapseRegistry collapseRegistry,
+        Action<Guid, Guid> onDepartingCollapsed,
         bool collapsed,
         float rowWidth,
         float rowFontSize,
@@ -490,6 +674,8 @@ internal sealed class HudPinsContent : StatelessWidget
     {
         this.rows = rows;
         this.moreCount = moreCount;
+        this.collapseRegistry = collapseRegistry;
+        this.onDepartingCollapsed = onDepartingCollapsed;
         this.collapsed = collapsed;
         this.rowWidth = rowWidth;
         this.rowFontSize = rowFontSize;
@@ -570,11 +756,13 @@ internal sealed class HudPinsContent : StatelessWidget
                     new Text(Lang.Get("scribe:scribe-hud-title"), titleStyle),
                 }));
 
+        // Gear sized to sit proportionally with the chevron/title beside it (scribe-settings-followups 4.2):
+        // 12px reads right against the 14px title, where the prior 16px looked oversized.
         var gear = new GestureDetector(
             onTap: _ => onOpenSettings(),
             child: new Padding(
                 EdgeInsets.Only(left: 6),
-                child: new VsIcon("scribegear", 16f, colors.OnSurfaceVariant)));
+                child: new VsIcon("scribegear", 12f, colors.OnSurfaceVariant)));
 
         return new Row(
             spacing: 4,
@@ -583,16 +771,16 @@ internal sealed class HudPinsContent : StatelessWidget
             children: new Widget[] { collapseToggle, gear });
     }
 
-    /// <summary>Target opacity a destructive-pending (Unpin/Delete) row fades toward over its window, as
-    /// a preview of removal (design D7). Not fully 0 so the row (and its still-clickable checkbox for
-    /// undo) stays visible until the send actually removes it.</summary>
-    private const float FadingOutOpacity = 0.15f;
+    /// <summary>Full duration of the destructive-pending (Unpin/Delete) text fade, matched to the HUD pin
+    /// window so the ramp reads as a countdown to removal (scribe-settings-followups 1.1).</summary>
+    private const int FadeWindowMs = 1500;
 
     /// <summary>One HUD row: [checkbox][text], the lectern read row minus chrome (no grip spacer, no
     /// pinned tint, no per-row buttons — design D1). Opacity animates by state: a destructive-pending row
-    /// (Unpin/Delete in its window) fades toward <see cref="FadingOutOpacity"/> over the window; a sunk
-    /// row mutes to <see cref="SunkOpacity"/>; else full. The checkbox stays fully opaque and clickable so
-    /// undo is always available (design D7) — only the TEXT fades, via a nested AnimatedOpacity.</summary>
+    /// (Unpin/Delete in its window) fades its text LINEARLY from fully opaque to fully transparent over the
+    /// window (a visible countdown — scribe-settings-followups 1.1); a sunk row mutes to
+    /// <see cref="SunkOpacity"/>; else full. The checkbox stays fully opaque and clickable so undo is
+    /// always available (design D7) — only the TEXT fades, via a nested AnimatedOpacity.</summary>
     private Widget BuildRow(HudPinRow row, ColorScheme colors, Vector4 glow)
     {
         var textStyle = new TextStyle
@@ -605,14 +793,23 @@ internal sealed class HudPinsContent : StatelessWidget
             SoftWrap = true,
         };
 
-        // The text fades toward FadingOutOpacity over the window for a destructive-pending row (preview of
-        // removal). The animation duration matches the pin window so the fade tracks the countdown; a
-        // non-fading row is fully opaque. Only the text fades — the checkbox stays clickable for undo.
-        Widget text = new AnimatedOpacity(
-            opacity: row.FadingOut ? FadingOutOpacity : 1f,
-            duration: TimeSpan.FromMilliseconds(row.FadingOut ? 1500 : 200),
-            curve: Curves.EaseOut,
-            child: new Text(row.Text, textStyle));
+        // The text fades LINEARLY toward full transparency over the window for a destructive-pending row (a
+        // countdown preview of removal — scribe-settings-followups 1.1). ScribeFadeText owns its own ticker
+        // (see its remarks): AnimatedOpacity can't be used here because the HUD rebuilds via ForceRebuild,
+        // which recreates the tree and makes an implicit tween snap straight to its target (the "instant
+        // jump to 0" bug). A non-fading row is fully opaque. Only the text fades — the checkbox stays
+        // clickable for undo.
+        //
+        // A DEPARTING row has already finished its fade; render its text at fixed zero opacity rather than
+        // via ScribeFadeText, whose state-owned controller would restart from full on this remount and flash
+        // the text back in before the collapse (scribe-list-collapse). The row body then collapses to zero.
+        Widget text = row.Departing
+            ? new Opacity(0f, new Text(row.Text, textStyle))
+            : new ScribeFadeText(
+                fading: row.FadingOut,
+                durationMs: FadeWindowMs,
+                text: row.Text,
+                style: textStyle);
 
         Widget rowBody = new Row(
             spacing: 6,
@@ -633,11 +830,86 @@ internal sealed class HudPinsContent : StatelessWidget
         // A sunk row mutes the WHOLE row (checkbox + text) to SunkOpacity, faded rather than snapped so a
         // completing task reads as a gentle settle. The ValueKey stabilizes row identity across rebuilds
         // for the animation.
-        return new AnimatedOpacity(
+        Widget styled = new AnimatedOpacity(
             opacity: row.Sunk ? SunkOpacity : 1f,
             duration: TimeSpan.FromMilliseconds(250),
             curve: Curves.EaseOut,
             child: rowBody,
             key: new ValueKey<Guid>(row.TaskId));
+
+        // A departing row collapses its height to zero (rows below slide up to meet it), then is removed via
+        // onDepartingCollapsed when the collapse completes (scribe-list-collapse). The collapse controller is
+        // host-owned (keyed by identity) so it resumes across the HUD's ForceRebuild remounts. Wrapping keeps
+        // the ValueKey OUTSIDE the collapsible so the row's identity (and its AnimatedOpacity state) is stable.
+        if (!row.Departing) return styled;
+        return new ScribeCollapsible(
+            id: $"{row.DocId:N}:{row.TaskId:N}",
+            collapsing: true,
+            registry: collapseRegistry,
+            onCollapsed: () => onDepartingCollapsed(row.DocId, row.TaskId),
+            child: styled,
+            key: new ValueKey<Guid>(row.TaskId));
+    }
+}
+
+/// <summary>
+/// A text widget that fades its own opacity from 1→0 over <paramref name="durationMs"/> when
+/// <c>fading</c> is set, using a self-owned <see cref="AnimationController"/> that it drives frame-by-frame
+/// (scribe-settings-followups 1.1).
+///
+/// <para><b>Why not <see cref="AnimatedOpacity"/>?</b> The HUD's only rebuild path is
+/// <see cref="GuiBase.ForceRebuild"/>, which UNMOUNTS and recreates the whole widget tree rather than
+/// reconciling it. An implicitly-animated widget only animates across a reconciling <c>UpdateWidget</c>
+/// (retarget tween → <c>Forward()</c>); recreated fresh, its tween inits <c>Begin=End=target</c> and
+/// evaluates to the target instantly — which is exactly the "snap straight to 0" bug. This widget instead
+/// starts its own controller in <see cref="InitState"/> and ticks itself, so it ramps correctly the
+/// moment it is (re)mounted in the fading state, needing no per-frame rebuild from the HUD.</para>
+/// </summary>
+internal sealed class ScribeFadeText : StatefulWidget
+{
+    public ScribeFadeText(bool fading, int durationMs, string text, TextStyle style, Gui.Widgets.Framework.Key? key = null) : base(key)
+    {
+        Fading = fading;
+        DurationMs = durationMs;
+        TextContent = text;
+        Style = style;
+    }
+
+    public bool Fading { get; }
+    public int DurationMs { get; }
+    public string TextContent { get; }
+    public TextStyle Style { get; }
+
+    public override State CreateState() => new ScribeFadeTextState();
+}
+
+internal sealed class ScribeFadeTextState : State<ScribeFadeText>
+{
+    private AnimationController? controller;
+
+    public override void InitState()
+    {
+        base.InitState();
+        if (!Widget.Fading) return;
+
+        // Own ticker: ramp 0→1 over the window; opacity is 1 − value so the text fades 1→0. Repaint each
+        // tick via MarkNeedsBuild (SetState) — the reconciling rebuild path, so this animates itself
+        // regardless of the parent using ForceRebuild.
+        controller = new AnimationController(TimeSpan.FromMilliseconds(Widget.DurationMs), Element.Owner!.GetTickerProvider());
+        controller.OnValueChanged += _ => Element.MarkNeedsBuild();
+        controller.Forward();
+    }
+
+    public override Widget Build(BuildContext context)
+    {
+        float opacity = controller == null ? 1f : 1f - (float)controller.Value;
+        return new Opacity(opacity, new Text(Widget.TextContent, Widget.Style));
+    }
+
+    public override void Dispose()
+    {
+        controller?.Dispose();
+        controller = null;
+        base.Dispose();
     }
 }
