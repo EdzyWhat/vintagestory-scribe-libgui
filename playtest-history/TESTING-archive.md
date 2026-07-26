@@ -451,3 +451,50 @@ archived `tasks.md`).
         resync→repaint chain is closed. Parts (a)/(b)/(c) remain confirmed. (The scroll-reset-on-complete
         also reported in that submission is tracked separately as `92d41071` under
         add-lectern-row-affordances-libgui — not re-observed this session, awaiting a deliberate retest.)
+
+## add-empty-task-lifecycle
+
+> Retired from TESTING.md 2026-07-25 (change archived; all items terminal — 6 Confirmed + 1 Obsolete).
+> Implemented 2026-07-25. New tasks start EMPTY with a dimmed "New task…" ghost hint; an empty task row
+> self-destructs on blur (focus moves to the row above); Enter on an empty row is a no-op;
+> switch-to-read/close/autosave never persist an empty task; the read view filters any stray empty task.
+> Core model no longer rejects blank task text (cleanup moved to the editing layer). Superseded the two
+> pre-implementation placeholders (`05727f66`/`f34ea553`).
+
+- [x] `9d85da89` **Add task starts empty.** Click "Add task" (or Enter on a non-empty row) — the new
+      row is empty with a dimmed "New task…" ghost hint, ready to type, no boilerplate to clear.
+      *(add-empty-task-lifecycle 6.2)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T22-36-25, reported against superseded item
+        `05727f66` "New tasks init empty"): "Works." New task rows now start empty and ready to type
+        instead of pre-filled with "New task".
+- [x] `8c411565` **Abandoned empty add disappears.** Add a task, type nothing, click away (or Tab off
+      it) — the empty row vanishes and does not persist across reload. *(add-empty-task-lifecycle 6.2)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T23-02-59): "Yes this works." An abandoned
+        empty add vanishes on blur and does not persist across reload.
+- [x] `577159f1` **Clear-to-delete a row.** In an existing task, Cmd/Ctrl+A then Delete to empty it,
+      then blur (click away / Tab) — the row is removed and focus lands on the row above.
+      *(add-empty-task-lifecycle 6.3)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T22-36-25, reported against superseded item
+        `f34ea553` "Emptied row auto-deletes on commit"): "Works." Cmd/Ctrl+A → Delete → blur now removes
+        the emptied row (the pre-change no-op is fixed).
+- [x] `3433d07d` **First/only empty row.** Empty the first row and blur — focus moves to the new first
+      row; empty the only row and blur — no crash, editor shows the empty-state hint.
+      *(add-empty-task-lifecycle 6.4)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T23-02-59): "Works. Both cases." First-row
+        blur re-homes focus to the new first row; only-row blur shows the empty-state hint, no crash.
+- [ ] `6f9ef4c2` **Empty note kept.** Leave a freeform text section empty and blur — it is NOT
+      auto-removed (only task rows self-destruct). *(add-empty-task-lifecycle 6.5)*
+      - **Obsolete 2026-07-25** (playtest submission 2026-07-25T23-02-59): tester — "These aren't on the
+        page to test. Delete this test item, we aren't prioritizing Freeform Text." Freeform text sections
+        aren't a surfaced/prioritized feature, so the empty-note-kept check no longer applies in practice.
+        The code still guards it (only task rows self-destruct; text sections are untouched) — kept as an
+        Obsolete record rather than deleted, per the verdict lifecycle.
+- [x] `76b2a6ba` **Switch/close drops empty task.** With an empty focused task, switch to read view or
+      close the dialog — no empty task is saved or shown; reload confirms none persisted.
+      *(add-empty-task-lifecycle 6.6)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T23-02-59): "Works." Switching to read /
+        closing with an empty focused task neither saves nor shows an empty task; none persists on reload.
+- [x] `7bdddcd1` **Enter on empty is a no-op.** Press Enter on an already-empty task row — no second
+      empty row is stacked. *(add-empty-task-lifecycle 4.5)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T23-02-59): "Works." Enter on an empty task
+        row stacks no second empty row.

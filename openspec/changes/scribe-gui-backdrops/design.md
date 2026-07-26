@@ -2,17 +2,26 @@
 
 The Scribe Lectern dialog (`GuiDialogScribeLecternLibGui`, `src/Mod/`) renders its widgets over a
 transparent window body. The user wants each Scribe window to read as a themed physical object via
-hand-authored art, with the read/editor page and the settings page carrying *distinct* illustrations,
-and wants the whole structure to be exercisable in-game with flat-color placeholders *before* any art
-is drawn (art is a later, non-blocking swap).
+hand-authored art, with the mechanism supporting *distinct* per-view illustrations where an item exposes
+more than one backdrop-bearing view, and wants the whole structure to be exercisable in-game with
+flat-color placeholders *before* any art is drawn (art is a later, non-blocking swap).
 
 This change is Phase 2 (workstream A of the approved plan): the reusable backdrop mechanism. It
 **depends on the sibling change `scribe-themed-toggle`** (assumed landed), which adds the
-`ThemedBackgrounds` boolean to `ScribePlayerSettings` (client-local, persisted in
+`PixelArtDisplay` boolean to `ScribePlayerSettings` (client-local, persisted in
 `scribe-hud-config.json`, live-propagated via `UpdateMySettings` → `MyPinsChanged` → `ForceRebuild`)
 and the light/dark theme split. Backdrops are gated on that toggle: ON draws art, OFF draws the plain
 LibGUI fallback. This change does **not** introduce the toggle, the light theme, animated tabs, or the
 pin editor.
+
+> NOTE (2026-07-26, reconciled to shipped): two things landed differently from this design's original
+> assumptions. (1) The preference shipped as `PixelArtDisplay`, not `ThemedBackgrounds` (same boolean,
+> renamed by the sibling change) — read every `ThemedBackgrounds` below as `PixelArtDisplay`. (2) The
+> Lectern's in-dialog settings view was removed in the 2026-07-25 pivot (the gear now opens the standalone
+> settings window, which follows the global theme and is not backdrop-wrapped), so the Lectern backs its
+> single body (read + editor share the `LecternPage` spec). The distinct-per-view mechanism is retained
+> and the `LecternSettings` spec is defined and reserved for a future item; the "distinct read/editor vs
+> settings" goal below applies to the mechanism's capability, not to the Lectern as shipped.
 
 Established rendering facts from exploration (ground truth):
 - `Container` + `BoxStyle.Texture` (and the `Image` widget) filter **bilinear**
@@ -35,13 +44,14 @@ Established rendering facts from exploration (ground truth):
 - Draw a backdrop behind dialog content via `Container` + `BoxStyle.Texture` when themed mode is ON.
 - A flat-placeholder-color fallback when the PNG is missing, so the full structure is testable in-game
   before any art exists (the user's flat-color-first build strategy) — no crash, one logged warning.
-- Distinct read/editor vs settings backdrops for the Lectern.
+- Support for distinct per-view backdrops (a per-view spec) where an item exposes more than one
+  backdrop-bearing view. (The Lectern as shipped backs its single body — see the reconciliation note.)
 - Self-loaded, shared, cached bitmaps that survive VS post-startup asset unload and are not reloaded
   per open; disposed on mod-system dispose.
 - No backdrop drawn (plain fallback) when themed mode is OFF.
 
 **Non-Goals:**
-- The `ThemedBackgrounds` toggle itself and the light theme (sibling `scribe-themed-toggle`).
+- The `PixelArtDisplay` toggle itself and the light theme (sibling `scribe-themed-toggle`).
 - Animated navigation tabs (sibling `scribe-animated-tabs`) and the slide-out pin editor
   (sibling `scribe-pin-editor`).
 - Shipping final art. Only the reused flat placeholder and placeholder colors are in scope.
@@ -98,8 +108,8 @@ settings look distinct even with zero art.
 - *Alternative rejected:* drawing nothing (bare content) on a missing asset — that hides which view is
   which and makes the "distinct per-view" behavior untestable until art exists.
 
-### D5: Gate on `ThemedBackgrounds`; bare body when OFF
-`ScribeBackdrop.Wrap` is called only when `modSystem.MySettings.ThemedBackgrounds` is ON (read fresh
+### D5: Gate on `PixelArtDisplay`; bare body when OFF
+`ScribeBackdrop.Wrap` is called only when `modSystem.MySettings.PixelArtDisplay` is ON (read fresh
 each `Build()`, following the `WindowFontScale` → `ScribeRowStyle.FromSettings` precedent at
 `GuiDialogScribeLecternLibGui.cs` ~:845). When OFF, the body is used bare — no `Container` wrap — under
 the plain LibGUI fallback theme, so the mod is fully usable with zero art.
@@ -134,21 +144,22 @@ structure works with flat placeholders until then.
 - **Writing zone:** reserve a **calm, light writing zone** in the central ~70% of the spread (where
   text renders, below the transparent title bar); decorative detail lives in the margins. Warm limited
   palette (cream parchment center, sepia ink, leather/wood margins per the desktop references).
-- **Per-view distinctness:** the read/editor page and the settings page are *separate* PNGs (distinct
-  specs). The reused `lecternbackdrop.png` stands in for the page until its final art is drawn; the
-  settings backdrop is a placeholder color until its PNG exists.
+- **Per-view distinctness:** where an item exposes both a page and a settings view, they are *separate*
+  PNGs (distinct specs). For the Lectern as shipped there is one body: the reused `lecternbackdrop.png`
+  stands in until its final art is drawn. The reserved `LecternSettings` PNG is a placeholder color until
+  a future item's settings view exists to draw it.
 - **Legibility check:** on delivery, verify text reads clearly over the art in-game; if not, apply a
   `textColor` override or a semi-opaque content panel.
 
 ## Verification (in-game only)
 
 The Core suite cannot reach `src/Mod/` GUI or the VS API. Verify in-game:
-1. **Present asset (toggle ON):** open the Lectern → the read/editor page shows its backdrop (the
-   reused flat-tan `lecternbackdrop.png` or its final art); switch to the settings page → a *distinct*
-   backdrop; art reads correctly over/through the content.
-2. **Missing asset (toggle ON):** with the settings PNG absent → the settings page draws its flat
+1. **Present asset (toggle ON):** open the Lectern → the dialog body (read and editor views) shows its
+   backdrop (the reused flat-tan `lecternbackdrop.png` or its final art); art reads correctly over/through
+   the content.
+2. **Missing asset (toggle ON):** with the body PNG temporarily absent → the body draws its flat
    placeholder color, the dialog does not crash, and exactly one warning is logged.
-3. **Toggle OFF:** neither page draws a backdrop; both render as the plain LibGUI fallback.
+3. **Toggle OFF:** neither view draws a backdrop; both render as the plain LibGUI fallback.
 4. **Caching / unload:** open, close, and reopen the Lectern well after startup → the backdrop still
    renders (survived asset unload) and is not re-decoded per open.
 5. Record the LibGUI backdrop lesson in `VSAPI-NOTES.md`.

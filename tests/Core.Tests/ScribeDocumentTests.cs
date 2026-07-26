@@ -63,12 +63,16 @@ public class ScribeDocumentTests
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("\t\n")]
-    public void AddTask_RejectsBlankText(string blank)
+    public void AddTask_AcceptsBlankText_StoredVerbatim(string blank)
     {
+        // A new task now starts empty (the player types into it); the model no longer rejects
+        // blank task text. Removing an abandoned empty task is the editing layer's job.
         var doc = new ScribeDocument();
 
-        Assert.False(doc.AddTask(blank));
-        Assert.Empty(doc.Blocks);
+        Assert.True(doc.AddTask(blank));
+        Assert.Single(doc.Blocks);
+        Assert.Equal(ScribeBlockKind.Task, doc.Blocks[0].Kind);
+        Assert.Equal(blank, doc.Blocks[0].Text);
     }
 
     [Fact]
@@ -115,13 +119,16 @@ public class ScribeDocumentTests
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("\n")]
-    public void SetBlockText_RejectsBlankForTask(string blank)
+    public void SetBlockText_AcceptsBlankForTask_StoredVerbatim(string blank)
     {
+        // Clearing a task to empty must succeed (the field writes through on every keystroke), so
+        // the task can go transiently empty while the player edits it. The editing layer removes a
+        // task left empty on blur; the model just stores the value.
         var doc = new ScribeDocument();
         doc.AddTask("Find copper");
 
-        Assert.False(doc.SetBlockText(0, blank));
-        Assert.Equal("Find copper", doc.Blocks[0].Text);
+        Assert.True(doc.SetBlockText(0, blank));
+        Assert.Equal(blank, doc.Blocks[0].Text);
     }
 
     [Fact]
@@ -301,13 +308,16 @@ public class ScribeDocumentTests
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    public void InsertTask_RejectsBlankText(string blank)
+    public void InsertTask_AcceptsBlankText_StoredVerbatim(string blank)
     {
+        // Enter=insert-below and "Add task" both seed an empty task now; InsertTask must accept it.
         var doc = new ScribeDocument();
         doc.AddTask("A");
 
-        Assert.False(doc.InsertTask(1, blank));
-        Assert.Single(doc.Blocks);
+        Assert.True(doc.InsertTask(1, blank));
+        Assert.Equal(2, doc.Blocks.Count);
+        Assert.Equal(ScribeBlockKind.Task, doc.Blocks[1].Kind);
+        Assert.Equal(blank, doc.Blocks[1].Text);
     }
 
     [Theory]

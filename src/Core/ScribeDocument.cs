@@ -4,8 +4,10 @@ namespace Scribe.Core;
 /// The game-agnostic model of a Scribe document: an ordered sequence of <see cref="ScribeBlock"/>s.
 /// Each block is either a checkbox task or a freeform text section, so tasks and text can be
 /// interspersed and reordered freely. All mutation methods return <c>true</c> on success and
-/// <c>false</c> for invalid input (blank task text, out-of-range index), never throwing to the
-/// caller. This type has no dependency on the Vintage Story API.
+/// <c>false</c> for invalid input (out-of-range index), never throwing to the caller. Task text
+/// is stored verbatim, including empty/whitespace-only text — the model enforces no non-blank
+/// content invariant; removing an abandoned or cleared empty task is the editing layer's job.
+/// This type has no dependency on the Vintage Story API.
 /// </summary>
 public sealed class ScribeDocument
 {
@@ -26,12 +28,12 @@ public sealed class ScribeDocument
     /// reassign a document's identity.</summary>
     internal void SetDocId(Guid docId) => DocId = docId;
 
-    /// <summary>Adds a checkbox task to the end. Blank/whitespace-only text is rejected; otherwise
-    /// the text is stored verbatim. Whitespace normalization (trimming) is the editing layer's
-    /// responsibility, not the model's -- see <see cref="SetBlockText"/>.</summary>
+    /// <summary>Adds a checkbox task to the end. Any text is accepted and stored verbatim,
+    /// including empty/whitespace-only text (a new task starts empty and the player types into it).
+    /// Whitespace normalization (trimming) and removal of an abandoned empty task are the editing
+    /// layer's responsibility, not the model's -- see <see cref="SetBlockText"/>.</summary>
     public bool AddTask(string text)
     {
-        if (string.IsNullOrWhiteSpace(text)) return false;
         _blocks.Add(new ScribeBlock(ScribeBlockKind.Task, text));
         return true;
     }
@@ -40,12 +42,11 @@ public sealed class ScribeDocument
     /// Inserts a checkbox task at <paramref name="index"/>, shifting later blocks down (so passing
     /// <c>currentIndex + 1</c> puts the new task directly under the current one — the editor's
     /// Enter=new-task gesture). <paramref name="index"/> may equal <see cref="Blocks"/>.Count to append.
-    /// Blank/whitespace-only text is rejected; an out-of-range index fails safely. Text is stored
-    /// verbatim (see <see cref="AddTask"/>).
+    /// Any text is accepted and stored verbatim, including empty/whitespace-only text; an
+    /// out-of-range index fails safely (see <see cref="AddTask"/>).
     /// </summary>
     public bool InsertTask(int index, string text)
     {
-        if (string.IsNullOrWhiteSpace(text)) return false;
         if (index < 0 || index > _blocks.Count) return false;
         _blocks.Insert(index, new ScribeBlock(ScribeBlockKind.Task, text));
         return true;
@@ -59,26 +60,19 @@ public sealed class ScribeDocument
     }
 
     /// <summary>
-    /// Changes a block's text. For Task blocks blank/whitespace-only text is rejected; Text sections
-    /// may be set to empty. Otherwise the text is stored verbatim -- the model does NOT trim
-    /// surrounding whitespace. Whitespace normalization (e.g. stripping a trailing blank line from a
-    /// committed edit) is the editing layer's job (the lectern dialog's NormalizeRowOnCommit), so
-    /// the live in-place editor can keep a just-typed trailing newline long enough for the row to
+    /// Changes a block's text. Both Task and Text blocks may be set to any value, including
+    /// empty/whitespace-only — the text is stored verbatim and the model does NOT trim surrounding
+    /// whitespace or reject blank task text. This lets a task go transiently empty while the player
+    /// clears it (the field writes through on every keystroke); removing a task left empty is the
+    /// editing layer's job. Whitespace normalization (e.g. stripping a trailing blank line from a
+    /// committed edit) is likewise the editing layer's job (the lectern dialog's NormalizeRowOnCommit),
+    /// so the live in-place editor can keep a just-typed trailing newline long enough for the row to
     /// grow. The Done flag and kind are unchanged.
     /// </summary>
     public bool SetBlockText(int index, string? text)
     {
         if (!IsValidIndex(index)) return false;
-        var block = _blocks[index];
-        if (block.IsTask)
-        {
-            if (string.IsNullOrWhiteSpace(text)) return false;
-            block.Text = text;
-        }
-        else
-        {
-            block.Text = text ?? "";
-        }
+        _blocks[index].Text = text ?? "";
         return true;
     }
 

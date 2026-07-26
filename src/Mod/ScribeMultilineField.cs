@@ -53,11 +53,13 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox
     private const string FontFamily = "sans-serif";
 
     private string text = "";
+    private string placeholder = "";
     private int caret;
     private int selectionAnchor;
     private bool hasFocus;
     private float fontSize = 15f;
     private Vector4 textColor = Vector4.One;
+    private Vector4 placeholderColor = new(1f, 1f, 1f, 0.4f);
     private Vector4 caretColor = Vector4.One;
     private Vector4 selectionColor = new(0.4f, 0.55f, 0.9f, 0.4f);
     private float padX = 8f;
@@ -69,6 +71,10 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox
     private float lineHeight = 18f;
 
     public string Text { get => text; set => SetProperty(ref text, value ?? "", relayout: true); }
+    /// <summary>Ghost hint text painted (dimmed) only when the field is empty — a "New task…" affordance
+    /// for a freshly-created empty task. It is NOT part of the editable text (never wrapped, measured for
+    /// height, or committed); it is drawn in place of the (absent) real text on the first line.</summary>
+    public string Placeholder { get => placeholder; set => SetProperty(ref placeholder, value ?? "", repaint: true); }
     public int Caret { get => caret; set => SetProperty(ref caret, value, repaint: true); }
     public int SelectionAnchor { get => selectionAnchor; set => SetProperty(ref selectionAnchor, value, repaint: true); }
     public bool FieldHasFocus { get => hasFocus; set => SetProperty(ref hasFocus, value, repaint: true); }
@@ -76,6 +82,7 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox
     public float PadX { get => padX; set => SetProperty(ref padX, value, relayout: true); }
     public float PadY { get => padY; set => SetProperty(ref padY, value, relayout: true); }
     public Vector4 TextColor { get => textColor; set => SetProperty(ref textColor, value, repaint: true); }
+    public Vector4 PlaceholderColor { get => placeholderColor; set => SetProperty(ref placeholderColor, value, repaint: true); }
     public Vector4 CaretColor { get => caretColor; set => SetProperty(ref caretColor, value, repaint: true); }
     public Vector4 SelectionColor { get => selectionColor; set => SetProperty(ref selectionColor, value, repaint: true); }
 
@@ -127,6 +134,15 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox
 
         // Text baseline: first line sits PadY down; DrawText's Y is the baseline, so add ascent.
         float ascent = lineHeight * 0.8f;
+
+        // Ghost placeholder: when there is no real text, paint the dimmed hint on the first line in place
+        // of the (absent) content. Drawn before the real-text loop so a stray empty visual line can't
+        // overpaint it, and gated on empty text so it never sits behind typed characters.
+        if (text.Length == 0 && placeholder.Length > 0)
+        {
+            context.DrawText(placeholder, new Vector2(PadX, PadY + ascent), fontSize, placeholderColor, FontFamily, FontWeight.Normal);
+        }
+
         for (int i = 0; i < visualLines.Count; i++)
         {
             float y = PadY + i * lineHeight + ascent;
@@ -279,11 +295,12 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox
 /// <summary>RenderObjectWidget bridge: pushes text/caret/selection/focus/colors into the render object.</summary>
 internal sealed class ScribeMultilineFieldRenderWidget : RenderObjectWidget
 {
-    public ScribeMultilineFieldRenderWidget(string text, int caret, int selectionAnchor, bool hasFocus,
-        float fontSize, float padX, float padY, Vector4 textColor, Vector4 caretColor, Vector4 selectionColor,
+    public ScribeMultilineFieldRenderWidget(string text, string placeholder, int caret, int selectionAnchor, bool hasFocus,
+        float fontSize, float padX, float padY, Vector4 textColor, Vector4 placeholderColor, Vector4 caretColor, Vector4 selectionColor,
         Vector4 boxColor, Vector4 borderColor, float borderThickness, Vector4 cornerRadii)
     {
         Text = text;
+        Placeholder = placeholder;
         Caret = caret;
         SelectionAnchor = selectionAnchor;
         HasFocus = hasFocus;
@@ -291,6 +308,7 @@ internal sealed class ScribeMultilineFieldRenderWidget : RenderObjectWidget
         PadX = padX;
         PadY = padY;
         TextColor = textColor;
+        PlaceholderColor = placeholderColor;
         CaretColor = caretColor;
         SelectionColor = selectionColor;
         BoxColor = boxColor;
@@ -300,6 +318,7 @@ internal sealed class ScribeMultilineFieldRenderWidget : RenderObjectWidget
     }
 
     public string Text { get; }
+    public string Placeholder { get; }
     public int Caret { get; }
     public int SelectionAnchor { get; }
     public bool HasFocus { get; }
@@ -307,6 +326,7 @@ internal sealed class ScribeMultilineFieldRenderWidget : RenderObjectWidget
     public float PadX { get; }
     public float PadY { get; }
     public Vector4 TextColor { get; }
+    public Vector4 PlaceholderColor { get; }
     public Vector4 CaretColor { get; }
     public Vector4 SelectionColor { get; }
     public Vector4 BoxColor { get; }
@@ -320,6 +340,7 @@ internal sealed class ScribeMultilineFieldRenderWidget : RenderObjectWidget
     {
         var ro = (ScribeMultilineFieldRender)renderObject;
         ro.Text = Text;
+        ro.Placeholder = Placeholder;
         ro.Caret = Caret;
         ro.SelectionAnchor = SelectionAnchor;
         ro.FieldHasFocus = HasFocus;
@@ -327,6 +348,7 @@ internal sealed class ScribeMultilineFieldRenderWidget : RenderObjectWidget
         ro.PadX = PadX;
         ro.PadY = PadY;
         ro.TextColor = TextColor;
+        ro.PlaceholderColor = PlaceholderColor;
         ro.CaretColor = CaretColor;
         ro.SelectionColor = SelectionColor;
         ro.Color = BoxColor;
@@ -345,6 +367,7 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
 {
     public ScribeMultilineField(
         string initialText = "",
+        string placeholder = "",
         FocusNode? focusNode = null,
         float fontSize = 15f,
         float padX = 8f,
@@ -359,6 +382,7 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         : base(key)
     {
         InitialText = initialText;
+        Placeholder = placeholder;
         FocusNode = focusNode;
         FontSize = fontSize;
         PadX = padX;
@@ -372,6 +396,9 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
     }
 
     public string InitialText { get; }
+    /// <summary>Ghost hint painted (dimmed) while the field is empty (e.g. "New task…"); empty string
+    /// disables it. Not part of the editable/committed text — see <see cref="ScribeMultilineFieldRender.Placeholder"/>.</summary>
+    public string Placeholder { get; }
     public FocusNode? FocusNode { get; }
     public float FontSize { get; }
     /// <summary>Internal horizontal padding for the field's text box (pixels). Fed from
@@ -796,6 +823,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
             onRelease: OnFieldRelease,
             child: new ScribeMultilineFieldRenderWidget(
                 text: text,
+                placeholder: Widget.Placeholder,
                 caret: caret,
                 selectionAnchor: anchor,
                 hasFocus: focusNode.HasFocus,
@@ -803,6 +831,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 padX: Widget.PadX,
                 padY: Widget.PadY,
                 textColor: colors.OnSurface,
+                placeholderColor: colors.OnSurfaceVariant with { W = 0.55f },
                 caretColor: colors.Primary,
                 selectionColor: colors.Primary with { W = 0.35f },
                 boxColor: colors.SurfaceHigh,

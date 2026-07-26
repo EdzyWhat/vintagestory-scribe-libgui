@@ -55,15 +55,16 @@
 
 ## 5. In-game verification (add to `TESTING.md`)
 
-- [ ] 5.1 Complete a HUD task under Delete and under Unpin: after the fade window the row's height
-  collapses smoothly and the rows below slide up (no instant vanish/snap).
-- [ ] 5.2 Complete/delete several HUD rows in quick succession: each collapses independently, none
-  strands a half-height gap.
-- [ ] 5.3 Unpin a HUD task (collapse), then immediately re-pin it from the lectern: it reappears at
-  full height (departing set cleared on server push).
-- [ ] 5.4 Delete a lectern editor row (hover → delete): it collapses smoothly and rows below slide
-  up. Delete several fast; each collapses independently.
-- [ ] 5.5 Scroll the editor to the bottom and delete the last row: no dead-space flash; the
-  viewport settles once the collapse finishes (deferred `RequestClampToExtent`).
-- [ ] 5.6 Delete a HUD row while another pin's fade window is still running (forces a `ForceRebuild`
+- [x] 5.1 Complete a HUD task under Delete and under Unpin: after the fade window the row's height
+  collapses smoothly and the rows below slide up (no instant vanish/snap). — Confirmed (playtest 2026-07-25T22-36-25)
+- [x] 5.2 Complete/delete several HUD rows in quick succession: each collapses independently, none
+  strands a half-height gap. — Confirmed (playtest 2026-07-25T22-36-25)
+- [x] 5.3 Unpin a HUD task (collapse), then immediately re-pin it from the lectern: it reappears at
+  full height (departing set cleared on server push). — Confirmed (playtest 2026-07-25T22-36-25)
+- [x] 5.4 Delete a lectern editor row (hover → delete): it collapses smoothly and rows below slide
+  up. Delete several fast; each collapses independently. — Confirmed (playtest 2026-07-25T22-36-25)
+- [x] 5.5 Scroll the editor to the bottom and delete the last row: no dead-space flash; the
+  viewport settles once the collapse finishes (deferred `RequestClampToExtent`). — Confirmed (playtest 2026-07-25T22-36-25)
+- [x] 5.6 Delete a HUD row while another pin's fade window is still running (forces a `ForceRebuild`
   mid-collapse): the collapse still completes smoothly (validates the resume-from-elapsed registry).
+  — Accepted (playtest 2026-07-25T22-36-25): too fiddly to trigger reliably; deemed an acceptable edge case, covered transitively by 5.1–5.3.

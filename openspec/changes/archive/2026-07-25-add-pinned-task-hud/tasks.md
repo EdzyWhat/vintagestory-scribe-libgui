@@ -52,10 +52,10 @@
 ## 7. Verify
 
 - [x] 7.1 `dotnet build src/Mod/Mod.csproj` clean; `dotnet test tests/Core.Tests` green (ordering tests + surviving clamp/normalize coverage; the settings-codec tests are removed per §1b.5).
-- [ ] 7.2 Restage (`build/restage.sh`) and FULLY relaunch the client (mod loads at boot; no hot reload).
-- [ ] 7.3 In-game: pin a task at a lectern → it appears on the HUD with correct text + done state, legible over a busy background via glow.
-- [ ] 7.4 In-game: complete a task with **Sink** → it mutes and, after ~2s, sinks to the bottom (re-toggle within 2s undoes); with **Unpin** → completion removes it; with **Delete** → completion deletes the task.
-- [ ] 7.5 In-game: break the lectern hosting a pinned task → the pin stays on the HUD (player-owned, non-destructive) and is still completable from its snapshot; a re-place restores its source.
-- [ ] 7.6 In-game: with more pins than the max, confirm exactly max rows + a "+N more" indicator; change the `HudMaxRows` value in `scribe-hud-config.json` and confirm the HUD honors it (no restart needed beyond a reload).
-- [ ] 7.7 In-game: HUD auto-shows on the first pin and hides at zero; the toggle hotkey AND the on-HUD control collapse/expand it (animated); the collapsed state persists across a relog; verify the preference carries to a DIFFERENT world (client-local, cross-world).
-- [ ] 7.8 Update `TESTING.md` (via the what-to-test skill) with the in-game items 7.3–7.7; sync deltas to main specs and archive per the openspec flow when confirmed.
+- [x] 7.2 Restage (`build/restage.sh`) and FULLY relaunch the client (mod loads at boot; no hot reload). — Done (restaged + relaunched across the 2026-07-25 playtest sessions)
+- [x] 7.3 In-game: pin a task at a lectern → it appears on the HUD with correct text + done state, legible over a busy background via glow. — Confirmed (playtest 2026-07-25T09-52-31, TESTING.md `f3df9416`)
+- [x] 7.4 In-game: complete a task with **Sink** → it mutes and, after ~2s, sinks to the bottom (re-toggle within 2s undoes); with **Unpin** → completion removes it; with **Delete** → completion deletes the task. — Confirmed (playtest 2026-07-25T22-36-25, TESTING.md `8439e474`; policy switching via the Settings UI)
+- [x] 7.5 In-game: break the lectern hosting a pinned task → the pin stays on the HUD (player-owned, non-destructive) and is still completable from its snapshot; a re-place restores its source. — Confirmed (playtest 2026-07-25T09-52-31, TESTING.md `9805a162`)
+- [x] 7.6 In-game: with more pins than the max, confirm exactly max rows + a "+N more" indicator; change the `HudMaxRows` value in `scribe-hud-config.json` and confirm the HUD honors it (no restart needed beyond a reload). — Confirmed (playtest 2026-07-25T09-52-31, TESTING.md `12dcaaa7`)
+- [x] 7.7 In-game: HUD auto-shows on the first pin and hides at zero; the toggle hotkey AND the on-HUD control collapse/expand it (animated); the collapsed state persists across a relog; verify the preference carries to a DIFFERENT world (client-local, cross-world). — Confirmed (playtest 2026-07-25T09-52-31, TESTING.md `16464b57`)
+- [x] 7.8 Update `TESTING.md` (via the what-to-test skill) with the in-game items 7.3–7.7; sync deltas to main specs and archive per the openspec flow when confirmed. — TESTING.md carries the confirmed items; specs synced + archived via this archive flow. (Two follow-ups logged, not blockers: `80777b7b` stale-editor-under-Delete, `dfad74a8` hanging HUD checkbox → scribe-list-collapse.)

@@ -50,11 +50,12 @@ deserialize rather than silently defaulting or misreading fields.
 
 ### Requirement: Document stores task text verbatim
 The document model SHALL store a task's text exactly as supplied, without trimming leading,
-trailing, or interior whitespace. The only content invariant the model enforces on a task is
-that its text is not blank or whitespace-only: an add or text-change with blank/whitespace-only
-task text SHALL be rejected and leave the document unchanged. Whitespace normalization (e.g.
-trimming a trailing blank line from a committed edit) is the responsibility of the editing layer,
-not the document model.
+trailing, or interior whitespace, and without rejecting any value. The model SHALL NOT enforce a
+non-blank content invariant on task text: an add or text-change with blank or whitespace-only task
+text SHALL succeed and store that text verbatim, exactly as it does for a freeform text section.
+Ensuring an empty task is not *persisted* (removing an abandoned or cleared empty task) is the
+responsibility of the editing layer, not the document model — consistent with the model's role of
+storing text verbatim while normalization and content policy live in the editing layer.
 
 #### Scenario: Adding a task preserves surrounding whitespace
 - **WHEN** a task is added with text that has leading and/or trailing whitespace around
@@ -67,10 +68,11 @@ not the document model.
   around non-blank content
 - **THEN** the stored task text retains that whitespace exactly as supplied
 
-#### Scenario: Blank or whitespace-only task text is rejected
+#### Scenario: Empty or whitespace-only task text is accepted
 - **WHEN** a task is added, or an existing task's text is changed, with text that is empty or
   contains only whitespace
-- **THEN** the operation reports failure and the document is left unchanged
+- **THEN** the operation succeeds and the document stores that empty/whitespace-only text
+  verbatim, rather than reporting failure and leaving the document unchanged
 
 ### Requirement: Documents and tasks carry stable identifiers
 Every document SHALL carry a stable identifier (`DocId`), and every block SHALL carry a stable

@@ -1185,6 +1185,27 @@ white-on-light text; OFF falls back to the global theme; the toggle relights the
 persists across a relog; the HUD and settings window correctly do NOT change with the toggle; both gears
 open the one settings window.
 
+**Fact (scribe-gui-backdrops): draw a dialog backdrop with `Container` + `BoxStyle.Texture`, and SELF-LOAD
+the bitmap.** A `Container`/box paints its fill + texture BEFORE its child (`RenderBox.PaintInternal` →
+`DrawMaskedBox`, then `PaintChildren`), so wrapping a view's body in `new Container(style: new BoxStyle {
+Texture = bmp }, child: body)` puts the art behind the content automatically — no `Stack` layer needed.
+The child stays fully interactive over it. **Do NOT use the `Image` widget or `SkiaAssetLoader.LoadBitmap`
+for this:** both call `TryGet(loc)` WITHOUT `loadAsset: true`, so the bytes are null after VS unloads
+assets post-startup (the same trap the SVG icon loader hit) and the backdrop silently vanishes in normal
+play. Self-load exactly like `ScribeModSystem.RegisterSvgIcon`: `capi.Assets.TryGet(loc, loadAsset: true)`
+then `SKBitmap.Decode(asset.Data)`. **Cache the decoded `SKBitmap` (AND a null miss) on the mod system,
+not the dialog** (`ScribeModSystem.GetBackdropBitmap` / `backdropCache`): the bitmap is immutable and
+shared across every open, so caching per-dialog would re-decode each open and risk one dialog disposing a
+bitmap another open still references. Dispose all cached bitmaps in `ModSystem.Dispose()`; a dialog must
+NEVER dispose a backdrop bitmap. Caching the null miss makes an unloadable asset warn exactly once (not
+per frame/open) and fall back to a flat placeholder `BoxStyle { Color = … }` — so the whole dialog
+structure is testable in-game before any PNG exists (flat-color-first). **Filtering:** `BoxStyle.Texture`
+(and `Image`) filter BILINEAR (`SKFilterQuality.Medium`) — smooth downsample (crisp for ink art authored ≥
+on-screen size), but BLURS upscaled hard pixel art. `NineSliceBox` is the only nearest-neighbor (crisp)
+path; use it for framed pixel chrome, not full-spread backdrops. Gate the wrap on the `PixelArtDisplay`
+preference read fresh each `Build()` (OFF = body bare, no wrap); the `UpdateMySettings` → `MyPinsChanged` →
+`ForceRebuild` chain relights it live for free.
+
 ## Dev-diagnosis toolkit
 
 The local iterate/diagnose loop for this project (Apple Silicon, where VSImGui sliders and the

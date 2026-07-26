@@ -93,6 +93,25 @@ public sealed class ScribePlayerSettings
     /// across the whole screen.</summary>
     public const int MaxHudRowWidth = 1000;
 
+    /// <summary>The Lectern layout's single driving width `W` in pixels (the "Pixel Art Size"), default
+    /// <c>600</c>. The whole dialog is an art-sized outer box of <c>W × (W·1160/1024)</c> and every inner
+    /// structure's size derives from <c>W</c>, so this one number scales the entire proportional layout
+    /// (scribe-notebook-frame). A per-player display preference; the Mod layer reads it fresh each build so a
+    /// change re-lays-out the open Lectern live. Snapped to a 10px grid and clamped on load
+    /// (<see cref="ClampPixelArtSize"/>), mirroring <see cref="HudRowWidth"/>.</summary>
+    public int PixelArtSize { get; set; } = DefaultPixelArtSize;
+
+    /// <summary>Default <see cref="PixelArtSize"/> for a player who has never changed it.</summary>
+    public const int DefaultPixelArtSize = 600;
+
+    /// <summary>Inclusive lower bound clamped on load, so a hand-edited value can't shrink the Lectern
+    /// (and its center tasks column) below a usable size.</summary>
+    public const int MinPixelArtSize = 300;
+
+    /// <summary>Inclusive upper bound clamped on load, so a hand-edited value can't blow the Lectern up
+    /// past the screen.</summary>
+    public const int MaxPixelArtSize = 1000;
+
     /// <summary>Text-size multiplier for the pinned-task HUD's row text (default <c>1.0</c> = no
     /// change). Snapped to a discrete 5% notch within its range (<c>0.80, 0.85, … , 1.20</c>), entered
     /// in the UI as a percent. A MULTIPLIER (not an absolute point size) so it stacks on top of the
@@ -135,6 +154,15 @@ public sealed class ScribePlayerSettings
     /// <summary>Clamps a loaded HUD row width to the safe range (see <see cref="HudRowWidth"/>).</summary>
     public static int ClampHudRowWidth(int value) => Math.Clamp(value, MinHudRowWidth, MaxHudRowWidth);
 
+    /// <summary>Clamps a loaded Pixel Art Size to <see cref="MinPixelArtSize"/>..<see cref="MaxPixelArtSize"/>
+    /// AND snaps it to the nearest 10px, so a hand-edited value settles onto the 10-step grid the UI uses
+    /// rather than an arbitrary width.</summary>
+    public static int ClampPixelArtSize(int value)
+    {
+        int clamped = Math.Clamp(value, MinPixelArtSize, MaxPixelArtSize);
+        return (int)Math.Round(clamped / 10.0) * 10;
+    }
+
     /// <summary>Maps a loaded HUD anchor value to a defined <see cref="ScribeHudAnchor"/>, falling back
     /// to the default (<see cref="ScribeHudAnchor.TopRight"/>) for any unrecognized value so a
     /// hand-edited or corrupted config can't select an undefined anchor.</summary>
@@ -150,15 +178,16 @@ public sealed class ScribePlayerSettings
 
     /// <summary>Normalizes this instance's fields in place after a load from an untrusted source
     /// (hand-edited JSON): clamps each numeric preference to its safe range (row count, row width, the
-    /// HUD offsets, and both font scales — snapping each scale to its nearest notch) and falls an
-    /// unknown <see cref="CompletionPolicy"/>/<see cref="HudAnchor"/> back to its default. Returns this
-    /// for chaining.</summary>
+    /// Pixel Art Size — snapped to the 10px grid, the HUD offsets, and both font scales — snapping each
+    /// scale to its nearest notch) and falls an unknown <see cref="CompletionPolicy"/>/<see cref="HudAnchor"/>
+    /// back to its default. Returns this for chaining.</summary>
     public ScribePlayerSettings Normalized()
     {
         HudMaxRows = ClampHudMaxRows(HudMaxRows);
         CompletionPolicy = NormalizePolicy(CompletionPolicy);
         HudAnchor = NormalizeAnchor(HudAnchor);
         HudRowWidth = ClampHudRowWidth(HudRowWidth);
+        PixelArtSize = ClampPixelArtSize(PixelArtSize);
         HudOffsetX = ClampHudOffset(HudOffsetX);
         HudOffsetY = ClampHudOffset(HudOffsetY);
         HudFontScale = ClampFontScale(HudFontScale);

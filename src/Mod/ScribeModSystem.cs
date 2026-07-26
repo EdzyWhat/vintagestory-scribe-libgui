@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Scribe.Core;
+using SkiaSharp;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
@@ -73,6 +74,13 @@ public sealed class ScribeModSystem : ModSystem
     /// client after <see cref="StartClientSide"/>.</summary>
     private ScribePlayerSettings? mySettings;
 
+    /// <summary>Client-side cache of self-loaded dialog backdrop bitmaps, keyed by asset-location string
+    /// (see <see cref="GetBackdropBitmap"/>). Holds a <c>null</c> value for an asset that could not be
+    /// loaded so the failing load is attempted — and warned about — exactly once, not per open or per
+    /// frame. One immutable bitmap is shared across every dialog open; a dialog NEVER disposes one. All
+    /// entries are disposed in <see cref="Dispose"/>. Null on a pure server.</summary>
+    private Dictionary<string, SKBitmap?>? backdropCache;
+
     /// <summary>Raised on the client whenever a fresh pin set push arrives, so an open lectern dialog
     /// (and the HUD) can repaint its per-player pin indicators.</summary>
     public event Action? MyPinsChanged;
@@ -142,14 +150,21 @@ public sealed class ScribeModSystem : ModSystem
         if (!settingsDialog.IsOpened()) settingsDialog.TryOpen();
     }
 
-    /// <summary>Dispose the client-side HUD (its own <see cref="MyPinsChanged"/> subscription + tick) and
-    /// the shared settings window. The server side holds no unmanaged/disposable state of its own here.</summary>
+    /// <summary>Dispose the client-side HUD (its own <see cref="MyPinsChanged"/> subscription + tick), the
+    /// shared settings window, and every cached backdrop bitmap (the one place a backdrop bitmap is ever
+    /// disposed — never a dialog). The server side holds no unmanaged/disposable state of its own here.</summary>
     public override void Dispose()
     {
         pinHud?.Dispose();
         pinHud = null;
         settingsDialog?.Dispose();
         settingsDialog = null;
+        if (backdropCache is not null)
+        {
+            foreach (var bmp in backdropCache.Values) bmp?.Dispose();
+            backdropCache.Clear();
+            backdropCache = null;
+        }
         base.Dispose();
     }
 
@@ -157,6 +172,38 @@ public sealed class ScribeModSystem : ModSystem
     /// cache. The lectern GUI drives its resting pin tint / pin-glyph accent off this. Returns false
     /// before the first push (a safe default — nothing shows as pinned until the server confirms).</summary>
     public bool IsPinnedForMe(Guid docId, Guid taskId) => myPins.Contains((docId, taskId));
+
+    /// <summary>
+    /// Client-side: load (once) and return the decoded backdrop bitmap for a dialog backdrop, or
+    /// <c>null</c> if the asset is missing/unloadable. The decoded bitmap is cached and shared across
+    /// every dialog open; a caller must NOT dispose it — all entries are disposed in <see cref="Dispose"/>.
+    ///
+    /// <para>Self-loads via <c>TryGet(loc, loadAsset: true)</c> + <see cref="SKBitmap.Decode(byte[])"/>,
+    /// mirroring <see cref="RegisterSvgIcon"/> (~:236): the naive <c>Image</c>/<c>SkiaAssetLoader.LoadBitmap</c>
+    /// path calls <c>TryGet(loc)</c> WITHOUT <c>loadAsset: true</c>, so its bytes are null after VS unloads
+    /// assets post-startup and the backdrop would silently vanish in normal play. The <c>null</c> result is
+    /// cached too, so an unloadable asset logs exactly one warning and repeat opens don't retry the failing
+    /// load. Returns null before <see cref="StartClientSide"/> (e.g. server side).</para>
+    /// </summary>
+    public SKBitmap? GetBackdropBitmap(AssetLocation loc)
+    {
+        if (capi is null) return null; // client-only
+        backdropCache ??= new Dictionary<string, SKBitmap?>();
+
+        string key = loc.ToString();
+        if (backdropCache.TryGetValue(key, out var cached)) return cached;
+
+        var asset = capi.Assets.TryGet(loc, loadAsset: true);
+        SKBitmap? bmp = asset?.Data is not null ? SKBitmap.Decode(asset.Data) : null;
+        if (bmp is null)
+        {
+            // Cache the miss so this warns once, not per open/frame (the flat-placeholder path draws instead).
+            capi.Logger.Warning("[scribe] backdrop asset {0} not loadable ({1}); using placeholder color",
+                loc, asset is null ? "not found" : "Data null or undecodable");
+        }
+        backdropCache[key] = bmp;
+        return bmp;
+    }
 
     /// <summary>Client-side: THIS player's HUD/pin preferences (client-local; defaults until
     /// <see cref="StartClientSide"/> loads the config). The HUD reads these directly. Falls back to a

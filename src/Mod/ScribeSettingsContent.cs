@@ -178,6 +178,14 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                     LabeledControl(
                         "settings-windowfontscale", colors, scale,
                         FontScaleField("windowfontscale", settings.WindowFontScale, v => onMutate(s => s.WindowFontScale = v)))),
+
+                // Pixel Art Size (W): the single driving width of the Lectern's proportional layout
+                // (scribe-notebook-frame). Numeric field stepping by 10, clamped + snapped to the 10px grid
+                // in Core's Normalized(); the open Lectern re-lays-out live on the write-through rebuild.
+                LabeledControl(
+                    "settings-pixelartsize", colors, scale,
+                    IntField("pixelartsize", settings.PixelArtSize, step: 10,
+                        onChanged: v => onMutate(s => s.PixelArtSize = v))),
             });
     }
 

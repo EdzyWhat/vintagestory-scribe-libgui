@@ -9,7 +9,8 @@ using Gui.Widgets.Events;        // PointerEvent
 using Gui.Widgets.Framework;     // Widget, StatefulWidget, State, Theme, ValueKey, Key
 using Gui.Widgets.Input;         // Checkbox, FocusNode, GestureDetector, MouseRegion
 using Gui.Widgets.Gestures;      // ScrollController
-using Gui.Widgets.Layout;        // Column, Row, Expanded, Padding, SizedBox, Center, CrossAxisAlignment, MainAxisAlignment
+using Gui.Widgets.Layout;        // Column, Row, Expanded, Padding, SizedBox, Center, Align, Alignment, CrossAxisAlignment, MainAxisAlignment
+using Gui.Widgets.Overlay;       // Tooltip
 using Gui.Widgets.Painting;      // BoxStyle
 using Gui.Widgets.Scroll;        // ListView, SingleChildScrollView, Scrollable, Scrollbar
 using Gui.Core.Layout;           // MainAxisSize
@@ -20,6 +21,41 @@ using Vintagestory.API.Config;   // Lang, GlobalConstants
 using Vintagestory.API.MathTools;  // BlockPos
 
 namespace Scribe;
+
+/// <summary>
+/// The Lectern dialog's proportional layout, derived entirely from ONE driving width <c>W</c> (the player's
+/// "Pixel Art Size" preference — scribe-notebook-frame). The whole dialog is an art-sized <c>OuterArtBox</c>
+/// of <c>W × H</c> whose height matches the backdrop art's aspect ratio (1024×1160 → <c>H = W·1160/1024</c>),
+/// so LibGUI's hard-coded stretch-to-fill <c>BoxStyle.Texture</c> renders the art as a uniform, distortion-
+/// free scale. Every inner region's size is a fixed proportion of <c>W</c> (or <c>H</c>), so the widget tree
+/// reads as ratios rather than arithmetic and one number rescales the entire layout. The three column widths
+/// sum to <see cref="InnerW"/> exactly (<c>0.0675 + 0.765 + 0.0675 = 0.9</c>) so no column overflows; the
+/// ~7% of <c>H</c> unused by <see cref="TitleBarH"/> + <see cref="InnerH"/> is bottom margin.
+/// </summary>
+internal readonly record struct LecternLayout(float W)
+{
+    /// <summary>Outer box height, matched to the backdrop art's 1024×1160 aspect so stretch-to-fill is a
+    /// uniform scale (no skew).</summary>
+    public float H => W * 1160f / 1024f;
+
+    /// <summary>The draggable title-bar band (top 13% of the outer box).</summary>
+    public float TitleBarH => 0.13f * H;
+
+    /// <summary>The centered inner section: 90% of the outer width, 80% of the outer height.</summary>
+    public float InnerW => 0.9f * W;
+    public float InnerH => 0.8f * H;
+
+    /// <summary>Each side spacer/nav column (left spacer + right icon-button column).</summary>
+    public float SideColW => 0.0675f * W;
+
+    /// <summary>The center tasks column that hosts the existing scrolling read/editor content.</summary>
+    public float TasksColW => 0.765f * W;
+
+    /// <summary>The bottom-anchored title+buttons row inside the title bar (75% of the outer width,
+    /// 6.5% of the outer height).</summary>
+    public float TitleBtnsW => 0.75f * W;
+    public float TitleBtnsH => 0.065f * H;
+}
 
 /// <summary>
 /// The lectern dialog, rebuilt on LibGUI (modid <c>gui</c>). As of migrate-editor-view-libgui this
@@ -69,6 +105,15 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     /// <summary>Set when a focus move or a row growth needs the focused row scrolled into view; acted
     /// on in <see cref="OnRenderGUI"/> AFTER layout has run (EnsureVisible reads live geometry).</summary>
     private bool pendingEnsureVisible;
+
+    /// <summary>Set by <see cref="OnRowBlurred"/> when a task row lost focus while empty, so the row's
+    /// removal + rebuild is deferred to the next <see cref="OnRenderGUI"/> (add-empty-task-lifecycle).
+    /// The blur fires from inside the field's focus-notification (and, on a row→row move, mid-way
+    /// through <c>FocusManager.RequestFocus</c> — the old node blurs before the new one focuses), so
+    /// removing the row synchronously would dispose focus nodes mid-transition and strand the pending
+    /// new focus. Deferring is the same re-entrancy guard <see cref="needsEditorCollapseCleanup"/> uses.
+    /// Null when no empty row is awaiting removal.</summary>
+    private int? pendingEmptyRowRemoval;
 
     /// <summary>Editor rows that have been deleted from the scratch document but are still collapsing their
     /// height to zero before leaving the list (scribe-list-collapse), keyed by the block's stable
@@ -164,16 +209,22 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         ForceRebuild();
     }
 
-    protected override WindowConfig CreateWindowConfig() => new()
+    protected override WindowConfig CreateWindowConfig()
     {
-        // 567px wide to match the vanilla survival Handbook's dialog: its detail view composes to a
-        // 567px outer width (500px content clip -> FixedGrow(6) = 506 -> ForkBoundingParent(5,_,36,_)
-        // = 547 -> +2x10 ElementToDialogPadding = 567; confirmed by decompiling
-        // Vintagestory.GameContent.GuiDialogHandbook). Height unchanged.
-        Size = new Vector2(567, 520),
-        Draggable = true,
-        Resizable = true,
-    };
+        // The whole dialog is the notebook art's OuterArtBox: size it to W × H (art aspect) so the
+        // stretch-to-fill backdrop renders un-distorted (scribe-notebook-frame). W is the player's Pixel
+        // Art Size preference, read fresh at open (TryOpen calls this per open, after the ctor set
+        // modSystem). Non-resizable so the aspect (hence the art) can never be stretched off-square; the
+        // title-bar band is the drag zone, so DragHandleHeight matches its height instead of the stock 24.
+        var layout = new LecternLayout(modSystem.MySettings.PixelArtSize);
+        return new WindowConfig
+        {
+            Size = new Vector2(layout.W, layout.H),
+            Draggable = true,
+            Resizable = false,
+            DragHandleHeight = layout.TitleBarH,
+        };
+    }
 
     /// <summary>
     /// The native dialog overrode <c>IsInRangeOfBlock</c> to fix a Creative-mode walk-away bug: the
@@ -294,6 +345,10 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     private void OnClickSwitchToRead()
     {
         if (focusedEditIndex is { } idx) NormalizeRowOnCommit(idx);
+        // Drop any abandoned empty task before flushing so the read view / persisted doc never shows one
+        // (add-empty-task-lifecycle D5) — the focused row may be an untyped new task the blur hasn't swept.
+        PurgeEmptyTasksFromScratch();
+        pendingEmptyRowRemoval = null; // superseded by the purge; don't act on it after the editor tears down
         FlushIfDirty();
         SendReleaseLockPacket();
         CaptureScrollForRestore();
@@ -415,18 +470,25 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         FocusEditorRow(prev);
     }
 
-    /// <summary>Enter: commit the focused row, then insert a new placeholder task directly beneath it
-    /// and focus it (so the player types straight into the new row). Rebuilds because the row set
-    /// changed. If the insert is rejected (shouldn't happen — placeholder is non-blank), falls back to
-    /// advancing focus so Enter is never a dead key.</summary>
+    /// <summary>Enter: commit the focused row, then insert a new EMPTY task directly beneath it and focus
+    /// it (so the player types straight into the new row). Rebuilds because the row set changed.
+    ///
+    /// <para>Q5 (add-empty-task-lifecycle): Enter on a row that is itself empty/whitespace-only is a
+    /// no-op on the row set — it does NOT stack a second empty task. Without this, empty-init would let
+    /// Enter-Enter-Enter spam a column of empty rows; instead the caret just stays where it is.</para></summary>
     private void EditorInsertTaskBelow(int index)
     {
-        if (scratch is null) return;
+        if (scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
+
+        // Q5: don't stack another empty task beneath an already-empty task row.
+        var current = scratch.Blocks[index];
+        if (current.IsTask && string.IsNullOrWhiteSpace(current.Text)) return;
+
         NormalizeRowOnCommit(index);
         FlushIfDirty();
 
         int insertAt = index + 1;
-        if (scratch.InsertTask(insertAt, Lang.Get("scribe:scribe-gui-newtask-placeholder")))
+        if (scratch.InsertTask(insertAt, ""))
         {
             isDirty = true;
             SyncFocusNodesToScratch();
@@ -439,6 +501,26 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         {
             FocusEditorRow(Math.Min(index + 1, scratch.Blocks.Count - 1));
         }
+    }
+
+    /// <summary>A row's editable field lost focus (add-empty-task-lifecycle D3). If the block at
+    /// <paramref name="index"/> is a TASK whose text is empty/whitespace-only, schedule its removal —
+    /// this is the self-destruct that turns "clear the text and click away" (or Tab off an untyped new
+    /// row) into a keyboard-only delete. A text section may be empty and is never auto-removed.
+    ///
+    /// <para>The actual delete is DEFERRED to <see cref="OnRenderGUI"/> (<see cref="pendingEmptyRowRemoval"/>)
+    /// rather than run here: blur fires from inside the field's focus-notification, and on a row→row move
+    /// the old node blurs mid-way through <c>FocusManager.RequestFocus</c> — deleting now (which disposes +
+    /// recreates focus nodes and rebuilds the tree) would strand the in-flight focus of the row being
+    /// entered. Reading the block from live scratch by index, and re-checking emptiness at removal time,
+    /// keeps this idempotent with the <see cref="OnRowFocusChanged"/> commit that also fires on a
+    /// row→row move.</para></summary>
+    private void OnRowBlurred(int index)
+    {
+        if (!isEditorMode || scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
+        var block = scratch.Blocks[index];
+        if (!block.IsTask || !string.IsNullOrWhiteSpace(block.Text)) return;
+        pendingEmptyRowRemoval = index;
     }
 
     /// <summary>Editor checkbox toggle: mutate the scratch document and mark dirty (lock-gated, unlike
@@ -587,13 +669,15 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         ForceRebuild();
     }
 
-    /// <summary>"Add task" button: append a placeholder task, grow the focus-node list, and rebuild
-    /// with the new row auto-focused so the player can type over the placeholder immediately.</summary>
+    /// <summary>"Add task" button: append an EMPTY task, grow the focus-node list, and rebuild with the
+    /// new row auto-focused so the player types straight into it (no boilerplate to clear —
+    /// add-empty-task-lifecycle). The field renders a dimmed "New task…" ghost hint while empty; if the
+    /// row is abandoned without typing, its blur removes it (see <see cref="OnRowBlurred"/>).</summary>
     private void OnClickAddTask()
     {
         if (scratch is null) return;
         if (focusedEditIndex is { } leaving) NormalizeRowOnCommit(leaving);
-        scratch.AddTask(Lang.Get("scribe:scribe-gui-newtask-placeholder"));
+        scratch.AddTask("");
         isDirty = true;
         SyncFocusNodesToScratch();
         autoFocusRowOnRebuild = scratch.Blocks.Count - 1;
@@ -632,6 +716,34 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         }
     }
 
+    /// <summary>True when the currently-focused editor row is a task whose text is empty/whitespace-only —
+    /// a transiently-empty row the player is (or just was) editing (add-empty-task-lifecycle). The autosave
+    /// tick uses this to avoid serializing that transient empty task; leaving the row / closing removes it.</summary>
+    private bool FocusedRowIsEmptyTask()
+    {
+        if (scratch is null || focusedEditIndex is not { } idx || idx < 0 || idx >= scratch.Blocks.Count) return false;
+        var block = scratch.Blocks[idx];
+        return block.IsTask && string.IsNullOrWhiteSpace(block.Text);
+    }
+
+    /// <summary>Removes every empty/whitespace-only TASK block from the scratch document, marking dirty if
+    /// any were removed (add-empty-task-lifecycle D5). Text sections are left untouched — an empty note is
+    /// valid. Called at the terminal commit paths (switch-to-read, close) so an abandoned empty task the
+    /// blur-removal hadn't yet swept is never flushed or shown in the read view. No rebuild/collapse — the
+    /// caller tears the editor down or rebuilds into the read view immediately after.</summary>
+    private void PurgeEmptyTasksFromScratch()
+    {
+        if (scratch is null) return;
+        for (int i = scratch.Blocks.Count - 1; i >= 0; i--)
+        {
+            var block = scratch.Blocks[i];
+            if (block.IsTask && string.IsNullOrWhiteSpace(block.Text) && scratch.DeleteBlock(i))
+            {
+                isDirty = true;
+            }
+        }
+    }
+
     // ---------------- Autosave / flush (throttled, lock-gated) ----------------
 
     private void StartAutosaveTick()
@@ -648,7 +760,15 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         }
     }
 
-    private void OnAutosaveTick(float deltaTime) => FlushIfDirty();
+    /// <summary>Autosave tick. Skips a flush while the focused row is a transiently-empty task
+    /// (add-empty-task-lifecycle): the player is mid-typing an empty new row, and serializing it would
+    /// round-trip an empty task into the shared document a beat before its blur removes it. Any OTHER
+    /// dirty edit still flushes on the next tick once the focused row has content or focus has moved.</summary>
+    private void OnAutosaveTick(float deltaTime)
+    {
+        if (FocusedRowIsEmptyTask()) return;
+        FlushIfDirty();
+    }
 
     /// <summary>Send the scratch document to the server through the existing lock-gated edit path and
     /// optimistically update the local cache so an immediate switch-to-read doesn't flash pre-edit
@@ -737,6 +857,24 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             if (IsOpened()) ForceRebuild();
         }
 
+        // A task row lost focus while empty (add-empty-task-lifecycle): remove it now, deferred out of the
+        // blur notification so we don't dispose focus nodes mid focus-transition. Re-read from live scratch
+        // and re-check emptiness so a stale index or a row that gained text in the meantime is a safe no-op
+        // (idempotent with the OnRowFocusChanged commit that also fires on a row→row move). DeleteEditorBlock
+        // handles the focus-to-above fixup (Q1) and the collapse animation.
+        if (pendingEmptyRowRemoval is { } emptyIdx)
+        {
+            pendingEmptyRowRemoval = null;
+            if (isEditorMode && scratch is not null && emptyIdx >= 0 && emptyIdx < scratch.Blocks.Count)
+            {
+                var block = scratch.Blocks[emptyIdx];
+                if (block.IsTask && string.IsNullOrWhiteSpace(block.Text))
+                {
+                    DeleteEditorBlock(emptyIdx);
+                }
+            }
+        }
+
         if (pendingEnsureVisible && isEditorMode && focusedEditIndex is { } idx
             && idx < editorFocusNodes.Count && editorFocusNodes[idx].Owner is { } element)
         {
@@ -788,6 +926,10 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         if (isEditorMode)
         {
             if (focusedEditIndex is { } closeIdx) NormalizeRowOnCommit(closeIdx);
+            // Same empty-task cleanup as switch-to-read: closing with an abandoned empty task must not
+            // persist it (add-empty-task-lifecycle D5).
+            PurgeEmptyTasksFromScratch();
+            pendingEmptyRowRemoval = null;
             FlushIfDirty();
             SendReleaseLockPacket();
             StopAutosaveTick();
@@ -817,44 +959,157 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
 
     protected override Widget Build()
     {
-        // Read the Pixel-Art Display preference fresh each build (scribe-themed-toggle D5), mirroring how
-        // RowStyle reads WindowFontScale fresh — so toggling the setting relights this dialog on the
-        // MyPinsChanged rebuild with no reopen. On = Scribe's light theme; off = the player's global
-        // LibGUI theme. The wrap recolors every descendant that reads Theme.Of(context); the title bar
-        // does NOT follow the wrap (WindowFrame reads ThemeData.Default at construction,
-        // WindowTitleBar.cs:231), so its colors are passed explicitly from the same scheme (task 4.2).
+        // Read the Pixel-Art Display preference AND the Pixel Art Size (W) fresh each build (mirrors how
+        // RowStyle reads WindowFontScale fresh) so toggling either relays out this dialog on the
+        // MyPinsChanged/UpdateMySettings rebuild with no reopen. On = Scribe's light theme + notebook art;
+        // off = the player's global LibGUI theme with no art. W drives the whole proportional layout via
+        // LecternLayout; the window Size is derived from the same W in CreateWindowConfig (applied at open).
         bool pixelArt = modSystem.MySettings.PixelArtDisplay;
-        var colors = ScribeTheme.For(pixelArt).ColorScheme;
+        var layout = new LecternLayout(modSystem.MySettings.PixelArtSize);
 
+        // The OuterArtBox is the notebook art itself (or a bare box when Pixel-Art Display is OFF, or the
+        // flat placeholder color when the PNG is missing — the existing gate + fallback, now at the root).
+        // Sized to W × H so the stretch-to-fill backdrop is a uniform, distortion-free scale. There is no
+        // WindowFrame: the tree below IS the header + content, so the art frames everything rather than
+        // sitting as a strip beneath a stock bar.
         return new Theme(
             ScribeTheme.For(pixelArt),
-            child: new WindowFrame(
-                title: Lang.Get("scribe:scribe-gui-title"),
-                onClose: () => TryClose(),
-                fillHeight: true,
-                titleBarColor: colors.Surface,
-                textColor: colors.OnSurface,
-                child: BuildCentralRegion()));
+            child: WrapBackdrop(pixelArt, layout, BuildOuterArtBox(layout)));
     }
 
-    /// <summary>The dialog's central content region: the read or editor view, each carrying a small chrome
-    /// row with the gear. As of the scribe-themed-toggle pivot (2026-07-25) the gear opens the SINGLE
-    /// standalone settings window (<see cref="ScribeModSystem.OpenSettings"/>) shared with the HUD gear —
-    /// the former in-Lectern settings view (a third central-region state) was removed. <c>WindowFrame</c>
-    /// has no trailing-action slot, so the gear lives in a header row just under the title bar.</summary>
-    private Widget BuildCentralRegion()
+    /// <summary>Wrap the layout tree in the OuterArtBox: the notebook backdrop <see cref="Container"/> sized to
+    /// <c>W × H</c> when Pixel-Art Display is ON, or the tree in a bare same-sized box when OFF (the existing
+    /// gate — scribe-gui-backdrops D5). The single <see cref="ScribeBackdrops.LecternPage"/> spec backs both
+    /// views; a missing PNG degrades to the flat tan placeholder (existing fallback).
+    /// <see cref="ScribeModSystem.GetBackdropBitmap"/> caches the bitmap, so this re-reads a cached reference
+    /// each build (no reload). The size is pinned here (not only via the window Size) so the art fills the
+    /// whole dialog exactly and the aspect can't drift.</summary>
+    private Widget WrapBackdrop(bool pixelArt, LecternLayout layout, Widget tree)
     {
-        Widget content = isEditorMode ? BuildEditorContent() : BuildReadContent();
-        return new Column(
-            spacing: 6,
-            crossAxisAlignment: CrossAxisAlignment.Stretch,
+        if (!pixelArt)
+        {
+            return new SizedBox(width: layout.W, height: layout.H, child: tree);
+        }
+        var bmp = modSystem.GetBackdropBitmap(ScribeBackdrops.LecternPage.Texture);
+        var style = bmp is not null
+            ? new BoxStyle { Texture = bmp, Width = layout.W, Height = layout.H }
+            : new BoxStyle { Color = new Vector4(0.85f, 0.78f, 0.62f, 1.0f), Width = layout.W, Height = layout.H };
+        return new Container(style: style, child: tree);
+    }
+
+    /// <summary>The OuterArtBox's contents: a vertical stack of the draggable TitleBar band and the
+    /// three-column SectionInnerBox, framed by the notebook art (scribe-notebook-frame). The ~7% of H below
+    /// the inner box is bottom margin (the Column is top-aligned by default).</summary>
+    private Widget BuildOuterArtBox(LecternLayout layout) =>
+        new Column(
+            crossAxisAlignment: CrossAxisAlignment.Center,
             mainAxisSize: MainAxisSize.Max,
             children: new Widget[]
             {
-                new ScribeGearHeader(onOpenSettings: modSystem.OpenSettings),
-                new Expanded(child: content),
+                BuildTitleBar(layout),
+                BuildSectionInnerBox(layout),
+            });
+
+    /// <summary>The TitleBar band (<c>W × 0.13H</c>) — the window's drag zone (see
+    /// <see cref="WindowConfig.DragHandleHeight"/>). It holds a bottom-anchored, centered TitleTextButtons row
+    /// (<c>0.75W × 0.065H</c>): the dialog title on the left (window text ×1.1) and a right-aligned group of
+    /// SVG nav/close buttons. Closing works without the stock frame — the close button calls
+    /// <see cref="GuiBase.TryClose"/>.</summary>
+    private Widget BuildTitleBar(LecternLayout layout)
+    {
+        var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
+        float titleFont = ScribeRowConstants.BaseWindowFontSize
+            * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale) * 1.1f;
+
+        Widget titleRow = new Row(
+            mainAxisAlignment: MainAxisAlignment.SpaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.Center,
+            mainAxisSize: MainAxisSize.Max,
+            children: new Widget[]
+            {
+                new Text(Lang.Get("scribe:scribe-gui-title"),
+                    new TextStyle { FontSize = titleFont, Weight = FontWeight.Bold, Color = colors.OnSurface }),
+                // Close button: the delete SVG at 1.4× the per-row delete control size (design D3), tooltipped.
+                TitleButton("scribeclose", "scribe-gui-close", colors.Error,
+                    size: ScribeRowConstants.RowCheckboxSize * 1.4f, onTap: () => TryClose()),
+            });
+
+        return new SizedBox(
+            width: layout.W,
+            height: layout.TitleBarH,
+            child: new Align(
+                Alignment.BottomCenter,
+                child: new SizedBox(
+                    width: layout.TitleBtnsW,
+                    height: layout.TitleBtnsH,
+                    child: titleRow)));
+    }
+
+    /// <summary>The SectionInnerBox (<c>0.9W × 0.8H</c>, centered): a row of three full-height columns —
+    /// a left spacer, the center tasks column hosting the existing scrolling read/editor content, and a
+    /// right column of tooltipped nav icons. The three widths sum to <see cref="LecternLayout.InnerW"/>
+    /// exactly, so nothing overflows.</summary>
+    private Widget BuildSectionInnerBox(LecternLayout layout) =>
+        new SizedBox(
+            width: layout.InnerW,
+            height: layout.InnerH,
+            child: new Row(
+                crossAxisAlignment: CrossAxisAlignment.Stretch,
+                mainAxisSize: MainAxisSize.Max,
+                children: new Widget[]
+                {
+                    new SizedBox(width: layout.SideColW),                             // SectionLeftCol (spacer)
+                    new SizedBox(width: layout.TasksColW, child: BuildCentralRegion()), // LecternTasksBox
+                    new SizedBox(width: layout.SideColW, child: BuildRightColNav()),   // SectionRightCol
+                }));
+
+    /// <summary>SectionRightCol: a vertical stack of tooltipped nav buttons — Settings (gear → the shared
+    /// standalone settings window), Read view, Edit view, Pinned tasks. Read is a plain "R" text button for
+    /// now (placeholder for the checkbox check SVG); the others reuse the mod's registered SVGs
+    /// (scribe-notebook-frame D3). Read/Edit switch the dialog's own view; Pinned is a stub until the pinned
+    /// view lands.</summary>
+    private Widget BuildRightColNav()
+    {
+        var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
+        float size = ScribeRowConstants.RowCheckboxSize * 1.2f;
+
+        return new Column(
+            spacing: 8,
+            mainAxisAlignment: MainAxisAlignment.Start,
+            crossAxisAlignment: CrossAxisAlignment.Center,
+            mainAxisSize: MainAxisSize.Max,
+            children: new Widget[]
+            {
+                TitleButton("scribegear", "scribe-gui-nav-settings", colors.OnSurfaceVariant,
+                    size: size, onTap: modSystem.OpenSettings),
+                // Read view: plain "R" text button placeholder (design D3) — to become the checkbox check SVG.
+                WithTooltip("scribe-gui-nav-read",
+                    new ScribeRowButtonText("R", colors.OnSurfaceVariant, size, onTap: EnterReadMode)),
+                TitleButton("scribeedit", "scribe-gui-nav-edit", colors.OnSurfaceVariant,
+                    size: size, onTap: RequestEditorAccess),
+                TitleButton("scribepin", "scribe-gui-nav-pinned", colors.OnSurfaceVariant,
+                    size: size, onTap: () => { /* pinned view: stub until the pinned-task view ships */ }),
             });
     }
+
+    /// <summary>A tooltipped icon button reusing the per-row button chrome (<see cref="ScribeRowButton"/>).</summary>
+    private static Widget TitleButton(string iconName, string tooltipKey, Vector4 color, float size, Action onTap) =>
+        WithTooltip(tooltipKey, new ScribeRowButton(iconName: iconName, iconColor: color, size: size, onTap: onTap));
+
+    /// <summary>Wrap a button in a localized hover tooltip (<c>scribe:&lt;key&gt;</c>), using the global
+    /// overlay so it isn't clipped by the surrounding boxes.</summary>
+    private static Widget WithTooltip(string key, Widget child) =>
+        new Tooltip(
+            child: child,
+            content: new Padding(
+                EdgeInsets.All(6),
+                child: new Text(Lang.Get("scribe:" + key), new TextStyle { FontSize = 13, SoftWrap = true })),
+            useGlobalOverlay: true);
+
+    /// <summary>The tasks column's content region: the read or editor view. Its former gear-header chrome row
+    /// moved to the SectionRightCol nav stack (scribe-notebook-frame), so this is now just the active view
+    /// filling the column.</summary>
+    private Widget BuildCentralRegion() => isEditorMode ? BuildEditorContent() : BuildReadContent();
 
     /// <summary>The live row style for this build, derived from the player's current settings (NOT cached
     /// at open — add-settings-tab D4), so a window-font-scale change from the settings view repaints the
@@ -867,8 +1122,14 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             // reference), so a later mutation of the authoritative document can't alias into a built
             // row — a re-sync rebuilds instead. Pinned is a per-player query (IsPinnedForMe), not a
             // document field, so each row carries its TaskId and is tinted from the client cache.
+            // Belt-and-suspenders (add-empty-task-lifecycle D5): the editor's blur-removal + terminal purge
+            // keep an empty task out of the persisted document, so this filter should rarely matter — but
+            // if an empty task ever reaches the read view (e.g. an older doc, or an autosave that raced a
+            // clear), never render it as a blank checkbox row. Task-only: an empty note is valid. The
+            // read-view toggle addresses tasks by TaskId, so dropping rows here doesn't misalign anything.
             blocks: lectern.Document.Blocks
                 .Select((b, i) => new ScribeReadRowData(i, b.IsTask, b.Done, IsPinnedForMe(b.TaskId), b.TaskId, b.Text))
+                .Where(r => !r.IsTask || !string.IsNullOrWhiteSpace(r.Text))
                 .ToList(),
             onToggleTask: OnReadViewCompleteTask,
             onSwitchToEditor: RequestEditorAccess,
@@ -898,6 +1159,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             onCommitAndAdvance: EditorAdvanceFrom,
             onCommitAndRetreat: EditorRetreatFrom,
             onInsertTaskBelow: EditorInsertTaskBelow,
+            onRowBlurred: OnRowBlurred,
             onToggleTask: ToggleEditorTask,
             onDeleteBlock: DeleteEditorBlock,
             onTogglePinned: TogglePinnedEditorTask,
@@ -1232,6 +1494,7 @@ internal sealed class ScribeLecternEditorContent : StatefulWidget
         Action<int> onCommitAndAdvance,
         Action<int> onCommitAndRetreat,
         Action<int> onInsertTaskBelow,
+        Action<int> onRowBlurred,
         Action<int> onToggleTask,
         Action<int> onDeleteBlock,
         Action<int> onTogglePinned,
@@ -1251,6 +1514,7 @@ internal sealed class ScribeLecternEditorContent : StatefulWidget
         OnCommitAndAdvance = onCommitAndAdvance;
         OnCommitAndRetreat = onCommitAndRetreat;
         OnInsertTaskBelow = onInsertTaskBelow;
+        OnRowBlurred = onRowBlurred;
         OnToggleTask = onToggleTask;
         OnDeleteBlock = onDeleteBlock;
         OnTogglePinned = onTogglePinned;
@@ -1271,6 +1535,9 @@ internal sealed class ScribeLecternEditorContent : StatefulWidget
     public Action<int> OnCommitAndAdvance { get; }
     public Action<int> OnCommitAndRetreat { get; }
     public Action<int> OnInsertTaskBelow { get; }
+    /// <summary>A row's field genuinely lost focus (add-empty-task-lifecycle): the dialog removes the row
+    /// if it is an empty task. See <see cref="GuiDialogScribeLecternLibGui.OnRowBlurred"/>.</summary>
+    public Action<int> OnRowBlurred { get; }
     public Action<int> OnToggleTask { get; }
     public Action<int> OnDeleteBlock { get; }
     public Action<int> OnTogglePinned { get; }
@@ -1370,6 +1637,7 @@ internal sealed class ScribeLecternEditorContentState : State<ScribeLecternEdito
                     onCommitAndAdvance: Widget.OnCommitAndAdvance,
                     onCommitAndRetreat: Widget.OnCommitAndRetreat,
                     onInsertTaskBelow: Widget.OnInsertTaskBelow,
+                    onRowBlurred: Widget.OnRowBlurred,
                     onToggleTask: Widget.OnToggleTask,
                     onDelete: Widget.OnDeleteBlock,
                     onTogglePinned: Widget.OnTogglePinned,
@@ -1459,6 +1727,7 @@ internal sealed class ScribeEditRow : StatefulWidget
         Action<int> onCommitAndAdvance,
         Action<int> onCommitAndRetreat,
         Action<int> onInsertTaskBelow,
+        Action<int> onRowBlurred,
         Action<int> onToggleTask,
         Action<int> onDelete,
         Action<int> onTogglePinned,
@@ -1477,6 +1746,7 @@ internal sealed class ScribeEditRow : StatefulWidget
         OnCommitAndAdvance = onCommitAndAdvance;
         OnCommitAndRetreat = onCommitAndRetreat;
         OnInsertTaskBelow = onInsertTaskBelow;
+        OnRowBlurred = onRowBlurred;
         OnToggleTask = onToggleTask;
         OnDelete = onDelete;
         OnTogglePinned = onTogglePinned;
@@ -1496,6 +1766,7 @@ internal sealed class ScribeEditRow : StatefulWidget
     public Action<int> OnCommitAndAdvance { get; }
     public Action<int> OnCommitAndRetreat { get; }
     public Action<int> OnInsertTaskBelow { get; }
+    public Action<int> OnRowBlurred { get; }
     public Action<int> OnToggleTask { get; }
     public Action<int> OnDelete { get; }
     public Action<int> OnTogglePinned { get; }
@@ -1559,8 +1830,13 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                     size: style.CheckboxSize)));
         }
 
+        // Ghost hint only on TASK rows (add-empty-task-lifecycle D6b) — a text section is legitimately
+        // empty and needs no "New task…" prompt. Painted dimmed while the field is empty; not committed.
+        string placeholder = Widget.Data.IsTask ? Lang.Get("scribe:scribe-gui-newtask-placeholder") : "";
+
         children.Add(new Expanded(child: new ScribeMultilineField(
             initialText: Widget.Data.Text,
+            placeholder: placeholder,
             focusNode: Widget.FocusNode,
             fontSize: style.FontSize,
             padX: style.FieldPadX,
@@ -1569,7 +1845,8 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             onChanged: text => Widget.OnTextChanged(index, text),
             onCommitAndAdvance: () => Widget.OnCommitAndAdvance(index),
             onCommitAndRetreat: () => Widget.OnCommitAndRetreat(index),
-            onInsertTaskBelow: () => Widget.OnInsertTaskBelow(index))));
+            onInsertTaskBelow: () => Widget.OnInsertTaskBelow(index),
+            onBlur: () => Widget.OnRowBlurred(index))));
 
         // Row body: [grip][checkbox][text]. Delete/pin no longer reserve columns here — they float on
         // top of the row (see below), so the text can use the full width.
@@ -1828,39 +2105,69 @@ internal sealed class ScribeRowButtonState : State<ScribeRowButton>
     }
 }
 
-// ============================================================================
-// Settings entry point (add-settings-tab; gear opens the shared standalone window post-2026-07-25 pivot)
-// ============================================================================
-
-/// <summary>A slim chrome row shown above the read/editor content carrying the gear that opens the
-/// settings view (add-settings-tab D2). <c>WindowFrame</c> exposes no trailing-action slot, so the gear
-/// sits here just under the title bar rather than in the title bar itself. Right-aligned so it reads as
-/// a chrome affordance rather than content. Present in both the read and editor views (the parent only
-/// omits it while the settings view itself is showing).</summary>
-internal sealed class ScribeGearHeader : StatelessWidget
+/// <summary>A text-glyph twin of <see cref="ScribeRowButton"/>: the same bordered, theme-filled square with
+/// hover/press states, but drawing a short text label (e.g. "R") instead of a VS icon. Used for the Read-view
+/// nav button as a placeholder until the checkbox check SVG replaces it (scribe-notebook-frame D3).</summary>
+internal sealed class ScribeRowButtonText : StatefulWidget
 {
-    private readonly Action onOpenSettings;
-
-    public ScribeGearHeader(Action onOpenSettings)
+    public ScribeRowButtonText(string label, Vector4 color, float size, Action onTap, Gui.Widgets.Framework.Key? key = null)
+        : base(key)
     {
-        this.onOpenSettings = onOpenSettings;
+        Label = label;
+        Color = color;
+        Size = size;
+        OnTap = onTap;
     }
+
+    public string Label { get; }
+    public Vector4 Color { get; }
+    public float Size { get; }
+    public Action OnTap { get; }
+
+    public override State CreateState() => new ScribeRowButtonTextState();
+}
+
+internal sealed class ScribeRowButtonTextState : State<ScribeRowButtonText>
+{
+    private bool hovered;
+    private bool pressed;
 
     public override Widget Build(BuildContext context)
     {
         var colors = Theme.Of(context).ColorScheme;
-        return new Padding(
-            EdgeInsets.Only(right: 10, top: 2),
-            child: new Row(
-                mainAxisAlignment: MainAxisAlignment.End,
-                mainAxisSize: MainAxisSize.Max,
-                children: new Widget[]
+
+        // Same solid raised-surface fill + hover/press lift as ScribeRowButton (kept opaque so it reads as a
+        // real button over the art).
+        Vector4 baseBg = colors.SurfaceHigh with { W = 1f };
+        float lift = pressed ? -0.06f : hovered ? 0.10f : 0f;
+        Vector4 bg = new(
+            Math.Clamp(baseBg.X + lift, 0f, 1f),
+            Math.Clamp(baseBg.Y + lift, 0f, 1f),
+            Math.Clamp(baseBg.Z + lift, 0f, 1f),
+            1f);
+
+        float box = Widget.Size - ScribeRowButton.BoxShrink;
+        float fontSize = Widget.Size * 0.62f;
+
+        return new GestureDetector(
+            onTap: _ => Widget.OnTap(),
+            onEnter: _ => { if (!hovered) SetState(() => hovered = true); },
+            onExit: _ => { if (hovered || pressed) SetState(() => { hovered = false; pressed = false; }); },
+            onPress: _ => { if (!pressed) SetState(() => pressed = true); },
+            onRelease: _ => { if (pressed) SetState(() => pressed = false); },
+            child: new Container(
+                style: new BoxStyle
                 {
-                    new ScribeRowButton(
-                        iconName: "scribegear",
-                        iconColor: colors.OnSurfaceVariant,
-                        size: 24f,
-                        onTap: onOpenSettings),
-                }));
+                    Color = bg,
+                    Width = box,
+                    Height = box,
+                    CornerRadius = new Vector4(3f),
+                    BorderThickness = 1f,
+                    BorderColor = colors.Border,
+                },
+                child: new Center(
+                    child: new Text(Widget.Label,
+                        new TextStyle { FontSize = fontSize, Weight = FontWeight.Bold, Color = Widget.Color }))));
     }
 }
+

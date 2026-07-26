@@ -8,11 +8,11 @@ within an item the read/editor page and the settings page SHALL each be able to 
 specification. Adding a new item's backdrops SHALL require only new specifications plus their PNGs — no
 change to the drawing helper or the cache.
 
-#### Scenario: An item declares distinct page and settings backdrops
+#### Scenario: An item declares one or more backdrops
 - **WHEN** a new item's backdrops are added to the backdrop-specification holder
-- **THEN** the item contributes at least two specifications (a page/read-editor spec and a settings
-  spec), each naming its own texture `AssetLocation`, without any shared-size constraint or change to
-  the `Wrap` helper or the bitmap cache
+- **THEN** the item contributes one specification per backdrop-bearing view (a single body spec, or a
+  distinct page and settings spec where it exposes both views), each naming its own texture
+  `AssetLocation`, without any shared-size constraint or change to the `Wrap` helper or the bitmap cache
 
 #### Scenario: A backdrop of any dimensions is accepted
 - **WHEN** a backdrop specification names a PNG whose dimensions differ from another view's PNG
@@ -20,13 +20,13 @@ change to the drawing helper or the cache.
   shared backdrop size
 
 ### Requirement: A backdrop is drawn behind dialog content when themed mode is on
-When the `ThemedBackgrounds` preference is ON, a Scribe dialog view SHALL draw its declared backdrop
+When the `PixelArtDisplay` preference is ON, a Scribe dialog view SHALL draw its declared backdrop
 behind the dialog's content. The backdrop SHALL be composed by wrapping the view's content in a LibGUI
 `Container` whose `BoxStyle` paints the backdrop, so the art sits behind the content automatically
 without a separate `Stack` layer. The content SHALL remain fully interactive over the backdrop.
 
 #### Scenario: Themed-on view shows its backdrop behind content
-- **WHEN** the player opens a Scribe dialog view with `ThemedBackgrounds` ON
+- **WHEN** the player opens a Scribe dialog view with `PixelArtDisplay` ON
 - **THEN** the view's declared backdrop is painted behind the view's widgets, and the widgets remain
   visible and interactive in front of it
 
@@ -47,15 +47,32 @@ in-game before any art exists.
 - **WHEN** a backdrop asset cannot be loaded
 - **THEN** the failure is logged once for diagnosis, not repeatedly on every frame or every dialog open
 
-### Requirement: The read/editor page and the settings page render distinct backdrops
-Within a single item, the read/editor page view and the settings page view SHALL render backdrops from
-different specifications, so the two pages are visually distinct even before final art is drawn.
+### Requirement: The mechanism supports distinct per-view backdrops
+The backdrop mechanism SHALL support a distinct backdrop specification per view within an item, so that
+where an item exposes more than one backdrop-bearing view (e.g. a read/editor page and a separate settings
+page) each view can render a different specification — a distinct texture, or a distinct placeholder color
+while art is pending — making the views visually distinct even before final art is drawn. An item that
+exposes only one backdrop-bearing view backs that single view; the per-view capability is a property of
+the mechanism, not a requirement that every item split its views.
 
-#### Scenario: Switching to settings shows a different backdrop
-- **WHEN** the player switches a Scribe dialog from its read/editor page to its settings page with
-  themed mode ON
-- **THEN** the settings page's backdrop is drawn from a different specification than the read/editor
-  page's backdrop (a distinct texture, or a distinct placeholder color while art is pending)
+> NOTE (2026-07-26): the Lectern — the only item wired in this change — exposes a single backdrop-bearing
+> body (its read and editor views share one `LecternPage` spec). Its former in-dialog settings view was
+> removed in the 2026-07-25 pivot (the gear now opens the standalone settings window, which deliberately
+> follows the global theme and is not backdrop-wrapped), so there is no second in-dialog view to carry a
+> distinct spec here. The `LecternSettings` spec is defined and reserved; the distinct-per-view path is
+> exercised when a future item (Desk / Notebook / Clay Tablet) ships its own page-vs-settings split.
+
+#### Scenario: An item with two backdrop-bearing views renders them from distinct specifications
+- **WHEN** an item exposes two backdrop-bearing views (a read/editor page and a settings page) and the
+  player switches between them with themed mode ON
+- **THEN** each view's backdrop is drawn from a different specification than the other's (a distinct
+  texture, or a distinct placeholder color while art is pending)
+
+#### Scenario: An item with a single backdrop-bearing view backs that view
+- **WHEN** an item exposes only one backdrop-bearing view (as the Lectern does — read and editor share
+  one spec) and the player opens it with themed mode ON
+- **THEN** that single view draws its declared backdrop, and the absence of a second in-dialog view is not
+  a failure of the mechanism
 
 ### Requirement: Backdrop bitmaps are self-loaded, shared, and cached
 Backdrop bitmaps SHALL be self-loaded on the mod system using `TryGet(loc, loadAsset: true)` so they
@@ -80,11 +97,11 @@ disposed.
 - **THEN** every cached backdrop bitmap is disposed
 
 ### Requirement: No backdrop is drawn when themed mode is off
-When the `ThemedBackgrounds` preference is OFF, a Scribe dialog view SHALL NOT draw any backdrop. The
+When the `PixelArtDisplay` preference is OFF, a Scribe dialog view SHALL NOT draw any backdrop. The
 view's content SHALL be used bare (no backdrop `Container` wrap), yielding the plain LibGUI fallback
 appearance with zero art required.
 
 #### Scenario: Themed-off view draws no backdrop
-- **WHEN** the player opens a Scribe dialog view with `ThemedBackgrounds` OFF
+- **WHEN** the player opens a Scribe dialog view with `PixelArtDisplay` OFF
 - **THEN** no backdrop texture or placeholder color is drawn behind the content, and the view renders
   as the plain LibGUI fallback

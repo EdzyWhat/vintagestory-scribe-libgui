@@ -251,7 +251,10 @@ having been applied. All completion policies SHALL share the same window duratio
 animated feedback during the window that reflects the pending outcome: a completion under a policy that
 removes the task or its pin SHALL visibly fade the affected row, and a completion under a policy that
 keeps-and-sinks the task SHALL visibly settle the row toward its sunk position. The task's checkbox SHALL
-remain operable throughout the window so the undo is always available.
+remain operable throughout the window so the undo is always available. When the window elapses under a
+policy that removes the task or its pin, the affected row SHALL collapse its height to zero — so the rows
+below it move up smoothly to fill the space — and SHALL be removed from the HUD only after that collapse
+completes, rather than disappearing in a single frame.
 
 #### Scenario: Undo within the window applies no completion
 - **WHEN** a player checks off a pinned task on the HUD and unchecks it before the window elapses
@@ -266,3 +269,14 @@ remain operable throughout the window so the undo is always available.
 - **WHEN** a completion is pending within its window
 - **THEN** the row animates to preview the outcome (a fade for unpin/delete, a settle toward the bottom
   for sink), while its checkbox stays operable for undo
+
+#### Scenario: A removing completion collapses the row before it leaves
+- **WHEN** the undoable window elapses for a completion under a policy that removes the task or its pin
+  (unpin or delete)
+- **THEN** the faded row's height collapses smoothly to zero and the rows below move up to meet it, and
+  the row is removed from the HUD only after that collapse finishes
+
+#### Scenario: A re-pin during or after a collapse is not left invisible
+- **WHEN** a task's row is collapsing (or has just collapsed) on the HUD and that same task is pinned
+  again before the HUD reconciles with the server
+- **THEN** the task reappears in the HUD at full height, with no residual collapse hiding it

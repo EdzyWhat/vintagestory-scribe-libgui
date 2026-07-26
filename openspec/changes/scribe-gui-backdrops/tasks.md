@@ -1,38 +1,42 @@
 ## 1. ScribeModSystem: self-loaded backdrop bitmap cache
 
-- [ ] 1.1 Add a `Dictionary<string, SKBitmap?>` backdrop cache field to `ScribeModSystem` (keyed by the
+- [x] 1.1 Add a `Dictionary<string, SKBitmap?>` backdrop cache field to `ScribeModSystem` (keyed by the
   asset location string; caching a null result too).
-- [ ] 1.2 Add `public SKBitmap? GetBackdropBitmap(AssetLocation loc)`: return the cached entry if
+- [x] 1.2 Add `public SKBitmap? GetBackdropBitmap(AssetLocation loc)`: return the cached entry if
   present; otherwise `TryGet(loc, loadAsset: true)`, `SKBitmap.Decode(asset.Data)`, cache and return the
   result. Mirror the self-loading pattern of `RegisterSvgIcon` (~:217) so it survives post-startup asset
   unload.
-- [ ] 1.3 On an absent/unloadable asset, cache `null` and log **exactly one** warning for that location
+- [x] 1.3 On an absent/unloadable asset, cache `null` and log **exactly one** warning for that location
   (so repeat opens do not re-warn or re-attempt the failing load every frame).
-- [ ] 1.4 Dispose every cached `SKBitmap` and clear the cache in `ScribeModSystem.Dispose()`; ensure no
+- [x] 1.4 Dispose every cached `SKBitmap` and clear the cache in `ScribeModSystem.Dispose()`; ensure no
   dialog ever disposes a backdrop bitmap.
 
 ## 2. ScribeBackdrop.cs: spec record + per-view specs + Wrap helper
 
-- [ ] 2.1 Add `src/Mod/ScribeBackdrop.cs` with `internal sealed record ScribeBackdropSpec(AssetLocation
+- [x] 2.1 Add `src/Mod/ScribeBackdrop.cs` with `internal sealed record ScribeBackdropSpec(AssetLocation
   Texture)` — no size field, nothing assumes a shared dimension.
-- [ ] 2.2 Add a `ScribeBackdrops` holder exposing per-item / per-view specs: `LecternPage` (reusing the
+- [x] 2.2 Add a `ScribeBackdrops` holder exposing per-item / per-view specs: `LecternPage` (reusing the
   existing `textures/gui/lecternbackdrop.png`) and `LecternSettings` (its own
   `textures/gui/lecternsettingsbackdrop.png`, placeholder until art lands). Leave room for
   Desk/Notebook/Tablet page+settings specs as they ship.
-- [ ] 2.3 Add `static Widget Wrap(ICoreClientAPI capi, ScribeBackdropSpec spec, Vector4 placeholder,
+- [x] 2.3 Add `static Widget Wrap(ICoreClientAPI capi, ScribeBackdropSpec spec, Vector4 placeholder,
   Widget child)`: fetch the bitmap via `GetBackdropBitmap`; build a `Container` with
   `new BoxStyle { Texture = bmp }` when non-null, else `new BoxStyle { Color = placeholder }`; return it
   wrapping `child`. Rely on `Container` painting its texture behind the child (no `Stack`).
 
 ## 3. Wire Lectern page vs settings backdrops (gated on the toggle)
 
-- [ ] 3.1 In `GuiDialogScribeLecternLibGui.Build()`, read `modSystem.MySettings.ThemedBackgrounds` fresh
-  each build (following the `ScribeRowStyle.FromSettings` per-build precedent ~:845).
-- [ ] 3.2 When themed mode is ON, wrap the read/editor body in `ScribeBackdrop.Wrap(..., LecternPage,
-  <page placeholder color>, body)` and the settings body in `ScribeBackdrop.Wrap(..., LecternSettings,
-  <distinct settings placeholder color>, body)` — distinct specs and distinct placeholder colors so the
-  two pages are distinguishable even with zero art.
-- [ ] 3.3 When themed mode is OFF, use each body bare (no `Container` wrap) so the dialog renders the
+- [x] 3.1 In `GuiDialogScribeLecternLibGui.Build()`, read `modSystem.MySettings.PixelArtDisplay` fresh
+  each build (following the `ScribeRowStyle.FromSettings` per-build precedent ~:845). NOTE: the toggle
+  shipped as `PixelArtDisplay` (sibling `scribe-themed-toggle`), not the planned `ThemedBackgrounds`; its
+  doc-comment explicitly reserves "illustrated backgrounds" for this change's phase.
+- [x] 3.2 When themed mode is ON, wrap the Lectern body (read AND editor) in
+  `ScribeBackdrop.Wrap(..., LecternPage, <tan page placeholder>, body)`. DEVIATION: the in-Lectern
+  settings view was removed in the 2026-07-25 pivot (the gear now opens the standalone, never-themed
+  settings window), so there is no second in-dialog view to carry `LecternSettings`. That spec is defined
+  and reserved for a future item's page-vs-settings split; the standalone settings window is deliberately
+  not backdrop-wrapped (it follows the global theme). Decided with the user 2026-07-26.
+- [x] 3.3 When themed mode is OFF, use each body bare (no `Container` wrap) so the dialog renders the
   plain LibGUI fallback with no backdrop.
 
 ## 4. Placeholder-fallback behavior
@@ -54,7 +58,7 @@
 
 ## 6. Documentation
 
-- [ ] 6.1 Append a LibGUI backdrop lesson to `VSAPI-NOTES.md` (`## LibGUI`): self-load backdrops via
+- [x] 6.1 Append a LibGUI backdrop lesson to `VSAPI-NOTES.md` (`## LibGUI`): self-load backdrops via
   `TryGet(loadAsset: true)` + `SKBitmap.Decode`; `Container` paints its `BoxStyle.Texture` behind its
   child (no `Stack` needed); `BoxStyle.Texture`/`Image` filter bilinear (soft on pixel upscale, crisp on
   downsample) vs `NineSliceBox` = nearest-neighbor/crisp; cache the bitmap (and null) on the mod system,

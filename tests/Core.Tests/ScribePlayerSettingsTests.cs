@@ -81,6 +81,40 @@ public class ScribePlayerSettingsTests
     }
 
     [Fact]
+    public void Default_PixelArtSize_Is600()
+    {
+        Assert.Equal(600, new ScribePlayerSettings().PixelArtSize);
+        Assert.Equal(600, new ScribePlayerSettings().Normalized().PixelArtSize);
+    }
+
+    [Theory]
+    [InlineData(2000, 1000)]  // above max -> clamp to max
+    [InlineData(1001, 1000)]
+    [InlineData(100, 300)]    // below min -> clamp to min
+    [InlineData(0, 300)]
+    [InlineData(-50, 300)]
+    [InlineData(600, 600)]    // in range, already on grid -> unchanged
+    public void Normalized_PixelArtSize_ClampsToRange(int raw, int expected)
+    {
+        var s = new ScribePlayerSettings { PixelArtSize = raw }.Normalized();
+
+        Assert.Equal(expected, s.PixelArtSize);
+    }
+
+    [Theory]
+    [InlineData(603, 600)]   // snaps down to the nearest 10
+    [InlineData(607, 610)]   // snaps up to the nearest 10
+    [InlineData(615, 620)]   // 61.5 -> 62 (banker's rounding ToEven) -> 620
+    [InlineData(444, 440)]
+    [InlineData(446, 450)]
+    public void Normalized_PixelArtSize_SnapsToTenGrid(int raw, int expected)
+    {
+        var s = new ScribePlayerSettings { PixelArtSize = raw }.Normalized();
+
+        Assert.Equal(expected, s.PixelArtSize);
+    }
+
+    [Fact]
     public void NormalizePolicy_Keep_IsPreserved()
     {
         // Keep (=3) is a defined policy and must survive normalization (regression against the new value).

@@ -21,6 +21,132 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## scribe-notebook-frame
+
+> Real notebook art (1024×1160) replaces the flat-tan placeholder, and the Lectern is restructured into a
+> proportional, art-framed layout driven by ONE width `W` ("Pixel Art Size"). The whole dialog is an
+> art-sized `OuterArtBox` (`W × H`, aspect 0.883) so LibGUI's stretch-to-fill `BoxStyle.Texture` renders the
+> art as a uniform, distortion-free scale; `WindowFrame` is dropped and the tree is built directly —
+> `Column[TitleBar band, three-column SectionInnerBox]`. Drag = `DragHandleHeight` sized to the title bar;
+> close = the delete SVG at 1.4×. Right column carries icon nav (Settings gear / Read "R" placeholder / Edit
+> feather / Pinned pin). `W` is a permanent Appearance preference (300–1000, step 10, default 600), read
+> fresh each build. Restaged Debug 2026-07-26 — fully relaunch the client first. **Note:** the Pinned nav
+> button is a no-op stub (no in-Lectern pinned view exists yet).
+
+- [x] `82cc3a7e` **Art renders un-distorted.** With Pixel-Art ON, open the Lectern: the notebook art fills the
+      whole window as the OuterArtBox and renders un-distorted (portrait, not skewed/stretched), framing the
+      content. *(scribe-notebook-frame 6.3)*
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T12-04-59): "Works." The notebook art fills
+        the window un-distorted as the OuterArtBox.
+- [ ] `e647c1c7` **Title bar drags + close.** Click-drag inside the top title-bar band → the window moves.
+      Click the close button (the 1.4× delete SVG, top-right of the title row) → the dialog closes.
+      *(scribe-notebook-frame 6.3)*
+      - **Still broken 2026-07-26** (playtest submission 2026-07-26T11-25-01, general notes; drag/close
+        themselves confirmed working in 2026-07-26T12-04-59 "Works"): the close button's CLICKABLE area
+        doesn't coincide with its drawn border — the hit region sits above and to the left of the visible
+        button (may be macOS-specific). Drag/close functionally work, but the misaligned hitbox is a real
+        defect. Also requested (changes, not defects): (a) add a drag-grip icon to the LEFT of the close
+        button so the draggable area is discoverable (the whole band is draggable but players won't intuit
+        it); (b) add 4px padding-left on the title text.
+- [x] `c74d74a8` **Three-column frame legible.** The scrolling read/editor content sits in the center column,
+      framed by the left spacer and the right icon column, all inside the art; task/note text stays legible
+      over the backdrop. *(scribe-notebook-frame 6.3)*
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T12-04-59): "Works! I love it!" Content sits
+        framed in the center column, legible over the backdrop.
+- [x] `a14e9435` **Right-col nav + tooltips.** Hover each right-column nav button (gear/R/feather/pin) → a
+      tooltip shows; gear opens Settings, R switches to read view, feather requests the editor. Pin is a no-op
+      stub for now. *(scribe-notebook-frame 6.3)*
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T12-04-59): "Works." Nav buttons show
+        tooltips and route to settings / read / editor as specced (Pin still a stub).
+- [x] `1bd45cf7` **Content interactive over art.** Over the backdrop, confirm the full editor still works:
+      type, check a task, pin, drag-reorder, and scroll all behave as before. *(scribe-notebook-frame 4.5)*
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T12-04-59): "Works." Full editor interaction
+        (type/check/pin/reorder/scroll) is intact over the backdrop.
+- [x] `3b87ec96` **Pixel Art Size rescales.** Change Pixel Art Size in Scribe Settings while a Lectern is
+      open → note whether the layout rescales live in-session or only re-sizes on the next open.
+      *(scribe-notebook-frame 6.4)*
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T12-04-59): "Works." Changing Pixel Art Size
+        re-lays-out the open Lectern's structures live. (The window/art canvas itself only grows on next open
+        — that limitation is the `a6308d20` side-bug below, not a failure of the live-relayout behavior.)
+- [x] `a6308d20` **Size persists + not resizable.** Set a Pixel Art Size, relog → it reads back (snapped to
+      the 10 grid, clamped 300–1000 on hand-edit); confirm the window itself cannot be resized by dragging its
+      edge. *(scribe-notebook-frame 6.4)*
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T12-04-59): "Works." The size persists across
+        a relog and the window can't be edge-dragged.
+      - **Side-bug found — art canvas won't grow past the last-OPENED width until relog.** Repro: log in at
+        600 → set to 300 → quit/relog → try 300→600: the structures move as W increases but the ART cannot
+        redraw/grow past 300; relog again and the art is correctly at 600. Confirmed root cause: the window
+        `Size` (hence the art `Container`'s `W × H` canvas) is only set in `CreateWindowConfig`, which runs
+        ONCE per open (`GuiBase.TryOpen`). A live W change re-lays-out the content tree but never re-applies
+        the window Size, so the OuterArtBox is capped at whatever W the window was OPENED at — raising W
+        beyond that spills the inner structures past the fixed art canvas. This is the same defect as the
+        earlier "">600 doesn't grow"" note (2026-07-26T11-25-01), now with an exact repro. Fix: re-apply the
+        window Size when W changes (or reopen), so the art canvas tracks the live W. Bugfix-pass candidate.
+
+## scribe-gui-backdrops
+
+> The reusable per-item / per-view illustrated-backdrop mechanism. A `ScribeBackdropSpec` (an
+> `AssetLocation`, no size assumption), a `ScribeBackdrops` holder, and `ScribeBackdrop.Wrap` that wraps a
+> view's body in a `Container` painting the loaded texture behind it (or a flat placeholder color when the
+> PNG is absent). Bitmaps are SELF-LOADED (`TryGet(loadAsset:true)` + `SKBitmap.Decode`) and cached on
+> `ScribeModSystem` so they survive VS's post-startup asset unload; disposed on mod-system dispose, never by
+> a dialog. Drawing is gated on the `PixelArtDisplay` toggle (ON = draw, OFF = plain LibGUI fallback).
+> **Deviation from plan:** the toggle shipped as `PixelArtDisplay` (not `ThemedBackgrounds`), and the
+> Lectern's in-dialog settings *view* was removed in the 2026-07-25 pivot — so only the single Lectern body
+> (read+editor) is wrapped, in `ScribeBackdrops.LecternPage` (reusing the existing tan
+> `lecternbackdrop.png`); the `LecternSettings` spec is defined but unused, and the standalone settings
+> window deliberately stays on the global theme. Restaged Debug 2026-07-26 — fully relaunch first.
+
+- [x] `a23a57e9` **Pixel-Art ON — Lectern backdrop.** With Pixel-Art Display ON, open the Lectern in both
+      read and editor view: the tan `lecternbackdrop.png` art draws behind the content in both, and the
+      task/note text stays legible over it. *(scribe-gui-backdrops 5.1)*
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T00-36-12): "Works." The backdrop draws
+        behind both the read and editor views with Pixel-Art ON and text stays legible.
+      - **Follow-up (new scope, not a defect):** the user is replacing the flat-tan `lecternbackdrop.png`
+        placeholder with real art at `Desktop/Lectern/Scribe-Notebook.png` — which is NOT the current
+        on-screen size, so scaling/positioning of the backdrop needs a design discussion before the swap.
+- [x] `da001e4a` **Pixel-Art OFF — no backdrop.** Turn Pixel-Art Display OFF and open the Lectern: neither
+      the read nor editor view draws any backdrop — both render as the plain LibGUI fallback (global
+      theme), no tan art. *(scribe-gui-backdrops 5.3)*
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T00-36-12): "Works." With Pixel-Art OFF
+        neither view draws a backdrop, as specced.
+      - **Plan change incoming (new scope):** the user is REVERSING this decision — they now want the
+        standard theme-derived backgrounds shown behind the Read/Edit views AND the Scribe Settings window
+        when Pixel-Art Display is OFF (rather than the current transparent/no-backdrop fallback). Likely a
+        matter of not suppressing the theme's own surface fill on those views. This item may become Obsolete
+        once that work lands.
+- [x] `ccaee4e2` **Backdrop survives asset unload.** Play a while after launch (so the engine unloads
+      assets), then open, close, and reopen the Lectern: the backdrop still renders every time (self-load
+      defeats the post-startup unload; the shared bitmap is cached, not re-decoded per open).
+      *(scribe-gui-backdrops 5.4)*
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T00-36-12): "Works — survives unload." The
+        backdrop still renders on reopen well after startup, proving the self-load defeats the post-startup
+        asset unload.
+- [ ] `0ebd6a06` **Backdrop legibility verdict.** While backdrops are on, judge whether the art fights the
+      text anywhere (read + editor); record whether a `textColor` override or a semi-opaque content panel is
+      needed. *(scribe-gui-backdrops 5.5)*
+      - **Backlogged 2026-07-26** (playtest submission 2026-07-26T00-36-12): a final legibility verdict is
+        premature — the current backdrop is still the flat-tan placeholder and is about to be replaced by
+        real art (`Scribe-Notebook.png`, see `a23a57e9`). No "art fights the text" problem was reported over
+        the placeholder; re-judge once the real art lands. The user's note under this item was actually a
+        SEPARATE contrast request (pinned-row tint), split out as `pin-row-contrast` below.
+      - **NEW REQUEST (pinned-row contrast, new scope):** in the Read/Edit views the pinned-task row uses a
+        semi-transparent fill that reads too subtly. The user wants much more contrast — a BLUE row tint at
+        ≥85% opacity, a darker blue for dark mode and a lighter blue for light mode; expected to need
+        iteration. Touches `ScribeTheme`/the pinned-row tint, not the backdrop mechanism.
+- [ ] `b7e0d31c` **Missing-asset placeholder + single warning.** Temporarily rename/remove the LOADED
+      backdrop PNG, open the Lectern with Pixel-Art ON: the body draws its flat placeholder color (no crash,
+      structure renders normally) and the log shows exactly ONE `[scribe] backdrop asset … not loadable`
+      warning across repeated opens. Restore the PNG after. *(scribe-gui-backdrops 4.1 / 4.2)*
+      - **Obsolete 2026-07-26** (playtest submission 2026-07-26T11-25-01, user unsure — asked for the exact
+        file to rename): this item's target moved. scribe-notebook-frame repointed `ScribeBackdrops.LecternPage`
+        from `lecternbackdrop.png` to `scribe-notebook.png`, so renaming `lecternbackdrop.png` no longer tests
+        anything (it's now the reserved-but-UNLOADED placeholder). The live asset to rename is now
+        `~/Library/Application Support/VintagestoryData/Mods/scribe/assets/scribe/textures/gui/scribe-notebook.png`
+        — BUT the missing-asset fallback is better re-verified under a fresh scribe-notebook-frame item against
+        that path, since the placeholder color + OuterArtBox structure also changed this session. Retired here;
+        will resurface as a notebook-frame item. (Exact live path recorded above for whenever it's retested.)
+
 ## scribe-themed-toggle
 
 > A persisted, client-local `PixelArtDisplay` preference (default ON) that themes Scribe's three CORE
@@ -95,20 +221,55 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > and the lectern editor (delete). Self-ticking so it animates under `ForceRebuild`; controller is
 > host-owned + keyed by identity so it resumes across remounts. Reorder-glide is out of scope (deferred).
 
-- [ ] `536fbadf` **HUD delete/unpin collapse.** Complete a HUD task under Delete and under Unpin; after
+- [x] `536fbadf` **HUD delete/unpin collapse.** Complete a HUD task under Delete and under Unpin; after
       the fade window the row's height collapses smoothly and the rows below slide up (no instant
       vanish/snap). *(scribe-list-collapse 5.1)*
-- [ ] `7f885cf7` **Rapid HUD removals.** Complete/delete several HUD rows in quick succession; each
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T22-36-25): "Works." The row collapses
+        smoothly under both Delete and Unpin.
+- [x] `7f885cf7` **Rapid HUD removals.** Complete/delete several HUD rows in quick succession; each
       collapses independently, none strands a half-height gap. *(scribe-list-collapse 5.2)*
-- [ ] `a6b4fc0e` **Re-pin during collapse.** Unpin a HUD task (it collapses), then immediately re-pin it
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T22-36-25): "Works." Each removal collapses
+        independently, no stranded gap.
+- [x] `a6b4fc0e` **Re-pin during collapse.** Unpin a HUD task (it collapses), then immediately re-pin it
       from the lectern; it reappears at full height, not stuck invisible. *(scribe-list-collapse 5.3)*
-- [ ] `fe0e18fc` **Lectern row delete collapse.** Hover a lectern editor row and click delete; it
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T22-36-25): "Works." Re-pinning during the
+        collapse brings the row back at full height.
+- [x] `fe0e18fc` **Lectern row delete collapse.** Hover a lectern editor row and click delete; it
       collapses smoothly and rows below slide up. Delete several fast; each collapses independently.
       *(scribe-list-collapse 5.4)*
-- [ ] `eb9e379c` **Delete at scroll bottom.** Scroll the editor to the bottom and delete the last row; no
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T22-36-25): "Works." Editor rows collapse
+        smoothly on delete, rows below slide up.
+- [x] `eb9e379c` **Delete at scroll bottom.** Scroll the editor to the bottom and delete the last row; no
       dead-space flash, the viewport settles once the collapse finishes. *(scribe-list-collapse 5.5)*
-- [ ] `58707ebd` **Collapse under rebuild.** Delete a HUD row while another pin's fade window is still
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T22-36-25): "Works." No dead-space flash;
+        the viewport settles after the collapse.
+- [x] `58707ebd` **Collapse under rebuild.** Delete a HUD row while another pin's fade window is still
       running; the collapse still completes smoothly (resume-from-elapsed registry). *(scribe-list-collapse 5.6)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T22-36-25): accepted as a win — the tester
+        found it too fiddly to trigger reliably (needs very fast cross-window mouse movement), deemed an
+        acceptable edge case. The resume-from-elapsed registry is exercised by 5.1–5.3 passing.
+- [ ] `dfad74a8` **Hanging textless checkbox after a HUD row clears.** After a HUD item is cleared, a bare
+      checkbox with no text is sometimes left behind on the HUD. *(scribe-list-collapse — follow-up)*
+      - **Still broken 2026-07-25** (playtest submission 2026-07-25T22-36-25, general note + screenshot
+        `.playtest-submissions/screenshots/2026-07-25T22-28-10-general.png`): the HUD shows two textless
+        checkboxes above a real "New task / New Line" pin. NOT an empty-text pin — an empty task can't be
+        pinned (pinning it blurs the field and the empty row self-destructs) or saved, confirmed by the
+        tester. Instead the row's TEXT faded to zero opacity over the undo window but the checkbox + row
+        height were left behind, so a bare checkbox lingers. Lives in the HUD removal machinery
+        (`HudScribePins` departing/`ScribeFadeText`/collapse), not in add-empty-task-lifecycle. Likely a
+        row whose completion sent but whose collapse/removal didn't retire the checkbox (or a Sink/undo
+        edge that leaves the faded text with a persistent checkbox). Needs a repro of the exact completion
+        policy + timing. Logged for a follow-up; not fixed here.
+      - **Not reproduced 2026-07-26** (playtest submission 2026-07-26T00-36-12): "keeping an eye on this,
+        but it hasn't popped up this game session." No recurrence this session; still unfixed and kept on
+        the list for a deliberate repro (the exact completion policy + timing that triggers it is still
+        unknown).
+      - **Still broken 2026-07-26 — REPRO FOUND** (playtest submission 2026-07-26T11-25-01): the trigger is
+        now known — under **"Delete task" policy**, rapidly click/queue a bunch of HUD tasks for completion,
+        then try to un-queue (uncheck within the undo window) some of them. That race sometimes strands the
+        bare checkbox. Confirms the earlier hypothesis (a completion whose collapse/removal didn't retire the
+        checkbox, on the undo path). Reproducible enough now to drive a fix in the HUD removal machinery
+        (`HudScribePins` departing / `ScribeFadeText` / collapse under Delete + rapid undo).
 
 ## add-settings-tab
 
@@ -208,7 +369,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       plate). *(add-pinned-task-hud 7.3)*
       - **Confirmed 2026-07-25** (user playtest, submission 2026-07-25T09-52-31): "Works." The HUD
         appears on pinning a task, showing text + done state legibly over the world.
-- [ ] `8439e474` **Completion policies.** Complete a HUD task under each policy (set in
+- [x] `8439e474` **Completion policies.** Complete a HUD task under each policy (set in
       `scribe-hud-config.json`): Sink → row mutes and after ~2s sinks to the bottom (re-toggle within
       2s undoes); Unpin → completion removes the row; Delete → completion deletes the underlying task.
       *(add-pinned-task-hud 7.4)*
@@ -216,6 +377,11 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         in-mod Settings Tab lands — hand-editing `scribe-hud-config.json` to switch policy per test is
         too fiddly. The Sink default path is exercised implicitly by 7.3/7.7; Unpin/Delete await the
         settings UI (a separate future change). Retest then.
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T22-36-25): "Works." Now that the Settings
+        UI lets the policy be switched in-game, all three policies (Sink/Unpin/Delete) behave on
+        completion. Two general-note caveats are tracked as separate follow-ups, not failures of this item:
+        the stale-editor-view-under-Delete issue (`80777b7b` below) and the hanging textless checkbox
+        after clearing a HUD row (`dfad74a8` under scribe-list-collapse).
 - [x] `9805a162` **Break lectern, pin survives.** Break the lectern hosting a pinned task → the pin
       stays on the HUD (player-owned) and is still completable from its snapshot; re-place the lectern →
       its source is restored. *(add-pinned-task-hud 7.5)*
@@ -242,13 +408,25 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       task text wraps within a fixed ~250px width rather than stretching wide. *(add-pinned-task-hud 4.5)*
       - **Confirmed 2026-07-25** (user playtest, submission 2026-07-25T09-52-31): "Works." The default
         top-right anchor sits left of the minimap (not under it) and text wraps within the fixed width.
-- [ ] `49d5003c` **Anchor/offset/width config.** Edit `scribe-hud-config.json`: set `HudAnchor` (e.g.
+- [x] `49d5003c` **Anchor/offset/width config.** Edit `scribe-hud-config.json`: set `HudAnchor` (e.g.
       `BottomRight` / `TopLeft` / `MiddleRight`), tweak `HudOffsetX`/`HudOffsetY`, and change
       `HudRowWidth`; reload → the HUD moves to that corner/edge, shifts by the offset (toward center),
       and the row area resizes to the new width. Confirm it never runs off-screen. *(add-pinned-task-hud 4.5)*
       - **Backlogged 2026-07-25** (user playtest, submission 2026-07-25T09-52-31): "The default is in the
         right place." Non-default anchors/offsets not exercised yet; the user will assess when testing on
         PC. Deferred, not broken — the default path is confirmed under `2394a823`.
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T22-36-25): "Works." Anchor/offset/width
+        set via the Settings UI reposition + resize the HUD correctly (no off-screen).
+- [ ] `80777b7b` **HUD-complete under Delete doesn't refresh an open editor.** With the editor view open
+      and Delete policy, checking a task off VIA THE HUD deletes it server-side but the open editor still
+      shows the row until you toggle Editor → Read → Editor. *(add-pinned-task-hud — follow-up)*
+      - **Still broken 2026-07-25** (playtest submission 2026-07-25T22-36-25, general note): a HUD Delete
+        completion mutates the authoritative document, but the editor edits a PRIVATE scratch copy and
+        deliberately ignores external resyncs (`GuiDialogScribeLecternLibGui.RefreshReadView` is a no-op
+        while `isEditorMode`), so the deleted row lingers in the open editor until a view-swap reseeds the
+        scratch. Pre-existing design tension (editor isolation), surfaced by exercising the Delete policy —
+        NOT caused by add-empty-task-lifecycle. Fix is non-trivial (reconciling an external delete into a
+        live scratch without clobbering in-progress edits); logged for a follow-up, not fixed here.
 
 ## add-lectern-row-affordances-libgui
 
@@ -504,6 +682,18 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         read view with fresh edits, no lock/stale weirdness — the change-1 backlogged return path is fixed.
       - **Backlogged 2026-07-23 (survival walk-away):** the survival-specific auto-close-while-editing case
         is not yet tested (mirrors the read-view survival item); code path is in place.
+
+- [ ] `696dd143` **Editor unfocus traps hotkeys.** In editor view, add a task via the "New Task" button then
+      click away to unfocus the field — global hotkeys (e.g. H for Handbook) stop working, unlike opening the
+      editor before creating any task. Confirm hotkeys fire whenever no editor field is focused.
+      *(migrate-editor-view-libgui — follow-up)*
+      - **Still broken 2026-07-26** (playtest submission 2026-07-26T12-04-59, general note): after adding a
+        task via "New Task" and unfocusing, general hotkeys (notably H → Handbook) no longer fire — but they
+        DO work if you open the editor and don't create a task first. Likely tied to `CaptureAllInputs()`
+        returning `isEditorMode` (all input trapped for the whole editor view, not just while a field is
+        focused): once a "New Task" row exists, the pending empty-row / focus machinery may keep the view in a
+        state where input stays captured even with nothing focused. Investigate whether capture should be
+        gated on "a field is actually focused" rather than "editor mode is active." Bugfix-pass candidate.
 
 ## adopt-libgui-foundation
 
@@ -987,24 +1177,3 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         the now-empty row. This is the empty-task auto-delete-on-commit behavior that `add-empty-task-lifecycle`
         is meant to deliver (not yet implemented, 0/32) — logged here so it's not re-derived; retest under
         that change once its tasks land. (Tracked as `f34ea553` under add-empty-task-lifecycle.)
-
-## add-empty-task-lifecycle
-
-> Not yet implemented (0/32). These items capture pre-implementation observations from playtests so
-> they're not re-derived; each becomes a confirming retest once the change lands. Backlogged, not
-> broken — the current behavior is the intended pre-change behavior.
-
-- [ ] `05727f66` **New tasks init empty.** Click "Add task" (or Enter to spawn one) → the new row
-      should start EMPTY, ready to type, rather than pre-filled with placeholder text you must clear
-      first. *(add-empty-task-lifecycle — pending)*
-      - **Backlogged 2026-07-24** (user playtest, submission 2026-07-24T20-58-43): new task rows are
-        currently created with "New task" text, not empty. This is expected — `OnClickAddTask` seeds
-        `scribe-gui-newtask-placeholder` by design until `add-empty-task-lifecycle` (0/32) replaces it
-        with empty-init. Retest when that change is implemented.
-- [ ] `f34ea553` **Emptied row auto-deletes on commit.** In an existing task, select all (Cmd/Ctrl+A),
-      press Delete to empty it, then Tab / Shift+Tab (or click away) to commit → the now-empty row
-      should be removed, not left as a blank task. *(add-empty-task-lifecycle — pending)*
-      - **Backlogged 2026-07-24** (user playtest, submissions 2026-07-24T20-46-16 and 2026-07-24T20-58-43):
-        Cmd+A → Delete → Shift+Tab does nothing — the emptied row persists. Expected pre-change; the
-        auto-delete-on-commit lifecycle is what `add-empty-task-lifecycle` (0/32) delivers. Retest when
-        implemented.
