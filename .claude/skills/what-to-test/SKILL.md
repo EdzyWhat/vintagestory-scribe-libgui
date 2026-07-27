@@ -1,7 +1,7 @@
 ---
 name: what-to-test
 description: Surface a short, concrete list of in-game conditions to test in Vintage Story, pulled from the remaining manual-test tasks in any in-progress OpenSpec change; persist/regenerate that list as TESTING.md at the repo root so it survives across sessions, with agent-recorded verdicts (not raw checkboxes) as the only source of truth; and use freshly captured screenshots as evidence against it. Items carry one of four lifecycle verdicts -- Confirmed, Still broken, Backlogged, Obsolete -- and verdict-carrying items are retained across regeneration (they don't vanish when their task is done or removed). Use when the user asks "what should I test", "what should I check in-game", "give me a testing checklist", "what's left to verify", "update the testing checklist", wants to review/process submitted playtest reports, wants an item marked completed/backlogged/obsolete, or mentions a "screenshot"/"screen"/"pic" while discussing testing, a bug, or a feature (a new capture from the game's screenshot folder to triage and check against the checklist).
-version: "1.3"
+version: "1.4"
 ---
 
 # What should I test?
@@ -19,17 +19,27 @@ registered on this machine) or the work lives in one, pass `--store <id>` on `li
 0. **Restage-freshness check (do this FIRST, before listing anything).** The whole point of this
    skill is to send the user to test in-game — but the game only loads the mod DLLs at launch, from
    the staged copy in `~/Library/Application Support/VintagestoryData/Mods/scribe/`, NOT from the
-   repo. If code was committed without restaging, the user tests a stale build (this has actually
+   repo. If source changed without restaging, the user tests a stale build (this has actually
    happened — a 4-commit-stale build was playtested as if current). Guard against it:
 
    ```bash
-   # newest staged mod DLL mtime vs. the last commit that touched src/Mod
+   # newest staged mod DLL mtime vs. the newest SOURCE file under src/Mod
    stat -f %m "$HOME/Library/Application Support/VintagestoryData/Mods/scribe/Scribe.dll" 2>/dev/null
-   git -C <repo> log -1 --format=%ct -- src/Mod
+   find <repo>/src/Mod -type f \( -name '*.cs' -o -name '*.json' \) -not -path '*/bin/*' -not -path '*/obj/*' \
+     -exec stat -f %m {} \; | sort -rn | head -1
    ```
-   Also check for uncommitted `src/Mod` edits (`git status --porcelain src/Mod`). The staged build is
-   **stale** if the DLL mtime predates the last `src/Mod` commit, OR there are uncommitted `src/Mod`
-   changes not yet restaged.
+   Also check for uncommitted-but-unstaged edits (`git status --porcelain src/Mod`). The staged build
+   is **stale** if the DLL mtime predates the newest `src/Mod` source-file mtime, OR there are
+   `src/Mod` changes not yet restaged.
+
+   **Compare against source-file mtimes, NOT the last commit timestamp.** An earlier version of this
+   check compared the DLL to `git log -1 --format=%ct -- src/Mod`, which assumes you always commit
+   *then* restage. This project's habit is the reverse — build+test, `restage.sh`, *then* `git commit`
+   — so the commit lands ~1min AFTER the (current) DLL and the commit-time check reported a false
+   "stale" on a build that was in fact fresh (seen repeatedly). Source-file mtime answers the real
+   question ("does the staged DLL reflect current source?") regardless of commit order, and still
+   catches the genuine gotcha: edit or commit without restaging → a source file is newer than the DLL
+   → correctly flagged.
 
    - **If stale:** lead the whole response with a loud warning — e.g.
      `⚠️ Staged build is STALE (staged <time> ago, but src/Mod changed since) — restage before testing or you'll be looking at old code.`
