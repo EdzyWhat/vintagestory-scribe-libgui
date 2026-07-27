@@ -454,6 +454,60 @@ public class ScribeDocumentTests
         Assert.Equal(new[] { "A", "B" }, doc.Blocks.Select(b => b.Text));
     }
 
+    // --- MoveTaskToBottom (Sink completion) ---
+
+    [Fact]
+    public void MoveTaskToBottom_MovesToEnd_PreservingOthersOrder()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("A");
+        doc.AddTask("B");
+        doc.AddTask("C");
+        var idA = doc.Blocks[0].TaskId;
+
+        bool ok = doc.MoveTaskToBottom(idA);
+
+        Assert.True(ok);
+        Assert.Equal(new[] { "B", "C", "A" }, doc.Blocks.Select(b => b.Text));
+    }
+
+    [Fact]
+    public void MoveTaskToBottom_AlreadyLast_IsNoOpFalse()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("A");
+        doc.AddTask("B");
+        var idB = doc.Blocks[1].TaskId;
+
+        // Already last: nothing to do, reported as false, order unchanged.
+        Assert.False(doc.MoveTaskToBottom(idB));
+        Assert.Equal(new[] { "A", "B" }, doc.Blocks.Select(b => b.Text));
+    }
+
+    [Fact]
+    public void MoveTaskToBottom_UnknownId_FailsSafely()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("A");
+
+        Assert.False(doc.MoveTaskToBottom(Guid.NewGuid()));
+        Assert.Equal(new[] { "A" }, doc.Blocks.Select(b => b.Text));
+    }
+
+    [Fact]
+    public void MoveTaskToBottom_MovesPastTextSections()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("task1");
+        doc.AddTextSection("a note");
+        doc.AddTask("task2");
+        var id1 = doc.Blocks[0].TaskId;
+
+        Assert.True(doc.MoveTaskToBottom(id1));
+        // task1 sinks to the very end, below the note and task2.
+        Assert.Equal(new[] { "a note", "task2", "task1" }, doc.Blocks.Select(b => b.Text));
+    }
+
     // --- Out-of-range safety ---
 
     [Theory]

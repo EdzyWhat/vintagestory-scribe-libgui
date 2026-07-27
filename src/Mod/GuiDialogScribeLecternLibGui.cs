@@ -616,21 +616,69 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         pendingEmptyRowRemoval = index;
     }
 
-    /// <summary>Editor checkbox toggle: mutate the scratch document and mark dirty (lock-gated, unlike
-    /// the read view's lock-free toggle). The row flips its own checkbox optimistically.
+    /// <summary>Editor checkbox toggle — completes a task under the player's completion policy so the
+    /// editor behaves IDENTICALLY to the read/pinned views and the HUD (scribe-lectern-view-consistency
+    /// §4). The row flips its own checkbox optimistically before this runs.
+    ///
+    /// <para><b>Why the policy is enacted in <c>scratch</c>, not via <see cref="ScribeCompleteTaskMessage"/>
+    /// (design Decision 2 fallback, chosen):</b> the editor holds the edit lock and autosaves the WHOLE
+    /// scratch document authoritatively (<see cref="FlushIfDirty"/> → lock-gated <c>ApplyEdit</c>). A
+    /// lock-free completion message writes the shared document out-of-band, so the very next whole-doc
+    /// flush would clobber its Sink reorder / Delete. Enacting the policy directly in scratch keeps
+    /// everything on the one authoritative path the editor already owns, and the flush's
+    /// <c>ReconcileActorPins</c> then carries the acting player's pin snapshot (and drops a pin whose task
+    /// was deleted) for free — so the end state (done + Sink/Delete + pin effect) matches every other
+    /// surface. The one pin effect the flush does NOT cover is <c>Unpin</c> (the task survives, so the
+    /// snapshot reconcile keeps the pin); that is sent explicitly via the identity pin path.</para>
     ///
     /// <para>Focus preservation (8.5 "toggling a checkbox should NOT disturb the caret in another focused
     /// row"): the checkbox isn't <c>IFocusable</c>, so pressing it blurs whatever field was focused via
     /// LibGUI's <c>DispatchPointerDown</c> focus-clear (same root cause as the delete/pin/reorder controls
-    /// — a05caret1). No rebuild happens here (the checkbox flips optimistically in its own State, leaving
-    /// the focused field's State mounted), so re-request focus directly on the row that held it.</para></summary>
+    /// — a05caret1). Keep/Unpin do no rebuild (the checkbox flips optimistically in its own State, leaving
+    /// the focused field's State mounted), so re-request focus directly on the row that held it; the
+    /// Sink/Delete branches delegate to <see cref="ReorderEditorBlock"/>/<see cref="DeleteEditorBlock"/>,
+    /// which own their own rebuild + focus fix-up.</para></summary>
     private void ToggleEditorTask(int index)
     {
-        if (scratch is null) return;
-        if (scratch.ToggleTask(index))
+        if (scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
+        var block = scratch.Blocks[index];
+        if (!block.IsTask) return;
+
+        bool nowDone = !block.Done;
+        Guid taskId = block.TaskId;
+
+        if (!scratch.ToggleTask(index)) return;
+        isDirty = true;
+
+        // Apply the policy only on a transition INTO done — unchecking never sinks/deletes/unpins.
+        if (nowDone)
         {
-            isDirty = true;
+            switch (modSystem.MySettings.CompletionPolicy)
+            {
+                case ScribeCompletionPolicy.Delete:
+                    // Drop the row (with the collapse animation + focus fix-up); the flush's
+                    // ReconcileActorPins then removes any pin on the now-gone task. DeleteEditorBlock
+                    // owns the rebuild, so return without the focus re-home below.
+                    DeleteEditorBlock(index);
+                    return;
+                case ScribeCompletionPolicy.Sink:
+                    // Move the (now-done) task to the document bottom — a real reorder of the shared doc
+                    // once flushed, matching every other surface. ReorderEditorBlock owns the rebuild and
+                    // keeps the moved row focused; a task already last is a safe no-op there.
+                    ReorderEditorBlock(index, scratch.Blocks.Count - 1);
+                    return;
+                case ScribeCompletionPolicy.Unpin:
+                    // The task stays, so the flush's snapshot reconcile keeps the pin — unpin explicitly.
+                    if (IsPinnedForMe(taskId)) SendSetPin(taskId, false);
+                    break;
+                case ScribeCompletionPolicy.Keep:
+                default:
+                    break;
+            }
         }
+
+        // Keep/Unpin (and any un-check): no rebuild happened, so re-home the caret to the row that held
+        // focus (a05caret1).
         if (focusedEditIndex is { } held && held < editorFocusNodes.Count) FocusEditorRow(held);
     }
 
@@ -1315,6 +1363,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
                 .Where(r => !r.IsTask || !string.IsNullOrWhiteSpace(r.Text))
                 .ToList(),
             onToggleTask: OnReadViewCompleteTask,
+            onTogglePinned: OnReadViewTogglePinned,
             onSwitchToEditor: RequestEditorAccess,
             style: RowStyle,
             scrollController: sharedScrollController);
@@ -1368,6 +1417,14 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             TaskId = taskId.ToByteArray(),
             Policy = (byte)modSystem.MySettings.CompletionPolicy,
         });
+    }
+
+    /// <summary>Read-view pin toggle (scribe-lectern-view-consistency §2): pin/unpin the task by its
+    /// stable identity, reusing the same lock-free <see cref="SendSetPin"/> path the editor row uses.
+    /// The read view holds no scratch document, so it addresses the pin purely by TaskId.</summary>
+    private void OnReadViewTogglePinned(Guid taskId)
+    {
+        SendSetPin(taskId, !IsPinnedForMe(taskId));
     }
 
     // ---------------- Pin Tab (scribe-pin-editor) ----------------
@@ -1581,12 +1638,14 @@ internal sealed class ScribeLecternReadContent : StatefulWidget
     public ScribeLecternReadContent(
         IReadOnlyList<ScribeReadRowData> blocks,
         Action<Guid> onToggleTask,
+        Action<Guid> onTogglePinned,
         Action onSwitchToEditor,
         ScribeRowStyle style,
         ScrollController scrollController)
     {
         Blocks = blocks;
         OnToggleTask = onToggleTask;
+        OnTogglePinned = onTogglePinned;
         OnSwitchToEditor = onSwitchToEditor;
         Style = style;
         ScrollController = scrollController;
@@ -1595,6 +1654,8 @@ internal sealed class ScribeLecternReadContent : StatefulWidget
     public IReadOnlyList<ScribeReadRowData> Blocks { get; }
     /// <summary>Complete a task by its stable id (the read view completes by identity, not index).</summary>
     public Action<Guid> OnToggleTask { get; }
+    /// <summary>Pin/unpin a task by its stable id (scribe-lectern-view-consistency §2).</summary>
+    public Action<Guid> OnTogglePinned { get; }
     public Action OnSwitchToEditor { get; }
     public ScribeRowStyle Style { get; }
     /// <summary>Dialog-owned scroll controller shared by both views (see the dialog field); NOT disposed
@@ -1637,7 +1698,7 @@ internal sealed class ScribeLecternReadContentState : State<ScribeLecternReadCon
                 controller: Widget.ScrollController,
                 child: new ListView(
                     children: Widget.Blocks
-                        .Select(b => (Widget)new ScribeReadRow(b, Widget.OnToggleTask, style, new ValueKey<int>(b.Index)))
+                        .Select(b => (Widget)new ScribeReadRow(b, Widget.OnToggleTask, Widget.OnTogglePinned, style, new ValueKey<int>(b.Index)))
                         .ToList(),
                     // Scroll estimate for rows not yet mounted (variableHeight measures the real height
                     // of mounted rows). This MUST equal a true single-line row height, because the
@@ -1664,6 +1725,10 @@ internal sealed class ScribeLecternReadContentState : State<ScribeLecternReadCon
                 mainAxisSize: MainAxisSize.Max,
                 children: new Widget[]
                 {
+                    // A straight edge directly above the scroll region, matching the editor and pinned
+                    // views (scribe-lectern-view-consistency §1). Reuses the theme-border Divider the
+                    // settings form uses; inherits the Column's spacing gap below it.
+                    new Divider(),
                     new Expanded(child: rowList),
                     new Button(
                         child: new Text(Lang.Get("scribe:scribe-gui-switch-to-editor"), switchTextStyle),
@@ -1678,16 +1743,18 @@ internal sealed class ScribeLecternReadContentState : State<ScribeLecternReadCon
 /// </summary>
 internal sealed class ScribeReadRow : StatefulWidget
 {
-    public ScribeReadRow(ScribeReadRowData data, Action<Guid> onToggleTask, ScribeRowStyle style, Gui.Widgets.Framework.Key? key = null)
+    public ScribeReadRow(ScribeReadRowData data, Action<Guid> onToggleTask, Action<Guid> onTogglePinned, ScribeRowStyle style, Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
         Data = data;
         OnToggleTask = onToggleTask;
+        OnTogglePinned = onTogglePinned;
         Style = style;
     }
 
     public ScribeReadRowData Data { get; }
     public Action<Guid> OnToggleTask { get; }
+    public Action<Guid> OnTogglePinned { get; }
     public ScribeRowStyle Style { get; }
 
     public override State CreateState() => new ScribeReadRowState();
@@ -1696,6 +1763,9 @@ internal sealed class ScribeReadRow : StatefulWidget
 internal sealed class ScribeReadRowState : State<ScribeReadRow>
 {
     private bool done;
+    /// <summary>True while the pointer is over this row: the pin control is hidden until then, mirroring
+    /// the editor row's hover-conditional icons (lectern-gui-shell "Row icons are hover-conditional").</summary>
+    private bool hovered;
 
     public override void InitState()
     {
@@ -1755,16 +1825,37 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
 
         // Resting pinned indicator (lectern-gui-shell "Pinned tasks show a resting indicator"): a
         // pinned task carries the same subtle tint the editor row uses, drawn under the row content, so
-        // it reads as pinned without hovering. Unpinned tasks and text sections get no tint. The read
-        // view exposes no pin *toggle* (pinning is a lock-gated authoring action, design D4) — only this.
-        if (Widget.Data.IsTask && Widget.Data.Pinned)
+        // it reads as pinned without hovering. Unpinned tasks and text sections get no tint. The
+        // Container is ALWAYS present (transparent fill when unpinned) so the read row's index-0 child
+        // stays structurally identical across hover — the same reconciler-stability rule the editor row
+        // documents, so revealing the hover pin never remounts the row subtree.
+        rowBody = new Container(
+            style: new BoxStyle
+            {
+                Color = Widget.Data.IsTask && Widget.Data.Pinned ? ScribeRowConstants.PinnedTint(colors) : Vector4.Zero,
+            },
+            child: rowBody);
+
+        // Pin toggle floats on the right, task-only, shown on hover — mirroring the editor row's pin
+        // button (scribe-lectern-view-consistency §2). The read view still exposes no edit/delete/drag;
+        // only pin + the checkbox are interactive here.
+        var stackChildren = new List<Widget> { rowBody };
+        if (hovered && Widget.Data.IsTask)
         {
-            rowBody = new Container(
-                style: new BoxStyle { Color = ScribeRowConstants.PinnedTint(colors) },
-                child: rowBody);
+            stackChildren.Add(new Positioned(
+                right: 5f, top: ScribeRowControlNudge.FloatingButtonTop(style),
+                child: new ScribeRowButton(
+                    iconName: "scribepin",
+                    iconColor: Widget.Data.Pinned ? colors.Primary : colors.OnSurfaceVariant,
+                    size: style.ControlSize,
+                    onTap: () => Widget.OnTogglePinned(Widget.Data.TaskId),
+                    iconScale: 1.1f))); // pin glyph +10%, matching the editor (§10.2)
         }
 
-        return rowBody;
+        return new MouseRegion(
+            onEnter: _ => { if (!hovered) SetState(() => hovered = true); },
+            onExit: _ => { if (hovered) SetState(() => hovered = false); },
+            child: new Stack(stackChildren));
     }
 }
 
@@ -2067,6 +2158,8 @@ internal sealed class ScribeLecternEditorContentState : State<ScribeLecternEdito
                 mainAxisSize: MainAxisSize.Max,
                 children: new Widget[]
                 {
+                    // Straight edge above the scroll region (scribe-lectern-view-consistency §1).
+                    new Divider(),
                     new Expanded(child: scrollBody),
                     new Row(
                         spacing: 8,
@@ -2460,8 +2553,9 @@ internal sealed class ScribeLecternPinnedContentState : State<ScribeLecternPinne
             { AutoHide = false };
         }
 
-        // Completion-policy picker footer: the same control the Settings window offers, editing the one
-        // shared per-player preference (scribe-pin-editor — "one value, two hosts").
+        // Completion-policy picker: the same control the Settings window offers, editing the one shared
+        // per-player preference (scribe-pin-editor — "one value, two hosts"). Positioned as the view's
+        // HEADER, above the list (scribe-lectern-view-consistency §3).
         var policyPicker = new Column(
             spacing: 4,
             crossAxisAlignment: CrossAxisAlignment.Stretch,
@@ -2490,8 +2584,11 @@ internal sealed class ScribeLecternPinnedContentState : State<ScribeLecternPinne
                 mainAxisSize: MainAxisSize.Max,
                 children: new Widget[]
                 {
-                    new Expanded(child: scrollBody),
+                    // Header: policy picker, then a divider straight-edge above the scroll region
+                    // (scribe-lectern-view-consistency §1 + §3). Expanded keeps the list filling the rest.
                     policyPicker,
+                    new Divider(),
+                    new Expanded(child: scrollBody),
                 }));
     }
 }

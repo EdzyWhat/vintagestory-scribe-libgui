@@ -619,9 +619,10 @@ public sealed class ScribeModSystem : ModSystem
         bool? current = pinStore.GetPinDone(player.PlayerUID, docId, taskId);
         if (current is null)
         {
-            // Not pinned by this player — this is a plain read-view checkbox on an unpinned document
-            // task. Toggle the shared document directly (legacy behavior); no store/policy involvement.
-            CompleteUnpinnedTaskAtSource(player, docId, taskId);
+            // Not pinned by this player — a plain checkbox on an unpinned document task. Toggle the
+            // shared document directly and apply the policy there too (the policy is not limited to
+            // pinned tasks — scribe-lectern-view-consistency): Sink→bottom, Delete→remove.
+            CompleteUnpinnedTaskAtSource(player, docId, taskId, policy);
             return;
         }
         bool nowDone = !current.Value;
@@ -651,11 +652,16 @@ public sealed class ScribeModSystem : ModSystem
                     changed |= pinStore.RemovePin(player.PlayerUID, docId, taskId);
                     break;
                 case ScribeCompletionPolicy.Sink:
+                    // Sink is a REAL document reorder (scribe-lectern-view-consistency): move the task to
+                    // the bottom of the shared source, so every viewer — read/editor/pinned view and the
+                    // HUD — sees the same order. Keep the (now-done) pin. Best-effort: a gone source just
+                    // leaves the pin done in the store (the HUD still sinks it client-side by done-state).
+                    if (resolved && lectern!.MoveTaskToBottomFromReader(taskId))
+                        Trace("  policy Sink: moved task {0} to bottom of source doc {1}", taskId, docId);
+                    break;
                 case ScribeCompletionPolicy.Keep:
                 default:
-                    // Non-destructive policies: keep the (now-done) pin. The HUD applies the client-side
-                    // difference — Sink mutes + sinks it to the bottom; Keep leaves it in place. The
-                    // server does not distinguish them (nothing is removed for either).
+                    // Keep leaves the (now-done) pin in place; nothing is removed or reordered.
                     break;
             }
         }
@@ -745,10 +751,14 @@ public sealed class ScribeModSystem : ModSystem
         return lectern is not null;
     }
 
-    /// <summary>Completes (toggles) an UNPINNED document task straight on the shared source — the plain
-    /// read-view checkbox on a task nobody has pinned. No store or completion-policy involvement (there
-    /// is no pin). A no-op when the source is unresolvable (nothing to toggle without a document).</summary>
-    private void CompleteUnpinnedTaskAtSource(IServerPlayer player, Guid docId, Guid taskId)
+    /// <summary>Completes (toggles) an UNPINNED document task straight on the shared source — a plain
+    /// checkbox on a task nobody has pinned. There is no pin, so there is no store involvement, but the
+    /// completion policy still applies to the document itself (scribe-lectern-view-consistency): on a
+    /// transition INTO done, <c>Sink</c> moves the task to the document bottom and <c>Delete</c> removes
+    /// it from the source; <c>Keep</c>/<c>Unpin</c> just toggle (there is nothing to unpin). A no-op when
+    /// the source is unresolvable (nothing to toggle without a document).</summary>
+    private void CompleteUnpinnedTaskAtSource(IServerPlayer player, Guid docId, Guid taskId,
+        ScribeCompletionPolicy policy)
     {
         if (!TryResolveLectern(docId, out var lectern))
         {
@@ -761,8 +771,30 @@ public sealed class ScribeModSystem : ModSystem
             Trace("  complete(unpinned): task {0} not found in doc {1}", taskId, docId);
             return;
         }
-        lectern.SetTaskDoneFromReader(taskId, !block.Done);
-        Trace("  complete(unpinned): task {0} toggled to done={1}", taskId, !block.Done);
+        bool nowDone = !block.Done;
+        lectern.SetTaskDoneFromReader(taskId, nowDone);
+        Trace("  complete(unpinned): task {0} toggled to done={1}", taskId, nowDone);
+
+        // Apply the policy on the shared document — only on a transition INTO done (unchecking never moves
+        // or removes). No pin to unpin here, so Unpin/Keep are plain toggles.
+        if (nowDone)
+        {
+            switch (policy)
+            {
+                case ScribeCompletionPolicy.Sink:
+                    if (lectern.MoveTaskToBottomFromReader(taskId))
+                        Trace("  policy Sink(unpinned): moved task {0} to bottom of source doc {1}", taskId, docId);
+                    break;
+                case ScribeCompletionPolicy.Delete:
+                    if (lectern.DeleteTaskFromReader(taskId))
+                        Trace("  policy Delete(unpinned): removed task {0} from source doc {1}", taskId, docId);
+                    break;
+                case ScribeCompletionPolicy.Unpin:
+                case ScribeCompletionPolicy.Keep:
+                default:
+                    break;
+            }
+        }
     }
 
     /// <summary>Re-push a single player their own full pin set (server → client). Called on join and

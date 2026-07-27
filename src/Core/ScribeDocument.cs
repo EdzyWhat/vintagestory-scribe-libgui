@@ -141,6 +141,29 @@ public sealed class ScribeDocument
         return null;
     }
 
+    /// <summary>
+    /// Moves the task with the given stable <see cref="ScribeBlock.TaskId"/> to the END of the block
+    /// list, preserving the relative order of every other block — the identity-addressed "sink to the
+    /// bottom" a completion under the Sink policy performs (scribe-lectern-view-consistency). Returns
+    /// false (document unchanged) when no block has that id, the id belongs to a non-task block, or the
+    /// task is already last. Pure data; no VS API.
+    /// </summary>
+    public bool MoveTaskToBottom(Guid taskId)
+    {
+        for (int i = 0; i < _blocks.Count; i++)
+        {
+            if (_blocks[i].TaskId == taskId && _blocks[i].IsTask)
+            {
+                if (i == _blocks.Count - 1) return false; // already last — nothing to do
+                var block = _blocks[i];
+                _blocks.RemoveAt(i);
+                _blocks.Add(block);
+                return true;
+            }
+        }
+        return false;
+    }
+
     /// <summary>Moves the block at <paramref name="from"/> to position <paramref name="to"/>.</summary>
     public bool MoveBlock(int from, int to)
     {

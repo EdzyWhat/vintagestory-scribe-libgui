@@ -371,6 +371,25 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable
         return false;
     }
 
+    /// <summary>
+    /// Server-side: move a task to the BOTTOM of the authoritative document by its stable
+    /// <see cref="ScribeBlock.TaskId"/> — the write-through for the <c>Sink</c> completion policy
+    /// (scribe-lectern-view-consistency). Lock-free like <see cref="SetTaskDoneFromReader"/>. Returns
+    /// whether the task moved (false when the id is unknown or the task is already last). Does NOT touch
+    /// pins.
+    /// </summary>
+    public bool MoveTaskToBottomFromReader(Guid taskId)
+    {
+        if (Api is not ICoreServerAPI) return false;
+
+        if (Document.MoveTaskToBottom(taskId))
+        {
+            MarkDirty(redrawOnClient: true);
+            return true;
+        }
+        return false;
+    }
+
     /// <summary>Server-side: after THIS player saves an edit, reconcile only the acting player's pins
     /// into the edited document (grief-proof: a pin is the owner's own copy — only their own edit
     /// changes/removes it), then re-push that player.</summary>

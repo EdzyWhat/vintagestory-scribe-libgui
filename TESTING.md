@@ -1276,3 +1276,29 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         the now-empty row. This is the empty-task auto-delete-on-commit behavior that `add-empty-task-lifecycle`
         is meant to deliver (not yet implemented, 0/32) — logged here so it's not re-derived; retest under
         that change once its tasks land. (Tracked as `f34ea553` under add-empty-task-lifecycle.)
+
+## scribe-lectern-view-consistency
+
+> Four v1 consistency tweaks across the Lectern's three views (Read/Editor/Pinned): pin/unpin from the
+> READ view, a completion policy that behaves IDENTICALLY in every view + the HUD, the Pinned view's
+> policy picker moved ABOVE the list, and a divider directly above each view's scroll area. Scope
+> expanded during implementation: "Sink" is now a REAL document reorder (new Core `MoveTaskToBottom`)
+> applying to ALL tasks (pinned or not), enacted server-side; the editor checkbox enacts the policy in
+> its own lock-gated scratch (Delete drops the row, Sink moves it to the bottom, Unpin fires an explicit
+> pin toggle). Built clean + Core-green (132/132) + restaged Debug 2026-07-27 — fully relaunch first.
+
+- [ ] `10bca3d2` **Divider above scroll list.** Open all three views (read, editor, pinned) in both
+      Pixel-Art and global-theme modes; a straight divider line sits directly above the scroll list in
+      each, not fighting the notebook frame. *(scribe-lectern-view-consistency 1.4 / 5.3)*
+- [ ] `1fac0462` **Pin from read view.** Pin/unpin a task from the READ view: it gets the pinned
+      indicator in read AND editor, appears on the HUD, and persists across relog. Text sections show no
+      pin control. *(scribe-lectern-view-consistency 2.4 / 5.4)*
+- [ ] `04d2e825` **Policy picker above pinned list.** In the pinned view the completion-policy picker
+      sits ABOVE the task list; changing it also updates the Scribe Settings window's completion policy.
+      *(scribe-lectern-view-consistency 3.2 / 5.5)*
+- [ ] `0c09d185` **Uniform policy every view.** Set each policy (Keep/Sink/Unpin/Delete) and complete a
+      task from read, editor, AND pinned views — same outcome each time (sink-to-bottom / unpin / delete),
+      matching the HUD. In the editor, ticking one row applies the policy while leaving other rows'
+      unsaved text + caret intact. *(scribe-lectern-view-consistency 5.6)*
+- [ ] `aca4f64d` **Sink/Delete are shared.** Sink from one view reorders the shared document for another
+      viewer; Delete from read/editor removes the task for everyone. *(scribe-lectern-view-consistency 5.7)*
