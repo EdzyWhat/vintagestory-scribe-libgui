@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Gui.Rendering;             // SkiaAssetLoader
 using Gui.Rendering.Text;        // FontRegistry, FontWeight
+using Gui.Sound;                 // ISoundPlayer, SoundPlayer (UI click sound)
 using Scribe.Core;
 using SkiaSharp;
 using Vintagestory.API.Client;
@@ -41,6 +42,11 @@ public sealed class ScribeModSystem : ModSystem
 
     private ICoreClientAPI? capi;
     private ICoreServerAPI? sapi;
+
+    /// <summary>Client-side shared no-op UI sound player (scribe-mute-ui-sounds), lazily built on first
+    /// use while the mute preference is on and reused across dialogs (it's stateless). See
+    /// <see cref="GetUiSoundPlayer"/>.</summary>
+    private SilentSoundPlayer? silentSoundPlayer;
 
     /// <summary>Server-side pin/settings store. Null on a pure client.</summary>
     private ScribePinStore? pinStore;
@@ -233,6 +239,17 @@ public sealed class ScribeModSystem : ModSystem
         capi.StoreModConfig(settings, HudConfigFileName);
         MyPinsChanged?.Invoke();
     }
+
+    /// <summary>Client-side: the UI sound player a Scribe dialog should install on its <c>BuildOwner</c>
+    /// for THIS player's current <see cref="ScribePlayerSettings.MuteUiSounds"/> preference
+    /// (scribe-mute-ui-sounds) — the shared no-op <see cref="SilentSoundPlayer"/> when muted, else the
+    /// stock LibGUI <see cref="SoundPlayer"/>. The silent player is stateless, so one shared instance is
+    /// lazily built and reused across dialogs/rebuilds. Called from each Scribe dialog's ctor and its
+    /// settings-change rebuild hook, so a live toggle re-installs the right player without a reopen.</summary>
+    public ISoundPlayer GetUiSoundPlayer(ICoreClientAPI capi)
+        => MySettings.MuteUiSounds
+            ? silentSoundPlayer ??= new SilentSoundPlayer(capi)
+            : new SoundPlayer(capi);
 
     /// <summary>Client-side: THIS player's full pin list (empty until the first push), in server order,
     /// each carrying its <c>LastKnownText</c>/<c>LastKnownDone</c> snapshot. The HUD renders from this;

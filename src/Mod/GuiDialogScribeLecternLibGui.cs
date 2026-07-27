@@ -236,10 +236,23 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         this.lectern = lectern;
         modSystem = capi.ModLoader.GetModSystem<ScribeModSystem>();
 
+        // Install the real-or-silent UI sound player for this player's current mute preference
+        // (scribe-mute-ui-sounds); GuiBase's ctor already set a real SoundPlayer, so this only needs to
+        // swap in the silent one when muted. Re-applied in OnMyPinsChanged so a live toggle takes effect.
+        ApplyUiSoundPreference();
+
         // Repaint the per-player pin indicators whenever this player's pushed pin set changes (a pin
         // added/removed/orphaned, or a snapshot refresh). Unsubscribed in OnGuiClosed.
         modSystem.MyPinsChanged += OnMyPinsChanged;
     }
+
+    /// <summary>Swap the LibGUI UI sound player to match this player's <c>MuteUiSounds</c> preference
+    /// (scribe-mute-ui-sounds): the shared no-op <see cref="ScribeModSystem.SilentSoundPlayer"/> when
+    /// muted, else the stock <c>SoundPlayer</c> LibGUI's <c>GuiBase</c> installs. Called from the ctor
+    /// and on every settings change (via <see cref="OnMyPinsChanged"/>), so flipping the toggle while the
+    /// dialog is open re-installs the correct player without a reopen.</summary>
+    private void ApplyUiSoundPreference()
+        => BuildOwner.SetSoundPlayer(modSystem.GetUiSoundPlayer(capi));
 
     /// <summary>Whether THIS player has pinned the given task in this lectern's document. Drives the
     /// resting pin tint and the pin-glyph accent in both views, sourced from the server-pushed cache
@@ -260,6 +273,9 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     private void OnMyPinsChanged()
     {
         if (!IsOpened()) return;
+        // A settings change may have flipped the mute preference — re-install the matching sound player
+        // so a live toggle takes effect on this already-open dialog (scribe-mute-ui-sounds).
+        ApplyUiSoundPreference();
         if (isEditorMode && focusedEditIndex is { } idx && idx < editorFocusNodes.Count)
         {
             autoFocusRowOnRebuild = idx;

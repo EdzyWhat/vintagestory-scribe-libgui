@@ -1302,3 +1302,21 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       unsaved text + caret intact. *(scribe-lectern-view-consistency 5.6)*
 - [ ] `aca4f64d` **Sink/Delete are shared.** Sink from one view reorders the shared document for another
       viewer; Delete from read/editor removes the task for everyone. *(scribe-lectern-view-consistency 5.7)*
+
+## scribe-mute-ui-sounds
+
+> A client-local "Mute Scribe UI sounds" toggle (default off) that silences Scribe's OWN LibGUI click
+> sounds — the sounds LibGUI's `Button` plays on tap (Lectern action buttons + numeric +/- steppers).
+> Implemented Scribe-side only: a no-op `SilentSoundPlayer : ISoundPlayer` swapped onto each Scribe
+> dialog's `BuildOwner` when muted, re-applied on the settings-change rebuild so a live toggle takes
+> effect with no reopen. Surfaced as a checkbox paired beside "Collapse the HUD" in Mod Behavior. Core
+> 133/133 green; build clean; restaged Debug 2026-07-27 — fully relaunch first.
+
+- [ ] `bbdc7002` **Mute silences Scribe buttons live.** With mute OFF (default) Scribe's action buttons +
+      numeric +/- steppers still click; enable "Mute Scribe UI sounds" and they go silent immediately with
+      no reopen; toggle back and the click returns. *(scribe-mute-ui-sounds 4.3)*
+- [ ] `d32d4f5c` **Two checkboxes one row.** In Mod Behavior, "Collapse the HUD" and "Mute Scribe UI
+      sounds" sit on one row as two columns, both labeled with working hover helptext.
+      *(scribe-mute-ui-sounds 4.4)*
+- [ ] `af1f2cbc` **Mute persists, scoped to Scribe.** The mute preference persists across a relog; while
+      muted, vanilla and other-mod sounds (block break, inventory) still play. *(scribe-mute-ui-sounds 4.5)*

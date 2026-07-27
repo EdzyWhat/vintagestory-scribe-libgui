@@ -35,6 +35,16 @@ public class ScribePlayerSettingsTests
         Assert.False(new ScribePlayerSettings { PixelArtDisplay = false }.Normalized().PixelArtDisplay);
     }
 
+    [Fact]
+    public void Default_MuteUiSounds_IsOff()
+    {
+        // A fresh profile (no saved preference) has Scribe's own UI click sounds ON (mute off);
+        // Normalized() leaves a bool untouched (nothing to clamp), so a stored value round-trips unchanged.
+        Assert.False(new ScribePlayerSettings().MuteUiSounds);
+        Assert.False(new ScribePlayerSettings().Normalized().MuteUiSounds);
+        Assert.True(new ScribePlayerSettings { MuteUiSounds = true }.Normalized().MuteUiSounds);
+    }
+
     [Theory]
     [InlineData(2.5f, 1.2f)]   // above max -> clamp to max notch
     [InlineData(1.5f, 1.2f)]

@@ -26,6 +26,15 @@ public sealed class ScribePlayerSettings
     /// show/hide hotkey.</summary>
     public bool HudCollapsed { get; set; }
 
+    /// <summary>Whether to silence Scribe's OWN LibGUI UI click sounds (the interaction sounds LibGUI's
+    /// <c>Button</c> plays on tap — the Lectern action buttons and numeric +/- steppers). Default
+    /// <c>false</c> (sounds on). When on, the Mod layer swaps a no-op sound player onto each Scribe
+    /// dialog's <c>BuildOwner</c>, so only Scribe's dialogs go silent — vanilla and other-mod audio are
+    /// untouched (scribe-mute-ui-sounds). A per-player, client-local preference: never server-synced,
+    /// carried by no block/document/pin data. A plain bool needing no clamp, so <see cref="Normalized"/>
+    /// leaves it untouched.</summary>
+    public bool MuteUiSounds { get; set; }
+
     /// <summary>Whether the Lectern dialog's views (read, editor, and later the pinned view) render in the
     /// mod's net-new "pixel-art" look — the light parchment theme (dark ink on light paper) plus, in a
     /// later phase, illustrated backgrounds. Default <c>true</c> (on). When off, those views fall back to

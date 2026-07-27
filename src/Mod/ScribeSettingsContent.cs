@@ -112,12 +112,18 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         },
                         onChanged: v => onMutate(s => s.CompletionPolicy = v))),
 
-                // The collapse toggle hugs its label at the start of the row rather than stretching the
-                // checkbox across the whole form width (scribe-settings-followups 3.3).
-                HuggingCheckbox(
-                    "settings-hudcollapsed", colors, scale,
-                    value: settings.HudCollapsed,
-                    onChanged: v => onMutate(s => s.HudCollapsed = v)),
+                // "Collapse the HUD" + "Mute Scribe UI sounds" share one row as two columns
+                // (scribe-mute-ui-sounds 3.2). Each hugs its own label at the start of its column
+                // (scribe-settings-followups 3.3); PairedControls splits the width evenly between them.
+                PairedControls(colors, scale,
+                    HuggingCheckbox(
+                        "settings-hudcollapsed", colors, scale,
+                        value: settings.HudCollapsed,
+                        onChanged: v => onMutate(s => s.HudCollapsed = v)),
+                    HuggingCheckbox(
+                        "settings-muteuisounds", colors, scale,
+                        value: settings.MuteUiSounds,
+                        onChanged: v => onMutate(s => s.MuteUiSounds = v))),
             });
     }
 

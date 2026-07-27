@@ -40,8 +40,18 @@ public sealed class ScribeSettingsDialog : GuiBase
     public ScribeSettingsDialog(ICoreClientAPI capi, ScribeModSystem modSystem) : base(capi)
     {
         this.modSystem = modSystem;
+        // Install the real-or-silent UI sound player for the current mute preference; re-applied in
+        // OnMyPinsChanged so toggling the setting in THIS window takes effect on its own buttons live
+        // (scribe-mute-ui-sounds). GuiBase's ctor already installed a real SoundPlayer.
+        ApplyUiSoundPreference();
         modSystem.MyPinsChanged += OnMyPinsChanged;
     }
+
+    /// <summary>Swap the LibGUI UI sound player to match this player's <c>MuteUiSounds</c> preference
+    /// (scribe-mute-ui-sounds), mirroring the Lectern dialog. Called from the ctor and on every settings
+    /// change so flipping the toggle here re-installs the correct player without a reopen.</summary>
+    private void ApplyUiSoundPreference()
+        => BuildOwner.SetSoundPlayer(modSystem.GetUiSoundPlayer(capi));
 
     /// <summary>Stable position/persistence key distinct from the lectern's (design DialogCode).</summary>
     public override string DialogCode => "scribesettings";
@@ -57,7 +67,11 @@ public sealed class ScribeSettingsDialog : GuiBase
 
     private void OnMyPinsChanged()
     {
-        if (IsOpened()) ForceRebuild();
+        if (!IsOpened()) return;
+        // Re-install the matching sound player in case the mute preference was just toggled, so it takes
+        // effect on this open window live (scribe-mute-ui-sounds).
+        ApplyUiSoundPreference();
+        ForceRebuild();
     }
 
     protected override Widget Build() =>
