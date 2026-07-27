@@ -109,7 +109,7 @@ decision to settle before any held-item tier is proposed.
 
 Two facts are independently re-derived across specs and should be cited from one source
 (`VSAPI-NOTES.md`), not re-established per spec: (a) the in-game calendar / `PrettyDate()`
-→ "store numeric `TotalDays`/`TotalHours` in Core, format in Mod" convention (in both `v6`
-and `chronicle`); (b) server-side player identity at write time (`fromPlayer.PlayerUID`/
+→ "store numeric `TotalDays`/`TotalHours` in Core, format in Mod" convention (in `v6`,
+`chronicle`, and `timers-and-alarms`); (b) server-side player identity at write time (`fromPlayer.PlayerUID`/
 `PlayerName`, server-authoritative, client can't self-assert) — the same trust boundary in
 both `v6` signatures and `chronicle` death entries.

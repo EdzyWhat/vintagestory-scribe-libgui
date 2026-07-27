@@ -37,6 +37,12 @@ age (the saw); anything past that is cosmetic.
   prerequisite is delivered by the row-list rework (v2 must wait for **S2**); and the
   single-editor lock does **not** carry over (a held stack has one holder — matches vanilla
   `ItemBook`, which uses no lock).
+  - **Timers & alarms (Clockmaker perk)** → `docs/specs/timers-and-alarms.md`. Real-time + in-game-time
+    reminders that fire a toast + sound, optionally on the HUD next to pins. Client-local state (a
+    `ScribePlayerSettings`-style JSON + one client poller — no native scheduler exists; poll
+    `Calendar.TotalHours`/`DateTime.UtcNow`), gated to the clockmaker's `tinkerer` trait. The timer PAGE
+    lives on the notebook, so it hard-depends on this v2 tier. Does NOT add due-dates to tasks (respects
+    the discipline reminder below) — it's a separate opt-in feature that may reference a task by id.
 - **v3 — Scratch tier: clay & wax tablets** → `docs/specs/v3-clay-tablet.md` (retitled in place;
   the filename is unchanged so existing pointers still resolve). Two sibling artifacts:
   - **Clay tablet:** soft/unfired item, 3-line UI, clayform-a-flat-slab, stylus in offhand,
@@ -93,6 +99,12 @@ age (the saw); anything past that is cosmetic.
   (~1000 chars) surfaced through the same channel. NOTE: the earlier ToastLib approach was rejected
   (see Done/superseded); pick a mechanism that fits the LibGUI rebuild (an in-dialog inline notice or
   a native `HudElement`, not ToastLib). Promote to an OpenSpec change when picked up.
+  - **UPDATE 2026-07-26 — the error SURFACE is DEFERRED past v1; the length case is solved by CLIPPING
+    instead of reporting.** v1 (RELEASE.md A1) caps task text at 1000 chars: the editor field enforces a
+    maxlength and the codec clips-instead-of-rejects on read (which also fixes the `fe168d81` silent-
+    rejection bug). No user-facing error notice ships for it. The general feedback surface (lost lock,
+    save failure) stays a post-v1 item — the specific v1 errors are being solved individually (clipping
+    here) rather than by building the shared notice channel now.
 - **Lectern GUI polish** → `docs/specs/lectern-gui-polish.md`. Merges: face-the-player on
   placement, "Edit" → "Edit Tasks" relabel, damped icon-gutter widths at large text size,
   the side-rail option bar + fold-switch-into-toggle + skeuomorphic collapse control chain,

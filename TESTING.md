@@ -21,6 +21,35 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## lectern-task-text-clip (RELEASE.md A1)
+
+> v1-blocking edit fix (implemented + staged 2026-07-26): over-long task text is now CLIPPED at 1000 chars
+> instead of the whole edit being silently rejected (the old `fe168d81` bug). The editor field stops
+> accepting task input at the cap, and the codec clips on load as the server-authoritative backstop.
+> Freeform note/Text sections keep the larger 10,000 cap. No error message — clip only. Fully relaunch first.
+
+- [ ] `e576c4cc` **Task text clips at 1000.** In the editor, type or paste a very long task (>1000 chars) —
+      the field stops accepting input at ~1000 and the task saves fine (does NOT drop the whole document or
+      other tasks, the old bug). Reopen/relog → the clipped task and everything else are intact. A freeform
+      note section can still hold much longer text (not clipped to 1000). *(RELEASE.md A1)*
+
+## lectern-placement (RELEASE.md A2b + A2c)
+
+> v1-blocking placement fixes (implemented + staged 2026-07-26): (A2b) the lectern turns to face the
+> placing player via the vanilla Sign `MeshAngleRad` idiom (22.5°-snapped) — mesh and hitbox both rotate,
+> angle persists; (A2c) the lectern is now floor-only — a `CanPlaceBlock` override rejects wall/ceiling
+> placement with the vanilla "Requires a solid ground" toast. Restaged Debug 2026-07-26 — fully relaunch first.
+
+- [ ] `c2ed2683` **Lectern faces you on placement.** Place a lectern from several directions (N/E/S/W and
+      a diagonal); the open-book reading face turns toward you each time — NOT away, NOT sideways. The
+      selection outline / collision hitbox lines up with the rotated model (aim at it from an angle). Break
+      and re-place → it re-faces you; relog → the facing persists. If it faces *away*, that's a 180° offset
+      bug to flag. *(RELEASE.md A2b)*
+- [ ] `0f7f85a1` **Lectern is floor-only.** Try to place a lectern against a wall (click a vertical face)
+      and on a ceiling (underside of a block) → both are rejected with a "Requires a solid ground" toast,
+      no block placed. Placing on the floor / on top of a solid block still works. Try placing on top of a
+      non-solid thing (e.g. a fence/torch) → rejected too. *(RELEASE.md A2c)*
+
 ## refine-settings-and-window-chrome
 
 > Feature pass on the Lectern/Settings chrome (from the 2026-07-26 playtest): a passive drag-grip icon left
