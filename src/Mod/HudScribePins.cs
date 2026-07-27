@@ -632,8 +632,9 @@ internal readonly record struct HudPinRow(
 internal sealed class HudPinsContent : StatelessWidget
 {
     /// <summary>Row text glow radius (fraction of font size) — a soft dark halo that keeps the light
-    /// text legible over any world background without a background plate (design D1).</summary>
-    private const float GlowWidth = 0.6f;
+    /// text legible over any world background without a background plate (design D1).
+    /// Tightened from 0.6 → 0.45 (v1-playtest-fixes): same protective halo, slightly crisper edge.</summary>
+    private const float GlowWidth = 0.45f;
 
     /// <summary>Opacity of a sunk (completed, past-undo) row — muted but still readable/undoable.</summary>
     private const float SunkOpacity = 0.5f;
@@ -679,7 +680,9 @@ internal sealed class HudPinsContent : StatelessWidget
     public override Widget Build(BuildContext context)
     {
         var colors = Theme.Of(context).ColorScheme;
-        Vector4 glow = new(0f, 0f, 0f, 0.9f); // dark halo
+        // Slightly darker glow (1.0 vs 0.9) for more contrast over busy world backgrounds
+        // (v1-playtest-fixes; was 0.9).
+        Vector4 glow = new(0f, 0f, 0f, 1.0f);
 
         var children = new List<Widget> { BuildHeader(colors, glow) };
 
@@ -728,7 +731,7 @@ internal sealed class HudPinsContent : StatelessWidget
         var titleStyle = new TextStyle
         {
             FontSize = 14,
-            Color = colors.OnSurfaceVariant,
+            Color = new Vector4(0.80f, 0.80f, 0.80f, 1f), // near-white header (v1-playtest-fixes)
             GlowWidth = GlowWidth,
             GlowColor = glow,
         };
@@ -774,11 +777,15 @@ internal sealed class HudPinsContent : StatelessWidget
     /// always available (design D7) — only the TEXT fades, via a nested AnimatedOpacity.</summary>
     private Widget BuildRow(HudPinRow row, ColorScheme colors, Vector4 glow)
     {
+        // HUD text is explicitly near-white rather than theme.OnSurface — the HUD always renders over
+        // the live game world on the global (dark) theme, and the tester wanted more legibility contrast
+        // (v1-playtest-fixes). Sunk rows use a more muted near-white; active rows are brighter.
         var textStyle = new TextStyle
         {
             FontSize = rowFontSize,
-            // A sunk (completed) row uses the muted variant; an active row uses the bright surface tone.
-            Color = row.Sunk ? colors.OnSurfaceVariant : colors.OnSurface,
+            Color = row.Sunk
+                ? new Vector4(0.70f, 0.70f, 0.70f, 1f)   // sunk: muted light grey
+                : new Vector4(0.93f, 0.93f, 0.93f, 1f),   // active: near-white
             GlowWidth = GlowWidth,
             GlowColor = glow,
             SoftWrap = true,

@@ -196,28 +196,27 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                             onChanged: v => onMutate(s => s.HudRowWidth = v),
                             clamp: ScribePlayerSettings.ClampHudRowWidth))),
 
-                // HUD X/Y offsets on ONE row (design D5); each is a ±300 pixel nudge relative to the
-                // anchor's pre-baked offset (design D8), stepping by 5.
-                LabeledControl(
-                    "settings-hudoffset", colors, scale,
-                    new Row(
-                        spacing: 12 * scale,
-                        mainAxisSize: MainAxisSize.Max,
-                        children: new Widget[]
-                        {
-                            new Expanded(child: OffsetField(
-                                "hudoffsetx", Lang.Get("scribe:settings-hudoffsetx"), settings.HudOffsetX,
-                                v => onMutate(s => s.HudOffsetX = v), colors, scale)),
-                            new Expanded(child: OffsetField(
-                                "hudoffsety", Lang.Get("scribe:settings-hudoffsety"), settings.HudOffsetY,
-                                v => onMutate(s => s.HudOffsetY = v), colors, scale)),
-                        })),
-
-                // HUD text scale (its former window-font pair moved to Window Appearance). Percent; clamps +
-                // snaps to a 5% notch on blur.
-                LabeledControl(
-                    "settings-hudfontscale", colors, scale,
-                    FontScaleField("hudfontscale", settings.HudFontScale, v => onMutate(s => s.HudFontScale = v))),
+                // HUD position (X/Y offsets) + HUD Text Size share one row as two columns
+                // (v1-playtest-fixes). The offset sub-row keeps its two inline fields; the font scale sits
+                // in the second column.
+                PairedControls(colors, scale,
+                    LabeledControl(
+                        "settings-hudoffset", colors, scale,
+                        new Row(
+                            spacing: 12 * scale,
+                            mainAxisSize: MainAxisSize.Max,
+                            children: new Widget[]
+                            {
+                                new Expanded(child: OffsetField(
+                                    "hudoffsetx", Lang.Get("scribe:settings-hudoffsetx"), settings.HudOffsetX,
+                                    v => onMutate(s => s.HudOffsetX = v), colors, scale)),
+                                new Expanded(child: OffsetField(
+                                    "hudoffsety", Lang.Get("scribe:settings-hudoffsety"), settings.HudOffsetY,
+                                    v => onMutate(s => s.HudOffsetY = v), colors, scale)),
+                            })),
+                    LabeledControl(
+                        "settings-hudfontscale", colors, scale,
+                        FontScaleField("hudfontscale", settings.HudFontScale, v => onMutate(s => s.HudFontScale = v)))),
             });
     }
 

@@ -66,7 +66,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > buttons TOGGLE the window open/closed. Core is unchanged (clamp statics reused). Restaged Debug 2026-07-26
 > — fully relaunch first.
 
-- [ ] `59d7ccbf` **Title-bar drag grip.** The Lectern title bar shows a grip icon left of the close button
+- [x] `59d7ccbf` **Title-bar drag grip.** The Lectern title bar shows a grip icon left of the close button
       with a "drag to move" tooltip on hover; the whole title-bar band still drags the window.
       *(refine-settings-and-window-chrome 7.3)*
       - **Still broken 2026-07-26** (playtest submission 2026-07-26T22-24-24): the grip icon shows with its
@@ -75,7 +75,9 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         letting the title-bar band handle it). Tester's two proposed resolutions: (a) wire the grip to drag
         the whole window like the rest of the band, or (b) make it truly non-interactive so the press falls
         through to the band's drag. Needs a fix + retest.
-- [ ] `bb25e8d3` **Numeric retype + clamp-on-blur.** In Scribe Settings, select-all a numeric field (e.g.
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T10-16-26): "Works." The grip now drags the
+        window (or falls through to the band's drag); the title-bar band still moves the window.
+- [x] `bb25e8d3` **Numeric retype + clamp-on-blur.** In Scribe Settings, select-all a numeric field (e.g.
       HUD row width, Pixel Art Size) and type a fresh value with no mid-edit snap; click away with an
       out-of-range value → it clamps AND a red range line appears beneath; a next in-range edit clears it;
       values persist across relog. +/- and arrows still step live. *(refine-settings-and-window-chrome 7.4)*
@@ -85,6 +87,8 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         relaxed: the **red range line is unwanted** — drop it from the spec rather than requiring it. So two
         actions: (1) fix the +/- unfocus-on-click regression; (2) amend the spec to remove the red-range-line
         requirement. Retest after the focus fix.
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T10-16-26): "Works." Retype + clamp-on-blur
+        and the +/- stepping now behave as specced.
 - [x] `52f2e92e` **Three sections + panel.** Scribe Settings shows three divider-separated sections (Mod
       Behavior / Window Appearance / HUD Appearance) with each control under the right section, and the form
       sits on an opaque theme-surface panel (not a transparent gap). *(refine-settings-and-window-chrome 7.5)*
@@ -793,6 +797,14 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         focused): once a "New Task" row exists, the pending empty-row / focus machinery may keep the view in a
         state where input stays captured even with nothing focused. Investigate whether capture should be
         gated on "a field is actually focused" rather than "editor mode is active." Bugfix-pass candidate.
+      - **Still broken 2026-07-27 — v1 BLOCKER** (playtest submission 2026-07-27T10-16-26): reproduced again;
+        tester wants this fixed before v1 and asked to explore it. Confirms the 2026-07-26 hypothesis is the
+        thing to chase: gate `CaptureAllInputs()` on a field actually being focused rather than on
+        `isEditorMode`, so hotkeys fire whenever no editor field holds focus.
+      - **Fix applied 2026-07-27 (awaiting retest — v1-playtest-fixes 1.1):** `CaptureAllInputs()` now
+        returns true only when an editor or Pin Tab field actually holds focus (`focusedEditIndex is not null`
+        / `focusedPinTaskId is not null`), not for the whole duration of editor mode. Retest: item `e6b5148e`
+        below.
 
 ## adopt-libgui-foundation
 
@@ -1287,19 +1299,50 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > its own lock-gated scratch (Delete drops the row, Sink moves it to the bottom, Unpin fires an explicit
 > pin toggle). Built clean + Core-green (132/132) + restaged Debug 2026-07-27 — fully relaunch first.
 
-- [ ] `10bca3d2` **Divider above scroll list.** Open all three views (read, editor, pinned) in both
+- [x] `10bca3d2` **Divider above scroll list.** Open all three views (read, editor, pinned) in both
       Pixel-Art and global-theme modes; a straight divider line sits directly above the scroll list in
       each, not fighting the notebook frame. *(scribe-lectern-view-consistency 1.4 / 5.3)*
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T10-16-26): "Works." A divider sits above
+        the scroll list in all three views.
 - [ ] `1fac0462` **Pin from read view.** Pin/unpin a task from the READ view: it gets the pinned
       indicator in read AND editor, appears on the HUD, and persists across relog. Text sections show no
       pin control. *(scribe-lectern-view-consistency 2.4 / 5.4)*
-- [ ] `04d2e825` **Policy picker above pinned list.** In the pinned view the completion-policy picker
+      - **Confirmed 2026-07-27 (base functionality)** (playtest submission 2026-07-27T10-16-26): the pin/unpin
+        itself works from the read view — indicator in both views, on the HUD, persists. BUT pinning jumps the
+        scroll list back to the top, which is disruptive; the tester asked to keep the scroll at its user-set
+        position and to spin the scroll-jump out as its own item (delivered functionality accepted). Tracked
+        as `32f807d9` below.
+- [ ] `32f807d9` **Read-view pin keeps scroll.** Pinning/unpinning a task from the read view keeps the
+      scroll list at its user-set position (does not jump to the top). *(scribe-lectern-view-consistency —
+      follow-up)*
+      - **Still broken 2026-07-27** (playtest submission 2026-07-27T10-16-26): pinning from the read view
+        redraws and resets the scroll offset to the top. Likely the same virtualized-`ListView` content-height
+        re-clamp family as `92d41071`/`7c22da1a` (a `MyPinsChanged` rebuild re-clamps against a stale content
+        height). Fix: capture the scroll offset before the pin rebuild and restore it after (reuse the
+        `CaptureScrollForRestore`/`JumpTo` machinery). Needs its own change item + fix.
+      - **Fix applied 2026-07-27 (awaiting retest — v1-playtest-fixes 3.1):** `OnReadViewTogglePinned` now
+        calls `CaptureScrollForRestore()` before `SendSetPin` (in read mode only), so the existing
+        `OnRenderGUI` re-apply loop restores the offset after the `MyPinsChanged` rebuild. Retest: item
+        `ed0a4f7e` below.
+- [x] `04d2e825` **Policy picker above pinned list.** In the pinned view the completion-policy picker
       sits ABOVE the task list; changing it also updates the Scribe Settings window's completion policy.
       *(scribe-lectern-view-consistency 3.2 / 5.5)*
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T10-16-26): "Works." Picker sits above the
+        pinned list and stays in sync with the settings window's completion policy.
 - [ ] `0c09d185` **Uniform policy every view.** Set each policy (Keep/Sink/Unpin/Delete) and complete a
       task from read, editor, AND pinned views — same outcome each time (sink-to-bottom / unpin / delete),
       matching the HUD. In the editor, ticking one row applies the policy while leaving other rows'
       unsaved text + caret intact. *(scribe-lectern-view-consistency 5.6)*
+      - **Still broken 2026-07-27** (playtest submission 2026-07-27T10-16-26): Keep, Unpin, and Delete work as
+        expected in every view. Two gaps on the Sink/"Keep (sink to bottom)" path: (1) completing under Sink
+        reorders the HUD pins but NOT the Pinned-view list — the tester wants the Pinned list to reorder to the
+        bottom too; (2) for a task the acting player originally created, the sink/reorder should be enforced in
+        the Read and Edit views as well (tester suggests leveraging the click-drag reorder functions). Partial:
+        the three non-sink policies are confirmed; the Sink-reorder-everywhere behavior needs more work.
+      - **Fix applied 2026-07-27 (awaiting retest — v1-playtest-fixes 2.1):** Pinned view now orders rows
+        through `ScribePinOrdering.ForDisplay` (completed pins below not-completed), matching the HUD's resting
+        order. Read/Edit already reflect the server's `MoveTaskToBottom` reorder via the existing resync path.
+        Retest: item `10622154` below.
 - [ ] `aca4f64d` **Sink/Delete are shared.** Sink from one view reorders the shared document for another
       viewer; Delete from read/editor removes the task for everyone. *(scribe-lectern-view-consistency 5.7)*
 
@@ -1312,11 +1355,38 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > effect with no reopen. Surfaced as a checkbox paired beside "Collapse the HUD" in Mod Behavior. Core
 > 133/133 green; build clean; restaged Debug 2026-07-27 — fully relaunch first.
 
-- [ ] `bbdc7002` **Mute silences Scribe buttons live.** With mute OFF (default) Scribe's action buttons +
+- [x] `bbdc7002` **Mute silences Scribe buttons live.** With mute OFF (default) Scribe's action buttons +
       numeric +/- steppers still click; enable "Mute Scribe UI sounds" and they go silent immediately with
       no reopen; toggle back and the click returns. *(scribe-mute-ui-sounds 4.3)*
-- [ ] `d32d4f5c` **Two checkboxes one row.** In Mod Behavior, "Collapse the HUD" and "Mute Scribe UI
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T10-16-26): "Works." Enabling mute silences
+        Scribe's buttons live with no reopen; toggling back restores the click.
+- [x] `d32d4f5c` **Two checkboxes one row.** In Mod Behavior, "Collapse the HUD" and "Mute Scribe UI
       sounds" sit on one row as two columns, both labeled with working hover helptext.
       *(scribe-mute-ui-sounds 4.4)*
-- [ ] `af1f2cbc` **Mute persists, scoped to Scribe.** The mute preference persists across a relog; while
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T10-16-26): "Works." Both checkboxes sit on
+        one row as two columns with working helptext.
+- [x] `af1f2cbc` **Mute persists, scoped to Scribe.** The mute preference persists across a relog; while
       muted, vanilla and other-mod sounds (block break, inventory) still play. *(scribe-mute-ui-sounds 4.5)*
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T10-16-26): "Works." The preference persists
+        across a relog and vanilla/other-mod sounds are unaffected while Scribe is muted.
+
+## v1-playtest-fixes
+
+> Six fixes from playtest 2026-07-27T10-16-26: (1) editor hotkey trap — v1 blocker, gate
+> `CaptureAllInputs()` on a focused field; (2) Sink reorders the Pinned view (via `ScribePinOrdering`)
+> and Read/Edit (via existing server reorder); (3) read-view pin preserves scroll (`CaptureScrollForRestore`);
+> (4–6) HUD text/glow legibility, 10px Lectern title padding, HUD Text Size beside HUD position.
+> Build clean (0/0), Core 133/133, restaged Debug 2026-07-27 — fully relaunch first.
+
+- [ ] `e6b5148e` **Hotkeys after unfocus.** Open the editor, add a task via New Task, click away to
+      unfocus — the Handbook key (H) and other global hotkeys fire. Then click a row and type WASD —
+      they edit the field, not the player. *(v1-playtest-fixes 1.2)*
+- [ ] `10622154` **Sink orders every surface.** With Sink policy, complete a pinned task from the
+      Pinned view — it sinks to the bottom of the Pinned list (not just the HUD). Complete an owned
+      task from Read and Edit views — it moves to the bottom in each, and the HUD agrees.
+      *(v1-playtest-fixes 2.5)*
+- [ ] `ed0a4f7e` **Read-view pin keeps scroll.** Scroll the read view down, then pin then unpin a
+      task — the list stays at the scrolled position, not the top. *(v1-playtest-fixes 3.2)*
+- [ ] `9a1c13f0` **HUD legibility + title + settings layout.** HUD text reads more crisply over the
+      world background; Lectern title has a visible 10px left gap; HUD Text Size sits beside HUD
+      position in Scribe Settings. *(v1-playtest-fixes 4.4)*

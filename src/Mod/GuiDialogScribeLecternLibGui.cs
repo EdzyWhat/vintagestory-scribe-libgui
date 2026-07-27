@@ -322,12 +322,14 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     // ---------------- Input capture + macOS caret translation ----------------
 
     /// <summary>
-    /// Capture ALL keyboard/mouse input while editing so typed keys (movement, hotbar, other
-    /// keybinds) don't leak through to the game (migrate-editor-view-libgui task 2.6 / design D6 —
-    /// the keypress-leak fix deferred from change 1). Only while in editor mode: the read view has no
-    /// typing and should not trap game input.
+    /// Capture ALL keyboard/mouse input ONLY while an editor or Pin-Tab field actually holds focus, so
+    /// typed keys don't leak to the game (movement, hotbar, keybinds). Gated on a field being focused
+    /// rather than on <c>isEditorMode</c> alone (v1-playtest-fixes): when the editor view is open but
+    /// no field holds focus (e.g. after "New Task" → click away), global hotkeys must still fire.
     /// </summary>
-    public override bool CaptureAllInputs() => isEditorMode;
+    public override bool CaptureAllInputs()
+        => (isEditorMode && focusedEditIndex is not null)
+        || (viewMode == ScribeLecternView.Pinned && focusedPinTaskId is not null);
 
     /// <summary>
     /// LibGUI's <see cref="Gui.Widgets.Events.KeyboardEvent"/> carries only Shift/Ctrl/Alt — it drops
@@ -1201,9 +1203,9 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             mainAxisSize: MainAxisSize.Max,
             children: new Widget[]
             {
-                // 4px left padding so the title isn't flush against the row's left edge (task 7.3).
+                // 10px left padding for visual breathing room (v1-playtest-fixes; was 4px).
                 new Padding(
-                    EdgeInsets.Only(left: 4),
+                    EdgeInsets.Only(left: 10),
                     child: new Text(Lang.Get("scribe:scribe-gui-title"),
                         new TextStyle { FontSize = titleFont, FontFamily = ScribeRowControlNudge.TitleFontFamily, Weight = FontWeight.Bold, Color = colors.OnSurface })),
                 // Trailing group: a drag-grip cue LEFT of the close button
@@ -1437,9 +1439,17 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
 
     /// <summary>Read-view pin toggle (scribe-lectern-view-consistency §2): pin/unpin the task by its
     /// stable identity, reusing the same lock-free <see cref="SendSetPin"/> path the editor row uses.
-    /// The read view holds no scratch document, so it addresses the pin purely by TaskId.</summary>
+    /// The read view holds no scratch document, so it addresses the pin purely by TaskId.
+    ///
+    /// <para>Scroll preservation (v1-playtest-fixes): capture the current offset before the pin send so
+    /// the pending <see cref="OnMyPinsChanged"/> → <see cref="ForceRebuild"/> path has an offset for the
+    /// <see cref="OnRenderGUI"/> re-apply loop to restore. Without this, the virtualized ListView's
+    /// content-height re-derivation on the first post-rebuild layout clamps the offset toward 0 (same
+    /// family as the view-switch scroll drift fixes). Guard to read view only — editor and Pin Tab have
+    /// their own focus/scroll-restore paths.</para></summary>
     private void OnReadViewTogglePinned(Guid taskId)
     {
+        if (!isEditorMode) CaptureScrollForRestore();
         SendSetPin(taskId, !IsPinnedForMe(taskId));
     }
 
@@ -1457,10 +1467,17 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         Guid? autoFocus = autoFocusPinTaskId;
         autoFocusPinTaskId = null; // one-shot
 
+        // Apply the sink ordering (v1-playtest-fixes): completed pins sink below not-completed ones,
+        // matching the resting order the HUD uses (ScribePinOrdering.ForDisplay). This is the plain
+        // Core resting order — the Pinned view does NOT replicate the HUD's undo-window "stay then
+        // sink" overlay (design Decision 2, open question resolved: plain resting order is sufficient
+        // here; the immediate sink is acceptable for the non-HUD surface).
+        var orderedPins = ScribePinOrdering.ForDisplay(modSystem.MyPins);
+
         // Each row's text seeds from its live edit buffer if one is in flight (a keystroke mid-resync),
         // else the authoritative server snapshot — the Pin Tab's equivalent of the editor re-seeding from
         // its scratch doc across a ForceRebuild (which fully unmounts + remounts the field).
-        var rows = modSystem.MyPins
+        var rows = orderedPins
             .Select(p => new ScribePinRowData(
                 p.OwnerDocId, p.TaskId, p.LastKnownDone,
                 pinEditBuffer.TryGetValue(p.TaskId, out var buffered) ? buffered : p.LastKnownText))
