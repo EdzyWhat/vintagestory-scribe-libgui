@@ -307,10 +307,20 @@ public sealed class ScribeModSystem : ModSystem
         {
             // Missing/corrupt asset: LoadFont already logged the failure. Leave Scribe's text on its
             // current family (sans-serif) rather than crashing — the mod stays fully usable without the face.
-            api.Logger.Warning("[scribe] bundled font 'Caudex' failed to load; row text stays on the default family");
+            api.Logger.Warning("[scribe] bundled font 'Caudex' failed to load; title stays on the default family");
             return;
         }
-        FontRegistry.RegisterCustomFont("Caudex", FontWeight.Normal, typeface);
+        // Register the same face under EVERY FontWeight. FontRegistry.GetCustomTypeface is keyed by
+        // (family, weight) and returns null on a miss, so a Bold lookup would NOT find a Normal-only
+        // registration and would fall through to a system font — which is exactly why the Bold dialog title
+        // rendered in the default face before this. We only ship the Regular TTF; Skia synthesizes bold/
+        // italic from it, which is fine for the spike. (LibGUI ships a real file per weight; the parent
+        // font work can do the same later.)
+        foreach (var weight in new[] { FontWeight.Normal, FontWeight.SemiBold, FontWeight.Bold, FontWeight.Italic })
+        {
+            FontRegistry.RegisterCustomFont("Caudex", weight, typeface);
+        }
+        api.Logger.Notification("[scribe] bundled font 'Caudex' registered for the lectern dialog title");
     }
 
     /// <summary>

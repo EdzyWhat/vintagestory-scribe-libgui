@@ -16,7 +16,7 @@
 text. An earlier pass wired the row text (read + editor) at Caudex; that was reversed — rows are back
 on the default family and only the title uses Caudex.
 
-- [x] 3.1 Added `internal const string TitleFontFamily = "Caudex"` to `ScribeRowControlNudge` in `GuiDialogScribeLecternLibGui.cs`, and set the title `Text`'s `TextStyle.FontFamily` (the `scribe:scribe-gui-title` widget in `BuildTitleBar`) to it. Restored that class's `FontFamily` measurement const to `"sans-serif"` (rows are default again).
+- [x] 3.1 Added `internal const string TitleFontFamily = "Caudex"` to `ScribeRowControlNudge` in `GuiDialogScribeLecternLibGui.cs`, and set the title `Text`'s `TextStyle.FontFamily` (the `scribe:scribe-gui-title` widget in `BuildTitleBar`) to it. Restored that class's `FontFamily` measurement const to `"sans-serif"` (rows are default again). **Fix (2026-07-27):** the title is `FontWeight.Bold` but Caudex was registered only under `Normal`, so `GetCustomTypeface` missed and the title fell back to the system font. `RegisterCustomFonts` now registers the face under all four `FontWeight`s (see §5.1 / VSAPI-NOTES gotcha 2).
 - [x] 3.2 Reverted `ScribeMultilineField.cs`'s `FontFamily` const back to `"sans-serif"` — the editor field is deliberately NOT in the title's bundled face.
 - [x] 3.3 Reverted both read-view `TextStyle` initializers (`ScribeReadRowState.Build` and the collapsing-row `Build`) back to the default family — task-row text is unchanged. Only the title `Text` carries `TitleFontFamily`. `TextStyle` size/color untouched throughout.
 
@@ -29,7 +29,7 @@ on the default family and only the title uses Caudex.
 
 ## 5. Record findings and correct the docs
 
-- [ ] 5.1 Record the outcome (registered-face path works on arm64 macOS via LibGUI's Skia `FontRegistry`; scoping via `TextStyle.FontFamily`) in `VSAPI-NOTES.md` — replacing/annotating the old "Custom TTF fonts in the GUI" Cairo/FreeType note, which described the retired native path.
+- [x] 5.1 Rewrote the `## Custom TTF fonts in the GUI` note in `VSAPI-NOTES.md` for the LibGUI/Skia `FontRegistry` path (replacing the retired Cairo/FreeType note), including the two gotchas we hit: (1) `textures/fonts/` not a bare `fonts/` (no `fonts` AssetCategory), and (2) register under every `FontWeight` — the `(family, weight)` registry misses silently and falls back to the system font (this was the Bold-title bug). Remaining arm64/on-Mac confirmation is §4.3.
 - [ ] 5.2 Correct `docs/specs/presentation-and-fonts.md`: the Cairo `FreeTypeFontFace` / `SetContextFontFace` mechanism no longer describes this repo; the LibGUI/Skia `FontRegistry.RegisterCustomFont` + `TextStyle.FontFamily` path is the current mechanism.
 - [ ] 5.3 Remove or correct the stale `GuiStyle.StandardFontName` reference (it belongs to the native Cairo path and is irrelevant to LibGUI's text rendering).
 - [ ] 5.4 Note in the findings whether the parent font work should keep bundling its own faces (proven here) or instead reference LibGUI's already-bundled serifs (Playfair Display / Cormorant Unicase) with zero new assets — the open question from design.md.

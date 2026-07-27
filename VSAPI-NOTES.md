@@ -799,16 +799,34 @@ chronicle/integration features — decompiled, not yet exercised.)
 
 ## Custom TTF fonts in the GUI
 
-**Symptom: bundling a custom `.ttf` and passing its name to `CairoFont` doesn't render it.**
-`CairoFont.SetupContext` calls `ctx.SelectFontFace(Fontname, ...)`, which resolves names via the
-OS/font registry — not extensible with a bundled file cross-platform. **Fix pattern (only works
-because Scribe bakes text onto its OWN `ImageSurface`/`Context`):** load the TTF via FreeType from
-`Lib/cairo-sharp.dll` — `Cairo.FreeTypeFontFace.Create(string filename, int loadoptions)` — and
-apply it with `Cairo.Context.SetContextFontFace(face)`, bypassing `SelectFontFace`. Caveats to
-verify live: (a) `SetContextFontFace` sets face but not size — set size via `SetupContext`/
-`SetFontSize`, apply the face override LAST so `SelectFontFace` doesn't clobber it; (b) FreeType
-needs a real filesystem path, so a packed-`.zip` asset may need extraction to temp; (c) cache the
-face — creation isn't free.
+**This is now the LibGUI/Skia path.** The old Cairo/`FreeTypeFontFace` note here described the
+retired native GUI (`ScribeRowElement.ComposeElements` on a private Cairo surface) — gone since the
+LibGUI migration. Scribe's text now renders through LibGUI/SkiaSharp, which has a proper
+cross-platform font-registration API, so the FreeType-direct hack is unnecessary.
+
+**Register a bundled `.ttf`:** load it to an `SKTypeface` with `new SkiaAssetLoader(capi).LoadFont(
+domain, path)` (reads the asset bytes via `SKTypeface.FromStream` — no filesystem path, no temp file,
+works packed or unpacked), then `Gui.Rendering.Text.FontRegistry.RegisterCustomFont(family, weight,
+typeface)`. Do it once at `StartClientSide`. `TextLayoutHelper` resolves a `TextStyle.FontFamily` via
+`GetCustomTypeface(family, weight)` BEFORE any `SKTypeface.FromFamilyName` system fallback, so naming
+the registered family in a `TextStyle` is sufficient for both measure and draw — no per-surface
+override. This mirrors LibGUI's own `GuiModSystem.LoadFonts`. (Scribe: `ScribeModSystem.RegisterCustomFonts`.)
+
+**Gotcha 1 — asset path: use `textures/fonts/`, NOT a bare `fonts/`.** `fonts` is not one of VS's
+scanned `AssetCategory` codes (decompiled `AssetCategory` — 16 categories, no `fonts`), so a bare
+`assets/scribe/fonts/x.ttf` is never scanned → `TryGet` returns null. LibGUI only loads its own
+`assets/gui/fonts/` by doing `api.Assets.AddModOrigin("gui","fonts")` + `Assets.Reload` first. File
+under the already-scanned `textures` category (like the SVG icons) to skip that dance. `LoadFont`
+lowercases the path, so the asset filename must be lowercase.
+
+**Gotcha 2 — register the face under EVERY `FontWeight` you'll request; the registry is keyed by
+`(family, weight)` and MISSES silently.** `GetCustomTypeface(family, weight)` returns null if the
+exact weight wasn't registered, and `TextLayoutHelper` then falls through to `SKTypeface.FromFamilyName`
+— which for a non-OS-installed family resolves to the system default. Symptom: text renders in the
+default font with no error logged. This bit us: the lectern title is `FontWeight.Bold` but Caudex was
+registered only under `Normal`, so the Bold lookup missed and the title stayed sans-serif. Fix:
+register the (single) TTF under Normal/SemiBold/Bold/Italic — Skia synthesizes bold/italic from a
+regular face. No size caveat like the old Cairo path — Skia sizing is handled by `TextLayoutHelper`.
 
 ## Player groups (for multi-owner / faction-style block gating)
 
