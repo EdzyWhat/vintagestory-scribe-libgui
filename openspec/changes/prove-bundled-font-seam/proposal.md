@@ -13,8 +13,8 @@ custom `.ttf` faces itself in production (`GuiModSystem.LoadFonts`). The mechani
 out to "prove" via a FreeType/Cairo private-surface hack is now a shipping, load-bearing code path
 in a dependency Scribe already relies on. This change is retargeted to that reality: a small,
 throwaway-scale spike that proves Scribe can register **one** bundled face through LibGUI's Skia
-registry and route **only** its own row text at it, on the author's Apple Silicon Mac, before any
-tier commits to a font system.
+registry and route **only** its own dialog title text at it, on the author's Apple Silicon Mac,
+before any tier commits to a font system.
 
 ## What Changes
 
@@ -25,13 +25,13 @@ tier commits to a font system.
   family name via `FontRegistry.RegisterCustomFont(family, weight, typeface)` — the same call
   LibGUI's own `GuiModSystem.LoadFonts` uses for its bundled faces. No FreeType P/Invoke, no
   temp-file extraction, no private Cairo surface.
-- Route **only** Scribe's lectern row text at the registered family by setting the row text's
-  `TextStyle.FontFamily` to that family name (the shared `FontFamily` const used by both the read
-  `Text` and the editor `ScribeMultilineField`, so measured line height and drawn glyphs stay in
-  lockstep). `TextLayoutHelper` consults `FontRegistry.GetCustomTypeface` before any system
-  fallback, so the registered face is picked up automatically and no other GUI's text is touched.
+- Route **only** Scribe's lectern dialog TITLE text at the registered family by setting the title
+  `Text`'s `TextStyle.FontFamily` to that family name (a single `TitleFontFamily` const on
+  `ScribeRowControlNudge`). Task-row text (read view + editor field) stays on its default family.
+  `TextLayoutHelper` consults `FontRegistry.GetCustomTypeface` before any system fallback, so the
+  registered face is picked up automatically and no other GUI's text is touched.
 - Prove, by running the spike **on the author's Apple Silicon Mac**, that the registered bundled
-  face renders on arm64 macOS and is correctly scoped to Scribe's row text only. (The original
+  face renders on arm64 macOS and is correctly scoped to Scribe's dialog title only. (The original
   FreeType-specific runtime unknowns — size-survival across a Cairo face swap, packed-zip temp-file
   extraction, `freetype6` arm64 interop — no longer apply on the Skia path; see design.md.)
 - Ship the font's `OFL.txt` and credit Caudex in a `CREDITS` file (license gate).
@@ -60,21 +60,22 @@ Explicit **non-goals** (this is a spike, not the font system):
 
 - `bundled-font-rendering`: A mod-scoped mechanism for rendering Scribe's own GUI text in a bundled
   TTF registered through LibGUI's Skia `FontRegistry`, proven end-to-end on one surface (the
-  lectern row text) with one face (Caudex), including the license-bundling requirement.
+  lectern dialog title) with one face (Caudex), including the license-bundling requirement.
 
 ### Modified Capabilities
 
-<!-- None. No existing spec's requirements change; the lectern row-text behavior gains a rendering
-     detail but no requirement in lectern-gui-shell is altered. -->
+<!-- None. No existing spec's requirements change; the lectern title gains a rendering detail but no
+     requirement in lectern-gui-shell is altered. -->
 
 ## Impact
 
 - **New asset:** one bundled `.ttf` (Caudex) plus its `OFL.txt` under the Scribe mod's assets, and
   a new `CREDITS` file at the repo root.
 - **Touched code (Mod layer only):** a small client-init font-registration call in
-  `ScribeModSystem.StartClientSide` (mirroring the existing `RegisterSvgIcon` precedent), and the
-  shared row-text `FontFamily` const in `GuiDialogScribeLecternLibGui.cs` /
-  `ScribeMultilineField.cs`. No change to the `TextStyle` size/color contract.
+  `ScribeModSystem.StartClientSide` (mirroring the existing `RegisterSvgIcon` precedent), and a
+  `TitleFontFamily` const on `ScribeRowControlNudge` set on the title `Text` in
+  `GuiDialogScribeLecternLibGui.cs`. No change to the `TextStyle` size/color contract, and no change
+  to task-row text.
 - **No** `src/Core/` impact, no network/persistence surface, no new package or mod dependency (uses
   only the already-depended-on `gui` LibGUI mod and its bundled SkiaSharp).
 - **CI unaffected:** cloud runners build/test `Core` only; this is Mod-layer client render proven

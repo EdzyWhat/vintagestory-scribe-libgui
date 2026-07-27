@@ -27,23 +27,18 @@ on OS/fontconfig name resolution to find the bundled file.
 ### Requirement: The bundled face applies to only the mod's own text
 
 The bundled face SHALL be applied only to Scribe's own text by setting the `TextStyle.FontFamily` of
-the lectern row text to the registered family name, so that `Gui.Rendering.Text.TextLayoutHelper`
-resolves the registered typeface for that text and no other GUI text in the game is affected. The
-same family name SHALL be used for both the read-view row text and the editor field so the two
-resolve the same typeface.
+the lectern dialog's TITLE text to the registered family name, so that
+`Gui.Rendering.Text.TextLayoutHelper` resolves the registered typeface for the title and no other GUI
+text in the game is affected. The lectern's task-row text (read view and editor field) SHALL remain on
+its default family and SHALL NOT be switched to the bundled face.
 
-#### Scenario: Only the lectern row text changes typeface
+#### Scenario: Only the lectern title changes typeface
 
 - **WHEN** the lectern dialog is open with the bundled-font path active
-- **THEN** the lectern's row text renders in the bundled Caudex face
+- **THEN** the dialog's title text renders in the bundled Caudex face
+- **AND** the task-row text (read and editor) renders in its default family, unchanged
 - **AND** all other in-game GUI text (menus, tooltips, other dialogs) renders in its normal font,
   unchanged
-
-#### Scenario: Read and editor views resolve the same face
-
-- **WHEN** the read view measures its row text and the editor field measures its text
-- **THEN** both resolve their typeface through the same registered family name
-- **AND** their measured line height and drawn glyphs stay in lockstep
 
 ### Requirement: The registered face is resolved by the layout path automatically
 
@@ -54,9 +49,9 @@ font override to route the face.
 
 #### Scenario: Naming the family is sufficient
 
-- **WHEN** the row text's `TextStyle.FontFamily` names the registered family
+- **WHEN** the title text's `TextStyle.FontFamily` names the registered family
 - **THEN** both `TextLayoutHelper` measurement and the text draw resolve the registered `SKTypeface`
-- **AND** no per-row or per-surface font-override call is required
+- **AND** no per-surface font-override call is required
 
 ### Requirement: The face is registered once at client init
 
@@ -80,7 +75,7 @@ path.
 #### Scenario: The bundled face renders on arm64 macOS
 
 - **WHEN** the spike build runs on the author's Apple Silicon Mac and the lectern is opened
-- **THEN** the row text renders in the bundled face without crash, error, or garbled glyphs
+- **THEN** the title text renders in the bundled face without crash, error, or garbled glyphs
 
 ### Requirement: The bundled font's license is honored
 

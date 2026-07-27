@@ -1141,7 +1141,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
                 new Padding(
                     EdgeInsets.Only(left: 4),
                     child: new Text(Lang.Get("scribe:scribe-gui-title"),
-                        new TextStyle { FontSize = titleFont, Weight = FontWeight.Bold, Color = colors.OnSurface })),
+                        new TextStyle { FontSize = titleFont, FontFamily = ScribeRowControlNudge.TitleFontFamily, Weight = FontWeight.Bold, Color = colors.OnSurface })),
                 // Trailing group: a drag-grip cue LEFT of the close button
                 // (refine-settings-and-window-chrome). The whole TitleBar band is the drag zone via
                 // WindowConfig.DragHandleHeight, and it signals that discoverably (players won't intuit an
@@ -1707,11 +1707,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
     {
         var colors = Theme.Of(context).ColorScheme;
         var style = Widget.Style;
-        // FontFamily is set explicitly (not left to TextStyle's default) so read-view row text resolves the
-        // SAME family the editor field draws/measures — the mod's bundled "Caudex" (prove-bundled-font-seam).
-        // Keeping all row text on the one ScribeRowControlNudge.RowFontFamily const keeps read/edit line
-        // metrics locked so a single-line row is pixel-identical across a view switch.
-        TextStyle textStyle = new() { FontSize = style.FontSize, FontFamily = ScribeRowControlNudge.RowFontFamily, Color = colors.OnSurface, SoftWrap = true };
+        TextStyle textStyle = new() { FontSize = style.FontSize, Color = colors.OnSurface, SoftWrap = true };
 
         var children = new List<Widget>();
 
@@ -1803,9 +1799,7 @@ internal sealed class ScribeFrozenEditorRow : StatelessWidget
     public override Widget Build(BuildContext context)
     {
         var colors = Theme.Of(context).ColorScheme;
-        // Match the read row's family (the bundled "Caudex") so the collapsing ghost keeps the same line
-        // metrics as the live row it replaces — see ScribeReadRowState.Build (prove-bundled-font-seam).
-        TextStyle textStyle = new() { FontSize = style.FontSize, FontFamily = ScribeRowControlNudge.RowFontFamily, Color = colors.OnSurface, SoftWrap = true };
+        TextStyle textStyle = new() { FontSize = style.FontSize, Color = colors.OnSurface, SoftWrap = true };
 
         var children = new List<Widget>
         {
@@ -2695,19 +2689,18 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
 /// any scale.</para></summary>
 internal static class ScribeRowControlNudge
 {
-    /// <summary>The single source of truth for the family Scribe's LECTERN ROW TEXT is drawn and measured
-    /// in — the read-view <c>Text</c>, the editor's <see cref="ScribeMultilineField"/>, and this class's
-    /// own line-height measurement all resolve THIS one const, so they can never drift apart (a mismatch
-    /// makes a single-line row a couple of pixels taller in one view than the other, which then throws off
-    /// the pixel-based scroll-offset restore across a view switch). "Caudex" is Scribe's bundled humanist
+    /// <summary>The family Scribe's dialog TITLE text is drawn in: "Caudex", the mod's bundled humanist
     /// serif, registered with LibGUI's Skia font registry in
-    /// <see cref="ScribeModSystem.RegisterCustomFonts"/> (prove-bundled-font-seam); if that registration
-    /// fails the family falls back to a system face via <c>TextLayoutHelper</c>, so text still renders.</summary>
-    internal const string RowFontFamily = "Caudex";
+    /// <see cref="ScribeModSystem.RegisterCustomFonts"/> (prove-bundled-font-seam). Only the title uses it;
+    /// task-row text stays on the default family (see <see cref="FontFamily"/>). If registration fails the
+    /// family falls back to a system face via <c>TextLayoutHelper</c>, so the title still renders.</summary>
+    internal const string TitleFontFamily = "Caudex";
 
-    /// <summary>Font family used to measure the single-line input height. Points at
-    /// <see cref="RowFontFamily"/> so the measured height equals the field's actual single-line height.</summary>
-    private const string FontFamily = RowFontFamily;
+    /// <summary>Font family used to measure the single-line input height. MUST match
+    /// <c>ScribeMultilineField.FontFamily</c> (and the read <c>Text</c> default) so the measured height
+    /// equals the field's actual single-line height. Row text is NOT in the title's Caudex face — the two
+    /// are deliberately separate.</summary>
+    private const string FontFamily = "sans-serif";
 
     /// <summary>Measured single-line input height at the style's current font size: the "Ag" line height
     /// (same family the field/read text use) plus the field's top+bottom internal padding — mirroring

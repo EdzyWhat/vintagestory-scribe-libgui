@@ -43,15 +43,14 @@ internal readonly record struct ScribeVisualLine(string Text, int Start);
 internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox
 {
     /// <summary>Font family used for BOTH measuring and drawing this field's text. It MUST match the
-    /// family the read view's <see cref="Gui.Widgets.Basic.Text"/> uses, or the two views resolve
-    /// different typefaces with different line metrics and a single-line row ends up a couple of pixels
-    /// taller in one view than the other — which then also makes the pixel-based scroll-offset restore
-    /// across a view switch land on a slightly different row. Passing "" here (an old value) resolved to a
-    /// DIFFERENT system typeface, which was the ~2px read/edit row-height mismatch. Points at the single
-    /// source of truth <see cref="ScribeRowControlNudge.RowFontFamily"/> ("Caudex", the mod's bundled
-    /// serif) so read, editor, and the height-measurement all stay locked to one family
-    /// (prove-bundled-font-seam).</summary>
-    private const string FontFamily = ScribeRowControlNudge.RowFontFamily;
+    /// family the read view's <see cref="Gui.Widgets.Basic.Text"/> uses (its <c>TextStyle</c> default), or
+    /// the two views resolve different typefaces with different line metrics and a single-line row ends up
+    /// a couple of pixels taller in one view than the other — which then also makes the pixel-based
+    /// scroll-offset restore across a view switch land on a slightly different row. Passing "" here (an old
+    /// value) resolved to a DIFFERENT system typeface than "sans-serif", which was the ~2px read/edit
+    /// row-height mismatch. Keep this in sync with <c>TextStyle()</c>'s default `FontFamily`. (Task rows are
+    /// deliberately NOT in the title's bundled Caudex face — only the dialog title uses that.)</summary>
+    private const string FontFamily = "sans-serif";
 
     private string text = "";
     private string placeholder = "";

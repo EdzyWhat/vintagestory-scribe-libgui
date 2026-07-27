@@ -10,19 +10,22 @@
 - [x] 2.2 Null-case guarded: on `LoadFont` returning null, logs a warning and returns (text falls back to a system face via `TextLayoutHelper`); no crash. No dispose hook added — the shared LibGUI registry owns the typeface lifetime. No `loadAsset:true` re-fetch needed: `LoadFont` reads bytes into the `SKTypeface` at init, before `UnloadAssets`.
 - [x] 2.3 Registration runs in `StartClientSide`, before any Scribe dialog opens, so first layout resolves the family.
 
-## 3. Route the row text at the registered family
+## 3. Route the dialog title at the registered family
 
-- [x] 3.1 Established a single source of truth: added `internal const string RowFontFamily = "Caudex"` to `ScribeRowControlNudge` in `GuiDialogScribeLecternLibGui.cs`, and repointed that class's own `FontFamily` measurement const at it. **Correction to design:** the read view does NOT use a `FontFamily` const — it relies on `TextStyle`'s *default* family (two sites, ~lines 1708 & 1801), so there are FOUR coupling points, not two. Using one shared const prevents the drift the design flagged.
-- [x] 3.2 Repointed `ScribeMultilineField.cs`'s `FontFamily` const at `ScribeRowControlNudge.RowFontFamily` (was `"sans-serif"`), so editor draw/measure track the shared family.
-- [x] 3.3 Set `FontFamily = ScribeRowControlNudge.RowFontFamily` on both read-view `TextStyle` initializers (`ScribeReadRowState.Build` and the collapsing-row `Build`) in `GuiDialogScribeLecternLibGui.cs`, applied after the background §8-10 agent released the file (verified my `RowFontFamily` const and the agent's `GripInsets` coexist in `ScribeRowControlNudge`). All four coupling points now resolve the one const. `TextStyle` size/color untouched.
+**Scope correction (2026-07-27):** the target is the lectern dialog's TITLE text, not the task-row
+text. An earlier pass wired the row text (read + editor) at Caudex; that was reversed — rows are back
+on the default family and only the title uses Caudex.
+
+- [x] 3.1 Added `internal const string TitleFontFamily = "Caudex"` to `ScribeRowControlNudge` in `GuiDialogScribeLecternLibGui.cs`, and set the title `Text`'s `TextStyle.FontFamily` (the `scribe:scribe-gui-title` widget in `BuildTitleBar`) to it. Restored that class's `FontFamily` measurement const to `"sans-serif"` (rows are default again).
+- [x] 3.2 Reverted `ScribeMultilineField.cs`'s `FontFamily` const back to `"sans-serif"` — the editor field is deliberately NOT in the title's bundled face.
+- [x] 3.3 Reverted both read-view `TextStyle` initializers (`ScribeReadRowState.Build` and the collapsing-row `Build`) back to the default family — task-row text is unchanged. Only the title `Text` carries `TitleFontFamily`. `TextStyle` size/color untouched throughout.
 
 ## 4. Build and prove on the author's Apple Silicon Mac
 
 - [x] 4.1 `dotnet build src/Mod/Mod.csproj --nologo` clean (0 warnings, 0 errors); Core suite green (128/128). No `src/Core/` change from the font work (the `MaxHudMaxRows` Core change in the tree is the separate refine-settings §10.3, not this spike).
 - [ ] 4.2 Restage (`bash build/restage.sh Debug`) and fully relaunch the client on the Mac.
-- [ ] 4.3 (arm64 render) Open the lectern and confirm the row text renders in Caudex with no crash, error, or garbled glyphs.
-- [ ] 4.4 (mod-scoping) Confirm other in-game GUI text (menus, tooltips, other dialogs, the standalone settings window) is unchanged — only the lectern row text uses Caudex.
-- [ ] 4.5 (measure/draw lockstep) Confirm read view and editor field render the row text at consistent size and line height (no clipping or baseline drift from a family/measure mismatch).
+- [ ] 4.3 (arm64 render) Open the lectern and confirm the TITLE text renders in Caudex with no crash, error, or garbled glyphs.
+- [ ] 4.4 (mod-scoping) Confirm the task-row text (read + editor) and all other in-game GUI text (menus, tooltips, other dialogs, the standalone settings window) are unchanged — only the lectern title uses Caudex.
 
 ## 5. Record findings and correct the docs
 

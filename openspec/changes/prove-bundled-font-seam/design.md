@@ -30,13 +30,16 @@ editor"). Scribe's GUI now renders through **LibGUI/SkiaSharp**.
   bundles Cormorant Unicase, JetBrains Mono, and Playfair Display as `gui`-domain `.ttf` assets and
   registers each via `RegisterCustomFont`. The spike is proving a shipping, load-bearing path.
 
-**Where Scribe's row text specifies its font:** LibGUI text is styled with
+**Where Scribe's title specifies its font:** LibGUI text is styled with
 `Gui.Rendering.Text.TextStyle`, whose `FontFamily` defaults to `"sans-serif"` (`TextStyle.cs:107`).
-Scribe's row text uses a shared `private const string FontFamily = "sans-serif"` in two places kept
-deliberately in lockstep — the read view / row text in `GuiDialogScribeLecternLibGui.cs:2623` and
-the editor's `ScribeMultilineField.cs:53` — so the measured line height (`TextLayoutHelper.MeasureText`)
-and the drawn glyphs resolve the same typeface. Pointing that shared family name at the registered
-face is the whole seam.
+The lectern dialog's title is a single `Text` widget built in `BuildTitleBar`
+(`GuiDialogScribeLecternLibGui.cs`, the `scribe:scribe-gui-title` widget). Setting that one
+`Text`'s `TextStyle.FontFamily` to the registered family is the whole seam — the title is a single
+draw with no read/edit duality, so there is no line-metric lockstep to maintain. The task-row text
+(read view + editor field) is deliberately left on the default `"sans-serif"` family.
+
+**Scope note (2026-07-27):** an earlier pass targeted the task-row text instead of the title; that
+was reversed at the author's request. Rows are on the default family; only the title carries Caudex.
 
 **The chosen face:** Caudex — a humanist serif under the SIL Open Font License 1.1, chosen only
 because it is unambiguously redistributable inside a mod `.zip` and legible as body text. The spike
@@ -55,8 +58,8 @@ path, which the parent font work needs; see Decision 1.)
 - Confirm it renders correctly on the author's Apple Silicon Mac.
 - Establish the license-bundling discipline (ship `OFL.txt`, credit in `CREDITS`) that the parent
   font work will reuse.
-- Leave the codebase clean: one registration call at client init, one shared family-name const
-  flipped at the row-text seam; trivially reverted if a finding kills the path.
+- Leave the codebase clean: one registration call at client init, one `TitleFontFamily` const set on
+  the title `Text`; trivially reverted if a finding kills the path.
 
 **Non-Goals:**
 
@@ -94,18 +97,17 @@ faces), it is cross-platform via SkiaSharp, it needs no filesystem path or temp 
   work must inherit. We bundle Caudex to prove that pipeline; noted as an option the parent work can
   still take.
 
-### Decision 2 — Route only the row text by flipping the shared `FontFamily` const
+### Decision 2 — Route only the title `Text` at the registered family
 
-Change the shared `private const string FontFamily` used by the row text
-(`GuiDialogScribeLecternLibGui.cs:2623`) and the editor field (`ScribeMultilineField.cs:53`) from
-`"sans-serif"` to `"Caudex"`, keeping the two in lockstep so measured line height and drawn glyphs
-match.
+Add a `TitleFontFamily = "Caudex"` const on `ScribeRowControlNudge` and set the title `Text`'s
+`TextStyle.FontFamily` to it in `BuildTitleBar`. Leave the task-row text (read `Text`, collapsing
+ghost, and the editor `ScribeMultilineField`) on the default `"sans-serif"`.
 
-**Why:** Scoping is inherent — only widgets whose `TextStyle.FontFamily` names the registered family
-resolve it; every other dialog, menu, and tooltip keeps its own family and is untouched. No
-per-surface draw override is needed because `TextLayoutHelper` does the lookup centrally. Keeping the
-two consts in lockstep preserves the existing invariant that read and editor views measure and draw
-the same typeface (their comments already call this out).
+**Why:** Scoping is inherent — only the widget whose `TextStyle.FontFamily` names the registered
+family resolves it; every other dialog, menu, tooltip, and the task rows keep their own family and
+are untouched. No per-surface draw override is needed because `TextLayoutHelper` does the lookup
+centrally. The title is a single `Text` (no read/edit duality), so unlike the abandoned row-text
+approach there is no cross-view line-metric lockstep to maintain.
 
 ### Decision 3 — Register once at client init; no per-frame work, no explicit dispose needed
 
@@ -129,10 +131,10 @@ this bakes the discipline in before the parent font work adds more faces.
 ## Risks / Trade-offs
 
 - **[Registered family not picked up]** → `TextLayoutHelper` checks `GetCustomTypeface` before system
-  fallback (`:106`), so a correctly-registered family resolves; if the row text still renders in
-  sans-serif, the likely cause is a family-name mismatch (registration name vs. `TextStyle.FontFamily`
+  fallback (`:106`), so a correctly-registered family resolves; if the title still renders in
+  sans-serif, the likely cause is a family-name mismatch (registration name vs. `TitleFontFamily`
   literal) or registration running after first layout. Mitigation: register in `StartClientSide`
-  before any dialog opens, and assert the exact family string matches on both sides.
+  before any dialog opens, and keep the registration name and the const as one string.
 - **[arm64 macOS render]** → SkiaSharp is already this fork's renderer (every LibGUI dialog Scribe
   draws exercises it), so this is largely retired vs. the old `freetype6` P/Invoke risk. The Mac run
   confirms rather than de-risks; still worth an explicit check since a bundled TTF is a new asset
@@ -141,9 +143,11 @@ this bakes the discipline in before the parent font work adds more faces.
   registering `"Caudex"` writes a global alias→typeface entry. Collision is implausible (no other mod
   requests "Caudex"), and this mirrors how LibGUI registers its own faces. Noted so a future reviewer
   isn't surprised Scribe writes into a shared registry.
-- **[Line-height/measure drift]** → if only one of the two `FontFamily` consts is flipped, read and
-  editor views would resolve different faces and their measured line heights would diverge.
-  Mitigation: flip both in lockstep (Decision 2); the existing comments already flag this coupling.
+- **[Title size/wrap under a serif]** → Caudex has different metrics than the default sans, so the
+  title could measure wider or clip in the title-bar band at some font scales. Mitigation: the title
+  is short and bold; verify at a couple of window font scales during the Mac run. (No read/edit
+  line-metric lockstep concern here — that was the abandoned row-text approach; the title is a single
+  draw.)
 - **[Scope creep into the full font system]** → Non-Goals fence it: one face, one family const, no
   registry abstraction, no config, no tier mapping.
 
