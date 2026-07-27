@@ -1292,6 +1292,40 @@ same theme/backdrop/size as read/editor by construction (shared `RowStyle` + `Le
 `ScribeTheme.For`), but the no-cap row list, the commit-on-blur edit flow, and drag-reorder feel are to be
 confirmed in-game (tasks 7.1–7.11)._
 
+**Symptom (refine-settings-and-window-chrome §8.1): a passive affordance inside the title-bar drag band
+(`DragHandleHeight`) with a hover tooltip SWALLOWS the drag — pressing ON it doesn't move the window, but
+pressing elsewhere in the band does.** `GuiBase.OnMouseDown` (`GuiBase.cs`) runs
+`EventDispatcher.DispatchPointerDown` FIRST and, if it returns `capturedByWidget == true`, returns before
+its `IsInDragZone(local)` band check ever executes. `DispatchPointerDown` captures whenever the hit path
+has any *active* target (`FindTarget` → `IsAnyActiveTarget` → `EventCheckHelper.HandlesAnyPointerEvent`).
+A `Tooltip` wraps its child in a `MouseRegion` for hover (`Tooltip.Build`), and `MouseRegion` is an active
+target (it handles enter/exit) — so the tooltip alone makes the whole affordance capture the press and
+defeat the band drag. **Click-through can't coexist with the tooltip:** `IgnorePointer.HitTest` returns
+`false` for the ENTIRE subtree, which would also stop the `MouseRegion` from ever receiving enter/exit,
+killing the tooltip. There is no per-widget "receive hover but not press" opt-out. **Fix pattern:** give
+the affordance its OWN window-drag gesture instead of trying to fall through — a `GestureDetector`
+(`onPress`/`onMove`/`onRelease`) nested INSIDE the tooltip (so the outer `MouseRegion` still fires hover).
+On press capture `capi.Input.MouseX/Y` + the protected `WindowPos`; on move set `WindowPos = start + (mouse
+delta / RuntimeEnv.GUIScale)` (raw pixels → logical, matching `WindowPos`'s units and `ToLogicalScreen`);
+on release persist via `capi.Gui.SetDialogPosition(DialogCode, …)` — the same things `GuiBase`'s own band
+drag does. `OnRenderGUI` syncs `rootRo.ScreenOffset` from `WindowPos` and clamps it on-screen every frame,
+so no manual relayout/hit-bounds sync is needed. `GestureDetector` holds the pointer capture across the
+move (`EventDispatcher._capturedElement`), so `OnMouseMove` keeps dispatching to it as the cursor leaves
+the glyph. See `OnGripDragStart`/`Move`/`End` + `BuildTitleBar` in `GuiDialogScribeLecternLibGui.cs`.
+
+**Symptom (refine-settings-and-window-chrome §8.2): a `NumericField`'s +/- step button loses the field's
+focus on every click, so repeated stepping needs a re-click.** The step button is a bare `GestureDetector`
+(not `IFocusable`), so pressing it blurs the focused field on pointer-DOWN — `DispatchPointerDown` does
+`RequestFocus(null)` when the hit path has no focusable (the `a05caret1` note). That blur runs the field's
+focus-lost COMMIT, which fired `onChanged` → the host's SYNCHRONOUS `ForceRebuild` (settings write-through)
+→ the step button is unmounted mid-press, so its pointer-UP tap (which would re-`RequestFocus`) never runs.
+The button's own arm-autofocus path was correct but unreachable because the rebuild happened on DOWN,
+before UP. **Fix pattern:** don't rebuild on a no-op blur — in the field's focus-lost handler, only fire
+`onChanged` when the committed value actually DIFFERS from the value the widget was mounted with. A step
+press blurs with the value unchanged (the player didn't retype), so `onChanged` is skipped, no rebuild
+happens, the button survives its own click, and its tap re-homes focus. A real retype still differs →
+`onChanged` fires → the write-through remount settles the field. See `ScribeNumericFieldState.OnFocusChanged`.
+
 ## Dev-diagnosis toolkit
 
 The local iterate/diagnose loop for this project (Apple Silicon, where VSImGui sliders and the

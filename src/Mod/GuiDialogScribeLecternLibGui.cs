@@ -123,6 +123,21 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     /// on in <see cref="OnRenderGUI"/> AFTER layout has run (EnsureVisible reads live geometry).</summary>
     private bool pendingEnsureVisible;
 
+    // ---- Title-bar grip drag (§8.1) ----
+    // The title-bar band is the drag zone (WindowConfig.DragHandleHeight), but a press ON the grip glyph
+    // was swallowed instead of moving the window: the grip's Tooltip wraps its child in a MouseRegion,
+    // which is an ACTIVE hit target (it handles enter/exit for hover), so GuiBase.OnMouseDown's
+    // EventDispatcher.DispatchPointerDown captures it and returns BEFORE the IsInDragZone band check ever
+    // runs (see GuiBase.cs). Click-through can't coexist with the tooltip — an IgnorePointer wrapper makes
+    // the WHOLE subtree invisible to hit-testing, which would also kill the MouseRegion's hover and thus
+    // the tooltip. So the grip drives its OWN window drag: a GestureDetector nested INSIDE the tooltip (so
+    // hover still fires on the outer MouseRegion) moves the window from press→move→release, mirroring what
+    // GuiBase's band drag does. See VSAPI-NOTES.md (§LibGUI). These track the drag in progress.
+    private bool gripDragging;
+    private int gripDragStartMouseX;
+    private int gripDragStartMouseY;
+    private Vector2 gripDragStartWindowPos;
+
     /// <summary>Set by <see cref="OnRowBlurred"/> when a task row lost focus while empty, so the row's
     /// removal + rebuild is deferred to the next <see cref="OnRenderGUI"/> (add-empty-task-lifecycle).
     /// The blur fires from inside the field's focus-notification (and, on a row→row move, mid-way
@@ -1127,11 +1142,17 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
                     EdgeInsets.Only(left: 4),
                     child: new Text(Lang.Get("scribe:scribe-gui-title"),
                         new TextStyle { FontSize = titleFont, Weight = FontWeight.Bold, Color = colors.OnSurface })),
-                // Trailing group: a passive drag-grip cue LEFT of the close button
-                // (refine-settings-and-window-chrome). The grip has NO gesture handler — the whole TitleBar
-                // band is already the drag zone via WindowConfig.DragHandleHeight; the grip only signals that
-                // discoverably (players won't intuit an invisible drag band). A "drag to move" tooltip labels
-                // it. Close reuses the delete SVG at 1.4× the per-row delete size (design D3).
+                // Trailing group: a drag-grip cue LEFT of the close button
+                // (refine-settings-and-window-chrome). The whole TitleBar band is the drag zone via
+                // WindowConfig.DragHandleHeight, and it signals that discoverably (players won't intuit an
+                // invisible drag band). But a press landing ON the grip used to be swallowed instead of
+                // moving the window: the tooltip wraps its child in a MouseRegion (needed for hover), which
+                // is an active hit target, so GuiBase captures the pointer-down before its band-drag check
+                // runs — and click-through can't coexist with the tooltip (an IgnorePointer would kill the
+                // MouseRegion's hover too). So the grip owns its OWN window drag via a GestureDetector nested
+                // INSIDE the tooltip: the outer MouseRegion still fires hover, and press→move→release moves
+                // the window just like the band (§8.1; see the gripDragging fields + VSAPI-NOTES.md §LibGUI).
+                // A "drag to move" tooltip labels it. Close reuses the delete SVG at 1.4× the per-row size.
                 new Row(
                     crossAxisAlignment: CrossAxisAlignment.Center,
                     mainAxisSize: MainAxisSize.Min,
@@ -1139,8 +1160,12 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
                     children: new Widget[]
                     {
                         WithTooltip("scribe-gui-drag",
-                            new ScribeVsIconGlyph("scribegrip", ScribeRowConstants.RowCheckboxSize * 1.1f,
-                                colors.OnSurfaceVariant)),
+                            new GestureDetector(
+                                onPress: OnGripDragStart,
+                                onMove: OnGripDragMove,
+                                onRelease: OnGripDragEnd,
+                                child: new ScribeVsIconGlyph("scribegrip", ScribeRowConstants.RowCheckboxSize * 1.1f,
+                                    colors.OnSurfaceVariant))),
                         TitleButton("scribeclose", "scribe-gui-close", colors.Error,
                             size: ScribeRowConstants.RowCheckboxSize * 1.4f, onTap: () => TryClose()),
                     }),
@@ -1155,6 +1180,44 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
                     width: layout.TitleBtnsW,
                     height: layout.TitleBtnsH,
                     child: titleRow)));
+    }
+
+    // ---------------- Title-bar grip drag (§8.1) ----------------
+    // The grip glyph moves the window itself, because a press on it is captured by the tooltip's
+    // MouseRegion before GuiBase's title-band drag can fire (see the gripDragging fields' comment and
+    // the BuildTitleBar grip note). We reproduce GuiBase's band-drag math here: capture the mouse and
+    // window position on press, then track the raw-pixel mouse delta (converted to logical pixels via
+    // GUIScale, the same conversion GuiBase.ToLogicalScreen uses) into the protected WindowPos each move.
+    // GestureDetector holds the pointer capture across the move (EventDispatcher._capturedElement), so
+    // OnMouseMove keeps dispatching to the grip even as the cursor leaves the glyph's bounds.
+
+    private void OnGripDragStart(PointerEvent e)
+    {
+        gripDragging = true;
+        gripDragStartMouseX = capi.Input.MouseX;
+        gripDragStartMouseY = capi.Input.MouseY;
+        gripDragStartWindowPos = WindowPos;
+    }
+
+    private void OnGripDragMove(PointerEvent e)
+    {
+        if (!gripDragging) return;
+        // Raw-pixel delta since press → logical (UI-scaled) pixels, matching WindowPos's units.
+        float scale = RuntimeEnv.GUIScale;
+        float dx = (capi.Input.MouseX - gripDragStartMouseX) / scale;
+        float dy = (capi.Input.MouseY - gripDragStartMouseY) / scale;
+        WindowPos = new Vector2(gripDragStartWindowPos.X + dx, gripDragStartWindowPos.Y + dy);
+        // OnRenderGUI syncs rootRo.ScreenOffset from WindowPos and clamps it on-screen every frame, so no
+        // explicit relayout/hit-bounds sync is needed here — the position takes effect on the next frame.
+    }
+
+    private void OnGripDragEnd(PointerEvent e)
+    {
+        if (!gripDragging) return;
+        gripDragging = false;
+        // Persist the moved position under the same dialog key GuiBase's own band drag saves to, so the
+        // window reopens where the player left it.
+        capi.Gui.SetDialogPosition(DialogCode, new Vec2i((int)WindowPos.X, (int)WindowPos.Y));
     }
 
     /// <summary>The SectionInnerBox (<c>0.9W × 0.8H</c>, centered): a row of three full-height columns —
@@ -1176,7 +1239,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
                 }));
 
     /// <summary>SectionRightCol: a vertical stack of tooltipped nav buttons — Settings (gear → the shared
-    /// standalone settings window), Read view (check glyph), Edit view (feather), Pinned tasks (pin). All
+    /// standalone settings window), Read view (check glyph), Edit view (pencil), Pinned tasks (pin). All
     /// reuse the mod's registered SVGs (scribe-notebook-frame D3). Read/Edit switch the dialog's own view;
     /// Pinned switches to the Pin Tab (scribe-pin-editor).</summary>
     private Widget BuildRightColNav()
@@ -1191,21 +1254,25 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             mainAxisSize: MainAxisSize.Max,
             children: new Widget[]
             {
-                TitleButton("scribegear", "scribe-gui-nav-settings", colors.OnSurfaceVariant,
-                    size: size, onTap: modSystem.OpenSettings),
                 // Read view: the checkbox check SVG (scribe-notebook-frame D3 placeholder "R" now replaced).
                 TitleButton("scribecheck", "scribe-gui-nav-read", colors.OnSurfaceVariant,
                     size: size, onTap: EnterReadMode),
                 TitleButton("scribeedit", "scribe-gui-nav-edit", colors.OnSurfaceVariant,
                     size: size, onTap: RequestEditorAccess),
+                // Pinned enlarged +10% (§10.2): the pin glyph reads a touch larger than the others.
                 TitleButton("scribepin", "scribe-gui-nav-pinned", colors.OnSurfaceVariant,
-                    size: size, onTap: OnClickSwitchToPinned),
+                    size: size, onTap: OnClickSwitchToPinned, iconScale: 1.1f),
+                // Settings gear LAST in the group (§10.1), after Read / Edit / Pinned.
+                TitleButton("scribegear", "scribe-gui-nav-settings", colors.OnSurfaceVariant,
+                    size: size, onTap: modSystem.OpenSettings),
             });
     }
 
-    /// <summary>A tooltipped icon button reusing the per-row button chrome (<see cref="ScribeRowButton"/>).</summary>
-    private static Widget TitleButton(string iconName, string tooltipKey, Vector4 color, float size, Action onTap) =>
-        WithTooltip(tooltipKey, new ScribeRowButton(iconName: iconName, iconColor: color, size: size, onTap: onTap));
+    /// <summary>A tooltipped icon button reusing the per-row button chrome (<see cref="ScribeRowButton"/>).
+    /// <paramref name="iconScale"/> grows just the glyph (not the box) — used to enlarge the pin +10%
+    /// (§10.2).</summary>
+    private static Widget TitleButton(string iconName, string tooltipKey, Vector4 color, float size, Action onTap, float iconScale = 1f) =>
+        WithTooltip(tooltipKey, new ScribeRowButton(iconName: iconName, iconColor: color, size: size, onTap: onTap, iconScale: iconScale));
 
     /// <summary>Wrap a button in a localized hover tooltip (<c>scribe:&lt;key&gt;</c>), using the global
     /// overlay so it isn't clipped by the surrounding boxes.</summary>
@@ -1640,7 +1707,11 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
     {
         var colors = Theme.Of(context).ColorScheme;
         var style = Widget.Style;
-        TextStyle textStyle = new() { FontSize = style.FontSize, Color = colors.OnSurface, SoftWrap = true };
+        // FontFamily is set explicitly (not left to TextStyle's default) so read-view row text resolves the
+        // SAME family the editor field draws/measures — the mod's bundled "Caudex" (prove-bundled-font-seam).
+        // Keeping all row text on the one ScribeRowControlNudge.RowFontFamily const keeps read/edit line
+        // metrics locked so a single-line row is pixel-identical across a view switch.
+        TextStyle textStyle = new() { FontSize = style.FontSize, FontFamily = ScribeRowControlNudge.RowFontFamily, Color = colors.OnSurface, SoftWrap = true };
 
         var children = new List<Widget>();
 
@@ -1648,10 +1719,11 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         // are column-identical and align seamlessly across a view switch. It's the actual grip glyph
         // (keeps the reserved width in lockstep with the editor's grip if ControlSize changes) but drawn
         // at zero opacity and with NO gesture wrapper -- purely a spacer, uninteractable and invisible.
-        // The read view exposes no reorder (dragging is a lock-gated authoring action, design D4). Nudged
-        // down by the same amount as the editor grip so the reserved column matches row-for-row.
+        // The read view exposes no reorder (dragging is a lock-gated authoring action, design D4). Uses the
+        // SAME GripInsets as the editor grip (top nudge + the -CheckboxTextGap trailing cancel, §10.4) so
+        // the reserved column — and thus the text's left edge — stays aligned row-for-row across a switch.
         children.Add(new Padding(
-            EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
+            ScribeRowControlNudge.GripInsets(style),
             child: new Opacity(
                 opacity: 0f,
                 child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant))));
@@ -1731,14 +1803,16 @@ internal sealed class ScribeFrozenEditorRow : StatelessWidget
     public override Widget Build(BuildContext context)
     {
         var colors = Theme.Of(context).ColorScheme;
-        TextStyle textStyle = new() { FontSize = style.FontSize, Color = colors.OnSurface, SoftWrap = true };
+        // Match the read row's family (the bundled "Caudex") so the collapsing ghost keeps the same line
+        // metrics as the live row it replaces — see ScribeReadRowState.Build (prove-bundled-font-seam).
+        TextStyle textStyle = new() { FontSize = style.FontSize, FontFamily = ScribeRowControlNudge.RowFontFamily, Color = colors.OnSurface, SoftWrap = true };
 
         var children = new List<Widget>
         {
-            // Grip-column spacer (invisible, uninteractable), matching the editor row's far-left grip so
-            // the ghost's columns line up with its neighbors as it collapses.
+            // Grip-column spacer (invisible, uninteractable), matching the editor row's far-left grip (same
+            // GripInsets, §10.4) so the ghost's columns line up with its neighbors as it collapses.
             new Padding(
-                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
+                ScribeRowControlNudge.GripInsets(style),
                 child: new Opacity(
                     opacity: 0f,
                     child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant))),
@@ -2114,9 +2188,11 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         // stays mounted so a drag it started can't lose the dispatcher's pointer capture mid-move.
         // onPress/onMove-hover(row)/onRelease drive the reorder. Nudged down to center on a one-line
         // input (see ScribeRowControlNudge); the top margin sits OUTSIDE the GestureDetector so the
-        // drag hit-target still covers the visible glyph.
+        // drag hit-target still covers the visible glyph. The negative right inset cancels the Row's
+        // CheckboxTextGap that would otherwise sit between the grip and the checkbox, so the grip's
+        // trailing margin is 0 and the text column reclaims that width (§10.4). See ScribeRowGripInsets.
         children.Add(new Padding(
-            EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
+            ScribeRowControlNudge.GripInsets(style),
             child: new GestureDetector(
                 onPress: _ => Widget.OnDragStart(index),
                 onRelease: _ => Widget.OnDragEnd(),
@@ -2223,7 +2299,8 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                         // Pinned reads "active" (accent); unpinned is muted.
                         iconColor: Widget.Data.Pinned ? colors.Primary : colors.OnSurfaceVariant,
                         size: btn,
-                        onTap: () => Widget.OnTogglePinned(index))));
+                        onTap: () => Widget.OnTogglePinned(index),
+                        iconScale: 1.1f))); // pin glyph +10% (§10.2)
             }
         }
 
@@ -2508,9 +2585,9 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
         var children = new List<Widget>();
 
         // Grip on the FAR LEFT (always present, matching the editor). onPress/hover(row)/release drive the
-        // reorder; nudged down to center on a one-line input.
+        // reorder; nudged down to center on a one-line input, with the trailing gap zeroed (§10.4).
         children.Add(new Padding(
-            EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
+            ScribeRowControlNudge.GripInsets(style),
             child: new GestureDetector(
                 onPress: _ => Widget.OnDragStart(Widget.Index),
                 onRelease: _ => Widget.OnDragEnd(),
@@ -2584,7 +2661,8 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
                     iconName: "scribepin",
                     iconColor: colors.Primary, // a Pin Tab row is always pinned → active accent
                     size: btn,
-                    onTap: () => Widget.OnUnpin(data.DocId, data.TaskId))));
+                    onTap: () => Widget.OnUnpin(data.DocId, data.TaskId),
+                    iconScale: 1.1f))); // pin glyph +10% (§10.2)
         }
 
         return new MouseRegion(
@@ -2617,10 +2695,19 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
 /// any scale.</para></summary>
 internal static class ScribeRowControlNudge
 {
-    /// <summary>Font family used to measure the single-line input height. MUST match
-    /// <c>ScribeMultilineFieldRender.FontFamily</c> (and the read <c>Text</c> default) so the measured
-    /// height equals the field's actual single-line height.</summary>
-    private const string FontFamily = "sans-serif";
+    /// <summary>The single source of truth for the family Scribe's LECTERN ROW TEXT is drawn and measured
+    /// in — the read-view <c>Text</c>, the editor's <see cref="ScribeMultilineField"/>, and this class's
+    /// own line-height measurement all resolve THIS one const, so they can never drift apart (a mismatch
+    /// makes a single-line row a couple of pixels taller in one view than the other, which then throws off
+    /// the pixel-based scroll-offset restore across a view switch). "Caudex" is Scribe's bundled humanist
+    /// serif, registered with LibGUI's Skia font registry in
+    /// <see cref="ScribeModSystem.RegisterCustomFonts"/> (prove-bundled-font-seam); if that registration
+    /// fails the family falls back to a system face via <c>TextLayoutHelper</c>, so text still renders.</summary>
+    internal const string RowFontFamily = "Caudex";
+
+    /// <summary>Font family used to measure the single-line input height. Points at
+    /// <see cref="RowFontFamily"/> so the measured height equals the field's actual single-line height.</summary>
+    private const string FontFamily = RowFontFamily;
 
     /// <summary>Measured single-line input height at the style's current font size: the "Ag" line height
     /// (same family the field/read text use) plus the field's top+bottom internal padding — mirroring
@@ -2638,6 +2725,15 @@ internal static class ScribeRowControlNudge
     /// scale.</summary>
     public static float CheckboxAndGripTop(ScribeRowStyle style)
         => MathF.Max(0f, (SingleLineInputHeight(style) - style.CheckboxSize) / 2f);
+
+    /// <summary>The grip glyph's insets in a row: the vertical centering top-nudge (kept, same as the
+    /// checkbox), plus a NEGATIVE right inset that cancels the Row's <see cref="ScribeRowStyle.CheckboxTextGap"/>
+    /// which would otherwise sit as a trailing margin between the grip and the next control (§10.4). With
+    /// the trailing gap zeroed the grip sits flush against the checkbox and the text column reclaims that
+    /// width. Used identically for the editor/pin grips AND the read/frozen grip-column spacers so read and
+    /// editor rows stay column-aligned across a view switch.</summary>
+    public static EdgeInsets GripInsets(ScribeRowStyle style)
+        => EdgeInsets.Only(top: CheckboxAndGripTop(style), right: -style.CheckboxTextGap);
 
     /// <summary>Absolute top offset (from the row's top edge) that centers a floating pin/delete button's
     /// DRAWN box on the one-line input. The button box is <see cref="ScribeRowButton.BoxShrink"/> px
@@ -2691,13 +2787,14 @@ internal sealed class ScribeVsIconGlyph : StatelessWidget
 /// <c>LoadSvg</c> fails on our post-startup-unloaded assets (see <see cref="ScribeVsIconGlyph"/>).</summary>
 internal sealed class ScribeRowButton : StatefulWidget
 {
-    public ScribeRowButton(string iconName, Vector4 iconColor, float size, Action onTap, Gui.Widgets.Framework.Key? key = null)
+    public ScribeRowButton(string iconName, Vector4 iconColor, float size, Action onTap, float iconScale = 1f, Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
         IconName = iconName;
         IconColor = iconColor;
         Size = size;
         OnTap = onTap;
+        IconScale = iconScale;
     }
 
     public string IconName { get; }
@@ -2707,6 +2804,12 @@ internal sealed class ScribeRowButton : StatefulWidget
     /// still sized from this nominal value so shrinking the box doesn't shrink the icon.</summary>
     public float Size { get; }
     public Action OnTap { get; }
+
+    /// <summary>Multiplier applied to the GLYPH only (not the box), so an icon can read a touch larger while
+    /// its button box stays the same size as its neighbors (§10.2, the pin +10%). The padding split absorbs
+    /// the difference, keeping the glyph centered — mirroring how <see cref="Size"/> vs the drawn box keeps
+    /// the icon fixed when the box shrinks. Default 1 = unchanged.</summary>
+    public float IconScale { get; }
 
     /// <summary>How much smaller (px, each dimension) the button's drawn chrome is than its nominal
     /// <see cref="Size"/> (2026-07-24 feedback: "2px smaller in height, 2px smaller in width"). The icon
@@ -2740,9 +2843,10 @@ internal sealed class ScribeRowButtonState : State<ScribeRowButton>
 
         // The glyph is sized from the FULL nominal Size so shrinking the box below leaves the icon
         // untouched (2026-07-24 feedback). Shrinking the drawn box by BoxShrink then tightens the padding
-        // that surrounds the glyph — the "skin", not the SVG.
+        // that surrounds the glyph — the "skin", not the SVG. IconScale (§10.2) then grows just the glyph
+        // (the box is unchanged), with the padding split below re-centering it.
         float pad = MathF.Max(3f, Widget.Size * 0.18f); // small padding; glyph fills the rest
-        float glyph = Widget.Size - pad * 2f;
+        float glyph = (Widget.Size - pad * 2f) * Widget.IconScale;
 
         // Drawn box is BoxShrink px smaller in each dimension; the padding absorbs the difference so the
         // glyph stays centered at its nominal size. Half the shrink comes off each side of the padding.

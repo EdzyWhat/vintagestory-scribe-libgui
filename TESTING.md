@@ -28,10 +28,12 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > accepting task input at the cap, and the codec clips on load as the server-authoritative backstop.
 > Freeform note/Text sections keep the larger 10,000 cap. No error message — clip only. Fully relaunch first.
 
-- [ ] `e576c4cc` **Task text clips at 1000.** In the editor, type or paste a very long task (>1000 chars) —
+- [x] `e576c4cc` **Task text clips at 1000.** In the editor, type or paste a very long task (>1000 chars) —
       the field stops accepting input at ~1000 and the task saves fine (does NOT drop the whole document or
       other tasks, the old bug). Reopen/relog → the clipped task and everything else are intact. A freeform
       note section can still hold much longer text (not clipped to 1000). *(RELEASE.md A1)*
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T22-24-24): "Works." Long task input clips at
+        the cap without dropping the document; freeform notes still hold longer text.
 
 ## lectern-placement (RELEASE.md A2b + A2c)
 
@@ -40,15 +42,19 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > angle persists; (A2c) the lectern is now floor-only — a `CanPlaceBlock` override rejects wall/ceiling
 > placement with the vanilla "Requires a solid ground" toast. Restaged Debug 2026-07-26 — fully relaunch first.
 
-- [ ] `c2ed2683` **Lectern faces you on placement.** Place a lectern from several directions (N/E/S/W and
+- [x] `c2ed2683` **Lectern faces you on placement.** Place a lectern from several directions (N/E/S/W and
       a diagonal); the open-book reading face turns toward you each time — NOT away, NOT sideways. The
       selection outline / collision hitbox lines up with the rotated model (aim at it from an angle). Break
       and re-place → it re-faces you; relog → the facing persists. If it faces *away*, that's a 180° offset
       bug to flag. *(RELEASE.md A2b)*
-- [ ] `0f7f85a1` **Lectern is floor-only.** Try to place a lectern against a wall (click a vertical face)
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T22-24-24): "Works." The lectern faces the
+        placing player from every direction; no 180° offset reported.
+- [x] `0f7f85a1` **Lectern is floor-only.** Try to place a lectern against a wall (click a vertical face)
       and on a ceiling (underside of a block) → both are rejected with a "Requires a solid ground" toast,
       no block placed. Placing on the floor / on top of a solid block still works. Try placing on top of a
       non-solid thing (e.g. a fence/torch) → rejected too. *(RELEASE.md A2c)*
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T22-24-24): "Works." Wall/ceiling placement
+        rejected; floor placement works.
 
 ## refine-settings-and-window-chrome
 
@@ -63,16 +69,35 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [ ] `59d7ccbf` **Title-bar drag grip.** The Lectern title bar shows a grip icon left of the close button
       with a "drag to move" tooltip on hover; the whole title-bar band still drags the window.
       *(refine-settings-and-window-chrome 7.3)*
+      - **Still broken 2026-07-26** (playtest submission 2026-07-26T22-24-24): the grip icon shows with its
+        tooltip, but click-dragging ON the grip does NOT move the window (it's a passive `ScribeVsIconGlyph`
+        with no gesture handler, and something on that glyph/tooltip path is eating the drag rather than
+        letting the title-bar band handle it). Tester's two proposed resolutions: (a) wire the grip to drag
+        the whole window like the rest of the band, or (b) make it truly non-interactive so the press falls
+        through to the band's drag. Needs a fix + retest.
 - [ ] `bb25e8d3` **Numeric retype + clamp-on-blur.** In Scribe Settings, select-all a numeric field (e.g.
       HUD row width, Pixel Art Size) and type a fresh value with no mid-edit snap; click away with an
       out-of-range value → it clamps AND a red range line appears beneath; a next in-range edit clears it;
       values persist across relog. +/- and arrows still step live. *(refine-settings-and-window-chrome 7.4)*
-- [ ] `52f2e92e` **Three sections + panel.** Scribe Settings shows three divider-separated sections (Mod
+      - **Still broken 2026-07-26** (playtest submission 2026-07-26T22-24-24): the core retype + clamp-on-blur
+        works, BUT there's a focus bug — every numeric field UNFOCUSES after each click on its +/- step
+        buttons (so repeated stepping requires re-clicking into the field). Tester also wants the spec
+        relaxed: the **red range line is unwanted** — drop it from the spec rather than requiring it. So two
+        actions: (1) fix the +/- unfocus-on-click regression; (2) amend the spec to remove the red-range-line
+        requirement. Retest after the focus fix.
+- [x] `52f2e92e` **Three sections + panel.** Scribe Settings shows three divider-separated sections (Mod
       Behavior / Window Appearance / HUD Appearance) with each control under the right section, and the form
       sits on an opaque theme-surface panel (not a transparent gap). *(refine-settings-and-window-chrome 7.5)*
-- [ ] `c2c153d1` **Settings gear toggles.** Clicking the Lectern right-column gear opens the settings window
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T22-24-24): "Works." Three divider-separated
+        sections on an opaque panel, each control under the right section. Follow-up polish requested (not
+        blocking this item): (a) section-header font is too big — make it only ~8% larger than the window
+        text; (b) put "Pixel Art Size" + "Window text size (%)" side by side in two columns; (c) rename
+        "Pixel Art Size" → "Pixel Art Size (px)".
+- [x] `c2c153d1` **Settings gear toggles.** Clicking the Lectern right-column gear opens the settings window
       and clicking it again CLOSES it; the HUD gear toggles the same way.
       *(refine-settings-and-window-chrome 7.6)*
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T22-24-24): "Works." Both the Lectern
+        right-column gear and the HUD gear toggle the settings window open/closed.
 
 ## scribe-notebook-frame
 
@@ -91,9 +116,14 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       content. *(scribe-notebook-frame 6.3)*
       - **Confirmed 2026-07-26** (playtest submission 2026-07-26T12-04-59): "Works." The notebook art fills
         the window un-distorted as the OuterArtBox.
-- [ ] `e647c1c7` **Title bar drags + close.** Click-drag inside the top title-bar band → the window moves.
+- [x] `e647c1c7` **Title bar drags + close.** Click-drag inside the top title-bar band → the window moves.
       Click the close button (the 1.4× delete SVG, top-right of the title row) → the dialog closes.
       *(scribe-notebook-frame 6.3)*
+      - **Confirmed 2026-07-26** (playtest submissions 2026-07-26T12-55-50 + 2026-07-26T22-24-24): drag +
+        close both work; the 4px title-text left-padding fix landed. Two non-blocking follow-ups remain: the
+        tester wants the title-text left padding bumped 4px → 15px (12-55-50 note), and the close-button
+        hitbox-vs-border misalignment is still the deferred Retina/GUIScale artifact recorded below (not
+        reintroduced, just not chased). Core drag+close behavior is good.
       - **Still broken 2026-07-26** (playtest submission 2026-07-26T11-25-01, general notes; drag/close
         themselves confirmed working in 2026-07-26T12-04-59 "Works"): the close button's CLICKABLE area
         doesn't coincide with its drawn border — the hit region sits above and to the left of the visible
@@ -333,6 +363,12 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         bare checkbox. Confirms the earlier hypothesis (a completion whose collapse/removal didn't retire the
         checkbox, on the undo path). Reproducible enough now to drive a fix in the HUD removal machinery
         (`HudScribePins` departing / `ScribeFadeText` / collapse under Delete + rapid undo).
+      - **Not reproduced 2026-07-26 — NOT a confirmed fix** (playtest submission 2026-07-26T12-55-50: "Fixed."):
+        left UNCHECKED deliberately. No fix commit touched `HudScribePins`/collapse between the 11:25 repro
+        and this report (only `530a506`, an OpenSpec-archive-only commit, landed in that window), and this bug
+        has already gone quiet once (2026-07-26T00-36-12) before recurring. Treating "Fixed" as another
+        non-reproduction of a known intermittent race, not a resolution. Retest specifically with the known
+        trigger (Delete policy + rapid complete-then-undo) before calling it fixed.
 
 ## add-settings-tab
 

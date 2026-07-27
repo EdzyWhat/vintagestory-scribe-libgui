@@ -1,3 +1,14 @@
+> **ABANDONED (2026-07-27).** The reconciling refactor was implemented on its own branch
+> (build-clean, 102/102 Core tests, never playtested) but left UNMERGED. The headline payoff —
+> "stock LibGUI animations become free once the tree reconciles" — proved FALSE for the
+> deletion-collapse: stock `AnimatedSize` has no completion callback (row removal still needs an
+> explicit controller), and LibGUI's reconciler is positional, so a mid-list delete remounts
+> trailing rows and restarts an in-flight collapse (the host-owned collapse registry stays
+> load-bearing). Scribe therefore KEEPS its self-ticking animation stack
+> (`ScribeCollapsible`/`ScribeHeightFactorRender`/registry + `ScribeFadeText`). Full write-up:
+> `docs/animation-lessons-learned.md`. Do NOT re-attempt stock animations without reading it
+> first. Archived with `--skip-specs`; its spec deltas were never promoted.
+
 ## Why
 
 Scribe's GUI hosts (the HUD and the lectern dialog) push almost every state change through

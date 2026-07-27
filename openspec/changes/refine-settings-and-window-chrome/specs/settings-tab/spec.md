@@ -81,19 +81,11 @@ enumerated options of the dropdowns SHALL be shown by human-readable, localized 
 
 ## ADDED Requirements
 
-### Requirement: A clamped numeric field surfaces its valid range as feedback
-When a numeric-entry control clamps a value on losing focus (because the entered value was outside the
-allowed range), it SHALL surface feedback text informing the player that the value was clamped and stating
-the valid range for that preference. The feedback SHALL clear on the next in-range edit of that field. The
-feedback strings SHALL be drawn from the mod's localization assets.
-
-#### Scenario: Clamp feedback appears with the valid range
-- **WHEN** a numeric field clamps an out-of-range value on losing focus
-- **THEN** feedback text appears indicating the value was clamped and stating that preference's valid range
-
-#### Scenario: Feedback clears on a valid edit
-- **WHEN** the player subsequently edits that field to an in-range value
-- **THEN** the clamp feedback text is cleared
+> **Dropped (2026-07-26 playtest, submission 2026-07-26T22-24-24):** an earlier ADDED requirement here —
+> "A clamped numeric field surfaces its valid range as feedback" (a red range line beneath the field) — was
+> removed at the tester's request. Silent clamp-on-blur was judged sufficient; the range line was unwanted
+> visual noise. The clamp behavior itself (clamp on blur, not per-keystroke) is retained above; only the
+> feedback-text affordance is dropped.
 
 ### Requirement: The settings surface paints a default window background
 The standalone settings window SHALL paint the active LibGUI theme's default surface color behind the

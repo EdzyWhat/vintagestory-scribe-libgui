@@ -49,8 +49,8 @@ public sealed class ScribePlayerSettings
     public const int MinHudMaxRows = 1;
 
     /// <summary>Inclusive upper bound clamped on load, so a hand-edited or garbled preference file
-    /// can't request an unbounded number of rows.</summary>
-    public const int MaxHudMaxRows = 20;
+    /// can't request an unbounded number of rows. A saved 11–20 re-clamps to 10 on next load (§10.3).</summary>
+    public const int MaxHudMaxRows = 10;
 
     /// <summary>Which screen corner/edge the HUD is pinned to (default <see cref="ScribeHudAnchor.TopRight"/>,
     /// pre-offset left of the minimap by the Mod layer). A per-player display preference; the Mod layer

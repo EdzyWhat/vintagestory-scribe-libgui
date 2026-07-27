@@ -34,10 +34,10 @@ namespace Scribe;
 /// <c>add-settings-tab</c> defect that made select-all-and-retype impossible). Instead the value is
 /// committed once on BLUR: the field parses its text, applies the optional <see cref="Clamp"/> callback
 /// (the Core <c>Clamp*</c> static — Core stays the range source of truth), rewrites its own text to the
-/// clamped result, and fires <c>onChanged</c> a single time. If the blur actually clamped an out-of-range
-/// value, a one-line <see cref="RangeText"/> feedback appears beneath the input until the next edit. The
-/// +/- buttons and arrow keys still write through LIVE (they are always in range), so live preview and the
-/// host's focus-preserving remount are unchanged for stepping.</para>
+/// clamped result, and fires <c>onChanged</c> a single time (only when the committed value actually
+/// differs from the mounted value — see <see cref="OnFocusChanged"/> for why that guard matters to +/-
+/// stepping). The +/- buttons and arrow keys still write through LIVE (they are always in range), so live
+/// preview and the host's focus-preserving remount are unchanged for stepping.</para>
 /// </summary>
 /// <summary>
 /// Host-owned focus state for a settings form's numeric fields, so focus survives the form's write-through
@@ -97,8 +97,7 @@ public sealed class ScribeNumericField : StatefulWidget
         FocusNode? focusNode = null,
         bool autoFocus = false,
         Action? onStepped = null,
-        Func<float, float>? clamp = null,
-        string? rangeText = null)
+        Func<float, float>? clamp = null)
     {
         Value = initialValue;
         Step = step;
@@ -108,7 +107,6 @@ public sealed class ScribeNumericField : StatefulWidget
         AutoFocus = autoFocus;
         OnStepped = onStepped;
         Clamp = clamp;
-        RangeText = rangeText;
     }
 
     public float Value { get; }
@@ -121,11 +119,6 @@ public sealed class ScribeNumericField : StatefulWidget
     /// callback lets the range stay owned by Core (<c>ScribePlayerSettings</c>) while the field owns only
     /// the clamp TIMING — a Mod-layer UI concern.</summary>
     public Func<float, float>? Clamp { get; }
-
-    /// <summary>Optional human-readable valid range (e.g. "300–1000"), shown as a one-line feedback beneath
-    /// the input ONLY after a blur actually clamped an out-of-range value, cleared on the next edit. Null =
-    /// never show feedback.</summary>
-    public string? RangeText { get; }
 
     /// <summary>Optional host-owned focus node. When supplied it survives the host's write-through
     /// <c>ForceRebuild</c> (which unmounts this widget), so paired with <see cref="AutoFocus"/> the field
@@ -152,9 +145,6 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
     private FocusNode? _internalFocusNode;
     private float _currentValue;
     private bool _hadFocus;
-    /// <summary>Set true when a blur actually clamped an out-of-range value, so the range feedback line
-    /// shows; cleared on the next edit or the next focus gain.</summary>
-    private bool _showRangeFeedback;
 
     public override void InitState()
     {
@@ -186,13 +176,12 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
     /// + <c>ValueKey</c> remount, which re-seeded the uncontrolled field to the clamped value mid-edit and
     /// made select-all-and-retype impossible. The commit (parse → clamp → onChanged) is deferred to blur
     /// (<see cref="OnFocusChanged"/>). Unparseable junk (not a partial-number prefix) still snaps back to the
-    /// last good value so the field never holds garbage. Any edit clears a stale range-feedback line.</summary>
+    /// last good value so the field never holds garbage.</summary>
     private void OnTextChanged()
     {
         if (float.TryParse(_controller.Text, out var newValue))
         {
             _currentValue = newValue;
-            if (_showRangeFeedback) SetState(() => _showRangeFeedback = false);
         }
         else if (_controller.Text is not ("" or "-" or "." or "," or " "))
         {
@@ -203,27 +192,33 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
     }
 
     /// <summary>Focus-node listener: on focus LOST, commit the typed value once — parse it, apply the Core
-    /// <see cref="ScribeNumericField.Clamp"/> callback, and if the clamp changed an out-of-range value,
-    /// rewrite the field text to the clamped result and surface the range feedback line. Fires
-    /// <c>onChanged</c> exactly once with the committed (clamped) value, so the host writes + persists it
-    /// then. On focus GAINED, clear any stale feedback. No-op transitions are ignored (the node notifies on
-    /// every change; we act only on the focus edge).</summary>
+    /// <see cref="ScribeNumericField.Clamp"/> callback, rewrite the field text to the clamped result, and
+    /// fire <c>onChanged</c> so the host writes + persists it. No-op transitions are ignored (the node
+    /// notifies on every change; we act only on the focus edge).
+    ///
+    /// <para><b>The +/- step-button unfocus fix (§8.2).</b> A step button is a bare
+    /// <see cref="GestureDetector"/>, not <see cref="Gui.Widgets.Framework.IFocusable"/>, so pressing it
+    /// blurs this field on pointer-DOWN (LibGUI's <c>EventDispatcher.DispatchPointerDown</c> calls
+    /// <c>RequestFocus(null)</c> whenever the hit path has no focusable — the <c>a05caret1</c> note). That
+    /// blur lands here and, if it fires <c>onChanged</c>, triggers the host's SYNCHRONOUS
+    /// <c>ForceRebuild</c> — which unmounts the step button mid-press, so its pointer-UP tap
+    /// (<see cref="Adjust"/>, which re-requests focus) never runs and focus is lost. The guard below is the
+    /// fix: on a blur where the committed value is UNCHANGED from what the field was mounted with (the
+    /// common case — the player didn't retype, they just clicked +/-), we skip <c>onChanged</c> entirely, so
+    /// no rebuild happens, the button survives its own click, and <see cref="Adjust"/> re-homes focus. When
+    /// the player DID retype an out-of-range value, the committed value differs, <c>onChanged</c> fires, and
+    /// the write-through remount settles the field on the clamped value as before.</para></summary>
     private void OnFocusChanged()
     {
         bool has = _focusNode.HasFocus;
         if (has == _hadFocus) return;
         _hadFocus = has;
 
-        if (has)
-        {
-            if (_showRangeFeedback) SetState(() => _showRangeFeedback = false);
-            return;
-        }
+        if (has) return;
 
         // Focus lost → commit. Parse the current text (fall back to the last good value on junk).
         if (!float.TryParse(_controller.Text, out var typed)) typed = _currentValue;
         float committed = Widget.Clamp is not null ? Widget.Clamp(typed) : typed;
-        bool wasClamped = Math.Abs(committed - typed) > 0.0001f;
 
         _currentValue = committed;
         string text = committed.ToString();
@@ -231,11 +226,14 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
         {
             _controller.Value = new TextEditingValue(text, TextSelection.Collapsed(text.Length));
         }
-        Widget.OnChanged?.Invoke(committed);
 
-        // Show the range line only when a value was actually clamped and we have range text for it.
-        bool show = wasClamped && Widget.RangeText is not null;
-        if (show != _showRangeFeedback) SetState(() => _showRangeFeedback = show);
+        // Only write through (and thus rebuild) when the value actually changed from the mounted value. A
+        // step-button press blurs us with the value unchanged; skipping onChanged there keeps the host from
+        // rebuilding out from under the button before its tap fires (§8.2 — see the doc comment above).
+        if (Math.Abs(committed - Widget.Value) > 0.0001f)
+        {
+            Widget.OnChanged?.Invoke(committed);
+        }
     }
 
     /// <summary>Step the value by <paramref name="delta"/> (shared by the +/- buttons and arrow keys) and
@@ -295,7 +293,9 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
                         Color = colors.OnPrimary,
                     }))));
 
-        Widget fieldRow = new Container(
+        // The clamp still fires on blur (in OnFocusChanged); the visible valid-range feedback line was
+        // dropped as unwanted (§8.2), so the field is just the input + its +/- step column.
+        return new Container(
             Widget.Style,
             new Row(children: new Widget[]
             {
@@ -316,18 +316,6 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
                     MakeButton("-", _ => Adjust(-Widget.Step)),
                 }),
             }));
-
-        // Range feedback line beneath the input, shown ONLY after a blur clamped an out-of-range value
-        // (refine-settings-and-window-chrome OQ1: "error only after clamp"), cleared on the next edit.
-        if (!_showRangeFeedback || Widget.RangeText is null) return fieldRow;
-        return new Column(
-            crossAxisAlignment: CrossAxisAlignment.Stretch,
-            mainAxisSize: MainAxisSize.Min,
-            children: new Widget[]
-            {
-                fieldRow,
-                new Text("⚠ " + Widget.RangeText, new TextStyle { FontSize = 12, Color = colors.Error }),
-            });
     }
 
     public override void Dispose()

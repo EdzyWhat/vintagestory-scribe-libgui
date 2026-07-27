@@ -38,12 +38,6 @@
 	"settings-section-windowappearance": "Window Appearance",
 	"settings-section-hudappearance": "HUD Appearance",
 
-	"settings-range-hudmaxrows": "Must be 1–20",
-	"settings-range-hudrowwidth": "Must be 80–1000",
-	"settings-range-hudoffset": "Must be -300 to 300",
-	"settings-range-fontscale": "Must be 80–120%",
-	"settings-range-pixelartsize": "Must be 300–1000",
-
 	"settings-completionpolicy": "On completing a task",
 	"settings-completionpolicy-help": "What happens to a pinned task when you check it off: keep it pinned (it sinks to the bottom of the HUD), unpin it, or delete the underlying task.",
 	"settings-hudcollapsed": "Collapse the HUD",
@@ -55,7 +49,7 @@
 	"settings-hudanchor": "HUD position",
 	"settings-hudanchor-help": "Which screen corner or edge the pinned-task HUD is anchored to.",
 	"settings-hudmaxrows": "Max HUD rows",
-	"settings-hudmaxrows-help": "How many pinned tasks the HUD shows at once (1–20). Extra pins are summarized as \"+N more\".",
+	"settings-hudmaxrows-help": "How many pinned tasks the HUD shows at once (1–10). Extra pins are summarized as \"+N more\".",
 	"settings-hudrowwidth": "HUD row width",
 	"settings-hudrowwidth-help": "The fixed pixel width of the HUD's task rows (100–1000, steps of 5); longer tasks wrap within this width.",
 	"settings-hudoffset": "HUD offset (px)",
@@ -66,7 +60,7 @@
 	"settings-hudfontscale-help": "Scales the pinned-task HUD's text (80–120%, steps of 5). Applied on top of the game's Interface → GUI Scale.",
 	"settings-windowfontscale": "Window text size (%)",
 	"settings-windowfontscale-help": "Scales the text in Scribe's block windows (the lectern), 80–120%, steps of 5. Applied on top of the game's Interface → GUI Scale.",
-	"settings-pixelartsize": "Pixel Art Size",
+	"settings-pixelartsize": "Pixel Art Size (px)",
 	"settings-pixelartsize-help": "The overall size of the Lectern's illustrated notebook (300–1000 px wide, steps of 10). The whole window and everything in it scales with this. Changing it re-sizes an open Lectern the next time you open it.",
 
 	"settings-anchor-topleft": "Top-left",

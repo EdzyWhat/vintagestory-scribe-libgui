@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using Gui.Rendering;             // SkiaAssetLoader
+using Gui.Rendering.Text;        // FontRegistry, FontWeight
 using Scribe.Core;
 using SkiaSharp;
 using Vintagestory.API.Client;
@@ -124,6 +126,7 @@ public sealed class ScribeModSystem : ModSystem
         mySettings = (api.LoadModConfig<ScribePlayerSettings>(HudConfigFileName) ?? new ScribePlayerSettings()).Normalized();
 
         RegisterCustomIcons(api);
+        RegisterCustomFonts(api);
 
         api.Network.GetChannel(NetworkChannelName)
             .SetMessageHandler<ScribeEditDocumentMessage>(OnClientReceivedEditReply)
@@ -274,6 +277,40 @@ public sealed class ScribeModSystem : ModSystem
         RegisterSvgIcon(api, "scribeedit", new AssetLocation("scribe", "textures/icons/edit.svg"));
         RegisterSvgIcon(api, "scribegear", new AssetLocation("scribe", "textures/icons/gear.svg"));
         RegisterSvgIcon(api, "scribecheck", new AssetLocation("scribe", "textures/icons/check.svg"));
+    }
+
+    /// <summary>
+    /// Registers Scribe's bundled typeface(s) with LibGUI's Skia font registry so the mod's own text can
+    /// name them via <c>TextStyle.FontFamily</c> (prove-bundled-font-seam). This mirrors how LibGUI itself
+    /// bundles + registers its faces in <c>GuiModSystem.LoadFonts</c>: load the <c>.ttf</c> asset bytes to an
+    /// <c>SKTypeface</c> via <see cref="SkiaAssetLoader.LoadFont"/>, then hand it to
+    /// <c>FontRegistry.RegisterCustomFont(family, weight, typeface)</c>. Once registered,
+    /// <c>TextLayoutHelper</c> resolves that family for BOTH measurement and drawing (it checks
+    /// <c>GetCustomTypeface</c> before any system-font fallback), so no per-surface draw override is needed
+    /// and the scoping is inherent — only text whose family names "Caudex" changes.
+    ///
+    /// <para>Asset path note: the font lives under <c>textures/fonts/</c>, NOT a bare <c>fonts/</c> folder.
+    /// <c>fonts</c> is not one of VS's scanned <c>AssetCategory</c> codes (confirmed by decompile — LibGUI
+    /// only loads its own <c>assets/gui/fonts/</c> by doing an extra <c>AddModOrigin("gui","fonts")</c> +
+    /// <c>Assets.Reload</c> dance first). Filing it under the already-scanned <c>textures</c> category
+    /// (the same one our SVG icons use) avoids that dance entirely. Unlike the icons, we do NOT need a
+    /// <c>loadAsset: true</c> re-fetch guard: <see cref="SkiaAssetLoader.LoadFont"/> reads the bytes into an
+    /// <c>SKTypeface</c> HERE at client init, before <c>UnloadAssets</c> nulls the asset data, and the
+    /// typeface (not the asset) is what the registry keeps. See VSAPI-NOTES.md (§LibGUI).</para>
+    /// </summary>
+    private static void RegisterCustomFonts(ICoreClientAPI api)
+    {
+        var loader = new SkiaAssetLoader(api);
+        // AssetLocation is lowercased by LoadFont (path.ToLower()), so the asset filename must be lowercase.
+        var typeface = loader.LoadFont("scribe", "textures/fonts/caudex-regular.ttf");
+        if (typeface is null)
+        {
+            // Missing/corrupt asset: LoadFont already logged the failure. Leave Scribe's text on its
+            // current family (sans-serif) rather than crashing — the mod stays fully usable without the face.
+            api.Logger.Warning("[scribe] bundled font 'Caudex' failed to load; row text stays on the default family");
+            return;
+        }
+        FontRegistry.RegisterCustomFont("Caudex", FontWeight.Normal, typeface);
     }
 
     /// <summary>

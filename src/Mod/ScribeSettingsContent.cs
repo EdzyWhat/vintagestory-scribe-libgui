@@ -139,21 +139,20 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                     value: settings.PixelArtDisplay,
                     onChanged: v => onMutate(s => s.PixelArtDisplay = v)),
 
-                // Pixel Art Size (W): the single driving width of the Lectern's proportional layout
-                // (scribe-notebook-frame). Steps by 10; clamps + snaps to the 10px grid on blur via the Core
-                // static, and re-lays-out the open Lectern live.
-                LabeledControl(
-                    "settings-pixelartsize", colors, scale,
-                    IntField("pixelartsize", settings.PixelArtSize, step: 10,
-                        onChanged: v => onMutate(s => s.PixelArtSize = v),
-                        clamp: ScribePlayerSettings.ClampPixelArtSize,
-                        rangeText: Lang.Get("scribe:settings-range-pixelartsize"))),
-
-                // Window text scale (moved here from the old HUD-font pairing so it sits with the other
-                // window-appearance controls). Entered as a percent; clamps + snaps to a 5% notch on blur.
-                LabeledControl(
-                    "settings-windowfontscale", colors, scale,
-                    FontScaleField("windowfontscale", settings.WindowFontScale, v => onMutate(s => s.WindowFontScale = v))),
+                // Pixel Art Size + Window text scale share one row as two columns (§9.2). Pixel Art Size (W)
+                // is the single driving width of the Lectern's proportional layout (scribe-notebook-frame),
+                // stepping by 10 and snapping to the 10px grid on blur; the window text scale is a percent
+                // snapping to a 5% notch on blur. Both clamp via their Core statics and re-lay-out the open
+                // Lectern live.
+                PairedControls(colors, scale,
+                    LabeledControl(
+                        "settings-pixelartsize", colors, scale,
+                        IntField("pixelartsize", settings.PixelArtSize, step: 10,
+                            onChanged: v => onMutate(s => s.PixelArtSize = v),
+                            clamp: ScribePlayerSettings.ClampPixelArtSize)),
+                    LabeledControl(
+                        "settings-windowfontscale", colors, scale,
+                        FontScaleField("windowfontscale", settings.WindowFontScale, v => onMutate(s => s.WindowFontScale = v)))),
             });
     }
 
@@ -174,9 +173,9 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         items: AnchorItems(),
                         onChanged: v => onMutate(s => s.HudAnchor = v))),
 
-                // Numeric fields (not sliders — sliders hijack scroll, design D8). Each clamps + shows its
-                // range feedback ON BLUR inside the field (refine-settings-and-window-chrome), using the Core
-                // Clamp* static; the ValueKey still remounts the field to the committed value after a write.
+                // Numeric fields (not sliders — sliders hijack scroll, design D8). Each clamps ON BLUR inside
+                // the field (refine-settings-and-window-chrome), using the Core Clamp* static; the ValueKey
+                // still remounts the field to the committed value after a write.
                 //
                 // Max HUD rows + HUD row width share one row as two columns (scribe-settings-followups 3.1).
                 PairedControls(colors, scale,
@@ -184,14 +183,12 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         "settings-hudmaxrows", colors, scale,
                         IntField("hudmaxrows", settings.HudMaxRows, step: 1,
                             onChanged: v => onMutate(s => s.HudMaxRows = v),
-                            clamp: ScribePlayerSettings.ClampHudMaxRows,
-                            rangeText: Lang.Get("scribe:settings-range-hudmaxrows"))),
+                            clamp: ScribePlayerSettings.ClampHudMaxRows)),
                     LabeledControl(
                         "settings-hudrowwidth", colors, scale,
                         IntField("hudrowwidth", settings.HudRowWidth, step: 5,
                             onChanged: v => onMutate(s => s.HudRowWidth = v),
-                            clamp: ScribePlayerSettings.ClampHudRowWidth,
-                            rangeText: Lang.Get("scribe:settings-range-hudrowwidth")))),
+                            clamp: ScribePlayerSettings.ClampHudRowWidth))),
 
                 // HUD X/Y offsets on ONE row (design D5); each is a ±300 pixel nudge relative to the
                 // anchor's pre-baked offset (design D8), stepping by 5.
@@ -242,11 +239,10 @@ internal sealed class ScribeSettingsContent : StatelessWidget
     /// (Typing a value whose running prefix is below the min briefly clamps mid-type; +/- and arrows are
     /// the primary path.)</summary>
     private Widget NumericField(string id, int keyValue, float initialValue, float step, Action<float> onChanged,
-        Func<float, float>? clamp = null, string? rangeText = null) =>
-        // A key-only SizedBox (no width/height → null constraints, so the child sizes itself): the field now
-        // renders its own range-feedback line beneath the input on a clamp, so it must be free to grow taller
-        // than the old fixed 34px. The ValueKey still remounts the uncontrolled field when the
-        // persisted/clamped value changes (settling it after a blur commit).
+        Func<float, float>? clamp = null) =>
+        // A key-only SizedBox (no width/height → null constraints, so the child sizes itself). The ValueKey
+        // remounts the uncontrolled field when the persisted/clamped value changes (settling it after a blur
+        // commit).
         new SizedBox(
             key: new ValueKey<int>(keyValue),
             child: new ScribeNumericField(
@@ -257,18 +253,16 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                 focusNode: focus.NodeFor(id),
                 autoFocus: focus.ShouldFocus(id),
                 onStepped: () => focus.ArmAutoFocus(id),
-                clamp: clamp,
-                rangeText: rangeText));
+                clamp: clamp));
 
     /// <summary>An integer numeric field stepping by <paramref name="step"/> that writes its rounded value
-    /// through on change. Clamp/range feedback happen on blur inside the field (the clamp is the Core
-    /// <c>Clamp*</c> static composed to operate on the rounded int).</summary>
+    /// through on change. Clamping happens on blur inside the field (the clamp is the Core <c>Clamp*</c>
+    /// static composed to operate on the rounded int).</summary>
     private Widget IntField(string id, int value, float step, Action<int> onChanged,
-        Func<int, int>? clamp = null, string? rangeText = null) =>
+        Func<int, int>? clamp = null) =>
         NumericField(id, keyValue: value, initialValue: value, step: step,
             onChanged: v => onChanged((int)MathF.Round(v)),
-            clamp: clamp is null ? null : v => clamp((int)MathF.Round(v)),
-            rangeText: rangeText);
+            clamp: clamp is null ? null : v => clamp((int)MathF.Round(v)));
 
     /// <summary>A labeled ±300px offset field: a small caption over an <see cref="IntField"/> (step 5). Clamps
     /// to the Core offset range on blur.</summary>
@@ -282,8 +276,7 @@ internal sealed class ScribeSettingsContent : StatelessWidget
             {
                 new Text(caption, new TextStyle { FontSize = 13 * scale, Color = colors.OnSurfaceVariant }),
                 IntField(id, value, step: 5, onChanged: onChanged,
-                    clamp: ScribePlayerSettings.ClampHudOffset,
-                    rangeText: Lang.Get("scribe:settings-range-hudoffset")),
+                    clamp: ScribePlayerSettings.ClampHudOffset),
             });
     }
 
@@ -299,14 +292,14 @@ internal sealed class ScribeSettingsContent : StatelessWidget
             // The field works in PERCENT (80–120); clamp in percent space by round-tripping through the Core
             // multiplier clamp (which also snaps to the 5% notch), so a blurred out-of-range percent settles
             // onto a valid notch percent.
-            clamp: v => MathF.Round(ScribePlayerSettings.ClampFontScale(v / 100f) * 100f),
-            rangeText: Lang.Get("scribe:settings-range-fontscale"));
+            clamp: v => MathF.Round(ScribePlayerSettings.ClampFontScale(v / 100f) * 100f));
     }
 
     // ---------------- Layout helpers ----------------
 
     private static Widget SectionTitle(string text, ColorScheme colors, float scale) =>
-        new Text(text, new TextStyle { FontSize = ScribeRowConstants.BaseSettingsFontSize * scale + 2f, Weight = FontWeight.Bold, Color = colors.OnSurface });
+        // Only ~8% larger than the window text (§9.1) — the old "+2f" absolute bump read too large.
+        new Text(text, new TextStyle { FontSize = ScribeRowConstants.BaseSettingsFontSize * scale * 1.08f, Weight = FontWeight.Bold, Color = colors.OnSurface });
 
     /// <summary>Lay two labeled controls side by side as equal-width columns in one row
     /// (scribe-settings-followups 3.1/3.2). Each child is <see cref="Expanded"/> so they split the

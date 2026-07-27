@@ -1,160 +1,166 @@
 ## Context
 
 `docs/specs/presentation-and-fonts.md` Item 3 ("custom fonts per tier") depends on being able to
-render Scribe's own GUI text in a bundled typeface without touching any other GUI in the game.
-A decompile of `VintagestoryAPI.dll`, `VintagestoryLib.dll`, and the vendored `Lib/cairo-sharp.dll`
-(2026-07-21; see `VSAPI-NOTES.md` "Custom TTF fonts in the GUI") established the mechanism but
-also surfaced three runtime behaviors that a static read of the DLLs cannot settle. This spike
-exists solely to de-risk those before a real tier commits to a font system.
+render Scribe's own GUI text in a bundled typeface without touching any other GUI in the game. This
+spike de-risks that before a real tier commits to a font system.
 
-**What the decompile confirmed (treat as ground truth):**
+**The premise changed with the LibGUI migration.** The original version of this change was written
+against the native game's **Cairo** text path, where `CairoFont.SetupContext` resolves fonts by
+name via fontconfig/OS and no managed font-registration API exists — forcing a FreeType-direct load
+(`Cairo.Util.FreeTypeFontFace.Create` + `SetContextFontFace`) on the row's private Cairo surface.
+That entire mechanism is gone from this repo: `ScribeRowElement.cs` and `GuiDialogScribeLectern.cs`
+were retired in commit `a7ad139` ("Migrate lectern editor view to LibGUI; retire the native
+editor"). Scribe's GUI now renders through **LibGUI/SkiaSharp**.
 
-- `CairoFont.SetupContext(ctx)` resolves fonts by **name only**, via
-  `ctx.SelectFontFace(Fontname, Slant, FontWeight)` → Pango/fontconfig → OS/registry. A full grep
-  of both game DLLs found **no** managed font-registration API, so a mod cannot bind a bundled
-  `.ttf` to a family name and select it by name cross-platform.
-- `Cairo.Util.FreeTypeFontFace.Create(string ttfPath, int loadoptions)` (in `Lib/cairo-sharp.dll`)
-  loads a `.ttf` **directly** through the bundled `freetype6` native lib via P/Invoke — bypassing
-  fontconfig/OS entirely — and returns a Cairo `FontFace`. `Cairo.Context.SetContextFontFace(FontFace)`
-  then makes that context draw with it, bypassing `SelectFontFace`'s name resolution.
-  - **Note the exact type is `Cairo.Util.FreeTypeFontFace`.** `docs/specs/presentation-and-fonts.md`
-    wrote `Cairo.FreeTypeFontFace` (missing the `.Util` segment); this change corrects that doc.
-- `ScribeRowElement.ComposeElements` (`src/Mod/ScribeRowElement.cs`) already bakes its text onto
-  its **own** `ImageSurface`/`Context` (created locally at lines ~135-136, deliberately *not* the
-  shared static surface), then `font.SetupContext(ctx)` and
-  `api.Gui.Text.AutobreakAndDrawMultilineTextAt(ctx, font, text, …)` (lines ~154-156). Calling
-  `ctx.SetContextFontFace(ourFace)` on that private context therefore affects **only** the mod's
-  row text — the mod-scoping is inherent to where the seam sits, not a separate mechanism.
-- FreeType-direct is uniform across Win/Linux/Mac because `freetype6` ships with the game, unlike
-  the OS-install + `clientsettings.json defaultFontName` route (which is game-wide anyway).
+**What LibGUI provides (verified in `reference/vslibgui/`, treat as ground truth):**
+
+- `Gui.Rendering.Text.FontRegistry` (`Rendering/Text/FontRegistry.cs`) is a cross-platform,
+  process-global font registry. `RegisterCustomFont(string familyName, FontWeight weight,
+  SKTypeface typeface)` (`:29`) registers a typeface under a family+weight key; `GetCustomTypeface`
+  (`:41`) looks one up.
+- `TextLayoutHelper` (`Rendering/Text/TextLayoutHelper.cs`) — LibGUI's text layout/measure path —
+  resolves a `TextStyle.FontFamily` via `FontRegistry.ResolveFontFamily`, then checks
+  `FontRegistry.GetCustomTypeface(resolvedFamily, weight)` (`:106`) **before** falling back to
+  `SKTypeface.FromFamilyName` (`:122`). So a registered family name is picked up automatically by
+  both measurement and drawing — no per-surface draw hook needed.
+- `SkiaAssetLoader.LoadFont(string domain, string path)` (`Rendering/SkiaAssetLoader.cs:61`) loads a
+  `.ttf` asset by `AssetLocation` and returns an `SKTypeface` via `SKTypeface.FromStream` over the
+  asset bytes — no filesystem path, no temp file, works identically packed or unpacked.
+- **LibGUI already does exactly this in production:** `GuiModSystem.LoadFonts` (`GuiModSystem.cs:117`)
+  bundles Cormorant Unicase, JetBrains Mono, and Playfair Display as `gui`-domain `.ttf` assets and
+  registers each via `RegisterCustomFont`. The spike is proving a shipping, load-bearing path.
+
+**Where Scribe's row text specifies its font:** LibGUI text is styled with
+`Gui.Rendering.Text.TextStyle`, whose `FontFamily` defaults to `"sans-serif"` (`TextStyle.cs:107`).
+Scribe's row text uses a shared `private const string FontFamily = "sans-serif"` in two places kept
+deliberately in lockstep — the read view / row text in `GuiDialogScribeLecternLibGui.cs:2623` and
+the editor's `ScribeMultilineField.cs:53` — so the measured line height (`TextLayoutHelper.MeasureText`)
+and the drawn glyphs resolve the same typeface. Pointing that shared family name at the registered
+face is the whole seam.
 
 **The chosen face:** Caudex — a humanist serif under the SIL Open Font License 1.1, chosen only
-because it is unambiguously redistributable inside a mod `.zip` and legible as body text. The
-spike proves the *seam*, not the final aesthetic.
+because it is unambiguously redistributable inside a mod `.zip` and legible as body text. The spike
+proves the *seam*, not the final aesthetic. (An alternative worth noting: LibGUI already bundles
+serif faces — Playfair Display, Cormorant Unicase — under family names Scribe could simply reference
+with zero new assets. We still bundle Caudex here to also prove Scribe's own asset+register+license
+path, which the parent font work needs; see Decision 1.)
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- Prove a bundled `.ttf` loads via `Cairo.Util.FreeTypeFontFace.Create` and renders through
-  `SetContextFontFace` on the lectern row text, and on **no** other game GUI.
-- Settle the three runtime unknowns (below) by running the spike on the author's Apple Silicon
-  Mac.
+- Prove a **Scribe-bundled** `.ttf` loads via `SkiaAssetLoader.LoadFont`, registers via
+  `FontRegistry.RegisterCustomFont`, and is picked up by `TextLayoutHelper` for the lectern row
+  text, and on **no** other game GUI.
+- Confirm it renders correctly on the author's Apple Silicon Mac.
 - Establish the license-bundling discipline (ship `OFL.txt`, credit in `CREDITS`) that the parent
   font work will reuse.
-- Leave the codebase in a clean state: one cached face loaded at client init, disposed at
-  shutdown; a single-line override at the draw seam; easily reverted if a finding kills the path.
+- Leave the codebase clean: one registration call at client init, one shared family-name const
+  flipped at the row-text seam; trivially reverted if a finding kills the path.
 
 **Non-Goals:**
 
 - Per-tier faces (cuneiform tablet, handwritten notebook) — the parent Item 3 vision, not this.
 - The global-swap route (OS install + `defaultFontName`) — game-wide, not mod-scopable, rejected.
+- The FreeType-direct / Cairo `SetContextFontFace` mechanism — obsolete on the LibGUI/Skia path.
 - Any `src/Core/` change, networking, persistence/sync, or codec bump — Mod-layer client render
   only.
 - A `ScribeFontRegistry` abstraction, config toggle, or tier→face mapping — over-engineering for a
-  one-face proof. A minimal cache holder suffices; the registry is designed in the parent work.
-- Replacing the stroke-glyph path (`docs/specs/glyph-strokes-ingestion.md`) — that targets the
-  tablet's stamped glyphs and is a different, coexisting approach.
+  one-face proof. A single client-init call suffices; the abstraction is designed in the parent
+  work.
+- Replacing the stroke-glyph path (`docs/specs/glyph-strokes-ingestion.md`).
 
 ## Decisions
 
-### Decision 1 — Load via FreeType-direct, not name-based selection
+### Decision 1 — Register via LibGUI's Skia `FontRegistry`, not FreeType-direct
 
-Use `Cairo.Util.FreeTypeFontFace.Create(ttfPath, loadoptions)` + `ctx.SetContextFontFace(face)`.
+Load the bundled `.ttf` with `SkiaAssetLoader.LoadFont("scribe", "fonts/caudex-regular.ttf")` and
+register it with `FontRegistry.RegisterCustomFont("Caudex", FontWeight.Normal, typeface)` at client
+init.
 
-**Why:** The decompile proved name-based `SelectFontFace` cannot resolve a bundled file
-cross-platform (no font-registration API exists). FreeType-direct is the only mod-scopable path,
-and it is uniform across platforms because `freetype6` is bundled.
+**Why:** This is LibGUI's shipping mechanism (`GuiModSystem.LoadFonts` does the same for its own
+faces), it is cross-platform via SkiaSharp, it needs no filesystem path or temp file, and
+`TextLayoutHelper` already consults the registry before system fallback so the registered family
+"just works" for both measure and draw.
 
-**Alternative considered — global font swap** (OS font install + `clientsettings.json
-defaultFontName`): rejected because it is game-wide (rewrites *every* GUI's font, not just
-Scribe's), requires the player to install a font at the OS level, and is exactly what the community
-guides describe and this proposal aims to avoid.
+**Alternatives considered:**
+- *FreeType-direct on a private Cairo surface* (the original design) — obsolete: the Cairo
+  `ComposeElements` seam and `GuiDialogScribeLectern.cs` no longer exist; text renders through Skia.
+- *Global font swap* (OS install + `clientsettings.json defaultFontName`) — rejected: game-wide,
+  requires an OS-level install, exactly what this proposal avoids.
+- *Reuse a LibGUI-bundled serif* (Playfair Display / Cormorant Unicase) by just naming it in
+  `TextStyle.FontFamily`, bundling nothing — genuinely viable and zero-asset, BUT it would not
+  exercise Scribe's own bundle→load→register→license pipeline, which is the discipline the parent
+  work must inherit. We bundle Caudex to prove that pipeline; noted as an option the parent work can
+  still take.
 
-### Decision 2 — Apply the override at the existing `ComposeElements` seam only
+### Decision 2 — Route only the row text by flipping the shared `FontFamily` const
 
-Insert `ctx.SetContextFontFace(cachedFace)` in `ScribeRowElement.ComposeElements` immediately
-**after** `font.SetupContext(ctx)` and **before** `AutobreakAndDrawMultilineTextAt`, on the row's
-own private `Context`.
+Change the shared `private const string FontFamily` used by the row text
+(`GuiDialogScribeLecternLibGui.cs:2623`) and the editor field (`ScribeMultilineField.cs:53`) from
+`"sans-serif"` to `"Caudex"`, keeping the two in lockstep so measured line height and drawn glyphs
+match.
 
-**Why:** That context is already private to the row (baked to its own surface for clip
-correctness). The scoping is free — no other surface is touched. The `RowFont()` `CairoFont` in
-`GuiDialogScribeLectern.cs` still owns size/color/layout; only the face is overridden.
+**Why:** Scoping is inherent — only widgets whose `TextStyle.FontFamily` names the registered family
+resolve it; every other dialog, menu, and tooltip keeps its own family and is untouched. No
+per-surface draw override is needed because `TextLayoutHelper` does the lookup centrally. Keeping the
+two consts in lockstep preserves the existing invariant that read and editor views measure and draw
+the same typeface (their comments already call this out).
 
-### Decision 3 — Ordering: SetupContext first, face override last, verify size survives
+### Decision 3 — Register once at client init; no per-frame work, no explicit dispose needed
 
-`SetupContext` calls `SelectFontFace`, which would clobber a face set earlier — so the face
-override must come **last**. The open risk is that `SetContextFontFace` sets the face but **not**
-the size, so the size `SetupContext` applied may or may not survive the face swap.
+Register the face exactly once in `ScribeModSystem.StartClientSide` (mirroring the existing
+`RegisterSvgIcon` precedent at `~:271`), not per-row or per-frame.
 
-**Approach:** apply `SetupContext` first (size/color/matrix), then `SetContextFontFace` last; then
-**visually verify the size is correct**. If the glyphs render at the wrong size, re-apply
-`ctx.SetFontSize(scaled(fontSize))` after the face override and record which is needed. This is
-runtime unknown #1 and is an explicit spike task — the design does not pre-decide the outcome.
+**Why:** `RegisterCustomFont` stores the `SKTypeface` in the shared registry once; `TextLayoutHelper`
+caches resolved typefaces thereafter. The `SKTypeface` lives for the client session in a
+process-global registry that outlives Scribe's dialogs, so there is no per-dialog handle to leak and
+no Scribe-owned dispose hook to add (LibGUI owns the registry lifetime, exactly as it does for its
+own bundled faces). This is deliberately simpler than the old FreeType path's manual
+cache-and-dispose.
 
-### Decision 4 — Cache one face at client init; dispose at shutdown
-
-Load the face exactly once (a single cached `FontFace` field on a client-side holder created in
-`StartClientSide`), never per-row or per-frame. `FreeTypeFontFace` implements `Dispose`; free it on
-client shutdown.
-
-**Why:** FreeType face creation is not free; `ComposeElements` runs on every recompose. Per-row
-creation would leak native handles and cost measurably. A minimal holder (not the full
-`ScribeFontRegistry`) keeps the spike small while modeling the caching discipline the real system
-needs.
-
-### Decision 5 — Resolve the asset to a real filesystem path (extract from zip if needed)
-
-`Create` needs a real filesystem path. In dev/unpacked builds the asset is already a real file; a
-**released** mod is a `.zip`, so the `.ttf` may need extraction to a temp file first (read asset
-bytes → write temp file → `Create(tempPath)`).
-
-**Approach:** implement the read-bytes-to-temp-file path (it works for both packed and unpacked)
-**and confirm** during the spike whether the unpacked dev path can be loaded directly. This is
-runtime unknown #2 — record which is actually required so the parent work does not re-derive it.
-
-### Decision 6 — License gate is part of "done"
+### Decision 4 — License gate is part of "done"
 
 Ship Caudex's `OFL.txt` alongside the `.ttf` and credit Caudex in a `CREDITS` file. SIL OFL 1.1
 permits bundling/redistribution inside the mod `.zip`; do not rename the font files if modified
-(they are not being modified here). The spike is not complete until the license artifacts are in
-place — this bakes the discipline in before the parent font work adds more faces.
+(they are not modified here). The spike is not complete until the license artifacts are in place —
+this bakes the discipline in before the parent font work adds more faces.
 
 ## Risks / Trade-offs
 
-- **[arm64 macOS interop fails]** → The whole point of running on the Mac. A prior VSImGui failure
-  was arm64-specific but in a *different* subsystem (the ImGui overlay, not Cairo), so it does not
-  predict this path — but it is why we verify rather than assume. If `freetype6` P/Invoke or the FT
-  face draw fails on arm64, the finding kills (or reshapes) the parent font path; the spike is
-  cheap precisely so we learn this early. Mitigation: the change is a single seam + a cached field,
-  trivially revertible.
-- **[Size clobbered by face swap]** → Decision 3: verify visually, re-apply `SetFontSize` after the
-  override if needed, and record the answer.
-- **[Packed-zip path can't be read directly]** → Decision 5: implement extract-to-temp, which works
-  regardless, and confirm which case applies.
-- **[Native handle leak]** → Decision 4: one cached face, disposed at shutdown; never per-row.
-- **[Scope creep into the full font system]** → Non-Goals fence it: one face, one surface, no
-  registry, no config, no tier mapping.
+- **[Registered family not picked up]** → `TextLayoutHelper` checks `GetCustomTypeface` before system
+  fallback (`:106`), so a correctly-registered family resolves; if the row text still renders in
+  sans-serif, the likely cause is a family-name mismatch (registration name vs. `TextStyle.FontFamily`
+  literal) or registration running after first layout. Mitigation: register in `StartClientSide`
+  before any dialog opens, and assert the exact family string matches on both sides.
+- **[arm64 macOS render]** → SkiaSharp is already this fork's renderer (every LibGUI dialog Scribe
+  draws exercises it), so this is largely retired vs. the old `freetype6` P/Invoke risk. The Mac run
+  confirms rather than de-risks; still worth an explicit check since a bundled TTF is a new asset
+  path. Mitigation: the change is one registration call + one const, trivially revertible.
+- **[Shared-registry collision]** → `FontRegistry` is a process-global static on the `gui` mod;
+  registering `"Caudex"` writes a global alias→typeface entry. Collision is implausible (no other mod
+  requests "Caudex"), and this mirrors how LibGUI registers its own faces. Noted so a future reviewer
+  isn't surprised Scribe writes into a shared registry.
+- **[Line-height/measure drift]** → if only one of the two `FontFamily` consts is flipped, read and
+  editor views would resolve different faces and their measured line heights would diverge.
+  Mitigation: flip both in lockstep (Decision 2); the existing comments already flag this coupling.
+- **[Scope creep into the full font system]** → Non-Goals fence it: one face, one family const, no
+  registry abstraction, no config, no tier mapping.
 
 ## Migration Plan
 
 Not applicable — no data model, persistence, or wire-format change. Deploy is a local dev build run
-on the author's Mac; "rollback" is reverting the single seam edit and the cached-field holder and
-removing the bundled asset. No release ships from this spike unless the findings say the path is
-sound.
+on the author's Mac; "rollback" is reverting the client-init registration call and the two
+`FontFamily` const edits and removing the bundled asset. No release ships from this spike unless the
+findings say the path is sound.
 
 ## Open Questions
 
-The three runtime unknowns below are the spike's reason to exist — they are resolved **by running
-it**, not on paper:
-
-1. **Size survival across the face swap** — does the `SetupContext`-then-`SetContextFontFace`
-   ordering preserve font size, or is a post-override `SetFontSize(scaled(size))` required?
-2. **Packed-zip path** — must the `.ttf` be extracted to a temp file for `Create`, or can the
-   unpacked dev asset path be loaded directly?
-3. **Apple Silicon interop** — does the `freetype6` P/Invoke + FT face draw actually render on
-   arm64 macOS?
-
-Deferred to the parent font work (`docs/specs/presentation-and-fonts.md` Item 3), explicitly **not**
-this spike: the `ScribeFontRegistry` shape, per-tier face selection, a client config toggle, and
-the sourcing of the actual production faces (rustic script, cuneiform).
+- **Bundle Caudex vs. reuse a LibGUI-bundled serif?** Decision 1 bundles Caudex to prove Scribe's own
+  asset+license pipeline. If the parent work decides the proof of the *pipeline* isn't needed and any
+  serif will do, it could instead just name Playfair Display / Cormorant Unicase (already registered
+  by LibGUI) in `TextStyle.FontFamily` with zero new assets. Not blocking for the spike; recorded for
+  the parent work.
+- The `ScribeFontRegistry` shape, per-tier face selection, a client config toggle, and the sourcing
+  of the actual production faces (rustic script, cuneiform) are deferred to the parent font work
+  (`docs/specs/presentation-and-fonts.md` Item 3), explicitly not this spike.

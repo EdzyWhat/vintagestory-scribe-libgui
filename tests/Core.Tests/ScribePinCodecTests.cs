@@ -98,7 +98,8 @@ public class ScribePinCodecTests
     [Theory]
     [InlineData(0, 1)]                 // below min → clamped up
     [InlineData(-5, 1)]                // negative → clamped up
-    [InlineData(1000, 20)]            // above max → clamped down
+    [InlineData(1000, 10)]           // above max → clamped down (max lowered 20 → 10, §10.3)
+    [InlineData(11, 10)]             // a previously-valid value now re-clamps to the new max
     [InlineData(5, 5)]                 // in range → unchanged
     public void Settings_ClampHudMaxRows_BoundsTheValue(int stored, int expected)
     {

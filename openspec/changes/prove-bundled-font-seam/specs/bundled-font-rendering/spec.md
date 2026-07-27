@@ -1,35 +1,36 @@
 ## ADDED Requirements
 
-### Requirement: A bundled TTF loads via FreeType-direct, not name-based selection
+### Requirement: A bundled TTF is registered through LibGUI's Skia font registry
 
-The mod SHALL render its own GUI text in a bundled `.ttf` typeface by loading that file directly
-through `Cairo.Util.FreeTypeFontFace.Create(ttfPath, loadoptions)` (backed by the game's bundled
-`freetype6` native library) and applying the returned `FontFace` with
-`Cairo.Context.SetContextFontFace(face)`. The mod SHALL NOT attempt to render the bundled face by
-passing its family name to `CairoFont`/`SelectFontFace`, because name-based resolution goes through
-the OS/fontconfig registry and cannot resolve a bundled file cross-platform.
+The mod SHALL render its own GUI text in a bundled `.ttf` typeface by loading that file through
+LibGUI's Skia asset loader (`Gui.Rendering.SkiaAssetLoader.LoadFont(domain, path)`, which returns an
+`SKTypeface` from the asset bytes) and registering the returned typeface under a family name via
+`Gui.Rendering.Text.FontRegistry.RegisterCustomFont(familyName, weight, typeface)`. The mod SHALL
+NOT install the font at the OS level, modify `clientsettings.json defaultFontName`, or otherwise rely
+on OS/fontconfig name resolution to find the bundled file.
 
-#### Scenario: The bundled face loads without an OS font install
+#### Scenario: The bundled face registers without an OS font install
 
-- **WHEN** the client initializes with the bundled Caudex `.ttf` present in the mod's assets and
-  the font not installed at the OS level
-- **THEN** `Cairo.Util.FreeTypeFontFace.Create` returns a usable `FontFace` for that file
-- **AND** the mod uses that `FontFace` for drawing, not a name passed to `SelectFontFace`
+- **WHEN** the client initializes with the bundled Caudex `.ttf` present in the mod's assets and the
+  font not installed at the OS level
+- **THEN** `SkiaAssetLoader.LoadFont` returns a usable `SKTypeface` for that asset
+- **AND** the mod registers it via `FontRegistry.RegisterCustomFont` under a family name
 
 #### Scenario: No global font configuration is touched
 
 - **WHEN** the bundled-font path is active
 - **THEN** the mod SHALL NOT modify `clientsettings.json defaultFontName` or require any OS font
   installation
-- **AND** the mechanism relies only on the already-vendored `Lib/cairo-sharp.dll` and the bundled
-  `freetype6`, adding no new package or mod dependency
+- **AND** the mechanism relies only on the already-depended-on `gui` (LibGUI) mod and its bundled
+  SkiaSharp, adding no new package or mod dependency
 
 ### Requirement: The bundled face applies to only the mod's own text
 
-The bundled face SHALL be applied only on Scribe's own baked drawing surface, at the existing
-lectern row-text draw seam in `ScribeRowElement.ComposeElements`, so that no other GUI text in the
-game is affected. The face override SHALL be applied to the row's private `Context` after
-`CairoFont.SetupContext` and before the multiline text draw.
+The bundled face SHALL be applied only to Scribe's own text by setting the `TextStyle.FontFamily` of
+the lectern row text to the registered family name, so that `Gui.Rendering.Text.TextLayoutHelper`
+resolves the registered typeface for that text and no other GUI text in the game is affected. The
+same family name SHALL be used for both the read-view row text and the editor field so the two
+resolve the same typeface.
 
 #### Scenario: Only the lectern row text changes typeface
 
@@ -38,86 +39,54 @@ game is affected. The face override SHALL be applied to the row's private `Conte
 - **AND** all other in-game GUI text (menus, tooltips, other dialogs) renders in its normal font,
   unchanged
 
-#### Scenario: The face override is applied last on the row's own context
+#### Scenario: Read and editor views resolve the same face
 
-- **WHEN** a row bakes its text in `ScribeRowElement.ComposeElements`
-- **THEN** `CairoFont.SetupContext(ctx)` is called first (establishing size/color/matrix)
-- **AND** `ctx.SetContextFontFace(cachedFace)` is applied afterward so `SelectFontFace` does not
-  clobber the bundled face
-- **AND** the override targets the row's own local `ImageSurface`/`Context`, not the shared static
-  surface
+- **WHEN** the read view measures its row text and the editor field measures its text
+- **THEN** both resolve their typeface through the same registered family name
+- **AND** their measured line height and drawn glyphs stay in lockstep
 
-### Requirement: Font size survives the face override
+### Requirement: The registered face is resolved by the layout path automatically
 
-The rendered row text SHALL appear at the size established by the row's `CairoFont` (the
-`RowFont()` size, scaled by the client text-size setting), not at a default or unscaled size, after
-the face override is applied. Because `SetContextFontFace` sets the face but not necessarily the
-size, the implementation SHALL verify the size at runtime and, if the face swap resets it,
-re-apply the scaled font size after the override.
+The mod SHALL rely on `TextLayoutHelper` consulting `FontRegistry.GetCustomTypeface` for a resolved
+family before any system-font fallback, so that naming the registered family in a `TextStyle` is
+sufficient for both text measurement and drawing; the mod SHALL NOT add a per-surface or per-draw
+font override to route the face.
 
-#### Scenario: Text renders at the configured size in the bundled face
+#### Scenario: Naming the family is sufficient
 
-- **WHEN** the lectern row text is drawn in the bundled face
-- **THEN** the glyphs render at the same size the engine default face rendered at for the current
-  text-size setting
-- **AND** if the face swap alone does not preserve the size, the scaled font size is re-applied so
-  the result matches
+- **WHEN** the row text's `TextStyle.FontFamily` names the registered family
+- **THEN** both `TextLayoutHelper` measurement and the text draw resolve the registered `SKTypeface`
+- **AND** no per-row or per-surface font-override call is required
 
-### Requirement: The bundled asset resolves to a real filesystem path
+### Requirement: The face is registered once at client init
 
-Because `FreeTypeFontFace.Create` requires a real filesystem path, the mod SHALL resolve the
-bundled `.ttf` to a real file for loading, extracting the asset bytes to a temporary file when the
-mod is running from a packed `.zip` where no such path exists. The resolution SHALL work for both
-the unpacked dev layout and a released packed `.zip`.
+The mod SHALL load and register the bundled face exactly once per client session, at client
+initialization (mirroring the existing icon-registration precedent), and SHALL NOT load or register
+it per row or per frame. The mod SHALL NOT add its own dispose hook for the registered typeface, as
+the shared LibGUI registry owns its lifetime for the client session.
 
-#### Scenario: The face loads from a released packed mod
+#### Scenario: The face is not re-registered per draw
 
-- **WHEN** the mod runs as a packed `.zip` (no direct filesystem path to the asset)
-- **THEN** the mod reads the asset bytes, writes them to a temporary file, and loads the face from
-  that temp path
-- **AND** the row text renders correctly
+- **WHEN** the lectern dialog recomposes its rows repeatedly
+- **THEN** the same registered typeface is reused for every row draw
+- **AND** no new `LoadFont`/`RegisterCustomFont` call occurs per row or per frame
 
-#### Scenario: The face loads from an unpacked dev build
-
-- **WHEN** the mod runs unpacked with the asset present as a real file
-- **THEN** the face loads (whether directly from the asset path or via the same temp-file path) and
-  the row text renders correctly
-
-### Requirement: The loaded face is cached once and disposed at shutdown
-
-The mod SHALL create the `FontFace` exactly once per client session (at client initialization) and
-reuse the cached instance for all row draws; it SHALL NOT create the face per row or per frame.
-The cached `FontFace` SHALL be disposed when the client shuts down.
-
-#### Scenario: The face is not recreated per draw
-
-- **WHEN** the lectern dialog recomposes its rows repeatedly (multiple `ComposeElements` calls)
-- **THEN** the same cached `FontFace` instance is reused for every row draw
-- **AND** no new `FreeTypeFontFace.Create` call occurs per row or per frame
-
-#### Scenario: The face is freed on shutdown
-
-- **WHEN** the client shuts down
-- **THEN** the cached `FontFace` is disposed, releasing its native FreeType handle
-
-### Requirement: The FreeType-direct path is proven on Apple Silicon
+### Requirement: The bundled face renders on Apple Silicon
 
 The spike SHALL be validated by running it on the author's Apple Silicon (arm64) macOS machine,
-confirming the `freetype6` P/Invoke load and the FreeType face draw render correctly on that
-hardware, since this is one of the runtime behaviors a static decompile could not settle.
+confirming the bundled TTF registers and renders correctly on that hardware through the SkiaSharp
+path.
 
 #### Scenario: The bundled face renders on arm64 macOS
 
 - **WHEN** the spike build runs on the author's Apple Silicon Mac and the lectern is opened
-- **THEN** the row text renders in the bundled face without crash, native-interop error, or garbled
-  glyphs
+- **THEN** the row text renders in the bundled face without crash, error, or garbled glyphs
 
 ### Requirement: The bundled font's license is honored
 
-The mod SHALL ship the bundled font's license file (`OFL.txt`) alongside the `.ttf` and SHALL
-credit the font (Caudex, SIL OFL 1.1) in a `CREDITS` file. If the font files were modified they
-SHALL NOT be redistributed under the original reserved font name; for this spike the files are
-unmodified.
+The mod SHALL ship the bundled font's license file (`OFL.txt`) alongside the `.ttf` and SHALL credit
+the font (Caudex, SIL OFL 1.1) in a `CREDITS` file. If the font files were modified they SHALL NOT be
+redistributed under the original reserved font name; for this spike the files are unmodified.
 
 #### Scenario: License artifacts ship with the font
 

@@ -126,6 +126,14 @@ public class ScribePlayerSettingsTests
     }
 
     [Fact]
+    public void MaxHudMaxRows_IsTen()
+    {
+        // The HUD row cap was lowered 20 -> 10 (§10.3); a saved 11-20 re-clamps to 10 on next load. The
+        // clamp behavior across the bound is covered by ScribePinCodecTests.Settings_ClampHudMaxRows_*.
+        Assert.Equal(10, ScribePlayerSettings.MaxHudMaxRows);
+    }
+
+    [Fact]
     public void Normalized_UnknownEnums_FallBackToDefault()
     {
         // Regression: consolidating the config must not change the enum/numeric normalization contract.
