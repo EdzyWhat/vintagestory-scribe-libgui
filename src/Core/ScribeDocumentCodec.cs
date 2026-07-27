@@ -49,8 +49,19 @@ public static class ScribeDocumentCodec
     /// </summary>
     public const int MaxBlocks = 1000;
 
-    /// <summary>Hard upper bound on a single block's text length, in characters. See <see cref="MaxBlocks"/>.</summary>
+    /// <summary>Hard upper bound on a single block's text length, in characters. See <see cref="MaxBlocks"/>.
+    /// Applies to freeform Text/note sections; Task blocks are held to the tighter
+    /// <see cref="MaxTaskTextLength"/> and CLIPPED (not rejected) on read.</summary>
     public const int MaxTextLength = 10_000;
+
+    /// <summary>Soft length limit for a checkbox Task's text, in characters. Unlike <see cref="MaxTextLength"/>
+    /// (a hard reject bound for freeform notes), an over-long Task is CLIPPED to this length on read rather
+    /// than rejecting the whole edit — so a paste or a runaway task can never silently drop an entire
+    /// document (the pre-2026-07-26 behavior where an oversized edit was refused with no feedback). The
+    /// editor field also enforces this as a maxlength so the clip is rarely reached; the codec clip is the
+    /// server-authoritative backstop. Tasks are meant to be short one-liners; freeform prose belongs in a
+    /// Text section, which keeps the larger cap.</summary>
+    public const int MaxTaskTextLength = 1000;
 
     public static byte[] Serialize(ScribeDocument doc)
     {
@@ -134,7 +145,17 @@ public static class ScribeDocumentCodec
                 bool hasAssignedToUid = r.ReadBoolean();
                 string? assignedToUid = hasAssignedToUid ? r.ReadString() : null;
                 string text = r.ReadString();
-                if (text.Length > MaxTextLength) return false; // per-block text-length cap
+                // Freeform Text/note sections: reject the whole payload past the hard cap (an
+                // allocation/abuse guard). Task blocks: CLIP to the soft task cap instead of rejecting,
+                // so an over-long task can never drop the entire document silently.
+                if (kind == ScribeBlockKind.Task)
+                {
+                    if (text.Length > MaxTaskTextLength) text = text.Substring(0, MaxTaskTextLength);
+                }
+                else if (text.Length > MaxTextLength)
+                {
+                    return false;
+                }
 
                 var block = new ScribeBlock(kind, text, done, depth, assignedToUid, taskId);
                 blocks.Add(block);

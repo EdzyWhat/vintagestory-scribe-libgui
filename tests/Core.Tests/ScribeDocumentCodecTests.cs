@@ -242,8 +242,10 @@ public class ScribeDocumentCodecTests
     [Fact]
     public void TryDeserialize_AtTextLengthCap_Succeeds()
     {
+        // The hard MaxTextLength cap applies to freeform Text sections (Task blocks clip instead — see
+        // the task-clip tests below), so exercise it with a Text section.
         var original = new ScribeDocument();
-        original.AddTask(new string('a', ScribeDocumentCodec.MaxTextLength));
+        original.AddTextSection(new string('a', ScribeDocumentCodec.MaxTextLength));
 
         byte[] bytes = ScribeDocumentCodec.Serialize(original);
         bool ok = ScribeDocumentCodec.TryDeserialize(bytes, out ScribeDocument? restored);
@@ -257,12 +259,59 @@ public class ScribeDocumentCodecTests
     public void TryDeserialize_OverTextLengthCap_FailsSafely()
     {
         var original = new ScribeDocument();
-        original.AddTask(new string('a', ScribeDocumentCodec.MaxTextLength + 1));
+        original.AddTextSection(new string('a', ScribeDocumentCodec.MaxTextLength + 1));
 
         byte[] bytes = ScribeDocumentCodec.Serialize(original);
         bool ok = ScribeDocumentCodec.TryDeserialize(bytes, out ScribeDocument? restored);
 
         Assert.False(ok);
         Assert.Null(restored);
+    }
+
+    [Fact]
+    public void TryDeserialize_TaskTextAtTaskCap_IsPreserved()
+    {
+        var original = new ScribeDocument();
+        original.AddTask(new string('a', ScribeDocumentCodec.MaxTaskTextLength));
+
+        byte[] bytes = ScribeDocumentCodec.Serialize(original);
+        bool ok = ScribeDocumentCodec.TryDeserialize(bytes, out ScribeDocument? restored);
+
+        Assert.True(ok);
+        Assert.Equal(ScribeDocumentCodec.MaxTaskTextLength, restored!.Blocks[0].Text.Length);
+    }
+
+    [Fact]
+    public void TryDeserialize_OverLongTaskText_IsClippedNotRejected()
+    {
+        // The pre-2026-07-26 behavior rejected the whole payload for an over-long block, silently dropping
+        // the document. A Task now CLIPS to MaxTaskTextLength and the rest of the document survives.
+        var original = new ScribeDocument();
+        original.AddTask(new string('a', ScribeDocumentCodec.MaxTaskTextLength + 500));
+        original.AddTask("survivor");
+
+        byte[] bytes = ScribeDocumentCodec.Serialize(original);
+        bool ok = ScribeDocumentCodec.TryDeserialize(bytes, out ScribeDocument? restored);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        Assert.Equal(2, restored!.Blocks.Count);
+        Assert.Equal(ScribeDocumentCodec.MaxTaskTextLength, restored.Blocks[0].Text.Length);
+        Assert.Equal("survivor", restored.Blocks[1].Text);
+    }
+
+    [Fact]
+    public void TryDeserialize_LongTextSection_IsNotClippedToTaskCap()
+    {
+        // A freeform Text section between the task cap and the hard cap is kept in full — the task clip
+        // must not bleed onto Text blocks.
+        var original = new ScribeDocument();
+        original.AddTextSection(new string('a', ScribeDocumentCodec.MaxTaskTextLength + 500));
+
+        byte[] bytes = ScribeDocumentCodec.Serialize(original);
+        bool ok = ScribeDocumentCodec.TryDeserialize(bytes, out ScribeDocument? restored);
+
+        Assert.True(ok);
+        Assert.Equal(ScribeDocumentCodec.MaxTaskTextLength + 500, restored!.Blocks[0].Text.Length);
     }
 }

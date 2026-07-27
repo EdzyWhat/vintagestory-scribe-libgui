@@ -373,6 +373,7 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         float padX = 8f,
         float padY = 6f,
         bool autoFocus = false,
+        int? maxLength = null,
         Action<string>? onChanged = null,
         Action? onCommitAndAdvance = null,
         Action? onCommitAndRetreat = null,
@@ -388,6 +389,7 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         PadX = padX;
         PadY = padY;
         AutoFocus = autoFocus;
+        MaxLength = maxLength;
         OnChanged = onChanged;
         OnCommitAndAdvance = onCommitAndAdvance;
         OnCommitAndRetreat = onCommitAndRetreat;
@@ -411,6 +413,12 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
     /// editor content coordinates focus among rows manually; a freshly built row that should be
     /// focused (e.g. after Add Task or entering editor mode) sets this to focus itself on mount.</summary>
     public bool AutoFocus { get; }
+    /// <summary>Optional maximum character count. When set, typing and paste are clamped so the field's
+    /// text never exceeds it (a maxlength affordance) — used for Task rows, held to
+    /// <c>ScribeDocumentCodec.MaxTaskTextLength</c>; null (Text sections) leaves the field uncapped and
+    /// relies on the codec's larger hard bound. The codec also clips on read as the authoritative
+    /// backstop, so this is purely the in-editor UX half.</summary>
+    public int? MaxLength { get; }
     public Action<string>? OnChanged { get; }
     /// <summary>Tab (no Shift): the field has committed its text via <see cref="OnChanged"/>; the
     /// parent should normalize + flush the row and move focus to the next row.</summary>
@@ -643,6 +651,15 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
             DeleteSelection();
         }
         caret = Math.Clamp(caret, 0, text.Length);
+        // Enforce the optional maxlength (Task rows): clamp the inserted run to the room remaining after
+        // the current text, so a long paste is truncated rather than blocked wholesale. Typing at the cap
+        // becomes a no-op. The codec clips on read regardless, so this is the in-editor UX half only.
+        if (Widget.MaxLength is { } max)
+        {
+            int room = Math.Max(0, max - text.Length);
+            if (s.Length > room) s = s.Substring(0, room);
+            if (s.Length == 0) return;
+        }
         text = text.Insert(caret, s);
         caret += s.Length;
         anchor = caret;
