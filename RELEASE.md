@@ -30,11 +30,15 @@ The release can't be truthful until this is done. Ordered by dependency.
       (per-task length limit). No error UI, no ToastLib. Core change (a new `MaxTaskTextLength` const +
       clip-on-read); implemented directly (small, settled) rather than via a full OpenSpec proposal.
 - [ ] **A2. ~~Per-task soft length limit~~ — MERGED into A1** (the clip IS the length limit).
-- [ ] **A2d. Lectern Pin Tab (CODE — v1-BLOCKING, decided 2026-07-26).** The Lectern's right-column nav
-      has a stubbed `scribepin` slot (`GuiDialogScribeLecternLibGui.BuildRightColNav`, the
-      `onTap: () => { /* stub */ }`). A working pinned-task view/page inside the Lectern is now required
-      for v1. Likely overlaps the existing OpenSpec change `scribe-pin-editor` (0/34) — reconcile with /
-      promote that change before coding rather than starting fresh. Own item; sequence after A1.
+- [ ] **A2d. Lectern Pin Tab (CODE — v1-BLOCKING, decided 2026-07-26).** SCOPE CONSOLIDATED into the
+      **retargeted `scribe-pin-editor` change** (2026-07-26): rewritten in place from the stale slide-out
+      "Pin Tray" to a **nav-column Pin Tab view** (fills the stubbed `scribepin` nav slot; a peer of
+      read/editor via `BuildCentralRegion`), extending the editor row rendering but sourced from `MyPins`.
+      Full editor parity per row (complete + edit + unpin + delete + reorder), applied immediately (no undo
+      window), plus the completion-policy picker on the tab. Server/store plumbing (`SetTaskTextFromReader`,
+      `ScribePinStore` reorder, new edit/reorder messages) kept from the original change. Supersedes
+      `scribe-animated-tabs` (tab-bar) and the stale `v5-backpack-hud.md` per-block cap. Validated 9/9.
+      Ready for `/opsx:apply`. Own item; sequence after A1.
 - [~] **A2b. Lectern placement orientation — face the player (CODE — v1-BLOCKING, decided 2026-07-26).**
       IMPLEMENTED + staged 2026-07-26 (Sign `MeshAngleRad` idiom): `TryPlaceBlock` sets the facing from
       player→block yaw snapped to 22.5°; BE persists `meshAngle`, rotates the mesh in `OnTesselation`

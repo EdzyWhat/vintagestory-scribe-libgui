@@ -1,3 +1,11 @@
+> **SUPERSEDED (2026-07-26).** This change's horizontal tab-bar (`ScribeTabBar`) nav model was superseded
+> by `scribe-notebook-frame` (shipped), which replaced the gear header with a **vertical right-column icon
+> nav** and dropped `WindowFrame`. The settings page it references was also pulled into a standalone window
+> (2026-07-25 pivot). The Pin Tab was consolidated into the retargeted `scribe-pin-editor` change using the
+> shipped vertical nav, not this tab bar. Retained for its "nav routes through a real method, not an inline
+> flag flip" discipline (adopted by `scribe-pin-editor`); do not implement as-is without reconciling
+> against the shipped notebook-frame nav.
+
 ## Why
 
 The Scribe Lectern dialog switches between its read/edit page and its settings page through a single

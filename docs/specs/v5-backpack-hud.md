@@ -3,6 +3,15 @@
 > **Status:** exploration/design spec (2026-07-21). NOT an OpenSpec change, NOT implemented
 > code. When v5 is picked up, this becomes the input to an `openspec-propose`. Follows the
 > structure in `docs/specs/README.md`.
+>
+> **STALE pin model (flagged 2026-07-26).** The pinned-task sections below describe the OLD
+> per-block pin model (`ScribeBlock.Pinned`, `ScribeDocument.TogglePinned`, `MaxPinnedTasks = 3`).
+> That model was superseded: pinning moved to a **per-player `ScribePinStore`** keyed by
+> `(DocId, TaskId)` (v3→v4 codec dropped the per-block `pinned` flag — see `docs/specs/README.md`),
+> the HUD shipped with a **configurable `HudMaxRows`** (default 3, not a hard ≤3 cap), and the
+> editable/reorderable pins surface is the **Pin Tab** (`scribe-pin-editor`). Read the pin-model
+> details here as historical; the per-player store + `HudMaxRows` + Pin Tab are authoritative. The
+> backpack/quick-capture portions of this spec are unaffected.
 
 ## Summary
 
