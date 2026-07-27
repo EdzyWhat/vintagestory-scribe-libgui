@@ -7,7 +7,7 @@ using Gui.Rendering.Text;        // TextStyle, FontWeight
 using Gui.Widgets.Basic;         // Text, WindowFrame, VsIcon, Container, Button
 using Gui.Widgets.Events;        // PointerEvent
 using Gui.Widgets.Framework;     // Widget, StatefulWidget, State, Theme, ValueKey, Key
-using Gui.Widgets.Input;         // Checkbox, FocusNode, GestureDetector, MouseRegion
+using Gui.Widgets.Input;         // Checkbox, FocusNode, GestureDetector, MouseRegion, Dropdown, DropdownItem
 using Gui.Widgets.Gestures;      // ScrollController
 using Gui.Widgets.Layout;        // Column, Row, Expanded, Padding, SizedBox, Center, Align, Alignment, CrossAxisAlignment, MainAxisAlignment
 using Gui.Widgets.Overlay;       // Tooltip
@@ -86,7 +86,24 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     private readonly ScrollController sharedScrollController = new();
 
     // ---- View state ----
-    private bool isEditorMode;
+    /// <summary>The Lectern dialog's central-region view. Read and Editor are the original two views;
+    /// Pinned is the Pin Tab (scribe-pin-editor) — a peer view listing the player's pins, selected from the
+    /// <c>scribepin</c> nav button. <see cref="BuildCentralRegion"/> chooses the body from this.</summary>
+    private enum ScribeLecternView { Read, Editor, Pinned }
+
+    private ScribeLecternView viewMode = ScribeLecternView.Read;
+
+    /// <summary>Whether the central region is in the (lock-gated) EDITOR view. Backed by
+    /// <see cref="viewMode"/> so all the editor-lifecycle code that toggled a bool keeps working unchanged:
+    /// setting it true selects the Editor view; setting it false returns to the Read view (Editor is the
+    /// only view that ever sets this, so false → Read matches the original semantics). Switching to the
+    /// Pin Tab sets <see cref="viewMode"/> directly (via <see cref="EnterPinnedMode"/>) after tearing the
+    /// editor down.</summary>
+    private bool isEditorMode
+    {
+        get => viewMode == ScribeLecternView.Editor;
+        set => viewMode = value ? ScribeLecternView.Editor : ScribeLecternView.Read;
+    }
 
     // ---- Editor state (null / inert while in read mode) ----
     /// <summary>Editor-view-only scratch copy; never aliased to <see cref="BlockEntityScribeLectern.Document"/>.</summary>
@@ -169,6 +186,32 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     /// keeps the unsaved scratch instead of reseeding it from the authoritative document.</summary>
     private bool recoveringLostLock;
 
+    // ---- Pin Tab state (inert unless in the Pinned view — scribe-pin-editor) ----
+    /// <summary>In-progress (uncommitted) text edits for Pin Tab rows, keyed by the pin's stable
+    /// <see cref="ScribeBlock.TaskId"/>, written through on every keystroke. This is the Pin Tab's
+    /// equivalent of the editor's <see cref="scratch"/> write-through: because a <see cref="ForceRebuild"/>
+    /// (fired by <see cref="OnMyPinsChanged"/>) fully unmounts the tree and re-seeds each field, a row
+    /// still being typed must re-seed from its live buffer rather than the stale server snapshot. An entry
+    /// is dropped when its edit commits (blur/Enter) or the pin leaves the set (<see cref="PrunePinState"/>).</summary>
+    private readonly Dictionary<Guid, string> pinEditBuffer = new();
+
+    /// <summary>One focus node per Pin Tab row, keyed by <see cref="ScribeBlock.TaskId"/> (pin order can
+    /// change, so keying by identity is stabler than by index — the editor keys its parallel list by index
+    /// because block order is its own scratch). Owned by the dialog so a caret survives the
+    /// <see cref="OnMyPinsChanged"/> <see cref="ForceRebuild"/> via <see cref="autoFocusPinTaskId"/>. Kept
+    /// in sync with the current pin set by <see cref="SyncPinFocusNodes"/>; disposed in <see cref="OnGuiClosed"/>.</summary>
+    private readonly Dictionary<Guid, FocusNode> pinFocusNodes = new();
+
+    /// <summary>The <see cref="ScribeBlock.TaskId"/> of the Pin Tab row currently focused, tracked from the
+    /// rows' focus nodes so a rebuild can restore the caret and a focus move can commit the row being left.
+    /// Not cleared on blur (its listener fires only on focus GAINED — the editor's pattern), so it still
+    /// names the row to restore across an async pin resync.</summary>
+    private Guid? focusedPinTaskId;
+
+    /// <summary>Pin row to auto-focus on the next Pin Tab rebuild (caret restore across a
+    /// <see cref="ForceRebuild"/>), or null. One-shot: consumed in <see cref="BuildPinnedContent"/>.</summary>
+    private Guid? autoFocusPinTaskId;
+
     /// <summary>The mod system, cached for per-player pin queries and the pin/complete network sends.</summary>
     private readonly ScribeModSystem modSystem;
 
@@ -205,6 +248,14 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         if (isEditorMode && focusedEditIndex is { } idx && idx < editorFocusNodes.Count)
         {
             autoFocusRowOnRebuild = idx;
+        }
+        // Pin Tab: keep the caret on the row being edited across this async resync rebuild (same hazard the
+        // editor faces — see OnMyPinsChanged remarks). A blur doesn't clear focusedPinTaskId, so it still
+        // names the row; re-arm the one-shot only if that pin still exists in the (new) set.
+        if (viewMode == ScribeLecternView.Pinned && focusedPinTaskId is { } pinId
+            && modSystem.MyPins.Any(p => p.TaskId == pinId))
+        {
+            autoFocusPinTaskId = pinId;
         }
         ForceRebuild();
     }
@@ -324,17 +375,44 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         }
     }
 
-    /// <summary>Enter (or stay in) the read view. Called on a read-access grant.</summary>
+    /// <summary>Enter (or stay in) the read view. Called on a read-access grant and from the Read nav
+    /// button. Tears down the editor if it was active; also lands on Read from the Pin Tab (which holds no
+    /// lock/scratch, so nothing to tear down — just select the view).</summary>
     public void EnterReadMode()
     {
         if (isEditorMode)
         {
             LeaveEditorMode();
         }
+        viewMode = ScribeLecternView.Read; // also covers a Pin Tab → Read switch (no editor teardown)
         if (IsOpened())
         {
             ForceRebuild();
         }
+    }
+
+    /// <summary>Switch to the Pin Tab view (scribe-pin-editor). Wired to the <c>scribepin</c> nav button —
+    /// a real entry method, not an inline flag flip (the nav discipline the editor's
+    /// <see cref="RequestEditorAccess"/> / <see cref="EnterReadMode"/> follow). If the editor view is
+    /// active, tear it down first (flush + release the lock) exactly like <see cref="OnClickSwitchToRead"/>,
+    /// then select the Pinned view. The Pin Tab reads the server-synced <c>MyPins</c> — no lock, no scratch
+    /// doc — so this needs no server round-trip.</summary>
+    private void OnClickSwitchToPinned()
+    {
+        if (isEditorMode)
+        {
+            if (focusedEditIndex is { } idx) NormalizeRowOnCommit(idx);
+            PurgeEmptyTasksFromScratch();
+            pendingEmptyRowRemoval = null;
+            FlushIfDirty();
+            SendReleaseLockPacket();
+            LeaveEditorMode();
+        }
+        viewMode = ScribeLecternView.Pinned;
+        focusedPinTaskId = null;
+        autoFocusPinTaskId = null;
+        SyncPinFocusNodes();
+        if (IsOpened()) ForceRebuild();
     }
 
     /// <summary>"Done editing" button: flush the pending edit, release the lock, and swap to the read
@@ -952,6 +1030,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             DisposeFocusNodes();
         }
         modSystem.MyPinsChanged -= OnMyPinsChanged;
+        DisposePinState();
         // The dialog owns the shared scroll controller (see its field); dispose it once here rather
         // than in either view's State, which come and go with each view-switch ForceRebuild.
         sharedScrollController.Dispose();
@@ -1097,10 +1176,9 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
                 }));
 
     /// <summary>SectionRightCol: a vertical stack of tooltipped nav buttons — Settings (gear → the shared
-    /// standalone settings window), Read view, Edit view, Pinned tasks. Read is a plain "R" text button for
-    /// now (placeholder for the checkbox check SVG); the others reuse the mod's registered SVGs
-    /// (scribe-notebook-frame D3). Read/Edit switch the dialog's own view; Pinned is a stub until the pinned
-    /// view lands.</summary>
+    /// standalone settings window), Read view (check glyph), Edit view (feather), Pinned tasks (pin). All
+    /// reuse the mod's registered SVGs (scribe-notebook-frame D3). Read/Edit switch the dialog's own view;
+    /// Pinned switches to the Pin Tab (scribe-pin-editor).</summary>
     private Widget BuildRightColNav()
     {
         var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
@@ -1115,13 +1193,13 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             {
                 TitleButton("scribegear", "scribe-gui-nav-settings", colors.OnSurfaceVariant,
                     size: size, onTap: modSystem.OpenSettings),
-                // Read view: plain "R" text button placeholder (design D3) — to become the checkbox check SVG.
-                WithTooltip("scribe-gui-nav-read",
-                    new ScribeRowButtonText("R", colors.OnSurfaceVariant, size, onTap: EnterReadMode)),
+                // Read view: the checkbox check SVG (scribe-notebook-frame D3 placeholder "R" now replaced).
+                TitleButton("scribecheck", "scribe-gui-nav-read", colors.OnSurfaceVariant,
+                    size: size, onTap: EnterReadMode),
                 TitleButton("scribeedit", "scribe-gui-nav-edit", colors.OnSurfaceVariant,
                     size: size, onTap: RequestEditorAccess),
                 TitleButton("scribepin", "scribe-gui-nav-pinned", colors.OnSurfaceVariant,
-                    size: size, onTap: () => { /* pinned view: stub until the pinned-task view ships */ }),
+                    size: size, onTap: OnClickSwitchToPinned),
             });
     }
 
@@ -1142,7 +1220,12 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     /// <summary>The tasks column's content region: the read or editor view. Its former gear-header chrome row
     /// moved to the SectionRightCol nav stack (scribe-notebook-frame), so this is now just the active view
     /// filling the column.</summary>
-    private Widget BuildCentralRegion() => isEditorMode ? BuildEditorContent() : BuildReadContent();
+    private Widget BuildCentralRegion() => viewMode switch
+    {
+        ScribeLecternView.Editor => BuildEditorContent(),
+        ScribeLecternView.Pinned => BuildPinnedContent(),
+        _ => BuildReadContent(),
+    };
 
     /// <summary>The live row style for this build, derived from the player's current settings (NOT cached
     /// at open — add-settings-tab D4), so a window-font-scale change from the settings view repaints the
@@ -1218,6 +1301,196 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             TaskId = taskId.ToByteArray(),
             Policy = (byte)modSystem.MySettings.CompletionPolicy,
         });
+    }
+
+    // ---------------- Pin Tab (scribe-pin-editor) ----------------
+
+    /// <summary>The Pin Tab body: the player's pins across every document (in pin-list order, no row cap),
+    /// each row editable by default reusing the editor's <see cref="ScribeEditRow"/> rendering but sourced
+    /// from <see cref="ScribeModSystem.MyPins"/>, plus the completion-policy picker. Focus is coordinated
+    /// through the dialog-owned <see cref="pinFocusNodes"/> (keyed by TaskId) the same way the editor
+    /// coordinates its index-keyed nodes.</summary>
+    private Widget BuildPinnedContent()
+    {
+        SyncPinFocusNodes();
+
+        Guid? autoFocus = autoFocusPinTaskId;
+        autoFocusPinTaskId = null; // one-shot
+
+        // Each row's text seeds from its live edit buffer if one is in flight (a keystroke mid-resync),
+        // else the authoritative server snapshot — the Pin Tab's equivalent of the editor re-seeding from
+        // its scratch doc across a ForceRebuild (which fully unmounts + remounts the field).
+        var rows = modSystem.MyPins
+            .Select(p => new ScribePinRowData(
+                p.OwnerDocId, p.TaskId, p.LastKnownDone,
+                pinEditBuffer.TryGetValue(p.TaskId, out var buffered) ? buffered : p.LastKnownText))
+            .ToList();
+
+        return new ScribeLecternPinnedContent(
+            rows: rows,
+            focusNodes: pinFocusNodes,
+            autoFocusTaskId: autoFocus,
+            onTextChanged: OnPinTextChanged,
+            onCommitText: CommitPinTextEdit,
+            onToggleComplete: OnPinCompleteTask,
+            onDelete: OnPinDeleteTask,
+            onUnpin: OnPinUnpinTask,
+            onReorder: OnPinReorder,
+            completionPolicy: modSystem.MySettings.CompletionPolicy,
+            onCompletionPolicyChanged: p => modSystem.UpdateMySettings(s => s.CompletionPolicy = p),
+            style: RowStyle,
+            scrollController: sharedScrollController);
+    }
+
+    /// <summary>Keep <see cref="pinFocusNodes"/> in sync with the current pin set: add a node for each new
+    /// pin, dispose+drop nodes for pins that left, and prune stale edit buffers. Each node carries a
+    /// listener that tracks the focused row and commits the row being left on a row→row focus move (the
+    /// editor's <see cref="OnRowFocusChanged"/> pattern, keyed by TaskId).</summary>
+    private void SyncPinFocusNodes()
+    {
+        var live = modSystem.MyPins.Select(p => p.TaskId).ToHashSet();
+
+        foreach (var taskId in pinFocusNodes.Keys.ToList())
+        {
+            if (!live.Contains(taskId))
+            {
+                pinFocusNodes[taskId].Dispose();
+                pinFocusNodes.Remove(taskId);
+            }
+        }
+        foreach (var taskId in live)
+        {
+            if (!pinFocusNodes.ContainsKey(taskId))
+            {
+                var node = new FocusNode();
+                var id = taskId; // capture per-iteration
+                node.AddListener(() => OnPinRowFocusChanged(id));
+                pinFocusNodes[taskId] = node;
+            }
+        }
+
+        // Drop edit buffers for pins no longer present so the dictionary can't grow unbounded.
+        foreach (var taskId in pinEditBuffer.Keys.ToList())
+        {
+            if (!live.Contains(taskId)) pinEditBuffer.Remove(taskId);
+        }
+    }
+
+    private void OnPinRowFocusChanged(Guid taskId)
+    {
+        if (!pinFocusNodes.TryGetValue(taskId, out var node) || !node.HasFocus) return;
+        // A different row just gained focus (click-to-edit another row): commit the row we left.
+        if (focusedPinTaskId is { } prev && prev != taskId) CommitPinTextEdit(prev);
+        focusedPinTaskId = taskId;
+    }
+
+    /// <summary>Live text-change from a focused Pin Tab field: buffer it (write-through, so a resync
+    /// rebuild re-seeds from the buffer, not the stale snapshot). No network send yet — the edit commits on
+    /// blur/Enter (<see cref="CommitPinTextEdit"/>).</summary>
+    private void OnPinTextChanged(Guid taskId, string text)
+    {
+        pinEditBuffer[taskId] = text;
+    }
+
+    /// <summary>Commit a Pin Tab row's buffered text edit: send the identity-addressed edit if the text
+    /// changed from the server snapshot and is non-blank, then drop the buffer. A blank/whitespace-only
+    /// edit is dropped WITHOUT sending (the server would reject it anyway — spec "blank edit is rejected");
+    /// the field re-seeds from the unchanged snapshot on the next rebuild. Called on blur, Enter, and a
+    /// row→row focus move.</summary>
+    private void CommitPinTextEdit(Guid taskId)
+    {
+        if (!pinEditBuffer.TryGetValue(taskId, out var text)) return;
+        pinEditBuffer.Remove(taskId);
+
+        var pin = modSystem.MyPins.FirstOrDefault(p => p.TaskId == taskId);
+        if (pin is null) return; // pin left the set meanwhile
+
+        string trimmed = text.TrimEnd(); // commit-time normalization, matching the editor (no leading trim)
+        if (string.IsNullOrWhiteSpace(trimmed)) return; // reject blank — leave the task unchanged
+        if (trimmed == pin.LastKnownText) return;        // no change
+
+        SendEditPinnedTask(pin.OwnerDocId, taskId, trimmed);
+    }
+
+    /// <summary>Pin Tab checkbox: complete the task by identity with NO undo delay (unlike the HUD) — send
+    /// the completion immediately under the player's current policy. Reuses the existing
+    /// <see cref="ScribeCompleteTaskMessage"/> (the server toggles store-first, applies the policy, and
+    /// re-pushes, which lands in <see cref="OnMyPinsChanged"/>).</summary>
+    private void OnPinCompleteTask(Guid docId, Guid taskId)
+    {
+        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeCompleteTaskMessage
+        {
+            DocId = docId.ToByteArray(),
+            TaskId = taskId.ToByteArray(),
+            Policy = (byte)modSystem.MySettings.CompletionPolicy,
+        });
+    }
+
+    /// <summary>Pin Tab delete control: delete the underlying task by identity (a standalone action, not a
+    /// completion side effect) via <see cref="ScribeDeleteTaskMessage"/>. Drop any in-flight edit buffer so
+    /// a stale commit can't fire after the row is gone.</summary>
+    private void OnPinDeleteTask(Guid docId, Guid taskId)
+    {
+        pinEditBuffer.Remove(taskId);
+        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeDeleteTaskMessage
+        {
+            DocId = docId.ToByteArray(),
+            TaskId = taskId.ToByteArray(),
+        });
+    }
+
+    /// <summary>Pin Tab unpin control: remove only the pin (the task survives), via the existing
+    /// <see cref="ScribeSetPinMessage"/> with <c>Pinned = false</c> — no block resolution needed.</summary>
+    private void OnPinUnpinTask(Guid docId, Guid taskId)
+    {
+        pinEditBuffer.Remove(taskId);
+        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeSetPinMessage
+        {
+            DocId = docId.ToByteArray(),
+            TaskId = taskId.ToByteArray(),
+            Pinned = false,
+        });
+    }
+
+    /// <summary>Pin Tab drag-reorder drop: send the whole new pin order (permuting the current list so the
+    /// pin at <paramref name="from"/> lands at <paramref name="to"/>) via <see cref="ScribeReorderPinsMessage"/>.
+    /// The server permutes only this player's list and re-pushes. A move-to-same index is a no-op.</summary>
+    private void OnPinReorder(int from, int to)
+    {
+        var pins = modSystem.MyPins;
+        if (from == to || from < 0 || to < 0 || from >= pins.Count || to >= pins.Count) return;
+
+        var order = pins.Select(p => (p.OwnerDocId, p.TaskId)).ToList();
+        var moved = order[from];
+        order.RemoveAt(from);
+        order.Insert(to, moved);
+
+        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeReorderPinsMessage
+        {
+            DocIds = order.Select(o => o.Item1.ToByteArray()).ToList(),
+            TaskIds = order.Select(o => o.Item2.ToByteArray()).ToList(),
+        });
+    }
+
+    /// <summary>Fire the identity-addressed pin-edit message. The document's DocId + the task's TaskId fully
+    /// address the edit; no block position is sent. The server writes through (best-effort) and re-pushes.</summary>
+    private void SendEditPinnedTask(Guid docId, Guid taskId, string text)
+    {
+        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeEditPinnedTaskMessage
+        {
+            DocId = docId.ToByteArray(),
+            TaskId = taskId.ToByteArray(),
+            Text = text,
+        });
+    }
+
+    /// <summary>Dispose every Pin Tab focus node and clear the buffers (called from
+    /// <see cref="OnGuiClosed"/>).</summary>
+    private void DisposePinState()
+    {
+        foreach (var node in pinFocusNodes.Values) node.Dispose();
+        pinFocusNodes.Clear();
+        pinEditBuffer.Clear();
     }
 }
 
@@ -1967,6 +2240,361 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             },
             onExit: _ => { if (hovered) SetState(() => hovered = false); },
             child: row);
+    }
+}
+
+// ============================================================================
+// Pin Tab content (scribe-pin-editor)
+// ============================================================================
+
+/// <summary>A value snapshot of one Pin Tab row: the pin's stable identity, its displayed done-state, and
+/// the text to seed the field with (the live edit buffer if one is in flight, else the server snapshot).
+/// Carries no live pin reference — a resync rebuilds instead.</summary>
+internal readonly record struct ScribePinRowData(Guid DocId, Guid TaskId, bool Done, string Text);
+
+/// <summary>
+/// The Pin Tab's content tree: the player's pins as an editable, reorderable list, plus the
+/// completion-policy picker below. Reuses the editor view's row shape (grip + checkbox +
+/// <see cref="ScribeMultilineField"/> + hover delete/unpin), but every row is editable by default and
+/// sourced from the player's pin set rather than a document. Uses a NON-virtualized
+/// <see cref="SingleChildScrollView"/> + <see cref="Column"/> of ALL rows (like the editor) so every
+/// field's focus node stays mounted and the dialog can coordinate cross-row focus/commit. No max-row cap.
+/// </summary>
+internal sealed class ScribeLecternPinnedContent : StatefulWidget
+{
+    public ScribeLecternPinnedContent(
+        IReadOnlyList<ScribePinRowData> rows,
+        IReadOnlyDictionary<Guid, FocusNode> focusNodes,
+        Guid? autoFocusTaskId,
+        Action<Guid, string> onTextChanged,
+        Action<Guid> onCommitText,
+        Action<Guid, Guid> onToggleComplete,
+        Action<Guid, Guid> onDelete,
+        Action<Guid, Guid> onUnpin,
+        Action<int, int> onReorder,
+        ScribeCompletionPolicy completionPolicy,
+        Action<ScribeCompletionPolicy> onCompletionPolicyChanged,
+        ScribeRowStyle style,
+        ScrollController scrollController)
+    {
+        Rows = rows;
+        FocusNodes = focusNodes;
+        AutoFocusTaskId = autoFocusTaskId;
+        OnTextChanged = onTextChanged;
+        OnCommitText = onCommitText;
+        OnToggleComplete = onToggleComplete;
+        OnDelete = onDelete;
+        OnUnpin = onUnpin;
+        OnReorder = onReorder;
+        CompletionPolicy = completionPolicy;
+        OnCompletionPolicyChanged = onCompletionPolicyChanged;
+        Style = style;
+        ScrollController = scrollController;
+    }
+
+    public IReadOnlyList<ScribePinRowData> Rows { get; }
+    public IReadOnlyDictionary<Guid, FocusNode> FocusNodes { get; }
+    public Guid? AutoFocusTaskId { get; }
+    public Action<Guid, string> OnTextChanged { get; }
+    public Action<Guid> OnCommitText { get; }
+    public Action<Guid, Guid> OnToggleComplete { get; }
+    public Action<Guid, Guid> OnDelete { get; }
+    public Action<Guid, Guid> OnUnpin { get; }
+    public Action<int, int> OnReorder { get; }
+    public ScribeCompletionPolicy CompletionPolicy { get; }
+    public Action<ScribeCompletionPolicy> OnCompletionPolicyChanged { get; }
+    public ScribeRowStyle Style { get; }
+    /// <summary>Dialog-owned scroll controller shared by all views; NOT disposed here.</summary>
+    public ScrollController ScrollController { get; }
+
+    public override State CreateState() => new ScribeLecternPinnedContentState();
+}
+
+internal sealed class ScribeLecternPinnedContentState : State<ScribeLecternPinnedContent>
+{
+    // Drag-reorder state (this State owns the row list, so a drag updates via SetState here — NOT the
+    // dialog's ForceRebuild, which would unmount the grip mid-drag and drop the pointer capture). Mirrors
+    // ScribeLecternEditorContentState.
+    private int? dragFromIndex;
+    private int? dragOverIndex;
+
+    private void OnRowDragStart(int index) => SetState(() => { dragFromIndex = index; dragOverIndex = index; });
+
+    private void OnRowDragOver(int index)
+    {
+        if (dragFromIndex is null || dragOverIndex == index) return;
+        SetState(() => dragOverIndex = index);
+    }
+
+    private void OnRowDragEnd()
+    {
+        if (dragFromIndex is { } from && dragOverIndex is { } to)
+        {
+            dragFromIndex = null;
+            dragOverIndex = null;
+            Widget.OnReorder(from, to); // no-op inside if from == to
+        }
+        else
+        {
+            SetState(() => { dragFromIndex = null; dragOverIndex = null; });
+        }
+    }
+
+    public override Widget Build(BuildContext context)
+    {
+        var colors = Theme.Of(context).ColorScheme;
+        TextStyle labelStyle = new() { FontSize = 14, Color = colors.OnSurface };
+
+        Widget scrollBody;
+        if (Widget.Rows.Count == 0)
+        {
+            scrollBody = new Padding(
+                EdgeInsets.All(12),
+                child: new Text(
+                    Lang.Get("scribe:scribe-gui-pintab-empty"),
+                    new TextStyle { FontSize = 14, Color = colors.OnSurfaceVariant, SoftWrap = true }));
+        }
+        else
+        {
+            var rows = Widget.Rows
+                .Select((r, i) => (Widget)new ScribePinRow(
+                    data: r,
+                    index: i,
+                    focusNode: Widget.FocusNodes.TryGetValue(r.TaskId, out var fn) ? fn : null,
+                    autoFocus: Widget.AutoFocusTaskId == r.TaskId,
+                    isDropTarget: dragFromIndex is not null && dragOverIndex == i,
+                    onTextChanged: Widget.OnTextChanged,
+                    onCommitText: Widget.OnCommitText,
+                    onToggleComplete: Widget.OnToggleComplete,
+                    onDelete: Widget.OnDelete,
+                    onUnpin: Widget.OnUnpin,
+                    onDragStart: OnRowDragStart,
+                    onDragOver: OnRowDragOver,
+                    onDragEnd: OnRowDragEnd,
+                    style: Widget.Style,
+                    // Key by TaskId (not index) so a row's field State + element identity track the pin
+                    // across a reorder/resync rebuild rather than by list position.
+                    key: new ValueKey<Guid>(r.TaskId)))
+                .ToList();
+
+            scrollBody = new Scrollbar(
+                controller: Widget.ScrollController,
+                child: new SingleChildScrollView(
+                    controller: Widget.ScrollController,
+                    child: new Column(
+                        spacing: 0,
+                        crossAxisAlignment: CrossAxisAlignment.Stretch,
+                        mainAxisSize: MainAxisSize.Min,
+                        children: rows)))
+            { AutoHide = false };
+        }
+
+        // Completion-policy picker footer: the same control the Settings window offers, editing the one
+        // shared per-player preference (scribe-pin-editor — "one value, two hosts").
+        var policyPicker = new Column(
+            spacing: 4,
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Min,
+            children: new Widget[]
+            {
+                new Text(Lang.Get("scribe:settings-completionpolicy"),
+                    new TextStyle { FontSize = 13, Color = colors.OnSurfaceVariant }),
+                new Dropdown<ScribeCompletionPolicy>(
+                    value: Widget.CompletionPolicy,
+                    items: new List<DropdownItem<ScribeCompletionPolicy>>
+                    {
+                        new() { Value = ScribeCompletionPolicy.Sink,   Label = Lang.Get("scribe:scribe-completion-sink") },
+                        new() { Value = ScribeCompletionPolicy.Keep,   Label = Lang.Get("scribe:scribe-completion-keep") },
+                        new() { Value = ScribeCompletionPolicy.Unpin,  Label = Lang.Get("scribe:scribe-completion-unpin") },
+                        new() { Value = ScribeCompletionPolicy.Delete, Label = Lang.Get("scribe:scribe-completion-delete") },
+                    },
+                    onChanged: v => Widget.OnCompletionPolicyChanged(v)),
+            });
+
+        return new Padding(
+            EdgeInsets.All(10),
+            child: new Column(
+                spacing: 8,
+                crossAxisAlignment: CrossAxisAlignment.Stretch,
+                mainAxisSize: MainAxisSize.Max,
+                children: new Widget[]
+                {
+                    new Expanded(child: scrollBody),
+                    policyPicker,
+                }));
+    }
+}
+
+/// <summary>
+/// One Pin Tab row: a drag grip + a completion checkbox + the pin's directly-editable text field, with
+/// hover-conditional unpin and delete buttons floating on the right — the editor row's shape
+/// (<see cref="ScribeEditRow"/>) fed from a pin rather than a document block. Editable by default; every
+/// action is addressed by the pin's stable <c>(DocId, TaskId)</c>. Keyed by TaskId by its parent.
+/// </summary>
+internal sealed class ScribePinRow : StatefulWidget
+{
+    public ScribePinRow(
+        ScribePinRowData data,
+        int index,
+        FocusNode? focusNode,
+        bool autoFocus,
+        bool isDropTarget,
+        Action<Guid, string> onTextChanged,
+        Action<Guid> onCommitText,
+        Action<Guid, Guid> onToggleComplete,
+        Action<Guid, Guid> onDelete,
+        Action<Guid, Guid> onUnpin,
+        Action<int> onDragStart,
+        Action<int> onDragOver,
+        Action onDragEnd,
+        ScribeRowStyle style,
+        Gui.Widgets.Framework.Key? key = null)
+        : base(key)
+    {
+        Data = data;
+        Index = index;
+        FocusNode = focusNode;
+        AutoFocus = autoFocus;
+        IsDropTarget = isDropTarget;
+        OnTextChanged = onTextChanged;
+        OnCommitText = onCommitText;
+        OnToggleComplete = onToggleComplete;
+        OnDelete = onDelete;
+        OnUnpin = onUnpin;
+        OnDragStart = onDragStart;
+        OnDragOver = onDragOver;
+        OnDragEnd = onDragEnd;
+        Style = style;
+    }
+
+    public ScribePinRowData Data { get; }
+    public int Index { get; }
+    public FocusNode? FocusNode { get; }
+    public bool AutoFocus { get; }
+    public bool IsDropTarget { get; }
+    public Action<Guid, string> OnTextChanged { get; }
+    public Action<Guid> OnCommitText { get; }
+    public Action<Guid, Guid> OnToggleComplete { get; }
+    public Action<Guid, Guid> OnDelete { get; }
+    public Action<Guid, Guid> OnUnpin { get; }
+    public Action<int> OnDragStart { get; }
+    public Action<int> OnDragOver { get; }
+    public Action OnDragEnd { get; }
+    public ScribeRowStyle Style { get; }
+
+    public override State CreateState() => new ScribePinRowState();
+}
+
+internal sealed class ScribePinRowState : State<ScribePinRow>
+{
+    private bool done;
+    /// <summary>True while the pointer is over this row: the delete/unpin controls are hidden until then
+    /// (the editor row's hover-gating). The grip is NOT hover-gated (it stays mounted so a drag it started
+    /// can't lose pointer capture mid-move).</summary>
+    private bool hovered;
+
+    public override void InitState()
+    {
+        base.InitState();
+        done = Widget.Data.Done;
+    }
+
+    public override Widget Build(BuildContext context)
+    {
+        var data = Widget.Data;
+        var style = Widget.Style;
+        var colors = Theme.Of(context).ColorScheme;
+
+        var children = new List<Widget>();
+
+        // Grip on the FAR LEFT (always present, matching the editor). onPress/hover(row)/release drive the
+        // reorder; nudged down to center on a one-line input.
+        children.Add(new Padding(
+            EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
+            child: new GestureDetector(
+                onPress: _ => Widget.OnDragStart(Widget.Index),
+                onRelease: _ => Widget.OnDragEnd(),
+                child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant))));
+
+        // Completion checkbox — completes with NO undo delay (the send fires immediately; see the dialog's
+        // OnPinCompleteTask). Flips optimistically in its own State; the server re-push reconciles it.
+        children.Add(new Padding(
+            EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
+            child: new Checkbox(
+                value: done,
+                onChanged: _ =>
+                {
+                    SetState(() => done = !done);
+                    Widget.OnToggleComplete(data.DocId, data.TaskId);
+                },
+                size: style.CheckboxSize)));
+
+        // Directly-editable text field (editable by default — no separate edit mode). Held to the same
+        // task-text cap as the editor. Writes through on every keystroke (OnTextChanged buffers it);
+        // commits on Enter/blur (OnCommitText). Enter commits in place (no insert-below on the Pin Tab).
+        children.Add(new Expanded(child: new ScribeMultilineField(
+            initialText: data.Text,
+            focusNode: Widget.FocusNode,
+            fontSize: style.FontSize,
+            padX: style.FieldPadX,
+            padY: style.FieldPadY,
+            autoFocus: Widget.AutoFocus,
+            maxLength: ScribeDocumentCodec.MaxTaskTextLength,
+            onChanged: text => Widget.OnTextChanged(data.TaskId, text),
+            onCommitAndAdvance: () => Widget.OnCommitText(data.TaskId),
+            onCommitAndRetreat: () => Widget.OnCommitText(data.TaskId),
+            onInsertTaskBelow: () => Widget.OnCommitText(data.TaskId),
+            onBlur: () => Widget.OnCommitText(data.TaskId))));
+
+        Widget rowBody = new Padding(
+            EdgeInsets.Symmetric(vertical: style.RowVerticalPadding, horizontal: style.RowHorizontalPadding),
+            child: new Row(
+                spacing: style.CheckboxTextGap,
+                crossAxisAlignment: CrossAxisAlignment.Start,
+                mainAxisSize: MainAxisSize.Max,
+                children: children));
+
+        // Drop-target highlight (a pin row is always "pinned", so no resting pinned tint). The Container is
+        // ALWAYS present (transparent fill when not a drop target) so toggling the fill is a property update,
+        // not a widget-type swap — keeping the field's State mounted (the STRUCTURAL STABILITY rule).
+        rowBody = new Container(
+            style: new BoxStyle { Color = Widget.IsDropTarget ? colors.StateSelected : Vector4.Zero },
+            child: rowBody);
+
+        // Delete + unpin float on the RIGHT as real buttons, shown only on hover. delete = right-most (the
+        // task itself), unpin to its left (remove only the pin). Same Stack overlay the editor uses.
+        var stackChildren = new List<Widget> { rowBody };
+        if (hovered)
+        {
+            float btn = style.ControlSize;
+            float gap = 4f;
+            float boxW = btn - ScribeRowButton.BoxShrink;
+            float btnRight = gap + 1f;
+            float btnTop = ScribeRowControlNudge.FloatingButtonTop(style);
+            stackChildren.Add(new Positioned(
+                right: btnRight, top: btnTop,
+                child: new ScribeRowButton(
+                    iconName: "scribeclose",
+                    iconColor: colors.Error,
+                    size: btn,
+                    onTap: () => Widget.OnDelete(data.DocId, data.TaskId))));
+            stackChildren.Add(new Positioned(
+                right: btnRight + boxW + gap, top: btnTop,
+                child: new ScribeRowButton(
+                    iconName: "scribepin",
+                    iconColor: colors.Primary, // a Pin Tab row is always pinned → active accent
+                    size: btn,
+                    onTap: () => Widget.OnUnpin(data.DocId, data.TaskId))));
+        }
+
+        return new MouseRegion(
+            onEnter: _ =>
+            {
+                if (!hovered) SetState(() => hovered = true);
+                Widget.OnDragOver(Widget.Index);
+            },
+            onExit: _ => { if (hovered) SetState(() => hovered = false); },
+            child: new Stack(stackChildren));
     }
 }
 

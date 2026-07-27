@@ -95,14 +95,19 @@ public sealed class ScribeModSystem : ModSystem
         // All message types must be registered in this same order on both sides. The original four
         // read/edit/lock messages come first (order frozen); the identity-addressed pin layer is
         // APPENDED after them. ScribeToggleTaskMessage (the old position-addressed read-view toggle)
-        // was retired in favor of ScribeCompleteTaskMessage — do not re-add it.
+        // was retired in favor of ScribeCompleteTaskMessage — do not re-add it. The Pin Tab's edit/
+        // delete/reorder messages (scribe-pin-editor) are APPENDED strictly after the existing ones —
+        // never inserted mid-list — so the wire packet ids of the shipped messages are unchanged.
         api.Network.RegisterChannel(NetworkChannelName)
             .RegisterMessageType<ScribeEditDocumentMessage>()
             .RegisterMessageType<ScribeReleaseLockMessage>()
             .RegisterMessageType<ScribeRequestAccessMessage>()
             .RegisterMessageType<ScribeSetPinMessage>()
             .RegisterMessageType<ScribeCompleteTaskMessage>()
-            .RegisterMessageType<ScribePinnedSetMessage>();
+            .RegisterMessageType<ScribePinnedSetMessage>()
+            .RegisterMessageType<ScribeEditPinnedTaskMessage>()
+            .RegisterMessageType<ScribeDeleteTaskMessage>()
+            .RegisterMessageType<ScribeReorderPinsMessage>();
     }
 
     /// <summary>Server-side accessor for the pin store, so the block entity can register/orphan its
@@ -268,6 +273,7 @@ public sealed class ScribeModSystem : ModSystem
         RegisterSvgIcon(api, "scribeclose", new AssetLocation("scribe", "textures/icons/close.svg"));
         RegisterSvgIcon(api, "scribeedit", new AssetLocation("scribe", "textures/icons/edit.svg"));
         RegisterSvgIcon(api, "scribegear", new AssetLocation("scribe", "textures/icons/gear.svg"));
+        RegisterSvgIcon(api, "scribecheck", new AssetLocation("scribe", "textures/icons/check.svg"));
     }
 
     /// <summary>
@@ -312,6 +318,9 @@ public sealed class ScribeModSystem : ModSystem
         channel.SetMessageHandler<ScribeRequestAccessMessage>(OnServerReceivedRequestAccess);
         channel.SetMessageHandler<ScribeSetPinMessage>(OnServerReceivedSetPin);
         channel.SetMessageHandler<ScribeCompleteTaskMessage>(OnServerReceivedCompleteTask);
+        channel.SetMessageHandler<ScribeEditPinnedTaskMessage>(OnServerReceivedEditPinnedTask);
+        channel.SetMessageHandler<ScribeDeleteTaskMessage>(OnServerReceivedDeleteTask);
+        channel.SetMessageHandler<ScribeReorderPinsMessage>(OnServerReceivedReorderPins);
 
         // Persist/load the pin + settings stores with the save game (the WaypointMapLayer pattern).
         api.Event.SaveGameLoaded += OnSaveGameLoaded;
@@ -452,6 +461,54 @@ public sealed class ScribeModSystem : ModSystem
         CompleteTaskForPlayer(fromPlayer, docId, taskId, policy);
     }
 
+    private void OnServerReceivedEditPinnedTask(IServerPlayer fromPlayer, ScribeEditPinnedTaskMessage message)
+    {
+        if (!TryReadGuid(message.DocId, out var docId) || !TryReadGuid(message.TaskId, out var taskId))
+        {
+            Trace("edit-pinned from {0}: MALFORMED packet (docId/taskId not 16 bytes) — ignored", fromPlayer.PlayerName);
+            return;
+        }
+        Trace("edit-pinned received from {0}: doc={1} task={2}", fromPlayer.PlayerName, docId, taskId);
+        EditPinnedTaskForPlayer(fromPlayer, docId, taskId, message.Text ?? "");
+    }
+
+    private void OnServerReceivedDeleteTask(IServerPlayer fromPlayer, ScribeDeleteTaskMessage message)
+    {
+        if (!TryReadGuid(message.DocId, out var docId) || !TryReadGuid(message.TaskId, out var taskId))
+        {
+            Trace("delete-task from {0}: MALFORMED packet (docId/taskId not 16 bytes) — ignored", fromPlayer.PlayerName);
+            return;
+        }
+        Trace("delete-task received from {0}: doc={1} task={2}", fromPlayer.PlayerName, docId, taskId);
+        DeleteTaskForPlayer(fromPlayer, docId, taskId);
+    }
+
+    private void OnServerReceivedReorderPins(IServerPlayer fromPlayer, ScribeReorderPinsMessage message)
+    {
+        // Validate the parallel id lists: both present, equal length, and bounded so a hostile/oversized
+        // payload can't drive an unbounded permute. Each entry must be a well-formed 16-byte Guid pair;
+        // any malformed/unknown entry is dropped by the store's reorder (unknown ids are ignored).
+        var docIds = message.DocIds;
+        var taskIds = message.TaskIds;
+        if (docIds is null || taskIds is null || docIds.Count != taskIds.Count
+            || docIds.Count > ScribePinCodec.MaxPinsPerPlayer)
+        {
+            Trace("reorder-pins from {0}: MALFORMED packet (null/mismatched/oversized id lists) — ignored", fromPlayer.PlayerName);
+            return;
+        }
+
+        var order = new List<(Guid, Guid)>(docIds.Count);
+        for (int i = 0; i < docIds.Count; i++)
+        {
+            if (TryReadGuid(docIds[i], out var docId) && TryReadGuid(taskIds[i], out var taskId))
+            {
+                order.Add((docId, taskId));
+            }
+        }
+        Trace("reorder-pins received from {0}: {1} ordered ids", fromPlayer.PlayerName, order.Count);
+        ReorderPinsForPlayer(fromPlayer, order);
+    }
+
     /// <summary>
     /// Server-side pin/unpin, addressed by (DocId, TaskId). An UNPIN removes straight from the store
     /// with no block resolution, so it works when the owning lectern is broken or its chunk is
@@ -557,6 +614,76 @@ public sealed class ScribeModSystem : ModSystem
         }
 
         if (changed) PushPinsTo(player);
+    }
+
+    /// <summary>
+    /// Server-side edit-a-pinned-task's-text by identity (the Pin Tab's inline text edit), for a task the
+    /// player has pinned. Best-effort write-through, mirroring <see cref="CompleteTaskForPlayer"/>:
+    /// <list type="number">
+    /// <item><b>Write through to the source</b> — when the owning document resolves, set its task's text
+    /// via the lock-free <see cref="BlockEntityScribeLectern.SetTaskTextFromReader"/> (which rejects a
+    /// blank edit and reconciles nothing else).</item>
+    /// <item><b>Update the pin snapshot</b> — refresh the acting player's pin's last-known text so the edit
+    /// is reflected even when the source is unresolvable (snapshot-only degrade).</item>
+    /// </list>
+    /// Only the acting player is touched (their own pin is their own copy — grief-proof). A blank/
+    /// whitespace-only edit is rejected end-to-end and changes nothing. Re-pushes the acting player when
+    /// their set changed. Public so the integration suite drives the exact production path.
+    /// </summary>
+    public void EditPinnedTaskForPlayer(IServerPlayer player, Guid docId, Guid taskId, string text)
+    {
+        if (sapi is null || pinStore is null) return;
+        if (string.IsNullOrWhiteSpace(text)) return; // reject blank/whitespace-only end-to-end
+
+        // Only edit through pins the player actually holds — an edit is a pin action, not a document RPC.
+        if (pinStore.GetPinDone(player.PlayerUID, docId, taskId) is null)
+        {
+            Trace("  edit: {0} has no pin on task {1} — ignored", player.PlayerName, taskId);
+            return;
+        }
+
+        // Write through to the shared source document when it resolves (best-effort; a gone source just
+        // skips this — the snapshot below still updates).
+        if (TryResolveLectern(docId, out var lectern)) lectern!.SetTaskTextFromReader(taskId, text);
+
+        // Always refresh the acting player's pin snapshot so the edit shows even if the source is unloaded.
+        bool changed = pinStore.SetPinText(player.PlayerUID, docId, taskId, text);
+        if (changed) PushPinsTo(player);
+    }
+
+    /// <summary>
+    /// Server-side standalone delete-a-task by identity (the Pin Tab's delete control), for a task the
+    /// player has pinned. Mirrors the Delete completion policy's write-through, but as a first-class action
+    /// independent of any policy: when the owning document resolves, remove the task lock-free via
+    /// <see cref="BlockEntityScribeLectern.DeleteTaskFromReader"/>; always remove the acting player's pin
+    /// (a safe no-op if it's already gone) and re-push. Snapshot/store-only when the source is unresolvable.
+    /// Public so the integration suite drives the exact production path.
+    /// </summary>
+    public void DeleteTaskForPlayer(IServerPlayer player, Guid docId, Guid taskId)
+    {
+        if (sapi is null || pinStore is null) return;
+
+        if (TryResolveLectern(docId, out var lectern) && lectern!.DeleteTaskFromReader(taskId))
+            Trace("  delete: removed task {0} from source doc {1}", taskId, docId);
+        else
+            Trace("  delete: source unresolvable for task {0} — pin removed only", taskId);
+
+        bool changed = pinStore.RemovePin(player.PlayerUID, docId, taskId);
+        if (changed) PushPinsTo(player);
+    }
+
+    /// <summary>
+    /// Server-side reorder of the acting player's own pin list into a client-supplied order. Permutes ONLY
+    /// that player's per-player list in <see cref="ScribePinStore"/> (unknown/duplicate ids ignored, omitted
+    /// pins preserved), never any document's block order and never another player's list; the store already
+    /// persists an ordered list under <c>scribe:pins:v1</c>, so persistence follows on the next world save.
+    /// Re-pushes the acting player when the order actually changed. Public so the integration suite drives
+    /// the exact production path.
+    /// </summary>
+    public void ReorderPinsForPlayer(IServerPlayer player, IReadOnlyList<(Guid DocId, Guid TaskId)> order)
+    {
+        if (sapi is null || pinStore is null) return;
+        if (pinStore.ReorderPins(player.PlayerUID, order)) PushPinsTo(player);
     }
 
     /// <summary>Resolves a docId to its currently-hosting lectern block entity via the live index, if

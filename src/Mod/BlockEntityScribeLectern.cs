@@ -322,6 +322,34 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable
     }
 
     /// <summary>
+    /// Server-side: change a task's text on the authoritative document, addressed by its stable
+    /// <see cref="ScribeBlock.TaskId"/> — the write-through target of the identity-addressed pin-edit path
+    /// (<see cref="ScribeEditPinnedTaskMessage"/>). Mirrors <see cref="SetTaskDoneFromReader"/>: lock-free
+    /// (an always-allowed action any viewer may perform, even while another player holds the editor lock),
+    /// mutating the authoritative document in place through the Core <see cref="ScribeDocument.SetTaskText"/>
+    /// path so the blank/whitespace-only rejection invariant holds. A blank edit, a TaskId with no matching
+    /// (or non-task) block, or a no-op is left unwritten. Returns whether it wrote. Does NOT touch pins — the
+    /// caller (<c>ScribeModSystem</c>) reconciles the acting player's snapshot separately; other players'
+    /// pins are deliberately left alone (grief-proof, player-owned pins).
+    ///
+    /// <para>Race caveat (same as <see cref="SetTaskDoneFromReader"/>): because this is lock-free by design,
+    /// a concurrent whole-document <see cref="ApplyEdit"/> under the edit lock can clobber this write (and
+    /// vice versa). The window is small and last-write-wins, consistent with the done-flag path.</para>
+    /// </summary>
+    public bool SetTaskTextFromReader(Guid taskId, string text)
+    {
+        if (Api is not ICoreServerAPI) return false;
+
+        var block = Document.FindByTaskId(taskId);
+        if (block is null || !block.IsTask) return false;
+        if (block.Text == text) return false;
+
+        if (!Document.SetTaskText(taskId, text)) return false; // rejects blank/whitespace-only
+        MarkDirty(redrawOnClient: true);
+        return true;
+    }
+
+    /// <summary>
     /// Server-side: delete a task from the authoritative document by its stable
     /// <see cref="ScribeBlock.TaskId"/> — the write-through for the <c>Delete</c> completion policy.
     /// Lock-free like <see cref="SetTaskDoneFromReader"/>. Returns whether a task was removed. Does NOT

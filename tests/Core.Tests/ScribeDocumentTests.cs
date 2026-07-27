@@ -157,6 +157,88 @@ public class ScribeDocumentTests
         Assert.Equal("", doc.Blocks[0].Text);
     }
 
+    // --- Edit task text by stable identity (SetTaskText) ---
+
+    [Fact]
+    public void SetTaskText_ByPresentId_ChangesTextAndKeepsDoneFlag()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("Find copper");
+        doc.ToggleTask(0); // now done
+        var id = doc.Blocks[0].TaskId;
+
+        bool ok = doc.SetTaskText(id, "Find tin");
+
+        Assert.True(ok);
+        Assert.Equal("Find tin", doc.Blocks[0].Text);
+        Assert.True(doc.Blocks[0].Done);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("\t\n")]
+    public void SetTaskText_RejectsBlankOrWhitespace_LeavesTaskUnchanged(string blank)
+    {
+        // Unlike SetBlockText (which stores blanks verbatim), the identity-addressed pin edit honors
+        // the content invariant: a blank/whitespace-only edit is rejected and the task is untouched, so
+        // a pin edit can never blank a task out.
+        var doc = new ScribeDocument();
+        doc.AddTask("Find copper");
+        var id = doc.Blocks[0].TaskId;
+
+        Assert.False(doc.SetTaskText(id, blank));
+        Assert.Equal("Find copper", doc.Blocks[0].Text);
+    }
+
+    [Fact]
+    public void SetTaskText_OnAbsentId_IsNoOp()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("Find copper");
+
+        Assert.False(doc.SetTaskText(Guid.NewGuid(), "Find tin"));
+        Assert.Equal("Find copper", doc.Blocks[0].Text);
+    }
+
+    [Fact]
+    public void SetTaskText_OnTextSectionId_Fails()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTextSection("not a task");
+        var id = doc.Blocks[0].TaskId;
+
+        Assert.False(doc.SetTaskText(id, "changed"));
+        Assert.Equal("not a task", doc.Blocks[0].Text);
+    }
+
+    [Fact]
+    public void SetTaskText_LeavesOtherBlocksUntouched()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("A");
+        doc.AddTask("B");
+        doc.AddTextSection("note");
+        var idB = doc.Blocks[1].TaskId;
+
+        Assert.True(doc.SetTaskText(idB, "B-edited"));
+        Assert.Equal(new[] { "A", "B-edited", "note" }, doc.Blocks.Select(b => b.Text));
+    }
+
+    [Fact]
+    public void SetTaskText_StoresTextVerbatim_WithoutTrimming()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("Find copper");
+        var id = doc.Blocks[0].TaskId;
+
+        // Non-blank text is stored verbatim (surrounding whitespace preserved) — the same no-trim rule
+        // as SetBlockText; only fully-blank input is rejected.
+        doc.SetTaskText(id, "  Find tin  ");
+
+        Assert.Equal("  Find tin  ", doc.Blocks[0].Text);
+    }
+
     // --- Toggle completion (tasks only) ---
 
     [Fact]

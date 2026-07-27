@@ -1259,6 +1259,39 @@ path; use it for framed pixel chrome, not full-spread backdrops. Gate the wrap o
 preference read fresh each `Build()` (OFF = body bare, no wrap); the `UpdateMySettings` → `MyPinsChanged` →
 `ForceRebuild` chain relights it live for free.
 
+**Fact (scribe-pin-editor): add a new central-region view to the Lectern dialog as a PEER of read/editor —
+a view-mode switch in `BuildCentralRegion`, not an overlay.** The dialog already chose its body from a
+`bool isEditorMode`; a third view (the Pin Tab) is cleanest as a small enum (`Read`/`Editor`/`Pinned`) with
+`isEditorMode` kept as a bool *property* over it (`get => view == Editor; set => view = value ? Editor :
+Read`) so all the editor-lifecycle code that flipped the bool keeps working untouched, and
+`BuildCentralRegion` becomes a `switch`. Route the nav button through a real entry method
+(`OnClickSwitchToPinned`) that tears down the editor first (flush + release lock, like
+`OnClickSwitchToRead`) — never an inline flag flip — matching the `RequestEditorAccess`/`EnterReadMode`
+discipline. The new view reuses the editor's `[grip][checkbox][field]` + hover delete/unpin row shape but
+feeds it from an alternate row-data source (`ScribePinnedRef` → `ScribePinRowData`) instead of the scratch
+document.
+
+**Fact (scribe-pin-editor): `ForceRebuild` FULLY unmounts + remounts the tree, so keying a row by
+`ValueKey<Guid>(TaskId)` does NOT by itself preserve its field's live text — you also need a write-through
+buffer to re-seed from.** `GuiBase.ForceRebuild` (`GuiBase.cs:1397`) calls `RootElement.Unmount()` and
+builds a brand-new tree — there is no reconciliation across it, so a `ValueKey` only stabilizes *element
+identity/ordering within one build*, not `State` across the teardown. The editor view survives a rebuild
+mid-typing only because its field writes through to the `scratch` document on every keystroke and re-seeds
+`initialText` from it. A pin-sourced view has no scratch doc, so it needs the SAME shape: a per-row
+`Dictionary<Guid,string> pinEditBuffer` written on `onChanged`, seeded into each field's `initialText` in
+`Build` (buffer if present, else the server snapshot), and cleared on commit (blur/Enter) or when the pin
+leaves the set. Restore the caret across the async `MyPinsChanged` rebuild the same way the editor does:
+track the focused row's TaskId (a blur does NOT clear it — the focus listener fires only on focus GAINED),
+re-arm a one-shot `autoFocusPinTaskId` in `OnMyPinsChanged` (only if that pin still exists), and pass it to
+the field's `autoFocus`. Own the focus nodes on the DIALOG keyed by TaskId (not index — pin order changes),
+syncing add/remove against the live set each build. See `BuildPinnedContent` / `SyncPinFocusNodes` /
+`pinEditBuffer` in `GuiDialogScribeLecternLibGui.cs`.
+
+_In-game legibility verdicts (scribe-pin-editor): pending first playtest — the Pin Tab renders under the
+same theme/backdrop/size as read/editor by construction (shared `RowStyle` + `LecternLayout` +
+`ScribeTheme.For`), but the no-cap row list, the commit-on-blur edit flow, and drag-reorder feel are to be
+confirmed in-game (tasks 7.1–7.11)._
+
 ## Dev-diagnosis toolkit
 
 The local iterate/diagnose loop for this project (Apple Silicon, where VSImGui sliders and the

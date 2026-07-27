@@ -138,6 +138,67 @@ public sealed class ScribePinStore
     public bool? GetPinDone(string playerUid, Guid docId, Guid taskId)
         => Find(playerUid, docId, taskId)?.LastKnownDone;
 
+    /// <summary>Sets the last-known text snapshot of the player's pin for this task — the snapshot-only
+    /// half of the identity-addressed edit path, so a pin edit is reflected even when the owning document
+    /// is unresolvable (mirrors <see cref="SetPinDone"/>). Blank/whitespace-only text is REJECTED (returns
+    /// false, snapshot unchanged) so a pin edit can never blank the snapshot. A no-op (returns false) when
+    /// the player has no such pin or its text already matches; returns true if the snapshot changed.</summary>
+    public bool SetPinText(string playerUid, Guid docId, Guid taskId, string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        if (Find(playerUid, docId, taskId) is not { } pin) return false;
+        if (pin.LastKnownText == text) return false;
+        pin.LastKnownText = text;
+        return true;
+    }
+
+    // ---------------- Reorder (per-player pin list) ----------------
+
+    /// <summary>
+    /// Permute a player's own pin list into the client-supplied order, addressed by pin identity
+    /// <c>(docId, taskId)</c>. Pins are moved to match <paramref name="order"/>; any id in
+    /// <paramref name="order"/> that the player doesn't hold (unknown), and any duplicate id, is ignored,
+    /// and any pin the client OMITS is preserved at the end in its current relative order (so a partial or
+    /// stale order can never drop a pin). Reorders ONLY this player's per-player list — never any
+    /// document's block order and never another player's list. Returns true if the order actually changed
+    /// (so the caller re-pushes/persists only on a real change).
+    /// </summary>
+    public bool ReorderPins(string playerUid, IReadOnlyList<(Guid DocId, Guid TaskId)> order)
+    {
+        if (!_pins.TryGetValue(playerUid, out var list) || list.Count == 0) return false;
+
+        var reordered = new List<ScribePinnedRef>(list.Count);
+        var taken = new HashSet<(Guid, Guid)>();
+
+        // First, the pins named in the client order (skipping unknown ids and duplicates).
+        foreach (var (docId, taskId) in order)
+        {
+            var key = (docId, taskId);
+            if (taken.Contains(key)) continue; // duplicate id in the requested order
+            var pin = list.FirstOrDefault(p => p.OwnerDocId == docId && p.TaskId == taskId);
+            if (pin is null) continue; // unknown id — not held by this player
+            reordered.Add(pin);
+            taken.Add(key);
+        }
+
+        // Then any pins the client omitted, kept in their current relative order so nothing is dropped.
+        foreach (var pin in list)
+        {
+            if (taken.Add((pin.OwnerDocId, pin.TaskId))) reordered.Add(pin);
+        }
+
+        // No-op when the resulting order matches the current one (reference-equal per slot).
+        bool changed = false;
+        for (int i = 0; i < list.Count; i++)
+        {
+            if (!ReferenceEquals(list[i], reordered[i])) { changed = true; break; }
+        }
+        if (!changed) return false;
+
+        _pins[playerUid] = reordered;
+        return true;
+    }
+
     // ---------------- Snapshot reconcile (acting player only) ----------------
 
     /// <summary>

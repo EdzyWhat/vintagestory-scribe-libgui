@@ -106,6 +106,30 @@ public sealed class ScribeDocument
     /// Thin overload for callers that don't need the removed task's id.</summary>
     public bool DeleteBlock(int index) => DeleteBlock(index, out _);
 
+    /// <summary>
+    /// Changes the text of the task with the given stable <see cref="ScribeBlock.TaskId"/> — the
+    /// identity-addressed convenience the pin editor uses to edit a task without knowing its index or
+    /// block position (over <see cref="FindByTaskId"/> + <see cref="SetBlockText"/>). Unlike the raw
+    /// <see cref="SetBlockText"/>, this HONORS the editing-layer content invariant: blank or
+    /// whitespace-only <paramref name="text"/> is REJECTED (returns false, document unchanged) so a pin
+    /// edit can never blank a task out. Also returns false when no task with that id exists or the id
+    /// belongs to a non-task block. Text is otherwise stored verbatim (no trimming — same as
+    /// <see cref="SetBlockText"/>). Pure data; no VS API.
+    /// </summary>
+    public bool SetTaskText(Guid taskId, string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        for (int i = 0; i < _blocks.Count; i++)
+        {
+            if (_blocks[i].TaskId == taskId && _blocks[i].IsTask)
+            {
+                _blocks[i].Text = text;
+                return true;
+            }
+        }
+        return false;
+    }
+
     /// <summary>Returns the block with the given <see cref="ScribeBlock.TaskId"/>, or null if no
     /// block in this document has that id.</summary>
     public ScribeBlock? FindByTaskId(Guid taskId)

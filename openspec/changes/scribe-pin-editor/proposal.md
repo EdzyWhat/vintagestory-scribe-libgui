@@ -10,13 +10,24 @@ action**, or to **reorder** a player's pins — pins are insertion-ordered only.
 goals across many lecterns need one place to manage every pin they hold, with full edit affordances
 and no undo lag.
 
-This change (Phase 4, the largest and riskiest) adds a slide-out **pin-editor pagelet** on the
-Lectern that lists all of a player's pins across every document, with per-row complete, inline text
-edit, delete, unpin, and reorder, and **no undo delay**. It complements — does not replace — the
-corner HUD (the HUD keeps its glanceable role and its undo window; both read the same pin set). The
-UI needs a thin, precedent-following server-authoritative sync extension: new identity-addressed
-messages for edit-text and reorder (and standalone delete/unpin), mirroring the existing
-`CompleteTaskForPlayer` template, with the same accepted best-effort behavior on unloaded sources.
+This change adds a **Pin Tab** — a nav-column view in the Lectern dialog, reached from the existing
+`scribepin` navigation button — that lists all of a player's pins across every document, with rows
+**editable by default** offering per-row complete, edit-text, delete, unpin, and reorder, and **no undo
+delay**. It also surfaces the "on completing a task" completion-policy control directly on the tab
+(where that choice's effect is most visible). It complements — does not replace — the corner HUD (the
+HUD keeps its glanceable role, automatic ordering, and undo window; both read the same pin set). The UI
+extends the editor view's row rendering but sourced from the player's pin set instead of the current
+document, and needs a thin, precedent-following server-authoritative sync extension: new
+identity-addressed messages for edit-text and reorder (and standalone delete/unpin), mirroring the
+existing `CompleteTaskForPlayer` template, with the same accepted best-effort behavior on unloaded
+sources.
+
+> **UI pivot (2026-07-26):** this change originally designed a slide-out `ScribePinTray` pagelet. It is
+> retargeted to a **nav-column Pin Tab view** (a peer of the read/editor views selected from the
+> `scribepin` nav button), matching the shipped `scribe-notebook-frame` vertical right-column nav — the
+> horizontal-tab and slide-out-tray concepts are superseded. The server/store sync plumbing below is
+> unchanged by the pivot; only the UI shell changed (a central-region view swap rather than an
+> `AnimatedSlide` overlay).
 
 ## What Changes
 
@@ -38,10 +49,15 @@ messages for edit-text and reorder (and standalone delete/unpin), mirroring the 
   `ScribeReorderPinsMessage` (plus optional standalone delete/unpin), appended to the frozen message
   registration order in `ScribeModSystem.Start`. New messages are additive; no existing message's wire
   format changes, and the persisted pin format is unchanged (order is already a persisted list).
-- **New slide-out pin-editor pagelet (`ScribePinTray`):** a `Positioned` + `AnimatedSlide` + `Clip`
-  pagelet on the Lectern, opened via a handle, listing all of the player's pins with the full edit
-  treatment and **no undo timer**. Reuses `ScribeMultilineField` for inline edit and the
-  `HudPinsContent`/`HudPinRow` row template.
+- **New Pin Tab nav view:** a new central-region view in `GuiDialogScribeLecternLibGui`, selected from
+  the existing `scribepin` nav button (its `onTap` is currently a stub), a peer of the read/editor views
+  (`BuildCentralRegion` gains a pinned branch). It lists all of the player's pins with rows **editable by
+  default** and **no undo timer**, extending the editor view's row rendering (`ScribeEditRow` =
+  `Checkbox` + `Expanded(ScribeMultilineField)` + hover delete/unpin/grip) but fed from `modSystem.MyPins`
+  instead of the document. Rows show all pins with **no max-row cap** (unlike the HUD).
+- **Completion-policy control on the tab:** the Scribe Settings "on completing a task"
+  (`ScribeCompletionPolicy`) picker is also rendered on the Pin Tab, editing the same shared
+  `ScribePlayerSettings.CompletionPolicy` preference (one value, two hosts).
 - **Optional Core convenience:** a tiny pure-data `ScribeDocument.SetTaskText(Guid, string)` over the
   existing `FindByTaskId` + `SetBlockText` — no VS API. Kept minimal.
 
@@ -52,11 +68,12 @@ the HUD's behavior (including its undo window) is untouched.
 
 ### New Capabilities
 
-- `pin-editor-tray` (`specs/pin-editor-tray/spec.md`): a slide-out pin-editor pagelet on the Lectern
-  that lists all of the player's pins across every document, with per-row complete / inline text edit /
-  delete / unpin / reorder and no undo delay; complements the corner HUD (both read the same pin set,
-  HUD behavior unchanged); slides in/out via a handle and stays interactive and hit-testable while
-  sliding.
+- `pinned-task-tab` (`specs/pinned-task-tab/spec.md`): a Pin Tab nav view in the Lectern (a peer of the
+  read/editor views, opened from the `scribepin` nav button) that lists all of the player's pins across
+  every document with no max-row cap, rows editable by default with per-row complete / edit text / delete
+  / unpin / reorder and no undo delay, plus the completion-policy control; fulfills the manual reorder /
+  manual unpin the HUD defers to it; complements the corner HUD (both read the same pin set, HUD behavior
+  unchanged).
 
 ### Modified Capabilities
 
@@ -77,16 +94,22 @@ the HUD's behavior (including its undo window) is untouched.
 - **Mod (`src/Mod/`)**: new `SetTaskTextFromReader(Guid, string)` on `BlockEntityScribeLectern`
   (mirrors `SetTaskDoneFromReader`); new `ScribeEditPinnedTaskMessage` / `ScribeReorderPinsMessage`
   (+ optional standalone delete/unpin) and their server handlers in `ScribeModSystem` mirroring
-  `CompleteTaskForPlayer`; reorder + persist support in `ScribePinStore`; new `ScribePinTray.cs`
-  slide-out widget; the Lectern dialog (`GuiDialogScribeLecternLibGui`) wires in the tray + handle
-  and the edit/delete/unpin/reorder senders.
-- **Assets**: `assets/scribe/lang/en.json` gains pin-tray / handle / row-action labels; pin-tray art
-  PNGs are progressive swaps (flat placeholders until then), not required by this change.
+  `CompleteTaskForPlayer`; reorder + persist support in `ScribePinStore`; the Lectern dialog
+  (`GuiDialogScribeLecternLibGui`) gains a Pin Tab view — a new view-mode field + a `BuildPinnedContent()`
+  branch in `BuildCentralRegion` that adapts the editor `ScribeEditRow` rendering to source from
+  `modSystem.MyPins`, the `scribepin` nav-button `onTap` wired to switch to it, the completion-policy
+  picker, and the edit/delete/unpin/reorder senders.
+- **Assets**: `assets/scribe/lang/en.json` gains Pin Tab / row-action / policy-picker labels (the
+  `scribe-gui-nav-pinned` nav tooltip already exists).
 - **Persistence / wire**: additive only — no persisted-format break (pin list order is already a
   persisted `List`), new messages appended to the frozen registration order.
-- **Dependencies / composition**: LibGUI (`gui`) is the existing hard dep; `AnimatedSlide`,
-  `Positioned`, `Clip`, `ScribeMultilineField` already ship. This change composes visually with
-  `scribe-themed-toggle` / `scribe-gui-backdrops` / `scribe-animated-tabs` (the pagelet renders under
-  whichever theme/backdrop/tab shell is active) but the **sync extension is independent** of all three
-  and does not require them to land first.
+- **Dependencies / composition**: LibGUI (`gui`) is the existing hard dep; `ScribeMultilineField` and the
+  editor `ScribeEditRow` rendering already ship, and the `scribepin` nav button + its tooltip already exist
+  (shipped `scribe-notebook-frame`). The Pin Tab is a new central-region view swap, reusing the existing
+  read/editor view-switch mechanism — no slide/overlay primitives needed. It renders under whichever theme
+  (`scribe-themed-toggle`) / backdrop (`scribe-gui-backdrops`) the Lectern dialog has active, and — being an
+  in-dialog view — is governed by the Lectern-dialog settings (`PixelArtDisplay`, `WindowFontScale`,
+  `PixelArtSize`), NOT the HUD-prefixed settings. The **sync extension is independent** of the theme/backdrop
+  work and does not require it to land first. Supersedes the stale `scribe-animated-tabs` horizontal-tab-bar
+  nav concept (the shipped vertical right-column nav won).
 - **Verification**: in-game only — the Core suite cannot reach `src/Mod` GUI code or the VS API.

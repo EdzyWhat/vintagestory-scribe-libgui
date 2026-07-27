@@ -24,6 +24,7 @@
 	"scribe-gui-nav-read": "Read view",
 	"scribe-gui-nav-edit": "Edit view",
 	"scribe-gui-nav-pinned": "Pinned tasks",
+	"scribe-gui-pintab-empty": "You have no pinned tasks. Pin a task from a lectern's edit view to manage it here.",
 
 	"scribe-hud-title": "Pinned",
 	"scribe-hud-more": "+{0} more",

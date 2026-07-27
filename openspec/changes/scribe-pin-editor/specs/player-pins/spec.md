@@ -3,7 +3,7 @@
 ### Requirement: Edit a pinned task's text by stable identity
 
 The system SHALL allow a player to change a pinned task's text addressed by `(DocId, TaskId)`, so a
-surface listing a player's pins (the pin-editor pagelet) can edit a task's text without knowing the
+surface listing a player's pins (the Pin Tab) can edit a task's text without knowing the
 task's position or block coordinates. The edit SHALL be best-effort write-through: when the task's
 document is currently resolvable, the new text SHALL be written into the authoritative document
 lock-free (mirroring the existing complete-by-identity path) and SHALL NOT require or acquire the
@@ -19,7 +19,7 @@ document unchanged).
 
 #### Scenario: Editing while another player holds the edit lock
 - **WHEN** one player holds a document's edit lock and another player edits a task in that document by
-  identity through the pin editor
+  identity through the Pin Tab
 - **THEN** the text change is applied lock-free without disturbing the editor's lock, and the pin
   snapshot is updated
 
@@ -31,7 +31,7 @@ document unchanged).
 ### Requirement: Delete a task by stable identity as a standalone action
 
 The system SHALL allow a player to delete a task addressed by `(DocId, TaskId)` as a first-class
-standalone action (not only as a side effect of a completion policy), so the pin-editor pagelet can
+standalone action (not only as a side effect of a completion policy), so the Pin Tab can
 delete a task directly. When the task's document is resolvable, the task SHALL be removed from the
 authoritative document lock-free (reusing the existing delete-from-reader path) and SHALL NOT require
 or acquire the document's edit lock; the player's pin for that task SHALL be removed from their pin set
@@ -50,15 +50,15 @@ if the pin is already gone.
 
 ### Requirement: Reorder the per-player pin list
 
-The system SHALL allow a player to reorder their own pin list, addressed by pin identity, so the pin-
-editor pagelet can arrange pins in a player-chosen order. Reordering SHALL permute only that player's
+The system SHALL allow a player to reorder their own pin list, addressed by pin identity, so the
+Pin Tab can arrange pins in a player-chosen order. Reordering SHALL permute only that player's
 per-player pin list; it SHALL NOT change any document's block order and SHALL NOT affect any other
 player's pin list. The reordered list SHALL be persisted per-player (in the existing per-player pin
 store) and re-synced to the owning player so the new order survives a restart and is reflected on every
 surface that reads that player's pins.
 
 #### Scenario: Reorder persists and re-syncs
-- **WHEN** a player reorders their pin list through the pin editor
+- **WHEN** a player reorders their pin list through the Pin Tab
 - **THEN** their pin list is permuted into the new order, persisted per-player, and re-synced to their
   client, and the same order is restored after a restart
 

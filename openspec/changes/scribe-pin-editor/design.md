@@ -19,16 +19,23 @@ chunks exists** — `TryResolvePos` misses when the owning doc is unloaded and m
 store/snapshot only, exactly how the Delete completion policy behaves today (ScribeModSystem.cs:476
 degrades gracefully). The pin editor adopts that same accepted best-effort behavior.
 
-The UI side is a slide-out pagelet on the Lectern dialog. LibGUI ships the primitives it needs:
-`AnimatedSlide` (translates in paint space and keeps hit-testing correct via inverted `RenderTransform`),
-`Positioned` + `Stack` (already used for row overlays at GuiDialogScribeLecternLibGui.cs:1490+), `Clip`
-(masks to the window edge), and `ScribeMultilineField` (reused for inline edit). `AnimatedOpacity` is
-already proven in `HudScribePins.cs:555`. The HUD's undo delay is client-only
-(`HudScribePins.UndoWindowMs`); the pagelet simply omits the sink-timer to get no-undo for free.
+The UI side is a **Pin Tab** — a new central-region view in the Lectern dialog, a peer of the read and
+editor views, selected from the right-column `scribepin` nav button (whose `onTap` is currently a stub at
+`GuiDialogScribeLecternLibGui.cs:1123-1124`). It reuses the existing read/editor view-switch mechanism
+(`BuildCentralRegion` chooses the body from a view-mode field) rather than any slide/overlay primitive,
+and extends the editor's `ScribeEditRow` rendering (`Checkbox` + `Expanded(ScribeMultilineField)` +
+hover-conditional delete/unpin/grip) but sourced from `modSystem.MyPins` instead of the document. The
+HUD's undo delay is client-only (`HudScribePins.UndoWindowMs`); the Pin Tab simply omits the sink-timer
+to get no-undo for free.
 
-This is Phase 4 and the largest/riskiest phase. It composes visually with `scribe-themed-toggle`,
-`scribe-gui-backdrops`, and `scribe-animated-tabs` (the pagelet renders under whatever theme, backdrop,
-and tab shell those phases establish), but the **sync extension in this change is independent** of them
+> **UI pivot (2026-07-26):** originally a slide-out `ScribePinTray` pagelet (`AnimatedSlide` + `Positioned`
+> + `Clip`). Retargeted to a nav-column view swap to match the shipped `scribe-notebook-frame` vertical
+> right-column nav; the slide-out overlay and the `scribe-animated-tabs` horizontal-tab-bar are both
+> superseded. The server/store decisions below are unchanged by the pivot.
+
+This composes visually with `scribe-themed-toggle` and `scribe-gui-backdrops` (the view renders under
+whatever theme/backdrop the Lectern dialog has active), but the **sync extension in this change is
+independent** of them
 and can land without them.
 
 ## Goals / Non-Goals
@@ -38,8 +45,8 @@ and can land without them.
 - Add identity-addressed edit-text, standalone delete/unpin, and per-player reorder to pins, mirroring
   the existing `CompleteTaskForPlayer` precedent exactly (resolve → best-effort write-through →
   snapshot/store update → re-push).
-- Add a slide-out pin-editor pagelet listing all of a player's pins across documents, with the full
-  edit treatment per row and no undo delay, complementing the HUD.
+- Add a Pin Tab nav view listing all of a player's pins across documents, rows editable by default with
+  the full edit treatment and no undo delay, plus the completion-policy control, complementing the HUD.
 - Keep `src/Core/` free of the VS API — any reorder/edit convenience there is pure data.
 - Keep the wire and persistence formats additive/unchanged.
 
@@ -70,7 +77,7 @@ New BE method mirroring `SetTaskDoneFromReader` (BlockEntityScribeLectern.cs:268
 authoritative `Document`, `MarkDirty`. It reuses the document model's set-text path so the blank/
 whitespace-only rejection invariant holds. Rationale: symmetry with the existing done-flag reader keeps
 the two mutation paths identical in shape and lock semantics. Alternative (route edits through the full
-`ApplyEdit` lock path) was rejected — it would require the edit lock the HUD/pagelet deliberately avoid.
+`ApplyEdit` lock path) was rejected — it would require the edit lock the HUD/Pin Tab deliberately avoid.
 
 ### New identity-addressed messages appended to the frozen registration order
 
@@ -93,23 +100,55 @@ is inherently per-player; document block order is shared across all players and 
 player's pin list would be a cross-player side effect. The store already persists an ordered `List`, so
 this is a format-free change.
 
-### `AnimatedSlide` for the pagelet (hit-testing stays correct)
+### Pin Tab is a central-region view swap (not an overlay), wired from the `scribepin` nav stub
 
-The pagelet is a `Positioned` child in a `Stack`, wrapped in `AnimatedSlide` (offset toggled `Zero` ↔
-off-screen X, an EaseOut curve) and `Clip`ped to the window edge; a `GestureDetector` handle toggles an
-`isPinTrayOpen` field → `SetState`/rebuild drives the slide. Rationale: `AnimatedSlide` translates in
-paint space and inverts the render transform, so controls remain hit-testable at their rendered position
-throughout the slide — unlike a manual offset that would leave hit regions at the un-slid position.
-Its animation State is stabilized with a `Key` so it survives `ForceRebuild` (dialog-owned
-`ScrollController`s already survive; view State is torn down on rebuild).
+The Pin Tab is a new selectable state of the Lectern dialog's central region, exactly like the read and
+editor views. Add a view-mode field (promote the existing `bool isEditorMode` to a small view enum, or add
+a parallel flag) and a `BuildPinnedContent()` branch in `BuildCentralRegion()`; wire the `scribepin`
+nav-button `onTap` (currently the stub at `GuiDialogScribeLecternLibGui.cs:1123-1124`) to switch to it.
+Follow the nav discipline the `scribe-animated-tabs` design established — a nav button routes through a
+real entry method (like `OnClickSwitchToRead` / `RequestEditorAccess`), it does not flip a mode flag
+inline. Rationale: this reuses the proven read/editor view-switch and matches the shipped
+`scribe-notebook-frame` vertical nav; no slide/overlay primitive is needed. Alternative (the original
+slide-out `AnimatedSlide` tray) was rejected — the shipped nav model is a view column, not an overlay, so a
+peer view is the consistent shape.
 
-### Reuse `ScribeMultilineField` for inline edit; omit the HUD sink-timer for no-undo
+### Reuse the editor `ScribeEditRow` rendering, fed from `MyPins`; omit the HUD sink-timer for no-undo
 
-The row template is `HudPinsContent`/`HudPinRow`; inline text edit reuses `ScribeMultilineField`
-(auto-recolors from the active theme). The pagelet deliberately **omits** the HUD's client-side
-undo/sink-timer (`HudScribePins.UndoWindowMs`), so completion and all actions apply immediately.
-Rationale: reuse keeps the editor consistent with existing surfaces; the no-undo requirement is met by
-simply not wiring the timer — server completion is already instant.
+Rows extend the editor view's `ScribeEditRow` rendering (`Checkbox` + `Expanded(ScribeMultilineField)` +
+hover-conditional delete `scribeclose` / unpin `scribepin` / drag-grip `scribegrip`) — the user's intent to
+"extend the editor view as much as we can" — but the row-data source is `modSystem.MyPins`
+(`ScribePinnedRef`), not the document's `ScribeEditRowData`. Rows are editable by default (no separate edit
+mode). The Pin Tab deliberately **omits** the HUD's client-side undo/sink-timer (`HudScribePins.UndoWindowMs`)
+so completion and every action apply immediately. Rationale: reusing the editor row keeps the surface
+consistent and is the least new code; no-undo is met by simply not wiring the timer (server completion is
+already instant); the Pin Tab is a deliberate management surface where the undo glance the HUD needs is
+unnecessary.
+
+### The completion-policy control appears on the Pin Tab, sharing the one preference
+
+Render the "on completing a task" `ScribeCompletionPolicy` picker (the same control the Scribe Settings
+window offers) on the Pin Tab, because the tab is where a check-off's sink/keep/unpin/delete effect is most
+directly observed. It reads/writes the single shared `ScribePlayerSettings.CompletionPolicy` (client-local,
+carried on each completion request) via the existing `UpdateMySettings` write-through — the control on the
+tab and the one in the Settings window edit the same value. Rationale: discoverability at the point of use;
+no new preference, no duplicated state.
+
+### Divergences from the editor view the Pin Tab must honor
+
+Because the Pin Tab reuses editor rendering but acts on per-player pins, four things differ from the editor:
+1. **Lock-free commit path.** Editor rows commit via the lock-gated document autosave
+   (`ScribeEditDocumentMessage`). Pin Tab actions route through the lock-free identity-addressed pin
+   messages (`ScribeSetPinMessage` / `ScribeCompleteTaskMessage` / the new edit + reorder messages), never
+   the document edit lock.
+2. **No max-row cap.** The Pin Tab shows every pin; the HUD's `HudMaxRows` / "+N more" bounding does not
+   apply.
+3. **Governed by Lectern-dialog settings** (`PixelArtDisplay`, `WindowFontScale`, `PixelArtSize`) since it
+   lives inside the Lectern dialog — NOT the HUD-prefixed settings (anchor/offsets/`HudRowWidth`/
+   `HudFontScale`).
+4. **Orphaned pins.** Actioning an orphaned row removes the pin rather than attempting to complete a task
+   (matches `player-pins`), keeping the surface's "checking an entry makes it leave the set" behavior
+   uniform.
 
 ## Risks / Trade-offs
 
@@ -118,7 +157,7 @@ simply not wiring the timer — server completion is already instant.
   deleting a pin whose owning document is unloaded updates only the per-player pin snapshot/store; the
   source document is unchanged until it is next loaded. → **Mitigation / accepted:** this exactly matches
   how the Delete completion policy behaves today, so it introduces no new failure mode; surface a
-  "changes apply when the page is loaded" hint in the pagelet only if it proves confusing in-game.
+  "changes apply when the page is loaded" hint in the Pin Tab only if it proves confusing in-game.
 
 - **[Risk] A lock-free text write can race a concurrent whole-document `ApplyEdit`.** `SetTaskTextFromReader`
   is lock-free by design (like the done-flag path), so a player editing the whole document under the edit
@@ -130,9 +169,12 @@ simply not wiring the timer — server completion is already instant.
   break compatibility. → **Mitigation:** append `ScribeEditPinnedTaskMessage` / `ScribeReorderPinsMessage`
   (and any standalone delete/unpin) strictly after the existing registrations in `ScribeModSystem.Start`.
 
-- **[Risk] Animation State loss on `ForceRebuild`.** The tray's slide State could reset when the dialog
-  rebuilds (view State is torn down). → **Mitigation:** key the tray's Stateful node so its element
-  identity is stable across rebuilds, as the plan requires.
+- **[Risk] Editing-row State loss on the `MyPinsChanged` `ForceRebuild`.** A server pin resync fires
+  `MyPinsChanged`, which rebuilds the view and tears down row State — mid-edit that could drop the
+  `ScribeMultilineField`'s focus/caret, the same hazard the editor view already faces. → **Mitigation:**
+  key each pin row by `ValueKey<Guid>(TaskId)` (the editor's existing pattern) so a row's element identity
+  and its field State survive a rebuild when the row is still present; a resync that removes/reorders rows
+  reconciles by key. Reuse the editor's established row-keying rather than inventing a new scheme.
 
 ## Migration Plan
 
