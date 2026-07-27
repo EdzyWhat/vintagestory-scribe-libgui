@@ -1,8 +1,11 @@
+using System;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
 using Vintagestory.API.Datastructures;
+using Vintagestory.API.MathTools;
 using Vintagestory.API.Server;
+using Vintagestory.API.Util;
 using Scribe.Core;
 
 namespace Scribe;
@@ -17,11 +20,44 @@ namespace Scribe;
 /// Only one player may hold the editor lock at a time (server-tracked, released on close/
 /// mode-switch/disconnect).
 /// </summary>
-public sealed class BlockEntityScribeLectern : BlockEntity
+public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable
 {
     private const string DocumentAttributeKey = ScribeDocumentAttributes.DocumentAttributeKey;
 
+    /// <summary>Client-side cached rotated mesh, rebuilt when <see cref="MeshAngleRad"/> changes
+    /// (keyed by angle in the object cache, mirroring <c>BlockEntitySign</c>).</summary>
+    private MeshData? mesh;
+
     public ScribeDocument Document { get; private set; } = new();
+
+    /// <summary>Horizontal placement angle (radians) so the lectern's open-book reading face turns
+    /// toward the placing player — the vanilla Sign/clutter <c>MeshAngleRad</c> idiom. Set once in
+    /// <see cref="BlockScribeLectern.TryPlaceBlock"/>, persisted as "meshAngle", and applied to both
+    /// the tesselated mesh (<see cref="OnTesselation"/>) and the collision/selection box (below).
+    /// The reused <c>bookshelves/lecturn-book-open</c> shape's authored front is SOUTH (+Z) at angle 0,
+    /// so the raw player-facing angle points the book at the player with no per-piece offset (see
+    /// VSAPI-NOTES "Block placement orientation").</summary>
+    private float meshAngleRad;
+
+    /// <summary>The block's collision/selection box rotated to <see cref="MeshAngleRad"/>, surfaced by
+    /// the block's <c>GetCollisionBoxes</c>/<c>GetSelectionBoxes</c> so the hitbox tracks the mesh.
+    /// Null until the first angle set (then the block falls back to its un-rotated JSON box).</summary>
+    public Cuboidf[]? RotatedBox { get; private set; }
+
+    public float MeshAngleRad
+    {
+        get => meshAngleRad;
+        set
+        {
+            bool changed = meshAngleRad != value;
+            meshAngleRad = value;
+            if (Block?.CollisionBoxes is { Length: > 0 } boxes)
+            {
+                RotatedBox = new[] { boxes[0].RotatedCopy(0f, value * (180f / (float)Math.PI), 0f, new Vec3d(0.5, 0.5, 0.5)) };
+            }
+            if (changed) MarkDirty(true);
+        }
+    }
 
     /// <summary>Server-side only: the UID of the player currently editing, if any.</summary>
     private string? lockHolderUid;
@@ -95,11 +131,19 @@ public sealed class BlockEntityScribeLectern : BlockEntity
     {
         base.ToTreeAttributes(tree);
         tree.SetBytes(DocumentAttributeKey, ScribeDocumentCodec.Serialize(Document));
+        tree.SetFloat("meshAngle", meshAngleRad);
     }
 
     public override void FromTreeAttributes(ITreeAttribute tree, IWorldAccessor worldForResolving)
     {
         base.FromTreeAttributes(tree, worldForResolving);
+
+        // Placement facing (vanilla Sign default: fall back to the shape's authored rotateY when a
+        // pre-orientation lectern has no persisted angle). Goes through the property so the rotated
+        // hitbox is rebuilt on load; the client re-tesselates on the following redraw.
+        MeshAngleRad = tree.HasAttribute("meshAngle")
+            ? tree.GetFloat("meshAngle", 0f)
+            : (Block?.Shape?.rotateY ?? 0f) * ((float)Math.PI / 180f);
 
         var bytes = tree.GetBytes(DocumentAttributeKey);
         // A v3 document had no persisted ids: the codec generates fresh ones and surfaces which tasks
@@ -424,5 +468,36 @@ public sealed class BlockEntityScribeLectern : BlockEntity
     {
         dialog = new GuiDialogScribeLecternLibGui(Pos, this, capi);
         dialog.TryOpen();
+    }
+
+    /// <summary>Client-side: draw the block shape rotated to <see cref="MeshAngleRad"/> so the open-book
+    /// face points the way it was placed. Mirrors <c>BlockEntitySign.OnTesselation</c>: builds the mesh
+    /// once per distinct angle via the object cache and feeds it to the chunk mesher (returning true to
+    /// suppress the default un-rotated block mesh).</summary>
+    public override bool OnTesselation(ITerrainMeshPool mesher, ITesselatorAPI tessThreadTesselator)
+    {
+        if (Api is not ICoreClientAPI capi || Block?.Shape?.Base is null)
+        {
+            return base.OnTesselation(mesher, tessThreadTesselator);
+        }
+
+        mesh = ObjectCacheUtil.GetOrCreate(Api, "scribelecternmesh-" + Block.Code + "-" + MeshAngleRad, () =>
+        {
+            var shape = capi.TesselatorManager.GetCachedShape(Block.Shape.Base);
+            capi.Tesselator.TesselateShape(Block, shape, out var meshData, new Vec3f(0f, MeshAngleRad * (180f / (float)Math.PI), 0f));
+            return meshData;
+        });
+
+        mesher.AddMeshData(mesh);
+        return true;
+    }
+
+    /// <summary>World-edit / schematic rotation parity (vanilla Sign pattern): adjust the stored facing
+    /// by the rotation amount so a rotated build keeps the lectern pointing correctly.</summary>
+    public void OnTransformed(IWorldAccessor worldAccessor, ITreeAttribute tree, int degreeRotation,
+        Dictionary<int, AssetLocation> oldBlockIdMapping, Dictionary<int, AssetLocation> oldItemIdMapping, EnumAxis? flipAxis)
+    {
+        float angle = tree.GetFloat("meshAngle", 0f) - degreeRotation * ((float)Math.PI / 180f);
+        tree.SetFloat("meshAngle", angle);
     }
 }

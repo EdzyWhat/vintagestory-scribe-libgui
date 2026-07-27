@@ -627,6 +627,48 @@ measurement 2026-07-22 (took three wrong fixes before instrumenting — measure,
   commit. **Lesson: when a text edit doesn't take effect, `grep` the data path (setter/normalizer)
   before touching the renderer.**
 
+## Block placement orientation — facing the player
+
+**Question: how do you make a placed block face the placing player?** (For the lectern
+face-the-player fix; decompiled `VintagestoryAPI.dll` + `VSSurvivalMod.dll` 2026-07-26.)
+
+- **The base `Block.TryPlaceBlock`/`DoPlaceBlock` does NOT orient anything** — it just
+  `SetBlock`s the exact `BlockId`. **A `horizontalorientation` variant group alone does nothing
+  at placement.** (This corrects `docs/specs/lectern-gui-polish.md` item 1, which wrongly claims
+  the engine auto-picks the facing variant with no code — it does not.) You need EITHER a behavior
+  or a code override.
+- **`Block.SuggestedHVOrientation(byPlayer, blockSel)`** returns `BlockFacing[]` pointing from the
+  block toward the player (`Atan2` internally) — the shared building block both idioms use.
+- **Idiom A — JSON only (`BlockBehaviorHorizontalOrientable`, in `VSSurvivalMod.dll`).** Add the
+  `HorizontalOrientable` behavior + a `side` variant group (`loadFromProperties:
+  "abstract/horizontalorientation"` → north/east/south/west) + `shapeByType` per-facing `rotateY`
+  + `selectionbox.rotateYByType` + `notcreativeinventory` (else 4 dup creative entries). Canonical
+  free-standing template: `assets/survival/blocktypes/wood/churn.json`. Cost: block code gains a
+  `-north/…` suffix (variant explosion; ripples into recipes / any literal-code references), and
+  only 4 cardinal facings.
+- **Idiom B — BlockEntity `MeshAngleRad` in code (the Sign idiom).** `BlockSign.TryPlaceBlock`
+  computes `Math.Atan2` from player pos, snaps to `π/4` (45°; chests use 22.5°), sets
+  `BlockEntitySign.MeshAngleRad`. The BE persists it as `"meshAngle"` in `To/FromTreeAttributes`
+  (defaulting to `Block.Shape.rotateY` when absent), rotates its collision box in the setter, and
+  `OnTesselation` tesselates with `new Vec3f(0, MeshAngleRad*180/π, 0)` cached by angle
+  (`ObjectCacheUtil.GetOrCreate("…"+MeshAngleRad, …)`). Keeps the block code stable (no variant
+  suffix) and gives smooth snapped facing — the lower-friction fit for a block that already has a
+  BE mirroring Sign.
+- **Gotchas:** (1) setting `MeshAngleRad` does nothing visually without an `OnTesselation` rotate;
+  (2) a non-cubic selection/collision box must be rotated too, and becomes diagonal at 45°/22.5° —
+  90°-only snapping keeps the box clean; (3) `IRotatable.OnTransformed` on the BE is optional polish
+  for `/we` / schematic-rotation parity.
+- **`lecturn-book-open` authored front = SOUTH (+Z) at `rotateY=0`** (decompiled the shape +
+  `Mat4f` 2026-07-26). The `rest` board (`rotationZ=-45`) + pages (`rotationZ=-56`) make the reading
+  surface face +X pre-rotation, then the shape's own root `rotationY=-90` turns +X→+Z. So the front
+  is +Z, and the mesh's `front(r) = (sin r, cos r)` means **`MeshAngleRad = atan2(playerX−blockX,
+  playerZ−blockZ)` points the reading face straight at the player with ZERO per-piece offset** —
+  exactly what vanilla `BlockClutter` (`BlockShapeFromAttributes.DoPlaceBlock`, 22.5°-snapped) does,
+  and why `clutter.json` sets no `rotation` for this piece. Only if you instead drive off a
+  NORTH-at-0 cardinal assumption (e.g. raw `SuggestedHVOrientation`) do you need +180°: SOUTH→0,
+  EAST→π/2, NORTH→π, WEST→3π/2. **Trap:** two same-named shapes exist — use the `bookshelves/`
+  copy (root `-90`), NOT plain `clutter/lecturn-book-open.json` (root `-45`, lands diagonal/SE).
+
 ## Held-item writing (books / notebooks / tablets)
 
 > Facts gathered during the 2026-07-21 roadmap-exploration pass (see `docs/specs/`), from
