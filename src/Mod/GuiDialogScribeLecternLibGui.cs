@@ -50,14 +50,14 @@ internal readonly record struct LecternLayout(float W)
 
     /// <summary>Each side spacer/nav column (left spacer + right icon-button column). Widened to hold the
     /// enlarged nav buttons (v1-playtest-fixes 5.6): 2·SideColW + TasksColW = 1.0·W exactly.</summary>
-    public float SideColW => 0.1025f * W;
+    public float SideColW => 0.1f * W;
 
     /// <summary>The center tasks column that hosts the existing scrolling read/editor content.</summary>
-    public float TasksColW => 0.795f * W;
+    public float TasksColW => 0.8f * W;
 
     /// <summary>The bottom-anchored title+buttons row inside the title bar (75% of the outer width,
     /// 6.5% of the outer height).</summary>
-    public float TitleBtnsW => 0.795f * W;
+    public float TitleBtnsW => 0.8f * W;
     public float TitleBtnsH => 0.065f * H;
 }
 
@@ -1593,6 +1593,9 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             onToggleTask: OnReadViewCompleteTask,
             onTogglePinned: OnReadViewTogglePinned,
             onSwitchToEditor: RequestEditorAccess,
+            // Symmetric 0.04·W horizontal inset on the footer button, from the same LecternLayout width.
+            footerButtonPadding: EdgeInsets.Symmetric(
+                horizontal: 0.04f * new LecternLayout(modSystem.MySettings.PixelArtSize).W),
             style: RowStyle,
             scrollController: sharedScrollController);
 
@@ -1628,6 +1631,9 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             onReorderBlock: (from, to) => ReorderEditorBlock(from, to),
             onAddTask: OnClickAddTask,
             onSwitchToRead: OnClickSwitchToRead,
+            // Symmetric 0.04·W horizontal inset on the footer button row, from the same LecternLayout width.
+            footerButtonPadding: EdgeInsets.Symmetric(
+                horizontal: 0.04f * new LecternLayout(modSystem.MySettings.PixelArtSize).W),
             style: RowStyle,
             scrollController: sharedScrollController,
             departingRows: departing,
@@ -1672,6 +1678,9 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     {
         SyncPinFocusNodes();
 
+        // Same driving width the rest of the dialog uses, so the policy picker's inset tracks the layout.
+        float layoutW = new LecternLayout(modSystem.MySettings.PixelArtSize).W;
+
         Guid? autoFocus = autoFocusPinTaskId;
         autoFocusPinTaskId = null; // one-shot
 
@@ -1703,6 +1712,9 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             onReorder: OnPinReorder,
             completionPolicy: modSystem.MySettings.CompletionPolicy,
             onCompletionPolicyChanged: p => modSystem.UpdateMySettings(s => s.CompletionPolicy = p),
+            // Match the title row's horizontal inset (left: 10 + 0.04·W, right: 0.04·W) so the picker lines
+            // up with the title band; W comes from the same LecternLayout the rest of the dialog uses.
+            policyPickerPadding: EdgeInsets.Only(left: 10 + 0.04f * layoutW, right: 0.04f * layoutW),
             style: RowStyle,
             scrollController: sharedScrollController);
     }
@@ -1881,6 +1893,7 @@ internal sealed class ScribeLecternReadContent : StatefulWidget
         Action<Guid> onToggleTask,
         Action<Guid> onTogglePinned,
         Action onSwitchToEditor,
+        EdgeInsets footerButtonPadding,
         ScribeRowStyle style,
         ScrollController scrollController)
     {
@@ -1888,6 +1901,7 @@ internal sealed class ScribeLecternReadContent : StatefulWidget
         OnToggleTask = onToggleTask;
         OnTogglePinned = onTogglePinned;
         OnSwitchToEditor = onSwitchToEditor;
+        FooterButtonPadding = footerButtonPadding;
         Style = style;
         ScrollController = scrollController;
     }
@@ -1898,6 +1912,9 @@ internal sealed class ScribeLecternReadContent : StatefulWidget
     /// <summary>Pin/unpin a task by its stable id (scribe-lectern-view-consistency §2).</summary>
     public Action<Guid> OnTogglePinned { get; }
     public Action OnSwitchToEditor { get; }
+    /// <summary>Horizontal breathing room applied around the footer button (Edit), 0.04·W each side, so it
+    /// doesn't run to the content edges. Passed from the dialog, which owns the <c>LecternLayout</c> width.</summary>
+    public EdgeInsets FooterButtonPadding { get; }
     public ScribeRowStyle Style { get; }
     /// <summary>Dialog-owned scroll controller shared by both views (see the dialog field); NOT disposed
     /// here — the dialog owns its lifetime so the scroll offset survives the view-switch rebuild.</summary>
@@ -1971,9 +1988,9 @@ internal sealed class ScribeLecternReadContentState : State<ScribeLecternReadCon
                     // settings form uses; inherits the Column's spacing gap below it.
                     new Divider(),
                     new Expanded(child: rowList),
-                    new Button(
+                    new Padding(Widget.FooterButtonPadding, child: new Button(
                         child: new Text(Lang.Get("scribe:scribe-gui-switch-to-editor"), switchTextStyle),
-                        onTap: _ => Widget.OnSwitchToEditor()),
+                        onTap: _ => Widget.OnSwitchToEditor())),
                 }));
     }
 }
@@ -2207,6 +2224,7 @@ internal sealed class ScribeLecternEditorContent : StatefulWidget
         Action<int, int> onReorderBlock,
         Action onAddTask,
         Action onSwitchToRead,
+        EdgeInsets footerButtonPadding,
         ScribeRowStyle style,
         ScrollController scrollController,
         IReadOnlyList<ScribeDepartingEditorRow> departingRows,
@@ -2227,6 +2245,7 @@ internal sealed class ScribeLecternEditorContent : StatefulWidget
         OnReorderBlock = onReorderBlock;
         OnAddTask = onAddTask;
         OnSwitchToRead = onSwitchToRead;
+        FooterButtonPadding = footerButtonPadding;
         Style = style;
         ScrollController = scrollController;
         DepartingRows = departingRows;
@@ -2252,6 +2271,10 @@ internal sealed class ScribeLecternEditorContent : StatefulWidget
     public Action<int, int> OnReorderBlock { get; }
     public Action OnAddTask { get; }
     public Action OnSwitchToRead { get; }
+    /// <summary>Horizontal breathing room applied around the footer button row (Add task / Done editing),
+    /// 0.04·W each side, so the buttons don't run to the content edges. Passed from the dialog, which owns
+    /// the <c>LecternLayout</c> width.</summary>
+    public EdgeInsets FooterButtonPadding { get; }
     public ScribeRowStyle Style { get; }
     /// <summary>Dialog-owned scroll controller shared by both views (see the dialog field); NOT disposed
     /// here — the dialog owns its lifetime so the scroll offset survives the view-switch rebuild. The
@@ -2406,7 +2429,7 @@ internal sealed class ScribeLecternEditorContentState : State<ScribeLecternEdito
                     // Straight edge above the scroll region (scribe-lectern-view-consistency §1).
                     new Divider(),
                     new Expanded(child: scrollBody),
-                    new Row(
+                    new Padding(Widget.FooterButtonPadding, child: new Row(
                         spacing: 8,
                         mainAxisSize: MainAxisSize.Max,
                         children: new Widget[]
@@ -2417,7 +2440,7 @@ internal sealed class ScribeLecternEditorContentState : State<ScribeLecternEdito
                             new Expanded(child: new Button(
                                 child: new Text(Lang.Get("scribe:scribe-gui-switch-to-read"), buttonTextStyle),
                                 onTap: _ => Widget.OnSwitchToRead())),
-                        }),
+                        })),
                 }));
     }
 }
@@ -2711,6 +2734,7 @@ internal sealed class ScribeLecternPinnedContent : StatefulWidget
         Action<int, int> onReorder,
         ScribeCompletionPolicy completionPolicy,
         Action<ScribeCompletionPolicy> onCompletionPolicyChanged,
+        EdgeInsets policyPickerPadding,
         ScribeRowStyle style,
         ScrollController scrollController)
     {
@@ -2725,6 +2749,7 @@ internal sealed class ScribeLecternPinnedContent : StatefulWidget
         OnReorder = onReorder;
         CompletionPolicy = completionPolicy;
         OnCompletionPolicyChanged = onCompletionPolicyChanged;
+        PolicyPickerPadding = policyPickerPadding;
         Style = style;
         ScrollController = scrollController;
     }
@@ -2740,6 +2765,10 @@ internal sealed class ScribeLecternPinnedContent : StatefulWidget
     public Action<int, int> OnReorder { get; }
     public ScribeCompletionPolicy CompletionPolicy { get; }
     public Action<ScribeCompletionPolicy> OnCompletionPolicyChanged { get; }
+    /// <summary>Horizontal breathing room applied around the completion-policy picker header, matching the
+    /// title row's inset (<c>left: 10 + 0.04·W, right: 0.04·W</c>) so the picker lines up with the title
+    /// band above it. Passed in from the dialog, which owns the <c>LecternLayout</c> width.</summary>
+    public EdgeInsets PolicyPickerPadding { get; }
     public ScribeRowStyle Style { get; }
     /// <summary>Dialog-owned scroll controller shared by all views; NOT disposed here.</summary>
     public ScrollController ScrollController { get; }
@@ -2862,7 +2891,9 @@ internal sealed class ScribeLecternPinnedContentState : State<ScribeLecternPinne
                 {
                     // Header: policy picker, then a divider straight-edge above the scroll region
                     // (scribe-lectern-view-consistency §1 + §3). Expanded keeps the list filling the rest.
-                    policyPicker,
+                    // The picker is inset horizontally to match the title row's padding (added on request);
+                    // the divider + list keep the outer EdgeInsets.All(10) so only the picker shifts in.
+                    new Padding(Widget.PolicyPickerPadding, child: policyPicker),
                     new Divider(),
                     new Expanded(child: scrollBody),
                 }));
