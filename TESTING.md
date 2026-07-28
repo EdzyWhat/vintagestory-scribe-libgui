@@ -1523,3 +1523,41 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         in `BuildRightColNav` ×1.5 (RowCheckboxSize × 1.2 → × 1.8); `ScribeRowButton` derives both its box
         and glyph size from that value, so both grow together. Overflow past `SideColW` left intentional to
         judge in-game. Restaged Debug.
+
+## scribe-pin-editor
+
+> The **Pin Tab** is the third Lectern view (the `scribepin` nav button), listing *all* of this player's
+> pins across every document — not just the open Lectern — as editable rows (text field + checkbox +
+> delete + unpin + reorder grip) with a completion-policy picker header. It is fully coded (5 network
+> messages) but had NEVER been playtested; these are its first in-game verifications (v1-release-checklist
+> §1, transcribed from scribe-pin-editor 7.1–7.11). This is the single largest un-verified v1 surface, so
+> run every item before trusting it. Fully relaunch the client first.
+
+- [ ] `691ef3c9` **Open the Pin Tab.** Open the Lectern and click the pin nav button; the central region
+      switches to the Pin Tab listing all pins across documents with no row cap. Navigate back and forth to
+      the read and editor views. *(v1-release-checklist 1.3)*
+- [ ] `8e914c42` **Rows are editable.** In the Pin Tab, confirm rows are editable by default: text field,
+      checkbox, delete, unpin, and reorder grip are all present and each acts on the correct pin.
+      *(v1-release-checklist 1.4)*
+- [ ] `639b2da7` **Complete has no undo delay.** Complete a task from the Pin Tab; it applies immediately
+      with NO undo delay, and the corner HUD updates in lockstep. *(v1-release-checklist 1.5)*
+- [ ] `85592294` **Edit a loaded-source pin.** Edit a pin whose source Lectern IS loaded; the source doc
+      text updates and persists (reopen the Lectern to verify), and the pin snapshot updates.
+      *(v1-release-checklist 1.6)*
+- [ ] `e152d0e1` **Edit an unloaded-source pin.** Edit or delete a pin whose source Lectern is NOT loaded;
+      the pin snapshot/removal updates with no crash and the source doc is unchanged until loaded.
+      *(v1-release-checklist 1.7)*
+- [ ] `12ca42f8` **Unpin vs. delete.** Confirm unpin removes only the pin (task survives in the source doc)
+      while delete removes the task from the source doc. *(v1-release-checklist 1.8)*
+- [ ] `85e92e9b` **Reorder persists.** Reorder pins in the Pin Tab; the order persists per-player across
+      relog (under `scribe:pins:v1`) and the corner HUD reflects the new order; document block order is
+      unchanged. *(v1-release-checklist 1.9)*
+- [ ] `a1e8e10e` **Blank edit rejected.** Confirm a blank or whitespace-only inline edit is rejected and
+      leaves the task text unchanged. *(v1-release-checklist 1.10)*
+- [ ] `45bb88ed` **Policy picker syncs.** Change the completion policy from the Pin Tab picker; the Settings
+      window reflects the same value, it persists across relog, and completing a task follows the new policy.
+      *(v1-release-checklist 1.11)*
+- [ ] `58328d3f` **Pin Tab honors Lectern theme.** Confirm the Pin Tab respects the Lectern-dialog theme/size
+      (`PixelArtDisplay`, `WindowFontScale`, `PixelArtSize`) — not the HUD settings — and that an editing
+      row's focus/caret survives a background pin resync (the `MyPinsChanged` rebuild).
+      *(v1-release-checklist 1.12)*
