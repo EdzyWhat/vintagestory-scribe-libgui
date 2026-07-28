@@ -1,0 +1,24 @@
+[
+	{
+		ingredientPattern: "FRL,PPP,BPN",
+		ingredients: {
+			"F": { type: "item", code: "game:feather" },
+			"R": { type: "item", code: "game:paper-parchment" },
+			"L": { type: "item", code: "game:leather-normal-plain" },
+			"P": { type: "item", code: "game:plank-*" },
+			"B": { type: "block", code: "game:bowl-*-fired" },
+			"N": { type: "item", code: "game:metalnailsandstrips-*" }
+		},
+		width: 3,
+		height: 3,
+		attributes: {
+			liquidContainerProps: {
+				requiresContent: { type: "item", code: "game:dye-black" },
+				requiresLitres: 1,
+				consumeContainer: true
+			}
+		},
+		name: "scribe:scribelectern",
+		output: { type: "block", code: "scribe:scribelectern", quantity: 1 }
+	}
+]

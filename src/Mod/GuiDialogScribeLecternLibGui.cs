@@ -1515,7 +1515,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
                     size: size, onTap: RequestEditorAccess, boxShadows: navShadow),
                 // Pinned enlarged +10% (§10.2): the pin glyph reads a touch larger than the others.
                 TitleButton("scribepin", "scribe-gui-nav-pinned", colors.OnSurfaceVariant,
-                    size: size, onTap: OnClickSwitchToPinned, iconScale: 1.1f, boxShadows: navShadow),
+                    size: size, onTap: OnClickSwitchToPinned, iconScale: 1.15f, boxShadows: navShadow),
                 // Settings gear LAST in the group (§10.1), after Read / Edit / Pinned.
                 TitleButton("scribegear", "scribe-gui-nav-settings", colors.OnSurfaceVariant,
                     size: size, onTap: modSystem.OpenSettings, boxShadows: navShadow),
@@ -1523,7 +1523,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     }
 
     /// <summary>A tooltipped icon button reusing the per-row button chrome (<see cref="ScribeRowButton"/>).
-    /// <paramref name="iconScale"/> grows just the glyph (not the box) — used to enlarge the pin +10%
+    /// <paramref name="iconScale"/> grows just the glyph (not the box) — used to enlarge the pin +15%
     /// (§10.2). <paramref name="boxShadows"/> passes an optional drop shadow through to the button's
     /// <c>BoxStyle</c> (the sidebar nav buttons use one to read as raised chrome — v1-playtest-fixes 5.6).</summary>
     private static Widget TitleButton(string iconName, string tooltipKey, Vector4 color, float size, Action onTap, float iconScale = 1f, BoxShadow[]? boxShadows = null) =>
@@ -2069,7 +2069,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                     iconColor: Widget.Data.Pinned ? colors.Primary : colors.OnSurfaceVariant,
                     size: style.ControlSize,
                     onTap: () => Widget.OnTogglePinned(Widget.Data.TaskId),
-                    iconScale: 1.1f))); // pin glyph +10%, matching the editor (§10.2)
+                    iconScale: 1.15f))); // pin glyph +15%, matching the editor (§10.2)
         }
 
         return new MouseRegion(
@@ -2568,8 +2568,8 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         //
         // The two drag states use DELIBERATELY DISTINCT, non-pin colors so drag signalling reads clearly
         // and doesn't collide with the pin resting tint (which used to share the drop-target's ochre):
-        //   • SOURCE (the row you grabbed)  → theme Primary brightened +20 — "here's where it came from".
-        //   • DROP TARGET (row under cursor)→ theme Primary darkened  -20 — "here's where it will land".
+        //   • SOURCE (the row you grabbed)  → theme Primary brightened +20, half-saturated — "came from".
+        //   • DROP TARGET (row under cursor)→ theme Primary darkened  -20, half-saturated — "lands here".
         // Both are theme-derived (via ShiftBrightness) so they read as "the theme, brighter/darker" under
         // any LibGUI theme rather than stark white/black. Fill sits at 0.4 alpha; a 1px border of the SAME
         // shifted color at 0.5 alpha crisps the row edge. Source wins when the cursor hovers back over the
@@ -2577,8 +2577,8 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         // re-showing the drop tint). Neither drag state active → the resting pin tint (task + pinned) or
         // nothing.
         Vector4? dragShift =
-            Widget.IsDragSource ? ScribeRowConstants.ShiftBrightness(colors.Primary, +20f)
-            : Widget.IsDropTarget ? ScribeRowConstants.ShiftBrightness(colors.Primary, -20f)
+            Widget.IsDragSource ? ScribeRowConstants.ShiftBrightness(colors.Primary, +20f, saturationScale: 0.5f)
+            : Widget.IsDropTarget ? ScribeRowConstants.ShiftBrightness(colors.Primary, -20f, saturationScale: 0.5f)
             : (Vector4?)null;
 
         Vector4 rowFill =
@@ -2639,7 +2639,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                         iconColor: Widget.Data.Pinned ? colors.Primary : colors.OnSurfaceVariant,
                         size: btn,
                         onTap: () => Widget.OnTogglePinned(index),
-                        iconScale: 1.1f))); // pin glyph +10% (§10.2)
+                        iconScale: 1.15f))); // pin glyph +15% (§10.2)
             }
         }
 
@@ -2988,15 +2988,15 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
 
         // Drag highlight, matching the Edit view (a pin row is always "pinned", so there's no resting
         // pinned tint to fall back to — only the drag states or transparent):
-        //   • SOURCE (the row you grabbed)  → theme Primary brightened +20 — "here's where it came from".
-        //   • DROP TARGET (row under cursor)→ theme Primary darkened  -20 — "here's where it will land".
+        //   • SOURCE (the row you grabbed)  → theme Primary brightened +20, half-saturated — "came from".
+        //   • DROP TARGET (row under cursor)→ theme Primary darkened  -20, half-saturated — "lands here".
         // Fill at 0.4 alpha; a 1px border of the SAME shifted color at 0.5 alpha crisps the edge. Source
         // wins when the cursor hovers back over the origin row. The Container is ALWAYS present (transparent
         // fill / zero border when idle) so toggling the highlight is a property update, not a widget-type
         // swap — keeping the field's State mounted (the STRUCTURAL STABILITY rule).
         Vector4? dragShift =
-            Widget.IsDragSource ? ScribeRowConstants.ShiftBrightness(colors.Primary, +20f)
-            : Widget.IsDropTarget ? ScribeRowConstants.ShiftBrightness(colors.Primary, -20f)
+            Widget.IsDragSource ? ScribeRowConstants.ShiftBrightness(colors.Primary, +20f, saturationScale: 0.5f)
+            : Widget.IsDropTarget ? ScribeRowConstants.ShiftBrightness(colors.Primary, -20f, saturationScale: 0.5f)
             : (Vector4?)null;
 
         rowBody = new Container(

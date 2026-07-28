@@ -84,15 +84,16 @@ internal static class ScribeRowConstants
         colors.Primary with { W = PinnedTintAlpha };
 
     /// <summary>Returns <paramref name="color"/> with its HSV Brightness (Value) shifted by
-    /// <paramref name="deltaValue"/> points (Skia's 0–100 scale; clamped), hue/saturation and the
-    /// original float alpha preserved. Perceptually nicer than an RGB lerp toward white/black —
-    /// keeps the theme's chroma so a shifted theme color still reads as "the theme, brighter/darker".
-    /// Used by the Edit-view drag highlights to derive theme-aware source (brighter) and drop-target
-    /// (darker) washes from <see cref="ColorScheme.Primary"/>.</summary>
-    public static Vector4 ShiftBrightness(Vector4 color, float deltaValue)
+    /// <paramref name="deltaValue"/> points and its Saturation scaled by <paramref name="saturationScale"/>
+    /// (both on Skia's 0–100 scale; Value clamped), hue and the original float alpha preserved.
+    /// Perceptually nicer than an RGB lerp toward white/black — keeps (a fraction of) the theme's chroma
+    /// so a shifted theme color still reads as "the theme, brighter/darker". Used by the drag highlights
+    /// to derive theme-aware source (brighter) and drop-target (darker) washes from
+    /// <see cref="ColorScheme.Primary"/>, muted to half saturation so they don't overpower the row text.</summary>
+    public static Vector4 ShiftBrightness(Vector4 color, float deltaValue, float saturationScale = 1f)
     {
         color.ToSkColor().ToHsv(out float h, out float s, out float v);
-        var shifted = SKColor.FromHsv(h, s, Math.Clamp(v + deltaValue, 0f, 100f));
+        var shifted = SKColor.FromHsv(h, s * saturationScale, Math.Clamp(v + deltaValue, 0f, 100f));
         return new Vector4(shifted.Red / 255f, shifted.Green / 255f, shifted.Blue / 255f, color.W);
     }
 }
