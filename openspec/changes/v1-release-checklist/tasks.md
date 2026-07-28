@@ -6,15 +6,20 @@
       - Done 2026-07-27: added the `## scribe-pin-editor` section with a preamble + 10 unchecked items
         (codes 691ef3c9, 8e914c42, 639b2da7, 85592294, e152d0e1, 12ca42f8, 85e92e9b, a1e8e10e, 45bb88ed,
         58328d3f) covering §1.3–1.12. No verdicts yet — awaiting the in-game pass.
-- [ ] 1.2 Build Debug, restage (`bash build/restage.sh Debug`), and fully relaunch the client.
-- [ ] 1.3 In-game: open the Lectern; the `scribepin` nav button switches the central region to the
+- [x] 1.2 Build Debug, restage (`bash build/restage.sh Debug`), and fully relaunch the client.
+      - Done 2026-07-28: staged build confirmed current (DLL 08:32:38, newest source 08:32:20).
+- [x] 1.3 In-game: open the Lectern; the `scribepin` nav button switches the central region to the
       Pin Tab, listing all pins with no row cap. Navigate back and forth with read/editor.
-- [ ] 1.4 In-game: confirm rows are editable by default — text field, checkbox, delete, unpin, and
+      - **Confirmed 2026-07-28** (`691ef3c9`, submission 2026-07-28T07-33-43): "Pin view works."
+- [x] 1.4 In-game: confirm rows are editable by default — text field, checkbox, delete, unpin, and
       reorder grip are all present and act on the right pin.
-- [ ] 1.5 In-game: complete a task from the Pin Tab → applies immediately with NO undo delay; confirm
+      - **Confirmed 2026-07-28** (`8e914c42`, submission 2026-07-28T07-33-43): "Rows are editable in pin view with expected function."
+- [x] 1.5 In-game: complete a task from the Pin Tab → applies immediately with NO undo delay; confirm
       the HUD updates in lockstep.
-- [ ] 1.6 In-game: edit a pin whose source Lectern IS loaded → source doc text updates and persists
+      - **Confirmed 2026-07-28** (`639b2da7`, submission 2026-07-28T07-33-43): "Works immediately, confirmed."
+- [x] 1.6 In-game: edit a pin whose source Lectern IS loaded → source doc text updates and persists
       (reopen the Lectern to verify).
+      - **Confirmed 2026-07-28** (`85592294`, submission 2026-07-28T07-33-43): "Works."
 - [x] 1.7 In-game: edit/delete a pin whose source Lectern IS NOT loaded → pin snapshot/removal
       updates; no crash; source doc unchanged (reconciles if/when the source is loaded again).
       "Source not loaded" covers all three real ways a source goes away in survival — test each:
@@ -26,16 +31,21 @@
       - **Confirmed 2026-07-28** (`e152d0e1`, playtest submission 2026-07-28T09-01-45): all three scenarios
         pass — picked up, destroyed in Creative, and out of chunk-load range — including after quit/rejoin.
         No crash; pin snapshot updates client-side, source doc untouched until reloaded.
-- [ ] 1.8 In-game: unpin removes the pin only (task survives in the source doc); delete removes the
+- [x] 1.8 In-game: unpin removes the pin only (task survives in the source doc); delete removes the
       task from the source doc.
-- [ ] 1.9 In-game: reorder pins → order persists per-player across relog (under `scribe:pins:v1`);
+      - **Confirmed 2026-07-28** (`12ca42f8`, submission 2026-07-28T07-33-43): "Only unpins."
+- [x] 1.9 In-game: reorder pins → order persists per-player across relog (under `scribe:pins:v1`);
       the corner HUD reflects the new order.
-- [ ] 1.10 In-game: confirm blank/whitespace-only inline edit is rejected and leaves the task text
+      - **Confirmed 2026-07-28** (`85e92e9b`, submission 2026-07-28T07-33-43): "Works."
+- [x] 1.10 In-game: confirm blank/whitespace-only inline edit is rejected and leaves the task text
        unchanged.
-- [ ] 1.11 In-game: change the completion policy from the Pin Tab picker → the Settings window
+       - **Confirmed 2026-07-28** (`a1e8e10e`, submission 2026-07-28T07-33-43): "Works."
+- [x] 1.11 In-game: change the completion policy from the Pin Tab picker → the Settings window
        reflects the same value; completing a task follows the new policy.
-- [ ] 1.12 In-game: confirm the Pin Tab respects the Lectern-dialog theme/size (`PixelArtDisplay`,
+       - **Confirmed 2026-07-28** (`45bb88ed`, submission 2026-07-28T07-33-43): "Syncs perfectly."
+- [x] 1.12 In-game: confirm the Pin Tab respects the Lectern-dialog theme/size (`PixelArtDisplay`,
        `WindowFontScale`, `PixelArtSize`) — not HUD-prefixed settings.
+       - **Confirmed 2026-07-28** (`58328d3f`, submission 2026-07-28T07-33-43): "Honors theme."
 
 ## 2. Multiplayer pass (A4) — second machine
 
@@ -51,8 +61,10 @@
       still open it in READ view normally.
 - [ ] 2.5 From session A's editor: drag-reorder a row, use the tool panel, adjust text-size slider.
       Reopen from the same session → changes persist. Confirm B's read view reflects the same order.
-- [ ] 2.6 Record verdicts in TESTING.md for items c127b9ad (7.5), 2a105a38 (7.6), and the
+- [x] 2.6 Record verdicts in TESTING.md for items c127b9ad (7.5), 2a105a38 (7.6), and the
       reorder/settings item (7.7).
+      - Done 2026-07-28: c127b9ad Confirmed (07-15-37); 2a105a38 Confirmed (09-01-45); 32876056 (7.7)
+        Confirmed (2026-07-21). All three verdicts on file in TESTING.md.
 
 ## 3. Survival pass (A5) + recipe handbook entry
 
@@ -70,11 +82,13 @@
 
 ## 4. Sidebar nav buttons retest (923a395a)
 
-- [ ] 4.1 Build and restage Debug (the ×1.5 fix is already staged from v1-playtest-fixes 5.6).
+- [x] 4.1 Build and restage Debug (the ×1.5 fix is already staged from v1-playtest-fixes 5.6).
       Confirm the DLL is fresh.
-- [ ] 4.2 In-game: open the Lectern and check the Read/Edit/Pinned/Settings nav buttons in the
+      - Done 2026-07-28: DLL confirmed current.
+- [x] 4.2 In-game: open the Lectern and check the Read/Edit/Pinned/Settings nav buttons in the
       right sidebar — confirm they are visibly larger (×1.5) and sit correctly within the column
       without breaking layout. Record the verdict in TESTING.md for `923a395a`.
+      - **Confirmed 2026-07-28** (`923a395a`, submission 2026-07-28T07-33-43): "Works. Looks good."
 
 ## 5. v3-blob codec test
 
@@ -205,10 +219,12 @@
       Manager list and on the VS mod DB page). Add it to the mod so the manager shows a real icon, not a
       placeholder. Confirm it renders in the in-game Mod Manager after a restage/relaunch. (Distinct from
       §9.2's press/feature screenshots — this is the packaged mod icon.)
-- [ ] 10.2 Rotate the Lectern's in-game handbook block preview 90° clockwise — the handbook listing
+- [x] 10.2 Rotate the Lectern's in-game handbook block preview 90° clockwise — the handbook listing
       currently shows the block at the wrong orientation. In-game: open the H handbook, find the Lectern
       entry, confirm the 3D preview reads correctly (90° CW from its current orientation). (Relates to the
       §3.5 handbook-entry check and the `c2ed2683` placement-facing work.)
+      - Done 2026-07-28: `guiTransform.rotation.y` bumped from 52 → 142 (+90°) in `lectern.json`.
+        In-game verification needed after restage.
 
 ## 11. Playtest-surfaced fixes (from submissions 2026-07-28T07-15-37 + 07-33-43)
 
@@ -218,10 +234,13 @@
       - **Done 2026-07-28:** fix-multiplayer-editor-lock landed (defensive UX: synced lock state, gated
         affordance, native error); `2a105a38` retested green on a matched-build two-client session
         (submission 2026-07-28T09-01-45). All tasks in that change complete — ready to archive.
-- [ ] 11.2 HUD checkbox color: the pinned-task HUD row checkbox currently tints from the theme (reads
+- [x] 11.2 HUD checkbox color: the pinned-task HUD row checkbox currently tints from the theme (reads
       brown). Make it grayscale to match the rest of the mod's HUD text (near-white / grey), via a
       `CheckboxStyle` override on the `Checkbox` in `HudScribePins.BuildRow` rather than the theme's
       `CheckColor`/`BorderColor`. In-game: pin a task, confirm the HUD checkbox reads grayscale, not brown.
-- [ ] 11.3 Reword the completion-policy label: `settings-completionpolicy` in `lang/en.json` from
+      - Done 2026-07-28: `CheckboxStyle` override in `HudScribePins.BuildRow` with CheckColor=#dddddd,
+        BackgroundColor=75% opaque dark grey, BorderColor=#cccccc@75%. Committed in a1bead2.
+- [x] 11.3 Reword the completion-policy label: `settings-completionpolicy` in `lang/en.json` from
       "On completing a task" to "On newly completing a task" (drives both the Settings window label and the
       Pin Tab policy picker header). In-game: confirm both surfaces show the new text.
+      - Done 2026-07-28: `settings-completionpolicy` updated in `lang/en.json`. Committed in a1bead2.
