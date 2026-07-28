@@ -133,9 +133,11 @@
         read-row `TextStyle.FontFamily` and the editor/pin `ScribeMultilineField` (new `fontFamily` param,
         used for BOTH measure + draw so read/edit line metrics stay identical). `ScribeTaskFont.Resolve`
         maps ""→"sans-serif". Live-update confirmation is part of the in-game 6.9.
-- [ ] 6.9 In-game: open Settings → confirm the font selector is present in Window Appearance with all
+- [x] 6.9 In-game: open Settings → confirm the font selector is present in Window Appearance with all
       configured options. Switch fonts → task rows update immediately. Close and reopen the Lectern →
       font persists. Relog → font still persists.
+      - **Confirmed 2026-07-28** (user): all fonts display correctly and the selector switches task-text
+        font live in-game.
 - [ ] 6.10 Test the fallback: temporarily rename a bundled TTF so it can't load → confirm a single
        warning is logged and the selector falls back to the default font without crashing.
 
