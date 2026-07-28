@@ -98,6 +98,22 @@ public sealed class ScribeSettingsDialog : GuiBase
                     scrollController: scrollController,
                     focus: numericFocus)));
 
+    /// <summary>Notify listeners (the lectern's Settings nav button) that this window just opened, so it
+    /// can recolor live (add-active-tab-nav-colors).</summary>
+    public override void OnGuiOpened()
+    {
+        base.OnGuiOpened();
+        modSystem.NotifySettingsVisibilityChanged();
+    }
+
+    /// <summary>Notify listeners that this window just closed — fires for every close route (gear
+    /// re-toggle, title-bar X, Escape) since they all funnel through the base close (add-active-tab-nav-colors).</summary>
+    public override void OnGuiClosed()
+    {
+        base.OnGuiClosed();
+        modSystem.NotifySettingsVisibilityChanged();
+    }
+
     public override void Dispose()
     {
         modSystem.MyPinsChanged -= OnMyPinsChanged;

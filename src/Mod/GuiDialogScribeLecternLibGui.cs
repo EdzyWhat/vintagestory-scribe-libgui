@@ -249,6 +249,11 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         // added/removed/orphaned, or a snapshot refresh). Unsubscribed in OnGuiClosed.
         modSystem.MyPinsChanged += OnMyPinsChanged;
 
+        // Recolor the Settings nav button live when the standalone settings window opens/closes
+        // (add-active-tab-nav-colors) — it can be toggled from the HUD gear while the lectern is open,
+        // so we can't rely on a lectern interaction to trigger the rebuild. Unsubscribed in OnGuiClosed.
+        modSystem.SettingsVisibilityChanged += OnSettingsVisibilityChanged;
+
 #if DEBUG
         // Scroll-jump diagnostics: log EVERY offset change on the shared controller — including the ones
         // LibGUI makes internally (ScrollWheelHandler.ClampOffset's ±50px JumpTo on a content-height
@@ -340,6 +345,14 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         // non-virtualized Column whose content height is exact from frame-1, so no restore needed there.
         if (viewMode != ScribeLecternView.Pinned) CaptureScrollForRestore();
         ForceRebuild();
+    }
+
+    /// <summary>Rebuild when the standalone settings window opens/closes so the Settings nav button picks
+    /// up or drops its active color (add-active-tab-nav-colors). No scroll/focus preservation needed — the
+    /// lectern's own view state is unchanged; only the gear's fill differs.</summary>
+    private void OnSettingsVisibilityChanged()
+    {
+        if (IsOpened()) ForceRebuild();
     }
 
     protected override WindowConfig CreateWindowConfig()
@@ -1260,6 +1273,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             DisposeFocusNodes();
         }
         modSystem.MyPinsChanged -= OnMyPinsChanged;
+        modSystem.SettingsVisibilityChanged -= OnSettingsVisibilityChanged;
         DisposePinState();
 #if DEBUG
         sharedScrollController.OnChanged -= OnScrollControllerChanged;
@@ -1509,16 +1523,23 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             children: new Widget[]
             {
                 // Read view: the checkbox check SVG (scribe-notebook-frame D3 placeholder "R" now replaced).
+                // Each button lights up in its thematic color when its view/surface is current
+                // (add-active-tab-nav-colors): Read/Edit/Pinned from viewMode, Settings from whether the
+                // standalone settings window is open (it is a separate dialog, not a lectern view).
                 TitleButton("scribecheck", "scribe-gui-nav-read", colors.OnSurfaceVariant,
-                    size: size, onTap: EnterReadMode, boxShadows: navShadow),
+                    size: size, onTap: EnterReadMode, boxShadows: navShadow,
+                    activeColor: viewMode == ScribeLecternView.Read ? ScribeRowConstants.NavActiveRead : null),
                 TitleButton("scribeedit", "scribe-gui-nav-edit", colors.OnSurfaceVariant,
-                    size: size, onTap: RequestEditorAccess, boxShadows: navShadow),
-                // Pinned enlarged +10% (§10.2): the pin glyph reads a touch larger than the others.
+                    size: size, onTap: RequestEditorAccess, boxShadows: navShadow,
+                    activeColor: viewMode == ScribeLecternView.Editor ? ScribeRowConstants.NavActiveEdit : null),
+                // Pinned enlarged +15% (§10.2): the pin glyph reads a touch larger than the others.
                 TitleButton("scribepin", "scribe-gui-nav-pinned", colors.OnSurfaceVariant,
-                    size: size, onTap: OnClickSwitchToPinned, iconScale: 1.15f, boxShadows: navShadow),
+                    size: size, onTap: OnClickSwitchToPinned, iconScale: 1.15f, boxShadows: navShadow,
+                    activeColor: viewMode == ScribeLecternView.Pinned ? ScribeRowConstants.NavActivePinned : null),
                 // Settings gear LAST in the group (§10.1), after Read / Edit / Pinned.
                 TitleButton("scribegear", "scribe-gui-nav-settings", colors.OnSurfaceVariant,
-                    size: size, onTap: modSystem.OpenSettings, boxShadows: navShadow),
+                    size: size, onTap: modSystem.OpenSettings, boxShadows: navShadow,
+                    activeColor: modSystem.IsSettingsOpen ? ScribeRowConstants.NavActiveSettings : null),
             });
     }
 
@@ -1526,8 +1547,8 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     /// <paramref name="iconScale"/> grows just the glyph (not the box) — used to enlarge the pin +15%
     /// (§10.2). <paramref name="boxShadows"/> passes an optional drop shadow through to the button's
     /// <c>BoxStyle</c> (the sidebar nav buttons use one to read as raised chrome — v1-playtest-fixes 5.6).</summary>
-    private static Widget TitleButton(string iconName, string tooltipKey, Vector4 color, float size, Action onTap, float iconScale = 1f, BoxShadow[]? boxShadows = null) =>
-        WithTooltip(tooltipKey, new ScribeRowButton(iconName: iconName, iconColor: color, size: size, onTap: onTap, iconScale: iconScale, boxShadows: boxShadows));
+    private static Widget TitleButton(string iconName, string tooltipKey, Vector4 color, float size, Action onTap, float iconScale = 1f, BoxShadow[]? boxShadows = null, Vector4? activeColor = null) =>
+        WithTooltip(tooltipKey, new ScribeRowButton(iconName: iconName, iconColor: color, size: size, onTap: onTap, iconScale: iconScale, boxShadows: boxShadows, activeColor: activeColor));
 
     /// <summary>Wrap a button in a localized hover tooltip (<c>scribe:&lt;key&gt;</c>), using the global
     /// overlay so it isn't clipped by the surrounding boxes.</summary>
@@ -3156,7 +3177,7 @@ internal sealed class ScribeVsIconGlyph : StatelessWidget
 /// <c>LoadSvg</c> fails on our post-startup-unloaded assets (see <see cref="ScribeVsIconGlyph"/>).</summary>
 internal sealed class ScribeRowButton : StatefulWidget
 {
-    public ScribeRowButton(string iconName, Vector4 iconColor, float size, Action onTap, float iconScale = 1f, BoxShadow[]? boxShadows = null, Gui.Widgets.Framework.Key? key = null)
+    public ScribeRowButton(string iconName, Vector4 iconColor, float size, Action onTap, float iconScale = 1f, BoxShadow[]? boxShadows = null, Vector4? activeColor = null, Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
         IconName = iconName;
@@ -3165,6 +3186,7 @@ internal sealed class ScribeRowButton : StatefulWidget
         OnTap = onTap;
         IconScale = iconScale;
         BoxShadows = boxShadows;
+        ActiveColor = activeColor;
     }
 
     public string IconName { get; }
@@ -3185,6 +3207,14 @@ internal sealed class ScribeRowButton : StatefulWidget
     /// <c>BoxStyle.BoxShadows</c>). Null = no shadow (the per-row delete/pin buttons); the enlarged sidebar
     /// nav buttons pass one so they read as raised chrome over the notebook art (v1-playtest-fixes 5.6).</summary>
     public BoxShadow[]? BoxShadows { get; }
+
+    /// <summary>Optional "active tab" fill color (add-active-tab-nav-colors). Null = the normal neutral
+    /// <c>SurfaceHigh</c> resting/hover/press behavior with the passed <see cref="IconColor"/> glyph. When
+    /// set, the button reads as the currently-selected tab: its box fills with this color, its glyph is
+    /// forced to <see cref="ScribeRowConstants.NavActiveGlyph"/> (cream) for contrast, and hover brightens
+    /// the fill by +10 HSV Brightness (via <see cref="ScribeRowConstants.ShiftBrightness"/>). Only the
+    /// sidebar nav buttons pass this; every other caller leaves it null and is unchanged.</summary>
+    public Vector4? ActiveColor { get; }
 
     /// <summary>How much smaller (px, each dimension) the button's drawn chrome is than its nominal
     /// <see cref="Size"/> (2026-07-24 feedback: "2px smaller in height, 2px smaller in width"). The icon
@@ -3208,13 +3238,29 @@ internal sealed class ScribeRowButtonState : State<ScribeRowButton>
         // Solid (opaque) background from the theme's raised-surface tone, brightening resting -> hover ->
         // press so the button reads as interactive. SurfaceHigh is the raised-element tone; nudge it up
         // for hover/press. Kept opaque (W=1) so it fully covers the row text it floats over.
-        Vector4 baseBg = colors.SurfaceHigh with { W = 1f };
-        float lift = pressed ? -0.06f : hovered ? 0.10f : 0f;
-        Vector4 bg = new(
-            Math.Clamp(baseBg.X + lift, 0f, 1f),
-            Math.Clamp(baseBg.Y + lift, 0f, 1f),
-            Math.Clamp(baseBg.Z + lift, 0f, 1f),
-            1f);
+        //
+        // ACTIVE TAB (add-active-tab-nav-colors): when ActiveColor is set this button is the current tab,
+        // so it fills with the thematic color instead of SurfaceHigh, and its glyph is forced to cream for
+        // contrast. Hover brightens the fill by +10 HSV Brightness (reusing ShiftBrightness); press darkens
+        // it slightly (-6 V) for the same tactile feedback the neutral path gives via the RGB lift.
+        Vector4 bg;
+        Vector4 glyphColor = Widget.IconColor;
+        if (Widget.ActiveColor is Vector4 active)
+        {
+            float vShift = pressed ? -6f : hovered ? 10f : 0f;
+            bg = (vShift == 0f ? active : ScribeRowConstants.ShiftBrightness(active, vShift)) with { W = 1f };
+            glyphColor = ScribeRowConstants.NavActiveGlyph;
+        }
+        else
+        {
+            Vector4 baseBg = colors.SurfaceHigh with { W = 1f };
+            float lift = pressed ? -0.06f : hovered ? 0.10f : 0f;
+            bg = new(
+                Math.Clamp(baseBg.X + lift, 0f, 1f),
+                Math.Clamp(baseBg.Y + lift, 0f, 1f),
+                Math.Clamp(baseBg.Z + lift, 0f, 1f),
+                1f);
+        }
 
         // The glyph is sized from the FULL nominal Size so shrinking the box below leaves the icon
         // untouched (2026-07-24 feedback). Shrinking the drawn box by BoxShrink then tightens the padding
@@ -3246,7 +3292,7 @@ internal sealed class ScribeRowButtonState : State<ScribeRowButton>
                     Padding = EdgeInsets.All(drawnPad),
                     BoxShadows = Widget.BoxShadows,
                 },
-                child: new VsIcon(Widget.IconName, glyph, Widget.IconColor)));
+                child: new VsIcon(Widget.IconName, glyph, glyphColor)));
     }
 }
 

@@ -93,6 +93,23 @@ public sealed class ScribeModSystem : ModSystem
     /// (and the HUD) can repaint its per-player pin indicators.</summary>
     public event Action? MyPinsChanged;
 
+    /// <summary>Raised on the client whenever the standalone settings window opens or closes
+    /// (add-active-tab-nav-colors). The settings window is a separate dialog, not a lectern view, so an
+    /// open lectern subscribes to this and rebuilds to recolor its Settings nav button live — regardless
+    /// of which gear (lectern or HUD) toggled the window. Fired from the dialog's own open/close lifecycle
+    /// so every close route (gear re-toggle, X button, Escape) notifies.</summary>
+    public event Action? SettingsVisibilityChanged;
+
+    /// <summary>True while the standalone settings window is currently open (add-active-tab-nav-colors).
+    /// The lectern reads this at build time to decide whether its Settings nav button shows its active
+    /// color. Safe on a pure server (the dialog is null there → false).</summary>
+    public bool IsSettingsOpen => settingsDialog?.IsOpened() == true;
+
+    /// <summary>Invoked by <see cref="ScribeSettingsDialog"/> from its open/close lifecycle to raise
+    /// <see cref="SettingsVisibilityChanged"/>. Centralized here so the dialog doesn't expose the event
+    /// itself.</summary>
+    public void NotifySettingsVisibilityChanged() => SettingsVisibilityChanged?.Invoke();
+
     public override void Start(ICoreAPI api)
     {
         base.Start(api);

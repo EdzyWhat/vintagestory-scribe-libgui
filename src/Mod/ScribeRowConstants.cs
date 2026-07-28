@@ -96,4 +96,25 @@ internal static class ScribeRowConstants
         var shifted = SKColor.FromHsv(h, s * saturationScale, Math.Clamp(v + deltaValue, 0f, 100f));
         return new Vector4(shifted.Red / 255f, shifted.Green / 255f, shifted.Blue / 255f, color.W);
     }
+
+    /// <summary>Thematic "active tab" fill color for the Read nav button — slate blue <c>#465481</c>
+    /// (add-active-tab-nav-colors). Shown as the button's box fill when the Read view is current; the
+    /// glyph switches to <see cref="NavActiveGlyph"/> for contrast, and hover brightens the fill +10 V.</summary>
+    public static readonly Vector4 NavActiveRead = new(0.2745f, 0.3294f, 0.5059f, 1f);
+
+    /// <summary>Thematic "active tab" fill color for the Edit nav button — brick red <c>#9d4b44</c>
+    /// (add-active-tab-nav-colors).</summary>
+    public static readonly Vector4 NavActiveEdit = new(0.6157f, 0.2941f, 0.2667f, 1f);
+
+    /// <summary>Thematic "active tab" fill color for the Pinned nav button — sage green <c>#6b8257</c>
+    /// (add-active-tab-nav-colors).</summary>
+    public static readonly Vector4 NavActivePinned = new(0.4196f, 0.5098f, 0.3412f, 1f);
+
+    /// <summary>Thematic "active tab" fill color for the Settings nav button — warm gray <c>#746f66</c>
+    /// (add-active-tab-nav-colors). Shown while the standalone settings window is open.</summary>
+    public static readonly Vector4 NavActiveSettings = new(0.4549f, 0.4353f, 0.4000f, 1f);
+
+    /// <summary>Cream glyph color <c>#eae6dd</c> used for a nav button's icon while that button is the
+    /// active tab, for contrast against the thematic fill (add-active-tab-nav-colors).</summary>
+    public static readonly Vector4 NavActiveGlyph = new(0.9176f, 0.9020f, 0.8667f, 1f);
 }
