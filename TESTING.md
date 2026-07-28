@@ -1626,3 +1626,68 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       *(v1-release-checklist 1.12)*
       - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Honors theme." The Pin Tab
         follows the Lectern-dialog theme/size settings (not the HUD-prefixed settings).
+
+## scribe-settings-followups
+
+> Settings UX polish: gradual HUD fade for unpin/delete (ScribeFadeText widget, self-ticking), durable
+> sink-reorder-and-stay (sunkOrder session set), settings form layout (PairedControls rows, HuggingCheckbox),
+> Up/Down arrow stepping in numeric fields (ScribeNumericField), lang renames (Mid-Left/Mid-Right), HUD gear
+> size reduction. Build clean; restaged Debug 2026-07-27 — fully relaunch first.
+
+- [ ] `f4825eb0` **HUD gradual fade.** Complete a HUD task under Unpin and under Delete: the task text
+      fades gradually from full to zero opacity across the 1.5s window, not an instant jump; the checkbox
+      stays opaque; uncheck mid-window and the text returns to full opacity and nothing is applied.
+      *(scribe-settings-followups 6.1)*
+- [ ] `7a86b890` **Sink stays at end.** Complete a HUD task under Sink: after the window elapses the row
+      moves to the END of the list. Then uncheck it — the row STAYS at the end, not jumping back to its
+      prior slot. Test under Keep policy: same settle-and-stay behavior. *(scribe-settings-followups 6.2)*
+- [ ] `7361924f` **Settings paired layout.** Open Scribe Settings: max-rows and row-width sit on ONE row;
+      HUD text size and window text size sit on ONE row; the Collapse-HUD checkbox hugs its label and is
+      not stretched full width. *(scribe-settings-followups 6.3)*
+- [ ] `5db8d149` **Numeric arrow stepping.** In Scribe Settings, focus a numeric field and press Up arrow —
+      the value steps up by that field's increment, clamped to range. Press Down — the value steps down.
+      *(scribe-settings-followups 6.4)*
+- [ ] `6b967f10` **Mid-Left Mid-Right labels.** Open the HUD-anchor dropdown — the mid-edge options read
+      "Mid-Left" and "Mid-Right". Also confirm the HUD gear icon is visibly smaller and proportional to the
+      collapse chevron beside it. *(scribe-settings-followups 6.5)*
+
+## v1-playtest-fixes (round 2)
+
+> Visual polish pass: sidebar nav buttons enlarged ×1.7 + retuned column widths, themed surface fill
+> behind central region and title row when Pixel Art is OFF, theme-derived drag wash (lighter source /
+> darker drop target) with 1px border in Edit and Pinned tabs, stronger pinned-row resting tint
+> (0.22→0.33). Build clean; restaged Debug 2026-07-27 — fully relaunch first.
+
+- [ ] `bb4643ce` **Polish round 2.** Open the Lectern: (a) the title bar text is noticeably larger than
+      the row body text; (b) in Settings and the Pinned tab policy picker the order is Keep (stay), Keep
+      (sink), Unpin, Delete; (c) set the HUD anchor to a Left edge — confirm header/footer text aligns
+      LEFT; set it to a Right edge — aligns RIGHT. *(v1-playtest-fixes 5.4)*
+- [ ] `a62162ac` **Visual pass.** Open the Lectern: (a) sidebar nav buttons are larger and sit correctly
+      within the right column; (b) with Pixel Art OFF the central region and title row show a themed surface
+      fill, not a transparent gap; (c) drag-reorder in Edit view and in the Pinned tab shows a lighter wash
+      on the grabbed row and a darker wash on the hover target, each with a 1px border — verify in both the
+      pixel-art light theme and the global dark theme; (d) pinned task rows show a stronger resting tint in
+      read/editor view. *(v1-playtest-fixes 8.6)*
+
+## v1-release-checklist (in-game items)
+
+> Handbook and font-selector manual checks from the v1-release-checklist.
+
+- [ ] `b7d1e703` **Handbook rotation.** Open the in-game handbook (H key), find the Lectern entry, and
+      confirm the 3D block preview reads correctly — the book face is visible, rotated correctly from the
+      prior orientation. *(v1-release-checklist 10.2)*
+- [ ] `8683093c` **Font fallback.** Temporarily rename a bundled TTF file so it cannot load, then open
+      the Lectern and select that font in the font selector. Confirm: exactly ONE warning is logged, the
+      selector falls back to the default font without crashing, and task text renders normally. Restore the
+      TTF after. *(v1-release-checklist 6.10)*
+
+## scribe-notebook-frame (remaining)
+
+> Post-playtest fix: Pixel Art canvas now tracks the live W value (re-applies WindowSize + SyncLayoutSize
+> in OnRenderGUI when W changes), so raising Pixel Art Size above the opened value grows the art canvas
+> live without a relog. Restaged Debug 2026-07-26 — fully relaunch first.
+
+- [ ] `52af67fd` **Pixel Art canvas grows live.** In Scribe Settings, raise Pixel Art Size above the value
+      the Lectern was opened at — the art canvas grows to fill the new size immediately without requiring a
+      relog. Also confirm the title text has its left padding and is not flush left.
+      *(scribe-notebook-frame 7.4)*
