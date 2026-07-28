@@ -135,6 +135,45 @@ public sealed class ScribePlayerSettings
     /// chokepoint. Clamped and snapped on load.</summary>
     public float WindowFontScale { get; set; } = DefaultFontScale;
 
+    /// <summary>Font family for the Lectern's task/note ROW text (v1-release-checklist §6). Empty string
+    /// (the default) means "use the built-in body font" — the existing sans-serif look, so a player who
+    /// never touches the selector is unchanged. A non-empty value must be one of <see cref="KnownTaskFonts"/>
+    /// (the bundled/registered families); an unrecognized value falls back to the default on load
+    /// (<see cref="NormalizeTaskFontFamily"/>). This governs ONLY task/note text — the in-Lectern buttons
+    /// use a fixed face chosen by the Mod layer, not this preference. A plain display string carried by no
+    /// document/pin data, so it needs no codec version bump.</summary>
+    public string TaskFontFamily { get; set; } = DefaultTaskFontFamily;
+
+    /// <summary>The default task-font value: empty string = the built-in body font (no override).</summary>
+    public const string DefaultTaskFontFamily = "";
+
+    /// <summary>The task-font families the selector offers, by exact registered family name. The empty
+    /// string (<see cref="DefaultTaskFontFamily"/>) is the implicit first choice (built-in body font) and
+    /// is always valid; these are the non-default options. "Playfair Display" and "Cormorant Unicase" are
+    /// registered by the LibGUI (<c>gui</c>) dependency; the rest are bundled by Scribe. Kept in Core as
+    /// plain strings (no game/font API reference) so <see cref="NormalizeTaskFontFamily"/> stays
+    /// unit-testable; the Mod layer owns actually registering and rendering them.</summary>
+    public static readonly string[] KnownTaskFonts =
+    {
+        "Scapholene",
+        "Caudex",
+        "La Belle Aurore",
+        "Noto Sans",
+        "Noto Serif",
+        "Playfair Display",
+        "Cormorant Unicase",
+    };
+
+    /// <summary>Maps a loaded task-font value to a valid one: the empty-string default, or an exact match
+    /// in <see cref="KnownTaskFonts"/>. Any other value (a hand-edited typo, or a font removed in a later
+    /// version) falls back to <see cref="DefaultTaskFontFamily"/> so the row text always resolves to a real
+    /// registered family. Null is treated as the default.</summary>
+    public static string NormalizeTaskFontFamily(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return DefaultTaskFontFamily;
+        return Array.IndexOf(KnownTaskFonts, value) >= 0 ? value : DefaultTaskFontFamily;
+    }
+
     /// <summary>Default font-scale multiplier (no scaling) for a player who has never changed it.</summary>
     public const float DefaultFontScale = 1.0f;
 
@@ -201,6 +240,7 @@ public sealed class ScribePlayerSettings
         HudOffsetY = ClampHudOffset(HudOffsetY);
         HudFontScale = ClampFontScale(HudFontScale);
         WindowFontScale = ClampFontScale(WindowFontScale);
+        TaskFontFamily = NormalizeTaskFontFamily(TaskFontFamily);
         return this;
     }
 }

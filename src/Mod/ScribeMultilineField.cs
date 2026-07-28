@@ -43,14 +43,15 @@ internal readonly record struct ScribeVisualLine(string Text, int Start);
 internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox
 {
     /// <summary>Font family used for BOTH measuring and drawing this field's text. It MUST match the
-    /// family the read view's <see cref="Gui.Widgets.Basic.Text"/> uses (its <c>TextStyle</c> default), or
-    /// the two views resolve different typefaces with different line metrics and a single-line row ends up
-    /// a couple of pixels taller in one view than the other — which then also makes the pixel-based
-    /// scroll-offset restore across a view switch land on a slightly different row. Passing "" here (an old
-    /// value) resolved to a DIFFERENT system typeface than "sans-serif", which was the ~2px read/edit
-    /// row-height mismatch. Keep this in sync with <c>TextStyle()</c>'s default `FontFamily`. (Task rows are
-    /// deliberately NOT in the title's bundled Caudex face — only the dialog title uses that.)</summary>
-    private const string FontFamily = "sans-serif";
+    /// family the read view's <see cref="Gui.Widgets.Basic.Text"/> uses for the same row, or the two views
+    /// resolve different typefaces with different line metrics and a single-line row ends up a couple of
+    /// pixels taller in one view than the other — which then also makes the pixel-based scroll-offset
+    /// restore across a view switch land on a slightly different row. Passing "" here resolves to a
+    /// DIFFERENT system typeface than "sans-serif" (the ~2px read/edit mismatch we hit before), so the
+    /// setter coalesces null/empty to the "sans-serif" default. Since v1-release-checklist §6 the family is
+    /// no longer fixed: the player's task-font choice flows in here AND into the read row's TextStyle via
+    /// the same resolver (<c>ScribeTaskFont.Resolve</c>), keeping the two views on one family.</summary>
+    private string fontFamily = "sans-serif";
 
     private string text = "";
     private string placeholder = "";
@@ -79,6 +80,9 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox
     public int SelectionAnchor { get => selectionAnchor; set => SetProperty(ref selectionAnchor, value, repaint: true); }
     public bool FieldHasFocus { get => hasFocus; set => SetProperty(ref hasFocus, value, repaint: true); }
     public float FontSize { get => fontSize; set => SetProperty(ref fontSize, value, relayout: true); }
+    /// <summary>Task-text font family (v1-release-checklist §6). Coalesces null/empty to "sans-serif" so an
+    /// unset value keeps the built-in body face; changing it relayouts (family changes line metrics).</summary>
+    public string FontFamily { get => fontFamily; set => SetProperty(ref fontFamily, string.IsNullOrEmpty(value) ? "sans-serif" : value, relayout: true); }
     public float PadX { get => padX; set => SetProperty(ref padX, value, relayout: true); }
     public float PadY { get => padY; set => SetProperty(ref padY, value, relayout: true); }
     public Vector4 TextColor { get => textColor; set => SetProperty(ref textColor, value, repaint: true); }
@@ -91,8 +95,8 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox
         float availWidth = float.IsPositiveInfinity(Constraints.MaxWidth) ? 300f : Constraints.MaxWidth;
         float textWidth = Math.Max(1f, availWidth - PadX * 2);
 
-        WrapInto(visualLines, text, textWidth, fontSize);
-        lineHeight = MeasureLineHeight(fontSize);
+        WrapInto(visualLines, text, textWidth, fontSize, fontFamily);
+        lineHeight = MeasureLineHeight(fontSize, fontFamily);
 
         float height = visualLines.Count * lineHeight + PadY * 2;
         // Fill the available width (so it looks like a field); height follows content = auto-grow.
@@ -166,7 +170,7 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox
     // Greedy word-wrap to a pixel width, honoring explicit '\n', recording each visual line's source
     // offset so the caret/selection can map flat offsets onto (line, column). Public API only
     // (MeasureText); LibGUI's BreakIntoLines is internal.
-    private static void WrapInto(List<ScribeVisualLine> outLines, string s, float maxWidth, float fontSize)
+    private static void WrapInto(List<ScribeVisualLine> outLines, string s, float maxWidth, float fontSize, string fontFamily)
     {
         outLines.Clear();
         int paragraphStart = 0;
@@ -185,7 +189,7 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox
             foreach (var word in paragraph.Split(' '))
             {
                 string candidate = current.Length == 0 ? word : current + " " + word;
-                float w = TextLayoutHelper.MeasureText(candidate, FontFamily, fontSize, FontWeight.Normal).X;
+                float w = TextLayoutHelper.MeasureText(candidate, fontFamily, fontSize, FontWeight.Normal).X;
                 if (w <= maxWidth || current.Length == 0)
                 {
                     if (current.Length == 0)
@@ -214,9 +218,9 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox
         }
     }
 
-    private static float MeasureLineHeight(float fontSize)
+    private static float MeasureLineHeight(float fontSize, string fontFamily)
     {
-        float h = TextLayoutHelper.MeasureText("Ag", FontFamily, fontSize, FontWeight.Normal).Y;
+        float h = TextLayoutHelper.MeasureText("Ag", fontFamily, fontSize, FontWeight.Normal).Y;
         return h > 0 ? h : fontSize * 1.2f;
     }
 
@@ -297,7 +301,7 @@ internal sealed class ScribeMultilineFieldRenderWidget : RenderObjectWidget
 {
     public ScribeMultilineFieldRenderWidget(string text, string placeholder, int caret, int selectionAnchor, bool hasFocus,
         float fontSize, float padX, float padY, Vector4 textColor, Vector4 placeholderColor, Vector4 caretColor, Vector4 selectionColor,
-        Vector4 boxColor, Vector4 borderColor, float borderThickness, Vector4 cornerRadii)
+        Vector4 boxColor, Vector4 borderColor, float borderThickness, Vector4 cornerRadii, string fontFamily)
     {
         Text = text;
         Placeholder = placeholder;
@@ -305,6 +309,7 @@ internal sealed class ScribeMultilineFieldRenderWidget : RenderObjectWidget
         SelectionAnchor = selectionAnchor;
         HasFocus = hasFocus;
         FontSize = fontSize;
+        FontFamily = fontFamily;
         PadX = padX;
         PadY = padY;
         TextColor = textColor;
@@ -323,6 +328,7 @@ internal sealed class ScribeMultilineFieldRenderWidget : RenderObjectWidget
     public int SelectionAnchor { get; }
     public bool HasFocus { get; }
     public float FontSize { get; }
+    public string FontFamily { get; }
     public float PadX { get; }
     public float PadY { get; }
     public Vector4 TextColor { get; }
@@ -345,6 +351,7 @@ internal sealed class ScribeMultilineFieldRenderWidget : RenderObjectWidget
         ro.SelectionAnchor = SelectionAnchor;
         ro.FieldHasFocus = HasFocus;
         ro.FontSize = FontSize;
+        ro.FontFamily = FontFamily;
         ro.PadX = PadX;
         ro.PadY = PadY;
         ro.TextColor = TextColor;
@@ -370,6 +377,7 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         string placeholder = "",
         FocusNode? focusNode = null,
         float fontSize = 15f,
+        string fontFamily = "sans-serif",
         float padX = 8f,
         float padY = 6f,
         bool autoFocus = false,
@@ -386,6 +394,7 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         Placeholder = placeholder;
         FocusNode = focusNode;
         FontSize = fontSize;
+        FontFamily = fontFamily;
         PadX = padX;
         PadY = padY;
         AutoFocus = autoFocus;
@@ -403,6 +412,9 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
     public string Placeholder { get; }
     public FocusNode? FocusNode { get; }
     public float FontSize { get; }
+    /// <summary>Task-text font family (v1-release-checklist §6); defaults to "sans-serif" (the built-in
+    /// body face). Must match the read row's resolved family so the two views keep identical line metrics.</summary>
+    public string FontFamily { get; }
     /// <summary>Internal horizontal padding for the field's text box (pixels). Fed from
     /// <see cref="ScribeRowStyle.FieldPadX"/> so the read view can match the same inset.</summary>
     public float PadX { get; }
@@ -854,6 +866,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 boxColor: colors.SurfaceHigh,
                 borderColor: focusNode.HasFocus ? colors.Primary : colors.Border,
                 borderThickness: 1f,
-                cornerRadii: Vector4.One * 4f));
+                cornerRadii: Vector4.One * 4f,
+                fontFamily: Widget.FontFamily));
     }
 }

@@ -9,8 +9,50 @@ Caudex
   with Reserved Font Name "Caudex".
   Licensed under the SIL Open Font License, Version 1.1.
   License text: src/Mod/assets/scribe/textures/fonts/OFL.txt
-  Bundled file: src/Mod/assets/scribe/textures/fonts/caudex-regular.ttf (unmodified)
+  Bundled file: src/Mod/assets/scribe/textures/fonts/caudex-bold.ttf (unmodified)
 
-  The SIL OFL 1.1 permits bundling and redistribution of the font inside this
-  mod. The font files are shipped unmodified and therefore retain their original
-  Reserved Font Name.
+Scapholène
+  Copyright (c) 2025, Scapholène.
+  Licensed under the Scapholène Font License v1.0 — personal and commercial use
+  and redistribution permitted, provided this license and credit are retained;
+  modification is not permitted (the font is bundled unmodified).
+  License text: src/Mod/assets/scribe/textures/fonts/LICENSE_Scapholene.txt
+  Bundled file: src/Mod/assets/scribe/textures/fonts/scapholene-regular.ttf (unmodified)
+  Suggested for Scribe by Artekuno in the teaser thread.
+
+La Belle Aurore
+  Copyright (c) 2010, Kimberly Geswein (kimberlygeswein.com),
+  with Reserved Font Name "La Belle Aurore".
+  Licensed under the SIL Open Font License, Version 1.1.
+  License text: src/Mod/assets/scribe/textures/fonts/OFL-LaBelleAurore.txt
+  Bundled file: src/Mod/assets/scribe/textures/fonts/labelleaurore-regular.ttf (unmodified)
+
+Noto Sans
+  Copyright the Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic),
+  with Reserved Font Name "Noto".
+  Licensed under the SIL Open Font License, Version 1.1.
+  License text: src/Mod/assets/scribe/textures/fonts/OFL-NotoSans.txt
+  Bundled file: src/Mod/assets/scribe/textures/fonts/notosans-regular.ttf (unmodified)
+
+Noto Serif
+  Copyright the Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic),
+  with Reserved Font Name "Noto".
+  Licensed under the SIL Open Font License, Version 1.1.
+  License text: src/Mod/assets/scribe/textures/fonts/OFL-NotoSerif.txt
+  Bundled file: src/Mod/assets/scribe/textures/fonts/notoserif-regular.ttf (unmodified)
+
+  The SIL OFL 1.1 permits bundling and redistribution of these fonts inside this
+  mod. The OFL font files are shipped unmodified and therefore retain their
+  original Reserved Font Names. Scapholène is likewise shipped unmodified under
+  its own license.
+
+  Playfair Display and Cormorant Unicase are also offered by Scribe's font
+  selector; those faces are provided and registered by the LibGUI (`gui`)
+  dependency, not bundled by Scribe, and are credited by that project.
+
+Inspiration
+-----------
+
+Wanderer's Sketchbook (by JeanPierre)
+  Scribe's task-pinning concept was inspired in part by Wanderer's Sketchbook.
+  Credit and thanks to JeanPierre for the original mod.

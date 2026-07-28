@@ -18,7 +18,8 @@ internal readonly record struct ScribeRowStyle(
     float CheckboxSize,
     float FieldPadX,
     float FieldPadY,
-    float ControlSize)
+    float ControlSize,
+    string TaskFontFamily)
 {
     /// <summary>
     /// Builds a row style from the player's consolidated settings. THIS IS THE SINGLE PLACE where the
@@ -42,6 +43,10 @@ internal readonly record struct ScribeRowStyle(
             // Per-row control glyphs (grip/pin/delete) scale with the row like the checkbox does, so
             // they grow/shrink with the text-size preference (lectern-gui-shell "scales with text size").
             // Sized to the checkbox so the affordance column reads as a sibling of the checkbox column.
-            ControlSize: ScribeRowConstants.RowCheckboxSize * scale);
+            ControlSize: ScribeRowConstants.RowCheckboxSize * scale,
+            // The player's task-text font choice (v1-release-checklist §6), normalized to a known family
+            // or "" (built-in body font). Read/editor rows apply it to their task/note text; re-deriving
+            // the style per build repaints an open Lectern when the selector changes.
+            TaskFontFamily: ScribePlayerSettings.NormalizeTaskFontFamily(s.TaskFontFamily));
     }
 }

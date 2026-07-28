@@ -87,28 +87,52 @@
 
 ## 6. Font selector — decide lineup and bundle faces
 
-- [ ] 6.1 Decide the font lineup (design.md open question #2). Confirm Scapholene is in. Choose up to
+- [x] 6.1 Decide the font lineup (design.md open question #2). Confirm Scapholene is in. Choose up to
       3 additional faces from: the existing LibGUI-bundled serifs (Playfair Display / Cormorant
       Unicase — zero new assets), or other faces with verified permissive licenses. Document the
       decision here (edit this task with a note once decided).
-- [ ] 6.2 Decide the button font (design.md open question #1). Either: keep the current default for
+      - Decided 2026-07-27 (user): lineup = Default (built-in body font) + **Scapholene, Caudex, La Belle
+        Aurore, Noto Sans, Noto Serif** (bundled) + **Playfair Display, Cormorant Unicase** (zero-asset,
+        from the LibGUI `gui` dep). 7 named faces + default. Codified in `ScribePlayerSettings.KnownTaskFonts`.
+- [x] 6.2 Decide the button font (design.md open question #1). Either: keep the current default for
       buttons and only change task text, or choose a button face. Document the decision.
-- [ ] 6.3 Download and verify the license for each new font to be bundled (Scapholene +  any others).
+      - Decided 2026-07-27 (user): the in-Lectern TEXT buttons (Edit / New Task / Done Editing) use a
+        FIXED **Caudex** face (`ScribeTaskFont.ButtonFamily`), independent of the task-text selector; the
+        font selector governs task/note row text ONLY.
+- [x] 6.3 Download and verify the license for each new font to be bundled (Scapholene +  any others).
       Confirm license allows mod redistribution.
-- [ ] 6.4 Add new TTF file(s) to `src/Mod/assets/scribe/textures/fonts/`. Add OFL or license
+      - Verified 2026-07-27: Scapholène v1.0 (redistribution permitted with license+credit retained, no
+        modification — bundled unmodified, fine); La Belle Aurore / Noto Sans / Noto Serif all SIL OFL 1.1.
+        License files shipped alongside the TTFs; all recorded in CREDITS.
+- [x] 6.4 Add new TTF file(s) to `src/Mod/assets/scribe/textures/fonts/`. Add OFL or license
       text files alongside them if required by the license.
-- [ ] 6.5 In `ScribeModSystem.StartClientSide`, register each new face via
+      - Done 2026-07-27: added scapholene-regular.ttf, labelleaurore-regular.ttf, notosans-regular.ttf,
+        notoserif-regular.ttf + LICENSE_Scapholene.txt, OFL-LaBelleAurore.txt, OFL-NotoSans.txt,
+        OFL-NotoSerif.txt (~2.3 MB total).
+- [x] 6.5 In `ScribeModSystem.StartClientSide`, register each new face via
       `FontRegistry.RegisterCustomFont` — follow the exact Caudex pattern (`caudex-regular.ttf`
       registration). Verify each face loads without error on a Debug build (`bash build/restage.sh Debug`
       + relaunch; watch for font-load warnings in the log).
-- [ ] 6.6 Add `TaskFontFamily` (string, defaults to `""` = system default) to `ScribePlayerSettings`.
-      Wire it through `UpdateMySettings` / `ApplySettings` like the other settings fields. No Core
-      change — this is Mod-side only.
-- [ ] 6.7 Add a font selector control to `ScribeSettingsContent` in the Window Appearance section,
+      - Done 2026-07-27: `RegisterCustomFonts` now loads the 4 bundled faces (each under all weights, per
+        the Caudex pattern) with a per-face load-failure warning; Playfair/Cormorant come from LibGUI so
+        aren't re-registered. Build clean; in-game font-load-log check is part of 6.9.
+- [x] 6.6 Add `TaskFontFamily` (string, defaults to `""` = system default) to `ScribePlayerSettings`.
+      Wire it through `UpdateMySettings` / `ApplySettings` like the other settings fields.
+      - Done 2026-07-27. NOTE: `ScribePlayerSettings` lives in `src/Core/`, not Mod (design D1's
+        "Mod-side only" was inaccurate). Added `TaskFontFamily` (string, default "") + `KnownTaskFonts`
+        allowlist + `NormalizeTaskFontFamily` (falls unknown→default) there — a plain POCO string, no VS
+        API, so the Core-unit-testable invariant holds. Normalized() clamps it. User approved this location.
+- [x] 6.7 Add a font selector control to `ScribeSettingsContent` in the Window Appearance section,
       following the existing `PairedControls` / dropdown pattern. Add the `settings-taskfont` and
       option-label lang keys to `lang/en.json`.
-- [ ] 6.8 In `GuiDialogScribeLecternLibGui`, apply `TaskFontFamily` to the `TextStyle` used for task
+      - Done 2026-07-27: `Dropdown<string>` (Default + KnownTaskFonts, labeled by family name) in the
+        Window Appearance section; `settings-taskfont`/`-help`/`-default` lang keys added.
+- [x] 6.8 In `GuiDialogScribeLecternLibGui`, apply `TaskFontFamily` to the `TextStyle` used for task
       row text. Confirm the font updates live when `ApplySettings` fires (no dialog restart needed).
+      - Done 2026-07-27: threaded through `ScribeRowStyle.TaskFontFamily` (re-derived per build) →
+        read-row `TextStyle.FontFamily` and the editor/pin `ScribeMultilineField` (new `fontFamily` param,
+        used for BOTH measure + draw so read/edit line metrics stay identical). `ScribeTaskFont.Resolve`
+        maps ""→"sans-serif". Live-update confirmation is part of the in-game 6.9.
 - [ ] 6.9 In-game: open Settings → confirm the font selector is present in Window Appearance with all
       configured options. Switch fonts → task rows update immediately. Close and reopen the Lectern →
       font persists. Relog → font still persists.
@@ -117,15 +141,22 @@
 
 ## 7. Credits and CHANGELOG
 
-- [ ] 7.1 Update `CREDITS` at the repo root: add an entry for every newly bundled font (name, author
+- [x] 7.1 Update `CREDITS` at the repo root: add an entry for every newly bundled font (name, author
       URL, license name). Add an entry crediting JeanPierre and Wanderer's Sketchbook as an inspiration
       for the task-pinning concept.
-- [ ] 7.2 Create `CHANGELOG.md` at the repo root. Add the `## [0.1.0]` section with:
+      - Done 2026-07-27: CREDITS now lists Caudex, Scapholène (+ Artekuno suggestion), La Belle Aurore,
+        Noto Sans, Noto Serif with license + bundled-file paths, notes Playfair/Cormorant come from LibGUI,
+        and adds a Wanderer's Sketchbook / JeanPierre inspiration entry. Also fixed the stale
+        caudex-regular.ttf reference → caudex-bold.ttf (the file we actually ship).
+- [x] 7.2 Create `CHANGELOG.md` at the repo root. Add the `## [0.1.0]` section with:
       - **Added**: Lectern block (place, edit tasks/notes, multiplayer-safe), pinned-task HUD
         (always-on, rebindable P hotkey, completion policies), Scribe Settings (all preferences),
         font selector for task text (Scapholene + [other faces]), survival grid recipe.
       - **Dependencies**: `game 1.22.0`, `gui 2.0.0 (LibGUI)`.
       - Date: fill in on the day of the tag.
+      - Done 2026-07-27: created CHANGELOG.md (Keep a Changelog format) with the `## [0.1.0] - Unreleased`
+        entry — Added (Lectern, recipe, HUD, Pin Tab, Settings, font selector) + Dependencies. Date to be
+        filled on tag day (§8.4).
 
 ## 8. Scope freeze and ship (RELEASE.md A6 + Track G)
 

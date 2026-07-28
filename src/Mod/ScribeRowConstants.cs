@@ -118,3 +118,27 @@ internal static class ScribeRowConstants
     /// active tab, for contrast against the thematic fill (add-active-tab-nav-colors).</summary>
     public static readonly Vector4 NavActiveGlyph = new(0.9176f, 0.9020f, 0.8667f, 1f);
 }
+
+/// <summary>Maps the player's task-font preference (<c>ScribePlayerSettings.TaskFontFamily</c>) to the
+/// concrete family name a LibGUI <c>TextStyle</c>/<c>ScribeMultilineField</c> should render with
+/// (v1-release-checklist §6). The stored value is a registered family name or the empty-string default;
+/// this resolves the default to LibGUI's built-in body family (<c>"sans-serif"</c>, the <c>TextStyle</c>
+/// default) so the row text is unchanged for a player who never picks a font. Any non-empty value is
+/// assumed already-normalized by <c>ScribePlayerSettings.NormalizeTaskFontFamily</c> to a registered
+/// family, so it is passed through verbatim.</summary>
+internal static class ScribeTaskFont
+{
+    /// <summary>LibGUI's default <c>TextStyle.FontFamily</c>; the resting body face when no font is chosen.</summary>
+    public const string DefaultFamily = "sans-serif";
+
+    /// <summary>Fixed font family for the in-Lectern TEXT buttons (Edit / New Task / Done Editing) —
+    /// Caudex, the same bundled face as the dialog title (v1-release-checklist §6.2). Deliberately NOT the
+    /// player's task-font choice: the buttons keep one consistent face regardless of the task-text font.
+    /// Caudex is registered under every weight in <c>ScribeModSystem.RegisterCustomFonts</c>.</summary>
+    public const string ButtonFamily = "Caudex";
+
+    /// <summary>Family name to render with: the built-in body face for the empty default, else the chosen
+    /// registered family.</summary>
+    public static string Resolve(string? taskFontFamily) =>
+        string.IsNullOrEmpty(taskFontFamily) ? DefaultFamily : taskFontFamily;
+}

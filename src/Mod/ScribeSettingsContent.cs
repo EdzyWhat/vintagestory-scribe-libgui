@@ -163,7 +163,34 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                     LabeledControl(
                         "settings-windowfontscale", colors, scale,
                         FontScaleField("windowfontscale", settings.WindowFontScale, v => onMutate(s => s.WindowFontScale = v)))),
+
+                // Task-text font selector (v1-release-checklist §6): picks the family for task/note ROW
+                // text; the empty-string default keeps the built-in body font. Governs task text only —
+                // the in-Lectern buttons keep a fixed face. Writes through UpdateMySettings, which
+                // NormalizeTaskFontFamily-clamps and repaints the open Lectern live.
+                LabeledControl(
+                    "settings-taskfont", colors, scale,
+                    new Dropdown<string>(
+                        value: ScribePlayerSettings.NormalizeTaskFontFamily(settings.TaskFontFamily),
+                        items: TaskFontItems(),
+                        onChanged: v => onMutate(s => s.TaskFontFamily = v))),
             });
+    }
+
+    /// <summary>Font-selector options: the empty-string "Default" (built-in body font) followed by each
+    /// bundled/registered family from <see cref="ScribePlayerSettings.KnownTaskFonts"/>, labeled by its own
+    /// family name. Kept in sync with the registration in <c>ScribeModSystem.RegisterCustomFonts</c>.</summary>
+    private static List<DropdownItem<string>> TaskFontItems()
+    {
+        var items = new List<DropdownItem<string>>
+        {
+            new() { Value = ScribePlayerSettings.DefaultTaskFontFamily, Label = Lang.Get("scribe:settings-taskfont-default") },
+        };
+        foreach (var family in ScribePlayerSettings.KnownTaskFonts)
+        {
+            items.Add(new DropdownItem<string> { Value = family, Label = family });
+        }
+        return items;
     }
 
     /// <summary>HUD Appearance: how the pinned-task HUD looks — anchor, row cap, row width, position

@@ -1929,7 +1929,7 @@ internal sealed class ScribeLecternReadContentState : State<ScribeLecternReadCon
     {
         var colors = Theme.Of(context).ColorScheme;
 
-        TextStyle switchTextStyle = new() { FontSize = 14, Color = colors.OnPrimary };
+        TextStyle switchTextStyle = new() { FontSize = 14, Color = colors.OnPrimary, FontFamily = ScribeTaskFont.ButtonFamily };
 
         // The scrollable row list. Each row is a self-stateful widget keyed by its block index so the
         // ListView tracks it across document changes (design D4). variableHeight so a wrapped
@@ -2035,7 +2035,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
     {
         var colors = Theme.Of(context).ColorScheme;
         var style = Widget.Style;
-        TextStyle textStyle = new() { FontSize = style.FontSize, Color = colors.OnSurface, SoftWrap = true };
+        TextStyle textStyle = new() { FontSize = style.FontSize, Color = colors.OnSurface, SoftWrap = true, FontFamily = ScribeTaskFont.Resolve(style.TaskFontFamily) };
 
         var children = new List<Widget>();
 
@@ -2343,7 +2343,7 @@ internal sealed class ScribeLecternEditorContentState : State<ScribeLecternEdito
     public override Widget Build(BuildContext context)
     {
         var colors = Theme.Of(context).ColorScheme;
-        TextStyle buttonTextStyle = new() { FontSize = 14, Color = colors.OnPrimary };
+        TextStyle buttonTextStyle = new() { FontSize = 14, Color = colors.OnPrimary, FontFamily = ScribeTaskFont.ButtonFamily };
 
         Widget scrollBody;
         if (Widget.Blocks.Count == 0)
@@ -2583,6 +2583,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             placeholder: placeholder,
             focusNode: Widget.FocusNode,
             fontSize: style.FontSize,
+            fontFamily: ScribeTaskFont.Resolve(style.TaskFontFamily),
             padX: style.FieldPadX,
             padY: style.FieldPadY,
             autoFocus: Widget.AutoFocus,
@@ -3020,6 +3021,7 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
             initialText: data.Text,
             focusNode: Widget.FocusNode,
             fontSize: style.FontSize,
+            fontFamily: ScribeTaskFont.Resolve(style.TaskFontFamily),
             padX: style.FieldPadX,
             padY: style.FieldPadY,
             autoFocus: Widget.AutoFocus,

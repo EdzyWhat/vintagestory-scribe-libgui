@@ -362,6 +362,35 @@ public sealed class ScribeModSystem : ModSystem
             FontRegistry.RegisterCustomFont("Caudex", weight, bold);
         }
         api.Logger.Notification("[scribe] bundled font 'Caudex' (bold cut) registered under all weights for the lectern dialog title");
+
+        // Task-text font selector faces (v1-release-checklist §6): the player picks one of these for the
+        // Lectern's task/note rows. Each is a single-cut regular TTF registered under ALL weights (same
+        // reasoning as Caudex above — the resolver may land on any weight, so map them all to the one face).
+        // "Playfair Display" / "Cormorant Unicase" are NOT here: the LibGUI (`gui`) dependency already
+        // registers those, so the selector can offer them at zero asset cost. Family names must match
+        // ScribePlayerSettings.KnownTaskFonts exactly. A missing/corrupt face logs one warning and is simply
+        // absent from the resolver (its selector option then falls through to the default body font).
+        var taskFonts = new (string family, string path)[]
+        {
+            ("Scapholene", "textures/fonts/scapholene-regular.ttf"),
+            ("La Belle Aurore", "textures/fonts/labelleaurore-regular.ttf"),
+            ("Noto Sans", "textures/fonts/notosans-regular.ttf"),
+            ("Noto Serif", "textures/fonts/notoserif-regular.ttf"),
+        };
+        foreach (var (family, path) in taskFonts)
+        {
+            var face = loader.LoadFont("scribe", path);
+            if (face is null)
+            {
+                api.Logger.Warning($"[scribe] bundled task font '{family}' failed to load; it will be unavailable in the font selector");
+                continue;
+            }
+            foreach (var weight in new[] { FontWeight.Normal, FontWeight.SemiBold, FontWeight.Bold, FontWeight.Italic })
+            {
+                FontRegistry.RegisterCustomFont(family, weight, face);
+            }
+        }
+        api.Logger.Notification("[scribe] bundled task-text fonts registered for the settings font selector");
     }
 
     /// <summary>
