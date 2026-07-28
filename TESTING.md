@@ -776,39 +776,41 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       row shows a checkbox + an editable text field. *(migrate-editor-view-libgui 5.4)*
       - **Confirmed 2026-07-23** (user playtest, submission 2026-07-23T19-04-07): "Works." Editor opens
         in the same LibGUI dialog with checkbox + editable field per row.
-- [x] `b3e11029` **Type, wrap, grow.** Click a row and type past the line width → text wraps onto a new
+- [x] `b4e9ae56` **Type, wrap, grow.** Click a row and type past the line width → text wraps onto a new
       line and the row grows to fit, pushing rows below down; delete it back → the row shrinks. A row
       that grows past the bottom stays scrolled into view with the caret visible. *(migrate-editor-view-libgui 5.4)*
       - **Confirmed 2026-07-23** (user playtest): wrap/grow/shrink + keep-in-view work. NOTE: there is no
         row-DELETE affordance in the editor view currently (a row can't be removed) — deferred to an
         upcoming delta, not a defect of this test (wrap/grow itself passes).
-- [x] `b3e11029` **Editor key model (REVISED).** Tab = commit + move to next row (no tab glyph);
+- [x] `eaa6b70f` **Editor key model (REVISED).** Tab = commit + move to next row (no tab glyph);
       Shift+Tab = commit + move to previous row; Enter = commit + insert a NEW task directly beneath the
       current one and focus it; Shift+Enter = insert a hard line break (row grows); Esc = commit + close.
       *(migrate-editor-view-libgui 5.4)*
       - **Confirmed 2026-07-23** (user playtest, revised model): Tab moves between tasks and Enter spawns a
         new task — the swapped bindings (Tab=advance / Enter=new-task-below, Core `InsertTask`) work as
         specified.
-- [x] `b3e11029` **Caret + selection (macOS).** Arrow keys move the caret; Alt/Option+←/→ skips by word;
+- [x] `1d35fe7d` **Caret + selection (macOS).** Arrow keys move the caret; Alt/Option+←/→ skips by word;
       Cmd+←/→ jumps to line start/end; holding Shift with any of these extends the selection. Cmd+A/C/X/V
       select-all/copy/cut/paste work. *(migrate-editor-view-libgui 5.4)*
       - **Confirmed 2026-07-23** (user playtest): "Works." macOS caret nav, word-skip, line-end,
         Shift-selection, and Cmd+A/C/X/V clipboard all functional (the Cmd-translation layer holds).
-- [ ] `b3e11029` **Commit syncs + no key leak.** Edit a row → the change autosaves and a second client
+- [x] `beee0ad8` **Commit syncs + no key leak.** Edit a row → the change autosaves and a second client
       (or reopening) sees it. While a field is focused, typing movement keys (WASD) does NOT move the
       player or trigger hotbar/hotkeys. *(migrate-editor-view-libgui 5.4)*
       - **Confirmed 2026-07-23 (no key leak, single-client autosave):** user playtest — editing autosaves
         and reopening shows the fresh edit; focused-field typing does not leak to game movement/hotbar.
-      - **Backlogged 2026-07-23 (multiplayer sync):** second-client live-sync not tested — parked pending a
-        multiplayer roadmap exploration (to be built/consolidated separately).
-- [x] `b3e11029` **Return to LibGUI read view.** Click "Done editing" (or close + reopen) → lands on the
+      - **Confirmed 2026-07-28 (multiplayer sync):** (playtest submission 2026-07-28T09-46-45, two-client MP
+        session) "Works." Edit autosaves and a second client sees it live; focused-field keys do not leak to
+        game movement/hotbar. Both the single-client and multi-client halves of this item now confirmed.
+- [x] `6ea8f46f` **Return to LibGUI read view.** Click "Done editing" (or close + reopen) → lands on the
       LibGUI read view showing the fresh edits (not a native read view), with no lock/stale-content
       weirdness. In SURVIVAL, walk out of range while editing → the dialog auto-closes (edit committed).
       *(migrate-editor-view-libgui 5.4)*
       - **Confirmed 2026-07-23** (user playtest): "Functionality works." Done-editing returns to the LibGUI
         read view with fresh edits, no lock/stale weirdness — the change-1 backlogged return path is fixed.
-      - **Backlogged 2026-07-23 (survival walk-away):** the survival-specific auto-close-while-editing case
-        is not yet tested (mirrors the read-view survival item); code path is in place.
+      - **Confirmed 2026-07-28 (survival walk-away):** (playtest submission 2026-07-28T09-46-45) "Works in
+        survival." Walk-out-of-range while editing auto-closes the dialog with edit committed. Both the
+        done-editing return path and the survival walk-away are now confirmed.
 
 - [x] `696dd143` **Editor unfocus traps hotkeys.** In editor view, add a task via the "New Task" button then
       click away to unfocus the field — global hotkeys (e.g. H for Handbook) stop working, unlike opening the
@@ -855,13 +857,13 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       *(6.4)*
       - **Confirmed 2026-07-23** (user playtest): read view opens on plain right-click and renders the
         live document on the parchment theme; all window chrome (close, drag, minimize/expand) works.
-- [x] `1b3f72f2` **Read-view checkbox toggles lock-free.** Click a task's checkbox in the read view →
+- [x] `a67b6aa6` **Read-view checkbox toggles lock-free.** Click a task's checkbox in the read view →
       it flips immediately and the done state persists after a resync (reopen to confirm). Confirm the
       rest of the row is inert (clicking/hovering the text does nothing — no edit field, drag, or
       icons). Ideally verify a second client can toggle while you hold the editor lock. *(6.4)*
       - **Confirmed 2026-07-23** (user playtest): read-view checkboxes function and persist across a
         resync.
-- [ ] `1b3f72f2` **Switch to editor + back.** From the LibGUI read view, click "Edit" → the working
+- [ ] `9936ade0` **Switch to editor + back.** From the LibGUI read view, click "Edit" → the working
       NATIVE editor view opens with full editing. Edit something, switch back to read → the LibGUI
       read view returns showing the fresh edit. Confirm no lock/stale-content weirdness across the
       hand-off. *(6.4)*
@@ -871,11 +873,11 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         read↔editor round-trip now lives wholly in the LibGUI dialog and is retested under
         `migrate-editor-view-libgui` item `b3e11029` (return-to-LibGUI-read-view). The old
         backlogged-return-path concern no longer applies as written.
-- [ ] `1b3f72f2` **Survival walk-away auto-close.** In SURVIVAL, open the lectern (read view) then
+- [ ] `5832ad8c` **Survival walk-away auto-close.** In SURVIVAL, open the lectern (read view) then
       walk out of range without closing → the dialog auto-closes (LibGUI's `InteractionRange` override
       pins it to the fixed survival reach, mirroring the native fix). *(6.4)*
-      - **Backlogged 2026-07-23:** user not testing in survival yet. Code path is in place (mirrors the
-        confirmed native fix); parked until a survival session.
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T09-46-45): "Works in survival." Dialog
+        auto-closes when walking out of range, mirroring the confirmed native fix.
 
 ## add-gui-inspect-overlay
 
@@ -1095,7 +1097,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         for — group pin+delete with a divider, and make the grip a bare chrome-less SVG — are carried
         into the new second-pass affordance change, not a defect in this item.
       - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
-- [x] `568a9827` **Single-line height + overlay.** On a tall WRAPPED note: pin/delete/grip sit on the
+- [x] `96ca5fee` **Single-line height + overlay.** On a tall WRAPPED note: pin/delete/grip sit on the
       TOP line, not stretched down the row. On a long single-line row: text uses full width, and
       hovering floats pin/delete over the text's right end — their opaque background cleanly hides the
       text directly beneath them. *(6.2 parts 2,3)*
@@ -1103,7 +1105,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         screenshots/../2026-07-22T13-12-46-568a9827.png: on a four-line wrapped note the pin/delete/grip
         sit on the top line rather than stretching down the row.
       - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
-- [ ] `568a9827` **Overlay click vs. text click.** Click an overlaid pin/delete → the stub log fires
+- [ ] `597113de` **Overlay click vs. text click.** Click an overlaid pin/delete → the stub log fires
       (no crash). Click text to the LEFT of the pin/delete cluster → the row focuses/edits normally.
       *(6.2 part 4)*
       - **Untested 2026-07-22** (playtest report 2026-07-22T13-17-40): left unverified — the user could
@@ -1112,21 +1114,21 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         being added in the new second-pass affordance change specifically so this becomes observable;
         re-verify click routing once that lands.
       - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
-- [x] `568a9827` **Input margin symmetry.** Focus a row and type → the focus highlight has an equal
+- [x] `9786db77` **Input margin symmetry.** Focus a row and type → the focus highlight has an equal
       small margin at top AND bottom, not butting against the ruling. A short (min-height) task centers
       its single line rather than sitting bottom-heavy. *(6.2 part 5)*
       - **Confirmed 2026-07-22** (playtest report 2026-07-22T13-17-40): user sees both the new bottom
         and top margins on the focused input. The follow-up request to tighten the ruling's own padding
         so the line hugs the content is carried into the new second-pass affordance change.
       - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
-- [x] `568a9827` **Far-left grip + no toggle shift.** The grip is at the row's far LEFT, left of the
+- [x] `ee75bb19` **Far-left grip + no toggle shift.** The grip is at the row's far LEFT, left of the
       checkbox (checkbox/text shifted right in the editor). Toggle Read↔Edit on the same lectern → the
       checkbox does NOT jump horizontally (read view reserves the same drag column, draws no grip).
       *(6.2 parts 6,7)*
       - **Confirmed 2026-07-22** (playtest report 2026-07-22T13-17-40, "Its good"): the grip renders at
         the row's far left of the checkbox; toggling Read↔Edit leaves the checkbox in place.
       - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
-- [x] `568a9827` **Scale + state + scroll.** Sweep the text-size slider min↔max → buttons, outline,
+- [x] `2467cf60` **Scale + state + scroll.** Sweep the text-size slider min↔max → buttons, outline,
       icon, drag column, and margins all scale, no crash at the smallest size. Pin a task, then click
       elsewhere → the pin stays pinned (On survives an unrelated mouse-up). Scroll a row past the clip
       edge → overlay icons and the input clip natively, nothing bleeds below the list. *(6.2 parts 8,9,10)*
@@ -1236,7 +1238,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-15-37, two-client MP session): "Works."
         Separate lecterns keep independent documents (no cross-bleed), and one player's edit appears live in
         the other's read view of that same lectern.
-- [ ] `2a105a38` **(7.6) Editor lock.** Have one player open a lectern in edit view (holding
+- [x] `2a105a38` **(7.6) Editor lock.** Have one player open a lectern in edit view (holding
       the lock). Confirm a second player is refused edit access to that same lectern but can
       still open it read-only, and that when the first player closes it or disconnects, the
       lock releases so the second player can then edit.
@@ -1253,6 +1255,11 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         edit view, player 2 should not be able to click into / activate the edit view at all (a client-side
         pre-open lock check), rather than being silently scrubbed. Needs a real fix — see v1-release-checklist
         §11.1. Retest after that lands.
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T09-01-45, two-client MP session on matched builds):
+        "Works. Surface visual feedback, and player 2 can't activate the view, and it's greyed out." The
+        fix-multiplayer-editor-lock defensive UX holds — player 2's edit affordance is inert/greyed while player 1
+        holds the lock, and the refusal surfaces feedback instead of silently scrubbing edits. Supersedes the
+        07-28T07-15-37/07-33-43 "Still broken" report (that session had a build/host mismatch).
 - [x] `942d549b` **(8.15) Visible scrollbar in both views.** Add enough tasks (or raise
       `TextSizeScale` in `scribe-client-config.json`) that the list exceeds the dialog height. In the
       READ view a draggable scrollbar track should appear on the right; drag its thumb and click the
@@ -1577,7 +1584,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       *(v1-release-checklist 1.6)*
       - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Works." Editing a loaded-source
         pin updates + persists the source doc and the pin snapshot.
-- [ ] `e152d0e1` **Edit an unloaded-source pin.** Edit or delete a pin whose source Lectern is NOT loaded;
+- [x] `e152d0e1` **Edit an unloaded-source pin.** Edit or delete a pin whose source Lectern is NOT loaded;
       the pin snapshot/removal updates with no crash and the source doc is unchanged until loaded.
       *(v1-release-checklist 1.7)*
       - **Untested 2026-07-28** (playtest submission 2026-07-28T07-33-43): tester needed clarification on what
@@ -1590,6 +1597,10 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         In every case: editing/deleting the pin updates only the client-side pin snapshot with no crash, and
         the source document is unchanged (reconciling if/when the block is loaded again). Editing from a
         *different nearby* Lectern while the source is still loaded is the `85592294` case, not this one.
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T09-01-45): all three source-not-loaded scenarios
+        pass — (a) Lectern picked up, (b) Lectern fully destroyed in Creative, (c) source out of chunk-load range.
+        Pins survive and edit/delete cleanly in every case, "even after quitting and rejoining." No crash; the
+        pin snapshot updates client-side and the source doc is untouched until reloaded.
 - [x] `12ca42f8` **Unpin vs. delete.** Confirm unpin removes only the pin (task survives in the source doc)
       while delete removes the task from the source doc. *(v1-release-checklist 1.8)*
       - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Only unpins." Unpin removes just

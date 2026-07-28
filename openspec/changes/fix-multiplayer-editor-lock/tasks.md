@@ -36,13 +36,16 @@
         (correct) code. STRONG candidate for symptom (b). Not confirmable without the host's build/commit.
         NEXT (for the real fix): confirm the host was on the same commit as the joining client before
         trusting the two-client repro; a version-skew repro is not a code bug in this tree.
-- [ ] 1.2 Reproduce both symptoms on the two-client setup and confirm the mechanism: (a) player 2 enters
+- [x] 1.2 Reproduce both symptoms on the two-client setup and confirm the mechanism: (a) player 2 enters
       + types while player 1 holds the lock; (b) an editing player's edits revert when the lock is FREE
       (no contention). Correlate (b) with `ApplyEdit` returning `false` (server lock check) by logging
       `lockHolderUid` vs. the autosave sender on the server.
-      - **BLOCKED on the two-client setup.** MUST first confirm the host ran the SAME commit as the joining
-        client (see the 1.1 host-build note) — a version-skew repro is not a bug in this tree. Deferred until
-        a controlled same-build two-client session is available.
+      - **RESOLVED 2026-07-28 (matched-build two-client session).** Neither symptom reproduced once the host
+        and joining client ran the SAME build (playtest submission 2026-07-28T09-01-45). This confirms the
+        1.1 diagnosis: the original "types then reverts" report (07-15-37/07-33-43) was a host-build mismatch
+        (the Mac was the joining player; the host governed the server-authoritative lock), not a defect in
+        this tree. No server logging needed — the defensive UX (2.x/4.x) both fixed the affordance and made
+        the mismatch moot.
 - [x] 1.3 Confirm whether the lock reliably releases on editor-close AND on an ungraceful disconnect
       (crash/timeout), not just a clean close — note the result (drives whether task 3.x needs a release fix).
       - **Verified by code (2026-07-28):** clean close/leave → `OnClickSwitchToRead`/`LeaveEditorMode` →
@@ -101,13 +104,20 @@
 - [x] 5.1 Build Debug (`dotnet build src/Mod/Mod.csproj -c Debug`) with 0 warnings/errors; run
       `dotnet test` (Core suite) green.
       - **Done (2026-07-28):** build 0W/0E; Core suite 140/140 passed.
-- [~] 5.2 Restage (`bash build/restage.sh Debug`) and fully relaunch BOTH clients.
-      - **Restaged (2026-07-28).** Relaunching BOTH clients is manual — and critically, the HOST must run
-        this same build for the fix (and any repro) to be valid (see 1.1/1.2 host-build note).
-- [ ] 5.3 Two-client retest of `2a105a38` (record verdict in TESTING.md):
+- [x] 5.2 Restage (`bash build/restage.sh Debug`) and fully relaunch BOTH clients.
+      - **Done (2026-07-28).** Restaged and both clients relaunched on the matched build; the 09-01-45
+        session ran with host and joining client on the same commit (the prerequisite from 1.1/1.2).
+- [x] 5.3 Two-client retest of `2a105a38` (record verdict in TESTING.md):
       (a) player 1 editing → player 2's "switch to editor" is inert and does not enter the editor; player 2
       sees the "Another player is making edits." native error;
       (b) player 1 leaves/disconnects → lock releases → player 2 can now enter the editor;
       (c) SOLE editor (no contention) → edits persist with NO revert.
-- [ ] 5.4 Update TESTING.md `2a105a38` with the verdict and check off v1-release-checklist §11.1
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T09-01-45, two-client MP session on MATCHED
+        builds — this was the missing prerequisite from 1.2). Tester: "Works. Surface visual feedback, and
+        player 2 can't activate the view, and it's greyed out." The defensive UX holds: P2's affordance is
+        inert/greyed while P1 holds the lock, refusal surfaces feedback, edits are no longer silently scrubbed.
+        The original "types then reverts" symptom did NOT recur once both machines ran the same build —
+        confirming the 1.1/1.2 host-build-mismatch diagnosis for the original report.
+- [x] 5.4 Update TESTING.md `2a105a38` with the verdict and check off v1-release-checklist §11.1
       (this change supersedes that inline task).
+      - **Done 2026-07-28:** TESTING.md `2a105a38` marked Confirmed; v1-release-checklist §11.1 checked off.

@@ -15,7 +15,7 @@
       the HUD updates in lockstep.
 - [ ] 1.6 In-game: edit a pin whose source Lectern IS loaded → source doc text updates and persists
       (reopen the Lectern to verify).
-- [ ] 1.7 In-game: edit/delete a pin whose source Lectern IS NOT loaded → pin snapshot/removal
+- [x] 1.7 In-game: edit/delete a pin whose source Lectern IS NOT loaded → pin snapshot/removal
       updates; no crash; source doc unchanged (reconciles if/when the source is loaded again).
       "Source not loaded" covers all three real ways a source goes away in survival — test each:
       (a) the source Lectern has been picked up and NOT re-placed (block gone, item in inventory);
@@ -23,6 +23,9 @@
       (c) the source Lectern is simply out of chunk-load range — players travel thousands of blocks,
       so walk far enough that its chunk unloads on the server, then edit/delete the pin from the Pin Tab.
       Editing from a *different nearby* Lectern while the source is still loaded is §1.6, NOT this test.
+      - **Confirmed 2026-07-28** (`e152d0e1`, playtest submission 2026-07-28T09-01-45): all three scenarios
+        pass — picked up, destroyed in Creative, and out of chunk-load range — including after quit/rejoin.
+        No crash; pin snapshot updates client-side, source doc untouched until reloaded.
 - [ ] 1.8 In-game: unpin removes the pin only (task survives in the source doc); delete removes the
       task from the source doc.
 - [ ] 1.9 In-game: reorder pins → order persists per-player across relog (under `scribe:pins:v1`);
@@ -209,9 +212,12 @@
 
 ## 11. Playtest-surfaced fixes (from submissions 2026-07-28T07-15-37 + 07-33-43)
 
-- [ ] 11.1 Fix the multiplayer editor-lock UX (`2a105a38` in TESTING.md). **Split into its own change:
+- [x] 11.1 Fix the multiplayer editor-lock UX (`2a105a38` in TESTING.md). **Split into its own change:
       `fix-multiplayer-editor-lock`** (proposal/design/specs/tasks written 2026-07-28). Track and implement
       it there via `/opsx:apply`; this line is done once that change lands and `2a105a38` is retested green.
+      - **Done 2026-07-28:** fix-multiplayer-editor-lock landed (defensive UX: synced lock state, gated
+        affordance, native error); `2a105a38` retested green on a matched-build two-client session
+        (submission 2026-07-28T09-01-45). All tasks in that change complete — ready to archive.
 - [ ] 11.2 HUD checkbox color: the pinned-task HUD row checkbox currently tints from the theme (reads
       brown). Make it grayscale to match the rest of the mod's HUD text (near-white / grey), via a
       `CheckboxStyle` override on the `Checkbox` in `HudScribePins.BuildRow` rather than the theme's
