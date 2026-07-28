@@ -1547,17 +1547,28 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     /// <paramref name="iconScale"/> grows just the glyph (not the box) — used to enlarge the pin +15%
     /// (§10.2). <paramref name="boxShadows"/> passes an optional drop shadow through to the button's
     /// <c>BoxStyle</c> (the sidebar nav buttons use one to read as raised chrome — v1-playtest-fixes 5.6).</summary>
-    private static Widget TitleButton(string iconName, string tooltipKey, Vector4 color, float size, Action onTap, float iconScale = 1f, BoxShadow[]? boxShadows = null, Vector4? activeColor = null) =>
+    private Widget TitleButton(string iconName, string tooltipKey, Vector4 color, float size, Action onTap, float iconScale = 1f, BoxShadow[]? boxShadows = null, Vector4? activeColor = null) =>
         WithTooltip(tooltipKey, new ScribeRowButton(iconName: iconName, iconColor: color, size: size, onTap: onTap, iconScale: iconScale, boxShadows: boxShadows, activeColor: activeColor));
 
     /// <summary>Wrap a button in a localized hover tooltip (<c>scribe:&lt;key&gt;</c>), using the global
-    /// overlay so it isn't clipped by the surrounding boxes.</summary>
-    private static Widget WithTooltip(string key, Widget child) =>
+    /// overlay so it isn't clipped by the surrounding boxes. The bubble fills with the theme's
+    /// <c>Background</c> (Tooltip renders it that way), so the content text uses its partner
+    /// <c>OnBackground</c> — the same dark ink the Lectern's body text uses when Pixel-Art Display paints
+    /// the light parchment theme. Without an explicit color the content defaulted to white, which washed
+    /// out against the light bubble; resolving through <see cref="ScribeTheme.For"/> keeps it correct in
+    /// both modes (dark ink on light paper when pixel-art is on, light text on the dark global theme when
+    /// off).</summary>
+    private Widget WithTooltip(string key, Widget child) =>
         new Tooltip(
             child: child,
             content: new Padding(
                 EdgeInsets.All(6),
-                child: new Text(Lang.Get("scribe:" + key), new TextStyle { FontSize = 13, SoftWrap = true })),
+                child: new Text(Lang.Get("scribe:" + key), new TextStyle
+                {
+                    FontSize = 13,
+                    SoftWrap = true,
+                    Color = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme.OnBackground,
+                })),
             useGlobalOverlay: true);
 
     /// <summary>The tasks column's content region: the read or editor view. Its former gear-header chrome row
