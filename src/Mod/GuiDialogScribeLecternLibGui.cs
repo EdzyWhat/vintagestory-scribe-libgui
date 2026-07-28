@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;        // Conditional (DEBUG-only scroll trace)
 using System.Linq;
 using Gui;                       // GuiDialogBlockEntityBase, WindowConfig
 using Gui.Rendering;             // EdgeInsets
@@ -244,6 +245,44 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         // Repaint the per-player pin indicators whenever this player's pushed pin set changes (a pin
         // added/removed/orphaned, or a snapshot refresh). Unsubscribed in OnGuiClosed.
         modSystem.MyPinsChanged += OnMyPinsChanged;
+
+#if DEBUG
+        // Scroll-jump diagnostics: log EVERY offset change on the shared controller — including the ones
+        // LibGUI makes internally (ScrollWheelHandler.ClampOffset's ±50px JumpTo on a content-height
+        // change), which none of our own OnRenderGUI loops can see. Paired with the [scribe-scroll] intent
+        // tags at our mutation sites, this shows "intent → resulting OnChanged" per frame. DEBUG-only:
+        // costs nothing in Release, and TraceScroll is [Conditional("DEBUG")] so its call sites vanish too.
+        sharedScrollController.OnChanged += OnScrollControllerChanged;
+#endif
+    }
+
+#if DEBUG
+    /// <summary>DEBUG-only: fires on every <see cref="sharedScrollController"/> offset change (our JumpTo,
+    /// LibGUI's internal clamp, wheel, EnsureVisible). Routes to <see cref="TraceScroll"/> tagged "changed".</summary>
+    private void OnScrollControllerChanged() => TraceScroll("changed");
+#endif
+
+    /// <summary>DEBUG-only scroll trace. Compiled out entirely in Release (<see cref="ConditionalAttribute"/>),
+    /// so call sites need no <c>#if</c> guard. Emits the full scroll state — live offset + max extent, the
+    /// active view, the focused editor row, and every pending scroll-intent flag with its frame counter — so
+    /// a jumping vs. clean action can be diffed line-for-line in <c>client-main.log</c> (watch with
+    /// <c>build/scribe-log.sh --client</c>). <paramref name="tag"/> names the call site (e.g. "sink",
+    /// "insert-below", "ensure-visible", "restore", "clamp", "changed").</summary>
+    [Conditional("DEBUG")]
+    private void TraceScroll(string tag)
+    {
+        capi.Logger.Notification(
+            "[scribe-scroll] {0,-14} off={1,7:0.0} max={2,7:0.0} view={3} focus={4} ensureVis={5} restore={6}(f{7}) clamp={8}(f{9})",
+            tag,
+            sharedScrollController.Offset,
+            sharedScrollController.MaxScrollExtent,
+            viewMode,
+            focusedEditIndex?.ToString() ?? "-",
+            pendingEnsureVisible,
+            pendingRestoreScrollOffset?.ToString("0.0") ?? "-",
+            scrollRestoreFrames,
+            pendingClampToExtent,
+            clampToExtentFrames);
     }
 
     /// <summary>Swap the LibGUI UI sound player to match this player's <c>MuteUiSounds</c> preference
@@ -273,6 +312,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     private void OnMyPinsChanged()
     {
         if (!IsOpened()) return;
+        TraceScroll("pins-changed");
         // A settings change may have flipped the mute preference — re-install the matching sound player
         // so a live toggle takes effect on this already-open dialog (scribe-mute-ui-sounds).
         ApplyUiSoundPreference();
@@ -288,6 +328,14 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         {
             autoFocusPinTaskId = pinId;
         }
+        // Read and Editor views use the virtualized ListView / SingleChildScrollView; a ForceRebuild
+        // re-derives content height and clamps the shared controller's offset toward 0, losing the player's
+        // scroll position. Capture the offset HERE — right before the rebuild — so the OnRenderGUI restore
+        // loop re-applies it once the content height settles. Capturing in OnReadViewTogglePinned (the
+        // pre-network-round-trip site) was too early: by the time this async callback fires the restore loop
+        // had already terminated (pendingRestoreScrollOffset was null). Pinned view rebuilds use a
+        // non-virtualized Column whose content height is exact from frame-1, so no restore needed there.
+        if (viewMode != ScribeLecternView.Pinned) CaptureScrollForRestore();
         ForceRebuild();
     }
 
@@ -326,10 +374,16 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     /// typed keys don't leak to the game (movement, hotbar, keybinds). Gated on a field being focused
     /// rather than on <c>isEditorMode</c> alone (v1-playtest-fixes): when the editor view is open but
     /// no field holds focus (e.g. after "New Task" → click away), global hotkeys must still fire.
+    ///
+    /// <para>v1-playtest-fixes (second pass): <see cref="OnRowFocusChanged"/> only fires on focus-gained,
+    /// so <see cref="focusedEditIndex"/> stays non-null after a click-away, keeping capture live after
+    /// unfocus. Guard with a live <see cref="FocusNode.HasFocus"/> check so capture drops the moment no
+    /// field holds the active focus token.</para>
     /// </summary>
     public override bool CaptureAllInputs()
-        => (isEditorMode && focusedEditIndex is not null)
-        || (viewMode == ScribeLecternView.Pinned && focusedPinTaskId is not null);
+        => (isEditorMode && focusedEditIndex is { } idx && idx < editorFocusNodes.Count && editorFocusNodes[idx].HasFocus)
+        || (viewMode == ScribeLecternView.Pinned && focusedPinTaskId is { } pinId
+            && pinFocusNodes.TryGetValue(pinId, out var pn) && pn.HasFocus);
 
     /// <summary>
     /// LibGUI's <see cref="Gui.Widgets.Events.KeyboardEvent"/> carries only Shift/Ctrl/Alt — it drops
@@ -474,6 +528,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     {
         pendingRestoreScrollOffset = sharedScrollController.Offset;
         scrollRestoreFrames = 0;
+        TraceScroll("capture-restore");
     }
 
     /// <summary>Tear down the editor state (stop autosave, drop scratch + focus nodes) and return to
@@ -535,16 +590,50 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
 
     /// <summary>
     /// Called by <see cref="BlockEntityScribeLectern.FromTreeAttributes"/> whenever the authoritative
-    /// document changes (e.g. another viewer toggled a task). Rebuilds the READ view from the
-    /// now-current document. A NO-OP while in editor mode: the editor edits a private scratch copy and
-    /// must not be clobbered by an external resync (mirrors the native editor's RefreshReadView).
+    /// document changes (e.g. another viewer toggled a task, or a HUD-Delete removed one). In read mode,
+    /// rebuilds from the current document. In editor mode, the scratch is the source of truth for content
+    /// being edited — a full resync must NOT overwrite in-progress text. However, if the fresh authoritative
+    /// document is missing a task that still lives in the scratch (e.g. this player completed it via the
+    /// HUD under Delete policy), that task no longer exists server-side and its row should disappear from
+    /// the editor without disturbing other rows' edits (add-pinned-task-hud follow-up — <c>80777b7b</c>).
     /// </summary>
     public void RefreshReadView()
     {
-        if (!isEditorMode && IsOpened())
+        if (!isEditorMode)
         {
-            ForceRebuild();
+            if (IsOpened()) ForceRebuild();
+            return;
         }
+
+        // Editor mode: don't resync content, but silently drop any tasks the server no longer knows about.
+        if (scratch is null || !IsOpened()) return;
+        var serverTaskIds = lectern.Document.Blocks
+            .Where(b => b.IsTask)
+            .Select(b => b.TaskId)
+            .ToHashSet();
+        bool any = false;
+        for (int i = scratch.Blocks.Count - 1; i >= 0; i--)
+        {
+            var b = scratch.Blocks[i];
+            if (!b.IsTask || serverTaskIds.Contains(b.TaskId)) continue;
+            // A task in scratch but absent from the server is EITHER a real task the server dropped
+            // (completed via the HUD / Delete policy elsewhere) — which should disappear here too — OR a
+            // task this editor JUST created that hasn't reached the server yet: EditorInsertTaskBelow
+            // flushes the pre-insert doc, and autosave is throttled (~1s) and skips an empty focused row,
+            // so a brand-new row lives locally-only for a beat. A resync landing in that window must NOT
+            // yank the new row out from under the player — that was the "Enter makes a task that self-
+            // destructs a few frames later" race (trace signature: insert-below N → delete N+1 with no
+            // sweep guard tripping, because the delete comes from HERE, not the empty-row sweep). Tell the
+            // two apart: never drop the row currently being edited, and never drop an empty task (empty
+            // tasks are never persisted by design — see PurgeEmptyTasksFromScratch — so their absence from
+            // the server is always expected, never a server-side deletion).
+            if (focusedEditIndex == i || string.IsNullOrWhiteSpace(b.Text)) continue;
+            DeleteEditorBlock(i);
+            any = true;
+        }
+        // DeleteEditorBlock schedules its own ForceRebuild; only rebuild if nothing was deleted
+        // (otherwise we're already rebuilding via the collapse/cleanup path).
+        if (!any) return;
     }
 
     // ---------------- Editor operations (called from the editor rows) ----------------
@@ -590,6 +679,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     private void EditorInsertTaskBelow(int index)
     {
         if (scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
+        TraceScroll($"insert-below {index}");
 
         // Q5: don't stack another empty task beneath an already-empty task row.
         var current = scratch.Blocks[index];
@@ -667,6 +757,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
 
         if (!scratch.ToggleTask(index)) return;
         isDirty = true;
+        TraceScroll($"complete {index} done={nowDone} policy={modSystem.MySettings.CompletionPolicy}");
 
         // Apply the policy only on a transition INTO done — unchecking never sinks/deletes/unpins.
         if (nowDone)
@@ -682,8 +773,10 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
                 case ScribeCompletionPolicy.Sink:
                     // Move the (now-done) task to the document bottom — a real reorder of the shared doc
                     // once flushed, matching every other surface. ReorderEditorBlock owns the rebuild and
-                    // keeps the moved row focused; a task already last is a safe no-op there.
-                    ReorderEditorBlock(index, scratch.Blocks.Count - 1);
+                    // keeps the moved row focused; a task already last is a safe no-op there. anchorViewport:
+                    // true holds the scroll where it was (design: Sink completion shouldn't yank the viewport
+                    // to the bottom the row sinks to — see the ReorderEditorBlock remarks + Phase 2 trace).
+                    ReorderEditorBlock(index, scratch.Blocks.Count - 1, anchorViewport: true);
                     return;
                 case ScribeCompletionPolicy.Unpin:
                     // The task stays, so the flush's snapshot reconcile keeps the pin — unpin explicitly.
@@ -696,8 +789,16 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         }
 
         // Keep/Unpin (and any un-check): no rebuild happened, so re-home the caret to the row that held
-        // focus (a05caret1).
-        if (focusedEditIndex is { } held && held < editorFocusNodes.Count) FocusEditorRow(held);
+        // focus (a05caret1). Re-request focus WITHOUT the scroll-into-view that FocusEditorRow schedules:
+        // clicking a checkbox on some other (possibly off-screen) row must not yank the viewport to the
+        // still-focused edit row. That pendingEnsureVisible was the "unchecking a task under Keep/Sink
+        // jumps the view" race (trace: complete N done=False → ensure-visible → changed to the focused
+        // row's offset). The caret is already where the player left it; only the focus token needs re-
+        // granting after DispatchPointerDown's press-clear, so RequestFocus alone is right.
+        if (focusedEditIndex is { } held && held < editorFocusNodes.Count)
+        {
+            editorFocusNodes[held].RequestFocus();
+        }
     }
 
     /// <summary>Per-row delete: remove the block from the scratch document and rebuild. Mirrors
@@ -709,6 +810,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     private void DeleteEditorBlock(int index)
     {
         if (scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
+        TraceScroll($"delete {index}");
 
         // Snapshot the row BEFORE removing it, so it can keep rendering as a static, non-interactive ghost
         // while it collapses its height to zero (scribe-list-collapse). The scratch deletion still happens
@@ -767,11 +869,21 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     /// <summary>A deleted editor row finished collapsing to zero height (scribe-list-collapse): retire its
     /// ghost and, now that the content is genuinely shorter, re-clamp the scroll extent. Deferred out of the
     /// animation callback via <see cref="needsEditorCollapseCleanup"/> so we don't unmount + rebuild the tree
-    /// re-entrantly from inside the ticker pump.</summary>
+    /// re-entrantly from inside the ticker pump.
+    ///
+    /// <para>Scroll preservation (Phase 2 trace: delete was jumping the viewport to the TOP): the
+    /// <see cref="needsEditorCollapseCleanup"/> <see cref="ForceRebuild"/> remounts the editor's
+    /// <c>SingleChildScrollView</c>, which re-lays-out and (via LibGUI's <c>ClampOffset</c> against a
+    /// transiently-zero content height) resets the offset to 0. The <see cref="RequestClampToExtent"/> loop
+    /// can only clamp DOWN, so it can't recover from a reset-to-0. Capture the current offset so the
+    /// <see cref="OnRenderGUI"/> restore loop re-applies it across that rebuild — the same "hold the offset"
+    /// mechanism Pin uses. Restoring the pre-collapse offset and letting the natural clamp reduce it to the
+    /// now-smaller max lands the viewport at the shortened list's bottom (the correct resting spot), not 0.</para></summary>
     private void OnEditorRowCollapsed(Guid taskId)
     {
         if (!departingEditorRows.Remove(taskId)) return;
         editorCollapseRegistry.Release(taskId.ToString("N"));
+        CaptureScrollForRestore();
         RequestClampToExtent();
         needsEditorCollapseCleanup = true;
     }
@@ -805,10 +917,20 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     /// <summary>Drag-reorder drop: move the block from <paramref name="from"/> to <paramref name="to"/>
     /// in the scratch document and rebuild. A move-to-same index is a safe no-op
     /// (<see cref="ScribeDocument.MoveBlock"/> returns true without changing anything, so no edit is
-    /// sent). Keeps the moved row focused across the rebuild.</summary>
-    private void ReorderEditorBlock(int from, int to)
+    /// sent). Keeps the moved row focused across the rebuild.
+    ///
+    /// <para><paramref name="anchorViewport"/> chooses what the scroll offset does across the rebuild.
+    /// A drag-reorder (false) chases the moved row with <see cref="pendingEnsureVisible"/> — the player
+    /// dragged it, so following it into view is expected. A <b>Sink completion</b> (true) instead HOLDS
+    /// the viewport where it was: completing a mid-list task should not yank the viewport to the bottom
+    /// where the row sinks to (Phase 2 trace: Sink was scrolling to the end). We capture the offset before
+    /// the rebuild and let the <see cref="OnRenderGUI"/> restore loop re-apply it — the same "hold still"
+    /// mechanism Pin uses via <see cref="OnMyPinsChanged"/>. Note a <c>ForceRebuild</c> resets the editor's
+    /// <c>SingleChildScrollView</c> offset to 0, so the capture+restore is required, not optional.</para></summary>
+    private void ReorderEditorBlock(int from, int to, bool anchorViewport = false)
     {
         if (scratch is null) return;
+        TraceScroll($"reorder {from}->{to} anchor={anchorViewport}");
         if (from == to)
         {
             // Released in place (or a grip click that never dragged): no edit — but the grip press already
@@ -824,7 +946,16 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         focusedEditIndex = to;
         SyncFocusNodesToScratch();
         autoFocusRowOnRebuild = to;
-        pendingEnsureVisible = true;
+        if (anchorViewport)
+        {
+            // Sink: hold the viewport still across the rebuild instead of scrolling to the sunk row.
+            CaptureScrollForRestore();
+        }
+        else
+        {
+            // Drag: follow the moved row into view.
+            pendingEnsureVisible = true;
+        }
         ForceRebuild();
     }
 
@@ -1043,7 +1174,18 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             if (isEditorMode && scratch is not null && emptyIdx >= 0 && emptyIdx < scratch.Blocks.Count)
             {
                 var block = scratch.Blocks[emptyIdx];
-                if (block.IsTask && string.IsNullOrWhiteSpace(block.Text))
+                // Never sweep a row that CURRENTLY holds keyboard focus, or is the row we still intend to
+                // focus. The empty-task self-destruct is for rows the user genuinely LEFT — but a
+                // freshly-inserted empty row (Enter / New Task) catches a TRANSIENT blur when the
+                // ensure-visible SetState churns the subtree and its field remounts (the one-shot auto-focus
+                // is already consumed), so OnRowBlurred scheduled it here even though the user never left it.
+                // The trace signature was: insert-below N -> focus=N+1 -> delete N+1, the new row vanishing
+                // "a few frames" after Enter. Guard on live focus so only a real leave removes the row; the
+                // terminal PurgeEmptyTasksFromScratch on switch/close still guarantees no empty task persists.
+                bool stillFocused =
+                    (focusedEditIndex == emptyIdx)
+                    || (emptyIdx < editorFocusNodes.Count && editorFocusNodes[emptyIdx].HasFocus);
+                if (block.IsTask && string.IsNullOrWhiteSpace(block.Text) && !stillFocused)
                 {
                     DeleteEditorBlock(emptyIdx);
                 }
@@ -1053,6 +1195,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         if (pendingEnsureVisible && isEditorMode && focusedEditIndex is { } idx
             && idx < editorFocusNodes.Count && editorFocusNodes[idx].Owner is { } element)
         {
+            TraceScroll("ensure-visible");
             Scrollable.EnsureVisible(element);
             pendingEnsureVisible = false;
         }
@@ -1064,6 +1207,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         // self-terminates when the target is simply unreachable).
         if (pendingRestoreScrollOffset is { } want)
         {
+            TraceScroll("restore");
             sharedScrollController.JumpTo(want);
             scrollRestoreFrames++;
             if (Math.Abs(sharedScrollController.Offset - want) < 0.5f || scrollRestoreFrames >= 5)
@@ -1081,6 +1225,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         // Skipped while a restore is still pending so the two don't fight.
         if (pendingClampToExtent && pendingRestoreScrollOffset is null)
         {
+            TraceScroll("clamp");
             float max = sharedScrollController.MaxScrollExtent;
             if (sharedScrollController.Offset > max) sharedScrollController.JumpTo(max);
             if (++clampToExtentFrames >= 5) pendingClampToExtent = false;
@@ -1094,6 +1239,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     {
         pendingClampToExtent = true;
         clampToExtentFrames = 0;
+        TraceScroll("request-clamp");
     }
 
     public override void OnGuiClosed()
@@ -1112,6 +1258,9 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         }
         modSystem.MyPinsChanged -= OnMyPinsChanged;
         DisposePinState();
+#if DEBUG
+        sharedScrollController.OnChanged -= OnScrollControllerChanged;
+#endif
         // The dialog owns the shared scroll controller (see its field); dispose it once here rather
         // than in either view's State, which come and go with each view-switch ForceRebuild.
         sharedScrollController.Dispose();
@@ -1194,8 +1343,12 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     private Widget BuildTitleBar(LecternLayout layout)
     {
         var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
+        // Title is 1.5× the window body text size — "50% larger" (v1-playtest-fixes 5.1). The ask moved
+        // 50% → 100% (×2.0) then back down a relative 25% to ×1.5 after ×2.0 read too large in-game
+        // (playtest 2026-07-27T18-22-10 then a follow-up). The body size is BaseWindowFontSize × the
+        // player's WindowFontScale, so the title tracks a live font-scale change too.
         float titleFont = ScribeRowConstants.BaseWindowFontSize
-            * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale) * 1.1f;
+            * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale) * 1.5f;
 
         Widget titleRow = new Row(
             mainAxisAlignment: MainAxisAlignment.SpaceBetween,
@@ -1311,7 +1464,12 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     private Widget BuildRightColNav()
     {
         var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
-        float size = ScribeRowConstants.RowCheckboxSize * 1.2f;
+        // Sidebar nav buttons enlarged 50% (v1-playtest-fixes 5.6): the base was RowCheckboxSize × 1.2; ×1.5
+        // on top of that (→ ×1.8) grows BOTH the button box and its inscribed SVG, since ScribeRowButton
+        // derives its box size AND glyph size from this one `size` value. At this size the buttons likely
+        // spill outside SectionRightCol's SideColW column — intentional, to see how the overflow reads
+        // in-game before deciding whether to widen the column.
+        float size = ScribeRowConstants.RowCheckboxSize * 1.2f * 1.5f;
 
         return new Column(
             spacing: 8,
@@ -1413,7 +1571,9 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             onToggleTask: ToggleEditorTask,
             onDeleteBlock: DeleteEditorBlock,
             onTogglePinned: TogglePinnedEditorTask,
-            onReorderBlock: ReorderEditorBlock,
+            // Drag-reorder follows the moved row into view (anchorViewport defaults false); only a Sink
+            // completion passes anchorViewport: true to hold the viewport still.
+            onReorderBlock: (from, to) => ReorderEditorBlock(from, to),
             onAddTask: OnClickAddTask,
             onSwitchToRead: OnClickSwitchToRead,
             style: RowStyle,
@@ -1441,15 +1601,11 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     /// stable identity, reusing the same lock-free <see cref="SendSetPin"/> path the editor row uses.
     /// The read view holds no scratch document, so it addresses the pin purely by TaskId.
     ///
-    /// <para>Scroll preservation (v1-playtest-fixes): capture the current offset before the pin send so
-    /// the pending <see cref="OnMyPinsChanged"/> → <see cref="ForceRebuild"/> path has an offset for the
-    /// <see cref="OnRenderGUI"/> re-apply loop to restore. Without this, the virtualized ListView's
-    /// content-height re-derivation on the first post-rebuild layout clamps the offset toward 0 (same
-    /// family as the view-switch scroll drift fixes). Guard to read view only — editor and Pin Tab have
-    /// their own focus/scroll-restore paths.</para></summary>
+    /// <para>Scroll preservation is handled in <see cref="OnMyPinsChanged"/> immediately before the
+    /// rebuild — capturing here (pre-network-round-trip) was too early and the restore loop expired
+    /// before the async callback arrived (v1-playtest-fixes second pass).</para></summary>
     private void OnReadViewTogglePinned(Guid taskId)
     {
-        if (!isEditorMode) CaptureScrollForRestore();
         SendSetPin(taskId, !IsPinnedForMe(taskId));
     }
 
@@ -2599,10 +2755,12 @@ internal sealed class ScribeLecternPinnedContentState : State<ScribeLecternPinne
                     new TextStyle { FontSize = 13, Color = colors.OnSurfaceVariant }),
                 new Dropdown<ScribeCompletionPolicy>(
                     value: Widget.CompletionPolicy,
+                    // Explicit display order (v1-playtest-fixes 5.2): Keep (stay), Keep (sink), Unpin,
+                    // Delete — kept in sync with the Settings picker in ScribeSettingsContent.
                     items: new List<DropdownItem<ScribeCompletionPolicy>>
                     {
-                        new() { Value = ScribeCompletionPolicy.Sink,   Label = Lang.Get("scribe:scribe-completion-sink") },
                         new() { Value = ScribeCompletionPolicy.Keep,   Label = Lang.Get("scribe:scribe-completion-keep") },
+                        new() { Value = ScribeCompletionPolicy.Sink,   Label = Lang.Get("scribe:scribe-completion-sink") },
                         new() { Value = ScribeCompletionPolicy.Unpin,  Label = Lang.Get("scribe:scribe-completion-unpin") },
                         new() { Value = ScribeCompletionPolicy.Delete, Label = Lang.Get("scribe:scribe-completion-delete") },
                     },

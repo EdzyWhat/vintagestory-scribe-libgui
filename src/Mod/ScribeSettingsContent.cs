@@ -103,10 +103,14 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                     "settings-completionpolicy", colors, scale,
                     new Dropdown<ScribeCompletionPolicy>(
                         value: settings.CompletionPolicy,
+                        // Explicit display order (v1-playtest-fixes 5.2): 1. Keep (stay in place),
+                        // 2. Keep (sink to bottom), 3. Unpin, 4. Delete — NOT the enum/alphabetical order the
+                        // dropdown would otherwise show. Keep this order in sync with the Pinned-view picker
+                        // in GuiDialogScribeLecternLibGui.
                         items: new List<DropdownItem<ScribeCompletionPolicy>>
                         {
-                            new() { Value = ScribeCompletionPolicy.Sink,   Label = Lang.Get("scribe:scribe-completion-sink") },
                             new() { Value = ScribeCompletionPolicy.Keep,   Label = Lang.Get("scribe:scribe-completion-keep") },
+                            new() { Value = ScribeCompletionPolicy.Sink,   Label = Lang.Get("scribe:scribe-completion-sink") },
                             new() { Value = ScribeCompletionPolicy.Unpin,  Label = Lang.Get("scribe:scribe-completion-unpin") },
                             new() { Value = ScribeCompletionPolicy.Delete, Label = Lang.Get("scribe:scribe-completion-delete") },
                         },

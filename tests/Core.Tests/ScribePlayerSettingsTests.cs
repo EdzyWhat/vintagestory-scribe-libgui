@@ -160,4 +160,20 @@ public class ScribePlayerSettingsTests
         Assert.Equal(ScribePlayerSettings.MaxHudMaxRows, s.HudMaxRows);
         Assert.Equal(ScribePlayerSettings.MaxHudRowWidth, s.HudRowWidth);
     }
+
+    [Theory]
+    [InlineData(ScribeHudAnchor.TopLeft, true)]
+    [InlineData(ScribeHudAnchor.MiddleLeft, true)]
+    [InlineData(ScribeHudAnchor.BottomLeft, true)]
+    [InlineData(ScribeHudAnchor.TopRight, false)]
+    [InlineData(ScribeHudAnchor.MiddleRight, false)]
+    [InlineData(ScribeHudAnchor.BottomRight, false)]
+    [InlineData(ScribeHudAnchor.TopMiddle, false)]
+    public void IsLeftAnchored_ClassifiesHorizontalSide(ScribeHudAnchor anchor, bool expected)
+    {
+        // Drives the HUD header/footer text alignment (v1-playtest-fixes 5.3): only the three Left anchors
+        // are left-aligned; center and both Right anchors hug the right edge, matching the ApplyAnchor
+        // X-position switch (only Left anchors add the offset from the left margin).
+        Assert.Equal(expected, anchor.IsLeftAnchored());
+    }
 }

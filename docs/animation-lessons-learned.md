@@ -161,8 +161,86 @@ Not nothing — the refactor's reconciliation work is sound, and if it's ever re
 - **There is no post-frame callback in LibGUI.** If you need "do X one frame after mount,"
   you need a self-ticking controller or a `capi` tick — not a framework hook.
 
+## Scroll/settling coordination and the race class (v1-playtest-fixes, 2026-07-27)
+
+This is the same machinery animations live in, so it belongs here even though it's about
+scroll: the lectern editor coordinates scroll offset through **`OnRenderGUI` post-layout
+settling loops** that run every frame after `base.OnRenderGUI`, because the things they read
+(content height, `MaxScrollExtent`, a target's live geometry) are only correct *after* layout
+has run for the current frame — the same reason `Scrollable.EnsureVisible` and any
+mount-then-animate trigger must be deferred to `OnRenderGUI` rather than fired from `Build()`
+or an event handler. There is no post-frame callback in LibGUI (see the TL;DR), so
+`OnRenderGUI` IS the post-layout hook. Understanding its dynamics is prerequisite to touching
+either the animation stack or the scroll stack, because they interleave in this one method.
+
+**The three settling loops** (all in `GuiDialogScribeLecternLibGui.OnRenderGUI`) are
+**frame-count-bounded, not convergence-guaranteed**, and can fight within a frame:
+
+- `pendingEnsureVisible` — scroll the focused editor row into view once (reads live geometry).
+- `pendingRestoreScrollOffset` (5-frame) — re-apply an offset captured before a view switch /
+  rebuild, because a `ForceRebuild` **resets `SingleChildScrollView`'s offset to 0** (it
+  remounts the scroll view; the offset is render-object-local `State`, disposed on unmount —
+  the exact positional-reconciliation teardown Reason 2 above describes for `AnimatedSize`).
+  Retried over a few frames because the read view's virtualized `ListView` re-derives its
+  content height (hence max extent) over the first frame(s) after the swap, so a single
+  `JumpTo` can still be clamped toward the top before the real row heights are known.
+- `pendingClampToExtent` (5-frame) — after a delete, clamp the offset DOWN to the shrunk
+  `MaxScrollExtent` once layout reports the reduced content height. Needed because LibGUI's
+  own auto-correct (`ScrollWheelHandler.ClampOffset`) **ignores an overshoot of ≤50px**, so
+  deleting one ~30px row while scrolled near the bottom strands the viewport past the new max.
+
+The proven "hold still across a rebuild" primitive is **capture + restore**
+(`CaptureScrollForRestore` before the `ForceRebuild`, then the restore loop re-applies it) —
+used by Pin/Unpin, view-switch, Sink completion, and the deletion-collapse cleanup. Do NOT
+invent a new scroll path; reuse capture+restore. Note the clamp loop can only clamp DOWN, so
+it cannot recover a `ForceRebuild`-reset-to-0 on its own — that's why the collapse-cleanup
+rebuild pairs capture+restore WITH the clamp (restore the pre-collapse offset, let the natural
+clamp reduce it to the shortened list's real bottom).
+
+**The race class (both v1 scroll bugs, and the shape to watch in animation work).** Both bugs
+fixed in this pass were **intermittent** because they depended on the ordering of an async
+event against a local mutation — the signature of a settling/timing race, which is exactly
+what makes animation bugs (mid-flight remounts, restart-from-zero, snap-instead-of-animate)
+hard to reproduce and diagnose:
+
+1. **Enter-makes-a-self-destructing-task**: an async server resync (`RefreshReadView`, fired
+   by the authoritative-doc push) pruned a row the local editor had *just* optimistically
+   created but not yet persisted. Any async server-resync that prunes local rows against a
+   server snapshot must special-case legitimately-local-only in-flight rows (here: never drop
+   the focused row; never drop an empty task, which is never persisted by design). The
+   animation-relevant lesson: **a `ForceRebuild` triggered by an async server push can land at
+   any frame** and tear down in-flight local state — the same hazard that restarts an in-flight
+   collapse (Reason 2). Guard local optimistic state against async resync teardown.
+2. **Uncheck-jumps-the-viewport**: a same-row focus RE-HOME reused the cross-row nav helper
+   (`FocusEditorRow`), which couples focus with `pendingEnsureVisible` (a scroll-into-view).
+   Re-homing focus after a `DispatchPointerDown` blur (a05caret1) is right; scrolling to it is
+   not. **Separate "focus here AND scroll to it" from "the caret is already here, only re-grant
+   the token"** — call `FocusNode.RequestFocus()` directly for the latter. General: watch for a
+   convenience helper that bundles a side effect (a scroll, a rebuild, an animation retarget)
+   you don't want at a particular call site.
+
+**Diagnosis method that worked (keep for animation bugs too).** These were misdiagnosed for
+multiple rounds by hypothesis-first blind fixes. What finally worked: a **DEBUG-only frame-by-
+frame trace** — a `[Conditional("DEBUG")]` `TraceScroll(tag)` logging offset / max extent /
+view / focused index / every pending-flag-with-frame-counter, plus a `#if DEBUG` subscription
+to `ScrollController.OnChanged` so LibGUI's OWN internal mutations (the ±50 `ClampOffset`
+`JumpTo` none of our loops can see) show up too. Intent tags at every mutation site
+(insert-below, delete, complete-with-policy, reorder, ensure-visible, restore, clamp,
+capture-restore) turn "intent → resulting OnChanged" into a diffable per-frame log. An
+equivalent controller-state trace is the right first move for any animation race (collapse
+restart, fade snap): log the controller's value/status/elapsed per frame and diff a
+working-vs-broken run rather than guessing. The trace was removed after these fixes verified,
+but the pattern (`[Conditional("DEBUG")]` + `OnChanged` subscription + intent tags) is the
+standing tool — re-add it for the next settling regression. Read the trace with
+`tail -f <client-main.log> | grep --line-buffered -i <tag>`; the project's `scribe-log.sh` and
+the raw log both let an unrelated GL-error flood through on Apple Silicon (harmless; see
+`VSAPI-NOTES.md`), so grep for your own tag.
+
 ## Pointers
 
+- `src/Mod/GuiDialogScribeLecternLibGui.cs` — the three `OnRenderGUI` settling loops,
+  `CaptureScrollForRestore`, and the two v1 race fixes (`RefreshReadView` guard,
+  `ToggleEditorTask` re-home). Also documented in `VSAPI-NOTES.md` `## LibGUI`.
 - `src/Mod/ScribeCollapsible.cs` — the collapse widget, height-factor render box, and
   host-owned registry (the pattern this doc defends).
 - `src/Mod/HudScribePins.cs` — `ScribeFadeText` (self-ticking fade) lives at the bottom.

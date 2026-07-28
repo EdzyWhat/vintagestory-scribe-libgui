@@ -1344,6 +1344,45 @@ press blurs with the value unchanged (the player didn't retype), so `onChanged` 
 happens, the button survives its own click, and its tap re-homes focus. A real retype still differs →
 `onChanged` fires → the write-through remount settles the field. See `ScribeNumericFieldState.OnFocusChanged`.
 
+**Symptom (v1-playtest-fixes scroll pass): pressing Enter to make a new task creates a row that
+self-destructs a few frames later — INTERMITTENTLY (a race).** The delete does NOT come from the
+empty-row self-destruct sweep (that path is guarded against sweeping a still-focused row); it comes
+from `RefreshReadView`, the resync fired by the authoritative document changing
+(`BlockEntityScribeLectern.FromTreeAttributes`). Mechanism: `EditorInsertTaskBelow` calls
+`FlushIfDirty()` BEFORE `scratch.InsertTask(...)`, so the flushed document does not contain the new
+empty task; that flush round-trips (server applies → pushes back), and when the push lands,
+`RefreshReadView` builds `serverTaskIds` from the fresh authoritative doc — which lacks the brand-new
+task — and calls `DeleteEditorBlock` on every scratch task "missing from the server," yanking the row
+the player just created. It's intermittent because it only fires when the server round-trip lands
+after the insert (a slow-enough round trip, or an autosave tick, races it). Empty tasks are NEVER
+persisted by design (autosave skips a focused empty row; `PurgeEmptyTasksFromScratch` drops the rest),
+so a resync will ALWAYS see a locally-new empty task as "server-missing" — the resync-drop had no
+business acting on it. **Fix pattern:** the resync-drop must distinguish a task the server genuinely
+DELETED (a real, typed task gone from the authoritative doc — should disappear locally too) from one
+the local editor just CREATED and hasn't successfully persisted yet. Two cheap discriminators, both
+needed: never drop the row currently being edited (`focusedEditIndex == i`), and never drop an EMPTY
+task (its absence from the server is always expected, never a deletion). See the guard in
+`RefreshReadView` (`GuiDialogScribeLecternLibGui.cs`). General rule: an async server-resync path that
+prunes local rows against a server snapshot must special-case rows that are legitimately local-only
+in-flight, or it will race optimistic local inserts.
+
+**Symptom (v1-playtest-fixes scroll pass): UN-checking a task (toggle back to not-done) under the
+Keep or Sink completion policy jumps the viewport — INTERMITTENTLY (only when the focused row is
+off-screen).** On an uncheck (`done=False`), `ToggleEditorTask` skips the policy switch (policies only
+act on a transition INTO done) and falls to the caret re-home line, which called `FocusEditorRow(held)`.
+`FocusEditorRow` sets `pendingEnsureVisible = true`, so `OnRenderGUI` then runs
+`Scrollable.EnsureVisible` on the focused row and scrolls it into view — even though the player clicked
+a checkbox on a DIFFERENT, possibly off-screen row. It "jumps" only when the focused edit row is
+outside the viewport, hence intermittent. Re-homing the caret IS intentional (spec 8.5: toggling a
+checkbox must not disturb the caret in another focused row — and the checkbox isn't `IFocusable`, so
+its press blurred the field via `DispatchPointerDown`, the a05caret1 note), but SCROLLING to it is not.
+**Fix pattern:** to re-grant focus without moving the viewport, call `FocusNode.RequestFocus()`
+DIRECTLY rather than the dialog's `FocusEditorRow` helper — the helper couples focus with
+`pendingEnsureVisible`, which is right for a deliberate cross-row nav (Enter/Shift+Tab) but wrong for a
+"the caret was already here, just re-arm the token" re-home. Watch for this coupling anywhere a
+same-row focus restore reuses a nav helper: separate "put focus here AND scroll to it" from "the caret
+is already here, only re-grant the focus token." See the Keep/Unpin/uncheck tail of `ToggleEditorTask`.
+
 ## Dev-diagnosis toolkit
 
 The local iterate/diagnose loop for this project (Apple Silicon, where VSImGui sliders and the

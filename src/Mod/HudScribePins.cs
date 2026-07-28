@@ -584,6 +584,9 @@ public sealed class HudScribePins : GuiBase
             collapseRegistry: collapseRegistry,
             onDepartingCollapsed: (docId, taskId) => OnDepartingCollapsed((docId, taskId)),
             collapsed: modSystem.MySettings.HudCollapsed,
+            // Header/footer align toward the anchored edge (v1-playtest-fixes 5.3): left for a left-anchored
+            // HUD, right otherwise. Same anchor classification the ApplyAnchor X-position switch uses.
+            leftAligned: ScribePlayerSettings.NormalizeAnchor(modSystem.MySettings.HudAnchor).IsLeftAnchored(),
             rowWidth: ScribePlayerSettings.ClampHudRowWidth(modSystem.MySettings.HudRowWidth),
             rowFontSize: ScribeRowConstants.BaseHudFontSize
                 * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.HudFontScale),
@@ -644,6 +647,7 @@ internal sealed class HudPinsContent : StatelessWidget
     private readonly ScribeCollapseRegistry collapseRegistry;
     private readonly Action<Guid, Guid> onDepartingCollapsed;
     private readonly bool collapsed;
+    private readonly bool leftAligned;
     private readonly float rowWidth;
     private readonly float rowFontSize;
     private readonly float checkboxSize;
@@ -657,6 +661,7 @@ internal sealed class HudPinsContent : StatelessWidget
         ScribeCollapseRegistry collapseRegistry,
         Action<Guid, Guid> onDepartingCollapsed,
         bool collapsed,
+        bool leftAligned,
         float rowWidth,
         float rowFontSize,
         float checkboxSize,
@@ -669,6 +674,7 @@ internal sealed class HudPinsContent : StatelessWidget
         this.collapseRegistry = collapseRegistry;
         this.onDepartingCollapsed = onDepartingCollapsed;
         this.collapsed = collapsed;
+        this.leftAligned = leftAligned;
         this.rowWidth = rowWidth;
         this.rowFontSize = rowFontSize;
         this.checkboxSize = checkboxSize;
@@ -708,8 +714,10 @@ internal sealed class HudPinsContent : StatelessWidget
 
         // Constrain the whole HUD to the configured fixed width (task 4.5) via a SizedBox, so a long
         // task wraps within that width instead of the shrink-wrap window growing arbitrarily wide. The
-        // Column right-aligns its rows within that fixed width (CrossAxisAlignment.End), keeping the
-        // content hugging the anchored (default top-right) edge as rows grow/shrink.
+        // Column aligns its rows within that fixed width toward the anchored edge — LEFT for a
+        // left-anchored HUD, RIGHT (End) otherwise (v1-playtest-fixes 5.3) — so the min-width header
+        // ("Pinned" + gear) and footer ("+N more") hug the correct side. The task rows are Max-width
+        // (they fill the column), so this alignment only visibly moves the header/footer.
         return new SizedBox(
             width: rowWidth,
             child: new Padding(
@@ -717,7 +725,7 @@ internal sealed class HudPinsContent : StatelessWidget
                 child: new Column(
                     spacing: 4,
                     mainAxisSize: MainAxisSize.Min,
-                    crossAxisAlignment: CrossAxisAlignment.End,
+                    crossAxisAlignment: leftAligned ? CrossAxisAlignment.Start : CrossAxisAlignment.End,
                     children: children)));
     }
 

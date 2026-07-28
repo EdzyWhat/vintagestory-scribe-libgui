@@ -319,25 +319,32 @@ public sealed class ScribeModSystem : ModSystem
     {
         var loader = new SkiaAssetLoader(api);
         // AssetLocation is lowercased by LoadFont (path.ToLower()), so the asset filename must be lowercase.
-        var typeface = loader.LoadFont("scribe", "textures/fonts/caudex-regular.ttf");
-        if (typeface is null)
+        // We ship ONLY the bold cut: Caudex has a single consumer — the lectern dialog title, which requests
+        // FontWeight.Bold — so there is no regular Caudex text to preserve. Loading a real regular alongside
+        // it (registered under Normal) turned out to render REGULAR for the Bold title in-game: the shipped
+        // `gui` mod's font resolution effectively picked the Normal-weight face despite the Bold request
+        // (loading was confirmed fine — both faces distinct, weight 400 vs 700 — so the mismatch is in the
+        // resolver, not the assets). Registering the ONE bold face under EVERY weight sidesteps that
+        // ambiguity entirely: whatever weight the resolver lands on, it returns the bold cut. This mirrors
+        // the earlier all-weights registration (commit 8b1fb14) but with the real bold TTF instead of the
+        // regular. If a future surface needs regular Caudex, ship the regular under its own family name (or
+        // a distinct alias) rather than reintroducing a Normal-weight registration here.
+        var bold = loader.LoadFont("scribe", "textures/fonts/caudex-bold.ttf");
+        if (bold is null)
         {
             // Missing/corrupt asset: LoadFont already logged the failure. Leave Scribe's text on its
             // current family (sans-serif) rather than crashing — the mod stays fully usable without the face.
             api.Logger.Warning("[scribe] bundled font 'Caudex' failed to load; title stays on the default family");
             return;
         }
-        // Register the same face under EVERY FontWeight. FontRegistry.GetCustomTypeface is keyed by
-        // (family, weight) and returns null on a miss, so a Bold lookup would NOT find a Normal-only
-        // registration and would fall through to a system font — which is exactly why the Bold dialog title
-        // rendered in the default face before this. We only ship the Regular TTF; Skia synthesizes bold/
-        // italic from it, which is fine for the spike. (LibGUI ships a real file per weight; the parent
-        // font work can do the same later.)
+        // FontRegistry.GetCustomTypeface is keyed by (family, weight) and returns null on a miss — a weight
+        // with no registration falls through to a system font. Register the bold cut under all four weights
+        // so every lookup resolves to it.
         foreach (var weight in new[] { FontWeight.Normal, FontWeight.SemiBold, FontWeight.Bold, FontWeight.Italic })
         {
-            FontRegistry.RegisterCustomFont("Caudex", weight, typeface);
+            FontRegistry.RegisterCustomFont("Caudex", weight, bold);
         }
-        api.Logger.Notification("[scribe] bundled font 'Caudex' registered for the lectern dialog title");
+        api.Logger.Notification("[scribe] bundled font 'Caudex' (bold cut) registered under all weights for the lectern dialog title");
     }
 
     /// <summary>

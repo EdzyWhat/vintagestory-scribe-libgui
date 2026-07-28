@@ -145,6 +145,10 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         `padding-left` on the title text is DONE (restaged Debug). (a) the drag-grip discoverability icon is
         deferred into the `refine-settings-and-window-chrome` feature proposal (title-bar chrome), not this
         bugfix pass.
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T18-22-10): "This works. It is not deferred."
+        Tester explicitly closing this out — drag + close both work and the item is not to be held open on
+        the close-button hitbox artifact above (that Retina/`GUIScale` visual-vs-clickable mismatch remains a
+        known, separately-tracked cosmetic note, not a reason to keep this item unconfirmed).
 - [x] `c74d74a8` **Three-column frame legible.** The scrolling read/editor content sits in the center column,
       framed by the left spacer and the right icon column, all inside the art; task/note text stays legible
       over the backdrop. *(scribe-notebook-frame 6.3)*
@@ -345,7 +349,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Confirmed 2026-07-25** (playtest submission 2026-07-25T22-36-25): accepted as a win — the tester
         found it too fiddly to trigger reliably (needs very fast cross-window mouse movement), deemed an
         acceptable edge case. The resume-from-elapsed registry is exercised by 5.1–5.3 passing.
-- [ ] `dfad74a8` **Hanging textless checkbox after a HUD row clears.** After a HUD item is cleared, a bare
+- [x] `dfad74a8` **Hanging textless checkbox after a HUD row clears.** After a HUD item is cleared, a bare
       checkbox with no text is sometimes left behind on the HUD. *(scribe-list-collapse — follow-up)*
       - **Still broken 2026-07-25** (playtest submission 2026-07-25T22-36-25, general note + screenshot
         `.playtest-submissions/screenshots/2026-07-25T22-28-10-general.png`): the HUD shows two textless
@@ -373,6 +377,12 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         has already gone quiet once (2026-07-26T00-36-12) before recurring. Treating "Fixed" as another
         non-reproduction of a known intermittent race, not a resolution. Retest specifically with the known
         trigger (Delete policy + rapid complete-then-undo) before calling it fixed.
+      - **Confirmed 2026-07-27 — closed by tester decision** (playtest submission 2026-07-27T18-22-10): "This
+        is fixed. If it comes up again we will open a new bug." No further recurrence across sessions. Note:
+        no targeted HUD-collapse fix was ever isolated for this intermittent race (see the two prior
+        non-reproductions) — this is the tester electing to close it out rather than a mechanism-verified
+        fix, so if the bare checkbox reappears under Delete + rapid complete-then-undo, it should be filed
+        fresh rather than reopened here.
 
 ## add-settings-tab
 
@@ -520,7 +530,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         PC. Deferred, not broken — the default path is confirmed under `2394a823`.
       - **Confirmed 2026-07-25** (playtest submission 2026-07-25T22-36-25): "Works." Anchor/offset/width
         set via the Settings UI reposition + resize the HUD correctly (no off-screen).
-- [ ] `80777b7b` **HUD-complete under Delete doesn't refresh an open editor.** With the editor view open
+- [x] `80777b7b` **HUD-complete under Delete doesn't refresh an open editor.** With the editor view open
       and Delete policy, checking a task off VIA THE HUD deletes it server-side but the open editor still
       shows the row until you toggle Editor → Read → Editor. *(add-pinned-task-hud — follow-up)*
       - **Still broken 2026-07-25** (playtest submission 2026-07-25T22-36-25, general note): a HUD Delete
@@ -530,6 +540,13 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         scratch. Pre-existing design tension (editor isolation), surfaced by exercising the Delete policy —
         NOT caused by add-empty-task-lifecycle. Fix is non-trivial (reconciling an external delete into a
         live scratch without clobbering in-progress edits); logged for a follow-up, not fixed here.
+      - **Fix applied 2026-07-27 (awaiting retest):** `RefreshReadView` now reconciles in editor mode:
+        tasks absent from the fresh server doc are removed from scratch via `DeleteEditorBlock` (with its
+        collapse animation and focus fixup), leaving other rows' in-progress text intact. Retest: item
+        `22412531` below.
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T18-22-10): "Works!" The open editor now
+        drops a HUD-deleted row immediately. (Note: this same `RefreshReadView` reconcile caused the
+        Enter-self-destruct regression `8f971d46`, fixed and confirmed this session.)
 
 ## add-lectern-row-affordances-libgui
 
@@ -786,10 +803,12 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Backlogged 2026-07-23 (survival walk-away):** the survival-specific auto-close-while-editing case
         is not yet tested (mirrors the read-view survival item); code path is in place.
 
-- [ ] `696dd143` **Editor unfocus traps hotkeys.** In editor view, add a task via the "New Task" button then
+- [x] `696dd143` **Editor unfocus traps hotkeys.** In editor view, add a task via the "New Task" button then
       click away to unfocus the field — global hotkeys (e.g. H for Handbook) stop working, unlike opening the
       editor before creating any task. Confirm hotkeys fire whenever no editor field is focused.
       *(migrate-editor-view-libgui — follow-up)*
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T18-22-10): "Fully fixed." The second-pass
+        live-`HasFocus` guard in `CaptureAllInputs()` holds — hotkeys fire once no editor field holds focus.
       - **Still broken 2026-07-26** (playtest submission 2026-07-26T12-04-59, general note): after adding a
         task via "New Task" and unfocusing, general hotkeys (notably H → Handbook) no longer fire — but they
         DO work if you open the editor and don't create a task first. Likely tied to `CaptureAllInputs()`
@@ -801,10 +820,15 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         tester wants this fixed before v1 and asked to explore it. Confirms the 2026-07-26 hypothesis is the
         thing to chase: gate `CaptureAllInputs()` on a field actually being focused rather than on
         `isEditorMode`, so hotkeys fire whenever no editor field holds focus.
-      - **Fix applied 2026-07-27 (awaiting retest — v1-playtest-fixes 1.1):** `CaptureAllInputs()` now
+      - **Fix applied 2026-07-27 (first pass — awaiting retest — v1-playtest-fixes 1.1):** `CaptureAllInputs()` now
         returns true only when an editor or Pin Tab field actually holds focus (`focusedEditIndex is not null`
-        / `focusedPinTaskId is not null`), not for the whole duration of editor mode. Retest: item `e6b5148e`
-        below.
+        / `focusedPinTaskId is not null`), not for the whole duration of editor mode.
+      - **Still broken 2026-07-27** (playtest submission 2026-07-27T15-22-22): fix didn't hold. Root cause:
+        `OnRowFocusChanged` only fires on focus-gained (guards `if (!HasFocus) return`), so clicking away never
+        clears `focusedEditIndex` — it stays non-null, keeping capture live indefinitely after unfocus.
+      - **Fix applied 2026-07-27 (second pass — awaiting retest — v1-playtest-fixes 1.2):** `CaptureAllInputs()`
+        now checks `editorFocusNodes[idx].HasFocus` directly (live state) rather than trusting the stale
+        `focusedEditIndex` value. Retest: item `e6b5148e`.
 
 ## adopt-libgui-foundation
 
@@ -1312,7 +1336,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         scroll list back to the top, which is disruptive; the tester asked to keep the scroll at its user-set
         position and to spin the scroll-jump out as its own item (delivered functionality accepted). Tracked
         as `32f807d9` below.
-- [ ] `32f807d9` **Read-view pin keeps scroll.** Pinning/unpinning a task from the read view keeps the
+- [x] `32f807d9` **Read-view pin keeps scroll.** Pinning/unpinning a task from the read view keeps the
       scroll list at its user-set position (does not jump to the top). *(scribe-lectern-view-consistency —
       follow-up)*
       - **Still broken 2026-07-27** (playtest submission 2026-07-27T10-16-26): pinning from the read view
@@ -1320,16 +1344,19 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         re-clamp family as `92d41071`/`7c22da1a` (a `MyPinsChanged` rebuild re-clamps against a stale content
         height). Fix: capture the scroll offset before the pin rebuild and restore it after (reuse the
         `CaptureScrollForRestore`/`JumpTo` machinery). Needs its own change item + fix.
-      - **Fix applied 2026-07-27 (awaiting retest — v1-playtest-fixes 3.1):** `OnReadViewTogglePinned` now
-        calls `CaptureScrollForRestore()` before `SendSetPin` (in read mode only), so the existing
-        `OnRenderGUI` re-apply loop restores the offset after the `MyPinsChanged` rebuild. Retest: item
-        `ed0a4f7e` below.
+      - **Fix applied 2026-07-27 (first pass — v1-playtest-fixes 3.1):** `OnReadViewTogglePinned` called
+        `CaptureScrollForRestore()` before `SendSetPin`, but the async round-trip meant the restore loop
+        expired before `OnMyPinsChanged` arrived.
+      - **Still broken 2026-07-27** (playtest submission 2026-07-27T15-22-22): "Same bug as ed0a4f7e" — jump
+        still occurs in Read and Edit views (not in Pinned view). Second-pass fix applied (see `ed0a4f7e`).
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T18-22-10, confirmed alongside `ed0a4f7e`):
+        "Works." Same second-pass fix (capture in `OnMyPinsChanged`) resolves both.
 - [x] `04d2e825` **Policy picker above pinned list.** In the pinned view the completion-policy picker
       sits ABOVE the task list; changing it also updates the Scribe Settings window's completion policy.
       *(scribe-lectern-view-consistency 3.2 / 5.5)*
       - **Confirmed 2026-07-27** (playtest submission 2026-07-27T10-16-26): "Works." Picker sits above the
         pinned list and stays in sync with the settings window's completion policy.
-- [ ] `0c09d185` **Uniform policy every view.** Set each policy (Keep/Sink/Unpin/Delete) and complete a
+- [x] `0c09d185` **Uniform policy every view.** Set each policy (Keep/Sink/Unpin/Delete) and complete a
       task from read, editor, AND pinned views — same outcome each time (sink-to-bottom / unpin / delete),
       matching the HUD. In the editor, ticking one row applies the policy while leaving other rows'
       unsaved text + caret intact. *(scribe-lectern-view-consistency 5.6)*
@@ -1339,12 +1366,13 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         bottom too; (2) for a task the acting player originally created, the sink/reorder should be enforced in
         the Read and Edit views as well (tester suggests leveraging the click-drag reorder functions). Partial:
         the three non-sink policies are confirmed; the Sink-reorder-everywhere behavior needs more work.
-      - **Fix applied 2026-07-27 (awaiting retest — v1-playtest-fixes 2.1):** Pinned view now orders rows
-        through `ScribePinOrdering.ForDisplay` (completed pins below not-completed), matching the HUD's resting
+      - **Fix applied 2026-07-27 (v1-playtest-fixes 2.1):** Pinned view now orders rows through
+        `ScribePinOrdering.ForDisplay` (completed pins below not-completed), matching the HUD's resting
         order. Read/Edit already reflect the server's `MoveTaskToBottom` reorder via the existing resync path.
-        Retest: item `10622154` below.
-- [ ] `aca4f64d` **Sink/Delete are shared.** Sink from one view reorders the shared document for another
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T15-22-22): "Works."
+- [x] `aca4f64d` **Sink/Delete are shared.** Sink from one view reorders the shared document for another
       viewer; Delete from read/editor removes the task for everyone. *(scribe-lectern-view-consistency 5.7)*
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T15-22-22): "Works."
 
 ## scribe-mute-ui-sounds
 
@@ -1378,15 +1406,120 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > (4–6) HUD text/glow legibility, 10px Lectern title padding, HUD Text Size beside HUD position.
 > Build clean (0/0), Core 133/133, restaged Debug 2026-07-27 — fully relaunch first.
 
-- [ ] `e6b5148e` **Hotkeys after unfocus.** Open the editor, add a task via New Task, click away to
+- [x] `e6b5148e` **Hotkeys after unfocus.** Open the editor, add a task via New Task, click away to
       unfocus — the Handbook key (H) and other global hotkeys fire. Then click a row and type WASD —
       they edit the field, not the player. *(v1-playtest-fixes 1.2)*
-- [ ] `10622154` **Sink orders every surface.** With Sink policy, complete a pinned task from the
+      - **Still broken 2026-07-27** (playtest submission 2026-07-27T15-22-22): "Same bug as 696dd143" — after
+        creating a task and clicking away, H does not open the Handbook. Fix applied (second pass, see
+        `696dd143`). Retest after relaunch.
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T18-22-10): "Works. I can now open the
+        Handbook." Second-pass live-`HasFocus` guard confirmed after relaunch.
+- [x] `10622154` **Sink orders every surface.** With Sink policy, complete a pinned task from the
       Pinned view — it sinks to the bottom of the Pinned list (not just the HUD). Complete an owned
       task from Read and Edit views — it moves to the bottom in each, and the HUD agrees.
       *(v1-playtest-fixes 2.5)*
-- [ ] `ed0a4f7e` **Read-view pin keeps scroll.** Scroll the read view down, then pin then unpin a
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T15-22-22): "Works."
+- [x] `ed0a4f7e` **Read-view pin keeps scroll.** Scroll the read view down, then pin then unpin a
       task — the list stays at the scrolled position, not the top. *(v1-playtest-fixes 3.2)*
-- [ ] `9a1c13f0` **HUD legibility + title + settings layout.** HUD text reads more crisply over the
+      - **Still broken 2026-07-27** (playtest submission 2026-07-27T15-22-22): pinning/unpinning jumps
+        the scroll in Read and Edit views (but NOT in Pinned view). Tester's hypothesis: scroll behavior
+        may be tied to the Pinned view's scrollable section height. Root cause: `CaptureScrollForRestore`
+        was called pre-network-send in `OnReadViewTogglePinned`, but the restore loop expired before the
+        async `OnMyPinsChanged` callback arrived, so nothing was pending at rebuild time.
+      - **Fix applied 2026-07-27 (second pass — awaiting retest — v1-playtest-fixes 3.2):** capture moved
+        into `OnMyPinsChanged` immediately before `ForceRebuild` for all non-Pinned views. Retest after
+        relaunch.
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T18-22-10): "Works." Moving the capture
+        into `OnMyPinsChanged` (so it survives the async round-trip) holds the scroll on pin/unpin.
+- [x] `9a1c13f0` **HUD legibility + title + settings layout.** HUD text reads more crisply over the
       world background; Lectern title has a visible 10px left gap; HUD Text Size sits beside HUD
       position in Scribe Settings. *(v1-playtest-fixes 4.4)*
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T15-22-22): "Works."
+- [ ] `e038c4ff` **Title bar text 50% larger.** In the Lectern title bar, increase the title text font
+      size by 50% relative to the window body text size. *(v1-playtest-fixes — general note 2026-07-27T15-22-22)*
+      - **Obsolete 2026-07-27** (playtest submission 2026-07-27T18-22-10): requirement changed — tester now
+        wants the title **100% larger, not 50%**, and never implemented the 50% version ("we haven't
+        actually tried to solve this yet"). Superseded by `b1c4f2a7` below. The tester also asked to replace
+        our bundled Caudex with the bold cut at `~/Downloads/Caudex/Caudex-Bold.ttf` (tracked as its own
+        item `686f45ae`).
+- [x] `180014f3` **Title bar text larger.** In the Lectern title bar, increase the title text font
+      size relative to the window body text size. *(v1-playtest-fixes — general note
+      2026-07-27T18-22-10; supersedes `e038c4ff`)*
+      - **Fix applied 2026-07-27 (awaiting retest — v1-playtest-fixes 5.1):** `titleFont` factor changed
+        `× 1.1` → `× 2.0` in `BuildTitleBar`.
+      - **Adjusted 2026-07-27 (awaiting retest):** user found `× 2.0` too large; reduced a relative 25% to
+        `× 1.5` (i.e. 50% larger than body). Restaged Debug — retest: title reads noticeably larger than the
+        body text without dominating the bar.
+      - **Confirmed 2026-07-27** (user retest this session): title at `× 1.5` reads noticeably larger than
+        the body text at a comfortable size.
+- [ ] `686f45ae` **Bundle bold Caudex.** Replace the bundled Caudex face with the bold cut from
+      ~/Downloads/Caudex/Caudex-Bold.ttf so the title (and any Caudex text) renders in the bold weight.
+      *(v1-playtest-fixes — general note 2026-07-27T18-22-10)*
+      - **Fix applied 2026-07-27 (awaiting retest — v1-playtest-fixes 5.5):** added `caudex-bold.ttf` to the
+        font assets; `RegisterCustomFonts` loads both cuts and registers the real bold under Bold/SemiBold
+        (regular under Normal/Italic), falling back to the regular if the bold asset is missing. Restaged
+        Debug (bold TTF confirmed staged) — retest: the (Bold-weight) Lectern title renders in true Caudex
+        Bold, not synthesized fake-bold.
+      - **Obsolete 2026-07-27** (user decision): the bold cut still rendered as regular in-game even after
+        (a) shipping the real weight-700 Caudex Bold TTF and (b) registering it under ALL four weights (the
+        approach that previously made the regular face "stick"). Diagnostic confirmed both faces load
+        distinctly (weight 400 vs 700), so the mismatch is in the shipped `gui` mod's font resolution, not
+        our assets — chasing it further isn't worth the effort for a title-weight nicety. Current state left
+        as-is (harmless): only `caudex-bold.ttf` ships, registered under every weight; the title renders in
+        Caudex at the intended 1.5× size, just not visibly bolder. Retire the test; if bold weight ever
+        matters, it needs a fix in font resolution (or a fork of `gui`), filed fresh.
+- [x] `6cac9e01` **Completion policy order.** Reorder the completion policy options to: 1. Keep (stay in
+      place), 2. Keep (sink to bottom), 3. Unpin, 4. Delete. *(v1-playtest-fixes — general note 2026-07-27T15-22-22)*
+      - **Still broken 2026-07-27** (playtest submission 2026-07-27T18-22-10): the Scribe Settings picker
+        shows Keep-sink, Keep-stay, Unpin, Delete (alphabetical), not the requested order. Not yet
+        attempted — task 5.2 is still open. Fix: set an explicit display order for the policy picker
+        (Settings + Pinned view) rather than relying on enum/alphabetical order.
+      - **Fix applied 2026-07-27 (awaiting retest — v1-playtest-fixes 5.2):** both pickers
+        (`ScribeSettingsContent` + the Pinned-view picker) now list Keep (stay), Keep (sink), Unpin, Delete
+        in that explicit order. Restaged Debug — retest: both dropdowns show the requested order.
+      - **Confirmed 2026-07-27** (user retest this session): "Policy order is good." Both pickers show the
+        requested Keep (stay), Keep (sink), Unpin, Delete order.
+- [x] `208dc5fb` **HUD text alignment by position.** The HUD header ("Pinned" + gear) and footer ("+N
+      more") should align left when HUD Position is a Left anchor, and right when Right — match the
+      column's `crossAxisAlignment` to the HUD position setting. *(v1-playtest-fixes — general note 2026-07-27T15-22-22)*
+      - **Still broken 2026-07-27** (playtest submission 2026-07-27T18-22-10): not yet attempted — task 5.3
+        is still open. Fix: set the HUD column's `crossAxisAlignment` from the live `HudAnchor` (left for
+        Left anchors, right for Right anchors) in `HudScribePins`.
+      - **Fix applied 2026-07-27 (awaiting retest — v1-playtest-fixes 5.3):** `HudPinsContent` now takes a
+        `leftAligned` flag (from the new Core `ScribeHudAnchor.IsLeftAnchored()` helper) driving the outer
+        Column's `crossAxisAlignment` (Start on Left anchors, End otherwise); the settings-change rebuild
+        re-reads it live. Restaged Debug — retest: header/footer hug left on a Left-anchored HUD, right on a
+        Right-anchored one.
+      - **Confirmed 2026-07-27** (user retest this session): "HUD alignment is good." Header/footer align to
+        the anchored edge.
+- [x] `22412531` **HUD-Delete refreshes open editor.** With the editor open and Delete policy, complete a
+      task via the HUD — the row should disappear from the editor immediately (no view-swap needed), while
+      any in-progress text on other rows is undisturbed. *(add-pinned-task-hud follow-up — fix applied 2026-07-27)*
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T18-22-10): "Works." Retest of `80777b7b`'s
+        fix — the open editor drops the HUD-deleted row immediately.
+- [x] `8f971d46` **Enter makes a durable new task.** In the editor, press Enter to create a new task
+      below the current one; the new row persists and stays focused for typing, and does not self-destruct
+      a few frames later. Repeat several times (fast, and with the list scrolled).
+      *(v1-playtest-fixes — RefreshReadView race, surfaced during the scroll-diagnosis session 2026-07-27)*
+      - **Confirmed 2026-07-27** (user retest this session, verified against the live `[scribe-scroll]`
+        trace): the intermittent self-destruct is gone. Root cause was `RefreshReadView` (the async
+        server-push resync from task 6.1) pruning the freshly-inserted row — `EditorInsertTaskBelow`
+        flushes the pre-insert doc and empty tasks are never persisted, so the resync always saw the new
+        task as "server-missing" and deleted it. Fix: `RefreshReadView` never drops the focused row or an
+        empty task. Trace signature `insert-below N → delete N+1` no longer appears.
+- [x] `121a234b` **Un-check holds the viewport.** Under Keep or Sink policy, scroll so the focused edit
+      row is off-screen, then un-check a completed task on a different row; the viewport holds still and
+      does not jump to the focused row.
+      *(v1-playtest-fixes — ToggleEditorTask re-home, surfaced during the scroll-diagnosis session 2026-07-27)*
+      - **Confirmed 2026-07-27** (user retest this session, verified against the live `[scribe-scroll]`
+        trace): the intermittent jump on un-check is gone. Root cause was the same-row caret re-home
+        reusing `FocusEditorRow`, which sets `pendingEnsureVisible` → scrolled the focused row into view
+        even though the click was on another row. Fix: re-grant focus with `FocusNode.RequestFocus()`
+        directly (no scroll) on the Keep/Unpin/un-check path.
+- [ ] `923a395a` **Sidebar nav buttons 50% bigger.** The Read/Edit/Pinned/Settings buttons in the Lectern
+      sidebar (SectionRightCol) are 50% larger — both the button box and the inscribed SVG. Check how the
+      enlarged buttons read against the SideColW column bounds (they may overflow). *(v1-playtest-fixes 5.6)*
+      - **Fix applied 2026-07-27 (awaiting retest — v1-playtest-fixes 5.6):** scaled the shared `size` local
+        in `BuildRightColNav` ×1.5 (RowCheckboxSize × 1.2 → × 1.8); `ScribeRowButton` derives both its box
+        and glyph size from that value, so both grow together. Overflow past `SideColW` left intentional to
+        judge in-game. Restaged Debug.

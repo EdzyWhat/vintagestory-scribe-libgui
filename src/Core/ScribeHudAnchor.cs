@@ -35,3 +35,17 @@ public enum ScribeHudAnchor : byte
     /// <summary>Bottom-right corner; the list grows upward.</summary>
     BottomRight = 6,
 }
+
+/// <summary>Pure helpers for classifying a <see cref="ScribeHudAnchor"/>'s horizontal side, so the HUD's
+/// text alignment (and the Mod layer's X-positioning) can be derived without duplicating the switch.
+/// Game-agnostic (pure BCL), so it stays unit-testable in <c>Core.Tests</c>.</summary>
+public static class ScribeHudAnchorExtensions
+{
+    /// <summary>True when the anchor pins the HUD to the screen's LEFT edge
+    /// (<see cref="ScribeHudAnchor.TopLeft"/>/<see cref="ScribeHudAnchor.MiddleLeft"/>/
+    /// <see cref="ScribeHudAnchor.BottomLeft"/>). The center and right anchors are treated as right-aligned
+    /// for text purposes (the HUD hugs its anchored edge), matching the Mod layer's X-position switch where
+    /// only the three Left anchors add the offset from the left margin.</summary>
+    public static bool IsLeftAnchored(this ScribeHudAnchor anchor) => anchor
+        is ScribeHudAnchor.TopLeft or ScribeHudAnchor.MiddleLeft or ScribeHudAnchor.BottomLeft;
+}
