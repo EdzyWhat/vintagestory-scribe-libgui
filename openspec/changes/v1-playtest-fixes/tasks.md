@@ -100,12 +100,14 @@ symbol. Source items: playtest submission `2026-07-27T10-16-26`.
   title-weight nicety. Current state (harmless): only `caudex-bold.ttf` ships, registered under every
   weight; title renders in Caudex at 1.5× size, just not visibly bolder. TESTING.md `686f45ae` obsoleted.
   (Added per playtest 2026-07-27T18-22-10 general note.)
-- [x] 5.6 Sidebar nav buttons 50% bigger: enlarge the Read/Edit/Pinned/Settings buttons in the Lectern
-  sidebar (`BuildRightColNav`, SectionRightCol) by 50% — BOTH the button box and the inscribed SVG. Done by
-  scaling the shared `size` local ×1.5 (RowCheckboxSize × 1.2 → × 1.8); `ScribeRowButton` derives both its
-  box and glyph size from that one value. The buttons likely overflow `SideColW` at this size — left
-  intentional to judge the overflow in-game before deciding whether to widen the column. Build clean;
-  restaged Debug 2026-07-27. (Added per user request this session.)
+- [x] 5.6 Sidebar nav buttons bigger + spacing + shadow: enlarge the Read/Edit/Pinned/Settings buttons in
+  the Lectern sidebar (`BuildRightColNav`, SectionRightCol) — BOTH the button box and the inscribed SVG —
+  by scaling the shared `size` local. Landed at `RowCheckboxSize × 1.7` after ×1.5/×1.8 read too large/small
+  in-game; `ScribeRowButton` derives both box and glyph size from that one value. Also set the nav Column's
+  `spacing: 16` and `crossAxisAlignment: CrossAxisAlignment.Start`, and gave each button a drop shadow
+  (`navShadow`: black @ 0.35, offset (2,2), blur 4) via a new `boxShadows` param threaded
+  `TitleButton` → `ScribeRowButton` → `BoxStyle.BoxShadows`. Build clean; restaged Debug 2026-07-27.
+  (Added per user request this session; values iterated live.)
 - [ ] 5.4 Manually test in-game: title bar text is noticeably larger than the row text; policy picker
   shows the new order in both Settings and the Pinned view; HUD header/footer text aligns left on a
   Left-anchored HUD and right on a Right-anchored HUD; the Read/Edit/Pinned/Settings sidebar buttons are
@@ -129,3 +131,38 @@ symbol. Source items: playtest submission `2026-07-27T10-16-26`.
   green (133/133).
 - [x] 7.2 Restage (`bash build/restage.sh Debug`) and fully relaunch the client.
 - [x] 7.3 Update `TESTING.md` with second-pass fix notes and new items.
+
+## 8. Polish round 3 — Lectern visual pass (this session, not previously specced)
+
+Retroactively captured: these are playtest-driven, visual-only tweaks to the Lectern surface (layout,
+theme-derived color, drag-state signalling). No behavior/persistence/API change, so no spec delta —
+recorded here as tasks because §5 is the standing "polish" home and 5.6 already lives here. All in
+`src/Mod/` (`GuiDialogScribeLecternLibGui.cs` + `ScribeRowConstants.cs`); values iterated live in-game.
+
+- [x] 8.1 `LecternLayout` column retune: rework the proportional column widths so the three columns
+  (`2·SideColW + TasksColW`) sum to `InnerW` exactly at `InnerW = 1.0·W`, keeping `TasksColW = 0.795·W`
+  and growing `SideColW` to `0.1025·W` to absorb the remainder (to fit the enlarged §5.6 nav buttons).
+  `TitleBtnsW = 0.795·W` set independently (not aliased to `TasksColW`). Invariant preserved: the three
+  columns sum to `InnerW`.
+- [x] 8.2 Pixel-Art-OFF colored backgrounds: when Pixel Art Display is OFF, paint a themed surface behind
+  the Lectern's central region and title row (previously transparent), matching the Scribe Settings panel.
+  Added a `FlatPanel(Widget)` helper that wraps its child in a `Container` filled with
+  `ThemeData.Default.ColorScheme.Surface` when Pixel Art is off (pass-through when on), applied to
+  `BuildCentralRegion()` and the title row — NOT the whole window. Title row padding changed to
+  `left: 10 + 0.04·W`, `right: 0.04·W`.
+- [x] 8.3 Theme-aware drag highlights (Edit + Pinned tabs): replace the flat white/black drag washes with
+  theme-derived color. New `ScribeRowConstants.ShiftBrightness(Vector4, float)` shifts a color's HSV
+  Brightness by ±N points (SkiaSharp `ToHsv`/`FromHsv`, hue/sat and float alpha preserved). Source row =
+  `Primary` brightened +20, drop target = `Primary` darkened −20; fill at 0.4 alpha with a 1px border of
+  the same shifted color at 0.5 alpha; source wins on overlap. Applied in both `ScribeEditRowState.Build`
+  and `ScribePinRowState.Build` (the Pinned tab gained the `isDragSource` plumbing to match the Edit view,
+  replacing its lone `StateSelected` drop-target fill).
+- [x] 8.4 Pinned-row resting tint stronger: bump `ScribeRowConstants.PinnedTintAlpha` 0.22 → 0.33 (the
+  theme-`Primary`-derived resting wash for pinned tasks in the read + editor views).
+- [x] 8.5 `dotnet build` / `restage.sh Debug` clean (0 warn / 0 err); Core suite green.
+- [ ] 8.6 Manually test in-game: (a) enlarged sidebar buttons sit correctly within the retuned `SideColW`;
+  (b) with Pixel Art OFF, the central region + title row show the themed surface fill (not a transparent
+  gap), title text keeps its left gap; (c) Edit view AND Pinned tab drags show a lighter theme wash on the
+  grabbed row and a darker one on the hover target, each with a crisp 1px border, source winning on
+  overlap — verify it reads well against BOTH the pixel-art light theme and the global dark theme; (d)
+  pinned rows show a slightly stronger resting tint in read/editor views.

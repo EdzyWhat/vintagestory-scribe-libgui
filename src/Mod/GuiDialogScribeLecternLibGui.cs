@@ -30,7 +30,7 @@ namespace Scribe;
 /// so LibGUI's hard-coded stretch-to-fill <c>BoxStyle.Texture</c> renders the art as a uniform, distortion-
 /// free scale. Every inner region's size is a fixed proportion of <c>W</c> (or <c>H</c>), so the widget tree
 /// reads as ratios rather than arithmetic and one number rescales the entire layout. The three column widths
-/// sum to <see cref="InnerW"/> exactly (<c>0.0675 + 0.765 + 0.0675 = 0.9</c>) so no column overflows; the
+/// sum to <see cref="InnerW"/> exactly (<c>0.1025 + 0.795 + 0.1025 = 1.0</c>) so no column overflows; the
 /// ~7% of <c>H</c> unused by <see cref="TitleBarH"/> + <see cref="InnerH"/> is bottom margin.
 /// </summary>
 internal readonly record struct LecternLayout(float W)
@@ -42,19 +42,22 @@ internal readonly record struct LecternLayout(float W)
     /// <summary>The draggable title-bar band (top 13% of the outer box).</summary>
     public float TitleBarH => 0.13f * H;
 
-    /// <summary>The centered inner section: 90% of the outer width, 80% of the outer height.</summary>
-    public float InnerW => 0.9f * W;
+    /// <summary>The centered inner section: the FULL outer width (100%), 80% of the outer height. The width is
+    /// the exact sum of the three columns below (2·SideColW + TasksColW) so nothing overflows; it was
+    /// widened to the full W when the side columns grew to fit the enlarged nav buttons (v1-playtest-fixes 5.6).</summary>
+    public float InnerW => 1.0f * W;
     public float InnerH => 0.8f * H;
 
-    /// <summary>Each side spacer/nav column (left spacer + right icon-button column).</summary>
-    public float SideColW => 0.0675f * W;
+    /// <summary>Each side spacer/nav column (left spacer + right icon-button column). Widened to hold the
+    /// enlarged nav buttons (v1-playtest-fixes 5.6): 2·SideColW + TasksColW = 1.0·W exactly.</summary>
+    public float SideColW => 0.1025f * W;
 
     /// <summary>The center tasks column that hosts the existing scrolling read/editor content.</summary>
-    public float TasksColW => 0.765f * W;
+    public float TasksColW => 0.795f * W;
 
     /// <summary>The bottom-anchored title+buttons row inside the title bar (75% of the outer width,
     /// 6.5% of the outer height).</summary>
-    public float TitleBtnsW => 0.75f * W;
+    public float TitleBtnsW => 0.795f * W;
     public float TitleBtnsH => 0.065f * H;
 }
 
@@ -1340,6 +1343,20 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     /// (<c>0.75W × 0.065H</c>): the dialog title on the left (window text ×1.1) and a right-aligned group of
     /// SVG nav/close buttons. Closing works without the stock frame — the close button calls
     /// <see cref="GuiBase.TryClose"/>.</summary>
+    /// <summary>When Pixel-Art Display is OFF (no notebook art backdrop), wrap <paramref name="child"/> in a
+    /// solid theme-surface panel so the title row and central content read as opaque panels rather than
+    /// transparent gaps onto the world; when ON, the notebook art is the background, so return the child
+    /// unwrapped. Uses <c>ThemeData.Default.ColorScheme.Surface</c> — the same fill (and reason) as the
+    /// standalone Scribe Settings window's body — since the OFF Lectern follows the player's global LibGUI
+    /// theme (scribe-themed-toggle). Deliberately panels only these two regions, not the whole window.</summary>
+    private Widget FlatPanel(Widget child)
+    {
+        if (modSystem.MySettings.PixelArtDisplay) return child;
+        return new Container(
+            style: new BoxStyle { Color = ThemeData.Default.ColorScheme.Surface },
+            child: child);
+    }
+
     private Widget BuildTitleBar(LecternLayout layout)
     {
         var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
@@ -1356,11 +1373,8 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             mainAxisSize: MainAxisSize.Max,
             children: new Widget[]
             {
-                // 10px left padding for visual breathing room (v1-playtest-fixes; was 4px).
-                new Padding(
-                    EdgeInsets.Only(left: 10),
-                    child: new Text(Lang.Get("scribe:scribe-gui-title"),
-                        new TextStyle { FontSize = titleFont, FontFamily = ScribeRowControlNudge.TitleFontFamily, Weight = FontWeight.Bold, Color = colors.OnSurface })),
+                new Text(Lang.Get("scribe:scribe-gui-title"),
+                    new TextStyle { FontSize = titleFont, FontFamily = ScribeRowControlNudge.TitleFontFamily, Weight = FontWeight.Bold, Color = colors.OnSurface }),
                 // Trailing group: a drag-grip cue LEFT of the close button
                 // (refine-settings-and-window-chrome). The whole TitleBar band is the drag zone via
                 // WindowConfig.DragHandleHeight, and it signals that discoverably (players won't intuit an
@@ -1398,7 +1412,13 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
                 child: new SizedBox(
                     width: layout.TitleBtnsW,
                     height: layout.TitleBtnsH,
-                    child: titleRow)));
+                    // Panel behind the title row when Pixel-Art is OFF (no art backdrop) so it isn't
+                    // transparent onto the world; unchanged when ON (the art is the background). The row's
+                    // content is inset symmetrically by 0.04·W on each side (plus the original 10px of
+                    // left breathing room) so the title + close/grip group sit clear of the panel edges.
+                    child: FlatPanel(new Padding(
+                        EdgeInsets.Only(left: 10 + 0.04f * layout.W, right: 0.04f * layout.W),
+                        child: titleRow)))));
     }
 
     // ---------------- Title-bar grip drag (§8.1) ----------------
@@ -1453,7 +1473,9 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
                 children: new Widget[]
                 {
                     new SizedBox(width: layout.SideColW),                             // SectionLeftCol (spacer)
-                    new SizedBox(width: layout.TasksColW, child: BuildCentralRegion()), // LecternTasksBox
+                    // Panel behind the central content when Pixel-Art is OFF (no art backdrop); unchanged
+                    // when ON. Only the tasks column and the title row get a flat panel, not the whole window.
+                    new SizedBox(width: layout.TasksColW, child: FlatPanel(BuildCentralRegion())), // LecternTasksBox
                     new SizedBox(width: layout.SideColW, child: BuildRightColNav()),   // SectionRightCol
                 }));
 
@@ -1464,39 +1486,48 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     private Widget BuildRightColNav()
     {
         var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
-        // Sidebar nav buttons enlarged 50% (v1-playtest-fixes 5.6): the base was RowCheckboxSize × 1.2; ×1.5
-        // on top of that (→ ×1.8) grows BOTH the button box and its inscribed SVG, since ScribeRowButton
-        // derives its box size AND glyph size from this one `size` value. At this size the buttons likely
-        // spill outside SectionRightCol's SideColW column — intentional, to see how the overflow reads
-        // in-game before deciding whether to widen the column.
-        float size = ScribeRowConstants.RowCheckboxSize * 1.2f * 1.5f;
+        // Sidebar nav buttons enlarged (v1-playtest-fixes 5.6): the base was RowCheckboxSize × 1.2; ×1.7 on
+        // top of that grows BOTH the button box and its inscribed SVG, since ScribeRowButton derives its box
+        // size AND glyph size from this one `size` value.
+        float size = ScribeRowConstants.RowCheckboxSize * 1.7f;
+
+        // A soft drop shadow so the enlarged nav buttons read as raised chrome floating over the notebook
+        // art (v1-playtest-fixes 5.6). Semi-transparent black, nudged down-right, gently blurred.
+        var navShadow = new[]
+        {
+            new BoxShadow(
+                Color: new Vector4(0f, 0f, 0f, 0.35f),
+                Offset: new Vector2(2f, 2f),
+                BlurRadius: 4f),
+        };
 
         return new Column(
-            spacing: 8,
+            spacing: 16,
             mainAxisAlignment: MainAxisAlignment.Start,
-            crossAxisAlignment: CrossAxisAlignment.Center,
+            crossAxisAlignment: CrossAxisAlignment.Start,
             mainAxisSize: MainAxisSize.Max,
             children: new Widget[]
             {
                 // Read view: the checkbox check SVG (scribe-notebook-frame D3 placeholder "R" now replaced).
                 TitleButton("scribecheck", "scribe-gui-nav-read", colors.OnSurfaceVariant,
-                    size: size, onTap: EnterReadMode),
+                    size: size, onTap: EnterReadMode, boxShadows: navShadow),
                 TitleButton("scribeedit", "scribe-gui-nav-edit", colors.OnSurfaceVariant,
-                    size: size, onTap: RequestEditorAccess),
+                    size: size, onTap: RequestEditorAccess, boxShadows: navShadow),
                 // Pinned enlarged +10% (§10.2): the pin glyph reads a touch larger than the others.
                 TitleButton("scribepin", "scribe-gui-nav-pinned", colors.OnSurfaceVariant,
-                    size: size, onTap: OnClickSwitchToPinned, iconScale: 1.1f),
+                    size: size, onTap: OnClickSwitchToPinned, iconScale: 1.1f, boxShadows: navShadow),
                 // Settings gear LAST in the group (§10.1), after Read / Edit / Pinned.
                 TitleButton("scribegear", "scribe-gui-nav-settings", colors.OnSurfaceVariant,
-                    size: size, onTap: modSystem.OpenSettings),
+                    size: size, onTap: modSystem.OpenSettings, boxShadows: navShadow),
             });
     }
 
     /// <summary>A tooltipped icon button reusing the per-row button chrome (<see cref="ScribeRowButton"/>).
     /// <paramref name="iconScale"/> grows just the glyph (not the box) — used to enlarge the pin +10%
-    /// (§10.2).</summary>
-    private static Widget TitleButton(string iconName, string tooltipKey, Vector4 color, float size, Action onTap, float iconScale = 1f) =>
-        WithTooltip(tooltipKey, new ScribeRowButton(iconName: iconName, iconColor: color, size: size, onTap: onTap, iconScale: iconScale));
+    /// (§10.2). <paramref name="boxShadows"/> passes an optional drop shadow through to the button's
+    /// <c>BoxStyle</c> (the sidebar nav buttons use one to read as raised chrome — v1-playtest-fixes 5.6).</summary>
+    private static Widget TitleButton(string iconName, string tooltipKey, Vector4 color, float size, Action onTap, float iconScale = 1f, BoxShadow[]? boxShadows = null) =>
+        WithTooltip(tooltipKey, new ScribeRowButton(iconName: iconName, iconColor: color, size: size, onTap: onTap, iconScale: iconScale, boxShadows: boxShadows));
 
     /// <summary>Wrap a button in a localized hover tooltip (<c>scribe:&lt;key&gt;</c>), using the global
     /// overlay so it isn't clipped by the surrounding boxes.</summary>
@@ -2287,6 +2318,10 @@ internal sealed class ScribeLecternEditorContentState : State<ScribeLecternEdito
                     focusNode: b.Index < Widget.FocusNodes.Count ? Widget.FocusNodes[b.Index] : null,
                     autoFocus: Widget.AutoFocusIndex == b.Index,
                     isDropTarget: dragFromIndex is not null && dragOverIndex == b.Index,
+                    // The origin row of the in-progress drag (null-safe: false when no drag is active). The
+                    // row's Build gives this white-wash priority over the drop-target black wash when the
+                    // cursor hovers back over the source.
+                    isDragSource: dragFromIndex == b.Index,
                     onTextChanged: Widget.OnTextChanged,
                     onCommitAndAdvance: Widget.OnCommitAndAdvance,
                     onCommitAndRetreat: Widget.OnCommitAndRetreat,
@@ -2379,6 +2414,7 @@ internal sealed class ScribeEditRow : StatefulWidget
         FocusNode? focusNode,
         bool autoFocus,
         bool isDropTarget,
+        bool isDragSource,
         Action<int, string> onTextChanged,
         Action<int> onCommitAndAdvance,
         Action<int> onCommitAndRetreat,
@@ -2398,6 +2434,7 @@ internal sealed class ScribeEditRow : StatefulWidget
         FocusNode = focusNode;
         AutoFocus = autoFocus;
         IsDropTarget = isDropTarget;
+        IsDragSource = isDragSource;
         OnTextChanged = onTextChanged;
         OnCommitAndAdvance = onCommitAndAdvance;
         OnCommitAndRetreat = onCommitAndRetreat;
@@ -2416,8 +2453,13 @@ internal sealed class ScribeEditRow : StatefulWidget
     public FocusNode? FocusNode { get; }
     public bool AutoFocus { get; }
     /// <summary>True while a drag is in progress and this row is the current drop target — the row
-    /// paints a highlight so the player sees where the dragged row would land.</summary>
+    /// paints a theme-derived darker wash + border so the player sees where the dragged row would land.</summary>
     public bool IsDropTarget { get; }
+    /// <summary>True while a drag is in progress and this row is the one being dragged (its origin) — the
+    /// row paints a theme-derived brighter wash + border so the player sees where the dragged row came
+    /// from. Takes priority over <see cref="IsDropTarget"/> when the cursor is hovering back over the
+    /// source row.</summary>
+    public bool IsDragSource { get; }
     public Action<int, string> OnTextChanged { get; }
     public Action<int> OnCommitAndAdvance { get; }
     public Action<int> OnCommitAndRetreat { get; }
@@ -2520,15 +2562,36 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                 mainAxisSize: MainAxisSize.Max,
                 children: children));
 
-        // Drop-target highlight / resting pinned tint, drawn behind the row content. The Container is
+        // Drag-reorder wash / resting pinned tint, drawn behind the row content. The Container is
         // ALWAYS present (fill may be transparent Vector4.Zero) — see the structural-stability note below
         // — so toggling the fill is a cheap property update, not a widget-type swap.
-        Vector4 rowFill = Widget.IsDropTarget
-            ? colors.StateSelected
+        //
+        // The two drag states use DELIBERATELY DISTINCT, non-pin colors so drag signalling reads clearly
+        // and doesn't collide with the pin resting tint (which used to share the drop-target's ochre):
+        //   • SOURCE (the row you grabbed)  → theme Primary brightened +20 — "here's where it came from".
+        //   • DROP TARGET (row under cursor)→ theme Primary darkened  -20 — "here's where it will land".
+        // Both are theme-derived (via ShiftBrightness) so they read as "the theme, brighter/darker" under
+        // any LibGUI theme rather than stark white/black. Fill sits at 0.4 alpha; a 1px border of the SAME
+        // shifted color at 0.5 alpha crisps the row edge. Source wins when the cursor hovers back over the
+        // origin row (releasing there is a no-op reorder, so signalling "this is home" is clearer than
+        // re-showing the drop tint). Neither drag state active → the resting pin tint (task + pinned) or
+        // nothing.
+        Vector4? dragShift =
+            Widget.IsDragSource ? ScribeRowConstants.ShiftBrightness(colors.Primary, +20f)
+            : Widget.IsDropTarget ? ScribeRowConstants.ShiftBrightness(colors.Primary, -20f)
+            : (Vector4?)null;
+
+        Vector4 rowFill =
+            dragShift is Vector4 d ? d with { W = 0.4f }
             : (Widget.Data.IsTask && Widget.Data.Pinned ? ScribeRowConstants.PinnedTint(colors) : Vector4.Zero);
 
         rowBody = new Container(
-            style: new BoxStyle { Color = rowFill },
+            style: new BoxStyle
+            {
+                Color = rowFill,
+                BorderColor = dragShift is Vector4 b ? b with { W = 0.5f } : Vector4.Zero,
+                BorderThickness = dragShift is not null ? 1f : 0f,
+            },
             child: rowBody);
 
         // Delete + pin float on the RIGHT of the row as real buttons (2026-07-24 feedback), shown only
@@ -2716,6 +2779,7 @@ internal sealed class ScribeLecternPinnedContentState : State<ScribeLecternPinne
                     focusNode: Widget.FocusNodes.TryGetValue(r.TaskId, out var fn) ? fn : null,
                     autoFocus: Widget.AutoFocusTaskId == r.TaskId,
                     isDropTarget: dragFromIndex is not null && dragOverIndex == i,
+                    isDragSource: dragFromIndex == i,
                     onTextChanged: Widget.OnTextChanged,
                     onCommitText: Widget.OnCommitText,
                     onToggleComplete: Widget.OnToggleComplete,
@@ -2798,6 +2862,7 @@ internal sealed class ScribePinRow : StatefulWidget
         FocusNode? focusNode,
         bool autoFocus,
         bool isDropTarget,
+        bool isDragSource,
         Action<Guid, string> onTextChanged,
         Action<Guid> onCommitText,
         Action<Guid, Guid> onToggleComplete,
@@ -2815,6 +2880,7 @@ internal sealed class ScribePinRow : StatefulWidget
         FocusNode = focusNode;
         AutoFocus = autoFocus;
         IsDropTarget = isDropTarget;
+        IsDragSource = isDragSource;
         OnTextChanged = onTextChanged;
         OnCommitText = onCommitText;
         OnToggleComplete = onToggleComplete;
@@ -2830,7 +2896,14 @@ internal sealed class ScribePinRow : StatefulWidget
     public int Index { get; }
     public FocusNode? FocusNode { get; }
     public bool AutoFocus { get; }
+    /// <summary>True while a drag is in progress and this row is the current drop target — the row
+    /// paints a theme-derived darker wash + border so the player sees where the dragged row would land.</summary>
     public bool IsDropTarget { get; }
+    /// <summary>True while a drag is in progress and this row is the one being dragged (its origin) — the
+    /// row paints a theme-derived brighter wash + border so the player sees where the dragged row came
+    /// from. Takes priority over <see cref="IsDropTarget"/> when the cursor hovers back over the source
+    /// row.</summary>
+    public bool IsDragSource { get; }
     public Action<Guid, string> OnTextChanged { get; }
     public Action<Guid> OnCommitText { get; }
     public Action<Guid, Guid> OnToggleComplete { get; }
@@ -2913,11 +2986,26 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
                 mainAxisSize: MainAxisSize.Max,
                 children: children));
 
-        // Drop-target highlight (a pin row is always "pinned", so no resting pinned tint). The Container is
-        // ALWAYS present (transparent fill when not a drop target) so toggling the fill is a property update,
-        // not a widget-type swap — keeping the field's State mounted (the STRUCTURAL STABILITY rule).
+        // Drag highlight, matching the Edit view (a pin row is always "pinned", so there's no resting
+        // pinned tint to fall back to — only the drag states or transparent):
+        //   • SOURCE (the row you grabbed)  → theme Primary brightened +20 — "here's where it came from".
+        //   • DROP TARGET (row under cursor)→ theme Primary darkened  -20 — "here's where it will land".
+        // Fill at 0.4 alpha; a 1px border of the SAME shifted color at 0.5 alpha crisps the edge. Source
+        // wins when the cursor hovers back over the origin row. The Container is ALWAYS present (transparent
+        // fill / zero border when idle) so toggling the highlight is a property update, not a widget-type
+        // swap — keeping the field's State mounted (the STRUCTURAL STABILITY rule).
+        Vector4? dragShift =
+            Widget.IsDragSource ? ScribeRowConstants.ShiftBrightness(colors.Primary, +20f)
+            : Widget.IsDropTarget ? ScribeRowConstants.ShiftBrightness(colors.Primary, -20f)
+            : (Vector4?)null;
+
         rowBody = new Container(
-            style: new BoxStyle { Color = Widget.IsDropTarget ? colors.StateSelected : Vector4.Zero },
+            style: new BoxStyle
+            {
+                Color = dragShift is Vector4 d ? d with { W = 0.4f } : Vector4.Zero,
+                BorderColor = dragShift is Vector4 b ? b with { W = 0.5f } : Vector4.Zero,
+                BorderThickness = dragShift is not null ? 1f : 0f,
+            },
             child: rowBody);
 
         // Delete + unpin float on the RIGHT as real buttons, shown only on hover. delete = right-most (the
@@ -3068,7 +3156,7 @@ internal sealed class ScribeVsIconGlyph : StatelessWidget
 /// <c>LoadSvg</c> fails on our post-startup-unloaded assets (see <see cref="ScribeVsIconGlyph"/>).</summary>
 internal sealed class ScribeRowButton : StatefulWidget
 {
-    public ScribeRowButton(string iconName, Vector4 iconColor, float size, Action onTap, float iconScale = 1f, Gui.Widgets.Framework.Key? key = null)
+    public ScribeRowButton(string iconName, Vector4 iconColor, float size, Action onTap, float iconScale = 1f, BoxShadow[]? boxShadows = null, Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
         IconName = iconName;
@@ -3076,6 +3164,7 @@ internal sealed class ScribeRowButton : StatefulWidget
         Size = size;
         OnTap = onTap;
         IconScale = iconScale;
+        BoxShadows = boxShadows;
     }
 
     public string IconName { get; }
@@ -3091,6 +3180,11 @@ internal sealed class ScribeRowButton : StatefulWidget
     /// the difference, keeping the glyph centered — mirroring how <see cref="Size"/> vs the drawn box keeps
     /// the icon fixed when the box shrinks. Default 1 = unchanged.</summary>
     public float IconScale { get; }
+
+    /// <summary>Optional drop/inner shadow(s) painted with the button's box (forwarded to
+    /// <c>BoxStyle.BoxShadows</c>). Null = no shadow (the per-row delete/pin buttons); the enlarged sidebar
+    /// nav buttons pass one so they read as raised chrome over the notebook art (v1-playtest-fixes 5.6).</summary>
+    public BoxShadow[]? BoxShadows { get; }
 
     /// <summary>How much smaller (px, each dimension) the button's drawn chrome is than its nominal
     /// <see cref="Size"/> (2026-07-24 feedback: "2px smaller in height, 2px smaller in width"). The icon
@@ -3150,6 +3244,7 @@ internal sealed class ScribeRowButtonState : State<ScribeRowButton>
                     BorderThickness = 1f,
                     BorderColor = colors.Border,
                     Padding = EdgeInsets.All(drawnPad),
+                    BoxShadows = Widget.BoxShadows,
                 },
                 child: new VsIcon(Widget.IconName, glyph, Widget.IconColor)));
     }

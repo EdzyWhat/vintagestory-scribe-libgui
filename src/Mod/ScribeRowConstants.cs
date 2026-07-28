@@ -1,5 +1,7 @@
+using Gui.Rendering;           // SkiaExtensions.ToSkColor
 using Gui.Widgets.Framework;   // ColorScheme
 using OpenTK.Mathematics;      // Vector4
+using SkiaSharp;               // SKColor.ToHsv/FromHsv
 
 namespace Scribe;
 
@@ -73,11 +75,24 @@ internal static class ScribeRowConstants
     /// (add-settings-tab D1b). Low enough to read as a subtle wash under the row content rather than a
     /// solid fill; the former fixed amber constant is dropped in favor of this theme-derived tint so
     /// switching the LibGUI theme re-tints pinned rows automatically.</summary>
-    public const float PinnedTintAlpha = 0.22f;
+    public const float PinnedTintAlpha = 0.33f;
 
     /// <summary>The resting pinned-row tint, derived at build time from the active LibGUI theme's
     /// <see cref="ColorScheme.Primary"/> at <see cref="PinnedTintAlpha"/> (add-settings-tab D1b). Used by
     /// both the read and editor rows for a pinned task's whole-row background wash.</summary>
     public static Vector4 PinnedTint(ColorScheme colors) =>
         colors.Primary with { W = PinnedTintAlpha };
+
+    /// <summary>Returns <paramref name="color"/> with its HSV Brightness (Value) shifted by
+    /// <paramref name="deltaValue"/> points (Skia's 0–100 scale; clamped), hue/saturation and the
+    /// original float alpha preserved. Perceptually nicer than an RGB lerp toward white/black —
+    /// keeps the theme's chroma so a shifted theme color still reads as "the theme, brighter/darker".
+    /// Used by the Edit-view drag highlights to derive theme-aware source (brighter) and drop-target
+    /// (darker) washes from <see cref="ColorScheme.Primary"/>.</summary>
+    public static Vector4 ShiftBrightness(Vector4 color, float deltaValue)
+    {
+        color.ToSkColor().ToHsv(out float h, out float s, out float v);
+        var shifted = SKColor.FromHsv(h, s, Math.Clamp(v + deltaValue, 0f, 100f));
+        return new Vector4(shifted.Red / 255f, shifted.Green / 255f, shifted.Blue / 255f, color.W);
+    }
 }
