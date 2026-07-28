@@ -49,18 +49,27 @@
 
 ## 2. Multiplayer pass (A4) — second machine
 
-- [ ] 2.1 Start a local headless server on the second machine:
+- [x] 2.1 Start a local headless server on the second machine:
       `dotnet ".../VintagestoryServer.dll" --dataPath ~/vsdata` with the scribe mod in the Mods folder.
       Confirm the server starts and loads the mod without errors.
-- [ ] 2.2 Connect a second client (the second machine). Place two separate Lecterns. Edit each from its
+      - **Confirmed 2026-07-28** (two-client MP sessions): server ran clean across multiple sessions.
+- [x] 2.2 Connect a second client (the second machine). Place two separate Lecterns. Edit each from its
       respective session; confirm the documents are independent and don't bleed into each other.
-- [ ] 2.3 From session A, open Lectern 1 in read view. From session B, edit that same Lectern.
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-15-37): "Works." No cross-bleed.
+        TESTING.md `c127b9ad`.
+- [x] 2.3 From session A, open Lectern 1 in read view. From session B, edit that same Lectern.
       Confirm session A's read view updates live (server syncs the edit).
-- [ ] 2.4 From session A, open Lectern 1 in EDITOR view. From session B, try to open the same Lectern
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-15-37): "Works." Live sync confirmed.
+        TESTING.md `beee0ad8`.
+- [x] 2.4 From session A, open Lectern 1 in EDITOR view. From session B, try to open the same Lectern
       in editor (shift+right-click) → B is refused with the "one person at a time" message but can
       still open it in READ view normally.
-- [ ] 2.5 From session A's editor: drag-reorder a row, use the tool panel, adjust text-size slider.
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T09-01-45): "Works." Defensive UX holds —
+        player 2's edit affordance inert/greyed while lock held. TESTING.md `2a105a38`.
+- [x] 2.5 From session A's editor: drag-reorder a row, use the tool panel, adjust text-size slider.
       Reopen from the same session → changes persist. Confirm B's read view reflects the same order.
+      - **Confirmed 2026-07-21** (playtest report 2026-07-21T08-13-42): reorder/tool panel/text-size all
+        persist. TESTING.md `32876056`.
 - [x] 2.6 Record verdicts in TESTING.md for items c127b9ad (7.5), 2a105a38 (7.6), and the
       reorder/settings item (7.7).
       - Done 2026-07-28: c127b9ad Confirmed (07-15-37); 2a105a38 Confirmed (09-01-45); 32876056 (7.7)
@@ -68,17 +77,28 @@
 
 ## 3. Survival pass (A5) + recipe handbook entry
 
-- [ ] 3.1 Start or load a survival world (not Creative). Confirm the Lectern does NOT appear in the
+- [x] 3.1 Start or load a survival world (not Creative). Confirm the Lectern does NOT appear in the
       creative inventory in creative mode (it should — but confirm it also works in survival reach).
-- [ ] 3.2 Gather the recipe ingredients in survival: planks, nails, parchment, feather, leather, and
+      - **Confirmed 2026-07-27** (add-lectern-recipe archive 3.1): Lectern crafted and used in a survival
+        world; survival walk-away auto-close confirmed 2026-07-28 (`6ea8f46f`).
+- [x] 3.2 Gather the recipe ingredients in survival: planks, nails, parchment, feather, leather, and
       a fired bowl containing black dye (≥1 L). Confirm all items are obtainable without Creative.
-- [ ] 3.3 Craft the Lectern at a crafting grid using the `add-lectern-recipe` change's recipe.
+      - **Confirmed 2026-07-27** (add-lectern-recipe archive 3.1): all ingredients gathered and crafted
+        successfully in survival without Creative mode.
+- [x] 3.3 Craft the Lectern at a crafting grid using the `add-lectern-recipe` change's recipe.
       Confirm the recipe registers and produces one Lectern block.
-- [ ] 3.4 Place and use the crafted Lectern in survival: open read view, open editor, add a task, pin
+      - **Confirmed 2026-07-27** (add-lectern-recipe archive 3.1): recipe registered clean (no warnings),
+        survival craft produced one Lectern block. Edge cases (empty bowl, wrong leather) rejected.
+- [x] 3.4 Place and use the crafted Lectern in survival: open read view, open editor, add a task, pin
       it to HUD. Confirm no Creative-reach quirks or crashes.
-- [ ] 3.5 Confirm the Lectern's in-game handbook entry shows the crafting recipe (add-lectern-recipe
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T09-46-45): "Works in survival." Editor
+        opens, walk-away auto-closes, no Creative-reach quirks.
+- [x] 3.5 Confirm the Lectern's in-game handbook entry shows the crafting recipe (add-lectern-recipe
       task 3.2). Confirm the entry is reachable via the H handbook.
-- [ ] 3.6 Record verdicts for the survival pass items in TESTING.md (RELEASE.md A5).
+      - **Confirmed 2026-07-27** (add-lectern-recipe archive 3.2): handbook entry present and reachable
+        via H; handbook block preview rotation confirmed 2026-07-28 (`b7d1e703`).
+- [x] 3.6 Record verdicts for the survival pass items in TESTING.md (RELEASE.md A5).
+      - Done: verdicts on file per items above.
 
 ## 4. Sidebar nav buttons retest (923a395a)
 
@@ -161,8 +181,9 @@
       font persists. Relog → font still persists.
       - **Confirmed 2026-07-28** (user): all fonts display correctly and the selector switches task-text
         font live in-game.
-- [ ] 6.10 Test the fallback: temporarily rename a bundled TTF so it can't load → confirm a single
+- [x] 6.10 Test the fallback: temporarily rename a bundled TTF so it can't load → confirm a single
        warning is logged and the selector falls back to the default font without crashing.
+       - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "Works." TESTING.md `8683093c`.
 
 ## 7. Credits and CHANGELOG
 

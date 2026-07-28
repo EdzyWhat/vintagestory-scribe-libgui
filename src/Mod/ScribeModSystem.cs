@@ -714,6 +714,14 @@ public sealed class ScribeModSystem : ModSystem
                     changed |= pinStore.RemovePin(player.PlayerUID, docId, taskId);
                     Trace("  policy Unpin: removed {0}'s pin on task {1}", player.PlayerName, taskId);
                     break;
+                case ScribeCompletionPolicy.UnpinSink:
+                    // Unpin (stay) + Sink: remove the pin AND move the task to the bottom of the source doc.
+                    changed |= pinStore.RemovePin(player.PlayerUID, docId, taskId);
+                    if (resolved && lectern!.MoveTaskToBottomFromReader(taskId))
+                        Trace("  policy UnpinSink: removed pin and moved task {0} to bottom of source doc {1}", taskId, docId);
+                    else
+                        Trace("  policy UnpinSink: removed pin on task {0} (source unresolvable for sink)", taskId);
+                    break;
                 case ScribeCompletionPolicy.Delete:
                     if (resolved && lectern!.DeleteTaskFromReader(taskId))
                         Trace("  policy Delete: removed task {0} from source doc {1}", taskId, docId);
@@ -852,6 +860,7 @@ public sealed class ScribeModSystem : ModSystem
             switch (policy)
             {
                 case ScribeCompletionPolicy.Sink:
+                case ScribeCompletionPolicy.UnpinSink: // no pin to unpin for an unpinned task — just sink
                     if (lectern.MoveTaskToBottomFromReader(taskId))
                         Trace("  policy Sink(unpinned): moved task {0} to bottom of source doc {1}", taskId, docId);
                     break;

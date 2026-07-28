@@ -57,15 +57,13 @@
 - [x] 7.1 `dotnet build src/Mod/Mod.csproj` clean; Core test suite green (no Core changes expected, but
   confirm the clamp statics are still the only clamp source).
 - [x] 7.2 Restage Debug (`bash build/restage.sh Debug`) and fully relaunch the client.
-- [ ] 7.3 In-game: the `scribegrip` icon shows left of the Lectern close button with a "drag to move"
+- [x] 7.3 In-game: the `scribegrip` icon shows left of the Lectern close button with a "drag to move"
   tooltip, and the whole title-bar band still drags the window.
-  **FAILED playtest 2026-07-26 (submission …T22-24-24, TESTING `59d7ccbf`):** dragging ON the grip does not
-  move the window. Fix in §8.1, then retest.
-- [ ] 7.4 In-game: select-all + retype a numeric field (incl. Pixel Art Size) without a mid-edit snap;
+  **CONFIRMED 2026-07-27** (playtest submission 2026-07-27T10-16-26, TESTING `59d7ccbf`): "Works." Fixed by §8.1 (grip now falls through to the band's drag).
+- [x] 7.4 In-game: select-all + retype a numeric field (incl. Pixel Art Size) without a mid-edit snap;
   entering an out-of-range value clamps on blur; values persist across a relog. (Range-feedback line
   requirement dropped — see §8.2.)
-  **FAILED playtest 2026-07-26 (submission …T22-24-24, TESTING `bb25e8d3`):** retype + clamp-on-blur work,
-  but every numeric field unfocuses after each +/- step-button click. Fix in §8.2, then retest.
+  **CONFIRMED 2026-07-27** (playtest submission 2026-07-27T10-16-26, TESTING `bb25e8d3`): "Works." Fixed by §8.2 (focus survives +/- step clicks).
 - [x] 7.5 In-game: Scribe Settings shows three dividers-separated sections (Mod Behavior / Window
   Appearance / HUD Appearance) with controls under the right section; the form sits on an opaque panel.
   **PASSED playtest 2026-07-26 (TESTING `52f2e92e`).** (Polish requests captured in §9.)

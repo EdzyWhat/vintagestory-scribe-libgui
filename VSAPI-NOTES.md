@@ -1479,6 +1479,16 @@ restage + **full client relaunch** (mod assemblies and lang/assets load once at 
 build flips that flag to `true`, revisit — until then, the loop is: `build/verify.sh` (or
 `restage.sh`) → relaunch → `build/scribe-log.sh`.
 
+## Minimap on/off setting key
+
+**Reading whether the minimap is currently shown:** `capi.Settings.Bool["showMinimapHud"]`. This key
+is written by `Vintagestory.GameContent.GuiDialogWorldMap` (in `VSEssentials.dll`) when the player
+toggles the minimap — it is NOT set in `ClientSettings`'s constructor defaults, so `Exists()` returns
+false on a fresh install. The `SettingsClass<bool>` indexer returns `defaultValue` (= `false`) for a
+missing key, so a bare `Bool["showMinimapHud"]` would incorrectly read as "off" on first launch.
+**Safe pattern:** `!capi.Settings.Bool.Exists("showMinimapHud") || capi.Settings.Bool["showMinimapHud"]`
+(absent = on by default). `ISettingsClass<T>` exposes `.Exists(key)` backed by `values.ContainsKey`.
+
 ## Atlas integration harness — next-adoption notes
 
 We already depend on Atlas (the headless-server integration suite, `tests/Integration.Tests`);

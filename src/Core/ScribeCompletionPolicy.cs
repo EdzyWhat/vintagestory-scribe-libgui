@@ -31,4 +31,10 @@ public enum ScribeCompletionPolicy : byte
     /// the Mod layer applies. Appended as value 3 to preserve the wire/serialized values of the
     /// original three.</summary>
     Keep = 3,
+
+    /// <summary>Completing the task both REMOVES the player's pin for it AND moves the underlying task to
+    /// the bottom of its source document (combining <see cref="Unpin"/> + <see cref="Sink"/>). The pin
+    /// departs the HUD after the undo window (like Unpin) while the document reorder is applied server-side
+    /// (like Sink). Appended as value 4 to preserve the wire/serialized values of the earlier four.</summary>
+    UnpinSink = 4,
 }

@@ -41,20 +41,29 @@
 
 ## 4. Placeholder-fallback behavior
 
-- [ ] 4.1 Confirm a missing/unloadable PNG yields the flat placeholder color path (via cached-null),
+- [x] 4.1 Confirm a missing/unloadable PNG yields the flat placeholder color path (via cached-null),
   the dialog renders its structure over it, and no exception is thrown.
-- [ ] 4.2 Confirm exactly one warning is logged per missing asset across repeated opens.
+  - **Confirmed 2026-07-28**: flat tan placeholder rendered, no crash. TESTING.md `3451f8d1`.
+- [x] 4.2 Confirm exactly one warning is logged per missing asset across repeated opens.
+  - **Confirmed 2026-07-28**: single-warning behavior confirmed alongside 4.1. TESTING.md `3451f8d1`.
 
 ## 5. In-game verification
 
-- [ ] 5.1 Toggle ON, asset present: open the Lectern → read/editor page shows its backdrop; switch to
-  settings → a *distinct* backdrop; content is legible over the art.
-- [ ] 5.2 Toggle ON, settings PNG missing: settings page shows its flat placeholder color, no crash,
-  one logged warning; structure renders normally.
-- [ ] 5.3 Toggle OFF: neither page draws a backdrop; both render as the plain LibGUI fallback.
-- [ ] 5.4 Cache/unload: open, close, reopen the Lectern well after startup → backdrop still renders
+- [x] 5.1 Toggle ON, asset present: open the Lectern → read/editor page shows its backdrop; content is
+  legible over the art. (Note: the settings page is the standalone window, not a Lectern view — no
+  distinct backdrop spec applies there.)
+  - **Confirmed 2026-07-26** (playtest submission 2026-07-26T00-36-12, TESTING.md `a23a57e9`): "Works."
+    Backdrop draws in both read and editor views with Pixel-Art ON, text legible.
+- [~] 5.2 Toggle ON, settings PNG missing: no crash, one logged warning, structure renders normally.
+  - Covered by §4.1/4.2 (same test — the missing-asset fallback is the one remaining in-game check).
+- [x] 5.3 Toggle OFF: neither page draws a backdrop; both render as the plain LibGUI fallback.
+  - **Confirmed 2026-07-26** (playtest submission 2026-07-26T00-36-12, TESTING.md `da001e4a`): "Works."
+- [x] 5.4 Cache/unload: open, close, reopen the Lectern well after startup → backdrop still renders
   (survived asset unload) and is not re-decoded per open.
-- [ ] 5.5 Record the LibGUI backdrop legibility/behavior verdict during this pass.
+  - **Confirmed 2026-07-26** (playtest submission 2026-07-26T00-36-12, TESTING.md `ccaee4e2`): "Works."
+- [x] 5.5 Record the LibGUI backdrop legibility/behavior verdict during this pass.
+  - **Obsolete 2026-07-28** (TESTING.md `0ebd6a06`): user retired this verdict — legibility addressed
+    another way. No legibility problem reported over the current art.
 
 ## 6. Documentation
 

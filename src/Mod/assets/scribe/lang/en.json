@@ -30,7 +30,8 @@
 	"scribe-hud-more": "+{0} more",
 	"scribe-completion-sink": "Keep (sink to bottom)",
 	"scribe-completion-keep": "Keep (stay in place)",
-	"scribe-completion-unpin": "Unpin",
+	"scribe-completion-unpin": "Unpin (stay in place)",
+	"scribe-completion-unpinsink": "Unpin (sink to bottom)",
 	"scribe-completion-delete": "Delete task",
 
 	"settings-title": "Scribe Settings",
@@ -69,13 +70,13 @@
 	"settings-taskfont-help": "The font used for task and note text in the Lectern. Buttons keep their own fixed font. Applies live to an open Lectern.",
 	"settings-taskfont-default": "Default",
 
-	"settings-anchor-topleft": "Top-left",
-	"settings-anchor-topmiddle": "Top-center",
-	"settings-anchor-topright": "Top-right",
+	"settings-anchor-topleft": "Top-Left",
+	"settings-anchor-topmiddle": "Top-Center",
+	"settings-anchor-topright": "Top-Right",
 	"settings-anchor-middleleft": "Mid-Left",
 	"settings-anchor-middleright": "Mid-Right",
-	"settings-anchor-bottomleft": "Bottom-left",
-	"settings-anchor-bottomright": "Bottom-right",
+	"settings-anchor-bottomleft": "Bottom-Left",
+	"settings-anchor-bottomright": "Bottom-Right",
 
 	"inputgroup-scribe": "Scribe",
 	"hotkey-scribepinhud": "Scribe Mod: Toggle pinned-task HUD"

@@ -109,10 +109,11 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         // in GuiDialogScribeLecternLibGui.
                         items: new List<DropdownItem<ScribeCompletionPolicy>>
                         {
-                            new() { Value = ScribeCompletionPolicy.Keep,   Label = Lang.Get("scribe:scribe-completion-keep") },
-                            new() { Value = ScribeCompletionPolicy.Sink,   Label = Lang.Get("scribe:scribe-completion-sink") },
-                            new() { Value = ScribeCompletionPolicy.Unpin,  Label = Lang.Get("scribe:scribe-completion-unpin") },
-                            new() { Value = ScribeCompletionPolicy.Delete, Label = Lang.Get("scribe:scribe-completion-delete") },
+                            new() { Value = ScribeCompletionPolicy.Keep,      Label = Lang.Get("scribe:scribe-completion-keep") },
+                            new() { Value = ScribeCompletionPolicy.Sink,      Label = Lang.Get("scribe:scribe-completion-sink") },
+                            new() { Value = ScribeCompletionPolicy.Unpin,     Label = Lang.Get("scribe:scribe-completion-unpin") },
+                            new() { Value = ScribeCompletionPolicy.UnpinSink, Label = Lang.Get("scribe:scribe-completion-unpinsink") },
+                            new() { Value = ScribeCompletionPolicy.Delete,    Label = Lang.Get("scribe:scribe-completion-delete") },
                         },
                         onChanged: v => onMutate(s => s.CompletionPolicy = v))),
 

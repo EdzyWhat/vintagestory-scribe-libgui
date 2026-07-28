@@ -136,6 +136,17 @@ public class ScribePlayerSettingsTests
     }
 
     [Fact]
+    public void NormalizePolicy_UnpinSink_IsPreserved()
+    {
+        // UnpinSink (=4) is a defined policy and must survive normalization.
+        Assert.Equal(ScribeCompletionPolicy.UnpinSink,
+            ScribePlayerSettings.NormalizePolicy(ScribeCompletionPolicy.UnpinSink));
+
+        var s = new ScribePlayerSettings { CompletionPolicy = ScribeCompletionPolicy.UnpinSink }.Normalized();
+        Assert.Equal(ScribeCompletionPolicy.UnpinSink, s.CompletionPolicy);
+    }
+
+    [Fact]
     public void MaxHudMaxRows_IsTen()
     {
         // The HUD row cap was lowered 20 -> 10 (§10.3); a saved 11-20 re-clamps to 10 on next load. The

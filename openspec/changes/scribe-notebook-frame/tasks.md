@@ -36,8 +36,10 @@
 - [x] 4.4 SectionRightCol: a `Column` of nav buttons, each tooltipped — Settings (`scribegear` → `OpenSettings`),
   Read (a plain "R" text button placeholder for now; swap to the checkbox check SVG later), Edit (`scribeedit`
   feather), Pinned (`scribepin`). Wire handlers to existing view-switch / settings entry points.
-- [ ] 4.5 Confirm the functional content stays fully interactive over the backdrop and that drag works over
+- [x] 4.5 Confirm the functional content stays fully interactive over the backdrop and that drag works over
   the TitleBar band.
+  - **Confirmed 2026-07-28**: type, checkbox, pin, drag-reorder, and scroll all work with Pixel-Art ON.
+    TESTING.md `1bd45cf7` (confirmed 2026-07-26 and re-verified now).
 
 ## 5. Pixel Art Size in settings form + lang
 
@@ -85,6 +87,7 @@
   VSAPI-NOTES).
 - [x] 7.3 **Title text padding.** Add 4px `padding-left` to the title `Text` in the TitleTextButtons row so it
   isn't flush against the row's left edge. FIXED: title `Text` wrapped in `Padding(EdgeInsets.Only(left: 4))`.
-- [ ] 7.4 Rebuild, restage Debug, and re-verify in-game: raising Pixel Art Size above the opened size grows
+- [x] 7.4 Rebuild, restage Debug, and re-verify in-game: raising Pixel Art Size above the opened size grows
   the art canvas live (no spill, no relog needed); the title text has its left padding. (Restaged Debug
   2026-07-26; 7.2 hitbox remains a known deferred item, not part of this retest.)
+  - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "Works." TESTING.md `52af67fd`.

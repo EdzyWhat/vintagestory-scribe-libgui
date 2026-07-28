@@ -45,5 +45,5 @@ fi
 mkdir -p Releases
 OUT="$REPO_ROOT/Releases/${MODID}_${VERSION}.zip"
 rm -f "$OUT"
-( cd "$STAGE" && zip -r -q "$OUT" . )
+( cd "$STAGE" && zip -r -q "$OUT" . -x "**/.DS_Store" )
 echo "Wrote $OUT"

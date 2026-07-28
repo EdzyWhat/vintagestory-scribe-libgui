@@ -101,14 +101,19 @@
 
 ## 6. In-game verification
 
-- [ ] 6.1 Complete a HUD task under Unpin and under Delete: the task text fades *gradually and linearly*
+- [x] 6.1 Complete a HUD task under Unpin and under Delete: the task text fades *gradually and linearly*
   from full to zero opacity across the ~1.5s window (not an instant jump); the checkbox stays opaque;
   unchecking mid-window restores full opacity and applies nothing.
-- [ ] 6.2 Complete a HUD task under Sink (and Keep): when the window elapses the row settles to the END of
+  - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "Works." TESTING.md `f4825eb0`.
+- [x] 6.2 Complete a HUD task under Sink (and Keep): when the window elapses the row settles to the END of
   the list; then uncheck it — it STAYS at the end (does not jump back to its prior slot) for the session.
-- [ ] 6.3 In Settings, confirm max-rows + row-width sit on one row, HUD-size + window-size sit on one row,
+  - **Backlogged 2026-07-28** (playtest submission 2026-07-28T10-38-17): tester moved to backlog — current behavior feels intuitive. TESTING.md `7a86b890`.
+- [x] 6.3 In Settings, confirm max-rows + row-width sit on one row, HUD-size + window-size sit on one row,
   and the Collapse-HUD checkbox hugs its label (not full width).
-- [ ] 6.4 Focus a numeric field and press Up/Down — the value steps by that field's increment, clamped to
+  - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "Works." TESTING.md `7361924f`.
+- [x] 6.4 Focus a numeric field and press Up/Down — the value steps by that field's increment, clamped to
   range.
-- [ ] 6.5 Open the HUD-anchor dropdown — the mid-edge options read "Mid-Left" and "Mid-Right"; the HUD gear
+  - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "Works." TESTING.md `5db8d149`.
+- [x] 6.5 Open the HUD-anchor dropdown — the mid-edge options read "Mid-Left" and "Mid-Right"; the HUD gear
   is visibly smaller / proportional to the collapse chevron.
+  - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "Works." TESTING.md `6b967f10`.

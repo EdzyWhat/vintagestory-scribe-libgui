@@ -818,6 +818,11 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
                     // The task stays, so the flush's snapshot reconcile keeps the pin — unpin explicitly.
                     if (IsPinnedForMe(taskId)) SendSetPin(taskId, false);
                     break;
+                case ScribeCompletionPolicy.UnpinSink:
+                    // Unpin + sink: move the task to the bottom (like Sink), AND unpin it (like Unpin).
+                    ReorderEditorBlock(index, scratch.Blocks.Count - 1, anchorViewport: true);
+                    if (IsPinnedForMe(taskId)) SendSetPin(taskId, false);
+                    return;
                 case ScribeCompletionPolicy.Keep:
                 default:
                     break;
@@ -2907,14 +2912,15 @@ internal sealed class ScribeLecternPinnedContentState : State<ScribeLecternPinne
                     new TextStyle { FontSize = 13, Color = colors.OnSurfaceVariant }),
                 new Dropdown<ScribeCompletionPolicy>(
                     value: Widget.CompletionPolicy,
-                    // Explicit display order (v1-playtest-fixes 5.2): Keep (stay), Keep (sink), Unpin,
-                    // Delete — kept in sync with the Settings picker in ScribeSettingsContent.
+                    // Explicit display order (v1-playtest-fixes 5.2 / 9.2): Keep (stay), Keep (sink),
+                    // Unpin (stay), Unpin (sink), Delete — kept in sync with the Settings picker.
                     items: new List<DropdownItem<ScribeCompletionPolicy>>
                     {
-                        new() { Value = ScribeCompletionPolicy.Keep,   Label = Lang.Get("scribe:scribe-completion-keep") },
-                        new() { Value = ScribeCompletionPolicy.Sink,   Label = Lang.Get("scribe:scribe-completion-sink") },
-                        new() { Value = ScribeCompletionPolicy.Unpin,  Label = Lang.Get("scribe:scribe-completion-unpin") },
-                        new() { Value = ScribeCompletionPolicy.Delete, Label = Lang.Get("scribe:scribe-completion-delete") },
+                        new() { Value = ScribeCompletionPolicy.Keep,      Label = Lang.Get("scribe:scribe-completion-keep") },
+                        new() { Value = ScribeCompletionPolicy.Sink,      Label = Lang.Get("scribe:scribe-completion-sink") },
+                        new() { Value = ScribeCompletionPolicy.Unpin,     Label = Lang.Get("scribe:scribe-completion-unpin") },
+                        new() { Value = ScribeCompletionPolicy.UnpinSink, Label = Lang.Get("scribe:scribe-completion-unpinsink") },
+                        new() { Value = ScribeCompletionPolicy.Delete,    Label = Lang.Get("scribe:scribe-completion-delete") },
                     },
                     onChanged: v => Widget.OnCompletionPolicyChanged(v)),
             });

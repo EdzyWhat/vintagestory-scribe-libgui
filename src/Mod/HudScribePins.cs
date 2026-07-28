@@ -230,7 +230,12 @@ public sealed class HudScribePins : GuiBase
         // (e.g. clear of the top-right minimap) and any value nudges further from it. This replaced the
         // old "apply the clearance only when offset==0" special-case, which made 0 ambiguous (default vs.
         // deliberately-flush). Only TopRight has a non-zero pre-bake (the minimap clearance on X).
-        float prebakeX = anchor == ScribeHudAnchor.TopRight ? DefaultTopRightMinimapClearanceX : 0f;
+        //
+        // Minimap-aware pre-bake (v1-playtest-fixes 9.3): apply the clearance only when the minimap is on.
+        // "showMinimapHud" is written by GuiDialogWorldMap — absent means minimap was never explicitly
+        // toggled (i.e. on by default). Treat absent = on so a fresh install still clears the minimap.
+        bool minimapOn = !capi.Settings.Bool.Exists("showMinimapHud") || capi.Settings.Bool["showMinimapHud"];
+        float prebakeX = anchor == ScribeHudAnchor.TopRight && minimapOn ? DefaultTopRightMinimapClearanceX : 0f;
         float offX = prebakeX + settings.HudOffsetX;
         float offY = settings.HudOffsetY;
 
@@ -389,12 +394,13 @@ public sealed class HudScribePins : GuiBase
                 // A Sink completion settles to the bottom now and holds that place for the session
                 // (scribe-settings-followups 2.1): record it so a later uncheck can't pull it back up.
                 if (pending.Policy == ScribeCompletionPolicy.Sink) sunkOrder.Add(key);
-                // A destructive completion (Unpin/Delete) will remove the pin server-side; instead of
-                // dropping its row in one frame, start collapsing its height to zero in place, then remove
+                // A destructive completion (Unpin/Delete/UnpinSink) will remove the pin server-side; instead
+                // of dropping its row in one frame, start collapsing its height to zero in place, then remove
                 // it when the collapse completes (scribe-list-collapse). Its text already faded to ~0 over
                 // the window, so the collapse just closes the empty space — no flash. Snapshot it (with its
                 // current display index) so it keeps rendering even after the server push drops the live pin.
-                if (pending.Policy is ScribeCompletionPolicy.Unpin or ScribeCompletionPolicy.Delete)
+                if (pending.Policy is ScribeCompletionPolicy.Unpin or ScribeCompletionPolicy.Delete
+                                   or ScribeCompletionPolicy.UnpinSink)
                     BeginDeparting(key);
                 SendCompletion(key.Item1, key.Item2, pending.Policy);
                 anyExpired = true;
@@ -432,9 +438,10 @@ public sealed class HudScribePins : GuiBase
         // it settles when the window expires — regardless of the pending policy.
         if (PendingFor(pin) is not null) return false;
         // Sent + confirmed done: it only remains visible under a non-removing policy (Sink/Keep — Unpin/
-        // Delete removed it). Sink de-prioritizes it; Keep holds its place. We don't persist which policy
-        // completed it, so the player's current policy is the proxy (matches the resting-order intent).
-        return modSystem.MySettings.CompletionPolicy == ScribeCompletionPolicy.Sink;
+        // Delete/UnpinSink removed it). Sink de-prioritizes it; Keep holds its place. We don't persist
+        // which policy completed it, so the player's current policy is the proxy.
+        return modSystem.MySettings.CompletionPolicy is ScribeCompletionPolicy.Sink
+                                                      or ScribeCompletionPolicy.UnpinSink;
     }
 
     /// <summary>Whether a row should render MUTED (the completed, resting-at-bottom look). Tied to actually
@@ -443,12 +450,14 @@ public sealed class HudScribePins : GuiBase
     /// (scribe-settings-followups 2.2).</summary>
     private bool SunkVisual(ScribePinnedRef pin) => DisplayedDone(pin) && SunkForOrder(pin);
 
-    /// <summary>Whether a pin is inside a pending window whose policy will REMOVE it (Unpin/Delete), so
-    /// the row should fade its text out over the window as a preview of the destructive outcome (design
-    /// D7). Sink/Keep don't fade (they persist); they get the mute/settle treatment instead.</summary>
+    /// <summary>Whether a pin is inside a pending window whose text should fade out as a countdown
+    /// preview: Unpin/Delete (destructive — row departs after the window) and Sink/UnpinSink (row
+    /// moves to the bottom after the window — v1-playtest-fixes 9.1). Keep doesn't fade. Departing
+    /// rows are excluded here because their text is rendered at a fixed zero opacity instead.</summary>
     private bool IsFadingOut(ScribePinnedRef pin)
         => PendingFor(pin) is { } pending
-           && pending.Policy is ScribeCompletionPolicy.Unpin or ScribeCompletionPolicy.Delete;
+           && pending.Policy is ScribeCompletionPolicy.Unpin or ScribeCompletionPolicy.Delete
+                              or ScribeCompletionPolicy.Sink or ScribeCompletionPolicy.UnpinSink;
 
     /// <summary>
     /// A row checkbox was clicked. Deferred-send model (design D7): checking a row does NOT send the

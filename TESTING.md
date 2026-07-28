@@ -223,6 +223,12 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Confirmed 2026-07-26** (playtest submission 2026-07-26T00-36-12): "Works — survives unload." The
         backdrop still renders on reopen well after startup, proving the self-load defeats the post-startup
         asset unload.
+- [x] `3451f8d1` **Missing-asset fallback.** Rename `scribe-notebook.png` to `.bak` (path:
+      `~/Library/Application Support/VintagestoryData/Mods/scribe/assets/scribe/textures/gui/scribe-notebook.png`),
+      open the Lectern with Pixel-Art ON: the body shows the flat tan placeholder color (no crash, structure
+      intact), and the log shows exactly ONE `[scribe]` backdrop warning across multiple opens. Restore the
+      PNG after. *(scribe-gui-backdrops 4.1 / 4.2)*
+      - **Confirmed 2026-07-28**: flat tan placeholder rendered with no crash and structure intact.
 - [ ] `0ebd6a06` **Backdrop legibility verdict.** While backdrops are on, judge whether the art fights the
       text anywhere (read + editor); record whether a `textColor` override or a semi-opaque content panel is
       needed. *(scribe-gui-backdrops 5.5)*
@@ -1634,22 +1640,29 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > Up/Down arrow stepping in numeric fields (ScribeNumericField), lang renames (Mid-Left/Mid-Right), HUD gear
 > size reduction. Build clean; restaged Debug 2026-07-27 — fully relaunch first.
 
-- [ ] `f4825eb0` **HUD gradual fade.** Complete a HUD task under Unpin and under Delete: the task text
+- [x] `f4825eb0` **HUD gradual fade.** Complete a HUD task under Unpin and under Delete: the task text
       fades gradually from full to zero opacity across the 1.5s window, not an instant jump; the checkbox
       stays opaque; uncheck mid-window and the text returns to full opacity and nothing is applied.
       *(scribe-settings-followups 6.1)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "Works." Text fades gradually
+        under both Unpin and Delete; mid-window uncheck restores full opacity and nothing is applied.
 - [ ] `7a86b890` **Sink stays at end.** Complete a HUD task under Sink: after the window elapses the row
       moves to the END of the list. Then uncheck it — the row STAYS at the end, not jumping back to its
       prior slot. Test under Keep policy: same settle-and-stay behavior. *(scribe-settings-followups 6.2)*
-- [ ] `7361924f` **Settings paired layout.** Open Scribe Settings: max-rows and row-width sit on ONE row;
+      - **Backlogged 2026-07-28** (playtest submission 2026-07-28T10-38-17): tester says it "doesn't work —
+        but it's kind of a decent/intuitive feeling as it is now." Moving to backlog per tester request.
+- [x] `7361924f` **Settings paired layout.** Open Scribe Settings: max-rows and row-width sit on ONE row;
       HUD text size and window text size sit on ONE row; the Collapse-HUD checkbox hugs its label and is
       not stretched full width. *(scribe-settings-followups 6.3)*
-- [ ] `5db8d149` **Numeric arrow stepping.** In Scribe Settings, focus a numeric field and press Up arrow —
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "Works."
+- [x] `5db8d149` **Numeric arrow stepping.** In Scribe Settings, focus a numeric field and press Up arrow —
       the value steps up by that field's increment, clamped to range. Press Down — the value steps down.
       *(scribe-settings-followups 6.4)*
-- [ ] `6b967f10` **Mid-Left Mid-Right labels.** Open the HUD-anchor dropdown — the mid-edge options read
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "Works."
+- [x] `6b967f10` **Mid-Left Mid-Right labels.** Open the HUD-anchor dropdown — the mid-edge options read
       "Mid-Left" and "Mid-Right". Also confirm the HUD gear icon is visibly smaller and proportional to the
       collapse chevron beside it. *(scribe-settings-followups 6.5)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "Works."
 
 ## v1-playtest-fixes (round 2)
 
@@ -1658,28 +1671,33 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > darker drop target) with 1px border in Edit and Pinned tabs, stronger pinned-row resting tint
 > (0.22→0.33). Build clean; restaged Debug 2026-07-27 — fully relaunch first.
 
-- [ ] `bb4643ce` **Polish round 2.** Open the Lectern: (a) the title bar text is noticeably larger than
+- [x] `bb4643ce` **Polish round 2.** Open the Lectern: (a) the title bar text is noticeably larger than
       the row body text; (b) in Settings and the Pinned tab policy picker the order is Keep (stay), Keep
       (sink), Unpin, Delete; (c) set the HUD anchor to a Left edge — confirm header/footer text aligns
       LEFT; set it to a Right edge — aligns RIGHT. *(v1-playtest-fixes 5.4)*
-- [ ] `a62162ac` **Visual pass.** Open the Lectern: (a) sidebar nav buttons are larger and sit correctly
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "a.good, b.good, c.good."
+- [x] `a62162ac` **Visual pass.** Open the Lectern: (a) sidebar nav buttons are larger and sit correctly
       within the right column; (b) with Pixel Art OFF the central region and title row show a themed surface
       fill, not a transparent gap; (c) drag-reorder in Edit view and in the Pinned tab shows a lighter wash
       on the grabbed row and a darker wash on the hover target, each with a 1px border — verify in both the
       pixel-art light theme and the global dark theme; (d) pinned task rows show a stronger resting tint in
       read/editor view. *(v1-playtest-fixes 8.6)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "a. works / b. works / c. works
+        / d. works."
 
 ## v1-release-checklist (in-game items)
 
 > Handbook and font-selector manual checks from the v1-release-checklist.
 
-- [ ] `b7d1e703` **Handbook rotation.** Open the in-game handbook (H key), find the Lectern entry, and
+- [x] `b7d1e703` **Handbook rotation.** Open the in-game handbook (H key), find the Lectern entry, and
       confirm the 3D block preview reads correctly — the book face is visible, rotated correctly from the
       prior orientation. *(v1-release-checklist 10.2)*
-- [ ] `8683093c` **Font fallback.** Temporarily rename a bundled TTF file so it cannot load, then open
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "Works."
+- [x] `8683093c` **Font fallback.** Temporarily rename a bundled TTF file so it cannot load, then open
       the Lectern and select that font in the font selector. Confirm: exactly ONE warning is logged, the
       selector falls back to the default font without crashing, and task text renders normally. Restore the
       TTF after. *(v1-release-checklist 6.10)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "Works."
 
 ## scribe-notebook-frame (remaining)
 
@@ -1687,7 +1705,28 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > in OnRenderGUI when W changes), so raising Pixel Art Size above the opened value grows the art canvas
 > live without a relog. Restaged Debug 2026-07-26 — fully relaunch first.
 
-- [ ] `52af67fd` **Pixel Art canvas grows live.** In Scribe Settings, raise Pixel Art Size above the value
+- [x] `52af67fd` **Pixel Art canvas grows live.** In Scribe Settings, raise Pixel Art Size above the value
       the Lectern was opened at — the art canvas grows to fill the new size immediately without requiring a
       relog. Also confirm the title text has its left padding and is not flush left.
       *(scribe-notebook-frame 7.4)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "Works." Canvas grows live above
+        the opened value; title text has its left padding.
+
+## v1-playtest-fixes (§9 follow-ups from 2026-07-28)
+
+> Three behavior requests from playtest submission 2026-07-28T10-38-17 general notes: HUD Sink fade
+> animation, a new "Unpin (sink to bottom)" completion policy with the old Unpin renamed to "Unpin
+> (stay in place)", and a minimap-aware HUD offset for Top-Right anchor.
+
+- [x] `e7d98c92` **HUD Sink fade.** Under Keep (sink to bottom) policy, complete a HUD task — the text
+      fades gradually during the undo window and the row moves to the bottom on elapse; mid-window uncheck
+      cancels and restores opacity. *(v1-playtest-fixes 9.4)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T11-06-45): "Works."
+- [x] `cd577b4f` **Unpin (sink to bottom) policy.** New policy appears in both pickers alongside renamed
+      "Unpin (stay in place)"; completing under the new policy both unpins AND moves the task to the bottom
+      of the document. *(v1-playtest-fixes 9.4)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T11-06-45): "Works."
+- [x] `dcf81c60` **Minimap-aware HUD offset.** With HUD Position set to Top-Right and minimap ON, the HUD
+      clears the minimap as before; with minimap OFF, no extra clearance gap — HUD sits at the default
+      anchor position. *(v1-playtest-fixes 9.4)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T11-06-45): "Works."

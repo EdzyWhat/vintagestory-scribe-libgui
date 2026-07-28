@@ -108,10 +108,11 @@ symbol. Source items: playtest submission `2026-07-27T10-16-26`.
   (`navShadow`: black @ 0.35, offset (2,2), blur 4) via a new `boxShadows` param threaded
   `TitleButton` → `ScribeRowButton` → `BoxStyle.BoxShadows`. Build clean; restaged Debug 2026-07-27.
   (Added per user request this session; values iterated live.)
-- [ ] 5.4 Manually test in-game: title bar text is noticeably larger than the row text; policy picker
+- [x] 5.4 Manually test in-game: title bar text is noticeably larger than the row text; policy picker
   shows the new order in both Settings and the Pinned view; HUD header/footer text aligns left on a
   Left-anchored HUD and right on a Right-anchored HUD; the Read/Edit/Pinned/Settings sidebar buttons are
   50% larger (box + glyph) — note how the enlarged buttons read against the SideColW column bounds.
+  - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "a.good, b.good, c.good." TESTING.md `bb4643ce`.
 
 ## 6. HUD-Delete refreshes open editor (`80777b7b`)
 
@@ -160,9 +161,43 @@ recorded here as tasks because §5 is the standing "polish" home and 5.6 already
 - [x] 8.4 Pinned-row resting tint stronger: bump `ScribeRowConstants.PinnedTintAlpha` 0.22 → 0.33 (the
   theme-`Primary`-derived resting wash for pinned tasks in the read + editor views).
 - [x] 8.5 `dotnet build` / `restage.sh Debug` clean (0 warn / 0 err); Core suite green.
-- [ ] 8.6 Manually test in-game: (a) enlarged sidebar buttons sit correctly within the retuned `SideColW`;
+- [x] 8.6 Manually test in-game: (a) enlarged sidebar buttons sit correctly within the retuned `SideColW`;
   (b) with Pixel Art OFF, the central region + title row show the themed surface fill (not a transparent
   gap), title text keeps its left gap; (c) Edit view AND Pinned tab drags show a lighter theme wash on the
   grabbed row and a darker one on the hover target, each with a crisp 1px border, source winning on
   overlap — verify it reads well against BOTH the pixel-art light theme and the global dark theme; (d)
   pinned rows show a slightly stronger resting tint in read/editor views.
+  - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "a. works / b. works / c. works / d. works." TESTING.md `a62162ac`.
+
+## 9. Playtest follow-ups (submission 2026-07-28T10-38-17)
+
+Three requests from the 2026-07-28 session general notes.
+
+- [x] 9.1 **HUD Sink fade bug.** Under "Keep (sink to bottom)" policy, the Sink path currently completes
+  the timer and moves the row to the bottom but does NOT play the gradual fade animation. The fade
+  (`ScribeFadeText`) is wired for Unpin and Delete but not Sink. Add the same fade-during-undo-window
+  behavior to Sink: during the undo window the row's text fades toward zero opacity (checkbox stays
+  opaque); unchecking within the window restores full opacity and cancels; elapsing applies the sink
+  (move to bottom). Likely touches `HudScribePins` departure/undo logic and `ScribeFadeText` usage.
+  - Extended `IsFadingOut` in `HudScribePins.cs` to include `Sink` and `UnpinSink` (alongside `Unpin`/`Delete`), so `ScribeFadeText` now runs for all four removing/sinking policies during the undo window.
+- [x] 9.2 **New "Unpin (sink to bottom)" policy.** Add a fifth completion policy that combines the
+  Unpin and Keep-sink behaviors: the task is unpinned AND moved to the bottom of the document on
+  completion. The current "Unpin" behavior (task stays in place) should be renamed to
+  "Unpin (stay in place)" to distinguish them. Update: `ScribeCompletionPolicy` enum, lang keys
+  (`en.json`), both policy pickers (Settings + Pinned view), all policy switch/case sites
+  (`HudScribePins`, `ScribeLecternViewConsistency` or wherever policy is enacted), and Core unit tests.
+  - Added `UnpinSink = 4` to `ScribeCompletionPolicy`; renamed "Unpin" lang key → "Unpin (stay in place)", added "scribe-completion-unpinsink"; updated both pickers, all 4 switch/case sites (`ScribeModSystem` ×2, `GuiDialogScribeLecternLibGui`, `HudScribePins`), and `BeginDeparting`/`SunkForOrder` checks. New Core test `NormalizePolicy_UnpinSink_IsPreserved` added. Build clean; 141/141 green.
+- [x] 9.3 **Minimap-aware HUD offset for Top-Right anchor.** When HUD Position is Top-Right, read
+  whether the player has Settings → Interface → Minimap enabled. If the minimap is ON, keep the
+  existing top-right clearance offset. If it is OFF, set the effective offset modifier to 0 (no extra
+  clearance needed). This needs a way to read the minimap setting from the client config at HUD-build
+  time — investigate the VS API path (e.g. `capi.Settings.Bool["showMinimapHud"]` or equivalent)
+  before implementing; note the result in VSAPI-NOTES.md.
+  - Key confirmed: `capi.Settings.Bool["showMinimapHud"]` (written by `GuiDialogWorldMap`, absent on fresh install = on). In `ApplyAnchor()`, `prebakeX` for TopRight now 260f when minimap is on (or absent), 0f when explicitly off. Safe absent-key pattern documented in VSAPI-NOTES.md.
+- [x] 9.4 Manually test in-game: (9.1) under Sink policy the text fades during the undo window and the
+  row sinks to the bottom on elapse; mid-window uncheck cancels and restores opacity. (9.2) new
+  "Unpin (sink to bottom)" and renamed "Unpin (stay in place)" appear in both pickers; completing under
+  the new policy both unpins AND moves to the bottom. (9.3) with minimap ON the HUD clears the minimap;
+  with minimap OFF the HUD sits at the default anchor position with no extra clearance gap.
+  - **Confirmed 2026-07-28** (playtest submission 2026-07-28T11-06-45): all three pass. TESTING.md `e7d98c92` / `cd577b4f` / `dcf81c60`.
+  - Also applied from general note: normalized HUD anchor label capitalization in `en.json` (Top-Left, Top-Center, Top-Right, Bottom-Left, Bottom-Right — was inconsistent lowercase vs. title case).
