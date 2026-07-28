@@ -704,8 +704,11 @@ internal sealed class HudPinsContent : StatelessWidget
                     Lang.Get("scribe:scribe-hud-more", moreCount),
                     new TextStyle
                     {
+                        // Desaturated 66% (keep 34% of the theme chroma) so the "+N more" footer and the
+                        // header gear — which share OnSurfaceVariant — read as a muted, near-grey HUD accent
+                        // rather than the theme's tinted variant (v1-release-checklist 11.2 follow-up).
+                        Color = ScribeRowConstants.ShiftBrightness(colors.OnSurfaceVariant, 0f, saturationScale: 0.34f),
                         FontSize = 13,
-                        Color = colors.OnSurfaceVariant,
                         GlowWidth = GlowWidth,
                         GlowColor = glow,
                     }));
@@ -759,12 +762,13 @@ internal sealed class HudPinsContent : StatelessWidget
                 }));
 
         // Gear sized to sit proportionally with the chevron/title beside it (scribe-settings-followups 4.2):
-        // 12px reads right against the 14px title, where the prior 16px looked oversized.
-        var gear = new GestureDetector(
-            onTap: _ => onOpenSettings(),
-            child: new Padding(
-                EdgeInsets.Only(left: 6),
-                child: new VsIcon("scribegear", 12f, colors.OnSurfaceVariant)));
+        // 12px reads right against the 14px title, where the prior 16px looked oversized. Its base color is
+        // desaturated 66% to match the "+N more" footer (both share OnSurfaceVariant); ScribeHudGearButton
+        // owns the hover-brighten (+10 V) and the up-3/left-5 nudge + tap. It is self-stateful so the hover
+        // survives the HUD's ForceRebuild (mirroring ScribeFadeText).
+        var gear = new ScribeHudGearButton(
+            baseColor: ScribeRowConstants.ShiftBrightness(colors.OnSurfaceVariant, 0f, saturationScale: 0.34f),
+            onTap: onOpenSettings);
 
         return new Row(
             spacing: 4,
@@ -828,7 +832,21 @@ internal sealed class HudPinsContent : StatelessWidget
                 new Checkbox(
                     value: row.Done,
                     onChanged: _ => onToggleRow(row.DocId, row.TaskId, row.Done),
-                    size: checkboxSize),
+                    size: checkboxSize,
+                    // Grayscale, not the theme default (v1-release-checklist 11.2). The stock CheckboxStyle
+                    // maps CheckColor←Primary, which is the parchment theme's brown ochre — out of place on
+                    // the HUD, which deliberately renders theme-independent near-white text over the world
+                    // glow (see textStyle above). Override to a light-grey box + near-white check so the
+                    // checkbox reads as part of the same grayscale HUD as its text.
+                    style: new CheckboxStyle
+                    {
+                        CheckColor = new Vector4(0.867f, 0.867f, 0.867f, 1f),   // #dddddd — softer than white, less blinding
+                        BackgroundColor = new Vector4(0.28f, 0.28f, 0.28f, 0.75f), // neutral dark-grey box at 75% opacity
+                        BorderColor = new Vector4(0.8f, 0.8f, 0.8f, 0.75f),  // #cccccc at 75% opacity — dimmer light-grey outline
+                        BorderThickness = 1.5f,
+                        CornerRadius = 2f,
+                        LabelStyle = textStyle,   // unused (no label) but required by the struct
+                    }),
                 // Expanded so the (SoftWrap) text wraps within the remaining fixed width.
                 new Expanded(child: text),
             });
@@ -917,5 +935,67 @@ internal sealed class ScribeFadeTextState : State<ScribeFadeText>
         controller?.Dispose();
         controller = null;
         base.Dispose();
+    }
+}
+
+/// <summary>The HUD header's settings gear: a self-stateful icon button that brightens +10 HSV Value on
+/// hover and opens the settings surface on tap. Stateful (not a bare GestureDetector) so the hover state
+/// survives the HUD's <see cref="GuiBase.ForceRebuild"/> — the same reason <see cref="ScribeFadeText"/> is.
+/// The up-3/left-5 nudge lives here: left comes off the leading pad, and the −3 y is a
+/// <c>Transform.Translate</c> wrapping the GestureDetector so the CLICKABLE region moves with the paint
+/// (<c>RenderTransform.GlobalToChild</c>), not just the drawn glyph.</summary>
+internal sealed class ScribeHudGearButton : StatefulWidget
+{
+    public ScribeHudGearButton(Vector4 baseColor, Action onTap, Gui.Widgets.Framework.Key? key = null) : base(key)
+    {
+        BaseColor = baseColor;
+        OnTap = onTap;
+    }
+
+    public Vector4 BaseColor { get; }
+    public Action OnTap { get; }
+
+    public override State CreateState() => new ScribeHudGearButtonState();
+}
+
+internal sealed class ScribeHudGearButtonState : State<ScribeHudGearButton>
+{
+    private bool hovered;
+
+    public override Widget Build(BuildContext context)
+    {
+        // Hover brightens the gear +10 HSV Value (reusing ShiftBrightness, matching the lectern nav/row
+        // buttons' hover feel); saturation/hue/alpha unchanged so it stays the same muted grey, just lighter.
+        var color = hovered
+            ? ScribeRowConstants.ShiftBrightness(Widget.BaseColor, +10f)
+            : Widget.BaseColor;
+
+        // VsIcon has no text-style glow (it's a tinted texture, not Skia text), so match the HUD text's
+        // dark halo with a Container BoxShadow instead — black, zero-offset, blurred — the same mechanism
+        // the lectern sidebar nav buttons use. It halos the icon's ~12px box rather than the glyph outline
+        // the way text glow hugs letterforms, but reads as the same legibility halo over a busy world.
+        var haloed = new Container(
+            new BoxStyle
+            {
+                BoxShadows = new[]
+                {
+                    new BoxShadow(
+                        Color: new Vector4(0f, 0f, 0f, 0.6f),   // softened black halo (full opacity read too harsh)
+                        Offset: new Vector2(0f, 0f),
+                        BlurRadius: 3f),
+                },
+            },
+            new VsIcon("scribegear", 12f, color));
+
+        return Transform.Translate(
+            new MouseRegion(
+                onEnter: _ => { if (!hovered) SetState(() => hovered = true); },
+                onExit: _ => { if (hovered) SetState(() => hovered = false); },
+                child: new GestureDetector(
+                    onTap: _ => Widget.OnTap(),
+                    child: new Padding(
+                        EdgeInsets.Only(left: 1),
+                        child: haloed))),
+            new Vector2(0f, -3f));
     }
 }

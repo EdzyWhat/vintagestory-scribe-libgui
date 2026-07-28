@@ -589,10 +589,30 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         return true;
     }
 
+    /// <summary>The user-facing "switch to editor" entry point for both affordances (read-view footer
+    /// button and the right-column Edit nav button) — fix-multiplayer-editor-lock §4. If the synced lock
+    /// state shows another player already holds the editor lock, this does NOT round-trip to the server:
+    /// it surfaces the native in-game error and stays put (the affordance is also rendered inert in that
+    /// state — see BuildRightColNav / the read-view footer). Otherwise it requests access normally; the
+    /// server refusal remains the authoritative backstop for the render→click race. Distinct from
+    /// <see cref="RequestEditorAccess"/>, which is the raw request also used by the lost-lock recovery
+    /// re-acquire (<see cref="HandleSaveFailed"/>) and must NOT be gated.</summary>
+    private void TryEnterEditor()
+    {
+        if (lectern.IsLockedByOther(capi.World.Player.PlayerUID))
+        {
+            capi.TriggerIngameError(this, "scribe-lectern-locked", Lang.Get("scribe:scribe-gui-locked"));
+            return;
+        }
+
+        RequestEditorAccess();
+    }
+
     /// <summary>"Switch to editor" button in the read view: request editor access from the server
     /// (design D2 flow, unchanged). A granted reply round-trips back to
     /// <see cref="BlockEntityScribeLectern.HandleServerReply"/>, which calls
-    /// <see cref="EnterEditorMode"/>.</summary>
+    /// <see cref="EnterEditorMode"/>. Callers that gate on the synced lock go through
+    /// <see cref="TryEnterEditor"/>; this raw form is also the lost-lock recovery re-acquire.</summary>
     private void RequestEditorAccess()
     {
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeRequestAccessMessage
@@ -1505,6 +1525,11 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         // size AND glyph size from this one `size` value.
         float size = ScribeRowConstants.RowCheckboxSize * 1.7f;
 
+        // Whether the editor lock is held by ANOTHER player (fix-multiplayer-editor-lock §4.1). When true
+        // the Edit nav button reads as unavailable (dimmed glyph) and its tap surfaces the native error
+        // instead of entering the editor — TryEnterEditor enforces the no-entry; this only styles it.
+        bool editLockedByOther = lectern.IsLockedByOther(capi.World.Player.PlayerUID);
+
         // A soft drop shadow so the enlarged nav buttons read as raised chrome floating over the notebook
         // art (v1-playtest-fixes 5.6). Semi-transparent black, nudged down-right, gently blurred.
         var navShadow = new[]
@@ -1529,8 +1554,9 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
                 TitleButton("scribecheck", "scribe-gui-nav-read", colors.OnSurfaceVariant,
                     size: size, onTap: EnterReadMode, boxShadows: navShadow,
                     activeColor: viewMode == ScribeLecternView.Read ? ScribeRowConstants.NavActiveRead : null),
-                TitleButton("scribeedit", "scribe-gui-nav-edit", colors.OnSurfaceVariant,
-                    size: size, onTap: RequestEditorAccess, boxShadows: navShadow,
+                TitleButton("scribeedit", "scribe-gui-nav-edit",
+                    editLockedByOther ? colors.OnSurfaceVariant with { W = 0.4f } : colors.OnSurfaceVariant,
+                    size: size, onTap: TryEnterEditor, boxShadows: navShadow,
                     activeColor: viewMode == ScribeLecternView.Editor ? ScribeRowConstants.NavActiveEdit : null),
                 // Pinned enlarged +15% (§10.2): the pin glyph reads a touch larger than the others.
                 TitleButton("scribepin", "scribe-gui-nav-pinned", colors.OnSurfaceVariant,
@@ -1603,7 +1629,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
                 .ToList(),
             onToggleTask: OnReadViewCompleteTask,
             onTogglePinned: OnReadViewTogglePinned,
-            onSwitchToEditor: RequestEditorAccess,
+            onSwitchToEditor: TryEnterEditor,
             // Symmetric 0.04·W horizontal inset on the footer button, from the same LecternLayout width.
             footerButtonPadding: EdgeInsets.Symmetric(
                 horizontal: 0.04f * new LecternLayout(modSystem.MySettings.PixelArtSize).W),

@@ -16,7 +16,13 @@
 - [ ] 1.6 In-game: edit a pin whose source Lectern IS loaded → source doc text updates and persists
       (reopen the Lectern to verify).
 - [ ] 1.7 In-game: edit/delete a pin whose source Lectern IS NOT loaded → pin snapshot/removal
-      updates; no crash; source doc unchanged.
+      updates; no crash; source doc unchanged (reconciles if/when the source is loaded again).
+      "Source not loaded" covers all three real ways a source goes away in survival — test each:
+      (a) the source Lectern has been picked up and NOT re-placed (block gone, item in inventory);
+      (b) the source Lectern has been fully destroyed (block gone for good);
+      (c) the source Lectern is simply out of chunk-load range — players travel thousands of blocks,
+      so walk far enough that its chunk unloads on the server, then edit/delete the pin from the Pin Tab.
+      Editing from a *different nearby* Lectern while the source is still loaded is §1.6, NOT this test.
 - [ ] 1.8 In-game: unpin removes the pin only (task survives in the source doc); delete removes the
       task from the source doc.
 - [ ] 1.9 In-game: reorder pins → order persists per-player across relog (under `scribe:pins:v1`);
@@ -189,3 +195,27 @@
 - [ ] 9.6 Run `/simplify` code quality pass on `src/Mod/GuiDialogScribeLecternLibGui.cs` and the most
       recently touched files.
 - [ ] 9.7 Iterate on the VS mod DB page based on early download/comment feedback.
+
+## 10. Playtest-surfaced fixes (from submission 2026-07-28T06-33-23)
+
+- [ ] 10.1 Create a mod-manager / mod-DB icon image for Scribe (the picture shown in the in-game Mod
+      Manager list and on the VS mod DB page). Add it to the mod so the manager shows a real icon, not a
+      placeholder. Confirm it renders in the in-game Mod Manager after a restage/relaunch. (Distinct from
+      §9.2's press/feature screenshots — this is the packaged mod icon.)
+- [ ] 10.2 Rotate the Lectern's in-game handbook block preview 90° clockwise — the handbook listing
+      currently shows the block at the wrong orientation. In-game: open the H handbook, find the Lectern
+      entry, confirm the 3D preview reads correctly (90° CW from its current orientation). (Relates to the
+      §3.5 handbook-entry check and the `c2ed2683` placement-facing work.)
+
+## 11. Playtest-surfaced fixes (from submissions 2026-07-28T07-15-37 + 07-33-43)
+
+- [ ] 11.1 Fix the multiplayer editor-lock UX (`2a105a38` in TESTING.md). **Split into its own change:
+      `fix-multiplayer-editor-lock`** (proposal/design/specs/tasks written 2026-07-28). Track and implement
+      it there via `/opsx:apply`; this line is done once that change lands and `2a105a38` is retested green.
+- [ ] 11.2 HUD checkbox color: the pinned-task HUD row checkbox currently tints from the theme (reads
+      brown). Make it grayscale to match the rest of the mod's HUD text (near-white / grey), via a
+      `CheckboxStyle` override on the `Checkbox` in `HudScribePins.BuildRow` rather than the theme's
+      `CheckColor`/`BorderColor`. In-game: pin a task, confirm the HUD checkbox reads grayscale, not brown.
+- [ ] 11.3 Reword the completion-policy label: `settings-completionpolicy` in `lang/en.json` from
+      "On completing a task" to "On newly completing a task" (drives both the Settings window label and the
+      Pin Tab policy picker header). In-game: confirm both surfaces show the new text.

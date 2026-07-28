@@ -62,6 +62,19 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable
     /// <summary>Server-side only: the UID of the player currently editing, if any.</summary>
     private string? lockHolderUid;
 
+    /// <summary>Client-side mirror of <see cref="lockHolderUid"/>, synced via the block-entity tree
+    /// (fix-multiplayer-editor-lock §2.1) so the client can reflect a held lock in its "switch to editor"
+    /// affordance WITHOUT a server round-trip. The server keeps <see cref="lockHolderUid"/> authoritative;
+    /// this is only read on the client. Null when the lock is free.</summary>
+    private string? syncedLockHolderUid;
+
+    /// <summary>Client-side: true when the editor lock is held by a DIFFERENT player than
+    /// <paramref name="viewerUid"/> (so this viewer's editor affordance should read as unavailable). False
+    /// when the lock is free or held by this viewer themselves. The server refusal remains the
+    /// authoritative gate; this only drives the affordance state for the common, already-known case.</summary>
+    public bool IsLockedByOther(string viewerUid) =>
+        syncedLockHolderUid is not null && syncedLockHolderUid != viewerUid;
+
     /// <summary>Server-side: DocId this block entity has registered in the pin store's live index, so
     /// it can unregister exactly that id on removal even if <see cref="Document"/> was later replaced.
     /// Null until the first server-side register.</summary>
@@ -132,6 +145,9 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable
         base.ToTreeAttributes(tree);
         tree.SetBytes(DocumentAttributeKey, ScribeDocumentCodec.Serialize(Document));
         tree.SetFloat("meshAngle", meshAngleRad);
+        // Sync the editor-lock holder so clients can reflect a held lock in their editor affordance
+        // (fix-multiplayer-editor-lock §2.1). Empty string = lock free (tree attrs don't store null).
+        tree.SetString("lockHolder", lockHolderUid ?? "");
     }
 
     public override void FromTreeAttributes(ITreeAttribute tree, IWorldAccessor worldForResolving)
@@ -144,6 +160,12 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable
         MeshAngleRad = tree.HasAttribute("meshAngle")
             ? tree.GetFloat("meshAngle", 0f)
             : (Block?.Shape?.rotateY ?? 0f) * ((float)Math.PI / 180f);
+
+        // Client mirror of the editor-lock holder (fix-multiplayer-editor-lock §2.1). Empty string (the
+        // "lock free" sentinel written above) maps back to null. Read on the client to drive the editor
+        // affordance; the server ignores its own synced copy (lockHolderUid stays authoritative).
+        var lockHolder = tree.GetString("lockHolder", "");
+        syncedLockHolderUid = string.IsNullOrEmpty(lockHolder) ? null : lockHolder;
 
         var bytes = tree.GetBytes(DocumentAttributeKey);
         // A v3 document had no persisted ids: the codec generates fresh ones and surfaces which tasks
@@ -258,6 +280,10 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable
         }
 
         lockHolderUid = byPlayer.PlayerUID;
+        // Re-sync so other clients see the lock is now held and can disable their editor affordance
+        // (fix-multiplayer-editor-lock §2.1). redrawOnClient:false — this only changes lock state, not the
+        // document, so no read-view rebuild is needed; the tree attr rides the next block-entity packet.
+        MarkDirty();
         SendReply(sapi, byPlayer, granted: true, editorMode: true, refusalReason: null);
     }
 
@@ -407,6 +433,9 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable
         if (lockHolderUid == playerUid)
         {
             lockHolderUid = null;
+            // Re-sync so other clients see the lock is free again and re-enable their editor affordance
+            // (fix-multiplayer-editor-lock §2.1). Also covers the disconnect path (OnPlayerDisconnect).
+            MarkDirty();
         }
     }
 

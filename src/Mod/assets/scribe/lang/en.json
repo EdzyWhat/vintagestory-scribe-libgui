@@ -10,7 +10,7 @@
 	"scribe-gui-pin": "Pin to HUD",
 	"scribe-gui-unpin": "Unpin from HUD",
 	"scribe-gui-textsize": "Text Size",
-	"scribe-gui-locked": "Only one person can use the lectern at a time.",
+	"scribe-gui-locked": "Another player is making edits.",
 	"scribe-gui-switch-to-editor": "Edit",
 	"scribe-gui-switch-to-read": "Done Editing",
 	"scribe-gui-newtask-placeholder": "New task…",
@@ -38,7 +38,7 @@
 	"settings-section-windowappearance": "Window Appearance",
 	"settings-section-hudappearance": "HUD Appearance",
 
-	"settings-completionpolicy": "On completing a task",
+	"settings-completionpolicy": "On newly completing a task",
 	"settings-completionpolicy-help": "What happens to a pinned task when you check it off: keep it pinned (it sinks to the bottom of the HUD), unpin it, or delete the underlying task.",
 	"settings-hudcollapsed": "Collapse the HUD",
 	"settings-hudcollapsed-help": "Minimize the pinned-task HUD to just its header. Same as the HUD's collapse chevron and its toggle hotkey.",

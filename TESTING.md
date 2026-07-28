@@ -235,6 +235,10 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         semi-transparent fill that reads too subtly. The user wants much more contrast — a BLUE row tint at
         ≥85% opacity, a darker blue for dark mode and a lighter blue for light mode; expected to need
         iteration. Touches `ScribeTheme`/the pinned-row tint, not the backdrop mechanism.
+      - **Obsolete 2026-07-28** (playtest submission 2026-07-28T07-15-37): user retired this legibility
+        verdict — "we changed the spec with more contrast another way." The legibility concern was addressed
+        by a different contrast approach (see the pinned-row contrast request above), so a standalone
+        art-vs-text legibility judgment no longer applies as written.
 - [ ] `b7e0d31c` **Missing-asset placeholder + single warning.** Temporarily rename/remove the LOADED
       backdrop PNG, open the Lectern with Pixel-Art ON: the body draws its flat placeholder color (no crash,
       structure renders normally) and the log shows exactly ONE `[scribe] backdrop asset … not loadable`
@@ -460,12 +464,15 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Confirmed 2026-07-25** (playtest submission 2026-07-25T13-50-39): "Works." Title reads "Scribe
         Settings" in the settings view and the filled gear icon renders. (General-note follow-up, new scope:
         the gear on the HUD pinned list is ~25% too big.)
-- [ ] `a581fcab` **Multiplayer Back safety.** Enter the editor, open settings (releasing the lock), have a
+- [x] `a581fcab` **Multiplayer Back safety.** Enter the editor, open settings (releasing the lock), have a
       second player grab the editor, then hit Back — you land in the read view, not a stuck settings frame.
       *(add-settings-tab 9.6)*
       - **Backlogged 2026-07-25** (playtest submission 2026-07-25T13-50-39): "Deferred until multiplayer
         testing." Needs a two-client setup; parked, not broken — the code path (Back-loses-lock → read-view
         fallback) is in place.
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-15-37, two-client MP session): "Works."
+        With a second player holding the editor lock, hitting Back lands in the read view — no stuck settings
+        frame.
 
 ## add-pinned-task-hud
 
@@ -829,6 +836,8 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Fix applied 2026-07-27 (second pass — awaiting retest — v1-playtest-fixes 1.2):** `CaptureAllInputs()`
         now checks `editorFocusNodes[idx].HasFocus` directly (live state) rather than trusting the stale
         `focusedEditIndex` value. Retest: item `e6b5148e`.
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Works. All hotkeys pass." The
+        second-pass live-`HasFocus` guard holds across a fresh session — re-confirmed.
 
 ## adopt-libgui-foundation
 
@@ -1216,7 +1225,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         so survival never flash-closes and behaves exactly as vanilla block-entity dialogs do — the
         override just hardcodes the value survival already uses. A quick survival open/walk-away
         would confirm empirically, but the math shows no regression.
-- [ ] `c127b9ad` **(7.5) Multiplayer, separate lecterns.** With two clients connected, give
+- [x] `c127b9ad` **(7.5) Multiplayer, separate lecterns.** With two clients connected, give
       each a lectern. Confirm edits made on one player's lectern don't bleed into the other's,
       and that when one player edits, the other sees the change appear live in their read view
       of that same lectern.
@@ -1224,6 +1233,9 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         "complex task, move to the bottom of the roadmap, but before mod release." Needs a
         two-client / headless-server setup; not blocked by code, parked by choice until closer
         to release.
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-15-37, two-client MP session): "Works."
+        Separate lecterns keep independent documents (no cross-bleed), and one player's edit appears live in
+        the other's read view of that same lectern.
 - [ ] `2a105a38` **(7.6) Editor lock.** Have one player open a lectern in edit view (holding
       the lock). Confirm a second player is refused edit access to that same lectern but can
       still open it read-only, and that when the first player closes it or disconnects, the
@@ -1231,6 +1243,16 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Backlogged 2026-07-19** (playtest report 2026-07-19T10-56-08): user deferred alongside
         7.5 — "complex task, move to the bottom of the roadmap, but before mod release." Same
         two-client setup requirement; parked until closer to release.
+      - **Still broken 2026-07-28** (playtest submissions 2026-07-28T07-15-37 + 07-33-43, two-client MP session,
+        behavior clarified by user): current behavior is that player 2 CAN enter the edit screen and appears to
+        type, but their edits are reverted by the editor within a few frames. This happens BOTH when player 1
+        holds the edit screen AND when no one else is editing — i.e. P2's edits never stick regardless of P1's
+        state, with NO feedback explaining why. This is not the expected behavior. Two desired changes: (1)
+        surface visual feedback when an edit can't be made — via Vintage Story's native error report or another
+        mechanism (candidate copy: "Another player is making edits."); and (2) when player 1 is actively IN the
+        edit view, player 2 should not be able to click into / activate the edit view at all (a client-side
+        pre-open lock check), rather than being silently scrubbed. Needs a real fix — see v1-release-checklist
+        §11.1. Retest after that lands.
 - [x] `942d549b` **(8.15) Visible scrollbar in both views.** Add enough tasks (or raise
       `TextSizeScale` in `scribe-client-config.json`) that the list exceeds the dialog height. In the
       READ view a draggable scrollbar track should appear on the right; drag its thumb and click the
@@ -1516,13 +1538,15 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         reusing `FocusEditorRow`, which sets `pendingEnsureVisible` → scrolled the focused row into view
         even though the click was on another row. Fix: re-grant focus with `FocusNode.RequestFocus()`
         directly (no scroll) on the Keep/Unpin/un-check path.
-- [ ] `923a395a` **Sidebar nav buttons 50% bigger.** The Read/Edit/Pinned/Settings buttons in the Lectern
+- [x] `923a395a` **Sidebar nav buttons 50% bigger.** The Read/Edit/Pinned/Settings buttons in the Lectern
       sidebar (SectionRightCol) are 50% larger — both the button box and the inscribed SVG. Check how the
       enlarged buttons read against the SideColW column bounds (they may overflow). *(v1-playtest-fixes 5.6)*
       - **Fix applied 2026-07-27 (awaiting retest — v1-playtest-fixes 5.6):** scaled the shared `size` local
         in `BuildRightColNav` ×1.5 (RowCheckboxSize × 1.2 → × 1.8); `ScribeRowButton` derives both its box
         and glyph size from that value, so both grow together. Overflow past `SideColW` left intentional to
         judge in-game. Restaged Debug.
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Works. Looks good." The enlarged
+        (×1.5) nav buttons read well within the sidebar column bounds; no problematic overflow.
 
 ## scribe-pin-editor
 
@@ -1533,31 +1557,61 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > §1, transcribed from scribe-pin-editor 7.1–7.11). This is the single largest un-verified v1 surface, so
 > run every item before trusting it. Fully relaunch the client first.
 
-- [ ] `691ef3c9` **Open the Pin Tab.** Open the Lectern and click the pin nav button; the central region
+- [x] `691ef3c9` **Open the Pin Tab.** Open the Lectern and click the pin nav button; the central region
       switches to the Pin Tab listing all pins across documents with no row cap. Navigate back and forth to
       the read and editor views. *(v1-release-checklist 1.3)*
-- [ ] `8e914c42` **Rows are editable.** In the Pin Tab, confirm rows are editable by default: text field,
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Pin view works." The pin nav
+        button switches to the Pin Tab and navigates back to read/editor.
+- [x] `8e914c42` **Rows are editable.** In the Pin Tab, confirm rows are editable by default: text field,
       checkbox, delete, unpin, and reorder grip are all present and each acts on the correct pin.
       *(v1-release-checklist 1.4)*
-- [ ] `639b2da7` **Complete has no undo delay.** Complete a task from the Pin Tab; it applies immediately
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Rows are editable in pin view
+        with expected function." Text field, checkbox, delete, unpin, and grip all present and acting on the
+        right pin.
+- [x] `639b2da7` **Complete has no undo delay.** Complete a task from the Pin Tab; it applies immediately
       with NO undo delay, and the corner HUD updates in lockstep. *(v1-release-checklist 1.5)*
-- [ ] `85592294` **Edit a loaded-source pin.** Edit a pin whose source Lectern IS loaded; the source doc
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Works immediately, confirmed."
+        Completion applies with no undo delay; HUD updates in lockstep.
+- [x] `85592294` **Edit a loaded-source pin.** Edit a pin whose source Lectern IS loaded; the source doc
       text updates and persists (reopen the Lectern to verify), and the pin snapshot updates.
       *(v1-release-checklist 1.6)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Works." Editing a loaded-source
+        pin updates + persists the source doc and the pin snapshot.
 - [ ] `e152d0e1` **Edit an unloaded-source pin.** Edit or delete a pin whose source Lectern is NOT loaded;
       the pin snapshot/removal updates with no crash and the source doc is unchanged until loaded.
       *(v1-release-checklist 1.7)*
-- [ ] `12ca42f8` **Unpin vs. delete.** Confirm unpin removes only the pin (task survives in the source doc)
+      - **Untested 2026-07-28** (playtest submission 2026-07-28T07-33-43): tester needed clarification on what
+        "unloaded source" means before running it. RESOLVED (user 2026-07-28) — "source not loaded" covers all
+        three real ways a source Lectern goes away in survival, and each should be tested:
+        (a) the source Lectern was **picked up** and not re-placed (block gone, item in inventory);
+        (b) the source Lectern was **fully destroyed** (block gone for good);
+        (c) the source Lectern is **out of chunk-load range** — players travel thousands of blocks, so walk
+        far enough that its chunk unloads on the server, then edit/delete the pin from the Pin Tab.
+        In every case: editing/deleting the pin updates only the client-side pin snapshot with no crash, and
+        the source document is unchanged (reconciling if/when the block is loaded again). Editing from a
+        *different nearby* Lectern while the source is still loaded is the `85592294` case, not this one.
+- [x] `12ca42f8` **Unpin vs. delete.** Confirm unpin removes only the pin (task survives in the source doc)
       while delete removes the task from the source doc. *(v1-release-checklist 1.8)*
-- [ ] `85e92e9b` **Reorder persists.** Reorder pins in the Pin Tab; the order persists per-player across
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Only unpins." Unpin removes just
+        the pin (task survives in the source doc); delete removes the task from the source doc.
+- [x] `85e92e9b` **Reorder persists.** Reorder pins in the Pin Tab; the order persists per-player across
       relog (under `scribe:pins:v1`) and the corner HUD reflects the new order; document block order is
       unchanged. *(v1-release-checklist 1.9)*
-- [ ] `a1e8e10e` **Blank edit rejected.** Confirm a blank or whitespace-only inline edit is rejected and
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Works." Reordered pin order
+        persists across relog and the HUD reflects the new order.
+- [x] `a1e8e10e` **Blank edit rejected.** Confirm a blank or whitespace-only inline edit is rejected and
       leaves the task text unchanged. *(v1-release-checklist 1.10)*
-- [ ] `45bb88ed` **Policy picker syncs.** Change the completion policy from the Pin Tab picker; the Settings
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Works." A blank/whitespace-only
+        inline edit is rejected and the task text is unchanged. Minor UX note (tester deemed acceptable, not a
+        defect): there's no in-place feedback that the edit was rejected until the view is reloaded.
+- [x] `45bb88ed` **Policy picker syncs.** Change the completion policy from the Pin Tab picker; the Settings
       window reflects the same value, it persists across relog, and completing a task follows the new policy.
       *(v1-release-checklist 1.11)*
-- [ ] `58328d3f` **Pin Tab honors Lectern theme.** Confirm the Pin Tab respects the Lectern-dialog theme/size
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Syncs perfectly." The Pin Tab
+        policy picker and the Settings window stay in sync; completions follow the selected policy.
+- [x] `58328d3f` **Pin Tab honors Lectern theme.** Confirm the Pin Tab respects the Lectern-dialog theme/size
       (`PixelArtDisplay`, `WindowFontScale`, `PixelArtSize`) — not the HUD settings — and that an editing
       row's focus/caret survives a background pin resync (the `MyPinsChanged` rebuild).
       *(v1-release-checklist 1.12)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Honors theme." The Pin Tab
+        follows the Lectern-dialog theme/size settings (not the HUD-prefixed settings).
