@@ -1383,6 +1383,49 @@ DIRECTLY rather than the dialog's `FocusEditorRow` helper — the helper couples
 same-row focus restore reuses a nav helper: separate "put focus here AND scroll to it" from "the caret
 is already here, only re-grant the focus token." See the Keep/Unpin/uncheck tail of `ToggleEditorTask`.
 
+## Platform: `BadImageFormatException: Bad IL range` on Apple Silicon
+
+**Symptom: the game crashes with `System.BadImageFormatException: Bad IL range` when closing a
+LibGUI dialog (Escape key or clicking the title-bar close button). Stack trace contains frames in
+`GestureDetector`, `WindowTitleBar`, `EventDispatcher`, and/or `GuiDialog.TryClose` / `GuiManager`.
+Garbled/binary symbols appear alongside readable frame names. Crashes are consistent and reproducible
+on an M-series Mac; the dialog worked fine on Intel.**
+
+This is a Vintage Story engine bug, not a Scribe or LibGUI bug. Root causes confirmed via 97-agent
+deep-research (2026-07-27):
+
+1. **VS ships x86_64 Mach-O, runs under Rosetta 2 on Apple Silicon.** `lfile "/Applications/Vintage
+   Story.app/Vintagestory"` → `Mach-O x86_64`. GitHub issue #8905 (anegostudios/VintageStory-Issues,
+   July 2026, M3 MacBook Air, v1.22.3) confirms this; `.ips` crash reports show `translated=true`
+   (Rosetta flag). The VS team acknowledged the issue and pointed to a native ARM64 build as the fix.
+   No ARM64 build had shipped as of this writing; check the VS changelog for any version after 1.22.3.
+
+2. **The exception is a pre-JIT PE loader validation failure, not an ARM64 JIT bug.**
+   `PEAssembly::GetIL()` in CoreCLR calls `CheckILMethod()` (in `cordecoderhelpers.h`), which
+   validates IL method header bounds against the mapped PE image before passing IL to the JIT.
+   Obfuscated VS DLLs (`Vintagestory.Client.NoObf` namespace — the obfuscation is evident in the
+   garbled frame names) produce method headers whose size fields create arithmetic overflow in the
+   bounds check (`S_UINT32` overflow-safe arithmetic), triggering `COR_E_BADIMAGEFORMAT /
+   BFA_BAD_IL_RANGE`. This happens before RyuJIT ever sees the IL.
+
+3. **Not the .NET PR #102799 fix.** That PR is scoped entirely to NativeAOT's compile-time
+   `ILCompiler.Compiler` — not CoreCLR's runtime JIT. Unrelated.
+
+4. **Why the crash surfaces on dialog close:** the closing code path (LibGUI event chain dispatching
+   into `GuiDialog.TryClose`) triggers JIT compilation of a VS obfuscated method whose IL fails the
+   bounds check. The LibGUI frames are in the stack because LibGUI dispatched the close event; the
+   actual failure is in VS's own code. No fix is possible from Scribe's or LibGUI's side.
+
+5. **No confirmed workaround.** `DOTNET_TieredCompilation=0` did NOT survive adversarial
+   verification (0-3 refuted). The only fix is a native ARM64 VS binary.
+
+**Fix pattern:** none actionable from mod code. Don't re-investigate if this crash resurfaces —
+check whether a post-1.22.3 VS release ships a native ARM64 build. Mention this in any LibGUI
+author outreach (task 9.4 of `v1-release-checklist`) — they may want to flag it in LibGUI docs as
+a known platform limitation while the VS ARM64 build is pending.
+
+---
+
 ## Dev-diagnosis toolkit
 
 The local iterate/diagnose loop for this project (Apple Silicon, where VSImGui sliders and the
