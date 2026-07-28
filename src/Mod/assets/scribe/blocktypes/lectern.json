@@ -37,5 +37,20 @@
 		rotation: { x: -22.6, y: 142 },
 		origin: { x: 0.5, y: 0.6, z: 0.5 },
 		scale: 1
+	},
+
+	attributes: {
+		handbook: {
+			extraSections: [
+				{
+					title: "scribe:handbook-scribelectern-views-title",
+					text: "scribe:handbook-scribelectern-views-text"
+				},
+				{
+					title: "scribe:handbook-scribelectern-hud-title",
+					text: "scribe:handbook-scribelectern-hud-text"
+				}
+			]
+		}
 	}
 }

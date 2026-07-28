@@ -206,12 +206,18 @@
 
 ## 8. Scope freeze and ship (RELEASE.md A6 + Track G)
 
-- [ ] 8.1 Confirm all items in tasks 1–7 above are done. Confirm no known-broken TESTING.md items
+- [x] 8.1 Confirm all items in tasks 1–7 above are done. Confirm no known-broken TESTING.md items
       remain. Confirm `modinfo.json` version = `"0.1.0"` and dep versions are current.
-- [ ] 8.2 Build Release: `dotnet build -c Release`. Run `dotnet test`. Confirm 0 failures.
-- [ ] 8.3 Package: `./build/package.sh` → `Releases/scribe_0.1.0.zip`.
-- [ ] 8.4 Tag and release: `git tag v0.1.0 && git push origin v0.1.0` → `release.yml` creates the
+      - Done 2026-07-28: all confirmed. modinfo.json = 0.1.0, game 1.22.0 + gui 2.0.0.
+- [x] 8.2 Build Release: `dotnet build -c Release`. Run `dotnet test`. Confirm 0 failures.
+      - Done 2026-07-28: Release build clean (0 warn/0 err), 141/141 Core + 25/25 Atlas green.
+- [x] 8.3 Package: `./build/package.sh` → `Releases/scribe_0.1.0.zip`.
+      - Done 2026-07-28: 1.1 MB zip, both DLLs + modinfo.json + assets, no .DS_Store.
+- [x] 8.4 Tag and release: `git tag v0.1.0 && git push origin v0.1.0` → `release.yml` creates the
       GitHub Release. `gh release upload v0.1.0 Releases/scribe_0.1.0.zip`.
+      - Done 2026-07-28: tag pushed, GitHub Release live at
+        https://github.com/EdzyWhat/vintagestory-scribe-libgui/releases/tag/v0.1.0,
+        scribe_0.1.0.zip uploaded.
 - [ ] 8.5 Publish the VS mod DB page with the zip/release link.
 
 ## 9. Post-release (not ship gates — do after 8.5)
