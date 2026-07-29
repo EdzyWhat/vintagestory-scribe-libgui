@@ -24,11 +24,11 @@
 
 ## 4. In-game verification
 
-- [ ] 4.1 Open a fresh Lectern — confirm title shows `"Lectern"` in read, edit, and pin views.
-- [ ] 4.2 In edit view, click the pencil — confirm the title becomes an editable input.
-- [ ] 4.3 Type a title (e.g. "Stone Age Notes") and click away — confirm the title reverts to text and shows "Stone Age Notes".
-- [ ] 4.4 Clear the title input and click away — confirm title resets to `"Lectern"`.
-- [ ] 4.5 Attempt to type more than 80 characters — confirm the input stops accepting beyond the 80th.
-- [ ] 4.6 Switch from edit to read while the title input is open — confirm input closes gracefully (saves current value) and read view shows the title without a pencil.
-- [ ] 4.7 Save and reload the world — confirm the title persists.
-- [ ] 4.8 Confirm no pencil icon appears in read view or pin view.
+- [x] 4.1 Open a fresh Lectern — confirm title shows `"Lectern"` in read, edit, and pin views.
+- [x] 4.2 In edit view, click the pencil — confirm the title becomes an editable input.
+- [x] 4.3 Type a title (e.g. "Stone Age Notes") and click away — confirm the title reverts to text and shows "Stone Age Notes".
+- [x] 4.4 Clear the title input and click away — confirm title resets to `"Lectern"`.
+- [x] 4.5 Attempt to type more than 50 characters — confirm the input stops accepting beyond the 50th.
+- [x] 4.6 Switch from edit to read while the title input is open — confirm input closes gracefully (saves current value) and read view shows the title without a pencil.
+- [x] 4.7 Save and reload the world — confirm the title persists.
+- [x] 4.8 Confirm no pencil icon appears in read view or pin view.
