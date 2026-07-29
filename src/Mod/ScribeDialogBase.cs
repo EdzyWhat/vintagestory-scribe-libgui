@@ -1870,9 +1870,9 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
         float bodySize  = ScribeRowConstants.BaseWindowFontSize
             * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale);
         float dateSize  = bodySize * 0.8f;
-        var headerStyle = new TextStyle { FontFamily = ScribeRowControlNudge.TitleFontFamily, Weight = FontWeight.Bold, Color = colors.OnSurface };
+        var headerStyle = new TextStyle { FontFamily = ScribeRowControlNudge.TitleFontFamily, Weight = FontWeight.Bold, FontSize = bodySize, Color = colors.OnSurface };
         var dateHeaderStyle = new TextStyle { FontFamily = ScribeRowControlNudge.TitleFontFamily, Weight = FontWeight.Bold, FontSize = dateSize, Color = colors.OnSurface with { W = colors.OnSurface.W * 0.8f } };
-        var bodyStyle   = new TextStyle { Color = colors.OnSurface };
+        var bodyStyle   = new TextStyle { FontSize = bodySize, Color = colors.OnSurface };
         var dateStyle   = new TextStyle { FontSize = dateSize, Color = colors.OnSurface with { W = colors.OnSurface.W * 0.8f } };
         var myName = capi.World.Player.PlayerName;
 
