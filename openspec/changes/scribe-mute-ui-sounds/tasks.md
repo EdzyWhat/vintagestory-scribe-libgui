@@ -40,11 +40,11 @@
 - [x] 4.1 `dotnet build src/Mod/Mod.csproj --nologo` clean; run
   `dotnet test tests/Core.Tests/Core.Tests.csproj` green.
 - [x] 4.2 Restage (`bash build/restage.sh Debug`) and fully relaunch the client.
-- [ ] 4.3 In-game: with mute OFF (default), Scribe's action/stepper buttons still click; enable the
+- [x] 4.3 In-game: with mute OFF (default), Scribe's action/stepper buttons still click; enable the
   toggle and confirm those buttons go silent immediately (no reopen). Toggle it back and confirm the
-  click returns.
-- [ ] 4.4 In-game: confirm the two checkboxes ("Collapse the HUD" + "Mute Scribe UI sounds") sit on
-  one row as two columns in Mod Behavior, both labeled with working helptext.
-- [ ] 4.5 In-game: confirm the preference persists across a relog and that vanilla/other-mod sounds
-  (e.g. block break, inventory) are unaffected while Scribe is muted.
+  click returns. — confirmed 2026-07-29
+- [x] 4.4 In-game: confirm the two checkboxes ("Collapse the HUD" + "Mute Scribe UI sounds") sit on
+  one row as two columns in Mod Behavior, both labeled with working helptext. — confirmed 2026-07-29
+- [x] 4.5 In-game: confirm the preference persists across a relog and that vanilla/other-mod sounds
+  (e.g. block break, inventory) are unaffected while Scribe is muted. — confirmed 2026-07-29
 - [x] 4.6 Update `TESTING.md` with the new in-game items.
