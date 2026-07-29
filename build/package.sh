@@ -40,6 +40,9 @@ cp src/Mod/bin/Release/net10.0/*.dll "$STAGE/"
 if [[ -d src/Mod/assets ]]; then
   cp -R src/Mod/assets "$STAGE/assets"
 fi
+if [[ -f src/Mod/modicon.png ]]; then
+  cp src/Mod/modicon.png "$STAGE/modicon.png"
+fi
 
 # Zip it up.
 mkdir -p Releases
