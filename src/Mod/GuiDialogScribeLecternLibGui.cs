@@ -1133,12 +1133,16 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         FlushIfDirty();
     }
 
-    /// <summary>FocusNode listener for the title input. Commits on focus loss; repaints on any focus change.</summary>
+    /// <summary>FocusNode listener for the title input. Commits on focus loss and rebuilds only when the
+    /// editing state actually changed (blur path). Focus-gain rebuilds are handled by the pencil onTap,
+    /// so suppressing them here avoids a redundant rebuild that causes the editor footer to flicker.</summary>
     private void OnTitleFocusChanged()
     {
-        if (!(_titleFocusNode?.HasFocus ?? true))
-            CommitTitleIfEditing();
-        if (IsOpened()) ForceRebuild();
+        if (!(_titleFocusNode?.HasFocus ?? true) && _isTitleEditing)
+        {
+            CommitTitleIfEditing();  // sets _isTitleEditing = false
+            if (IsOpened()) ForceRebuild();
+        }
     }
 
     private void FlushIfDirty()
@@ -1450,11 +1454,12 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         var titleStyle = new TextStyle { FontSize = titleFont, FontFamily = ScribeRowControlNudge.TitleFontFamily, Weight = FontWeight.Bold, Color = colors.OnSurface };
         var displayTitle = (_isTitleEditing ? null : (scratch?.Title ?? lectern.Document.Title)) ?? ScribeDocument.DefaultTitle;
 
+        const float titleBtnSpacing = 6f;
         Widget titleSlot = _isTitleEditing
             ? new Expanded(new TextField(
                 _titleController!,
                 _titleFocusNode!,
-                new TextFieldStyle { Height = titleFont + 8, FillColor = new Vector4(0, 0, 0, 0), BorderThickness = 0 },
+                new TextFieldStyle { FillColor = new Vector4(0, 0, 0, 0), BorderThickness = 0, TextStyle = titleStyle },
                 onKeyDown: e =>
                 {
                     if (_titleController!.Text.Length >= ScribeDocument.MaxTitleLength
@@ -1472,17 +1477,21 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
 
         // Pencil — icon-only (no chrome), same visual weight as the grip glyph.
         // Only shown in editor view (scratch is non-null); hidden in read and pin views.
+        // Left margin = 1.5× the inter-button spacing, to separate it visually from the title text.
+        float pencilSize = ScribeRowConstants.RowCheckboxSize * 1.1f * 0.75f;
         Widget? pencilSlot = scratch is not null
-            ? WithTooltip("scribe:scribe-gui-title-edit-tooltip",
-                new GestureDetector(
-                    onTap: _ =>
-                    {
-                        _titleController!.Value = new TextEditingValue(displayTitle, TextSelection.Collapsed(displayTitle.Length));
-                        _isTitleEditing = true;
-                        ForceRebuild();
-                        _titleFocusNode!.RequestFocus();
-                    },
-                    child: new ScribeVsIconGlyph("scribeedit", ScribeRowConstants.RowCheckboxSize * 1.1f, colors.OnSurfaceVariant)))
+            ? new Padding(
+                EdgeInsets.Only(left: titleBtnSpacing * 1.5f),
+                WithTooltip("scribe:scribe-gui-title-edit-tooltip",
+                    new GestureDetector(
+                        onTap: _ =>
+                        {
+                            _titleController!.Value = new TextEditingValue(displayTitle, TextSelection.Collapsed(displayTitle.Length));
+                            _isTitleEditing = true;
+                            ForceRebuild();
+                            _titleFocusNode!.RequestFocus();
+                        },
+                        child: new ScribeVsIconGlyph("scribeedit", pencilSize, colors.OnSurfaceVariant))))
             : null;
 
         Widget titleRow = new Row(
@@ -1506,7 +1515,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
                 new Row(
                     crossAxisAlignment: CrossAxisAlignment.Center,
                     mainAxisSize: MainAxisSize.Min,
-                    spacing: 6,
+                    spacing: titleBtnSpacing,
                     children: pencilSlot is not null
                         ? new Widget[]
                         {
