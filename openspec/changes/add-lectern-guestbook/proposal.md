@@ -9,7 +9,7 @@ participation: opening the block on a given day is enough to leave your name.
 - A new **Guestbook tab** is added to the Lectern nav column, alongside Read / Edit / Pins.
 - When any player opens the Lectern GUI, the server records their display name + the current in-game
   date (not real-world date) as a visitor entry — one entry per player per in-game day.
-- The tab displays entries as a three-column table (Visitor | Group | Date of visit) in reverse-chronological order.
+- The tab displays entries as a two-column table (Visitor | Date of visit) in reverse-chronological order.
 - Entries are capped at a configurable maximum (default 100) on a rolling basis (oldest dropped
   when the cap is exceeded).
 - The guestbook is read-only from the GUI — no editing or deleting individual entries.
@@ -22,7 +22,7 @@ participation: opening the block on a given day is enough to leave your name.
 ### New Capabilities
 
 - `lectern-guestbook`: Persistent visitor log on the Lectern block — server records player name +
-  in-game date on GUI open; exposed as a read-only tab in the Lectern GUI. Capped rolling history.
+  in-game date-only (no time) on GUI open; exposed as a read-only two-column tab in the Lectern GUI. Capped rolling history. Own-entry note field editable.
 
 ### Modified Capabilities
 
@@ -36,7 +36,6 @@ participation: opening the block on a given day is enough to leave your name.
 - `BlockEntityScribeLectern.cs` — new `GuestbookEntries` field, `To/FromTreeAttributes` extension,
   new packet type for "record visitor" and "sync guestbook".
 - `GuiDialogScribeLectern.cs` — new Guestbook tab view (read-only two-column table, 4th nav slot after Pins); send record-visitor packet on open (fires on any tab access, not just the Guestbook tab).
-- `src/Core/` — new `GuestbookEntry` value type (player name + group string + in-game date string) and
-  `GuestbookStore` (add, cap, serialize). No VS API references — date and group names arrive as
-  pre-formatted strings passed from Mod layer.
+- `src/Core/` — new `GuestbookEntry` value type (player name + in-game date string + note) and
+  `GuestbookStore` (add, cap, serialize). No VS API references — the date string is passed from the Mod layer as a date-only formatted string (no time component).
 - No new mod dependencies. No breaking changes to existing packets or document format.

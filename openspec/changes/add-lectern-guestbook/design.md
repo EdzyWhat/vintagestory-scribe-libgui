@@ -5,9 +5,11 @@ The Lectern block entity currently holds a `ScribeDocument` (tasks + notes) and 
 and synced via `SendBlockEntityPacket`. This change adds a third store — a `GuestbookStore` —
 following the same structural pattern.
 
-The key constraint is that Core must remain VS-API-free. The in-game calendar date is available
-as `api.World.Calendar.PrettyDate()` (returns a formatted string like "10th of Harvestmonth,
-year 3") — this is a Mod-layer concern, passed into Core as a plain string.
+The key constraint is that Core must remain VS-API-free. The in-game calendar date is a
+Mod-layer concern, passed into Core as a plain pre-formatted string. The date is built
+date-only (no time) from `IWorldCalendar` properties: `DayOfMonth`, `MonthName`, `Year` —
+e.g. `$"{cal.DayOfMonth} {Lang.Get("month-" + cal.MonthName)}, Year {cal.Year}"` (produces
+"8 August, Year 0"). `PrettyDate()` is NOT used because it appends a time component.
 
 ## Goals / Non-Goals
 
@@ -28,25 +30,21 @@ year 3") — this is a Mod-layer concern, passed into Core as a plain string.
 ## Decisions
 
 ### D1: Store in Core, all fields as strings passed from Mod layer
-**Decision:** `GuestbookEntry` holds `string PlayerName`, `string Groups`, and `string InGameDate`.
-The Mod layer calls `api.World.Calendar.PrettyDate()` for the date and builds the groups string
-from `IPlayer.Groups` via `string.Join(", ", player.Groups.Select(g => g.GroupName))` (or `"-"` if
-the array is empty).
+**Decision:** `GuestbookEntry` holds `string PlayerName`, `string InGameDate`, and `string Note`.
+No group field — groups were removed from scope. The Mod layer builds the date-only string from
+`IWorldCalendar` properties (see Context above) and passes it in; Core never touches the VS API.
 
-**Why:** keeps Core VS-API-free; both the date and group names are human-readable strings stable
-enough for a guestbook display (not used for arithmetic or lookup). Capturing group names at
-record time is intentional — it's a snapshot of membership at the moment of the visit, which is
-what a guestbook should reflect. Alternative of storing group UIDs and resolving at display time
-was rejected: it couples Core to the server's group registry and breaks if groups are renamed or
-deleted.
+**Why:** keeps Core VS-API-free. Groups were dropped as unnecessary complexity for a social-trace
+feature — player name alone is sufficient identity. The date is date-only (no time) to keep the
+display readable and to ensure deduplication is per-day rather than per-session.
 
 ### D2: Deduplication key is (PlayerName, InGameDate)
 **Decision:** `TryAddEntry` returns `false` without adding if an entry with the same
 `(PlayerName, InGameDate)` already exists.
 
-**Why:** simple, stateless check with no extra indices. Assumes `PrettyDate()` returns the same
-string for all ticks on the same in-game day — confirmed by reading VS calendar source
-(`PrettyDate` is deterministic per-day).
+**Why:** simple, stateless check with no extra indices. The date string is built from
+`DayOfMonth`/`MonthName`/`Year` which are deterministic per-day — all opens on the same in-game
+day produce the same string, so the check is reliable.
 
 Alternative considered: store a `HashSet<(name, date)>` separately. Rejected — redundant; the
 entries list itself is the source of truth and scanning 100 entries is trivial.
@@ -68,35 +66,34 @@ collaboratively edited.
 model has a tight schema; the guestbook is a flat list and doesn't belong in it.
 
 ### D5: Guestbook tab is the 4th nav slot (before Settings gear), two-column table layout
-**Decision:** insert the Guestbook tab as the 4th child of `BuildRightColNav()`'s `Column`,
-after the `scribepin` button and before the `scribegear` Settings button. A new
-`ScribeLecternView.Visitors` enum variant is added; `BuildCentralRegion()` gets a `Visitors`
-case that calls `BuildVisitorsContent()`. The dialog opens in `Read` view by default — the
-Guestbook tab is not the initial active view.
+**Decision:** The Guestbook nav button is injected via `GetExtraNavButtons()` in
+`GuiDialogScribeLecternLibGui` (not hardcoded in `ScribeDialogBase`), since the Guestbook is
+planned for Lectern + Desk but not Notebook. Nav order: Read → Edit → Pins → **Guest Book** → Settings.
+The tooltip reads `"Guest Book"` (two words).
 
-The tab content is a three-column table built from LibGUI primitives:
-- A fixed header `Row` with three `Expanded(Text)` children styled
-  `{ FontFamily = "Caudex", Weight = FontWeight.Bold }` (matching `ScribeRowControlNudge.TitleFontFamily`).
-  Column labels: `"Visitor"` (left), `"Group"` (centre), `"Date of visit"` (right).
-- A thin horizontal divider below the header.
-- A `SingleChildScrollView` wrapping a `Column` of data rows, each a `Row` with three
-  `Expanded(Text)` children (`playerName`, `groups`, `inGameDate`). Non-virtualized — 100-entry cap
-  keeps the row count trivially small.
-- Rows sorted newest-first (most-recent `inGameDate` string at the top).
+`BuildVisitorsContent()` is `protected virtual` in `ScribeDialogBase`, so the Desk can override
+it if needed. `BuildCentralRegion()` routes the `Visitors` view state there.
 
-**Why:** LibGUI has no built-in table widget; `Row` + `Expanded` is the established ad-hoc
-two-column pattern used by `PairedControls()` in `ScribeSettingsContent`. Placing the tab
-before Settings is consistent with the lectern's functional hierarchy (content tabs first,
-utility gear last). Not making it the default open view avoids surprising players who open
-the lectern to read or edit.
+The tab content is a **two-column** table (Visitor + Date of visit, no Group) plus an editable Note field per own entry:
+- Outer structure: `Padding(EdgeInsets.All(10))` wrapping a `Column(mainAxisSize: Max, crossAxisAlignment: Stretch)` — required to fill the available height correctly (missing these caused content to overflow into the title bar).
+- A fixed header `Row` with two `Expanded(Text)` children plus a third for Note, all styled Caudex Bold.
+  Column labels: `"Visitor"` (left), `"Date of visit"` (centre), `"Note"` (right).
+- A thin horizontal `Divider` below the header.
+- A `Scrollbar { AutoHide = false }` wrapping a `SingleChildScrollView` of data rows — consistent with Read/Editor/Pinned views (always-visible track).
+- Rows sorted newest-first; `Expanded` on the scroll body fills remaining height.
+- **Date of visit** text is styled at `0.8 × WindowFontScale` size and `alpha = 0.8` (slightly smaller, slightly transparent) to de-emphasise it relative to the visitor name.
+- Own-entry Note slot: `TextField` (80-char cap, borderless, transparent fill). Other entries: plain `Text`.
+
+**Why:** LibGUI has no built-in table widget; `Row` + `Expanded` is the established pattern.
+Groups were dropped — player name alone is sufficient. Date-only (no time) keeps the column
+narrow and the dedup key per-day. The date style treatment follows the visual hierarchy of the
+row editor where secondary metadata reads smaller/dimmer.
 
 ## Risks / Trade-offs
 
 - **BE size growth over long play:** bounded by the 100-entry cap, so worst case is ~100
   `(name, date)` string pairs — negligible. [Low risk]
-- **`PrettyDate()` format change in a future VS version:** the dedup key and display text are
-  the same string, so a format change would only affect how dates look in the guestbook, not
-  correctness. [Low risk]
+- **Calendar API change in a future VS version:** the date string is built from `DayOfMonth`, `MonthName`, `Year` — stable properties. A format change would only affect display, not correctness. [Low risk]
 - **Player name changes:** entries are written with the display name at time of visit. A
   player who renames will appear under their old name for prior entries — acceptable for a
   guestbook. [Known, acceptable]

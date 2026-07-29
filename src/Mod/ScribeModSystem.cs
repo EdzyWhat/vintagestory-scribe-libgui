@@ -132,7 +132,10 @@ public sealed class ScribeModSystem : ModSystem
             .RegisterMessageType<ScribePinnedSetMessage>()
             .RegisterMessageType<ScribeEditPinnedTaskMessage>()
             .RegisterMessageType<ScribeDeleteTaskMessage>()
-            .RegisterMessageType<ScribeReorderPinsMessage>();
+            .RegisterMessageType<ScribeReorderPinsMessage>()
+            .RegisterMessageType<ScribeRecordVisitorMessage>()
+            .RegisterMessageType<ScribeGuestbookSyncMessage>()
+            .RegisterMessageType<ScribeEditGuestbookNoteMessage>();
     }
 
     /// <summary>Server-side accessor for the pin store, so the block entity can register/orphan its
@@ -153,7 +156,8 @@ public sealed class ScribeModSystem : ModSystem
 
         api.Network.GetChannel(NetworkChannelName)
             .SetMessageHandler<ScribeEditDocumentMessage>(OnClientReceivedEditReply)
-            .SetMessageHandler<ScribePinnedSetMessage>(OnClientReceivedPinnedSet);
+            .SetMessageHandler<ScribePinnedSetMessage>(OnClientReceivedPinnedSet)
+            .SetMessageHandler<ScribeGuestbookSyncMessage>(OnClientReceivedGuestbookSync);
 
         // The pinned-task HUD self-shows once the player's pin set arrives (it subscribes to
         // MyPinsChanged in its ctor), so it can be constructed here regardless of current pin count —
@@ -311,6 +315,8 @@ public sealed class ScribeModSystem : ModSystem
         RegisterSvgIcon(api, "scribeedit", new AssetLocation("scribe", "textures/icons/edit.svg"));
         RegisterSvgIcon(api, "scribegear", new AssetLocation("scribe", "textures/icons/gear.svg"));
         RegisterSvgIcon(api, "scribecheck", new AssetLocation("scribe", "textures/icons/check.svg"));
+        // Guestbook nav icon — placeholder reusing check.svg until a dedicated icon ships.
+        RegisterSvgIcon(api, "scribeguest", new AssetLocation("scribe", "textures/icons/check.svg"));
     }
 
     /// <summary>
@@ -438,6 +444,8 @@ public sealed class ScribeModSystem : ModSystem
         channel.SetMessageHandler<ScribeEditPinnedTaskMessage>(OnServerReceivedEditPinnedTask);
         channel.SetMessageHandler<ScribeDeleteTaskMessage>(OnServerReceivedDeleteTask);
         channel.SetMessageHandler<ScribeReorderPinsMessage>(OnServerReceivedReorderPins);
+        channel.SetMessageHandler<ScribeRecordVisitorMessage>(OnServerReceivedRecordVisitor);
+        channel.SetMessageHandler<ScribeEditGuestbookNoteMessage>(OnServerReceivedEditGuestbookNote);
 
         // Persist/load the pin + settings stores with the save game (the WaypointMapLayer pattern).
         api.Event.SaveGameLoaded += OnSaveGameLoaded;
@@ -870,6 +878,30 @@ public sealed class ScribeModSystem : ModSystem
         {
             if (sapi.World.PlayerByUid(uid) is IServerPlayer player) PushPinsTo(player);
         }
+    }
+
+    private void OnServerReceivedRecordVisitor(IServerPlayer fromPlayer, ScribeRecordVisitorMessage message)
+    {
+        if (sapi is null) return;
+        var pos = new BlockPos(message.PosX, message.PosY, message.PosZ);
+        if (sapi.World.BlockAccessor.GetBlockEntity(pos) is BlockEntityScribeLectern lectern)
+            lectern.RecordVisitor(sapi, fromPlayer);
+    }
+
+    private void OnServerReceivedEditGuestbookNote(IServerPlayer fromPlayer, ScribeEditGuestbookNoteMessage message)
+    {
+        if (sapi is null) return;
+        var pos = new BlockPos(message.PosX, message.PosY, message.PosZ);
+        if (sapi.World.BlockAccessor.GetBlockEntity(pos) is BlockEntityScribeLectern lectern)
+            lectern.UpdateGuestbookNote(sapi, fromPlayer, message.Note ?? "");
+    }
+
+    private void OnClientReceivedGuestbookSync(ScribeGuestbookSyncMessage message)
+    {
+        if (capi is null) return;
+        var pos = new BlockPos(message.PosX, message.PosY, message.PosZ);
+        if (capi.World.BlockAccessor.GetBlockEntity(pos) is BlockEntityScribeLectern lectern)
+            lectern.ApplyGuestbookSync(message.GuestbookBytes);
     }
 
     /// <summary>

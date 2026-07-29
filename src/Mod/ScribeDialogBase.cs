@@ -42,9 +42,24 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
     /// <summary>The Lectern dialog's central-region view. Read and Editor are the original two views;
     /// Pinned is the Pin Tab (scribe-pin-editor) — a peer view listing the player's pins, selected from the
     /// <c>scribepin</c> nav button. <see cref="BuildCentralRegion"/> chooses the body from this.</summary>
-    private enum ScribeLecternView { Read, Editor, Pinned }
+    private enum ScribeLecternView { Read, Editor, Pinned, Visitors }
 
     private ScribeLecternView viewMode = ScribeLecternView.Read;
+
+    /// <summary>True when the Guestbook (Visitors) tab is the active view. Exposed so subclasses
+    /// can apply the active color to their Guestbook nav button in <see cref="GetExtraNavButtons"/>.</summary>
+    protected bool IsVisitorsView => viewMode == ScribeLecternView.Visitors;
+
+    /// <summary>The pixel size used for sidebar nav buttons — subclasses call this when building
+    /// their own nav buttons via <see cref="GetExtraNavButtons"/> so the size matches.</summary>
+    protected float NavButtonSize => ScribeRowConstants.RowCheckboxSize * 1.7f;
+
+    /// <summary>The drop shadow applied to sidebar nav buttons. Subclasses use this when building
+    /// extra nav buttons in <see cref="GetExtraNavButtons"/>.</summary>
+    protected BoxShadow[] NavButtonShadow => new[]
+    {
+        new BoxShadow(Color: new Vector4(0f, 0f, 0f, 0.35f), Offset: new Vector2(2f, 2f), BlurRadius: 4f),
+    };
 
     /// <summary>Whether the central region is in the (lock-gated) EDITOR view. Backed by
     /// <see cref="viewMode"/> so all the editor-lifecycle code that toggled a bool keeps working unchanged:
@@ -483,6 +498,31 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
         autoFocusPinTaskId = null;
         SyncPinFocusNodes();
         if (IsOpened()) ForceRebuild();
+    }
+
+    /// <summary>Switches to the Guestbook (Visitors) view, tearing down the editor first if active.
+    /// Called from the Guestbook nav button in subclasses that expose the tab.</summary>
+    protected void OnClickSwitchToVisitors()
+    {
+        CommitTitleIfEditing();
+        if (isEditorMode)
+        {
+            if (focusedEditIndex is { } idx) NormalizeRowOnCommit(idx);
+            PurgeEmptyTasksFromScratch();
+            pendingEmptyRowRemoval = null;
+            FlushIfDirty();
+            SendReleaseLockPacket();
+            LeaveEditorMode();
+        }
+        viewMode = ScribeLecternView.Visitors;
+        if (IsOpened()) ForceRebuild();
+    }
+
+    /// <summary>If the Guestbook tab is currently active, rebuilds it to reflect a just-received
+    /// guestbook sync from the server.</summary>
+    protected internal void RefreshGuestbookView()
+    {
+        if (viewMode == ScribeLecternView.Visitors && IsOpened()) ForceRebuild();
     }
 
     /// <summary>"Done editing" button: flush the pending edit, release the lock, and swap to the read
@@ -1633,8 +1673,9 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
     /// <summary>A tooltipped icon button reusing the per-row button chrome (<see cref="ScribeRowButton"/>).
     /// <paramref name="iconScale"/> grows just the glyph (not the box) — used to enlarge the pin +15%
     /// (§10.2). <paramref name="boxShadows"/> passes an optional drop shadow through to the button's
-    /// <c>BoxStyle</c> (the sidebar nav buttons use one to read as raised chrome — v1-playtest-fixes 5.6).</summary>
-    private Widget TitleButton(string iconName, string tooltipKey, Vector4 color, float size, Action onTap, float iconScale = 1f, BoxShadow[]? boxShadows = null, Vector4? activeColor = null) =>
+    /// <c>BoxStyle</c> (the sidebar nav buttons use one to read as raised chrome — v1-playtest-fixes 5.6).
+    /// Protected so subclasses can build matching nav buttons in <see cref="GetExtraNavButtons"/>.</summary>
+    protected Widget TitleButton(string iconName, string tooltipKey, Vector4 color, float size, Action onTap, float iconScale = 1f, BoxShadow[]? boxShadows = null, Vector4? activeColor = null) =>
         WithTooltip(tooltipKey, new ScribeRowButton(iconName: iconName, iconColor: color, size: size, onTap: onTap, iconScale: iconScale, boxShadows: boxShadows, activeColor: activeColor));
 
     /// <summary>Wrap a button in a localized hover tooltip (<c>scribe:&lt;key&gt;</c>), using the global
@@ -1663,9 +1704,10 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
     /// filling the column.</summary>
     private Widget BuildCentralRegion() => viewMode switch
     {
-        ScribeLecternView.Editor => BuildEditorContent(),
-        ScribeLecternView.Pinned => BuildPinnedContent(),
-        _ => BuildReadContent(),
+        ScribeLecternView.Editor   => BuildEditorContent(),
+        ScribeLecternView.Pinned   => BuildPinnedContent(),
+        ScribeLecternView.Visitors => BuildVisitorsContent(),
+        _                          => BuildReadContent(),
     };
 
     /// <summary>The live row style for this build, derived from the player's current settings (NOT cached
@@ -1817,6 +1859,105 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
             policyPickerPadding: EdgeInsets.Only(left: 10 + 0.04f * layoutW, right: 0.04f * layoutW),
             style: RowStyle,
             scrollController: sharedScrollController);
+    }
+
+    /// <summary>Guestbook tab content: a read-only (except own note) three-column visitor table.
+    /// Virtual so the Desk or other future blocks can override if needed; the default reads from
+    /// <see cref="IScribeDocumentHost.Guestbook"/> and needs no override for standard blocks.</summary>
+    protected virtual Widget BuildVisitorsContent()
+    {
+        var colors      = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
+        float bodySize  = ScribeRowConstants.BaseWindowFontSize
+            * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale);
+        float dateSize  = bodySize * 0.8f;
+        var headerStyle = new TextStyle { FontFamily = ScribeRowControlNudge.TitleFontFamily, Weight = FontWeight.Bold, Color = colors.OnSurface };
+        var dateHeaderStyle = new TextStyle { FontFamily = ScribeRowControlNudge.TitleFontFamily, Weight = FontWeight.Bold, FontSize = dateSize, Color = colors.OnSurface with { W = colors.OnSurface.W * 0.8f } };
+        var bodyStyle   = new TextStyle { Color = colors.OnSurface };
+        var dateStyle   = new TextStyle { FontSize = dateSize, Color = colors.OnSurface with { W = colors.OnSurface.W * 0.8f } };
+        var myName = capi.World.Player.PlayerName;
+
+        var entries = host.Guestbook.Entries;
+
+        // Newest-first display (entries are stored oldest-first in the store).
+        var rows = new List<Widget>(entries.Count);
+        for (int i = entries.Count - 1; i >= 0; i--)
+        {
+            var entry = entries[i];
+            Widget noteSlot;
+            if (entry.PlayerName == myName)
+            {
+                var ctrl = new TextEditingController(entry.Note);
+                var focus = new FocusNode();
+                string committed = entry.Note;
+                focus.AddListener(() =>
+                {
+                    if (!focus.HasFocus)
+                    {
+                        var trimmed = ctrl.Text.Trim();
+                        if (trimmed != committed)
+                        {
+                            committed = trimmed;
+                            capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(
+                                new ScribeEditGuestbookNoteMessage
+                                {
+                                    PosX = host.Pos.X, PosY = host.Pos.Y, PosZ = host.Pos.Z,
+                                    Note = trimmed,
+                                });
+                        }
+                    }
+                });
+                noteSlot = new Expanded(new TextField(ctrl, focus,
+                    new TextFieldStyle { FillColor = new Vector4(0, 0, 0, 0), BorderThickness = 0, TextStyle = bodyStyle },
+                    onKeyDown: e =>
+                    {
+                        if (ctrl.Text.Length >= GuestbookStore.MaxNoteLength
+                            && !e.Ctrl && e.KeyCode is not ((int)GlKeys.BackSpace or (int)GlKeys.Delete
+                                or (int)GlKeys.Left or (int)GlKeys.Right or (int)GlKeys.Home or (int)GlKeys.End))
+                            e.Handled = true;
+                        if (e.KeyCode is (int)GlKeys.Enter or (int)GlKeys.KeypadEnter or (int)GlKeys.Escape)
+                        {
+                            focus.Unfocus();
+                            e.Handled = true;
+                        }
+                    }));
+            }
+            else
+            {
+                noteSlot = new Expanded(new Text(entry.Note, bodyStyle));
+            }
+
+            rows.Add(new Row(children: new Widget[]
+            {
+                new Expanded(new Text(entry.PlayerName, bodyStyle)),
+                new Expanded(new Text(entry.InGameDate, dateStyle)),
+                noteSlot,
+            }));
+        }
+
+        Widget body = entries.Count == 0
+            ? new Center(child: new Text(Lang.Get("scribe:scribe-guestbook-empty"), bodyStyle))
+            : new Scrollbar(controller: sharedScrollController,
+                child: new SingleChildScrollView(controller: sharedScrollController,
+                    child: new Column(children: rows.ToArray(), mainAxisSize: MainAxisSize.Min)))
+              { AutoHide = false };
+
+        return new Padding(
+            EdgeInsets.All(10),
+            new Column(
+                spacing: 8,
+                crossAxisAlignment: CrossAxisAlignment.Stretch,
+                mainAxisSize: MainAxisSize.Max,
+                children: new Widget[]
+                {
+                    new Row(children: new Widget[]
+                    {
+                        new Expanded(new Text(Lang.Get("scribe:scribe-guestbook-col-visitor"), headerStyle)),
+                        new Expanded(new Text(Lang.Get("scribe:scribe-guestbook-col-date"),    dateHeaderStyle)),
+                        new Expanded(new Text(Lang.Get("scribe:scribe-guestbook-col-note"),    headerStyle)),
+                    }),
+                    new Divider(),
+                    new Expanded(body),
+                }));
     }
 
     /// <summary>Keep <see cref="pinFocusNodes"/> in sync with the current pin set: add a node for each new

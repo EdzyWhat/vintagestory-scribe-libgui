@@ -85,6 +85,8 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
     /// load instead of persisting.</summary>
     private bool needsV5Resave;
 
+    private GuestbookStore _guestbook = new();
+
     // ── IScribeDocumentHost explicit implementations ──────────────────────
     BlockPos IScribeDocumentHost.Pos => Pos;
     ScribeDocument IScribeDocumentHost.Document => Document;
@@ -93,6 +95,7 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
     ScribeBackdropSpec IScribeDocumentHost.BackdropSpec => ScribeBackdrops.LecternPage;
     ScribeLayout IScribeDocumentHost.GetLayout(float w) => new ScribeLayout(w, 1160f / 1024f);
     string IScribeDocumentHost.DefaultDocumentTitle => "Lectern";
+    GuestbookStore IScribeDocumentHost.Guestbook => _guestbook;
 
     /// <summary>Client-side: the single LibGUI dialog serving BOTH views (migrate-editor-view-libgui).
     /// Read and editor are internal view states of this one dialog, so switching between them is a
@@ -150,6 +153,7 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
         // Sync the editor-lock holder so clients can reflect a held lock in their editor affordance
         // (fix-multiplayer-editor-lock §2.1). Empty string = lock free (tree attrs don't store null).
         tree.SetString("lockHolder", lockHolderUid ?? "");
+        tree.SetBytes("guestbook", _guestbook.Serialize());
     }
 
     public override void FromTreeAttributes(ITreeAttribute tree, IWorldAccessor worldForResolving)
@@ -174,6 +178,7 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
         Document = ScribeDocumentCodec.TryDeserialize(bytes, out var doc, out _) && doc is not null
             ? doc
             : new ScribeDocument();
+        _guestbook = GuestbookStore.Deserialize(tree.GetBytes("guestbook"));
 
         // A resync may have replaced the document (a different DocId is unusual for a lectern, but the
         // break→replace path can restore a saved doc). Keep the live index pointing at the current one.
@@ -514,6 +519,11 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
         if (!open)
         {
             OpenDialog(capi);
+            // Notify server to record this player as a visitor (fire-and-forget; server deduplicates).
+            capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeRecordVisitorMessage
+            {
+                PosX = Pos.X, PosY = Pos.Y, PosZ = Pos.Z,
+            });
         }
 
         if (message.EditorMode)
@@ -524,6 +534,49 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
         {
             dialog!.EnterReadMode();
         }
+    }
+
+    /// <summary>Sends the current guestbook to a specific client. Called after a new entry is
+    /// recorded so the opening player sees their own entry immediately.</summary>
+    public void SendGuestbookSync(ICoreServerAPI sapi, IServerPlayer toPlayer)
+    {
+        sapi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeGuestbookSyncMessage
+        {
+            PosX = Pos.X, PosY = Pos.Y, PosZ = Pos.Z,
+            GuestbookBytes = _guestbook.Serialize(),
+        }, toPlayer);
+    }
+
+    /// <summary>Server-side: record a visitor entry for this player. If a new entry was added, marks
+    /// the block dirty and sends the updated guestbook back to the opening client.</summary>
+    public void RecordVisitor(ICoreServerAPI sapi, IServerPlayer player)
+    {
+        var cal     = sapi.World.Calendar;
+        int dayOfMonth = (int)(cal.TotalDays % cal.DaysPerMonth) + 1;
+        var date = $"{dayOfMonth} {Lang.Get("month-" + cal.MonthName)}, Year {cal.Year}";
+        if (_guestbook.TryAddEntry(player.PlayerName, date))
+        {
+            MarkDirty();
+            SendGuestbookSync(sapi, player);
+        }
+    }
+
+    /// <summary>Server-side: update the note on the sender's own guestbook entry.</summary>
+    public void UpdateGuestbookNote(ICoreServerAPI sapi, IServerPlayer player, string note)
+    {
+        note = note.Trim();
+        if (_guestbook.TrySetNote(player.PlayerName, note))
+        {
+            MarkDirty();
+            SendGuestbookSync(sapi, player);
+        }
+    }
+
+    /// <summary>Client-side: apply an incoming guestbook sync from the server.</summary>
+    public void ApplyGuestbookSync(byte[]? bytes)
+    {
+        _guestbook = GuestbookStore.Deserialize(bytes);
+        dialog?.RefreshGuestbookView();
     }
 
     /// <summary>Creates and opens the single LibGUI dialog (read view by default). The "switch to

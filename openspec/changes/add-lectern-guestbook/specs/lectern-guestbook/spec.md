@@ -2,15 +2,14 @@
 
 ### Requirement: Server records a visitor entry on GUI open
 When a player opens the Lectern GUI, the server SHALL record a visitor entry consisting of the
-player's display name, the player's current group membership (all group names comma-joined;
-`"-"` if the player belongs to no groups), and the current in-game calendar date. The entry
-SHALL be recorded at most once per player per in-game day — opening the GUI multiple times on
-the same day SHALL NOT produce duplicate entries. Group names are captured as a snapshot at
-record time (from `IPlayer.Groups[].GroupName`). The recording SHALL be server-authoritative.
+player's display name and the current in-game calendar **date only** (no time component) — e.g.
+`"8 August, Year 0"`. The entry SHALL be recorded at most once per player per in-game day —
+opening the GUI multiple times on the same day SHALL NOT produce duplicate entries. The
+recording SHALL be server-authoritative.
 
 #### Scenario: First open of the day creates an entry
 - **WHEN** a player opens the Lectern GUI for the first time on a given in-game day
-- **THEN** the server adds an entry `{ playerName, groups, inGameDate }` to the guestbook
+- **THEN** the server adds an entry `{ playerName, inGameDate }` to the guestbook
 
 #### Scenario: Repeated opens on the same day are idempotent
 - **WHEN** a player opens the same Lectern GUI more than once on the same in-game day
@@ -46,38 +45,34 @@ constant (not yet user-configurable in v1).
 - **WHEN** the guestbook is at its 100-entry cap and a new entry is recorded
 - **THEN** the oldest entry is removed and the new entry is added, keeping the total at 100
 
-### Requirement: Guestbook tab displays entries as a read-only two-column table
+### Requirement: Guestbook tab displays entries as a two-column table
 The Lectern GUI SHALL expose a Guestbook nav tab positioned as the 4th nav slot (after Pins,
-before the Settings gear). The tab SHALL NOT be the active view on dialog open — the lectern
-opens in Read view by default regardless of whether the player has previously viewed the Guestbook tab.
+before the Settings gear). Its tooltip SHALL read `"Guest Book"` (two words). The tab SHALL NOT
+be the active view on dialog open — the lectern opens in Read view by default.
 
-The tab SHALL display entries as a three-column table:
-- Column 1 header: **"Visitor"** — the player's display name.
-- Column 2 header: **"Group"** — the player's group memberships at time of visit, comma-joined; `"-"` if none.
-- Column 3 header: **"Date of visit"** — the in-game calendar date of the entry.
-- All three column headers SHALL be rendered in the title font (Caudex Bold).
+The tab SHALL display entries as a two-column table (plus an editable Note field):
+- Column 1 header: **"Visitor"** — the player's display name, in Caudex Bold.
+- Column 2 header: **"Date of visit"** — the in-game calendar date (date only, no time), in Caudex Bold at `0.8 ×` the window font size and `alpha = 0.8` (slightly smaller and slightly transparent to de-emphasise it).
+- Column 3 header: **"Note"** — a short optional note left by the visitor (max 80 chars), in Caudex Bold.
 - Rows SHALL be displayed in reverse-chronological order (most-recent entry first).
-- The table SHALL be read-only — no player can edit or delete individual entries from the GUI.
+- A player's own entry SHALL show the Note field as an editable text input; all other entries SHALL show Note as read-only plain text.
+- The scroll area SHALL always display a visible scrollbar track (`AutoHide = false`).
 
-#### Scenario: Tab shows entries as a three-column table, newest-first
+#### Scenario: Tab shows entries as a two-column table, newest-first
 - **WHEN** a player opens the Guestbook tab on a lectern with multiple entries
-- **THEN** a table is shown with "Visitor", "Group", and "Date of visit" column headers in Caudex Bold, and rows listed most-recent-first
+- **THEN** a table is shown with "Visitor" and "Date of visit" (and "Note") headers in Caudex Bold, rows listed most-recent-first
 
-#### Scenario: Group column shows dash when player has no groups
-- **WHEN** the visiting player belongs to no groups
-- **THEN** the Group column for their entry shows "-"
-
-#### Scenario: Group column shows all groups comma-joined
-- **WHEN** the visiting player belongs to two groups "Builders" and "Explorers"
-- **THEN** the Group column shows "Builders, Explorers"
+#### Scenario: Date of visit is date-only
+- **WHEN** a player's entry is displayed
+- **THEN** the Date of visit shows only the in-game date (e.g. "8 August, Year 0") with no time component
 
 #### Scenario: Tab is 4th in the nav column, not the default view
 - **WHEN** a player opens the Lectern dialog
 - **THEN** the lectern opens in Read view, not the Guestbook tab
 
-#### Scenario: Tab is read-only
+#### Scenario: Own-entry Note is editable; others are read-only
 - **WHEN** a player views the Guestbook tab
-- **THEN** there are no controls to edit or delete individual entries
+- **THEN** their own entry's Note field is an editable input (max 80 chars); other players' Note fields are plain text
 
 #### Scenario: Empty state when no entries
 - **WHEN** a player opens the Guestbook tab on a lectern that has never been opened before
@@ -94,8 +89,8 @@ second open.
 
 ### Requirement: Guestbook design is block-agnostic for forward compatibility
 The Core `GuestbookStore` and `GuestbookEntry` types SHALL have no references to
-`BlockEntityScribeLectern` — the Mod layer passes the pre-formatted group string and date string
-in. This allows the Desk (v0.3) to reuse the same types without modification.
+`BlockEntityScribeLectern` — the Mod layer passes the pre-formatted date string in.
+This allows the Desk (v0.3) to reuse the same types without modification.
 
 #### Scenario: GuestbookStore has no VS API dependency
 - **WHEN** the Core.Tests project compiles and runs with no game install

@@ -93,4 +93,7 @@ public interface IScribeDocumentHost
     /// (e.g. <c>"Lectern"</c>, <c>"Notebook"</c>). Distinct from <see cref="ScribeDocument.DefaultTitle"/>
     /// (<c>"Untitled"</c>) which is a Core-layer constant used only by the codec.</summary>
     string DefaultDocumentTitle { get; }
+
+    /// <summary>The guestbook for this block — visitor entries recorded server-side on GUI open.</summary>
+    GuestbookStore Guestbook { get; }
 }
