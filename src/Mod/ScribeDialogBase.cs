@@ -1914,7 +1914,7 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
 
             rows.Add(new Row(children: new Widget[]
             {
-                new Expanded(new Text(entry.PlayerName, bodyStyle), flex: 3),
+                new Expanded(new Text(entry.PlayerName, bodyStyle), flex: 2),
                 new Expanded(new Text(entry.InGameDate, dateStyle),  flex: 2),
                 noteSlot,
             }));
@@ -1937,7 +1937,7 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
                 {
                     new Row(children: new Widget[]
                     {
-                        new Expanded(new Text(Lang.Get("scribe:scribe-guestbook-col-visitor"), headerStyle),     flex: 3),
+                        new Expanded(new Text(Lang.Get("scribe:scribe-guestbook-col-visitor"), headerStyle),     flex: 2),
                         new Expanded(new Text(Lang.Get("scribe:scribe-guestbook-col-date"),    dateHeaderStyle), flex: 2),
                         new Expanded(new Text(Lang.Get("scribe:scribe-guestbook-col-note"),    headerStyle),     flex: 4),
                     }),
