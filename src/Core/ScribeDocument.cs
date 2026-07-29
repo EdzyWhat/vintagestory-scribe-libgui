@@ -15,7 +15,7 @@ public sealed class ScribeDocument
     public const string DefaultTitle = "Untitled";
 
     /// <summary>Maximum number of characters in a Lectern title.</summary>
-    public const int MaxTitleLength = 80;
+    public const int MaxTitleLength = 50;
 
     private readonly List<ScribeBlock> _blocks = new();
 

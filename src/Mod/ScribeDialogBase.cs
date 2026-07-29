@@ -14,6 +14,7 @@ using Gui.Widgets.Layout;        // Column, Row, Expanded, Padding, SizedBox, Ce
 using Gui.Widgets.Overlay;       // Tooltip
 using Gui.Widgets.Painting;      // BoxStyle
 using Gui.Widgets.Scroll;        // ListView, SingleChildScrollView, Scrollable, Scrollbar
+using Gui.Widgets.Spans;         // TextSpan
 using Gui.Core.Layout;           // MainAxisSize
 using OpenTK.Mathematics;        // Vector2
 using Scribe.Core;
@@ -1427,7 +1428,7 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
                         e.Handled = true;
                     }
                 }))
-            : new Expanded(new Text(displayTitle, titleStyle));
+            : new Expanded(new RichText(new TextSpan(displayTitle), titleStyle, maxLines: 1, overflow: TextOverflow.Ellipsis));
 
         // Pencil — icon-only (no chrome), same visual weight as the grip glyph.
         // Only shown in editor view (scratch is non-null); hidden in read and pin views.

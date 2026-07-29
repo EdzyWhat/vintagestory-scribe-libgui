@@ -10,7 +10,7 @@ Line numbers are from the research pass and may drift — locate by symbol.
   content Build (~GuiDialog:2062).
 - [x] 1.3 Same for the pinned view — but coordinate with §3 (the picker also moves to the header): the
   pinned outer `Column` becomes `[ policyPicker, Divider, Expanded(scrollBody) ]` (~GuiDialog:2485).
-- [ ] 1.4 Confirm the divider inherits the theme border color in both Pixel-Art (light parchment) and
+- [x] 1.4 Confirm the divider inherits the theme border color in both Pixel-Art (light parchment) and
   global-theme modes and doesn't visually fight the notebook frame.
 
 ## 2. Pin toggle on read-view rows
@@ -71,13 +71,13 @@ only applied to PINNED tasks. Author chose to make Sink a real, all-tasks docume
 - [x] 5.1 `dotnet build src/Mod/Mod.csproj --nologo` clean; Core suite green. (0 warn/0 err; 132/132.)
 - [x] 5.2 Restage (`bash build/restage.sh Debug`) — done (18 files staged). Fully relaunch the client
   before testing the in-game items below.
-- [ ] 5.3 In-game: a divider shows directly above the scroll list in all three views (read, editor,
+- [x] 5.3 In-game: a divider shows directly above the scroll list in all three views (read, editor,
   pinned), in both Pixel-Art and global-theme modes.
-- [ ] 5.4 In-game: pin/unpin a task from the READ view; it gets the pinned indicator in read AND editor,
+- [x] 5.4 In-game: pin/unpin a task from the READ view; it gets the pinned indicator in read AND editor,
   appears on the HUD, and persists across relog. Text sections show no pin control.
-- [ ] 5.5 In-game: the pinned view's policy picker sits ABOVE the list; changing it updates the settings
+- [x] 5.5 In-game: the pinned view's policy picker sits ABOVE the list; changing it updates the settings
   window's completion policy too.
-- [ ] 5.6 In-game: set each policy (Keep/Sink/Unpin/Delete) and complete a task from EACH view (read,
+- [x] 5.6 In-game: set each policy (Keep/Sink/Unpin/Delete) and complete a task from EACH view (read,
   editor, pinned) — confirm the SAME outcome in every view (sink→bottom / unpin / delete), matching the
   HUD. Specifically confirm the editor case: ticking one row's box applies the policy AND leaves other
   rows' in-progress unsaved text + caret intact.
