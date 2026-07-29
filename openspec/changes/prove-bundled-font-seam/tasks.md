@@ -23,13 +23,13 @@ on the default family and only the title uses Caudex.
 ## 4. Build and prove on the author's Apple Silicon Mac
 
 - [x] 4.1 `dotnet build src/Mod/Mod.csproj --nologo` clean (0 warnings, 0 errors); Core suite green (128/128). No `src/Core/` change from the font work (the `MaxHudMaxRows` Core change in the tree is the separate refine-settings §10.3, not this spike).
-- [ ] 4.2 Restage (`bash build/restage.sh Debug`) and fully relaunch the client on the Mac.
-- [ ] 4.3 (arm64 render) Open the lectern and confirm the TITLE text renders in Caudex with no crash, error, or garbled glyphs.
-- [ ] 4.4 (mod-scoping) Confirm the task-row text (read + editor) and all other in-game GUI text (menus, tooltips, other dialogs, the standalone settings window) are unchanged — only the lectern title uses Caudex.
+- [x] 4.2 Restage (`bash build/restage.sh Debug`) and fully relaunch the client on the Mac. — confirmed 2026-07-29
+- [x] 4.3 (arm64 render) Open the lectern and confirm the TITLE text renders in Caudex with no crash, error, or garbled glyphs. — confirmed 2026-07-29
+- [x] 4.4 (mod-scoping) Confirm the task-row text (read + editor) and all other in-game GUI text (menus, tooltips, other dialogs, the standalone settings window) are unchanged — only the lectern title uses Caudex. — confirmed 2026-07-29
 
 ## 5. Record findings and correct the docs
 
 - [x] 5.1 Rewrote the `## Custom TTF fonts in the GUI` note in `VSAPI-NOTES.md` for the LibGUI/Skia `FontRegistry` path (replacing the retired Cairo/FreeType note), including the two gotchas we hit: (1) `textures/fonts/` not a bare `fonts/` (no `fonts` AssetCategory), and (2) register under every `FontWeight` — the `(family, weight)` registry misses silently and falls back to the system font (this was the Bold-title bug). Remaining arm64/on-Mac confirmation is §4.3.
-- [ ] 5.2 Correct `docs/specs/presentation-and-fonts.md`: the Cairo `FreeTypeFontFace` / `SetContextFontFace` mechanism no longer describes this repo; the LibGUI/Skia `FontRegistry.RegisterCustomFont` + `TextStyle.FontFamily` path is the current mechanism.
-- [ ] 5.3 Remove or correct the stale `GuiStyle.StandardFontName` reference (it belongs to the native Cairo path and is irrelevant to LibGUI's text rendering).
-- [ ] 5.4 Note in the findings whether the parent font work should keep bundling its own faces (proven here) or instead reference LibGUI's already-bundled serifs (Playfair Display / Cormorant Unicase) with zero new assets — the open question from design.md.
+- [x] 5.2 Correct `docs/specs/presentation-and-fonts.md`: rewrote the VS API hooks font section and Item 3 mechanism to describe the LibGUI/Skia `FontRegistry` + `SkiaAssetLoader` path; moved the Cairo/FreeType notes to a clearly-labelled historical section.
+- [x] 5.3 Stale `GuiStyle.StandardFontName` / Cairo references corrected as part of 5.2; no remaining instances in the file.
+- [x] 5.4 Two-route note added to both the VS API hooks section and Item 3: bundle own face (proven by this change, required for faces not already in LibGUI) vs. reuse LibGUI-bundled serifs (Playfair Display / Cormorant Unicase — zero assets, just name the family). Parent font work can choose per tier.

@@ -80,41 +80,38 @@ All confirmed against `src/Mod` code already in the repo, `VSAPI-NOTES.md`, and 
 
 ### Loading a custom font face (the key research finding)
 
-The engine ships its own typefaces as **`.ttf` files** under `assets/game/fonts/` (confirmed:
-`Lora-*.ttf`, `Almendra-*.ttf`, `Montserrat-*.ttf`). `CairoFont.SetupContext(ctx)` selects a
-face by **name** via `ctx.SelectFontFace(Fontname, Slant, FontWeight)` (confirmed in decompiled
-`CairoFont`) — i.e. name-based OS/registry resolution, which a mod cannot reliably extend with a
-bundled file cross-platform.
+> **Note (2026-07-27):** Scribe's GUI migrated from the native Cairo path to **LibGUI/SkiaSharp**
+> in commit `a7ad139`. The Cairo `FreeTypeFontFace` mechanism described in the original version of
+> this section is obsolete for this repo. The current mechanism is documented below; the original
+> Cairo notes are retained at the end for historical context only.
 
-**But there is a direct, name-independent path a mod CAN use, because Scribe already draws its
-own Cairo surface.** `Lib/cairo-sharp.dll` exposes:
+**Current path (LibGUI/Skia — proven by `prove-bundled-font-seam`, 2026-07-27):**
 
-```
-// Cairo.FreeTypeFontFace : FontFace
-public static FreeTypeFontFace Create(string filename, int loadoptions)   // loads a .ttf via FreeType
-// Cairo.Context
-public void SetContextFontFace(FontFace value)
-```
+LibGUI provides a cross-platform, process-global font registry:
 
-`FreeTypeFontFace.Create(path, loadoptions)` loads a TTF file directly through FreeType and wraps
-it as a Cairo `FontFace`; `Context.SetContextFontFace(face)` then makes the current Cairo context
-draw with it — **completely bypassing `SelectFontFace`'s name resolution.** Because `ScribeRowElement`
-(and the clay-tablet UI to come) bakes text onto its *own* `ImageSurface`/`Context`, the mod can
-call `ctx.SetContextFontFace(ourLoadedFace)` right before its `AutobreakAndDrawMultilineTextAt`
-call and get the bundled typeface with no OS install and no dependency on the engine's font map.
+- `Gui.Rendering.Text.FontRegistry.RegisterCustomFont(string familyName, FontWeight weight, SKTypeface typeface)` — registers a bundled face under a family name.
+- `SkiaAssetLoader.LoadFont(string domain, string path)` — loads a `.ttf` from a mod asset (works packed or unpacked; no temp file needed).
+- `TextLayoutHelper` resolves `TextStyle.FontFamily` via `FontRegistry.GetCustomTypeface` **before** falling back to `SKTypeface.FromFamilyName`, so a registered family name is picked up automatically for both measurement and drawing — no per-surface draw hook needed.
 
-**Caveats / open items on this path** (flagged as SUGGESTED VSAPI-NOTES ADDITION below):
-- `SetContextFontFace` sets the raw Cairo font face but **not** the size/weight the way
-  `CairoFont.SetupContext` does. The draw code would set the face, then still set font
-  size/matrix (either via `CairoFont`'s size handling or `ctx.SetFontSize(scaled(size))`). The
-  exact interaction of a manually-set FT face with `CairoFont.SetupContext` (which calls
-  `SelectFontFace` and would clobber our face) needs a live test — likely we call
-  `SetupContext` first (for size/color) then `SetContextFontFace` last to override the face.
-- The face must be resolved from the mod's asset path to a real filesystem path (mod assets can
-  live inside a packed `.zip`); if `FreeTypeFontFace.Create` needs a real file, we may have to
-  read the asset bytes and write a temp file, or confirm FreeType can load from the unpacked dev
-  path. Needs a decompile/test pass when picked up.
-- Load the face **once** (cache it), not per-row-per-frame — FreeType face creation is not free.
+**Shipping pattern (established by `prove-bundled-font-seam`):**
+
+1. Bundle the `.ttf` under `src/Mod/assets/scribe/fonts/`.
+2. Register once in `ScribeModSystem.StartClientSide` (mirroring the existing `RegisterSvgIcon` pattern):
+   ```csharp
+   var typeface = SkiaAssetLoader.LoadFont("scribe", "fonts/yourface-regular.ttf");
+   FontRegistry.RegisterCustomFont("YourFamily", FontWeight.Normal, typeface);
+   ```
+3. Reference the family name in any `TextStyle.FontFamily` field — scoped to only those widgets; every other dialog, menu, tooltip, and task row is unaffected.
+
+**Alternative worth noting:** LibGUI already bundles **Playfair Display** and **Cormorant Unicase** (and Caudex, registered by `prove-bundled-font-seam`) under their own family names. A future item could simply name one of those in `TextStyle.FontFamily` with zero new assets, if Scribe's own bundle→load→register pipeline doesn't need to be exercised for that tier.
+
+**License gate (unchanged from original):** confirm the chosen face permits redistribution inside a mod `.zip` (SIL OFL and Apache-2.0 Google Fonts faces are fine) before bundling. Ship `OFL.txt` alongside the `.ttf` and credit in `CREDITS`.
+
+---
+
+**Historical: original Cairo path (obsolete for this repo)**
+
+The original research found that `Lib/cairo-sharp.dll` exposed `Cairo.FreeTypeFontFace.Create(filename, loadoptions)` + `Context.SetContextFontFace(face)`, allowing a mod to load a `.ttf` directly via FreeType and bypass `CairoFont.SetupContext`'s name-based OS resolution — usable on `ScribeRowElement`'s private `ImageSurface`/`Context`. This path is no longer relevant because `ScribeRowElement.cs` and the native `GuiDialogScribeLectern.cs` were retired when Scribe migrated to LibGUI. Kept here for reference in case a future item re-engages the native Cairo path for non-LibGUI surfaces.
 
 ### Existing seams this cluster builds on
 
@@ -178,11 +175,13 @@ with. A small `ScribeFontRegistry` (Mod-side, client-only) loads and caches the 
 once and hands the right one to the row/tablet draw code:
 
 ```csharp
-// src/Mod, client-only. Loads bundled TTFs via Cairo.FreeTypeFontFace.Create once, caches them.
+// src/Mod, client-only. Loads bundled TTFs via SkiaAssetLoader.LoadFont once; registers via
+// FontRegistry.RegisterCustomFont so TextLayoutHelper resolves them by family name.
 sealed class ScribeFontRegistry {
-    FontFace Body { get; }        // rustic/handwritten script — notebooks/books (v2)
-    FontFace Cuneiform { get; }   // block-letter stamped face — clay tablet (v3)
-    // Tier -> face lookup; falls back to the engine default face if a bundle is missing.
+    // Registers each face at client init; callers reference by TextStyle.FontFamily name.
+    // "Body" = rustic/handwritten script (notebooks/books, v2)
+    // "Cuneiform" = block-letter stamped face (clay tablet, v3)
+    // Falls back to default family if a bundle is missing (registration simply skipped).
 }
 ```
 
@@ -267,18 +266,16 @@ glyph.
 
 ### Item 3 — custom fonts per tier
 
-**Mechanism (see VS API hooks for the decompile detail):**
+**Mechanism (LibGUI/Skia path — see VS API hooks section for full detail):**
 
-1. Bundle the chosen TTFs under `src/Mod/assets/scribe/fonts/…`.
-2. On client start, `ScribeFontRegistry` loads each via `Cairo.FreeTypeFontFace.Create(path,
-   loadoptions)` **once** and caches the `FontFace`.
-3. The row/tablet draw code, after `font.SetupContext(ctx)` (which sets size/color but selects the
-   default face by name), calls `ctx.SetContextFontFace(registry.Body /* or .Cuneiform */)` to
-   override the face just before `AutobreakAndDrawMultilineTextAt`. Verify ordering live (the
-   `SetupContext`-then-override sequence — flagged as an open item above).
-4. **Tier mapping:** notebook/book (v2) → rustic script; clay tablet (v3) → cuneiform block
-   letters. The lectern (v1, plain wood) can stay on the engine default or adopt the rustic script
-   — a presentation decision. Selection is a client knob, not synced.
+1. Bundle the chosen TTFs under `src/Mod/assets/scribe/fonts/…` alongside their license files.
+2. On client start, a `ScribeFontRegistry` loads each via `SkiaAssetLoader.LoadFont("scribe", "fonts/…")` **once** and registers via `FontRegistry.RegisterCustomFont(familyName, weight, typeface)`.
+3. Any `TextStyle` that needs the face sets `FontFamily = "YourFamily"`. `TextLayoutHelper` resolves the registered name automatically — no per-surface draw override needed.
+4. **Tier mapping:** notebook/book (v2) → rustic script; clay tablet (v3) → cuneiform block letters. The lectern (v1) uses Caudex for its title (proven by `prove-bundled-font-seam`); task-row text stays on the default family. Selection is a client-side knob, not synced.
+
+**Route choice for each tier:** two options:
+- **Bundle own face** — full Scribe-side asset+license pipeline (proven path). Required if the face isn't already bundled by LibGUI.
+- **Reuse a LibGUI-bundled face** (Playfair Display, Cormorant Unicase, or others registered by the `gui` mod) — zero new assets, just name the family in `TextStyle.FontFamily`. Viable if the aesthetic fits; no license work needed since LibGUI already ships them.
 
 **License gate (hard prerequisite, per ROADMAP):** *before any specific face is chosen*, confirm
 the font's license permits redistribution/bundling inside a mod `.zip` (SIL OFL and most
