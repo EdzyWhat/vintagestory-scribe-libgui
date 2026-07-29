@@ -46,5 +46,5 @@
 - [x] 7.2 `dotnet test tests/Core.Tests` — 144/144 pass
 - [x] 7.3 Manual in-game: Read / Edit / Pinned views confirmed working 2026-07-29
 - [x] 7.4 Manual in-game: clear title → confirmed resets to "Lectern" 2026-07-29
-- [ ] 7.5 Manual in-game: scroll position preserved across view switches
+- [x] 7.5 Manual in-game: scroll position preserved across view switches — confirmed 2026-07-29
 - [ ] 7.6 Manual in-game: multiplayer editor lock
