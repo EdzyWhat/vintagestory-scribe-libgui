@@ -1869,10 +1869,11 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
         var colors      = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
         float bodySize  = ScribeRowConstants.BaseWindowFontSize
             * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale);
-        float dateSize  = bodySize * 0.6f;
+        float dateSize  = bodySize * 0.7f;
+        float noteSize  = bodySize * 0.8f;
         var headerStyle = new TextStyle { FontFamily = ScribeRowControlNudge.TitleFontFamily, Weight = FontWeight.Bold, FontSize = bodySize, Color = colors.OnSurface };
         var bodyStyle   = new TextStyle { FontSize = bodySize, Color = colors.OnSurface };
-        var dateStyle   = new TextStyle { FontSize = dateSize, Color = colors.OnSurface with { W = colors.OnSurface.W * 0.6f } };
+        var dateStyle   = new TextStyle { FontSize = dateSize, Color = colors.OnSurface with { W = colors.OnSurface.W * 0.7f } };
         var myName = capi.World.Player.PlayerName;
 
         var entries = host.Guestbook.Entries;
@@ -1887,28 +1888,35 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
             {
                 string current = entry.Note;
                 string lastSent = entry.Note;
-                noteSlot = new Expanded(new ScribeMultilineField(
-                    initialText: entry.Note,
-                    fontSize: bodySize,
-                    fontFamily: ScribeTaskFont.Resolve(modSystem.MySettings.TaskFontFamily),
-                    maxLength: GuestbookStore.MaxNoteLength,
-                    onChanged: text => current = text,
-                    onBlur: () =>
-                    {
-                        var trimmed = current.Trim();
-                        if (trimmed == lastSent) return;
-                        lastSent = trimmed;
-                        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(
-                            new ScribeEditGuestbookNoteMessage
+                noteSlot = new Expanded(
+                    new Padding(EdgeInsets.Only(bottom: 2f),
+                        new ScribeMultilineField(
+                            initialText: entry.Note,
+                            fontSize: noteSize,
+                            fontFamily: ScribeTaskFont.Resolve(modSystem.MySettings.TaskFontFamily),
+                            maxLength: GuestbookStore.MaxNoteLength,
+                            onChanged: text => current = text,
+                            onBlur: () =>
                             {
-                                PosX = host.Pos.X, PosY = host.Pos.Y, PosZ = host.Pos.Z,
-                                Note = trimmed,
-                            });
-                    }), flex: 5);
+                                var trimmed = current.Trim();
+                                if (trimmed == lastSent) return;
+                                lastSent = trimmed;
+                                capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(
+                                    new ScribeEditGuestbookNoteMessage
+                                    {
+                                        PosX = host.Pos.X, PosY = host.Pos.Y, PosZ = host.Pos.Z,
+                                        Note = trimmed,
+                                    });
+                            })),
+                    flex: 5);
             }
             else
             {
-                noteSlot = new Expanded(new Text(entry.Note, bodyStyle), flex: 5);
+                var noteStyle = new TextStyle { FontSize = noteSize, Color = colors.OnSurface };
+                noteSlot = new Expanded(
+                    new Padding(EdgeInsets.Only(bottom: 2f),
+                        new Text(entry.Note, noteStyle)),
+                    flex: 5);
             }
 
             rows.Add(new Row(children: new Widget[]
