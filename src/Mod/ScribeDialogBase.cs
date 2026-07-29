@@ -1873,7 +1873,7 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
         float noteSize  = bodySize * 0.8f;
         var headerStyle = new TextStyle { FontFamily = ScribeRowControlNudge.TitleFontFamily, Weight = FontWeight.Bold, FontSize = bodySize, Color = colors.OnSurface };
         var bodyStyle   = new TextStyle { FontSize = bodySize, Color = colors.OnSurface };
-        var dateStyle   = new TextStyle { FontSize = dateSize, Color = colors.OnSurface with { W = colors.OnSurface.W * 0.7f } };
+        var dateStyle   = new TextStyle { FontSize = dateSize, Color = colors.OnSurface with { W = colors.OnSurface.W * 0.9f } };
         var myName = capi.World.Player.PlayerName;
 
         var entries = host.Guestbook.Entries;
