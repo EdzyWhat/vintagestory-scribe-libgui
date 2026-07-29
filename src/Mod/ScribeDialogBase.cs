@@ -1782,12 +1782,14 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
         Guid? autoFocus = autoFocusPinTaskId;
         autoFocusPinTaskId = null; // one-shot
 
-        // Apply the sink ordering (v1-playtest-fixes): completed pins sink below not-completed ones,
-        // matching the resting order the HUD uses (ScribePinOrdering.ForDisplay). This is the plain
-        // Core resting order — the Pinned view does NOT replicate the HUD's undo-window "stay then
-        // sink" overlay (design Decision 2, open question resolved: plain resting order is sufficient
-        // here; the immediate sink is acceptable for the non-HUD surface).
-        var orderedPins = ScribePinOrdering.ForDisplay(modSystem.MyPins);
+        // Apply sink ordering only when the policy actually sinks done pins. Under Keep, done pins
+        // hold their position (same behaviour as the HUD's SunkForOrder). Unpin/Delete remove the
+        // pin entirely, so ordering is moot for them and raw order is fine.
+        var policy = modSystem.MySettings.CompletionPolicy;
+        bool sinkOrder = policy is ScribeCompletionPolicy.Sink or ScribeCompletionPolicy.UnpinSink;
+        var orderedPins = sinkOrder
+            ? ScribePinOrdering.ForDisplay(modSystem.MyPins)
+            : (IReadOnlyList<ScribePinnedRef>)modSystem.MyPins;
 
         // Each row's text seeds from its live edit buffer if one is in flight (a keystroke mid-resync),
         // else the authoritative server snapshot — the Pin Tab's equivalent of the editor re-seeding from
