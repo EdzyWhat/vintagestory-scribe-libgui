@@ -1869,11 +1869,10 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
         var colors      = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
         float bodySize  = ScribeRowConstants.BaseWindowFontSize
             * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale);
-        float dateSize  = bodySize * 0.8f;
+        float dateSize  = bodySize * 0.6f;
         var headerStyle = new TextStyle { FontFamily = ScribeRowControlNudge.TitleFontFamily, Weight = FontWeight.Bold, FontSize = bodySize, Color = colors.OnSurface };
-        var dateHeaderStyle = new TextStyle { FontFamily = ScribeRowControlNudge.TitleFontFamily, Weight = FontWeight.Bold, FontSize = dateSize, Color = colors.OnSurface with { W = colors.OnSurface.W * 0.8f } };
         var bodyStyle   = new TextStyle { FontSize = bodySize, Color = colors.OnSurface };
-        var dateStyle   = new TextStyle { FontSize = dateSize, Color = colors.OnSurface with { W = colors.OnSurface.W * 0.8f } };
+        var dateStyle   = new TextStyle { FontSize = dateSize, Color = colors.OnSurface with { W = colors.OnSurface.W * 0.6f } };
         var myName = capi.World.Player.PlayerName;
 
         var entries = host.Guestbook.Entries;
@@ -1905,17 +1904,26 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
                                 PosX = host.Pos.X, PosY = host.Pos.Y, PosZ = host.Pos.Z,
                                 Note = trimmed,
                             });
-                    }), flex: 4);
+                    }), flex: 5);
             }
             else
             {
-                noteSlot = new Expanded(new Text(entry.Note, bodyStyle), flex: 4);
+                noteSlot = new Expanded(new Text(entry.Note, bodyStyle), flex: 5);
             }
 
             rows.Add(new Row(children: new Widget[]
             {
-                new Expanded(new Text(entry.PlayerName, bodyStyle), flex: 2),
-                new Expanded(new Text(entry.InGameDate, dateStyle),  flex: 2),
+                new Expanded(
+                    new Column(
+                        spacing: 0,
+                        mainAxisSize: MainAxisSize.Min,
+                        crossAxisAlignment: CrossAxisAlignment.Stretch,
+                        children: new Widget[]
+                        {
+                            new Text(entry.PlayerName, bodyStyle),
+                            new Text(entry.InGameDate, dateStyle),
+                        }),
+                    flex: 3),
                 noteSlot,
             }));
         }
@@ -1937,9 +1945,8 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
                 {
                     new Row(children: new Widget[]
                     {
-                        new Expanded(new Text(Lang.Get("scribe:scribe-guestbook-col-visitor"), headerStyle),     flex: 2),
-                        new Expanded(new Text(Lang.Get("scribe:scribe-guestbook-col-date"),    dateHeaderStyle), flex: 2),
-                        new Expanded(new Text(Lang.Get("scribe:scribe-guestbook-col-note"),    headerStyle),     flex: 4),
+                        new Expanded(new Text(Lang.Get("scribe:scribe-guestbook-col-visitor"), headerStyle), flex: 3),
+                        new Expanded(new Text(Lang.Get("scribe:scribe-guestbook-col-note"),    headerStyle), flex: 5),
                     }),
                     new Divider(),
                     new Expanded(body),
