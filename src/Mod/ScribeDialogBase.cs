@@ -1919,17 +1919,17 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
                             focus.Unfocus();
                             e.Handled = true;
                         }
-                    }));
+                    }), flex: 4);
             }
             else
             {
-                noteSlot = new Expanded(new Text(entry.Note, bodyStyle));
+                noteSlot = new Expanded(new Text(entry.Note, bodyStyle), flex: 4);
             }
 
             rows.Add(new Row(children: new Widget[]
             {
-                new Expanded(new Text(entry.PlayerName, bodyStyle)),
-                new Expanded(new Text(entry.InGameDate, dateStyle)),
+                new Expanded(new Text(entry.PlayerName, bodyStyle), flex: 3),
+                new Expanded(new Text(entry.InGameDate, dateStyle),  flex: 2),
                 noteSlot,
             }));
         }
@@ -1951,9 +1951,9 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
                 {
                     new Row(children: new Widget[]
                     {
-                        new Expanded(new Text(Lang.Get("scribe:scribe-guestbook-col-visitor"), headerStyle)),
-                        new Expanded(new Text(Lang.Get("scribe:scribe-guestbook-col-date"),    dateHeaderStyle)),
-                        new Expanded(new Text(Lang.Get("scribe:scribe-guestbook-col-note"),    headerStyle)),
+                        new Expanded(new Text(Lang.Get("scribe:scribe-guestbook-col-visitor"), headerStyle),     flex: 3),
+                        new Expanded(new Text(Lang.Get("scribe:scribe-guestbook-col-date"),    dateHeaderStyle), flex: 2),
+                        new Expanded(new Text(Lang.Get("scribe:scribe-guestbook-col-note"),    headerStyle),     flex: 4),
                     }),
                     new Divider(),
                     new Expanded(body),
