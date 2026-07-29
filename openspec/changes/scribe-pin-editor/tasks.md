@@ -83,24 +83,24 @@
 
 ## 7. In-game verification (pending — requires a running game; not executable in this environment)
 
-- [ ] 7.1 Open the Lectern; the `scribepin` nav button switches the central region to the Pin Tab, which
+- [x] 7.1 Open the Lectern; the `scribepin` nav button switches the central region to the Pin Tab, which
       lists all pins across documents with no row cap, back-and-forth with read/editor.
-- [ ] 7.2 Rows are editable by default: the text field, checkbox, delete, unpin, and reorder grip are all
+- [x] 7.2 Rows are editable by default: the text field, checkbox, delete, unpin, and reorder grip are all
       present and act on the right pin.
-- [ ] 7.3 Complete a task from the Pin Tab → applies immediately with NO undo delay; confirm the HUD
+- [x] 7.3 Complete a task from the Pin Tab → applies immediately with NO undo delay; confirm the HUD
       still applies its undo window when used from the HUD.
-- [ ] 7.4 Edit a pin whose source Lectern is **loaded** → source doc text updates + persists (reopen to
+- [x] 7.4 Edit a pin whose source Lectern is **loaded** → source doc text updates + persists (reopen to
       confirm); pin snapshot updates.
 - [ ] 7.5 Edit/delete a pin whose source is **unloaded** → pin snapshot/removal updates, no crash, source
       unchanged until loaded (accepted best-effort, matches Delete-policy today).
-- [ ] 7.6 Unpin removes only the pin (task survives); delete removes the task.
+- [x] 7.6 Unpin removes only the pin (task survives); delete removes the task.
 - [ ] 7.7 Reorder pins → order persists per-player across relog (saved under `scribe:pins:v1`); confirm
       document block order is unchanged.
-- [ ] 7.8 Cross-check the corner HUD updates in lockstep with every Pin Tab action (same `MyPins`).
-- [ ] 7.9 Confirm blank/whitespace-only inline edit is rejected and leaves the task unchanged.
-- [ ] 7.10 Change the completion policy from the Pin Tab picker → the Settings window reflects the same
+- [x] 7.8 Cross-check the corner HUD updates in lockstep with every Pin Tab action (same `MyPins`).
+- [x] 7.9 Confirm blank/whitespace-only inline edit is rejected and leaves the task unchanged.
+- [x] 7.10 Change the completion policy from the Pin Tab picker → the Settings window reflects the same
       value, it persists across relog, and it governs a Pin Tab check-off (sink/keep/unpin/delete).
-- [ ] 7.11 Confirm the Pin Tab follows the Lectern-dialog theme/size (`PixelArtDisplay`, `WindowFontScale`,
+- [x] 7.11 Confirm the Pin Tab follows the Lectern-dialog theme/size (`PixelArtDisplay`, `WindowFontScale`,
       `PixelArtSize`) — not the HUD settings — and that editing-row focus/caret survives a background
       pin resync (the `MyPinsChanged` rebuild).
 
