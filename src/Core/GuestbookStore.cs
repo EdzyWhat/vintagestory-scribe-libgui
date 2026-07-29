@@ -17,7 +17,7 @@ public sealed class GuestbookStore
     private const byte Version = 1;
 
     public const int MaxEntries  = 100;
-    public const int MaxNoteLength = 80;
+    public const int MaxNoteLength = 140;
 
     private readonly List<GuestbookEntry> _entries = new();
 

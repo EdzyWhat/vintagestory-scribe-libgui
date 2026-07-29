@@ -1886,39 +1886,25 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
             Widget noteSlot;
             if (entry.PlayerName == myName)
             {
-                var ctrl = new TextEditingController(entry.Note);
-                var focus = new FocusNode();
-                string committed = entry.Note;
-                focus.AddListener(() =>
-                {
-                    if (!focus.HasFocus)
+                string current = entry.Note;
+                string lastSent = entry.Note;
+                noteSlot = new Expanded(new ScribeMultilineField(
+                    initialText: entry.Note,
+                    fontSize: bodySize,
+                    fontFamily: ScribeTaskFont.Resolve(modSystem.MySettings.TaskFontFamily),
+                    maxLength: GuestbookStore.MaxNoteLength,
+                    onChanged: text => current = text,
+                    onBlur: () =>
                     {
-                        var trimmed = ctrl.Text.Trim();
-                        if (trimmed != committed)
-                        {
-                            committed = trimmed;
-                            capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(
-                                new ScribeEditGuestbookNoteMessage
-                                {
-                                    PosX = host.Pos.X, PosY = host.Pos.Y, PosZ = host.Pos.Z,
-                                    Note = trimmed,
-                                });
-                        }
-                    }
-                });
-                noteSlot = new Expanded(new TextField(ctrl, focus,
-                    new TextFieldStyle { FillColor = new Vector4(0, 0, 0, 0), BorderThickness = 0, TextStyle = bodyStyle },
-                    onKeyDown: e =>
-                    {
-                        if (ctrl.Text.Length >= GuestbookStore.MaxNoteLength
-                            && !e.Ctrl && e.KeyCode is not ((int)GlKeys.BackSpace or (int)GlKeys.Delete
-                                or (int)GlKeys.Left or (int)GlKeys.Right or (int)GlKeys.Home or (int)GlKeys.End))
-                            e.Handled = true;
-                        if (e.KeyCode is (int)GlKeys.Enter or (int)GlKeys.KeypadEnter or (int)GlKeys.Escape)
-                        {
-                            focus.Unfocus();
-                            e.Handled = true;
-                        }
+                        var trimmed = current.Trim();
+                        if (trimmed == lastSent) return;
+                        lastSent = trimmed;
+                        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(
+                            new ScribeEditGuestbookNoteMessage
+                            {
+                                PosX = host.Pos.X, PosY = host.Pos.Y, PosZ = host.Pos.Z,
+                                Note = trimmed,
+                            });
                     }), flex: 4);
             }
             else
