@@ -1922,15 +1922,16 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
             rows.Add(new Row(children: new Widget[]
             {
                 new Expanded(
-                    new Column(
-                        spacing: 0,
-                        mainAxisSize: MainAxisSize.Min,
-                        crossAxisAlignment: CrossAxisAlignment.Stretch,
-                        children: new Widget[]
-                        {
-                            new Text(entry.PlayerName, bodyStyle),
-                            new Text(entry.InGameDate, dateStyle),
-                        }),
+                    new Padding(EdgeInsets.Only(left: 4f),
+                        new Column(
+                            spacing: 0,
+                            mainAxisSize: MainAxisSize.Min,
+                            crossAxisAlignment: CrossAxisAlignment.Stretch,
+                            children: new Widget[]
+                            {
+                                new Text(entry.PlayerName, bodyStyle),
+                                new Text(entry.InGameDate, dateStyle),
+                            })),
                     flex: 3),
                 noteSlot,
             }));
@@ -1953,7 +1954,7 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
                 {
                     new Row(children: new Widget[]
                     {
-                        new Expanded(new Text(Lang.Get("scribe:scribe-guestbook-col-visitor"), headerStyle), flex: 3),
+                        new Expanded(new Padding(EdgeInsets.Only(left: 4f), new Text(Lang.Get("scribe:scribe-guestbook-col-visitor"), headerStyle)), flex: 3),
                         new Expanded(new Text(Lang.Get("scribe:scribe-guestbook-col-note"),    headerStyle), flex: 5),
                     }),
                     new Divider(),
