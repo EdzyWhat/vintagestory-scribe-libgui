@@ -160,7 +160,7 @@ internal sealed class ScribeEditorContent : StatefulWidget
     public Action<int> OnCommitAndRetreat { get; }
     public Action<int> OnInsertTaskBelow { get; }
     /// <summary>A row's field genuinely lost focus (add-empty-task-lifecycle): the dialog removes the row
-    /// if it is an empty task. See <see cref="GuiDialogScribeLecternLibGui.OnRowBlurred"/>.</summary>
+    /// if it is an empty task. See <see cref="ScribeDialogBase.OnRowBlurred"/>.</summary>
     public Action<int> OnRowBlurred { get; }
     public Action<int> OnToggleTask { get; }
     public Action<int> OnDeleteBlock { get; }
@@ -172,7 +172,7 @@ internal sealed class ScribeEditorContent : StatefulWidget
     public Action OnSwitchToRead { get; }
     /// <summary>Horizontal breathing room applied around the footer button row (Add task / Done editing),
     /// 0.04·W each side, so the buttons don't run to the content edges. Passed from the dialog, which owns
-    /// the <c>LecternLayout</c> width.</summary>
+    /// the <c>ScribeLayout</c> width.</summary>
     public EdgeInsets FooterButtonPadding { get; }
     public ScribeRowStyle Style { get; }
     /// <summary>Dialog-owned scroll controller shared by both views (see the dialog field); NOT disposed

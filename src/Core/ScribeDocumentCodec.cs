@@ -19,13 +19,9 @@ namespace Scribe.Core;
 /// extend the reader with a new branch — do not reorder existing fields.
 ///
 /// Field history:
-///   v1 — flat tasks + a single note (pre-ordered-blocks).
-///   v2 — ordered blocks: [kind, done, depth, text].
-///   v3 — appended a per-block `pinned` bool and optional `assignedToUid`:
-///        [kind, done, depth, pinned, hasAssignedToUid, assignedToUid?, text].
 ///   v4 — added a 16-byte document id (after the version byte) and a 16-byte per-block id
-///        (first field of each block), and DROPPED the per-block `pinned` bool (pinning moved
-///        to a per-player store). The reader still accepts v3 (see <see cref="TryDeserialize"/>).
+///        (first field of each block); dropped the v3 per-block `pinned` bool (pinning moved
+///        to a per-player store).
 ///   v5 — appended a document title string after the block list. The reader still accepts v4
 ///        (supplies <see cref="ScribeDocument.DefaultTitle"/> for documents without a title).
 ///
@@ -91,17 +87,16 @@ public static class ScribeDocumentCodec
     }
 
     /// <summary>
-    /// Deserializes a document. Accepts the current format (v4) and the immediately prior one
-    /// (v3); any other version fails safely. Signature-stable for the many callers that don't need
-    /// the migration list — routes through the three-arg overload and discards it.
+    /// Deserializes a document. Accepts v5 (current) and v4 (prior); any other version fails safely.
+    /// Signature-stable for callers that don't need the legacy-pin out-param — routes through the
+    /// three-arg overload and discards it.
     /// </summary>
     public static bool TryDeserialize(byte[]? bytes, out ScribeDocument? document)
         => TryDeserialize(bytes, out document, out _);
 
     /// <summary>
-    /// Deserializes a document. <paramref name="legacyPinnedTaskIds"/> is always empty for v4 and v5
-    /// (pin migration from the removed per-block flag was a v3→v4 concern; v3 is no longer accepted).
-    /// Kept for API compatibility with the block entity's migration path.
+    /// Deserializes a document. <paramref name="legacyPinnedTaskIds"/> is always empty (v3, which
+    /// carried per-block pin flags, is no longer accepted). Kept for call-site compatibility.
     /// </summary>
     public static bool TryDeserialize(byte[]? bytes, out ScribeDocument? document, out IReadOnlyList<Guid> legacyPinnedTaskIds)
     {
@@ -121,7 +116,6 @@ public static class ScribeDocumentCodec
             if (version != Version && version != PriorVersion) return false;
             bool isCurrent = version == Version;
 
-            // v4 and v5 both carry a persisted DocId; v3 did not (but v3 is no longer accepted).
             Guid docId = new Guid(ReadExactly(r, 16));
 
             int blockCount = r.ReadInt32();
@@ -133,13 +127,11 @@ public static class ScribeDocumentCodec
             var blocks = new List<ScribeBlock>(blockCount);
             for (int i = 0; i < blockCount; i++)
             {
-                // v4 and v5 both carry a persisted TaskId per block (v3 did not, but is no longer accepted).
                 Guid taskId = new Guid(ReadExactly(r, 16));
 
                 var kind = (ScribeBlockKind)r.ReadByte();
                 bool done = r.ReadBoolean();
                 int depth = r.ReadInt32();
-                // The per-block `pinned` bool was dropped in v4; v3 is no longer accepted here.
                 bool hasAssignedToUid = r.ReadBoolean();
                 string? assignedToUid = hasAssignedToUid ? r.ReadString() : null;
                 string text = r.ReadString();

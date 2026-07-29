@@ -237,24 +237,6 @@ public sealed class ScribePinStore
         return changed ? new[] { actingPlayerUid } : Array.Empty<string>();
     }
 
-    // ---------------- v3 legacy-pin migration ----------------
-
-    /// <summary>
-    /// One-time migration of a v3 document's previously-pinned tasks into a player's store (the v3
-    /// <c>pinned</c> flag was shared, not per-player; single-player scope only — see the design's
-    /// Migration Plan). Each id that still resolves in <paramref name="document"/> is pinned with a
-    /// snapshot taken from it; ids that no longer resolve are skipped (nothing to reference).
-    /// </summary>
-    public void MigrateLegacyPins(string playerUid, Guid docId, IEnumerable<Guid> pinnedTaskIds, ScribeDocument document, double totalHours)
-    {
-        foreach (var taskId in pinnedTaskIds)
-        {
-            var block = document.FindByTaskId(taskId);
-            if (block is null) continue;
-            SetPin(playerUid, docId, taskId, totalHours, block.Text, block.Done);
-        }
-    }
-
     // ---------------- Persistence bridge ----------------
 
     /// <summary>Serializes the whole pin store to the savegame blob form.</summary>

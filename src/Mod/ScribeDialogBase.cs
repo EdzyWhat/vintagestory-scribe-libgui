@@ -166,7 +166,7 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
     /// equivalent of the editor's <see cref="scratch"/> write-through: because a <see cref="ForceRebuild"/>
     /// (fired by <see cref="OnMyPinsChanged"/>) fully unmounts the tree and re-seeds each field, a row
     /// still being typed must re-seed from its live buffer rather than the stale server snapshot. An entry
-    /// is dropped when its edit commits (blur/Enter) or the pin leaves the set (<see cref="PrunePinState"/>).</summary>
+    /// is dropped when its edit commits (blur/Enter) or the pin leaves the set (<see cref="DisposePinState"/>).</summary>
     private readonly Dictionary<Guid, string> pinEditBuffer = new();
 
     /// <summary>One focus node per Pin Tab row, keyed by <see cref="ScribeBlock.TaskId"/> (pin order can
@@ -1068,12 +1068,10 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
         FlushIfDirty();
     }
 
-    /// <summary>Send the scratch document to the server through the existing lock-gated edit path and
-    /// optimistically update the local cache so an immediate switch-to-read doesn't flash pre-edit
-    /// content. No-op when nothing changed. Semantics unchanged from the native editor's FlushIfDirty.</summary>
-    /// <summary>Commits the title input (if active): trims, defaults empty to "Lectern", clamps to 80
-    /// chars, writes to <see cref="scratch"/>, resets the editing flag, and flushes. Safe to call when
-    /// not editing (no-op) or when <see cref="scratch"/> is null (no-op).</summary>
+    /// <summary>Commits the title input (if active): trims, defaults empty to host's default title,
+    /// clamps to <see cref="ScribeDocument.MaxTitleLength"/> chars, writes to <see cref="scratch"/>,
+    /// resets the editing flag, and flushes. Safe to call when not editing (no-op) or when
+    /// <see cref="scratch"/> is null (no-op).</summary>
     private void CommitTitleIfEditing()
     {
         if (!_isTitleEditing || scratch is null) return;
@@ -1330,7 +1328,7 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
         // RowStyle reads WindowFontScale fresh) so toggling either relays out this dialog on the
         // MyPinsChanged/UpdateMySettings rebuild with no reopen. On = Scribe's light theme + notebook art;
         // off = the player's global LibGUI theme with no art. W drives the whole proportional layout via
-        // LecternLayout; the window Size is derived from the same W in CreateWindowConfig (applied at open).
+        // ScribeLayout; the window Size is derived from the same W in CreateWindowConfig (applied at open).
         bool pixelArt = modSystem.MySettings.PixelArtDisplay;
         var layout = host.GetLayout(modSystem.MySettings.PixelArtSize);
 
@@ -1377,11 +1375,6 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
                 BuildSectionInnerBox(layout),
             });
 
-    /// <summary>The TitleBar band (<c>W × 0.13H</c>) — the window's drag zone (see
-    /// <see cref="WindowConfig.DragHandleHeight"/>). It holds a bottom-anchored, centered TitleTextButtons row
-    /// (<c>0.75W × 0.065H</c>): the dialog title on the left (window text ×1.1) and a right-aligned group of
-    /// SVG nav/close buttons. Closing works without the stock frame — the close button calls
-    /// <see cref="GuiBase.TryClose"/>.</summary>
     /// <summary>When Pixel-Art Display is OFF (no notebook art backdrop), wrap <paramref name="child"/> in a
     /// solid theme-surface panel so the title row and central content read as opaque panels rather than
     /// transparent gaps onto the world; when ON, the notebook art is the background, so return the child
@@ -1396,6 +1389,11 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
             child: child);
     }
 
+    /// <summary>The TitleBar band (<c>W × 0.13H</c>) — the window's drag zone (see
+    /// <see cref="WindowConfig.DragHandleHeight"/>). It holds a bottom-anchored, centered TitleTextButtons row
+    /// (<c>0.75W × 0.065H</c>): the dialog title on the left (window text ×1.1) and a right-aligned group of
+    /// SVG nav/close buttons. Closing works without the stock frame — the close button calls
+    /// <see cref="GuiBase.TryClose"/>.</summary>
     private Widget BuildTitleBar(ScribeLayout layout)
     {
         var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
@@ -1556,7 +1554,7 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
 
     /// <summary>The SectionInnerBox (<c>0.9W × 0.8H</c>, centered): a row of three full-height columns —
     /// a left spacer, the center tasks column hosting the existing scrolling read/editor content, and a
-    /// right column of tooltipped nav icons. The three widths sum to <see cref="LecternLayout.InnerW"/>
+    /// right column of tooltipped nav icons. The three widths sum to <see cref="ScribeLayout.InnerW"/>
     /// exactly, so nothing overflows.</summary>
     private Widget BuildSectionInnerBox(ScribeLayout layout) =>
         new SizedBox(

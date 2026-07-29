@@ -80,7 +80,7 @@ internal sealed class ScribePinnedContent : StatefulWidget
     public Action<ScribeCompletionPolicy> OnCompletionPolicyChanged { get; }
     /// <summary>Horizontal breathing room applied around the completion-policy picker header, matching the
     /// title row's inset (<c>left: 10 + 0.04·W, right: 0.04·W</c>) so the picker lines up with the title
-    /// band above it. Passed in from the dialog, which owns the <c>LecternLayout</c> width.</summary>
+    /// band above it. Passed in from the dialog, which owns the <c>ScribeLayout</c> width.</summary>
     public EdgeInsets PolicyPickerPadding { get; }
     public ScribeRowStyle Style { get; }
     /// <summary>Dialog-owned scroll controller shared by all views; NOT disposed here.</summary>
@@ -93,7 +93,7 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
 {
     // Drag-reorder state (this State owns the row list, so a drag updates via SetState here — NOT the
     // dialog's ForceRebuild, which would unmount the grip mid-drag and drop the pointer capture). Mirrors
-    // ScribeLecternEditorContentState.
+    // ScribeEditorContentState.
     private int? dragFromIndex;
     private int? dragOverIndex;
 

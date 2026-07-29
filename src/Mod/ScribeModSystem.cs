@@ -462,31 +462,6 @@ public sealed class ScribeModSystem : ModSystem
 
     private void OnPlayerNowPlaying(IServerPlayer player)
     {
-        DrainLegacyPinsFor(player);
-        PushPinsTo(player);
-    }
-
-    /// <summary>
-    /// One-time, single-player-scoped drain of v3 documents' previously-pinned tasks into this
-    /// player's store (design Migration Plan). For each loaded lectern that deserialized from v3, its
-    /// codec-surfaced legacy-pinned ids are migrated; the lectern was also marked dirty on load so it
-    /// re-saves as v4. Runs on every join but is idempotent — <see cref="ScribePinStore.SetPin"/> is a
-    /// no-op for an already-present pin, so re-draining an already-migrated document adds nothing.
-    /// Scoped to single-player because the v3 flag was shared, not per-player (a multiplayer world's
-    /// v3 pins can't be attributed to one player — an explicit non-goal).
-    /// </summary>
-    private void DrainLegacyPinsFor(IServerPlayer player)
-    {
-        if (sapi is null || pinStore is null) return;
-        if (sapi.Server.Config.MaxClients > 1) return; // single-player scope only
-
-        double totalHours = sapi.World.Calendar.TotalHours;
-        foreach (var lectern in EnumerateLoadedLecterns())
-        {
-            var legacy = lectern.TakeLegacyPinnedTaskIds();
-            if (legacy.Count == 0) continue;
-            pinStore.MigrateLegacyPins(player.PlayerUID, lectern.Document.DocId, legacy, lectern.Document, totalHours);
-        }
         PushPinsTo(player);
     }
 

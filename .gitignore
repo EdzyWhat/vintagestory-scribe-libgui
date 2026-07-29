@@ -41,6 +41,7 @@ src/Mod/lib/*
 # only (leading /) so it doesn't also catch playtest-history/screenshots/ below, which is
 # meant to be committed.
 /screenshots/
+docs/media/screenshots/
 
 # Playtest checklist submissions (app lives in the separate vs-playtest-checklist repo):
 # ephemeral local reports queued for Claude to review, not meant to be committed

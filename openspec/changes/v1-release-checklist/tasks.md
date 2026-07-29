@@ -218,7 +218,7 @@
       - Done 2026-07-28: tag pushed, GitHub Release live at
         https://github.com/EdzyWhat/vintagestory-scribe-libgui/releases/tag/v0.1.0,
         scribe_0.1.0.zip uploaded.
-- [ ] 8.5 Publish the VS mod DB page with the zip/release link.
+- [x] 8.5 Publish the VS mod DB page with the zip/release link.
 
 ## 9. Post-release (not ship gates — do after 8.5)
 
@@ -226,23 +226,22 @@
       feather + leather + ink bowl), no temporal gear, LibGUI required (no ImGui), multiplayer
       confirmed, sound toggle exists, timers deferred to Clockmaker's Notebook (v2), Scapholene
       credit to Artekuno's suggestion. Reference the teaser thread.
-- [ ] 9.2 Capture B2 feature screenshots: HUD in-world with active pins, Settings window, notebook
-      backdrop, task checklist in the editor. Store under `docs/media/` (per RELEASE.md press-media
-      decision — separate from `screenshots/` debug shots).
+- [x] 9.2 Capture B2 feature screenshots: HUD in-world with active pins, Settings window, notebook
+      backdrop, task checklist in the editor. Store under `docs/media/screenshots/` (gitignored).
 - [ ] 9.3 Produce the 60–90s feature showcase video: place lectern → add/check tasks → pin to HUD →
       HUD in-world → settings/themes → outro/download link. Script draft at `docs/media/video-script.md`.
-- [ ] 9.4 Reach out to the LibGUI author with a courtesy message (attribution, feedback, and optionally
+- [x] 9.4 Reach out to the LibGUI author with a courtesy message (attribution, feedback, and optionally
       a link to the released mod).
 - [ ] 9.5 Add Tab/Shift+Tab navigation tooltips to the task editor rows (discoverability — surfaced by
       thepeebrain's teaser comment about keyboard-driven use). Promote to its own small change if
       non-trivial.
-- [ ] 9.6 Run `/simplify` code quality pass on `src/Mod/GuiDialogScribeLecternLibGui.cs` and the most
-      recently touched files.
-- [ ] 9.7 Iterate on the VS mod DB page based on early download/comment feedback.
+- [x] 9.6 Code quality pass on recently touched files: stale cref/comments fixed, dead code removed
+      (`ScribeRowButtonText`, v3-pin migration path), codec field-history trimmed to v4/v5 only.
+- [x] 9.7 Iterate on the VS mod DB page based on early download/comment feedback.
 
 ## 10. Playtest-surfaced fixes (from submission 2026-07-28T06-33-23)
 
-- [ ] 10.1 Create a mod-manager / mod-DB icon image for Scribe (the picture shown in the in-game Mod
+- [x] 10.1 Create a mod-manager / mod-DB icon image for Scribe (the picture shown in the in-game Mod
       Manager list and on the VS mod DB page). Add it to the mod so the manager shows a real icon, not a
       placeholder. Confirm it renders in the in-game Mod Manager after a restage/relaunch. (Distinct from
       §9.2's press/feature screenshots — this is the packaged mod icon.)

@@ -57,7 +57,7 @@ internal sealed class ScribeReadContent : StatefulWidget
     public Action<Guid> OnTogglePinned { get; }
     public Action OnSwitchToEditor { get; }
     /// <summary>Horizontal breathing room applied around the footer button (Edit), 0.04·W each side, so it
-    /// doesn't run to the content edges. Passed from the dialog, which owns the <c>LecternLayout</c> width.</summary>
+    /// doesn't run to the content edges. Passed from the dialog, which owns the <c>ScribeLayout</c> width.</summary>
     public EdgeInsets FooterButtonPadding { get; }
     public ScribeRowStyle Style { get; }
     /// <summary>Dialog-owned scroll controller shared by both views (see the dialog field); NOT disposed
@@ -262,7 +262,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
 }
 
 // ============================================================================
-// Editor view content (migrate-editor-view-libgui)
+// Editor view content
 // ============================================================================
 
 /// <summary>A value snapshot of one editable block plus its index. The live text lives in the

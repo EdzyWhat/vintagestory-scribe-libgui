@@ -80,16 +80,10 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
     /// Null until the first server-side register.</summary>
     private Guid? registeredDocId;
 
-    /// <summary>Server-side: task ids the codec surfaced as previously-pinned when a v3 document was
-    /// loaded, awaiting a one-time drain into a player's pin store (see
-    /// <see cref="TakeLegacyPinnedTaskIds"/>). Empty for a v4 document.</summary>
-    private IReadOnlyList<Guid> legacyPinnedTaskIds = System.Array.Empty<Guid>();
-
-    /// <summary>Server-side: true when this block entity loaded a v3 document (no persisted ids), so
-    /// it must be marked dirty on first server init to re-save as v4 — otherwise its generated
-    /// DocId/TaskIds regenerate every load and pins can't stick (the single most important sequencing
-    /// detail in the design).</summary>
-    private bool needsV4Resave;
+    /// <summary>Server-side: true when this block entity loaded a v4 document (no title field), so it
+    /// must be marked dirty on first server init to re-save as v5 — otherwise the title defaults every
+    /// load instead of persisting.</summary>
+    private bool needsV5Resave;
 
     // ── IScribeDocumentHost explicit implementations ──────────────────────
     BlockPos IScribeDocumentHost.Pos => Pos;
@@ -114,12 +108,11 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
             sapi.Event.PlayerDisconnect += OnPlayerDisconnect;
 
             // Register this document's live DocId → position mapping so pins can resolve it, and
-            // re-save a v3-loaded document as v4 so its freshly-generated ids persist (else they
-            // regenerate every load and pins can't stick).
+            // re-save a v4-loaded document as v5 so the title field persists.
             RegisterDocInStore();
-            if (needsV4Resave)
+            if (needsV5Resave)
             {
-                needsV4Resave = false;
+                needsV5Resave = false;
                 MarkDirty();
             }
         }
@@ -177,14 +170,10 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
         syncedLockHolderUid = string.IsNullOrEmpty(lockHolder) ? null : lockHolder;
 
         var bytes = tree.GetBytes(DocumentAttributeKey);
-        // A v3 document had no persisted ids: the codec generates fresh ones and surfaces which tasks
-        // were pinned so they can be migrated. Remember both so Initialize re-saves as v4 (ids stick)
-        // and the mod system can drain the legacy pins on the owner's next join.
-        needsV4Resave = ScribeDocumentCodec.IsPriorVersion(bytes);
-        Document = ScribeDocumentCodec.TryDeserialize(bytes, out var doc, out var legacyPinned) && doc is not null
+        needsV5Resave = ScribeDocumentCodec.IsPriorVersion(bytes);
+        Document = ScribeDocumentCodec.TryDeserialize(bytes, out var doc, out _) && doc is not null
             ? doc
             : new ScribeDocument();
-        legacyPinnedTaskIds = legacyPinned;
 
         // A resync may have replaced the document (a different DocId is unusual for a lectern, but the
         // break→replace path can restore a saved doc). Keep the live index pointing at the current one.
@@ -231,15 +220,6 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
     private ScribePinStore? PinStore => ModSystem?.PinStore;
 
     private ScribeModSystem? ModSystem => Api?.ModLoader.GetModSystem<ScribeModSystem>();
-
-    /// <summary>Hands off (and clears) the v3 legacy-pinned task ids for a one-time migration drain.
-    /// Returns empty after the first call or for a v4 document.</summary>
-    public IReadOnlyList<Guid> TakeLegacyPinnedTaskIds()
-    {
-        var ids = legacyPinnedTaskIds;
-        legacyPinnedTaskIds = System.Array.Empty<Guid>();
-        return ids;
-    }
 
     /// <summary>
     /// Called from <see cref="BlockScribeLectern.OnBlockInteractStart"/> on whichever side is
