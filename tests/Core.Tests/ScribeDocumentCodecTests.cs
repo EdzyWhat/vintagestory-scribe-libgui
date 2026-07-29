@@ -97,59 +97,57 @@ public class ScribeDocumentCodecTests
     }
 
     [Fact]
-    public void TryDeserialize_V3Bytes_Succeeds_AndSurfacesLegacyPinnedIds()
+    public void TryDeserialize_V3Bytes_FailsSafely()
     {
-        // Hand-build a v3 payload (the immediately prior format): DocId/TaskId absent, a per-block
-        // `pinned` bool present. Two tasks, the second pinned.
+        // v3 is no longer accepted (PriorVersion = 4 since v5 was introduced). Hand-build a valid
+        // v3 payload and confirm it is rejected rather than misread.
         using var ms = new MemoryStream();
         using (var w = new BinaryWriter(ms))
         {
             w.Write("SCRB"u8.ToArray());
             w.Write((byte)3);
-            w.Write(2); // blockCount
-            // block 0 — not pinned
+            w.Write(1); // blockCount
             w.Write((byte)ScribeBlockKind.Task);
             w.Write(false); // done
             w.Write(0);     // depth
             w.Write(false); // pinned
             w.Write(false); // hasAssignedToUid
             w.Write("Find copper");
-            // block 1 — pinned
-            w.Write((byte)ScribeBlockKind.Task);
-            w.Write(true);  // done
-            w.Write(0);     // depth
-            w.Write(true);  // pinned
-            w.Write(false); // hasAssignedToUid
-            w.Write("Find tin");
         }
 
-        bool ok = ScribeDocumentCodec.TryDeserialize(ms.ToArray(), out ScribeDocument? restored, out var legacyPinned);
+        bool ok = ScribeDocumentCodec.TryDeserialize(ms.ToArray(), out ScribeDocument? restored);
 
-        Assert.True(ok);
-        Assert.NotNull(restored);
-        Assert.Equal(2, restored!.Blocks.Count);
-        Assert.Equal("Find copper", restored.Blocks[0].Text);
-        Assert.True(restored.Blocks[1].Done);
-        // A fresh DocId was generated (not the empty Guid) and every block got a fresh TaskId.
-        Assert.NotEqual(Guid.Empty, restored.DocId);
-        Assert.All(restored.Blocks, b => Assert.NotEqual(Guid.Empty, b.TaskId));
-        // Exactly the pinned block's (freshly generated) id is surfaced for migration, and it
-        // matches the id now on that block.
-        var pinnedId = Assert.Single(legacyPinned);
-        Assert.Equal(restored.Blocks[1].TaskId, pinnedId);
+        Assert.False(ok);
+        Assert.Null(restored);
     }
 
     [Fact]
-    public void TryDeserialize_V4Bytes_SurfaceNoLegacyPinnedIds()
+    public void TryDeserialize_V4Bytes_Succeeds_AndSurfacesNoLegacyPinnedIds()
     {
-        var original = new ScribeDocument();
-        original.AddTask("Find copper");
+        // v4 is the immediately prior format (PriorVersion). It deserializes successfully; the
+        // legacy pinned-task migration list is always empty (v3 migration was a v3→v4 concern).
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write(new byte[] { (byte)'S', (byte)'C', (byte)'R', (byte)'B' });
+            w.Write((byte)4);
+            w.Write(Guid.NewGuid().ToByteArray()); // DocId
+            w.Write(1); // blockCount
+            w.Write(Guid.NewGuid().ToByteArray()); // TaskId
+            w.Write((byte)ScribeBlockKind.Task);
+            w.Write(false); // done
+            w.Write(0);     // depth
+            w.Write(false); // hasAssignedToUid
+            w.Write("Find copper");
+            // no title field — v4 ends here
+        }
+        byte[] v4Bytes = ms.ToArray();
 
-        byte[] bytes = ScribeDocumentCodec.Serialize(original);
-        bool ok = ScribeDocumentCodec.TryDeserialize(bytes, out ScribeDocument? restored, out var legacyPinned);
+        bool ok = ScribeDocumentCodec.TryDeserialize(v4Bytes, out ScribeDocument? restored, out var legacyPinned);
 
         Assert.True(ok);
         Assert.NotNull(restored);
+        Assert.Equal("Find copper", restored!.Blocks[0].Text);
         Assert.Empty(legacyPinned);
     }
 
@@ -178,9 +176,9 @@ public class ScribeDocumentCodecTests
     [Fact]
     public void TryDeserialize_UnsupportedOlderVersionBytes_FailsSafely()
     {
-        // The reader accepts only the current version (4) and the immediately prior one (3).
+        // The reader accepts only the current version (5) and the immediately prior one (4).
         // A v2-shaped payload is older than that and must be rejected outright, not misread by
-        // reading v3/v4 fields (ids, pinned) that aren't present.
+        // reading v4/v5 fields (ids, title) that aren't present.
         using var ms = new MemoryStream();
         using (var w = new BinaryWriter(ms))
         {
@@ -313,5 +311,59 @@ public class ScribeDocumentCodecTests
 
         Assert.True(ok);
         Assert.Equal(ScribeDocumentCodec.MaxTaskTextLength + 500, restored!.Blocks[0].Text.Length);
+    }
+
+    [Fact]
+    public void Serialize_Deserialize_Title_RoundTrips()
+    {
+        var original = new ScribeDocument();
+        original.Title = "Stone Age Notes";
+        original.AddTask("Find flint");
+
+        byte[] bytes = ScribeDocumentCodec.Serialize(original);
+        bool ok = ScribeDocumentCodec.TryDeserialize(bytes, out ScribeDocument? restored);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        Assert.Equal("Stone Age Notes", restored!.Title);
+    }
+
+    [Fact]
+    public void TryDeserialize_V4Bytes_SuppliesDefaultTitle()
+    {
+        // Hand-roll v4 bytes (magic + version=4 + DocId + blockCount=0) to simulate a document
+        // saved before the title field was introduced. Deserializing must supply "Lectern".
+        using var ms = new System.IO.MemoryStream();
+        using (var w = new System.IO.BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write(new byte[] { (byte)'S', (byte)'C', (byte)'R', (byte)'B' }); // magic
+            w.Write((byte)4);                 // version = 4 (prior)
+            w.Write(Guid.NewGuid().ToByteArray()); // DocId
+            w.Write((int)0);                  // blockCount = 0
+            // no title field — v4 ends here
+        }
+        byte[] v4Bytes = ms.ToArray();
+
+        bool ok = ScribeDocumentCodec.TryDeserialize(v4Bytes, out ScribeDocument? restored);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        Assert.Equal(ScribeDocument.DefaultTitle, restored!.Title);
+    }
+
+    [Fact]
+    public void TryDeserialize_V5Bytes_WhitespaceTitle_SuppliesDefaultTitle()
+    {
+        // A document serialized with a whitespace-only title (e.g. player cleared it before the
+        // blur-normalize fired) must deserialize to the default title, not whitespace.
+        var original = new ScribeDocument();
+        original.Title = "   "; // whitespace — normalize-on-blur should prevent this, codec clips as backstop
+
+        byte[] bytes = ScribeDocumentCodec.Serialize(original);
+        bool ok = ScribeDocumentCodec.TryDeserialize(bytes, out ScribeDocument? restored);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        Assert.Equal(ScribeDocument.DefaultTitle, restored!.Title);
     }
 }

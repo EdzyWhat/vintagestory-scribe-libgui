@@ -4,6 +4,7 @@
 	"blockhelp-scribelectern-edit": "Edit",
 
 	"scribe-gui-title": "Lectern",
+	"scribe-gui-title-edit-tooltip": "Edit title",
 	"scribe-gui-addtask": "Add Task",
 	"scribe-gui-addtext": "Add Note",
 	"scribe-gui-delete": "Delete",

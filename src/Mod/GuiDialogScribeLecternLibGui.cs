@@ -127,6 +127,12 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     /// on in <see cref="OnRenderGUI"/> AFTER layout has run (EnsureVisible reads live geometry).</summary>
     private bool pendingEnsureVisible;
 
+    // ---- Document title editing ----
+    /// <summary>True while the title row is in inline-input mode (pencil was clicked, input is active).</summary>
+    private bool _isTitleEditing;
+    private TextEditingController? _titleController;
+    private FocusNode? _titleFocusNode;
+
     // ---- Title-bar grip drag (§8.1) ----
     // The title-bar band is the drag zone (WindowConfig.DragHandleHeight), but a press ON the grip glyph
     // was swallowed instead of moving the window: the grip's Tooltip wraps its child in a MouseRegion,
@@ -253,6 +259,10 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
         // (add-active-tab-nav-colors) — it can be toggled from the HUD gear while the lectern is open,
         // so we can't rely on a lectern interaction to trigger the rebuild. Unsubscribed in OnGuiClosed.
         modSystem.SettingsVisibilityChanged += OnSettingsVisibilityChanged;
+
+        _titleController = new TextEditingController("");
+        _titleFocusNode = new FocusNode();
+        _titleFocusNode.AddListener(OnTitleFocusChanged);
 
 #if DEBUG
         // Scroll-jump diagnostics: log EVERY offset change on the shared controller — including the ones
@@ -483,6 +493,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     /// lock/scratch, so nothing to tear down — just select the view).</summary>
     public void EnterReadMode()
     {
+        CommitTitleIfEditing();
         if (isEditorMode)
         {
             LeaveEditorMode();
@@ -502,6 +513,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     /// doc — so this needs no server round-trip.</summary>
     private void OnClickSwitchToPinned()
     {
+        CommitTitleIfEditing();
         if (isEditorMode)
         {
             if (focusedEditIndex is { } idx) NormalizeRowOnCommit(idx);
@@ -1104,6 +1116,31 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     /// <summary>Send the scratch document to the server through the existing lock-gated edit path and
     /// optimistically update the local cache so an immediate switch-to-read doesn't flash pre-edit
     /// content. No-op when nothing changed. Semantics unchanged from the native editor's FlushIfDirty.</summary>
+    /// <summary>Commits the title input (if active): trims, defaults empty to "Lectern", clamps to 80
+    /// chars, writes to <see cref="scratch"/>, resets the editing flag, and flushes. Safe to call when
+    /// not editing (no-op) or when <see cref="scratch"/> is null (no-op).</summary>
+    private void CommitTitleIfEditing()
+    {
+        if (!_isTitleEditing || scratch is null) return;
+        var raw = _titleController?.Text ?? "";
+        var trimmed = raw.Trim();
+        var final = string.IsNullOrEmpty(trimmed)
+            ? ScribeDocument.DefaultTitle
+            : trimmed[..Math.Min(trimmed.Length, ScribeDocument.MaxTitleLength)];
+        scratch.Title = final;
+        _isTitleEditing = false;
+        isDirty = true;
+        FlushIfDirty();
+    }
+
+    /// <summary>FocusNode listener for the title input. Commits on focus loss; repaints on any focus change.</summary>
+    private void OnTitleFocusChanged()
+    {
+        if (!(_titleFocusNode?.HasFocus ?? true))
+            CommitTitleIfEditing();
+        if (IsOpened()) ForceRebuild();
+    }
+
     private void FlushIfDirty()
     {
         if (!isDirty || scratch is null) return;
@@ -1285,6 +1322,7 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
 
     public override void OnGuiClosed()
     {
+        CommitTitleIfEditing();
         if (isEditorMode)
         {
             if (focusedEditIndex is { } closeIdx) NormalizeRowOnCommit(closeIdx);
@@ -1303,6 +1341,9 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
 #if DEBUG
         sharedScrollController.OnChanged -= OnScrollControllerChanged;
 #endif
+        _titleFocusNode?.RemoveListener(OnTitleFocusChanged);
+        _titleFocusNode?.Dispose();
+        _titleController?.Dispose();
         // The dialog owns the shared scroll controller (see its field); dispose it once here rather
         // than in either view's State, which come and go with each view-switch ForceRebuild.
         sharedScrollController.Dispose();
@@ -1605,6 +1646,93 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     /// <summary>The tasks column's content region: the read or editor view. Its former gear-header chrome row
     /// moved to the SectionRightCol nav stack (scribe-notebook-frame), so this is now just the active view
     /// filling the column.</summary>
+    /// <summary>
+    /// The document title row shown above the central region in every view. When <paramref name="editable"/>
+    /// is true (editor view only), a pencil icon is shown to the right; clicking it activates an inline
+    /// single-line input. On blur the input commits, normalizes, and flushes. When false (read/pin views)
+    /// the title is display-only with no pencil.
+    /// </summary>
+    private Widget BuildDocumentHeader(bool editable)
+    {
+        float titleFont = ScribeRowConstants.BaseWindowFontSize
+            * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale) * 1.5f;
+        var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
+        var titleStyle = new TextStyle
+        {
+            FontSize = titleFont,
+            FontFamily = ScribeRowControlNudge.TitleFontFamily,
+            Weight = FontWeight.Bold,
+            Color = colors.OnSurface,
+        };
+
+        var currentTitle = (editable ? scratch?.Title : lectern.Document.Title) ?? ScribeDocument.DefaultTitle;
+
+        if (editable && _isTitleEditing)
+        {
+            return new Padding(
+                EdgeInsets.Symmetric(horizontal: 10, vertical: 6),
+                new TextField(
+                    _titleController!,
+                    _titleFocusNode!,
+                    new TextFieldStyle
+                    {
+                        Height = titleFont + 14,
+                        FillColor = colors.Surface,
+                        BorderThickness = 1,
+                        BorderColor = colors.Border,
+                    },
+                    onKeyDown: e =>
+                    {
+                        // Cap at 80 chars — swallow printable input but allow navigation/deletion keys
+                        if (_titleController!.Text.Length >= ScribeDocument.MaxTitleLength
+                            && e.KeyCode is not ((int)GlKeys.BackSpace or (int)GlKeys.Delete
+                                or (int)GlKeys.Left or (int)GlKeys.Right
+                                or (int)GlKeys.Home or (int)GlKeys.End))
+                        {
+                            // Allow ctrl-keys (select-all, copy, cut) to pass through
+                            if (!e.Ctrl) e.Handled = true;
+                        }
+                        // Enter or Escape commits and closes the input
+                        if (e.KeyCode is (int)GlKeys.Enter or (int)GlKeys.KeypadEnter or (int)GlKeys.Escape)
+                        {
+                            CommitTitleIfEditing();
+                            ForceRebuild();
+                            e.Handled = true;
+                        }
+                    }));
+        }
+
+        Widget titleText = new Expanded(new Text(currentTitle, style: titleStyle));
+
+        if (!editable)
+        {
+            return new Padding(
+                EdgeInsets.Symmetric(horizontal: 10, vertical: 6),
+                new Row(children: new Widget[] { titleText }));
+        }
+
+        // Editor view, not yet editing — show title + pencil button
+        Widget pencil = WithTooltip(
+            Lang.Get("scribe:scribe-gui-title-edit-tooltip"),
+            new ScribeRowButton(
+                iconName: "scribeedit",
+                iconColor: colors.OnSurfaceVariant,
+                size: ScribeRowConstants.RowCheckboxSize * 1.4f,
+                onTap: () =>
+                {
+                    _titleController!.Value = new TextEditingValue(
+                        currentTitle,
+                        TextSelection.Collapsed(currentTitle.Length));
+                    _isTitleEditing = true;
+                    ForceRebuild();
+                    _titleFocusNode!.RequestFocus();
+                }));
+
+        return new Padding(
+            EdgeInsets.Symmetric(horizontal: 10, vertical: 6),
+            new Row(children: new Widget[] { titleText, pencil }));
+    }
+
     private Widget BuildCentralRegion() => viewMode switch
     {
         ScribeLecternView.Editor => BuildEditorContent(),
@@ -1618,7 +1746,10 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
     private ScribeRowStyle RowStyle => ScribeRowStyle.FromSettings(modSystem.MySettings);
 
     private Widget BuildReadContent() =>
-        new ScribeLecternReadContent(
+        new Column(mainAxisSize: MainAxisSize.Max, children: new Widget[]
+        {
+            BuildDocumentHeader(editable: false),
+            new ScribeLecternReadContent(
             // Snapshot the block list for this build into value copies (never a live block
             // reference), so a later mutation of the authoritative document can't alias into a built
             // row — a re-sync rebuilds instead. Pinned is a per-player query (IsPinnedForMe), not a
@@ -1639,7 +1770,8 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             footerButtonPadding: EdgeInsets.Symmetric(
                 horizontal: 0.04f * new LecternLayout(modSystem.MySettings.PixelArtSize).W),
             style: RowStyle,
-            scrollController: sharedScrollController);
+            scrollController: sharedScrollController),
+        });
 
     private Widget BuildEditorContent()
     {
@@ -1656,31 +1788,35 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
             .Select(d => new ScribeDepartingEditorRow(d.Row, d.Index))
             .ToList();
 
-        return new ScribeLecternEditorContent(
-            blocks: blocks,
-            focusNodes: editorFocusNodes,
-            autoFocusIndex: autoFocus,
-            onTextChanged: NotifyTextChanged,
-            onCommitAndAdvance: EditorAdvanceFrom,
-            onCommitAndRetreat: EditorRetreatFrom,
-            onInsertTaskBelow: EditorInsertTaskBelow,
-            onRowBlurred: OnRowBlurred,
-            onToggleTask: ToggleEditorTask,
-            onDeleteBlock: DeleteEditorBlock,
-            onTogglePinned: TogglePinnedEditorTask,
-            // Drag-reorder follows the moved row into view (anchorViewport defaults false); only a Sink
-            // completion passes anchorViewport: true to hold the viewport still.
-            onReorderBlock: (from, to) => ReorderEditorBlock(from, to),
-            onAddTask: OnClickAddTask,
-            onSwitchToRead: OnClickSwitchToRead,
-            // Symmetric 0.04·W horizontal inset on the footer button row, from the same LecternLayout width.
-            footerButtonPadding: EdgeInsets.Symmetric(
-                horizontal: 0.04f * new LecternLayout(modSystem.MySettings.PixelArtSize).W),
-            style: RowStyle,
-            scrollController: sharedScrollController,
-            departingRows: departing,
-            collapseRegistry: editorCollapseRegistry,
-            onDepartingCollapsed: OnEditorRowCollapsed);
+        return new Column(mainAxisSize: MainAxisSize.Max, children: new Widget[]
+        {
+            BuildDocumentHeader(editable: true),
+            new ScribeLecternEditorContent(
+                blocks: blocks,
+                focusNodes: editorFocusNodes,
+                autoFocusIndex: autoFocus,
+                onTextChanged: NotifyTextChanged,
+                onCommitAndAdvance: EditorAdvanceFrom,
+                onCommitAndRetreat: EditorRetreatFrom,
+                onInsertTaskBelow: EditorInsertTaskBelow,
+                onRowBlurred: OnRowBlurred,
+                onToggleTask: ToggleEditorTask,
+                onDeleteBlock: DeleteEditorBlock,
+                onTogglePinned: TogglePinnedEditorTask,
+                // Drag-reorder follows the moved row into view (anchorViewport defaults false); only a Sink
+                // completion passes anchorViewport: true to hold the viewport still.
+                onReorderBlock: (from, to) => ReorderEditorBlock(from, to),
+                onAddTask: OnClickAddTask,
+                onSwitchToRead: OnClickSwitchToRead,
+                // Symmetric 0.04·W horizontal inset on the footer button row, from the same LecternLayout width.
+                footerButtonPadding: EdgeInsets.Symmetric(
+                    horizontal: 0.04f * new LecternLayout(modSystem.MySettings.PixelArtSize).W),
+                style: RowStyle,
+                scrollController: sharedScrollController,
+                departingRows: departing,
+                collapseRegistry: editorCollapseRegistry,
+                onDepartingCollapsed: OnEditorRowCollapsed),
+        });
     }
 
     /// <summary>Read-view task checkbox click: complete the task by its stable identity via the
@@ -1742,23 +1878,27 @@ public sealed class GuiDialogScribeLecternLibGui : GuiDialogBlockEntityBase
                 pinEditBuffer.TryGetValue(p.TaskId, out var buffered) ? buffered : p.LastKnownText))
             .ToList();
 
-        return new ScribeLecternPinnedContent(
-            rows: rows,
-            focusNodes: pinFocusNodes,
-            autoFocusTaskId: autoFocus,
-            onTextChanged: OnPinTextChanged,
-            onCommitText: CommitPinTextEdit,
-            onToggleComplete: OnPinCompleteTask,
-            onDelete: OnPinDeleteTask,
-            onUnpin: OnPinUnpinTask,
-            onReorder: OnPinReorder,
-            completionPolicy: modSystem.MySettings.CompletionPolicy,
-            onCompletionPolicyChanged: p => modSystem.UpdateMySettings(s => s.CompletionPolicy = p),
-            // Match the title row's horizontal inset (left: 10 + 0.04·W, right: 0.04·W) so the picker lines
-            // up with the title band; W comes from the same LecternLayout the rest of the dialog uses.
-            policyPickerPadding: EdgeInsets.Only(left: 10 + 0.04f * layoutW, right: 0.04f * layoutW),
-            style: RowStyle,
-            scrollController: sharedScrollController);
+        return new Column(mainAxisSize: MainAxisSize.Max, children: new Widget[]
+        {
+            BuildDocumentHeader(editable: false),
+            new ScribeLecternPinnedContent(
+                rows: rows,
+                focusNodes: pinFocusNodes,
+                autoFocusTaskId: autoFocus,
+                onTextChanged: OnPinTextChanged,
+                onCommitText: CommitPinTextEdit,
+                onToggleComplete: OnPinCompleteTask,
+                onDelete: OnPinDeleteTask,
+                onUnpin: OnPinUnpinTask,
+                onReorder: OnPinReorder,
+                completionPolicy: modSystem.MySettings.CompletionPolicy,
+                onCompletionPolicyChanged: p => modSystem.UpdateMySettings(s => s.CompletionPolicy = p),
+                // Match the title row's horizontal inset (left: 10 + 0.04·W, right: 0.04·W) so the picker lines
+                // up with the title band; W comes from the same LecternLayout the rest of the dialog uses.
+                policyPickerPadding: EdgeInsets.Only(left: 10 + 0.04f * layoutW, right: 0.04f * layoutW),
+                style: RowStyle,
+                scrollController: sharedScrollController),
+        });
     }
 
     /// <summary>Keep <see cref="pinFocusNodes"/> in sync with the current pin set: add a node for each new

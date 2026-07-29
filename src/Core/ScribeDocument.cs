@@ -11,7 +11,17 @@ namespace Scribe.Core;
 /// </summary>
 public sealed class ScribeDocument
 {
+    /// <summary>Default title shown for a Lectern that has never had a title set.</summary>
+    public const string DefaultTitle = "Lectern";
+
+    /// <summary>Maximum number of characters in a Lectern title.</summary>
+    public const int MaxTitleLength = 80;
+
     private readonly List<ScribeBlock> _blocks = new();
+
+    /// <summary>The display title of this document. Defaults to <see cref="DefaultTitle"/>;
+    /// the editing layer normalizes empty/whitespace titles back to the default before saving.</summary>
+    public string Title { get; set; } = DefaultTitle;
 
     /// <summary>The blocks, in order. Read-only to callers; mutate via the methods below.</summary>
     public IReadOnlyList<ScribeBlock> Blocks => _blocks;

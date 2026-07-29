@@ -7,14 +7,15 @@ namespace Scribe.Core;
 /// used for both world persistence and network sync, so the round-trip is exact and any
 /// malformed input fails safely (returns false) rather than throwing.
 ///
-/// Current format (v4, little-endian via <see cref="BinaryWriter"/>):
+/// Current format (v5, little-endian via <see cref="BinaryWriter"/>):
 ///   [4 bytes magic "SCRB"][1 byte version][16 bytes DocId][int blockCount]
 ///   [per block: 16 bytes TaskId, byte kind, bool done, int depth, bool hasAssignedToUid,
 ///    string assignedToUid (only if hasAssignedToUid), string text]
+///   [string title]
 ///
 /// APPEND-ONLY VERSION DISCIPLINE: <see cref="Version"/> is a single global counter and new
-/// fields append in version order (never interleave; never two "v4"s). See
-/// docs/specs/README.md convention #1. When adding v5, append its fields after v4's layout and
+/// fields append in version order (never interleave; never two "v5"s). See
+/// docs/specs/README.md convention #1. When adding v6, append its fields after v5's layout and
 /// extend the reader with a new branch — do not reorder existing fields.
 ///
 /// Field history:
@@ -25,6 +26,8 @@ namespace Scribe.Core;
 ///   v4 — added a 16-byte document id (after the version byte) and a 16-byte per-block id
 ///        (first field of each block), and DROPPED the per-block `pinned` bool (pinning moved
 ///        to a per-player store). The reader still accepts v3 (see <see cref="TryDeserialize"/>).
+///   v5 — appended a document title string after the block list. The reader still accepts v4
+///        (supplies <see cref="ScribeDocument.DefaultTitle"/> for documents without a title).
 ///
 /// A hand-rolled format keeps Core free of any external dependency. The version byte lets
 /// us evolve the format while still reading the immediately prior save layout.
@@ -32,10 +35,10 @@ namespace Scribe.Core;
 public static class ScribeDocumentCodec
 {
     private static readonly byte[] Magic = "SCRB"u8.ToArray();
-    private const byte Version = 4; // see the "Field history" above; v4 adds DocId/TaskId, drops pinned.
+    private const byte Version = 5; // see the "Field history" above; v5 adds document Title.
 
-    /// <summary>The immediately prior format version the reader still accepts (with generated ids).</summary>
-    private const byte PriorVersion = 3;
+    /// <summary>The immediately prior format version the reader still accepts.</summary>
+    private const byte PriorVersion = 4;
 
     /// <summary>
     /// Hard upper bound on the number of blocks a single document may hold. A document is edited by
@@ -82,6 +85,7 @@ public static class ScribeDocumentCodec
                 if (block.AssignedToUid is not null) w.Write(block.AssignedToUid);
                 w.Write(block.Text);
             }
+            w.Write(doc.Title); // v5: document title appended after block list
         }
         return ms.ToArray();
     }
@@ -95,12 +99,9 @@ public static class ScribeDocumentCodec
         => TryDeserialize(bytes, out document, out _);
 
     /// <summary>
-    /// Deserializes a document and, for a prior-version (v3) payload, surfaces the identifiers of
-    /// the tasks that carried the now-removed per-block `pinned` flag, so a caller can migrate them
-    /// into the per-player pin store. For a current-version (v4) payload the document carries its
-    /// own persisted ids and <paramref name="legacyPinnedTaskIds"/> is empty (v4 has no pin flag).
-    /// The ids surfaced for a v3 payload are the freshly-generated <see cref="ScribeBlock.TaskId"/>s
-    /// of the just-built document, so they match the ids the caller will see on <paramref name="document"/>.
+    /// Deserializes a document. <paramref name="legacyPinnedTaskIds"/> is always empty for v4 and v5
+    /// (pin migration from the removed per-block flag was a v3→v4 concern; v3 is no longer accepted).
+    /// Kept for API compatibility with the block entity's migration path.
     /// </summary>
     public static bool TryDeserialize(byte[]? bytes, out ScribeDocument? document, out IReadOnlyList<Guid> legacyPinnedTaskIds)
     {
@@ -120,8 +121,8 @@ public static class ScribeDocumentCodec
             if (version != Version && version != PriorVersion) return false;
             bool isCurrent = version == Version;
 
-            // v4 carries a persisted DocId in the header; v3 has none (generate a fresh one).
-            Guid docId = isCurrent ? new Guid(ReadExactly(r, 16)) : Guid.NewGuid();
+            // v4 and v5 both carry a persisted DocId; v3 did not (but v3 is no longer accepted).
+            Guid docId = new Guid(ReadExactly(r, 16));
 
             int blockCount = r.ReadInt32();
             // Reject a negative count, a count that can't physically fit in the buffer (a tiny
@@ -130,18 +131,15 @@ public static class ScribeDocumentCodec
             if (blockCount < 0 || blockCount > bytes.Length || blockCount > MaxBlocks) return false;
 
             var blocks = new List<ScribeBlock>(blockCount);
-            List<Guid>? legacyPinned = null; // lazily allocated; only v3 with pinned tasks needs it
             for (int i = 0; i < blockCount; i++)
             {
-                // v4 reads a persisted TaskId first; v3 has none (a fresh id is generated below).
-                Guid? taskId = isCurrent ? new Guid(ReadExactly(r, 16)) : null;
+                // v4 and v5 both carry a persisted TaskId per block (v3 did not, but is no longer accepted).
+                Guid taskId = new Guid(ReadExactly(r, 16));
 
                 var kind = (ScribeBlockKind)r.ReadByte();
                 bool done = r.ReadBoolean();
                 int depth = r.ReadInt32();
-                // v3 carried a per-block `pinned` bool here; v4 dropped it. Read-and-discard on v3,
-                // but remember which tasks were pinned so the caller can migrate them.
-                bool pinned = !isCurrent && r.ReadBoolean();
+                // The per-block `pinned` bool was dropped in v4; v3 is no longer accepted here.
                 bool hasAssignedToUid = r.ReadBoolean();
                 string? assignedToUid = hasAssignedToUid ? r.ReadString() : null;
                 string text = r.ReadString();
@@ -157,19 +155,19 @@ public static class ScribeDocumentCodec
                     return false;
                 }
 
-                var block = new ScribeBlock(kind, text, done, depth, assignedToUid, taskId);
-                blocks.Add(block);
-                if (pinned)
-                {
-                    (legacyPinned ??= new List<Guid>()).Add(block.TaskId);
-                }
+                blocks.Add(new ScribeBlock(kind, text, done, depth, assignedToUid, taskId));
             }
+
+            // v5 appends a document title after the block list; v4 has none — supply the default.
+            string title = isCurrent ? r.ReadString() : ScribeDocument.DefaultTitle;
+            if (string.IsNullOrWhiteSpace(title)) title = ScribeDocument.DefaultTitle;
+            if (title.Length > ScribeDocument.MaxTitleLength) title = title[..ScribeDocument.MaxTitleLength];
 
             var doc = new ScribeDocument();
             doc.SetDocId(docId);
             doc.SetBlocks(blocks);
+            doc.Title = title;
             document = doc;
-            if (legacyPinned is not null) legacyPinnedTaskIds = legacyPinned;
             return true;
         }
         catch (Exception ex) when (ex is EndOfStreamException or IOException or FormatException)
@@ -182,12 +180,10 @@ public static class ScribeDocumentCodec
     }
 
     /// <summary>
-    /// True when <paramref name="bytes"/> are a readable document written in a format OLDER than the
-    /// current version (today: v3). Such a document deserializes fine but had its ids freshly
-    /// generated on read, so a caller that wants those ids to stick must re-save it in the current
-    /// format (v4). Returns false for current-version bytes, and for null/malformed/unsupported bytes
-    /// (nothing to upgrade). Lets the block entity decide to MarkDirty-on-load without reaching into
-    /// the format internals.
+    /// True when <paramref name="bytes"/> are a readable document written in the immediately prior
+    /// format version (v4). Such a document deserializes fine but lacks the title field added in v5,
+    /// so the block entity can choose to re-save it immediately. Returns false for current-version
+    /// bytes, and for null/malformed/unsupported bytes (nothing to upgrade).
     /// </summary>
     public static bool IsPriorVersion(byte[]? bytes)
     {
