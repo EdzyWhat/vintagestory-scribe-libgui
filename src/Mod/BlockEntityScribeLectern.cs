@@ -20,7 +20,7 @@ namespace Scribe;
 /// Only one player may hold the editor lock at a time (server-tracked, released on close/
 /// mode-switch/disconnect).
 /// </summary>
-public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable
+public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeDocumentHost
 {
     private const string DocumentAttributeKey = ScribeDocumentAttributes.DocumentAttributeKey;
 
@@ -91,10 +91,19 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable
     /// detail in the design).</summary>
     private bool needsV4Resave;
 
+    // ── IScribeDocumentHost explicit implementations ──────────────────────
+    BlockPos IScribeDocumentHost.Pos => Pos;
+    ScribeDocument IScribeDocumentHost.Document => Document;
+    bool IScribeDocumentHost.IsLockedByOther(string viewerUid) => IsLockedByOther(viewerUid);
+    void IScribeDocumentHost.ApplyLocalOptimisticEdit(ScribeDocument doc) => ApplyLocalOptimisticEdit(doc);
+    ScribeBackdropSpec IScribeDocumentHost.BackdropSpec => ScribeBackdrops.LecternPage;
+    ScribeLayout IScribeDocumentHost.GetLayout(float w) => new ScribeLayout(w, 1160f / 1024f);
+    string IScribeDocumentHost.DefaultDocumentTitle => "Lectern";
+
     /// <summary>Client-side: the single LibGUI dialog serving BOTH views (migrate-editor-view-libgui).
     /// Read and editor are internal view states of this one dialog, so switching between them is a
     /// view swap rather than closing one dialog and opening another.</summary>
-    private GuiDialogScribeLecternLibGui? dialog;
+    private ScribeDialogBase? dialog;
 
     public override void Initialize(ICoreAPI api)
     {

@@ -12,7 +12,7 @@ namespace Scribe.Core;
 public sealed class ScribeDocument
 {
     /// <summary>Default title shown for a Lectern that has never had a title set.</summary>
-    public const string DefaultTitle = "Lectern";
+    public const string DefaultTitle = "Untitled";
 
     /// <summary>Maximum number of characters in a Lectern title.</summary>
     public const int MaxTitleLength = 80;

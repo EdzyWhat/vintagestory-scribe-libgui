@@ -12,7 +12,7 @@ namespace Scribe;
 /// <see cref="AssetLocation"/> — nothing here assumes a pixel size, so a view may declare art of any
 /// dimensions (the drawing helper stretches/downsamples it, see <see cref="ScribeBackdrop.Wrap"/>).
 /// </summary>
-internal sealed record ScribeBackdropSpec(AssetLocation Texture);
+public sealed record ScribeBackdropSpec(AssetLocation Texture);
 
 /// <summary>
 /// The per-item / per-view backdrop specifications for Scribe's dialogs (the <c>gui-backdrop</c>
