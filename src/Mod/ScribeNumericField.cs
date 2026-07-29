@@ -302,10 +302,10 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
                 new Expanded(new TextField(
                     _controller,
                     _focusNode,
-                    new BoxStyle
+                    new TextFieldStyle
                     {
                         Height = fieldHeight,
-                        Color = new Vector4(colors.Background.X, colors.Background.Y, colors.Background.Z, 0.9f),
+                        FillColor = new Vector4(colors.Background.X, colors.Background.Y, colors.Background.Z, 0.9f),
                         BorderThickness = 1,
                         BorderColor = colors.Border,
                     },

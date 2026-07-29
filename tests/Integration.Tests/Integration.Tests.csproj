@@ -17,7 +17,7 @@
        override on another OS with -p:VintagestoryDataMods=... . LOCAL ONLY, like the whole suite. -->
   <PropertyGroup>
     <VintagestoryDataMods Condition="'$(VintagestoryDataMods)' == ''">$(HOME)/Library/Application Support/VintagestoryData/Mods</VintagestoryDataMods>
-    <ScribeGuiModZip>$(VintagestoryDataMods)/gui_2.0.0.zip</ScribeGuiModZip>
+    <ScribeGuiModZip>$(VintagestoryDataMods)/gui_3.1.0.zip</ScribeGuiModZip>
   </PropertyGroup>
 
   <ItemGroup>
@@ -66,9 +66,9 @@
        code". The installed gui zip is client-side (requiredOnServer:false) but the server's
        dependency resolver still needs it present. We copy the installed zip into the test output
        dir and reference it by the resulting relative name in AssemblyInfo.cs's [assembly:
-       AtlasMods("gui_2.0.0.zip")] (AtlasMods paths resolve against the test assembly's dir). -->
+       AtlasMods("gui_3.1.0.zip")] (AtlasMods paths resolve against the test assembly's dir). -->
   <ItemGroup Condition="Exists('$(ScribeGuiModZip)')">
-    <None Include="$(ScribeGuiModZip)" CopyToOutputDirectory="PreserveNewest" Link="gui_2.0.0.zip" />
+    <None Include="$(ScribeGuiModZip)" CopyToOutputDirectory="PreserveNewest" Link="gui_3.1.0.zip" />
   </ItemGroup>
   <Target Name="WarnMissingGuiMod" BeforeTargets="Build" Condition="!Exists('$(ScribeGuiModZip)')">
     <Warning Text="gui mod zip not found at '$(ScribeGuiModZip)'. Atlas cannot stage scribe's hard `gui` dependency, so every integration scenario will fail at SetBlock with 'Unknown block code scribe:scribelectern'. Install the `gui` (LibGUI) mod, or set -p:VintagestoryDataMods=&lt;your Mods folder&gt;." />

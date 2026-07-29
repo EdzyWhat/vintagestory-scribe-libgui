@@ -10,7 +10,7 @@ actually installed and tested against.
 Extracted from the game mod `.zip`s under the local Vintage Story Mods folder
 (`~/Library/Application Support/VintagestoryData/Mods/` on macOS):
 
-- `gui_2.0.0.zip` (LibGUI, modid `gui` — Scribe's hard dependency; see `Mod.csproj`) → the 7
+- `gui_3.1.0.zip` (LibGUI, modid `gui` — Scribe's hard dependency; see `Mod.csproj`) → the 7
   vendored managed DLLs: `Gui.dll`, `ExCSS.dll`, `ShimSkiaSharp.dll`, `SkiaSharp.HarfBuzz.dll`,
   `Svg.Custom.dll`, `Svg.Model.dll`, `Svg.Skia.dll`, `HarfBuzzSharp.dll`. Only `Gui.dll` is
   referenced for compile (`Mod.csproj`); the other six are its runtime companions, extracted so a
@@ -28,7 +28,7 @@ Extracted from the game mod `.zip`s under the local Vintage Story Mods folder
 cd /tmp
 MODS="$HOME/Library/Application Support/VintagestoryData/Mods"
 
-unzip -o "$MODS/gui_2.0.0.zip" -d gui_extract \
+unzip -o "$MODS/gui_3.1.0.zip" -d gui_extract \
   Gui.dll ExCSS.dll ShimSkiaSharp.dll SkiaSharp.HarfBuzz.dll \
   Svg.Custom.dll Svg.Model.dll Svg.Skia.dll HarfBuzzSharp.dll
 unzip -o "$MODS/configlib_1.12.0.zip" -d configlib_extract configlib.dll
