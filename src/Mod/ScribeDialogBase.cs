@@ -1873,7 +1873,7 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
         float noteSize  = bodySize * 0.8f;
         var headerStyle = new TextStyle { FontFamily = ScribeRowControlNudge.TitleFontFamily, Weight = FontWeight.Bold, FontSize = bodySize, Color = colors.OnSurface };
         var bodyStyle   = new TextStyle { FontSize = bodySize, Color = colors.OnSurface };
-        var dateStyle   = new TextStyle { FontSize = dateSize, Color = colors.OnSurface with { W = colors.OnSurface.W * 0.9f } };
+        var dateStyle   = new TextStyle { FontSize = dateSize, Color = colors.OnSurface with { W = colors.OnSurface.W * 0.8f } };
         var myName = capi.World.Player.PlayerName;
 
         var entries = host.Guestbook.Entries;
@@ -1889,7 +1889,7 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
                 string current = entry.Note;
                 string lastSent = entry.Note;
                 noteSlot = new Expanded(
-                    new Padding(EdgeInsets.Only(bottom: 2f),
+                    new Padding(EdgeInsets.Only(bottom: 6f),
                         new ScribeMultilineField(
                             initialText: entry.Note,
                             fontSize: noteSize,
@@ -1914,7 +1914,7 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
             {
                 var noteStyle = new TextStyle { FontSize = noteSize, Color = colors.OnSurface };
                 noteSlot = new Expanded(
-                    new Padding(EdgeInsets.Only(bottom: 2f),
+                    new Padding(EdgeInsets.Only(bottom: 6f),
                         new Text(entry.Note, noteStyle)),
                     flex: 5);
             }
@@ -1922,7 +1922,7 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
             rows.Add(new Row(children: new Widget[]
             {
                 new Expanded(
-                    new Padding(EdgeInsets.Only(left: 4f),
+                    new Padding(EdgeInsets.Only(left: 10f),
                         new Column(
                             spacing: 0,
                             mainAxisSize: MainAxisSize.Min,
@@ -1954,7 +1954,7 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
                 {
                     new Row(children: new Widget[]
                     {
-                        new Expanded(new Padding(EdgeInsets.Only(left: 4f), new Text(Lang.Get("scribe:scribe-guestbook-col-visitor"), headerStyle)), flex: 3),
+                        new Expanded(new Padding(EdgeInsets.Only(left: 10f), new Text(Lang.Get("scribe:scribe-guestbook-col-visitor"), headerStyle)), flex: 3),
                         new Expanded(new Text(Lang.Get("scribe:scribe-guestbook-col-note"),    headerStyle), flex: 5),
                     }),
                     new Divider(),
