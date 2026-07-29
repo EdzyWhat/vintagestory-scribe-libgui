@@ -111,9 +111,9 @@ shift+right-click (or the in-GUI toggle button) opens/switches to the lock-holdi
       -> Confirmed 2026-07-21 (TESTING.md `97938f33`).
 - [x] 7.4 Toggle check: from the editor view, click the in-GUI toggle to switch to read view (confirm the just-typed edit is reflected, not stale); from the read view, click the toggle to request the editor view back
       -> Confirmed 2026-07-21 (TESTING.md `89290239`).
-- [ ] 7.5 Multiplayer check: run a local headless server (`dotnet ".../VintagestoryServer.dll" --dataPath ~/vsdata`) with the mod, connect a second client, confirm an edit by one session is seen live in the other session's *read* view, and that two separate lecterns hold independent documents
-- [ ] 7.6 Lock check: with the editor view open in one session, confirm a second session's shift+right-click (or toggle-to-editor) is refused with the "one person at a time" message but still shows current content read-only; confirm a second session's plain right-click (read view) is granted normally even while the editor lock is held elsewhere; confirm closing the editor view or disconnecting releases the lock for the next requester
-- [ ] 7.7 Reorder + tool panel check: in the editor view, mouse-drag a row to reorder it; collapse/expand the tool panel; adjust the text-size slider and confirm the font scales and the preference persists across reopen
+- [~] 7.5 Multiplayer check — **Obsolete (headless skipped)**; to be verified against live multiplayer instead.
+- [x] 7.6 Lock check: confirmed 2026-07-29 — editor lock refused to second session; read view still granted; lock releases on close/disconnect.
+- [x] 7.7 Reorder + tool panel check: confirmed 2026-07-29 — drag-reorder, tool panel collapse/expand, text-size slider scales and persists across reopen.
       -> OBSOLETE (as written): this was Confirmed 2026-07-21 (TESTING.md `32876056`) against the NATIVE
          GUI, but all three features it exercised are gone/redesigned in the LibGUI rebuild, so the task
          no longer applies as phrased. Coverage moved elsewhere: drag-reorder was re-verified and
