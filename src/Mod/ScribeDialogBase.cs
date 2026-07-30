@@ -1889,34 +1889,31 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
                 string current = entry.Note;
                 string lastSent = entry.Note;
                 noteSlot = new Expanded(
-                    new Padding(EdgeInsets.Only(bottom: 6f),
-                        new ScribeMultilineField(
-                            initialText: entry.Note,
-                            fontSize: noteSize,
-                            fontFamily: ScribeTaskFont.Resolve(modSystem.MySettings.TaskFontFamily),
-                            maxLength: GuestbookStore.MaxNoteLength,
-                            onChanged: text => current = text,
-                            onBlur: () =>
-                            {
-                                var trimmed = current.Trim();
-                                if (trimmed == lastSent) return;
-                                lastSent = trimmed;
-                                capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(
-                                    new ScribeEditGuestbookNoteMessage
-                                    {
-                                        PosX = host.Pos.X, PosY = host.Pos.Y, PosZ = host.Pos.Z,
-                                        Note = trimmed,
-                                    });
-                            })),
+                    new ScribeMultilineField(
+                        initialText: entry.Note,
+                        fontSize: noteSize,
+                        fontFamily: ScribeTaskFont.Resolve(modSystem.MySettings.TaskFontFamily),
+                        padY: 6f,
+                        maxLength: GuestbookStore.MaxNoteLength,
+                        onChanged: text => current = text,
+                        onBlur: () =>
+                        {
+                            var trimmed = current.Trim();
+                            if (trimmed == lastSent) return;
+                            lastSent = trimmed;
+                            capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(
+                                new ScribeEditGuestbookNoteMessage
+                                {
+                                    PosX = host.Pos.X, PosY = host.Pos.Y, PosZ = host.Pos.Z,
+                                    Note = trimmed,
+                                });
+                        }),
                     flex: 5);
             }
             else
             {
                 var noteStyle = new TextStyle { FontSize = noteSize, Color = colors.OnSurface };
-                noteSlot = new Expanded(
-                    new Padding(EdgeInsets.Only(bottom: 6f),
-                        new Text(entry.Note, noteStyle)),
-                    flex: 5);
+                noteSlot = new Expanded(new Text(entry.Note, noteStyle), flex: 5);
             }
 
             rows.Add(new Row(children: new Widget[]
