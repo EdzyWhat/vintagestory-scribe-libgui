@@ -22,7 +22,7 @@ public sealed class GuiDialogScribeLecternLibGui : ScribeDialogBase
         var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
         yield return TitleButton(
             "scribeguest",
-            "scribe:scribe-tab-guestbook",
+            "scribe-tab-guestbook",
             colors.OnSurfaceVariant,
             NavButtonSize,
             OnClickSwitchToVisitors,
