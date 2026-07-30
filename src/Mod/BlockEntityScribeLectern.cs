@@ -88,7 +88,6 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
     private GuestbookStore _guestbook = new();
 
     // ── IScribeDocumentHost explicit implementations ──────────────────────
-    BlockPos IScribeDocumentHost.Pos => Pos;
     ScribeDocument IScribeDocumentHost.Document => Document;
     bool IScribeDocumentHost.IsLockedByOther(string viewerUid) => IsLockedByOther(viewerUid);
     void IScribeDocumentHost.ApplyLocalOptimisticEdit(ScribeDocument doc) => ApplyLocalOptimisticEdit(doc);
@@ -113,6 +112,7 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
             // Register this document's live DocId → position mapping so pins can resolve it, and
             // re-save a v4-loaded document as v5 so the title field persists.
             RegisterDocInStore();
+            ModSystem?.RegisterHost(this);
             if (needsV5Resave)
             {
                 needsV5Resave = false;
@@ -142,6 +142,7 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
                 store.UnregisterDoc(docId);
             }
             registeredDocId = null;
+            ModSystem?.UnregisterHost(Document.DocId);
         }
     }
 
@@ -442,9 +443,7 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
     {
         var reply = new ScribeEditDocumentMessage
         {
-            PosX = Pos.X,
-            PosY = Pos.Y,
-            PosZ = Pos.Z,
+            DocIdBytes = Document.DocId.ToByteArray(),
             Granted = granted,
             EditorMode = editorMode,
             RefusalReason = refusalReason,
@@ -522,7 +521,7 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
             // Notify server to record this player as a visitor (fire-and-forget; server deduplicates).
             capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeRecordVisitorMessage
             {
-                PosX = Pos.X, PosY = Pos.Y, PosZ = Pos.Z,
+                DocIdBytes = Document.DocId.ToByteArray(),
             });
         }
 
@@ -542,7 +541,7 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
     {
         sapi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeGuestbookSyncMessage
         {
-            PosX = Pos.X, PosY = Pos.Y, PosZ = Pos.Z,
+            DocIdBytes = Document.DocId.ToByteArray(),
             GuestbookBytes = _guestbook.Serialize(),
         }, toPlayer);
     }

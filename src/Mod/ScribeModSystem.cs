@@ -8,7 +8,6 @@ using SkiaSharp;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
-using Vintagestory.API.MathTools;
 using Vintagestory.API.Server;
 
 namespace Scribe;
@@ -89,6 +88,24 @@ public sealed class ScribeModSystem : ModSystem
     /// entries are disposed in <see cref="Dispose"/>. Null on a pure server.</summary>
     private Dictionary<string, SKBitmap?>? backdropCache;
 
+    /// <summary>
+    /// Runtime registry that maps each active <see cref="Guid"/> DocId to the
+    /// <see cref="IScribeDocumentHost"/> currently hosting it. Lecterns register on
+    /// <c>Initialize</c> and unregister on <c>OnBlockRemoved</c>; NotebookHosts register when
+    /// the notebook dialog opens and unregister when it closes. Server-only (hosts register on
+    /// both sides via the client and server <see cref="BlockEntityScribeLectern"/> paths, but the
+    /// server registry is the authoritative one used for incoming packets).
+    /// </summary>
+    private readonly Dictionary<Guid, IScribeDocumentHost> _hostRegistry = new();
+
+    /// <summary>Registers a host under its document's <c>DocId</c>. Called by
+    /// <see cref="BlockEntityScribeLectern.Initialize"/> and <see cref="NotebookHost"/> on dialog open.</summary>
+    public void RegisterHost(IScribeDocumentHost host) => _hostRegistry[host.Document.DocId] = host;
+
+    /// <summary>Unregisters a host by DocId. Called by
+    /// <see cref="BlockEntityScribeLectern.OnBlockRemoved"/> and <see cref="NotebookHost"/> on dialog close.</summary>
+    public void UnregisterHost(Guid docId) => _hostRegistry.Remove(docId);
+
     /// <summary>Raised on the client whenever a fresh pin set push arrives, so an open lectern dialog
     /// (and the HUD) can repaint its per-player pin indicators.</summary>
     public event Action? MyPinsChanged;
@@ -116,6 +133,7 @@ public sealed class ScribeModSystem : ModSystem
 
         api.RegisterBlockClass("BlockScribeLectern", typeof(BlockScribeLectern));
         api.RegisterBlockEntityClass("ScribeLectern", typeof(BlockEntityScribeLectern));
+        api.RegisterItemClass("ItemScribeNotebook", typeof(ItemScribeNotebook));
 
         // All message types must be registered in this same order on both sides. The original four
         // read/edit/lock messages come first (order frozen); the identity-addressed pin layer is
@@ -135,7 +153,8 @@ public sealed class ScribeModSystem : ModSystem
             .RegisterMessageType<ScribeReorderPinsMessage>()
             .RegisterMessageType<ScribeRecordVisitorMessage>()
             .RegisterMessageType<ScribeGuestbookSyncMessage>()
-            .RegisterMessageType<ScribeEditGuestbookNoteMessage>();
+            .RegisterMessageType<ScribeEditGuestbookNoteMessage>()
+            .RegisterMessageType<ScribeNotebookSaveMessage>();
     }
 
     /// <summary>Server-side accessor for the pin store, so the block entity can register/orphan its
@@ -157,7 +176,8 @@ public sealed class ScribeModSystem : ModSystem
         api.Network.GetChannel(NetworkChannelName)
             .SetMessageHandler<ScribeEditDocumentMessage>(OnClientReceivedEditReply)
             .SetMessageHandler<ScribePinnedSetMessage>(OnClientReceivedPinnedSet)
-            .SetMessageHandler<ScribeGuestbookSyncMessage>(OnClientReceivedGuestbookSync);
+            .SetMessageHandler<ScribeGuestbookSyncMessage>(OnClientReceivedGuestbookSync)
+            .SetMessageHandler<ScribeNotebookSaveMessage>(OnClientReceivedNotebookSave);
 
         // The pinned-task HUD self-shows once the player's pin set arrives (it subscribes to
         // MyPinsChanged in its ctor), so it can be constructed here regardless of current pin count —
@@ -446,6 +466,7 @@ public sealed class ScribeModSystem : ModSystem
         channel.SetMessageHandler<ScribeReorderPinsMessage>(OnServerReceivedReorderPins);
         channel.SetMessageHandler<ScribeRecordVisitorMessage>(OnServerReceivedRecordVisitor);
         channel.SetMessageHandler<ScribeEditGuestbookNoteMessage>(OnServerReceivedEditGuestbookNote);
+        channel.SetMessageHandler<ScribeNotebookSaveMessage>(OnServerReceivedNotebookSave);
 
         // Persist/load the pin + settings stores with the save game (the WaypointMapLayer pattern).
         api.Event.SaveGameLoaded += OnSaveGameLoaded;
@@ -473,26 +494,10 @@ public sealed class ScribeModSystem : ModSystem
         PushPinsTo(player);
     }
 
-    private IEnumerable<BlockEntityScribeLectern> EnumerateLoadedLecterns()
-    {
-        // The live position index holds exactly the loaded lecterns' documents; resolve each back to
-        // its block entity. (A document whose chunk is unloaded isn't in the index and has no legacy
-        // ids to drain until it loads and re-registers.)
-        if (sapi is null || pinStore is null) yield break;
-        foreach (var docId in pinStore.KnownDocIds())
-        {
-            if (pinStore.TryResolvePos(docId, out var pos)
-                && sapi.World.BlockAccessor.GetBlockEntity<BlockEntityScribeLectern>(pos) is { } lectern)
-            {
-                yield return lectern;
-            }
-        }
-    }
-
     private void OnClientReceivedEditReply(ScribeEditDocumentMessage message)
     {
         if (capi is null) return;
-        if (TryGetLectern(capi.World, message.PosX, message.PosY, message.PosZ) is { } lectern)
+        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeLectern lectern)
         {
             lectern.HandleServerReply(message);
         }
@@ -501,7 +506,7 @@ public sealed class ScribeModSystem : ModSystem
     private void OnServerReceivedEdit(IServerPlayer fromPlayer, ScribeEditDocumentMessage message)
     {
         if (sapi is null) return;
-        if (TryGetLectern(sapi.World, message.PosX, message.PosY, message.PosZ) is { } lectern)
+        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeLectern lectern)
         {
             if (!lectern.ApplyEdit(fromPlayer, message.DocumentBytes))
             {
@@ -513,7 +518,7 @@ public sealed class ScribeModSystem : ModSystem
     private void OnServerReceivedReleaseLock(IServerPlayer fromPlayer, ScribeReleaseLockMessage message)
     {
         if (sapi is null) return;
-        if (TryGetLectern(sapi.World, message.PosX, message.PosY, message.PosZ) is { } lectern)
+        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeLectern lectern)
         {
             lectern.ReleaseLock(fromPlayer.PlayerUID);
         }
@@ -522,7 +527,7 @@ public sealed class ScribeModSystem : ModSystem
     private void OnServerReceivedRequestAccess(IServerPlayer fromPlayer, ScribeRequestAccessMessage message)
     {
         if (sapi is null) return;
-        if (TryGetLectern(sapi.World, message.PosX, message.PosY, message.PosZ) is { } lectern)
+        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeLectern lectern)
         {
             lectern.OnRequestAccess(fromPlayer, message.WantEditor);
         }
@@ -627,9 +632,8 @@ public sealed class ScribeModSystem : ModSystem
         {
             string text = "";
             bool done = false;
-            if (pinStore.TryResolvePos(docId, out var pos)
-                && sapi.World.BlockAccessor.GetBlockEntity<BlockEntityScribeLectern>(pos) is { } lectern
-                && lectern.Document.FindByTaskId(taskId) is { } block)
+            if (_hostRegistry.TryGetValue(docId, out var host)
+                && host.Document.FindByTaskId(taskId) is { } block)
             {
                 text = block.Text;
                 done = block.Done;
@@ -800,15 +804,12 @@ public sealed class ScribeModSystem : ModSystem
         if (pinStore.ReorderPins(player.PlayerUID, order)) PushPinsTo(player);
     }
 
-    /// <summary>Resolves a docId to its currently-hosting lectern block entity via the live index, if
-    /// one is loaded. Returns false (and null) when the source is unloaded or destroyed — the
-    /// completion path then relies on the store alone.</summary>
+    /// <summary>Resolves a docId to its currently-hosting lectern block entity via the host registry.
+    /// Returns false (and null) when the source is unregistered or is a non-lectern host (e.g.
+    /// NotebookHost) — the completion path then relies on the store alone.</summary>
     private bool TryResolveLectern(Guid docId, out BlockEntityScribeLectern? lectern)
     {
-        lectern = null;
-        if (sapi is null || pinStore is null) return false;
-        if (!pinStore.TryResolvePos(docId, out var pos)) return false;
-        lectern = sapi.World.BlockAccessor.GetBlockEntity<BlockEntityScribeLectern>(pos);
+        lectern = _hostRegistry.TryGetValue(docId, out var host) ? host as BlockEntityScribeLectern : null;
         return lectern is not null;
     }
 
@@ -883,25 +884,58 @@ public sealed class ScribeModSystem : ModSystem
     private void OnServerReceivedRecordVisitor(IServerPlayer fromPlayer, ScribeRecordVisitorMessage message)
     {
         if (sapi is null) return;
-        var pos = new BlockPos(message.PosX, message.PosY, message.PosZ);
-        if (sapi.World.BlockAccessor.GetBlockEntity(pos) is BlockEntityScribeLectern lectern)
+        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeLectern lectern)
             lectern.RecordVisitor(sapi, fromPlayer);
     }
 
     private void OnServerReceivedEditGuestbookNote(IServerPlayer fromPlayer, ScribeEditGuestbookNoteMessage message)
     {
         if (sapi is null) return;
-        var pos = new BlockPos(message.PosX, message.PosY, message.PosZ);
-        if (sapi.World.BlockAccessor.GetBlockEntity(pos) is BlockEntityScribeLectern lectern)
+        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeLectern lectern)
             lectern.UpdateGuestbookNote(sapi, fromPlayer, message.Note ?? "");
     }
 
     private void OnClientReceivedGuestbookSync(ScribeGuestbookSyncMessage message)
     {
         if (capi is null) return;
-        var pos = new BlockPos(message.PosX, message.PosY, message.PosZ);
-        if (capi.World.BlockAccessor.GetBlockEntity(pos) is BlockEntityScribeLectern lectern)
+        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeLectern lectern)
             lectern.ApplyGuestbookSync(message.GuestbookBytes);
+    }
+
+    private void OnServerReceivedNotebookSave(IServerPlayer fromPlayer, ScribeNotebookSaveMessage message)
+    {
+        if (sapi is null || !TryReadGuid(message.DocIdBytes, out var docId)) return;
+        // Find the notebook in the player's active hand slot.
+        var slot = fromPlayer.Entity?.ActiveHandItemSlot;
+        if (slot?.Itemstack?.Collectible is not ItemScribeNotebook) return;
+        if (!ScribeDocumentAttributes.TryReadFrom(slot.Itemstack, out var existing) || existing?.DocId != docId)
+            return;
+
+        if (ScribeDocumentCodec.TryDeserialize(message.DocumentBytes, out var doc) && doc is not null)
+        {
+            ScribeDocumentAttributes.WriteTo(slot.Itemstack, doc);
+            slot.MarkDirty();
+            // Reconcile actor pins so pin snapshots stay fresh after a notebook edit.
+            if (pinStore is { } store)
+                PushPinsTo(store.ReconcileSnapshotsForActor(fromPlayer.PlayerUID, doc.DocId, doc));
+        }
+
+        // Echo back so the dialog's HandleServerReply can update the client's authoritative copy.
+        sapi.Network.GetChannel(NetworkChannelName).SendPacket(new ScribeNotebookSaveMessage
+        {
+            DocIdBytes = message.DocIdBytes,
+            DocumentBytes = message.DocumentBytes,
+        }, fromPlayer);
+    }
+
+    private void OnClientReceivedNotebookSave(ScribeNotebookSaveMessage message)
+    {
+        if (capi is null || !TryReadGuid(message.DocIdBytes, out var docId)) return;
+        if (_hostRegistry.TryGetValue(docId, out var host) && host is NotebookHost notebookHost)
+        {
+            if (ScribeDocumentCodec.TryDeserialize(message.DocumentBytes, out var doc) && doc is not null)
+                notebookHost.ApplyLocalOptimisticEdit(doc);
+        }
     }
 
     /// <summary>
@@ -928,9 +962,13 @@ public sealed class ScribeModSystem : ModSystem
         return false;
     }
 
-    private static BlockEntityScribeLectern? TryGetLectern(IWorldAccessor world, int x, int y, int z)
+    /// <summary>Resolves a DocId (carried as raw bytes in a packet) to its currently-registered
+    /// <see cref="IScribeDocumentHost"/>. Returns null for a malformed/unknown DocId — the caller
+    /// should silently discard the packet in that case.</summary>
+    private IScribeDocumentHost? TryResolveHost(byte[]? docIdBytes)
     {
-        var pos = new BlockPos(x, y, z);
-        return world.BlockAccessor.GetBlockEntity<BlockEntityScribeLectern>(pos);
+        if (!TryReadGuid(docIdBytes, out var docId)) return null;
+        _hostRegistry.TryGetValue(docId, out var host);
+        return host;
     }
 }

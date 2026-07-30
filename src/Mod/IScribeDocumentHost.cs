@@ -1,5 +1,4 @@
 using Scribe.Core;
-using Vintagestory.API.MathTools;
 
 namespace Scribe;
 
@@ -71,9 +70,6 @@ public readonly record struct ScribeLayout(float W, float AspectH, ScribeLayoutP
 /// </summary>
 public interface IScribeDocumentHost
 {
-    /// <summary>Block position — used to address packets to the correct block entity.</summary>
-    BlockPos Pos { get; }
-
     /// <summary>The server-authoritative document shown in the read and pin views.</summary>
     ScribeDocument Document { get; }
 

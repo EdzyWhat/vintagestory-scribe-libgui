@@ -3,22 +3,18 @@ using ProtoBuf;
 namespace Scribe;
 
 /// <summary>
-/// Client -&gt; server: request to switch a currently-open lectern dialog between the lock-free
-/// read view and the lock-holding editor view, sent by the in-GUI mode-toggle button. The
-/// initial open (right-click / shift+right-click) does not use this message — it rides the
-/// implicit block-interaction sync instead. Server replies via <see cref="ScribeEditDocumentMessage"/>.
+/// Client → server: request to switch a currently-open dialog between the lock-free read view and
+/// the lock-holding editor view, sent by the in-GUI mode-toggle button. The initial open does not
+/// use this message — it rides the implicit block-interaction sync instead. Server replies via
+/// <see cref="ScribeEditDocumentMessage"/>. Addressed by <see cref="DocIdBytes"/> (replacing the
+/// former PosX/Y/Z fields) so the same message works for both the Lectern and the Notebook.
 /// </summary>
 [ProtoContract]
 public sealed class ScribeRequestAccessMessage
 {
+    /// <summary>The owning document's <c>DocId</c> as 16 raw bytes.</summary>
     [ProtoMember(1)]
-    public int PosX { get; set; }
-
-    [ProtoMember(2)]
-    public int PosY { get; set; }
-
-    [ProtoMember(3)]
-    public int PosZ { get; set; }
+    public byte[]? DocIdBytes { get; set; }
 
     /// <summary>True to request the editor view (takes the lock); false to switch to read view.</summary>
     [ProtoMember(4)]

@@ -2,14 +2,12 @@ using ProtoBuf;
 
 namespace Scribe;
 
-/// <summary>Client → server: notify the server that this client has opened the Lectern GUI. No
-/// payload needed — the server identifies the player from the packet sender and resolves the lectern
-/// from the block position in the channel context.</summary>
+/// <summary>Client → server: notify the server that this client has opened a Lectern GUI. The server
+/// records the visiting player and the in-game date, then syncs the updated guestbook back.
+/// Addressed by <see cref="DocIdBytes"/> (replacing the former PosX/Y/Z fields).</summary>
 [ProtoContract]
 public sealed class ScribeRecordVisitorMessage
 {
-    /// <summary>Block position of the lectern, serialized as three ints.</summary>
-    [ProtoMember(1)] public int PosX { get; set; }
-    [ProtoMember(2)] public int PosY { get; set; }
-    [ProtoMember(3)] public int PosZ { get; set; }
+    /// <summary>The lectern's document <c>DocId</c> as 16 raw bytes.</summary>
+    [ProtoMember(1)] public byte[]? DocIdBytes { get; set; }
 }

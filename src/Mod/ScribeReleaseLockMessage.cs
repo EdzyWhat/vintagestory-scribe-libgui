@@ -2,16 +2,12 @@ using ProtoBuf;
 
 namespace Scribe;
 
-/// <summary>Client -&gt; server: release the single-editor lock on a lectern (sent on GUI close).</summary>
+/// <summary>Client → server: release the single-editor lock on a document host (sent on GUI close).
+/// Addressed by <see cref="DocIdBytes"/> (replacing the former PosX/Y/Z fields).</summary>
 [ProtoContract]
 public sealed class ScribeReleaseLockMessage
 {
+    /// <summary>The owning document's <c>DocId</c> as 16 raw bytes.</summary>
     [ProtoMember(1)]
-    public int PosX { get; set; }
-
-    [ProtoMember(2)]
-    public int PosY { get; set; }
-
-    [ProtoMember(3)]
-    public int PosZ { get; set; }
+    public byte[]? DocIdBytes { get; set; }
 }

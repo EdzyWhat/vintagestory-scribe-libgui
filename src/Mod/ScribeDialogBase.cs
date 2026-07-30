@@ -623,14 +623,14 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
     /// (design D2 flow, unchanged). A granted reply round-trips back to
     /// <see cref="BlockEntityScribeLectern.HandleServerReply"/>, which calls
     /// <see cref="EnterEditorMode"/>. Callers that gate on the synced lock go through
-    /// <see cref="TryEnterEditor"/>; this raw form is also the lost-lock recovery re-acquire.</summary>
-    private void RequestEditorAccess()
+    /// <see cref="TryEnterEditor"/>; this raw form is also the lost-lock recovery re-acquire.
+    /// Subclasses that don't require a server round-trip (e.g. Notebook) override this to call
+    /// <see cref="EnterEditorMode"/> directly.</summary>
+    protected virtual void RequestEditorAccess()
     {
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeRequestAccessMessage
         {
-            PosX = host.Pos.X,
-            PosY = host.Pos.Y,
-            PosZ = host.Pos.Z,
+            DocIdBytes = host.Document.DocId.ToByteArray(),
             WantEditor = true,
         });
     }
@@ -1142,18 +1142,12 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
         }
     }
 
-    private void FlushIfDirty()
+    protected void FlushIfDirty()
     {
         if (!isDirty || scratch is null) return;
 
         var bytes = ScribeDocumentCodec.Serialize(scratch);
-        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeEditDocumentMessage
-        {
-            PosX = host.Pos.X,
-            PosY = host.Pos.Y,
-            PosZ = host.Pos.Z,
-            DocumentBytes = bytes,
-        });
+        SendFlushPacket(bytes);
         isDirty = false;
 
         // Un-aliased fresh copy: scratch keeps mutating while editing continues.
@@ -1161,6 +1155,18 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
         {
             host.ApplyLocalOptimisticEdit(copy);
         }
+    }
+
+    /// <summary>Sends the serialized document bytes to the server for authoritative storage.
+    /// Override in subclasses to use a different packet type (e.g. <see cref="ScribeNotebookSaveMessage"/>
+    /// for the Notebook vs. <see cref="ScribeEditDocumentMessage"/> for the Lectern).</summary>
+    protected virtual void SendFlushPacket(byte[] documentBytes)
+    {
+        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeEditDocumentMessage
+        {
+            DocIdBytes = host.Document.DocId.ToByteArray(),
+            DocumentBytes = documentBytes,
+        });
     }
 
     // ---------------- Focus-node lifecycle ----------------
@@ -1356,13 +1362,11 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
         base.OnGuiClosed();
     }
 
-    private void SendReleaseLockPacket()
+    protected virtual void SendReleaseLockPacket()
     {
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeReleaseLockMessage
         {
-            PosX = host.Pos.X,
-            PosY = host.Pos.Y,
-            PosZ = host.Pos.Z,
+            DocIdBytes = host.Document.DocId.ToByteArray(),
         });
     }
 
@@ -1915,7 +1919,7 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
                             capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(
                                 new ScribeEditGuestbookNoteMessage
                                 {
-                                    PosX = host.Pos.X, PosY = host.Pos.Y, PosZ = host.Pos.Z,
+                                    DocIdBytes = host.Document.DocId.ToByteArray(),
                                     Note = trimmed,
                                 });
                         }),
