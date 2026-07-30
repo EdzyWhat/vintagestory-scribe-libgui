@@ -27,6 +27,6 @@ public sealed class GuiDialogScribeLecternLibGui : ScribeDialogBase
             NavButtonSize,
             OnClickSwitchToVisitors,
             boxShadows: NavButtonShadow,
-            activeColor: IsVisitorsView ? ScribeRowConstants.NavActivePinned : null);
+            activeColor: IsVisitorsView ? ScribeRowConstants.NavActiveGuestbook : null);
     }
 }

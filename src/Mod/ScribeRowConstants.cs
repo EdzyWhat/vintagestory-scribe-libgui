@@ -114,6 +114,14 @@ internal static class ScribeRowConstants
     /// (add-active-tab-nav-colors). Shown while the standalone settings window is open.</summary>
     public static readonly Vector4 NavActiveSettings = new(0.4549f, 0.4353f, 0.4000f, 1f);
 
+    /// <summary>Thematic "active tab" fill color for the History nav button — warm amber <c>#b28651</c>
+    /// (notebook-history-tab).</summary>
+    public static readonly Vector4 NavActiveHistory = new(0.6980f, 0.5255f, 0.3176f, 1f);
+
+    /// <summary>Thematic "active tab" fill color for the Guestbook nav button — dusty plum <c>#7a597e</c>
+    /// (notebook-history-tab).</summary>
+    public static readonly Vector4 NavActiveGuestbook = new(0.4784f, 0.3490f, 0.4941f, 1f);
+
     /// <summary>Cream glyph color <c>#eae6dd</c> used for a nav button's icon while that button is the
     /// active tab, for contrast against the thematic fill (add-active-tab-nav-colors).</summary>
     public static readonly Vector4 NavActiveGlyph = new(0.9176f, 0.9020f, 0.8667f, 1f);

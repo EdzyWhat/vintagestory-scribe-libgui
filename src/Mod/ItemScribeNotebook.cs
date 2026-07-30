@@ -1,6 +1,8 @@
+using Scribe.Core;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
+using Vintagestory.API.Server;
 using Vintagestory.API.Util;
 
 namespace Scribe;
@@ -48,6 +50,31 @@ public class ItemScribeNotebook : Item
 
         handling = EnumHandHandling.PreventDefault;
         OpenNotebookDialog(slot, capi);
+    }
+
+    public override void OnCreatedByCrafting(ItemSlot[] allInputSlots, ItemSlot outputSlot, IRecipeBase byRecipe)
+    {
+        base.OnCreatedByCrafting(allInputSlots, outputSlot, byRecipe);
+        if (api.Side != EnumAppSide.Server) return;
+
+        // Resolve the crafting player from the inventory's opener set.
+        var playerUid = outputSlot.Inventory.openedByPlayerGUIds.FirstOrDefault();
+        var playerName = (playerUid is not null
+            ? (api.World.PlayerByUid(playerUid) as IServerPlayer)?.PlayerName
+            : null) ?? "Unknown";
+
+        var sapi = (ICoreServerAPI)api;
+        var cal  = sapi.World.Calendar;
+        int dayOfMonth = (int)(cal.TotalDays % cal.DaysPerMonth) + 1;
+        string date = $"{dayOfMonth} {Vintagestory.API.Config.Lang.Get("month-" + cal.MonthName)}, Year {cal.Year}";
+        var history = HistoryStore.Deserialize(outputSlot.Itemstack.Attributes.GetBytes("scribeHistory"));
+        history.TryAddEntry(new HistoryEntry
+        {
+            Kind       = HistoryEventKind.Crafted,
+            ActorName  = playerName,
+            InGameDate = date,
+        });
+        outputSlot.Itemstack.Attributes.SetBytes("scribeHistory", history.Serialize());
     }
 
     private void OpenNotebookDialog(ItemSlot slot, ICoreClientAPI capi)

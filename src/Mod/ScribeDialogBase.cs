@@ -36,19 +36,23 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
     /// offset shows the same rows. Passed into the <c>ListView</c>/<c>SingleChildScrollView</c>, which
     /// then do NOT dispose it (they only dispose their own internal fallback); the dialog disposes it in
     /// <see cref="OnGuiClosed"/>. An offset past a shorter view's max is clamped on layout.</summary>
-    private readonly ScrollController sharedScrollController = new();
+    private protected readonly ScrollController sharedScrollController = new();
 
     // ---- View state ----
     /// <summary>The Lectern dialog's central-region view. Read and Editor are the original two views;
     /// Pinned is the Pin Tab (scribe-pin-editor) — a peer view listing the player's pins, selected from the
     /// <c>scribepin</c> nav button. <see cref="BuildCentralRegion"/> chooses the body from this.</summary>
-    private enum ScribeLecternView { Read, Editor, Pinned, Visitors }
+    private enum ScribeLecternView { Read, Editor, Pinned, Visitors, History }
 
     private ScribeLecternView viewMode = ScribeLecternView.Read;
 
     /// <summary>True when the Guestbook (Visitors) tab is the active view. Exposed so subclasses
     /// can apply the active color to their Guestbook nav button in <see cref="GetExtraNavButtons"/>.</summary>
     protected bool IsVisitorsView => viewMode == ScribeLecternView.Visitors;
+
+    /// <summary>True when the History tab is the active view. Exposed so subclasses can apply the
+    /// active color to their History nav button in <see cref="GetExtraNavButtons"/>.</summary>
+    protected bool IsHistoryView => viewMode == ScribeLecternView.History;
 
     /// <summary>The pixel size used for sidebar nav buttons — subclasses call this when building
     /// their own nav buttons via <see cref="GetExtraNavButtons"/> so the size matches.</summary>
@@ -532,6 +536,41 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
     protected internal void RefreshGuestbookView()
     {
         if (viewMode == ScribeLecternView.Visitors && IsOpened()) ForceRebuild();
+    }
+
+    /// <summary>Switches to the History tab, tearing down the editor first if active.
+    /// Called from the History nav button in subclasses that expose the tab.</summary>
+    protected void OnClickSwitchToHistory()
+    {
+        CommitTitleIfEditing();
+        if (isEditorMode)
+        {
+            if (focusedEditIndex is { } idx) NormalizeRowOnCommit(idx);
+            PurgeEmptyTasksFromScratch();
+            pendingEmptyRowRemoval = null;
+            FlushIfDirty();
+            SendReleaseLockPacket();
+            LeaveEditorMode();
+        }
+        viewMode = ScribeLecternView.History;
+        if (IsOpened()) ForceRebuild();
+    }
+
+    /// <summary>Rebuilds the History view if it is currently active. Called after a history sync.</summary>
+    protected internal void RefreshHistoryView()
+    {
+        if (viewMode == ScribeLecternView.History && IsOpened()) ForceRebuild();
+    }
+
+    /// <summary>Builds the History tab content. Subclasses that expose a History tab override this
+    /// to provide a real implementation. The base returns an empty placeholder.</summary>
+    protected virtual Widget BuildHistoryContent()
+    {
+        var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
+        float bodySize = ScribeRowConstants.BaseWindowFontSize
+            * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale);
+        var bodyStyle = new TextStyle { FontSize = bodySize, Color = colors.OnSurface };
+        return new Center(child: new Text(Lang.Get("scribe:scribe-gui-history-empty"), bodyStyle));
     }
 
     /// <summary>"Done editing" button: flush the pending edit, release the lock, and swap to the read
@@ -1761,6 +1800,7 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
         ScribeLecternView.Editor   => BuildEditorContent(),
         ScribeLecternView.Pinned   => BuildPinnedContent(),
         ScribeLecternView.Visitors => BuildVisitorsContent(),
+        ScribeLecternView.History  => BuildHistoryContent(),
         _                          => BuildReadContent(),
     };
 
@@ -1975,22 +2015,24 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
                 noteSlot = new Expanded(new Text(entry.Note, noteStyle), flex: 5);
             }
 
-            rows.Add(new Row(children: new Widget[]
-            {
-                new Expanded(
-                    new Padding(EdgeInsets.Only(left: 10f),
-                        new Column(
-                            spacing: 0,
-                            mainAxisSize: MainAxisSize.Min,
-                            crossAxisAlignment: CrossAxisAlignment.Stretch,
-                            children: new Widget[]
-                            {
-                                new Text(entry.PlayerName, bodyStyle),
-                                new Text(entry.InGameDate, dateStyle),
-                            })),
-                    flex: 3),
-                noteSlot,
-            }));
+            rows.Add(new Padding(
+                EdgeInsets.Only(bottom: 3f),
+                new Row(children: new Widget[]
+                {
+                    new Expanded(
+                        new Padding(EdgeInsets.Only(left: 10f),
+                            new Column(
+                                spacing: 0,
+                                mainAxisSize: MainAxisSize.Min,
+                                crossAxisAlignment: CrossAxisAlignment.Stretch,
+                                children: new Widget[]
+                                {
+                                    new Text(entry.PlayerName, bodyStyle),
+                                    new Text(entry.InGameDate, dateStyle),
+                                })),
+                        flex: 3),
+                    noteSlot,
+                })));
         }
 
         Widget body = entries.Count == 0

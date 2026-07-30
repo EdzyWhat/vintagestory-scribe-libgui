@@ -24,6 +24,13 @@
       <HintPath>$(VintageStoryPath)/VintagestoryLib.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- VSSurvivalMod: referenced for temporal storm detection (SystemTemporalStability).
+         Private=false: the game ships this; we never copy it. The soft-dep guard in
+         OnStormTick handles the case where it's absent (non-survival servers). -->
+    <Reference Include="VSSurvivalMod">
+      <HintPath>$(VintageStoryPath)/Mods/VSSurvivalMod.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="protobuf-net">
       <HintPath>$(VintageStoryPath)/Lib/protobuf-net.dll</HintPath>
       <Private>false</Private>

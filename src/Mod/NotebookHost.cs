@@ -1,6 +1,7 @@
 using System;
 using Scribe.Core;
 using Vintagestory.API.Common;
+using Vintagestory.API.Config;
 using Vintagestory.API.Server;
 
 namespace Scribe;
@@ -19,6 +20,7 @@ public sealed class NotebookHost : IScribeDocumentHost
 {
     private readonly ItemSlot _slot;
     private ScribeDocument _document;
+    private HistoryStore _history;
     private ICoreServerAPI? _sapi;
     private IServerPlayer? _player;
 
@@ -32,21 +34,36 @@ public sealed class NotebookHost : IScribeDocumentHost
             ScribeDocumentAttributes.WriteTo(stack, doc);
         }
         _document = doc;
+        _history = HistoryStore.Deserialize(stack.Attributes.GetBytes("scribeHistory"));
     }
 
     /// <summary>Attach server context so write-through operations can push the updated document
-    /// back to the player's client after mutating the ItemStack.</summary>
+    /// back to the player's client after mutating the ItemStack. Also records a PickedUp entry
+    /// the first time this player opens the notebook.</summary>
     public void AttachServerContext(ICoreServerAPI sapi, IServerPlayer player)
     {
         _sapi = sapi;
         _player = player;
+        RecordPickedUpIfNew(sapi, player);
     }
 
     public ScribeDocument Document => _document;
 
+    /// <summary>The notebook's history chronicle. Persisted in <c>ItemStack.Attributes["scribeHistory"]</c>
+    /// and flushed alongside the document in <see cref="Flush"/>.</summary>
+    public HistoryStore History => _history;
+
     public bool IsLockedByOther(string viewerUid) => false;
 
     public void ApplyLocalOptimisticEdit(ScribeDocument doc) => _document = doc;
+
+    /// <summary>Replaces the in-memory history store from freshly deserialized bytes pushed by the
+    /// server. Used by the client-side network receive path to refresh the History tab.</summary>
+    public void ApplyHistoryUpdate(byte[]? historyBytes)
+    {
+        if (historyBytes is not null)
+            _history = HistoryStore.Deserialize(historyBytes);
+    }
 
     public ScribeBackdropSpec BackdropSpec => ScribeBackdrops.LecternPage;
 
@@ -101,16 +118,53 @@ public sealed class NotebookHost : IScribeDocumentHost
     {
         if (_slot.Itemstack is not { } stack) return;
         ScribeDocumentAttributes.WriteTo(stack, _document);
+        stack.Attributes.SetBytes("scribeHistory", _history.Serialize());
         _slot.MarkDirty();
-        // Push the updated document back to the player's client so their dialog and read view
-        // reflect the change (e.g. a deleted or moved task). Mirrors the Lectern's MarkDirty(redrawOnClient:true).
+        // Push the updated document (and history bytes) back to the player's client.
         if (_sapi is not null && _player is not null)
         {
             _sapi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeNotebookSaveMessage
             {
                 DocIdBytes = _document.DocId.ToByteArray(),
                 DocumentBytes = ScribeDocumentCodec.Serialize(_document),
+                HistoryBytes = _history.Serialize(),
             }, _player);
         }
+    }
+
+    /// <summary>Writes only the history store back to the ItemStack and pushes a sync to the client.
+    /// Cheaper than <see cref="Flush"/> when only history changed (avoids re-serializing the document).</summary>
+    public void FlushHistory()
+    {
+        if (_slot.Itemstack is not { } stack) return;
+        stack.Attributes.SetBytes("scribeHistory", _history.Serialize());
+        _slot.MarkDirty();
+        if (_sapi is not null && _player is not null)
+        {
+            _sapi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeNotebookSaveMessage
+            {
+                DocIdBytes   = _document.DocId.ToByteArray(),
+                HistoryBytes = _history.Serialize(),
+                // DocumentBytes intentionally null — client treats null as "no document update"
+            }, _player);
+        }
+    }
+
+    private void RecordPickedUpIfNew(ICoreServerAPI sapi, IServerPlayer player)
+    {
+        var added = _history.TryAddEntry(new HistoryEntry
+        {
+            Kind       = HistoryEventKind.PickedUp,
+            ActorName  = player.PlayerName,
+            InGameDate = FormatDate(sapi),
+        });
+        if (added) Flush();
+    }
+
+    internal static string FormatDate(ICoreServerAPI sapi)
+    {
+        var cal = sapi.World.Calendar;
+        int dayOfMonth = (int)(cal.TotalDays % cal.DaysPerMonth) + 1;
+        return $"{dayOfMonth} {Vintagestory.API.Config.Lang.Get("month-" + cal.MonthName)}, Year {cal.Year}";
     }
 }

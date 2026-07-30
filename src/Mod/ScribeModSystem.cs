@@ -337,8 +337,8 @@ public sealed class ScribeModSystem : ModSystem
         RegisterSvgIcon(api, "scribeedit", new AssetLocation("scribe", "textures/icons/edit.svg"));
         RegisterSvgIcon(api, "scribegear", new AssetLocation("scribe", "textures/icons/gear.svg"));
         RegisterSvgIcon(api, "scribecheck", new AssetLocation("scribe", "textures/icons/check.svg"));
-        // Guestbook nav icon — placeholder reusing check.svg until a dedicated icon ships.
-        RegisterSvgIcon(api, "scribeguest", new AssetLocation("scribe", "textures/icons/check.svg"));
+        RegisterSvgIcon(api, "scribeguest",   new AssetLocation("scribe", "textures/icons/guestbook.svg"));
+        RegisterSvgIcon(api, "scribehistory", new AssetLocation("scribe", "textures/icons/guestbook.svg"));
     }
 
     /// <summary>
@@ -476,6 +476,10 @@ public sealed class ScribeModSystem : ModSystem
 
         // Initial per-player push once a player is fully in-world, and legacy-pin drain.
         api.Event.PlayerNowPlaying += OnPlayerNowPlaying;
+
+        // History chronicle hooks.
+        api.Event.OnEntityDeath += OnEntityDeath;
+        api.World.RegisterGameTickListener(OnStormTick, 5000);
     }
 
     private void OnSaveGameLoaded()
@@ -960,8 +964,17 @@ public sealed class ScribeModSystem : ModSystem
         if (capi is null || !TryReadGuid(message.DocIdBytes, out var docId)) return;
         if (_hostRegistry.TryGetValue(docId, out var host) && host is NotebookHost notebookHost)
         {
-            if (ScribeDocumentCodec.TryDeserialize(message.DocumentBytes, out var doc) && doc is not null)
+            if (message.DocumentBytes is not null
+                && ScribeDocumentCodec.TryDeserialize(message.DocumentBytes, out var doc) && doc is not null)
                 notebookHost.ApplyLocalOptimisticEdit(doc);
+            if (message.HistoryBytes is not null)
+            {
+                notebookHost.ApplyHistoryUpdate(message.HistoryBytes);
+                // Refresh the History tab if it's currently open.
+                if (capi.Gui.OpenedGuis.OfType<GuiDialogScribeNotebook>()
+                        .FirstOrDefault(d => d.IsOpened()) is { } dialog)
+                    dialog.RefreshHistoryView();
+            }
         }
     }
 
@@ -1024,6 +1037,156 @@ public sealed class ScribeModSystem : ModSystem
                     $"translation=({tf.Translation.X:0.##}, {tf.Translation.Y:0.##}, {tf.Translation.Z:0.##})  " +
                     $"scale={tf.ScaleXYZ.X:0.##}");
             });
+    }
+
+    // ── History chronicle ────────────────────────────────────────────────────────────────────────
+
+    private bool _stormWasActive;
+
+    /// <summary>Known boss entity code prefixes and their display names for the BossKill event.
+    /// Checked via entity.Code.Path.StartsWith so variant suffixes (-pristine, -corrupted, etc.) match.</summary>
+    private static readonly (string Prefix, string DisplayName)[] BossTable =
+    {
+        ("eidolon", "Eidolon"),
+        ("erel",    "Mad Crow"),
+    };
+
+    /// <summary>Finds the first <see cref="ItemScribeNotebook"/> stack anywhere in the player's
+    /// inventory (all bags, hotbar, backpack) and returns a server-attached
+    /// <see cref="NotebookHost"/> for it, or null if none is present.</summary>
+    private NotebookHost? FindNotebookInInventory(IServerPlayer player)
+    {
+        if (sapi is null) return null;
+        foreach (var inv in player.InventoryManager.InventoriesOrdered)
+        {
+            foreach (var slot in inv)
+            {
+                if (slot.Itemstack?.Collectible is not ItemScribeNotebook) continue;
+                var host = new NotebookHost(slot);
+                host.AttachServerContext(sapi, player);
+                return host;
+            }
+        }
+        return null;
+    }
+
+    private void OnEntityDeath(Vintagestory.API.Common.Entities.Entity entity, Vintagestory.API.Common.DamageSource dmg)
+    {
+        if (sapi is null) return;
+
+        // ── Boss kill ──
+        foreach (var (prefix, displayName) in BossTable)
+        {
+            if (!entity.Code.Path.StartsWith(prefix)) continue;
+            var deathPos = entity.Pos.XYZ;
+            foreach (var player in sapi.World.AllOnlinePlayers.OfType<IServerPlayer>())
+            {
+                var host = FindNotebookInInventory(player);
+                if (host is null) continue;
+                double dist = player.Entity.Pos.XYZ.DistanceTo(deathPos);
+                if (dist > 100) continue;
+                host.History.TryAddEntry(new Scribe.Core.HistoryEntry
+                {
+                    Kind       = Scribe.Core.HistoryEventKind.BossKill,
+                    ActorName  = player.PlayerName,
+                    Detail     = displayName,
+                    InGameDate = NotebookHost.FormatDate(sapi),
+                });
+                host.FlushHistory();
+            }
+            return;
+        }
+
+        // ── Player death ──
+        if (entity is not Vintagestory.API.Common.EntityPlayer ep) return;
+        if (ep.Player is not IServerPlayer sp) return;
+
+        var nbHost = FindNotebookInInventory(sp);
+        if (nbHost is null) return;
+
+        // Reconstruct the death message from the damage source using vanilla's deathmsg-{code}-{N} keys.
+        string deathMsg = BuildDeathMessage(sp.PlayerName, dmg);
+
+        nbHost.History.TryAddEntry(new Scribe.Core.HistoryEntry
+        {
+            Kind       = Scribe.Core.HistoryEventKind.Death,
+            ActorName  = sp.PlayerName,
+            Detail     = deathMsg,
+            InGameDate = NotebookHost.FormatDate(sapi),
+        });
+        nbHost.FlushHistory();
+
+        // ── PvP kill — record on the killer's notebook if they hold one ──
+        if (dmg?.SourceEntity is Vintagestory.API.Common.EntityPlayer killerEntity
+            && killerEntity.Player is IServerPlayer killer && killer.PlayerUID != sp.PlayerUID)
+        {
+            var killerHost = FindNotebookInInventory(killer);
+            if (killerHost is not null)
+            {
+                killerHost.History.TryAddEntry(new Scribe.Core.HistoryEntry
+                {
+                    Kind       = Scribe.Core.HistoryEventKind.PvpKill,
+                    ActorName  = killer.PlayerName,
+                    Detail     = $"{sp.PlayerName} was slain",
+                    InGameDate = NotebookHost.FormatDate(sapi),
+                });
+                killerHost.FlushHistory();
+            }
+        }
+    }
+
+    private void OnStormTick(float _)
+    {
+        if (sapi is null) return;
+        var stormSys = sapi.ModLoader.GetModSystem<Vintagestory.GameContent.SystemTemporalStability>();
+        if (stormSys is null) return;
+
+        bool nowActive = stormSys.StormData.nowStormActive;
+        bool rising    = nowActive && !_stormWasActive;
+        _stormWasActive = nowActive;
+
+        if (!rising) return;
+
+        string strength = stormSys.StormData.nextStormStrength.ToString();
+        string date     = NotebookHost.FormatDate(sapi);
+
+        foreach (var player in sapi.World.AllOnlinePlayers.OfType<IServerPlayer>())
+        {
+            var host = FindNotebookInInventory(player);
+            if (host is null) continue;
+            host.History.TryAddEntry(new Scribe.Core.HistoryEntry
+            {
+                Kind       = Scribe.Core.HistoryEventKind.TemporalStorm,
+                Detail     = strength,
+                InGameDate = date,
+            });
+            host.FlushHistory();
+        }
+    }
+
+    private static string BuildDeathMessage(string playerName, Vintagestory.API.Common.DamageSource? dmg)
+    {
+        if (dmg is null) return $"{playerName} died.";
+
+        // Build the lang key the same way vanilla does: deathmsg-{entityCode}-{N}
+        // Entity-killed: use the attacker's entity code path (e.g. "nightmareshiver")
+        // Non-entity: use the damage source type name in lowercase (e.g. "fall", "fire-block")
+        string cause;
+        if (dmg.SourceEntity is not null)
+            cause = dmg.SourceEntity.Code.Path; // e.g. "nightmareshiver", "wolf-eurasian-adult-male"
+        else
+            cause = dmg.Source.ToString().ToLowerInvariant().Replace("_", "-"); // e.g. "fall", "fire"
+
+        // Try variant counts 1..4 and pick from available. Use a hash of the player name to
+        // deterministically pick the same variant as vanilla's random (close enough for a chronicle).
+        int hash = Math.Abs(playerName.GetHashCode());
+        for (int maxN = 4; maxN >= 1; maxN--)
+        {
+            string key = $"deathmsg-{cause}-{(hash % maxN) + 1}";
+            string msg = Vintagestory.API.Config.Lang.Get(key, playerName);
+            if (msg != key) return msg; // Lang.Get returns the key unchanged on a miss
+        }
+        return $"{playerName} died.";
     }
 
     /// <summary>

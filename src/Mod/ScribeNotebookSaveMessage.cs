@@ -18,4 +18,9 @@ public sealed class ScribeNotebookSaveMessage
     /// <summary>Core-serialized <c>ScribeDocument</c> bytes.</summary>
     [ProtoMember(2)]
     public byte[]? DocumentBytes { get; set; }
+
+    /// <summary>Core-serialized <c>HistoryStore</c> bytes. Null on older packets or when history
+    /// is unchanged; the client treats null as "no update to history".</summary>
+    [ProtoMember(3)]
+    public byte[]? HistoryBytes { get; set; }
 }

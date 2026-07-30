@@ -1,3 +1,14 @@
+using System.Collections.Generic;
+using System.Linq;
+using Gui.Core.Layout;
+using Gui.Rendering;
+using Gui.Rendering.Text;
+using Gui.Widgets.Basic;
+using Gui.Widgets.Framework;
+using Gui.Widgets.Layout;
+using Gui.Widgets.Overlay;
+using Gui.Widgets.Scroll;
+using OpenTK.Mathematics;
 using Scribe.Core;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
@@ -10,7 +21,8 @@ namespace Scribe;
 /// The Notebook item's dialog — a thin sealed subclass of <see cref="ScribeDialogBase"/>.
 /// Differences from the Lectern:
 /// <list type="bullet">
-/// <item>No Guestbook tab (no <see cref="GetExtraNavButtons"/> override).</item>
+/// <item>No Guestbook tab (no Visitors nav button).</item>
+/// <item>History tab — a chronicle of significant events recorded automatically and manually.</item>
 /// <item>Editor access is always granted without a server round-trip (no lock contention on items).</item>
 /// <item>Saves use <see cref="ScribeNotebookSaveMessage"/> instead of <see cref="ScribeEditDocumentMessage"/>.</item>
 /// <item>Lock-release is a no-op (no editor lock on items).</item>
@@ -44,6 +56,91 @@ public sealed class GuiDialogScribeNotebook : ScribeDialogBase
 
     /// <summary>No editor lock on a Notebook — nothing to release.</summary>
     protected override void SendReleaseLockPacket() { }
+
+    /// <summary>Adds the History nav button between Pinned and Settings.</summary>
+    protected override IEnumerable<Widget> GetExtraNavButtons()
+    {
+        var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
+        yield return TitleButton(
+            "scribehistory",
+            "scribe-gui-nav-history",
+            colors.OnSurfaceVariant,
+            NavButtonSize,
+            OnClickSwitchToHistory,
+            boxShadows: NavButtonShadow,
+            activeColor: IsHistoryView ? ScribeRowConstants.NavActiveHistory : null);
+    }
+
+    /// <summary>Builds the History tab content for the Notebook — a newest-first read-only list of
+    /// all automatically recorded history entries.</summary>
+    protected override Widget BuildHistoryContent()
+    {
+        var nbHost  = host as NotebookHost;
+        var entries = nbHost?.History.Entries ?? Array.Empty<HistoryEntry>();
+        var colors  = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
+        float bodySize = ScribeRowConstants.BaseWindowFontSize
+            * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale);
+        float kindSize = bodySize * 0.72f;
+        float dateSize = bodySize * 0.72f;
+
+        var bodyStyle = new TextStyle { FontSize = bodySize, Color = colors.OnSurface };
+        var kindStyle = new TextStyle { FontSize = kindSize, Color = colors.OnSurface with { W = colors.OnSurface.W * 0.65f }, Weight = FontWeight.SemiBold };
+        var dateStyle = new TextStyle { FontSize = dateSize, Color = colors.OnSurface with { W = colors.OnSurface.W * 0.55f } };
+
+        var rows = new List<Widget>(entries.Count);
+        for (int i = entries.Count - 1; i >= 0; i--)
+        {
+            var entry = entries[i];
+            rows.Add(new Padding(
+                EdgeInsets.Only(bottom: 6f),
+                new Column(
+                    spacing: 2,
+                    crossAxisAlignment: CrossAxisAlignment.Stretch,
+                    mainAxisSize: MainAxisSize.Min,
+                    children: new Widget[]
+                    {
+                        new Row(children: new Widget[]
+                        {
+                            new Expanded(new Text(KindLabel(entry), kindStyle), flex: 1),
+                            new Text(entry.InGameDate, dateStyle),
+                        }),
+                        new Padding(EdgeInsets.Only(left: 8f),
+                            new Text(entry.ActorName.Length > 0
+                                ? $"{entry.ActorName}{(entry.Detail.Length > 0 ? " — " + entry.Detail : "")}"
+                                : entry.Detail,
+                                bodyStyle)),
+                    })));
+        }
+
+        Widget body = entries.Count == 0
+            ? new Center(child: new Text(Lang.Get("scribe:scribe-gui-history-empty"), bodyStyle))
+            : new Scrollbar(controller: sharedScrollController,
+                child: new SingleChildScrollView(controller: sharedScrollController,
+                    child: new Column(
+                        children: rows.ToArray(),
+                        mainAxisSize: MainAxisSize.Min,
+                        crossAxisAlignment: CrossAxisAlignment.Stretch)))
+              { AutoHide = false };
+
+        return new Padding(
+            EdgeInsets.All(10),
+            new Column(
+                spacing: 0,
+                crossAxisAlignment: CrossAxisAlignment.Stretch,
+                mainAxisSize: MainAxisSize.Max,
+                children: new Widget[] { new Expanded(body) }));
+    }
+
+    private static string KindLabel(HistoryEntry entry) => entry.Kind switch
+    {
+        HistoryEventKind.Crafted       => Lang.Get("scribe:scribe-gui-history-kind-crafted"),
+        HistoryEventKind.PickedUp      => Lang.Get("scribe:scribe-gui-history-kind-pickedup"),
+        HistoryEventKind.Death         => Lang.Get("scribe:scribe-gui-history-kind-death"),
+        HistoryEventKind.PvpKill       => Lang.Get("scribe:scribe-gui-history-kind-pvpkill"),
+        HistoryEventKind.BossKill      => Lang.Get("scribe:scribe-gui-history-kind-bosskill"),
+        HistoryEventKind.TemporalStorm => Lang.Get("scribe:scribe-gui-history-kind-temporalstorm"),
+        _                              => entry.Kind.ToString(),
+    };
 
     private void OnActiveSlotChanged(ActiveSlotChangeEventArgs _)
     {
