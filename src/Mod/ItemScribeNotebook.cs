@@ -27,12 +27,6 @@ public class ItemScribeNotebook : Item
                 ActionLangCode = "scribe:itemhelp-scribenotebook-open",
                 MouseButton = EnumMouseButton.Right,
             },
-            new WorldInteraction
-            {
-                ActionLangCode = "scribe:itemhelp-scribenotebook-place",
-                HotKeyCode = "sneak",
-                MouseButton = EnumMouseButton.Right,
-            },
         });
     }
 
@@ -43,8 +37,12 @@ public class ItemScribeNotebook : Item
         EntitySelection entitySel, bool firstEvent, ref EnumHandHandling handling)
     {
         if (!firstEvent) return;
-        // Pass through to GroundStorable when sneaking so shift+right-click places the notebook.
-        if (byEntity.Controls.Sneak) return;
+        // Shift+right-click: let base run CollectibleBehaviors (including GroundStorable).
+        if (byEntity.Controls.ShiftKey)
+        {
+            base.OnHeldInteractStart(slot, byEntity, blockSel, entitySel, firstEvent, ref handling);
+            return;
+        }
         if (byEntity.Api.Side != EnumAppSide.Client) return;
         if (byEntity.Api is not ICoreClientAPI capi) return;
 

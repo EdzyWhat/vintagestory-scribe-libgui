@@ -1,6 +1,7 @@
 using Scribe.Core;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
+using Vintagestory.API.Config;
 using Vintagestory.API.MathTools;
 
 namespace Scribe;
@@ -18,10 +19,15 @@ namespace Scribe;
 /// </summary>
 public sealed class GuiDialogScribeNotebook : ScribeDialogBase
 {
+    private IInventory? _hotbar;
+
     public GuiDialogScribeNotebook(IScribeDocumentHost host, ICoreClientAPI capi)
         : base(new BlockPos(0), host, capi)
     {
         capi.Event.AfterActiveSlotChanged += OnActiveSlotChanged;
+        _hotbar = capi.World.Player.InventoryManager.GetOwnInventory(GlobalConstants.hotBarInvClassName);
+        if (_hotbar != null)
+            _hotbar.SlotModified += OnHotbarSlotModified;
     }
 
     /// <summary>Disable the engine's frame-by-frame range check. Notebooks are not proximity-bound
@@ -45,9 +51,17 @@ public sealed class GuiDialogScribeNotebook : ScribeDialogBase
             TryClose();
     }
 
+    private void OnHotbarSlotModified(int slotId)
+    {
+        if (slotId == capi.World.Player.InventoryManager.ActiveHotbarSlotNumber)
+            OnActiveSlotChanged(default!);
+    }
+
     public override void OnGuiClosed()
     {
         capi.Event.AfterActiveSlotChanged -= OnActiveSlotChanged;
+        if (_hotbar != null)
+            _hotbar.SlotModified -= OnHotbarSlotModified;
         base.OnGuiClosed();
     }
 

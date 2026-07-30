@@ -331,11 +331,16 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
     }
 
     /// <summary>Rebuild when the standalone settings window opens/closes so the Settings nav button picks
-    /// up or drops its active color (add-active-tab-nav-colors). No scroll/focus preservation needed — the
-    /// lectern's own view state is unchanged; only the gear's fill differs.</summary>
+    /// up or drops its active color (add-active-tab-nav-colors). Scroll position must be captured before
+    /// the rebuild — ForceRebuild re-derives content height and clamps the offset toward 0.</summary>
     private void OnSettingsVisibilityChanged()
     {
-        if (IsOpened()) ForceRebuild();
+        if (IsOpened())
+        {
+            TraceScroll("settings-vis");
+            if (viewMode != ScribeLecternView.Pinned) CaptureScrollForRestore();
+            ForceRebuild();
+        }
     }
 
     protected override WindowConfig CreateWindowConfig()
@@ -648,7 +653,14 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
     {
         if (!isEditorMode)
         {
-            if (IsOpened()) ForceRebuild();
+            if (IsOpened())
+            {
+                // Preserve scroll position across this server-pushed rebuild (e.g. a task deleted by
+                // the Delete completion policy). Without this capture the ForceRebuild re-derives
+                // content height and clamps the offset toward 0, same race as OnMyPinsChanged.
+                if (viewMode != ScribeLecternView.Pinned) CaptureScrollForRestore();
+                ForceRebuild();
+            }
             return;
         }
 
@@ -1297,12 +1309,28 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
         // self-terminates when the target is simply unreachable).
         if (pendingRestoreScrollOffset is { } want)
         {
-            TraceScroll("restore");
-            sharedScrollController.JumpTo(want);
-            scrollRestoreFrames++;
-            if (Math.Abs(sharedScrollController.Offset - want) < 0.5f || scrollRestoreFrames >= 5)
+            // Skip the JumpTo on frames where the ListView content height (max extent) hasn't
+            // settled yet — attempting it when max < want causes a visible bounce: JumpTo sets
+            // offset to want, LibGUI immediately clamps it back to max, and the flicker shows for
+            // one frame. Wait until max ≥ want (or the frame budget expires), so the first JumpTo
+            // that actually fires will stick.
+            if (sharedScrollController.MaxScrollExtent >= want - 0.5f)
             {
-                pendingRestoreScrollOffset = null;
+                TraceScroll("restore");
+                sharedScrollController.JumpTo(want);
+                scrollRestoreFrames++;
+                if (Math.Abs(sharedScrollController.Offset - want) < 0.5f || scrollRestoreFrames >= 5)
+                {
+                    pendingRestoreScrollOffset = null;
+                }
+            }
+            else
+            {
+                // Max not yet settled — count the frame toward the budget anyway so we don't spin
+                // forever if the list genuinely got shorter than the captured offset.
+                TraceScroll("restore-wait");
+                scrollRestoreFrames++;
+                if (scrollRestoreFrames >= 5) pendingRestoreScrollOffset = null;
             }
         }
 

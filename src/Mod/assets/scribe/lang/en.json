@@ -105,7 +105,6 @@
 
    "item-scribenotebook": "Notebook",
    "item-scribenotebook-desc": "A personal notebook. Write tasks and notes anywhere.",
-   "itemhelp-scribenotebook-open": "Open Notebook",
-   "itemhelp-scribenotebook-place": "Place on Ground"
+   "itemhelp-scribenotebook-open": "Open Notebook"
 }
 

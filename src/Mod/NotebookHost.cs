@@ -1,6 +1,7 @@
 using System;
 using Scribe.Core;
 using Vintagestory.API.Common;
+using Vintagestory.API.Server;
 
 namespace Scribe;
 
@@ -18,6 +19,8 @@ public sealed class NotebookHost : IScribeDocumentHost
 {
     private readonly ItemSlot _slot;
     private ScribeDocument _document;
+    private ICoreServerAPI? _sapi;
+    private IServerPlayer? _player;
 
     public NotebookHost(ItemSlot slot)
     {
@@ -29,6 +32,14 @@ public sealed class NotebookHost : IScribeDocumentHost
             ScribeDocumentAttributes.WriteTo(stack, doc);
         }
         _document = doc;
+    }
+
+    /// <summary>Attach server context so write-through operations can push the updated document
+    /// back to the player's client after mutating the ItemStack.</summary>
+    public void AttachServerContext(ICoreServerAPI sapi, IServerPlayer player)
+    {
+        _sapi = sapi;
+        _player = player;
     }
 
     public ScribeDocument Document => _document;
@@ -88,10 +99,18 @@ public sealed class NotebookHost : IScribeDocumentHost
 
     private void Flush()
     {
-        if (_slot.Itemstack is { } stack)
+        if (_slot.Itemstack is not { } stack) return;
+        ScribeDocumentAttributes.WriteTo(stack, _document);
+        _slot.MarkDirty();
+        // Push the updated document back to the player's client so their dialog and read view
+        // reflect the change (e.g. a deleted or moved task). Mirrors the Lectern's MarkDirty(redrawOnClient:true).
+        if (_sapi is not null && _player is not null)
         {
-            ScribeDocumentAttributes.WriteTo(stack, _document);
-            _slot.MarkDirty();
+            _sapi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeNotebookSaveMessage
+            {
+                DocIdBytes = _document.DocId.ToByteArray(),
+                DocumentBytes = ScribeDocumentCodec.Serialize(_document),
+            }, _player);
         }
     }
 }

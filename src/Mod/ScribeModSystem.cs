@@ -694,7 +694,7 @@ public sealed class ScribeModSystem : ModSystem
 
         // Write through to the shared source document when it resolves (best-effort; a gone source just
         // skips this). Reconciles only the acting player — other pinners keep their own copies.
-        bool resolved = TryResolveDocHost(docId, out var docHost);
+        bool resolved = TryResolveDocHost(docId, out var docHost, player);
         if (resolved) docHost!.SetTaskDoneFromReader(taskId, nowDone);
 
         // Apply the completion policy — only on a transition INTO done (unchecking never removes).
@@ -767,7 +767,7 @@ public sealed class ScribeModSystem : ModSystem
 
         // Write through to the shared source document when it resolves (best-effort; a gone source just
         // skips this — the snapshot below still updates).
-        if (TryResolveDocHost(docId, out var docHost)) docHost!.SetTaskTextFromReader(taskId, text);
+        if (TryResolveDocHost(docId, out var docHost, player)) docHost!.SetTaskTextFromReader(taskId, text);
 
         // Always refresh the acting player's pin snapshot so the edit shows even if the source is unloaded.
         bool changed = pinStore.SetPinText(player.PlayerUID, docId, taskId, text);
@@ -786,7 +786,7 @@ public sealed class ScribeModSystem : ModSystem
     {
         if (sapi is null || pinStore is null) return;
 
-        if (TryResolveDocHost(docId, out var docHost) && docHost!.DeleteTaskFromReader(taskId))
+        if (TryResolveDocHost(docId, out var docHost, player) && docHost!.DeleteTaskFromReader(taskId))
             Trace("  delete: removed task {0} from source doc {1}", taskId, docId);
         else
             Trace("  delete: source unresolvable for task {0} — pin removed only", taskId);
@@ -809,11 +809,31 @@ public sealed class ScribeModSystem : ModSystem
         if (pinStore.ReorderPins(player.PlayerUID, order)) PushPinsTo(player);
     }
 
-    /// <summary>Resolves a docId to its currently-registered <see cref="IScribeDocumentHost"/> (Lectern or
-    /// Notebook). Returns false when the host is not in the server registry (unloaded, unregistered).</summary>
-    private bool TryResolveDocHost(Guid docId, out IScribeDocumentHost? host)
+    /// <summary>Resolves a docId to an <see cref="IScribeDocumentHost"/>. Checks the registry first
+    /// (covers Lecterns, which register server-side on Initialize). If not found, searches the acting
+    /// player's inventory for a Notebook whose stored DocId matches and creates a transient host from
+    /// that slot — Notebooks are only registered client-side, so the server must find them by scanning.</summary>
+    private bool TryResolveDocHost(Guid docId, out IScribeDocumentHost? host,
+        IServerPlayer? player = null)
     {
-        return _hostRegistry.TryGetValue(docId, out host);
+        if (_hostRegistry.TryGetValue(docId, out host)) return true;
+
+        if (player is null || sapi is null) return false;
+
+        foreach (var inv in player.InventoryManager.InventoriesOrdered)
+        {
+            foreach (var slot in inv)
+            {
+                if (slot.Itemstack?.Collectible is not ItemScribeNotebook) continue;
+                if (!ScribeDocumentAttributes.TryReadFrom(slot.Itemstack, out var doc) || doc is null) continue;
+                if (doc.DocId != docId) continue;
+                var nbHost = new NotebookHost(slot);
+                nbHost.AttachServerContext(sapi, player);
+                host = nbHost;
+                return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>Completes (toggles) an UNPINNED document task straight on the shared source — a plain
@@ -825,7 +845,7 @@ public sealed class ScribeModSystem : ModSystem
     private void CompleteUnpinnedTaskAtSource(IServerPlayer player, Guid docId, Guid taskId,
         ScribeCompletionPolicy policy)
     {
-        if (!TryResolveDocHost(docId, out var docHost))
+        if (!TryResolveDocHost(docId, out var docHost, player))
         {
             Trace("  complete(unpinned): doc {0} unresolvable — nothing to toggle", docId);
             return;
