@@ -139,6 +139,9 @@ public sealed class HudScribePins : GuiBase
     /// unmount + rebuild the tree re-entrantly there.</summary>
     private bool needsCollapseCleanup;
 
+    private record struct AnchorInputs(float ScreenW, float ScreenH, ScribeHudAnchor Anchor, float OffX, float OffY, bool MinimapOn);
+    private AnchorInputs? _lastAnchorInputs;
+
     public HudScribePins(ICoreClientAPI capi, ScribeModSystem modSystem) : base(capi)
     {
         this.modSystem = modSystem;
@@ -225,6 +228,12 @@ public sealed class HudScribePins : GuiBase
         var settings = modSystem.MySettings;
         var anchor = ScribePlayerSettings.NormalizeAnchor(settings.HudAnchor);
 
+        bool minimapOn = !capi.Settings.Bool.Exists("showMinimapHud") || capi.Settings.Bool["showMinimapHud"];
+        float prebakeX = anchor == ScribeHudAnchor.TopRight && minimapOn ? DefaultTopRightMinimapClearanceX : 0f;
+        var key = new AnchorInputs(screenW, screenH, anchor, prebakeX + settings.HudOffsetX, settings.HudOffsetY, minimapOn);
+        if (_lastAnchorInputs == key) return;
+        _lastAnchorInputs = key;
+
         // Offsets are RELATIVE to the anchor's pre-baked offset (add-settings-tab D8): the player's stored
         // value is ADDED to the anchor's sensible built-in default, so a stored 0 sits at that default
         // (e.g. clear of the top-right minimap) and any value nudges further from it. This replaced the
@@ -234,10 +243,8 @@ public sealed class HudScribePins : GuiBase
         // Minimap-aware pre-bake (v1-playtest-fixes 9.3): apply the clearance only when the minimap is on.
         // "showMinimapHud" is written by GuiDialogWorldMap — absent means minimap was never explicitly
         // toggled (i.e. on by default). Treat absent = on so a fresh install still clears the minimap.
-        bool minimapOn = !capi.Settings.Bool.Exists("showMinimapHud") || capi.Settings.Bool["showMinimapHud"];
-        float prebakeX = anchor == ScribeHudAnchor.TopRight && minimapOn ? DefaultTopRightMinimapClearanceX : 0f;
-        float offX = prebakeX + settings.HudOffsetX;
-        float offY = settings.HudOffsetY;
+        float offX = key.OffX;
+        float offY = key.OffY;
 
         // Left/center/right along X; top/center/bottom along Y. Left & top edges add the offset (moving
         // inward = toward center); right & bottom edges subtract it (also toward center); center anchors
@@ -277,6 +284,7 @@ public sealed class HudScribePins : GuiBase
     /// </summary>
     private void OnMyPinsChanged()
     {
+        _lastAnchorInputs = null;
         ReconcileOptimisticWithServer();
         // Reconcile the collapsing/removing rows against the authoritative pin set: note removals the server
         // has now confirmed, and cancel the departure of any task the player re-pinned so it comes back at
@@ -383,6 +391,8 @@ public sealed class HudScribePins : GuiBase
     private void OnTick(float dt)
     {
         elapsedMs += dt * 1000.0;
+
+        if (pendingCompletions.Count == 0) return;
 
         bool anyExpired = false;
         foreach (var key in pendingCompletions.Keys.ToList())
