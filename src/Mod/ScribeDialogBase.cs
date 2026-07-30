@@ -97,6 +97,9 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
     private TextEditingController? _titleController;
     private FocusNode? _titleFocusNode;
 
+    // ---- Guestbook note focus (one node shared across all note fields; re-assigned on each rebuild) ----
+    private FocusNode? _guestbookNoteFocusNode;
+
     // ---- Title-bar grip drag (§8.1) ----
     // The title-bar band is the drag zone (WindowConfig.DragHandleHeight), but a press ON the grip glyph
     // was swallowed instead of moving the window: the grip's Tooltip wraps its child in a MouseRegion,
@@ -379,7 +382,8 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
     public override bool CaptureAllInputs()
         => (isEditorMode && focusedEditIndex is { } idx && idx < editorFocusNodes.Count && editorFocusNodes[idx].HasFocus)
         || (viewMode == ScribeLecternView.Pinned && focusedPinTaskId is { } pinId
-            && pinFocusNodes.TryGetValue(pinId, out var pn) && pn.HasFocus);
+            && pinFocusNodes.TryGetValue(pinId, out var pn) && pn.HasFocus)
+        || (_guestbookNoteFocusNode?.HasFocus ?? false);
 
     /// <summary>
     /// LibGUI's <see cref="Gui.Widgets.Events.KeyboardEvent"/> carries only Shift/Ctrl/Alt — it drops
@@ -1341,6 +1345,8 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
         _titleFocusNode?.RemoveListener(OnTitleFocusChanged);
         _titleFocusNode?.Dispose();
         _titleController?.Dispose();
+        _guestbookNoteFocusNode?.Dispose();
+        _guestbookNoteFocusNode = null;
         // The dialog owns the shared scroll controller (see its field); dispose it once here rather
         // than in either view's State, which come and go with each view-switch ForceRebuild.
         sharedScrollController.Dispose();
@@ -1878,6 +1884,10 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
 
         var entries = host.Guestbook.Entries;
 
+        // Fresh focus node each rebuild so CaptureAllInputs can track it.
+        _guestbookNoteFocusNode?.Dispose();
+        _guestbookNoteFocusNode = new FocusNode();
+
         // Newest-first display (entries are stored oldest-first in the store).
         var rows = new List<Widget>(entries.Count);
         for (int i = entries.Count - 1; i >= 0; i--)
@@ -1891,6 +1901,7 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
                 noteSlot = new Expanded(
                     new ScribeMultilineField(
                         initialText: entry.Note,
+                        focusNode: _guestbookNoteFocusNode,
                         fontSize: noteSize,
                         fontFamily: ScribeTaskFont.Resolve(modSystem.MySettings.TaskFontFamily),
                         padY: 6f,
