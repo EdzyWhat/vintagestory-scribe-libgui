@@ -91,10 +91,10 @@
       still applies its undo window when used from the HUD.
 - [x] 7.4 Edit a pin whose source Lectern is **loaded** → source doc text updates + persists (reopen to
       confirm); pin snapshot updates.
-- [ ] 7.5 Edit/delete a pin whose source is **unloaded** → pin snapshot/removal updates, no crash, source
+- [x] 7.5 Edit/delete a pin whose source is **unloaded** → pin snapshot/removal updates, no crash, source
       unchanged until loaded (accepted best-effort, matches Delete-policy today).
 - [x] 7.6 Unpin removes only the pin (task survives); delete removes the task.
-- [ ] 7.7 Reorder pins → order persists per-player across relog (saved under `scribe:pins:v1`); confirm
+- [x] 7.7 Reorder pins → order persists per-player across relog (saved under `scribe:pins:v1`); confirm
       document block order is unchanged.
 - [x] 7.8 Cross-check the corner HUD updates in lockstep with every Pin Tab action (same `MyPins`).
 - [x] 7.9 Confirm blank/whitespace-only inline edit is rejected and leaves the task unchanged.

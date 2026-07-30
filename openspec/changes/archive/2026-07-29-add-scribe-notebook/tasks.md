@@ -134,10 +134,17 @@ Messages that still carry `PosX/PosY/PosZ`: `ScribeEditDocumentMessage`,
   no ground-drop or third-person transforms — appeared tiny on the ground).
 - [x] 9.F7 Add `/scripttf <target> <prop> <value>` dev command for tuning item transforms
   in-game without restarting (registered client-side in `ScribeModSystem`).
-- [ ] 9.3 In-game: obtain the Notebook from the Creative inventory, open it, write a task,
+- [x] 9.3 In-game: obtain the Notebook from the Creative inventory, open it, write a task,
   close and reopen — confirm the task persists.
-- [ ] 9.4 In-game: confirm the Lectern still opens, saves, and pins correctly (regression
+- [x] 9.4 In-game: confirm the Lectern still opens, saves, and pins correctly (regression
   check after the packet migration).
-- [ ] 9.5 In-game: confirm pin/unpin from a Notebook works (task appears in HUD / Pin Tab).
-- [ ] 9.6 In-game: confirm the Notebook dialog does NOT auto-close when walking away from
+- [x] 9.5 In-game: confirm pin/unpin from a Notebook works (task appears in HUD / Pin Tab).
+- [x] 9.6 In-game: confirm the Notebook dialog does NOT auto-close when walking away from
   the point where it was opened.
+- [x] 9.F8 Fix: pressing Q to drop the Notebook while the GUI is open does not close the
+  dialog. Root cause: `AfterActiveSlotChanged` only fires on hotbar slot switches, not on
+  item removal from the current slot. Fix: also subscribe to
+  `hotbar.SlotModified` (via `GetOwnInventory(GlobalConstants.hotBarInvClassName)`);
+  when the modified slot == `ActiveHotbarSlotNumber`, delegate to the existing
+  `OnActiveSlotChanged` check. Unsubscribe in `OnGuiClosed`.
+- [x] 9.7 In-game: open Notebook, press Q to drop it — confirm dialog closes.

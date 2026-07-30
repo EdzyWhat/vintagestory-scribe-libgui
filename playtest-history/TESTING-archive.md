@@ -498,3 +498,27 @@ archived `tasks.md`).
       empty row is stacked. *(add-empty-task-lifecycle 4.5)*
       - **Confirmed 2026-07-25** (playtest submission 2026-07-25T23-02-59): "Works." Enter on an empty task
         row stacks no second empty row.
+
+## scribe-mute-ui-sounds
+
+> A client-local "Mute Scribe UI sounds" toggle (default off) that silences Scribe's OWN LibGUI click
+> sounds — the sounds LibGUI's `Button` plays on tap (Lectern action buttons + numeric +/- steppers).
+> Implemented Scribe-side only: a no-op `SilentSoundPlayer : ISoundPlayer` swapped onto each Scribe
+> dialog's `BuildOwner` when muted, re-applied on the settings-change rebuild so a live toggle takes
+> effect with no reopen. Surfaced as a checkbox paired beside "Collapse the HUD" in Mod Behavior. Core
+> 133/133 green; build clean; restaged Debug 2026-07-27 — fully relaunch first.
+
+- [x] `bbdc7002` **Mute silences Scribe buttons live.** With mute OFF (default) Scribe's action buttons +
+      numeric +/- steppers still click; enable "Mute Scribe UI sounds" and they go silent immediately with
+      no reopen; toggle back and the click returns. *(scribe-mute-ui-sounds 4.3)*
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T10-16-26): "Works." Enabling mute silences
+        Scribe's buttons live with no reopen; toggling back restores the click.
+- [x] `d32d4f5c` **Two checkboxes one row.** In Mod Behavior, "Collapse the HUD" and "Mute Scribe UI
+      sounds" sit on one row as two columns, both labeled with working hover helptext.
+      *(scribe-mute-ui-sounds 4.4)*
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T10-16-26): "Works." Both checkboxes sit on
+        one row as two columns with working helptext.
+- [x] `af1f2cbc` **Mute persists, scoped to Scribe.** The mute preference persists across a relog; while
+      muted, vanilla and other-mod sounds (block break, inventory) still play. *(scribe-mute-ui-sounds 4.5)*
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T10-16-26): "Works." The preference persists
+        across a relog and vanilla/other-mod sounds are unaffected while Scribe is muted.

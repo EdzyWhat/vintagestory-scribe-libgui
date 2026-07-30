@@ -43,11 +43,11 @@
 
 ## 6. In-game verification (Atlas / manual)
 
-- [ ] 6.1 Open a lectern for the first time — confirm a guestbook entry appears with your name and today's in-game date.
-- [ ] 6.2 Close and reopen the same lectern on the same in-game day — confirm no duplicate entry.
-- [ ] 6.3 Advance to the next in-game day (sleep or use `/time`), reopen — confirm a new entry for the new date.
+- [x] 6.1 Open a lectern for the first time — confirm a guestbook entry appears with your name and today's in-game date.
+- [x] 6.2 Close and reopen the same lectern on the same in-game day — confirm no duplicate entry.
+- [x] 6.3 Advance to the next in-game day (sleep or use `/time`), reopen — confirm a new entry for the new date.
 - [ ] 6.4 Have a second player open the same lectern — confirm both names appear.
-- [ ] 6.5 Save and reload the world — confirm entries are still present.
-- [ ] 6.6 Type a note on your own entry — confirm it saves and persists after close/reopen.
+- [x] 6.5 Save and reload the world — confirm entries are still present.
+- [x] 6.6 Type a note on your own entry — confirm it saves and persists after close/reopen.
 - [ ] 6.7 Confirm another player's entry shows their note as plain text (no input field).
-- [ ] 6.8 Confirm typing more than 80 characters in the note field is blocked.
+- [x] 6.8 Confirm typing more than 80 characters in the note field is blocked.

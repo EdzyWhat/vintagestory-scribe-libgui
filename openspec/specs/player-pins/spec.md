@@ -122,6 +122,17 @@ format break.
 - **WHEN** a player changes one of their settings
 - **THEN** the updated settings are persisted and re-delivered to that player's client
 
+### Requirement: Pin messages carry DocId instead of BlockPos
+All pin/unpin/complete-pin network packets SHALL carry the target task's `DocId` and
+`TaskId` as the sole address fields (no `PosX/PosY/PosZ`). The server SHALL route these
+packets through the host registry. This change does not alter any pin behavior visible to
+the player.
+
+#### Scenario: Pin packet routes by DocId
+- **WHEN** a player pins or unpins a task in any Scribe GUI
+- **THEN** the outbound packet contains the `DocId` (16-byte array) and `TaskId` only, and
+  the server resolves the host via the registry
+
 ### Requirement: Pinning is lock-free and independent of the document
 Pinning or unpinning a task SHALL NOT modify the task's document, acquire the document's edit
 lock, or mark the document dirty. A player SHALL be able to pin or unpin a task regardless of

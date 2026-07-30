@@ -1409,30 +1409,6 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       viewer; Delete from read/editor removes the task for everyone. *(scribe-lectern-view-consistency 5.7)*
       - **Confirmed 2026-07-27** (playtest submission 2026-07-27T15-22-22): "Works."
 
-## scribe-mute-ui-sounds
-
-> A client-local "Mute Scribe UI sounds" toggle (default off) that silences Scribe's OWN LibGUI click
-> sounds — the sounds LibGUI's `Button` plays on tap (Lectern action buttons + numeric +/- steppers).
-> Implemented Scribe-side only: a no-op `SilentSoundPlayer : ISoundPlayer` swapped onto each Scribe
-> dialog's `BuildOwner` when muted, re-applied on the settings-change rebuild so a live toggle takes
-> effect with no reopen. Surfaced as a checkbox paired beside "Collapse the HUD" in Mod Behavior. Core
-> 133/133 green; build clean; restaged Debug 2026-07-27 — fully relaunch first.
-
-- [x] `bbdc7002` **Mute silences Scribe buttons live.** With mute OFF (default) Scribe's action buttons +
-      numeric +/- steppers still click; enable "Mute Scribe UI sounds" and they go silent immediately with
-      no reopen; toggle back and the click returns. *(scribe-mute-ui-sounds 4.3)*
-      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T10-16-26): "Works." Enabling mute silences
-        Scribe's buttons live with no reopen; toggling back restores the click.
-- [x] `d32d4f5c` **Two checkboxes one row.** In Mod Behavior, "Collapse the HUD" and "Mute Scribe UI
-      sounds" sit on one row as two columns, both labeled with working hover helptext.
-      *(scribe-mute-ui-sounds 4.4)*
-      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T10-16-26): "Works." Both checkboxes sit on
-        one row as two columns with working helptext.
-- [x] `af1f2cbc` **Mute persists, scoped to Scribe.** The mute preference persists across a relog; while
-      muted, vanilla and other-mod sounds (block break, inventory) still play. *(scribe-mute-ui-sounds 4.5)*
-      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T10-16-26): "Works." The preference persists
-        across a relog and vanilla/other-mod sounds are unaffected while Scribe is muted.
-
 ## v1-playtest-fixes
 
 > Six fixes from playtest 2026-07-27T10-16-26: (1) editor hotkey trap — v1 blocker, gate
@@ -1730,3 +1706,25 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       clears the minimap as before; with minimap OFF, no extra clearance gap — HUD sits at the default
       anchor position. *(v1-playtest-fixes 9.4)*
       - **Confirmed 2026-07-28** (playtest submission 2026-07-28T11-06-45): "Works."
+## add-lectern-guestbook
+
+> The Guest Book tab on the Lectern: records each visitor's name and in-game date on open, with an
+> 80-char personal note field per entry. Entries are server-authoritative, persisted in the block
+> entity, and synced to all viewers. Only your own entry has an editable note field.
+
+- [x] `6b1dc808` **First visit recorded.** Open a lectern for the first time; switch to the Guest Book tab — confirm your name and today's in-game date appear as a new entry. *(6.1)*
+      - **Confirmed 2026-07-29** (playtest submission 2026-07-29T23-10-57): "Works."
+- [x] `4b3d537e` **No duplicate on same day.** Close and reopen the same lectern on the same in-game day — confirm no second entry for you is added. *(6.2)*
+      - **Confirmed 2026-07-29** (playtest submission 2026-07-29T23-10-57): "Works."
+- [x] `c39db062` **New entry on new day.** Advance to the next in-game day (sleep or `/time`), reopen — confirm a second entry appears with the new date. *(6.3)*
+      - **Confirmed 2026-07-29** (playtest submission 2026-07-29T23-10-57): "Works."
+- [ ] `17923456` **Second player recorded.** Have a second player open the same lectern — confirm both names appear in the Guest Book list. *(6.4)*
+      - **Backlogged 2026-07-29** needs a two-client setup; parked until multiplayer test session.
+- [x] `4ffaf625` **Entries survive relog.** Save and reload the world — confirm all guestbook entries are still present. *(6.5)*
+      - **Confirmed 2026-07-29** (playtest submission 2026-07-29T23-10-57): "Works."
+- [x] `c6c680f1` **Note persists.** Type a note on your own entry and close/reopen the lectern — confirm the note saved and is still there. *(6.6)*
+      - **Confirmed 2026-07-29** (playtest submission 2026-07-29T23-10-57): "Works."
+- [ ] `aa3b9869` **Other player's note is read-only.** Confirm another player's entry shows their note as plain text — no editable input field for it. *(6.7)*
+      - **Backlogged 2026-07-29** needs a two-client setup; parked until multiplayer test session.
+- [x] `989c54ac` **Note capped at 80 chars.** In the note field, try to type past 80 characters — confirm input stops at the cap. *(6.8)*
+      - **Confirmed 2026-07-29** (playtest submission 2026-07-29T23-10-57): "Works."

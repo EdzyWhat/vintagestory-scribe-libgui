@@ -278,6 +278,17 @@ preserve block order, each block's kind, text, completed flag, and depth.
 - **WHEN** deserialization is given empty or malformed bytes
 - **THEN** it reports failure rather than throwing, and yields no partial document
 
+### Requirement: Edit packets carry DocId instead of BlockPos
+All document-edit network packets (save document, set task done, request/release editor
+lock) SHALL carry the `DocId` (16-byte array) as the sole document address field. No
+`PosX/PosY/PosZ` fields. The server routes via the host registry. Document model and
+serialization are unchanged.
+
+#### Scenario: Edit packet routes by DocId
+- **WHEN** a client flushes an autosave or explicit save
+- **THEN** the packet contains the `DocId` only (no block position), and the server
+  resolves the host via the host registry
+
 ### Requirement: Document carries a title field
 `ScribeDocument` SHALL carry a `Title` string property (max 80 chars). The default value when
 unset or empty after trim SHALL be `"Lectern"`. The title SHALL be serialized in the document
