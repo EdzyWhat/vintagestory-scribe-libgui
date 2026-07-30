@@ -29,4 +29,14 @@ public sealed class ScribeSetPinMessage
     /// <summary>True to pin, false to unpin.</summary>
     [ProtoMember(3)]
     public bool Pinned { get; set; }
+
+    /// <summary>Client-supplied text snapshot — used when the server cannot resolve the task from a
+    /// registered host (e.g. a Notebook whose host is not server-side). The server falls back to this
+    /// when the registry lookup returns no matching block.</summary>
+    [ProtoMember(4)]
+    public string? SnapshotText { get; set; }
+
+    /// <summary>Client-supplied done snapshot, parallel to <see cref="SnapshotText"/>.</summary>
+    [ProtoMember(5)]
+    public bool SnapshotDone { get; set; }
 }

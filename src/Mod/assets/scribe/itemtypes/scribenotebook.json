@@ -2,9 +2,19 @@
 	"code": "scribenotebook",
 	"class": "ItemScribeNotebook",
 	"maxstacksize": 1,
+	"behaviors": [
+		{ "name": "GroundStorable", "properties": { "layout": "Quadrants", "collisionBox": { "x1": 0, "y1": 0, "z1": 0, "x2": 1, "y2": 0.125, "z2": 1 } } }
+	],
+	"attributes": {
+		"groundStorageTransform": {
+			"translation": { "x": 0.12, "y": 0, "z": -0.04 },
+			"rotation": { "x": 0, "y": 35, "z": 90 },
+			"origin": { "x": 0.5, "y": 0.05, "z": 0.5 }
+		}
+	},
 	"shape": { "base": "scribe:item/notebook" },
 	"textures": {
-		"cover": { "base": "game:block/wood/planks/birch1" }
+		"cover": { "base": "scribe:items/notebook-cover" }
 	},
 	"guiTransform": {
 		"translation": { "x": 0, "y": 0, "z": 0 },
@@ -17,6 +27,18 @@
 		"rotation": { "x": -14, "y": -152, "z": 28 },
 		"origin": { "x": 0.5, "y": 0.1, "z": 0.5 },
 		"scale": 2.07
+	},
+	"tpHandTransform": {
+		"translation": { "x": -0.79, "y": -0.36, "z": -0.86 },
+		"rotation": { "x": 7, "y": -15, "z": 7 },
+		"origin": { "x": 0.5, "y": 0.1, "z": 0.5 },
+		"scale": 0.67
+	},
+	"groundTransform": {
+		"translation": { "x": 0, "y": 0, "z": 0 },
+		"rotation": { "x": 0, "y": 0, "z": 90 },
+		"origin": { "x": 0.41, "y": 0, "z": 0.5 },
+		"scale": 4
 	},
 	"creativeinventory": { "general": ["*"], "items": ["*"] }
 }

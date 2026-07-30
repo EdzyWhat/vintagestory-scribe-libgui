@@ -1,7 +1,7 @@
-using System;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
+using Vintagestory.API.Util;
 
 namespace Scribe;
 
@@ -12,16 +12,39 @@ namespace Scribe;
 /// </summary>
 public class ItemScribeNotebook : Item
 {
+    private WorldInteraction[] _interactions = System.Array.Empty<WorldInteraction>();
+
     public override void OnLoaded(ICoreAPI api)
     {
         base.OnLoaded(api);
         MaxStackSize = 1;
+
+        if (api.Side != EnumAppSide.Client) return;
+        _interactions = ObjectCacheUtil.GetOrCreate(api, "scribeNotebookInteractions", () => new WorldInteraction[]
+        {
+            new WorldInteraction
+            {
+                ActionLangCode = "scribe:itemhelp-scribenotebook-open",
+                MouseButton = EnumMouseButton.Right,
+            },
+            new WorldInteraction
+            {
+                ActionLangCode = "scribe:itemhelp-scribenotebook-place",
+                HotKeyCode = "sneak",
+                MouseButton = EnumMouseButton.Right,
+            },
+        });
     }
+
+    public override WorldInteraction[] GetHeldInteractionHelp(ItemSlot inSlot)
+        => _interactions.Append(base.GetHeldInteractionHelp(inSlot));
 
     public override void OnHeldInteractStart(ItemSlot slot, EntityAgent byEntity, BlockSelection blockSel,
         EntitySelection entitySel, bool firstEvent, ref EnumHandHandling handling)
     {
         if (!firstEvent) return;
+        // Pass through to GroundStorable when sneaking so shift+right-click places the notebook.
+        if (byEntity.Controls.Sneak) return;
         if (byEntity.Api.Side != EnumAppSide.Client) return;
         if (byEntity.Api is not ICoreClientAPI capi) return;
 

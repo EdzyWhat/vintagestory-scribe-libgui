@@ -107,10 +107,33 @@ Messages that still carry `PosX/PosY/PosZ`: `ScribeEditDocumentMessage`,
   - `"item-scribenotebook"` → `"Notebook"`
   - `"item-scribenotebook-desc"` → `"A personal notebook. Write tasks and notes anywhere."`
 
-## 9. Build and smoke test
+## 9. Post-implementation fixes (discovered during in-game testing)
 
 - [x] 9.1 Run `dotnet build` from `src/Mod/` — confirm zero errors and zero new warnings.
 - [x] 9.2 Run `dotnet test` from `tests/Core.Tests/` — confirm all tests still pass.
+- [x] 9.F1 Fix: Lectern GUI no longer opened after packet migration. Root cause: `RegisterHost`
+  was server-only, so the client-side `_hostRegistry` was always empty and
+  `OnClientReceivedEditReply` could not find the BE. Fix: call `RegisterHost` on both
+  sides in `BlockEntityScribeLectern.Initialize`.
+- [x] 9.F2 Fix: Notebook task-wipe on drop/pickup. Root cause: `OnServerReceivedNotebookSave`
+  guarded with `existing?.DocId != docId`; a fresh stack has no stored doc so `existing`
+  is null, the comparison trips, and every autosave is silently dropped. Fix: only reject
+  when an existing doc is present and its DocId mismatches.
+- [x] 9.F3 Fix: Notebook dialog does not close when the item leaves the active hand slot.
+  Fix: subscribe to `capi.Event.AfterActiveSlotChanged` in `GuiDialogScribeNotebook`
+  constructor; call `TryClose()` when the active slot no longer holds an
+  `ItemScribeNotebook`. Unsubscribe in `OnGuiClosed`.
+- [x] 9.F4 Fix: `gui@3.1.0` crash on close-button click (`ButtonState.PlaySound` calls
+  `Element.Owner.GetSoundPlayer()` after the element is unmounted). Workaround: install
+  `SilentSoundPlayer` on `BuildOwner` at the top of `OnGuiClosed` so any deferred
+  `SetState` callbacks get a non-null player and complete harmlessly.
+- [x] 9.F5 Fix: Notebook texture used a placeholder wood-plank tile. Fix: extract
+  `leather1.png` from Wanderer's Sketchbook zip into `scribe/textures/items/notebook-cover.png`;
+  update `scribenotebook.json` texture reference.
+- [x] 9.F6 Add `groundTransform` and `tpHandTransform` to `scribenotebook.json` (item had
+  no ground-drop or third-person transforms — appeared tiny on the ground).
+- [x] 9.F7 Add `/scripttf <target> <prop> <value>` dev command for tuning item transforms
+  in-game without restarting (registered client-side in `ScribeModSystem`).
 - [ ] 9.3 In-game: obtain the Notebook from the Creative inventory, open it, write a task,
   close and reopen — confirm the task persists.
 - [ ] 9.4 In-game: confirm the Lectern still opens, saves, and pins correctly (regression

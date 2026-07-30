@@ -184,6 +184,8 @@ public sealed class ScribeModSystem : ModSystem
         // it stays closed until there is ≥1 pin. It owns its own subscription + tick; we dispose it.
         pinHud = new HudScribePins(api, this);
 
+        RegisterNotebookTuneCommand(api);
+
         // Rebindable collapse/expand hotkey (design D6). GUIOrOtherControls so it fires even while a
         // dialog is open; default P, no modifiers. The HUD flips its client-local collapse preference.
         api.Input.RegisterHotKey(HudHotkeyCode, Lang.Get("scribe:hotkey-scribepinhud"), GlKeys.P,
@@ -549,7 +551,7 @@ public sealed class ScribeModSystem : ModSystem
             return;
         }
         Trace("set-pin received from {0}: pinned={1} doc={2} task={3}", fromPlayer.PlayerName, message.Pinned, docId, taskId);
-        SetPinForPlayer(fromPlayer, docId, taskId, message.Pinned);
+        SetPinForPlayer(fromPlayer, docId, taskId, message.Pinned, message.SnapshotText, message.SnapshotDone);
     }
 
     private void OnServerReceivedCompleteTask(IServerPlayer fromPlayer, ScribeCompleteTaskMessage message)
@@ -623,15 +625,18 @@ public sealed class ScribeModSystem : ModSystem
     /// Lock-free throughout. Re-pushes the player when their set changed. Public so the block-entity
     /// layer and the integration suite drive the exact production path, not a copy of it.
     /// </summary>
-    public void SetPinForPlayer(IServerPlayer player, Guid docId, Guid taskId, bool pinned)
+    public void SetPinForPlayer(IServerPlayer player, Guid docId, Guid taskId, bool pinned,
+        string? fallbackText = null, bool fallbackDone = false)
     {
         if (sapi is null || pinStore is null) return;
 
         bool changed;
         if (pinned)
         {
-            string text = "";
-            bool done = false;
+            string text = fallbackText ?? "";
+            bool done = fallbackDone;
+            // Prefer the server's own authoritative document when available; fall back to the
+            // client-supplied snapshot for items whose host is not registered server-side (e.g. Notebooks).
             if (_hostRegistry.TryGetValue(docId, out var host)
                 && host.Document.FindByTaskId(taskId) is { } block)
             {
@@ -689,8 +694,8 @@ public sealed class ScribeModSystem : ModSystem
 
         // Write through to the shared source document when it resolves (best-effort; a gone source just
         // skips this). Reconciles only the acting player — other pinners keep their own copies.
-        bool resolved = TryResolveLectern(docId, out var lectern);
-        if (resolved) lectern!.SetTaskDoneFromReader(taskId, nowDone);
+        bool resolved = TryResolveDocHost(docId, out var docHost);
+        if (resolved) docHost!.SetTaskDoneFromReader(taskId, nowDone);
 
         // Apply the completion policy — only on a transition INTO done (unchecking never removes).
         if (nowDone)
@@ -704,13 +709,13 @@ public sealed class ScribeModSystem : ModSystem
                 case ScribeCompletionPolicy.UnpinSink:
                     // Unpin (stay) + Sink: remove the pin AND move the task to the bottom of the source doc.
                     changed |= pinStore.RemovePin(player.PlayerUID, docId, taskId);
-                    if (resolved && lectern!.MoveTaskToBottomFromReader(taskId))
+                    if (resolved && docHost!.MoveTaskToBottomFromReader(taskId))
                         Trace("  policy UnpinSink: removed pin and moved task {0} to bottom of source doc {1}", taskId, docId);
                     else
                         Trace("  policy UnpinSink: removed pin on task {0} (source unresolvable for sink)", taskId);
                     break;
                 case ScribeCompletionPolicy.Delete:
-                    if (resolved && lectern!.DeleteTaskFromReader(taskId))
+                    if (resolved && docHost!.DeleteTaskFromReader(taskId))
                         Trace("  policy Delete: removed task {0} from source doc {1}", taskId, docId);
                     else
                         Trace("  policy Delete: source unresolvable for task {0} — pin removed only", taskId);
@@ -721,7 +726,7 @@ public sealed class ScribeModSystem : ModSystem
                     // the bottom of the shared source, so every viewer — read/editor/pinned view and the
                     // HUD — sees the same order. Keep the (now-done) pin. Best-effort: a gone source just
                     // leaves the pin done in the store (the HUD still sinks it client-side by done-state).
-                    if (resolved && lectern!.MoveTaskToBottomFromReader(taskId))
+                    if (resolved && docHost!.MoveTaskToBottomFromReader(taskId))
                         Trace("  policy Sink: moved task {0} to bottom of source doc {1}", taskId, docId);
                     break;
                 case ScribeCompletionPolicy.Keep:
@@ -762,7 +767,7 @@ public sealed class ScribeModSystem : ModSystem
 
         // Write through to the shared source document when it resolves (best-effort; a gone source just
         // skips this — the snapshot below still updates).
-        if (TryResolveLectern(docId, out var lectern)) lectern!.SetTaskTextFromReader(taskId, text);
+        if (TryResolveDocHost(docId, out var docHost)) docHost!.SetTaskTextFromReader(taskId, text);
 
         // Always refresh the acting player's pin snapshot so the edit shows even if the source is unloaded.
         bool changed = pinStore.SetPinText(player.PlayerUID, docId, taskId, text);
@@ -781,7 +786,7 @@ public sealed class ScribeModSystem : ModSystem
     {
         if (sapi is null || pinStore is null) return;
 
-        if (TryResolveLectern(docId, out var lectern) && lectern!.DeleteTaskFromReader(taskId))
+        if (TryResolveDocHost(docId, out var docHost) && docHost!.DeleteTaskFromReader(taskId))
             Trace("  delete: removed task {0} from source doc {1}", taskId, docId);
         else
             Trace("  delete: source unresolvable for task {0} — pin removed only", taskId);
@@ -804,13 +809,11 @@ public sealed class ScribeModSystem : ModSystem
         if (pinStore.ReorderPins(player.PlayerUID, order)) PushPinsTo(player);
     }
 
-    /// <summary>Resolves a docId to its currently-hosting lectern block entity via the host registry.
-    /// Returns false (and null) when the source is unregistered or is a non-lectern host (e.g.
-    /// NotebookHost) — the completion path then relies on the store alone.</summary>
-    private bool TryResolveLectern(Guid docId, out BlockEntityScribeLectern? lectern)
+    /// <summary>Resolves a docId to its currently-registered <see cref="IScribeDocumentHost"/> (Lectern or
+    /// Notebook). Returns false when the host is not in the server registry (unloaded, unregistered).</summary>
+    private bool TryResolveDocHost(Guid docId, out IScribeDocumentHost? host)
     {
-        lectern = _hostRegistry.TryGetValue(docId, out var host) ? host as BlockEntityScribeLectern : null;
-        return lectern is not null;
+        return _hostRegistry.TryGetValue(docId, out host);
     }
 
     /// <summary>Completes (toggles) an UNPINNED document task straight on the shared source — a plain
@@ -822,19 +825,19 @@ public sealed class ScribeModSystem : ModSystem
     private void CompleteUnpinnedTaskAtSource(IServerPlayer player, Guid docId, Guid taskId,
         ScribeCompletionPolicy policy)
     {
-        if (!TryResolveLectern(docId, out var lectern))
+        if (!TryResolveDocHost(docId, out var docHost))
         {
             Trace("  complete(unpinned): doc {0} unresolvable — nothing to toggle", docId);
             return;
         }
-        var block = lectern!.Document.FindByTaskId(taskId);
+        var block = docHost!.Document.FindByTaskId(taskId);
         if (block is null || !block.IsTask)
         {
             Trace("  complete(unpinned): task {0} not found in doc {1}", taskId, docId);
             return;
         }
         bool nowDone = !block.Done;
-        lectern.SetTaskDoneFromReader(taskId, nowDone);
+        docHost.SetTaskDoneFromReader(taskId, nowDone);
         Trace("  complete(unpinned): task {0} toggled to done={1}", taskId, nowDone);
 
         // Apply the policy on the shared document — only on a transition INTO done (unchecking never moves
@@ -845,11 +848,11 @@ public sealed class ScribeModSystem : ModSystem
             {
                 case ScribeCompletionPolicy.Sink:
                 case ScribeCompletionPolicy.UnpinSink: // no pin to unpin for an unpinned task — just sink
-                    if (lectern.MoveTaskToBottomFromReader(taskId))
+                    if (docHost.MoveTaskToBottomFromReader(taskId))
                         Trace("  policy Sink(unpinned): moved task {0} to bottom of source doc {1}", taskId, docId);
                     break;
                 case ScribeCompletionPolicy.Delete:
-                    if (lectern.DeleteTaskFromReader(taskId))
+                    if (docHost.DeleteTaskFromReader(taskId))
                         Trace("  policy Delete(unpinned): removed task {0} from source doc {1}", taskId, docId);
                     break;
                 case ScribeCompletionPolicy.Unpin:
@@ -905,10 +908,14 @@ public sealed class ScribeModSystem : ModSystem
     private void OnServerReceivedNotebookSave(IServerPlayer fromPlayer, ScribeNotebookSaveMessage message)
     {
         if (sapi is null || !TryReadGuid(message.DocIdBytes, out var docId)) return;
-        // Find the notebook in the player's active hand slot.
+        // The dialog closes (and flushes) the moment the notebook leaves the active hand slot,
+        // so by the time this packet arrives the item should still be there.
         var slot = fromPlayer.Entity?.ActiveHandItemSlot;
         if (slot?.Itemstack?.Collectible is not ItemScribeNotebook) return;
-        if (!ScribeDocumentAttributes.TryReadFrom(slot.Itemstack, out var existing) || existing?.DocId != docId)
+        // Verify the packet's DocId matches the document already in the stack (if any).
+        // A fresh stack with no prior save has no stored DocId yet — allow that write.
+        if (ScribeDocumentAttributes.TryReadFrom(slot.Itemstack, out var existing)
+            && existing is not null && existing.DocId != docId)
             return;
 
         if (ScribeDocumentCodec.TryDeserialize(message.DocumentBytes, out var doc) && doc is not null)
@@ -936,6 +943,67 @@ public sealed class ScribeModSystem : ModSystem
             if (ScribeDocumentCodec.TryDeserialize(message.DocumentBytes, out var doc) && doc is not null)
                 notebookHost.ApplyLocalOptimisticEdit(doc);
         }
+    }
+
+    /// <summary>
+    /// Dev-only client command: <c>/scripttf &lt;target&gt; &lt;prop&gt; &lt;value&gt;</c>
+    /// Mutates the held Notebook item's model transforms live so rotation/scale/translation
+    /// can be tuned in-game. Prints the full current transform block after each change so
+    /// the result can be pasted directly into scribenotebook.json.
+    ///
+    /// <c>target</c>: tp | ground | gui | fp
+    /// <c>prop</c>:   rx | ry | rz | tx | ty | tz | scale
+    /// </summary>
+    private static void RegisterNotebookTuneCommand(ICoreClientAPI api)
+    {
+        api.ChatCommands.Create("scripttf")
+            .WithDescription("[scribe dev] Tune Notebook item model transforms live. Usage: /scripttf <tp|ground|gui|fp> <rx|ry|rz|tx|ty|tz|scale> <value>")
+            .WithArgs(
+                api.ChatCommands.Parsers.WordRange("target", "tp", "ground", "gui", "fp"),
+                api.ChatCommands.Parsers.WordRange("prop", "rx", "ry", "rz", "tx", "ty", "tz", "scale"),
+                api.ChatCommands.Parsers.Float("value"))
+            .HandleWith(args =>
+            {
+                var slot = api.World.Player.InventoryManager.ActiveHotbarSlot;
+                if (slot?.Itemstack?.Collectible is not ItemScribeNotebook item)
+                    return TextCommandResult.Error("Hold the Notebook in your active hotbar slot first.");
+
+                string target = (string)args[0];
+                string prop   = (string)args[1];
+                float  value  = (float)args[2];
+
+                var tf = target switch
+                {
+                    "tp"     => item.TpHandTransform,
+                    "ground" => item.GroundTransform,
+                    "gui"    => item.GuiTransform,
+                    "fp"     => item.FpHandTransform,
+                    _        => null,
+                };
+
+                if (tf is null)
+                    return TextCommandResult.Error($"Unknown target '{target}'.");
+
+                switch (prop)
+                {
+                    case "rx":    tf.Rotation.X = value; break;
+                    case "ry":    tf.Rotation.Y = value; break;
+                    case "rz":    tf.Rotation.Z = value; break;
+                    case "tx":    tf.Translation.X = value; break;
+                    case "ty":    tf.Translation.Y = value; break;
+                    case "tz":    tf.Translation.Z = value; break;
+                    case "scale": tf.ScaleXYZ.Set(value, value, value); break;
+                    default:      return TextCommandResult.Error($"Unknown prop '{prop}'.");
+                }
+
+                // Force a re-render of the held item.
+                slot.MarkDirty();
+
+                return TextCommandResult.Success(
+                    $"[scribe] {target}: rotation=({tf.Rotation.X:0.##}, {tf.Rotation.Y:0.##}, {tf.Rotation.Z:0.##})  " +
+                    $"translation=({tf.Translation.X:0.##}, {tf.Translation.Y:0.##}, {tf.Translation.Z:0.##})  " +
+                    $"scale={tf.ScaleXYZ.X:0.##}");
+            });
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using System;
 using Scribe.Core;
 
 namespace Scribe;
@@ -92,4 +93,22 @@ public interface IScribeDocumentHost
 
     /// <summary>The guestbook for this block — visitor entries recorded server-side on GUI open.</summary>
     GuestbookStore Guestbook { get; }
+
+    // ── Server-side document write-through (lock-free, called from completion/pin handlers) ──
+
+    /// <summary>Server-side: set a task's done flag by stable TaskId. No-op if not found.
+    /// For block hosts: marks dirty and resyncs. For item hosts: writes to the ItemStack.</summary>
+    void SetTaskDoneFromReader(Guid taskId, bool done);
+
+    /// <summary>Server-side: delete a task by stable TaskId. Returns true if removed.
+    /// For block hosts: marks dirty and resyncs. For item hosts: writes to the ItemStack.</summary>
+    bool DeleteTaskFromReader(Guid taskId);
+
+    /// <summary>Server-side: move a task to the bottom of the document. Returns true if moved.
+    /// For block hosts: marks dirty and resyncs. For item hosts: writes to the ItemStack.</summary>
+    bool MoveTaskToBottomFromReader(Guid taskId);
+
+    /// <summary>Server-side: set a task's text by stable TaskId. Returns true if changed.
+    /// Rejects blank/whitespace. For block hosts: marks dirty and resyncs. For item hosts: writes to the ItemStack.</summary>
+    bool SetTaskTextFromReader(Guid taskId, string text);
 }

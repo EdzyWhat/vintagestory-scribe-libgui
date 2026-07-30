@@ -95,6 +95,10 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
     ScribeLayout IScribeDocumentHost.GetLayout(float w) => new ScribeLayout(w, 1160f / 1024f);
     string IScribeDocumentHost.DefaultDocumentTitle => "Lectern";
     GuestbookStore IScribeDocumentHost.Guestbook => _guestbook;
+    void IScribeDocumentHost.SetTaskDoneFromReader(Guid taskId, bool done) => SetTaskDoneFromReader(taskId, done);
+    bool IScribeDocumentHost.DeleteTaskFromReader(Guid taskId) => DeleteTaskFromReader(taskId);
+    bool IScribeDocumentHost.MoveTaskToBottomFromReader(Guid taskId) => MoveTaskToBottomFromReader(taskId);
+    bool IScribeDocumentHost.SetTaskTextFromReader(Guid taskId, string text) => SetTaskTextFromReader(taskId, text);
 
     /// <summary>Client-side: the single LibGUI dialog serving BOTH views (migrate-editor-view-libgui).
     /// Read and editor are internal view states of this one dialog, so switching between them is a
@@ -105,6 +109,10 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
     {
         base.Initialize(api);
 
+        // Register on both sides so the client registry can route edit replies back to this BE,
+        // and the server registry can route incoming save/lock packets to it.
+        ModSystem?.RegisterHost(this);
+
         if (api is ICoreServerAPI sapi)
         {
             sapi.Event.PlayerDisconnect += OnPlayerDisconnect;
@@ -112,7 +120,6 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
             // Register this document's live DocId → position mapping so pins can resolve it, and
             // re-save a v4-loaded document as v5 so the title field persists.
             RegisterDocInStore();
-            ModSystem?.RegisterHost(this);
             if (needsV5Resave)
             {
                 needsV5Resave = false;
@@ -142,8 +149,9 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
                 store.UnregisterDoc(docId);
             }
             registeredDocId = null;
-            ModSystem?.UnregisterHost(Document.DocId);
         }
+
+        ModSystem?.UnregisterHost(Document.DocId);
     }
 
     public override void ToTreeAttributes(ITreeAttribute tree)

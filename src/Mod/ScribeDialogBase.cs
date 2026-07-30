@@ -958,11 +958,16 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
     /// from a future HUD). The server derives the snapshot from its own document.</summary>
     private void SendSetPin(Guid taskId, bool pinned)
     {
+        var block = host.Document.FindByTaskId(taskId);
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeSetPinMessage
         {
             DocId = host.Document.DocId.ToByteArray(),
             TaskId = taskId.ToByteArray(),
             Pinned = pinned,
+            // Supply a client-side snapshot so the server can record it even when the host is not
+            // registered server-side (e.g. Notebook items — only the client holds the document).
+            SnapshotText = block?.Text ?? "",
+            SnapshotDone = block?.Done ?? false,
         });
     }
 
@@ -1329,6 +1334,14 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
 
     public override void OnGuiClosed()
     {
+        // Workaround for a gui@3.1.0 bug: ButtonState.PlaySound() calls
+        // Element.Owner.GetSoundPlayer() inside a SetState callback that may fire
+        // after the element is unmounted (e.g. the close button click that caused
+        // this close). Owner is null at that point → NullReferenceException. Swapping
+        // to a silent no-op player before teardown ensures GetSoundPlayer() returns
+        // non-null and the deferred callback completes harmlessly.
+        BuildOwner.SetSoundPlayer(new SilentSoundPlayer(capi));
+
         CommitTitleIfEditing();
         if (isEditorMode)
         {
@@ -1455,7 +1468,10 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
             * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale) * 1.5f;
 
         var titleStyle = new TextStyle { FontSize = titleFont, FontFamily = ScribeRowControlNudge.TitleFontFamily, Weight = FontWeight.Bold, Color = colors.OnSurface };
-        var displayTitle = (_isTitleEditing ? null : (scratch?.Title ?? host.Document.Title)) ?? host.DefaultDocumentTitle;
+        var rawTitle = _isTitleEditing ? null : (scratch?.Title ?? host.Document.Title);
+        // Treat the codec default title ("Untitled") as absent so each host type can supply its own
+        // meaningful default (e.g. "Notebook" vs "Lectern") rather than always showing "Untitled".
+        var displayTitle = (rawTitle == ScribeDocument.DefaultTitle ? null : rawTitle) ?? host.DefaultDocumentTitle;
 
         const float titleBtnSpacing = 6f;
         Widget titleSlot = _isTitleEditing
