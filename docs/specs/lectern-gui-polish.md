@@ -1,8 +1,14 @@
 # Lectern GUI / layout polish (near-term cluster)
 
-> **Status:** exploration/design spec (2026-07-21). NOT an OpenSpec change, NOT implemented
-> code. When picked up, this becomes the input to one or more `openspec-propose` runs — see
-> "Dependencies & sequencing" for how it splits.
+> **Status:** mostly delivered (2026-07-30). Item-by-item:
+> - **1 Placement facing** — SHIPPED v0.1.0
+> - **2 "Edit" → "Task Editor" relabel** — SHIPPED 2026-07-30
+> - **3 Damped left-gutter scaling** — DEFERRED (minor; `ControlSize` scales linearly in `ScribeRowStyle.cs`; no OpenSpec change yet)
+> - **4 Side rail** — SHIPPED (the LibGUI right-col nav column IS the side rail)
+> - **5 Fold switch-view into collapse toggle** — OBSOLETE (shelved; nav column handles view switching cleanly)
+> - **6 Skeuomorphic collapse control** — SHIPPED (nav buttons with themed SVG icons + color states satisfy this intent)
+> - **7 Lectern block shape + notebook PNG** — DEFERRED (art-gated; GUI backdrop delivered the aesthetic direction)
+> - **8 Icon-font audit** — SHIPPED (`add-custom-svg-row-icons`, archived 2026-07-21)
 
 ## Summary
 

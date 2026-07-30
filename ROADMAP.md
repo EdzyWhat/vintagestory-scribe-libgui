@@ -28,13 +28,13 @@ age (the saw); anything past that is cosmetic.
 - **v1 — Lectern slice** *(current)*: one lectern block (reuses the vanilla
   "lecturn-book-open" shape — plain wood) with a task checklist + short note,
   server-authoritative and multiplayer-safe. Built modularly so later tiers slot in. The
-  **row-list rework** (S1 shipped, S2 = `lectern-edit-in-place-rows` proposed) is finishing
-  the GUI onto a single custom-drawn row element — this is a hard prerequisite for the held
-  tiers below (a real clipped/scrollable region + a unified read/edit renderer).
+  **row-list rework** (S1 + S2 shipped: `lectern-edit-in-place-rows` archived 2026-07-21)
+  delivered a single custom-drawn row element with native clipping, a continuous scroll path,
+  and edit-in-place keyboard conventions (Enter/Shift+Tab/Esc, Mac caret routing).
 - **v2 — Notebook (collection)** → `docs/specs/v2-notebook.md`. Leather-bound held item,
   infinite pages. Introduces the **`docId`-on-item + server-side document store** that v3
   reuses. Two carried-over decisions are now **resolved** in the spec: the scroll/clip
-  prerequisite is delivered by the row-list rework (v2 must wait for **S2**); and the
+  prerequisite was delivered by the row-list rework (S2 shipped — v2 is unblocked); and the
   single-editor lock does **not** carry over (a held stack has one holder — matches vanilla
   `ItemBook`, which uses no lock).
   - **Timers & alarms (Clockmaker perk)** → `docs/specs/timers-and-alarms.md`. Real-time + in-game-time
@@ -105,12 +105,16 @@ age (the saw); anything past that is cosmetic.
     rejection bug). No user-facing error notice ships for it. The general feedback surface (lost lock,
     save failure) stays a post-v1 item — the specific v1 errors are being solved individually (clipping
     here) rather than by building the shared notice channel now.
-- **Lectern GUI polish** → `docs/specs/lectern-gui-polish.md`. Merges: face-the-player on
-  placement, "Edit" → "Edit Tasks" relabel, damped icon-gutter widths at large text size,
-  the side-rail option bar + fold-switch-into-toggle + skeuomorphic collapse control chain,
-  the loose-leaf-paper model swap, and the icon-font audit. The relabel and the placement
-  facing are **trivial and have zero row-list-rework dependency** — candidates to pull out as
-  a quick standalone change now (see open decision). The gutter-width item rides S2.
+- **Lectern GUI polish** → `docs/specs/lectern-gui-polish.md`. Most items are now delivered
+  or retired. **Shipped:** placement facing (v0.1.0), custom SVG icon set
+  (`add-custom-svg-row-icons`), side-rail nav column (the LibGUI right-col nav IS the side
+  rail + skeuomorphic ribbon), pixel-art GUI backdrop (lectern aesthetic direction delivered),
+  "Edit" → "Task Editor" relabel (2026-07-30). **Obsolete:** fold-switch-into-toggle
+  (shelved — the nav column already provides clean view switching). **Still deferred:** damped
+  left-gutter scaling — `ControlSize` in `ScribeRowStyle.cs` scales linearly today; a
+  sub-linear factor would reduce the grip/checkbox column's proportional share at large text
+  sizes (minor, no OpenSpec change yet); block shape refinement + notebook item PNG update
+  (art-gated).
 
 ## Presentation & polish (deferred, mostly asset-gated)
 
@@ -122,11 +126,9 @@ custom per-tier fonts (cuneiform for the tablet, rustic script for books — loa
 FreeType, gated on a license check), and lightly-scoped handwriting-skill / item-aging visuals.
 All render-only; several need art/audio assets before they can start.
 
-**Sequencing vs. lectern-gui-polish** *(decided 2026-07-21)*: the S3/S4 animation work here and
-the chrome/layout items in `lectern-gui-polish.md` (gutter scaling, side rail, folded toggle,
-skeuomorphic ribbon) edit the same reworked post-S2 editor render code. Land the **GUI polish
-first** so the editor's final layout is settled, **then** add S3 (drag preview) / S4 (checkbox
-animation) on top of stable layout — otherwise the animations rebase over a moving chrome.
+**Sequencing vs. lectern-gui-polish** *(decided 2026-07-21, gate passed 2026-07-30)*: the
+chrome layout is now settled (side rail delivered, "Task Editor" relabel landed, fold-toggle
+shelved). S3 (drag preview) and S4 (checkbox animation) can proceed without rebasing risk.
 
 ## Chronicle & integrations (later)
 
@@ -174,9 +176,9 @@ fast. Concrete, cheap directions this suggests (several now folded into specs):
   `MoveBlock` primitive — the lighter cousin of the v4 kanban funnel.
 - **Reorder via mouse drag** (already shipped) over select+step buttons — VS is heavily
   mouse-driven, so drag is the consistent choice.
-- **Tab / Shift+Tab / Enter to save-and-move-focus between rows** — being delivered by S2
-  (`lectern-edit-in-place-rows`); survey adjacent hotkey affordances (Ctrl+Enter to
-  commit-and-add-below, etc.) as a small batch once it's built.
+- **Tab / Shift+Tab / Enter to save-and-move-focus between rows** — shipped in S2
+  (`lectern-edit-in-place-rows`, archived 2026-07-21); survey adjacent hotkey affordances
+  (Ctrl+Enter to commit-and-add-below, etc.) as a small batch for a future change.
 - **A "carry forward" migration** for the clay tablet's 3-line cap (Bullet-Journal-style) — a
   Core op, specced in `v3-clay-tablet.md`.
 - **Discipline reminder:** resist due dates / priority / tags as structured `ScribeBlock`
@@ -203,19 +205,10 @@ specs (each documents its assumed default) but they shape sequencing and scope.
    leave faction backing (built-in player groups vs. shared owner-UID list vs. third-party mod)
    as an open question until v4 is actually scoped. The player-group finding (VSAPI-NOTES) means
    the no-dependency path exists whenever we return to it.
-2. **Lectern-polish quick wins** — **DECIDED 2026-07-21 (icon direction settled): go icon-only,
-   custom SVGs. Assets + registration mechanism now LANDED** (`add-custom-svg-row-icons`). The
-   icon-font audit (lectern-gui-polish spec, item 8) resolved the direction the relabel was blocked
-   on: the "Edit" control becomes a **custom pencil/quill SVG** (no built-in edit glyph), with "Edit
-   Tasks" surviving only as the hover/tooltip text; the pin becomes a **custom pushpin SVG** and the
-   drag handle a **custom six-dot grip SVG** (no built-in covers either); and delete swaps `eraser`
-   → a **custom close SVG** (kept in the same hand-drawn family). All four SVGs are authored, ship at
-   `src/Mod/assets/scribe/textures/icons/`, and are registered at client init as
-   `scribepin`/`scribegrip`/`scribeclose`/`scribeedit`. **Remaining work is button-repointing only**,
-   which is deferred to the affordance changes: `restore-row-affordance-columns` (new — re-adds the
-   pin/delete gutter columns to `ScribeRowElement`, which the S2 merge dropped, then draws these
-   icons) and `lectern-drag-reorder-feedback` (grip). The Edit-control relabel + placement facing
-   quick wins ride the same window.
+2. **Lectern-polish icon direction** — **DONE.** Custom SVGs authored and registered
+   (`add-custom-svg-row-icons`, archived 2026-07-21): `scribepin`/`scribegrip`/`scribeclose`/
+   `scribeedit`. All four row/control icons are hand-drawn, tooltip-backed, and wired.
+   "Edit" → "Task Editor" relabel landed 2026-07-30.
 3. **v5 HUD pin scope** — when the source document is on an item you're NOT holding, do pinned
    tasks still show (needs a server-pushed "my pins" summary) or only the currently-held
    document's pins?

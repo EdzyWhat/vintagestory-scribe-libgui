@@ -12,12 +12,12 @@
 	"scribe-gui-unpin": "Unpin from HUD",
 	"scribe-gui-textsize": "Text Size",
 	"scribe-gui-locked": "Another player is making edits.",
-	"scribe-gui-switch-to-editor": "Edit",
+	"scribe-gui-switch-to-editor": "Task Editor",
 	"scribe-gui-switch-to-read": "Done Editing",
 	"scribe-gui-newtask-placeholder": "New task…",
 	"scribe-gui-collapse": "Collapse",
 	"scribe-gui-expand": "Expand",
-	"scribe-gui-edit-hint": "This lectern is empty. Click Edit to add tasks or notes.",
+	"scribe-gui-edit-hint": "This lectern is empty. Click Task Editor to add tasks or notes.",
 	"scribe-gui-save-failed": "Your changes could not be saved — the lectern is no longer locked to you.",
 	"scribe-gui-close": "Close",
 	"scribe-gui-drag": "Drag to move",
@@ -30,7 +30,7 @@
 	"scribe-guestbook-col-visitor": "Visitor",
 	"scribe-guestbook-col-date": "Date of visit",
 	"scribe-guestbook-col-note": "Note",
-	"scribe-gui-pintab-empty": "You have no pinned tasks. Pin a task from a lectern's edit view to manage it here.",
+	"scribe-gui-pintab-empty": "You have no pinned tasks. Pin a task to manage it here.",
 
 	"scribe-hud-title": "Pinned",
 	"scribe-hud-more": "+{0} more",
@@ -46,34 +46,34 @@
 	"settings-section-hudappearance": "HUD Appearance",
 
 	"settings-completionpolicy": "On newly completing a task",
-	"settings-completionpolicy-help": "What happens to a pinned task when you check it off: keep it pinned (it sinks to the bottom of the HUD), unpin it, or delete the underlying task.",
+	"settings-completionpolicy-help": "Choose what happens to a pinned task when you check it off.",
 	"settings-hudcollapsed": "Collapse the HUD",
-	"settings-hudcollapsed-help": "Minimize the pinned-task HUD to just its header. Same as the HUD's collapse chevron and its toggle hotkey.",
+	"settings-hudcollapsed-help": "Minimize the pinned-task HUD to just its header.",
 
 	"settings-muteuisounds": "Mute Scribe UI sounds",
-	"settings-muteuisounds-help": "Silence the click sounds Scribe's own buttons make (the Lectern and settings buttons). Only affects Scribe — your game and other mods' sounds are untouched.",
+	"settings-muteuisounds-help": "Silence Scribe's button sounds — your game and other mods' sounds are untouched.",
 
 	"settings-pixelartdisplay": "Pixel-Art Display",
-	"settings-pixelartdisplay-help": "Show the Lectern in Scribe's light \"parchment\" look (dark ink on a light page, with themed art). Turn off to use your own game GUI theme for it instead. The pinned-task HUD and this settings window always use your own game theme.",
+	"settings-pixelartdisplay-help": "Toggle the custom art and theme for Scribe's blocks and items",
 
 	"settings-hudanchor": "HUD position",
 	"settings-hudanchor-help": "Which screen corner or edge the pinned-task HUD is anchored to.",
 	"settings-hudmaxrows": "Max HUD rows",
-	"settings-hudmaxrows-help": "How many pinned tasks the HUD shows at once (1–10). Extra pins are summarized as \"+N more\".",
-	"settings-hudrowwidth": "HUD row width",
-	"settings-hudrowwidth-help": "The fixed pixel width of the HUD's task rows (100–1000, steps of 5); longer tasks wrap within this width.",
+	"settings-hudmaxrows-help": "How many pinned tasks the HUD shows at once. (1–10) Extra pins are summarized as \"+N more\".",
+	"settings-hudrowwidth": "HUD task width",
+	"settings-hudrowwidth-help": "How wide is Scribe's HUD. (100–1000, steps of 5)",
 	"settings-hudoffset": "HUD offset (px)",
-	"settings-hudoffset-help": "Nudge the HUD relative to its anchor's built-in position (e.g. clear of the minimap). Positive moves it toward screen center along each axis; clamped to ±300, steps of 5.",
+	"settings-hudoffset-help": "Nudge the HUD relative to its starting position. (Clamped to ±300, steps of 5)",
 	"settings-hudoffsetx": "Horizontal",
 	"settings-hudoffsety": "Vertical",
 	"settings-hudfontscale": "HUD text size (%)",
-	"settings-hudfontscale-help": "Scales the pinned-task HUD's text (80–120%, steps of 5). Applied on top of the game's Interface → GUI Scale.",
+	"settings-hudfontscale-help": "Scales the pinned-task HUD's text. (80–120%, steps of 5)",
 	"settings-windowfontscale": "Window text size (%)",
-	"settings-windowfontscale-help": "Scales the text in Scribe's block windows (the lectern), 80–120%, steps of 5. Applied on top of the game's Interface → GUI Scale.",
+	"settings-windowfontscale-help": "Scales the text in Scribe's interfaces. (80–120%, steps of 5)",
 	"settings-pixelartsize": "Pixel Art Size (px)",
-	"settings-pixelartsize-help": "The overall size of the Lectern's illustrated notebook (300–1000 px wide, steps of 10). The whole window and everything in it scales with this. Changing it re-sizes an open Lectern the next time you open it.",
+	"settings-pixelartsize-help": "The overall size of the Lectern's illustrated notebook (300–1000 px wide, steps of 10)",
 	"settings-taskfont": "Task text font",
-	"settings-taskfont-help": "The font used for task and note text in the Lectern. Buttons keep their own fixed font. Applies live to an open Lectern.",
+	"settings-taskfont-help": "Choose the primary font used in Scribe.",
 	"settings-taskfont-default": "Default",
 
 	"settings-anchor-topleft": "Top-Left",
@@ -85,11 +85,11 @@
 	"settings-anchor-bottomright": "Bottom-Right",
 
 	"inputgroup-scribe": "Scribe",
-	"hotkey-scribepinhud": "Scribe Mod: Toggle pinned-task HUD",
+	"hotkey-scribepinhud": "Scribe Mod: Expand/collapse pinned-task HUD",
 
 
    "handbook-scribelectern-views-title": "Using the Lectern",
-   "handbook-scribelectern-views-text": "The Lectern has four tabs, switched via the icon buttons in the right-hand sidebar.<br><br><strong>Read</strong> — Shows all tasks and notes as a scrollable list. Any player can read, pin, and check off tasks, even while another player holds the editor lock.<br><br><strong>Edit</strong> — Full document editing. Add tasks, edit text, pin rows, reorder by drag, and delete rows. Changes autosave as you type. Only one player may edit at a time.<br><br><strong>Pinned</strong> — Lists all of your pinned tasks across every Lectern, fully editable in place. Completions apply immediately with no undo delay.<br><br><strong>Settings</strong> — Opens the Scribe Settings panel (same as the gear icon on the Pinned Task HUD).",
+   "handbook-scribelectern-views-text": "The Lectern has four tabs, switched via the icon buttons in the right-hand sidebar.<br><br><strong>Read</strong> — Shows all tasks and notes as a scrollable list. Any player can read, pin, and check off tasks, even while another player holds the editor lock.<br><br><strong>Task Editor</strong> — Full document editing. Add tasks, edit text, pin rows, reorder by drag, and delete rows. Changes autosave as you type. Only one player may edit at a time.<br><br><strong>Pinned</strong> — Lists all of your pinned tasks across every Lectern, fully editable in place. Completions apply immediately with no undo delay.<br><br><strong>Settings</strong> — Opens the Scribe Settings panel (same as the gear icon on the Pinned Task HUD).",
 
 
    "handbook-scribelectern-hud-title": "Pinned Task HUD",
@@ -97,7 +97,7 @@
 
 
    "craftinginfo-scribe-getting-started-title": "Scribe Mod: Getting Started",
-   "craftinginfo-scribe-getting-started-text": "<strong>What is Scribe?</strong><br>Scribe adds a Lectern block for writing tasks and notes and pinning them to a persistent HUD overlay visible while you play.<br><br><strong>Crafting the Lectern</strong><br>See the <a href=\"handbook://block-scribe:scribelectern\">Scribe Lectern</a> page for the recipe.<br><br><strong>Opening the Lectern</strong><br>Right-click to open in Read view. Shift+right-click to open in Edit view and request the editor lock.<br><br><strong>The four views</strong><br>Read: scroll, complete, and pin tasks to your HUD.<br>Edit: also add, edit, reorder, and delete rows. One player edits at a time.<br>Pinned: all your pins across every Lectern, editable in place.<br>Settings: all Scribe preferences.<br><br><strong>Pinned Task HUD</strong><br>Hover a task in Read or Edit view and click the pin icon. The task appears on your HUD immediately. Check it off from the HUD to start the 1.5-second undo window; let it elapse to apply your completion policy.<br><br>Press P (rebindable) or click the ▾ Pinned header to collapse the HUD.<br><br>For keyboard shortcuts and text editing mechanics, see <a href=\"handbook://craftinginfo-scribe-editor-reference\">Scribe Mod: Editor Reference</a> in the handbook.",
+   "craftinginfo-scribe-getting-started-text": "<strong>What is Scribe?</strong><br>Scribe adds a Lectern block for writing tasks and notes and pinning them to a persistent HUD overlay visible while you play.<br><br><strong>Crafting the Lectern</strong><br>See the <a href=\"handbook://block-scribe:scribelectern\">Scribe Lectern</a> page for the recipe.<br><br><strong>Opening the Lectern</strong><br>Right-click to open in Read view. Shift+right-click to open in Edit view and request the editor lock.<br><br><strong>The four views</strong><br>Read: scroll, complete, and pin tasks to your HUD.<br>Task Editor: also add, edit, reorder, and delete rows. One player edits at a time.<br>Pinned: all your pins across every Lectern, editable in place.<br>Settings: all Scribe preferences.<br><br><strong>Pinned Task HUD</strong><br>Hover a task in Read or Edit view and click the pin icon. The task appears on your HUD immediately. Check it off from the HUD to start the 1.5-second undo window; let it elapse to apply your completion policy.<br><br>Press P (rebindable) or click the ▾ Pinned header to collapse the HUD.<br><br>For keyboard shortcuts and text editing mechanics, see <a href=\"handbook://craftinginfo-scribe-editor-reference\">Scribe Mod: Editor Reference</a> in the handbook.",
 
 
    "craftinginfo-scribe-editor-reference-title": "Scribe Mod: Editor Reference",
