@@ -989,7 +989,7 @@ internal sealed class ScribeHudGearButtonState : State<ScribeHudGearButton>
                 BoxShadows = new[]
                 {
                     new BoxShadow(
-                        Color: new Vector4(0f, 0f, 0f, 0.6f),   // softened black halo (full opacity read too harsh)
+                        Color: new Vector4(0f, 0f, 0f, 0.4f),   // softened black halo (full opacity read too harsh)
                         Offset: new Vector2(0f, 0f),
                         BlurRadius: 3f),
                 },
