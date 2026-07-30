@@ -18,6 +18,7 @@ namespace Scribe.Core;
 ///
 /// Guids are written as 16 raw bytes (protobuf-agnostic and compact). Caps bound every read so a
 /// malformed or hostile payload can't allocate without limit.
+/// See <see href="../docs/CODEC-MIGRATION.md">docs/CODEC-MIGRATION.md</see> for the migration-step pattern and how to add a new version.
 /// </summary>
 public static class ScribePinCodec
 {
@@ -26,6 +27,13 @@ public static class ScribePinCodec
 
     /// <summary>Version of the pin-list blobs (SPIN/SPST). Unchanged — pins didn't change shape.</summary>
     private const byte PinVersion = 1;
+
+    /// <summary>
+    /// The immediately prior pin-list version. Equal to <see cref="PinVersion"/> until a pin-format
+    /// change occurs — at that point bump <see cref="PinVersion"/>, set this to the old value, and
+    /// add upgrade logic to <see cref="ApplyPinMigrations"/>. See docs/CODEC-MIGRATION.md.
+    /// </summary>
+    private const byte PriorPinVersion = PinVersion;
 
     /// <summary>Hard upper bound on the number of pins a single player may hold, enforced on every
     /// list/store read so a malformed or hostile payload cannot grow a persisted/synced set without
@@ -61,8 +69,11 @@ public static class ScribePinCodec
         {
             using var ms = new MemoryStream(bytes, writable: false);
             using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: true);
-            if (ReadHeader(r, ListMagic) != PinVersion) return false;
+            // See docs/CODEC-MIGRATION.md for the migration-step pattern.
+            int version = ReadHeader(r, ListMagic);
+            if (version != PinVersion && version != PriorPinVersion) return false;
             if (!TryReadPinList(r, bytes.Length, out var list)) return false;
+            ApplyPinMigrations((byte)version, ref list);
             pins = list;
             return true;
         }
@@ -100,7 +111,9 @@ public static class ScribePinCodec
         {
             using var ms = new MemoryStream(bytes, writable: false);
             using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: true);
-            if (ReadHeader(r, StoreMagic) != PinVersion) return false;
+            // See docs/CODEC-MIGRATION.md for the migration-step pattern.
+            int version = ReadHeader(r, StoreMagic);
+            if (version != PinVersion && version != PriorPinVersion) return false;
 
             int playerCount = r.ReadInt32();
             if (playerCount < 0 || playerCount > bytes.Length || playerCount > MaxPlayers) return false;
@@ -111,6 +124,7 @@ public static class ScribePinCodec
                 string uid = r.ReadString();
                 if (uid.Length > MaxUidLength) return false;
                 if (!TryReadPinList(r, bytes.Length, out var list)) return false;
+                ApplyPinMigrations((byte)version, ref list);
                 result[uid] = list;
             }
             store = result;
@@ -174,6 +188,18 @@ public static class ScribePinCodec
         }
         pins = list;
         return true;
+    }
+
+    /// <summary>
+    /// Migration steps for pin-list bytes written in the immediately prior version. Currently a
+    /// no-op because <see cref="PriorPinVersion"/> equals <see cref="PinVersion"/> — no pin-format
+    /// fields have changed yet. When the first pin-format change arrives: bump
+    /// <see cref="PinVersion"/>, set <see cref="PriorPinVersion"/> to the old value, and add the
+    /// upgrade logic here. See docs/CODEC-MIGRATION.md for the pattern.
+    /// </summary>
+    private static void ApplyPinMigrations(byte version, ref List<ScribePinnedRef> pins)
+    {
+        // No migration needed while PriorPinVersion == PinVersion.
     }
 
     /// <summary>Reads exactly <paramref name="count"/> bytes or throws <see cref="EndOfStreamException"/>

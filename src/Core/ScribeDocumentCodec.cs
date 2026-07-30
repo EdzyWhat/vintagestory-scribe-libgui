@@ -13,6 +13,12 @@ namespace Scribe.Core;
 ///    string assignedToUid (only if hasAssignedToUid), string text]
 ///   [string title]
 ///
+/// Accepted-version window:
+///   Current : v5 — reads title string after block list
+///   Prior   : v4 — no title field; migrated to DefaultTitle by <see cref="ApplyV4ToV5Migrations"/>
+///   Older   : rejected (fail-safe return false)
+/// See <see href="../docs/CODEC-MIGRATION.md">docs/CODEC-MIGRATION.md</see> for the migration-step pattern and how to add a new version.
+///
 /// APPEND-ONLY VERSION DISCIPLINE: <see cref="Version"/> is a single global counter and new
 /// fields append in version order (never interleave; never two "v5"s). See
 /// docs/specs/README.md convention #1. When adding v6, append its fields after v5's layout and
@@ -23,7 +29,7 @@ namespace Scribe.Core;
 ///        (first field of each block); dropped the v3 per-block `pinned` bool (pinning moved
 ///        to a per-player store).
 ///   v5 — appended a document title string after the block list. The reader still accepts v4
-///        (supplies <see cref="ScribeDocument.DefaultTitle"/> for documents without a title).
+///        (title supplied via <see cref="ApplyV4ToV5Migrations"/> for documents without one).
 ///
 /// A hand-rolled format keeps Core free of any external dependency. The version byte lets
 /// us evolve the format while still reading the immediately prior save layout.
@@ -112,9 +118,9 @@ public static class ScribeDocumentCodec
             var magic = r.ReadBytes(Magic.Length);
             if (!magic.AsSpan().SequenceEqual(Magic)) return false;
 
+            // See accepted-version table in the class doc-comment and docs/CODEC-MIGRATION.md.
             byte version = r.ReadByte();
             if (version != Version && version != PriorVersion) return false;
-            bool isCurrent = version == Version;
 
             Guid docId = new Guid(ReadExactly(r, 16));
 
@@ -150,8 +156,9 @@ public static class ScribeDocumentCodec
                 blocks.Add(new ScribeBlock(kind, text, done, depth, assignedToUid, taskId));
             }
 
-            // v5 appends a document title after the block list; v4 has none — supply the default.
-            string title = isCurrent ? r.ReadString() : ScribeDocument.DefaultTitle;
+            // v5 appends a document title after the block list; v4 has none — migration supplies it.
+            string title = version == Version ? r.ReadString() : ScribeDocument.DefaultTitle;
+            ApplyV4ToV5Migrations(version, ref title);
             if (string.IsNullOrWhiteSpace(title)) title = ScribeDocument.DefaultTitle;
             if (title.Length > ScribeDocument.MaxTitleLength) title = title[..ScribeDocument.MaxTitleLength];
 
@@ -185,6 +192,21 @@ public static class ScribeDocumentCodec
             if (bytes[i] != Magic[i]) return false;
         }
         return bytes[Magic.Length] == PriorVersion;
+    }
+
+    /// <summary>
+    /// Migration step for bytes written in v4 (the immediately prior version). v4 has no document
+    /// title field, so this step supplies <see cref="ScribeDocument.DefaultTitle"/>. Called after
+    /// the v4 title placeholder is set; a no-op for current-version (v5) bytes because the title
+    /// is already read from the stream. When adding v6, add an <c>ApplyV5ToV6Migrations</c> method
+    /// following the same pattern — see docs/CODEC-MIGRATION.md.
+    /// </summary>
+    private static void ApplyV4ToV5Migrations(byte version, ref string title)
+    {
+        if (version != PriorVersion) return;
+        // v4 has no title field; the caller already set title = DefaultTitle. This method is the
+        // single documented home for v4→v5 upgrade logic so future readers can find it easily.
+        if (string.IsNullOrWhiteSpace(title)) title = ScribeDocument.DefaultTitle;
     }
 
     /// <summary>Reads exactly <paramref name="count"/> bytes or throws <see cref="EndOfStreamException"/>
