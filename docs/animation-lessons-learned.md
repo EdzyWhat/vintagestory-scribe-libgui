@@ -236,6 +236,60 @@ standing tool — re-add it for the next settling regression. Read the trace wit
 the raw log both let an unrelated GL-error flood through on Apple Silicon (harmless; see
 `VSAPI-NOTES.md`), so grep for your own tag.
 
+## Re-check: does 3.1.0 + an ADD-grow use case change the verdict? (2026-07-30)
+
+Revisited after the LibGUI 3.1.0 upgrade, specifically for an **"Add Task" appear animation** — a
+new task row that *pops into existence and grows to full vertical height* — prompted by the
+`.ui showcase` `AnimatedSize` example (`_expanded ? Column[header, extra] : header`). Assessment
+only; **not acted on.** Conclusion: the prior "keep the self-ticking stack" verdict **stands**, but
+the reasons are narrower than they look, and ADD-grow is a *different, easier* case than the
+DELETE-collapse this doc originally killed.
+
+**3.1.0's `AnimatedSize` is unchanged in the ways that matter.** Verified against the shipped
+`Gui.dll`: `Gui.Widgets.Animations.AnimatedSize` is still a bare `SingleChildWidget` (ctor
+`(TimeSpan duration, Curve?, Widget? child, Key?)`) with **no `onEnd`, no status** — same shape this
+doc analyzed for 2.0.0. So nothing about the completion-signal argument (Reason 1) changed.
+
+**Which of the three walls actually apply to ADD-grow (vs. DELETE-collapse):**
+
+| Wall | DELETE-collapse (killed) | ADD-grow (this idea) |
+|---|---|---|
+| R1 — no `onEnd` for lifecycle | Fatal (must remove row when shrink ends) | **N/A** — nothing to remove; row just settles at full height |
+| R2 — positional remount restarts in-flight anim | Fatal (deleting row 2 remounts row 4's ghost) | **Mostly N/A** — `OnClickAddTask` APPENDS to the end (`scratch.AddTask("")` → last slot; `ScribeDialogBase.cs:1112`); nothing after it to remount |
+| Bonus — no animate-on-mount + no post-frame hook | worked around via ghost | **This is the real (small) obstacle** — implicit widgets seed `Begin==End` on first mount, and LibGUI has no post-frame callback to flip them |
+
+So only the *smallest* of the three walls applies to Add-Task — and it's the same one
+`ScribeCollapsible` already solves (a self-ticking controller started in `InitState` animates on
+mount without any post-frame hook).
+
+**The bigger blocker is the host, not `AnimatedSize`.** `OnClickAddTask` ends in **`ForceRebuild()`**
+(`ScribeDialogBase.cs:1121`); the whole editor updates via `ForceRebuild`. Per this doc's core law,
+implicit animations **snap** on a `ForceRebuild` host — so a naive stock `AnimatedSize` there pops to
+full height with no motion. The `.ui showcase` example animates only because the showcase host
+*reconciles* (`SetState`); it's also the *in-place expand on an already-mounted widget* case (the one
+case this doc says implicit animation genuinely fits), which is subtly different from Scribe's
+*freshly-mounted row under a `ForceRebuild` host*.
+
+**Three paths, if this is ever picked up:**
+- **A — stock `AnimatedSize`, naive:** snaps. Dead on arrival on the `ForceRebuild` editor host.
+- **B — invert `ScribeCollapsible` into a grow-on-mount "ScribeRevealable" (RECOMMENDED):**
+  self-ticking, host-owned controller growing factor 0→1 instead of 1→0, **no `onEnd` needed** (no
+  removal). Reuses the exact pattern the codebase already trusts, starts in `InitState` (solves the
+  animate-on-mount wrinkle), and sidesteps both the `ForceRebuild`-snap and the reconciler. It is
+  essentially `ScribeCollapsible` run backwards, *minus* the removal callback — simpler than what
+  exists. Open sub-questions to work when acting: where the wrapper sits relative to the new row, and
+  how `autoFocusRowOnRebuild` / `pendingEnsureVisible` interact with a row whose height is still
+  growing.
+- **C — revive reconciliation, THEN use stock `AnimatedSize`:** the big one. This is exactly the
+  abandoned `refactor-reconciling-gui-rebuild` path; it would unlock stock `AnimatedSize` *and* the
+  fades, but re-opens a grave already dug. Worth it only as a broad "stock animations everywhere"
+  goal, not for Add-Task alone.
+
+**Bottom line:** the 3.1.0 upgrade does **not** unlock stock implicit animation for Scribe's cases —
+the `ForceRebuild` host is the gate, and `AnimatedSize` is still callback-less. But ADD-grow is a
+legitimately easier case than the DELETE-collapse this doc killed, and Path B is a modest, proven way
+to get it without touching the reconciler.
+
 ## Pointers
 
 - `src/Mod/GuiDialogScribeLecternLibGui.cs` — the three `OnRenderGUI` settling loops,
