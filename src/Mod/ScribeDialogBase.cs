@@ -111,6 +111,15 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
     /// on the next pointer-down. Deferring the focus to the post-dispatch render point avoids that
     /// re-entrancy (same reason as <see cref="pendingEnsureVisible"/> and the collapse/empty-row sweeps).</summary>
     private bool _pendingTitleFocus;
+    /// <summary>Set by the pencil tap so the <see cref="ForceRebuild"/> that swaps the title into inline-input
+    /// mode runs from <see cref="OnRenderGUI"/> instead of inside the pointer dispatch. Deferring only the
+    /// follow-up <c>RequestFocus()</c> (via <see cref="_pendingTitleFocus"/>) was NOT enough: the bare
+    /// <c>ForceRebuild()</c> in the tap ALSO unmounts the whole tree mid-pointer-walk, orphaning a sibling
+    /// button whose <c>Element.Owner</c> goes null, so LibGUI still NPE'd in <c>ButtonState.PlaySound</c> when
+    /// the dispatch reached it (crash confirmed 2026-07-31 on a Clockmaker's Notebook crafted from a Notebook,
+    /// where the carried title makes the timing reproduce reliably). Same defer-tree-edits-out-of-input rule as
+    /// <see cref="pendingEmptyRowRemoval"/> — the actual rebuild happens at the safe post-dispatch render point.</summary>
+    private bool _pendingTitleEditRebuild;
 
     // ---- Guestbook note focus (one node shared across all note fields; re-assigned on each rebuild) ----
     private FocusNode? _guestbookNoteFocusNode;
@@ -1384,6 +1393,15 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
             }
         }
 
+        // Swap the title into inline-input mode from the safe post-dispatch point (the pencil tap only
+        // armed the flag). This ForceRebuild mounts the TextField; _pendingTitleFocus (below) then focuses
+        // it on a later frame once its Owner is live. Deferred out of the tap — see _pendingTitleEditRebuild.
+        if (_pendingTitleEditRebuild)
+        {
+            _pendingTitleEditRebuild = false;
+            if (_isTitleEditing) ForceRebuild();
+        }
+
         // Focus the title field once its post-pencil rebuild has mounted (the stock TextField sets
         // FocusNode.Owner = Element in InitState, so a non-null Owner means it's live). Deferred out of
         // the pencil tap to avoid unmounting the tree mid-pointer-dispatch — see _pendingTitleFocus.
@@ -1641,11 +1659,12 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
                         {
                             _titleController!.Value = new TextEditingValue(displayTitle, TextSelection.Collapsed(displayTitle.Length));
                             _isTitleEditing = true;
-                            // Defer the focus to OnRenderGUI (see _pendingTitleFocus): focusing here — right
-                            // after ForceRebuild() unmounts the tree, still inside the pointer dispatch —
-                            // orphaned a sibling button and crashed LibGUI's PlaySound on the next click.
+                            // Defer BOTH the rebuild and the focus out of this pointer handler to OnRenderGUI.
+                            // Calling ForceRebuild() (or RequestFocus()) here — inside the pointer dispatch —
+                            // unmounts the tree mid-walk and orphans a sibling button, crashing LibGUI's
+                            // PlaySound on the same click. See _pendingTitleEditRebuild / _pendingTitleFocus.
+                            _pendingTitleEditRebuild = true;
                             _pendingTitleFocus = true;
-                            ForceRebuild();
                         },
                         child: new ScribeVsIconGlyph("scribeedit", pencilSize, colors.OnSurfaceVariant))))
             : null;

@@ -1829,3 +1829,24 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       editor, click the title-edit pencil; the field enters edit mode and focuses without crashing, and
       clicking other buttons in the same dialog does not NPE. Type a long title and confirm it clamps /
       scrolls horizontally instead of wrapping. *(title-pencil-crash-fix)*
+      - **Still broken 2026-07-31** (playtest submission 2026-07-31T14-19-22, PC v1.22.6): the deferred-focus
+        fix did NOT resolve it — the game hard-crashed with the SAME `NullReferenceException` in
+        `Gui.Widgets.Basic.ButtonState.PlaySound` (`Button.cs:109`), reached from `GestureDetector.OnPointerDown`
+        → `SetState` → `PlaySound`, that the fix targeted. This is a real regression, not a stale build: all
+        six new-feature items in the same session passed, so the PC is on a current 0.2.0 build. KEY REPRO
+        (user): it crashes specifically on a **Clockmaker's Notebook that was just crafted FROM a prior
+        Notebook** (a carry-through document) — i.e. it ties to `carry-notebook-doc-through-craft`, not the
+        plain-craft path. Hypothesis to chase: the pencil tap still calls a bare `ForceRebuild()` synchronously
+        inside the pointer dispatch (`ScribeDialogBase.cs:1648`); deferring only the `RequestFocus()` wasn't
+        enough — the `ForceRebuild()` itself unmounts the tree mid-walk and orphans a sibling button. The
+        carried-over doc likely changes the title-row build (a non-empty carried title → the ellipsis/edit slot
+        differs) so the orphaned-sibling timing reproduces reliably where a blank notebook didn't. Needs the
+        `ForceRebuild()` ALSO deferred out of the tap (arm a pending-rebuild flag consumed in `OnRenderGUI`),
+        then retest on a crafted-from-Notebook Clockmaker's Notebook specifically.
+      - **Fix applied 2026-07-31 (awaiting retest):** deferred the pencil tap's `ForceRebuild()` itself out of
+        the pointer dispatch via a new `_pendingTitleEditRebuild` one-shot flag — `OnRenderGUI` now runs the
+        rebuild (then `_pendingTitleFocus` focuses the mounted field a frame later), mirroring the
+        `pendingEmptyRowRemoval` pattern. The tap no longer touches the widget tree at all. Build clean (0
+        errors). RETEST: on a Clockmaker's Notebook crafted FROM a Notebook (the reliable repro), open the
+        editor, click the title pencil → it enters edit mode + focuses with no crash, and clicking other
+        buttons in the dialog does not NPE. Also spot-check the plain Notebook + Lectern editors.

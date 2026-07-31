@@ -1258,11 +1258,23 @@ walk reaches one its `_isPressed=true; PlaySound()` runs against a now-null `Own
 code appears on the crash stack — it's entirely inside `gui.dll` input dispatch — but your rebuild-from-a-
 tap is the trigger. A plain `ForceRebuild()` from a tap (e.g. a tab switch) is USUALLY survivable; the
 crash showed up when the tap ALSO re-homed focus onto the freshly-remounted node in the same handler.
-**Fix pattern:** never mutate the tree AND move focus synchronously inside a pointer handler. Arm a
-one-shot pending flag, `ForceRebuild()`, and do the `RequestFocus()` from the next `OnRenderGUI` (a safe
-post-dispatch point) once the rebuilt field has mounted (`FocusNode.Owner is not null`). See
-`_pendingTitleFocus` in `ScribeDialogBase.cs` — mirrors `pendingEnsureVisible` and the collapse/empty-row
-sweeps that defer tree edits out of animation/notification callbacks for the same re-entrancy reason.
+**Fix pattern:** never mutate the tree from inside a pointer handler at all — **the `ForceRebuild()` itself
+is the hazard, not just the focus call.** Defer BOTH out of the tap: arm one-shot pending flags, and from the
+next `OnRenderGUI` (a safe post-dispatch point) first `ForceRebuild()` and then, on a later frame,
+`RequestFocus()` once the rebuilt field has mounted (`FocusNode.Owner is not null`). See
+`_pendingTitleEditRebuild` + `_pendingTitleFocus` in `ScribeDialogBase.cs` — mirrors `pendingEmptyRowRemoval`
+and the collapse sweeps that defer tree edits out of animation/notification callbacks for the same
+re-entrancy reason.
+**First-pass mistake (2026-07-31, do not repeat):** an earlier fix deferred ONLY the `RequestFocus()` and
+still called `ForceRebuild()` synchronously in the tap, reasoning the rebuild alone was survivable. It is
+NOT when the tap is on a widget whose rebuild changes the sibling layout: `ForceRebuild` does
+`RootElement.Unmount()` on the WHOLE tree, so any sibling button still queued in the in-flight pointer-down
+walk is orphaned (`Element.Owner` → null) and NPEs in `PlaySound`. This reproduced reliably on a Clockmaker's
+Notebook crafted FROM a Notebook (the carried-over title changes the title-row build → the orphaned-sibling
+timing hits every time), where a blank notebook had masked it. Note a `ForceRebuild()` from a tap that does
+NOT re-home focus or reshape siblings (e.g. a plain tab switch) is usually survivable — the crash needs the
+rebuild to disturb a sibling that's still mid-dispatch — but the safe rule is simply: don't touch the tree in
+a pointer handler; defer it.
 Related: our own custom fields self-focus safely from their `InitState` via an `autoFocus` param
 (`ScribeMultilineField`), which is post-mount; the stock `TextField` has no such param, so a dialog-owned
 node must be focused this deferred way instead.
