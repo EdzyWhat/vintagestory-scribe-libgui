@@ -1911,3 +1911,30 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         `_isTitleEditing`, since the blur path has already set it false). Build clean. RETEST on a
         crafted-from-Notebook Clockmaker's Notebook: enter title edit via the pencil, type, then click another
         button (nav tab, a row, etc.) to unfocus → the title commits and the dialog does NOT crash.
+
+## fix-transient-lectern-editor-lock
+
+> The contended editor lock is transient crash-prevention only, not a permanent lockout. Root cause was
+> an in-memory leak: the server's `lockHolderUid` wasn't reliably cleared when the holder left, so a
+> second player was blocked forever even after the first relogged. Fixed by clearing the lock on load,
+> releasing it on EVERY dialog close (not just editor-mode exits), and closing the Read-nav-button gap.
+> A dormant `LecternAccessMode` (Public/Private) was added for a future read-only permission — it
+> round-trips and syncs but has no player control and the entry gate ignores it.
+
+- [x] `c5b23e3f` **P2 blocked while P1 edits.** With P1 actively in the editor, confirm P2's editor
+      affordance is inert and activating it keeps P2 in read view with the native "another player is
+      editing" notice. *(fix-transient-lectern-editor-lock 5.1)*
+      - **Confirmed 2026-07-31** (two-client MP session): P2 stays in read view with the native notice
+        while P1 holds the editor.
+- [x] `c5c2643a` **All exit paths release.** With P1 in the editor, confirm each of Read/Pinned/History
+      tab, ESC, and Lectern close frees the lock immediately so P2 can enter — including the previously-
+      broken Read-nav-button path and the close-not-in-editor path. *(fix-transient-lectern-editor-lock 5.2)*
+      - **Confirmed 2026-07-31** (two-client MP session): every tab switch, ESC, and close releases the
+        lock; the Read-nav-button gap that leaked before now releases as expected.
+- [x] `d10ea03b` **Disconnect releases.** P1 holds the editor lock, then disconnects; confirm P2 can
+      open the editor. *(fix-transient-lectern-editor-lock 5.3)*
+      - **Confirmed 2026-07-31** (two-client MP session): P1 disconnecting frees the lock and P2 enters.
+- [x] `24b56072` **Relog repro fixed.** Reproduce the original bug shape (P1 opens editor → leaves → P2
+      relogs) and confirm P2 can now edit. *(fix-transient-lectern-editor-lock 5.4)*
+      - **Confirmed 2026-07-31** (two-client MP session): the original permanent-lockout no longer
+        reproduces — after P1 leaves and P2 relogs, P2 can enter the editor.

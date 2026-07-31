@@ -501,6 +501,17 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
         CommitTitleIfEditing();
         if (isEditorMode)
         {
+            // Full editor teardown, matching OnClickSwitchToPinned/History and the editor footer's
+            // OnClickSwitchToRead: flush the last edit AND release the server-held lock before leaving.
+            // The Read nav button routes here directly (onTap: EnterReadMode), so without the release a
+            // switch to Read via the nav button leaked the lock while every other tab freed it — the
+            // exact asymmetry reported (fix-transient-lectern-editor-lock). LeaveEditorMode itself does
+            // NOT release, by contract.
+            if (focusedEditIndex is { } idx) NormalizeRowOnCommit(idx);
+            PurgeEmptyTasksFromScratch();
+            pendingEmptyRowRemoval = null;
+            FlushIfDirty();
+            SendReleaseLockPacket();
             LeaveEditorMode();
         }
         viewMode = ScribeLecternView.Read; // also covers a Pin Tab → Read switch (no editor teardown)
@@ -1515,10 +1526,15 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
             PurgeEmptyTasksFromScratch();
             pendingEmptyRowRemoval = null;
             FlushIfDirty();
-            SendReleaseLockPacket();
             StopAutosaveTick();
             DisposeFocusNodes();
         }
+        // Release the editor lock on EVERY close, not only when the client is still in editor mode
+        // (fix-transient-lectern-editor-lock 1.2). A player who acquired the lock and then switched to
+        // read/pins/history before closing would otherwise skip the release, leaking the server's
+        // authoritative holder and locking the lectern out until block reload/restart. ReleaseLock is
+        // idempotent + UID-guarded server-side, so this is a harmless no-op when we hold no lock.
+        SendReleaseLockPacket();
         modSystem.MyPinsChanged -= OnMyPinsChanged;
         modSystem.SettingsVisibilityChanged -= OnSettingsVisibilityChanged;
         DisposePinState();

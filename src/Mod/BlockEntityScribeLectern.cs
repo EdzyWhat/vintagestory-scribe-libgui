@@ -75,6 +75,18 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
     public bool IsLockedByOther(string viewerUid) =>
         syncedLockHolderUid is not null && syncedLockHolderUid != viewerUid;
 
+    /// <summary>Server-authoritative durable access mode for this lectern (fix-transient-lectern-editor-lock).
+    /// Persisted + synced via the tree round-trip. RESERVED / dormant this version: nothing sets it away
+    /// from <see cref="LecternAccessMode.Public"/> and the editor-entry gate does not read it, so every
+    /// lectern behaves as Public. Kept as a distinct field so the sticky "private/read-only" permission can
+    /// be surfaced by a later change without conflating it with the transient editor lock.</summary>
+    private LecternAccessMode accessMode = LecternAccessMode.Public;
+
+    /// <summary>Client-side mirror of <see cref="accessMode"/>, updated from the tree in
+    /// <see cref="FromTreeAttributes"/>. Unused by any current control (dormant); present so a future
+    /// player-facing change reads a synced value rather than adding a new packet.</summary>
+    private LecternAccessMode syncedAccessMode = LecternAccessMode.Public;
+
     /// <summary>Server-side: DocId this block entity has registered in the pin store's live index, so
     /// it can unregister exactly that id on removal even if <see cref="Document"/> was later replaced.
     /// Null until the first server-side register.</summary>
@@ -116,6 +128,13 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
         if (api is ICoreServerAPI sapi)
         {
             sapi.Event.PlayerDisconnect += OnPlayerDisconnect;
+
+            // Clear-on-load leg of the transient-lock guarantee (fix-transient-lectern-editor-lock).
+            // The editor lock is server-session-only crash-prevention state, never authoritative
+            // across a load: a freshly-loaded block must start editable. FromTreeAttributes only ever
+            // writes the *client mirror* (syncedLockHolderUid), so this null is defence-in-depth — it
+            // guarantees no code path can leave a loaded block holding a stale server-side lock.
+            lockHolderUid = null;
 
             // Register this document's live DocId → position mapping so pins can resolve it, and
             // re-save a v4-loaded document as v5 so the title field persists.
@@ -161,7 +180,14 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
         tree.SetFloat("meshAngle", meshAngleRad);
         // Sync the editor-lock holder so clients can reflect a held lock in their editor affordance
         // (fix-multiplayer-editor-lock §2.1). Empty string = lock free (tree attrs don't store null).
+        // This is TRANSIENT session state: it drives the contended-editor affordance on other clients,
+        // but is never authoritative across a block load — Initialize clears lockHolderUid on load and
+        // FromTreeAttributes only writes the client mirror (fix-transient-lectern-editor-lock).
         tree.SetString("lockHolder", lockHolderUid ?? "");
+        // Durable per-lectern access mode (fix-transient-lectern-editor-lock). Dormant this version
+        // (always Public), but persisted + synced so a future private/read-only permission needs no
+        // save-format change. Stored as the underlying byte.
+        tree.SetInt("accessMode", (byte)accessMode);
         tree.SetBytes("guestbook", _guestbook.Serialize());
     }
 
@@ -181,6 +207,13 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
         // affordance; the server ignores its own synced copy (lockHolderUid stays authoritative).
         var lockHolder = tree.GetString("lockHolder", "");
         syncedLockHolderUid = string.IsNullOrEmpty(lockHolder) ? null : lockHolder;
+
+        // Durable access mode (fix-transient-lectern-editor-lock). Absent key (pre-existing saves) →
+        // Public. Both the authoritative field and its client mirror are set from the tree; the field
+        // is dormant (never read by the editor gate this version).
+        var mode = (LecternAccessMode)(byte)tree.GetInt("accessMode", (int)LecternAccessMode.Public);
+        accessMode = mode;
+        syncedAccessMode = mode;
 
         var bytes = tree.GetBytes(DocumentAttributeKey);
         needsV5Resave = ScribeDocumentCodec.IsPriorVersion(bytes);
@@ -432,7 +465,10 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
         }
     }
 
-    /// <summary>Server-side: releases the lock, e.g. when the editing player closes the GUI or switches to read view.</summary>
+    /// <summary>Server-side: releases the lock, e.g. when the editing player closes the GUI or switches to read view.
+    /// Idempotent + UID-guarded: only the current holder's own release clears it, so a redundant release
+    /// (e.g. release-on-every-close for a player who holds no lock) is a harmless no-op
+    /// (fix-transient-lectern-editor-lock).</summary>
     public void ReleaseLock(string playerUid)
     {
         if (lockHolderUid == playerUid)

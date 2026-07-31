@@ -835,6 +835,41 @@ presence, verified in `GuiScreenWorldCustomize`:
   (via `Lang.Get` / `Lang.GetIfExists`). With `onCustomizeScreen: false` these are never rendered,
   so they're not needed — don't ship dead keys.
 
+## BlockEntity tree sync vs. save, and transient session state (editor lock)
+
+**Symptom that sent us here: a "transient" single-editor lock on the Scribe lectern behaved as a
+PERMANENT lockout** — once player 1 opened the editor, player 2 could never edit again, even after
+P1 left, relogged, or (we assumed) a server restart. First hypothesis was "the lock is baked into
+the save via `ToTreeAttributes`." Decompiling `VintagestoryLib.dll` disproved that and pinned the
+real cause; the facts are worth keeping:
+
+- **`ToTreeAttributes`/`FromTreeAttributes` are double-duty: disk save AND network packet.** The
+  same tree is written to the region file and used to build the per-client BE packet. So a value you
+  put in the tree reaches clients — but whether it survives a *server restart* depends on whether the
+  server-side field is re-read from the tree in `Initialize`, which it usually is NOT for fields you
+  only mirror for the client.
+- **`FromTreeAttributes` is always called before `Initialize()`** (DLL doc-comment, confirmed).
+  On a fresh chunk load the engine calls `Initialize` on every disk-loaded BE (ServerMain
+  `LoadBlockEntities`). If `Initialize` doesn't re-read a field, that field starts at its C# default
+  after a restart regardless of what was on disk.
+- **The server rebuilds every client BE packet LIVE** via `SendBlockEntity`/`SendDirtyBlockEntities`,
+  re-serializing from `ToTreeAttributes` at send time. `MarkDirty()` enqueues the BE to
+  `DirtyBlockEntities`; the dirty flush re-serializes current in-memory state. So a client mirror is
+  only ever as correct as the server's live field at flush time.
+- **Conclusion for a "transient" lock:** a server restart already self-heals it (the field defaults
+  back), so the reported permanent lockout could ONLY be a *live in-memory leak* — the server's
+  `lockHolderUid` never getting cleared when the holder left. It was never a persistence bug. The fix
+  is defence-in-depth on the release side, not the save side: clear on load (`Initialize`), release
+  on EVERY dialog-close path (not just editor-mode exits — a switch-to-read via a nav button was the
+  leaking path), and on `OnPlayerDisconnect`. No heartbeat/timer needed.
+- **Design pattern that fell out of this:** keep server-authoritative state as two fields — the
+  authoritative one written only by grant/release (`lockHolderUid`), and a client mirror
+  (`syncedLockHolderUid`) that `FromTreeAttributes` sets and the affordance reads. If you ALSO want a
+  value that genuinely persists (e.g. a durable per-block permission), re-read it in `Initialize` from
+  the tree and default it when the key is absent (pre-existing saves) — that's the difference between
+  "transient session state" and "persisted state" in this API, and it's entirely up to whether
+  `Initialize` reads the key back.
+
 ## Calendar, player events, per-player storage, and survival-mod systems
 
 **Question: how do you read the in-game date, subscribe to player death, persist per-player
