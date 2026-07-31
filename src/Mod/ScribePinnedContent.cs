@@ -172,14 +172,36 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
         // Completion-policy picker: the same control the Settings window offers, editing the one shared
         // per-player preference (scribe-pin-editor — "one value, two hosts"). Positioned as the view's
         // HEADER, above the list (scribe-lectern-view-consistency §3).
+        //
+        // The caption scales with the window text size (derived from the shared row Style, which is
+        // BaseWindowFontSize * WindowFontScale) and carries the SAME hover helptext the Settings screen
+        // shows for this setting, so the two hosts of this one preference read identically. Both the
+        // caption/help and the dropdown's own text follow the player's chosen Task Text Font.
+        float scale = Widget.Style.FontSize / ScribeRowConstants.BaseWindowFontSize;
+        string taskFont = ScribeTaskFont.Resolve(Widget.Style.TaskFontFamily);
+        Widget policyCaption = new Text(Lang.Get("scribe:settings-completionpolicy"),
+            new TextStyle { FontSize = 13 * scale, Color = colors.OnSurfaceVariant, FontFamily = taskFont });
+        policyCaption = new Tooltip(
+            child: policyCaption,
+            content: new Padding(
+                EdgeInsets.All(6),
+                child: new Text(
+                    Lang.Get("scribe:settings-completionpolicy-help"),
+                    new TextStyle { FontSize = 13 * scale, Color = colors.OnSurface, SoftWrap = true, FontFamily = taskFont })),
+            useGlobalOverlay: true);
+
+        // Start from the theme's dropdown style and swap in the task font on its shared TextStyle (used
+        // for both the trigger button label and the menu items).
+        var dropdownStyle = Theme.Of(context).DropdownStyle;
+        dropdownStyle = dropdownStyle with { TextStyle = dropdownStyle.TextStyle with { FontFamily = taskFont } };
+
         var policyPicker = new Column(
             spacing: 4,
             crossAxisAlignment: CrossAxisAlignment.Stretch,
             mainAxisSize: MainAxisSize.Min,
             children: new Widget[]
             {
-                new Text(Lang.Get("scribe:settings-completionpolicy"),
-                    new TextStyle { FontSize = 13, Color = colors.OnSurfaceVariant }),
+                policyCaption,
                 new Dropdown<ScribeCompletionPolicy>(
                     value: Widget.CompletionPolicy,
                     // Explicit display order (v1-playtest-fixes 5.2 / 9.2): Keep (stay), Keep (sink),
@@ -192,7 +214,8 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                         new() { Value = ScribeCompletionPolicy.UnpinSink, Label = Lang.Get("scribe:scribe-completion-unpinsink") },
                         new() { Value = ScribeCompletionPolicy.Delete,    Label = Lang.Get("scribe:scribe-completion-delete") },
                     },
-                    onChanged: v => Widget.OnCompletionPolicyChanged(v)),
+                    onChanged: v => Widget.OnCompletionPolicyChanged(v),
+                    style: dropdownStyle),
             });
 
         return new Padding(

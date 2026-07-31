@@ -130,7 +130,8 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
                 : new ScribeCountdownText(
                     initialSeconds: _resyncRemaining ? (timer?.RemainingSeconds ?? _localRemaining) : _localRemaining,
                     style: bigStyle,
-                    capi: capi);
+                    capi: capi,
+                    mode: timer?.Mode ?? TimerMode.InGame);
 
             string labelText = timer?.Label ?? "";
 
@@ -341,15 +342,20 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
 
 /// <summary>Self-ticking countdown display. Seeds from <paramref name="initialSeconds"/> and
 /// decrements every 250 ms without triggering a parent ForceRebuild, so sibling widgets
-/// (e.g. the Stop Timer button) are never remounted while the timer is running.</summary>
+/// (e.g. the Stop Timer button) are never remounted while the timer is running.
+///
+/// <para>An InGame-mode timer drains at the world's in-game time rate (≈30 in-game s per real s by
+/// default), matching the server's authoritative decrement; RealTime drains one-per-real-second. The
+/// rate is read live each tick so a mid-run world time-speed change tracks.</para></summary>
 internal sealed class ScribeCountdownText : StatefulWidget
 {
     public readonly double InitialSeconds;
     public readonly TextStyle Style;
     public readonly ICoreClientAPI Capi;
+    public readonly TimerMode Mode;
 
-    public ScribeCountdownText(double initialSeconds, TextStyle style, ICoreClientAPI capi)
-    { InitialSeconds = initialSeconds; Style = style; Capi = capi; }
+    public ScribeCountdownText(double initialSeconds, TextStyle style, ICoreClientAPI capi, TimerMode mode)
+    { InitialSeconds = initialSeconds; Style = style; Capi = capi; Mode = mode; }
 
     public override State CreateState() => new ScribeCountdownTextState();
 }
@@ -364,7 +370,10 @@ internal sealed class ScribeCountdownTextState : State<ScribeCountdownText>
         base.InitState();
         _remaining = Widget.InitialSeconds;
         _tickId = Widget.Capi.Event.RegisterGameTickListener(dt =>
-            SetState(() => _remaining = Math.Max(0, _remaining - dt)), 250);
+        {
+            double rate = Widget.Mode == TimerMode.InGame ? ScribeTimeRate.InGamePerReal(Widget.Capi) : 1.0;
+            SetState(() => _remaining = Math.Max(0, _remaining - dt * rate));
+        }, 250);
     }
 
     public override void Dispose()
@@ -429,11 +438,14 @@ internal sealed class ScribeTimerModeRowState : State<ScribeTimerModeRow>
             LabelStyle = Widget.BodyStyle with { FontFamily = ScribeTaskFont.ButtonFamily },
         };
 
-        return new Row(
-            spacing: 16,
-            mainAxisSize: MainAxisSize.Max,
-            mainAxisAlignment: MainAxisAlignment.Center,
-            crossAxisAlignment: CrossAxisAlignment.Center,
+        // Stack the two options vertically. A horizontal row of both Caudex-Bold labels overflows the
+        // narrow notebook page, pushing "Real time" off the right edge (behind the Settings nav button,
+        // which then swallows its clicks). Vertical stacking keeps both on the page and selectable.
+        // crossAxisAlignment.Start aligns the two dots; the parent form centers the whole group.
+        return new Column(
+            spacing: 8,
+            mainAxisSize: MainAxisSize.Min,
+            crossAxisAlignment: CrossAxisAlignment.Start,
             children: new Widget[]
             {
                 new RadioButton<int>(

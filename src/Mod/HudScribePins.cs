@@ -414,11 +414,18 @@ public sealed class HudScribePins : GuiBase
         elapsedMs += dt * 1000.0;
 
         // Interpolate the timer countdown between server pushes (250ms tick, server pushes every 1s).
+        // InGame-mode timers drain at the world's in-game time rate (≈30 in-game s per real s by default),
+        // matching the server's decrement so the smooth local display doesn't diverge from the authoritative
+        // value. RealTime timers drain one-per-real-second.
         var timer = modSystem.MyTimer;
         if (timer?.Status == Scribe.Core.TimerStatus.Running)
         {
             if (_timerResync) { _timerLocalRemaining = timer.RemainingSeconds; _timerResync = false; }
-            else _timerLocalRemaining = Math.Max(0, _timerLocalRemaining - dt);
+            else
+            {
+                double rate = timer.Mode == Scribe.Core.TimerMode.InGame ? ScribeTimeRate.InGamePerReal(capi) : 1.0;
+                _timerLocalRemaining = Math.Max(0, _timerLocalRemaining - dt * rate);
+            }
             if (IsOpened()) ForceRebuild();
         }
 

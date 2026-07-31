@@ -536,7 +536,10 @@ public sealed class ScribeModSystem : ModSystem
                         int    len   = r.ReadInt32();
                         byte[] blob  = r.ReadBytes(len);
                         var    store = TimerStore.Deserialize(blob);
-                        if (store.Status != TimerStatus.Idle)
+                        // Only resume Running timers. A persisted Fired timer (possible from a savegame
+                        // written by an older build) is dropped so it doesn't flash on rejoin — see the
+                        // matching filter in OnGameWorldSave.
+                        if (store.Status == TimerStatus.Running && store.RemainingSeconds > 0)
                             timerStores[uid] = store;
                     }
                 }
@@ -550,21 +553,33 @@ public sealed class ScribeModSystem : ModSystem
         if (sapi is null || pinStore is null) return;
         sapi.WorldManager.SaveGame.StoreData(PinStoreSaveKey, pinStore.SerializePins());
 
-        if (timerStores is not null && timerStores.Count > 0)
+        if (timerStores is not null)
         {
-            using var ms = new System.IO.MemoryStream();
-            using (var w = new System.IO.BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+            // Only persist Running timers. A Fired timer is a transient notification whose flash is
+            // driven by the un-persisted timerFiredElapsed counter; resurrecting it on reload would
+            // restart the 30 s flash from zero even though nothing just completed (the "flashing on
+            // rejoin with no active timer" bug). Fired/Idle timers are simply dropped on save.
+            var running = timerStores.Where(kv => kv.Value.Status == TimerStatus.Running).ToList();
+            if (running.Count > 0)
             {
-                w.Write(timerStores.Count);
-                foreach (var (uid, store) in timerStores)
+                using var ms = new System.IO.MemoryStream();
+                using (var w = new System.IO.BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
                 {
-                    var blob = store.Serialize();
-                    w.Write(uid);
-                    w.Write(blob.Length);
-                    w.Write(blob);
+                    w.Write(running.Count);
+                    foreach (var (uid, store) in running)
+                    {
+                        var blob = store.Serialize();
+                        w.Write(uid);
+                        w.Write(blob.Length);
+                        w.Write(blob);
+                    }
                 }
+                sapi.WorldManager.SaveGame.StoreData(TimerStoreSaveKey, ms.ToArray());
             }
-            sapi.WorldManager.SaveGame.StoreData(TimerStoreSaveKey, ms.ToArray());
+            else
+            {
+                sapi.WorldManager.SaveGame.StoreData(TimerStoreSaveKey, System.Array.Empty<byte>());
+            }
         }
     }
 
@@ -1174,10 +1189,16 @@ public sealed class ScribeModSystem : ModSystem
         }
     }
 
-    /// <summary>1-second server tick: decrement running timers, fire at zero, auto-clear after 30 s.</summary>
+    /// <summary>1-second server tick: decrement running timers, fire at zero, auto-clear after 30 s.
+    /// A timer's <c>RemainingSeconds</c> is stored in the unit the player entered. In RealTime mode it
+    /// counts down one-per-real-second; in InGame mode it drains at the world's in-game time rate, so an
+    /// entered in-game duration fires when that much in-game time has actually passed (≈30× faster than
+    /// real time by default). This also means InGame timers pause exactly when the world does.</summary>
     private void OnTimerTick(float _)
     {
         if (sapi is null || timerStores is null) return;
+
+        double inGameRate = ScribeTimeRate.InGamePerReal(sapi);
 
         List<string>? toRemove = null;
         foreach (var (uid, store) in timerStores)
@@ -1186,7 +1207,7 @@ public sealed class ScribeModSystem : ModSystem
 
             if (store.Status == TimerStatus.Running)
             {
-                store.RemainingSeconds -= 1.0;
+                store.RemainingSeconds -= store.Mode == TimerMode.InGame ? inGameRate : 1.0;
                 if (store.RemainingSeconds <= 0)
                 {
                     store.RemainingSeconds = 0;

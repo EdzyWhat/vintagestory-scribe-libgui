@@ -796,6 +796,15 @@ chronicle/integration features — decompiled, not yet exercised.)
   `"temporalstability"`; `StormData.nowStormActive` flips true on start). Handbook =
   `ModSystemSurvivalHandbook.OpenDetailPageFor(pageCode)`; item page codes via
   `GuiHandbookItemStackPage.PageCodeForStack(ItemStack)`.
+- **In-game time speed (how many in-game seconds pass per real second):**
+  `Calendar.SpeedOfTime * Calendar.CalendarSpeedMul`. `SpeedOfTime` defaults to 60,
+  `CalendarSpeedMul` to 0.5, so the default is **30 in-game seconds per real second → a 48-minute
+  day** (the world's "days last X real minutes" setting drives these). `GameCalendar` proves the
+  product: its `secondsPerRealSecond(seconds)` returns `seconds * currentSpeedOfTime * CalendarSpeedMul`,
+  and `DayLengthInRealLifeSeconds = 3600 * HoursPerDay / SpeedOfTime / CalendarSpeedMul`. So to convert
+  a player-entered in-game duration to the real-time it should take: `realSeconds = inGameSeconds /
+  (SpeedOfTime * CalendarSpeedMul)`. `SpeedOfTime` already includes any active
+  `SetTimeSpeedModifier` contributions ("sum of all modifiers"), so read it live rather than caching.
 
 ## Custom TTF fonts in the GUI
 
