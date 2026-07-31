@@ -1750,14 +1750,18 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Confirmed 2026-07-29** (playtest submission 2026-07-29T23-10-57): "Works."
 - [x] `c39db062` **New entry on new day.** Advance to the next in-game day (sleep or `/time`), reopen — confirm a second entry appears with the new date. *(6.3)*
       - **Confirmed 2026-07-29** (playtest submission 2026-07-29T23-10-57): "Works."
-- [ ] `17923456` **Second player recorded.** Have a second player open the same lectern — confirm both names appear in the Guest Book list. *(6.4)*
+- [x] `17923456` **Second player recorded.** Have a second player open the same lectern — confirm both names appear in the Guest Book list. *(6.4)*
       - **Backlogged 2026-07-29** needs a two-client setup; parked until multiplayer test session.
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T14-19-22, two-client MP session): "Works."
+        Both players' names appear in the shared Guest Book list.
 - [x] `4ffaf625` **Entries survive relog.** Save and reload the world — confirm all guestbook entries are still present. *(6.5)*
       - **Confirmed 2026-07-29** (playtest submission 2026-07-29T23-10-57): "Works."
 - [x] `c6c680f1` **Note persists.** Type a note on your own entry and close/reopen the lectern — confirm the note saved and is still there. *(6.6)*
       - **Confirmed 2026-07-29** (playtest submission 2026-07-29T23-10-57): "Works."
-- [ ] `aa3b9869` **Other player's note is read-only.** Confirm another player's entry shows their note as plain text — no editable input field for it. *(6.7)*
+- [x] `aa3b9869` **Other player's note is read-only.** Confirm another player's entry shows their note as plain text — no editable input field for it. *(6.7)*
       - **Backlogged 2026-07-29** needs a two-client setup; parked until multiplayer test session.
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T14-19-22, two-client MP session): "Works."
+        Another player's entry shows their note as plain text with no editable field.
 - [x] `989c54ac` **Note capped at 80 chars.** In the note field, try to type past 80 characters — confirm input stops at the cap. *(6.8)*
       - **Confirmed 2026-07-29** (playtest submission 2026-07-29T23-10-57): "Works."
 
@@ -1786,13 +1790,28 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         world is not blocked. NOTE: `/worldconfig scribeClockmakerRequiresTrait false` reported "No such
         config found" because `restage.sh` was not staging the mod-root `worldconfig.json` (fixed
         2026-07-31); re-test leg (b) after a fresh restage + relaunch. Box stays unchecked until both seen.
+      - **Still broken 2026-07-31** (playtest submission 2026-07-31T14-19-22, PC/MP session): `/worldconfig`
+        still returns "No such config found: scribeClockmakerRequiresTrait" — root-caused: `restage.ps1`
+        (Windows) NEVER got the mod-root `worldconfig.json` staging step that `restage.sh` got this session,
+        so the PC-staged mod has a null `WorldConfig`. Fix `restage.ps1` to stage `worldconfig.json`, then
+        re-test legs (b) + (c). SEPARATE follow-up raised by the tester (real, worth its own item): a world
+        that already had Scribe installed before 0.2.0 does not gain the new worldconfig key on upgrade —
+        the engine only seeds worldConfigAttributes into a world at creation, so existing worlds report "No
+        such config found" even with the file staged. Need (1) player-facing mod-page instructions for
+        setting/enabling the config on an existing world, and (2) a decision on migrating the key into
+        already-created worlds. Legs (b)/(c) remain unverified.
 - [x] `0213647b` **Handbook sections render.** Open the in-game handbook for both the Notebook and
       Clockmaker's Notebook and confirm the new extra sections show; the getting-started + editor-reference
       guide pages read coherently with working cross-links. *(scribe-0-2-0-release-content 2.4)*
       - **Confirmed 2026-07-31** (user report): the new handbook extra sections render on the notebook items.
-- [ ] `b2804892` **Seed command populates + persists.** In a creative world run `/scribe seed` against a
+- [x] `b2804892` **Seed command populates + persists.** In a creative world run `/scribe seed` against a
       held Notebook and a looked-at Lectern; confirm tasks/notes, History (notebook) and Guestbook (lectern)
       populate, persist across save/reload, and sync to a second client. *(scribe-0-2-0-release-content 3.9)*
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T14-19-22): "Works." Seeded tasks/notes +
+        History (notebook) + Guestbook (lectern) populate, persist, and sync. Behavior note from the tester
+        (not a defect): `/scribe seed` only targets an item/block that has been OPENED at least once — merely
+        looking at a block or holding an item in the active slot isn't enough. Worth a `/scribe seed` help-text
+        clarification or a clearer "open it first" error, but the command works as exercised.
 
 ## carry-notebook-doc-through-craft
 
@@ -1808,14 +1827,21 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       *(carry-notebook-doc-through-craft 3.3)*
       - **Confirmed 2026-07-31** (user report): crafting a Notebook into a Clockmaker's Notebook as a
         tinkerer carries the document over — tasks and History both survive the upgrade.
-- [ ] `065b935a` **Fresh craft with no source document.** Obtain a Clockmaker's Notebook whose craft had no
+- [x] `065b935a` **Fresh craft with no source document.** Obtain a Clockmaker's Notebook whose craft had no
       source document (creative `giveitem`); confirm it opens with a fresh empty document and a crafted-only
       or empty history — no crash, no stale data. *(carry-notebook-doc-through-craft 3.4)*
-- [ ] `1700a1b5` **Timer radios: Real Time first.** Open the Clockmaker's Notebook Timer tab and confirm the
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T14-19-22): "Works." A `giveitem` Clockmaker's
+        Notebook with no source opens with a fresh empty document — no crash, no stale data.
+- [x] `1700a1b5` **Timer radios: Real Time first.** Open the Clockmaker's Notebook Timer tab and confirm the
       mode radios list Real Time first and In-game time second. *(carry-notebook-doc-through-craft — timer reorder)*
-- [ ] `586a51c8` **Handbook notes the carryover.** Open the Notebook's handbook entry and confirm the
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T14-19-22): "Works." Timer tab lists Real Time
+        first, In-game time second. FOLLOW-UP (general note, new scope): Real Time should also be the DEFAULT
+        selected mode, not just first in the list — currently the order changed but the default did not.
+- [x] `586a51c8` **Handbook notes the carryover.** Open the Notebook's handbook entry and confirm the
       crafting section states that upgrading to the Clockmaker's Notebook keeps your tasks and History.
       *(carry-notebook-doc-through-craft 2.0)*
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T14-19-22): "Works." The Notebook handbook
+        craft section states the upgrade keeps your tasks and History.
 
 ## title-pencil-crash-fix
 
