@@ -3,10 +3,11 @@
 A rebuild playbook for both the author and the agent: how each piece of Scribe's current
 custom-drawn lectern GUI maps onto LibGUI, in what order to do it, and the traps to avoid.
 
-> **Read first:** [`libgui-reference.md`](libgui-reference.md) for the LibGUI model, and
-> `openspec/changes/explore-libgui-adoption/proposal.md` for why this is **spike-gated** — do not
-> start a migration until the spike's go/no-go checklist passes. This guide is the plan for *if we
-> go*, and the input to the spike.
+> **Read first:** [`libgui-reference.md`](libgui-reference.md) for the LibGUI model. **This
+> migration is DONE** — the spike (archived `explore-libgui-adoption`) came back GO, the lectern
+> read/editor views migrated, and the native `GuiComposer` dialog was deleted. This guide is kept as
+> the *record* of how the mapping was done and the traps that applied; it is no longer a "should we?"
+> document. (Historical note: it was originally written as the pre-spike plan for *if we go*.)
 
 ## The mental shift
 

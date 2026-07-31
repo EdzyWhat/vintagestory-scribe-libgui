@@ -5,21 +5,38 @@ UI framework for Vintage Story that bypasses the native `GuiComposer`/`GuiElemen
 renders via SkiaSharp. Written for the `explore-libgui-adoption` change so we don't re-derive this
 each session.
 
-> **Status of adoption:** NOT adopted. This documents what LibGUI is; the go/no-go decision is
-> gated on the spike in `openspec/changes/explore-libgui-adoption/proposal.md`. See also the
-> Scribe→LibGUI mapping in [`libgui-migration-guide.md`](libgui-migration-guide.md).
+> **Status of adoption:** ADOPTED — LibGUI is a production hard dependency (modid `gui`). The
+> go/no-go spike (archived `explore-libgui-adoption`) came back GO; the lectern read view migrated
+> in `adopt-libgui-foundation`, the editor in `migrate-editor-view-libgui`, and the native
+> `GuiComposer` lectern dialog has been deleted. See the Scribe→LibGUI mapping in
+> [`libgui-migration-guide.md`](libgui-migration-guide.md) and the adopted-facts log in
+> `VSAPI-NOTES.md` (§ "LibGUI").
+
+> ⚠️ **Version skew — read before trusting the local source clone.** We ship against **gui 3.1.0**
+> (see `src/Mod/modinfo.json`), but the local `./reference/vslibgui/` clone and the GitHub upstream
+> are both stuck at **2.0.0** (upstream `main` = commit `42503d9`, and there is **no 3.1.0 tag or
+> branch** — the author ships compiled DLLs to the mod portal ahead of pushing source). So the clone
+> below is a 2.0.0 reference, useful for the shared core but **wrong on anything new in 3.1.0**
+> (`DefaultTextStyle`, `TextStyle.Merge`, `VtmlConverter`, `MarqueeText`, `AnimatedText`,
+> `ErrorBoundary`, `LayoutBuilder`, `FocusScope`, `SettingsDialog`, theme presets). **For 3.1.0
+> ground truth, decompile the shipped DLL** — this is the authoritative source, not GitHub:
+> ```
+> ~/.dotnet/tools/ilspycmd -l c "$HOME/Library/Application Support/VintagestoryData/Mods/gui_3.1.0.zip → Gui.dll"
+> # extract the zip first; Gui.pdb ships alongside, so line numbers are accurate.
+> ```
 
 ## Where to look things up (do this before guessing)
 
-Two local, gitignored clones exist for this reason — **search them with ripgrep before assuming a
-top-level summary is complete** (the wiki and the source disagree in at least one important place;
-see the variable-height note below):
+Local, gitignored clones exist — **search them with ripgrep before assuming a top-level summary is
+complete** (the wiki and the source disagree in at least one important place; see the variable-height
+note below), but heed the version-skew warning above:
 
 - **Wiki** → `./.wiki/*.md` — e.g. `rg -i "variableHeight" ./.wiki/`
-- **Full source** → `./reference/vslibgui/` — the ground truth when it and the wiki disagree.
-  E.g. `rg -n "public ListView" ./reference/vslibgui/`
+- **Full source (2.0.0)** → `./reference/vslibgui/` — ground truth vs. the wiki *for the 2.0.0 core*.
+  E.g. `rg -n "public ListView" ./reference/vslibgui/`. **Do not trust it for 3.1.0-only APIs** —
+  decompile `Gui.dll` from `gui_3.1.0.zip` for those.
 
-Re-clone if missing:
+Re-clone if missing (note: these fetch **2.0.0**, not the 3.1.0 we ship):
 ```
 git clone --depth 1 https://github.com/ripls56/vslibgui.wiki.git .wiki
 git clone --depth 1 https://github.com/ripls56/vslibgui.git reference/vslibgui
@@ -37,7 +54,7 @@ and the GitHub source.
 |---|---|
 | Repo | `github.com/ripls56/vslibgui` (portal name **libGUI**) |
 | **Dependency modid** | **`gui`** (generic — collision risk); assembly **`Gui.dll`** |
-| License / version | MIT / **v2.0.0** (Jun 2026) |
+| License / version | MIT / **v3.1.0 shipped** (we depend on it); local source clone + GitHub upstream are **2.0.0 only** — see the version-skew warning above |
 | Target | VS **1.22.0–1.22.3**, **net10.0** |
 | Side | `Universal`, `requiredOnClient: true`, `requiredOnServer: false` (rendering is client-only) |
 | Maturity | Young: ~1861 downloads, 2 consumers (HudUI, ChatUI — both by the author), 2 retracted early releases |
@@ -228,8 +245,21 @@ and cached by index. Visible range: `firstVisible = floor(offset/itemHeight) - 1
 - `GuiModSystem` (LibGUI's `ModSystem`) sets up the Skia renderer + theme watcher on
   `StartClientSide`; your dialog just subclasses `GuiBase`/`GuiDialogBlockEntityBase`.
 
-## Open questions the spike must answer
+## 3.1.0 improvements not yet adopted
 
-Tracked in `openspec/changes/explore-libgui-adoption/proposal.md` — renders on Apple Silicon;
-block-entity lifecycle + packets intact; live-editable variable-height row in `ListView`; theme
-JSON replaces the ~60 `ScribeClientConfig` knobs; builds + stages via `restage.ps1`.
+The spike questions are all answered (adoption is done — renders on Apple Silicon, block-entity
+lifecycle + packets intact, variable-height rows work). The open thread now is **which 3.1.0
+additions to adopt**, since we migrated onto a 2.0.0 mental model and upgraded the DLL without
+reworking the code. Tracked in `openspec/changes/adopt-libgui-31-improvements/` (proposal). Headline
+candidates:
+
+- **`DefaultTextStyle` + `TextStyle.Merge`** (biggest win) — an inherited text style Scribe could set
+  once per tab, collapsing the ~34 hand-built `TextStyle`s and ~15 manual `FontFamily = taskFont`
+  threadings into "override only the delta."
+- **`VtmlConverter.Convert(vtml, TextStyle, ILogger?)`** — rich text for notes/guestbook.
+- **`MarqueeText`, `AnimatedText`, `AnimatedSize`, `LayoutBuilder`, `FocusScope`, `ErrorBoundary`,
+  `StepperButton`, `SettingsDialog`, theme presets** — situational; evaluate per feature.
+
+**Still true after the upgrade (do not expect 3.1.0 to have fixed it):** `ButtonState` still reads
+`Element.Owner.GetSoundPlayer()` / `GetTickerProvider()` at build/tap time, so the NPE-on-remount
+means the "never `ForceRebuild` a mounted Button" workaround remains necessary.
