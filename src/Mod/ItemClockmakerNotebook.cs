@@ -54,6 +54,30 @@ public class ItemClockmakerNotebook : Item
     {
         base.OnCreatedByCrafting(allInputSlots, outputSlot, byRecipe);
         if (api.Side != EnumAppSide.Server) return;
+        if (outputSlot.Itemstack is null) return;
+
+        // Carry the source Notebook's document + history onto the fresh Clockmaker's output so
+        // the upgrade keeps the same DocId, tasks/state, and chronicle instead of starting blank.
+        // Locate the source by the presence of the document attribute (robust to grid position);
+        // the current recipe has exactly one such input. Raw byte copies preserve the DocId
+        // exactly and avoid a codec round-trip. When no source document is present, the output
+        // keeps the fresh stack and NotebookHost initializes an empty document on first open.
+        var sourceStack = allInputSlots
+            .Select(s => s.Itemstack)
+            .FirstOrDefault(st => st is not null
+                && st.Attributes.HasAttribute(ScribeDocumentAttributes.DocumentAttributeKey));
+        if (sourceStack is not null)
+        {
+            var docBytes = sourceStack.Attributes.GetBytes(ScribeDocumentAttributes.DocumentAttributeKey);
+            if (docBytes is not null)
+                outputSlot.Itemstack.Attributes.SetBytes(ScribeDocumentAttributes.DocumentAttributeKey, docBytes);
+
+            // Copy history BEFORE the "Crafted" stamp below, so the new entry appends onto the
+            // carried-over chronicle rather than a blank one.
+            var histBytes = sourceStack.Attributes.GetBytes("scribeHistory");
+            if (histBytes is not null)
+                outputSlot.Itemstack.Attributes.SetBytes("scribeHistory", histBytes);
+        }
 
         var playerUid = outputSlot.Inventory.openedByPlayerGUIds.FirstOrDefault();
         var playerName = (playerUid is not null

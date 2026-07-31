@@ -1794,3 +1794,26 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       held Notebook and a looked-at Lectern; confirm tasks/notes, History (notebook) and Guestbook (lectern)
       populate, persist across save/reload, and sync to a second client. *(scribe-0-2-0-release-content 3.9)*
 
+## carry-notebook-doc-through-craft
+
+> Crafting a Notebook into a Clockmaker's Notebook now carries the source Notebook's document (title +
+> tasks + task state, same DocId) AND its History chronicle onto the crafted output, instead of producing
+> a blank one; the new "Crafted" entry appends onto the carried-over history. Also reordered the Timer tab
+> radios so Real Time is first, In-game time second, and noted the carryover in the Notebook's handbook.
+> ⚠️ Restaged Debug 2026-07-31 — fully relaunch the client first.
+
+- [x] `fb219286` **Craft carries document + history.** Craft a Clockmaker's Notebook from a Notebook that
+      has a title, several tasks (some done), and prior History; confirm the crafted Clockmaker's Notebook
+      opens showing the same title/tasks/done-state and the prior History plus a new "Crafted" entry.
+      *(carry-notebook-doc-through-craft 3.3)*
+      - **Confirmed 2026-07-31** (user report): crafting a Notebook into a Clockmaker's Notebook as a
+        tinkerer carries the document over — tasks and History both survive the upgrade.
+- [ ] `065b935a` **Fresh craft with no source document.** Obtain a Clockmaker's Notebook whose craft had no
+      source document (creative `giveitem`); confirm it opens with a fresh empty document and a crafted-only
+      or empty history — no crash, no stale data. *(carry-notebook-doc-through-craft 3.4)*
+- [ ] `1700a1b5` **Timer radios: Real Time first.** Open the Clockmaker's Notebook Timer tab and confirm the
+      mode radios list Real Time first and In-game time second. *(carry-notebook-doc-through-craft — timer reorder)*
+- [ ] `586a51c8` **Handbook notes the carryover.** Open the Notebook's handbook entry and confirm the
+      crafting section states that upgrading to the Clockmaker's Notebook keeps your tasks and History.
+      *(carry-notebook-doc-through-craft 2.0)*
+

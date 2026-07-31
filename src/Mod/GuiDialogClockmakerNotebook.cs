@@ -467,17 +467,17 @@ internal sealed class ScribeTimerModeRowState : State<ScribeTimerModeRow>
             children: new Widget[]
             {
                 new RadioButton<int>(
-                    value: (int)TimerMode.InGame,
-                    groupValue: _current,
-                    onChanged: Select,
-                    label: Lang.Get("scribe:scribe-gui-timer-mode-ingame"),
-                    size: Widget.CheckboxSize,
-                    style: radioStyle),
-                new RadioButton<int>(
                     value: (int)TimerMode.RealTime,
                     groupValue: _current,
                     onChanged: Select,
                     label: Lang.Get("scribe:scribe-gui-timer-mode-realtime"),
+                    size: Widget.CheckboxSize,
+                    style: radioStyle),
+                new RadioButton<int>(
+                    value: (int)TimerMode.InGame,
+                    groupValue: _current,
+                    onChanged: Select,
+                    label: Lang.Get("scribe:scribe-gui-timer-mode-ingame"),
                     size: Widget.CheckboxSize,
                     style: radioStyle),
             });
