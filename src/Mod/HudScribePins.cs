@@ -147,6 +147,14 @@ public sealed class HudScribePins : GuiBase
     private double _timerLocalRemaining;
     private bool _timerResync = true;
 
+    /// <summary>Last timer status the HUD reacted to. The server pushes timer state every second while a
+    /// timer runs (each fires <see cref="OnMyTimerChanged"/>); the steady per-second countdown repaint is
+    /// the shared <see cref="ScribeModSystem.TimerDisplayTick"/>'s job, so OnMyTimerChanged only rebuilds
+    /// on a genuine Idle↔Running↔Fired transition — otherwise the HUD rebuilt twice a second (push +
+    /// display tick).</summary>
+    private Scribe.Core.TimerStatus _lastTimerStatus = Scribe.Core.TimerStatus.Idle;
+
+
     public HudScribePins(ICoreClientAPI capi, ScribeModSystem modSystem) : base(capi)
     {
         this.modSystem = modSystem;
@@ -155,7 +163,18 @@ public sealed class HudScribePins : GuiBase
         // react to a pin arriving even while it is closed so it can open itself. Released in Dispose().
         modSystem.MyPinsChanged += OnMyPinsChanged;
         modSystem.MyTimerChanged += OnMyTimerChanged;
+        modSystem.TimerDisplayTick += OnTimerDisplayTick;
         tickListenerId = capi.Event.RegisterGameTickListener(OnTick, TickIntervalMs);
+    }
+
+    /// <summary>Repaint the HUD timer countdown on the shared 1Hz tick so it stays in step with the
+    /// Notebook Timer tab (both fire from the same dispatch). Only rebuilds while a running/fired timer
+    /// is on screen and the HUD is open; the 250ms OnTick keeps _timerLocalRemaining interpolated.</summary>
+    private void OnTimerDisplayTick()
+    {
+        var timer = modSystem.MyTimer;
+        if (timer?.Status == Scribe.Core.TimerStatus.Running && IsOpened())
+            ForceRebuild();
     }
 
     // ---------------- HUD dialog semantics ----------------
@@ -318,12 +337,19 @@ public sealed class HudScribePins : GuiBase
     {
         _timerResync = true;
         var timer = modSystem.MyTimer;
-        bool hasTimer = timer is { Status: Scribe.Core.TimerStatus.Running or Scribe.Core.TimerStatus.Fired };
+        var status = timer?.Status ?? Scribe.Core.TimerStatus.Idle;
+        bool statusChanged = status != _lastTimerStatus;
+        _lastTimerStatus = status;
+
+        bool hasTimer = status is Scribe.Core.TimerStatus.Running or Scribe.Core.TimerStatus.Fired;
         if (hasTimer && !IsOpened() && modSystem.MyPins.Count == 0)
             TryOpen();
         else if (!hasTimer && !modSystem.MyPins.Any() && IsOpened())
             TryClose();
-        else if (IsOpened())
+        // Only rebuild here on a genuine status transition (start/fire/clear). The routine per-second
+        // running push does NOT rebuild — TimerDisplayTick owns the steady countdown repaint, so the HUD
+        // rebuilds once per second, not twice.
+        else if (statusChanged && IsOpened())
             ForceRebuild();
     }
 
@@ -426,7 +452,10 @@ public sealed class HudScribePins : GuiBase
                 double rate = timer.Mode == Scribe.Core.TimerMode.InGame ? ScribeTimeRate.InGamePerReal(capi) : 1.0;
                 _timerLocalRemaining = Math.Max(0, _timerLocalRemaining - dt * rate);
             }
-            if (IsOpened()) ForceRebuild();
+            // NOTE: the repaint is NOT triggered here. This 250ms tick only interpolates the local
+            // remaining seconds for accuracy; the actual ForceRebuild fires from the mod system's shared
+            // 1Hz TimerDisplayTick (see OnTimerDisplayTick) so the HUD and the Notebook Timer tab repaint
+            // in the exact same dispatch rather than up to 250ms apart.
         }
 
         if (pendingCompletions.Count == 0) return;
@@ -684,6 +713,7 @@ public sealed class HudScribePins : GuiBase
     {
         modSystem.MyPinsChanged -= OnMyPinsChanged;
         modSystem.MyTimerChanged -= OnMyTimerChanged;
+        modSystem.TimerDisplayTick -= OnTimerDisplayTick;
         if (tickListenerId != 0)
         {
             capi.Event.UnregisterGameTickListener(tickListenerId);

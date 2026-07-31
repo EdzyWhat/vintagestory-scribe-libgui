@@ -60,10 +60,11 @@
 
 - [x] 4.1 Build clean; run `dotnet test tests/Core.Tests` (should be unaffected — no Core change).
   *(full solution builds clean, 0 warnings; Core.Tests 179/179 pass.)*
-- [ ] 4.2 In-game: for each tab, walk the full Task Text Font × window-text-size matrix and confirm
-  no font/size regression vs. the pre-change build.
-- [ ] 4.3 In-game: change the Task Text Font and window text size with a dialog open; confirm every
-  label live-updates (no label stuck on the old font because it bypassed inheritance).
+- [x] 4.2 In-game: for each tab, walk the full Task Text Font × window-text-size matrix and confirm
+  no font/size regression vs. the pre-change build. *(verified in-game — looks good.)*
+- [x] 4.3 In-game: change the Task Text Font and window text size with a dialog open; confirm every
+  label live-updates (no label stuck on the old font because it bypassed inheritance). *(verified
+  in-game — every label live-updates.)*
 
 ## 5. Close out
 

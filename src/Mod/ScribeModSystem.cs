@@ -56,6 +56,7 @@ public sealed class ScribeModSystem : ModSystem
 
     /// <summary>Server-side ticker id for the 1-second timer countdown. 0 when not registered.</summary>
     private long timerTickListenerId;
+    private long timerDisplayTickId;
 
     /// <summary>Seconds elapsed since each player's timer fired. Used for the 30-second auto-clear.
     /// Separate from <see cref="timerStores"/> so it doesn't affect the codec.</summary>
@@ -128,6 +129,14 @@ public sealed class ScribeModSystem : ModSystem
     /// <summary>Raised on the client whenever the server pushes a new timer state, so the HUD and any
     /// open Clockmaker's Notebook dialog can update their timer display.</summary>
     public event Action? MyTimerChanged;
+
+    /// <summary>Fired once per real second on the client from a single shared tick listener. The HUD
+    /// timer row and the Notebook Timer tab's countdown both repaint off THIS event (not their own
+    /// 250ms interpolation ticks) so their whole-second display advances in the exact same dispatch —
+    /// otherwise two independent 250ms listeners detect the second-flip up to 250ms apart, which reads
+    /// as visible drift when both are on screen. Each subscriber still interpolates its own remaining
+    /// seconds at 250ms for accuracy; this only synchronizes the repaint.</summary>
+    public event Action? TimerDisplayTick;
 
     /// <summary>Raised on the client whenever the standalone settings window opens or closes
     /// (add-active-tab-nav-colors). The settings window is a separate dialog, not a lectern view, so an
@@ -208,6 +217,11 @@ public sealed class ScribeModSystem : ModSystem
         // it stays closed until there is ≥1 pin. It owns its own subscription + tick; we dispose it.
         pinHud = new HudScribePins(api, this);
 
+        // Single shared 1Hz display tick: drives BOTH the HUD timer row and the Notebook Timer tab
+        // countdown so they repaint on the same dispatch (see TimerDisplayTick). One listener, so there
+        // is one authoritative second-boundary rather than two out-of-phase 250ms listeners.
+        timerDisplayTickId = api.World.RegisterGameTickListener(_ => TimerDisplayTick?.Invoke(), 1000);
+
         RegisterNotebookTuneCommand(api);
 
         // Rebindable collapse/expand hotkey (design D6). GUIOrOtherControls so it fires even while a
@@ -241,6 +255,11 @@ public sealed class ScribeModSystem : ModSystem
     {
         pinHud?.Dispose();
         pinHud = null;
+        if (timerDisplayTickId != 0 && capi is not null)
+        {
+            capi.World.UnregisterGameTickListener(timerDisplayTickId);
+            timerDisplayTickId = 0;
+        }
         settingsDialog?.Dispose();
         settingsDialog = null;
         if (backdropCache is not null)

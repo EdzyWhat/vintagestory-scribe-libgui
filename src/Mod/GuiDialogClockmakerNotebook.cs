@@ -136,7 +136,8 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
                     initialSeconds: _resyncRemaining ? (timer?.RemainingSeconds ?? _localRemaining) : _localRemaining,
                     style: bigStyle,
                     capi: capi,
-                    mode: timer?.Mode ?? TimerMode.InGame);
+                    mode: timer?.Mode ?? TimerMode.InGame,
+                    modSystem: modSystem);
 
             string labelText = timer?.Label ?? "";
 
@@ -362,9 +363,10 @@ internal sealed class ScribeCountdownText : StatefulWidget
     public readonly TextStyle Style;
     public readonly ICoreClientAPI Capi;
     public readonly TimerMode Mode;
+    public readonly ScribeModSystem ModSystem;
 
-    public ScribeCountdownText(double initialSeconds, TextStyle style, ICoreClientAPI capi, TimerMode mode)
-    { InitialSeconds = initialSeconds; Style = style; Capi = capi; Mode = mode; }
+    public ScribeCountdownText(double initialSeconds, TextStyle style, ICoreClientAPI capi, TimerMode mode, ScribeModSystem modSystem)
+    { InitialSeconds = initialSeconds; Style = style; Capi = capi; Mode = mode; ModSystem = modSystem; }
 
     public override State CreateState() => new ScribeCountdownTextState();
 }
@@ -372,22 +374,28 @@ internal sealed class ScribeCountdownText : StatefulWidget
 internal sealed class ScribeCountdownTextState : State<ScribeCountdownText>
 {
     private double _remaining;
-    private long _tickId;
 
     public override void InitState()
     {
         base.InitState();
         _remaining = Widget.InitialSeconds;
-        _tickId = Widget.Capi.Event.RegisterGameTickListener(dt =>
-        {
-            double rate = Widget.Mode == TimerMode.InGame ? ScribeTimeRate.InGamePerReal(Widget.Capi) : 1.0;
-            SetState(() => _remaining = Math.Max(0, _remaining - dt * rate));
-        }, 250);
+        // Decrement AND repaint off the mod system's shared 1Hz tick — no dedicated 250ms listener. The
+        // display only ever shows whole seconds, so finer interpolation was invisible; one tick per real
+        // second advances the countdown by one real second's worth (rate for InGame ≈ 30). Sharing the
+        // tick also keeps this countdown and the HUD timer row in the exact same dispatch (they'd drift if
+        // driven by two independent listeners). See ScribeModSystem.TimerDisplayTick.
+        Widget.ModSystem.TimerDisplayTick += OnDisplayTick;
+    }
+
+    private void OnDisplayTick()
+    {
+        double rate = Widget.Mode == TimerMode.InGame ? ScribeTimeRate.InGamePerReal(Widget.Capi) : 1.0;
+        SetState(() => _remaining = Math.Max(0, _remaining - rate));
     }
 
     public override void Dispose()
     {
-        if (_tickId != 0) { Widget.Capi.Event.UnregisterGameTickListener(_tickId); _tickId = 0; }
+        Widget.ModSystem.TimerDisplayTick -= OnDisplayTick;
         base.Dispose();
     }
 
