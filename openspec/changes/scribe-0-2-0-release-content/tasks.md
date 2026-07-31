@@ -34,10 +34,11 @@
       false, enumerate `sapi.World.GridRecipes`, match the Clockmaker's Notebook recipe(s) by
       `Name.Path`/output code, and set `RequiresTrait = null`. Do NOT add a second `MatchesGridRecipe`
       handler (last-writer-wins semantics make it unreliable — see design 6b).
-- [ ] 1b.4 Restage and confirm in-game: with the requirement ON, a clockmaker-class (tinkerer) player
+- [x] 1b.4 Restage and confirm in-game: with the requirement ON, a clockmaker-class (tinkerer) player
       can craft the Clockmaker's Notebook and a non-tinkerer cannot; toggling the worldconfig off (new
       world or `/worldconfig`) lets a non-tinkerer craft it. Verify a classless/no-character-system
-      world is not blocked.
+      world is not blocked. (Confirmed 2026-07-31, playtest 15-05-03: ON-gate + `/worldconfig … false`
+      bypass both verified after the package.sh/worldconfig ship fixes. See TESTING.md `80eb64b2`.)
 
 ## 2. In-game handbook (data-only)
 

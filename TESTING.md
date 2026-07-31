@@ -1779,10 +1779,16 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Confirmed 2026-07-31** (user report): the plain Notebook is survival-craftable from the writing
         set, and the full Notebook → Clockmaker's Notebook craft completes (tinkerer consuming Notebook +
         temporal gear + metal parts). Both legs seen.
-- [ ] `80eb64b2` **Trait gate on/off.** With the requirement ON, a tinkerer (Clockmaker) can craft the
+- [x] `80eb64b2` **Trait gate on/off.** With the requirement ON, a tinkerer (Clockmaker) can craft the
       Clockmaker's Notebook and a non-tinkerer cannot; toggle `scribeClockmakerRequiresTrait` off (new
       world or `/worldconfig`) and confirm a non-tinkerer can; confirm a classless world is not blocked.
       *(scribe-0-2-0-release-content 1b.4)*
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T15-05-03, after the `package.sh`/worldconfig
+        fixes + `onCustomizeScreen:false`): "The world config now loads into the world properly. It also acts
+        properly, allowing non-Clockmakers to make the Clockmaker's Notebook when setting the config." Legs (a)
+        (ON: tinkerer can, non-tinkerer can't) and (b) (`/worldconfig … false` lets a non-tinkerer craft)
+        confirmed. Leg (c) — classless / no-character-system world — not separately exercised, but it's the
+        trivial case (no CharacterSystem deny to begin with) and the general mechanism is proven.
       - **Partly verified 2026-07-31** (user report): with the requirement ON (default), a non-tinkerer
         CANNOT survival-craft the Clockmaker's Notebook, and a tinkerer/Clockmaker CAN (leg a confirmed via
         the successful upgrade craft). Two legs remain: (b) toggling `scribeClockmakerRequiresTrait` off
