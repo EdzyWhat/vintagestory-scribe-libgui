@@ -97,7 +97,8 @@ public sealed class ScribeNumericField : StatefulWidget
         FocusNode? focusNode = null,
         bool autoFocus = false,
         Action? onStepped = null,
-        Func<float, float>? clamp = null)
+        Func<float, float>? clamp = null,
+        TextStyle? textStyle = null)
     {
         Value = initialValue;
         Step = step;
@@ -107,6 +108,7 @@ public sealed class ScribeNumericField : StatefulWidget
         AutoFocus = autoFocus;
         OnStepped = onStepped;
         Clamp = clamp;
+        TextStyle = textStyle;
     }
 
     public float Value { get; }
@@ -134,6 +136,10 @@ public sealed class ScribeNumericField : StatefulWidget
     /// <summary>Fired when the value is stepped via +/- button or arrow key, BEFORE the value write, so the
     /// host can arm auto-focus for this field ahead of the rebuild the write triggers.</summary>
     public Action? OnStepped { get; }
+
+    /// <summary>Optional explicit text style for the number input. When set, overrides the theme
+    /// default so the text color matches the host dialog's surface (e.g. Scribe parchment theme).</summary>
+    public TextStyle? TextStyle { get; }
 
     public override State CreateState() => new ScribeNumericFieldState();
 }
@@ -295,6 +301,14 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
 
         // The clamp still fires on blur (in OnFocusChanged); the visible valid-range feedback line was
         // dropped as unwanted (§8.2), so the field is just the input + its +/- step column.
+        // Use caller-supplied fill color if the BoxStyle has one, otherwise fall back to theme.
+        var fillColor = Widget.Style.Color.W > 0
+            ? Widget.Style.Color
+            : new Vector4(colors.Background.X, colors.Background.Y, colors.Background.Z, 0.9f);
+        var borderColor = Widget.Style.BorderColor.W > 0
+            ? Widget.Style.BorderColor
+            : colors.Border;
+
         return new Container(
             Widget.Style,
             new Row(children: new Widget[]
@@ -305,9 +319,10 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
                     new TextFieldStyle
                     {
                         Height = fieldHeight,
-                        FillColor = new Vector4(colors.Background.X, colors.Background.Y, colors.Background.Z, 0.9f),
+                        FillColor = fillColor,
                         BorderThickness = 1,
-                        BorderColor = colors.Border,
+                        BorderColor = borderColor,
+                        TextStyle = Widget.TextStyle ?? new TextStyle { Color = colors.OnSurface },
                     },
                     onKeyDown: OnFieldKeyDown)),
                 new Column(children: new Widget[]

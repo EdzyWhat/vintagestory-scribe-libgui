@@ -247,11 +247,12 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
         Widget scrollBody;
         if (Widget.Blocks.Count == 0)
         {
+            var hintStyle = Widget.Style;
             scrollBody = new Padding(
                 EdgeInsets.All(12),
                 child: new Text(
                     Lang.Get("scribe:scribe-gui-edit-hint"),
-                    new TextStyle { FontSize = 14, Color = colors.OnSurfaceVariant, SoftWrap = true }));
+                    new TextStyle { FontSize = hintStyle.FontSize, Color = colors.OnSurfaceVariant, SoftWrap = true, FontFamily = ScribeTaskFont.Resolve(hintStyle.TaskFontFamily) }));
         }
         else
         {

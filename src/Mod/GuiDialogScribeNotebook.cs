@@ -82,8 +82,9 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
             * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale);
         float kindSize = bodySize * 0.72f;
         float dateSize = bodySize * 0.72f;
+        string taskFont = ScribeTaskFont.Resolve(modSystem.MySettings.TaskFontFamily);
 
-        var bodyStyle = new TextStyle { FontSize = bodySize, Color = colors.OnSurface };
+        var bodyStyle = new TextStyle { FontSize = bodySize, Color = colors.OnSurface, FontFamily = taskFont };
         var kindStyle = new TextStyle { FontSize = kindSize, Color = colors.OnSurface with { W = colors.OnSurface.W * 0.65f }, Weight = FontWeight.SemiBold };
         var dateStyle = new TextStyle { FontSize = dateSize, Color = colors.OnSurface with { W = colors.OnSurface.W * 0.55f } };
 

@@ -122,8 +122,8 @@ internal static class ScribeRowConstants
     /// (notebook-history-tab).</summary>
     public static readonly Vector4 NavActiveGuestbook = new(0.4784f, 0.3490f, 0.4941f, 1f);
 
-    /// <summary>Thematic "active tab" fill color for the Timer nav button — steel blue <c>#3d6b7a</c>.</summary>
-    public static readonly Vector4 NavActiveTimer = new(0.2392f, 0.4196f, 0.4784f, 1f);
+    /// <summary>Thematic "active tab" fill color for the Timer nav button — muted teal <c>#63929c</c>.</summary>
+    public static readonly Vector4 NavActiveTimer = new(0.3882f, 0.5725f, 0.6118f, 1f);
 
     /// <summary>Cream glyph color <c>#eae6dd</c> used for a nav button's icon while that button is the
     /// active tab, for contrast against the thematic fill (add-active-tab-nav-colors).</summary>

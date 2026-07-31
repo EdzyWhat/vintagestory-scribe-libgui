@@ -666,7 +666,8 @@ public sealed class HudScribePins : GuiBase
             onToggleCollapsed: ToggleCollapsed,
             onOpenSettings: modSystem.OpenSettings,
             timerData: timerSnapshot,
-            onClearTimer: SendClearTimer);
+            onClearTimer: SendClearTimer,
+            capiForTimer: capi);
     }
 
     // ---------------- Lifecycle ----------------
@@ -729,6 +730,7 @@ internal sealed class HudPinsContent : StatelessWidget
     private readonly Action onOpenSettings;
     private readonly Scribe.Core.TimerStore? timerData;
     private readonly Action? onClearTimer;
+    private readonly ICoreClientAPI? capiForTimer;
 
     public HudPinsContent(
         IReadOnlyList<HudPinRow> rows,
@@ -744,7 +746,8 @@ internal sealed class HudPinsContent : StatelessWidget
         Action onToggleCollapsed,
         Action onOpenSettings,
         Scribe.Core.TimerStore? timerData = null,
-        Action? onClearTimer = null)
+        Action? onClearTimer = null,
+        ICoreClientAPI? capiForTimer = null)
     {
         this.rows = rows;
         this.moreCount = moreCount;
@@ -760,6 +763,7 @@ internal sealed class HudPinsContent : StatelessWidget
         this.onOpenSettings = onOpenSettings;
         this.timerData = timerData;
         this.onClearTimer = onClearTimer;
+        this.capiForTimer = capiForTimer;
     }
 
     public override Widget Build(BuildContext context)
@@ -798,7 +802,7 @@ internal sealed class HudPinsContent : StatelessWidget
             if (timerData is { Status: Scribe.Core.TimerStatus.Running or Scribe.Core.TimerStatus.Fired })
             {
                 children.Add(new Divider());
-                children.Add(BuildTimerRow(timerData, colors, glow));
+                children.Add(BuildTimerRow(timerData, colors, glow, capiForTimer));
             }
         }
 
@@ -962,7 +966,7 @@ internal sealed class HudPinsContent : StatelessWidget
             key: new ValueKey<Guid>(row.TaskId));
     }
 
-    private Widget BuildTimerRow(Scribe.Core.TimerStore timer, ColorScheme colors, Vector4 glow)
+    private Widget BuildTimerRow(Scribe.Core.TimerStore timer, ColorScheme colors, Vector4 glow, ICoreClientAPI? capi)
     {
         bool fired = timer.Status == Scribe.Core.TimerStatus.Fired;
 
@@ -980,13 +984,13 @@ internal sealed class HudPinsContent : StatelessWidget
             ? "00:00"
             : FormatTimerDuration(timer.RemainingSeconds);
 
-        Widget timeWidget = fired
-            ? new ScribeBlinkText(timeText, textStyle)
+        Widget timeWidget = (fired && capi is not null)
+            ? new ScribeBlinkText(timeText, textStyle, capi)
             : new Text(timeText, textStyle);
 
         // Clock icon — rotates when fired.
-        Widget iconWidget = fired
-            ? new ScribeTimerIcon(rowFontSize * 1.1f, new Vector4(0.93f, 0.93f, 0.93f, 1f))
+        Widget iconWidget = (fired && capi is not null)
+            ? new ScribeTimerIcon(rowFontSize * 1.1f, new Vector4(0.93f, 0.93f, 0.93f, 1f), capi)
             : new ScribeVsIconGlyph("scribetimer", rowFontSize * 1.1f, new Vector4(0.93f, 0.93f, 0.93f, 1f));
 
         // Label (if any) muted next to the icon.
