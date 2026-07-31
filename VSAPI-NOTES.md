@@ -1314,6 +1314,19 @@ timing hits every time), where a blank notebook had masked it. Note a `ForceRebu
 NOT re-home focus or reshape siblings (e.g. a plain tab switch) is usually survivable — the crash needs the
 rebuild to disturb a sibling that's still mid-dispatch — but the safe rule is simply: don't touch the tree in
 a pointer handler; defer it.
+**Second-pass mistake (2026-07-31, same crash on a THIRD path — do not repeat):** after the tap was
+fixed, the identical `PlaySound` NPE reappeared on **UN**focusing the title. Cause: the title's
+`FocusNode` listener (`OnTitleFocusChanged`) committed on blur and then called `ForceRebuild()`
+synchronously. A blur listener fires as a *side-effect* of the pointer dispatch of whatever button
+STOLE the focus — i.e. from inside that button's in-flight pointer-down walk — so the rebuild orphaned
+the clicked button before its own `PlaySound` ran. Fix: arm the SAME `_pendingTitleEditRebuild` flag from
+the listener (commit inline, defer only the rebuild). **General rule this nails down: it is not just
+`onTap` handlers that are unsafe — ANY callback reachable synchronously from pointer dispatch is, including
+`FocusNode`/`onFocusChange`/`onBlur` listeners that a click triggers indirectly.** Contrast with a
+button's OWN `onTap`: LibGUI's `Button` plays its click sound BEFORE invoking your `OnTap` (`Button.cs:71`),
+and dispatch stops on that handled tap, so a `ForceRebuild()` in a nav-button handler (our `EnterReadMode`
+etc. do `CommitTitleIfEditing()`+`ForceRebuild()`) is safe — the crash needs a rebuild that disturbs a
+sibling STILL queued in the walk, which is exactly the indirect-blur case.
 Related: our own custom fields self-focus safely from their `InitState` via an `autoFocus` param
 (`ScribeMultilineField`), which is post-mount; the stock `TextField` has no such param, so a dialog-owned
 node must be focused this deferred way instead.

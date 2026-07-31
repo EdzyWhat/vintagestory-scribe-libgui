@@ -1886,3 +1886,18 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         errors). RETEST: on a Clockmaker's Notebook crafted FROM a Notebook (the reliable repro), open the
         editor, click the title pencil → it enters edit mode + focuses with no crash, and clicking other
         buttons in the dialog does not NPE. Also spot-check the plain Notebook + Lectern editors.
+      - **Still broken 2026-07-31** (playtest submission 2026-07-31T15-05-03, PC v1.22.6): the tap fix held —
+        entering title-edit no longer crashes — but the SAME `ButtonState.PlaySound` NPE (`Button.cs:109`,
+        via `GestureDetector.OnPointerDown`) now fires on **UN**focusing the title (clicking elsewhere after
+        editing), again on a Clockmaker's Notebook crafted from a Notebook. The crash MOVED to a third path:
+        `OnTitleFocusChanged` (the title FocusNode listener) commits on blur and then called `ForceRebuild()`
+        synchronously — but focus-loss fires from INSIDE the pointer dispatch of whatever button stole focus,
+        so that rebuild unmounted the tree mid-walk and orphaned the clicked button before its own `PlaySound`
+        ran (unlike a button's own `OnTap`, which plays its sound BEFORE invoking our handler → safe, which is
+        why the nav-mode `CommitTitleIfEditing()`+`ForceRebuild()` handlers never crashed).
+      - **Fix applied 2026-07-31 (awaiting retest):** `OnTitleFocusChanged` now commits inline but arms
+        `_pendingTitleEditRebuild` instead of calling `ForceRebuild()` — the same one-shot flag the tap uses,
+        consumed in `OnRenderGUI` at the safe post-dispatch point (guard relaxed to rebuild regardless of
+        `_isTitleEditing`, since the blur path has already set it false). Build clean. RETEST on a
+        crafted-from-Notebook Clockmaker's Notebook: enter title edit via the pencil, type, then click another
+        button (nav tab, a row, etc.) to unfocus → the title commits and the dialog does NOT crash.
