@@ -34,6 +34,6 @@
       crafted Clockmaker's Notebook opens showing the SAME title/tasks/done-state and the prior
       History plus a new "Crafted" entry. Confirmed in-game 2026-07-31 (user): tasks + History
       both carry over through the upgrade craft. (TESTING.md `fb219286`.)
-- [ ] 3.4 In-game negative check: obtain a Clockmaker's Notebook whose craft had no source
+- [x] 3.4 In-game negative check: obtain a Clockmaker's Notebook whose craft had no source
       document (e.g. creative `giveitem`) and confirm it opens with a fresh empty document and a
-      crafted-only (or empty) history — no crash, no stale data.
+      crafted-only (or empty) history — no crash, no stale data. (Confirmed 2026-07-31.)

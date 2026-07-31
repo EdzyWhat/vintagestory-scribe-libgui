@@ -90,15 +90,15 @@
 ## 9. Final verification
 
 - [x] 9.1 `dotnet test` — 175 passed, 0 failed.
-- [ ] 9.2 In-game: craft a notebook → History tab shows Crafted entry.
-- [ ] 9.3 Open the notebook → PickedUp entry appears; reopen → no duplicate.
+- [x] 9.2 In-game: craft a notebook → History tab shows Crafted entry. (Confirmed 2026-07-31.)
+- [x] 9.3 Open the notebook → PickedUp entry appears; reopen → no duplicate. (Confirmed 2026-07-31.)
 - [ ] 9.4 Die holding the notebook → Death entry appears with the reconstructed death message.
 - [ ] 9.5 In multiplayer: kill another player while holding notebook → PvpKill entry appears.
 - [ ] 9.6 Trigger a temporal storm (`/time set storm`) → TemporalStorm entry appears on all
       open notebooks.
 - [ ] 9.7 Kill an Eidolon within 100 blocks → BossKill entry shows "Eidolon". Verify a
       distant kill (> 100 blocks) records nothing.
-- [ ] 9.8 Add a manual entry → appears in tab. Edit it → text updates. Add 10 total → "Add
-      entry" button disappears.
-- [ ] 9.9 Give the notebook to another player → they see the full history from before.
-- [ ] 9.10 Restart the world → all history survives.
+- [x] 9.8 Add a manual entry → appears in tab. Edit it → text updates. Add 10 total → "Add
+      entry" button disappears. (Confirmed 2026-07-31.)
+- [x] 9.9 Give the notebook to another player → they see the full history from before. (Confirmed 2026-07-31, MP.)
+- [x] 9.10 Restart the world → all history survives. (Confirmed 2026-07-31.)
