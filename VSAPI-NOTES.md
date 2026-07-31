@@ -1503,6 +1503,12 @@ wiki cloned to `reference/atlas` / `reference/atlas-wiki`, gitignored):
   (e.g. v3→v4) where "nothing else changed" is the real invariant and is tedious to assert field by
   field. See `reference/atlas-wiki/` (`CLI.md`, `Writing-Scenarios.md`).
 
+**Symptom: `ButtonState.PlaySound()` NullReferenceException when a `Button` widget is tapped inside a dialog that calls `ForceRebuild()` from a tick listener.**
+
+`ButtonState` (shipped `Gui.dll 3.1.0`) caches the `ISoundPlayer` from `Element.Owner` during mount/build. When `GuiBase.ForceRebuild()` is called at high frequency from a tick listener (e.g. every 250 ms to update a countdown), the button is repeatedly unmounted and remounted. During one of those remounts, `Element.Owner` may be transiently null, leaving the cached sound player null. The next tap calls `PlaySound()` on the null reference.
+
+**Fix pattern:** Never call `ForceRebuild()` from a high-frequency tick listener when the rebuilt tree contains `Button` widgets. Instead, drive countdown display with a self-owned `StatefulWidget` (like `ScribeFadeText`) that calls `Element.MarkNeedsBuild()` directly — this diffs against the existing element tree without full unmount/remount. For server-pushed updates (1 s cadence), `ForceRebuild` is safe because it's infrequent enough. See `GuiDialogClockmakerNotebook.cs`.
+
 ## Entry template
 
 ```

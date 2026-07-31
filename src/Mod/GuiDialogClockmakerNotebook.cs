@@ -316,7 +316,9 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
         var timer = modSystem.MyTimer;
         if (timer?.Status != TimerStatus.Running) return;
         _localRemaining = Math.Max(0, _localRemaining - dt);
-        if (IsTimerView && IsOpened()) ForceRebuild();
+        // No ForceRebuild here — the dialog updates on server pushes (every 1s via RefreshTimerView).
+        // Rebuilding every 250ms was causing ButtonState to remount repeatedly, leaving a transiently
+        // null element owner that crashed ButtonState.PlaySound on the next tap.
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
