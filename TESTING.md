@@ -1867,10 +1867,14 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > Fixed by deferring the title focus to `OnRenderGUI` via `_pendingTitleFocus`. ⚠️ Restaged Debug
 > 2026-07-31 — fully relaunch the client first. (VSAPI-NOTES.md "0.2.0 title-pencil".)
 
-- [ ] `5f69fd12` **Title pencil no longer crashes.** Open a Notebook / Clockmaker's Notebook / Lectern
+- [x] `5f69fd12` **Title pencil no longer crashes.** Open a Notebook / Clockmaker's Notebook / Lectern
       editor, click the title-edit pencil; the field enters edit mode and focuses without crashing, and
       clicking other buttons in the same dialog does not NPE. Type a long title and confirm it clamps /
       scrolls horizontally instead of wrapping. *(title-pencil-crash-fix)*
+      - **Confirmed 2026-07-31** (local mac retest on the fresh Debug restage carrying both the tap fix
+        15dd621 and the blur fix): both the title-pencil TAP (enter edit) and BLUR (click away to unfocus)
+        paths are safe — no `ButtonState.PlaySound` NPE. Closes the crash that dodged twice by relocating
+        (tap → blur). See VSAPI-NOTES "title-pencil" for the pointer-dispatch re-entrancy rule.
       - **Still broken 2026-07-31** (playtest submission 2026-07-31T14-19-22, PC v1.22.6): the deferred-focus
         fix did NOT resolve it — the game hard-crashed with the SAME `NullReferenceException` in
         `Gui.Widgets.Basic.ButtonState.PlaySound` (`Button.cs:109`), reached from `GestureDetector.OnPointerDown`
