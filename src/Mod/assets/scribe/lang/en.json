@@ -115,6 +115,20 @@
 
    "item-scribenotebook": "Notebook",
    "item-scribenotebook-desc": "A personal notebook. Write tasks and notes anywhere.",
-   "itemhelp-scribenotebook-open": "Open Notebook"
+   "itemhelp-scribenotebook-open": "Open Notebook",
+
+   "item-scribeclockmakernotebook": "Clockmaker's Notebook",
+   "item-scribeclockmakernotebook-desc": "A notebook with a built-in timer. Set countdowns in real or in-game time.",
+   "itemhelp-scribeclockmakernotebook-open": "Open Clockmaker's Notebook",
+
+   "scribe-gui-nav-timer": "Timer",
+   "scribe-gui-timer-empty": "No timer set.",
+   "scribe-gui-timer-label": "Label (optional)",
+   "scribe-gui-timer-mode-ingame": "In-game time",
+   "scribe-gui-timer-mode-realtime": "Real time",
+   "scribe-gui-timer-start": "Start Timer",
+   "scribe-gui-timer-stop": "Stop Timer",
+
+   "scribe-hud-timer-label": "Timer"
 }
 

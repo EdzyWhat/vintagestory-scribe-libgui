@@ -42,7 +42,7 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
     /// <summary>The Lectern dialog's central-region view. Read and Editor are the original two views;
     /// Pinned is the Pin Tab (scribe-pin-editor) — a peer view listing the player's pins, selected from the
     /// <c>scribepin</c> nav button. <see cref="BuildCentralRegion"/> chooses the body from this.</summary>
-    private enum ScribeLecternView { Read, Editor, Pinned, Visitors, History }
+    private enum ScribeLecternView { Read, Editor, Pinned, Visitors, History, Timer }
 
     private ScribeLecternView viewMode = ScribeLecternView.Read;
 
@@ -53,6 +53,10 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
     /// <summary>True when the History tab is the active view. Exposed so subclasses can apply the
     /// active color to their History nav button in <see cref="GetExtraNavButtons"/>.</summary>
     protected bool IsHistoryView => viewMode == ScribeLecternView.History;
+
+    /// <summary>True when the Timer tab is the active view. Exposed so subclasses can apply the
+    /// active color to their Timer nav button in <see cref="GetExtraNavButtons"/>.</summary>
+    protected bool IsTimerView => viewMode == ScribeLecternView.Timer;
 
     /// <summary>The pixel size used for sidebar nav buttons — subclasses call this when building
     /// their own nav buttons via <see cref="GetExtraNavButtons"/> so the size matches.</summary>
@@ -571,6 +575,40 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
             * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale);
         var bodyStyle = new TextStyle { FontSize = bodySize, Color = colors.OnSurface };
         return new Center(child: new Text(Lang.Get("scribe:scribe-gui-history-empty"), bodyStyle));
+    }
+
+    /// <summary>Switches to the Timer tab, tearing down the editor first if active.
+    /// Called from the Timer nav button in subclasses that expose the tab.</summary>
+    protected void OnClickSwitchToTimer()
+    {
+        CommitTitleIfEditing();
+        if (isEditorMode)
+        {
+            if (focusedEditIndex is { } idx) NormalizeRowOnCommit(idx);
+            PurgeEmptyTasksFromScratch();
+            pendingEmptyRowRemoval = null;
+            FlushIfDirty();
+            SendReleaseLockPacket();
+            LeaveEditorMode();
+        }
+        viewMode = ScribeLecternView.Timer;
+        if (IsOpened()) ForceRebuild();
+    }
+
+    /// <summary>Rebuilds the Timer view if it is currently active. Called after a timer state push.</summary>
+    protected internal void RefreshTimerView()
+    {
+        if (viewMode == ScribeLecternView.Timer && IsOpened()) ForceRebuild();
+    }
+
+    /// <summary>Builds the Timer tab content. Subclasses that expose a Timer tab override this.</summary>
+    protected virtual Widget BuildTimerContent()
+    {
+        var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
+        float bodySize = ScribeRowConstants.BaseWindowFontSize
+            * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale);
+        var bodyStyle = new TextStyle { FontSize = bodySize, Color = colors.OnSurface };
+        return new Center(child: new Text(Lang.Get("scribe:scribe-gui-timer-empty"), bodyStyle));
     }
 
     /// <summary>"Done editing" button: flush the pending edit, release the lock, and swap to the read
@@ -1801,6 +1839,7 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
         ScribeLecternView.Pinned   => BuildPinnedContent(),
         ScribeLecternView.Visitors => BuildVisitorsContent(),
         ScribeLecternView.History  => BuildHistoryContent(),
+        ScribeLecternView.Timer    => BuildTimerContent(),
         _                          => BuildReadContent(),
     };
 
@@ -2050,6 +2089,7 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
                 mainAxisSize: MainAxisSize.Max,
                 children: new Widget[]
                 {
+                    new Divider(),
                     new Row(children: new Widget[]
                     {
                         new Expanded(new Padding(EdgeInsets.Only(left: 10f), new Text(Lang.Get("scribe:scribe-guestbook-col-visitor"), headerStyle)), flex: 3),

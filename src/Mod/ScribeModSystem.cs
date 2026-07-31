@@ -29,7 +29,8 @@ public sealed class ScribeModSystem : ModSystem
 
     /// <summary>Savegame key for the persisted pin store. (Per-player display/behavior preferences are
     /// NOT persisted server-side — they are client-local JSON; see <see cref="HudConfigFileName"/>.)</summary>
-    private const string PinStoreSaveKey = "scribe:pins:v1";
+    private const string PinStoreSaveKey   = "scribe:pins:v1";
+    private const string TimerStoreSaveKey = "scribe:timer:v1";
 
     /// <summary>Client-local JSON file holding ALL of this player's Scribe preferences — completion
     /// policy, HUD rows/anchor/offsets/width/collapse, and the HUD/window font-size scales — per-player,
@@ -49,6 +50,16 @@ public sealed class ScribeModSystem : ModSystem
 
     /// <summary>Server-side pin/settings store. Null on a pure client.</summary>
     private ScribePinStore? pinStore;
+
+    /// <summary>Server-side per-player timer store. Keyed by PlayerUID. Null on a pure client.</summary>
+    private Dictionary<string, TimerStore>? timerStores;
+
+    /// <summary>Server-side ticker id for the 1-second timer countdown. 0 when not registered.</summary>
+    private long timerTickListenerId;
+
+    /// <summary>Seconds elapsed since each player's timer fired. Used for the 30-second auto-clear.
+    /// Separate from <see cref="timerStores"/> so it doesn't affect the codec.</summary>
+    private readonly Dictionary<string, double> timerFiredElapsed = new();
 
     /// <summary>Client-side cache of THIS player's own pins, populated by the server push. Keyed by
     /// (docId, taskId) for O(1) <see cref="IsPinnedForMe"/> lookups from the GUI.</summary>
@@ -110,6 +121,14 @@ public sealed class ScribeModSystem : ModSystem
     /// (and the HUD) can repaint its per-player pin indicators.</summary>
     public event Action? MyPinsChanged;
 
+    /// <summary>Client-side cache of THIS player's active timer state, populated by the server push.
+    /// Null means no timer data has arrived yet (treat as Idle).</summary>
+    public TimerStore? MyTimer { get; private set; }
+
+    /// <summary>Raised on the client whenever the server pushes a new timer state, so the HUD and any
+    /// open Clockmaker's Notebook dialog can update their timer display.</summary>
+    public event Action? MyTimerChanged;
+
     /// <summary>Raised on the client whenever the standalone settings window opens or closes
     /// (add-active-tab-nav-colors). The settings window is a separate dialog, not a lectern view, so an
     /// open lectern subscribes to this and rebuilds to recolor its Settings nav button live — regardless
@@ -134,6 +153,7 @@ public sealed class ScribeModSystem : ModSystem
         api.RegisterBlockClass("BlockScribeLectern", typeof(BlockScribeLectern));
         api.RegisterBlockEntityClass("ScribeLectern", typeof(BlockEntityScribeLectern));
         api.RegisterItemClass("ItemScribeNotebook", typeof(ItemScribeNotebook));
+        api.RegisterItemClass("ItemClockmakerNotebook", typeof(ItemClockmakerNotebook));
 
         // All message types must be registered in this same order on both sides. The original four
         // read/edit/lock messages come first (order frozen); the identity-addressed pin layer is
@@ -154,7 +174,10 @@ public sealed class ScribeModSystem : ModSystem
             .RegisterMessageType<ScribeRecordVisitorMessage>()
             .RegisterMessageType<ScribeGuestbookSyncMessage>()
             .RegisterMessageType<ScribeEditGuestbookNoteMessage>()
-            .RegisterMessageType<ScribeNotebookSaveMessage>();
+            .RegisterMessageType<ScribeNotebookSaveMessage>()
+            .RegisterMessageType<ScribeSetTimerMessage>()
+            .RegisterMessageType<ScribeClearTimerMessage>()
+            .RegisterMessageType<ScribeTimerStateMessage>();
     }
 
     /// <summary>Server-side accessor for the pin store, so the block entity can register/orphan its
@@ -177,7 +200,8 @@ public sealed class ScribeModSystem : ModSystem
             .SetMessageHandler<ScribeEditDocumentMessage>(OnClientReceivedEditReply)
             .SetMessageHandler<ScribePinnedSetMessage>(OnClientReceivedPinnedSet)
             .SetMessageHandler<ScribeGuestbookSyncMessage>(OnClientReceivedGuestbookSync)
-            .SetMessageHandler<ScribeNotebookSaveMessage>(OnClientReceivedNotebookSave);
+            .SetMessageHandler<ScribeNotebookSaveMessage>(OnClientReceivedNotebookSave)
+            .SetMessageHandler<ScribeTimerStateMessage>(OnClientReceivedTimerState);
 
         // The pinned-task HUD self-shows once the player's pin set arrives (it subscribes to
         // MyPinsChanged in its ctor), so it can be constructed here regardless of current pin count —
@@ -339,6 +363,7 @@ public sealed class ScribeModSystem : ModSystem
         RegisterSvgIcon(api, "scribecheck", new AssetLocation("scribe", "textures/icons/check.svg"));
         RegisterSvgIcon(api, "scribeguest",   new AssetLocation("scribe", "textures/icons/guestbook.svg"));
         RegisterSvgIcon(api, "scribehistory", new AssetLocation("scribe", "textures/icons/guestbook.svg"));
+        RegisterSvgIcon(api, "scribetimer",   new AssetLocation("scribe", "textures/icons/timer.svg"));
     }
 
     /// <summary>
@@ -469,6 +494,8 @@ public sealed class ScribeModSystem : ModSystem
         channel.SetMessageHandler<ScribeRecordVisitorMessage>(OnServerReceivedRecordVisitor);
         channel.SetMessageHandler<ScribeEditGuestbookNoteMessage>(OnServerReceivedEditGuestbookNote);
         channel.SetMessageHandler<ScribeNotebookSaveMessage>(OnServerReceivedNotebookSave);
+        channel.SetMessageHandler<ScribeSetTimerMessage>(OnServerReceivedSetTimer);
+        channel.SetMessageHandler<ScribeClearTimerMessage>(OnServerReceivedClearTimer);
 
         // Persist/load the pin + settings stores with the save game (the WaypointMapLayer pattern).
         api.Event.SaveGameLoaded += OnSaveGameLoaded;
@@ -480,6 +507,10 @@ public sealed class ScribeModSystem : ModSystem
         // History chronicle hooks.
         api.Event.OnEntityDeath += OnEntityDeath;
         api.World.RegisterGameTickListener(OnStormTick, 5000);
+
+        // Timer countdown: 1 s tick for all running/fired player timers.
+        timerStores = new Dictionary<string, TimerStore>();
+        timerTickListenerId = api.World.RegisterGameTickListener(OnTimerTick, 1000);
     }
 
     private void OnSaveGameLoaded()
@@ -487,17 +518,60 @@ public sealed class ScribeModSystem : ModSystem
         if (sapi is null || pinStore is null) return;
         var pinBytes = sapi.WorldManager.SaveGame.GetData(PinStoreSaveKey);
         pinStore.LoadFrom(pinBytes);
+
+        if (timerStores is not null)
+        {
+            timerStores.Clear();
+            var timerBytes = sapi.WorldManager.SaveGame.GetData(TimerStoreSaveKey);
+            if (timerBytes is not null)
+            {
+                try
+                {
+                    using var ms = new System.IO.MemoryStream(timerBytes, writable: false);
+                    using var r  = new System.IO.BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true);
+                    int count = r.ReadInt32();
+                    for (int i = 0; i < count; i++)
+                    {
+                        string uid   = r.ReadString();
+                        int    len   = r.ReadInt32();
+                        byte[] blob  = r.ReadBytes(len);
+                        var    store = TimerStore.Deserialize(blob);
+                        if (store.Status != TimerStatus.Idle)
+                            timerStores[uid] = store;
+                    }
+                }
+                catch { /* Malformed — start fresh. */ }
+            }
+        }
     }
 
     private void OnGameWorldSave()
     {
         if (sapi is null || pinStore is null) return;
         sapi.WorldManager.SaveGame.StoreData(PinStoreSaveKey, pinStore.SerializePins());
+
+        if (timerStores is not null && timerStores.Count > 0)
+        {
+            using var ms = new System.IO.MemoryStream();
+            using (var w = new System.IO.BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+            {
+                w.Write(timerStores.Count);
+                foreach (var (uid, store) in timerStores)
+                {
+                    var blob = store.Serialize();
+                    w.Write(uid);
+                    w.Write(blob.Length);
+                    w.Write(blob);
+                }
+            }
+            sapi.WorldManager.SaveGame.StoreData(TimerStoreSaveKey, ms.ToArray());
+        }
     }
 
     private void OnPlayerNowPlaying(IServerPlayer player)
     {
         PushPinsTo(player);
+        PushTimerTo(player);
     }
 
     private void OnClientReceivedEditReply(ScribeEditDocumentMessage message)
@@ -1042,6 +1116,106 @@ public sealed class ScribeModSystem : ModSystem
                     $"translation=({tf.Translation.X:0.##}, {tf.Translation.Y:0.##}, {tf.Translation.Z:0.##})  " +
                     $"scale={tf.ScaleXYZ.X:0.##}");
             });
+    }
+
+    // ── Timer ─────────────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>Server → client: push the current timer state to the player.</summary>
+    private void PushTimerTo(IServerPlayer player)
+    {
+        if (sapi is null || timerStores is null) return;
+        var store = timerStores.TryGetValue(player.PlayerUID, out var s) ? s : new TimerStore();
+        sapi.Network.GetChannel(NetworkChannelName).SendPacket(new ScribeTimerStateMessage
+        {
+            Status           = store.Status,
+            Mode             = store.Mode,
+            Label            = store.Label,
+            RemainingSeconds = store.RemainingSeconds,
+        }, player);
+    }
+
+    private void OnServerReceivedSetTimer(IServerPlayer fromPlayer, ScribeSetTimerMessage message)
+    {
+        if (sapi is null || timerStores is null) return;
+        if (message.DurationSeconds <= 0) return;
+
+        timerStores[fromPlayer.PlayerUID] = new TimerStore
+        {
+            Status           = TimerStatus.Running,
+            Mode             = message.Mode,
+            Label            = message.Label ?? "",
+            RemainingSeconds = message.DurationSeconds,
+        };
+        PushTimerTo(fromPlayer);
+    }
+
+    private void OnServerReceivedClearTimer(IServerPlayer fromPlayer, ScribeClearTimerMessage _)
+    {
+        if (sapi is null || timerStores is null) return;
+        timerStores.Remove(fromPlayer.PlayerUID);
+        PushTimerTo(fromPlayer);
+    }
+
+    private void OnClientReceivedTimerState(ScribeTimerStateMessage message)
+    {
+        MyTimer = new TimerStore
+        {
+            Status           = message.Status,
+            Mode             = message.Mode,
+            Label            = message.Label ?? "",
+            RemainingSeconds = message.RemainingSeconds,
+        };
+        MyTimerChanged?.Invoke();
+        // Refresh the Timer tab in any open Clockmaker's Notebook dialog.
+        if (capi is not null)
+        {
+            foreach (var dialog in capi.Gui.OpenedGuis.OfType<GuiDialogClockmakerNotebook>())
+                if (dialog.IsOpened()) dialog.RefreshTimerView();
+        }
+    }
+
+    /// <summary>1-second server tick: decrement running timers, fire at zero, auto-clear after 30 s.</summary>
+    private void OnTimerTick(float _)
+    {
+        if (sapi is null || timerStores is null) return;
+
+        List<string>? toRemove = null;
+        foreach (var (uid, store) in timerStores)
+        {
+            var player = sapi.World.PlayerByUid(uid) as IServerPlayer;
+
+            if (store.Status == TimerStatus.Running)
+            {
+                store.RemainingSeconds -= 1.0;
+                if (store.RemainingSeconds <= 0)
+                {
+                    store.RemainingSeconds = 0;
+                    store.Status = TimerStatus.Fired;
+                    timerFiredElapsed[uid] = 0;
+                }
+                if (player is not null) PushTimerTo(player);
+            }
+            else if (store.Status == TimerStatus.Fired)
+            {
+                timerFiredElapsed.TryGetValue(uid, out var elapsed);
+                timerFiredElapsed[uid] = elapsed + 1.0;
+                if (elapsed + 1.0 >= 30.0)
+                {
+                    toRemove ??= new List<string>();
+                    toRemove.Add(uid);
+                }
+            }
+        }
+        if (toRemove is not null)
+        {
+            foreach (var uid in toRemove)
+            {
+                var player = sapi.World.PlayerByUid(uid) as IServerPlayer;
+                timerStores.Remove(uid);
+                timerFiredElapsed.Remove(uid);
+                if (player is not null) PushTimerTo(player);
+            }
+        }
     }
 
     // ── History chronicle ────────────────────────────────────────────────────────────────────────

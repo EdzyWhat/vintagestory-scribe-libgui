@@ -29,7 +29,7 @@ namespace Scribe;
 /// <item>Proximity auto-close disabled via <see cref="InteractionRange"/> override.</item>
 /// </list>
 /// </summary>
-public sealed class GuiDialogScribeNotebook : ScribeDialogBase
+public class GuiDialogScribeNotebook : ScribeDialogBase
 {
     private IInventory? _hotbar;
 
@@ -125,10 +125,10 @@ public sealed class GuiDialogScribeNotebook : ScribeDialogBase
         return new Padding(
             EdgeInsets.All(10),
             new Column(
-                spacing: 0,
+                spacing: 8,
                 crossAxisAlignment: CrossAxisAlignment.Stretch,
                 mainAxisSize: MainAxisSize.Max,
-                children: new Widget[] { new Expanded(body) }));
+                children: new Widget[] { new Divider(), new Expanded(body) }));
     }
 
     private static string KindLabel(HistoryEntry entry) => entry.Kind switch

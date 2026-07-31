@@ -142,6 +142,11 @@ public sealed class HudScribePins : GuiBase
     private record struct AnchorInputs(float ScreenW, float ScreenH, ScribeHudAnchor Anchor, float OffX, float OffY, bool MinimapOn);
     private AnchorInputs? _lastAnchorInputs;
 
+    /// <summary>Client-side interpolated remaining seconds for the timer, kept smooth between 1-second
+    /// server pushes. Resynced from <see cref="ScribeModSystem.MyTimer"/> on every push.</summary>
+    private double _timerLocalRemaining;
+    private bool _timerResync = true;
+
     public HudScribePins(ICoreClientAPI capi, ScribeModSystem modSystem) : base(capi)
     {
         this.modSystem = modSystem;
@@ -149,6 +154,7 @@ public sealed class HudScribePins : GuiBase
         // Own the subscription + tick for this object's whole lifetime (not per-open): the HUD must
         // react to a pin arriving even while it is closed so it can open itself. Released in Dispose().
         modSystem.MyPinsChanged += OnMyPinsChanged;
+        modSystem.MyTimerChanged += OnMyTimerChanged;
         tickListenerId = capi.Event.RegisterGameTickListener(OnTick, TickIntervalMs);
     }
 
@@ -291,12 +297,14 @@ public sealed class HudScribePins : GuiBase
         // full height instead of being stuck suppressed (scribe-list-collapse).
         ReconcileDeparting();
 
+        var rawTimer = modSystem.MyTimer;
+        bool hasTimer = rawTimer is { Status: Scribe.Core.TimerStatus.Running or Scribe.Core.TimerStatus.Fired };
         bool hasPins = modSystem.MyPins.Count > 0;
-        if (hasPins && !IsOpened())
+        if ((hasPins || hasTimer) && !IsOpened())
         {
             TryOpen(); // withFocus defaults false via base; a HUD never steals focus anyway
         }
-        else if (!hasPins && IsOpened())
+        else if (!hasPins && !hasTimer && IsOpened())
         {
             TryClose();
         }
@@ -304,6 +312,19 @@ public sealed class HudScribePins : GuiBase
         {
             ForceRebuild();
         }
+    }
+
+    private void OnMyTimerChanged()
+    {
+        _timerResync = true;
+        var timer = modSystem.MyTimer;
+        bool hasTimer = timer is { Status: Scribe.Core.TimerStatus.Running or Scribe.Core.TimerStatus.Fired };
+        if (hasTimer && !IsOpened() && modSystem.MyPins.Count == 0)
+            TryOpen();
+        else if (!hasTimer && !modSystem.MyPins.Any() && IsOpened())
+            TryClose();
+        else if (IsOpened())
+            ForceRebuild();
     }
 
     /// <summary>Clear each optimistic override that the latest snapshot already agrees with, so the row
@@ -391,6 +412,15 @@ public sealed class HudScribePins : GuiBase
     private void OnTick(float dt)
     {
         elapsedMs += dt * 1000.0;
+
+        // Interpolate the timer countdown between server pushes (250ms tick, server pushes every 1s).
+        var timer = modSystem.MyTimer;
+        if (timer?.Status == Scribe.Core.TimerStatus.Running)
+        {
+            if (_timerResync) { _timerLocalRemaining = timer.RemainingSeconds; _timerResync = false; }
+            else _timerLocalRemaining = Math.Max(0, _timerLocalRemaining - dt);
+            if (IsOpened()) ForceRebuild();
+        }
 
         if (pendingCompletions.Count == 0) return;
 
@@ -529,6 +559,11 @@ public sealed class HudScribePins : GuiBase
     public void ToggleCollapsed()
         => modSystem.UpdateMySettings(s => s.HudCollapsed = !s.HudCollapsed);
 
+    private void SendClearTimer()
+    {
+        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeClearTimerMessage());
+    }
+
     // ---------------- Build ----------------
 
     /// <summary>The live, ordered, capped rows to display — the authoritative pin set minus any rows that are
@@ -597,6 +632,22 @@ public sealed class HudScribePins : GuiBase
         // theme and the global one. The HUD pins always render on the player's global LibGUI theme, so
         // there is deliberately NO Theme wrap here — HudPinsContent reads ThemeData.Default via
         // Theme.Of(context) like any un-wrapped widget.
+        // Build a timer snapshot with interpolated remaining for smooth display.
+        Scribe.Core.TimerStore? timerSnapshot = null;
+        var rawTimer = modSystem.MyTimer;
+        if (rawTimer is { Status: Scribe.Core.TimerStatus.Running or Scribe.Core.TimerStatus.Fired })
+        {
+            timerSnapshot = new Scribe.Core.TimerStore
+            {
+                Status           = rawTimer.Status,
+                Mode             = rawTimer.Mode,
+                Label            = rawTimer.Label,
+                RemainingSeconds = rawTimer.Status == Scribe.Core.TimerStatus.Running
+                    ? _timerLocalRemaining
+                    : 0,
+            };
+        }
+
         return new HudPinsContent(
             rows: shown,
             moreCount: moreCount,
@@ -613,7 +664,9 @@ public sealed class HudScribePins : GuiBase
                 * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.HudFontScale),
             onToggleRow: OnToggleRow,
             onToggleCollapsed: ToggleCollapsed,
-            onOpenSettings: modSystem.OpenSettings);
+            onOpenSettings: modSystem.OpenSettings,
+            timerData: timerSnapshot,
+            onClearTimer: SendClearTimer);
     }
 
     // ---------------- Lifecycle ----------------
@@ -622,6 +675,7 @@ public sealed class HudScribePins : GuiBase
     public override void Dispose()
     {
         modSystem.MyPinsChanged -= OnMyPinsChanged;
+        modSystem.MyTimerChanged -= OnMyTimerChanged;
         if (tickListenerId != 0)
         {
             capi.Event.UnregisterGameTickListener(tickListenerId);
@@ -673,6 +727,8 @@ internal sealed class HudPinsContent : StatelessWidget
     private readonly Action<Guid, Guid, bool> onToggleRow;
     private readonly Action onToggleCollapsed;
     private readonly Action onOpenSettings;
+    private readonly Scribe.Core.TimerStore? timerData;
+    private readonly Action? onClearTimer;
 
     public HudPinsContent(
         IReadOnlyList<HudPinRow> rows,
@@ -686,7 +742,9 @@ internal sealed class HudPinsContent : StatelessWidget
         float checkboxSize,
         Action<Guid, Guid, bool> onToggleRow,
         Action onToggleCollapsed,
-        Action onOpenSettings)
+        Action onOpenSettings,
+        Scribe.Core.TimerStore? timerData = null,
+        Action? onClearTimer = null)
     {
         this.rows = rows;
         this.moreCount = moreCount;
@@ -700,6 +758,8 @@ internal sealed class HudPinsContent : StatelessWidget
         this.onToggleRow = onToggleRow;
         this.onToggleCollapsed = onToggleCollapsed;
         this.onOpenSettings = onOpenSettings;
+        this.timerData = timerData;
+        this.onClearTimer = onClearTimer;
     }
 
     public override Widget Build(BuildContext context)
@@ -731,6 +791,14 @@ internal sealed class HudPinsContent : StatelessWidget
                         GlowWidth = GlowWidth,
                         GlowColor = glow,
                     }));
+            }
+
+            // Timer row: below the pins (and +N more), separated by a small divider, shown when
+            // a Clockmaker's Notebook timer is Running or Fired.
+            if (timerData is { Status: Scribe.Core.TimerStatus.Running or Scribe.Core.TimerStatus.Fired })
+            {
+                children.Add(new Divider());
+                children.Add(BuildTimerRow(timerData, colors, glow));
             }
         }
 
@@ -892,6 +960,63 @@ internal sealed class HudPinsContent : StatelessWidget
             onCollapsed: () => onDepartingCollapsed(row.DocId, row.TaskId),
             child: styled,
             key: new ValueKey<Guid>(row.TaskId));
+    }
+
+    private Widget BuildTimerRow(Scribe.Core.TimerStore timer, ColorScheme colors, Vector4 glow)
+    {
+        bool fired = timer.Status == Scribe.Core.TimerStatus.Fired;
+
+        var textStyle = new TextStyle
+        {
+            FontSize  = rowFontSize,
+            Color     = new Vector4(0.93f, 0.93f, 0.93f, 1f),
+            GlowWidth = GlowWidth,
+            GlowColor = glow,
+        };
+        var muted = textStyle with { Color = new Vector4(0.70f, 0.70f, 0.70f, 1f) };
+
+        // Countdown or blinking 00:00.
+        string timeText = fired
+            ? "00:00"
+            : FormatTimerDuration(timer.RemainingSeconds);
+
+        Widget timeWidget = fired
+            ? new ScribeBlinkText(timeText, textStyle)
+            : new Text(timeText, textStyle);
+
+        // Clock icon — rotates when fired.
+        Widget iconWidget = fired
+            ? new ScribeTimerIcon(rowFontSize * 1.1f, new Vector4(0.93f, 0.93f, 0.93f, 1f))
+            : new ScribeVsIconGlyph("scribetimer", rowFontSize * 1.1f, new Vector4(0.93f, 0.93f, 0.93f, 1f));
+
+        // Label (if any) muted next to the icon.
+        string label = timer.Label.Length > 0 ? timer.Label : Lang.Get("scribe:scribe-hud-timer-label");
+
+        Widget row = new Row(
+            spacing: 6,
+            mainAxisSize: MainAxisSize.Max,
+            crossAxisAlignment: CrossAxisAlignment.Center,
+            children: new Widget[]
+            {
+                iconWidget,
+                new Expanded(child: new Text(label, muted)),
+                timeWidget,
+            });
+
+        // Clicking the timer row when fired sends a clear.
+        if (fired && onClearTimer is not null)
+            row = new GestureDetector(onTap: _ => onClearTimer(), child: row);
+
+        return row;
+    }
+
+    private static string FormatTimerDuration(double seconds)
+    {
+        int total = (int)Math.Max(0, seconds);
+        int h = total / 3600;
+        int m = (total % 3600) / 60;
+        int s = total % 60;
+        return h > 0 ? $"{h:D2}:{m:D2}:{s:D2}" : $"{m:D2}:{s:D2}";
     }
 }
 
