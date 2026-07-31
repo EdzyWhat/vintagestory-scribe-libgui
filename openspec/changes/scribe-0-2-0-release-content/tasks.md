@@ -84,9 +84,10 @@
       passes (`build/verify.sh`). NOT FEASIBLE at Core level — the fix is a Mod-layer type check on VS
       API sibling classes (`ItemScribeNotebook`/`ItemClockmakerNotebook`) with no Core seam. Confirmed
       the Mod build compiles and all 183 Core tests pass.
-- [ ] 3.9 In a creative world, run the command against a Notebook and a Lectern; confirm tasks/notes,
+- [x] 3.9 In a creative world, run the command against a Notebook and a Lectern; confirm tasks/notes,
       History (notebook), and Guestbook (lectern) populate, persist across save/reload, and sync to a
-      second client.
+      second client. (Confirmed 2026-07-31, playtest 14-19-22: "Works." — populate, persist, and sync all
+      verified. See TESTING.md `b2804892`.)
 
 ## 4. Launch material (in-repo drafts)
 
