@@ -526,6 +526,43 @@ public sealed class ScribeModSystem : ModSystem
         // Timer countdown: 1 s tick for all running/fired player timers.
         timerStores = new Dictionary<string, TimerStore>();
         timerTickListenerId = api.World.RegisterGameTickListener(OnTimerTick, 1000);
+
+        ApplyClockmakerTraitGate(api);
+    }
+
+    /// <summary>
+    /// Clockmaker's Notebook crafting is gated by the vanilla <c>tinkerer</c> trait via the recipe's
+    /// native <c>requiresTrait</c> field (enforced data-only by the survival mod's CharacterSystem).
+    /// A server operator can disable that requirement world-wide with the
+    /// <c>scribeClockmakerRequiresTrait</c> worldconfig boolean (default: enforced). When disabled we
+    /// null out <see cref="GridRecipe.RequiresTrait"/> on the loaded recipe(s) so the game matches for
+    /// every player — this is the reliable bypass (a second MatchesGridRecipe handler is last-writer-wins
+    /// and cannot dependably override the survival mod's deny). Runs in StartServerSide, which is after
+    /// grid recipes register and after World.Config is populated from the savegame.
+    /// </summary>
+    private static void ApplyClockmakerTraitGate(ICoreServerAPI api)
+    {
+        // Always pass an explicit default: worlds created before this key existed won't have it baked
+        // into the savegame, and GetBool does not consult the registered attribute default at read time.
+        bool requireTrait = api.World.Config.GetBool("scribeClockmakerRequiresTrait", true);
+        if (requireTrait) return;
+
+        int cleared = 0;
+        foreach (var recipe in api.World.GridRecipes)
+        {
+            if (recipe.Output?.Code?.Path == "scribeclockmakernotebook" && recipe.RequiresTrait is not null)
+            {
+                recipe.RequiresTrait = null;
+                cleared++;
+            }
+        }
+
+        if (cleared > 0)
+        {
+            api.Logger.Notification(
+                "[scribe] scribeClockmakerRequiresTrait disabled: cleared the tinkerer trait requirement on {0} Clockmaker's Notebook recipe(s).",
+                cleared);
+        }
     }
 
     private void OnSaveGameLoaded()
@@ -944,7 +981,7 @@ public sealed class ScribeModSystem : ModSystem
             foreach (var slot in slots)
             {
                 if (slot is null) continue;
-                if (slot.Itemstack?.Collectible is not ItemScribeNotebook) continue;
+                if (slot.Itemstack?.Collectible is not (ItemScribeNotebook or ItemClockmakerNotebook)) continue;
                 if (!ScribeDocumentAttributes.TryReadFrom(slot.Itemstack, out var doc) || doc is null) continue;
                 if (doc.DocId != docId) continue;
                 var nbHost = new NotebookHost(slot);
@@ -1049,9 +1086,11 @@ public sealed class ScribeModSystem : ModSystem
     {
         if (sapi is null || !TryReadGuid(message.DocIdBytes, out var docId)) return;
         // The dialog closes (and flushes) the moment the notebook leaves the active hand slot,
-        // so by the time this packet arrives the item should still be there.
+        // so by the time this packet arrives the item should still be there. Both notebook item
+        // classes flush through this handler, so accept the Clockmaker's Notebook too — otherwise
+        // its task/note edits are silently dropped server-side.
         var slot = fromPlayer.Entity?.ActiveHandItemSlot;
-        if (slot?.Itemstack?.Collectible is not ItemScribeNotebook) return;
+        if (slot?.Itemstack?.Collectible is not (ItemScribeNotebook or ItemClockmakerNotebook)) return;
         // Verify the packet's DocId matches the document already in the stack (if any).
         // A fresh stack with no prior save has no stored DocId yet — allow that write.
         if (ScribeDocumentAttributes.TryReadFrom(slot.Itemstack, out var existing)
@@ -1267,9 +1306,12 @@ public sealed class ScribeModSystem : ModSystem
         ("erel",    "Mad Crow"),
     };
 
-    /// <summary>Finds the first <see cref="ItemScribeNotebook"/> stack anywhere in the player's
-    /// inventory (all bags, hotbar, backpack) and returns a server-attached
-    /// <see cref="NotebookHost"/> for it, or null if none is present.</summary>
+    /// <summary>Finds the first Notebook stack anywhere in the player's inventory (all bags, hotbar,
+    /// backpack) and returns a server-attached <see cref="NotebookHost"/> for it, or null if none is
+    /// present. Matches BOTH <see cref="ItemScribeNotebook"/> and its sibling
+    /// <see cref="ItemClockmakerNotebook"/> — both carry a document + history store, so live history
+    /// recorders (deaths, storms, boss kills) must be able to write into a held Clockmaker's Notebook,
+    /// which they previously could not.</summary>
     private NotebookHost? FindNotebookInInventory(IServerPlayer player)
     {
         if (sapi is null) return null;
@@ -1277,7 +1319,7 @@ public sealed class ScribeModSystem : ModSystem
         {
             foreach (var slot in inv)
             {
-                if (slot.Itemstack?.Collectible is not ItemScribeNotebook) continue;
+                if (slot.Itemstack?.Collectible is not (ItemScribeNotebook or ItemClockmakerNotebook)) continue;
                 var host = new NotebookHost(slot);
                 host.AttachServerContext(sapi, player);
                 return host;

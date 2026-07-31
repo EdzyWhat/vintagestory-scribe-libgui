@@ -1,32 +1,60 @@
 ## 1. Crafting recipes (data-only)
 
-- [ ] 1.1 Author `recipes/grid/scribenotebook.json` producing one `scribe:scribenotebook` from a
+- [x] 1.1 Author `recipes/grid/scribenotebook.json` producing one `scribe:scribenotebook` from a
       paper + leather writing set (baseline `game:paper-parchment` + `game:leather-normal-plain`);
       finalize the exact grid arrangement and any binding item.
-- [ ] 1.2 Add/confirm any lang keys needed for the recipe output display.
-- [ ] 1.3 Review `recipes/grid/scribelectern.json` and `recipes/grid/scribeclockmakernotebook.json`
-      for balance; adjust only if warranted and note any change.
+- [x] 1.2 Add/confirm any lang keys needed for the recipe output display. (None needed — the grid
+      recipe derives its output name from the existing `item-scribenotebook` key.)
+- [x] 1.3 Review `recipes/grid/scribelectern.json` and `recipes/grid/scribeclockmakernotebook.json`
+      for balance; adjust only if warranted and note any change. FOUND + FIXED a crash bug: the
+      Clockmaker's Notebook's first variant used the non-existent `item game:metalparts-*` wildcard,
+      which crashed the handbook's "Created by" renderer on open. Corrected to `block game:metal-parts`.
 - [ ] 1.4 Restage the mod (`build/restage.sh`) and confirm in-game: the Notebook shows a grid recipe
       in the handbook, is craftable in survival, and the full Notebook → Clockmaker's chain works.
 
+## 1b. Clockmaker's Notebook trait gating + bypass
+
+- [x] 1b.1 Add `"requiresTrait": "tinkerer"` to `recipes/grid/scribeclockmakernotebook.json` (data-only;
+      enforced by the vanilla `CharacterSystem` `MatchesGridRecipe` handler). Leave the plain Notebook +
+      Lectern recipes ungated. (Recipe also corrected to a single 3-ingredient recipe: 1 Notebook +
+      1 Temporal Gear + 1 Metal Parts.)
+- [x] 1b.2 Declare the bypass worldconfig boolean in a new `worldconfig.json` at the mod root (next to
+      `modinfo.json`): one `worldConfigAttributes` entry
+      `{ "category": "scribe", "code": "scribeClockmakerRequiresTrait", "dataType": "bool", "default": "true" }`.
+      Add the `worldattribute-scribeClockmakerRequiresTrait` (and category) lang keys.
+- [x] 1b.3 In `AssetsFinalize` or `StartServerSide` (after recipe registration — NOT early
+      `AssetsLoaded`), read `sapi.World.Config.GetBool("scribeClockmakerRequiresTrait", true)`; when
+      false, enumerate `sapi.World.GridRecipes`, match the Clockmaker's Notebook recipe(s) by
+      `Name.Path`/output code, and set `RequiresTrait = null`. Do NOT add a second `MatchesGridRecipe`
+      handler (last-writer-wins semantics make it unreliable — see design 6b).
+- [ ] 1b.4 Restage and confirm in-game: with the requirement ON, a clockmaker-class (tinkerer) player
+      can craft the Clockmaker's Notebook and a non-tinkerer cannot; toggling the worldconfig off (new
+      world or `/worldconfig`) lets a non-tinkerer craft it. Verify a classless/no-character-system
+      world is not blocked.
+
 ## 2. In-game handbook (data-only)
 
-- [ ] 2.1 Add a `handbook` block with `extraSections` to `itemtypes/scribenotebook.json` referencing
-      new `scribe:` lang keys (what it does, editor, how to craft).
-- [ ] 2.2 Add a `handbook` block with `extraSections` to `itemtypes/scribeclockmakernotebook.json`
-      (function, the timer, crafting from a Notebook).
-- [ ] 2.3 Refresh `handbook-scribelectern-*` sections and the two guide pages
-      (`config/handbook/00-getting-started.json`, `01-editor-reference.json`) so mod-wide docs
-      acknowledge the notebook; add/adjust lang keys in `lang/en.json` with working cross-links.
+- [x] 2.1 Add a `handbook` block with `extraSections` to `itemtypes/scribenotebook.json` referencing
+      new `scribe:` lang keys (what it does, editor, how to craft). 3 sections; cross-links to Lectern
+      + Clockmaker's Notebook + editor-reference.
+- [x] 2.2 Add a `handbook` block with `extraSections` to `itemtypes/scribeclockmakernotebook.json`
+      (function, the timer, crafting from a Notebook). 3 sections; craft section documents the
+      Tinkerer-trait requirement + the worldconfig bypass (engine denial is silent).
+- [x] 2.3 Refresh the two guide pages (`00-getting-started`, `01-editor-reference`) so mod-wide docs
+      acknowledge the notebooks with working cross-links. (The `handbook-scribelectern-*` sections
+      themselves remain Lectern-accurate and were left unchanged.)
 - [ ] 2.4 Restage and confirm in-game: both notebook items show the new handbook sections and the
       guide pages read coherently.
 
 ## 3. Demo-seeding command + Clockmaker history fix (code)
 
-- [ ] 3.1 Make `NotebookHost.Flush()` public (match the existing public `FlushHistory()`).
-- [ ] 3.2 Widen `FindNotebookInInventory` (`ScribeModSystem.cs:1257`) to match
-      `ItemScribeNotebook or ItemClockmakerNotebook` so live history records into a held Clockmaker's
-      Notebook; verify `NotebookHost` works unchanged for a clockmaker stack.
+- [x] 3.1 Make `NotebookHost.Flush()` public (match the existing public `FlushHistory()`).
+- [x] 3.2 Widen ALL sibling-exclusion sites to `ItemScribeNotebook or ItemClockmakerNotebook`
+      (in-game verification showed the bug is broader than just history): `FindNotebookInInventory`
+      (history recorders), `OnServerReceivedNotebookSave` (was dropping Clockmaker task/note edits —
+      confirmed data loss on dialog close), `TryResolveDocHost` inventory scan (DocId→host routing),
+      and `OnActiveSlotChanged` in `GuiDialogScribeNotebook` (dialog force-closed on hotbar change).
+      Leave `/scripttf` Notebook-only. `NotebookHost` works unchanged for a clockmaker stack.
 - [ ] 3.3 Add server-only `BlockEntityScribeLectern.SeedGuestbook(entries)` guarding
       `Api is ICoreServerAPI`, looping `TryAddEntry`/`TrySetNote`, then `MarkDirty()` (mirror
       `RecordVisitor`).

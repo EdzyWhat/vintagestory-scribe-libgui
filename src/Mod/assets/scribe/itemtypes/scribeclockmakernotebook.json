@@ -10,6 +10,26 @@
 			"translation": { "x": 0.12, "y": 0, "z": -0.04 },
 			"rotation": { "x": 0, "y": 35, "z": 90 },
 			"origin": { "x": 0.5, "y": 0.05, "z": 0.5 }
+		},
+		"handbook": {
+			"extraSections": [
+				{
+					"title": "scribe:handbook-scribeclockmakernotebook-about-title",
+					"text": "scribe:handbook-scribeclockmakernotebook-about-text"
+				},
+				{
+					"title": "scribe:handbook-scribeclockmakernotebook-timer-title",
+					"text": "scribe:handbook-scribeclockmakernotebook-timer-text"
+				},
+				{
+					"title": "scribe:handbook-scribenotebook-history-title",
+					"text": "scribe:handbook-scribenotebook-history-text"
+				},
+				{
+					"title": "scribe:handbook-scribeclockmakernotebook-craft-title",
+					"text": "scribe:handbook-scribeclockmakernotebook-craft-text"
+				}
+			]
 		}
 	},
 	"shape": { "base": "scribe:item/notebook" },

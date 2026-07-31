@@ -1,24 +1,15 @@
 [
 	{
-		ingredientPattern: "N_N,_B_,_N_",
+		ingredientPattern: "BGM",
+		requiresTrait: "tinkerer",
 		ingredients: {
-			"N": { type: "item", code: "game:metalparts-*" },
-			"B": { type: "item", code: "scribe:scribenotebook" }
+			"B": { type: "item", code: "scribe:scribenotebook" },
+			"G": { type: "item", code: "game:gear-temporal" },
+			"M": { type: "block", code: "game:metal-parts" }
 		},
 		width: 3,
-		height: 3,
+		height: 1,
 		name: "scribe:scribeclockmakernotebook",
-		output: { type: "item", code: "scribe:scribeclockmakernotebook", quantity: 1 }
-	},
-	{
-		ingredientPattern: "N_N,_B_,_N_",
-		ingredients: {
-			"N": { type: "item", code: "game:gear-temporal" },
-			"B": { type: "item", code: "scribe:scribenotebook" }
-		},
-		width: 3,
-		height: 3,
-		name: "scribe:scribeclockmakernotebook-alt",
 		output: { type: "item", code: "scribe:scribeclockmakernotebook", quantity: 1 }
 	}
 ]

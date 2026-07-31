@@ -73,12 +73,24 @@ combinations are skipped and reported, never errored — matching the hosting as
   `RecordVisitor` (`:561`).
 
 **4. Widen notebook detection to both item classes (a real fix, not just a seed helper).**
-`FindNotebookInInventory` (`:1257`) matches only `ItemScribeNotebook`; `ItemClockmakerNotebook` is
-a sibling class, so live history recorders (deaths/storms/boss kills) currently never record into a
-held Clockmaker's Notebook. Widen the match to `is ItemScribeNotebook or ItemClockmakerNotebook`
-everywhere the helper feeds recording. `NotebookHost`'s constructor is collectible-agnostic (only
-touches `ScribeDocumentAttributes` + `scribeHistory` bytes), so it works unchanged for a clockmaker
-stack. (User-confirmed: fix the live recorders too, not just the seed path.)
+`ItemClockmakerNotebook` is a *sibling* of `ItemScribeNotebook` (both extend `Item`), so every
+`is ItemScribeNotebook` type-check silently excludes the Clockmaker's Notebook. In-game verification
+(2026-07-31) confirmed this breaks more than history: **closing a Clockmaker's Notebook dialog does
+not persist its task/note edits at all**, and changing the active hotbar slot force-closes the open
+dialog. So the fix spans four sites, all widened to `is (ItemScribeNotebook or ItemClockmakerNotebook)`:
+- `FindNotebookInInventory` — live history recorders (deaths/storms/boss kills) can record into a
+  held Clockmaker's Notebook (the originally-scoped fix).
+- `OnServerReceivedNotebookSave` (`ScribeModSystem.cs:1088`) — the server was **rejecting** the
+  Clockmaker's Notebook's `ScribeNotebookSaveMessage`, dropping every task/note edit. This is the
+  data-loss bug confirmed in-game.
+- `TryResolveDocHost` inventory scan (`ScribeModSystem.cs:981`) — server-side DocId→host resolution
+  for pin/edit routing must find a held Clockmaker's Notebook.
+- `OnActiveSlotChanged` (`GuiDialogScribeNotebook.cs:153`, inherited by the Clockmaker dialog) — the
+  dialog must stay open while a Clockmaker's Notebook is the active hand item.
+The `/scripttf` dev transform-tuner (`ScribeModSystem.cs:1153`) stays Notebook-only by design (it
+mutates the plain Notebook's model transforms). `NotebookHost`'s constructor is collectible-agnostic
+(only touches `ScribeDocumentAttributes` + `scribeHistory` bytes), so it works unchanged for a
+clockmaker stack. (User-confirmed after in-game verification: fix the whole sibling-exclusion family.)
 
 **5. Believable dates via a small formatter.**
 Add `FormatDateDaysAgo(sapi, daysAgo)` mirroring `NotebookHost.FormatDate` (`:164`) so seeded
@@ -86,14 +98,75 @@ History/Guestbook entries span multiple in-game days instead of all showing toda
 display-only strings stored verbatim; plausibility, not calendar exactness, is the bar.
 
 **6. Recipe: reuse the Lectern recipe's ingredient vocabulary.**
-New `recipes/grid/scribenotebook.json` (data-only, auto-loaded) with baseline
-`game:paper-parchment` + `game:leather-normal-plain`; exact grid finalized at authoring time. Also
-sanity-review the two existing recipes for balance; change them only if warranted.
+New `recipes/grid/scribenotebook.json` (data-only, auto-loaded). Finalized after an in-game balance
+pass (user-directed) to sit closer to the Lectern's writing-set cost: a 3×2 grid `FRN,BL_` =
+`game:feather` + `game:paper-parchment` + `game:metalnailsandstrips-*` (the buckle, top-right) over a
+fired bowl of black ink + `game:leather-normal-plain`. The ink is a `liquidContainerProps` fill
+(`requiresContent: game:dye-black`, `requiresLitres: 1`, `consumeContainer: true`), mirroring the
+Lectern recipe exactly. Also sanity-review the two existing recipes for balance; change them only if
+warranted. **Recipe corrected in review (user-directed):** the Clockmaker's Notebook recipe is a
+single recipe consuming exactly **three ingredients, one each** — 1 `scribe:scribenotebook` +
+1 `game:gear-temporal` + 1 `game:metal-parts` — laid out in a 3×1 row (`GMB`). The shipped recipe had
+two problems: it was two separate variants (metal-parts OR temporal-gear as four corner pieces around
+the notebook), and its metal-parts reference used the non-existent `{ type: "item", code:
+"game:metalparts-*" }` wildcard, which resolves to zero items and **crashes the handbook**
+(`SlideshowGridRecipeTextComponent.ResolveIngredients` throws when a wildcard matches nothing) the
+moment anyone opens the Clockmaker's Notebook's "Created by" page. The correct metal-parts reference is
+the block `{ type: "block", code: "game:metal-parts" }` (the `metalpartsandscraps` block, code `metal`,
+`type` variant `parts`/`scraps`) — the old one was wrong on both `type` (item→block) and `code`.
+
+**6b. Clockmaker's Notebook craft is gated by the `tinkerer` trait, data-only, with a worldconfig bypass.**
+Verified from the game DLLs + vanilla assets (do not re-derive):
+- `GridRecipe` (via `Vintagestory.API.Common.RecipeBase`, `VintagestoryAPI.dll`) has a native
+  `public string? RequiresTrait { get; set; }` field. Setting `"requiresTrait": "tinkerer"` in the
+  recipe JSON is fully enforced by the game with **no mod code** — the vanilla survival
+  `Vintagestory.GameContent.CharacterSystem` (`Mods/VSSurvivalMod.dll`) subscribes to
+  `IEventAPI.MatchesGridRecipe` and denies the match for players lacking the trait. Vanilla precedent:
+  `assets/survival/recipes/grid/{sewingkit,linen}.json` use `requiresTrait: "clothier"`.
+- There is **no "Tinkerer" class**; `tinkerer` is a *trait* granted by the `clockmaker` class
+  (`assets/survival/config/characterclasses.json`: clockmaker → [..., "tinkerer"]). `tinkerer` in
+  `config/traits.json` has empty attributes — a pure gating flag. So the correct token is the trait
+  `"tinkerer"`, NOT a class code. Thematically apt: the Clockmaker's Notebook wants the clockmaker's
+  tinkerer trait.
+- Enforcement short-circuits to **allow** when the player has no `characterClass` watched attribute
+  (classless / no character system) — matching vanilla; documented as a scenario, not a bug.
+- **Scope:** only `recipes/grid/scribeclockmakernotebook.json` gets `requiresTrait`. The plain
+  Notebook and Lectern recipes stay ungated. (User-confirmed.)
+- **Bypass = worldconfig + startup null-out.** Declared **data-only** in a `worldconfig.json` at the
+  mod root next to `modinfo.json` (Scribe is loaded as a folder mod with a `modinfo.json`, so this is
+  the correct form — the `[ModInfo].WorldConfig` attribute form is only for pure code/DLL mods without
+  a `modinfo.json`). One `worldConfigAttributes` entry, mirroring vanilla `survivalchallenges` bools:
+  `{ "category": "scribe", "code": "scribeClockmakerRequiresTrait", "dataType": "bool", "default": "true" }`.
+  Localize its label via lang key `worldattribute-scribeClockmakerRequiresTrait`. **Read** server-side
+  with `sapi.World.Config.GetBool("scribeClockmakerRequiresTrait", true)` — always pass the `true`
+  default explicitly, since worlds created before this key existed won't have it baked into the savegame
+  (`GetBool` does NOT consult the registered attribute default; that default is only written into
+  `World.Config` at world *creation*). When the toggle is off, enumerate `sapi.World.GridRecipes`
+  (the `List<GridRecipe>` on `IWorldAccessor`), match the Clockmaker's Notebook recipe(s) by
+  `r.Name?.Path` / resolved output code, and set `RequiresTrait = null` so `CharacterSystem` allows all.
+  **Timing:** grid recipes are registered by vanilla's `RecipeLoader` at `ExecuteOrder 1.0`, so the
+  null-out must run *after* that — do it in `AssetsFinalize` or `StartServerSide` (both run after all
+  `AssetsLoaded`), NOT in an early `AssetsLoaded`. `/worldconfig scribeClockmakerRequiresTrait false`
+  (alias `/wc`) mutates the same key operators would toggle. (Verified from `VintagestoryLib.dll`
+  `ModContainer.LoadModInfo`/`WorldConfig`/`CmdWorldConfig`, `VintagestoryAPI.dll`
+  `ModWorldConfiguration`/`WorldConfigurationAttribute`/`IWorldAccessor.Config`+`.GridRecipes`/
+  `TreeAttribute.GetBool`, and `VSSurvivalMod.dll` `RecipeLoader.AssetsLoaded`.)
+  - _Alternative rejected — a second `MatchesGridRecipe` handler returning `true`:_ verified unsafe.
+    `Vintagestory.Server.ServerEventAPI.TriggerMatchesRecipe` (`VintagestoryLib.dll`) returns only the
+    **last** subscriber's bool (last-writer-wins, undefined ordering vs. the survival mod's handler),
+    so a bypass handler cannot reliably override the vanilla `false`. Null the field instead.
+  - _Alternative noted — granting `tinkerer` via a player's `extraTraits` watched attribute:_ works
+    per-player (the vanilla handler honors `extraTraits`), but the user asked for a world-wide on/off,
+    so the worldconfig null-out is the chosen mechanism.
+- **No ConfigLib dependency.** The toggle is a vanilla worldconfig setting; ConfigLib stays an
+  optional soft dep unrelated to this gate. (User-confirmed.)
 
 **7. Handbook: data-only, following the Lectern convention.**
 Add `handbook.extraSections` to both notebook itemtypes referencing new `scribe:` lang keys;
 refresh `handbook-scribelectern-*` and the two `config/handbook/*.json` guide pages so mod-wide docs
-read coherently. No C# — the engine auto-loads these.
+read coherently. No C# — the engine auto-loads these. The Clockmaker's Notebook handbook entry SHALL
+mention the `tinkerer`/clockmaker-class crafting requirement so players understand why the recipe may
+not be craftable for them (the engine's own denial is silent).
 
 **8. Launch material stays in the existing `docs/media/` convention.**
 `mod-page.txt` edited in place (fix stale LibGUI 2.0.0 → 3.1.0, add notebook section, bump
@@ -129,3 +202,8 @@ worlds, not shipped saves.
   baseline — finalize at recipe-authoring time and verify in-game.
 - Whether to extend `RELEASE.md` with a 0.2.0 track section or start a dedicated 0.2.0 release doc —
   decide at authoring time (leaning toward extending `RELEASE.md` for continuity).
+- Whether to surface the toggle on the world-creation Customize screen (default `onCustomizeScreen:
+  true`) or hide it (`onCustomizeScreen: false`) and leave it `/worldconfig`-only — decide at
+  authoring time. Key name, DECLARE mechanism, and READ call are now settled (see Decision 6b):
+  `scribeClockmakerRequiresTrait`, default `"true"`, declared in `worldconfig.json`, read via
+  `World.Config.GetBool`.

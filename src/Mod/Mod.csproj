@@ -100,6 +100,7 @@
        project's build output as a mod). Copy them into the build output on every build. -->
   <ItemGroup>
     <None Include="modinfo.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="worldconfig.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="assets/**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

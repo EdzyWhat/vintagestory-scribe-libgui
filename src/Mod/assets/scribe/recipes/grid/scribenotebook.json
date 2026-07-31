@@ -1,0 +1,23 @@
+[
+	{
+		ingredientPattern: "FRN,BL_",
+		ingredients: {
+			"F": { type: "item", code: "game:feather" },
+			"R": { type: "item", code: "game:paper-parchment" },
+			"N": { type: "item", code: "game:metalnailsandstrips-*" },
+			"B": { type: "block", code: "game:bowl-*-fired" },
+			"L": { type: "item", code: "game:leather-normal-plain" }
+		},
+		width: 3,
+		height: 2,
+		attributes: {
+			liquidContainerProps: {
+				requiresContent: { type: "item", code: "game:dye-black" },
+				requiresLitres: 1,
+				consumeContainer: true
+			}
+		},
+		name: "scribe:scribenotebook",
+		output: { type: "item", code: "scribe:scribenotebook", quantity: 1 }
+	}
+]

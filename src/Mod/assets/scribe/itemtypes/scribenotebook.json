@@ -10,6 +10,26 @@
 			"translation": { "x": 0.12, "y": 0, "z": -0.04 },
 			"rotation": { "x": 0, "y": 35, "z": 90 },
 			"origin": { "x": 0.5, "y": 0.05, "z": 0.5 }
+		},
+		"handbook": {
+			"extraSections": [
+				{
+					"title": "scribe:handbook-scribenotebook-about-title",
+					"text": "scribe:handbook-scribenotebook-about-text"
+				},
+				{
+					"title": "scribe:handbook-scribenotebook-editor-title",
+					"text": "scribe:handbook-scribenotebook-editor-text"
+				},
+				{
+					"title": "scribe:handbook-scribenotebook-history-title",
+					"text": "scribe:handbook-scribenotebook-history-text"
+				},
+				{
+					"title": "scribe:handbook-scribenotebook-craft-title",
+					"text": "scribe:handbook-scribenotebook-craft-text"
+				}
+			]
 		}
 	},
 	"shape": { "base": "scribe:item/notebook" },

@@ -1,0 +1,10 @@
+{
+	"worldConfigAttributes": [
+		{
+			"category": "scribe",
+			"code": "scribeClockmakerRequiresTrait",
+			"dataType": "bool",
+			"default": "true"
+		}
+	]
+}

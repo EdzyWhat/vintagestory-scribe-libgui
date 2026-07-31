@@ -114,7 +114,11 @@ public sealed class NotebookHost : IScribeDocumentHost
         return true;
     }
 
-    private void Flush()
+    /// <summary>Writes the document AND history store back to the ItemStack, marks the slot dirty, and
+    /// pushes a full sync to the player's client. Public so server-side tools (e.g. the demo seeder)
+    /// can persist seeded content through the normal flow — mirrors the already-public
+    /// <see cref="FlushHistory"/>.</summary>
+    public void Flush()
     {
         if (_slot.Itemstack is not { } stack) return;
         ScribeDocumentAttributes.WriteTo(stack, _document);

@@ -21,6 +21,10 @@ append-only History and Guestbook logs in particular cannot be hand-authored in 
   fictional Lectern Guestbook visitors — persisted server-authoritatively for screenshot/video
   capture. History seeds only the Notebook; Guestbook seeds only the Lectern (they are hosted
   asymmetrically).
+- **Gate the Clockmaker's Notebook craft behind the `tinkerer` trait** (granted by the vanilla
+  `clockmaker` character class) using the recipe's native `requiresTrait` field — data-only, enforced
+  by the game's own `CharacterSystem`. Add a server-side worldconfig toggle (default: requirement ON)
+  that, when disabled, clears `requiresTrait` at server startup so anyone can craft it.
 - **Fix a latent bug**: live history recorders (deaths, temporal storms, boss kills) never record
   into a held Clockmaker's Notebook because inventory detection matches only `ItemScribeNotebook`.
   Widen detection to include `ItemClockmakerNotebook`.
@@ -44,6 +48,9 @@ append-only History and Guestbook logs in particular cannot be hand-authored in 
   Lectern with sample tasks, notes, and — for capture of otherwise un-fakeable logs — programmatic
   History (notebook) and Guestbook (lectern) entries, persisted through the normal
   server-authoritative flow.
+- `clockmaker-trait-gating`: the Clockmaker's Notebook recipe requires the `tinkerer` trait
+  (data-only `requiresTrait`), with a server worldconfig toggle to disable the requirement
+  world-wide (clears `requiresTrait` at startup).
 
 ### Modified Capabilities
 - `notebook-item`: history events SHALL record into a held Clockmaker's Notebook as well as the
@@ -51,15 +58,17 @@ append-only History and Guestbook logs in particular cannot be hand-authored in 
 
 ## Impact
 
-- **Assets (data-only):** new `recipes/grid/scribenotebook.json`; possible tweaks to
-  `recipes/grid/{scribelectern,scribeclockmakernotebook}.json`; `handbook` blocks in
+- **Assets (data-only):** new `recipes/grid/scribenotebook.json`; `requiresTrait: "tinkerer"` added
+  to `recipes/grid/scribeclockmakernotebook.json` (also corrected to a single 3-ingredient recipe and
+  a valid `game:metal-parts` block code); possible balance tweaks to `recipes/grid/scribelectern.json`; `handbook` blocks in
   `itemtypes/{scribenotebook,scribeclockmakernotebook}.json`; refreshed
   `config/handbook/{00-getting-started,01-editor-reference}.json`; new lang keys in `lang/en.json`.
 - **Code (src/Mod):** new server-side `/scribe seed` command registered in `StartServerSide`
   (`ScribeModSystem.cs`); `NotebookHost.Flush()` made public; widened notebook detection in
-  `FindNotebookInInventory`; new server-only `BlockEntityScribeLectern.SeedGuestbook(...)`. No new
-  network message types; no `src/Core` API dependency added (Core seeding uses existing
-  `AddTask`/`AddTextSection`/`TryAddEntry`).
+  `FindNotebookInInventory`; new server-only `BlockEntityScribeLectern.SeedGuestbook(...)`; a
+  server-startup worldconfig read that clears `RequiresTrait` on the Clockmaker's Notebook recipe(s)
+  when the bypass toggle is on. No new network message types; no `src/Core` API dependency added
+  (Core seeding uses existing `AddTask`/`AddTextSection`/`TryAddEntry`).
 - **Docs/media:** `docs/media/mod-page.txt`, `docs/media/wiki/*` (new drafts), a new 0.2 reddit
   post, `docs/media/video-script.md`, `docs/media/screenshots/0.2/` (capture target).
 - **Release:** `src/Mod/modinfo.json` version, `CHANGELOG.md`, release tracker.
