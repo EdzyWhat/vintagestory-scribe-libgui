@@ -826,8 +826,13 @@ public sealed class ScribeModSystem : ModSystem
 
         foreach (var inv in player.InventoryManager.InventoriesOrdered)
         {
-            foreach (var slot in inv)
+            IEnumerable<ItemSlot>? slots;
+            try { slots = new List<ItemSlot>(inv); }
+            catch { continue; }
+
+            foreach (var slot in slots)
             {
+                if (slot is null) continue;
                 if (slot.Itemstack?.Collectible is not ItemScribeNotebook) continue;
                 if (!ScribeDocumentAttributes.TryReadFrom(slot.Itemstack, out var doc) || doc is null) continue;
                 if (doc.DocId != docId) continue;

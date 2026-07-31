@@ -211,6 +211,7 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
         {
             Document = doc;
             RegisterDocInStore();
+            ModSystem?.RegisterHost(this); // re-register under the restored DocId
             MarkDirty();
         }
     }
@@ -306,6 +307,7 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
         {
             Document = doc;
             RegisterDocInStore(); // an edit never changes the DocId, but keep the index authoritative
+            ModSystem?.RegisterHost(this); // re-register in case the DocId changed (e.g. a fresh document in tests)
             MarkDirty(redrawOnClient: true);
             // Only the editing player's own pins reconcile to their edit (grief-proof, player-owned).
             ReconcileActorPins(fromPlayer.PlayerUID);
