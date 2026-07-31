@@ -129,6 +129,16 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         "settings-muteuisounds", colors, scale,
                         value: settings.MuteUiSounds,
                         onChanged: v => onMutate(s => s.MuteUiSounds = v))),
+
+                // "Timer disappears" (timer-auto-disappear-setting): when on, a fired Clockmaker's Notebook
+                // timer auto-clears from the HUD after ~30 s; when off it stays until dismissed. Sits on its
+                // own paired row (left column) beneath the first pair, keeping the hugging-checkbox layout.
+                PairedControls(colors, scale,
+                    HuggingCheckbox(
+                        "settings-timerdisappear", colors, scale,
+                        value: settings.TimerAutoDisappear,
+                        onChanged: v => onMutate(s => s.TimerAutoDisappear = v)),
+                    new SizedBox()),
             });
     }
 

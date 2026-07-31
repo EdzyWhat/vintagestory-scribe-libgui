@@ -58,10 +58,6 @@ public sealed class ScribeModSystem : ModSystem
     private long timerTickListenerId;
     private long timerDisplayTickId;
 
-    /// <summary>Seconds elapsed since each player's timer fired. Used for the 30-second auto-clear.
-    /// Separate from <see cref="timerStores"/> so it doesn't affect the codec.</summary>
-    private readonly Dictionary<string, double> timerFiredElapsed = new();
-
     /// <summary>Client-side cache of THIS player's own pins, populated by the server push. Keyed by
     /// (docId, taskId) for O(1) <see cref="IsPinnedForMe"/> lookups from the GUI.</summary>
     private readonly HashSet<(Guid, Guid)> myPins = new();
@@ -555,10 +551,14 @@ public sealed class ScribeModSystem : ModSystem
                         int    len   = r.ReadInt32();
                         byte[] blob  = r.ReadBytes(len);
                         var    store = TimerStore.Deserialize(blob);
-                        // Only resume Running timers. A persisted Fired timer (possible from a savegame
-                        // written by an older build) is dropped so it doesn't flash on rejoin — see the
-                        // matching filter in OnGameWorldSave.
+                        // Resume Running timers AND fired-but-undismissed timers. A Fired timer carries its
+                        // FiredElapsedSeconds (codec v2), so its client-driven auto-disappear resumes the
+                        // remaining window rather than restarting a fresh 30 s — see the matching filter in
+                        // OnGameWorldSave. (A v1 save never persisted Fired timers, so no legacy Fired blob
+                        // with elapsed=0 can flash a full window on load.)
                         if (store.Status == TimerStatus.Running && store.RemainingSeconds > 0)
+                            timerStores[uid] = store;
+                        else if (store.Status == TimerStatus.Fired)
                             timerStores[uid] = store;
                     }
                 }
@@ -574,18 +574,21 @@ public sealed class ScribeModSystem : ModSystem
 
         if (timerStores is not null)
         {
-            // Only persist Running timers. A Fired timer is a transient notification whose flash is
-            // driven by the un-persisted timerFiredElapsed counter; resurrecting it on reload would
-            // restart the 30 s flash from zero even though nothing just completed (the "flashing on
-            // rejoin with no active timer" bug). Fired/Idle timers are simply dropped on save.
-            var running = timerStores.Where(kv => kv.Value.Status == TimerStatus.Running).ToList();
-            if (running.Count > 0)
+            // Persist Running AND fired-but-undismissed timers. A fired timer is a notification the player
+            // may not have acknowledged yet; dropping it on save would silently lose it across a relog.
+            // Its FiredElapsedSeconds (codec v2) is persisted with it, so the client-driven auto-disappear
+            // resumes the remaining window on rejoin rather than restarting a fresh 30 s
+            // (timer-auto-disappear-setting). Idle timers are still dropped.
+            var persisted = timerStores
+                .Where(kv => kv.Value.Status is TimerStatus.Running or TimerStatus.Fired)
+                .ToList();
+            if (persisted.Count > 0)
             {
                 using var ms = new System.IO.MemoryStream();
                 using (var w = new System.IO.BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
                 {
-                    w.Write(running.Count);
-                    foreach (var (uid, store) in running)
+                    w.Write(persisted.Count);
+                    foreach (var (uid, store) in persisted)
                     {
                         var blob = store.Serialize();
                         w.Write(uid);
@@ -1161,10 +1164,11 @@ public sealed class ScribeModSystem : ModSystem
         var store = timerStores.TryGetValue(player.PlayerUID, out var s) ? s : new TimerStore();
         sapi.Network.GetChannel(NetworkChannelName).SendPacket(new ScribeTimerStateMessage
         {
-            Status           = store.Status,
-            Mode             = store.Mode,
-            Label            = store.Label,
-            RemainingSeconds = store.RemainingSeconds,
+            Status              = store.Status,
+            Mode                = store.Mode,
+            Label               = store.Label,
+            RemainingSeconds    = store.RemainingSeconds,
+            FiredElapsedSeconds = store.FiredElapsedSeconds,
         }, player);
     }
 
@@ -1194,10 +1198,11 @@ public sealed class ScribeModSystem : ModSystem
     {
         MyTimer = new TimerStore
         {
-            Status           = message.Status,
-            Mode             = message.Mode,
-            Label            = message.Label ?? "",
-            RemainingSeconds = message.RemainingSeconds,
+            Status              = message.Status,
+            Mode                = message.Mode,
+            Label               = message.Label ?? "",
+            RemainingSeconds    = message.RemainingSeconds,
+            FiredElapsedSeconds = message.FiredElapsedSeconds,
         };
         MyTimerChanged?.Invoke();
         // Refresh the Timer tab in any open Clockmaker's Notebook dialog.
@@ -1208,18 +1213,23 @@ public sealed class ScribeModSystem : ModSystem
         }
     }
 
-    /// <summary>1-second server tick: decrement running timers, fire at zero, auto-clear after 30 s.
-    /// A timer's <c>RemainingSeconds</c> is stored in the unit the player entered. In RealTime mode it
-    /// counts down one-per-real-second; in InGame mode it drains at the world's in-game time rate, so an
-    /// entered in-game duration fires when that much in-game time has actually passed (≈30× faster than
-    /// real time by default). This also means InGame timers pause exactly when the world does.</summary>
+    /// <summary>1-second server tick: decrement running timers and fire at zero. A timer's
+    /// <c>RemainingSeconds</c> is stored in the unit the player entered. In RealTime mode it counts down
+    /// one-per-real-second; in InGame mode it drains at the world's in-game time rate, so an entered
+    /// in-game duration fires when that much in-game time has actually passed (≈30× faster than real time
+    /// by default). This also means InGame timers pause exactly when the world does.
+    ///
+    /// <para>The server does NOT auto-clear a fired timer: the 30 s auto-disappear is governed by the
+    /// player's client-local <see cref="ScribePlayerSettings.TimerAutoDisappear"/> preference, which only
+    /// the client knows, so the client drives the clear (timer-auto-disappear-setting). The server merely
+    /// accumulates <see cref="TimerStore.FiredElapsedSeconds"/> on the fired store so the flash window is
+    /// persisted and resumes (not restarts) across a relog.</para></summary>
     private void OnTimerTick(float _)
     {
         if (sapi is null || timerStores is null) return;
 
         double inGameRate = ScribeTimeRate.InGamePerReal(sapi);
 
-        List<string>? toRemove = null;
         foreach (var (uid, store) in timerStores)
         {
             var player = sapi.World.PlayerByUid(uid) as IServerPlayer;
@@ -1231,29 +1241,16 @@ public sealed class ScribeModSystem : ModSystem
                 {
                     store.RemainingSeconds = 0;
                     store.Status = TimerStatus.Fired;
-                    timerFiredElapsed[uid] = 0;
+                    store.FiredElapsedSeconds = 0;
                 }
                 if (player is not null) PushTimerTo(player);
             }
             else if (store.Status == TimerStatus.Fired)
             {
-                timerFiredElapsed.TryGetValue(uid, out var elapsed);
-                timerFiredElapsed[uid] = elapsed + 1.0;
-                if (elapsed + 1.0 >= 30.0)
-                {
-                    toRemove ??= new List<string>();
-                    toRemove.Add(uid);
-                }
-            }
-        }
-        if (toRemove is not null)
-        {
-            foreach (var uid in toRemove)
-            {
-                var player = sapi.World.PlayerByUid(uid) as IServerPlayer;
-                timerStores.Remove(uid);
-                timerFiredElapsed.Remove(uid);
-                if (player is not null) PushTimerTo(player);
+                // Keep the persisted fired-elapsed advancing (real seconds — the flash window is real-time
+                // regardless of the timer's countdown mode). No auto-removal here: the client sends the
+                // clear when its "Timer disappears" preference is on and the window elapses.
+                store.FiredElapsedSeconds += 1.0;
             }
         }
     }

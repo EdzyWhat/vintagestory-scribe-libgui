@@ -20,8 +20,13 @@ public sealed class ScribeClearTimerMessage { }
 [ProtoContract]
 public sealed class ScribeTimerStateMessage
 {
-    [ProtoMember(1)] public TimerStatus Status           { get; set; }
-    [ProtoMember(2)] public TimerMode   Mode             { get; set; }
-    [ProtoMember(3)] public string?     Label            { get; set; }
-    [ProtoMember(4)] public double      RemainingSeconds { get; set; }
+    [ProtoMember(1)] public TimerStatus Status              { get; set; }
+    [ProtoMember(2)] public TimerMode   Mode                { get; set; }
+    [ProtoMember(3)] public string?     Label               { get; set; }
+    [ProtoMember(4)] public double      RemainingSeconds    { get; set; }
+
+    /// <summary>Seconds the timer has been in the Fired state (0 while Idle/Running). The client seeds its
+    /// own auto-disappear accumulator from this so a fired timer restored on rejoin resumes the remaining
+    /// window rather than restarting (timer-auto-disappear-setting).</summary>
+    [ProtoMember(5)] public double      FiredElapsedSeconds { get; set; }
 }

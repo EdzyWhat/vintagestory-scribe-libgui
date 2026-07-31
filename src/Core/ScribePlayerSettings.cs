@@ -35,6 +35,16 @@ public sealed class ScribePlayerSettings
     /// leaves it untouched.</summary>
     public bool MuteUiSounds { get; set; }
 
+    /// <summary>Whether a fired Clockmaker's Notebook timer automatically disappears from the pinned-task
+    /// HUD after <see cref="TimerStore.FiredAutoClearSeconds"/> (~30 s). Default <c>true</c> (the timer
+    /// disappears), preserving the original behavior. When <c>false</c>, a fired timer stays on the HUD
+    /// until the player dismisses it — by clicking the fired HUD timer row or pressing Stop Timer in the
+    /// Clockmaker's Notebook. Because this is client-local and never server-synced, the auto-disappear is
+    /// driven by the player's own client (which alone knows the preference) rather than the server tick
+    /// (timer-auto-disappear-setting). A plain bool needing no clamp, so <see cref="Normalized"/> leaves it
+    /// untouched.</summary>
+    public bool TimerAutoDisappear { get; set; } = true;
+
     /// <summary>Whether the Lectern dialog's views (read, editor, and later the pinned view) render in the
     /// mod's net-new "pixel-art" look — the light parchment theme (dark ink on light paper) plus, in a
     /// later phase, illustrated backgrounds. Default <c>true</c> (on). When off, those views fall back to

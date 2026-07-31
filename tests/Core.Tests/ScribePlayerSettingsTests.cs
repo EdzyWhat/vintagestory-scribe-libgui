@@ -45,6 +45,17 @@ public class ScribePlayerSettingsTests
         Assert.True(new ScribePlayerSettings { MuteUiSounds = true }.Normalized().MuteUiSounds);
     }
 
+    [Fact]
+    public void Default_TimerAutoDisappear_IsOn()
+    {
+        // A fresh profile (no saved preference) keeps the original behavior: a fired timer disappears
+        // from the HUD after ~30 s (timer-auto-disappear-setting). Normalized() leaves a bool untouched
+        // (nothing to clamp), so a stored value round-trips unchanged — including an explicit false.
+        Assert.True(new ScribePlayerSettings().TimerAutoDisappear);
+        Assert.True(new ScribePlayerSettings().Normalized().TimerAutoDisappear);
+        Assert.False(new ScribePlayerSettings { TimerAutoDisappear = false }.Normalized().TimerAutoDisappear);
+    }
+
     [Theory]
     [InlineData(2.5f, 1.2f)]   // above max -> clamp to max notch
     [InlineData(1.5f, 1.2f)]

@@ -64,6 +64,9 @@
 	"settings-muteuisounds": "Mute Scribe UI sounds",
 	"settings-muteuisounds-help": "Silence Scribe's button sounds — your game and other mods' sounds are untouched.",
 
+	"settings-timerdisappear": "Timer disappears",
+	"settings-timerdisappear-help": "When on, a finished Clockmaker's Notebook timer disappears from the HUD after about 30 seconds. Turn off to keep it showing until you click it or press Stop Timer.",
+
 	"settings-pixelartdisplay": "Pixel-Art Display",
 	"settings-pixelartdisplay-help": "Toggle the custom art and theme for Scribe's blocks and items",
 

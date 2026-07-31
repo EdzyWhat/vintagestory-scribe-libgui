@@ -154,6 +154,20 @@ public sealed class HudScribePins : GuiBase
     /// display tick).</summary>
     private Scribe.Core.TimerStatus _lastTimerStatus = Scribe.Core.TimerStatus.Idle;
 
+    /// <summary>Client-side accumulator for how long the current timer has been Fired, in real seconds. The
+    /// server no longer times the 30 s auto-disappear (it's governed by the client-local
+    /// <see cref="ScribePlayerSettings.TimerAutoDisappear"/> preference, which only the client knows), so
+    /// this drives it. Seeded from the pushed <see cref="TimerStore.FiredElapsedSeconds"/> whenever a Fired
+    /// state arrives — 0 at the firing transition, or the persisted value when a fired timer is restored on
+    /// rejoin, so the window resumes rather than restarts — then advanced locally on the 1 Hz
+    /// <see cref="ScribeModSystem.TimerDisplayTick"/> (timer-auto-disappear-setting).</summary>
+    private double _firedElapsedLocal;
+
+    /// <summary>Guards against sending more than one auto-clear for the same fired timer (the clear request
+    /// and the server's Idle re-push are a round-trip apart, during which another 1 Hz tick could fire).
+    /// Reset each time a fresh Fired state arrives.</summary>
+    private bool _firedAutoClearSent;
+
 
     public HudScribePins(ICoreClientAPI capi, ScribeModSystem modSystem) : base(capi)
     {
@@ -173,6 +187,24 @@ public sealed class HudScribePins : GuiBase
     private void OnTimerDisplayTick()
     {
         var timer = modSystem.MyTimer;
+
+        // Client-driven auto-disappear (timer-auto-disappear-setting): while a timer is Fired, advance the
+        // local elapsed and — ONLY if the player's "Timer disappears" preference is on — clear it once the
+        // ~30 s window elapses. Re-reading the preference every tick is what makes turning it off mid-flash
+        // take effect live: the check simply stops passing, so no clear is ever sent and the fired row
+        // stays until the player dismisses it. The server no longer times this.
+        if (timer?.Status == Scribe.Core.TimerStatus.Fired)
+        {
+            _firedElapsedLocal += 1.0;
+            if (!_firedAutoClearSent
+                && modSystem.MySettings.TimerAutoDisappear
+                && _firedElapsedLocal >= Scribe.Core.TimerStore.FiredAutoClearSeconds)
+            {
+                _firedAutoClearSent = true;
+                SendClearTimer();
+            }
+        }
+
         if (timer?.Status == Scribe.Core.TimerStatus.Running && IsOpened())
             ForceRebuild();
     }
@@ -340,6 +372,21 @@ public sealed class HudScribePins : GuiBase
         var status = timer?.Status ?? Scribe.Core.TimerStatus.Idle;
         bool statusChanged = status != _lastTimerStatus;
         _lastTimerStatus = status;
+
+        // A fresh Fired state (the firing transition, or a fired timer restored on rejoin) reseeds the
+        // client-side auto-disappear accumulator from the pushed elapsed and re-arms the one-shot clear, so
+        // the ~30 s window resumes from where the server left it rather than restarting. Any non-Fired state
+        // (Running/Idle/cleared) resets it so a later fire starts a clean window.
+        if (status == Scribe.Core.TimerStatus.Fired)
+        {
+            _firedElapsedLocal = timer?.FiredElapsedSeconds ?? 0.0;
+            _firedAutoClearSent = false;
+        }
+        else
+        {
+            _firedElapsedLocal = 0.0;
+            _firedAutoClearSent = false;
+        }
 
         bool hasTimer = status is Scribe.Core.TimerStatus.Running or Scribe.Core.TimerStatus.Fired;
         if (hasTimer && !IsOpened() && modSystem.MyPins.Count == 0)

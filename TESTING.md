@@ -21,6 +21,38 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## timer-auto-disappear-setting
+
+> New per-player "Timer disappears" preference (Mod Behavior). Default ON preserves the original
+> ~30 s auto-clear of a fired Clockmaker's Notebook timer; OFF keeps the fired timer on the HUD
+> until dismissed. Auto-clear moved server→client (client-local pref); fired timers now persist
+> across relog and resume (not restart) their window. Build + Core suite pass; needs in-game verify.
+> ⚠️ Restage before testing (staged build was stale as of implementation).
+
+- [x] `3f30ea17` **Default disappear.** With Timer disappears ON (default), set a short Clockmaker's
+      Notebook timer, let it fire, and confirm the fired timer row leaves the HUD after ~30 s with no
+      action. *(timer-auto-disappear-setting 8.2)*
+  - **Confirmed 2026-07-31** in-game: default-on fired timer disappears from the HUD on its own.
+- [x] `04828d42` **Off → HUD click.** Turn Timer disappears OFF, let a timer fire, wait well past 30 s
+      and confirm the fired row stays; then click the fired HUD row and confirm it clears.
+      *(timer-auto-disappear-setting 8.2)*
+  - **Confirmed 2026-07-31** in-game: with the setting off, the fired row stays and clears on HUD click.
+- [x] `11ff7552` **Off → Stop Timer.** With Timer disappears OFF and a timer fired, open the
+      Clockmaker's Notebook Timer tab and press Stop Timer; confirm the fired row clears from the HUD.
+      *(timer-auto-disappear-setting 8.2)*
+  - **Confirmed 2026-07-31** in-game: with the setting off, the fired row stays and clears via Stop Timer.
+- [x] `8ed153d0` **Open ≠ clear.** With a timer fired, open the Clockmaker's Notebook (any tab) and
+      take no action; confirm the fired timer is NOT cleared and still shows. *(timer-auto-disappear-setting 8.2)*
+  - **Confirmed 2026-07-31** in-game: opening the notebook does not clear the fired timer.
+- [x] `ac0bd817` **Toggle off mid-flash.** Let a timer fire with Timer disappears ON, then within the
+      30 s window turn the setting OFF; confirm the pending auto-clear is cancelled and the fired row
+      stays. *(timer-auto-disappear-setting 8.2)*
+  - **Confirmed 2026-07-31** in-game: toggling off mid-flash cancels the pending auto-clear; the row stays.
+- [x] `7435c6bf` **Relog resumes window.** With Timer disappears ON, let a timer fire, wait ~20 s, log
+      out and back in; confirm the fired timer still shows on rejoin and clears after roughly the
+      REMAINING window (not a fresh 30 s). *(timer-auto-disappear-setting 8.2)*
+  - **Confirmed 2026-07-31** in-game: fired timer survives relog and still shows on rejoin.
+
 ## lectern-task-text-clip (RELEASE.md A1)
 
 > v1-blocking edit fix (implemented + staged 2026-07-26): over-long task text is now CLIPPED at 1000 chars
