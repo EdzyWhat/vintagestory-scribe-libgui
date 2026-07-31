@@ -1817,3 +1817,15 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       crafting section states that upgrading to the Clockmaker's Notebook keeps your tasks and History.
       *(carry-notebook-doc-through-craft 2.0)*
 
+## title-pencil-crash-fix
+
+> In-game testing (2026-07-31) surfaced a hard crash: clicking the Edit-tab title pencil NPE'd inside
+> LibGUI (`ButtonState.PlaySound`, null `Element.Owner`). Cause was the pencil tap calling `ForceRebuild()`
+> then `RequestFocus()` synchronously inside the pointer dispatch, orphaning a sibling button mid-walk.
+> Fixed by deferring the title focus to `OnRenderGUI` via `_pendingTitleFocus`. ⚠️ Restaged Debug
+> 2026-07-31 — fully relaunch the client first. (VSAPI-NOTES.md "0.2.0 title-pencil".)
+
+- [ ] `5f69fd12` **Title pencil no longer crashes.** Open a Notebook / Clockmaker's Notebook / Lectern
+      editor, click the title-edit pencil; the field enters edit mode and focuses without crashing, and
+      clicking other buttons in the same dialog does not NPE. Type a long title and confirm it clamps /
+      scrolls horizontally instead of wrapping. *(title-pencil-crash-fix)*

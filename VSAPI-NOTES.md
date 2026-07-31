@@ -1246,6 +1246,27 @@ NOT clear our `focusedEditIndex` (its listener fires only on focus GAINED), so t
 row to restore. See `DeleteEditorBlock`, `TogglePinnedEditorTask`/`OnMyPinsChanged`, and `ReorderEditorBlock`
 in `GuiDialogScribeLecternLibGui.cs`.
 
+**Symptom (0.2.0 title-pencil): clicking a button crashes with `NullReferenceException` in
+`ButtonState.PlaySound` (`Button.cs:109`, shipped `gui@3.1.0`), reached from
+`GestureDetector.OnPointerDown` → `SetState` → `PlaySound` → `base.Element.Owner.GetSoundPlayer()`.** The
+null is `Element`/`Owner`, NOT the sound player (`GetSoundPlayer()` *throws `InvalidOperationException`*
+when the player is unset). Cause: a handler called `ForceRebuild()` **and then a follow-up mutation
+(`FocusNode.RequestFocus()`) synchronously, from inside the pointer-down dispatch.** `GuiBase.ForceRebuild`
+does `RootElement.Unmount()` on the WHOLE tree and remounts a fresh one; doing that mid-dispatch orphans
+the sibling buttons still queued in `EventDispatcher.DispatchToHierarchy`'s pointer-down walk, so when the
+walk reaches one its `_isPressed=true; PlaySound()` runs against a now-null `Owner`. Note none of your own
+code appears on the crash stack — it's entirely inside `gui.dll` input dispatch — but your rebuild-from-a-
+tap is the trigger. A plain `ForceRebuild()` from a tap (e.g. a tab switch) is USUALLY survivable; the
+crash showed up when the tap ALSO re-homed focus onto the freshly-remounted node in the same handler.
+**Fix pattern:** never mutate the tree AND move focus synchronously inside a pointer handler. Arm a
+one-shot pending flag, `ForceRebuild()`, and do the `RequestFocus()` from the next `OnRenderGUI` (a safe
+post-dispatch point) once the rebuilt field has mounted (`FocusNode.Owner is not null`). See
+`_pendingTitleFocus` in `ScribeDialogBase.cs` — mirrors `pendingEnsureVisible` and the collapse/empty-row
+sweeps that defer tree edits out of animation/notification callbacks for the same re-entrancy reason.
+Related: our own custom fields self-focus safely from their `InitState` via an `autoFocus` param
+(`ScribeMultilineField`), which is post-mount; the stock `TextField` has no such param, so a dialog-owned
+node must be focused this deferred way instead.
+
 **Fact (scribe-themed-toggle): a per-dialog theme = wrap the dialog's `Build()` output in
 `new Theme(themeData, child: …)`; `GuiBase` gives no theme override hook.** `GuiBase.BuildRootTree`
 always wraps content in the global `Theme(ThemeData.Default…)`, and exposes no way to override it. The
