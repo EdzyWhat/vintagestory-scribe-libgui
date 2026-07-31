@@ -1848,6 +1848,10 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
     /// open dialog on the next rebuild.</summary>
     private ScribeRowStyle RowStyle => ScribeRowStyle.FromSettings(modSystem.MySettings);
 
+    /// <summary>Lang key for the empty-document hint shown in the Read and Edit views. Notebook
+    /// subclasses override this to show "This notebook is empty…" instead of the Lectern phrasing.</summary>
+    protected virtual string EmptyHintLangKey => "scribe:scribe-gui-edit-hint";
+
     private Widget BuildReadContent() =>
         new ScribeReadContent(
             // Snapshot the block list for this build into value copies (never a live block
@@ -1870,7 +1874,8 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
             footerButtonPadding: EdgeInsets.Symmetric(
                 horizontal: 0.04f * host.GetLayout(modSystem.MySettings.PixelArtSize).W),
             style: RowStyle,
-            scrollController: sharedScrollController);
+            scrollController: sharedScrollController,
+            hintLangKey: EmptyHintLangKey);
 
     private Widget BuildEditorContent()
     {
@@ -1911,7 +1916,8 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
             scrollController: sharedScrollController,
             departingRows: departing,
             collapseRegistry: editorCollapseRegistry,
-            onDepartingCollapsed: OnEditorRowCollapsed);
+            onDepartingCollapsed: OnEditorRowCollapsed,
+            hintLangKey: EmptyHintLangKey);
     }
 
     /// <summary>Read-view task checkbox click: complete the task by its stable identity via the

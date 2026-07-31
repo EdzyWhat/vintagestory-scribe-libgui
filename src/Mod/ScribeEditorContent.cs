@@ -128,7 +128,8 @@ internal sealed class ScribeEditorContent : StatefulWidget
         ScrollController scrollController,
         IReadOnlyList<ScribeDepartingEditorRow> departingRows,
         ScribeCollapseRegistry collapseRegistry,
-        Action<Guid> onDepartingCollapsed)
+        Action<Guid> onDepartingCollapsed,
+        string hintLangKey = "scribe:scribe-gui-edit-hint")
     {
         Blocks = blocks;
         FocusNodes = focusNodes;
@@ -150,6 +151,7 @@ internal sealed class ScribeEditorContent : StatefulWidget
         DepartingRows = departingRows;
         CollapseRegistry = collapseRegistry;
         OnDepartingCollapsed = onDepartingCollapsed;
+        HintLangKey = hintLangKey;
     }
 
     public IReadOnlyList<ScribeEditRowData> Blocks { get; }
@@ -188,6 +190,7 @@ internal sealed class ScribeEditorContent : StatefulWidget
     /// <summary>Fired (with the row's TaskId) when a departing row's collapse completes, so the dialog can
     /// remove its ghost and re-clamp the scroll extent.</summary>
     public Action<Guid> OnDepartingCollapsed { get; }
+    public string HintLangKey { get; }
 
     public override State CreateState() => new ScribeEditorContentState();
 }
@@ -248,11 +251,10 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
         if (Widget.Blocks.Count == 0)
         {
             var hintStyle = Widget.Style;
-            scrollBody = new Padding(
-                EdgeInsets.All(12),
-                child: new Text(
-                    Lang.Get("scribe:scribe-gui-edit-hint"),
-                    new TextStyle { FontSize = hintStyle.FontSize, Color = colors.OnSurfaceVariant, SoftWrap = true, FontFamily = ScribeTaskFont.Resolve(hintStyle.TaskFontFamily) }));
+            scrollBody = new Center(child: new Text(
+                Lang.Get(Widget.HintLangKey),
+                new TextStyle { FontSize = hintStyle.FontSize, Color = colors.OnSurfaceVariant, SoftWrap = true,
+                    FontFamily = ScribeTaskFont.Resolve(hintStyle.TaskFontFamily), Align = TextAlignment.Center }));
         }
         else
         {

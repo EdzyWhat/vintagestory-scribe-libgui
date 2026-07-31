@@ -235,7 +235,7 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
             {
                 new SizedBox(width: 260, child: labelRow),
                 timeRow,
-                modeRow,
+                new SizedBox(width: 260, child: modeRow),
                 startBtn,
             });
     }
@@ -422,9 +422,17 @@ internal sealed class ScribeTimerModeRowState : State<ScribeTimerModeRow>
     }
 
     public override Widget Build(BuildContext context)
-        => new Row(
+    {
+        // Use the theme's default radio style, overriding only the label font to Caudex-Bold.
+        var radioStyle = Theme.Of(context).RadioButtonStyle with
+        {
+            LabelStyle = Widget.BodyStyle with { FontFamily = ScribeTaskFont.ButtonFamily },
+        };
+
+        return new Row(
             spacing: 16,
-            mainAxisSize: MainAxisSize.Min,
+            mainAxisSize: MainAxisSize.Max,
+            mainAxisAlignment: MainAxisAlignment.Center,
             crossAxisAlignment: CrossAxisAlignment.Center,
             children: new Widget[]
             {
@@ -433,14 +441,17 @@ internal sealed class ScribeTimerModeRowState : State<ScribeTimerModeRow>
                     groupValue: _current,
                     onChanged: Select,
                     label: Lang.Get("scribe:scribe-gui-timer-mode-ingame"),
-                    size: Widget.CheckboxSize),
+                    size: Widget.CheckboxSize,
+                    style: radioStyle),
                 new RadioButton<int>(
                     value: (int)TimerMode.RealTime,
                     groupValue: _current,
                     onChanged: Select,
                     label: Lang.Get("scribe:scribe-gui-timer-mode-realtime"),
-                    size: Widget.CheckboxSize),
+                    size: Widget.CheckboxSize,
+                    style: radioStyle),
             });
+    }
 }
 
 // ── ScribeBlinkText ──────────────────────────────────────────────────────────

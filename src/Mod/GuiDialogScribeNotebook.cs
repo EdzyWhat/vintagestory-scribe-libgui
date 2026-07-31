@@ -46,6 +46,8 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
     /// to a block position, so we never want the dialog to auto-close based on distance.</summary>
     protected override double InteractionRange => double.MaxValue;
 
+    protected override string EmptyHintLangKey => "scribe:scribe-gui-edit-hint-notebook";
+
     /// <summary>The Notebook grants editor access immediately without a server round-trip — there is
     /// no lock to contend over when only one player can hold an item at a time. Seed the scratch from
     /// the host's current document so existing tasks and title are preserved when entering editor mode.</summary>

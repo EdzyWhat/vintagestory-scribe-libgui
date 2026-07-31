@@ -39,7 +39,8 @@ internal sealed class ScribeReadContent : StatefulWidget
         Action onSwitchToEditor,
         EdgeInsets footerButtonPadding,
         ScribeRowStyle style,
-        ScrollController scrollController)
+        ScrollController scrollController,
+        string hintLangKey = "scribe:scribe-gui-edit-hint")
     {
         Blocks = blocks;
         OnToggleTask = onToggleTask;
@@ -48,6 +49,7 @@ internal sealed class ScribeReadContent : StatefulWidget
         FooterButtonPadding = footerButtonPadding;
         Style = style;
         ScrollController = scrollController;
+        HintLangKey = hintLangKey;
     }
 
     public IReadOnlyList<ScribeReadRowData> Blocks { get; }
@@ -63,6 +65,7 @@ internal sealed class ScribeReadContent : StatefulWidget
     /// <summary>Dialog-owned scroll controller shared by both views (see the dialog field); NOT disposed
     /// here — the dialog owns its lifetime so the scroll offset survives the view-switch rebuild.</summary>
     public ScrollController ScrollController { get; }
+    public string HintLangKey { get; }
 
     public override State CreateState() => new ScribeReadContentState();
 }
@@ -84,11 +87,10 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
         if (Widget.Blocks.Count == 0)
         {
             var hintStyle = Widget.Style;
-            rowList = new Padding(
-                EdgeInsets.All(12),
-                child: new Text(
-                    Lang.Get("scribe:scribe-gui-edit-hint"),
-                    new TextStyle { FontSize = hintStyle.FontSize, Color = colors.OnSurfaceVariant, SoftWrap = true, FontFamily = ScribeTaskFont.Resolve(hintStyle.TaskFontFamily) }));
+            rowList = new Center(child: new Text(
+                Lang.Get(Widget.HintLangKey),
+                new TextStyle { FontSize = hintStyle.FontSize, Color = colors.OnSurfaceVariant, SoftWrap = true,
+                    FontFamily = ScribeTaskFont.Resolve(hintStyle.TaskFontFamily), Align = TextAlignment.Center }));
         }
         else
         {
