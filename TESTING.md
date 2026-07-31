@@ -1800,6 +1800,16 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         such config found" even with the file staged. Need (1) player-facing mod-page instructions for
         setting/enabling the config on an existing world, and (2) a decision on migrating the key into
         already-created worlds. Legs (b)/(c) remain unverified.
+      - **Update 2026-07-31** (engine-source investigation, no migration needed): decompiled `CmdWorldConfig`
+        + `GuiScreenWorldCustomize`. `/worldconfig` discovers keys from the LOADED mod's `WorldConfigAttributes`
+        (`modLoader.Mods`), not from what was seeded into the save; on read it falls back to `TypedDefault`
+        when the save lacks the key, and `SetBool` writes it unconditionally. So NO existing-world backfill
+        code is needed — `/worldconfig scribeClockmakerRequiresTrait false` works on any world AS LONG AS the
+        mod actually ships `worldconfig.json`. The real bug was `build/package.sh` never staging that file into
+        the release zip (fixed 2026-07-31), so the released mod had a null `WorldConfig` and reported "No such
+        config found" everywhere. Also set `onCustomizeScreen: false` (operator command only, no world-creation
+        GUI toggle — user's call) and pointed the handbook craft text at the concrete `/worldconfig …` command.
+        Re-test legs (b)/(c) with the fresh restage; the existing-world migration concern is resolved (non-issue).
 - [x] `0213647b` **Handbook sections render.** Open the in-game handbook for both the Notebook and
       Clockmaker's Notebook and confirm the new extra sections show; the getting-started + editor-reference
       guide pages read coherently with working cross-links. *(scribe-0-2-0-release-content 2.4)*

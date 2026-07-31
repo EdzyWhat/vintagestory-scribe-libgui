@@ -36,6 +36,13 @@ dotnet build src/Mod/Mod.csproj --configuration Release
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 cp "$MODINFO" "$STAGE/"
+# worldconfig.json (mod-root sibling of modinfo.json) declares the worldConfigAttributes the
+# engine reads into Mod.WorldConfig. Without it in the shipped zip, /worldconfig can't find our
+# keys ("No such config found") on ANY world -- the released mod would have no WorldConfig at all.
+# Mirror restage.sh's guard; optional because not every mod ships one.
+if [[ -f "src/Mod/worldconfig.json" ]]; then
+  cp "src/Mod/worldconfig.json" "$STAGE/"
+fi
 cp src/Mod/bin/Release/net10.0/*.dll "$STAGE/"
 if [[ -d src/Mod/assets ]]; then
   cp -R src/Mod/assets "$STAGE/assets"

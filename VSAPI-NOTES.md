@@ -795,6 +795,45 @@ reports "No such config found" for a key your `worldconfig.json` clearly declare
   lower-cased: `category`, `code`, `dataType`, `default`).
 - Note it stayed hidden until the file was actually staged: before that, `WorldConfig` was null
   so the whole `foreach (verifiedMod ...)` outer loop skipped scribe entirely.
+- **The staging gap is THREE scripts, not one.** `restage.sh` was fixed first, then `restage.ps1`
+  (Windows dev), then — the one that actually reaches players — **`build/package.sh`** (the release
+  zip). All three independently copy `modinfo.json` + DLLs + `assets/` and each needed its own
+  `worldconfig.json` copy added. A fix to the dev restagers does NOT fix the shipped mod; if
+  `/worldconfig` says "No such config found" for a *released* build, suspect `package.sh` first.
+
+### No existing-world "migration" is needed for a new worldconfig key (2026-07-31)
+
+Worry: "worlds created before we added the key won't have it, so upgraders can't toggle it."
+Decompiling `CmdWorldConfig` + `GuiScreenWorldCustomize` shows this is a **non-issue** — the engine
+already handles an absent key everywhere that matters:
+- **Key discovery is from the LOADED mod, not the save.** `/worldconfig` (and the Customize GUI)
+  enumerate `modLoader.Mods` → `mod.WorldConfig.WorldConfigAttributes`. A save that never had the
+  key still lists/accepts it as long as the *mod* ships `worldconfig.json`.
+- **Read falls back to the registered default's… no — to YOUR explicit default.** `CmdWorldConfig`
+  does `if (WorldConfiguration.HasAttribute(key)) …read… else "(default:) " + TypedDefault`. But
+  note `sapi.World.Config.GetBool(key, fallback)` does NOT consult `TypedDefault` — so always pass
+  the same explicit fallback in code (we pass `true`). An unseeded key then behaves as the default.
+- **Write is unconditional.** `SetBool`/`SetInt`/etc. write into the save's `WorldConfiguration`
+  regardless of whether the key was seeded at creation. So `/worldconfig <key> <val>` persists on
+  any existing world. → **Do not write StartServerSide backfill code; it's redundant.**
+
+### Hiding a worldconfig key from the world-creation GUI — two independent flags
+
+`WorldConfigurationAttribute` (in `VintagestoryAPI.dll`) has two bool fields that control GUI
+presence, verified in `GuiScreenWorldCustomize`:
+- **`onCustomizeScreen`** (default **`true`**): `false` → the attribute is skipped entirely in the
+  Customize screen loop (`if (!attribute.OnCustomizeScreen) continue;`). It exists ONLY via the
+  `/worldconfig` chat command (needs `controlserver`). Use this for operator-only settings that
+  shouldn't clutter the worldgen screen. **We set this `false` for `scribeClockmakerRequiresTrait`.**
+- **`onlyDuringWorldCreate`** (default **`false`**): `true` → the control still renders but is
+  `Enabled = (wcu.IsNewWorld || !OnlyDuringWorldCreate)`, i.e. **greyed-out/read-only** once the
+  world exists (editable only at creation). Does not hide it.
+- The Customize screen is reachable for EXISTING worlds too: Singleplayer → pick world → **Modify →
+  Customize** (`GuiScreenSingleplayerModify` constructs `GuiScreenWorldCustomize` with
+  `IsNewWorld = false`). So "world config" ≠ "worldgen-only"; it's just per-save config.
+- GUI label/tooltip lang keys are `worldattribute-<code>` and `worldattribute-<code>-desc`
+  (via `Lang.Get` / `Lang.GetIfExists`). With `onCustomizeScreen: false` these are never rendered,
+  so they're not needed — don't ship dead keys.
 
 ## Calendar, player events, per-player storage, and survival-mod systems
 

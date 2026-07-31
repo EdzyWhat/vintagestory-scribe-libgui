@@ -5,7 +5,8 @@
 			"category": "scribe",
 			"code": "scribeClockmakerRequiresTrait",
 			"dataType": "bool",
-			"default": "true"
+			"default": "true",
+			"onCustomizeScreen": false
 		}
 	]
 }

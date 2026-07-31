@@ -22,8 +22,13 @@
       1 Temporal Gear + 1 Metal Parts.)
 - [x] 1b.2 Declare the bypass worldconfig boolean in a new `worldconfig.json` at the mod root (next to
       `modinfo.json`): one `worldConfigAttributes` entry
-      `{ "category": "scribe", "code": "scribeClockmakerRequiresTrait", "dataType": "bool", "default": "true" }`.
-      Add the `worldattribute-scribeClockmakerRequiresTrait` (and category) lang keys.
+      `{ "category": "scribe", "code": "scribeClockmakerRequiresTrait", "dataType": "bool", "default": "true", "onCustomizeScreen": false }`.
+      `onCustomizeScreen: false` keeps it OUT of the world-creation/Modify GUI (it's an operator setting,
+      not a worldgen option) — reached only via `/worldconfig scribeClockmakerRequiresTrait false` (needs
+      `controlserver`). Because it never renders a GUI label, the `worldattribute-…` lang keys are NOT
+      needed and are intentionally not shipped. `build/package.sh` also stages `worldconfig.json` into the
+      release zip (it previously only copied modinfo/DLLs/assets, so the shipped mod had no WorldConfig and
+      `/worldconfig` returned "No such config found" on every world).
 - [x] 1b.3 In `AssetsFinalize` or `StartServerSide` (after recipe registration — NOT early
       `AssetsLoaded`), read `sapi.World.Config.GetBool("scribeClockmakerRequiresTrait", true)`; when
       false, enumerate `sapi.World.GridRecipes`, match the Clockmaker's Notebook recipe(s) by
