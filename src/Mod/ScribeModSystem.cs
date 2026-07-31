@@ -528,6 +528,8 @@ public sealed class ScribeModSystem : ModSystem
         timerTickListenerId = api.World.RegisterGameTickListener(OnTimerTick, 1000);
 
         ApplyClockmakerTraitGate(api);
+
+        RegisterSeedCommand(api);
     }
 
     /// <summary>
@@ -1194,6 +1196,244 @@ public sealed class ScribeModSystem : ModSystem
             });
     }
 
+    // ── Demo-content seeding (dev/creative tool) ────────────────────────────────────────────────────
+
+    /// <summary>Fictional visitor names for seeded Lectern guestbooks. Kept ≤16 chars each so they read
+    /// as plausible player names in screenshots.</summary>
+    private static readonly string[] SeedVisitorNames =
+    {
+        "Alrik", "Brenna", "Cael", "Dagny", "Emeric", "Fenna", "Gorm", "Hilde",
+    };
+
+    /// <summary>Sample tasks for a seeded document — a believable mix of done/undone chores and goals.</summary>
+    private static readonly (string Text, bool Done)[] SeedTasks =
+    {
+        ("Smelt copper for the new forge",        true),
+        ("Trade furs at the trader up the coast",  true),
+        ("Repair the north wall breach",           true),
+        ("Plant flax in the east field",           false),
+        ("Brew a batch of cheese",                 false),
+        ("Find a temporal gear for the mechanism", false),
+        ("Stock up on arrows before the storm",    false),
+        ("Map the cave system below the cellar",   false),
+        ("Tame a pair of hens",                    true),
+        ("Cook a meal for the feast",              false),
+        ("Reinforce the cellar door",              false),
+        ("Chart the road to the ruins",            false),
+    };
+
+    /// <summary>Sample note sections for a seeded document.</summary>
+    private static readonly string[] SeedNotes =
+    {
+        "The trader north of here pays best for hides — bring at least a dozen.",
+        "Storm season is close. Keep temporal gears and cured meat stocked.",
+    };
+
+    /// <summary>Registers the server-side dev command <c>/scribe seed &lt;what&gt; [target]</c>, which
+    /// populates a target Notebook or looked-at Lectern with believable demo content (tasks, notes,
+    /// History on notebooks, Guestbook on lecterns) for screenshot/video capture. All three stores are
+    /// server-authoritative, so this must be a server command. Double-gated: the <c>controlserver</c>
+    /// privilege plus an in-handler creative-mode check. History seeds only the Notebook and Guestbook
+    /// only the Lectern (they are hosted asymmetrically); inapplicable combinations are skipped and
+    /// reported, never errored (design decisions 1–3).</summary>
+    private void RegisterSeedCommand(ICoreServerAPI api)
+    {
+        var parsers = api.ChatCommands.Parsers;
+        api.ChatCommands.Create("scribe")
+            .WithDescription("[scribe dev] Scribe developer commands.")
+            .RequiresPrivilege(Privilege.controlserver)
+            .RequiresPlayer()
+            .BeginSubCommand("seed")
+                .WithDescription("[scribe dev] Seed demo content into a Notebook or looked-at Lectern. " +
+                    "Usage: /scribe seed <tasks|notes|history|guestbook|all> [notebook|lectern]")
+                .WithArgs(
+                    parsers.WordRange("what", "tasks", "notes", "history", "guestbook", "all"),
+                    parsers.OptionalWordRange("target", "notebook", "lectern"))
+                .HandleWith(OnSeedCommand)
+            .EndSubCommand();
+    }
+
+    private TextCommandResult OnSeedCommand(TextCommandCallingArgs args)
+    {
+        if (sapi is null) return TextCommandResult.Error("Server not ready.");
+        if (args.Caller.Player is not IServerPlayer player)
+            return TextCommandResult.Error("This command must be run by a player.");
+        if (player.WorldData.CurrentGameMode != EnumGameMode.Creative)
+            return TextCommandResult.Error("/scribe seed is only available in creative mode.");
+
+        string what   = (string)args[0];
+        string target = args[1] as string ?? "auto";
+
+        // Resolve the seed target: an explicit lectern/notebook, or auto (looked-at lectern else held notebook).
+        var lectern = ResolveLookedAtLectern(player);
+        NotebookHost? notebook = null;
+
+        bool useLectern;
+        switch (target)
+        {
+            case "lectern":
+                if (lectern is null)
+                    return TextCommandResult.Error("Look at a Scribe Lectern to seed it.");
+                useLectern = true;
+                break;
+            case "notebook":
+                notebook = FindNotebookInInventory(player);
+                if (notebook is null)
+                    return TextCommandResult.Error("Hold a Notebook (or Clockmaker's Notebook) to seed it.");
+                useLectern = false;
+                break;
+            default: // auto
+                if (lectern is not null)
+                {
+                    useLectern = true;
+                }
+                else
+                {
+                    notebook = FindNotebookInInventory(player);
+                    if (notebook is null)
+                        return TextCommandResult.Error(
+                            "No target: look at a Scribe Lectern, or hold a Notebook, then run /scribe seed again.");
+                    useLectern = false;
+                }
+                break;
+        }
+
+        return useLectern
+            ? SeedLectern(lectern!, what)
+            : SeedNotebook(notebook!, what);
+    }
+
+    /// <summary>Auto-target helper: the <see cref="BlockEntityScribeLectern"/> the player is currently
+    /// looking at, or null. Mirrors the block-selection lookup in <see cref="BlockScribeLectern"/>.</summary>
+    private BlockEntityScribeLectern? ResolveLookedAtLectern(IServerPlayer player)
+    {
+        var pos = player.CurrentBlockSelection?.Position;
+        if (pos is null || sapi is null) return null;
+        return sapi.World.BlockAccessor.GetBlockEntity(pos) as BlockEntityScribeLectern;
+    }
+
+    private TextCommandResult SeedNotebook(NotebookHost host, string what)
+    {
+        if (what == "guestbook")
+            return TextCommandResult.Error("A Notebook has no Guestbook — that is a Lectern feature.");
+
+        bool seedTasks = what is "tasks" or "all";
+        // "all" intentionally excludes notes (only the explicit "notes" target seeds them) — a seeded
+        // demo document should show tasks, not note sections.
+        bool seedNotes = what is "notes";
+        bool seedHistory = what is "history" or "all";
+
+        if (seedTasks) SeedDocumentTasks(host.Document);
+        if (seedNotes) SeedDocumentNotes(host.Document);
+        if (seedHistory) SeedHistory(host.History);
+
+        host.Flush();
+
+        var did = new List<string>();
+        if (seedTasks) did.Add("tasks");
+        if (seedNotes) did.Add("notes");
+        if (seedHistory) did.Add("history");
+        return TextCommandResult.Success($"[scribe] Seeded Notebook: {string.Join(", ", did)}.");
+    }
+
+    private TextCommandResult SeedLectern(BlockEntityScribeLectern lectern, string what)
+    {
+        bool seedTasks = what is "tasks" or "all";
+        // "all" intentionally excludes notes (only the explicit "notes" target seeds them) — see SeedNotebook.
+        bool seedNotes = what is "notes";
+        bool seedGuestbook = what is "guestbook" or "all";
+        bool wantHistory = what == "history";
+        if (wantHistory)
+            return TextCommandResult.Error("A Lectern has no History — that is a Notebook feature.");
+
+        if (seedTasks) SeedDocumentTasks(lectern.Document);
+        if (seedNotes) SeedDocumentNotes(lectern.Document);
+        // Persist the document edits (guestbook seeds itself + marks dirty separately).
+        if (seedTasks || seedNotes) lectern.MarkDirty(redrawOnClient: true);
+        if (seedGuestbook) SeedGuestbookOn(lectern);
+
+        var did = new List<string>();
+        if (seedTasks) did.Add("tasks");
+        if (seedNotes) did.Add("notes");
+        if (seedGuestbook) did.Add("guestbook");
+        return TextCommandResult.Success(
+            $"[scribe] Seeded Lectern: {string.Join(", ", did)}. Reopen the lectern to see it.");
+    }
+
+    private static void SeedDocumentTasks(Scribe.Core.ScribeDocument doc)
+    {
+        foreach (var (text, done) in SeedTasks)
+        {
+            doc.AddTask(text);
+            if (done)
+            {
+                // The task was appended last; flip its done flag via its index.
+                doc.ToggleTask(doc.Blocks.Count - 1);
+            }
+        }
+    }
+
+    private static void SeedDocumentNotes(Scribe.Core.ScribeDocument doc)
+    {
+        foreach (var note in SeedNotes)
+            doc.AddTextSection(note);
+    }
+
+    /// <summary>Seeds a spread of History entries dated across recent in-game days so the History tab
+    /// reads like a lived-in chronicle rather than a single-day dump.</summary>
+    private void SeedHistory(Scribe.Core.HistoryStore history)
+    {
+        if (sapi is null) return;
+        string date(int daysAgo) => NotebookHost.FormatDateDaysAgo(sapi, daysAgo);
+
+        history.TryAddEntry(new Scribe.Core.HistoryEntry
+        {
+            Kind = Scribe.Core.HistoryEventKind.Crafted, InGameDate = date(14),
+        });
+        history.TryAddEntry(new Scribe.Core.HistoryEntry
+        {
+            Kind = Scribe.Core.HistoryEventKind.PickedUp, ActorName = "Alrik", InGameDate = date(14),
+        });
+        history.TryAddEntry(new Scribe.Core.HistoryEntry
+        {
+            Kind = Scribe.Core.HistoryEventKind.TemporalStorm, Detail = "Medium", InGameDate = date(11),
+        });
+        history.TryAddEntry(new Scribe.Core.HistoryEntry
+        {
+            Kind = Scribe.Core.HistoryEventKind.Death, ActorName = "Alrik",
+            Detail = "Alrik was slain by a drifter.", InGameDate = date(9),
+        });
+        history.TryAddEntry(new Scribe.Core.HistoryEntry
+        {
+            Kind = Scribe.Core.HistoryEventKind.BossKill,
+            Detail = Lang.Get("scribe:scribe-history-boss-eidolon", "Alrik"), InGameDate = date(6),
+        });
+        history.TryAddEntry(new Scribe.Core.HistoryEntry
+        {
+            Kind = Scribe.Core.HistoryEventKind.TemporalStorm, Detail = "Heavy", InGameDate = date(4),
+        });
+        history.TryAddEntry(new Scribe.Core.HistoryEntry
+        {
+            Kind = Scribe.Core.HistoryEventKind.PvpKill, ActorName = "Alrik",
+            Detail = "Gorm was slain", InGameDate = date(2),
+        });
+    }
+
+    /// <summary>Seeds fictional guestbook visitors (some with short notes) on a lectern, dated across
+    /// recent in-game days via the server-only <see cref="BlockEntityScribeLectern.SeedGuestbook"/> seam.</summary>
+    private void SeedGuestbookOn(BlockEntityScribeLectern lectern)
+    {
+        if (sapi is null) return;
+        var notes = new[] { "Fine work on the roof!", "Left three loaves in the chest.", null, "Back next season." };
+        var entries = new List<(string, string, string?)>();
+        for (int i = 0; i < SeedVisitorNames.Length; i++)
+        {
+            entries.Add((SeedVisitorNames[i], NotebookHost.FormatDateDaysAgo(sapi, (SeedVisitorNames.Length - i) * 2),
+                i < notes.Length ? notes[i] : null));
+        }
+        lectern.SeedGuestbook(entries);
+    }
+
     // ── Timer ─────────────────────────────────────────────────────────────────────────────────────
 
     /// <summary>Server → client: push the current timer state to the player.</summary>
@@ -1298,12 +1538,20 @@ public sealed class ScribeModSystem : ModSystem
 
     private bool _stormWasActive;
 
-    /// <summary>Known boss entity code prefixes and their display names for the BossKill event.
-    /// Checked via entity.Code.Path.StartsWith so variant suffixes (-pristine, -corrupted, etc.) match.</summary>
-    private static readonly (string Prefix, string DisplayName)[] BossTable =
+    /// <summary>Known boss entity code prefixes and the lang key of the narrative line recorded for the
+    /// BossKill event. Checked via entity.Code.Path.StartsWith so variant suffixes (-pristine, -corrupted,
+    /// etc.) match. The lang string takes the slayer's name as {0} and becomes the entry's Detail (the
+    /// whole descriptive sentence), so ActorName is left empty for boss kills — see OnEntityDeath.
+    ///
+    /// MORE BOSSES ARE EXPECTED. Each boss needs its OWN narrative sentence — the current lines are
+    /// boss-specific ("descended into darkness", "climbed the tower"), not a fill-in-the-blank template.
+    /// To add one: (1) add a `scribe-history-boss-&lt;name&gt;` key to lang/en.json with the full sentence
+    /// and a {0} for the slayer, (2) add a `(prefix, "scribe:scribe-history-boss-&lt;name&gt;")` row here.
+    /// No other code changes are needed.</summary>
+    private static readonly (string Prefix, string LangKey)[] BossTable =
     {
-        ("eidolon", "Eidolon"),
-        ("erel",    "Mad Crow"),
+        ("eidolon", "scribe:scribe-history-boss-eidolon"),
+        ("erel",    "scribe:scribe-history-boss-erel"),
     };
 
     /// <summary>Finds the first Notebook stack anywhere in the player's inventory (all bags, hotbar,
@@ -1333,7 +1581,7 @@ public sealed class ScribeModSystem : ModSystem
         if (sapi is null) return;
 
         // ── Boss kill ──
-        foreach (var (prefix, displayName) in BossTable)
+        foreach (var (prefix, langKey) in BossTable)
         {
             if (!entity.Code.Path.StartsWith(prefix)) continue;
             var deathPos = entity.Pos.XYZ;
@@ -1343,11 +1591,12 @@ public sealed class ScribeModSystem : ModSystem
                 if (host is null) continue;
                 double dist = player.Entity.Pos.XYZ.DistanceTo(deathPos);
                 if (dist > 100) continue;
+                // The whole descriptive sentence lives in Detail (ActorName empty); the History row
+                // shows Detail alone when ActorName is empty, so no "Name — " prefix is prepended.
                 host.History.TryAddEntry(new Scribe.Core.HistoryEntry
                 {
                     Kind       = Scribe.Core.HistoryEventKind.BossKill,
-                    ActorName  = player.PlayerName,
-                    Detail     = displayName,
+                    Detail     = Lang.Get(langKey, player.PlayerName),
                     InGameDate = NotebookHost.FormatDate(sapi),
                 });
                 host.FlushHistory();

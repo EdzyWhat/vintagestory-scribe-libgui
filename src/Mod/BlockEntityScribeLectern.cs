@@ -570,6 +570,26 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
         }
     }
 
+    /// <summary>Server-only: seed fictional guestbook visitors for demo/screenshot capture. Mirrors
+    /// <see cref="RecordVisitor"/> (append via <see cref="GuestbookStore.TryAddEntry"/>, optional note via
+    /// <see cref="GuestbookStore.TrySetNote"/>), then persists + re-syncs the read view once via
+    /// <see cref="BlockEntity.MarkDirty"/>. Each entry is <c>(visitorName, inGameDate, note)</c>; a null/empty
+    /// note is skipped. No-op off the server. An open guestbook tab won't repaint live (a dev-tool trade-off —
+    /// reopen the lectern to see seeded entries); the read view refreshes via the block-entity packet.</summary>
+    public void SeedGuestbook(IEnumerable<(string VisitorName, string InGameDate, string? Note)> entries)
+    {
+        if (Api is not ICoreServerAPI) return;
+
+        bool changed = false;
+        foreach (var (name, date, note) in entries)
+        {
+            if (_guestbook.TryAddEntry(name, date)) changed = true;
+            if (!string.IsNullOrEmpty(note) && _guestbook.TrySetNote(name, note)) changed = true;
+        }
+
+        if (changed) MarkDirty(redrawOnClient: true);
+    }
+
     /// <summary>Server-side: update the note on the sender's own guestbook entry.</summary>
     public void UpdateGuestbookNote(ICoreServerAPI sapi, IServerPlayer player, string note)
     {

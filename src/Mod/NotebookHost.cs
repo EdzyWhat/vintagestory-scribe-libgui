@@ -171,4 +171,21 @@ public sealed class NotebookHost : IScribeDocumentHost
         int dayOfMonth = (int)(cal.TotalDays % cal.DaysPerMonth) + 1;
         return $"{dayOfMonth} {Vintagestory.API.Config.Lang.Get("month-" + cal.MonthName)}, Year {cal.Year}";
     }
+
+    /// <summary>Formats the calendar date <paramref name="daysAgo"/> in-game days before now, so seeded
+    /// demo History/Guestbook entries span multiple days instead of all reading "today". Mirrors
+    /// <see cref="FormatDate"/> but derives month/year/day-of-month from <c>TotalDays - daysAgo</c>
+    /// (clamped at 0 so it never underflows into a negative calendar). Display-only; plausibility, not
+    /// calendar exactness, is the bar (see design decision 5).</summary>
+    internal static string FormatDateDaysAgo(ICoreServerAPI sapi, int daysAgo)
+    {
+        var cal = sapi.World.Calendar;
+        double totalDays = Math.Max(0, cal.TotalDays - daysAgo);
+        int monthsPerYear = Math.Max(1, cal.DaysPerYear / cal.DaysPerMonth);
+        int dayOfMonth = (int)(totalDays % cal.DaysPerMonth) + 1;
+        int monthIndex = (int)(totalDays / cal.DaysPerMonth) % monthsPerYear + 1;
+        int year = (int)(totalDays / cal.DaysPerYear) + 1;
+        var monthName = (Vintagestory.API.Common.EnumMonth)monthIndex;
+        return $"{dayOfMonth} {Vintagestory.API.Config.Lang.Get("month-" + monthName)}, Year {year}";
+    }
 }

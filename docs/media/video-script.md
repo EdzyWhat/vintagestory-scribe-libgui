@@ -67,11 +67,53 @@ Player walks around the world with tasks visible.
 ### Beat 8 — Outro / CTA (1:30–end)
 **Shot:** pull back to the world. Lectern in the environment. HUD with a couple tasks pinned.  
 **Overlay:**
-- *"Scribe v0.1 — available on the Vintage Story Mod DB"*
+- *"Scribe v0.2 — available on the Vintage Story Mod DB"*
 - *"Requires LibGUI (free, one-click install)"*  
 *Fade to title card / mod DB URL.*
 
 ---
+
+## 0.2 additions — carried notes, timers, and logs
+
+Insert these beats after Beat 6 (Settings) and before the Multiplayer/Outro beats, or cut a shorter
+0.2-focused clip from just these. They lead with the headline change: *you can take it with you.*
+
+### Beat 2.1 — The Notebook (carry it with you)
+**Shot:** open inventory, pull out the **Notebook**, right-click to open it in-hand. It opens on the
+same clean task list — no block, no walking back to a Lectern.  
+**Overlay:** *"New in 0.2 — a carried Notebook. Your tasks, in your pocket."*  
+*Type a task or two, then close and walk away — make the point that it's on you now, not on a block.*
+
+### Beat 2.2 — The Clockmaker's Notebook & Timer
+**Shot:** open the **Clockmaker's Notebook**, go to the **Timer** tab. Set a short label ("Pull the
+crucible") and a duration, pick Real time, press **Start Timer**. Cut to the world — the timer sits on
+the HUD above the pins, counting down. Let it fire: it blinks and rocks.  
+**Overlay:** *"The Clockmaker's Notebook adds timers — real time or in-game time, right on your HUD."*
+
+### Beat 2.3 — History & Guestbook (the logs write themselves)
+**Shot:** open the Notebook's **History** tab — show a lived-in chronicle (crafted, a storm, a death,
+a boss kill). Then a Lectern's **Guestbook** tab with a few signed visitors.  
+**Overlay:** *"Every Notebook keeps a History. Every Lectern keeps a Guestbook. Written automatically."*
+
+---
+
+## Shot-list & demo-seed cheat sheet
+
+The History and Guestbook logs can't be authored by hand, and empty task lists look unconvincing on
+camera. Use the creative-only seed command to stage each shot, then capture. All commands require
+creative mode + the `controlserver` privilege.
+
+| Shot / beat | What it needs | Seed command | Notes |
+|-------------|---------------|--------------|-------|
+| Read view w/ full task list | Tasks + notes on a Notebook | hold Notebook → `/scribe seed all notebook` | 12 mixed done/undone tasks + 2 notes |
+| History tab (Notebook) | A varied, dated chronicle | hold Notebook → `/scribe seed history notebook` | spread across recent in-game days |
+| Guestbook tab (Lectern) | Several signed visitors | look at Lectern → `/scribe seed guestbook lectern` | some visitors leave short notes; **reopen the lectern** to see them |
+| Lectern Read view | Tasks + notes on a Lectern | look at Lectern → `/scribe seed all lectern` | reopen to refresh the read view |
+| Timer on HUD | A running / fired timer | set it live in the Clockmaker's Notebook Timer tab | not seedable — it's a live countdown; use a short Real-time duration for the fire shot |
+| Pinned HUD | A few pins | seed tasks, then pin 2–3 from Read view | pins aren't seeded (they're per-player state) |
+
+`/scribe seed all` with no target auto-picks the Lectern you're looking at, else the Notebook you
+hold. Screenshots land in `docs/media/screenshots/0.2/`.
 
 ## Production notes
 - Keep the world tidy — a clean, mid-game survival base is more relatable than a Creative sandbox.

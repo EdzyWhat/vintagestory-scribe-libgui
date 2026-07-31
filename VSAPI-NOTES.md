@@ -768,6 +768,34 @@ rebindable hotkey?** (For the v5 pinned-task HUD — decompiled, not yet exercis
   shift)` + `SetHotKeyHandler(code, ActionConsumable<KeyCombination>)` (handler returns bool =
   consumed); register in `StartClientSide`; rebindings persist by code in `clientsettings.json`.
 
+## World config (`worldconfig.json`) — staging + the `playStyles` main-menu crash
+
+**Symptom: main menu crashes with `NullReferenceException` in
+`GuiScreenSingleplayer.getHoverText` (line ~309) the instant you click Singleplayer — before
+any world loads — right after adding a mod `worldconfig.json`.** Also: `/worldconfig <key>`
+reports "No such config found" for a key your `worldconfig.json` clearly declares.
+
+- **The file lives at the MOD ROOT**, a sibling of `modinfo.json` (`ModContainer` reads
+  `Path.Combine(FolderPath, "worldconfig.json")`, or the same-named zip entry). It is NOT under
+  `assets/`. Our `build/restage.sh` only copied `modinfo.json` + DLLs + `assets/`, so the file
+  was silently dropped and the staged mod had a `null` `Mod.WorldConfig` — which is why
+  `/worldconfig` (`CmdWorldConfig`, which iterates every `mod.WorldConfig.WorldConfigAttributes`)
+  couldn't find the key. Fix was to stage the root file explicitly.
+- **`ModWorldConfiguration` is a plain JSON POCO with bare public fields and NO defaults:**
+  `PlayStyle[] PlayStyles; WorldConfigurationAttribute[] WorldConfigAttributes;`. If your JSON
+  omits `playStyles`, the field deserializes to **`null`**.
+- **The engine landmine:** `GuiScreenSingleplayer.getHoverText` builds a hover tooltip for
+  EVERY save in the singleplayer list and does `foreach (PlayStyle ps in verifiedMod.WorldConfig
+  .PlayStyles)` with **no null guard**. A mod that ships `worldConfigAttributes` but no
+  `playStyles` therefore crashes the main menu for all saves. (Genuine vanilla missing-null-check
+  bug, but the practical fix is ours.)
+- **Fix: always include `"playStyles": []`** alongside `worldConfigAttributes` — an empty array
+  makes the unguarded loop iterate zero times. `WorldConfigurationAttribute` fields are
+  `Category, Code, DataType, Default, Values, Names, Min/Max/Step, ...` (JSON keys are
+  lower-cased: `category`, `code`, `dataType`, `default`).
+- Note it stayed hidden until the file was actually staged: before that, `WorldConfig` was null
+  so the whole `foreach (verifiedMod ...)` outer loop skipped scribe entirely.
+
 ## Calendar, player events, per-player storage, and survival-mod systems
 
 **Question: how do you read the in-game date, subscribe to player death, persist per-player

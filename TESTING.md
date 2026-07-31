@@ -1760,3 +1760,37 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Backlogged 2026-07-29** needs a two-client setup; parked until multiplayer test session.
 - [x] `989c54ac` **Note capped at 80 chars.** In the note field, try to type past 80 characters — confirm input stops at the cap. *(6.8)*
       - **Confirmed 2026-07-29** (playtest submission 2026-07-29T23-10-57): "Works."
+
+## scribe-0-2-0-release-content
+
+> 0.2.0 release-prep: the plain Notebook's survival recipe, a `tinkerer`-trait craft gate for the
+> Clockmaker's Notebook (+ worldconfig bypass), in-game handbook coverage for both notebook items,
+> and a creative-only `/scribe seed` demo command that seeds tasks/notes/History/Guestbook through
+> the normal server-authoritative flow. ⚠️ Restage before testing — the 0.2.0 Mod changes are
+> uncommitted/unstaged as of this writing (`build/restage.sh Debug`), so the staged build predates them.
+
+- [x] `38e61888` **Notebook craftable + chain.** In survival, craft a Notebook from the writing set;
+      confirm its handbook shows a grid recipe, it crafts, and the full Notebook → Clockmaker's Notebook
+      chain works. *(scribe-0-2-0-release-content 1.4)*
+      - **Confirmed 2026-07-31** (user report): the plain Notebook is survival-craftable from the writing
+        set, and the full Notebook → Clockmaker's Notebook craft completes (tinkerer consuming Notebook +
+        temporal gear + metal parts). Both legs seen.
+- [ ] `80eb64b2` **Trait gate on/off.** With the requirement ON, a tinkerer (Clockmaker) can craft the
+      Clockmaker's Notebook and a non-tinkerer cannot; toggle `scribeClockmakerRequiresTrait` off (new
+      world or `/worldconfig`) and confirm a non-tinkerer can; confirm a classless world is not blocked.
+      *(scribe-0-2-0-release-content 1b.4)*
+      - **Partly verified 2026-07-31** (user report): with the requirement ON (default), a non-tinkerer
+        CANNOT survival-craft the Clockmaker's Notebook, and a tinkerer/Clockmaker CAN (leg a confirmed via
+        the successful upgrade craft). Two legs remain: (b) toggling `scribeClockmakerRequiresTrait` off
+        (new world or `/worldconfig`) lets a non-tinkerer craft it, (c) a classless / no-character-system
+        world is not blocked. NOTE: `/worldconfig scribeClockmakerRequiresTrait false` reported "No such
+        config found" because `restage.sh` was not staging the mod-root `worldconfig.json` (fixed
+        2026-07-31); re-test leg (b) after a fresh restage + relaunch. Box stays unchecked until both seen.
+- [x] `0213647b` **Handbook sections render.** Open the in-game handbook for both the Notebook and
+      Clockmaker's Notebook and confirm the new extra sections show; the getting-started + editor-reference
+      guide pages read coherently with working cross-links. *(scribe-0-2-0-release-content 2.4)*
+      - **Confirmed 2026-07-31** (user report): the new handbook extra sections render on the notebook items.
+- [ ] `b2804892` **Seed command populates + persists.** In a creative world run `/scribe seed` against a
+      held Notebook and a looked-at Lectern; confirm tasks/notes, History (notebook) and Guestbook (lectern)
+      populate, persist across save/reload, and sync to a second client. *(scribe-0-2-0-release-content 3.9)*
+

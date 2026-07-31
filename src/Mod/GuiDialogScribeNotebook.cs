@@ -105,7 +105,9 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
                     {
                         new Row(children: new Widget[]
                         {
-                            new Expanded(new Text(KindLabel(entry), kindStyle), flex: 1),
+                            new Expanded(
+                                new Padding(EdgeInsets.Only(left: 6f), new Text(KindLabel(entry), kindStyle)),
+                                flex: 1),
                             new Text(entry.InGameDate, dateStyle),
                         }),
                         new Padding(EdgeInsets.Only(left: 8f),

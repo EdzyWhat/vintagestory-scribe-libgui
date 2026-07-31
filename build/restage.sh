@@ -45,6 +45,12 @@ dotnet build src/Mod/Mod.csproj --configuration "$CONFIG"
 
 mkdir -p "$STAGE"
 cp "$MODINFO" "$STAGE/"
+# worldconfig.json (mod-root sibling of modinfo.json) declares worldConfigAttributes the engine
+# reads into Mod.WorldConfig. Without staging it, /worldconfig can't find our keys ("No such
+# config found") because the staged mod has no WorldConfig. Optional: not every mod ships one.
+if [[ -f "src/Mod/worldconfig.json" ]]; then
+  cp "src/Mod/worldconfig.json" "$STAGE/"
+fi
 # Blanket copy of the build output DLLs (Scribe.dll + Scribe.Core.dll). The `gui` (LibGUI) hard
 # dep, ConfigLib, and the game DLLs are all Private=false, so they never land in bin/ and are NOT
 # staged here -- the separately-installed mods/game provide them at runtime (verified: no Gui.dll).
