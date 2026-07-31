@@ -3,10 +3,11 @@
 	class: "BlockScribeLectern",
 	entityclass: "ScribeLectern",
 
-	// Reuses the vanilla lectern shape (plain wood, not the "aged"/scavenged variant,
-	// since this block is meant to be crafted rather than found). The shape's own
-	// embedded textures are literal, resolvable paths, so no override is needed here.
-	shape: { base: "game:block/clutter/bookshelves/lecturn-book-open" },
+	// Cloned from the vanilla open-lectern shape (game:block/clutter/bookshelves/lecturn-book-open)
+	// into our own domain so its geometry and textures are editable without depending on vanilla
+	// files. The shape's 4 embedded textures were repointed to scribe:block/lectern/* (clones of the
+	// vanilla mahogany/ebony-ornate/normal-orangebrown/opened-normal PNGs) — edit those to reskin.
+	shape: { base: "scribe:block/lectern/lectern" },
 
 	creativeinventory: { "general": ["*"], "decorative": ["*"] },
 

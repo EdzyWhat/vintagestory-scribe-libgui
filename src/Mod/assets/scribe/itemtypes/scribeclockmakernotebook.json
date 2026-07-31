@@ -14,7 +14,7 @@
 	},
 	"shape": { "base": "scribe:item/notebook" },
 	"textures": {
-		"cover": { "base": "scribe:items/notebook-cover" }
+		"cover": { "base": "scribe:items/clockmaker-cover" }
 	},
 	"guiTransform": {
 		"translation": { "x": 0, "y": 0, "z": 0 },
