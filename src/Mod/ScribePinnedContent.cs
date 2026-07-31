@@ -179,19 +179,25 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
         // caption/help and the dropdown's own text follow the player's chosen Task Text Font.
         float scale = Widget.Style.FontSize / ScribeRowConstants.BaseWindowFontSize;
         string taskFont = ScribeTaskFont.Resolve(Widget.Style.TaskFontFamily);
+        // Caption font family inherited from the tab's DefaultTextStyle ancestor; the smaller 13*scale
+        // size is a deliberate delta and stays explicit.
         Widget policyCaption = new Text(Lang.Get("scribe:settings-completionpolicy"),
-            new TextStyle { FontSize = 13 * scale, Color = colors.OnSurfaceVariant, FontFamily = taskFont });
+            new TextStyle { FontSize = 13 * scale, Color = colors.OnSurfaceVariant });
         policyCaption = new Tooltip(
             child: policyCaption,
             content: new Padding(
                 EdgeInsets.All(6),
+                // useGlobalOverlay: this tooltip renders OUTSIDE the tab subtree (task 3.1), so the
+                // DefaultTextStyle ancestor does NOT reach it — it must keep an explicit task font.
                 child: new Text(
                     Lang.Get("scribe:settings-completionpolicy-help"),
                     new TextStyle { FontSize = 13 * scale, Color = colors.OnSurface, SoftWrap = true, FontFamily = taskFont })),
             useGlobalOverlay: true);
 
         // Start from the theme's dropdown style and swap in the task font on its shared TextStyle (used
-        // for both the trigger button label and the menu items).
+        // for both the trigger button label and the menu items). Kept explicit (not inherited): the
+        // dropdown's popup menu renders in a global overlay, outside the tab subtree the DefaultTextStyle
+        // ancestor covers (task 3.1) — and Dropdown takes a DropdownStyle, not a plain Text anyway.
         var dropdownStyle = Theme.Of(context).DropdownStyle;
         dropdownStyle = dropdownStyle with { TextStyle = dropdownStyle.TextStyle with { FontFamily = taskFont } };
 
@@ -218,7 +224,11 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                     style: dropdownStyle),
             });
 
-        return new Padding(
+        // Root the tab subtree in the player's Task Text Font + window-scaled base size, so the empty
+        // state and the policy caption inherit them (adopt-libgui-31-improvements). Survivors that render
+        // outside this subtree keep explicit fonts: the policy tooltip + dropdown menu (global overlay,
+        // task 3.1) and the pin rows' ScribeMultilineField (custom RenderBox that doesn't inherit).
+        return ScribeTextDefaults.Wrap(Widget.Style.TaskFontFamily, Widget.Style.FontSize, new Padding(
             EdgeInsets.All(10),
             child: new Column(
                 spacing: 8,
@@ -233,7 +243,7 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                     new Padding(Widget.PolicyPickerPadding, child: policyPicker),
                     new Divider(),
                     new Expanded(child: scrollBody),
-                }));
+                })));
     }
 }
 

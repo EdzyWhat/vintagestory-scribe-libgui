@@ -86,11 +86,11 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
         Widget rowList;
         if (Widget.Blocks.Count == 0)
         {
-            var hintStyle = Widget.Style;
+            // Font family + base size inherited from the tab's DefaultTextStyle ancestor; only the
+            // color and the centered-wrap overrides are non-default and stay explicit.
             rowList = new Center(child: new Text(
                 Lang.Get(Widget.HintLangKey),
-                new TextStyle { FontSize = hintStyle.FontSize, Color = colors.OnSurfaceVariant, SoftWrap = true,
-                    FontFamily = ScribeTaskFont.Resolve(hintStyle.TaskFontFamily), Align = TextAlignment.Center }));
+                new TextStyle { Color = colors.OnSurfaceVariant, SoftWrap = true, Align = TextAlignment.Center }));
         }
         else
         {
@@ -122,7 +122,11 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
             { AutoHide = false };
         }
 
-        return new Padding(
+        // Root the whole tab subtree in the player's Task Text Font + window-scaled base size, so the
+        // row text and empty hint inherit them (adopt-libgui-31-improvements). The row widgets live in
+        // the ListView below, which is a descendant of this ancestor. The switch/Edit button keeps its
+        // own explicit Caudex button font (a deliberate non-task face), so it is unaffected.
+        return ScribeTextDefaults.Wrap(Widget.Style.TaskFontFamily, Widget.Style.FontSize, new Padding(
             EdgeInsets.All(10),
             child: new Column(
                 spacing: 8,
@@ -138,7 +142,7 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
                     new Padding(Widget.FooterButtonPadding, child: new Button(
                         child: new Text(Lang.Get("scribe:scribe-gui-switch-to-editor"), switchTextStyle),
                         onTap: _ => Widget.OnSwitchToEditor())),
-                }));
+                })));
     }
 }
 
@@ -182,7 +186,9 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
     {
         var colors = Theme.Of(context).ColorScheme;
         var style = Widget.Style;
-        TextStyle textStyle = new() { FontSize = style.FontSize, Color = colors.OnSurface, SoftWrap = true, FontFamily = ScribeTaskFont.Resolve(style.TaskFontFamily) };
+        // Font family + base size inherited from the tab's DefaultTextStyle ancestor; only color and
+        // wrap are non-default here.
+        TextStyle textStyle = new() { Color = colors.OnSurface, SoftWrap = true };
 
         var children = new List<Widget>();
 

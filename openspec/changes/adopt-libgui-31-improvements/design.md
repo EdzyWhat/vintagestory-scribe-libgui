@@ -67,20 +67,30 @@ This is exactly the Flutter mechanism the LibGUI author ported.
 - **The HUD is not a tab.** `HudScribePins` builds outside the dialog. Decide per-widget whether it
   gets its own `DefaultTextStyle` root or keeps explicit styles; do not assume the tab pattern
   applies unchanged.
-- **Merge semantics: default-valued fields inherit (verified from the DLL).** `override.Merge(base)`
-  compares each field of `override` against a fresh `default(TextStyle)`; if it differs from default
-  it wins, otherwise the field is taken from `base`. Confirmed field-by-field in the decompiled body
-  (`FontFamily`, `FontSize`, `Color`, `Weight`, `Align`, `Overflow`, `Outline*`, `Glow*`, `Boldness`,
-  `SoftWrap`, `Decoration`, `MaxLines`). Two consequences that shape the implementation:
-  - A widget setting only `Color` correctly inherits the ancestor's family and size — the partial
-    override works as hoped.
-  - **A widget that explicitly sets a field to its *default* value silently inherits instead.** The
-    landmines are `SoftWrap = false`, `Align = <the enum's zero value>`, `FontSize = 0`, and a
-    zero/transparent `Color`. **Rule: the per-tab `DefaultTextStyle` ancestor carries ONLY
-    `FontFamily` (+ base `FontSize` if we scale it there) and leaves every other field at default**,
-    so per-widget non-default overrides always win and no widget is surprised by inheriting a
-    non-default `Align`/`SoftWrap`. In particular, do NOT set `SoftWrap = true` on the ancestor — a
-    child wanting `false` (the default) could not override it.
+- **Merge semantics: initializer-valued fields inherit (verified from the DLL — CORRECTED during
+  implementation).** `override.Merge(base)` compares each field of `override` against `new TextStyle()`
+  — the **parameterless ctor, which runs the property initializers**, NOT `default(TextStyle)` (the
+  all-zero struct). If a field differs from that initializer value it wins, otherwise it's taken from
+  `base`. Confirmed field-by-field in the decompiled `Merge` body. **The initializer sentinels are:
+  `FontFamily = "sans-serif"`, `FontSize = 14f`, `Color = Vector4.One` (white), `Weight = Normal`,
+  `Align = Left`, `SoftWrap = true`, `Overflow = Clip`, `MaxLines = 0`, all `Outline*/Glow*/Boldness =
+  0`.** (An earlier draft of this doc had this inverted — it named `default(TextStyle)` and listed
+  `SoftWrap = false` / `Align = zero` / `FontSize = 0` as the inherit-cases. That was backwards.)
+  Consequences that shape the implementation:
+  - A widget setting a field to a NON-initializer value overrides fine — `Color = OnSurface`,
+    `FontSize = 13*scale`, `Weight = Bold`, `Align = Center`, `SoftWrap = false` all win as intended.
+    The common partial overrides (e.g. only `Color`) work as hoped.
+  - **A widget that sets a field back to its initializer value CANNOT override the ancestor** — Merge
+    reads it as "unset" and inherits. The real landmines: you cannot force `FontFamily = "sans-serif"`
+    under a non-sans ancestor (sans-serif IS the sentinel), cannot re-assert `FontSize = 14`, white,
+    `SoftWrap = true`, or `Align = Left`. So a per-tab ancestor is family-wrap-all-or-nothing:
+    descendants that were deliberately neutral sans-serif flip to the ancestor's family and can't opt
+    back out. This drove real decisions: HUD + Settings stay UNWRAPPED (all-neutral), and the
+    metadata on the wrapped History/Timer/Guestbook tabs deliberately flips to the task font (user
+    approved). **Rule: the per-tab `DefaultTextStyle` ancestor carries ONLY `FontFamily` (+ base
+    `FontSize`) and leaves every other field at its initializer default**, so per-widget non-default
+    overrides always win and nothing is surprised by inheriting a non-default `Align`/`SoftWrap`. In
+    particular, do NOT set `SoftWrap`/`Align`/`Color` on the ancestor.
 - **Low upside ceiling.** This is cleanup, not a feature; the payoff is fewer future bugs and a
   smaller styling surface, not player-visible value. Worth doing because the bug class is real and
   recurring, but it should not crowd out feature work.

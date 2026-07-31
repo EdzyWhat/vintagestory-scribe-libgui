@@ -104,9 +104,14 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
         float small   = body * 0.8f;
         string taskFont = ScribeTaskFont.Resolve(modSystem.MySettings.TaskFontFamily);
 
+        // bodyStyle KEEPS its explicit FontFamily: it is threaded into non-Text widgets (the label
+        // TextField's TextFieldStyle and the numeric steppers) which do NOT read the DefaultTextStyle
+        // ancestor, so dropping it would regress those inputs to sans-serif. big/label flow only into
+        // Text widgets, so their family is inherited from the wrap below. small never set a family and
+        // now inherits the task font too (adopt-libgui-31-improvements — approved chrome-label change).
         var bodyStyle  = new TextStyle { FontSize = body,  Color = colors.OnSurface, FontFamily = taskFont };
-        var bigStyle   = new TextStyle { FontSize = big,   Color = colors.OnSurface, FontFamily = taskFont };
-        var labelStyle = new TextStyle { FontSize = body,  Color = colors.OnSurface with { W = colors.OnSurface.W * 0.7f }, FontFamily = taskFont };
+        var bigStyle   = new TextStyle { FontSize = big,   Color = colors.OnSurface };
+        var labelStyle = new TextStyle { FontSize = body,  Color = colors.OnSurface with { W = colors.OnSurface.W * 0.7f } };
         var smallStyle = new TextStyle { FontSize = small, Color = colors.OnSurfaceVariant };
 
         if (_resyncRemaining && timer is not null)
@@ -155,13 +160,17 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
                 children: activeChildren);
         }
 
-        return new Padding(
+        // Root the tab subtree in the player's Task Text Font + window-scaled base size
+        // (adopt-libgui-31-improvements). big/label/small Text widgets inherit the family from here;
+        // bodyStyle keeps its explicit family for the non-inheriting label field + numeric steppers; the
+        // Stop/Start buttons keep their explicit Caudex button font. The mode radios take the task font.
+        return ScribeTextDefaults.Wrap(modSystem.MySettings.TaskFontFamily, body, new Padding(
             EdgeInsets.All(10),
             new Column(
                 spacing: 8,
                 crossAxisAlignment: CrossAxisAlignment.Stretch,
                 mainAxisSize: MainAxisSize.Max,
-                children: new Widget[] { new Divider(), new Expanded(new Center(child: content)) }));
+                children: new Widget[] { new Divider(), new Expanded(new Center(child: content)) })));
     }
 
     private Widget BuildSetTimerForm(ColorScheme colors, TextStyle bodyStyle, TextStyle smallStyle, float scale)
@@ -432,10 +441,11 @@ internal sealed class ScribeTimerModeRowState : State<ScribeTimerModeRow>
 
     public override Widget Build(BuildContext context)
     {
-        // Use the theme's default radio style, overriding only the label font to Caudex-Bold.
+        // Use the theme's default radio style; the mode labels take the player's Task Text Font
+        // (BodyStyle already carries the resolved task font), not the fixed Caudex button face.
         var radioStyle = Theme.Of(context).RadioButtonStyle with
         {
-            LabelStyle = Widget.BodyStyle with { FontFamily = ScribeTaskFont.ButtonFamily },
+            LabelStyle = Widget.BodyStyle,
         };
 
         // Stack the two options vertically. A horizontal row of both Caudex-Bold labels overflows the

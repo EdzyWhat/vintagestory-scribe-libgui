@@ -47,7 +47,9 @@ internal sealed class ScribeFrozenEditorRow : StatelessWidget
     public override Widget Build(BuildContext context)
     {
         var colors = Theme.Of(context).ColorScheme;
-        TextStyle textStyle = new() { FontSize = style.FontSize, Color = colors.OnSurface, SoftWrap = true };
+        // Font family + base size inherited from the tab's DefaultTextStyle ancestor (this ghost is a
+        // snapshot of a task-font row, so inheriting the task font keeps it consistent as it collapses).
+        TextStyle textStyle = new() { Color = colors.OnSurface, SoftWrap = true };
 
         var children = new List<Widget>
         {
@@ -250,11 +252,11 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
         Widget scrollBody;
         if (Widget.Blocks.Count == 0)
         {
-            var hintStyle = Widget.Style;
+            // Font family + base size inherited from the tab's DefaultTextStyle ancestor; only color and
+            // the centered-wrap overrides are non-default and stay explicit.
             scrollBody = new Center(child: new Text(
                 Lang.Get(Widget.HintLangKey),
-                new TextStyle { FontSize = hintStyle.FontSize, Color = colors.OnSurfaceVariant, SoftWrap = true,
-                    FontFamily = ScribeTaskFont.Resolve(hintStyle.TaskFontFamily), Align = TextAlignment.Center }));
+                new TextStyle { Color = colors.OnSurfaceVariant, SoftWrap = true, Align = TextAlignment.Center }));
         }
         else
         {
@@ -320,7 +322,12 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
             { AutoHide = false };
         }
 
-        return new Padding(
+        // Root the tab subtree in the player's Task Text Font + window-scaled base size, so the empty
+        // hint and the frozen collapsing-ghost rows inherit them (adopt-libgui-31-improvements). The live
+        // editable rows use ScribeMultilineField, a custom RenderBox that does NOT read DefaultTextStyle,
+        // so it keeps its own explicit fontFamily/fontSize (a deliberate survivor). The footer buttons
+        // keep their explicit Caudex button font.
+        return ScribeTextDefaults.Wrap(Widget.Style.TaskFontFamily, Widget.Style.FontSize, new Padding(
             EdgeInsets.All(10),
             child: new Column(
                 spacing: 8,
@@ -343,7 +350,7 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                                 child: new Text(Lang.Get("scribe:scribe-gui-switch-to-read"), buttonTextStyle),
                                 onTap: _ => Widget.OnSwitchToRead())),
                         })),
-                }));
+                })));
     }
 }
 

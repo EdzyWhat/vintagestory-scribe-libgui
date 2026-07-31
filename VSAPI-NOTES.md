@@ -1392,6 +1392,41 @@ DIRECTLY rather than the dialog's `FocusEditorRow` helper — the helper couples
 same-row focus restore reuses a nav helper: separate "put focus here AND scroll to it" from "the caret
 is already here, only re-grant the focus token." See the Keep/Unpin/uncheck tail of `ToggleEditorTask`.
 
+**Fact (3.1.0): `DefaultTextStyle` + `TextStyle.Merge` — how text-style inheritance actually resolves,
+and the ONE landmine.** 3.1.0 adds `Gui.Widgets.Basic.Theming.DefaultTextStyle : InheritedWidget`
+(`TextStyle Style`, ctor `(TextStyle style, Widget child, Key? key = null)`, static `TextStyle
+Of(BuildContext)`). `Text.Build` resolves its style as `StyleOverride?.Merge(DefaultTextStyle.Of(context))
+?? DefaultTextStyle.Of(context)` — so an ancestor `DefaultTextStyle` supplies defaults and each `Text`
+merges its partial override on top (the Flutter mechanism). Adopted by Scribe in
+`adopt-libgui-31-improvements` to set the player's Task Text Font once per tab (via `ScribeTextDefaults`)
+instead of threading `FontFamily = ScribeTaskFont.Resolve(...)` at every `Text`.
+
+**The landmine — and the CORRECTION to what we first believed.** `override.Merge(base)` decides each
+field with `result.X = (X != new TextStyle().X) ? X : base.X`. The sentinel it compares against is
+**`new TextStyle()` — the PARAMETERLESS CTOR, which runs the property initializers** (`FontFamily =
+"sans-serif"`, `FontSize = 14f`, `Color = Vector4.One` (white), `SoftWrap = true`, `Align = Left`,
+`Weight = Normal`) — **NOT `default(TextStyle)` (the all-zero struct).** Verified field-by-field in the
+decompiled `Merge` body in the shipped `Gui.dll`. (The `adopt-libgui-31-improvements` design.md initially
+had this inverted — said the sentinel was `default(TextStyle)` and listed `SoftWrap = false` / `Align =
+zero` / `FontSize = 0` as the "silently inherits" cases. That is backwards; this note is the correct
+version.) Consequences that actually shape the code:
+- A child that sets a field to one of those **initializer defaults cannot override the ancestor** — the
+  Merge reads it as "unset" and inherits. The real cases: **you cannot force `FontFamily = "sans-serif"`
+  under a non-sans ancestor** (sans-serif IS the sentinel), cannot force `FontSize = 14`, cannot force
+  white, cannot force `SoftWrap = true` back on if the ancestor turned it off, cannot force `Align =
+  Left`. So a per-tab ancestor is wrap-everything-or-nothing for the family: descendants that were
+  deliberately neutral sans-serif (HUD, settings chrome, History/Timer/Guestbook metadata) **flip to the
+  ancestor's family** and can't opt back out. This drove real product decisions (leave HUD + Settings
+  unwrapped; the user explicitly OK'd the metadata flip on the wrapped tabs).
+- A field at a **non-initializer value overrides fine** (`Color = OnSurface`, `FontSize = 13*scale`,
+  `Weight = Bold`, `Align = Center`, `SoftWrap = false`) — the common overrides all work.
+- **Rule Scribe follows:** the ancestor (`ScribeTextDefaults.Style`) carries ONLY `FontFamily` (+ the
+  scaled base `FontSize`) and leaves everything else at initializer defaults; tabs strip only the
+  redundant `FontFamily`/base-`FontSize` from descendant `Text` styles. Custom RenderBoxes
+  (`ScribeMultilineField`) and non-`Text` widgets (`TextField`/`TextFieldStyle`, `Dropdown`) do NOT read
+  `DefaultTextStyle`, so they keep an explicit family; so does anything in a `useGlobalOverlay: true`
+  subtree (renders outside the ancestor). See `ScribeTextDefaults.cs`.
+
 ## Platform: `BadImageFormatException: Bad IL range` on Apple Silicon
 
 **Symptom: the game crashes with `System.BadImageFormatException: Bad IL range` when closing a

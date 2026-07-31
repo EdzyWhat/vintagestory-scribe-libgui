@@ -573,8 +573,11 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
         var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
         float bodySize = ScribeRowConstants.BaseWindowFontSize
             * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale);
+        // Family inherited from the wrap; only the size/color are set. (Base placeholder shown by hosts
+        // that don't override History; wrapped for parity with the Notebook's real History tab.)
         var bodyStyle = new TextStyle { FontSize = bodySize, Color = colors.OnSurface };
-        return new Center(child: new Text(Lang.Get("scribe:scribe-gui-history-empty"), bodyStyle));
+        return ScribeTextDefaults.Wrap(modSystem.MySettings.TaskFontFamily, bodySize,
+            new Center(child: new Text(Lang.Get("scribe:scribe-gui-history-empty"), bodyStyle)));
     }
 
     /// <summary>Switches to the Timer tab, tearing down the editor first if active.
@@ -607,8 +610,11 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
         var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
         float bodySize = ScribeRowConstants.BaseWindowFontSize
             * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale);
+        // Family inherited from the wrap; only the size/color are set. (Base placeholder shown by hosts
+        // that don't override Timer; wrapped for parity with the Clockmaker Notebook's real Timer tab.)
         var bodyStyle = new TextStyle { FontSize = bodySize, Color = colors.OnSurface };
-        return new Center(child: new Text(Lang.Get("scribe:scribe-gui-timer-empty"), bodyStyle));
+        return ScribeTextDefaults.Wrap(modSystem.MySettings.TaskFontFamily, bodySize,
+            new Center(child: new Text(Lang.Get("scribe:scribe-gui-timer-empty"), bodyStyle)));
     }
 
     /// <summary>"Done editing" button: flush the pending edit, release the lock, and swap to the read
@@ -2087,7 +2093,12 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
                     child: new Column(children: rows.ToArray(), mainAxisSize: MainAxisSize.Min)))
               { AutoHide = false };
 
-        return new Padding(
+        // Root the Guestbook tab subtree in the player's Task Text Font + window-scaled base size
+        // (adopt-libgui-31-improvements). Visitor names/dates/other-players' notes inherit the family
+        // here (approved change). headerStyle keeps its explicit Caudex (TitleFontFamily) — a non-default
+        // family wins over the inherited one under Merge. The own-note ScribeMultilineField keeps its
+        // explicit task font (custom RenderBox that doesn't read DefaultTextStyle).
+        return ScribeTextDefaults.Wrap(modSystem.MySettings.TaskFontFamily, bodySize, new Padding(
             EdgeInsets.All(10),
             new Column(
                 spacing: 8,
@@ -2103,7 +2114,7 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
                     }),
                     new Divider(),
                     new Expanded(body),
-                }));
+                })));
     }
 
     /// <summary>Keep <see cref="pinFocusNodes"/> in sync with the current pin set: add a node for each new

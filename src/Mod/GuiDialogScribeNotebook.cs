@@ -84,9 +84,10 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
             * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale);
         float kindSize = bodySize * 0.72f;
         float dateSize = bodySize * 0.72f;
-        string taskFont = ScribeTaskFont.Resolve(modSystem.MySettings.TaskFontFamily);
 
-        var bodyStyle = new TextStyle { FontSize = bodySize, Color = colors.OnSurface, FontFamily = taskFont };
+        // Family inherited from the tab's DefaultTextStyle ancestor (below): bodyStyle drops its explicit
+        // FontFamily; kind/date carried no family and now follow the task font too (approved change).
+        var bodyStyle = new TextStyle { FontSize = bodySize, Color = colors.OnSurface };
         var kindStyle = new TextStyle { FontSize = kindSize, Color = colors.OnSurface with { W = colors.OnSurface.W * 0.65f }, Weight = FontWeight.SemiBold };
         var dateStyle = new TextStyle { FontSize = dateSize, Color = colors.OnSurface with { W = colors.OnSurface.W * 0.55f } };
 
@@ -125,13 +126,15 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
                         crossAxisAlignment: CrossAxisAlignment.Stretch)))
               { AutoHide = false };
 
-        return new Padding(
+        // Root the History tab subtree in the player's Task Text Font + window-scaled base size
+        // (adopt-libgui-31-improvements). Body/kind/date Text widgets all inherit the family from here.
+        return ScribeTextDefaults.Wrap(modSystem.MySettings.TaskFontFamily, bodySize, new Padding(
             EdgeInsets.All(10),
             new Column(
                 spacing: 8,
                 crossAxisAlignment: CrossAxisAlignment.Stretch,
                 mainAxisSize: MainAxisSize.Max,
-                children: new Widget[] { new Divider(), new Expanded(body) }));
+                children: new Widget[] { new Divider(), new Expanded(body) })));
     }
 
     private static string KindLabel(HistoryEntry entry) => entry.Kind switch
