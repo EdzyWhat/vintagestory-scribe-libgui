@@ -7,9 +7,7 @@ rather than by position or block coordinates. Pins are owned by a single player,
 the save game, synced authoritatively to that player's client, and carry a last-known snapshot so
 they can be displayed even when their source is unresolvable. This capability was created via spec
 sync from change `add-pinned-task-foundation`.
-
 ## Requirements
-
 ### Requirement: Pins are per-player references to a specific task
 The system SHALL record pins as a per-player set of references, each identifying a specific
 task by its owning document's stable identifier and the task's stable identifier
@@ -291,3 +289,126 @@ completes, rather than disappearing in a single frame.
 - **WHEN** a task's row is collapsing (or has just collapsed) on the HUD and that same task is pinned
   again before the HUD reconciles with the server
 - **THEN** the task reappears in the HUD at full height, with no residual collapse hiding it
+
+### Requirement: Edit a pinned task's text by stable identity
+
+The system SHALL allow a player to change a pinned task's text addressed by `(DocId, TaskId)`, so a
+surface listing a player's pins (the Pin Tab) can edit a task's text without knowing the
+task's position or block coordinates. The edit SHALL be best-effort write-through: when the task's
+document is currently resolvable, the new text SHALL be written into the authoritative document
+lock-free (mirroring the existing complete-by-identity path) and SHALL NOT require or acquire the
+document's edit lock; regardless of whether the source is resolvable, the pin's last-known text
+snapshot SHALL be updated to the new text and re-synced to the owning player. The edit SHALL respect
+the document model's content invariant (blank or whitespace-only text is rejected and leaves the
+document unchanged).
+
+#### Scenario: Edit a resolvable pinned task's text
+- **WHEN** a player edits a pinned task's text addressed by `(DocId, TaskId)` whose document is loaded
+- **THEN** the task's text is changed in the authoritative document without acquiring the document's
+  edit lock, and the player's pin snapshot for it is updated to the new text and re-synced
+
+#### Scenario: Editing while another player holds the edit lock
+- **WHEN** one player holds a document's edit lock and another player edits a task in that document by
+  identity through the Pin Tab
+- **THEN** the text change is applied lock-free without disturbing the editor's lock, and the pin
+  snapshot is updated
+
+#### Scenario: Blank edit text is rejected
+- **WHEN** a player edits a pinned task's text to a value that is empty or whitespace-only
+- **THEN** the operation reports failure, the authoritative document is left unchanged, and no snapshot
+  update that would blank the pin is applied
+
+### Requirement: Delete a task by stable identity as a standalone action
+
+The system SHALL allow a player to delete a task addressed by `(DocId, TaskId)` as a first-class
+standalone action (not only as a side effect of a completion policy), so the Pin Tab can
+delete a task directly. When the task's document is resolvable, the task SHALL be removed from the
+authoritative document lock-free (reusing the existing delete-from-reader path) and SHALL NOT require
+or acquire the document's edit lock; the player's pin for that task SHALL be removed from their pin set
+and the updated set re-synced. Deleting SHALL be addressed by identity alone and SHALL be a safe no-op
+if the pin is already gone.
+
+#### Scenario: Delete a resolvable task by identity
+- **WHEN** a player deletes a task addressed by `(DocId, TaskId)` whose document is loaded
+- **THEN** the task is removed from the authoritative document without acquiring the edit lock, the
+  player's pin for it is removed, and the updated pin set is re-synced
+
+#### Scenario: Standalone delete removes the pin even when the source is unresolvable
+- **WHEN** a player deletes a pinned task by identity while its owning document's chunk is unloaded
+- **THEN** the player's pin is removed and the operation does not fail, without requiring the block to
+  be resolved
+
+### Requirement: Reorder the per-player pin list
+
+The system SHALL allow a player to reorder their own pin list, addressed by pin identity, so the
+Pin Tab can arrange pins in a player-chosen order. Reordering SHALL permute only that player's
+per-player pin list; it SHALL NOT change any document's block order and SHALL NOT affect any other
+player's pin list. The reordered list SHALL be persisted per-player (in the existing per-player pin
+store) and re-synced to the owning player so the new order survives a restart and is reflected on every
+surface that reads that player's pins.
+
+#### Scenario: Reorder persists and re-syncs
+- **WHEN** a player reorders their pin list through the Pin Tab
+- **THEN** their pin list is permuted into the new order, persisted per-player, and re-synced to their
+  client, and the same order is restored after a restart
+
+#### Scenario: Reordering does not touch document block order
+- **WHEN** a player reorders their pins that reference tasks in one or more documents
+- **THEN** no document's block order changes and no other player's pin list is affected — only the
+  reordering player's own pin list order changes
+
+### Requirement: Mutating an unloaded document's source is best-effort and snapshot-only
+
+Because no mechanism exists to force-load an unloaded chunk, any pin mutation that would write through
+to a source document (editing text or deleting a task by identity) SHALL degrade to updating the
+per-player pin state only when the source document is unresolvable, exactly as the existing
+delete-on-complete policy behaves when its source is unloaded. In this case the pin snapshot (for an
+edit) or the pin's presence (for a delete) SHALL be updated and re-synced, the operation SHALL NOT
+fail or crash, and the source document SHALL remain unchanged until it is next loaded. The system SHALL
+NOT force-load a chunk to satisfy a pin mutation.
+
+#### Scenario: Editing text of a pin whose source is unloaded
+- **WHEN** a player edits a pinned task's text by identity while the task's owning document's chunk is
+  unloaded
+- **THEN** the pin's text snapshot is updated and re-synced, the operation does not fail, and the
+  source document is not modified (and is not force-loaded) until it is next loaded
+
+#### Scenario: Deleting a task whose source is unloaded
+- **WHEN** a player deletes a pinned task by identity while its owning document's chunk is unloaded
+- **THEN** the player's pin is removed and re-synced, the operation does not fail, and no chunk is
+  force-loaded to attempt the source deletion
+
+### Requirement: The sink completion order is shown on the Pinned view, not only the HUD
+When a player's completion policy is *sink*, the resting display order in which completed tasks sink
+below not-completed ones SHALL be applied to the Lectern's Pinned view, not only to the pinned-task HUD.
+The Pinned view SHALL render the player's pins with completed pins ordered below not-completed pins
+(preserving pin order within each group), using the same ordering rule the HUD uses. Completing a pinned
+task under *sink* from any surface SHALL therefore move that task toward the bottom of the Pinned view,
+matching what the HUD shows.
+
+#### Scenario: A sunk task appears at the bottom of the Pinned view
+- **WHEN** a player whose policy is *sink* completes a pinned task
+- **THEN** that task is shown below the not-completed pins in the Pinned view (matching the HUD's sink
+  order), rather than staying in its prior position
+
+#### Scenario: Pinned view and HUD agree on sink order
+- **WHEN** the same player views their pins on both the HUD and the Pinned view after a *sink* completion
+- **THEN** both surfaces show the completed task sunk below the not-completed pins in the same order
+
+### Requirement: A sink completion of an owned task reorders the owner's Read and Edit views
+When a player completes a task under the *sink* policy and that task's document is resolvable, the task
+SHALL be moved to the bottom of that document's order (the existing document reorder), and the acting
+player's open Read and Edit views of that document SHALL reflect the new order promptly rather than
+requiring the player to reopen or switch views. This makes "drop to bottom" visible on the same surface
+the player completed the task from, for a task in a document they can edit.
+
+#### Scenario: Read view reflects a sink reorder without reopening
+- **WHEN** a player whose policy is *sink* completes a task from the Read view of a resolvable document
+- **THEN** the completed task moves to the bottom of the Read list without the player reopening or
+  switching views
+
+#### Scenario: Editor reflects a sink reorder in place
+- **WHEN** a player whose policy is *sink* completes a task from the editor view
+- **THEN** the task moves to the bottom of the editor list while other rows' in-progress edits are
+  preserved
+

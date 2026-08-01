@@ -4,24 +4,33 @@
 
 TBD - created via spec sync from change `skeuomorphic-lectern-gui`. This is a new capability
 covering the skeuomorphic layout and interaction shell of the lectern's GUI dialog.
-
 ## Requirements
-
 ### Requirement: Lectern dialog uses a portrait, custom-drawn backdrop
-The lectern's GUI dialog (both read view and editor view) SHALL be laid out in a portrait
-(taller-than-wide) aspect ratio and SHALL render a custom-drawn backdrop image in place of
-the engine's default shaded dialog panel.
+The lectern's GUI dialog (both read view and editor view) SHALL be an art-sized outer box (the
+`OuterArtBox`) whose width is the layout's driving width `W` and whose height matches the backdrop art's
+aspect ratio (`H = W × 1160/1024`), rendering the custom-drawn backdrop image filling that box without
+distortion in place of the engine's default shaded dialog panel. The dialog window SHALL be sized to the
+`OuterArtBox` and SHALL be non-resizable so the art cannot be stretched off-aspect. The functional views
+(read and editor) SHALL be laid out INSIDE the `OuterArtBox` so the backdrop art frames the functional
+content rather than being filled edge to edge by it. When the backdrop preference is OFF, the box SHALL be
+used without the texture (the existing fallback), and when the art asset is missing it SHALL fall back to a
+flat placeholder color.
 
 #### Scenario: Opening the lectern shows a portrait, skinned dialog
-- **WHEN** a player right-clicks or shift+right-clicks a placed lectern
-- **THEN** the opened dialog is taller than it is wide, and its background is the custom
-  backdrop image rather than the default `AddShadedDialogBG` panel
+- **WHEN** a player right-clicks or shift+right-clicks a placed lectern with the backdrop enabled
+- **THEN** the opened dialog is taller than it is wide, its background is the custom backdrop image
+  rendered without distortion (not stretched off its native aspect ratio), and the functional read/editor
+  content is laid out inside the box with the backdrop art visible framing it
 
 #### Scenario: Backdrop is swappable without a code change
-- **WHEN** the placeholder backdrop asset is replaced with a different image (or draw
-  routine) of matching dimensions
-- **THEN** the dialog renders the new backdrop with no changes required to
-  `GuiDialogScribeLectern.cs`'s layout or composition logic
+- **WHEN** the backdrop asset is replaced with a different image of the SAME aspect ratio
+- **THEN** the dialog renders the new backdrop with no changes required to the dialog's layout or
+  composition logic
+
+#### Scenario: The window is not resizable
+- **WHEN** the player attempts to resize the lectern dialog window
+- **THEN** the window does not resize, so the backdrop art's aspect ratio (and therefore its
+  distortion-free rendering) is preserved
 
 ### Requirement: Task/note row list scrolls within a clipped region
 The lectern GUI's task/note row list SHALL render inside a scrollable, clipped content
@@ -302,6 +311,16 @@ the client entered the editor before the lock was confirmed granted.
   holds the lock it entered on)
 
 ### Requirement: A contended editor lock blocks entry and reports it to the player
+The lectern's single-editor lock SHALL be **transient server-session state only**. The server's
+authoritative lock holder SHALL be released whenever the holder leaves the editing session by ANY
+path — closing the dialog, switching to the read view or another tab, or disconnecting — and SHALL
+be cleared when the block entity is loaded. Consequently the lock SHALL NEVER survive the holder
+leaving the editor, a second player's relog, or a server restart: it can prevent a *concurrent*
+second editor, but it can never become a permanent lockout that bars a lectern from ever being
+edited again. The lock MAY be mirrored to clients via the block-entity sync (to drive the
+contended-editor affordance), but that synced value SHALL NOT be treated as authoritative across a
+block load.
+
 When another player already holds the lectern's single-editor lock, the dialog SHALL NOT allow a second
 player to enter the editor view. The second player's "switch to editor" affordance SHALL reflect the
 unavailable lock (visibly disabled/inert while the lock is held by another player), and activating it
@@ -330,6 +349,18 @@ silently discarded.
 - **WHEN** no other player holds the lock and a player activates "switch to editor"
 - **THEN** the player enters the editor view and their edits persist (no revert), because the lock is
   granted and retained for the duration of the editor session
+
+#### Scenario: Closing the dialog releases the lock even when not in editor mode
+- **WHEN** player 1 acquired the editor lock, then switched to the read view (or another tab) without
+  fully closing, and then closes the dialog
+- **THEN** the server's lock holder is released on that close, so player 2 can subsequently enter the
+  editor
+
+#### Scenario: The lock does not lock out after the holder leaves or a second player relogs
+- **WHEN** player 1 leaves the editing session (closes the dialog, switches to read, or disconnects),
+  or a lectern is loaded whose in-memory holder was somehow still set
+- **THEN** the loaded/updated lectern has no editor lock held, and any player — including one who
+  relogs — may enter the editor view
 
 ### Requirement: Editor rows are editable multi-line LibGUI widgets
 The editor view SHALL render each task/note row as a self-stateful, `ValueKey`-keyed LibGUI widget
@@ -363,8 +394,11 @@ the dialog's scroll viewport with no row painting outside it and no page-turn na
 ### Requirement: Editor input captures keystrokes while focused
 While an editor row's text field holds focus, the dialog SHALL capture keyboard input so that typed keys
 edit the field and do NOT leak through to the game (e.g. player movement, hotbar selection, or other
-keybinds). Releasing focus (leaving the editor view or committing out of all fields) SHALL restore normal
-key handling.
+keybinds). When NO editor field holds focus — including while the editor view is open but the player has
+clicked away from every row (e.g. after adding a task via "New Task" and unfocusing it) — the dialog SHALL
+NOT capture input, so global hotkeys (e.g. the Handbook key) fire normally. Input capture SHALL therefore
+be gated on a field actually holding focus, NOT merely on the editor view being active. Releasing focus
+(leaving the editor view or committing out of all fields) SHALL restore normal key handling.
 
 #### Scenario: Typing does not trigger game keybinds
 - **WHEN** the player types letters that also match game keybinds (e.g. movement keys) while an editor
@@ -375,6 +409,12 @@ key handling.
 #### Scenario: Focus release restores game input
 - **WHEN** the player leaves the editor view or no field is focused
 - **THEN** keyboard input is no longer captured by the dialog and normal game key handling resumes
+
+#### Scenario: Hotkeys fire after clicking away from a new task row
+- **WHEN** the player adds a task via "New Task" in the editor view and then clicks away so no editor
+  field holds focus
+- **THEN** global hotkeys (e.g. the Handbook key) fire normally, exactly as they would if the editor were
+  opened without any task having been created
 
 ### Requirement: Editor caret conventions match desktop editing idioms cross-platform
 The editor's text field SHALL support desktop caret-navigation idioms on macOS as well as Windows.
@@ -639,3 +679,78 @@ view or persisted across reload.
 - **WHEN** a task row is empty and the player switches to the read view or closes the dialog
 - **THEN** the empty task is removed rather than saved, and the read view / reloaded document shows
   no empty task
+
+### Requirement: The lectern lays its content out proportionally from one driving width
+The lectern dialog's layout SHALL be derived from a single driving width `W` (the "Pixel Art Size"): every
+structural region's size SHALL be expressed as a proportion of `W` (or of `H = W × 1160/1024`). The
+`OuterArtBox` SHALL contain, stacked top to bottom, a `TitleBar` band of height `0.13 × H` and a
+`SectionInnerBox` of `0.9 × W` by `0.8 × H` (centered horizontally), leaving the remaining vertical space
+as bottom margin. Changing `W` SHALL rescale the entire layout consistently.
+
+#### Scenario: All regions scale with the driving width
+- **WHEN** the Pixel Art Size `W` changes
+- **THEN** the outer box, title bar, inner section, and its columns all resize in proportion, preserving
+  their relative ratios and the framed appearance
+
+### Requirement: The lectern has a draggable title bar with title text and SVG buttons
+The `TitleBar` band SHALL be the dialog's draggable region (click-drag within it moves the window). It SHALL
+contain a bottom-anchored, horizontally-centered `TitleTextButtons` row (`0.75 × W` wide, `0.065 × H` tall)
+holding the dialog's title text on the left (rendered at the window text size scaled by ×1.1) and a
+right-aligned group of icon buttons drawn from the mod's custom SVGs. The group SHALL include a close button
+that reuses the delete SVG at 1.4× the delete control's size. Each button SHALL provide a tooltip. Closing
+and dragging SHALL work without relying on the stock window frame.
+
+#### Scenario: The title bar drags the window and closes it
+- **WHEN** the player click-drags inside the title bar band
+- **THEN** the window moves; and clicking the close button (the 1.4× delete SVG) closes the dialog
+
+#### Scenario: Title text and buttons are laid out and labeled
+- **WHEN** the lectern opens
+- **THEN** the title text sits on the left of the bottom-anchored centered row at window-text ×1.1, the SVG
+  button group sits on the right, and hovering any button shows its tooltip
+
+### Requirement: The inner section is a three-column layout framing the scrolling content
+The `SectionInnerBox` SHALL be a row of three full-height columns: a left spacer column (`0.0675 × W`), a
+tasks column (`0.765 × W`) that hosts the existing scrollable read/editor content, and a right column
+(`0.0675 × W`) holding a vertical stack of icon buttons for navigation (Scribe Settings, Read view, Edit
+view, Pinned tasks). The navigation buttons SHALL be icon-only and SHALL each provide a tooltip. The three
+column widths SHALL sum to the inner box width so no column overflows.
+
+#### Scenario: The scrolling content sits in the center column framed by side columns
+- **WHEN** the lectern opens
+- **THEN** the existing task/note scroll region renders in the center column, with the left spacer and the
+  right icon-button column on either side, all within the framed inner section
+
+#### Scenario: The right column exposes tooltipped navigation icons
+- **WHEN** the player hovers a button in the right column
+- **THEN** its tooltip appears, and activating it performs its navigation (open settings, switch to read,
+  switch to edit, or show pinned tasks)
+
+### Requirement: The title bar shows a drag-grip affordance
+The Lectern dialog's title-bar button row SHALL include a drag-grip icon (the mod's registered
+`scribegrip` SVG) positioned to the LEFT of the close button, so the fully-draggable title-bar band is
+visually discoverable. The grip SHALL be a passive affordance marking the drag zone — it SHALL be tinted
+as a non-primary control and SHALL provide a localized tooltip indicating the band can be dragged to move
+the window. The window's drag behavior SHALL remain owned by the title-bar band itself (the grip does not
+need its own drag gesture), so dragging works anywhere in the band, not only on the grip.
+
+#### Scenario: The drag grip appears left of the close button
+- **WHEN** the Lectern dialog is open
+- **THEN** a drag-grip icon (the `scribegrip` SVG) is shown immediately to the left of the title bar's
+  close button, and hovering it shows a tooltip indicating the title bar can be dragged to move the window
+
+#### Scenario: Dragging still works across the whole band
+- **WHEN** the player click-drags anywhere within the title-bar band (not only on the grip icon)
+- **THEN** the window moves, since the drag zone is the whole band and the grip is only a discoverability cue
+
+### Requirement: Read-view pin toggle preserves scroll position
+When the player pins or unpins a task from the read view, the dialog SHALL preserve the read list's
+current scroll offset across the rebuild that the pin change triggers. Toggling a pin SHALL NOT jump the
+scroll list to the top; the list SHALL remain at the position the player had scrolled to (clamped only if
+the list genuinely became shorter).
+
+#### Scenario: Pinning a scrolled-down task keeps the scroll position
+- **WHEN** the player has scrolled the read view down and pins (or unpins) a task
+- **THEN** the read list stays at the same scroll position after the pin toggle rather than jumping back
+  to the top
+
