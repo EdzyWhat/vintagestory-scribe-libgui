@@ -96,6 +96,32 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Confirmed 2026-07-31** (playtest submission 2026-07-31T21-39-18): "Works." `/scribe seed all`
         produces the fuller chronicle with no doubled names.
 
+## notebook-history-tab
+
+> The Notebook's History tab: an auto-chronicle of significant events (Crafted, PickedUp, Death, PvpKill,
+> BossKill, TemporalStorm) plus player-authored Manual entries, with per-kind caps. Server hooks record
+> deaths/kills/storms via `OnEntityDeath` + a storm-tick edge-detector; entries sync to all open notebooks
+> and persist in the ItemStack. Newest-first; auto entries read-only, Manual editable up to a cap.
+
+- [x] `a4c22c79` **Death entry logged.** Die while holding the notebook (anywhere on your person, not just
+      the hotbar); confirm a Death entry appears with the reconstructed death message.
+      *(notebook-history-tab 9.4)*
+      - **Confirmed 2026-07-31**: Death entry logs with the reconstructed message; works with the notebook
+        anywhere on the person, not just the hotbar.
+- [x] `03699a3d` **PvpKill entry logged.** In multiplayer, kill another player while holding the notebook
+      (any inventory slot on your person); confirm a PvpKill entry appears. *(notebook-history-tab 9.5)*
+      - **Confirmed 2026-07-31** (MP): PvpKill entry logs regardless of the notebook's location on the person.
+- [x] `b5fd19de` **Storm entry logged.** Trigger a temporal storm (`/time set storm`); confirm a
+      TemporalStorm entry appears on all open notebooks. *(notebook-history-tab 9.6)*
+      - **Confirmed 2026-07-31**: temporal storm logs a TemporalStorm entry on open notebooks.
+- [ ] `71d5916f` **Boss-kill entry + range gate.** Kill an Eidolon within 100 blocks while holding the
+      notebook; confirm a BossKill entry reads "Eidolon", and a kill >100 blocks records nothing.
+      *(notebook-history-tab 9.7)*
+      - **Backlogged 2026-07-31** (user decision): shipping without the deliberate Eidolon-kill session. The
+        BossKill path shares the same `OnEntityDeath` hook as the confirmed Death/PvpKill/Storm entries
+        (`a4c22c79`/`03699a3d`/`b5fd19de`); the 100-block range gate is the only untested piece. Not broken —
+        deferred.
+
 ## timer-auto-disappear-setting
 
 > New per-player "Timer disappears" preference (Mod Behavior). Default ON preserves the original

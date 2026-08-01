@@ -84,20 +84,24 @@
       `DocumentBytes` — client treats null as no document update). Client's
       `OnClientReceivedNotebookSave` calls `ApplyHistoryUpdate(message.HistoryBytes)` on the
       `NotebookHost`, then `RefreshHistoryView()` triggers a rebuild if the tab is open.
-      **NOTE:** `RefreshHistoryView()` call needs to be added to `OnClientReceivedNotebookSave`.
-      Currently `ApplyHistoryUpdate` updates the store but the tab doesn't auto-rebuild.
+      (Verified 2026-07-31: the `RefreshHistoryView()` call IS wired in `OnClientReceivedNotebookSave`
+      — gated on non-null `HistoryBytes` and an open `GuiDialogScribeNotebook` — so the tab auto-rebuilds.
+      The earlier "needs to be added" note was stale.)
 
 ## 9. Final verification
 
 - [x] 9.1 `dotnet test` — 175 passed, 0 failed.
 - [x] 9.2 In-game: craft a notebook → History tab shows Crafted entry. (Confirmed 2026-07-31.)
 - [x] 9.3 Open the notebook → PickedUp entry appears; reopen → no duplicate. (Confirmed 2026-07-31.)
-- [ ] 9.4 Die holding the notebook → Death entry appears with the reconstructed death message.
-- [ ] 9.5 In multiplayer: kill another player while holding notebook → PvpKill entry appears.
-- [ ] 9.6 Trigger a temporal storm (`/time set storm`) → TemporalStorm entry appears on all
-      open notebooks.
+- [x] 9.4 Die holding the notebook → Death entry appears with the reconstructed death message.
+      (Confirmed 2026-07-31 — works anywhere on the person, not just the hotbar.)
+- [x] 9.5 In multiplayer: kill another player while holding notebook → PvpKill entry appears.
+      (Confirmed 2026-07-31 MP — works regardless of the notebook's location on the person.)
+- [x] 9.6 Trigger a temporal storm (`/time set storm`) → TemporalStorm entry appears on all
+      open notebooks. (Confirmed 2026-07-31.)
 - [ ] 9.7 Kill an Eidolon within 100 blocks → BossKill entry shows "Eidolon". Verify a
-      distant kill (> 100 blocks) records nothing.
+      distant kill (> 100 blocks) records nothing. (Backlogged 2026-07-31 — deferred; the
+      Death/PvP/Storm history paths sharing the same OnEntityDeath hook are confirmed.)
 - [x] 9.8 Add a manual entry → appears in tab. Edit it → text updates. Add 10 total → "Add
       entry" button disappears. (Confirmed 2026-07-31.)
 - [x] 9.9 Give the notebook to another player → they see the full history from before. (Confirmed 2026-07-31, MP.)
