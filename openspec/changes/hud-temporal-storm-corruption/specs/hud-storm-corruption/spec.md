@@ -68,14 +68,14 @@ change the title; it only drives corruption.
 ### Requirement: The corruption re-randomizes organically while active
 
 While a trigger is active, the corrupted rendering SHALL be recomputed on a randomized interval
-between 2 and 8 seconds, so the injected marks change over time and the text appears to writhe
+between 0 and 5 seconds, so the injected marks change over time and the text appears to writhe
 rather than remaining static. Recomputation SHALL reuse the HUD's existing refresh mechanism and
 SHALL NOT re-scramble every frame.
 
 #### Scenario: Corruption shifts over time
 
 - **WHEN** a trigger remains active across several seconds
-- **THEN** the specific injected marks change on a randomized 2–8 second cadence
+- **THEN** the specific injected marks change on a randomized 0–5 second cadence
 
 ### Requirement: The effect degrades gracefully when storm state is unavailable
 

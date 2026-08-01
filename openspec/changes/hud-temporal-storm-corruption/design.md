@@ -35,7 +35,7 @@ recreates the widget tree, so smooth per-frame animation uses self-ticking `Stat
 - Variable strength: storm tier → vanilla glitch strengths (≈0.53 / 0.67 / 0.90); low stability →
   linear ramp 0.0 at 0.50 to 1.0 at 0.10; effective = max of the two.
 - Storm-only title swap to "Survive the Storm", steady for the storm.
-- Organic re-randomization on a 2–8 s cadence.
+- Organic re-randomization on a 0–5 s cadence.
 - A client-local settings toggle (default on) that fully disables the effect.
 - Keep the corruption logic in `src/Core` as a pure, unit-tested helper.
 
@@ -71,20 +71,20 @@ Every user-visible string built in `HudPinsContent` (title, row text, "+N more",
 countdown) is passed through the Core corruptor with the current strength/seed before being handed
 to its `Text` widget. Title selection in `BuildHeader` chooses `scribe-hud-title-storm` when
 `stormActive`, else `scribe-hud-title`, then corrupts the chosen string. _Trade-off:_ corrupting at
-build time (not per frame) means the marks only change on rebuild — which is exactly what the 2–8 s
+build time (not per frame) means the marks only change on rebuild — which is exactly what the 0–5 s
 re-randomization drives (decision 4). Icons/textures (chevron glyph, gear) are left untouched.
 
 **4. Re-randomization via a randomized-interval rebuild, edge-detected.**
 Reuse the existing tick machinery rather than adding per-frame work. On a recurring tick, when a
 trigger is active, if the current time has passed the next scheduled re-scramble, advance
-`corruptionSeed`, pick a new random interval in [2 s, 8 s], and `ForceRebuild()`. Also edge-detect
+`corruptionSeed`, pick a new random interval in [0 s, 5 s], and `ForceRebuild()`. Also edge-detect
 trigger on/off and storm active/inactive transitions to rebuild immediately (so the title swap and
 first corruption are prompt). _Rationale:_ matches the established `OnTimerDisplayTick`
 `ForceRebuild()` pattern and the `_stormWasActive` edge-detect already in `OnStormTick`. Since
 `Date.now`-style calls are fine in the Mod layer (unlike Core), use `capi.World.ElapsedMilliseconds`
 for scheduling. _Alternative considered:_ a self-ticking `StatefulWidget` corruptor per text element
 (like `ScribeFadeText`) — cleaner animation but more surface; deferred unless per-frame shimmer is
-wanted later. The 2–8 s cadence does not need frame-accurate animation.
+wanted later. The 0–5 s cadence does not need frame-accurate animation.
 
 **5. Settings toggle: client-local, follows the existing preference pattern.**
 Add one boolean preference (default true) alongside the other client-local display/behavior prefs,
@@ -104,7 +104,7 @@ corruption reads at the same intensity the game's own chat corruption would.
   atlas may mishandle stacked diacritics] → Verify in-game across title, wrapping row text, and the
   timer; if layout misbehaves, cap the marks-per-character or restrict to a subset that renders
   cleanly. This is the primary feasibility unknown and gets an explicit test task.
-- [`ForceRebuild()` on the re-scramble cadence adds churn] → Cadence is 2–8 s and only while a
+- [`ForceRebuild()` on the re-scramble cadence adds churn] → Cadence is 0–5 s and only while a
   trigger is active; negligible next to the existing 1 Hz timer rebuild. Confirm no interaction with
   the timer rebuild or collapse animation.
 - [Reading `WatchedAttributes` / `SystemTemporalStability` on a non-survival server] → Null-check the

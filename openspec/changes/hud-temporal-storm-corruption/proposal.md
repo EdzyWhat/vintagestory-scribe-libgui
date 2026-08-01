@@ -23,7 +23,7 @@ storm/stability state is fully public API.
 - **Storm-only title swap.** During an active temporal storm the HUD title "Pinned" is replaced by
   "Survive the Storm", steady for the storm's duration, reverting when it ends. The low-stability
   trigger does **not** change the title (it only drives corruption).
-- **Organic re-randomization.** The corrupted rendering re-scrambles on a randomized **2–8 second**
+- **Organic re-randomization.** The corrupted rendering re-scrambles on a randomized **0–5 second**
   interval while a trigger is active, so it writhes rather than sitting static.
 - **Player-facing toggle.** A new Scribe setting (default on) disables the entire effect — title
   swap and corruption — for players who rely on HUD legibility or are motion-sensitive.

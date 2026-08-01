@@ -16,6 +16,7 @@ using OpenTK.Mathematics;        // Vector2, Vector4
 using Scribe.Core;
 using Vintagestory.API.Client;
 using Vintagestory.API.Config;   // Lang, RuntimeEnv
+using Vintagestory.GameContent;  // SystemTemporalStability, EnumTempStormStrength
 
 namespace Scribe;
 
@@ -167,6 +168,42 @@ public sealed class HudScribePins : GuiBase
     /// and the server's Idle re-push are a round-trip apart, during which another 1 Hz tick could fire).
     /// Reset each time a fresh Fired state arrives.</summary>
     private bool _firedAutoClearSent;
+
+    // ---------------- Temporal-storm corruption (hud-temporal-storm-corruption) ----------------
+
+    /// <summary>Base corruption strengths per storm tier, sourced verbatim from vanilla's own
+    /// <c>stormGlitchStrength</c> bases in <see cref="SystemTemporalStability"/> (decompiled) so the HUD
+    /// corrupts at the same intensity the game's own storm chat would. Not scaled.</summary>
+    private const double StormLightStrength = 0.53;
+    private const double StormMediumStrength = 0.67;
+    private const double StormHeavyStrength = 0.90;
+
+    /// <summary>Personal-stability corruption ramp bounds: at/above <see cref="StabilityRampUpper"/> the
+    /// low-stability trigger contributes nothing; it ramps linearly to full strength at (or below)
+    /// <see cref="StabilityRampLower"/>.</summary>
+    private const double StabilityRampUpper = 0.50;
+    private const double StabilityRampLower = 0.10;
+
+    /// <summary>Re-scramble cadence bounds (ms): while a trigger is active the corruption is recomputed on
+    /// a randomized interval in this range, so the marks writhe rather than sitting static.</summary>
+    private const long RescrambleMinMs = 0;
+    private const long RescrambleMaxMs = 5000;
+
+    /// <summary>Seed handed to the Core corruptor each rebuild; advanced on the re-scramble cadence so the
+    /// injected marks change while the same text stays put. Deterministic per build so the whole HUD's
+    /// corruption is coherent within one frame.</summary>
+    private int _corruptionSeed;
+
+    /// <summary><see cref="ICoreClientAPI.World"/>'s <c>ElapsedMilliseconds</c> at which the next
+    /// re-scramble is due; scheduled to a fresh random interval each time it fires (or when a trigger
+    /// first becomes active).</summary>
+    private long _nextRescrambleMs;
+
+    /// <summary>Edge-detect state for the corruption trigger and the storm-active flag, so a transition
+    /// rebuilds the HUD immediately (prompt title swap + first corruption) rather than waiting for the
+    /// next re-scramble tick. Mirrors the server-side <c>_stormWasActive</c> pattern.</summary>
+    private bool _corruptionWasActive;
+    private bool _stormWasActiveHud;
 
 
     public HudScribePins(ICoreClientAPI capi, ScribeModSystem modSystem) : base(capi)
@@ -486,6 +523,11 @@ public sealed class HudScribePins : GuiBase
     {
         elapsedMs += dt * 1000.0;
 
+        // Temporal-storm corruption (hud-temporal-storm-corruption): advance/re-scramble the corruption
+        // and rebuild on trigger/storm transitions or the 0–5 s cadence. Cheap when no trigger is active
+        // (a couple of null-safe reads) and only rebuilds while the HUD is open.
+        bool corruptionRebuilt = TickCorruption();
+
         // Interpolate the timer countdown between server pushes (250ms tick, server pushes every 1s).
         // InGame-mode timers drain at the world's in-game time rate (≈30 in-game s per real s by default),
         // matching the server's decrement so the smooth local display doesn't diverge from the authoritative
@@ -530,7 +572,8 @@ public sealed class HudScribePins : GuiBase
             }
         }
 
-        if (anyExpired && IsOpened()) ForceRebuild();
+        // TickCorruption may already have rebuilt this tick; don't rebuild twice.
+        if (anyExpired && !corruptionRebuilt && IsOpened()) ForceRebuild();
     }
 
     // ---------------- Row state helpers ----------------
@@ -647,6 +690,94 @@ public sealed class HudScribePins : GuiBase
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeClearTimerMessage());
     }
 
+    // ---------------- Temporal-storm corruption ----------------
+
+    /// <summary>
+    /// Reads the two client-local instability triggers and returns the effective corruption strength
+    /// (0..1) plus whether a storm is active (which drives only the title swap). Both triggers are read
+    /// off <c>capi</c> each rebuild:
+    /// <list type="bullet">
+    /// <item>storm tier → vanilla's own glitch-strength bases (Light 0.53 / Medium 0.67 / Heavy 0.90)
+    /// when <see cref="SystemTemporalStability"/>'s <c>StormData.nowStormActive</c> is set;</item>
+    /// <item>low personal stability → a linear ramp from 0 at 0.50 stability to 1 at 0.10, read off the
+    /// player's <c>temporalStability</c> watched attribute.</item>
+    /// </list>
+    /// The effective strength is the greater of the two. When the player's storm-corruption preference is
+    /// off, or the temporal system can't be resolved (e.g. a non-survival server), this returns
+    /// <c>(0, false)</c> so both corruption and the title swap are suppressed — the graceful no-op.
+    /// </summary>
+    private (double strength, bool stormActive) ComputeCorruption()
+    {
+        // Player opt-out (settings toggle) fully disables the effect — no corruption, no title swap.
+        if (!modSystem.MySettings.StormCorruption) return (0.0, false);
+
+        var stormSys = capi.ModLoader.GetModSystem<SystemTemporalStability>();
+        if (stormSys is null) return (0.0, false);
+
+        // Storm trigger: tier → vanilla glitch-strength base, only while a storm is actually active.
+        bool stormActive = stormSys.StormData.nowStormActive;
+        double stormStrength = stormActive
+            ? stormSys.StormData.nextStormStrength switch
+            {
+                EnumTempStormStrength.Heavy  => StormHeavyStrength,
+                EnumTempStormStrength.Medium => StormMediumStrength,
+                _                            => StormLightStrength, // Light (and any unknown) → lightest
+            }
+            : 0.0;
+
+        // Low-stability trigger: linear ramp 0 at 0.50 → 1 at 0.10, clamped. Default 1.0 (fully stable)
+        // when the attribute is absent, so the trigger simply never fires.
+        double stability = capi.World.Player?.Entity?.WatchedAttributes?.GetDouble("temporalStability", 1.0) ?? 1.0;
+        double stabilityStrength = Math.Clamp(
+            (StabilityRampUpper - stability) / (StabilityRampUpper - StabilityRampLower), 0.0, 1.0);
+
+        return (Math.Max(stormStrength, stabilityStrength), stormActive);
+    }
+
+    /// <summary>
+    /// The corruption re-scramble tick (hud-temporal-storm-corruption 4.1/4.2), driven off the existing
+    /// 250 ms <see cref="OnTick"/>. While a trigger is active it advances the seed and rebuilds on a
+    /// randomized 0–5 s cadence so the marks writhe; it also edge-detects the trigger becoming active/
+    /// inactive and the storm flag flipping, rebuilding immediately on either transition so the title
+    /// swap and first corruption are prompt. Returns true when it triggered a rebuild (so the caller can
+    /// avoid a redundant one).
+    /// </summary>
+    private bool TickCorruption()
+    {
+        var (strength, stormActive) = ComputeCorruption();
+        bool active = strength > 0.0;
+
+        bool transition = active != _corruptionWasActive || stormActive != _stormWasActiveHud;
+        _corruptionWasActive = active;
+        _stormWasActiveHud = stormActive;
+
+        long now = capi.World.ElapsedMilliseconds;
+
+        if (transition)
+        {
+            // A fresh trigger (or title-swap) transition: reschedule and rebuild now so the effect is prompt.
+            _corruptionSeed++;
+            _nextRescrambleMs = now + NextRescrambleInterval();
+            if (IsOpened()) { ForceRebuild(); return true; }
+            return false;
+        }
+
+        // Steady state: re-scramble on the randomized cadence while a trigger remains active.
+        if (active && now >= _nextRescrambleMs)
+        {
+            _corruptionSeed++;
+            _nextRescrambleMs = now + NextRescrambleInterval();
+            if (IsOpened()) { ForceRebuild(); return true; }
+        }
+
+        return false;
+    }
+
+    /// <summary>A fresh randomized re-scramble interval in [0, 5000] ms. Uses the game's client RNG
+    /// (Mod-layer randomness is fine — unlike Core); index-free since order doesn't matter here.</summary>
+    private long NextRescrambleInterval()
+        => RescrambleMinMs + (long)(capi.World.Rand.NextDouble() * (RescrambleMaxMs - RescrambleMinMs));
+
     // ---------------- Build ----------------
 
     /// <summary>The live, ordered, capped rows to display — the authoritative pin set minus any rows that are
@@ -731,9 +862,18 @@ public sealed class HudScribePins : GuiBase
             };
         }
 
+        // Temporal-storm corruption signal (hud-temporal-storm-corruption): the effective strength + storm
+        // flag for this build, and the current seed so every corrupted string in the tree scrambles
+        // coherently within one frame. Recomputed here so a plain ForceRebuild (e.g. the 1 Hz timer tick)
+        // reflects the live storm/stability state, not just the re-scramble tick.
+        var (corruptionStrength, stormActive) = ComputeCorruption();
+
         return new HudPinsContent(
             rows: shown,
             moreCount: moreCount,
+            corruptionStrength: corruptionStrength,
+            stormActive: stormActive,
+            corruptionSeed: _corruptionSeed,
             collapseRegistry: collapseRegistry,
             onDepartingCollapsed: (docId, taskId) => OnDepartingCollapsed((docId, taskId)),
             collapsed: modSystem.MySettings.HudCollapsed,
@@ -802,6 +942,13 @@ internal sealed class HudPinsContent : StatelessWidget
 
     private readonly IReadOnlyList<HudPinRow> rows;
     private readonly int moreCount;
+    /// <summary>Effective temporal-corruption strength (0..1) for this build; 0 = no corruption
+    /// (hud-temporal-storm-corruption). Applied to every user-visible string via <see cref="Corrupt"/>.</summary>
+    private readonly double corruptionStrength;
+    /// <summary>Whether a temporal storm is active — drives only the title swap to "Survive the Storm".</summary>
+    private readonly bool stormActive;
+    /// <summary>Seed for the corruptor this build; the host advances it on the re-scramble cadence.</summary>
+    private readonly int corruptionSeed;
     private readonly ScribeCollapseRegistry collapseRegistry;
     private readonly Action<Guid, Guid> onDepartingCollapsed;
     private readonly bool collapsed;
@@ -819,6 +966,9 @@ internal sealed class HudPinsContent : StatelessWidget
     public HudPinsContent(
         IReadOnlyList<HudPinRow> rows,
         int moreCount,
+        double corruptionStrength,
+        bool stormActive,
+        int corruptionSeed,
         ScribeCollapseRegistry collapseRegistry,
         Action<Guid, Guid> onDepartingCollapsed,
         bool collapsed,
@@ -835,6 +985,9 @@ internal sealed class HudPinsContent : StatelessWidget
     {
         this.rows = rows;
         this.moreCount = moreCount;
+        this.corruptionStrength = corruptionStrength;
+        this.stormActive = stormActive;
+        this.corruptionSeed = corruptionSeed;
         this.collapseRegistry = collapseRegistry;
         this.onDepartingCollapsed = onDepartingCollapsed;
         this.collapsed = collapsed;
@@ -849,6 +1002,15 @@ internal sealed class HudPinsContent : StatelessWidget
         this.onClearTimer = onClearTimer;
         this.capiForTimer = capiForTimer;
     }
+
+    /// <summary>Run a user-visible string through the Core corruptor at this build's
+    /// <see cref="corruptionStrength"/> (hud-temporal-storm-corruption 3.3/3.4). A per-string
+    /// <paramref name="seedOffset"/> is added to <see cref="corruptionSeed"/> so different strings in the
+    /// same frame don't all inject the identical mark pattern, while the whole frame still advances
+    /// together on the re-scramble tick. A strength of 0 returns the input unchanged (the corruptor
+    /// short-circuits), so this is a no-op when no trigger is active.</summary>
+    private string Corrupt(string text, int seedOffset = 0)
+        => ScribeTextCorruptor.Corrupt(text, corruptionStrength, corruptionSeed + seedOffset);
 
     public override Widget Build(BuildContext context)
     {
@@ -868,7 +1030,7 @@ internal sealed class HudPinsContent : StatelessWidget
             if (moreCount > 0)
             {
                 children.Add(new Text(
-                    Lang.Get("scribe:scribe-hud-more", moreCount),
+                    Corrupt(Lang.Get("scribe:scribe-hud-more", moreCount), seedOffset: 101),
                     new TextStyle
                     {
                         // Desaturated 66% (keep 34% of the theme chroma) so the "+N more" footer and the
@@ -932,8 +1094,13 @@ internal sealed class HudPinsContent : StatelessWidget
                 crossAxisAlignment: CrossAxisAlignment.Center,
                 children: new Widget[]
                 {
+                    // The chevron is a glyph affordance, not prose — leave it uncorrupted. The title text
+                    // swaps to the storm call-to-action while a storm is active, then is corrupted like the
+                    // rest of the HUD (hud-temporal-storm-corruption 3.3).
                     new Text(chevron, titleStyle),
-                    new Text(Lang.Get("scribe:scribe-hud-title"), titleStyle),
+                    new Text(
+                        Corrupt(Lang.Get(stormActive ? "scribe:scribe-hud-title-storm" : "scribe:scribe-hud-title")),
+                        titleStyle),
                 }));
 
         // Gear sized to sit proportionally with the chevron/title beside it (scribe-settings-followups 4.2):
@@ -988,12 +1155,17 @@ internal sealed class HudPinsContent : StatelessWidget
         // A DEPARTING row has already finished its fade; render its text at fixed zero opacity rather than
         // via ScribeFadeText, whose state-owned controller would restart from full on this remount and flash
         // the text back in before the collapse (scribe-list-collapse). The row body then collapses to zero.
+        // Corrupt the row text (hud-temporal-storm-corruption 3.4). A per-row seed offset (derived from the
+        // task identity) keeps two rows from injecting the identical mark pattern, while the whole HUD still
+        // re-scrambles together on the host's cadence. No-op when no trigger is active (strength 0).
+        string rowText = Corrupt(row.Text, seedOffset: row.TaskId.GetHashCode());
+
         Widget text = row.Departing
-            ? new Opacity(0f, new Text(row.Text, textStyle))
+            ? new Opacity(0f, new Text(rowText, textStyle))
             : new ScribeFadeText(
                 fading: row.FadingOut,
                 durationMs: FadeWindowMs,
-                text: row.Text,
+                text: rowText,
                 style: textStyle);
 
         Widget rowBody = new Row(
@@ -1063,10 +1235,11 @@ internal sealed class HudPinsContent : StatelessWidget
         };
         var muted = textStyle with { Color = new Vector4(0.70f, 0.70f, 0.70f, 1f) };
 
-        // Countdown or blinking 00:00.
-        string timeText = fired
-            ? "00:00"
-            : FormatTimerDuration(timer.RemainingSeconds);
+        // Countdown or blinking 00:00 — corrupted like the rest of the HUD (hud-temporal-storm-corruption
+        // 3.4). Distinct per-string seed offsets so the label and countdown don't share a mark pattern.
+        string timeText = Corrupt(
+            fired ? "00:00" : FormatTimerDuration(timer.RemainingSeconds),
+            seedOffset: 202);
 
         Widget timeWidget = (fired && capi is not null)
             ? new ScribeBlinkText(timeText, textStyle, capi)
@@ -1077,8 +1250,10 @@ internal sealed class HudPinsContent : StatelessWidget
             ? new ScribeTimerIcon(rowFontSize * 1.1f, new Vector4(0.93f, 0.93f, 0.93f, 1f), capi)
             : new ScribeVsIconGlyph("scribetimer", rowFontSize * 1.1f, new Vector4(0.93f, 0.93f, 0.93f, 1f));
 
-        // Label (if any) muted next to the icon.
-        string label = timer.Label.Length > 0 ? timer.Label : Lang.Get("scribe:scribe-hud-timer-label");
+        // Label (if any) muted next to the icon — corrupted with its own seed offset.
+        string label = Corrupt(
+            timer.Label.Length > 0 ? timer.Label : Lang.Get("scribe:scribe-hud-timer-label"),
+            seedOffset: 303);
 
         Widget row = new Row(
             spacing: 6,
