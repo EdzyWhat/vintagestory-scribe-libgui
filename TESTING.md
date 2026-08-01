@@ -344,6 +344,12 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Follow-up (new scope, not a defect):** the user is replacing the flat-tan `lecternbackdrop.png`
         placeholder with real art at `Desktop/Lectern/Scribe-Notebook.png` — which is NOT the current
         on-screen size, so scaling/positioning of the backdrop needs a design discussion before the swap.
+      - **Confirmed 2026-08-01** (user report): FOLLOW-UP resolved and extended. Real art is now wired
+        per-dialog — the Lectern draws `scribe-lectern.png`, the Clockmaker's Notebook draws
+        `scribe-clockmakers-notebook.png`, and the plain Notebook keeps `scribe-notebook.png` (all
+        1024×1160, so no scaling/aspect change was needed). `NotebookHost` takes an optional backdrop spec
+        so the two notebook items — which share the host — differ (commit `0d18e79` gui-backdrop). User
+        confirms the backdrops render correctly in-game.
 - [x] `da001e4a` **Pixel-Art OFF — no backdrop.** Turn Pixel-Art Display OFF and open the Lectern: neither
       the read nor editor view draws any backdrop — both render as the plain LibGUI fallback (global
       theme), no tan art. *(scribe-gui-backdrops 5.3)*
