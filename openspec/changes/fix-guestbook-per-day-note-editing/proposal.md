@@ -24,6 +24,12 @@ caret in) a distinct note for each visit — the exact behaviour the tab present
 - **Note length reconciliation:** the spec text still says "max 80 chars" while the code
   enforces `MaxNoteLength = 140`; reconcile the spec to the shipped value (140) so the
   requirement matches reality (no code change to the cap).
+- **Soft per-player prune:** to keep a returning player's history readable, a soft
+  per-player cap (`SoftMaxEntriesPerPlayer = 10`) is added to `GuestbookStore.TryAddEntry`.
+  Once a player exceeds the cap, their oldest **note-less** entry is dropped — an entry with
+  note text is never pruned, and the just-added entry is never the one removed, so a player
+  who annotates every visit keeps all of their entries and may exceed the cap. This is
+  independent of the existing hard whole-store `MaxEntries` ring buffer.
 - No persistence-format change: existing SGBK v1 saves already store `(playerName,
   inGameDate, note)` per entry, so the new addressing reads/writes the same fields.
 
@@ -43,7 +49,9 @@ caret in) a distinct note for each visit — the exact behaviour the tab present
 
 - **Core** (`src/Core/GuestbookStore.cs`): `TrySetNote(playerName, note)` becomes
   entry-addressed — `TrySetNote(playerName, inGameDate, note)` matching on
-  `(PlayerName, InGameDate)`. Unit-testable without the game; add `Core.Tests` coverage.
+  `(PlayerName, InGameDate)`. `TryAddEntry` gains a soft per-player prune of the oldest
+  note-less entry past `SoftMaxEntriesPerPlayer`. Unit-testable without the game; add
+  `Core.Tests` coverage for both.
 - **Wire** (`src/Mod/ScribeEditGuestbookNoteMessage.cs`): add an `InGameDate` field.
 - **Server handler** (the `ScribeEditGuestbookNoteMessage` receiver): pass the date through
   to `TrySetNote`.

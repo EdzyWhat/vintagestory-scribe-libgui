@@ -145,7 +145,7 @@ public sealed partial class ScribeModSystem
     {
         if (sapi is null) return;
         if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeLectern lectern)
-            lectern.UpdateGuestbookNote(sapi, fromPlayer, message.Note ?? "");
+            lectern.UpdateGuestbookNote(sapi, fromPlayer, message.InGameDate ?? "", message.Note ?? "");
     }
 
     private void OnClientReceivedGuestbookSync(ScribeGuestbookSyncMessage message)

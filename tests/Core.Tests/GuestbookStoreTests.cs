@@ -61,11 +61,76 @@ public class GuestbookStoreTests
     }
 
     [Fact]
+    public void TryAddEntry_PrunesOldestNotelessEntryWhenPlayerExceedsSoftCap()
+    {
+        var store = new GuestbookStore();
+        // Fill the soft cap exactly; none of these carry a note.
+        for (int i = 0; i < GuestbookStore.SoftMaxEntriesPerPlayer; i++)
+            store.TryAddEntry("Alice", $"Day {i}");
+        Assert.Equal(GuestbookStore.SoftMaxEntriesPerPlayer, store.Entries.Count);
+
+        // One more visit tips her over the soft cap: the oldest note-less entry (Day 0) is pruned,
+        // so the count holds at the cap and the newest day survives.
+        store.TryAddEntry("Alice", "Day overflow");
+        Assert.Equal(GuestbookStore.SoftMaxEntriesPerPlayer, store.Entries.Count);
+        Assert.DoesNotContain(store.Entries, e => e.InGameDate == "Day 0");
+        Assert.Contains(store.Entries, e => e.InGameDate == "Day overflow");
+    }
+
+    [Fact]
+    public void TryAddEntry_NeverPrunesEntriesWithNotes()
+    {
+        var store = new GuestbookStore();
+        // Every entry within the soft cap carries a note — none are prunable.
+        for (int i = 0; i < GuestbookStore.SoftMaxEntriesPerPlayer; i++)
+        {
+            store.TryAddEntry("Alice", $"Day {i}");
+            store.TrySetNote("Alice", $"Day {i}", $"note {i}");
+        }
+
+        // Adding another must NOT delete any noted entry, so the player exceeds the soft cap.
+        store.TryAddEntry("Alice", "Day overflow");
+        Assert.Equal(GuestbookStore.SoftMaxEntriesPerPlayer + 1, store.Entries.Count);
+        for (int i = 0; i < GuestbookStore.SoftMaxEntriesPerPlayer; i++)
+            Assert.Contains(store.Entries, e => e.InGameDate == $"Day {i}");
+    }
+
+    [Fact]
+    public void TryAddEntry_PrunesOnlyTheActingPlayersEntries()
+    {
+        var store = new GuestbookStore();
+        // Bob has an old note-less entry that must be left alone when Alice tips over her cap.
+        store.TryAddEntry("Bob", "Bob's day");
+        for (int i = 0; i < GuestbookStore.SoftMaxEntriesPerPlayer; i++)
+            store.TryAddEntry("Alice", $"Day {i}");
+
+        store.TryAddEntry("Alice", "Day overflow");
+
+        Assert.Contains(store.Entries, e => e.PlayerName == "Bob" && e.InGameDate == "Bob's day");
+        Assert.Equal(GuestbookStore.SoftMaxEntriesPerPlayer, store.Entries.Count(e => e.PlayerName == "Alice"));
+    }
+
+    [Fact]
+    public void TryAddEntry_PrunesOldestNotelessNotOldestOverall()
+    {
+        var store = new GuestbookStore();
+        for (int i = 0; i < GuestbookStore.SoftMaxEntriesPerPlayer; i++)
+            store.TryAddEntry("Alice", $"Day {i}");
+        // Give the oldest entry a note so it's protected; the oldest note-LESS one is now Day 1.
+        store.TrySetNote("Alice", "Day 0", "kept forever");
+
+        store.TryAddEntry("Alice", "Day overflow");
+
+        Assert.Contains(store.Entries, e => e.InGameDate == "Day 0");        // noted → protected
+        Assert.DoesNotContain(store.Entries, e => e.InGameDate == "Day 1");  // oldest note-less → pruned
+    }
+
+    [Fact]
     public void TrySetNote_SetsNoteOnMatchingEntry()
     {
         var store = new GuestbookStore();
         store.TryAddEntry("Alice", "1st of Harvestmonth");
-        bool changed = store.TrySetNote("Alice", "Found the copper vein!");
+        bool changed = store.TrySetNote("Alice", "1st of Harvestmonth", "Found the copper vein!");
         Assert.True(changed);
         Assert.Equal("Found the copper vein!", store.Entries[0].Note);
     }
@@ -75,7 +140,7 @@ public class GuestbookStoreTests
     {
         var store = new GuestbookStore();
         store.TryAddEntry("Alice", "1st of Harvestmonth");
-        bool changed = store.TrySetNote("Bob", "Hello");
+        bool changed = store.TrySetNote("Bob", "1st of Harvestmonth", "Hello");
         Assert.False(changed);
     }
 
@@ -84,8 +149,8 @@ public class GuestbookStoreTests
     {
         var store = new GuestbookStore();
         store.TryAddEntry("Alice", "1st of Harvestmonth");
-        store.TrySetNote("Alice", "First visit");
-        bool changed = store.TrySetNote("Alice", "First visit");
+        store.TrySetNote("Alice", "1st of Harvestmonth", "First visit");
+        bool changed = store.TrySetNote("Alice", "1st of Harvestmonth", "First visit");
         Assert.False(changed);
     }
 
@@ -95,19 +160,33 @@ public class GuestbookStoreTests
         var store = new GuestbookStore();
         store.TryAddEntry("Alice", "1st of Harvestmonth");
         var longNote = new string('x', GuestbookStore.MaxNoteLength + 10);
-        store.TrySetNote("Alice", longNote);
+        store.TrySetNote("Alice", "1st of Harvestmonth", longNote);
         Assert.Equal(GuestbookStore.MaxNoteLength, store.Entries[0].Note.Length);
     }
 
     [Fact]
-    public void TrySetNote_MatchesFirstEntryForPlayer()
+    public void TrySetNote_UpdatesOnlyTheAddressedDayForSamePlayer()
     {
         var store = new GuestbookStore();
         store.TryAddEntry("Alice", "Day 1");
         store.TryAddEntry("Alice", "Day 2");
-        store.TrySetNote("Alice", "Note on first");
-        Assert.Equal("Note on first", store.Entries[0].Note);
-        Assert.Equal("", store.Entries[1].Note);
+
+        bool changed = store.TrySetNote("Alice", "Day 2", "Note on the second day");
+
+        Assert.True(changed);
+        Assert.Equal("", store.Entries[0].Note);                       // Day 1 untouched
+        Assert.Equal("Note on the second day", store.Entries[1].Note); // Day 2 updated
+    }
+
+    [Fact]
+    public void TrySetNote_ReturnsFalseWhenDateMatchesNoEntry()
+    {
+        var store = new GuestbookStore();
+        store.TryAddEntry("Alice", "Day 1");
+        // Right player, wrong day: no entry matches, so nothing is written.
+        bool changed = store.TrySetNote("Alice", "Day 2", "Note for a day she never visited");
+        Assert.False(changed);
+        Assert.Equal("", store.Entries[0].Note);
     }
 
     [Fact]
@@ -115,7 +194,7 @@ public class GuestbookStoreTests
     {
         var store = new GuestbookStore();
         store.TryAddEntry("Alice", "1st of Harvestmonth");
-        store.TrySetNote("Alice", "Found iron!");
+        store.TrySetNote("Alice", "1st of Harvestmonth", "Found iron!");
         store.TryAddEntry("Bob", "2nd of Harvestmonth");
 
         var restored = GuestbookStore.Deserialize(store.Serialize());

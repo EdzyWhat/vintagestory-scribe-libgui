@@ -1877,6 +1877,17 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [x] `989c54ac` **Note capped at 80 chars.** In the note field, try to type past 80 characters — confirm input stops at the cap. *(6.8)*
       - **Confirmed 2026-07-29** (playtest submission 2026-07-29T23-10-57): "Works."
 
+## fix-guestbook-per-day-note-editing
+
+> Fixes the multi-day guestbook note bug: each of your own day-entries now gets its own caret-isolated,
+> independently-saved note field, and a soft per-player cap prunes your oldest note-LESS entries so the
+> list stays readable (entries you annotated are never dropped).
+
+- [ ] `5df9e12c` **Per-field caret isolation.** As a player with entries on ≥2 in-game days, click one of your own note fields — confirm only that field shows a caret and typing goes to it (including the newest, not just the oldest). *(4.3)*
+- [ ] `9a57fac1` **Per-day note saves independently.** Type a distinct note on each of your day-entries, then close and reopen the lectern — confirm each day kept its own note. *(4.3)*
+- [ ] `52fac6d2` **Multiplayer note isolation.** A second player opens the same lectern — confirm they see your notes read-only and can edit each of their own multi-day notes independently on their client. *(4.4)*
+- [ ] `30895563` **Note-less entries pruned past the soft cap.** Visit a lectern on more than 10 in-game days without leaving notes — confirm oldest empty entries drop so your list stays around ten, while any entry you left a note on is never dropped. *(1.3)*
+
 ## scribe-0-2-0-release-content
 
 > 0.2.0 release-prep: the plain Notebook's survival recipe, a `tinkerer`-trait craft gate for the

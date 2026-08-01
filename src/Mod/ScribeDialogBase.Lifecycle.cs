@@ -219,8 +219,9 @@ public abstract partial class ScribeDialogBase
         _titleFocusNode?.RemoveListener(OnTitleFocusChanged);
         _titleFocusNode?.Dispose();
         _titleController?.Dispose();
-        _guestbookNoteFocusNode?.Dispose();
-        _guestbookNoteFocusNode = null;
+        foreach (var node in _guestbookNoteFocusNodes.Values)
+            node.Dispose();
+        _guestbookNoteFocusNodes.Clear();
         // The dialog owns the shared scroll controller (see its field); dispose it once here rather
         // than in either view's State, which come and go with each view-switch ForceRebuild.
         sharedScrollController.Dispose();

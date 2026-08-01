@@ -632,17 +632,19 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
         foreach (var (name, date, note) in entries)
         {
             if (_guestbook.TryAddEntry(name, date)) changed = true;
-            if (!string.IsNullOrEmpty(note) && _guestbook.TrySetNote(name, note)) changed = true;
+            if (!string.IsNullOrEmpty(note) && _guestbook.TrySetNote(name, date, note)) changed = true;
         }
 
         if (changed) MarkDirty(redrawOnClient: true);
     }
 
-    /// <summary>Server-side: update the note on the sender's own guestbook entry.</summary>
-    public void UpdateGuestbookNote(ICoreServerAPI sapi, IServerPlayer player, string note)
+    /// <summary>Server-side: update the note on the sender's own guestbook entry for the given in-game
+    /// day. Addressed by <c>(player name, inGameDate)</c> so a player with several entries edits only the
+    /// intended day's note; an unmatched date is a harmless no-op.</summary>
+    public void UpdateGuestbookNote(ICoreServerAPI sapi, IServerPlayer player, string inGameDate, string note)
     {
         note = note.Trim();
-        if (_guestbook.TrySetNote(player.PlayerName, note))
+        if (_guestbook.TrySetNote(player.PlayerName, inGameDate, note))
         {
             MarkDirty();
             SendGuestbookSync(sapi, player);

@@ -64,3 +64,27 @@ edit SHALL be a no-op (no other entry is modified).
 #### Scenario: Note edits persist and sync per entry
 - **WHEN** a player edits the note on a specific entry and the world is later reloaded
 - **THEN** that entry retains its note and other entries retain theirs, matching what was last committed
+
+### Requirement: A player's note-less entries are pruned past a soft per-player cap
+To keep a single player's guestbook history readable, once adding a new entry would give that player
+more than a soft cap of entries (10), the store SHALL prune that player's OLDEST entry that carries no
+note text. An entry that carries a note SHALL never be pruned, and the entry just added SHALL never be
+the one pruned. If every one of the player's other entries carries a note, no pruning occurs and the
+player MAY exceed the soft cap. Pruning SHALL affect only the entry-adding player's own entries, never
+another player's. This soft per-player cap is independent of the hard whole-store entry cap.
+
+#### Scenario: Oldest note-less entry is pruned when a player exceeds the soft cap
+- **WHEN** a player whose entries are all note-less reaches the soft per-player cap and visits again on a new day
+- **THEN** their oldest note-less entry is removed and the newly added day's entry is kept, holding their entry count at the cap
+
+#### Scenario: Entries with notes are never pruned
+- **WHEN** a player who has left a note on every entry up to the soft cap visits again on a new day
+- **THEN** no entry is removed and the player's entry count exceeds the soft cap
+
+#### Scenario: Pruning targets the oldest note-LESS entry, not the oldest overall
+- **WHEN** a player's oldest entry carries a note but a later entry does not, and the player exceeds the soft cap
+- **THEN** the noted oldest entry is kept and the oldest note-less entry is pruned instead
+
+#### Scenario: Pruning only affects the acting player
+- **WHEN** one player exceeds the soft cap and triggers pruning
+- **THEN** only that player's own note-less entry is considered; other players' entries are untouched

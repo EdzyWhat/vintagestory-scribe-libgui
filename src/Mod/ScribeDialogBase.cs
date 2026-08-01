@@ -118,8 +118,14 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// post-dispatch render point.</summary>
     private bool _pendingTitleEditRebuild;
 
-    // ---- Guestbook note focus (one node shared across all note fields; re-assigned on each rebuild) ----
-    private FocusNode? _guestbookNoteFocusNode;
+    // ---- Guestbook note focus ----
+    /// <summary>One focus node per editable own-entry note field, keyed by the entry's natural key
+    /// <c>(PlayerName, InGameDate)</c> (see <see cref="GuestbookNoteKey"/>). A player may have several
+    /// entries (one per in-game day visited), each with its own editable note; a single shared node made
+    /// every own field paint a caret at once and routed input to just one of them. Keyed by identity (like
+    /// <see cref="pinFocusNodes"/>) so each field is caret-isolated. Kept in sync by
+    /// <see cref="SyncGuestbookFocusNodes"/> on each Guestbook rebuild; disposed in <see cref="OnGuiClosed"/>.</summary>
+    private readonly Dictionary<string, FocusNode> _guestbookNoteFocusNodes = new();
 
     // ---- Title-bar grip drag (§8.1) ----
     // The title-bar band is the drag zone (WindowConfig.DragHandleHeight), but a press ON the grip glyph
@@ -409,7 +415,7 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
         => (isEditorMode && focusedEditIndex is { } idx && idx < editorFocusNodes.Count && editorFocusNodes[idx].HasFocus)
         || (viewMode == ScribeLecternView.Pinned && focusedPinTaskId is { } pinId
             && pinFocusNodes.TryGetValue(pinId, out var pn) && pn.HasFocus)
-        || (_guestbookNoteFocusNode?.HasFocus ?? false);
+        || _guestbookNoteFocusNodes.Values.Any(n => n.HasFocus);
 
     /// <summary>
     /// LibGUI's <see cref="Gui.Widgets.Events.KeyboardEvent"/> carries only Shift/Ctrl/Alt — it drops

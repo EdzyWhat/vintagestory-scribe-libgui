@@ -43,9 +43,10 @@ public abstract partial class ScribeDialogBase
 
         var entries = host.Guestbook.Entries;
 
-        // Fresh focus node each rebuild so CaptureAllInputs can track it.
-        _guestbookNoteFocusNode?.Dispose();
-        _guestbookNoteFocusNode = new FocusNode();
+        // Keep one focus node per own editable entry, so each note field is caret-isolated and
+        // receives its own keystrokes (a single shared node made every field paint a caret at once
+        // and routed input to just one row). Mirrors SyncPinFocusNodes.
+        SyncGuestbookFocusNodes();
 
         // Newest-first display (entries are stored oldest-first in the store).
         var rows = new List<Widget>(entries.Count);
@@ -57,10 +58,14 @@ public abstract partial class ScribeDialogBase
             {
                 string current = entry.Note;
                 string lastSent = entry.Note;
+                string entryDate = entry.InGameDate; // capture for the blur send
                 noteSlot = new Expanded(
                     new ScribeMultilineField(
+                        // Stable per-row identity keyed on the entry's natural key so LibGUI can tell the
+                        // otherwise-identical sibling note fields apart and route focus/state to the right one.
+                        key: new ValueKey<string>(GuestbookNoteKey(entry)),
                         initialText: entry.Note,
-                        focusNode: _guestbookNoteFocusNode,
+                        focusNode: _guestbookNoteFocusNodes[GuestbookNoteKey(entry)],
                         fontSize: noteSize,
                         fontFamily: ScribeTaskFont.Resolve(modSystem.MySettings.TaskFontFamily),
                         padY: 6f,
@@ -75,6 +80,7 @@ public abstract partial class ScribeDialogBase
                                 new ScribeEditGuestbookNoteMessage
                                 {
                                     DocIdBytes = host.Document.DocId.ToByteArray(),
+                                    InGameDate = entryDate,
                                     Note = trimmed,
                                 });
                         }),
@@ -135,5 +141,38 @@ public abstract partial class ScribeDialogBase
                     new Divider(),
                     new Expanded(body),
                 })));
+    }
+
+    /// <summary>Stable identity string for one of the local player's own guestbook entries: the natural
+    /// key <c>(PlayerName, InGameDate)</c> joined by a NUL, which can't appear in a player name or a
+    /// formatted date, so distinct entries never collide. Keys both the row's <see cref="ValueKey{T}"/>
+    /// and its <see cref="_guestbookNoteFocusNodes"/> node.</summary>
+    private static string GuestbookNoteKey(GuestbookEntry entry) => $"{entry.PlayerName}\0{entry.InGameDate}";
+
+    /// <summary>Keep <see cref="_guestbookNoteFocusNodes"/> in sync with the local player's OWN entries:
+    /// add a node for each new own-entry, dispose+drop nodes for entries that are gone, and reuse the rest
+    /// so a caret survives a Guestbook rebuild. Mirrors <see cref="SyncPinFocusNodes"/>; no focus listener
+    /// is needed because each note commits independently on its own blur (there is no row→row commit).</summary>
+    private void SyncGuestbookFocusNodes()
+    {
+        var myName = capi.World.Player.PlayerName;
+        var live = host.Guestbook.Entries
+            .Where(e => e.PlayerName == myName)
+            .Select(GuestbookNoteKey)
+            .ToHashSet();
+
+        foreach (var key in _guestbookNoteFocusNodes.Keys.ToList())
+        {
+            if (!live.Contains(key))
+            {
+                _guestbookNoteFocusNodes[key].Dispose();
+                _guestbookNoteFocusNodes.Remove(key);
+            }
+        }
+        foreach (var key in live)
+        {
+            if (!_guestbookNoteFocusNodes.ContainsKey(key))
+                _guestbookNoteFocusNodes[key] = new FocusNode();
+        }
     }
 }
