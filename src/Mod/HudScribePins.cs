@@ -841,11 +841,10 @@ public sealed class HudScribePins : GuiBase
         int max = Math.Min(modSystem.MySettings.HudMaxRows, MaxRenderedRows);
         int moreCount = Math.Max(0, liveCount - max);
 
-        // The HUD is NOT governed by Pixel-Art Display (scribe-themed-toggle clarification 2026-07-25):
-        // only the Lectern dialog (read/editor, later the pinned view) toggles between Scribe's light
-        // theme and the global one. The HUD pins always render on the player's global LibGUI theme, so
-        // there is deliberately NO Theme wrap here — HudPinsContent reads ThemeData.Default via
-        // Theme.Of(context) like any un-wrapped widget.
+        // The HUD is NOT governed by Pixel-Art Display (scribe-themed-toggle): only the Lectern dialog
+        // toggles between Scribe's light theme and the global one. The HUD pins always render on the
+        // player's global LibGUI theme, so there is deliberately NO Theme wrap here — HudPinsContent reads
+        // ThemeData.Default via Theme.Of(context) like any un-wrapped widget.
         // Build a timer snapshot with interpolated remaining for smooth display.
         Scribe.Core.TimerStore? timerSnapshot = null;
         var rawTimer = modSystem.MyTimer;

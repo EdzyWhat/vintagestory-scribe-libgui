@@ -104,23 +104,18 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
     private bool _isTitleEditing;
     private TextEditingController? _titleController;
     private FocusNode? _titleFocusNode;
-    /// <summary>Set by the pencil tap; the freshly-rebuilt title field is focused from
-    /// <see cref="OnRenderGUI"/> instead of inside the tap. Calling <c>RequestFocus()</c> right after a
-    /// <c>ForceRebuild()</c> from within the pointer dispatch unmounted the tree mid-walk and left a
-    /// sibling button with a null <c>Element.Owner</c> — LibGUI then NPE'd in <c>ButtonState.PlaySound</c>
-    /// on the next pointer-down. Deferring the focus to the post-dispatch render point avoids that
-    /// re-entrancy (same reason as <see cref="pendingEnsureVisible"/> and the collapse/empty-row sweeps).</summary>
+    /// <summary>Set by the pencil tap so the freshly-rebuilt title field is focused from
+    /// <see cref="OnRenderGUI"/>, not inside the tap: calling <c>RequestFocus()</c> right after a
+    /// <c>ForceRebuild()</c> mid-pointer-dispatch orphans a sibling button (null <c>Element.Owner</c>) and
+    /// LibGUI NPEs in <c>ButtonState.PlaySound</c>. Same defer-out-of-input rule as
+    /// <see cref="pendingEnsureVisible"/>.</summary>
     private bool _pendingTitleFocus;
-    /// <summary>Set by BOTH title edit-mode transitions — the pencil tap (enter inline-input) and the blur
-    /// listener (commit + exit) — so the <see cref="ForceRebuild"/> that swaps the title slot runs from
-    /// <see cref="OnRenderGUI"/> instead of inside the pointer dispatch. Deferring only the follow-up
-    /// <c>RequestFocus()</c> (via <see cref="_pendingTitleFocus"/>) was NOT enough: the bare
-    /// <c>ForceRebuild()</c> ALSO unmounts the whole tree mid-pointer-walk, orphaning a sibling button whose
-    /// <c>Element.Owner</c> goes null, so LibGUI still NPE'd in <c>ButtonState.PlaySound</c> when the dispatch
-    /// reached it (crash confirmed 2026-07-31 on a Clockmaker's Notebook crafted from a Notebook, where the
-    /// carried title makes the timing reproduce reliably — first on the tap, then on unfocus). Same
-    /// defer-tree-edits-out-of-input rule as <see cref="pendingEmptyRowRemoval"/> — the actual rebuild happens
-    /// at the safe post-dispatch render point.</summary>
+    /// <summary>Set by both title edit-mode transitions (pencil tap and blur commit) so the
+    /// <see cref="ForceRebuild"/> that swaps the title slot runs from <see cref="OnRenderGUI"/>, not inside
+    /// pointer dispatch: the rebuild itself unmounts the tree mid-walk and triggers the same
+    /// <c>ButtonState.PlaySound</c> NPE, so deferring only the follow-up focus
+    /// (<see cref="_pendingTitleFocus"/>) is not enough — the whole rebuild must defer to the safe
+    /// post-dispatch render point.</summary>
     private bool _pendingTitleEditRebuild;
 
     // ---- Guestbook note focus (one node shared across all note fields; re-assigned on each rebuild) ----
@@ -1266,9 +1261,8 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
     /// The commit itself (a scratch-state write) runs inline, but the ForceRebuild that swaps the title
     /// back out of inline-input mode is DEFERRED to OnRenderGUI via <see cref="_pendingTitleEditRebuild"/>.
     /// This listener fires from inside pointer dispatch when a click elsewhere steals focus, and a
-    /// synchronous ForceRebuild there unmounts the tree mid-walk — orphaning the very button that received
-    /// the click and NPE-ing in ButtonState.PlaySound (crash confirmed 2026-07-31 on a Clockmaker's Notebook
-    /// crafted from a Notebook, unfocusing the title). Same hazard/fix as the pencil tap.</summary>
+    /// synchronous ForceRebuild there unmounts the tree mid-walk — orphaning the button that received the
+    /// click and NPE-ing in ButtonState.PlaySound. Same hazard/fix as the pencil tap.</summary>
     private void OnTitleFocusChanged()
     {
         if (!(_titleFocusNode?.HasFocus ?? true) && _isTitleEditing)
@@ -1640,10 +1634,8 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
     private Widget BuildTitleBar(ScribeLayout layout)
     {
         var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
-        // Title is 1.5× the window body text size — "50% larger" (v1-playtest-fixes 5.1). The ask moved
-        // 50% → 100% (×2.0) then back down a relative 25% to ×1.5 after ×2.0 read too large in-game
-        // (playtest 2026-07-27T18-22-10 then a follow-up). The body size is BaseWindowFontSize × the
-        // player's WindowFontScale, so the title tracks a live font-scale change too.
+        // Title is 1.5× the window body text size — "50% larger" (v1-playtest-fixes 5.1). The body size is
+        // BaseWindowFontSize × the player's WindowFontScale, so the title tracks a live font-scale change too.
         float titleFont = ScribeRowConstants.BaseWindowFontSize
             * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale) * 1.5f;
 

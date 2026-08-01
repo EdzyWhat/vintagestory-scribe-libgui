@@ -76,7 +76,7 @@ public sealed class ScribeModSystem : ModSystem
     /// own event/tick lifetime, disposed in <see cref="Dispose"/>.</summary>
     private HudScribePins? pinHud;
 
-    /// <summary>The single standalone Scribe settings window (scribe-themed-toggle pivot 2026-07-25).
+    /// <summary>The single standalone Scribe settings window (scribe-themed-toggle).
     /// There is now ONE settings surface, opened via <see cref="OpenSettings"/> from BOTH the HUD gear and
     /// the Lectern gear (the former in-Lectern settings view was removed). Lazily constructed on first
     /// open and reused across opens (so it keeps its scroll/focus state); disposed in
@@ -245,10 +245,9 @@ public sealed class ScribeModSystem : ModSystem
     }
 
     /// <summary>Toggle the single standalone Scribe settings window open/closed. Called from both the HUD
-    /// gear and the Lectern gear so there is exactly ONE settings surface (scribe-themed-toggle pivot
-    /// 2026-07-25); clicking either gear a second time now CLOSES it rather than being a no-op
-    /// (refine-settings-and-window-chrome). Lazily builds the dialog on first use and reuses it thereafter.
-    /// Client-only.</summary>
+    /// gear and the Lectern gear so there is exactly ONE settings surface (scribe-themed-toggle); clicking
+    /// either gear a second time CLOSES it rather than being a no-op (refine-settings-and-window-chrome).
+    /// Lazily builds the dialog on first use and reuses it thereafter. Client-only.</summary>
     public void OpenSettings()
     {
         if (capi is null) return; // client-only

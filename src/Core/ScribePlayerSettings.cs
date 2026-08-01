@@ -10,6 +10,9 @@ namespace Scribe.Core;
 /// Defaults are what a player who has never changed a setting gets: see the property initializers.
 /// Game-agnostic (pure BCL); the Mod layer owns persistence and any UI. The completion policy also
 /// travels to the server in the completion request, where it is normalized the same way.
+///
+/// The bool preferences below carry no data beyond their own on/off state, so <see cref="Normalized"/>
+/// leaves them untouched; only the numeric/enum preferences are clamped or range-checked on load.
 /// </summary>
 public sealed class ScribePlayerSettings
 {
@@ -30,19 +33,16 @@ public sealed class ScribePlayerSettings
     /// <c>Button</c> plays on tap — the Lectern action buttons and numeric +/- steppers). Default
     /// <c>false</c> (sounds on). When on, the Mod layer swaps a no-op sound player onto each Scribe
     /// dialog's <c>BuildOwner</c>, so only Scribe's dialogs go silent — vanilla and other-mod audio are
-    /// untouched (scribe-mute-ui-sounds). A per-player, client-local preference: never server-synced,
-    /// carried by no block/document/pin data. A plain bool needing no clamp, so <see cref="Normalized"/>
-    /// leaves it untouched.</summary>
+    /// untouched (scribe-mute-ui-sounds).</summary>
     public bool MuteUiSounds { get; set; }
 
     /// <summary>Whether a fired Clockmaker's Notebook timer automatically disappears from the pinned-task
     /// HUD after <see cref="TimerStore.FiredAutoClearSeconds"/> (~30 s). Default <c>true</c> (the timer
     /// disappears), preserving the original behavior. When <c>false</c>, a fired timer stays on the HUD
     /// until the player dismisses it — by clicking the fired HUD timer row or pressing Stop Timer in the
-    /// Clockmaker's Notebook. Because this is client-local and never server-synced, the auto-disappear is
-    /// driven by the player's own client (which alone knows the preference) rather than the server tick
-    /// (timer-auto-disappear-setting). A plain bool needing no clamp, so <see cref="Normalized"/> leaves it
-    /// untouched.</summary>
+    /// Clockmaker's Notebook. Because this is client-local, the auto-disappear is driven by the player's
+    /// own client (which alone knows the preference) rather than the server tick
+    /// (timer-auto-disappear-setting).</summary>
     public bool TimerAutoDisappear { get; set; } = true;
 
     /// <summary>Whether the Lectern dialog's views (read, editor, and later the pinned view) render in the
@@ -50,19 +50,14 @@ public sealed class ScribePlayerSettings
     /// later phase, illustrated backgrounds. Default <c>true</c> (on). When off, those views fall back to
     /// the player's global LibGUI theme (the stock dark default unless the player set their own),
     /// depending on no art. This governs ONLY the Lectern dialog: the pinned-task HUD and the standalone
-    /// settings window are deliberately NOT toggled — they always follow the player's global theme
-    /// (clarification 2026-07-25). A per-player, client-local display preference: never server-synced,
-    /// carried by no block/document/pin data. A plain bool needing no clamp, so <see cref="Normalized"/>
-    /// leaves it untouched.</summary>
+    /// settings window are deliberately NOT toggled — they always follow the player's global theme.</summary>
     public bool PixelArtDisplay { get; set; } = true;
 
     /// <summary>Whether the pinned-task HUD corrupts its own text (and swaps its title to "Survive the
     /// Storm") while a temporal-instability trigger is active — an active temporal storm or personal
     /// stability below 50% (hud-temporal-storm-corruption). Default <c>true</c> (the effect is on). When
     /// <c>false</c>, the HUD never corrupts its text or swaps its title regardless of storm/stability
-    /// state, for players who rely on HUD legibility or are motion-sensitive. A per-player, client-local
-    /// display preference: never server-synced, carried by no block/document/pin data. A plain bool
-    /// needing no clamp, so <see cref="Normalized"/> leaves it untouched.</summary>
+    /// state, for players who rely on HUD legibility or are motion-sensitive.</summary>
     public bool StormCorruption { get; set; } = true;
 
     /// <summary>The timer type the Clockmaker's Notebook's "set timer" form pre-selects: the last type the
