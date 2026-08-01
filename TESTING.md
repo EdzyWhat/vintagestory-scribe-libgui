@@ -31,19 +31,27 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > "Storm text corruption" setting (HUD Appearance section) disables the whole effect. Fully relaunch the
 > client to pick up the new build.
 
-- [ ] `cc124162` **Trigger a storm.** Trigger a temporal storm with a Notebook pinned/timer running;
+- [x] `cc124162` **Trigger a storm.** Trigger a temporal storm with a Notebook pinned/timer running;
       confirm the HUD title reads "Survive the Storm", all HUD text (rows, +N more, timer) corrupts at
       storm intensity, and it reverts to "Pinned" and clean text when the storm ends.
       *(hud-temporal-storm-corruption 6.2)*
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T21-39-18): "Works." Storm triggers the
+        "Survive the Storm" title + corrupted HUD text at storm intensity, reverting to "Pinned"/clean when
+        the storm ends.
 - [ ] `e289157a` **Low-stability ramp.** Without a storm, drop personal stability below 50% (e.g. stand
       near a rift); confirm HUD text corruption ramps up as stability falls toward 10%, and the title
       stays "Pinned" (no storm swap). *(hud-temporal-storm-corruption 6.3)*
-- [ ] `d6f9d273` **Re-scramble + layout.** While a trigger is active, watch the HUD for several seconds;
+- [x] `d6f9d273` **Re-scramble + layout.** While a trigger is active, watch the HUD for several seconds;
       confirm the injected marks shift on a ~0–5 s cadence and that wrapping rows, title, and timer render
       the combining marks without broken width/wrapping or clipping. *(hud-temporal-storm-corruption 6.4)*
-- [ ] `8dc37921` **Toggle off mid-storm.** During an active storm, turn off the "Storm text corruption"
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T21-39-18): "Works." Marks re-scramble on the
+        0–5 s cadence and the combining marks render without broken width/wrapping or clipping — resolves the
+        design's flagged Skia layout feasibility unknown; no marks-per-char cap needed.
+- [x] `8dc37921` **Toggle off mid-storm.** During an active storm, turn off the "Storm text corruption"
       setting; confirm corruption and the title swap stop immediately; turn it back on and confirm they
       resume. *(hud-temporal-storm-corruption 6.5)*
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T21-39-18): "Works." Toggling the setting off
+        mid-storm stops corruption + title swap immediately; toggling on resumes them.
 
 ## fix-pvp-death-kill-attribution
 
@@ -54,24 +62,34 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > empty ActorName (no doubled name). Retention caps raised; `/scribe seed` rebuilt from live keys.
 > **MULTIPLAYER — needs a second player for 7.1–7.4.** Fully relaunch the client (assets load at boot).
 
-- [ ] `c1e10e64` **Melee PvP death names killer.** Player A holds a Notebook; Player B kills A with a
+- [x] `c1e10e64` **Melee PvP death names killer.** Player A holds a Notebook; Player B kills A with a
       MELEE weapon. Confirm A's Death entry names B as the killer, not "A died." *(fix-pvp-death-kill-attribution 7.1)*
-- [ ] `d5945602` **Melee PvP kill logged.** Player A holds a Notebook and kills Player B with a melee
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T21-39-18, MP session): "Works." Melee PvP
+        death names the killer, not "A died."
+- [x] `d5945602` **Melee PvP kill logged.** Player A holds a Notebook and kills Player B with a melee
       weapon. Confirm A's notebook gets a PvpKill entry naming B. *(fix-pvp-death-kill-attribution 7.2)*
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T21-39-18, MP session): "Works." The killer's
+        notebook gets a PvpKill entry naming the victim.
 - [ ] `81fbc148` **Ranged (bow) path + verb.** Repeat the death/kill with a BOW; confirm the projectile
       path still attributes correctly and the verb reads "pincushioned." *(fix-pvp-death-kill-attribution 7.3)*
-- [ ] `79dcedb5` **Verb variety.** Confirm a sword kill reads "slashed" and a spear "impaled"; with a
+- [x] `79dcedb5` **Verb variety.** Confirm a sword kill reads "slashed" and a spear "impaled"; with a
       combat mod, a firearm/crossbow reads "shot" or at least a sensible verb — never wrong attribution.
       *(fix-pvp-death-kill-attribution 7.4)*
-- [ ] `1105f7ca` **Mob death names variant.** Die to a nightmare drifter or bear while holding a
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T21-39-18): "Works." Weapon-aware verbs read
+        sensibly per weapon; no wrong attribution.
+- [x] `1105f7ca` **Mob death names variant.** Die to a nightmare drifter or bear while holding a
       Notebook; confirm the Death entry reads a flavored line naming the correct creature ("...by a
       nightmare drifter."), not "died.", no PvpKill entry, and no doubled name. *(fix-pvp-death-kill-attribution 7.5)*
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T21-39-18): "Works." Mob death reads a
+        flavored line naming the correct creature variant, no PvpKill entry, no doubled name.
 - [ ] `f07d0b45` **Environmental death unchanged.** Die to fall / fire / hunger while holding a
       Notebook; confirm the Death entry still uses the vanilla reconstructed message and no PvpKill
       entry is created. *(fix-pvp-death-kill-attribution 7.6)*
-- [ ] `28c4ede1` **Seed chronicle.** Run `/scribe seed all` on a held Notebook; confirm the fuller
+- [x] `28c4ede1` **Seed chronicle.** Run `/scribe seed all` on a held Notebook; confirm the fuller
       chronicle (drifter death, bow PvP death, bear death, boss kill, storm, sword PvP kill) with no
       doubled names. *(fix-pvp-death-kill-attribution 7.7)*
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T21-39-18): "Works." `/scribe seed all`
+        produces the fuller chronicle with no doubled names.
 
 ## timer-auto-disappear-setting
 
@@ -1919,7 +1937,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > Fixed by deferring the title focus to `OnRenderGUI` via `_pendingTitleFocus`. ⚠️ Restaged Debug
 > 2026-07-31 — fully relaunch the client first. (VSAPI-NOTES.md "0.2.0 title-pencil".)
 
-- [x] `5f69fd12` **Title pencil no longer crashes.** Open a Notebook / Clockmaker's Notebook / Lectern
+- [ ] `5f69fd12` **Title pencil no longer crashes.** Open a Notebook / Clockmaker's Notebook / Lectern
       editor, click the title-edit pencil; the field enters edit mode and focuses without crashing, and
       clicking other buttons in the same dialog does not NPE. Type a long title and confirm it clamps /
       scrolls horizontally instead of wrapping. *(title-pencil-crash-fix)*
@@ -1963,6 +1981,12 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         `_isTitleEditing`, since the blur path has already set it false). Build clean. RETEST on a
         crafted-from-Notebook Clockmaker's Notebook: enter title edit via the pencil, type, then click another
         button (nav tab, a row, etc.) to unfocus → the title commits and the dialog does NOT crash.
+      - **Reported pass, NOT confirmed 2026-07-31** (playtest submission 2026-07-31T21-39-18, mac): "Works." Left
+        UNCHECKED deliberately — this bug has dodged three fixes by relocating (tap → blur → ...) and its only
+        reliable repro is a Clockmaker's Notebook crafted FROM a prior Notebook on PC (v1.22.6), which this mac
+        session (MP PvP + storm items) does not state it exercised. The blur-path fix (`_pendingTitleEditRebuild`
+        armed from `OnTitleFocusChanged`) is the current awaiting-retest build. Retest the crafted-from-Notebook
+        + blur path on PC specifically before checking this off.
 
 ## fix-transient-lectern-editor-lock
 

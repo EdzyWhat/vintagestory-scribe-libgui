@@ -40,22 +40,24 @@
 
 - [x] 5.1 Add a client-local boolean preference (default true) for the storm-corruption effect,
       alongside the other display/behavior prefs; add label + helptext lang keys.
-- [x] 5.2 Surface it as a labeled control with helptext in the settings tab (Appearance section),
-      writing through immediately.
+- [x] 5.2 Surface it as a labeled control with helptext in the settings tab (Behavior section, next to
+      "Timer disappears" — moved there from HUD Appearance per 2026-07-31 playtest feedback), writing
+      through immediately.
 - [x] 5.3 `HudScribePins` reads the preference in the strength computation and rebuilds on toggle so
       enabling/disabling applies live.
 
 ## 6. Verification
 
 - [x] 6.1 Build passes (`build/verify.sh`); Core tests green.
-- [ ] 6.2 In-game (restage): trigger a temporal storm — confirm the title reads "Survive the Storm"
+- [x] 6.2 In-game (restage): trigger a temporal storm — confirm the title reads "Survive the Storm"
       and all HUD text corrupts at roughly the storm-tier intensity; confirm it reverts when the
-      storm ends.
+      storm ends. (Confirmed 2026-07-31 playtest.)
 - [ ] 6.3 In-game: drive personal stability below 50% without a storm (e.g. rift proximity) — confirm
       corruption ramps up as stability drops toward 10%, and the title stays "Pinned".
-- [ ] 6.4 In-game: confirm the re-scramble visibly shifts on a 0–5 s cadence and text layout
+- [x] 6.4 In-game: confirm the re-scramble visibly shifts on a 0–5 s cadence and text layout
       (wrapping rows, title, timer) renders the combining marks without breaking measurement or
-      clipping; cap marks-per-char if layout misbehaves.
-- [ ] 6.5 In-game: toggle the setting off mid-storm — confirm corruption and title swap stop
-      immediately; toggle on — confirm they resume.
+      clipping; cap marks-per-char if layout misbehaves. (Confirmed 2026-07-31 playtest — Skia renders
+      the stacked marks cleanly; no marks-per-char cap needed.)
+- [x] 6.5 In-game: toggle the setting off mid-storm — confirm corruption and title swap stop
+      immediately; toggle on — confirm they resume. (Confirmed 2026-07-31 playtest.)
 - [ ] 6.6 Cross-check against `what-to-test` / TESTING.md and record verdicts.

@@ -130,15 +130,21 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         value: settings.MuteUiSounds,
                         onChanged: v => onMutate(s => s.MuteUiSounds = v))),
 
-                // "Timer disappears" (timer-auto-disappear-setting): when on, a fired Clockmaker's Notebook
-                // timer auto-clears from the HUD after ~30 s; when off it stays until dismissed. Sits on its
-                // own paired row (left column) beneath the first pair, keeping the hugging-checkbox layout.
+                // "Timer disappears" (timer-auto-disappear-setting) + "Storm text corruption"
+                // (hud-temporal-storm-corruption) share one paired row. Timer disappears: when on, a fired
+                // Clockmaker's Notebook timer auto-clears from the HUD after ~30 s; when off it stays until
+                // dismissed. Storm text corruption: when on, the HUD scrambles its text and swaps its title
+                // during a temporal storm / low stability. Both are behavior switches (not appearance), so
+                // they sit here rather than in HUD Appearance; each hugs its own label.
                 PairedControls(colors, scale,
                     HuggingCheckbox(
                         "settings-timerdisappear", colors, scale,
                         value: settings.TimerAutoDisappear,
                         onChanged: v => onMutate(s => s.TimerAutoDisappear = v)),
-                    new SizedBox()),
+                    HuggingCheckbox(
+                        "settings-stormcorruption", colors, scale,
+                        value: settings.StormCorruption,
+                        onChanged: v => onMutate(s => s.StormCorruption = v))),
             });
     }
 
@@ -259,16 +265,6 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                     LabeledControl(
                         "settings-hudfontscale", colors, scale,
                         FontScaleField("hudfontscale", settings.HudFontScale, v => onMutate(s => s.HudFontScale = v)))),
-
-                // Storm text corruption (hud-temporal-storm-corruption): when on, the HUD scrambles its
-                // text and swaps its title during a temporal storm / low stability. Hugs its label like the
-                // other toggles; sits on its own paired row (left column) at the end of the HUD section.
-                PairedControls(colors, scale,
-                    HuggingCheckbox(
-                        "settings-stormcorruption", colors, scale,
-                        value: settings.StormCorruption,
-                        onChanged: v => onMutate(s => s.StormCorruption = v)),
-                    new SizedBox()),
             });
     }
 
