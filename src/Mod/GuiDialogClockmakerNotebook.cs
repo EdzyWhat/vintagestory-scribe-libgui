@@ -38,7 +38,10 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
     /// server push arrives).</summary>
     private bool _resyncRemaining = true;
 
-    private TimerMode _pendingMode = TimerMode.InGame;
+    // Seeded from the player's remembered PreferredTimerMode in the ctor body (NOT here — field
+    // initializers run before base(...) assigns modSystem). Defaults to RealTime for a first-time player
+    // (fix-clockmaker-timer-mode-default). Persisted back on every selection so it survives close/reopen.
+    private TimerMode _pendingMode;
     private int _pendingHours;
     private int _pendingMinutes;
     private int _pendingSecs;
@@ -55,6 +58,8 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
     public GuiDialogClockmakerNotebook(IScribeDocumentHost host, ICoreClientAPI capi)
         : base(host, capi)
     {
+        // Seed the "set timer" form's mode from the player's remembered choice (default RealTime).
+        _pendingMode = modSystem.MySettings.PreferredTimerMode;
         modSystem.MyTimerChanged += OnTimerChanged;
         _timerTickId = capi.Event.RegisterGameTickListener(OnTimerTick, 250);
     }
@@ -221,7 +226,13 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
         // call SetState on itself without remounting the sibling Button.
         Widget modeRow = new ScribeTimerModeRow(
             selected: _pendingMode,
-            onSelect: m => _pendingMode = m,
+            // Remember the choice: persist it as the player's PreferredTimerMode so the form pre-selects it
+            // on the next close/reopen (fix-clockmaker-timer-mode-default).
+            onSelect: m =>
+            {
+                _pendingMode = m;
+                modSystem.UpdateMySettings(s => s.PreferredTimerMode = m);
+            },
             bodyStyle: bodyStyle,
             checkboxSize: ScribeRowConstants.RowCheckboxSize * scale);
 

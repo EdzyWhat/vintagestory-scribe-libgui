@@ -65,6 +65,14 @@ public sealed class ScribePlayerSettings
     /// needing no clamp, so <see cref="Normalized"/> leaves it untouched.</summary>
     public bool StormCorruption { get; set; } = true;
 
+    /// <summary>The timer type the Clockmaker's Notebook's "set timer" form pre-selects: the last type the
+    /// player chose, remembered across close/reopen. Default <see cref="TimerMode.RealTime"/> — the first
+    /// option in the selector, so a player opening the Timer tab for the very first time starts on Real time
+    /// (fix-clockmaker-timer-mode-default). Only seeds the Idle form; a running timer always shows its own
+    /// stored mode. A per-player, client-local preference: never server-synced. An unknown value falls back
+    /// to the default on load (<see cref="NormalizeTimerMode"/>).</summary>
+    public TimerMode PreferredTimerMode { get; set; } = TimerMode.RealTime;
+
     /// <summary>Maximum number of pinned tasks the HUD shows at once (default 3); pins beyond this
     /// are summarized ("+N more"). A per-player display preference; the Mod layer owns the HUD and
     /// clamps this to a sane range on read (see <see cref="ScribePinCodec"/>).</summary>
@@ -243,6 +251,12 @@ public sealed class ScribePlayerSettings
     public static ScribeCompletionPolicy NormalizePolicy(ScribeCompletionPolicy value) =>
         Enum.IsDefined(typeof(ScribeCompletionPolicy), value) ? value : ScribeCompletionPolicy.Sink;
 
+    /// <summary>Maps a loaded timer-mode value to a defined <see cref="TimerMode"/>, falling back to the
+    /// default (<see cref="TimerMode.RealTime"/>) for any unrecognized value so a hand-edited or corrupted
+    /// config can't select an undefined timer type.</summary>
+    public static TimerMode NormalizeTimerMode(TimerMode value) =>
+        Enum.IsDefined(typeof(TimerMode), value) ? value : TimerMode.RealTime;
+
     /// <summary>Normalizes this instance's fields in place after a load from an untrusted source
     /// (hand-edited JSON): clamps each numeric preference to its safe range (row count, row width, the
     /// Pixel Art Size — snapped to the 10px grid, the HUD offsets, and both font scales — snapping each
@@ -252,6 +266,7 @@ public sealed class ScribePlayerSettings
     {
         HudMaxRows = ClampHudMaxRows(HudMaxRows);
         CompletionPolicy = NormalizePolicy(CompletionPolicy);
+        PreferredTimerMode = NormalizeTimerMode(PreferredTimerMode);
         HudAnchor = NormalizeAnchor(HudAnchor);
         HudRowWidth = ClampHudRowWidth(HudRowWidth);
         PixelArtSize = ClampPixelArtSize(PixelArtSize);
