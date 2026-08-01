@@ -1,3 +1,4 @@
+using System.Text;
 using Scribe.Core;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
@@ -34,6 +35,19 @@ public class ItemScribeNotebook : Item
 
     public override WorldInteraction[] GetHeldInteractionHelp(ItemSlot inSlot)
         => _interactions.Append(base.GetHeldInteractionHelp(inSlot));
+
+    /// <summary>Append the stored document's title (quoted, or an untitled placeholder) to the
+    /// held/inventory tooltip. A never-opened notebook carries no document attribute yet, so
+    /// <see cref="ScribeDocumentAttributes.TryReadFrom"/> returns false and the placeholder shows.</summary>
+    public override void GetHeldItemInfo(ItemSlot inSlot, StringBuilder dsc, IWorldAccessor world, bool withDebugInfo)
+    {
+        base.GetHeldItemInfo(inSlot, dsc, world, withDebugInfo);
+        string? title = inSlot.Itemstack is { } stack
+            && ScribeDocumentAttributes.TryReadFrom(stack, out var doc) && doc is not null
+            ? doc.Title
+            : null;
+        dsc.AppendLine(ScribeTooltip.FormatTitleLine(title));
+    }
 
     public override void OnHeldInteractStart(ItemSlot slot, EntityAgent byEntity, BlockSelection blockSel,
         EntitySelection entitySel, bool firstEvent, ref EnumHandHandling handling)

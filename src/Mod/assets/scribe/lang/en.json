@@ -3,6 +3,9 @@
 	"blockhelp-scribelectern-open": "Read",
 	"blockhelp-scribelectern-edit": "Edit",
 
+	"tooltip-title": "Title: \"{0}\"",
+	"tooltip-title-untitled": "(untitled)",
+
 	"scribe-gui-title": "Lectern",
 	"scribe-gui-title-edit-tooltip": "Edit title",
 	"scribe-gui-addtask": "Add Task",

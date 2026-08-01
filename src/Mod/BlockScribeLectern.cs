@@ -43,6 +43,17 @@ public sealed class BlockScribeLectern : Block
         return interactions.Append(base.GetPlacedBlockInteractionHelp(world, selection, forPlayer));
     }
 
+    /// <summary>Append the document's title (quoted, or an untitled placeholder) to the placed-block
+    /// look-at tooltip, read live from the block entity's document. A missing block entity falls back
+    /// to the placeholder via <see cref="ScribeTooltip.FormatTitleLine"/> (null → untitled).</summary>
+    public override string GetPlacedBlockInfo(IWorldAccessor world, BlockPos pos, IPlayer forPlayer)
+    {
+        string title = world.BlockAccessor.GetBlockEntity(pos) is BlockEntityScribeLectern lectern
+            ? lectern.Document.Title
+            : null!;
+        return base.GetPlacedBlockInfo(world, pos, forPlayer) + ScribeTooltip.FormatTitleLine(title) + "\n";
+    }
+
     public override bool OnBlockInteractStart(IWorldAccessor world, IPlayer byPlayer, BlockSelection blockSel)
     {
         if (world.BlockAccessor.GetBlockEntity(blockSel.Position) is BlockEntityScribeLectern lectern)

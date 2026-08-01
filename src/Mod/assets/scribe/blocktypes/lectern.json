@@ -22,11 +22,6 @@
 	collisionbox: { x1: 0.1817, y1: 0, z1: 0.1875, x2: 0.8188, y2: 1.2563, z2: 0.8125 },
 	selectionbox: { x1: 0.1817, y1: 0, z1: 0.1875, x2: 0.8188, y2: 1.2563, z2: 0.8125 },
 
-	combustibleProps: {
-		burnTemperature: 600,
-		burnDuration: 10
-	},
-
 	sounds: {
 		place: "block/planks",
 		hit: "block/planks",

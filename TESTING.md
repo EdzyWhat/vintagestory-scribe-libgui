@@ -1888,6 +1888,17 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [ ] `52fac6d2` **Multiplayer note isolation.** A second player opens the same lectern — confirm they see your notes read-only and can edit each of their own multi-day notes independently on their client. *(4.4)*
 - [ ] `30895563` **Note-less entries pruned past the soft cap.** Visit a lectern on more than 10 in-game days without leaving notes — confirm oldest empty entries drop so your list stays around ten, while any entry you left a note on is never dropped. *(1.3)*
 
+## add-title-to-scribe-tooltips
+
+> Shows a Scribe document's title on the Lectern's placed-block tooltip and both Notebook items'
+> inventory tooltips (quoted, with an `(untitled)` placeholder), and removes the irrelevant Burn
+> temperature/duration lines from the Lectern.
+
+- [ ] `468d7234` **Titled lectern tooltip.** Place a Lectern, give it a title; look at the placed block — confirm the tooltip shows `Title: "<title>"` and NO Burn temperature/duration lines. *(4.3)*
+- [ ] `84eb244b` **Untitled lectern tooltip.** Look at a freshly placed, never-titled Lectern — confirm the tooltip shows `Title: "(untitled)"`. *(4.3)*
+- [ ] `c9a643bd` **Titled notebook tooltips.** Hover a titled Notebook and a titled Clockmaker's Notebook in the inventory — confirm each shows `Title: "<title>"`. *(4.4)*
+- [ ] `5babbc80` **Never-opened notebook tooltip.** Hover a freshly crafted Notebook that has never been opened — confirm the tooltip shows `Title: "(untitled)"`. *(4.4)*
+
 ## scribe-0-2-0-release-content
 
 > 0.2.0 release-prep: the plain Notebook's survival recipe, a `tinkerer`-trait craft gate for the

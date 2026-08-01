@@ -1,3 +1,4 @@
+using System.Text;
 using Scribe.Core;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
@@ -33,6 +34,19 @@ public class ItemClockmakerNotebook : Item
 
     public override WorldInteraction[] GetHeldInteractionHelp(ItemSlot inSlot)
         => _interactions.Append(base.GetHeldInteractionHelp(inSlot));
+
+    /// <summary>Append the stored document's title (quoted, or an untitled placeholder) to the
+    /// held/inventory tooltip. The upgrade copies the source Notebook's document payload, so the
+    /// carried-over title renders here without any extra plumbing.</summary>
+    public override void GetHeldItemInfo(ItemSlot inSlot, StringBuilder dsc, IWorldAccessor world, bool withDebugInfo)
+    {
+        base.GetHeldItemInfo(inSlot, dsc, world, withDebugInfo);
+        string? title = inSlot.Itemstack is { } stack
+            && ScribeDocumentAttributes.TryReadFrom(stack, out var doc) && doc is not null
+            ? doc.Title
+            : null;
+        dsc.AppendLine(ScribeTooltip.FormatTitleLine(title));
+    }
 
     public override void OnHeldInteractStart(ItemSlot slot, EntityAgent byEntity, BlockSelection blockSel,
         EntitySelection entitySel, bool firstEvent, ref EnumHandHandling handling)
