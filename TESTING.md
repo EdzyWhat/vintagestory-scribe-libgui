@@ -41,6 +41,11 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [ ] `e289157a` **Low-stability ramp.** Without a storm, drop personal stability below 50% (e.g. stand
       near a rift); confirm HUD text corruption ramps up as stability falls toward 10%, and the title
       stays "Pinned" (no storm swap). *(hud-temporal-storm-corruption 6.3)*
+      - **Backlogged 2026-07-31** (user decision): shipping the storm-corruption change without exercising
+        the no-storm low-stability ramp for now. The ramp is the same `max(storm, stability)` path already
+        confirmed under storms (`cc124162`/`d6f9d273`) and is unit-covered in the corruptor; the sub-50%
+        stability trigger just needs a deliberate rift-proximity session to watch it ramp on its own. Not
+        broken — deferred.
 - [x] `d6f9d273` **Re-scramble + layout.** While a trigger is active, watch the HUD for several seconds;
       confirm the injected marks shift on a ~0–5 s cadence and that wrapping rows, title, and timer render
       the combining marks without broken width/wrapping or clipping. *(hud-temporal-storm-corruption 6.4)*
@@ -1937,7 +1942,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > Fixed by deferring the title focus to `OnRenderGUI` via `_pendingTitleFocus`. ⚠️ Restaged Debug
 > 2026-07-31 — fully relaunch the client first. (VSAPI-NOTES.md "0.2.0 title-pencil".)
 
-- [ ] `5f69fd12` **Title pencil no longer crashes.** Open a Notebook / Clockmaker's Notebook / Lectern
+- [x] `5f69fd12` **Title pencil no longer crashes.** Open a Notebook / Clockmaker's Notebook / Lectern
       editor, click the title-edit pencil; the field enters edit mode and focuses without crashing, and
       clicking other buttons in the same dialog does not NPE. Type a long title and confirm it clamps /
       scrolls horizontally instead of wrapping. *(title-pencil-crash-fix)*
@@ -1987,6 +1992,13 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         session (MP PvP + storm items) does not state it exercised. The blur-path fix (`_pendingTitleEditRebuild`
         armed from `OnTitleFocusChanged`) is the current awaiting-retest build. Retest the crafted-from-Notebook
         + blur path on PC specifically before checking this off.
+      - **Confirmed 2026-07-31** (PC v1.22.6, verified-fresh build carrying blur fix `15dd621`): crafted a
+        Clockmaker's Notebook from a Notebook, opened the editor, ran the full title-pencil edit→unfocus path —
+        NO crash. The earlier 2026-07-31T15-05-03 blur-path crash was a STALE PC build: joining the Mac server
+        does NOT sync mod DLLs to the client (VS only version-checks in the handshake), and the version never
+        bumped past 0.2.0, so a pre-fix PC 0.2.0 joined cleanly and ran the old code. After a `git pull` +
+        rebuild/restage on the PC, all three orphaned-sibling paths (tap `15dd621`/`93c3b64`, blur `15dd621`,
+        deferred-focus `63f2ebe`) hold. Closed.
 
 ## fix-transient-lectern-editor-lock
 

@@ -53,7 +53,9 @@
       and all HUD text corrupts at roughly the storm-tier intensity; confirm it reverts when the
       storm ends. (Confirmed 2026-07-31 playtest.)
 - [ ] 6.3 In-game: drive personal stability below 50% without a storm (e.g. rift proximity) — confirm
-      corruption ramps up as stability drops toward 10%, and the title stays "Pinned".
+      corruption ramps up as stability drops toward 10%, and the title stays "Pinned". (Backlogged
+      2026-07-31 — shipping without this deliberate rift-proximity session; the ramp shares the confirmed
+      `max(storm, stability)` path and is unit-covered.)
 - [x] 6.4 In-game: confirm the re-scramble visibly shifts on a 0–5 s cadence and text layout
       (wrapping rows, title, timer) renders the combining marks without breaking measurement or
       clipping; cap marks-per-char if layout misbehaves. (Confirmed 2026-07-31 playtest — Skia renders
