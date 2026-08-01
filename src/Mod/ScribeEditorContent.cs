@@ -125,6 +125,7 @@ internal sealed class ScribeEditorContent : StatefulWidget
         Action<int, int> onReorderBlock,
         Action onAddTask,
         Action onSwitchToRead,
+        Action onOpenEditorReference,
         EdgeInsets footerButtonPadding,
         ScribeRowStyle style,
         ScrollController scrollController,
@@ -147,6 +148,7 @@ internal sealed class ScribeEditorContent : StatefulWidget
         OnReorderBlock = onReorderBlock;
         OnAddTask = onAddTask;
         OnSwitchToRead = onSwitchToRead;
+        OnOpenEditorReference = onOpenEditorReference;
         FooterButtonPadding = footerButtonPadding;
         Style = style;
         ScrollController = scrollController;
@@ -174,6 +176,10 @@ internal sealed class ScribeEditorContent : StatefulWidget
     public Action<int, int> OnReorderBlock { get; }
     public Action OnAddTask { get; }
     public Action OnSwitchToRead { get; }
+    /// <summary>Open the "Scribe Editor Features" handbook page (v1-release-checklist 9.5). Wired from the
+    /// dialog (which holds the client API); this widget stays free of the VS API. See
+    /// <see cref="ScribeDialogBase.OpenEditorReferenceHandbook"/>.</summary>
+    public Action OnOpenEditorReference { get; }
     /// <summary>Horizontal breathing room applied around the footer button row (Add task / Done editing),
     /// 0.04·W each side, so the buttons don't run to the content edges. Passed from the dialog, which owns
     /// the <c>ScribeLayout</c> width.</summary>
@@ -340,6 +346,11 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                     new Expanded(child: scrollBody),
                     new Padding(Widget.FooterButtonPadding, child: new Row(
                         spacing: 8,
+                        // Center so the (non-Expanded) info Button sits vertically centered against the two
+                        // labelled buttons. NOT Stretch: stretch gives the icon button an unbounded axis that a
+                        // greedy child (Center/Align) would balloon to fill the whole dialog — an 18px glyph
+                        // already renders at ~the 14px label's line height, so natural heights match anyway.
+                        crossAxisAlignment: CrossAxisAlignment.Center,
                         mainAxisSize: MainAxisSize.Max,
                         children: new Widget[]
                         {
@@ -349,6 +360,38 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                             new Expanded(child: new Button(
                                 child: new Text(Lang.Get("scribe:scribe-gui-switch-to-read"), buttonTextStyle),
                                 onTap: _ => Widget.OnSwitchToRead())),
+                            // Trailing info button — a peer of the Add/Done buttons: same LibGUI Button (Primary
+                            // variant, so it inherits the identical background, border, padding, and hover/press
+                            // feedback), just NON-Expanded so it hugs the right edge at its natural width while
+                            // the two labelled buttons split the flexible space. Its child is the scaled-up ⓘ
+                            // glyph, set directly (like the siblings' Text — NO Center wrapper, which would
+                            // greedily expand the non-Expanded button to fill the dialog) in the button font
+                            // color (OnPrimary). Clicking opens the "Scribe Editor Features" handbook page; the
+                            // hover tooltip labels it (v1-release-checklist 9.5 — discoverability of Tab/Shift+Tab
+                            // row nav). Inline tooltip (not the private WithTooltip helper in ScribeDialogBase),
+                            // matching ScribePinnedContent's inline tooltip using the tab theme's OnBackground.
+                            new Tooltip(
+                                child: new Button(
+                                    // 17f (nudged down from 18) so the glyph's rendered content matches the
+                                    // label text's height rather than overshooting it.
+                                    child: new ScribeVsIconGlyph("scribeinfo", 17f, colors.OnPrimary),
+                                    // Copy the theme button style but replace the default label padding
+                                    // (Symmetric(10, 20)) with a tight, equal All(7): equal on all sides keeps
+                                    // the square glyph in a square box (not the label-shaped landscape one), and
+                                    // the reduced amount brings total height (~38px) in line with the Add/Done
+                                    // buttons — the glyph content renders taller than label text, so it needs
+                                    // less padding to match, not the same.
+                                    style: Theme.Of(context).ButtonStyle with { Padding = EdgeInsets.All(7) },
+                                    onTap: _ => Widget.OnOpenEditorReference()),
+                                content: new Padding(
+                                    EdgeInsets.All(6),
+                                    child: new Text(Lang.Get("scribe:scribe-gui-editor-reference-tooltip"), new TextStyle
+                                    {
+                                        FontSize = 13,
+                                        SoftWrap = true,
+                                        Color = colors.OnBackground,
+                                    })),
+                                useGlobalOverlay: true),
                         })),
                 })));
     }

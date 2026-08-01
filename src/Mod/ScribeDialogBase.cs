@@ -1988,6 +1988,7 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
             onReorderBlock: (from, to) => ReorderEditorBlock(from, to),
             onAddTask: OnClickAddTask,
             onSwitchToRead: OnClickSwitchToRead,
+            onOpenEditorReference: OpenEditorReferenceHandbook,
             // Symmetric 0.04·W horizontal inset on the footer button row, from the same ScribeLayout width.
             footerButtonPadding: EdgeInsets.Symmetric(
                 horizontal: 0.04f * host.GetLayout(modSystem.MySettings.PixelArtSize).W),
@@ -1997,6 +1998,19 @@ public abstract class ScribeDialogBase : GuiDialogBlockEntityBase
             collapseRegistry: editorCollapseRegistry,
             onDepartingCollapsed: OnEditorRowCollapsed,
             hintLangKey: EmptyHintLangKey);
+    }
+
+    /// <summary>Footer "Editor Features" (ⓘ) button: open the "Scribe Editor Features" handbook page
+    /// (v1-release-checklist 9.5 — surfaces the keyboard-navigation reference at the point of use). We fire
+    /// the game's registered <c>"handbook"</c> link protocol with the same <c>handbook://</c> href the lang
+    /// pages already link to, rather than reaching into <c>ModSystemSurvivalHandbook</c>'s private dialog —
+    /// this keeps us decoupled and degrades gracefully: if the survival mod (and thus its handbook protocol)
+    /// isn't loaded, <c>LinkProtocols</c> has no <c>"handbook"</c> entry and this is a no-op instead of a
+    /// crash. See VSAPI-NOTES.md (survival-mod systems) for the page-code / link-protocol mechanics.</summary>
+    private void OpenEditorReferenceHandbook()
+    {
+        if (capi.LinkProtocols.TryGetValue("handbook", out var open))
+            open(new LinkTextComponent("handbook://craftinginfo-scribe-editor-reference"));
     }
 
     /// <summary>Read-view task checkbox click: complete the task by its stable identity via the

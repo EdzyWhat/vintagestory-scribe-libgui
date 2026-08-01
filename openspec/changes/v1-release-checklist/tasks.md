@@ -232,7 +232,7 @@
       HUD in-world → settings/themes → outro/download link. Script draft at `docs/media/video-script.md`.
 - [x] 9.4 Reach out to the LibGUI author with a courtesy message (attribution, feedback, and optionally
       a link to the released mod).
-- [ ] 9.5 Add Tab/Shift+Tab navigation tooltips to the task editor rows (discoverability — surfaced by
+- [x] 9.5 Add Tab/Shift+Tab navigation tooltips to the task editor rows (discoverability — surfaced by
       thepeebrain's teaser comment about keyboard-driven use). Promote to its own small change if
       non-trivial.
 - [x] 9.6 Code quality pass on recently touched files: stale cref/comments fixed, dead code removed
