@@ -1,15 +1,15 @@
 ## 1. Split ScribeDialogBase.cs
 
-- [ ] 1.1 Read the current `src/Mod/ScribeDialogBase.cs` and identify cohesive concern clusters
+- [x] 1.1 Read the current `src/Mod/ScribeDialogBase.cs` and identify cohesive concern clusters
       from its `#region`/method grouping (candidate seams: title-edit, guestbook, pinned view,
       backdrop/layout, input-capture/focus, view-model/state).
-- [ ] 1.2 Create `partial class ScribeDialogBase` files named `ScribeDialogBase.<Concern>.cs` in
+- [x] 1.2 Create `partial class ScribeDialogBase` files named `ScribeDialogBase.<Concern>.cs` in
       `src/Mod/`, moving each cluster's members verbatim (comments included). Keep the primary
       declaration, all field initializers, and the ctor in `ScribeDialogBase.cs`.
-- [ ] 1.3 Confirm the move is pure relocation: no rename, no visibility change, no signature
+- [x] 1.3 Confirm the move is pure relocation: no rename, no visibility change, no signature
       change, no logic change (a diff should show members leaving one file and arriving in
       another, nothing else).
-- [ ] 1.4 `dotnet build src/Mod/Mod.csproj -c Debug` — clean; `dotnet test tests/Core.Tests` — all
+- [x] 1.4 `dotnet build src/Mod/Mod.csproj -c Debug` — clean; `dotnet test tests/Core.Tests` — all
       pass. Commit this file's split on its own.
 
 ## 2. Split ScribeModSystem.cs
