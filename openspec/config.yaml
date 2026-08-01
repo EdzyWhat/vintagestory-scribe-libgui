@@ -35,9 +35,10 @@ context: |
   - Secondary goal is the author rebuilding dev skills (Git, CI, spec-driven development),
     so favor clear, well-explained, conventional solutions.
 
-  Current focus: v1 — a single "lectern" block (reuses the vanilla "Aged book lectern"
-  clutter shape) with a task checklist + short freeform note, server-authoritative and
-  multiplayer-safe. See ROADMAP.md for later tiers.
+  Current focus: post-v0.2.0 — the lectern, notebook, and clockmaker's-notebook documents
+  have shipped (task checklist + freeform notes, server-authoritative and multiplayer-safe,
+  live on the mod DB). Work now is polish and the next roadmap tiers. See ROADMAP.md for
+  later tiers and CHANGELOG.md for what has shipped.
 
 rules:
   tasks:

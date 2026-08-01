@@ -8,7 +8,9 @@ secondary payoff. Note-keeping tools progress with your tech tree, from a crude 
 tablet in the stone age up to shared bulletin boards, grounded in both the real
 archaeology of writing and vanilla game mechanics.
 
-> **Status:** early development. See [`ROADMAP.md`](./ROADMAP.md) for the staged plan.
+> **Status:** released — v0.2.0, [live on the mod DB](https://mods.vintagestory.at/scribe).
+> See [`ROADMAP.md`](./ROADMAP.md) for the staged plan ahead and [`CHANGELOG.md`](./CHANGELOG.md)
+> for what has shipped.
 
 ## Requirements
 
@@ -61,10 +63,10 @@ mods on its mod path — it never sees your installed `VintagestoryData/Mods` fo
 Scribe's hard dependency on the `gui` (LibGUI) mod has to be staged too, or the mod loader
 skips Scribe and every scenario fails at `SetBlock` with *"Unknown block code
 scribe:scribelectern"*. `Integration.Tests.csproj` handles this by copying the installed
-`gui_2.0.0.zip` into the test output directory (from `$(VintagestoryDataMods)`, defaulting to
+`gui_3.1.0.zip` into the test output directory (from `$(VintagestoryDataMods)`, defaulting to
 the macOS install path), and `AssemblyInfo.cs` stages it via `[assembly:
-AtlasMods("gui_2.0.0.zip")]`. On a non-macOS machine, or if the mod version changes, override
-the path (`-p:VintagestoryDataMods=<your Mods folder>`) and update the `gui_2.0.0.zip`
+AtlasMods("gui_3.1.0.zip")]`. On a non-macOS machine, or if the mod version changes, override
+the path (`-p:VintagestoryDataMods=<your Mods folder>`) and update the `gui_3.1.0.zip`
 filename in both places in lockstep.
 
 `FixtureBuilders` is excluded from normal runs: it's a one-time world-builder scenario, not

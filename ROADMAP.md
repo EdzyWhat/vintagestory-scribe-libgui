@@ -25,24 +25,22 @@ age (the saw); anything past that is cosmetic.
 
 ## Staged plan
 
-- **v1 — Lectern slice** *(current)*: one lectern block (reuses the vanilla
+- **v1 — Lectern slice** *(shipped, v0.1.x)*: one lectern block (reuses the vanilla
   "lecturn-book-open" shape — plain wood) with a task checklist + short note,
   server-authoritative and multiplayer-safe. Built modularly so later tiers slot in. The
   **row-list rework** (S1 + S2 shipped: `lectern-edit-in-place-rows` archived 2026-07-21)
   delivered a single custom-drawn row element with native clipping, a continuous scroll path,
   and edit-in-place keyboard conventions (Enter/Shift+Tab/Esc, Mac caret routing).
-- **v2 — Notebook (collection)** → `docs/specs/v2-notebook.md`. Leather-bound held item,
-  infinite pages. Introduces the **`docId`-on-item + server-side document store** that v3
-  reuses. Two carried-over decisions are now **resolved** in the spec: the scroll/clip
-  prerequisite was delivered by the row-list rework (S2 shipped — v2 is unblocked); and the
-  single-editor lock does **not** carry over (a held stack has one holder — matches vanilla
-  `ItemBook`, which uses no lock).
-  - **Timers & alarms (Clockmaker perk)** → `docs/specs/timers-and-alarms.md`. Real-time + in-game-time
-    reminders that fire a toast + sound, optionally on the HUD next to pins. Client-local state (a
-    `ScribePlayerSettings`-style JSON + one client poller — no native scheduler exists; poll
-    `Calendar.TotalHours`/`DateTime.UtcNow`), gated to the clockmaker's `tinkerer` trait. The timer PAGE
-    lives on the notebook, so it hard-depends on this v2 tier. Does NOT add due-dates to tasks (respects
-    the discipline reminder below) — it's a separate opt-in feature that may reference a task by id.
+- **v2 — Notebook (collection)** *(shipped, v0.2.0)* → `docs/specs/v2-notebook.md`. Leather-bound
+  held item, infinite pages. Introduced the **`docId`-on-item + server-side document store** that
+  v3 reuses. The single-editor lock does **not** carry over (a held stack has one holder — matches
+  vanilla `ItemBook`, which uses no lock).
+  - **Timers & alarms (Clockmaker perk)** *(shipped, v0.2.0)* → `docs/specs/timers-and-alarms.md`.
+    Real-time + in-game-time reminders that fire a toast + sound, optionally on the HUD next to pins.
+    Client-local state (a `ScribePlayerSettings`-style JSON + one client poller — no native scheduler
+    exists; poll `Calendar.TotalHours`/`DateTime.UtcNow`), gated to the clockmaker's `tinkerer` trait.
+    The timer PAGE lives on the notebook. Does NOT add due-dates to tasks (respects the discipline
+    reminder below) — it's a separate opt-in feature that may reference a task by id.
 - **v3 — Scratch tier: clay & wax tablets** → `docs/specs/v3-clay-tablet.md` (retitled in place;
   the filename is unchanged so existing pointers still resolve). Two sibling artifacts:
   - **Clay tablet:** soft/unfired item, 3-line UI, clayform-a-flat-slab, stylus in offhand,
@@ -80,15 +78,6 @@ age (the saw); anything past that is cosmetic.
   place a mistake corrupts existing saves, and both v6 and chronicle then build on a codec that
   already tolerates old layouts. See `docs/specs/README.md` → Shared Core-model conventions #1 for
   the single-version-line rule (append fields in version order; never two "v4"s).
-- **~~BUG — editor view doesn't auto-close on walk-away~~ — FIXED & confirmed 2026-07-21.**
-  Playtest confirmed (TESTING.md `9c04c5c7` / add-lectern-block 7.8): editor/read views now
-  auto-close on walk-away and the edit is saved. Root cause (decompile): the base auto-close gated
-  on `IsInRangeOfBlock` → `WorldData.PickingRange`, which the engine inflates to ~100 blocks in
-  Creative — so the ~5-block survival threshold never applied to a creative-placed lectern. Fixed
-  by overriding `IsInRangeOfBlock` to use the fixed `GlobalConstants.DefaultPickingRange`. Known
-  accepted Creative-only quirk left as-is: opening a lectern from beyond ~5 blocks (possible only
-  in Creative's inflated reach) flashes it open then auto-closes — harmless, not the mod's
-  intended endpoint. Survival is unaffected by analysis (open-reach 4.5 < close threshold 5.0).
 - **In-game user feedback / error surface** *(requested 2026-07-24, playtest submission
   2026-07-24T22-41-15).* There is no user-facing way to surface an edit error today: the server
   silently rejects an oversized edit (over `ScribeDocumentCodec.MaxBlocks`/`MaxTextLength`) and the
@@ -228,24 +217,19 @@ specs (each documents its assumed default) but they shape sequencing and scope.
    entry" question (author-match is always available). The append-only guestbook never contends
    regardless. Supersedes v6's own recommended defaults (single-lock + board-level policy).
 
-### Done / superseded (kept only as history)
+### Reserved & don't-re-propose (forward-relevant guardrails)
 
-- **Optional in-game settings panel (ConfigLib, soft dep)** — adopted 2026-07-19
-  (`add-imgui-configlib-tuning`), then **removed 2026-07-23**: the LibGUI rebuild stopped
-  consuming the layout fields it exposed, leaving the panel inert; the reference and
-  `configlib-patches.json` manifest were stripped as dead wiring.
-- **ImGui debug-tuning overlay** — adopted 2026-07-19 (`add-imgui-configlib-tuning`; Debug-only,
-  Release-excluded), then **removed 2026-07-23**: never rendered on Apple Silicon, and the
-  native `GuiComposer` layout knobs it tuned were replaced by LibGUI's theme/flex model. The
-  `#if DEBUG` slider code and DLL references are gone.
-- **ToastLib for the HUD** — investigated and rejected 2026-07-19 (stale for 1.22.x, ImGui
-  dep, no persist-and-update primitive). v5 uses a native `HudElement` instead.
-- **Configurable text-size minimum** — done 2026-07-20 (`MinTextSizePercent`; range retuned to
-  20%–120%).
-- **Static open-book / turn-page pagination UI** — superseded by `skeuomorphic-lectern-gui`,
-  which kept a continuous scrollable region (see that change's design.md decision 4). The mod
-  portal reference that motivated the backdrop art: https://mods.vintagestory.at/show/mod/42149.
-- **Freeform text-section blocks** (`ScribeBlockKind.Text`, `ScribeDocument.AddTextSection`) are
-  reserved for a future item/recipe, not the lectern (the "Add Note" button was removed in
-  add-lectern-block task 8.18); the Core capability + `ScribeBlockRowCell` text-row rendering are
-  kept working so a future recipe can reuse them with no Core changes.
+The full record of shipped, removed, and rejected work lives in `CHANGELOG.md`, the archived
+OpenSpec changes (`openspec/changes/archive/`), and git history. Two items are kept here because
+they still shape future work:
+
+- **Reserved: freeform text-section blocks** (`ScribeBlockKind.Text`,
+  `ScribeDocument.AddTextSection`) are reserved for a future item/recipe, not the lectern (the
+  "Add Note" button was removed in add-lectern-block task 8.18). The Core capability +
+  `ScribeBlockRowCell` text-row rendering are kept working so a future recipe can reuse them with
+  no Core changes.
+- **Don't re-propose ConfigLib / the ImGui debug overlay / ToastLib.** All three were tried or
+  investigated and deliberately dropped (ConfigLib + the `#if DEBUG` ImGui overlay adopted then
+  removed once the LibGUI rebuild made them inert/never-rendered on Apple Silicon; ToastLib
+  rejected as stale for 1.22.x with no persist-and-update primitive). The HUD uses a native
+  `HudElement`, not ImGui. See the archived `add-imgui-configlib-tuning` change for the details.
