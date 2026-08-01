@@ -26,14 +26,14 @@
 
 ## 3. Verify behavior preservation end-to-end
 
-- [ ] 3.1 `bash build/restage.sh Debug`, then run the Atlas integration suite (local pre-push
+- [x] 3.1 `bash build/restage.sh Debug`, then run the Atlas integration suite (local pre-push
       gate) — green.
 - [ ] 3.2 Manual in-game smoke: open the Lectern, plain Notebook, and Clockmaker's Notebook;
       verify Read / Editor / Pinned / Guestbook / Timer views, title editing, lock/autosave, and
       backdrops all render and function identically to before.
-- [ ] 3.3 Confirm no file under `src/Mod/` remains a ~2000-line catch-all (both former god-files
+- [x] 3.3 Confirm no file under `src/Mod/` remains a ~2000-line catch-all (both former god-files
       are now a set of concern-named partials).
 
 ## 4. Validate
 
-- [ ] 4.1 `openspec validate split-large-gui-files --strict` passes.
+- [x] 4.1 `openspec validate split-large-gui-files --strict` passes.
