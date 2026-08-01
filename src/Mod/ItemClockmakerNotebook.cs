@@ -100,7 +100,7 @@ public class ItemClockmakerNotebook : Item
 
     private void OpenNotebookDialog(ItemSlot slot, ICoreClientAPI capi)
     {
-        var host = new NotebookHost(slot);
+        var host = new NotebookHost(slot, ScribeBackdrops.ClockmakerPage);
         var modSystem = capi.ModLoader.GetModSystem<ScribeModSystem>();
         modSystem.RegisterHost(host);
         // Tell the server we opened this notebook so it can record the one-time PickedUp entry

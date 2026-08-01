@@ -19,14 +19,20 @@ namespace Scribe;
 public sealed class NotebookHost : IScribeDocumentHost
 {
     private readonly ItemSlot _slot;
+    private readonly ScribeBackdropSpec _backdrop;
     private ScribeDocument _document;
     private HistoryStore _history;
     private ICoreServerAPI? _sapi;
     private IServerPlayer? _player;
 
-    public NotebookHost(ItemSlot slot)
+    /// <param name="backdrop">The dialog backdrop this host reports via <see cref="BackdropSpec"/>.
+    /// Defaults to <see cref="ScribeBackdrops.NotebookPage"/> (the plain Notebook's art); the Clockmaker's
+    /// Notebook item passes <see cref="ScribeBackdrops.ClockmakerPage"/> so it draws distinct art even
+    /// though both items share this host class.</param>
+    public NotebookHost(ItemSlot slot, ScribeBackdropSpec? backdrop = null)
     {
         _slot = slot;
+        _backdrop = backdrop ?? ScribeBackdrops.NotebookPage;
         var stack = slot.Itemstack!;
         if (!ScribeDocumentAttributes.TryReadFrom(stack, out var doc) || doc is null)
         {
@@ -67,7 +73,7 @@ public sealed class NotebookHost : IScribeDocumentHost
             _history = HistoryStore.Deserialize(historyBytes);
     }
 
-    public ScribeBackdropSpec BackdropSpec => ScribeBackdrops.LecternPage;
+    public ScribeBackdropSpec BackdropSpec => _backdrop;
 
     public ScribeLayout GetLayout(float pixelArtSize) => new ScribeLayout(pixelArtSize, 1160f / 1024f);
 

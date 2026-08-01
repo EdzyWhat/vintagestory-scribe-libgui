@@ -16,20 +16,34 @@ public sealed record ScribeBackdropSpec(AssetLocation Texture);
 
 /// <summary>
 /// The per-item / per-view backdrop specifications for Scribe's dialogs (the <c>gui-backdrop</c>
-/// capability). Each item (the Lectern now; Desk / Notebook / Clay Tablet as they ship) declares its own
-/// specs, and within an item the read/editor page and the settings page reference DISTINCT specs so the
-/// two pages are visually distinguishable even before final art is drawn. Adding a new item's backdrops
-/// is only new specs here plus their PNGs — no change to <see cref="ScribeBackdrop.Wrap"/> or the bitmap
-/// cache (<see cref="ScribeModSystem.GetBackdropBitmap"/>).
+/// capability). Each item declares its OWN page spec so the dialogs are visually distinct: the Lectern,
+/// the plain Notebook, and the Clockmaker's Notebook each name a different illustrated background (the
+/// plain Notebook and Clockmaker share the <see cref="NotebookHost"/> class, so the Clockmaker item
+/// passes <see cref="ClockmakerPage"/> to its host's ctor to override the default). Within an item the
+/// read/editor page and the settings page reference DISTINCT specs. Adding a new item's backdrops is only
+/// new specs here plus their PNGs — no change to <see cref="ScribeBackdrop.Wrap"/> or the bitmap cache
+/// (<see cref="ScribeModSystem.GetBackdropBitmap"/>).
 /// </summary>
 internal static class ScribeBackdrops
 {
-    /// <summary>The Lectern read/editor page: the illustrated notebook art (1024×1160, aspect 0.883)
-    /// that the dialog is sized to so LibGUI's stretch-to-fill <c>BoxStyle.Texture</c> renders it as a
-    /// uniform, distortion-free scale (scribe-notebook-frame). The flat <c>lecternbackdrop.png</c> stays in
-    /// the assets as the reserved placeholder.</summary>
+    /// <summary>The Lectern read/editor page: its own illustrated art (1024×1160, aspect 0.883) that the
+    /// dialog is sized to so LibGUI's stretch-to-fill <c>BoxStyle.Texture</c> renders it as a uniform,
+    /// distortion-free scale (scribe-notebook-frame). The flat <c>lecternbackdrop.png</c> stays in the
+    /// assets as the reserved placeholder.</summary>
     public static readonly ScribeBackdropSpec LecternPage =
+        new(new AssetLocation("scribe", "textures/gui/scribe-lectern.png"));
+
+    /// <summary>The plain (player-held) Notebook item's read/editor page. Same 1024×1160 art size as the
+    /// other pages; the default backdrop <see cref="NotebookHost"/> uses when its ctor is given no
+    /// override.</summary>
+    public static readonly ScribeBackdropSpec NotebookPage =
         new(new AssetLocation("scribe", "textures/gui/scribe-notebook.png"));
+
+    /// <summary>The Clockmaker's Notebook item's read/editor page. Passed to the shared
+    /// <see cref="NotebookHost"/> ctor by <c>ItemClockmakerNotebook</c> so the Clockmaker draws distinct
+    /// art from the plain Notebook (both items otherwise share the same host class).</summary>
+    public static readonly ScribeBackdropSpec ClockmakerPage =
+        new(new AssetLocation("scribe", "textures/gui/scribe-clockmakers-notebook.png"));
 
     /// <summary>The Lectern settings page. Names its OWN texture (distinct from
     /// <see cref="LecternPage"/>); the PNG does not exist yet, so this resolves to the flat placeholder

@@ -33,6 +33,15 @@ Mods/
 src/Mod/lib/*
 !src/Mod/lib/README.md
 
+# Art source/backup files under assets/ -- Photoshop sources and "OG"/backup copies of textures
+# that would otherwise ship in the public mod zip (build/package.sh blanket-copies src/Mod/assets/).
+# Keep them local: only the wired-up final PNGs belong in the release. Covers e.g.
+# scribe-sm-OG.png/.psd, sketchbook-mod.psd, *-og.png, and the "lectern (OG)/" backup dir.
+*.psd
+*-og.png
+*-OG.png
+*(OG)*
+
 # Local env / secrets
 .env
 *.local
