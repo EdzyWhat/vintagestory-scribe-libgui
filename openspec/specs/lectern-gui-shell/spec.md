@@ -192,12 +192,13 @@ in this capability.
 
 ### Requirement: Read view is rendered by a LibGUI dialog
 The lectern's read view SHALL be rendered by a dialog built on the LibGUI framework (modid `gui`),
-subclassing LibGUI's `GuiDialogBlockEntityBase`, rather than by the native `GuiComposer`-based
-`GuiDialogScribeLectern` read view. The dialog SHALL open from the normal lectern interaction path and
-receive its document state through the existing server-authoritative flow (the `scribe` network channel
-and its packets), NOT by directly reusing an in-memory `Document` reference and NOT via any debug/chat
-command. The dialog's block-entity lifecycle — open, close via the window's close control, title-bar
-drag, and minimize/expand — SHALL work as the native dialog's did.
+subclassing `ScribeDialogBase` (which itself subclasses LibGUI's `GuiDialogBlockEntityBase`), rather
+than by the native `GuiComposer`-based `GuiDialogScribeLectern` read view. The dialog SHALL open from
+the normal lectern interaction path and receive its document state through the existing
+server-authoritative flow (the `scribe` network channel and its packets), NOT by directly reusing an
+in-memory `Document` reference and NOT via any debug/chat command. The dialog's block-entity lifecycle
+— open, close via the window's close control, title-bar drag, and minimize/expand — SHALL work as the
+native dialog's did.
 
 #### Scenario: Right-clicking a lectern opens the LibGUI read view
 - **WHEN** a player interacts with a placed lectern to view it
@@ -207,8 +208,8 @@ drag, and minimize/expand — SHALL work as the native dialog's did.
 
 #### Scenario: No debug command is involved in the real open path
 - **WHEN** the read view opens in normal play
-- **THEN** it opens through the lectern's interaction + packet flow, not through a `.scribespike` (or any
-  other) chat command, and it does not depend on the throwaway spike dialog
+- **THEN** it opens through the lectern's interaction + packet flow, not through a `.scribespike` (or
+  any other) chat command, and it does not depend on the throwaway spike dialog
 
 ### Requirement: Read view renders the document as a scrollable widget tree
 The read view SHALL render the document as a LibGUI widget tree — a window frame containing a free-text
@@ -253,42 +254,43 @@ an interim seam; a later change replaces the native editor with a LibGUI editor 
   the migration)
 
 ### Requirement: Read-view checkbox toggles task done state without the editor lock
-The read view's task checkbox SHALL be interactive: clicking it toggles that task's done state.
-Because the read view holds no editor lock, toggling done SHALL be an always-allowed server
-action that does NOT require acquiring the single-editor lock, applied server-authoritatively
-and re-synced to all viewers. A player SHALL be able to toggle a task's done state from the read
-view even while another player holds the editor lock. No other part of a read-view row SHALL be
-interactive — the read view exposes no text editing, drag, or per-row icon controls. The checkbox
-MAY be rendered with LibGUI's stock checkbox widget; its skeuomorphic custom-glyph appearance is not
-required by this requirement.
+The read view's task checkbox SHALL be interactive: clicking it completes that task by stable
+identity, applying the player's completion policy (Keep/Sink/Unpin/Delete) the same way every other
+Scribe surface does. Because the read view holds no editor lock, completing SHALL be an always-allowed
+server action that does NOT require acquiring the single-editor lock, applied server-authoritatively
+and re-synced to all viewers. A player SHALL be able to complete a task from the read view even while
+another player holds the editor lock. No other part of a read-view row SHALL be interactive except its
+checkbox and its pin-toggle control (see the read-view pin-toggle requirement). The checkbox MAY be
+rendered with LibGUI's stock checkbox widget; its skeuomorphic custom-glyph appearance is not required.
 
 #### Scenario: Clicking a read-view checkbox toggles done
 - **WHEN** the player clicks a task row's checkbox in the read view
-- **THEN** that task's done state flips, the change is applied server-authoritatively (without
-  requiring the editor lock) and synced back, and the checkbox updates to reflect the new state
+- **THEN** that task is completed by identity, the player's completion policy is applied
+  server-authoritatively (without requiring the editor lock) and synced back, and the checkbox
+  updates to reflect the new state
 
 #### Scenario: Toggling done works while someone else is editing
 - **WHEN** a player clicks a read-view task checkbox while a different player holds the lectern's
   editor lock
-- **THEN** the toggle is still applied and synced, and is not rejected for lack of the lock
+- **THEN** the completion is still applied and synced, and is not rejected for lack of the lock
 
 #### Scenario: The rest of a read-view row is inert
-- **WHEN** the player clicks or hovers a read-view row anywhere other than its checkbox
-- **THEN** no edit field opens, no row reorder begins, and no per-row icon control activates
+- **WHEN** the player clicks or hovers a read-view row anywhere other than its checkbox or its
+  pin-toggle control
+- **THEN** no edit field opens, no row reorder begins, and no other per-row control activates
 
 ### Requirement: Editor view is rendered by the LibGUI dialog
 The lectern's editor view SHALL be rendered by the same LibGUI dialog that renders the read view
-(`GuiDialogScribeLecternLibGui`), NOT by the native `GuiComposer`-based `GuiDialogScribeLectern`.
-Switching between the read view and the editor view SHALL be an internal view swap within that single
-dialog — no separate native dialog SHALL be opened for editing. Returning from the editor view (by
-finishing editing) SHALL return to the LibGUI read view, and entering the editor view SHALL acquire the
-lectern's single-editor lock through the existing server flow, releasing it when the editor view is left.
+(`GuiDialogScribeLecternLibGui`, a sealed subclass of `ScribeDialogBase`), NOT by the native
+`GuiComposer`-based `GuiDialogScribeLectern`. Switching between the read view and the editor view
+SHALL be an internal view swap within that single dialog — no separate native dialog SHALL be opened
+for editing. Returning from the editor view (by finishing editing) SHALL return to the LibGUI read
+view, and entering the editor view SHALL acquire the lectern's single-editor lock through the existing
+server flow, releasing it when the editor view is left.
 
 The dialog SHALL enter the editor view ONLY after the server has actually granted the single-editor
 lock. It SHALL NOT enter the editor view optimistically (before the grant reply) nor on a refused
-reply. This closes the defect where a second player could open the editor and type while the server
-still held the lock for another player, and where an editing player's own edits were rejected because
-the client entered the editor before the lock was confirmed granted.
+reply.
 
 #### Scenario: Switching to editor stays in the LibGUI dialog
 - **WHEN** the player activates "switch to editor" from the LibGUI read view
@@ -306,9 +308,7 @@ the client entered the editor before the lock was confirmed granted.
 
 #### Scenario: Editor view is entered only after the lock is granted
 - **WHEN** the player activates "switch to editor" and the server grants the lock
-- **THEN** the dialog swaps to the editor view only upon receiving the granted reply, and the editing
-  player's subsequent autosave edits are accepted (the server's lock check passes because the client
-  holds the lock it entered on)
+- **THEN** the dialog swaps to the editor view only upon receiving the granted reply
 
 ### Requirement: A contended editor lock blocks entry and reports it to the player
 The lectern's single-editor lock SHALL be **transient server-session state only**. The server's
@@ -753,4 +753,66 @@ the list genuinely became shorter).
 - **WHEN** the player has scrolled the read view down and pins (or unpins) a task
 - **THEN** the read list stays at the same scroll position after the pin toggle rather than jumping back
   to the top
+
+### Requirement: Read-view rows expose a pin-toggle affordance
+Each task row in the read view SHALL provide a control that toggles the task's pinned state for the
+acting player, addressed by stable identity, mirroring the editor view's pin control. Text-section
+rows SHALL NOT expose this control. The control's visual state SHALL reflect whether the task is
+currently pinned for the player.
+
+#### Scenario: Toggling pin from a read-view row
+- **WHEN** the player activates a read-view task row's pin-toggle control
+- **THEN** the task's pinned state for that player flips and the control's visual state reflects the
+  new value
+
+#### Scenario: Read-view text sections have no pin control
+- **WHEN** a text-section row is composed in the read view
+- **THEN** no pin-toggle control is present for that row
+
+### Requirement: Every Lectern view completes a task with the player's completion policy
+Completing a task via its checkbox SHALL apply the player's completion policy identically in all three
+Lectern views (read, editor, and pinned), matching the pinned-task HUD. The editor view's checkbox
+SHALL NOT be an exception: completing a task from the editor SHALL apply the same policy
+(Keep/Sink/Unpin/Delete) by stable identity, rather than only toggling a local done flag. The policy
+SHALL apply verbatim in every view with no per-view guard or confirmation — including a policy that
+deletes the task or reorders it within the shared document.
+
+#### Scenario: Editor checkbox applies the completion policy
+- **WHEN** a player completes a task via its checkbox in the editor view
+- **THEN** the player's completion policy is applied to that task by identity (the same result the
+  read, pinned, and HUD surfaces produce), not merely a local done-flag toggle
+
+#### Scenario: Same result regardless of view
+- **WHEN** the same player with the same completion policy completes a given task from the read view,
+  the editor view, the pinned view, or the HUD
+- **THEN** the outcome is the same in every case (the policy's Keep/Sink/Unpin/Delete effect)
+
+#### Scenario: Completing an editor task preserves other in-progress edits
+- **WHEN** a player has unsaved text edits in some editor rows and completes a different task via its
+  checkbox
+- **THEN** the completion is applied and the other rows' in-progress text and the caret are preserved
+  (not discarded by the reconciliation)
+
+### Requirement: A divider separates each view's header from its scrolling list
+Each Lectern view (read, editor, pinned) SHALL render a horizontal divider directly above its
+scrolling task/note list, providing a straight visual edge between the view's header area and the
+scroll region.
+
+#### Scenario: Divider above the scroll area in every view
+- **WHEN** any of the read, editor, or pinned views is shown
+- **THEN** a horizontal divider is drawn directly above that view's scrolling list
+
+### Requirement: The pinned view places its completion-policy picker above the list
+In the pinned view, the completion-policy picker SHALL be positioned above the pinned-task list (as a
+header), not below it as a footer. Changing the policy from this picker SHALL continue to update the
+same per-player completion-policy preference that the settings surface edits.
+
+#### Scenario: Policy picker sits above the pinned list
+- **WHEN** the pinned view is shown
+- **THEN** the completion-policy picker appears above the list of pinned tasks
+
+#### Scenario: The pinned picker and the settings control stay in sync
+- **WHEN** the player changes the completion policy from the pinned view's picker
+- **THEN** the same per-player completion-policy preference is updated, and the settings surface
+  reflects the same value
 

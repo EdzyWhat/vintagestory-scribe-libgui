@@ -12,7 +12,7 @@ produce the same policy-applied result for the same player and task, with no sur
 different or reduced behavior. Completion is shared document state (it applies for every player),
 distinct from the per-player pin.
 
-#### Scenario: Complete a resolvable task by identity
+#### Scenario: Complete a resolvable pinned task by identity
 - **WHEN** a player completes a task addressed by `(DocId, TaskId)` whose document is loaded
 - **THEN** that task's completed state is set in the authoritative document without acquiring the
   document's edit lock, and the player's completion policy is applied

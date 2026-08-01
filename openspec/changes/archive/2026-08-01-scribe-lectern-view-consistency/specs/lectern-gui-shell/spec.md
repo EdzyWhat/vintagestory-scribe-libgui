@@ -10,18 +10,18 @@ another player holds the editor lock. No other part of a read-view row SHALL be 
 checkbox and its pin-toggle control (see the read-view pin-toggle requirement). The checkbox MAY be
 rendered with LibGUI's stock checkbox widget; its skeuomorphic custom-glyph appearance is not required.
 
-#### Scenario: Clicking a read-view checkbox completes with the player's policy
+#### Scenario: Clicking a read-view checkbox toggles done
 - **WHEN** the player clicks a task row's checkbox in the read view
 - **THEN** that task is completed by identity, the player's completion policy is applied
   server-authoritatively (without requiring the editor lock) and synced back, and the checkbox
   updates to reflect the new state
 
-#### Scenario: Completing works while someone else is editing
+#### Scenario: Toggling done works while someone else is editing
 - **WHEN** a player clicks a read-view task checkbox while a different player holds the lectern's
   editor lock
 - **THEN** the completion is still applied and synced, and is not rejected for lack of the lock
 
-#### Scenario: The rest of a read-view row is inert except pin and checkbox
+#### Scenario: The rest of a read-view row is inert
 - **WHEN** the player clicks or hovers a read-view row anywhere other than its checkbox or its
   pin-toggle control
 - **THEN** no edit field opens, no row reorder begins, and no other per-row control activates
