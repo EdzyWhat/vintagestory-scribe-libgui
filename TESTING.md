@@ -1883,10 +1883,14 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > independently-saved note field, and a soft per-player cap prunes your oldest note-LESS entries so the
 > list stays readable (entries you annotated are never dropped).
 
-- [ ] `5df9e12c` **Per-field caret isolation.** As a player with entries on ≥2 in-game days, click one of your own note fields — confirm only that field shows a caret and typing goes to it (including the newest, not just the oldest). *(4.3)*
-- [ ] `9a57fac1` **Per-day note saves independently.** Type a distinct note on each of your day-entries, then close and reopen the lectern — confirm each day kept its own note. *(4.3)*
-- [ ] `52fac6d2` **Multiplayer note isolation.** A second player opens the same lectern — confirm they see your notes read-only and can edit each of their own multi-day notes independently on their client. *(4.4)*
-- [ ] `30895563` **Note-less entries pruned past the soft cap.** Visit a lectern on more than 10 in-game days without leaving notes — confirm oldest empty entries drop so your list stays around ten, while any entry you left a note on is never dropped. *(1.3)*
+- [x] `5df9e12c` **Per-field caret isolation.** As a player with entries on ≥2 in-game days, click one of your own note fields — confirm only that field shows a caret and typing goes to it (including the newest, not just the oldest). *(4.3)*
+      - **Confirmed 2026-08-01** (playtest submission 2026-08-01T16-54-36): "Works."
+- [x] `9a57fac1` **Per-day note saves independently.** Type a distinct note on each of your day-entries, then close and reopen the lectern — confirm each day kept its own note. *(4.3)*
+      - **Confirmed 2026-08-01** (playtest submission 2026-08-01T16-54-36): "Works."
+- [x] `52fac6d2` **Multiplayer note isolation.** A second player opens the same lectern — confirm they see your notes read-only and can edit each of their own multi-day notes independently on their client. *(4.4)*
+      - **Confirmed 2026-08-01** (playtest submission 2026-08-01T16-54-36): "Works."
+- [x] `30895563` **Note-less entries pruned past the soft cap.** Visit a lectern on more than 10 in-game days without leaving notes — confirm oldest empty entries drop so your list stays around ten, while any entry you left a note on is never dropped. *(1.3)*
+      - **Confirmed 2026-08-01** (playtest submission 2026-08-01T16-54-36): "Works."
 
 ## add-title-to-scribe-tooltips
 
@@ -1894,10 +1898,15 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > inventory tooltips (quoted, with an `(untitled)` placeholder), and removes the irrelevant Burn
 > temperature/duration lines from the Lectern.
 
-- [ ] `468d7234` **Titled lectern tooltip.** Place a Lectern, give it a title; look at the placed block — confirm the tooltip shows `Title: "<title>"` and NO Burn temperature/duration lines. *(4.3)*
-- [ ] `84eb244b` **Untitled lectern tooltip.** Look at a freshly placed, never-titled Lectern — confirm the tooltip shows `Title: "(untitled)"`. *(4.3)*
-- [ ] `c9a643bd` **Titled notebook tooltips.** Hover a titled Notebook and a titled Clockmaker's Notebook in the inventory — confirm each shows `Title: "<title>"`. *(4.4)*
-- [ ] `5babbc80` **Never-opened notebook tooltip.** Hover a freshly crafted Notebook that has never been opened — confirm the tooltip shows `Title: "(untitled)"`. *(4.4)*
+- [x] `468d7234` **Titled lectern tooltip.** Place a Lectern, give it a title; look at the placed block — confirm the tooltip shows `Title: "<title>"` and NO Burn temperature/duration lines. *(4.3)*
+      - **Confirmed 2026-08-01** (playtest submission 2026-08-01T16-54-36): "Works."
+- [x] `84eb244b` **Untitled lectern tooltip.** Look at a freshly placed, never-titled Lectern — confirm the tooltip shows `Title: "(untitled)"`. *(4.3)*
+      - **Confirmed 2026-08-01** (playtest submission 2026-08-01T16-54-36): "Works."
+- [x] `c9a643bd` **Titled notebook tooltips.** Hover a titled Notebook and a titled Clockmaker's Notebook in the inventory — confirm each shows `Title: "<title>"`. *(4.4)*
+      - **Confirmed 2026-08-01** (playtest submission 2026-08-01T16-54-36): "Works."
+- [x] `5babbc80` **Never-opened notebook tooltip.** Hover a freshly crafted Notebook that has never been opened — confirm the tooltip shows `Title: "(untitled)"`. *(4.4)*
+      - **Confirmed 2026-08-01** (playtest submission 2026-08-01T16-54-36): "Works."
+- [ ] `6ca225ff` **Lectern item tooltip.** Break or pick up a titled Lectern and hover the resulting block item in the inventory — confirm the tooltip shows `Title: "<title>"`, matching the Notebook. *(4.6)*
 
 ## scribe-0-2-0-release-content
 

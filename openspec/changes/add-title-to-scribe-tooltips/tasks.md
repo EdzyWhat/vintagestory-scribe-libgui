@@ -17,6 +17,9 @@
       placeholder if the BE is missing).
 - [x] 2.2 Remove the `combustibleProps` block (burnTemperature/burnDuration) from
       `src/Mod/assets/scribe/blocktypes/lectern.json`.
+- [x] 2.3 Also override `GetHeldItemInfo` on `BlockScribeLectern` so the Lectern's held/inventory
+      form shows the same title line (reading the ItemStack document via
+      `ScribeDocumentAttributes.TryReadFrom`) — playtest follow-up (2026-08-01T16-54-36 general note).
 
 ## 3. Notebook item tooltips
 
@@ -31,9 +34,11 @@
 
 - [x] 4.1 `dotnet build src/Mod/Mod.csproj -c Debug` — zero new warnings/errors.
 - [x] 4.2 `bash build/restage.sh Debug`, then fully quit + relaunch the game (assets/lang load at boot).
-- [ ] 4.3 Manual in-game: place a Lectern, give it a title; look at it — tooltip shows
+- [x] 4.3 Manual in-game: place a Lectern, give it a title; look at it — tooltip shows
       `Title: "<title>"` and NO Burn temperature/duration lines. Look at a fresh (untitled) lectern —
       tooltip shows `Title: "(untitled)"`.
-- [ ] 4.4 Manual in-game: hover a titled Notebook and a Clockmaker's Notebook in the inventory —
+- [x] 4.4 Manual in-game: hover a titled Notebook and a Clockmaker's Notebook in the inventory —
       each shows `Title: "<title>"`; a never-opened Notebook shows `Title: "(untitled)"`.
 - [x] 4.5 Update `TESTING.md` with the new in-game tooltip items.
+- [ ] 4.6 Manual in-game (2.3 follow-up): break/pick-up a titled Lectern and hover the resulting
+      block item in the inventory — confirm it shows `Title: "<title>"`, matching the Notebook.

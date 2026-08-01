@@ -43,11 +43,11 @@
 
 - [x] 4.1 `dotnet build src/Mod/Mod.csproj -c Debug` — zero new warnings/errors.
 - [x] 4.2 `dotnet test tests/Core.Tests` — all pass, including the new 1.2 cases.
-- [ ] 4.3 Manual in-game: as a player with entries on ≥2 in-game days, open the Guestbook tab.
+- [x] 4.3 Manual in-game: as a player with entries on ≥2 in-game days, open the Guestbook tab.
       Confirm clicking one note field shows a caret in that field ONLY, typing goes to the
       clicked field (including the newest, not just the oldest), and each day's note saves
       independently and survives closing/reopening the lectern.
-- [ ] 4.4 Manual in-game (multiplayer, if convenient): confirm another player still sees your
+- [x] 4.4 Manual in-game (multiplayer, if convenient): confirm another player still sees your
       notes read-only and their own multi-day notes edit independently on their client.
 - [x] 4.5 Update `TESTING.md` with the new in-game guestbook items (per-field caret isolation,
       per-day independent save/persist).

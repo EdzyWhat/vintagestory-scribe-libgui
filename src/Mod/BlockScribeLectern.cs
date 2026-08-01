@@ -1,3 +1,4 @@
+using System.Text;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.MathTools;
@@ -52,6 +53,21 @@ public sealed class BlockScribeLectern : Block
             ? lectern.Document.Title
             : null!;
         return base.GetPlacedBlockInfo(world, pos, forPlayer) + ScribeTooltip.FormatTitleLine(title) + "\n";
+    }
+
+    /// <summary>Append the title to the Lectern's held/inventory tooltip too, matching the Notebook
+    /// items. A broken-and-picked-up Lectern carries its document in the stack (see
+    /// <see cref="GetDrops"/> / <see cref="OnPickBlock"/>), so the title reads via
+    /// <see cref="ScribeDocumentAttributes.TryReadFrom"/>; a freshly-crafted lectern with no stored
+    /// document shows the untitled placeholder.</summary>
+    public override void GetHeldItemInfo(ItemSlot inSlot, StringBuilder dsc, IWorldAccessor world, bool withDebugInfo)
+    {
+        base.GetHeldItemInfo(inSlot, dsc, world, withDebugInfo);
+        string? title = inSlot.Itemstack is { } stack
+            && ScribeDocumentAttributes.TryReadFrom(stack, out var doc) && doc is not null
+            ? doc.Title
+            : null;
+        dsc.AppendLine(ScribeTooltip.FormatTitleLine(title));
     }
 
     public override bool OnBlockInteractStart(IWorldAccessor world, IPlayer byPlayer, BlockSelection blockSel)
