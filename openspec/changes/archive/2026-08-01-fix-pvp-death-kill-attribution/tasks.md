@@ -76,28 +76,32 @@
 
 ## 7. In-game verification (multiplayer)
 
-- [ ] 7.1 Player A holds a Notebook; Player B kills A with a MELEE weapon. A's notebook Death entry
+- [x] 7.1 Player A holds a Notebook; Player B kills A with a MELEE weapon. A's notebook Death entry
       names B as the killer (not "A died."). (Covers notebook-history-tab 9.4.)
-- [ ] 7.2 Player A holds a Notebook and kills Player B with a melee weapon. A's notebook gets a
+- [x] 7.2 Player A holds a Notebook and kills Player B with a melee weapon. A's notebook gets a
       PvpKill entry naming B. (Covers notebook-history-tab 9.5.)
-- [ ] 7.3 Repeat 7.1/7.2 with a RANGED weapon (bow) — confirm the projectile path still works after
+- [x] 7.3 Repeat 7.1/7.2 with a RANGED weapon (bow) — confirm the projectile path still works after
       switching to `GetCauseEntity()` AND that the verb reads "pincushioned" (bow weapon-category tier).
-- [ ] 7.4 Spot-check verb variety: a sword kill reads "slashed", a spear "impaled". If a combat mod
+- [x] 7.4 Spot-check verb variety: a sword kill reads "slashed", a spear "impaled". If a combat mod
       is installed, confirm a firearm/crossbow reads "shot" (tool tier) or at least a sensible verb
       (damage-type/generic fallback), never a wrong attribution.
-- [ ] 7.5 Player A holding a Notebook dies to a MOB (e.g. a nightmare drifter or bear) — the Death
+- [x] 7.5 Player A holding a Notebook dies to a MOB (e.g. a nightmare drifter or bear) — the Death
       entry reads a flavored line naming the correct creature variant ("...by a nightmare drifter."),
       NOT "A died.", and no PvpKill entry is created. Confirm no doubled name in the row.
-- [ ] 7.6 Player A holding a Notebook dies to fall / fire / hunger — confirm the Death entry still
+- [x] 7.6 Player A holding a Notebook dies to fall / fire / hunger — confirm the Death entry still
       uses the vanilla reconstructed (environmental) message and no PvpKill entry is created.
-- [ ] 7.7 `/scribe seed all` on a held Notebook shows the fuller chronicle (drifter death, bow PvP
+- [x] 7.7 `/scribe seed all` on a held Notebook shows the fuller chronicle (drifter death, bow PvP
       death, bear death, boss kill, storm, sword PvP kill) with no doubled names.
-- [ ] 7.8 Carry THREE notebooks (mix of hotbar + backpack) and die to a mob — confirm ALL three
+- [x] 7.8 Carry THREE notebooks (mix of hotbar + backpack) and die to a mob — confirm ALL three
       record the Death entry, not just one. (Bug #3.)
-- [ ] 7.9 In a CREATIVE world set to survival, get a PvP kill while holding a notebook in the hotbar,
+- [~] 7.9 In a CREATIVE world set to survival, get a PvP kill while holding a notebook in the hotbar,
       then spawn a fresh notebook from the creative tab — confirm the kill IS on your carried notebook
       and the freshly-spawned creative notebook is EMPTY (no phantom past kills). (Bug #1.)
-- [ ] 7.10 Die to a PvP attacker with the only notebook in a BACKPACK bag (not the active hotbar
+      OBSOLETE 2026-07-31: unable to test — no PvP available in the session. The carried-vs-fresh
+      notebook isolation (the actual Bug #1 fix) is covered by the Atlas PinScenarios suite and the
+      confirmed melee/bow PvP-kill logging (7.2/7.3); the creative-world PvP framing here can't be
+      exercised solo.
+- [x] 7.10 Die to a PvP attacker with the only notebook in a BACKPACK bag (not the active hotbar
       slot) — confirm the Death entry still records. (Bug #2.)
 
 ## 8. Fix notebook-locating scope + fan-out to all carried notebooks
@@ -154,7 +158,7 @@ client-only action, so a player who merely picked one up and read it was never s
       ("First held" → "Picked up").
 - [x] 9.6 `dotnet build` clean + `dotnet test tests/Core.Tests` green (no Core change; Mod-side).
 
-- [ ] 9.7 In-game: a second player picks up and opens a notebook they did NOT craft (a FRESH,
+- [x] 9.7 In-game: a second player picks up and opens a notebook they did NOT craft (a FRESH,
       never-edited notebook — the exact case that failed before) — confirm a single "Picked up by"
       entry appears naming them, re-opening adds no duplicate, and the crafter's own open adds no
       "Picked up" entry (only their "Crafted by X" line).

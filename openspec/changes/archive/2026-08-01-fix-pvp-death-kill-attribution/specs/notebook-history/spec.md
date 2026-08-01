@@ -1,6 +1,6 @@
 ## MODIFIED Requirements
 
-### Requirement: Death event recorded on every carried notebook when holder dies
+### Requirement: Death event recorded when holder dies while carrying notebook
 The system SHALL record a `Death` entry on the server, on EVERY Notebook the dying player is
 carrying on their person, when that player dies. "Carried on their person" means a notebook in the
 player's hotbar, backpack bags, worn character/clothing slots, or mouse-cursor drag slot; it
@@ -15,7 +15,7 @@ reconstructed vanilla `deathmsg-<cause>-<N>` message. It SHALL NOT fall back to 
 "died" message while a cause entity is resolvable. The Detail sentence already names the victim, so
 the entry SHALL leave `ActorName` empty (the display prepends "ActorName — " otherwise).
 
-#### Scenario: Death while carrying records entry on all carried notebooks
+#### Scenario: Death while holding records entry
 - **WHEN** a player carrying one or more Notebooks (in hotbar, backpack, character, or cursor slots)
   dies from any cause
 - **THEN** a Death entry is added to EACH of those notebooks with the appropriate death message and
@@ -60,14 +60,14 @@ the entry SHALL leave `ActorName` empty (the display prepends "ActorName — " o
 - **WHEN** a player dies while NOT holding a Notebook
 - **THEN** no Death entry is added to any Notebook
 
-### Requirement: PvpKill event recorded on every carried notebook when holder kills another player
+### Requirement: PvpKill event recorded when holder kills another player
 The system SHALL record a `PvpKill` entry on the server, on EVERY Notebook the killer is carrying on
 their person (same carried-inventory scope as the Death requirement — hotbar/backpack/character/cursor,
 never the creative or staging inventories), when that player delivers the killing blow to another
 player. The killer SHALL be resolved from the damage source's cause entity so that melee kills are
 attributed, not only projectile kills.
 
-#### Scenario: Killing another player records entry on all carried notebooks, killer-first
+#### Scenario: Killing another player records entry
 - **WHEN** a player carrying one or more Notebooks kills another player
 - **THEN** a PvpKill entry is added to EACH of the killer's carried notebooks, written from the
   killer's perspective — killer-first and active ("Raptor slew Junkmuffin.") — naming the victim
@@ -83,7 +83,7 @@ attributed, not only projectile kills.
 - **WHEN** a notebook holder dies to a non-player cause, or by their own hand
 - **THEN** no PvpKill entry is added to any notebook
 
-### Requirement: PickedUp event recorded once per non-crafter when the notebook is opened
+### Requirement: PickedUp event recorded on first dialog open per player
 The system SHALL record a one-time `PickedUp` entry on the server for each player who opens a
 Notebook, EXCEPT the crafter (who already has a `Crafted` entry standing in for their acquisition).
 Because opening the dialog is a client-only action the server does not otherwise observe, the client
@@ -92,7 +92,7 @@ and the server handler SHALL resolve the opening player's held notebook so the r
 server-side where the write persists. The entry SHALL be deduplicated to at most one per player
 (by actor name).
 
-#### Scenario: Non-crafter opening a notebook the first time records a PickedUp entry
+#### Scenario: First open records entry
 - **WHEN** a player who did not craft the Notebook opens it for the first time
 - **THEN** a single `PickedUp` entry naming that player and the in-game date is added to the
   notebook
@@ -102,6 +102,6 @@ server-side where the write persists. The entry SHALL be deduplicated to at most
 - **THEN** no `PickedUp` entry is added — the existing `Crafted` entry already records their
   acquisition
 
-#### Scenario: Re-opening a notebook does not add duplicate PickedUp entries
+#### Scenario: Second open by same player adds no entry
 - **WHEN** a non-crafter who already has a `PickedUp` entry opens the same notebook again
 - **THEN** no additional `PickedUp` entry is added (deduplicated per actor)

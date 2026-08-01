@@ -75,8 +75,11 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       weapon. Confirm A's notebook gets a PvpKill entry naming B. *(fix-pvp-death-kill-attribution 7.2)*
       - **Confirmed 2026-07-31** (playtest submission 2026-07-31T21-39-18, MP session): "Works." The killer's
         notebook gets a PvpKill entry naming the victim.
-- [ ] `81fbc148` **Ranged (bow) path + verb.** Repeat the death/kill with a BOW; confirm the projectile
+- [x] `81fbc148` **Ranged (bow) path + verb.** Repeat the death/kill with a BOW; confirm the projectile
       path still attributes correctly and the verb reads "pincushioned." *(fix-pvp-death-kill-attribution 7.3)*
+      - **Confirmed 2026-07-31** in-game: bow death/kill attributes correctly and logs a good entry; the
+        bow-vs-sword comparison (task 7.4) shows a distinct, sensible ranged verb — projectile path intact
+        after the `GetCauseEntity()` switch.
 - [x] `79dcedb5` **Verb variety.** Confirm a sword kill reads "slashed" and a spear "impaled"; with a
       combat mod, a firearm/crossbow reads "shot" or at least a sensible verb — never wrong attribution.
       *(fix-pvp-death-kill-attribution 7.4)*
@@ -87,9 +90,11 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       nightmare drifter."), not "died.", no PvpKill entry, and no doubled name. *(fix-pvp-death-kill-attribution 7.5)*
       - **Confirmed 2026-07-31** (playtest submission 2026-07-31T21-39-18): "Works." Mob death reads a
         flavored line naming the correct creature variant, no PvpKill entry, no doubled name.
-- [ ] `f07d0b45` **Environmental death unchanged.** Die to fall / fire / hunger while holding a
+- [x] `f07d0b45` **Environmental death unchanged.** Die to fall / fire / hunger while holding a
       Notebook; confirm the Death entry still uses the vanilla reconstructed message and no PvpKill
       entry is created. *(fix-pvp-death-kill-attribution 7.6)*
+      - **Confirmed 2026-07-31** in-game: tested with fall damage — the Death entry still logs the
+        vanilla reconstructed (environmental) message and no PvpKill entry is created.
 - [x] `28c4ede1` **Seed chronicle.** Run `/scribe seed all` on a held Notebook; confirm the fuller
       chronicle (drifter death, bow PvP death, bear death, boss kill, storm, sword PvP kill) with no
       doubled names. *(fix-pvp-death-kill-attribution 7.7)*
