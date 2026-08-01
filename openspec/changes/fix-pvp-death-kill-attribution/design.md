@@ -149,17 +149,42 @@ generic `"Player {0} got killed by {1}"` — it does not name the weapon.
   client-only action (`OnHeldInteractStart` → `OpenNotebookDialog` builds a client-side `NotebookHost`
   and never touches the server), so a player who merely picked up and read a notebook was never seen
   by the server and got no entry. Fix: a new `ScribeNotebookOpenedMessage` (client→server, carrying
-  the opened doc's `DocId` bytes) sent from BOTH notebook items' open paths right after
-  `RegisterHost`. Its server handler (`OnServerReceivedNotebookOpened`) resolves the opening player's
-  held notebook host — which runs `AttachServerContext` → `RecordPickedUpIfNew` on the server, where
-  the write actually persists. The recorder suppresses the crafter (their Crafted entry already
-  stands in for acquisition — detected by an existing `Crafted` entry with the same `ActorName`);
-  every other player is still deduplicated to one PickedUp entry each by `HistoryStore.TryAddEntry`.
+  the opened doc's `DocId` bytes) sent from BOTH notebook items' open paths right after `RegisterHost`.
+
+  **Resolve by the active-hand slot, not by DocId, and record history-only.** The first attempt had
+  the handler resolve the notebook via `TryResolveDocHost(docId, …)` → `AttachServerContext` →
+  `RecordPickedUpIfNew`, but that never fired for the actual pickup case, for a subtle reason: a
+  notebook's `DocId` is generated **client-side** (`Guid.NewGuid()` in the `NotebookHost` ctor) and
+  only reaches the server on the FIRST edit-flush; crafting writes only `scribeHistory`, never
+  `scribeDocument`. So a freshly picked-up (never-edited) notebook has no server-side document and no
+  DocId to match — `TryResolveDocHost` scans every carried slot, matches nothing, and the recorder
+  never runs. It would only have worked on a notebook the player had already edited. Worse, "fixing"
+  it by letting the server build a full `NotebookHost` would stamp a fresh **server-random**
+  `scribeDocument` onto the stack, which `OnServerReceivedNotebookSave` (DocId-guarded) would then use
+  to **reject the owner's real edits** (DocId mismatch). The fix therefore (a) resolves the notebook
+  by the player's ACTIVE-HAND slot — the slot they right-clicked to open, exactly as the save handler
+  already does — and (b) records via a new history-only helper `NotebookHost.TryRecordPickedUpOnSlot`
+  that touches ONLY the `scribeHistory` attribute and never the document, then echoes the updated
+  history back (a `ScribeNotebookSaveMessage` with null `DocumentBytes`) so an open dialog refreshes
+  its History tab. The recorder suppresses the crafter (their Crafted entry already stands in for
+  acquisition — detected by an existing `Crafted` entry with the same `ActorName`); every other player
+  is still deduplicated to one PickedUp entry each by `HistoryStore.TryAddEntry`.
+
   Alternative considered: firing the entry from a server-side "item entered inventory" hook —
   rejected as broader than "picked up & looked at it" and lacking a reliable per-player once
   semantics; open-triggered matches the user's stated intent ("the first time they picked up a
-  notebook" = the first time they open it). Mod-side only (new message class + handler +
-  crafter-suppression); no `Core`/save-format change.
+  notebook" = the first time they open it). Mod-side only (new message class + handler + history-only
+  helper + crafter-suppression); no `Core`/save-format change.
+
+  **Latent gap deliberately NOT fixed here:** because a never-edited notebook's `DocId` isn't known
+  server-side until the first edit, any *DocId-addressed* server lookup of a fresh notebook (e.g.
+  `TryResolveDocHost`, notebook-task pin snapshots) can't resolve it either. This pickup fix routes
+  around that via the active-hand slot, but the underlying "notebook DocId is client-authoritative
+  until first edit" gap remains. Closing it would mean writing `scribeDocument` at craft time — but
+  that is neither sufficient (looted/traded/`/give`/creative-spawned notebooks never run
+  `OnCreatedByCrafting`) nor free of risk (it interacts with the Clockmaker upgrade path, which
+  copies the source document bytes to preserve the DocId). Out of scope for this change; noted for a
+  future one.
 - **Retention caps raised** in `HistoryStore` so a carried notebook keeps a longer chronicle:
   `MaxDeaths`/`MaxPvpKills` 10 → 30, `MaxBossKills` 10 → 20 (`MaxStorms` unchanged). This is the only
   `Core` change; the sliding-window cap tests reference the constants symbolically and still pass.

@@ -175,6 +175,40 @@ public sealed class NotebookHost : IScribeDocumentHost
         if (added) Flush();
     }
 
+    /// <summary>Records the one-time PickedUp entry directly on a held notebook's ItemStack — history
+    /// ONLY, deliberately never touching the <c>scribeDocument</c> attribute. This is the path used by
+    /// the notebook-opened network handler, where the server sees a notebook that was just picked up
+    /// and opened but has never synced a document (a notebook's DocId is generated client-side and only
+    /// reaches the server on the first edit; crafting writes only <c>scribeHistory</c>). Constructing a
+    /// full <see cref="NotebookHost"/> here would be wrong: its ctor stamps a fresh server-random
+    /// document onto the stack, which <see cref="ScribeModSystem.OnServerReceivedNotebookSave"/> would
+    /// then reject the owner's real edits against (DocId mismatch). Working on the raw history attribute
+    /// avoids that entirely. Crafter is suppressed and other players are deduplicated per actor, exactly
+    /// like <see cref="RecordPickedUpIfNew"/>. Returns the updated history bytes to push to the client
+    /// (so an open dialog can refresh its History tab) when an entry was added, else null.</summary>
+    public static byte[]? TryRecordPickedUpOnSlot(ICoreServerAPI sapi, ItemSlot slot, IServerPlayer player)
+    {
+        if (slot.Itemstack is not { } stack) return null;
+        var history = HistoryStore.Deserialize(stack.Attributes.GetBytes("scribeHistory"));
+
+        bool isCrafter = history.Entries.Any(
+            e => e.Kind == HistoryEventKind.Crafted && e.ActorName == player.PlayerName);
+        if (isCrafter) return null;
+
+        bool added = history.TryAddEntry(new HistoryEntry
+        {
+            Kind       = HistoryEventKind.PickedUp,
+            ActorName  = player.PlayerName,
+            InGameDate = FormatDate(sapi),
+        });
+        if (!added) return null;
+
+        var bytes = history.Serialize();
+        stack.Attributes.SetBytes("scribeHistory", bytes);
+        slot.MarkDirty();
+        return bytes;
+    }
+
     internal static string FormatDate(ICoreServerAPI sapi)
     {
         var cal = sapi.World.Calendar;

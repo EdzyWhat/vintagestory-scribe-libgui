@@ -134,18 +134,27 @@ client-only action, so a player who merely picked one up and read it was never s
 - [x] 9.1 Add `src/Mod/ScribeNotebookOpenedMessage.cs` — a `[ProtoContract]` client→server message
       carrying the opened document's `DocId` bytes (`[ProtoMember(1)] byte[]? DocIdBytes`).
 - [x] 9.2 Register the message type on the network channel and set a server handler
-      (`OnServerReceivedNotebookOpened`) that resolves the opening player's held notebook host
-      (`TryResolveDocHost(docId, out _, fromPlayer)`) so `AttachServerContext` → `RecordPickedUpIfNew`
-      runs server-side where the write persists. Add `NotifyServerNotebookOpened(Guid docId)` that
+      (`OnServerReceivedNotebookOpened`). Resolve the notebook by the opening player's ACTIVE-HAND slot
+      (the slot they right-clicked to open — NOT by DocId, which a freshly picked-up notebook has never
+      synced server-side; see design). Record via a new history-only helper
+      `NotebookHost.TryRecordPickedUpOnSlot` that touches ONLY the `scribeHistory` attribute (never the
+      document — stamping a server-random document would make `OnServerReceivedNotebookSave` reject the
+      owner's edits). Echo the updated history back (`ScribeNotebookSaveMessage`, null `DocumentBytes`)
+      so an open dialog refreshes its History tab. Add `NotifyServerNotebookOpened(Guid docId)` that
       sends the packet from the client.
 - [x] 9.3 Send `NotifyServerNotebookOpened(host.Document.DocId)` from BOTH notebook items' open paths
       (`ItemScribeNotebook.OpenNotebookDialog` + `ItemClockmakerNotebook.OpenNotebookDialog`) right
       after `RegisterHost`.
-- [x] 9.4 Suppress the entry for the crafter in `RecordPickedUpIfNew` — skip when an existing
-      `Crafted` entry has the same `ActorName` (their Crafted entry already records acquisition);
-      other players stay deduplicated to one `PickedUp` each by `TryAddEntry`.
-- [x] 9.5 `dotnet build` clean + `dotnet test tests/Core.Tests` green (no Core change; Mod-side).
+- [x] 9.4 Suppress the entry for the crafter in `TryRecordPickedUpOnSlot` (and the existing
+      `RecordPickedUpIfNew`) — skip when an existing `Crafted` entry has the same `ActorName` (their
+      Crafted entry already records acquisition); other players stay deduplicated to one `PickedUp`
+      each by `TryAddEntry`.
+- [x] 9.5 Reword the PickedUp label from "First held by" to "Picked up by"
+      (`scribe-gui-history-kind-pickedup` in `en.json`) and align the handbook history blurb
+      ("First held" → "Picked up").
+- [x] 9.6 `dotnet build` clean + `dotnet test tests/Core.Tests` green (no Core change; Mod-side).
 
-- [ ] 9.6 In-game: a second player picks up and opens a notebook they did NOT craft — confirm a
-      single "Picked up" entry appears naming them, re-opening adds no duplicate, and the crafter's
-      own open adds no "Picked up" entry (only their "Crafted by X" line).
+- [ ] 9.7 In-game: a second player picks up and opens a notebook they did NOT craft (a FRESH,
+      never-edited notebook — the exact case that failed before) — confirm a single "Picked up by"
+      entry appears naming them, re-opening adds no duplicate, and the crafter's own open adds no
+      "Picked up" entry (only their "Crafted by X" line).

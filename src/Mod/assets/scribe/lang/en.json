@@ -31,7 +31,7 @@
 	"scribe-gui-history-empty": "No history yet. Events will be recorded as you play.",
 	"scribe-gui-history-add": "Add entry",
 	"scribe-gui-history-kind-crafted": "Crafted",
-	"scribe-gui-history-kind-pickedup": "First held by",
+	"scribe-gui-history-kind-pickedup": "Picked up by",
 	"scribe-gui-history-kind-death": "Death",
 	"scribe-gui-history-kind-pvpkill": "Killed",
 	"scribe-gui-history-kind-bosskill": "Boss defeated",
@@ -189,7 +189,7 @@
    "handbook-scribenotebook-editor-title": "Writing in the Notebook",
    "handbook-scribenotebook-editor-text": "The Notebook uses the same editor as the Lectern, minus the Guestbook. Tabs switch via the right-hand sidebar:<br><br><strong>Read</strong> — your tasks and notes as a scrollable list; complete and pin from here.<br><strong>Task Editor</strong> — add, edit, reorder, and delete rows. Changes autosave as you type.<br><strong>Pinned</strong> — every task you have pinned to the HUD, editable in place.<br><strong>History</strong> — the auto-logged event chronicle.<br><br>For keyboard shortcuts and text-editing mechanics, see <a href=\"handbook://craftinginfo-scribe-editor-reference\">Scribe Mod: Editor Reference</a>.",
    "handbook-scribenotebook-history-title": "The History Tab",
-   "handbook-scribenotebook-history-text": "Every notebook keeps a private <strong>History</strong> chronicle on its History tab — a newest-first log that fills in automatically as you carry it. Recorded events include when it was <strong>Crafted</strong>, who <strong>First held</strong> it, your <strong>Deaths</strong>, players you <strong>Killed</strong>, <strong>Bosses defeated</strong>, and <strong>Temporal Storms</strong> weathered while it was on you. You can also add your own dated <strong>Notes</strong> to the chronicle.<br><br>History is per-notebook and travels with the item, so each notebook tells the story of its own owner. This is unlike the Lectern's public <a href=\"handbook://block-scribe:scribelectern\">Guest Book</a>, which logs visitors to a shared block.",
+   "handbook-scribenotebook-history-text": "Every notebook keeps a private <strong>History</strong> chronicle on its History tab — a newest-first log that fills in automatically as you carry it. Recorded events include when it was <strong>Crafted</strong>, who <strong>Picked</strong> it <strong>up</strong>, your <strong>Deaths</strong>, players you <strong>Killed</strong>, <strong>Bosses defeated</strong>, and <strong>Temporal Storms</strong> weathered while it was on you. You can also add your own dated <strong>Notes</strong> to the chronicle.<br><br>History is per-notebook and travels with the item, so each notebook tells the story of its own owner. This is unlike the Lectern's public <a href=\"handbook://block-scribe:scribelectern\">Guest Book</a>, which logs visitors to a shared block.",
    "handbook-scribenotebook-craft-title": "Crafting the Notebook",
    "handbook-scribenotebook-craft-text": "Craft the Notebook on the crafting grid from a leather cover, a parchment page, a feather quill, a metal nails-and-strips buckle, and a bowl of black ink — see the recipe on this page. Once you have a Notebook you can upgrade it into a <a href=\"handbook://item-scribe:scribeclockmakernotebook\">Clockmaker's Notebook</a> — the upgrade keeps your tasks and History.",
 

@@ -1130,19 +1130,33 @@ public sealed class ScribeModSystem : ModSystem
         }, fromPlayer);
     }
 
-    /// <summary>Client → server: the player opened a Notebook. Resolve the held notebook host, which
-    /// (via <see cref="NotebookHost.AttachServerContext"/>) records this player's one-time PickedUp
+    /// <summary>Client → server: the player opened a Notebook. Records this player's one-time PickedUp
     /// entry — deduplicated per actor in <c>HistoryStore.TryAddEntry</c>, and skipped for the crafter,
     /// whose Crafted entry already stands in for their acquisition. Opening the dialog is otherwise a
     /// client-only action the server never sees, so without this signal no PickedUp entry is recorded
-    /// (the historical gap: the recorder only ever ran on a task pin/complete round-trip or a death).</summary>
+    /// (the historical gap: the recorder only ever ran on a task pin/complete round-trip or a death).
+    ///
+    /// Resolves the notebook by the ACTIVE-HAND slot (the slot the player right-clicked to open), NOT by
+    /// DocId: a freshly picked-up notebook has never synced a document, so the server stack carries no
+    /// DocId to match against — the message's DocId is only a loose hint here. Recording is history-only
+    /// (<see cref="NotebookHost.TryRecordPickedUpOnSlot"/>) so we never stamp a server-random document
+    /// that <see cref="OnServerReceivedNotebookSave"/> would later reject the owner's edits against.</summary>
     private void OnServerReceivedNotebookOpened(IServerPlayer fromPlayer, ScribeNotebookOpenedMessage message)
     {
-        if (sapi is null || !TryReadGuid(message.DocIdBytes, out var docId)) return;
-        // TryResolveDocHost scans the player's inventory for the matching notebook and, on a hit,
-        // calls AttachServerContext → RecordPickedUpIfNew. We don't need the host here — resolving it
-        // is the whole point (the PickedUp side effect).
-        TryResolveDocHost(docId, out _, fromPlayer);
+        if (sapi is null) return;
+        var slot = fromPlayer.Entity?.ActiveHandItemSlot;
+        if (slot?.Itemstack?.Collectible is not (ItemScribeNotebook or ItemClockmakerNotebook)) return;
+
+        var historyBytes = NotebookHost.TryRecordPickedUpOnSlot(sapi, slot, fromPlayer);
+        if (historyBytes is null) return; // crafter, or this player already has a PickedUp entry
+
+        // Push the new history to the opener's client so an open dialog refreshes its History tab
+        // (DocumentBytes null → the client leaves the document untouched, updating history only).
+        sapi.Network.GetChannel(NetworkChannelName).SendPacket(new ScribeNotebookSaveMessage
+        {
+            DocIdBytes   = message.DocIdBytes,
+            HistoryBytes = historyBytes,
+        }, fromPlayer);
     }
 
     private void OnClientReceivedNotebookSave(ScribeNotebookSaveMessage message)
