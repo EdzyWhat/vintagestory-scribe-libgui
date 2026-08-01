@@ -1575,6 +1575,24 @@ version.) Consequences that actually shape the code:
   `DefaultTextStyle`, so they keep an explicit family; so does anything in a `useGlobalOverlay: true`
   subtree (renders outside the ancestor). See `ScribeTextDefaults.cs`.
 
+## Two different `BadImageFormatException` crashes — don't conflate them
+
+There are TWO distinct `BadImageFormatException` crashes on this project; they have different error
+text, different trigger points, and only one is unfixable. Check the message and the triggering frame
+before assuming it's the engine bug:
+
+| Message | Trigger | Cause | Fix |
+|---|---|---|---|
+| `...: Bad IL range` | Closing a LibGUI dialog (Esc / title-bar close) | VS engine bug under Rosetta (see below) | None from mod code |
+| `An attempt was made to load a program with an incorrect format. (0x8007000B)` | Any lazy-JIT of a mod method (e.g. `CollectibleObject.OnHeldUseStart` on right-click) | **Restage-while-running** — `restage.sh` overwrote the memory-mapped `Scribe.dll` under the live process, so the CLR JIT read a torn/inconsistent assembly | **Fully quit + relaunch the client.** Self-inflicted by the dev loop, not a code bug |
+
+**The `0x8007000B` one is the common false alarm.** It looks alarming and shares the exception type
+with the Rosetta crash below, but it only means you restaged while the game was open (exactly what
+`restage.sh`'s "fully quit and relaunch" reminder warns against). The DLL loads cleanly on the next
+launch; nothing in the mod or the committed build is wrong. It fires on the first JIT of a mod method
+after the swap — often a held-item right-click (`OnHeldUseStart`), a block interaction, or opening a
+dialog — so the frame varies. Distinguish it from the engine bug purely by the message string.
+
 ## Platform: `BadImageFormatException: Bad IL range` on Apple Silicon
 
 **Symptom: the game crashes with `System.BadImageFormatException: Bad IL range` when closing a
