@@ -1,4 +1,11 @@
-# lectern-nav-active-state
+# lectern-nav-active-state Specification
+
+## Purpose
+This capability covers the active-state styling of the Lectern dialog's four sidebar nav buttons
+(Read, Edit, Pinned, Settings). It gives the currently-active view's button a distinct thematic
+fill and cream glyph so the player can see which surface is in front, keeps the Settings button in
+sync with the standalone settings window's open/closed state (a separate dialog, not a lectern
+view), and defines the hover feedback that keeps the active button interactive.
 
 ## Requirements
 
