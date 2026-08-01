@@ -81,8 +81,10 @@ only applied to PINNED tasks. Author chose to make Sink a real, all-tasks docume
   editor, pinned) — confirm the SAME outcome in every view (sink→bottom / unpin / delete), matching the
   HUD. Specifically confirm the editor case: ticking one row's box applies the policy AND leaves other
   rows' in-progress unsaved text + caret intact.
-- [ ] 5.7 In-game: confirm Sink reordering from one view is reflected in the shared document for another
+- [x] 5.7 In-game: confirm Sink reordering from one view is reflected in the shared document for another
   viewer, and that Delete from the read/editor view removes the task for everyone (the accepted uniform
   behavior).
+  - Confirmed 2026-08-01 (two-client MP): Player A's Sink is visible live to Player B across both the
+    read view and the HUD; the shared document stays in sync.
 - [x] 5.8 Update `TESTING.md` with the new in-game items. (Added the `scribe-lectern-view-consistency`
   section: divider, pin-from-read, picker-above-list, uniform-policy, shared Sink/Delete.)

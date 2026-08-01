@@ -47,4 +47,7 @@
 - [x] 7.3 Manual in-game: Read / Edit / Pinned views confirmed working 2026-07-29
 - [x] 7.4 Manual in-game: clear title → confirmed resets to "Lectern" 2026-07-29
 - [x] 7.5 Manual in-game: scroll position preserved across view switches — confirmed 2026-07-29
-- [ ] 7.6 Manual in-game: multiplayer editor lock
+- [x] 7.6 Manual in-game: multiplayer editor lock
+  - Confirmed 2026-08-01 (two-client MP): only one player edits at a time; the lock releases on the
+    exit paths (tab switch / ESC / close), NOT on opening Settings — Settings is an overlay, not an
+    exit, so it correctly keeps the lock held.
