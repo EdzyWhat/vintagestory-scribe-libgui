@@ -14,14 +14,14 @@
 
 ## 2. Split ScribeModSystem.cs
 
-- [ ] 2.1 Read the current `src/Mod/ScribeModSystem.cs` and identify concern clusters (candidate
+- [x] 2.1 Read the current `src/Mod/ScribeModSystem.cs` and identify concern clusters (candidate
       seams: icon/font registration, host/document registry, network packet handlers,
       backdrop-bitmap cache, client/server lifecycle).
-- [ ] 2.2 Create `partial class ScribeModSystem` files named `ScribeModSystem.<Concern>.cs`,
+- [x] 2.2 Create `partial class ScribeModSystem` files named `ScribeModSystem.<Concern>.cs`,
       moving each cluster verbatim. Keep the primary declaration, field initializers, and
       `Start*`/lifecycle entry points in `ScribeModSystem.cs`.
-- [ ] 2.3 Confirm pure relocation (same constraint as 1.3).
-- [ ] 2.4 `dotnet build` clean; `dotnet test tests/Core.Tests` pass. Commit this file's split on
+- [x] 2.3 Confirm pure relocation (same constraint as 1.3).
+- [x] 2.4 `dotnet build` clean; `dotnet test tests/Core.Tests` pass. Commit this file's split on
       its own.
 
 ## 3. Verify behavior preservation end-to-end
