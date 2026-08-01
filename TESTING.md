@@ -21,6 +21,30 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## hud-temporal-storm-corruption
+
+> The pinned-task HUD reacts to temporal instability: it corrupts all its own text (Zalgo-style
+> combining-mark injection, the same mechanism vanilla uses for storm chat) while a temporal storm is
+> active OR personal stability is below 50%, and swaps its title to "Survive the Storm" during a storm.
+> Strength is keyed to storm tier (Light 0.53 / Medium 0.67 / Heavy 0.90) or a low-stability ramp
+> (0 at 50% → 1 at 10%), whichever is greater; it re-scrambles on a 0–5 s cadence. A default-on
+> "Storm text corruption" setting (HUD Appearance section) disables the whole effect. Fully relaunch the
+> client to pick up the new build.
+
+- [ ] `cc124162` **Trigger a storm.** Trigger a temporal storm with a Notebook pinned/timer running;
+      confirm the HUD title reads "Survive the Storm", all HUD text (rows, +N more, timer) corrupts at
+      storm intensity, and it reverts to "Pinned" and clean text when the storm ends.
+      *(hud-temporal-storm-corruption 6.2)*
+- [ ] `e289157a` **Low-stability ramp.** Without a storm, drop personal stability below 50% (e.g. stand
+      near a rift); confirm HUD text corruption ramps up as stability falls toward 10%, and the title
+      stays "Pinned" (no storm swap). *(hud-temporal-storm-corruption 6.3)*
+- [ ] `d6f9d273` **Re-scramble + layout.** While a trigger is active, watch the HUD for several seconds;
+      confirm the injected marks shift on a ~0–5 s cadence and that wrapping rows, title, and timer render
+      the combining marks without broken width/wrapping or clipping. *(hud-temporal-storm-corruption 6.4)*
+- [ ] `8dc37921` **Toggle off mid-storm.** During an active storm, turn off the "Storm text corruption"
+      setting; confirm corruption and the title swap stop immediately; turn it back on and confirm they
+      resume. *(hud-temporal-storm-corruption 6.5)*
+
 ## fix-pvp-death-kill-attribution
 
 > Attribute melee PvP kills (resolve attacker via `GetCauseEntity()`, not the melee-null

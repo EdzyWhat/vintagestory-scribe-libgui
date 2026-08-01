@@ -56,6 +56,15 @@ public sealed class ScribePlayerSettings
     /// leaves it untouched.</summary>
     public bool PixelArtDisplay { get; set; } = true;
 
+    /// <summary>Whether the pinned-task HUD corrupts its own text (and swaps its title to "Survive the
+    /// Storm") while a temporal-instability trigger is active — an active temporal storm or personal
+    /// stability below 50% (hud-temporal-storm-corruption). Default <c>true</c> (the effect is on). When
+    /// <c>false</c>, the HUD never corrupts its text or swaps its title regardless of storm/stability
+    /// state, for players who rely on HUD legibility or are motion-sensitive. A per-player, client-local
+    /// display preference: never server-synced, carried by no block/document/pin data. A plain bool
+    /// needing no clamp, so <see cref="Normalized"/> leaves it untouched.</summary>
+    public bool StormCorruption { get; set; } = true;
+
     /// <summary>Maximum number of pinned tasks the HUD shows at once (default 3); pins beyond this
     /// are summarized ("+N more"). A per-player display preference; the Mod layer owns the HUD and
     /// clamps this to a sane range on read (see <see cref="ScribePinCodec"/>).</summary>

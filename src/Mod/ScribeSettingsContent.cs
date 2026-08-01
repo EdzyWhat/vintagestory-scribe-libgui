@@ -259,6 +259,16 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                     LabeledControl(
                         "settings-hudfontscale", colors, scale,
                         FontScaleField("hudfontscale", settings.HudFontScale, v => onMutate(s => s.HudFontScale = v)))),
+
+                // Storm text corruption (hud-temporal-storm-corruption): when on, the HUD scrambles its
+                // text and swaps its title during a temporal storm / low stability. Hugs its label like the
+                // other toggles; sits on its own paired row (left column) at the end of the HUD section.
+                PairedControls(colors, scale,
+                    HuggingCheckbox(
+                        "settings-stormcorruption", colors, scale,
+                        value: settings.StormCorruption,
+                        onChanged: v => onMutate(s => s.StormCorruption = v)),
+                    new SizedBox()),
             });
     }
 
