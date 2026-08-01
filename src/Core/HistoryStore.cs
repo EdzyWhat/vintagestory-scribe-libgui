@@ -23,10 +23,10 @@ public sealed class HistoryStore
     private const byte Version      = 1;
     private const byte PriorVersion = 1; // no prior version yet; scaffold per ScribePinCodec pattern
 
-    public const int MaxDeaths    = 10;
+    public const int MaxDeaths    = 30;
     public const int MaxStorms    = 5;
-    public const int MaxPvpKills  = 10;
-    public const int MaxBossKills = 10;
+    public const int MaxPvpKills  = 30;
+    public const int MaxBossKills = 20;
 
     /// <summary>Hard allocation guard: reject any payload larger than this.</summary>
     public const int MaxHistoryBytes = 64 * 1024;

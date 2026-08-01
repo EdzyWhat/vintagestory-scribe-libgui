@@ -93,6 +93,24 @@ generic `"Player {0} got killed by {1}"` — it does not name the weapon.
   The victim's Death entry and the killer's PvpKill entry share this string so both read the same.
 - **All verbs + the template are mod-owned lang keys** in `scribe/lang/en.json`, so wording is
   fully editable without a code change and translatable later.
+- **Creature (non-PvP) deaths get their own flavor pool.** Vanilla ships `deathmsg-<creature>` keys
+  for almost no creatures — decompiling `VintagestoryLib.dll`'s `GetDeathMessage` shows it builds
+  `"deathmsg-" + Code.Path.Replace("-", "")`, but `game/lang/en.json` only defines
+  `deathmsg-drifter-normal-1..3` plus environmental keys; nightmare/tainted/corrupt drifters, bears,
+  wolves, etc. have none, so those kills fell through to "died." Instead, name the creature with
+  `Entity.GetPrefixAndCreatureName()` — the same accessor vanilla's fallback uses, which yields the
+  variant-correct phrase *with its indefinite article baked in* ("a nightmare drifter", "a brown
+  bear"; falls back to "a wild animal"). Templates therefore must NOT add their own "a"/"an". A
+  self-sizing `scribe-mob-death-0..N` pool (probe upward until a key is missing) supplies the line;
+  translators may ship as few as one. Note vanilla has no "grizzly" bear (brown/black/panda/polar/
+  sun) and no bare "drifter" — always a variant.
+- **Auto-narrated combat entries use empty `ActorName`.** The History row renders
+  `ActorName.Length > 0 ? "{ActorName} — {Detail}" : Detail`. Every death/PvP sentence already names
+  the victim, so setting `ActorName` would double the name ("Alrik — ...Alrik..."). The BossKill path
+  already relied on this empty-`ActorName` convention; Death and PvpKill now match it.
+- **Retention caps raised** in `HistoryStore` so a carried notebook keeps a longer chronicle:
+  `MaxDeaths`/`MaxPvpKills` 10 → 30, `MaxBossKills` 10 → 20 (`MaxStorms` unchanged). This is the only
+  `Core` change; the sliding-window cap tests reference the constants symbolically and still pass.
 
 ## Risks / Trade-offs
 

@@ -2,16 +2,26 @@
 
 ### Requirement: Death event recorded when holder dies while carrying notebook
 The system SHALL record a `Death` entry on the server when a player dies while holding a
-Notebook in their active hotbar. The Detail field SHALL contain the reconstructed vanilla
-death message for that player and damage source. When the killing damage was dealt by another
-player (resolved via the damage source's cause entity, which covers both melee and projectile
-attacks), the Detail SHALL instead be a mod-owned PvP death message that names the killer, the
-victim, and a kill verb, rather than falling back to an unattributed "died" message.
+Notebook in their active hotbar. The Detail field SHALL contain a self-contained sentence that
+names the victim, chosen by the killing damage source's cause entity (which covers both melee and
+projectile attacks): when the killer is another player, a mod-owned PvP death message naming the
+killer, victim, and a kill verb; when the killer is a creature, a mod-owned flavored message that
+names the creature by its own variant-correct display name; otherwise (environmental death) the
+reconstructed vanilla `deathmsg-<cause>-<N>` message. It SHALL NOT fall back to an unattributed
+"died" message while a cause entity is resolvable. The Detail sentence already names the victim, so
+the entry SHALL leave `ActorName` empty (the display prepends "ActorName — " otherwise).
 
 #### Scenario: Death while holding records entry
 - **WHEN** a player holding a Notebook in their hotbar dies from any cause
-- **THEN** a Death entry is added with their name, the reconstructed death message, and
-  the in-game date
+- **THEN** a Death entry is added with the appropriate death message and the in-game date, with the
+  whole sentence in Detail (no separate actor-name prefix that would repeat the victim's name)
+
+#### Scenario: Death by a creature names the correct variant
+- **WHEN** a player holding a Notebook is killed by a creature (not another player), whether by
+  melee or projectile
+- **THEN** the Death entry's message names that creature by its variant-correct display name (e.g.
+  "a nightmare drifter", "a brown bear"), drawn from the entity's own name rather than a fixed
+  string, and does NOT fall back to the generic "<victim> died." message
 
 #### Scenario: Death by another player names the killer with a weapon-aware verb
 - **WHEN** a player holding a Notebook is killed by another player, whether by melee or

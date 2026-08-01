@@ -884,6 +884,36 @@ chronicle/integration features — decompiled, not yet exercised.)
   `PrettyDate()` in Core.
 - **Player death:** `IServerEventAPI.PlayerDeath` → `PlayerDeathDelegate(IServerPlayer byPlayer,
   DamageSource damageSource)`. Server-side, once per death, gives identity + cause.
+- **Resolving the attacker — use `DamageSource.GetCauseEntity()`, NOT `SourceEntity`.** The API
+  doc-comment: `SourceEntity` is **null for non-projectile (melee) damage**; `GetCauseEntity()`
+  returns `CauseEntity ?? SourceEntity` and is the documented way to get the attacker "for both
+  melee and projectile damage" — it's what vanilla's own server-side `GetDeathMessage` uses.
+  Reading `SourceEntity` alone silently drops every melee PvP kill (this was the
+  `fix-pvp-death-kill-attribution` root cause). No `deathmsg-player-*`/`deathmsg-pvp-*` lang key
+  ships in vanilla, so a PvP death has to build its own message string.
+- **Naming the killing weapon:** damage *type* does NOT distinguish vanilla melee weapons —
+  `EntityAgent.OnInteract` hardcodes melee `DamageSource.Type = BluntAttack` (sword/spear/knife
+  don't override it); only projectiles carry a meaningful type. The accurate signal is the killer's
+  held item: `killerEntity.RightHandItemSlot?.Itemstack?.Collectible?.Tool` (`EnumTool?` — Sword,
+  Bow, Spear, Club, Firearm, Crossbow, …; the exotic members exist for mods, no vanilla item uses
+  them). `RightHandItemSlot` is the killer's active hotbar slot, so read it in the death event as a
+  best-effort heuristic (vanilla's death-audit log reads the same field).
+- **Reconstructing a vanilla-style death message — vanilla ships almost no `deathmsg-<creature>`
+  keys.** Vanilla's `GetDeathMessage` (decompiled from `VintagestoryLib.dll`) builds the key as
+  `"deathmsg-" + causeEntity.Code.Path.Replace("-", "")` (hyphens **stripped**, so `drifter-nightmare`
+  → `deathmsgdrifternightmare`) and looks it up in a cache pre-split on the trailing `-N`. But
+  `game/lang/en.json` only defines `deathmsg-drifter-normal-1..3` (plus environmental `deathmsg-fall`,
+  `-hunger`, `-fire-block`, `-electricity-block`, `-explosion`) — there is **no** key for
+  nightmare/tainted/corrupt drifters, bears, wolves, etc. On a miss vanilla falls back to
+  `Lang.Get("Player {0} got killed by {1}", name, causeEntity.GetPrefixAndCreatureName())`.
+- **`Entity.GetPrefixAndCreatureName()` is the correct, variant-aware creature name** ("a nightmare
+  drifter", "a brown bear") — it reads `game:prefixandcreature-<code>` (falling back to the
+  hyphen-stripped key, then `generic-wildanimal` = "a wild animal"). Note there is **no "grizzly"**
+  bear in vanilla (brown/black/panda/polar/sun; codes like `bear-brown-adult-male`) and **no bare
+  "drifter"** entity — always a `-normal/-deep/-tainted/-corrupt/-nightmare/-double-headed` variant.
+  Scribe's `BuildDeathMessage` uses `GetPrefixAndCreatureName()` + its own `scribe:scribe-mob-death-N`
+  flavor pool rather than vanilla's sparse `deathmsg-` keys, precisely because those keys don't exist
+  for most creatures.
 - **Per-player persistent store:** `IServerPlayer.SetModData<T>(key, data)` / `GetModData<T>(key,
   default)` — permanent, per-player, NOT client-synced (also raw-byte `SetModdata`/`GetModdata`/
   `RemoveModdata`). This is where a "milestones seen" set lives.
