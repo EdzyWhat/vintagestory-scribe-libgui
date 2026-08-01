@@ -1959,6 +1959,9 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Confirmed 2026-07-31** (playtest submission 2026-07-31T14-19-22): "Works." Timer tab lists Real Time
         first, In-game time second. FOLLOW-UP (general note, new scope): Real Time should also be the DEFAULT
         selected mode, not just first in the list — currently the order changed but the default did not.
+      - **Confirmed 2026-08-01** (user report): FOLLOW-UP resolved. The Timer tab's "set timer" form now
+        defaults to Real Time on a first-ever open and otherwise restores the player's last-selected mode
+        (client-local `PreferredTimerMode`, commit `3b983ed` fix-clockmaker-timer-mode-default).
 - [x] `586a51c8` **Handbook notes the carryover.** Open the Notebook's handbook entry and confirm the
       crafting section states that upgrading to the Clockmaker's Notebook keeps your tasks and History.
       *(carry-notebook-doc-through-craft 2.0)*
