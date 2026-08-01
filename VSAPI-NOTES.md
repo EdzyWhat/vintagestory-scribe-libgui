@@ -870,6 +870,43 @@ real cause; the facts are worth keeping:
   "transient session state" and "persisted state" in this API, and it's entirely up to whether
   `Initialize` reads the key back.
 
+### `Initialize` vs `FromTreeAttributes` ordering is NOT universal — it flips for a freshly-placed BE (2026-07-31)
+
+The bullet above says "`FromTreeAttributes` is always called before `Initialize()`." That is only
+true for a BE that **already existed** (chunk-loaded from disk / arriving on the client via the
+first BE sync). The `VintagestoryAPI` `BlockEntity.Initialize` doc-comment states it explicitly:
+
+> "called right after the block entity was spawned or right after it was loaded from a newly loaded
+> chunk. However **if this block entity already existed then `FromTreeAttributes` is called first!**"
+
+So the real ordering is:
+- **Freshly placed** (brand-new BE): `Initialize` runs **first**, then `FromTreeAttributes` (once the
+  first sync/save round-trip carries state in).
+- **Loaded / already existed**: `FromTreeAttributes` runs **first**, then `Initialize`.
+
+**Symptom that sent us here: a newly-placed Scribe lectern would not open, while lecterns already in
+the world opened fine.** Root cause was this ordering asymmetry crossed with a registry keyed by a
+value that only `FromTreeAttributes` fills in:
+
+- The client dialog only opens when the server's open-reply is routed back to the BE via
+  `ScribeModSystem.TryResolveHost`, a lookup in `_hostRegistry` **keyed by `Document.DocId`**.
+- Each side builds its `ScribeDocument` with its OWN random `DocId` (`ScribeDocument` ctor →
+  `Guid.NewGuid()`). The authoritative DocId only arrives in `FromTreeAttributes`.
+- `RegisterHost` was called in `Initialize` (and, per `ab702d1`, re-called in the server-side
+  `ApplyEdit`/`OnBlockPlaced`) — but NOT in `FromTreeAttributes`.
+- For a freshly-placed lectern the client runs `Initialize` first → registers under the **throwaway**
+  random DocId → then `FromTreeAttributes` swaps `Document` to the real DocId but leaves the registry
+  keyed under the dead id → the open-reply lookup misses → **the dialog silently never opens.** A
+  loaded lectern works because `FromTreeAttributes` ran first, so `Initialize` already registers under
+  the correct DocId.
+- **Fix:** call `ModSystem?.RegisterHost(this)` at the end of `FromTreeAttributes` too (no-op before
+  `Api` is set, i.e. the load-path ordering — `Initialize` registers moments later). Same bug class as
+  `ab702d1`, on the one path that fix didn't cover.
+
+**General lesson:** any per-BE index keyed by a field that `FromTreeAttributes` populates (a DocId, an
+owner UID, anything not known at construction) MUST be (re-)keyed in `FromTreeAttributes`, not only in
+`Initialize` — otherwise it works for loaded blocks and silently breaks for freshly-placed ones.
+
 ## Calendar, player events, per-player storage, and survival-mod systems
 
 **Question: how do you read the in-game date, subscribe to player death, persist per-player

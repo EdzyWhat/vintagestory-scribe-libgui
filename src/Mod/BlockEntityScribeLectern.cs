@@ -226,6 +226,18 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
         // break→replace path can restore a saved doc). Keep the live index pointing at the current one.
         RegisterDocInStore();
 
+        // Re-key the host registry under the now-current DocId (same bug class as ab702d1's
+        // ApplyEdit/OnBlockPlaced re-registers, on the path they missed). Each side constructs its
+        // Document with its OWN random DocId (ScribeDocument ctor → Guid.NewGuid()); the authoritative
+        // DocId only arrives here. For a FRESHLY PLACED lectern the VS lifecycle runs Initialize (which
+        // registers under the throwaway random id) BEFORE FromTreeAttributes, so without this the client
+        // stays keyed under a dead id, the server's open reply routes to nothing via TryResolveHost, and
+        // the dialog never opens — while a chunk-LOADED lectern works because FromTreeAttributes runs
+        // first (VintagestoryAPI BlockEntity.Initialize doc-comment: "if this block entity already
+        // existed then FromTreeAttributes is called first"), so Initialize already sees the real DocId.
+        // No-op when Api isn't set yet (the load-path ordering) — Initialize registers right after.
+        ModSystem?.RegisterHost(this);
+
         // Reflect an authoritative resync in the open dialog. RefreshReadView rebuilds the read view
         // from the now-current Document; it is a no-op while the dialog is in editor mode (the editor
         // edits a private scratch copy that an external resync must not clobber).
