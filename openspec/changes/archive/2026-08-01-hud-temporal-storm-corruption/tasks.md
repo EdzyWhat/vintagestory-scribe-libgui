@@ -62,4 +62,5 @@
       the stacked marks cleanly; no marks-per-char cap needed.)
 - [x] 6.5 In-game: toggle the setting off mid-storm — confirm corruption and title swap stop
       immediately; toggle on — confirm they resume. (Confirmed 2026-07-31 playtest.)
-- [ ] 6.6 Cross-check against `what-to-test` / TESTING.md and record verdicts.
+- [x] 6.6 Cross-check against `what-to-test` / TESTING.md and record verdicts. (Done 2026-07-31: 6.2/6.4/6.5
+      confirmed, 6.3 backlogged, plus the title-pencil crash `5f69fd12` confirmed — all recorded in TESTING.md.)
