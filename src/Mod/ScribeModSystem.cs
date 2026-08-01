@@ -114,6 +114,18 @@ public sealed class ScribeModSystem : ModSystem
     /// <see cref="BlockEntityScribeLectern.OnBlockRemoved"/> and <see cref="NotebookHost"/> on dialog close.</summary>
     public void UnregisterHost(Guid docId) => _hostRegistry.Remove(docId);
 
+    /// <summary>Client → server: notify that the player just opened the notebook with this DocId, so
+    /// the server can record their one-time PickedUp history entry (see
+    /// <see cref="OnServerReceivedNotebookOpened"/>). No-op off the client. Called by both notebook
+    /// items' open paths.</summary>
+    public void NotifyServerNotebookOpened(Guid docId)
+    {
+        capi?.Network.GetChannel(NetworkChannelName).SendPacket(new ScribeNotebookOpenedMessage
+        {
+            DocIdBytes = docId.ToByteArray(),
+        });
+    }
+
     /// <summary>Raised on the client whenever a fresh pin set push arrives, so an open lectern dialog
     /// (and the HUD) can repaint its per-player pin indicators.</summary>
     public event Action? MyPinsChanged;
@@ -180,6 +192,7 @@ public sealed class ScribeModSystem : ModSystem
             .RegisterMessageType<ScribeGuestbookSyncMessage>()
             .RegisterMessageType<ScribeEditGuestbookNoteMessage>()
             .RegisterMessageType<ScribeNotebookSaveMessage>()
+            .RegisterMessageType<ScribeNotebookOpenedMessage>()
             .RegisterMessageType<ScribeSetTimerMessage>()
             .RegisterMessageType<ScribeClearTimerMessage>()
             .RegisterMessageType<ScribeTimerStateMessage>();
@@ -509,6 +522,7 @@ public sealed class ScribeModSystem : ModSystem
         channel.SetMessageHandler<ScribeRecordVisitorMessage>(OnServerReceivedRecordVisitor);
         channel.SetMessageHandler<ScribeEditGuestbookNoteMessage>(OnServerReceivedEditGuestbookNote);
         channel.SetMessageHandler<ScribeNotebookSaveMessage>(OnServerReceivedNotebookSave);
+        channel.SetMessageHandler<ScribeNotebookOpenedMessage>(OnServerReceivedNotebookOpened);
         channel.SetMessageHandler<ScribeSetTimerMessage>(OnServerReceivedSetTimer);
         channel.SetMessageHandler<ScribeClearTimerMessage>(OnServerReceivedClearTimer);
 
@@ -1116,6 +1130,21 @@ public sealed class ScribeModSystem : ModSystem
         }, fromPlayer);
     }
 
+    /// <summary>Client → server: the player opened a Notebook. Resolve the held notebook host, which
+    /// (via <see cref="NotebookHost.AttachServerContext"/>) records this player's one-time PickedUp
+    /// entry — deduplicated per actor in <c>HistoryStore.TryAddEntry</c>, and skipped for the crafter,
+    /// whose Crafted entry already stands in for their acquisition. Opening the dialog is otherwise a
+    /// client-only action the server never sees, so without this signal no PickedUp entry is recorded
+    /// (the historical gap: the recorder only ever ran on a task pin/complete round-trip or a death).</summary>
+    private void OnServerReceivedNotebookOpened(IServerPlayer fromPlayer, ScribeNotebookOpenedMessage message)
+    {
+        if (sapi is null || !TryReadGuid(message.DocIdBytes, out var docId)) return;
+        // TryResolveDocHost scans the player's inventory for the matching notebook and, on a hit,
+        // calls AttachServerContext → RecordPickedUpIfNew. We don't need the host here — resolving it
+        // is the whole point (the PickedUp side effect).
+        TryResolveDocHost(docId, out _, fromPlayer);
+    }
+
     private void OnClientReceivedNotebookSave(ScribeNotebookSaveMessage message)
     {
         if (capi is null || !TryReadGuid(message.DocIdBytes, out var docId)) return;
@@ -1411,7 +1440,7 @@ public sealed class ScribeModSystem : ModSystem
         history.TryAddEntry(new Scribe.Core.HistoryEntry
         {
             Kind = Scribe.Core.HistoryEventKind.Death,
-            Detail = SeedPvpMessage(killer: "Gorm", weaponTool: "bow", victim: "Alrik"), InGameDate = date(9),
+            Detail = SeedPvpDeathMessage(killer: "Gorm", weaponTool: "bow", victim: "Alrik"), InGameDate = date(9),
         });
         history.TryAddEntry(new Scribe.Core.HistoryEntry
         {
@@ -1430,19 +1459,29 @@ public sealed class ScribeModSystem : ModSystem
         history.TryAddEntry(new Scribe.Core.HistoryEntry
         {
             Kind = Scribe.Core.HistoryEventKind.PvpKill,
-            Detail = SeedPvpMessage(killer: "Alrik", weaponTool: "sword", victim: "Gorm"), InGameDate = date(2),
+            Detail = SeedPvpKillMessage(killer: "Alrik", weaponTool: "sword", victim: "Gorm"), InGameDate = date(2),
         });
     }
 
-    /// <summary>Builds a seeded PvP history message from the same lang keys the live
-    /// <see cref="ResolvePvpVerb"/> path uses — the <c>scribe:scribe-pvp-verb-tool-&lt;tool&gt;</c>
-    /// verb assembled into <c>scribe:scribe-pvp-death-message</c> — so demo content can never drift
-    /// from real wording. <paramref name="weaponTool"/> is a lowercased <c>EnumTool</c> name (e.g.
-    /// "bow", "sword"); no live entity is needed since we name the weapon category directly.</summary>
-    private static string SeedPvpMessage(string killer, string weaponTool, string victim)
+    /// <summary>Builds a seeded PvP DEATH message (victim-first passive, for a victim's Death entry)
+    /// from the same lang keys the live path uses — the <c>scribe:scribe-pvp-verb-tool-&lt;tool&gt;</c>
+    /// verb's passive participle assembled into <c>scribe:scribe-pvp-death-message</c> — so demo
+    /// content can never drift from real wording. <paramref name="weaponTool"/> is a lowercased
+    /// <c>EnumTool</c> name (e.g. "bow"); no live entity is needed since we name the weapon category
+    /// directly. Mirrors the live <see cref="VerbParticiple"/> death branch in <c>OnEntityDeath</c>.</summary>
+    private static string SeedPvpDeathMessage(string killer, string weaponTool, string victim)
     {
-        string verb = Lang.Get($"scribe:scribe-pvp-verb-tool-{weaponTool}");
-        return Lang.Get("scribe:scribe-pvp-death-message", killer, verb, victim);
+        string verbKey = $"scribe:scribe-pvp-verb-tool-{weaponTool}";
+        return Lang.Get("scribe:scribe-pvp-death-message", victim, VerbParticiple(verbKey), killer);
+    }
+
+    /// <summary>Builds a seeded PvP KILL message (killer-first active, for a killer's PvpKill entry).
+    /// Companion to <see cref="SeedPvpDeathMessage"/>; mirrors the live <see cref="VerbActive"/> kill
+    /// branch in <c>OnEntityDeath</c>.</summary>
+    private static string SeedPvpKillMessage(string killer, string weaponTool, string victim)
+    {
+        string verbKey = $"scribe:scribe-pvp-verb-tool-{weaponTool}";
+        return Lang.Get("scribe:scribe-pvp-kill-message", killer, VerbActive(verbKey), victim);
     }
 
     /// <summary>Builds a seeded mob-death message from the same <c>scribe:scribe-mob-death-N</c> pool
@@ -1594,27 +1633,54 @@ public sealed class ScribeModSystem : ModSystem
         ("erel",    "scribe:scribe-history-boss-erel"),
     };
 
-    /// <summary>Finds the first Notebook stack anywhere in the player's inventory (all bags, hotbar,
-    /// backpack) and returns a server-attached <see cref="NotebookHost"/> for it, or null if none is
-    /// present. Matches BOTH <see cref="ItemScribeNotebook"/> and its sibling
-    /// <see cref="ItemClockmakerNotebook"/> — both carry a document + history store, so live history
-    /// recorders (deaths, storms, boss kills) must be able to write into a held Clockmaker's Notebook,
-    /// which they previously could not.</summary>
-    private NotebookHost? FindNotebookInInventory(IServerPlayer player)
+    /// <summary>The inventory <see cref="Vintagestory.API.Common.InventoryBase.ClassName"/>s a
+    /// notebook counts as "carried on the player's person" for history recording: the hotbar, the
+    /// backpack bags, worn character/clothing slots, and the mouse-cursor drag slot (a real held
+    /// stack while a GUI is open). Deliberately EXCLUDES the creative inventory
+    /// (<c>creativeInvClassName</c>) — it holds infinite *template* stacks, and writing history into
+    /// one mutates the template so every future copy carries phantom entries (the observed
+    /// "new notebook auto-populates past kills" bug) — as well as the transient <c>ground</c> and
+    /// <c>craftinggrid</c> staging inventories, which are not "on your person". Names come from
+    /// <see cref="Vintagestory.API.Config.GlobalConstants"/>.</summary>
+    private static readonly HashSet<string> CarriedInventoryClasses = new()
     {
-        if (sapi is null) return null;
+        GlobalConstants.hotBarInvClassName,      // "hotbar"
+        GlobalConstants.backpackInvClassName,    // "backpack"
+        GlobalConstants.characterInvClassName,   // "character"
+        GlobalConstants.mousecursorInvClassName, // "mouse"
+    };
+
+    /// <summary>Yields a server-attached <see cref="NotebookHost"/> for EVERY Notebook stack the
+    /// player is carrying on their person (see <see cref="CarriedInventoryClasses"/>), so a live
+    /// history event (death, storm, boss kill) is recorded on ALL of them, not just the first found.
+    /// Matches BOTH <see cref="ItemScribeNotebook"/> and its sibling <see cref="ItemClockmakerNotebook"/>
+    /// — both carry a document + history store. Scoped to real carried inventories on purpose: the
+    /// old "walk InventoriesOrdered, return the first match" logic also walked the CREATIVE inventory
+    /// (whose template stacks it then mutated) and the ground/crafting staging inventories, so in a
+    /// creative world the killer's real notebook got nothing while a creative-tab template silently
+    /// accumulated the kills.</summary>
+    private IEnumerable<NotebookHost> FindCarriedNotebooks(IServerPlayer player)
+    {
+        if (sapi is null) yield break;
         foreach (var inv in player.InventoryManager.InventoriesOrdered)
         {
+            if (!CarriedInventoryClasses.Contains(inv.ClassName)) continue;
             foreach (var slot in inv)
             {
                 if (slot.Itemstack?.Collectible is not (ItemScribeNotebook or ItemClockmakerNotebook)) continue;
                 var host = new NotebookHost(slot);
                 host.AttachServerContext(sapi, player);
-                return host;
+                yield return host;
             }
         }
-        return null;
     }
+
+    /// <summary>Convenience wrapper: the first carried Notebook, or null. Used where a single target
+    /// is wanted (the demo seeder, and the killer-notebook lookup whose PvpKill entry is a single
+    /// record). Live recorders that must fan out to every notebook use
+    /// <see cref="FindCarriedNotebooks"/> directly.</summary>
+    private NotebookHost? FindNotebookInInventory(IServerPlayer player)
+        => FindCarriedNotebooks(player).FirstOrDefault();
 
     private void OnEntityDeath(Vintagestory.API.Common.Entities.Entity entity, Vintagestory.API.Common.DamageSource dmg)
     {
@@ -1627,19 +1693,21 @@ public sealed class ScribeModSystem : ModSystem
             var deathPos = entity.Pos.XYZ;
             foreach (var player in sapi.World.AllOnlinePlayers.OfType<IServerPlayer>())
             {
-                var host = FindNotebookInInventory(player);
-                if (host is null) continue;
                 double dist = player.Entity.Pos.XYZ.DistanceTo(deathPos);
                 if (dist > 100) continue;
-                // The whole descriptive sentence lives in Detail (ActorName empty); the History row
-                // shows Detail alone when ActorName is empty, so no "Name — " prefix is prepended.
-                host.History.TryAddEntry(new Scribe.Core.HistoryEntry
+                // Record on EVERY notebook the player carries, not just the first found.
+                foreach (var host in FindCarriedNotebooks(player))
                 {
-                    Kind       = Scribe.Core.HistoryEventKind.BossKill,
-                    Detail     = Lang.Get(langKey, player.PlayerName),
-                    InGameDate = NotebookHost.FormatDate(sapi),
-                });
-                host.FlushHistory();
+                    // The whole descriptive sentence lives in Detail (ActorName empty); the History row
+                    // shows Detail alone when ActorName is empty, so no "Name — " prefix is prepended.
+                    host.History.TryAddEntry(new Scribe.Core.HistoryEntry
+                    {
+                        Kind       = Scribe.Core.HistoryEventKind.BossKill,
+                        Detail     = Lang.Get(langKey, player.PlayerName),
+                        InGameDate = NotebookHost.FormatDate(sapi),
+                    });
+                    host.FlushHistory();
+                }
             }
             return;
         }
@@ -1653,12 +1721,14 @@ public sealed class ScribeModSystem : ModSystem
         // "attacker is a different player" predicate drives both the victim's message and the
         // killer's PvpKill entry, so both symptoms are fixed by one condition.
         IServerPlayer? killer = null;
-        NotebookHost? killerHost = null;
+        // Materialize the killer's carried notebooks once so we can both (a) index the generic-verb
+        // pool off one of them and (b) record the PvpKill on ALL of them.
+        List<NotebookHost> killerHosts = new();
         if (dmg?.GetCauseEntity() is Vintagestory.API.Common.EntityPlayer killerEntity
             && killerEntity.Player is IServerPlayer k && k.PlayerUID != sp.PlayerUID)
         {
-            killer     = k;
-            killerHost = FindNotebookInInventory(k);
+            killer      = k;
+            killerHosts = FindCarriedNotebooks(k).ToList();
         }
 
         // A PvP death names the killer with a weapon-aware verb; any other death reconstructs a
@@ -1666,21 +1736,30 @@ public sealed class ScribeModSystem : ModSystem
         // branch produces a self-contained sentence that already names the victim, so the entry
         // leaves ActorName empty and puts the whole sentence in Detail — the History row prepends
         // "ActorName — " otherwise, which would print the player's name twice (see the BossKill
-        // path, which is empty-ActorName for the same reason). The killer's PvpKill entry (if they
-        // hold a notebook) shares the exact same message so both notebooks read identically.
-        string deathMsg;
+        // path, which is empty-ActorName for the same reason).
+        //
+        // For PvP, each notebook reads from ITS OWN owner's perspective, so the two logs diverge:
+        //   • the victim's Death log is victim-first & passive:  "Junkmuffin was slain by Raptor."
+        //   • the killer's PvpKill log is killer-first & active: "Raptor slew Junkmuffin."
+        // Both come from the same resolved verb key (active verb vs. its passive participle).
+        string deathMsg;   // victim-first — the victim's Death entry
+        string? killMsg = null; // killer-first — the killer's PvpKill entry (PvP only)
         if (killer is not null)
         {
-            string verb = ResolvePvpVerb((Vintagestory.API.Common.EntityPlayer)dmg!.GetCauseEntity(), dmg, killerHost);
-            deathMsg = Lang.Get("scribe:scribe-pvp-death-message", killer.PlayerName, verb, sp.PlayerName);
+            // The generic-pool cursor reads the killer's existing PvpKill count; use their first
+            // notebook as the reference. (Different carried notebooks may hold different counts, but
+            // the verb is cosmetic flavor — one reference is fine, and all get the same final line.)
+            string verbKey = ResolvePvpVerbKey((Vintagestory.API.Common.EntityPlayer)dmg!.GetCauseEntity(), dmg, killerHosts.FirstOrDefault());
+            deathMsg = Lang.Get("scribe:scribe-pvp-death-message", sp.PlayerName, VerbParticiple(verbKey), killer.PlayerName);
+            killMsg  = Lang.Get("scribe:scribe-pvp-kill-message",  killer.PlayerName, VerbActive(verbKey), sp.PlayerName);
         }
         else
         {
             deathMsg = BuildDeathMessage(sp.PlayerName, dmg);
         }
 
-        var nbHost = FindNotebookInInventory(sp);
-        if (nbHost is not null)
+        // Record the Death on EVERY notebook the victim carries, not just the first found.
+        foreach (var nbHost in FindCarriedNotebooks(sp))
         {
             nbHost.History.TryAddEntry(new Scribe.Core.HistoryEntry
             {
@@ -1691,50 +1770,71 @@ public sealed class ScribeModSystem : ModSystem
             nbHost.FlushHistory();
         }
 
-        // ── PvP kill — record the shared message on the killer's notebook if they hold one ──
-        if (killer is not null && killerHost is not null)
+        // ── PvP kill — record the killer-first message on every notebook the killer carries ──
+        if (killer is not null && killMsg is not null)
         {
-            killerHost.History.TryAddEntry(new Scribe.Core.HistoryEntry
+            foreach (var killerHost in killerHosts)
             {
-                Kind       = Scribe.Core.HistoryEventKind.PvpKill,
-                Detail     = deathMsg,
-                InGameDate = NotebookHost.FormatDate(sapi),
-            });
-            killerHost.FlushHistory();
+                killerHost.History.TryAddEntry(new Scribe.Core.HistoryEntry
+                {
+                    Kind       = Scribe.Core.HistoryEventKind.PvpKill,
+                    Detail     = killMsg,
+                    InGameDate = NotebookHost.FormatDate(sapi),
+                });
+                killerHost.FlushHistory();
+            }
         }
     }
 
     /// <summary>
-    /// Resolves a weapon-aware PvP kill verb by a 3-tier fallback, best signal first (see
-    /// design.md): (1) the killer's held-item <c>Collectible.Tool</c> (<c>EnumTool</c>) →
+    /// Resolves the lang KEY of a weapon-aware PvP kill verb by a 3-tier fallback, best signal first
+    /// (see design.md): (1) the killer's held-item <c>Collectible.Tool</c> (<c>EnumTool</c>) →
     /// <c>scribe:scribe-pvp-verb-tool-&lt;tool&gt;</c>; (2) else <c>dmg.Type</c> →
     /// <c>scribe:scribe-pvp-verb-damage-&lt;type&gt;</c>; (3) else the generic no-repeat pool
     /// <c>scribe:scribe-pvp-verb-generic-N</c>, indexed off the killer notebook's existing PvpKill
     /// count so successive kills rotate without a <c>Random</c>. Tier 1 is the only accurate signal
     /// for vanilla melee (vanilla hardcodes melee <c>dmg.Type</c> to Blunt).
+    ///
+    /// Returns the KEY (not the resolved string) so the caller can look up BOTH the active verb
+    /// (killer-first kill message) and its passive participle (victim-first death message) via
+    /// <see cref="VerbActive"/> / <see cref="VerbParticiple"/>.
     /// </summary>
-    private static string ResolvePvpVerb(
+    private static string ResolvePvpVerbKey(
         Vintagestory.API.Common.EntityPlayer killerEntity,
         Vintagestory.API.Common.DamageSource dmg,
         NotebookHost? killerHost)
     {
         // Tier 1 — weapon category from the killer's currently-held item.
         var tool = killerEntity.RightHandItemSlot?.Itemstack?.Collectible?.Tool;
-        if (tool is not null && TryLang($"scribe:scribe-pvp-verb-tool-{tool.ToString()!.ToLowerInvariant()}", out string toolVerb))
-            return toolVerb;
+        if (tool is not null)
+        {
+            string toolKey = $"scribe:scribe-pvp-verb-tool-{tool.ToString()!.ToLowerInvariant()}";
+            if (TryLang(toolKey, out _)) return toolKey;
+        }
 
         // Tier 2 — damage type (catches modded weapons that set a type but no tool).
-        if (TryLang($"scribe:scribe-pvp-verb-damage-{dmg.Type.ToString().ToLowerInvariant()}", out string dmgVerb))
-            return dmgVerb;
+        string dmgKey = $"scribe:scribe-pvp-verb-damage-{dmg.Type.ToString().ToLowerInvariant()}";
+        if (TryLang(dmgKey, out _)) return dmgKey;
 
         // Tier 3 — generic pool, size discovered by probing upward from -0. Rotate by the killer's
         // existing PvpKill count so the next kill picks a different verb (no immediate repeat).
         int poolSize = 0;
         while (TryLang($"scribe:scribe-pvp-verb-generic-{poolSize}", out _)) poolSize++;
-        if (poolSize == 0) return Lang.Get("scribe:scribe-pvp-verb-damage-bluntattack"); // defensive; keys ship with the mod
+        if (poolSize == 0) return "scribe:scribe-pvp-verb-damage-bluntattack"; // defensive; keys ship with the mod
         int priorKills = killerHost?.History.Entries.Count(e => e.Kind == Scribe.Core.HistoryEventKind.PvpKill) ?? 0;
-        return Lang.Get($"scribe:scribe-pvp-verb-generic-{priorKills % poolSize}");
+        return $"scribe:scribe-pvp-verb-generic-{priorKills % poolSize}";
     }
+
+    /// <summary>The active past-tense verb for the killer-first kill message ("Raptor <b>slashed</b>
+    /// Junkmuffin") — just the resolved key's own value.</summary>
+    private static string VerbActive(string verbKey) => Lang.Get(verbKey);
+
+    /// <summary>The passive participle for the victim-first death message ("Junkmuffin was
+    /// <b>slain</b> by Raptor"). Uses a <c>&lt;key&gt;-participle</c> override when one exists, else
+    /// falls back to the active verb (correct for "shot"/"slashed"/"bashed"/… which are identical in
+    /// both forms; only "slew" → "slain" ships an override).</summary>
+    private static string VerbParticiple(string verbKey)
+        => TryLang($"{verbKey}-participle", out string participle) ? participle : Lang.Get(verbKey);
 
     /// <summary>
     /// <see cref="Lang.Get"/> with the key-echo miss check used throughout this file: returns false
@@ -1763,15 +1863,17 @@ public sealed class ScribeModSystem : ModSystem
 
         foreach (var player in sapi.World.AllOnlinePlayers.OfType<IServerPlayer>())
         {
-            var host = FindNotebookInInventory(player);
-            if (host is null) continue;
-            host.History.TryAddEntry(new Scribe.Core.HistoryEntry
+            // Record on EVERY notebook the player carries, not just the first found.
+            foreach (var host in FindCarriedNotebooks(player))
             {
-                Kind       = Scribe.Core.HistoryEventKind.TemporalStorm,
-                Detail     = strength,
-                InGameDate = date,
-            });
-            host.FlushHistory();
+                host.History.TryAddEntry(new Scribe.Core.HistoryEntry
+                {
+                    Kind       = Scribe.Core.HistoryEventKind.TemporalStorm,
+                    Detail     = strength,
+                    InGameDate = date,
+                });
+                host.FlushHistory();
+            }
         }
     }
 

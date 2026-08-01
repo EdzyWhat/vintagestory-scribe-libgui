@@ -82,6 +82,9 @@ public class ItemScribeNotebook : Item
         var host = new NotebookHost(slot);
         var modSystem = capi.ModLoader.GetModSystem<ScribeModSystem>();
         modSystem.RegisterHost(host);
+        // Tell the server we opened this notebook so it can record the one-time PickedUp entry
+        // (opening the dialog is client-only; the server never sees it otherwise).
+        modSystem.NotifyServerNotebookOpened(host.Document.DocId);
 
         var dialog = new GuiDialogScribeNotebook(host, capi);
         dialog.OnClosed += () => modSystem.UnregisterHost(host.Document.DocId);

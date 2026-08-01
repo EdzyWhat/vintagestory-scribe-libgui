@@ -88,9 +88,24 @@ generic `"Player {0} got killed by {1}"` — it does not name the weapon.
      repeat" is achieved by advancing an index derived from the killer notebook's existing PvpKill
      entry count (already in the History store) rather than `Random` — deterministic, no new
      persisted state, and it rotates naturally across successive kills.
-- **Assemble the final text from one template** `scribe:pvp-death-message` with args
-  `{0}` = killer, `{1}` = verb, `{2}` = victim (e.g. "{0} {1} {2}." → "Raptor shot Junkmuffin.").
-  The victim's Death entry and the killer's PvpKill entry share this string so both read the same.
+- **Write each PvP log from its own owner's perspective — two templates, one resolved verb key.**
+  The verb is resolved to a lang *key* (not a pre-formatted string) so both a passive and an active
+  form are available from the same signal:
+  - The victim's **Death** entry is victim-first & passive:
+    `scribe:scribe-pvp-death-message` = `"{0} was {1} by {2}."` → "Junkmuffin was slain by Raptor."
+    ({0} = victim, {1} = participle, {2} = killer).
+  - The killer's **PvpKill** entry is killer-first & active:
+    `scribe:scribe-pvp-kill-message` = `"{0} {1} {2}."` → "Raptor slew Junkmuffin."
+    ({0} = killer, {1} = active verb, {2} = victim).
+  - The passive form comes from an optional `<verb-key>-participle` override
+    (`VerbParticiple` → `Lang.Get("{key}-participle")` if present, else the active verb from
+    `VerbActive`). In the shipped English set only the generic pool differs ("slew" → "slain"); the
+    weapon/damage verbs ("shot", "slashed", …) read fine in both slots, so they ship no participle
+    override and fall back to the active form.
+  Rationale: sharing one killer-first sentence made the victim's own notebook read as though they
+  did the killing. Deriving both forms from one verb key keeps the two logs in sync (same weapon
+  signal) while letting each read naturally from its owner's point of view. Reworded from the
+  original single shared `scribe:pvp-death-message` template.
 - **All verbs + the template are mod-owned lang keys** in `scribe/lang/en.json`, so wording is
   fully editable without a code change and translatable later.
 - **Creature (non-PvP) deaths get their own flavor pool.** Vanilla ships `deathmsg-<creature>` keys
@@ -108,6 +123,43 @@ generic `"Player {0} got killed by {1}"` — it does not name the weapon.
   `ActorName.Length > 0 ? "{ActorName} — {Detail}" : Detail`. Every death/PvP sentence already names
   the victim, so setting `ActorName` would double the name ("Alrik — ...Alrik..."). The BossKill path
   already relied on this empty-`ActorName` convention; Death and PvpKill now match it.
+- **Locate notebooks by a carried-inventory allow-list, and update every match.** The original
+  `FindNotebookInInventory` walked `player.InventoryManager.InventoriesOrdered` and returned the first
+  notebook found. Decompiling `VintagestoryLib.dll` shows `InventoriesOrdered` is EVERY inventory the
+  player owns — `GlobalConstants` names them `hotbar`, `backpack`, `character`, `creative`, `ground`,
+  `mouse`, `craftinggrid` — and `InventoryPlayerCreative : InventoryBasePlayer` is in that set. Both
+  notebook items are creative-listed (`"creativeinventory": {…}`), so in a creative world the creative
+  inventory enumerates notebook *template* stacks. The first-match walk therefore (a) could resolve a
+  creative template and write history into it — which is then handed back out as every future spawned
+  copy (the observed "new notebook auto-populates past kills"), (b) resolved whichever inventory
+  happened to enumerate first, so a backpack notebook was skipped when another matched earlier (the
+  "only records from the hotbar" symptom), and (c) stopped at the first match, so only 1 of N carried
+  notebooks updated. Fix: an allow-list `CarriedInventoryClasses = { hotbar, backpack, character,
+  mouse }` (the player's real carried stacks; `mouse` is the live cursor-drag stack — a real held
+  item, unlike the infinite creative templates), and a `FindCarriedNotebooks` enumerator that yields
+  a host for EVERY matching notebook. All four live recorders (victim Death, killer PvpKill, boss
+  kill, storm) loop over it; a thin `FirstOrDefault()` wrapper serves the single-target seed command.
+  This is Mod-side only (no `Core`/save-format change), and documented in VSAPI-NOTES so the
+  `InventoriesOrdered`-includes-creative gotcha is not re-derived.
+- **Record the one-time PickedUp entry on notebook open, via a client→server signal.** The intent
+  was: the crafter gets a "Crafted by X" entry, and every *other* player who ever picks up the
+  notebook gets a one-time "picked up" entry the first time they open it. In practice it never fired.
+  `RecordPickedUpIfNew` lives in `NotebookHost.AttachServerContext`, which only runs when the SERVER
+  resolves a host — a task pin/complete round-trip or a death event. Opening a notebook is a
+  client-only action (`OnHeldInteractStart` → `OpenNotebookDialog` builds a client-side `NotebookHost`
+  and never touches the server), so a player who merely picked up and read a notebook was never seen
+  by the server and got no entry. Fix: a new `ScribeNotebookOpenedMessage` (client→server, carrying
+  the opened doc's `DocId` bytes) sent from BOTH notebook items' open paths right after
+  `RegisterHost`. Its server handler (`OnServerReceivedNotebookOpened`) resolves the opening player's
+  held notebook host — which runs `AttachServerContext` → `RecordPickedUpIfNew` on the server, where
+  the write actually persists. The recorder suppresses the crafter (their Crafted entry already
+  stands in for acquisition — detected by an existing `Crafted` entry with the same `ActorName`);
+  every other player is still deduplicated to one PickedUp entry each by `HistoryStore.TryAddEntry`.
+  Alternative considered: firing the entry from a server-side "item entered inventory" hook —
+  rejected as broader than "picked up & looked at it" and lacking a reliable per-player once
+  semantics; open-triggered matches the user's stated intent ("the first time they picked up a
+  notebook" = the first time they open it). Mod-side only (new message class + handler +
+  crafter-suppression); no `Core`/save-format change.
 - **Retention caps raised** in `HistoryStore` so a carried notebook keeps a longer chronicle:
   `MaxDeaths`/`MaxPvpKills` 10 → 30, `MaxBossKills` 10 → 20 (`MaxStorms` unchanged). This is the only
   `Core` change; the sliding-window cap tests reference the constants symbolically and still pass.

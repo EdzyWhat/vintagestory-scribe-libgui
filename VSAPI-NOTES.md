@@ -917,6 +917,20 @@ chronicle/integration features — decompiled, not yet exercised.)
 - **Per-player persistent store:** `IServerPlayer.SetModData<T>(key, data)` / `GetModData<T>(key,
   default)` — permanent, per-player, NOT client-synced (also raw-byte `SetModdata`/`GetModdata`/
   `RemoveModdata`). This is where a "milestones seen" set lives.
+- **`InventoryManager.InventoriesOrdered` includes the CREATIVE inventory (and ground/mouse/crafting)
+  — do NOT treat it as "the player's carried items".** It walks EVERY inventory the player owns; the
+  `GlobalConstants` class names are `hotbar`, `backpack`, `character`, `creative`, `ground`, `mouse`,
+  `craftinggrid`, and `InventoryPlayerCreative : InventoryBasePlayer` is in the set. A
+  creative-listed item (`"creativeinventory": {…}`) is enumerated from the creative inventory as an
+  infinite **template** stack — so a naive "find the first held item of type X in `InventoriesOrdered`
+  and write to it" can (a) mutate a creative template (its ItemStack attributes then ride along on
+  every future spawned copy — looked like "a fresh notebook auto-populates past history"), and
+  (b) resolve a different stack than the one the player thinks they're holding. Fix pattern: filter
+  `inv.ClassName` against an allow-list of the real carried inventories (`hotbar`/`backpack`/
+  `character`/`mouse`; `mouse` is the live cursor-drag stack, a real held item) and iterate ALL
+  matches, not just the first, if the state should live on every copy. (Scribe's `FindCarriedNotebooks`
+  — the `fix-pvp-death-kill-attribution` follow-up — does exactly this after the first-match walk
+  caused all three of those symptoms.)
 - **No global craft/smelt event:** the only crafting hook is the instance override
   `Collectible.OnCreatedByCrafting(...)`; `MatchGridRecipeDelegate` is a match filter, not a
   completion signal. Milestone/achievement-style detection must poll inventory (slow

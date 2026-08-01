@@ -21,6 +21,34 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## fix-pvp-death-kill-attribution
+
+> Attribute melee PvP kills (resolve attacker via `GetCauseEntity()`, not the melee-null
+> `SourceEntity`) and flavor the messages: weapon-aware PvP verb (bow → "pincushioned", sword →
+> "slashed"), and creature deaths named by variant ("a nightmare drifter", "a brown bear") from a
+> mob-death flavor pool instead of "died." Combat entries carry the whole sentence in Detail with
+> empty ActorName (no doubled name). Retention caps raised; `/scribe seed` rebuilt from live keys.
+> **MULTIPLAYER — needs a second player for 7.1–7.4.** Fully relaunch the client (assets load at boot).
+
+- [ ] `c1e10e64` **Melee PvP death names killer.** Player A holds a Notebook; Player B kills A with a
+      MELEE weapon. Confirm A's Death entry names B as the killer, not "A died." *(fix-pvp-death-kill-attribution 7.1)*
+- [ ] `d5945602` **Melee PvP kill logged.** Player A holds a Notebook and kills Player B with a melee
+      weapon. Confirm A's notebook gets a PvpKill entry naming B. *(fix-pvp-death-kill-attribution 7.2)*
+- [ ] `81fbc148` **Ranged (bow) path + verb.** Repeat the death/kill with a BOW; confirm the projectile
+      path still attributes correctly and the verb reads "pincushioned." *(fix-pvp-death-kill-attribution 7.3)*
+- [ ] `79dcedb5` **Verb variety.** Confirm a sword kill reads "slashed" and a spear "impaled"; with a
+      combat mod, a firearm/crossbow reads "shot" or at least a sensible verb — never wrong attribution.
+      *(fix-pvp-death-kill-attribution 7.4)*
+- [ ] `1105f7ca` **Mob death names variant.** Die to a nightmare drifter or bear while holding a
+      Notebook; confirm the Death entry reads a flavored line naming the correct creature ("...by a
+      nightmare drifter."), not "died.", no PvpKill entry, and no doubled name. *(fix-pvp-death-kill-attribution 7.5)*
+- [ ] `f07d0b45` **Environmental death unchanged.** Die to fall / fire / hunger while holding a
+      Notebook; confirm the Death entry still uses the vanilla reconstructed message and no PvpKill
+      entry is created. *(fix-pvp-death-kill-attribution 7.6)*
+- [ ] `28c4ede1` **Seed chronicle.** Run `/scribe seed all` on a held Notebook; confirm the fuller
+      chronicle (drifter death, bow PvP death, bear death, boss kill, storm, sword PvP kill) with no
+      doubled names. *(fix-pvp-death-kill-attribution 7.7)*
+
 ## timer-auto-disappear-setting
 
 > New per-player "Timer disappears" preference (Mod Behavior). Default ON preserves the original

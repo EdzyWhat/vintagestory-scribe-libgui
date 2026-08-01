@@ -38,8 +38,10 @@ public sealed class NotebookHost : IScribeDocumentHost
     }
 
     /// <summary>Attach server context so write-through operations can push the updated document
-    /// back to the player's client after mutating the ItemStack. Also records a PickedUp entry
-    /// the first time this player opens the notebook.</summary>
+    /// back to the player's client after mutating the ItemStack. Also records this player's one-time
+    /// PickedUp entry (deduplicated per actor, skipped for the crafter) via
+    /// <see cref="RecordPickedUpIfNew"/> — reached both from the notebook-opened network handler and
+    /// whenever the server resolves the host for a task interaction or death event.</summary>
     public void AttachServerContext(ICoreServerAPI sapi, IServerPlayer player)
     {
         _sapi = sapi;
@@ -156,6 +158,14 @@ public sealed class NotebookHost : IScribeDocumentHost
 
     private void RecordPickedUpIfNew(ICoreServerAPI sapi, IServerPlayer player)
     {
+        // The crafter already has a "Crafted by X" entry standing in for their acquisition, so don't
+        // also give them a redundant "Picked up" line. Other players still get their own first-pickup
+        // entry (deduplicated per actor by TryAddEntry). The Crafted entry stores the crafter's name
+        // in ActorName (see ItemScribeNotebook.OnCreatedByCrafting).
+        bool isCrafter = _history.Entries.Any(
+            e => e.Kind == HistoryEventKind.Crafted && e.ActorName == player.PlayerName);
+        if (isCrafter) return;
+
         var added = _history.TryAddEntry(new HistoryEntry
         {
             Kind       = HistoryEventKind.PickedUp,
