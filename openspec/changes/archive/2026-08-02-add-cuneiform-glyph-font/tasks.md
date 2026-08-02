@@ -46,7 +46,7 @@
 ## 8. Dev harness + prototype verification
 
 - [x] 8.1 Add a dev-only entry point (temporary hotkey / chat command / throwaway block) that renders a demo string through `CuneiformText`, behind no player-facing feature — `/cuneiform [text]` client command opens `GuiDialogCuneiformHarness`
-- [ ] 8.2 Prototype step 1: render 2–3 hardcoded glyphs (no asset, no animation) — confirm crisp filled strokes, theme ink color, correct box sizing
-- [ ] 8.3 Prototype step 2: render a full demo sentence from the bundle — judge legibility/spacing; tune `WordGapUnits` and any letter-spacing
-- [ ] 8.4 Toggle `DisableCuneiformFont` and confirm fallback to the selected task font
+- [x] 8.2 Prototype step 1: render 2–3 hardcoded glyphs (no asset, no animation) — confirm crisp filled strokes, theme ink color, correct box sizing — VERIFIED in-game 2026-08-02 (`screenshots/progress/2026-08-02_07-49-09_cuneiform-harness-first-in-game-render.png`): strokes crisp/filled/AA-clean, correct ink, boxes scale per em
+- [x] 8.3 Prototype step 2: render a full demo sentence from the bundle — judge legibility/spacing; tune `WordGapUnits` and any letter-spacing — VERIFIED: highly legible even at small em; spacing good, `WordGapUnits=45` kept (no tune). NB the authored set has no `&` — the demo string was corrected to authored punctuation (`CLAY, WAX!`); an unauthored char correctly renders as a missing-glyph gap
+- [x] 8.4 Toggle `DisableCuneiformFont` and confirm fallback to the selected task font — VERIFIED: after toggling on and re-running `.cuneiform`, lines render in the chosen task font. NB the *dev harness* does not live-swap while open (it captures state at construction and has no settings-change rebuild hook); the real tablet dialog (Proposal C) subclasses `ScribeDialogBase`, which already rebuilds on the settings-change event, so in-place replacement is a C concern, not an A gap
 - [x] 8.5 `dotnet test` green (new Core tests + existing suite) — 218/218 pass
