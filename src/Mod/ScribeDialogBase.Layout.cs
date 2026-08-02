@@ -122,25 +122,9 @@ public abstract partial class ScribeDialogBase
         var displayTitle = (rawTitle == ScribeDocument.DefaultTitle ? null : rawTitle) ?? host.DefaultDocumentTitle;
 
         const float titleBtnSpacing = 6f;
-        Widget titleSlot = _isTitleEditing
-            ? new Expanded(new TextField(
-                _titleController!,
-                _titleFocusNode!,
-                new TextFieldStyle { FillColor = new Vector4(0, 0, 0, 0), BorderThickness = 0, TextStyle = titleStyle },
-                onKeyDown: e =>
-                {
-                    if (_titleController!.Text.Length >= ScribeDocument.MaxTitleLength
-                        && !e.Ctrl && e.KeyCode is not ((int)GlKeys.BackSpace or (int)GlKeys.Delete
-                            or (int)GlKeys.Left or (int)GlKeys.Right or (int)GlKeys.Home or (int)GlKeys.End))
-                        e.Handled = true;
-                    if (e.KeyCode is (int)GlKeys.Enter or (int)GlKeys.KeypadEnter or (int)GlKeys.Escape)
-                    {
-                        CommitTitleIfEditing();
-                        ForceRebuild();
-                        e.Handled = true;
-                    }
-                }))
-            : new Expanded(new RichText(new TextSpan(displayTitle), titleStyle, maxLines: 1, overflow: TextOverflow.Ellipsis));
+        Widget titleSlot = new Expanded(_isTitleEditing
+            ? BuildTitleField(titleStyle)
+            : BuildTitleDisplay(displayTitle, titleStyle));
 
         // Pencil — icon-only (no chrome), same visual weight as the grip glyph.
         // Only shown in editor view (scratch is non-null); hidden in read and pin views.
@@ -230,6 +214,47 @@ public abstract partial class ScribeDialogBase
                     child: FlatPanel(new Padding(
                         EdgeInsets.Only(left: 10 + 0.04f * layout.W, right: 0.04f * layout.W),
                         child: titleRow)))));
+    }
+
+    /// <summary>The resting (non-editing) title widget, sized to fill the title slot's Expanded. Default is
+    /// today's single-line <see cref="RichText"/> with ellipsis overflow (Lectern/Notebook, unchanged). The
+    /// tablet overrides this to render the title as display-only cuneiform truncated to the band width
+    /// (add-tablet-cuneiform-chrome D2). <paramref name="displayTitle"/> is the already-resolved title text
+    /// (host default substituted for the codec's "Untitled"); <paramref name="titleStyle"/> carries the
+    /// resolved size/family/weight/color so an override can match the band metrics.</summary>
+    private protected virtual Widget BuildTitleDisplay(string displayTitle, TextStyle titleStyle) =>
+        new RichText(new TextSpan(displayTitle), titleStyle, maxLines: 1, overflow: TextOverflow.Ellipsis);
+
+    /// <summary>The active (editing) title widget — a live text input bound to <see cref="_titleController"/>
+    /// and <see cref="_titleFocusNode"/>. Default is the stock LibGUI single-line <see cref="TextField"/>
+    /// (Lectern/Notebook, unchanged), with the maxlength gate and Enter/Escape commit wired here so the
+    /// shared commit machinery (<see cref="CommitTitleIfEditing"/>) is untouched by an override. The tablet
+    /// overrides this to a single-line cuneiform input driven by the SAME controller/focus node, so its
+    /// <see cref="_isTitleEditing"/> / <see cref="_pendingTitleEditRebuild"/> / <see cref="_pendingTitleFocus"/>
+    /// deferral all still apply (add-tablet-cuneiform-chrome D2).</summary>
+    private protected virtual Widget BuildTitleField(TextStyle titleStyle) =>
+        new TextField(
+            _titleController!,
+            _titleFocusNode!,
+            new TextFieldStyle { FillColor = new Vector4(0, 0, 0, 0), BorderThickness = 0, TextStyle = titleStyle },
+            onKeyDown: OnTitleFieldKeyDown);
+
+    /// <summary>Shared title-input key handling for both the default <see cref="TextField"/> and a subclass's
+    /// cuneiform title input: block typing past <see cref="ScribeDocument.MaxTitleLength"/> (letting the
+    /// caret/delete keys through), and commit + rebuild on Enter/Escape. Extracted so the tablet's cuneiform
+    /// title field reuses the identical maxlength + commit behavior.</summary>
+    private protected void OnTitleFieldKeyDown(KeyboardEvent e)
+    {
+        if (_titleController!.Text.Length >= ScribeDocument.MaxTitleLength
+            && !e.Ctrl && e.KeyCode is not ((int)GlKeys.BackSpace or (int)GlKeys.Delete
+                or (int)GlKeys.Left or (int)GlKeys.Right or (int)GlKeys.Home or (int)GlKeys.End))
+            e.Handled = true;
+        if (e.KeyCode is (int)GlKeys.Enter or (int)GlKeys.KeypadEnter or (int)GlKeys.Escape)
+        {
+            CommitTitleIfEditing();
+            ForceRebuild();
+            e.Handled = true;
+        }
     }
 
     // ---------------- Title-bar grip drag (§8.1) ----------------
@@ -400,8 +425,22 @@ public abstract partial class ScribeDialogBase
 
     /// <summary>The live row style for this build, derived from the player's current settings (NOT cached
     /// at open — add-settings-tab D4), so a window-font-scale change from the settings view repaints the
-    /// open dialog on the next rebuild.</summary>
-    private ScribeRowStyle RowStyle => ScribeRowStyle.FromSettings(modSystem.MySettings);
+    /// open dialog on the next rebuild. Passes through <see cref="DecorateRowStyle"/> so a subclass may
+    /// layer tier-specific row behavior (the tablet flips on the cuneiform row path) without duplicating
+    /// the settings-derivation.</summary>
+    private ScribeRowStyle RowStyle => DecorateRowStyle(ScribeRowStyle.FromSettings(modSystem.MySettings));
+
+    /// <summary>Hook to adjust the settings-derived <see cref="ScribeRowStyle"/> for this dialog tier. The
+    /// default returns it unchanged (Lectern/Notebook). The tablet overrides it to set
+    /// <see cref="ScribeRowStyle.UseCuneiform"/> + the glyph bundle under the single cuneiform branch, so
+    /// its editable rows type in cuneiform (add-tablet-cuneiform-chrome).</summary>
+    private protected virtual ScribeRowStyle DecorateRowStyle(ScribeRowStyle style) => style;
+
+    /// <summary>Action for the editor footer's Settings gear, or null to omit it. The default is null: the
+    /// Lectern/Notebook reach Scribe Settings through their nav column, so their footer has no gear. The
+    /// tablet — which drops the nav column (D3) — overrides this to <c>modSystem.OpenSettings</c> so a gear
+    /// appears right of the ⓘ info button, styled identically (add-tablet-cuneiform-chrome).</summary>
+    private protected virtual Action? EditorSettingsGearAction => null;
 
     /// <summary>Lang key for the empty-document hint shown in the Read and Edit views. Notebook
     /// subclasses override this to show "This notebook is empty…" instead of the Lectern phrasing.</summary>
@@ -483,6 +522,10 @@ public abstract partial class ScribeDialogBase
             onAddTask: OnClickAddTask,
             onSwitchToRead: OnClickSwitchToRead,
             onOpenEditorReference: OpenEditorReferenceHandbook,
+            // Footer gear (tablet only). The base returns null so the Lectern/Notebook footer omits it —
+            // those dialogs reach Settings through their nav column, which the tablet drops (D3). The tablet
+            // overrides EditorSettingsGearAction to return modSystem.OpenSettings (add-tablet-cuneiform-chrome).
+            onOpenSettings: EditorSettingsGearAction,
             // Symmetric 0.04·W horizontal inset on the footer button row, from the same ScribeLayout width.
             footerButtonPadding: EdgeInsets.Symmetric(
                 horizontal: 0.04f * host.GetLayout(modSystem.MySettings.PixelArtSize).W),

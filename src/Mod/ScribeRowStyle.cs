@@ -1,4 +1,5 @@
 using Scribe.Core;
+using Scribe.Core.Cuneiform;   // GlyphBundle (tablet cuneiform row path)
 
 namespace Scribe;
 
@@ -21,6 +22,17 @@ internal readonly record struct ScribeRowStyle(
     float ControlSize,
     string TaskFontFamily)
 {
+    /// <summary>When true (tablet only), editable rows render their text as live cuneiform strokes with a
+    /// synthetic caret instead of the normal task font (add-tablet-cuneiform-chrome). Default false keeps
+    /// the Lectern/Notebook rows on the normal renderer, and the disable-cuneiform fallback resolves this
+    /// back to false so every tablet surface reverts together. An <c>init</c>-only add-on so
+    /// <see cref="FromSettings"/> and existing positional constructions stay valid.</summary>
+    public bool UseCuneiform { get; init; }
+
+    /// <summary>Parsed cuneiform glyph geometry for the <see cref="UseCuneiform"/> row path; null renders
+    /// no strokes (asset not yet loaded). Ignored when <see cref="UseCuneiform"/> is false.</summary>
+    public GlyphBundle? CuneiformBundle { get; init; }
+
     /// <summary>
     /// Builds a row style from the player's consolidated settings. THIS IS THE SINGLE PLACE where the
     /// window font-size scale is applied: the scalable values are multiplied by

@@ -2172,10 +2172,12 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 
 ## add-clockmaker-notebook-schematic
 
-- [ ] `de045c46` **Schematic item exists.** Open Creative search for "schematic" — confirm the
+- [x] `de045c46` **Schematic item exists.** Open Creative search for "schematic" — confirm the
       Clockmaker's Notebook Schematic shows up with its name/description and a handbook page, and that
       when held or ground-stored it renders as the (borrowed) glider-blueprint scroll art.
       *(add-clockmaker-notebook-schematic 1.4)*
+      - **Confirmed 2026-08-02** via playtest submission (2026-08-02T12-40-23): the schematic item
+        appears in Creative search and reads correctly. No screenshot on file; existence check only.
 - [ ] `429072f0` **Craft without the trait.** On a NON-Clockmaker character, put Notebook + temporal
       gear + metal parts + the schematic in the grid — confirm it yields a Clockmaker's Notebook, the
       schematic STAYS in the grid (reusable), and the other three are consumed. Craft a second from the
@@ -2183,15 +2185,100 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [ ] `297731fd` **Trait path unchanged.** Confirm a Clockmaker (Tinkerer trait) still crafts via the
       original 3-item no-schematic recipe, AND a non-Clockmaker with no schematic still CANNOT craft via
       that trait recipe. *(add-clockmaker-notebook-schematic 2.4)*
+      - **Still broken 2026-08-02:** the CM Notebook handbook entry (Desktop capture "Screenshot
+        2026-08-02 at 12.45.37 PM", cloud-only — no repo copy staged) shows only ONE recipe
+        (Notebook + temporal gear + metal parts, 3 items) and NO trait asterisk. Expected two recipes —
+        the trait-gated 3-item recipe (which should carry a `* Requires <trait> trait` marker, as the
+        Sling entry does) AND the new 4-item schematic recipe. Neither the second recipe nor the trait
+        marker appears, suggesting the schematic recipe didn't register and/or the trait recipe lost its
+        trait gate. Next: check the recipe JSON registration + the handbook's recipe aggregation for
+        this item.
 - [ ] `e093c2ad` **Carryover via schematic.** Craft the Clockmaker's Notebook via the schematic recipe
       from a Notebook that already has tasks/notes/History — confirm the document and History carry into
       the result. *(add-clockmaker-notebook-schematic 2.5)*
-- [ ] `2a7c88a0` **Patch loads clean.** Check the game log on boot — confirm no "could not find
+- [x] `2a7c88a0` **Patch loads clean.** Check the game log on boot — confirm no "could not find
       file/path" warning for trader-commodities or trader-treasurehunter tradelists (the ware patch
       resolved). *(add-clockmaker-notebook-schematic 3.2)*
+      - **Confirmed 2026-08-02** via playtest submission (2026-08-02T12-40-23): no missing-file/path
+        warning for the trader tradelist patches on boot.
 - [ ] `0efc1fa5` **Traders sell it.** Spawn fresh Commodities and Treasure Hunter traders (already-
       spawned ones won't restock immediately) and check stock until the schematic appears — confirm the
       gear price/stock look right and buying it yields a working schematic. Note it's a probabilistic
       appearance. *(add-clockmaker-notebook-schematic 3.3)*
 - [ ] `7d43b5d3` **Other traders exclude it.** Check a non-target trader (e.g. Survival Goods or
       Artisan) and confirm the schematic is NOT in its wares. *(add-clockmaker-notebook-schematic 3.4)*
+
+## add-tablet-cuneiform-chrome
+
+- [ ] `6017abe3` **Type live cuneiform.** Hold a clay/wax tablet and type into a task row — glyphs
+      form as cuneiform strokes with a blinking synthetic caret; arrow-key nav and click-to-place move
+      the caret to the right character boundary. Also confirm no title banner renders and the editor
+      fills the central region. *(add-tablet-cuneiform-chrome 7.2)*
+  - **Still broken 2026-08-02:** playtest (2026-08-02T12-48-22-general.png) — "no room to type,"
+    couldn't reach a task row at all. Blocked by the same balloon bug as `a029001d`: the "Add task"
+    button filled the whole central column, covering the row area. Title editing worked ("WE CAN TYPE
+    IN HERE…" typed into the title bar). Fix applied (see `a029001d`); retest typing into a task row
+    once the button no longer fills the column.
+  - **Still broken 2026-08-02 (retest):** balloon fix confirmed — rows are reachable and glyphs form
+    correctly, arrow-nav (L/R + U/D) works perfectly (2026-08-02T13-01-04-6017abe3.png). But three
+    sub-issues remain, all NEW/pre-existing (not the balloon): (1) the synthetic caret does not BLINK
+    (renders static); (2) Shift+Enter does not insert a line break in a cuneiform row; (3) Shift+arrow
+    "selects" text but there is no visual selection feedback in the cuneiform render. Also a space typed
+    at end-of-line doesn't advance the caret until the next non-space char (see general notes). NOTE on
+    "banner renders": the screenshot shows only the cuneiform TITLE BAR + rows — the retired redundant
+    banner is genuinely gone; the tester read the cuneiform title bar as "the banner." Needs a fix pass
+    on caret-blink + Shift+Enter + selection feedback before this can pass.
+- [x] `4c2624f4` **Check focus chrome.** A resting tablet row shows no border/background; clicking/
+      focusing it gives it a border + soft fill; it reverts on blur — and in-progress text/caret
+      survives the appearance change (no revert). *(add-tablet-cuneiform-chrome 5.1)*
+  - **Confirmed 2026-08-02** via 2026-08-02T13-01-04-6017abe3.png (focused 3rd row shows border + soft
+    fill, resting rows are bare) — tester: "the swap is distinct."
+- [x] `77394f15` **Edit title in cuneiform.** Click the pencil and type — the title bar edits live in
+      cuneiform; a long title hard-clips (truncates) in the fixed band instead of growing it taller.
+      *(add-tablet-cuneiform-chrome 7.2)*
+  - **Confirmed 2026-08-02:** tester "Works" — title edits live in cuneiform and truncates in the band
+    (title reads "WE CAN TYPE IN HERE, BUT THERE'S N…" clipped, in 2026-08-02T13-01-04-6017abe3.png).
+- [x] `0cff0bd9` **Wrap long rows.** Type a long task row — it word-wraps and the row auto-grows; the
+      caret still tracks correctly across wrapped lines. *(add-tablet-cuneiform-chrome 7.2)*
+  - **Confirmed 2026-08-02:** tester "Works"; the focused row in 2026-08-02T13-01-04-6017abe3.png shows
+    a wrapped two-line task with the caret tracking on the second line.
+- [x] `a029001d` **Cuneiform button labels.** The footer "Add task" label renders in cuneiform strokes
+      at the same scale as the row glyphs. *(add-tablet-cuneiform-chrome 5.4)*
+  - **Still broken 2026-08-02:** playtest (2026-08-02T12-48-22-general.png) — the "Add task" button
+    ballooned to fill the ENTIRE central column, hiding the task rows ("Add Task takes the entire
+    column… no room to type"). Root cause: `BuildButtonLabel` wrapped the cuneiform label in a
+    `Center`, which is a `RenderPositionedBox` that expands to the parent's finite `MaxHeight`; inside
+    the "Add task" `Expanded` (max height = the whole scroll column) it stretched the button to fill it.
+    The normal `Text` label and the sibling ⓘ/gear glyphs use no such wrapper (the file's own comments
+    warn about exactly this). **Fix applied** (ScribeEditorContent.cs): return `CuneiformText` directly,
+    no `Center`. Builds clean, restaged. Retest that "Add task" hugs its label and rows are visible.
+  - **Confirmed 2026-08-02 (retest)** via 2026-08-02T13-10-26-general.png — balloon fixed, button is
+    normal height, label is cuneiform in an appropriate footprint. Tester notes the cuneiform label is
+    NOT at the same visual scale as the row glyphs (~52px button vs ~62px for the ⓘ/gear siblings) — a
+    global cuneiform-scale + Add-task padding refinement is filed as a follow-up (see general notes),
+    not a blocker for this item.
+- [x] `96661ea2` **Gear opens Settings.** The footer gear (right of the ⓘ) opens Scribe Settings and
+      matches the ⓘ button's styling/size. *(add-tablet-cuneiform-chrome 7.2)*
+  - **Confirmed 2026-08-02:** tester "Works"; the gear sits right of the ⓘ at matching size in
+    2026-08-02T13-10-26-general.png and opens Settings.
+- [x] `78d5448e` **Toggle disable-cuneiform.** Flip "Disable cuneiform font" in Settings both
+      directions — every tablet surface (title, rows, button labels) reverts to the normal editable
+      font together and stays editable, then all return to cuneiform on flip back.
+      *(add-tablet-cuneiform-chrome 6.2)*
+  - **Confirmed 2026-08-02:** tester "Works" — all surfaces flip together in both directions and stay
+    editable. (Separate follow-up: tester wants the setting reframed from "Disable cuneiform" to a
+    positive "Cuneiform Tablets" default-true boolean — see general notes.)
+- [x] `0e313a22` **Settings stays legible.** With cuneiform ON, confirm the Scribe Settings window
+      itself is still normal readable text (never cuneiform), in both toggle states.
+      *(add-tablet-cuneiform-chrome 6.3)*
+  - **Confirmed 2026-08-02:** tester "Works" — Settings stays in the normal readable font regardless of
+    the cuneiform toggle.
+- [ ] `d53f6b5b` **Both materials.** Repeat the core cuneiform checks on both a clay and a wax tablet —
+      behavior identical, only backdrop/ink color differ. *(add-tablet-cuneiform-chrome 4.5)*
+  - **Still broken 2026-08-02:** tester "can't see any backdrop or ink color difference" between clay
+    and wax. Expected per design that clay vs wax differ in backdrop + ink color. NOTE: the material
+    backdrops are tracked separately in `add-tablet-clay-type-backdrops` and the ink-contrast decision
+    is deliberately DEFERRED (memory: tablet-theme-contrast-vs-backdrops — the current earthen palette
+    is a PLACEHOLDER pending the real clay/wax backdrops). So "no difference" is expected at THIS stage,
+    not a regression — but this item can't pass until those land. Likely reclassify as Backlogged on the
+    material-backdrops change rather than a cuneiform-chrome failure.

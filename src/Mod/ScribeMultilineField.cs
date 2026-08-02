@@ -28,6 +28,7 @@ using Gui.Widgets.Events;         // KeyboardEvent, IKeyDownHandler, IKeyCharHan
 using Gui.Widgets.Framework;      // Widget, StatefulWidget, State, RenderObjectWidget, Theme, IFocusable
 using Gui.Widgets.Input;          // FocusNode, GestureDetector
 using OpenTK.Mathematics;         // Vector2, Vector4
+using Scribe.Core.Cuneiform;      // GlyphBundle (cuneiform render path)
 using Vintagestory.API.Client;    // GlKeys
 
 namespace Scribe;
@@ -39,8 +40,10 @@ namespace Scribe;
 internal readonly record struct ScribeVisualLine(string Text, int Start);
 
 /// <summary>The render object: wraps + paints multi-line text, a selection highlight, and a caret,
-/// auto-sizing its height to the wrapped line count.</summary>
-internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox
+/// auto-sizing its height to the wrapped line count. Implements <see cref="IScribeEditableTextRender"/>
+/// (already had both members) so the field State can drive it or the cuneiform render object through
+/// one contract.</summary>
+internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox, IScribeEditableTextRender
 {
     /// <summary>Font family used for BOTH measuring and drawing this field's text. It MUST match the
     /// family the read view's <see cref="Gui.Widgets.Basic.Text"/> uses for the same row, or the two views
@@ -406,6 +409,8 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         float padY = 6f,
         bool autoFocus = false,
         int? maxLength = null,
+        bool useCuneiform = false,
+        GlyphBundle? cuneiformBundle = null,
         Action<string>? onChanged = null,
         Action? onCommitAndAdvance = null,
         Action? onCommitAndRetreat = null,
@@ -423,6 +428,8 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         PadY = padY;
         AutoFocus = autoFocus;
         MaxLength = maxLength;
+        UseCuneiform = useCuneiform;
+        CuneiformBundle = cuneiformBundle;
         OnChanged = onChanged;
         OnCommitAndAdvance = onCommitAndAdvance;
         OnCommitAndRetreat = onCommitAndRetreat;
@@ -455,6 +462,14 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
     /// relies on the codec's larger hard bound. The codec also clips on read as the authoritative
     /// backstop, so this is purely the in-editor UX half.</summary>
     public int? MaxLength { get; }
+    /// <summary>When true (tablet only), the field paints its buffer as live cuneiform strokes with a
+    /// synthetic caret instead of the normal TTF text — the same State drives a cuneiform render object.
+    /// Default false keeps the Lectern/Notebook editors on the normal renderer, and the disable-cuneiform
+    /// fallback flows in as false so those surfaces revert to a legible editable field.</summary>
+    public bool UseCuneiform { get; }
+    /// <summary>Parsed cuneiform glyph geometry for the <see cref="UseCuneiform"/> path; null renders no
+    /// strokes (asset not yet loaded). Ignored when <see cref="UseCuneiform"/> is false.</summary>
+    public GlyphBundle? CuneiformBundle { get; }
     public Action<string>? OnChanged { get; }
     /// <summary>Tab (no Shift): the field has committed its text via <see cref="OnChanged"/>; the
     /// parent should normalize + flush the row and move focus to the next row.</summary>
@@ -790,13 +805,22 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
     private int? OffsetAt(PointerEvent e)
     {
         if (Element?.RenderObject is not { } proxy) return null;
-        var textRender = proxy is ScribeMultilineFieldRender direct
-            ? direct
-            : proxy.Children.Count > 0 ? proxy.Children[0] as ScribeMultilineFieldRender : null;
+        var textRender = ResolveTextRender(proxy);
         if (textRender is null) return null;
 
         Vector2 local = proxy.GlobalToLocal(new Vector2(e.X, e.Y));
         return Math.Clamp(textRender.OffsetAtPosition(local), 0, text.Length);
+    }
+
+    /// <summary>Resolve the field's editable text render object through the GestureDetector proxy. The
+    /// proxy wraps our render object as its single child; it may be the normal
+    /// <see cref="ScribeMultilineFieldRender"/> or the cuneiform <see cref="ScribeCuneiformFieldRender"/>,
+    /// so we resolve it by the shared <see cref="IScribeEditableTextRender"/> contract rather than a
+    /// concrete type — letting one State drive either render object (design D2/D-Q4).</summary>
+    private static IScribeEditableTextRender? ResolveTextRender(RenderObject proxy)
+    {
+        if (proxy is IScribeEditableTextRender direct) return direct;
+        return proxy.Children.Count > 0 ? proxy.Children[0] as IScribeEditableTextRender : null;
     }
 
     /// <summary>Move the caret one visual line up (<paramref name="direction"/> = -1) or down (+1),
@@ -806,9 +830,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
     private int? CaretVertical(int direction)
     {
         if (Element?.RenderObject is not { } proxy) return null;
-        var textRender = proxy is ScribeMultilineFieldRender direct
-            ? direct
-            : proxy.Children.Count > 0 ? proxy.Children[0] as ScribeMultilineFieldRender : null;
+        var textRender = ResolveTextRender(proxy);
         if (textRender is null) return null;
 
         return Math.Clamp(textRender.CaretOffsetVertical(caret, direction), 0, text.Length);
@@ -895,11 +917,30 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
     public override Widget Build(BuildContext context)
     {
         var colors = Theme.Of(context).ColorScheme;
-        return new GestureDetector(
-            onPress: OnFieldPress,
-            onMove: OnFieldMove,
-            onRelease: OnFieldRelease,
-            child: new ScribeMultilineFieldRenderWidget(
+
+        // The gesture/keyboard model is identical for both render paths (this State owns it); only the
+        // child render widget differs. When UseCuneiform is on, drive the cuneiform render object — it
+        // implements the same IScribeEditableTextRender geometry contract the click/vertical-nav helpers
+        // resolve through the proxy, so no State code changes between the two paths.
+        Widget child = Widget.UseCuneiform
+            ? new ScribeCuneiformFieldRenderWidget(
+                text: text,
+                caret: caret,
+                hasFocus: focusNode.HasFocus,
+                fontSizeEm: Widget.FontSize,
+                inkColor: colors.OnSurface,
+                caretColor: colors.Primary,
+                bundle: Widget.CuneiformBundle,
+                padX: Widget.PadX,
+                padY: Widget.PadY,
+                // No field-level box on the cuneiform (tablet) path: the row is borderless/transparent at
+                // rest and gains its border + background from the enclosing ScribeEditRow Container on focus
+                // (add-tablet-cuneiform-chrome D3 / task 5.1) — one appearance driver, no doubled chrome.
+                boxColor: Vector4.Zero,
+                borderColor: Vector4.Zero,
+                borderThickness: 0f,
+                cornerRadii: Vector4.Zero)
+            : new ScribeMultilineFieldRenderWidget(
                 text: text,
                 placeholder: Widget.Placeholder,
                 caret: caret,
@@ -916,6 +957,12 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 borderColor: focusNode.HasFocus ? colors.Primary : colors.Border,
                 borderThickness: 1f,
                 cornerRadii: Vector4.One * 4f,
-                fontFamily: Widget.FontFamily));
+                fontFamily: Widget.FontFamily);
+
+        return new GestureDetector(
+            onPress: OnFieldPress,
+            onMove: OnFieldMove,
+            onRelease: OnFieldRelease,
+            child: child);
     }
 }

@@ -104,6 +104,12 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     private bool _isTitleEditing;
     private TextEditingController? _titleController;
     private FocusNode? _titleFocusNode;
+    /// <summary>The shared title editing controller/focus node, exposed to a subclass that supplies its own
+    /// title input widget (the tablet's cuneiform title, add-tablet-cuneiform-chrome). A subclass MUST bind
+    /// its input to these — the commit machinery (<see cref="CommitTitleIfEditing"/>) and the blur listener
+    /// key off them — rather than creating its own. Non-null once <c>OnGuiOpened</c> has run.</summary>
+    private protected TextEditingController TitleController => _titleController!;
+    private protected FocusNode TitleFocusNode => _titleFocusNode!;
     /// <summary>Set by the pencil tap so the freshly-rebuilt title field is focused from
     /// <see cref="OnRenderGUI"/>, not inside the tap: calling <c>RequestFocus()</c> right after a
     /// <c>ForceRebuild()</c> mid-pointer-dispatch orphans a sibling button (null <c>Element.Owner</c>) and

@@ -25,6 +25,12 @@ public readonly struct PositionedStroke
 /// The result of laying a string out: the positioned strokes (in construction order) plus the line's
 /// total advance width and its height, all in grid units. <see cref="TotalWidth"/> is the pen position
 /// after the last glyph; <see cref="LineHeight"/> is the em height a renderer sizes the line box to.
+///
+/// For editable text, the line also carries a <see cref="CharBoundaries"/> map — the cumulative pen
+/// position (grid units) at each source-character boundary — so a caller can place a synthetic caret
+/// and hit-test clicks against cuneiform (which has no native caret). <see cref="SourceStart"/> is the
+/// index, in the ORIGINAL laid-out string, of this line's first character (0 for a single line;
+/// non-zero for a wrapped continuation line), so a global character index maps to a line + local index.
 /// </summary>
 public sealed class CuneiformLine
 {
@@ -37,11 +43,69 @@ public sealed class CuneiformLine
     /// <summary>The line's height in grid units (the em height a renderer scales from).</summary>
     public double LineHeight { get; }
 
-    public CuneiformLine(IReadOnlyList<PositionedStroke> strokes, double totalWidth, double lineHeight)
+    /// <summary>Cumulative pen position (grid units) at each source-character boundary of THIS line.
+    /// Length is the line's character count + 1: index 0 is the pen before the first character (always
+    /// 0.0) and the last entry equals <see cref="TotalWidth"/>. Every source character advances the pen
+    /// (a space by the word gap, a missing glyph by the missing-glyph gap, a glyph by its footprint plus
+    /// its leading inter-glyph gap), so a caret index maps to a stable position even across spaces and
+    /// unknown characters.</summary>
+    public IReadOnlyList<double> CharBoundaries { get; }
+
+    /// <summary>Index, in the original laid-out string, of this line's first character. 0 for a single
+    /// (unwrapped) line; the source offset of the break for a wrapped continuation line.</summary>
+    public int SourceStart { get; }
+
+    public CuneiformLine(
+        IReadOnlyList<PositionedStroke> strokes,
+        double totalWidth,
+        double lineHeight,
+        IReadOnlyList<double> charBoundaries,
+        int sourceStart)
     {
         Strokes = strokes;
         TotalWidth = totalWidth;
         LineHeight = lineHeight;
+        CharBoundaries = charBoundaries;
+        SourceStart = sourceStart;
+    }
+
+    /// <summary>The pen position (grid units) of the caret sitting BEFORE the character at
+    /// <paramref name="localCharIndex"/> within this line. The index is clamped to a valid boundary, so
+    /// 0 returns the line start and the character count returns <see cref="TotalWidth"/>.</summary>
+    public double CaretXAt(int localCharIndex)
+    {
+        if (CharBoundaries.Count == 0)
+        {
+            return 0.0;
+        }
+
+        int idx = Math.Clamp(localCharIndex, 0, CharBoundaries.Count - 1);
+        return CharBoundaries[idx];
+    }
+
+    /// <summary>The local character-boundary index (0..character count) whose pen position is nearest to
+    /// <paramref name="x"/> grid units — i.e. where a click at <paramref name="x"/> should place the
+    /// caret. Ties resolve to the lower index.</summary>
+    public int NearestBoundary(double x)
+    {
+        if (CharBoundaries.Count == 0)
+        {
+            return 0;
+        }
+
+        int best = 0;
+        double bestDist = Math.Abs(CharBoundaries[0] - x);
+        for (int i = 1; i < CharBoundaries.Count; i++)
+        {
+            double dist = Math.Abs(CharBoundaries[i] - x);
+            if (dist < bestDist)
+            {
+                bestDist = dist;
+                best = i;
+            }
+        }
+
+        return best;
     }
 }
 
@@ -85,24 +149,120 @@ public sealed class CuneiformLineLayout
     }
 
     /// <summary>
-    /// Lays <paramref name="text"/> out into a <see cref="CuneiformLine"/>. Input is folded to uppercase
-    /// before glyph lookup (the authored set is uppercase-only); spaces advance <see cref="WordGapUnits"/>
-    /// with no strokes; a character with no authored glyph advances <see cref="MissingGlyphGapUnits"/>
-    /// with no strokes (never throws). Strokes are emitted in authored construction order across the line.
+    /// Lays <paramref name="text"/> out into a single <see cref="CuneiformLine"/>. Input is folded to
+    /// uppercase before glyph lookup (the authored set is uppercase-only); spaces advance
+    /// <see cref="WordGapUnits"/> with no strokes; a character with no authored glyph advances
+    /// <see cref="MissingGlyphGapUnits"/> with no strokes (never throws). Strokes are emitted in authored
+    /// construction order across the line. The returned line also carries a per-character advance map
+    /// (<see cref="CuneiformLine.CharBoundaries"/>) for caret placement and click hit-testing.
     /// </summary>
     public CuneiformLine Layout(string text)
     {
+        return LayoutSegment(text ?? string.Empty, 0);
+    }
+
+    /// <summary>
+    /// Lays <paramref name="text"/> out into ONE OR MORE <see cref="CuneiformLine"/>s, soft-wrapping at
+    /// word-gap (space/tab) boundaries so that no line exceeds <paramref name="maxWidthGridUnits"/> grid
+    /// units where a break point exists. This is the cuneiform analogue of normal text soft-wrap.
+    ///
+    /// A word that is itself wider than the maximum occupies its own line rather than being split
+    /// mid-glyph (layout never throws). A non-positive or infinite <paramref name="maxWidthGridUnits"/>
+    /// disables wrapping and returns exactly one line, identical to <see cref="Layout"/>. Each returned
+    /// line's <see cref="CuneiformLine.SourceStart"/> is the index of its first character in
+    /// <paramref name="text"/>, and its <see cref="CuneiformLine.CharBoundaries"/> are local to that line.
+    /// </summary>
+    public IReadOnlyList<CuneiformLine> LayoutWrapped(string text, double maxWidthGridUnits)
+    {
+        string source = text ?? string.Empty;
+
+        if (!(maxWidthGridUnits > 0.0) || double.IsInfinity(maxWidthGridUnits))
+        {
+            return new[] { LayoutSegment(source, 0) };
+        }
+
+        // Tokenize into words — maximal runs of non-space/tab characters — recording each word's
+        // half-open [start, end) source range. Wrapping happens between words only (there is no
+        // kerning across a space, so words lay out independently), so this is the natural unit.
+        var words = new List<(int Start, int End)>();
+        int wordStart = -1;
+        for (int i = 0; i < source.Length; i++)
+        {
+            bool isSpace = source[i] == ' ' || source[i] == '\t';
+            if (!isSpace)
+            {
+                if (wordStart < 0) wordStart = i;
+            }
+            else if (wordStart >= 0)
+            {
+                words.Add((wordStart, i));
+                wordStart = -1;
+            }
+        }
+        if (wordStart >= 0)
+        {
+            words.Add((wordStart, source.Length));
+        }
+
+        // Empty or whitespace-only input: one line, identical to the single-line layout.
+        if (words.Count == 0)
+        {
+            return new[] { LayoutSegment(source, 0) };
+        }
+
+        double WordWidth((int Start, int End) w) =>
+            LayoutSegment(source.Substring(w.Start, w.End - w.Start), 0).TotalWidth;
+
+        var lines = new List<CuneiformLine>();
+        int lineStart = words[0].Start;
+        int lineEnd = words[0].End;
+        double lineWidth = WordWidth(words[0]);
+
+        for (int k = 1; k < words.Count; k++)
+        {
+            double wordWidth = WordWidth(words[k]);
+            double candidate = lineWidth + WordGapUnits + wordWidth;
+
+            if (candidate > maxWidthGridUnits)
+            {
+                // Overflow: flush the current line and start a new one with this word. An over-long
+                // word (wider than max on its own) simply becomes a one-word line — never split.
+                lines.Add(LayoutSegment(source.Substring(lineStart, lineEnd - lineStart), lineStart));
+                lineStart = words[k].Start;
+                lineEnd = words[k].End;
+                lineWidth = wordWidth;
+            }
+            else
+            {
+                lineEnd = words[k].End;
+                lineWidth = candidate;
+            }
+        }
+
+        lines.Add(LayoutSegment(source.Substring(lineStart, lineEnd - lineStart), lineStart));
+        return lines;
+    }
+
+    /// <summary>
+    /// Lays a single segment out, recording the cumulative pen position at every source-character
+    /// boundary. <paramref name="sourceStart"/> is stamped onto the result as
+    /// <see cref="CuneiformLine.SourceStart"/> so wrapped lines can be mapped back to the original string.
+    /// </summary>
+    private CuneiformLine LayoutSegment(string text, int sourceStart)
+    {
         var positioned = new List<PositionedStroke>();
+        var boundaries = new List<double>(text.Length + 1) { 0.0 };
         double pen = 0.0;
         double lineHeight = DefaultGridSize;
         Glyph? prev = null;
 
-        foreach (char raw in text ?? string.Empty)
+        foreach (char raw in text)
         {
             if (raw == ' ' || raw == '\t')
             {
                 pen += WordGapUnits;
                 prev = null; // no glyph on either side of a space to kern against
+                boundaries.Add(pen);
                 continue;
             }
 
@@ -113,6 +273,7 @@ public sealed class CuneiformLineLayout
             {
                 pen += MissingGlyphGapUnits;
                 prev = null;
+                boundaries.Add(pen);
                 continue;
             }
 
@@ -138,9 +299,10 @@ public sealed class CuneiformLineLayout
 
             pen += glyph.AdvanceWidth;
             prev = glyph;
+            boundaries.Add(pen);
         }
 
-        return new CuneiformLine(positioned, pen, lineHeight);
+        return new CuneiformLine(positioned, pen, lineHeight, boundaries, sourceStart);
     }
 
     /// <summary>

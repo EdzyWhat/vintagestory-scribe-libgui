@@ -126,6 +126,7 @@ internal sealed class ScribeEditorContent : StatefulWidget
         Action onAddTask,
         Action onSwitchToRead,
         Action onOpenEditorReference,
+        Action? onOpenSettings,
         EdgeInsets footerButtonPadding,
         ScribeRowStyle style,
         ScrollController scrollController,
@@ -151,6 +152,7 @@ internal sealed class ScribeEditorContent : StatefulWidget
         OnAddTask = onAddTask;
         OnSwitchToRead = onSwitchToRead;
         OnOpenEditorReference = onOpenEditorReference;
+        OnOpenSettings = onOpenSettings;
         FooterButtonPadding = footerButtonPadding;
         Style = style;
         ScrollController = scrollController;
@@ -194,6 +196,11 @@ internal sealed class ScribeEditorContent : StatefulWidget
     /// dialog (which holds the client API); this widget stays free of the VS API. See
     /// <see cref="ScribeDialogBase.OpenEditorReferenceHandbook"/>.</summary>
     public Action OnOpenEditorReference { get; }
+    /// <summary>Open Scribe Settings from a footer gear button, mirroring <see cref="OnOpenEditorReference"/>.
+    /// Non-null only for the tablet (add-tablet-cuneiform-chrome): the always-edit tablet has no Settings tab
+    /// in a nav column, so its footer carries a gear beside the ⓘ info button. The tabbed dialogs pass null
+    /// (they reach Settings through their nav column) and the gear is omitted.</summary>
+    public Action? OnOpenSettings { get; }
     /// <summary>Horizontal breathing room applied around the footer button row (Add task / Done editing),
     /// 0.04·W each side, so the buttons don't run to the content edges. Passed from the dialog, which owns
     /// the <c>ScribeLayout</c> width.</summary>
@@ -370,6 +377,33 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                 })));
     }
 
+    /// <summary>A footer button's label: cuneiform strokes under the single tablet cuneiform branch
+    /// (add-tablet-cuneiform-chrome task 5.4), else the normal <see cref="Text"/>. Both share the branch the
+    /// rows and title already use (<see cref="ScribeRowStyle.UseCuneiform"/> + bundle threaded from the
+    /// tablet), so disabling cuneiform reverts every surface — labels included — in one place. The em size
+    /// tracks the label's font size so a cuneiform label reads at the same scale as the readable one; ink is
+    /// the button-label color the readable label uses (<c>OnPrimary</c>, dimmed at the tier cap). A null
+    /// bundle (asset not loaded) falls back to the readable label so a button is never blank.
+    ///
+    /// <para>The <see cref="CuneiformText"/> is returned DIRECTLY, with NO <see cref="Center"/>/<see cref="Align"/>
+    /// wrapper — exactly like the normal <see cref="Text"/> label and the sibling ⓘ/gear glyphs below. A Center
+    /// is a <c>RenderPositionedBox</c> that takes the parent's full <c>MaxHeight</c> when finite; inside the
+    /// "Add task" <see cref="Expanded"/> (whose max height is the entire scroll column) that balloons the whole
+    /// button to fill the central region — the 2026-08-02 playtest regression this fixes. Both label widgets
+    /// self-size to their content, so the button hugs the label at either scale.</para></summary>
+    private Widget BuildButtonLabel(string label, TextStyle labelStyle)
+    {
+        if (Widget.Style.UseCuneiform && Widget.Style.CuneiformBundle is { } bundle)
+        {
+            return new CuneiformText(
+                text: label,
+                fontSizeEm: labelStyle.FontSize,
+                inkColor: labelStyle.Color,
+                bundle: bundle);
+        }
+        return new Text(label, labelStyle);
+    }
+
     /// <summary>The footer button row: "Add task", optionally "Done editing", and the trailing ⓘ info
     /// button. The always-edit tablet omits "Done editing" (<see cref="ScribeEditorContent.ShowSwitchToRead"/>
     /// false) since it has no Read view to switch to; the tabbed dialogs keep it.</summary>
@@ -380,7 +414,7 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
             // "Add task": dimmed + inert once the tier cap is reached (tablet at 10 tasks);
             // uncapped tiers always pass AddTaskEnabled=true, so this renders exactly as before.
             new Expanded(child: new Button(
-                child: new Text(
+                child: BuildButtonLabel(
                     Lang.Get("scribe:scribe-gui-addtask"),
                     Widget.AddTaskEnabled
                         ? buttonTextStyle
@@ -391,7 +425,7 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
         if (Widget.ShowSwitchToRead)
         {
             buttons.Add(new Expanded(child: new Button(
-                child: new Text(Lang.Get("scribe:scribe-gui-switch-to-read"), buttonTextStyle),
+                child: BuildButtonLabel(Lang.Get("scribe:scribe-gui-switch-to-read"), buttonTextStyle),
                 onTap: _ => Widget.OnSwitchToRead())));
         }
 
@@ -428,6 +462,28 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                                         Color = colors.OnBackground,
                                     })),
                                 useGlobalOverlay: true));
+
+        // Settings gear — tablet only (add-tablet-cuneiform-chrome). The always-edit tablet has no nav
+        // column to reach Settings through, so a gear sits just right of the ⓘ info button, styled
+        // identically (same non-Expanded Primary Button, tight All(7) padding, 17f OnPrimary glyph). Omitted
+        // when OnOpenSettings is null (the tabbed dialogs, which reach Settings via their nav column).
+        if (Widget.OnOpenSettings is { } openSettings)
+        {
+            buttons.Add(new Tooltip(
+                child: new Button(
+                    child: new ScribeVsIconGlyph("scribegear", 17f, colors.OnPrimary),
+                    style: Theme.Of(context).ButtonStyle with { Padding = EdgeInsets.All(7) },
+                    onTap: _ => openSettings()),
+                content: new Padding(
+                    EdgeInsets.All(6),
+                    child: new Text(Lang.Get("scribe:scribe-gui-nav-settings"), new TextStyle
+                    {
+                        FontSize = 13,
+                        SoftWrap = true,
+                        Color = colors.OnBackground,
+                    })),
+                useGlobalOverlay: true));
+        }
 
         return buttons.ToArray();
     }
@@ -524,6 +580,32 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
     {
         base.InitState();
         done = Widget.Data.Done;
+        // Repaint the row's Container when its field gains/loses focus, so the cuneiform (tablet) path can
+        // show a border + background on focus (add-tablet-cuneiform-chrome task 5.1). The field owns its
+        // own repaint on focus, but that only rebuilds the field subtree — the enclosing row Container
+        // needs its own listener to react. The focus node is dialog-owned (shared with the field); a
+        // ChangeNotifier accepts multiple listeners, so this coexists with the dialog's OnRowFocusChanged.
+        Widget.FocusNode?.AddListener(OnFieldFocusChanged);
+    }
+
+    /// <summary>Move the focus listener if a rebuild handed this row a different focus node instance (a
+    /// given row index keeps its node across rebuilds, so this is belt-and-suspenders).</summary>
+    public override void UpdateWidget(ScribeEditRow oldWidget)
+    {
+        base.UpdateWidget(oldWidget);
+        if (!ReferenceEquals(oldWidget.FocusNode, Widget.FocusNode))
+        {
+            oldWidget.FocusNode?.RemoveListener(OnFieldFocusChanged);
+            Widget.FocusNode?.AddListener(OnFieldFocusChanged);
+        }
+    }
+
+    private void OnFieldFocusChanged() => SetState(() => { });
+
+    public override void Dispose()
+    {
+        Widget.FocusNode?.RemoveListener(OnFieldFocusChanged);
+        base.Dispose();
     }
 
     public override Widget Build(BuildContext context)
@@ -575,6 +657,11 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             padX: style.FieldPadX,
             padY: style.FieldPadY,
             autoFocus: Widget.AutoFocus,
+            // Tablet-only: render/edit this row as live cuneiform strokes (add-tablet-cuneiform-chrome).
+            // Both flags are off for the Lectern/Notebook rows and for the disable-cuneiform fallback, so
+            // those surfaces stay on the normal editable renderer.
+            useCuneiform: style.UseCuneiform,
+            cuneiformBundle: style.CuneiformBundle,
             // Task rows are held to the soft task cap as a maxlength affordance; freeform Text sections
             // stay uncapped in-editor (bounded only by the codec's larger hard limit). The codec clips
             // Task text on read regardless, so this is the UX half of the same limit (RELEASE.md A1).
@@ -614,16 +701,31 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             : Widget.IsDropTarget ? ScribeRowConstants.ShiftBrightness(colors.Primary, -20f, saturationScale: 0.5f)
             : (Vector4?)null;
 
+        // Focus-driven row chrome, TABLET (cuneiform) PATH ONLY (add-tablet-cuneiform-chrome D3/task 5.1):
+        // the cuneiform field paints no box of its own, so the always-present row Container is the sole
+        // appearance driver — borderless/transparent at rest, bordered + a soft surface fill on focus. The
+        // widget type never swaps (only these BoxStyle properties change), so the field's live caret/text
+        // survives the repaint. The normal (Lectern/Notebook) path is untouched: UseCuneiform is false, so
+        // the field keeps drawing its own focus border and this stays transparent.
+        bool focusedCuneiform = style.UseCuneiform && (Widget.FocusNode?.HasFocus ?? false);
+
         Vector4 rowFill =
             dragShift is Vector4 d ? d with { W = 0.4f }
+            : focusedCuneiform ? colors.SurfaceHigh
             : (Widget.Data.IsTask && Widget.Data.Pinned ? ScribeRowConstants.PinnedTint(colors) : Vector4.Zero);
+
+        Vector4 rowBorder =
+            dragShift is Vector4 b ? b with { W = 0.5f }
+            : focusedCuneiform ? colors.Primary
+            : Vector4.Zero;
 
         rowBody = new Container(
             style: new BoxStyle
             {
                 Color = rowFill,
-                BorderColor = dragShift is Vector4 b ? b with { W = 0.5f } : Vector4.Zero,
-                BorderThickness = dragShift is not null ? 1f : 0f,
+                BorderColor = rowBorder,
+                BorderThickness = dragShift is not null || focusedCuneiform ? 1f : 0f,
+                CornerRadius = focusedCuneiform ? Vector4.One * 4f : Vector4.Zero,
             },
             child: rowBody);
 

@@ -1,13 +1,9 @@
-using Gui.Rendering;             // EdgeInsets
-using Gui.Rendering.Text;        // TextStyle
-using Gui.Widgets.Basic;         // Text, Container
+using System;                    // Action (footer Settings gear seam)
+using Gui.Rendering.Text;        // TextStyle (cuneiform title seam overrides)
 using Gui.Widgets.Framework;     // Widget, ThemeData
-using Gui.Widgets.Layout;        // Column, Expanded, Padding, SizedBox, Align, Alignment, CrossAxisAlignment
-using Gui.Widgets.Painting;      // BoxStyle
-using Gui.Core.Layout;           // MainAxisSize
-using OpenTK.Mathematics;        // Vector4
-using Scribe.Core;
-using Scribe.Core.Cuneiform;     // GlyphBundle
+using Gui.Widgets.Layout;        // SizedBox
+using Scribe.Core;               // ScribeDocumentCodec, ScribePlayerSettings
+using Scribe.Core.Cuneiform;     // GlyphBundle (cuneiform title path)
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;   // GlobalConstants
@@ -27,11 +23,10 @@ namespace Scribe;
 /// <item><b>Always edit.</b> The dialog enters editor mode in its constructor (before the first
 /// <c>Build()</c>, which <c>TryOpen</c> runs), so <see cref="ScribeDialogBase.BuildCentralRegion"/> can
 /// render the inherited editable task list with no view switching.</item>
-/// <item><b>Cuneiform title banner.</b> The overridden central region stacks a display-only
-/// <see cref="CuneiformText"/> banner (the document title, in the cuneiform pseudo-font — Proposal A) over
-/// the inherited editable task list. This is the first real cuneiform text inside production dialog chrome.
-/// The single <see cref="ScribeTaskFont.UseCuneiform"/> branch falls the banner back to normal text when
-/// the player disables the font.</item>
+/// <item><b>Live cuneiform input.</b> Under the single <see cref="ScribeTaskFont.UseCuneiform"/> branch,
+/// the tablet's editable task rows type directly in the cuneiform pseudo-font (Proposal A) with a synthetic
+/// caret — driven by <see cref="DecorateRowStyle"/> flipping on the cuneiform row path
+/// (add-tablet-cuneiform-chrome). Disabling the font reverts every surface to the normal editable field.</item>
 /// <item><b>Earthen theme + material backdrop.</b> <see cref="ResolveTheme"/> selects
 /// <see cref="ScribeTheme.Tablet"/>; the host reports the clay/wax backdrop matching the item's material.</item>
 /// </list>
@@ -83,70 +78,91 @@ public class GuiDialogScribeTablet : ScribeDialogBase
     /// <summary>The tablet uses its own earthen palette rather than the parchment one (add-tablet-dialog D6).</summary>
     protected override ThemeData ResolveTheme(bool pixelArt) => ScribeTheme.ForTablet(pixelArt);
 
+    /// <summary>Flip the editable rows to live cuneiform under the single <see cref="ScribeTaskFont.UseCuneiform"/>
+    /// branch (add-tablet-cuneiform-chrome). When the player disables cuneiform, the flag resolves false and
+    /// the rows fall back to the normal editable field — one decision, threaded to every tablet surface. The
+    /// glyph bundle is the client-cached parse; null (asset not yet loaded) simply renders no strokes.</summary>
+    private protected override ScribeRowStyle DecorateRowStyle(ScribeRowStyle style)
+    {
+        if (ActiveCuneiformBundle is not { } bundle)
+        {
+            return style;
+        }
+
+        return style with
+        {
+            UseCuneiform = true,
+            CuneiformBundle = bundle,
+        };
+    }
+
+    /// <summary>Resting title: display-only cuneiform, single-line, hard-clipped to the band width, under
+    /// the single cuneiform branch (add-tablet-cuneiform-chrome D2). When cuneiform is disabled the base
+    /// default (a RichText with ellipsis) is used, so the title reverts with every other tablet surface.
+    /// A null glyph bundle (asset not yet loaded) also falls back to the readable default.</summary>
+    private protected override Widget BuildTitleDisplay(string displayTitle, TextStyle titleStyle)
+    {
+        var bundle = ActiveCuneiformBundle;
+        if (bundle is null)
+        {
+            return base.BuildTitleDisplay(displayTitle, titleStyle);
+        }
+
+        var colors = ResolveTheme(modSystem.MySettings.PixelArtDisplay).ColorScheme;
+        return new Gui.Widgets.Painting.Clip(
+            child: new CuneiformText(
+                text: displayTitle,
+                fontSizeEm: titleStyle.FontSize,
+                inkColor: colors.OnSurface,
+                bundle: bundle));
+    }
+
+    /// <summary>Editing title: a live single-line cuneiform input bound to the SAME title controller/focus
+    /// node the base owns, so <see cref="ScribeDialogBase"/>'s commit/blur/deferred-rebuild machinery is
+    /// untouched (add-tablet-cuneiform-chrome D2). Falls back to the base's stock TextField when cuneiform is
+    /// disabled or the glyph bundle hasn't loaded. The shared key handler (<see cref="OnTitleFieldKeyDown"/>)
+    /// enforces the identical maxlength + Enter/Escape commit as the normal title field.</summary>
+    private protected override Widget BuildTitleField(TextStyle titleStyle)
+    {
+        var bundle = ActiveCuneiformBundle;
+        if (bundle is null)
+        {
+            return base.BuildTitleField(titleStyle);
+        }
+
+        return new ScribeCuneiformTitleField(
+            TitleController,
+            TitleFocusNode,
+            fontSizeEm: titleStyle.FontSize,
+            bundle: bundle,
+            onKeyDown: OnTitleFieldKeyDown);
+    }
+
+    /// <summary>The parsed glyph bundle when the single cuneiform branch is active for the tablet, else null
+    /// (cuneiform disabled OR the asset hasn't loaded). One place that resolves the branch so the title
+    /// display, title input, rows, and labels all agree (add-tablet-cuneiform-chrome D4).</summary>
+    private GlyphBundle? ActiveCuneiformBundle =>
+        ScribeTaskFont.UseCuneiform(modSystem.MySettings.DisableCuneiformFont)
+            ? modSystem.GetCuneiformBundle()
+            : null;
+
+    /// <summary>The tablet has no nav column to reach Scribe Settings through (D3), so its editor footer
+    /// grows a Settings gear right of the ⓘ info button, wired to <see cref="ScribeModSystem.OpenSettings"/>
+    /// (add-tablet-cuneiform-chrome). The base returns null, keeping the Lectern/Notebook footer gear-free.</summary>
+    private protected override Action? EditorSettingsGearAction => modSystem.OpenSettings;
+
     /// <summary>No nav column on the tablet: an empty right column whose <c>SideColW</c> width (set by the
     /// enclosing <c>SizedBox</c> in <c>BuildSectionInnerBox</c>) still preserves the symmetric side margin.
     /// None of the Read/Edit/Pinned/Settings buttons render (add-tablet-dialog D3).</summary>
     protected override Widget BuildRightColNav() => new SizedBox();
 
-    /// <summary>The tablet's always-edit central region: a display-only cuneiform title banner on top, then
-    /// the inherited editable task list filling the remainder. The editor is REUSED, not forked
-    /// (add-tablet-dialog D2/D4) — task add/edit/check/pin keep working under the tablet's 10-task / 1-pin
-    /// policy. The banner takes a fixed height derived from its em size (an <c>Expanded</c> would be inert
-    /// inside the editor's scroll view, so the banner is measured first and the list gets the rest).</summary>
-    protected override Widget BuildCentralRegion() =>
-        new Column(
-            crossAxisAlignment: CrossAxisAlignment.Stretch,
-            mainAxisSize: MainAxisSize.Max,
-            children: new Widget[]
-            {
-                BuildTitleBanner(),
-                new Expanded(child: BuildEditorContent()),
-            });
-
-    /// <summary>The display-only cuneiform title banner: the document's title (always present — falls back
-    /// to the host's "Tablet" default) rendered in the cuneiform pseudo-font at a fixed pixel height. The
-    /// single <see cref="ScribeTaskFont.UseCuneiform"/> branch point routes to the normal task font via
-    /// <see cref="ScribeTaskFont.Resolve"/> when the player has disabled cuneiform, so the accessibility
-    /// fallback is one decision in one place (add-tablet-dialog D5).</summary>
-    private Widget BuildTitleBanner()
-    {
-        var colors = ScribeTheme.ForTablet(modSystem.MySettings.PixelArtDisplay).ColorScheme;
-        Vector4 ink = colors.OnSurface;
-
-        // Prominent but bounded: the window body size, scaled by the player's font-scale, then enlarged so
-        // the title reads as a headline over the task rows. The banner's box is this em height plus padding.
-        float fontSizeEm = ScribeRowConstants.BaseWindowFontSize
-            * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale) * 2.4f;
-
-        string title = DisplayDocumentTitle;
-        bool useCuneiform = ScribeTaskFont.UseCuneiform(modSystem.MySettings.DisableCuneiformFont);
-
-        Widget line;
-        if (useCuneiform)
-        {
-            GlyphBundle? bundle = modSystem.GetCuneiformBundle();
-            line = new CuneiformText(text: title, fontSizeEm: fontSizeEm, inkColor: ink, bundle: bundle);
-        }
-        else
-        {
-            // Fallback: the same title through the normal text path in the player's resolved task font.
-            line = new Text(title, new TextStyle
-            {
-                FontSize = fontSizeEm,
-                Color = ink,
-                FontFamily = ScribeTaskFont.Resolve(modSystem.MySettings.TaskFontFamily),
-            });
-        }
-
-        // Fixed height (em + vertical breathing room), left-aligned to sit above the task rows. NOT an
-        // Expanded — the banner must not consume the list's space, and Expanded is inert in a scroll view.
-        const float bannerVerticalPadding = 12f;
-        return new SizedBox(
-            height: fontSizeEm + bannerVerticalPadding * 2f,
-            child: new Padding(
-                EdgeInsets.Symmetric(horizontal: 10f, vertical: bannerVerticalPadding),
-                child: new Align(Alignment.CenterLeft, child: line)));
-    }
+    /// <summary>The tablet's always-edit central region: just the inherited editable task list, now that the
+    /// display-only cuneiform title banner is retired (add-tablet-cuneiform-chrome — the 2026-08-02 playtest
+    /// rejected it as a redundant second copy of the title bar). The editor is REUSED, not forked
+    /// (add-tablet-dialog D2/D4); its rows type in live cuneiform via <see cref="DecorateRowStyle"/>, and the
+    /// title itself renders in cuneiform through the base title bar. Task add/edit/check/pin keep working
+    /// under the tablet's 10-task / 1-pin policy.</summary>
+    protected override Widget BuildCentralRegion() => BuildEditorContent();
 
     private void OnActiveSlotChanged(ActiveSlotChangeEventArgs _)
     {
