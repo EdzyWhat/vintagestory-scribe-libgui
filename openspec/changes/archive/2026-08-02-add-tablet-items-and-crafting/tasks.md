@@ -61,8 +61,9 @@
   drop/pickup too).
 - [x] 6.5 Confirm the interim `GuiDialogScribeNotebook` opens for the tablet (bespoke dialog is
   Proposal C).
-- [ ] 6.6 Atlas/integration: the local pre-push gate stages the `gui` dep and exercises the item;
+- [x] 6.6 Atlas/integration: the local pre-push gate stages the `gui` dep and exercises the item;
   keep synthetic player names ≤16 chars and ensure `ItemScribeTablet` is registered before staging.
+  (Passed on push to `main` 2026-08-02: Core 227/227 + Atlas 25/25 green.)
 
 ## Implementation notes (2026-08-02)
 
