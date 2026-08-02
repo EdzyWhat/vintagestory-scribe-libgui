@@ -3,25 +3,28 @@
 ## Purpose
 TBD - created by archiving change scribe-gui-backdrops. Update Purpose after archive.
 ## Requirements
-
 ### Requirement: Each item and view declares its own backdrop art of any size
-The mod SHALL model a Scribe dialog backdrop as a per-item, per-view specification that names a texture
-asset by `AssetLocation` and makes NO assumption about the art's pixel dimensions. Each item (Lectern
-now; Desk / Notebook / Clay Tablet later) SHALL be able to declare its own backdrop specifications, and
-within an item the read/editor page and the settings page SHALL each be able to reference a different
-specification. Adding a new item's backdrops SHALL require only new specifications plus their PNGs — no
-change to the drawing helper or the cache.
+The mod SHALL model a Scribe dialog backdrop as a per-item, per-dialog specification that names a texture
+asset by `AssetLocation` and makes NO assumption about the art's pixel dimensions. Each item (Lectern,
+plain Notebook, and Clockmaker's Notebook now; Desk / Clay Tablet later) SHALL be able to declare its own
+backdrop specification. Adding a new item's backdrop SHALL require only a new specification plus its PNG —
+no change to the dialog's backdrop-wrapping logic or the bitmap cache.
 
 #### Scenario: An item declares one or more backdrops
-- **WHEN** a new item's backdrops are added to the backdrop-specification holder
-- **THEN** the item contributes one specification per backdrop-bearing view (a single body spec, or a
-  distinct page and settings spec where it exposes both views), each naming its own texture
-  `AssetLocation`, without any shared-size constraint or change to the `Wrap` helper or the bitmap cache
+- **WHEN** a new item's backdrop is added to the backdrop-specification holder
+- **THEN** the item contributes one specification naming its own texture `AssetLocation`, without any
+  shared-size constraint or change to the backdrop-wrapping logic or the bitmap cache
 
 #### Scenario: A backdrop of any dimensions is accepted
-- **WHEN** a backdrop specification names a PNG whose dimensions differ from another view's PNG
-- **THEN** both are handled by the same drawing helper, and neither is required to match a fixed or
-  shared backdrop size
+- **WHEN** a backdrop specification names a PNG whose dimensions differ from another item's PNG
+- **THEN** both are handled by the same dialog backdrop-wrapping logic, and neither is required to match
+  a fixed or shared backdrop size
+
+#### Scenario: Distinct items render distinct art
+- **WHEN** the player opens the Lectern, the plain Notebook, and the Clockmaker's Notebook with
+  `PixelArtDisplay` ON
+- **THEN** each draws its own declared backdrop specification, even where two items share an underlying
+  dialog host
 
 ### Requirement: A backdrop is drawn behind dialog content when themed mode is on
 When the `PixelArtDisplay` preference is ON, a Scribe dialog view SHALL draw its declared backdrop
@@ -50,33 +53,6 @@ in-game before any art exists.
 #### Scenario: An unloadable backdrop logs a single warning
 - **WHEN** a backdrop asset cannot be loaded
 - **THEN** the failure is logged once for diagnosis, not repeatedly on every frame or every dialog open
-
-### Requirement: The mechanism supports distinct per-view backdrops
-The backdrop mechanism SHALL support a distinct backdrop specification per view within an item, so that
-where an item exposes more than one backdrop-bearing view (e.g. a read/editor page and a separate settings
-page) each view can render a different specification — a distinct texture, or a distinct placeholder color
-while art is pending — making the views visually distinct even before final art is drawn. An item that
-exposes only one backdrop-bearing view backs that single view; the per-view capability is a property of
-the mechanism, not a requirement that every item split its views.
-
-> NOTE (2026-07-26): the Lectern — the only item wired in this change — exposes a single backdrop-bearing
-> body (its read and editor views share one `LecternPage` spec). Its former in-dialog settings view was
-> removed in the 2026-07-25 pivot (the gear now opens the standalone settings window, which deliberately
-> follows the global theme and is not backdrop-wrapped), so there is no second in-dialog view to carry a
-> distinct spec here. The `LecternSettings` spec is defined and reserved; the distinct-per-view path is
-> exercised when a future item (Desk / Notebook / Clay Tablet) ships its own page-vs-settings split.
-
-#### Scenario: An item with two backdrop-bearing views renders them from distinct specifications
-- **WHEN** an item exposes two backdrop-bearing views (a read/editor page and a settings page) and the
-  player switches between them with themed mode ON
-- **THEN** each view's backdrop is drawn from a different specification than the other's (a distinct
-  texture, or a distinct placeholder color while art is pending)
-
-#### Scenario: An item with a single backdrop-bearing view backs that view
-- **WHEN** an item exposes only one backdrop-bearing view (as the Lectern does — read and editor share
-  one spec) and the player opens it with themed mode ON
-- **THEN** that single view draws its declared backdrop, and the absence of a second in-dialog view is not
-  a failure of the mechanism
 
 ### Requirement: Backdrop bitmaps are self-loaded, shared, and cached
 Backdrop bitmaps SHALL be self-loaded on the mod system using `TryGet(loc, loadAsset: true)` so they
@@ -109,3 +85,4 @@ appearance with zero art required.
 - **WHEN** the player opens a Scribe dialog view with `PixelArtDisplay` OFF
 - **THEN** no backdrop texture or placeholder color is drawn behind the content, and the view renders
   as the plain LibGUI fallback
+

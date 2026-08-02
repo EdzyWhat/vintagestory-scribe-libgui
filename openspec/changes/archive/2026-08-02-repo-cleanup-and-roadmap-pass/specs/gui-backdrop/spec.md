@@ -7,7 +7,7 @@ plain Notebook, and Clockmaker's Notebook now; Desk / Clay Tablet later) SHALL b
 backdrop specification. Adding a new item's backdrop SHALL require only a new specification plus its PNG —
 no change to the dialog's backdrop-wrapping logic or the bitmap cache.
 
-#### Scenario: An item declares its backdrop
+#### Scenario: An item declares one or more backdrops
 - **WHEN** a new item's backdrop is added to the backdrop-specification holder
 - **THEN** the item contributes one specification naming its own texture `AssetLocation`, without any
   shared-size constraint or change to the backdrop-wrapping logic or the bitmap cache
