@@ -63,6 +63,52 @@ public sealed partial class ScribeModSystem
         return bmp;
     }
 
+    /// <summary>Asset location of the committed cuneiform glyph-geometry bundle, produced by
+    /// <c>glyph-forge/tools/build_glyphs_bundle.py</c>. Filed under <c>textures/</c> because VS only scans
+    /// its fixed <c>AssetCategory</c> folders — there is no "fonts"/"glyphs" category (see
+    /// <see cref="RegisterSvgIcon"/>). This is stroke GEOMETRY, not a TTF, so it does NOT go through
+    /// <c>FontRegistry</c>.</summary>
+    private static readonly AssetLocation CuneiformBundleLocation =
+        new("scribe", "textures/fonts/cuneiform-glyphs-1.json");
+
+    /// <summary>
+    /// Client-side: load (once) and return the parsed cuneiform <see cref="Scribe.Core.Cuneiform.GlyphBundle"/>,
+    /// or <c>null</c> if the asset is missing/unparseable. Mirrors <see cref="GetBackdropBitmap"/>: it
+    /// self-loads via <c>TryGet(loc, loadAsset: true)</c> so the bytes survive VS's post-startup asset
+    /// unload (a plain <c>TryGet</c> nulls <c>.Data</c>), then parses the raw JSON string in Core. The parsed
+    /// model is cached and shared across every widget; a <c>null</c> result is cached too (guarded by
+    /// <see cref="cuneiformBundleLoaded"/>) so an unparseable asset warns exactly once. Returns null before
+    /// <see cref="StartClientSide"/> (e.g. server side).
+    /// </summary>
+    public Scribe.Core.Cuneiform.GlyphBundle? GetCuneiformBundle()
+    {
+        if (capi is null) return null; // client-only
+        if (cuneiformBundleLoaded) return cuneiformBundle;
+
+        cuneiformBundleLoaded = true;
+        var asset = capi.Assets.TryGet(CuneiformBundleLocation, loadAsset: true);
+        if (asset?.Data is null)
+        {
+            capi.Logger.Warning("[scribe] cuneiform glyph bundle {0} not loadable ({1}); cuneiform text will not render",
+                CuneiformBundleLocation, asset is null ? "not found" : "Data null");
+            cuneiformBundle = null;
+            return null;
+        }
+
+        try
+        {
+            cuneiformBundle = Scribe.Core.Cuneiform.GlyphBundle.Parse(asset.ToText());
+        }
+        catch (Exception ex)
+        {
+            capi.Logger.Warning("[scribe] cuneiform glyph bundle {0} failed to parse: {1}",
+                CuneiformBundleLocation, ex.Message);
+            cuneiformBundle = null;
+        }
+
+        return cuneiformBundle;
+    }
+
     /// <summary>Client-side: THIS player's HUD/pin preferences (client-local; defaults until
     /// <see cref="StartClientSide"/> loads the config). The HUD reads these directly. Falls back to a
     /// fresh default instance if queried before load (e.g. server side), so it is never null.</summary>

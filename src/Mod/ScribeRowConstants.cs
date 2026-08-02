@@ -152,4 +152,13 @@ internal static class ScribeTaskFont
     /// registered family.</summary>
     public static string Resolve(string? taskFontFamily) =>
         string.IsNullOrEmpty(taskFontFamily) ? DefaultFamily : taskFontFamily;
+
+    /// <summary>The SINGLE branch point that decides whether the tablet tier renders text in the cuneiform
+    /// pseudo-font or falls back to normal text (add-cuneiform-glyph-font). Returns <c>true</c> to use
+    /// cuneiform (the <c>CuneiformText</c> widget), <c>false</c> to render through the normal
+    /// <see cref="Resolve"/> path in the player's task font. Centralizing the decision here (rather than
+    /// scattering <c>settings.DisableCuneiformFont</c> checks across the tablet dialog and its rows) keeps
+    /// the accessibility fallback a one-line change and guarantees every tablet surface agrees. Callers pass
+    /// the player's own client-local <see cref="ScribePlayerSettings.DisableCuneiformFont"/> preference.</summary>
+    public static bool UseCuneiform(bool disableCuneiformFont) => !disableCuneiformFont;
 }

@@ -60,6 +60,14 @@ public sealed class ScribePlayerSettings
     /// state, for players who rely on HUD legibility or are motion-sensitive.</summary>
     public bool StormCorruption { get; set; } = true;
 
+    /// <summary>Whether to DISABLE the cuneiform pseudo-font used by the tablet tier and render that text
+    /// in the player's selected task font instead (cuneiform-glyph-font). Default <c>false</c> (cuneiform
+    /// on — the distinctive carved-wedge script). A per-player, client-local accessibility/legibility
+    /// fallback: never server-synced. When <c>true</c>, the single <c>UseCuneiform</c> branch point resolves
+    /// to normal text through the existing <see cref="TaskFontFamily"/> chokepoint. A plain bool, so
+    /// <see cref="Normalized"/> leaves it untouched.</summary>
+    public bool DisableCuneiformFont { get; set; }
+
     /// <summary>The timer type the Clockmaker's Notebook's "set timer" form pre-selects: the last type the
     /// player chose, remembered across close/reopen. Default <see cref="TimerMode.RealTime"/> — the first
     /// option in the selector, so a player opening the Timer tab for the very first time starts on Real time

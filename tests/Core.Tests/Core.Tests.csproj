@@ -22,4 +22,13 @@
     <ProjectReference Include="..\..\src\Core\Core.csproj" />
   </ItemGroup>
 
+  <!-- Copy the committed cuneiform glyph bundle into the test output so a Core test can assert the
+       real shipped artifact parses (47 authored characters), not just a hand-authored sample. Linked
+       (not embedded) so it tracks the mod asset the game actually loads. -->
+  <ItemGroup>
+    <None Include="..\..\src\Mod\assets\scribe\textures\fonts\cuneiform-glyphs-1.json"
+          Link="cuneiform-glyphs-1.json"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

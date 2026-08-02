@@ -96,6 +96,19 @@ public sealed partial class ScribeModSystem : ModSystem
     /// entries are disposed in <see cref="Dispose"/>. Null on a pure server.</summary>
     private Dictionary<string, SKBitmap?>? backdropCache;
 
+    /// <summary>Client-side cache of the parsed cuneiform glyph bundle (see <see cref="GetCuneiformBundle"/>).
+    /// A sentinel <c>false</c> in <see cref="cuneiformBundleLoaded"/> distinguishes "not yet loaded" from
+    /// "loaded but unavailable" (a null parse), so a missing/unparseable asset warns exactly once rather
+    /// than re-fetching every frame. Not a native/disposable resource (pure managed model), so it needs no
+    /// cleanup in <see cref="Dispose"/>. Null/false on a pure server.</summary>
+    private Scribe.Core.Cuneiform.GlyphBundle? cuneiformBundle;
+    private bool cuneiformBundleLoaded;
+
+    /// <summary>The dev-only cuneiform font harness window opened by <c>/cuneiform</c> (see
+    /// <see cref="RegisterCuneiformHarnessCommand"/>). Reused across runs — reopened with fresh demo text
+    /// each command — and disposed in <see cref="Dispose"/>. Null until first opened, and on a pure server.</summary>
+    private GuiDialogCuneiformHarness? cuneiformHarness;
+
     /// <summary>
     /// Runtime registry that maps each active <see cref="Guid"/> DocId to the
     /// <see cref="IScribeDocumentHost"/> currently hosting it. Lecterns register on
@@ -232,6 +245,7 @@ public sealed partial class ScribeModSystem : ModSystem
         timerDisplayTickId = api.World.RegisterGameTickListener(_ => TimerDisplayTick?.Invoke(), 1000);
 
         RegisterNotebookTuneCommand(api);
+        RegisterCuneiformHarnessCommand(api);
 
         // Rebindable collapse/expand hotkey (design D6). GUIOrOtherControls so it fires even while a
         // dialog is open; default P, no modifiers. The HUD flips its client-local collapse preference.
@@ -258,6 +272,8 @@ public sealed partial class ScribeModSystem : ModSystem
         }
         settingsDialog?.Dispose();
         settingsDialog = null;
+        cuneiformHarness?.Dispose();
+        cuneiformHarness = null;
         if (backdropCache is not null)
         {
             foreach (var bmp in backdropCache.Values) bmp?.Dispose();

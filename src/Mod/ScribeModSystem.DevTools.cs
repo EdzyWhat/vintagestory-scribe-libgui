@@ -75,6 +75,32 @@ public sealed partial class ScribeModSystem
             });
     }
 
+    /// <summary>Dev-only client-side surface for the cuneiform font (add-cuneiform-glyph-font, Proposal A):
+    /// <c>/cuneiform [text]</c> opens the <see cref="GuiDialogCuneiformHarness"/>, which renders the given
+    /// (or a default) demo string through <see cref="CuneiformText"/> at several sizes plus an animated
+    /// reveal. It exists ONLY to prove the render/layout path and the disable-cuneiform fallback in-game
+    /// before any tablet item/dialog exists — it is behind no player-facing feature. Reuses a single cached
+    /// dialog instance, reopening it with fresh text so repeated runs don't leak windows.</summary>
+    private void RegisterCuneiformHarnessCommand(ICoreClientAPI api)
+    {
+        api.ChatCommands.Create("cuneiform")
+            .WithDescription("[scribe dev] Open the cuneiform font harness. Usage: /cuneiform [demo text]")
+            .WithArgs(api.ChatCommands.Parsers.OptionalAll("text"))
+            .HandleWith(args =>
+            {
+                string text = args[0] as string ?? "";
+
+                // Close any prior harness so the window rebuilds with the new demo text (the dialog captures
+                // its text at construction).
+                cuneiformHarness?.TryClose();
+                cuneiformHarness?.Dispose();
+                cuneiformHarness = new GuiDialogCuneiformHarness(api, this, text);
+                cuneiformHarness.TryOpen();
+
+                return TextCommandResult.Success("[scribe] Cuneiform harness opened.");
+            });
+    }
+
     // ── Demo-content seeding (dev/creative tool) ────────────────────────────────────────────────────
 
     /// <summary>Fictional visitor names for seeded Lectern guestbooks. Kept ≤16 chars each so they read

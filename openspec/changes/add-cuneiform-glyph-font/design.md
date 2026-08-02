@@ -1,0 +1,124 @@
+## Context
+
+Scribe's next roadmap tier is an early-game **tablet** family (clay/wax) that wants a carved,
+ancient-looking script rather than another ordinary typeface. The `glyph-forge` sister project
+(`~/claude/glyph-forge`) already authors this script as **stroke geometry**: each character is an
+ordered list of straight strokes (`start`/`end` centerline + `weight`) on a 100-unit em-grid, drawn
+as filled rectangles, in construction order (see `glyph-forge/EXPORT-FORMAT.md`). 47 characters are
+authored — A–Z **uppercase only**, 0–9, and 11 punctuation marks — with **no lowercase and no space
+glyph**. A bundler (`glyph-forge/tools/build_glyphs_bundle.py`) combines the per-glyph files into one
+`glyphs-1.json` keyed by character.
+
+Whether this script is legible, pleasant, and technically renderable in Scribe's LibGUI (Skia) GUI
+is the single biggest unknown in the tablet plan. This change proves it **in isolation**, ahead of
+the tablet item and dialog, per the approved plan
+(`~/.claude/plans/clay-wax-tablets-delightful-neumann.md`, Proposal A). Existing constraints apply:
+the `src/Core/` library must not reference the VS API (it stays `dotnet test`-able), and no new mod
+dependency may be added (only the already-required `gui`/LibGUI mod and its bundled SkiaSharp).
+
+The mod already has a directly analogous custom widget to mirror: `src/Mod/ScribeMultilineField.cs`
+is a 3-class LibGUI render widget (`RenderBox` + `RenderObjectWidget` + `StatefulWidget`) that paints
+text/selection/caret via `PaintingContext` — the same shape the cuneiform widget takes.
+
+## Goals / Non-Goals
+
+**Goals:**
+- A game-agnostic Core glyph model + proportional line-layout math, fully unit-tested.
+- A committed, scanned bundle asset the mod loads client-side.
+- A custom LibGUI render widget that paints the stroke quads on the Skia canvas, with an optional
+  (default-idle) stroke-by-stroke reveal.
+- A client setting to disable cuneiform and fall back to the player's task font, with one branch
+  point.
+- A dev harness to view the script in-game and tune legibility/spacing quickly.
+
+**Non-Goals:**
+- The tablet item, its crafting, its persistence, and the tablet dialog (Proposals B and C).
+- The pencil-toggle editable input row (Proposal D). This change renders **display-only** text.
+- Any deferred tablet mechanic: firing→archive, water damage, carry-forward migration, wax-wipe, and
+  the stylus-in-offhand edit gate.
+- Multi-line wrapping of cuneiform text (single-line layout is enough to prove the script; wrapping
+  can come with the row work).
+- Authoring lowercase or additional glyphs — the layout adapts to the authored set instead.
+
+## Decisions
+
+### Glyph model + layout live in Core (`src/Core/Cuneiform/`), not the Mod
+The stroke geometry, corner math, migration ladder, and line-layout are pure data transforms with no
+game dependency, so they belong in `src/Core/` where they are `dotnet test`-able without a game
+install — the load-bearing Core invariant. Files: `GlyphStroke` (with `Corners()`), `Glyph` (fields
++ migration), `GlyphBundle` (parse a raw JSON string via `System.Text.Json`), `CuneiformLineLayout`
+(the layout engine). A small Core `Vec2` is used rather than `System.Numerics.Vector2`, keeping the
+layer free of any type that would tempt a Skia/VS import.
+
+*Alternative considered:* do the math inside the Mod widget. Rejected — it would make the riskiest
+logic (spacing/kerning/reveal) untestable on CI and violate the Core split.
+
+### Render on the raw Skia canvas with `SKPath`, not `DrawBox`
+Strokes are arbitrary-angle rectangles. `PaintingContext.DrawBox` only draws axis-aligned (rounded)
+boxes, so a diagonal stroke cannot be expressed with it. The widget therefore builds each stroke's
+4-corner `SKPath` and fills it via `context.Canvas` + `SharedPaint` (the raw SkiaSharp path the
+`PaintingContext` exposes). `DrawBox`/`DrawText` remain available for any row background/frame.
+
+*Alternative considered:* rotate the canvas per stroke and draw an axis-aligned rect. Rejected — a
+path fill is simpler, allocation-light with a reused `SKPath`, and avoids per-stroke transform
+push/pop.
+
+### The bundle ships under `textures/` and loads by asset location
+VS only scans its fixed set of `AssetCategory` folders; there is no "fonts"/"glyphs" category, so the
+JSON is filed at `src/Mod/assets/scribe/textures/fonts/cuneiform-glyphs-1.json` (the same reason the
+mod's TTF and SVG assets live under `textures/`). It is loaded client-side with the self-healing
+`TryGet(loc, loadAsset: true)` re-fetch guard the mod's SVG icons already use, because the game may
+null out asset `.Data` on unload. The geometry does **not** go through `FontRegistry` — that path is
+for real `SKTypeface` TTFs only.
+
+*Alternative considered:* embed the JSON as a compiled resource. Rejected — a scanned asset matches
+every other Scribe asset, is trivially regenerated, and needs no build-time embedding step.
+
+### The bundle is a committed build artifact, regenerated by the glyph-forge tool
+`glyph-forge/tools/build_glyphs_bundle.py` is the single source of the combined file; the mod commits
+its output and documents the regen command. This keeps `glyph-forge` the authoring source of truth
+without coupling the mod's build to a Python step.
+
+### Disable-cuneiform is one setting with a single branch point
+Add `bool DisableCuneiformFont` (default false) to `src/Core/ScribePlayerSettings.cs` (carried
+through `Normalized()`), a checkbox in `src/Mod/ScribeSettingsContent.cs`, and resolve the
+cuneiform-vs-task-font choice at exactly one place adjacent to the existing `ScribeTaskFont.Resolve`
+chokepoint (`src/Mod/ScribeRowConstants.cs`): a consumer computes a single `UseCuneiform` boolean and
+either instantiates the cuneiform widget or renders normal text in the resolved task font. No
+scattered conditionals.
+
+### Reveal animation is wired but idles fully revealed
+The `StatefulWidget` owns an optional `AnimationController` (created in `InitState`, disposed in
+`Dispose`, per `docs/libgui-reference.md`) mapping a 0–1 value to a leading stroke count via
+`AnimatedBuilder`. For this prototype it idles at full reveal (static display), so the reveal is
+additive and never blocks proving legibility first.
+
+## Risks / Trade-offs
+
+- **[Raw-canvas polygon fill is unproven in this codebase]** → The existing widgets only ever call
+  `DrawText`/`DrawBox`; filling `SKPath` quads inside `RenderBox.PaintInternal` is new. Mitigation:
+  the very first prototype step renders 2–3 hardcoded glyphs with no asset load and no animation, to
+  confirm crisp filled strokes, correct theme color, and correct box sizing before building anything
+  on top.
+- **[Proportional legibility of a wedge script at game sizes is subjective]** → uppercase-only, no
+  space glyph, and kerning tuned for a web canvas may read poorly small. Mitigation: the dev harness
+  renders a full demo sentence so advance/kerning and the `WordGapUnits` constant can be eyeballed
+  and tuned in-game; the tunables live in Core where they are easy to adjust and test.
+- **[Asset unload nulls `.Data`]** → a cached parse could hold a stale reference after
+  `UnloadAssets`. Mitigation: re-fetch with `loadAsset: true` on demand, matching the SVG-icon
+  pattern; parse once and cache the parsed model, not the asset handle.
+- **[Bundle drifts from glyph-forge authoring]** → the committed JSON could lag the source glyphs.
+  Mitigation: document the one-line regen command in `tasks.md` and treat the bundle as a generated
+  artifact.
+- **[System.Text.Json trimming/AOT quirks under the game runtime]** → deserialization of the bundle
+  must work under VS's .NET runtime. Mitigation: parse from the raw string in Core with explicit,
+  simple POCO/records (no source-gen dependency), and cover parsing with a Core unit test.
+
+## Open Questions
+
+- The exact `WordGapUnits` and any global letter-spacing multiplier — to be tuned against the
+  in-game harness, not decided up front.
+- Missing-glyph policy detail: skip-with-small-gap is the safe default; whether to instead fold to
+  `?` for visible feedback is a legibility call to make from the harness.
+- Whether the demo harness is reached via a temporary hotkey, a chat command, or a throwaway test
+  block — any dev-only entry point is acceptable so long as it ships behind no player-facing feature.
