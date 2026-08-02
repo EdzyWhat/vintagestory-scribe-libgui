@@ -157,20 +157,23 @@ public class CuneiformTests
     }
 
     [Fact]
-    public void Parse_ShippedBundle_ContainsAll47AuthoredCharacters()
+    public void Parse_ShippedBundle_ContainsAllAuthoredCharacters()
     {
         // The real committed artifact (copied into the test output) must parse and carry the full
-        // authored set: A–Z (26) + 0–9 (10) + 11 punctuation = 47 — no lowercase, no space glyph.
+        // authored set: A–Z (26) + 0–9 (10) + 18 punctuation = 54 — no lowercase, no space glyph.
+        // (The punctuation set grew from 11 to 18 with the glyph-forge symbol sync adding + / = % # * @.)
         string path = Path.Combine(AppContext.BaseDirectory, "cuneiform-glyphs-1.json");
         Assert.True(File.Exists(path), $"Shipped glyph bundle not found at {path}");
 
         GlyphBundle bundle = GlyphBundle.Parse(File.ReadAllText(path));
 
-        Assert.Equal(47, bundle.CharacterCount);
+        Assert.Equal(54, bundle.CharacterCount);
         Assert.True(bundle.Contains('A'));
         Assert.True(bundle.Contains('Z'));
         Assert.True(bundle.Contains('0'));
         Assert.True(bundle.Contains('?'));
+        Assert.True(bundle.Contains('+'), "the glyph-forge symbol sync added '+'");
+        Assert.True(bundle.Contains('@'), "the glyph-forge symbol sync added '@'");
         Assert.False(bundle.Contains('a'), "authored set is uppercase-only");
         Assert.False(bundle.Contains(' '), "no space glyph is authored");
 
