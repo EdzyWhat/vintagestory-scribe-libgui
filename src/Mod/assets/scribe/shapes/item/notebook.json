@@ -13,7 +13,7 @@
 		]
 	},
 	"textures": {
-		"cover": "black"
+		"cover": "scribe:items/notebook-cover"
 	},
 	"elements": [
 		{
