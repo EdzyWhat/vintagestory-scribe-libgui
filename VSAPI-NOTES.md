@@ -747,33 +747,51 @@ with no confirm dialog needed. Third-person animation via the `HeldTpUseAnimatio
 `byEntity.AnimManager?.StartAnimation(name)`. (The specific animation clip for a Scribe gesture is
 a placeholder until art exists — verify the clip name.)
 
-## Model transform tuning — the built-in `.tfedit` has NO First-Person target (2026-08-01)
+## `fpHandTransform` is a DEAD field — the held item renders through `tpHandTransform` in BOTH first- and third-person (2026-08-02)
 
-**Symptom: `.tfedit fp` (or `/dev tfedit fp`) always emits `tpHandTransform`, never
-`fpHandTransform`.** The built-in transform editor (`GuiDialogTransformEditor` in
-`VintagestoryLib.dll`) is **client-side** — invoke it with a leading dot (`.tfedit`), not `/`
-(`/tfedit` / `/dev` route to the survival mod's *server* `/dev`, which has different subcommands
-and no `tfedit`). Its internal target list is `[Gui=0, Fp=1, Tp=2, TpOff=3, Ground=4]`, but the
-sidebar only draws buttons for Gui / Main Hand / Off Hand / Ground, and `CmdTransformEditor` has
-**no `"fp"` case** — so `.tfedit fp` silently leaves the target at its default (2 = Main Hand). The
-dialog titles itself "Transform Editor (2)" and edits `tpHandTransform` even when `fp` is typed.
-Hugo Cortell's Transform Designer mod (`.tfdesign`) has the same gap by deliberate scope — its
-`TFDesignContext` enum is `{ Gui, MainHand, OffHand, Ground }`. Its gizmos render in the world-space
-`Opaque` pass; the first-person hand is a separate near-camera projection, so world-space drag
-gizmos can't line up with FP — which is *why* FP is omitted (gizmos are the hard part for FP).
+**The finding (verified by decompiling the render path):** there is no separate first-person hand
+transform. `fpHandTransform` in an itemtype JSON is loaded onto the runtime `CollectibleObject`
+(`ItemType`/`BlockType` copy it) and then **never read at render time**. Tune `tpHandTransform`
+instead — it is what shows in first person too.
 
-**Fix for tuning `fpHandTransform` live:** Scribe ships two dev tools that edit the transform
-objects directly (client-side, session-only — they mutate `item.FpHandTransform` etc. and call
-`slot.MarkDirty()`; nothing persisted/synced, so relaunch resets and you bake final values into the
-itemtype JSON by hand). Sliders/numbers sidestep the gizmo problem entirely — no screen→world
-raycast, the game just re-renders the held item in whatever pass it belongs to (including FP) for
-free. See `ScribeTransformTuning` (shared target→JSON-key mapping + formatter),
-`GuiDialogScribeTransformPanel` (`.scribetfpanel`, slider panel, the preferred FP tool), and the
-`/scripttf` command (no-GUI fallback, one axis per typed command).
+The proof chain, all in the shipped DLLs:
+- `EnumItemRenderTarget.HandFp` (index 1) is marked `[Obsolete("Use HandTp instead")]`
+  (`VintagestoryAPI.dll`). The enum is `{ Gui=0, HandFp=1, HandTp=2, HandTpOff=3, Ground=4 }`.
+- `InventoryItemRenderer.GetItemStackRenderInfo` (`VintagestoryLib.dll`) builds `renderinfo.Transform`
+  with a switch over the target that has cases for **Ground / Gui / HandTp / HandTpOff only — no HandFp
+  case**. So no render target ever selects `fpHandTransform`.
+- The held-item renderer is `EntityShapeRenderer.RenderHeldItem` / `EntityPlayerShapeRenderer.RenderHeldItem`
+  (`VSEssentials.dll`). In first-person mode the FP override falls through to
+  `base.RenderHeldItem`, which calls `GetItemStackRenderInfo(slot, right ? HandTp : HandTpOff, dt)` — i.e.
+  target **2/3 (Tp), never 1 (Fp)**, in every camera mode. FP only differs by shader + a near-camera
+  projection (`HandRenderFov`, `fpModeItemShader`), not by transform.
+- Vanilla confirms it: items that spin in-hand (e.g. the temporal-gear-style `OnHeldIdle`) set
+  **both** `FpHandTransform.Rotation.Y` and `TpHandTransform.Rotation.Y` each frame — the Fp write is
+  vestigial; only the Tp one is rendered.
 
-**When tuning FP:** set `.clientconfig immersiveFpMode false` first. With immersive FP on, the real
-body arms animate to an idle rest pose so the item drifts/lowers and the preview doesn't match the
-floating-hands pose the transform actually targets.
+**The built-in editors already cover this — there is nothing for a mod tool to add.**
+`GuiDialogTransformEditor` (`.tfedit`, client-side — leading dot, not `/`) has target list
+`[Gui=0, Fp=1, Tp=2, TpOff=3, Ground=4]`, but its `TargetTransform` **setter has no case 1** —
+writing the Fp target is a silent no-op by design, because the field is dead. Its "Main Hand" target
+edits `tpHandTransform` and previews live in first person. Hugo Cortell's Transform Designer
+(`.tfdesign`) likewise exposes only `{ Gui, MainHand, OffHand, Ground }`. Use `.tfedit` → Main Hand.
+
+**History:** Scribe once shipped a `.scribetfpanel` slider panel + `/scripttf` "fp" target + a
+`ScribeTransformTuning` helper (the `add-fp-transform-panel` change) built on the false premise that
+`fpHandTransform` was reachable-but-unexposed. That whole stack was scrapped 2026-08-02 once the
+decompile above showed the field is dead; the notebook itemtypes now carry only `tpHandTransform`
+(the fp block was removed to avoid implying it does anything). `/scripttf` reverted to its original
+inline form.
+
+**Related, still-true note — the FP arm lowers a held item after ~2.3 s.** The first-person arm
+holds a freshly-selected item up briefly, then eases to a rest pose at the player's side. This is the
+`helditemready` clip (`quantityframes:70, onAnimationEnd:EaseOut`; defaulted onto every collectible by
+`CollectibleType` in VSEssentials): `EntityPlayer.HandleSeraphHandAnimations` calls `StartHeldReadyAnim`
+once per raise and never re-raises an idle item, so `RunningAnimation.Progress` reaches the `EaseOut`
+branch and the arm drops. `immersiveFpMode false` does NOT prevent it (tested on macOS). Crouching +
+looking down keeps a held item in view. This only matters if you ever need to *see* a held item's
+resting pose for a screenshot — it has nothing to do with transform tuning, which previews fine in the
+inventory/GUI render or third-person.
 
 ## Always-on HUD overlays and hotkeys
 

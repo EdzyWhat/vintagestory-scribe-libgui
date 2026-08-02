@@ -40,5 +40,5 @@
 - [x] 4.4 Manual in-game: hover a titled Notebook and a Clockmaker's Notebook in the inventory —
       each shows `Title: "<title>"`; a never-opened Notebook shows `Title: "(untitled)"`.
 - [x] 4.5 Update `TESTING.md` with the new in-game tooltip items.
-- [ ] 4.6 Manual in-game (2.3 follow-up): break/pick-up a titled Lectern and hover the resulting
+- [x] 4.6 Manual in-game (2.3 follow-up): break/pick-up a titled Lectern and hover the resulting
       block item in the inventory — confirm it shows `Title: "<title>"`, matching the Notebook.

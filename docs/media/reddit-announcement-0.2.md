@@ -15,7 +15,7 @@ new headline feature — you can now carry your notes. Link to the mod DB.
 
 ---
 
-## Post body (draft)
+## Post body (FINAL — ready to post)
 
 > Hey — a while back I released **Scribe**, a mod for keeping your to-do list *inside* the game
 > instead of on a sticky note next to your monitor. The first version was a **Lectern** you place
@@ -23,13 +23,19 @@ new headline feature — you can now carry your notes. Link to the mod DB.
 >
 > **Scribe 0.2 does that.**
 >
+> *(video: place a lectern → add/check tasks → pin to HUD → open the carried Notebook → a
+> Clockmaker timer running on the HUD → font/theme picker)*
+>
 > **What's new:**
 > - **Notebook** — a carried item with the same task list + notes as the Lectern, but personal and
->   portable. No editor lock, no block to walk back to — just open it in your hand and write.
-> - **Clockmaker's Notebook** — the Notebook's clockwork sibling, with a **Timer** tab. Set a
->   countdown in real time or in-game time, give it a label, and it shows up on your HUD next to
->   your pinned tasks — then blinks when it fires. Great for "pull the crucible in 20 minutes" or
->   "the cellar's done fermenting."
+>   portable. No editor lock, no block to walk back to — just open it in your hand and write. It
+>   crafts from things you have early: a feather, parchment, metal nails, leather, and a bowl of
+>   black dye for ink — no rare materials, so you can carry your notes basically from the start.
+> - **Clockmaker's Notebook** — the Notebook's clockwork sibling, with a **Timer** tab. This is the
+>   reminder feature a few of you asked about in the teaser thread. Set a countdown in real time or
+>   in-game time, give it a label, and it shows up on your HUD next to your pinned tasks — then
+>   blinks when it fires. Great for "pull the crucible in 20 minutes" or "the cellar's done
+>   fermenting."
 > - **History** — every Notebook quietly keeps a log of what happened while you carried it: when it
 >   was crafted, deaths, PvP and boss kills, temporal storms. A little chronicle you didn't have to
 >   write.
@@ -42,23 +48,31 @@ new headline feature — you can now carry your notes. Link to the mod DB.
 > tinkerer trait), but server owners can turn that off with a world setting if they'd rather anyone
 > craft it.
 >
-> Still requires **LibGUI** as a dependency (one-click from the mod DB), same as before. Existing
-> worlds are fine — everything here is additive.
+> A few notes:
+> - **Multiplayer works** — everything's server-authoritative and syncs live; the Lectern hands off
+>   its editor between players. Been testing it two-client; if anything feels off in MP, tell me.
+> - **UI sounds have an on/off toggle** in settings, if the page-turn/click sounds aren't your thing.
+> - You can pick the **typeface** for your notes — the default is **Scapholène**, which Artekuno
+>   suggested back in the teaser thread (thanks!).
 >
-> **[Mod DB link]** — as always, feedback welcome, especially on the timers and anything that feels
-> off in multiplayer.
+> Still requires **LibGUI** as a dependency (one-click from the mod DB) — no ImGui, it's all native
+> LibGUI now. Existing worlds are fine; everything here is additive.
 >
-> [screenshot: Notebook open with tasks + a Clockmaker timer on the HUD]
+> **https://mods.vintagestory.at/scribe** — as always, feedback welcome, especially on the timers
+> and anything that feels off in multiplayer.
+>
+> *(For anyone who saw the WIP teaser: https://www.reddit.com/r/VintageStory/comments/1v7jgfi/ )*
 
 ---
 
 ## Notes for posting
 
-- **Image:** the hook is *carried + timer* — a shot showing the Notebook UI open in-hand with a
-  running timer on the HUD reads the update at a glance. A History-tab shot is a good second image.
-- Replace **[Mod DB link]** with: https://mods.vintagestory.at/scribe
+- **Media:** lead with the **showcase video** (it's done) — it reads the whole update at a glance
+  (carried Notebook + a running HUD timer is the hook). A History-tab still is a good second image.
+- Mod DB link is inline: https://mods.vintagestory.at/scribe
+- Teaser thread is inline: https://www.reddit.com/r/VintageStory/comments/1v7jgfi/
 - Tag/flair as Mod Update if that flair exists.
-- Consider a short comment on the original 0.1 release thread pointing here.
-- Seed the screenshot content with `/scribe seed all` (creative) so the tasks/notes/history look
-  lived-in rather than empty — see the shot-list in `video-script.md`.
+- Drop a short comment on the original 0.1 release thread pointing here.
+- **Recipe wording is accurate to the current `scribenotebook.json`** (feather / parchment / metal
+  nails / leather / bowl of black dye) — no "planks." Per-decision, temporal gear is not mentioned.
 </content>

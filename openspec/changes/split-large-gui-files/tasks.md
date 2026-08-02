@@ -28,7 +28,7 @@
 
 - [x] 3.1 `bash build/restage.sh Debug`, then run the Atlas integration suite (local pre-push
       gate) — green.
-- [ ] 3.2 Manual in-game smoke: open the Lectern, plain Notebook, and Clockmaker's Notebook;
+- [x] 3.2 Manual in-game smoke: open the Lectern, plain Notebook, and Clockmaker's Notebook;
       verify Read / Editor / Pinned / Guestbook / Timer views, title editing, lock/autosave, and
       backdrops all render and function identically to before.
 - [x] 3.3 Confirm no file under `src/Mod/` remains a ~2000-line catch-all (both former god-files
