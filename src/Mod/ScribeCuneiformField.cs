@@ -11,8 +11,10 @@
 // hard positioning (per-character advance, word-wrap) lives in Scribe.Core.Cuneiform and is unit-tested
 // there; this file only converts grid units ↔ pixels, stacks wrapped lines, and draws.
 //
-// Caret-only for v1: selection (shift-arrow / drag highlight) over cuneiform is the deferred
-// explore-cuneiform-text-selection stub, so SelectionAnchor is accepted but not highlighted here.
+// Selection (shift-arrow / drag / double-click word / triple-click line) is owned by the shared
+// ScribeMultilineFieldState — the same range that drives the normal field. This render object paints a
+// highlight box behind the strokes for that range (explore-cuneiform-text-selection), reusing the same
+// per-character CaretXAt map the caret uses (a selection is just two boundaries).
 
 using System;
 using System.Collections.Generic;
@@ -52,11 +54,13 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
 {
     private string text = "";
     private int caret;
+    private int selectionAnchor;
     private bool hasFocus;
     private bool caretVisible = true;
     private float fontSizeEm = 28f;
     private Vector4 inkColor = Vector4.One;
     private Vector4 caretColor = Vector4.One;
+    private Vector4 selectionColor = new(0.4f, 0.55f, 0.9f, 0.35f);
     private GlyphBundle? bundle;
     private float padX = 8f;
     private float padY = 6f;
@@ -70,6 +74,10 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
 
     public string Text { get => text; set => SetProperty(ref text, value ?? "", relayout: true); }
     public int Caret { get => caret; set => SetProperty(ref caret, value, repaint: true); }
+    /// <summary>The selection's other endpoint (the fixed anchor); the live selection is
+    /// [min(anchor,caret), max(anchor,caret)], collapsed when equal to <see cref="Caret"/>. Drives the
+    /// highlight only — the shared <see cref="ScribeMultilineFieldState"/> owns the range and gestures.</summary>
+    public int SelectionAnchor { get => selectionAnchor; set => SetProperty(ref selectionAnchor, value, repaint: true); }
     public bool FieldHasFocus { get => hasFocus; set => SetProperty(ref hasFocus, value, repaint: true); }
     /// <summary>Blink gate: when false the synthetic caret bar is not painted (the OFF half of the blink),
     /// driven by <see cref="ScribeMultilineFieldState"/>'s shared caret ticker so this caret blinks at the
@@ -78,6 +86,8 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     public float FontSizeEm { get => fontSizeEm; set => SetProperty(ref fontSizeEm, value, relayout: true); }
     public Vector4 InkColor { get => inkColor; set => SetProperty(ref inkColor, value, repaint: true); }
     public Vector4 CaretColor { get => caretColor; set => SetProperty(ref caretColor, value, repaint: true); }
+    /// <summary>Fill color of the selection highlight box painted behind the strokes.</summary>
+    public Vector4 SelectionColor { get => selectionColor; set => SetProperty(ref selectionColor, value, repaint: true); }
     public GlyphBundle? Bundle { get => bundle; set => SetProperty(ref bundle, value, relayout: true); }
     public float PadX { get => padX; set => SetProperty(ref padX, value, relayout: true); }
     public float PadY { get => padY; set => SetProperty(ref padY, value, relayout: true); }
@@ -135,6 +145,31 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
         if (context.Canvas is null)
         {
             return;
+        }
+
+        // Selection highlight first, so it sits BEHIND the strokes (mirrors ScribeMultilineFieldRender).
+        // A selection is just two caret boundaries, so this reuses the same CaretXAt map the caret uses —
+        // one DrawBox per wrapped line, clamping the range to each line's source span.
+        int selStart = Math.Min(caret, selectionAnchor);
+        int selEnd = Math.Max(caret, selectionAnchor);
+        if (hasFocus && selEnd > selStart)
+        {
+            for (int i = 0; i < lines.Count; i++)
+            {
+                int lineStart = lines[i].SourceStart;
+                int lineEnd = lineStart + (lines[i].CharBoundaries.Count - 1); // boundary count = char count + 1
+                int a = Math.Max(selStart, lineStart);
+                int b = Math.Min(selEnd, lineEnd);
+                if (b <= a)
+                {
+                    continue;
+                }
+
+                float x1 = padX + (float)(lines[i].CaretXAt(a - lineStart) * scale);
+                float x2 = padX + (float)(lines[i].CaretXAt(b - lineStart) * scale);
+                float y = padY + i * lineHeightPx;
+                context.DrawBox(new Vector2(x1, y), new Vector2(x2 - x1, lineHeightPx), selectionColor, Vector4.Zero, 0f, Vector4.Zero);
+            }
         }
 
         SKPaint paint = context.SharedPaint;
@@ -255,18 +290,21 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
 internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
 {
     public ScribeCuneiformFieldRenderWidget(
-        string text, int caret, bool hasFocus, float fontSizeEm, Vector4 inkColor, Vector4 caretColor,
+        string text, int caret, int selectionAnchor, bool hasFocus, float fontSizeEm, Vector4 inkColor,
+        Vector4 caretColor, Vector4 selectionColor,
         GlyphBundle? bundle, float padX, float padY,
         Vector4 boxColor, Vector4 borderColor, float borderThickness, Vector4 cornerRadii,
         bool singleLine = false, bool caretVisible = true)
     {
         Text = text;
         Caret = caret;
+        SelectionAnchor = selectionAnchor;
         HasFocus = hasFocus;
         CaretVisible = caretVisible;
         FontSizeEm = fontSizeEm;
         InkColor = inkColor;
         CaretColor = caretColor;
+        SelectionColor = selectionColor;
         Bundle = bundle;
         PadX = padX;
         PadY = padY;
@@ -279,11 +317,13 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
 
     public string Text { get; }
     public int Caret { get; }
+    public int SelectionAnchor { get; }
     public bool HasFocus { get; }
     public bool CaretVisible { get; }
     public float FontSizeEm { get; }
     public Vector4 InkColor { get; }
     public Vector4 CaretColor { get; }
+    public Vector4 SelectionColor { get; }
     public GlyphBundle? Bundle { get; }
     public float PadX { get; }
     public float PadY { get; }
@@ -300,11 +340,13 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
         var ro = (ScribeCuneiformFieldRender)renderObject;
         ro.Text = Text;
         ro.Caret = Caret;
+        ro.SelectionAnchor = SelectionAnchor;
         ro.FieldHasFocus = HasFocus;
         ro.CaretVisible = CaretVisible;
         ro.FontSizeEm = FontSizeEm;
         ro.InkColor = InkColor;
         ro.CaretColor = CaretColor;
+        ro.SelectionColor = SelectionColor;
         ro.Bundle = Bundle;
         ro.PadX = PadX;
         ro.PadY = PadY;

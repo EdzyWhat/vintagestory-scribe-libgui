@@ -997,10 +997,12 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
             ? new ScribeCuneiformFieldRenderWidget(
                 text: text,
                 caret: caret,
+                selectionAnchor: anchor,
                 hasFocus: focusNode.HasFocus,
                 fontSizeEm: Widget.FontSize,
                 inkColor: colors.OnSurface,
                 caretColor: colors.Primary,
+                selectionColor: colors.Primary with { W = 0.35f },
                 bundle: Widget.CuneiformBundle,
                 padX: Widget.PadX,
                 padY: Widget.PadY,

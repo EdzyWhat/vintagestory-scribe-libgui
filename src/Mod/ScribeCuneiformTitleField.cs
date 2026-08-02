@@ -193,16 +193,19 @@ internal sealed class ScribeCuneiformTitleFieldState : State<ScribeCuneiformTitl
     {
         var colors = Theme.Of(context).ColorScheme;
         int caret = Math.Clamp(Controller.Selection.ExtentOffset, 0, Controller.Text.Length);
+        int selectionAnchor = Math.Clamp(Controller.Selection.BaseOffset, 0, Controller.Text.Length);
 
         return new GestureDetector(
             onPress: OnPress,
             child: new ScribeCuneiformFieldRenderWidget(
                 text: Controller.Text,
                 caret: caret,
+                selectionAnchor: selectionAnchor,
                 hasFocus: FocusNode.HasFocus,
                 fontSizeEm: Widget.FontSizeEm,
                 inkColor: colors.OnSurface,
                 caretColor: colors.Primary,
+                selectionColor: colors.Primary with { W = 0.35f },
                 bundle: Widget.Bundle,
                 padX: 0f,   // the title band supplies its own inset; keep the glyphs flush like the RichText did
                 padY: 0f,
