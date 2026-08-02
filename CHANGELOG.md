@@ -14,6 +14,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   lasts forever. The existing trait-gated recipe and the `scribeClockmakerRequiresTrait` world
   setting are unchanged — this is an additional path, not a replacement.
 
+### Changed
+- The editor footer's Information (ⓘ) button now **toggles** the "Scribe Editor Features" handbook
+  page: clicking it opens the reference when the handbook is closed and closes the handbook when it
+  is already open (if the handbook is open on another page, the first click navigates there and the
+  next closes it). Its tooltip now reads "Show / hide Editor Features". Shared across the Lectern,
+  both Notebooks, and the tablet editors.
+
 ## [0.2.0] - 2026-08-01
 
 ### Added

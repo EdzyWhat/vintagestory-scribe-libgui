@@ -1025,6 +1025,25 @@ chronicle/integration features — decompiled, not yet exercised.)
   `"temporalstability"`; `StormData.nowStormActive` flips true on start). Handbook =
   `ModSystemSurvivalHandbook.OpenDetailPageFor(pageCode)`; item page codes via
   `GuiHandbookItemStackPage.PageCodeForStack(ItemStack)`.
+- **Opening / closing the handbook WITHOUT coupling to the survival mod's privates (verified against
+  1.22.3 DLLs, 2026-08-02):** `ModSystemSurvivalHandbook` holds its `GuiDialogHandbook dialog` as a
+  **private** field and exposes **no** public open/close/toggle (only the `OnInitCustomPages` event +
+  `ShouldLoad`/`StartClientSide`/`Dispose`), so `GetModSystem<ModSystemSurvivalHandbook>()` is a dead
+  end for driving the dialog — and `OpenDetailPageFor` is a method on `GuiDialogHandbook`, not on the
+  mod system. To **open/navigate**, fire the registered `"handbook"` link protocol
+  (`capi.LinkProtocols.TryGetValue("handbook", out var open); open(new LinkTextComponent("handbook://<pagecode>"))`)
+  — its handler opens the dialog if closed then calls `OpenDetailPageFor`; absent survival mod ⇒ no
+  `"handbook"` entry ⇒ graceful no-op. To **discover/close** it decoupled, scan the live open-dialog
+  list `capi.Gui.OpenedGuis` (`IGuiAPI.OpenedGuis : List<GuiDialog>`) for the dialog whose **public**
+  `ToggleKeyCombinationCode == "handbook"` (`GuiDialogHandbook` overrides it to that stable string) and
+  call base-`GuiDialog.TryClose()`. The base `GuiDialog` publicly exposes `IsOpened()`, `TryOpen()`,
+  `TryClose()`, `Toggle()`, and the abstract `ToggleKeyCombinationCode` — matching on that string is the
+  reflection-free equivalent of `OfType<GuiDialogHandbook>()` and takes NO `VSSurvivalMod` type reference.
+  The handbook's own hotkey handler is itself `if (dialog.IsOpened()) TryClose(); else { TryOpen(); … }`,
+  confirming those are the intended primitives. The current handbook PAGE is held in `GuiDialogHandbook`'s
+  protected `browseHistory`/`pageNumberByPageCode` — NOT publicly readable, so a page-aware "close only
+  when on my page" needs the observable open/closed state plus a navigate-then-dismiss flow, not private
+  page state. (Used by `add-info-button-handbook-toggle` — the editor ⓘ button toggle.)
 - **In-game time speed (how many in-game seconds pass per real second):**
   `Calendar.SpeedOfTime * Calendar.CalendarSpeedMul`. `SpeedOfTime` defaults to 60,
   `CalendarSpeedMul` to 0.5, so the default is **30 in-game seconds per real second → a 48-minute

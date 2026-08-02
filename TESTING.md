@@ -2316,3 +2316,17 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
   - **Confirmed 2026-08-02:** tester — "All selection modes work and are visually clear with the new
     highlight box." Shift-arrow, drag, double-click word, triple-click line all render the highlight over
     cuneiform on single-line + wrapped rows and the title band; Ctrl+C yields plain text.
+
+## add-info-button-handbook-toggle
+
+- [ ] `9f96bb03` **Open closed → opens reference.** In the editor (spot-check the Lectern AND a tablet)
+      with the handbook CLOSED, click the ⓘ button — the survival handbook opens to the Scribe Editor
+      Features page (unchanged from before). *(add-info-button-handbook-toggle 4.2)*
+- [ ] `f5ea01dd` **Open-on-our-page → closes.** With the handbook already OPEN on the Scribe Editor
+      Features page, click ⓘ — the handbook closes. *(add-info-button-handbook-toggle 4.3)*
+- [ ] `6103f6f8` **Open-elsewhere → navigates then closes.** With the handbook OPEN on a DIFFERENT page,
+      click ⓘ — it navigates to the Scribe Editor Features page (NOT closed); a further click then closes
+      it. Confirm the two-click flow feels right. *(add-info-button-handbook-toggle 4.4)*
+- [ ] `11c74a8d` **Tooltip + close sound.** Hover ⓘ — the tooltip reads the toggle wording ("Show /
+      hide Editor Features"); confirm the handbook close plays/omits its sound acceptably.
+      *(add-info-button-handbook-toggle 4.5)*

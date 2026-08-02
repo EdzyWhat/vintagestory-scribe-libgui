@@ -18,7 +18,7 @@
 	"scribe-gui-switch-to-editor": "Task Editor",
 	"scribe-gui-switch-to-read": "Done Editing",
 	"scribe-gui-newtask-placeholder": "New task…",
-	"scribe-gui-editor-reference-tooltip": "Editor Features",
+	"scribe-gui-editor-reference-tooltip": "Show / hide Editor Features",
 	"scribe-gui-collapse": "Collapse",
 	"scribe-gui-expand": "Expand",
 	"scribe-gui-edit-hint": "This lectern is empty.\nClick Task Editor to add tasks or notes.",

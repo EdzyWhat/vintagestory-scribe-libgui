@@ -521,7 +521,7 @@ public abstract partial class ScribeDialogBase
             onReorderBlock: (from, to) => ReorderEditorBlock(from, to),
             onAddTask: OnClickAddTask,
             onSwitchToRead: OnClickSwitchToRead,
-            onOpenEditorReference: OpenEditorReferenceHandbook,
+            onOpenEditorReference: ToggleEditorReferenceHandbook,
             // Footer gear (tablet only). The base returns null so the Lectern/Notebook footer omits it —
             // those dialogs reach Settings through their nav column, which the tablet drops (D3). The tablet
             // overrides EditorSettingsGearAction to return modSystem.OpenSettings (add-tablet-cuneiform-chrome).
@@ -550,15 +550,42 @@ public abstract partial class ScribeDialogBase
     /// central region reads (add-tablet-dialog D4).</summary>
     protected virtual bool ShowEditorSwitchToRead => true;
 
-    /// <summary>Footer "Editor Features" (ⓘ) button: open the "Scribe Editor Features" handbook page
-    /// (v1-release-checklist 9.5 — surfaces the keyboard-navigation reference at the point of use). We fire
-    /// the game's registered <c>"handbook"</c> link protocol with the same <c>handbook://</c> href the lang
-    /// pages already link to, rather than reaching into <c>ModSystemSurvivalHandbook</c>'s private dialog —
-    /// this keeps us decoupled and degrades gracefully: if the survival mod (and thus its handbook protocol)
-    /// isn't loaded, <c>LinkProtocols</c> has no <c>"handbook"</c> entry and this is a no-op instead of a
-    /// crash. See VSAPI-NOTES.md (survival-mod systems) for the page-code / link-protocol mechanics.</summary>
-    private void OpenEditorReferenceHandbook()
+    /// <summary>Footer "Editor Features" (ⓘ) button: TOGGLE the "Scribe Editor Features" handbook page
+    /// (v1-release-checklist 9.5 — surfaces the keyboard-navigation reference at the point of use;
+    /// add-info-button-handbook-toggle — a 2026-08-02 playtester wanted ⓘ to also dismiss the panel).
+    ///
+    /// <para>Behavior (design D3, "focus, don't hide"): if no handbook dialog is open, fire the game's
+    /// registered <c>"handbook"</c> link protocol to OPEN it on our reference page; if a handbook IS
+    /// already open, CLOSE it. Re-firing the link protocol while it is open on a different entry would
+    /// merely navigate it to our page, so the observable flow is "open ⇒ toggles closed; closed ⇒ opens
+    /// to our page" — a page-aware single-click close is not possible without reading the dialog's private
+    /// page state (see VSAPI-NOTES.md, survival-mod systems).</para>
+    ///
+    /// <para>Kept deliberately DECOUPLED from the survival mod: we discover the open handbook by scanning
+    /// the public <c>capi.Gui.OpenedGuis</c> for the <see cref="GuiDialog"/> whose public
+    /// <see cref="GuiDialog.ToggleKeyCombinationCode"/> is <c>"handbook"</c> and close it via base
+    /// <see cref="GuiDialog.TryClose"/> — no reference to <c>GuiDialogHandbook</c> /
+    /// <c>ModSystemSurvivalHandbook</c> and no reflection. It also degrades gracefully: if the survival mod
+    /// (and thus its handbook dialog + link protocol) isn't loaded, the <c>OpenedGuis</c> scan finds
+    /// nothing and <c>LinkProtocols</c> has no <c>"handbook"</c> entry, so both paths are safe no-ops
+    /// instead of a crash.</para></summary>
+    private void ToggleEditorReferenceHandbook()
     {
+        // Discover any open handbook by its stable PUBLIC identity (its toggle-hotkey code), not by its
+        // concrete type — this is the reflection-free, decoupled equivalent of OfType<GuiDialogHandbook>().
+        GuiDialog? openHandbook = capi.Gui.OpenedGuis
+            .FirstOrDefault(d => d.ToggleKeyCombinationCode == "handbook");
+
+        if (openHandbook != null)
+        {
+            // Open ⇒ close it (D3: any open handbook toggles closed). TryClose runs the dialog's normal
+            // OnGuiClosed path (D-Q3: its own close sound/animation, no extra work needed here).
+            openHandbook.TryClose();
+            return;
+        }
+
+        // Closed ⇒ open to our reference page via the registered link protocol (unchanged from the
+        // open-only original). Absent survival mod ⇒ no "handbook" protocol ⇒ graceful no-op.
         if (capi.LinkProtocols.TryGetValue("handbook", out var open))
             open(new LinkTextComponent("handbook://craftinginfo-scribe-editor-reference"));
     }
