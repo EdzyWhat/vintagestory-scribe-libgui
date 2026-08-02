@@ -4,7 +4,7 @@ All notable changes to Scribe are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] - 2026-07-31
+## [0.2.0] - 2026-08-01
 
 ### Added
 - **Notebook** — a carried, personal document with the same task checklist and freeform
@@ -18,6 +18,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Notebook History** — an append-only chronicle recorded automatically while you carry a
   Notebook: crafted, picked up, deaths, PvP kills, boss kills, and temporal storms, each stamped
   with the in-game date. High-frequency kinds roll off past a per-kind cap.
+- **Guestbook** — a Lectern tab that logs visitors automatically: each player who opens the
+  Lectern gets a dated entry, with room for a short personal note they can edit per day. Ideal
+  for a shared base or trader stall.
+- **Temporal-storm HUD effect** — during temporal instability the Pinned Task HUD text briefly
+  corrupts and the document title flickers, as a flavor tie-in to the storm. Toggleable in
+  settings.
+- **Document title on tooltips** — a Lectern block, and a Notebook or Clockmaker's Notebook
+  item, now shows its document title in the hover tooltip, so you can tell your notes apart
+  without opening them.
+- **Up/Down caret navigation** — the arrow keys now move the text caret between visual lines in
+  the multi-line editor and pinned rows (to the line's start/end at the first/last line), with
+  Shift extending the selection.
 - **In-game handbook entries** for the Notebook and Clockmaker's Notebook, plus refreshed
   Lectern sections and guide pages so the mod's handbook reads coherently as a whole.
 - **Clockmaker's Notebook craft gate** — the recipe requires the vanilla `tinkerer` trait
@@ -27,6 +39,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   content (tasks, notes, History on a Notebook, Guestbook on a Lectern) for screenshot/video
   capture, through the normal server-authoritative flow.
 
+### Changed
+- Refreshed the Notebook, Clockmaker's Notebook, and Lectern art, and gave each dialog its own
+  distinct GUI backdrop.
+- **Tab / Shift+Tab** traversal in editable views now visits only the rows' text fields,
+  skipping the completion checkboxes (still clickable by mouse).
+
 ### Fixed
 - A held **Clockmaker's Notebook** now behaves like the plain Notebook everywhere it previously
   didn't: live History events record into it, closing its dialog persists task/note edits (was
@@ -35,6 +53,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   silently excluded its sibling class.
 - Corrected the Clockmaker's Notebook recipe, whose non-existent `game:metalparts-*` item
   wildcard crashed the handbook's "Created by" page on open.
+- A newly placed Lectern would refuse to open because its host registry was keyed under a stale
+  document id; the key now tracks the placed block.
+- Various Guestbook fixes: editing a note no longer blocks player movement, long notes wrap
+  correctly, and the tooltip is no longer double-prefixed with the mod domain.
 
 ## [0.1.2] - 2026-07-28
 
@@ -77,4 +99,7 @@ First public release.
 - `game` 1.22.0
 - `gui` 2.0.0 (LibGUI)
 
+[0.2.0]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v0.1.2...v0.2.0
+[0.1.2]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/releases/tag/v0.1.0
