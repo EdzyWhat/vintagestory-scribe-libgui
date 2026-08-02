@@ -132,7 +132,8 @@ internal sealed class ScribeEditorContent : StatefulWidget
         IReadOnlyList<ScribeDepartingEditorRow> departingRows,
         ScribeCollapseRegistry collapseRegistry,
         Action<Guid> onDepartingCollapsed,
-        string hintLangKey = "scribe:scribe-gui-edit-hint")
+        string hintLangKey = "scribe:scribe-gui-edit-hint",
+        bool addTaskEnabled = true)
     {
         Blocks = blocks;
         FocusNodes = focusNodes;
@@ -156,6 +157,7 @@ internal sealed class ScribeEditorContent : StatefulWidget
         CollapseRegistry = collapseRegistry;
         OnDepartingCollapsed = onDepartingCollapsed;
         HintLangKey = hintLangKey;
+        AddTaskEnabled = addTaskEnabled;
     }
 
     public IReadOnlyList<ScribeEditRowData> Blocks { get; }
@@ -175,6 +177,11 @@ internal sealed class ScribeEditorContent : StatefulWidget
     /// <see cref="ScribeEditorContentState"/> for the drag mechanics.</summary>
     public Action<int, int> OnReorderBlock { get; }
     public Action OnAddTask { get; }
+    /// <summary>Whether the footer "Add task" button is enabled. Default true (uncapped tiers — Lectern,
+    /// Notebook — always). The tablet tier passes false once its document holds the max task blocks
+    /// (scribe-document-policy), which dims the button and makes its tap a no-op so the 10-task cap is a
+    /// visible affordance, not just a silent backstop.</summary>
+    public bool AddTaskEnabled { get; }
     public Action OnSwitchToRead { get; }
     /// <summary>Open the "Scribe Editor Features" handbook page (v1-release-checklist 9.5). Wired from the
     /// dialog (which holds the client API); this widget stays free of the VS API. See
@@ -354,9 +361,15 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                         mainAxisSize: MainAxisSize.Max,
                         children: new Widget[]
                         {
+                            // "Add task": dimmed + inert once the tier cap is reached (tablet at 10 tasks);
+                            // uncapped tiers always pass AddTaskEnabled=true, so this renders exactly as before.
                             new Expanded(child: new Button(
-                                child: new Text(Lang.Get("scribe:scribe-gui-addtask"), buttonTextStyle),
-                                onTap: _ => Widget.OnAddTask())),
+                                child: new Text(
+                                    Lang.Get("scribe:scribe-gui-addtask"),
+                                    Widget.AddTaskEnabled
+                                        ? buttonTextStyle
+                                        : buttonTextStyle with { Color = colors.OnPrimary with { W = 0.4f } }),
+                                onTap: Widget.AddTaskEnabled ? _ => Widget.OnAddTask() : null)),
                             new Expanded(child: new Button(
                                 child: new Text(Lang.Get("scribe:scribe-gui-switch-to-read"), buttonTextStyle),
                                 onTap: _ => Widget.OnSwitchToRead())),

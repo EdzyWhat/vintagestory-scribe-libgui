@@ -1,0 +1,57 @@
+{
+	"code": "scribetablet",
+	"class": "ItemScribeTablet",
+	"variantgroups": [
+		{ "code": "material", "states": ["clay", "wax"] }
+	],
+	"maxstacksize": 1,
+	"behaviors": [
+		{ "name": "GroundStorable", "properties": { "layout": "Quadrants", "collisionBox": { "x1": 0, "y1": 0, "z1": 0, "x2": 1, "y2": 0.125, "z2": 1 } } }
+	],
+	"attributes": {
+		"groundStorageTransform": {
+			"translation": { "x": 0.12, "y": 0, "z": -0.04 },
+			"rotation": { "x": 0, "y": 35, "z": 90 },
+			"origin": { "x": 0.5, "y": 0.05, "z": 0.5 }
+		},
+		"handbook": {
+			"extraSections": [
+				{
+					"title": "scribe:handbook-scribetablet-about-title",
+					"text": "scribe:handbook-scribetablet-about-text"
+				},
+				{
+					"title": "scribe:handbook-scribetablet-craft-title",
+					"text": "scribe:handbook-scribetablet-craft-text"
+				}
+			]
+		}
+	},
+	"shapeByType": {
+		"*-clay": { "base": "game:block/clutter/tablet-clay1" },
+		"*-wax": { "base": "game:block/clutter/tablet-clay1" }
+	},
+	"textures": {
+		"ceramic": { "base": "game:block/clay/aged-ceramic1" },
+		"writing": { "base": "game:block/overlay/writing" }
+	},
+	"guiTransform": {
+		"translation": { "x": 0, "y": 0, "z": 0 },
+		"rotation": { "x": -22, "y": -45, "z": 0 },
+		"origin": { "x": 0.5, "y": 0.4, "z": 0.5 },
+		"scale": 2.4
+	},
+	"tpHandTransform": {
+		"translation": { "x": -0.85, "y": -0.3, "z": -0.5 },
+		"rotation": { "x": 0, "y": 0, "z": 0 },
+		"origin": { "x": 0.5, "y": 0.1, "z": 0.5 },
+		"scale": 0.6
+	},
+	"groundTransform": {
+		"translation": { "x": 0, "y": 0, "z": 0 },
+		"rotation": { "x": 0, "y": 0, "z": 0 },
+		"origin": { "x": 0.5, "y": 0, "z": 0.5 },
+		"scale": 3
+	},
+	"creativeinventory": { "general": ["*"], "items": ["*"] }
+}

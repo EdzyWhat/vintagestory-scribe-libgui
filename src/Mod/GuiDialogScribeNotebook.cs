@@ -152,10 +152,10 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
 
     private void OnActiveSlotChanged(ActiveSlotChangeEventArgs _)
     {
-        // Either notebook item may host this dialog (the Clockmaker's Notebook subclasses the tab set),
-        // so both must keep it open when they remain the active hand item.
+        // Any Scribe document item may host this dialog (both notebooks and the tablet, which reuses
+        // this dialog interim), so keep it open while a document item remains the active hand item.
         if (capi.World.Player.Entity.ActiveHandItemSlot?.Itemstack?.Collectible
-            is not (ItemScribeNotebook or ItemClockmakerNotebook))
+            is not IScribeDocumentItem)
             TryClose();
     }
 

@@ -16,7 +16,7 @@ namespace Scribe;
 /// Owner-only: <see cref="IsLockedByOther"/> always returns false because only one player
 /// can hold the item at a time.
 /// </summary>
-public sealed class NotebookHost : IScribeDocumentHost
+public class NotebookHost : IScribeDocumentHost
 {
     private readonly ItemSlot _slot;
     private readonly ScribeBackdropSpec _backdrop;
@@ -77,7 +77,14 @@ public sealed class NotebookHost : IScribeDocumentHost
 
     public ScribeLayout GetLayout(float pixelArtSize) => new ScribeLayout(pixelArtSize, 1160f / 1024f);
 
-    public string DefaultDocumentTitle => "Notebook";
+    public virtual string DefaultDocumentTitle => "Notebook";
+
+    /// <summary>The notebook tier is uncapped. Declared here (implementing the interface member for the
+    /// whole <see cref="NotebookHost"/> hierarchy) and <c>virtual</c> so <see cref="TabletHost"/> can
+    /// override it to the tablet cap — a bare <c>Policy</c> member on the subclass would NOT re-map the
+    /// interface, which is fixed at the type that declares the interface (this one), so calls through
+    /// <see cref="IScribeDocumentHost"/> would wrongly resolve to the default.</summary>
+    public virtual ScribeDocumentPolicy Policy => ScribeDocumentPolicy.Unlimited;
 
     /// <summary>The Notebook has no guestbook. This property is never called because
     /// <see cref="GuiDialogScribeNotebook"/> does not add a Visitors nav button.</summary>

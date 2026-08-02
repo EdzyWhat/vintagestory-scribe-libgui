@@ -1,0 +1,11 @@
+{
+	ingredientPattern: "W,S",
+	ingredients: {
+		"W": { type: "item", code: "game:beeswax" },
+		"S": { type: "item", code: "game:stick" }
+	},
+	width: 1,
+	height: 2,
+	name: "scribe:scribetablet-wax",
+	output: { type: "item", code: "scribe:scribetablet-wax", quantity: 1 }
+}

@@ -184,6 +184,7 @@ public sealed partial class ScribeModSystem : ModSystem
         api.RegisterBlockEntityClass("ScribeLectern", typeof(BlockEntityScribeLectern));
         api.RegisterItemClass("ItemScribeNotebook", typeof(ItemScribeNotebook));
         api.RegisterItemClass("ItemClockmakerNotebook", typeof(ItemClockmakerNotebook));
+        api.RegisterItemClass("ItemScribeTablet", typeof(ItemScribeTablet));
 
         // All message types must be registered in this same order on both sides. The original four
         // read/edit/lock messages come first (order frozen); the identity-addressed pin layer is

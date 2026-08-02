@@ -68,8 +68,12 @@ public sealed partial class ScribeModSystem
             if (!CarriedInventoryClasses.Contains(inv.ClassName)) continue;
             foreach (var slot in inv)
             {
-                if (slot.Itemstack?.Collectible is not (ItemScribeNotebook or ItemClockmakerNotebook)) continue;
-                var host = new NotebookHost(slot);
+                if (slot.Itemstack?.Collectible is not IScribeDocumentItem) continue;
+                // TabletHost derives from NotebookHost, so a carried tablet records the same history
+                // (deaths, kills, storms) as a notebook through the identical write-through path.
+                var host = slot.Itemstack.Collectible is ItemScribeTablet
+                    ? new TabletHost(slot)
+                    : new NotebookHost(slot);
                 host.AttachServerContext(sapi, player);
                 yield return host;
             }

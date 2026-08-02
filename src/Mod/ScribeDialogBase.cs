@@ -325,6 +325,55 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// rather than any document field (pinning is per-player, not document state).</summary>
     private bool IsPinnedForMe(Guid taskId) => modSystem.IsPinnedForMe(host.Document.DocId, taskId);
 
+    /// <summary>Whether the tier cap (<see cref="IScribeDocumentHost.Policy"/>) still permits adding one
+    /// more TASK block to the document being edited. Counted against the live scratch document while
+    /// editing (falls back to the host document if scratch is not yet initialized). Uncapped tiers
+    /// (Lectern, Notebook — <see cref="ScribeDocumentPolicy.Unlimited"/>) always return true, so this
+    /// gates only the tablet tier (scribe-document-policy).</summary>
+    private bool CanAddTaskUnderPolicy()
+    {
+        var doc = scratch ?? host.Document;
+        int taskCount = doc.Blocks.Count(b => b.IsTask);
+        return host.Policy.CanAdd(taskCount);
+    }
+
+    /// <summary>Toggle THIS player's pin on the given task, honoring the tier's pin cap
+    /// (<see cref="IScribeDocumentHost.Policy"/>) with SWAP semantics rather than refusal. Unpinning is
+    /// always allowed. When pinning would exceed a finite <see cref="ScribeDocumentPolicy.MaxPins"/>
+    /// cap (the tablet tier: 1 pin per document), the player's oldest pins for THIS document are
+    /// released first so the new pin fits — a seamless "pin this one instead" swap. Uncapped tiers
+    /// (Lectern, Notebook — <see cref="ScribeDocumentPolicy.Unlimited"/>) never release anything and
+    /// simply pin. Pin actions are per-player and lock-free (see <see cref="SendSetPin"/>); the server
+    /// re-pushes this player's set, landing in <see cref="OnMyPinsChanged"/> to repaint the rows.</summary>
+    private void TogglePinWithPolicy(Guid taskId)
+    {
+        bool willPin = !IsPinnedForMe(taskId);
+        if (!willPin)
+        {
+            SendSetPin(taskId, false);
+            return;
+        }
+        ReleasePinsToFitPolicy(taskId);
+        SendSetPin(taskId, true);
+    }
+
+    /// <summary>Release the player's oldest pins for the current document until pinning one more task
+    /// stays within the tier's <see cref="ScribeDocumentPolicy.MaxPins"/> cap. No-op for uncapped tiers
+    /// (no cap → nothing to make room for). <see cref="ScribeModSystem.MyPins"/> is in pin order, so the
+    /// earliest entries are released first.</summary>
+    private void ReleasePinsToFitPolicy(Guid newlyPinnedTaskId)
+    {
+        if (host.Policy.MaxPins is not int max) return; // uncapped tier — never swap
+        Guid docId = host.Document.DocId;
+        var existing = modSystem.MyPins
+            .Where(p => p.OwnerDocId == docId && p.TaskId != newlyPinnedTaskId)
+            .ToList();
+        // Adding one more must leave the count at <= max, so release (count + 1 - max) oldest pins.
+        int toRelease = existing.Count + 1 - max;
+        for (int i = 0; i < toRelease && i < existing.Count; i++)
+            SendSetPin(existing[i].TaskId, false);
+    }
+
     /// <summary>A fresh pin-set/settings push arrived: rebuild so the pin indicators reflect it. A
     /// no-op while not open. In editor mode the pin state is per-player (not part of the scratch doc),
     /// so repainting it does not disturb the in-progress text edit.

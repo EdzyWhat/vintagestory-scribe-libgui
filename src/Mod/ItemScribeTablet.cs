@@ -9,10 +9,19 @@ using Vintagestory.API.Util;
 namespace Scribe;
 
 /// <summary>
-/// A player-carried Clockmaker's Notebook item. Identical to <see cref="ItemScribeNotebook"/>
-/// but opens <see cref="GuiDialogClockmakerNotebook"/>, which adds a Timer tab.
+/// A player-carried tablet item — the early-game "scratch tier" writing surface. One class backs both
+/// the clay and wax variants (the <c>material</c> variant axis in <c>itemtypes/scribetablet.json</c>);
+/// they differ only in art and recipe, not behavior. Modeled on <see cref="ItemScribeNotebook"/>:
+/// MaxStackSize 1, right-click to open (shift passes through to ground storage), a title tooltip line,
+/// and a server-side <c>Crafted</c> history entry. NO stylus-in-offhand edit gate (explicitly deferred).
+///
+/// <para>The document persists on the ItemStack exactly like the notebook — pure reuse of
+/// <see cref="ScribeDocumentAttributes"/> — via a <see cref="TabletHost"/> that caps the tier at 10 task
+/// blocks and 1 pin. Interim behavior (this change): the tablet opens the EXISTING
+/// <see cref="GuiDialogScribeNotebook"/> so the item is fully testable before the bespoke tablet dialog
+/// (Proposal C) exists.</para>
 /// </summary>
-public class ItemClockmakerNotebook : Item, IScribeDocumentItem
+public class ItemScribeTablet : Item, IScribeDocumentItem
 {
     private WorldInteraction[] _interactions = System.Array.Empty<WorldInteraction>();
 
@@ -22,11 +31,11 @@ public class ItemClockmakerNotebook : Item, IScribeDocumentItem
         MaxStackSize = 1;
 
         if (api.Side != EnumAppSide.Client) return;
-        _interactions = ObjectCacheUtil.GetOrCreate(api, "scribeClockmakerNotebookInteractions", () => new WorldInteraction[]
+        _interactions = ObjectCacheUtil.GetOrCreate(api, "scribeTabletInteractions", () => new WorldInteraction[]
         {
             new WorldInteraction
             {
-                ActionLangCode = "scribe:itemhelp-scribeclockmakernotebook-open",
+                ActionLangCode = "scribe:itemhelp-scribetablet-open",
                 MouseButton = EnumMouseButton.Right,
             },
         });
@@ -36,8 +45,8 @@ public class ItemClockmakerNotebook : Item, IScribeDocumentItem
         => _interactions.Append(base.GetHeldInteractionHelp(inSlot));
 
     /// <summary>Append the stored document's title (quoted, or an untitled placeholder) to the
-    /// held/inventory tooltip. The upgrade copies the source Notebook's document payload, so the
-    /// carried-over title renders here without any extra plumbing.</summary>
+    /// held/inventory tooltip. A never-opened tablet carries no document attribute yet, so
+    /// <see cref="ScribeDocumentAttributes.TryReadFrom"/> returns false and the placeholder shows.</summary>
     public override void GetHeldItemInfo(ItemSlot inSlot, StringBuilder dsc, IWorldAccessor world, bool withDebugInfo)
     {
         base.GetHeldItemInfo(inSlot, dsc, world, withDebugInfo);
@@ -52,6 +61,7 @@ public class ItemClockmakerNotebook : Item, IScribeDocumentItem
         EntitySelection entitySel, bool firstEvent, ref EnumHandHandling handling)
     {
         if (!firstEvent) return;
+        // Shift+right-click: let base run CollectibleBehaviors (including GroundStorable).
         if (byEntity.Controls.ShiftKey)
         {
             base.OnHeldInteractStart(slot, byEntity, blockSel, entitySel, firstEvent, ref handling);
@@ -61,38 +71,15 @@ public class ItemClockmakerNotebook : Item, IScribeDocumentItem
         if (byEntity.Api is not ICoreClientAPI capi) return;
 
         handling = EnumHandHandling.PreventDefault;
-        OpenNotebookDialog(slot, capi);
+        OpenTabletDialog(slot, capi);
     }
 
     public override void OnCreatedByCrafting(ItemSlot[] allInputSlots, ItemSlot outputSlot, IRecipeBase byRecipe)
     {
         base.OnCreatedByCrafting(allInputSlots, outputSlot, byRecipe);
         if (api.Side != EnumAppSide.Server) return;
-        if (outputSlot.Itemstack is null) return;
 
-        // Carry the source Notebook's document + history onto the fresh Clockmaker's output so
-        // the upgrade keeps the same DocId, tasks/state, and chronicle instead of starting blank.
-        // Locate the source by the presence of the document attribute (robust to grid position);
-        // the current recipe has exactly one such input. Raw byte copies preserve the DocId
-        // exactly and avoid a codec round-trip. When no source document is present, the output
-        // keeps the fresh stack and NotebookHost initializes an empty document on first open.
-        var sourceStack = allInputSlots
-            .Select(s => s.Itemstack)
-            .FirstOrDefault(st => st is not null
-                && st.Attributes.HasAttribute(ScribeDocumentAttributes.DocumentAttributeKey));
-        if (sourceStack is not null)
-        {
-            var docBytes = sourceStack.Attributes.GetBytes(ScribeDocumentAttributes.DocumentAttributeKey);
-            if (docBytes is not null)
-                outputSlot.Itemstack.Attributes.SetBytes(ScribeDocumentAttributes.DocumentAttributeKey, docBytes);
-
-            // Copy history BEFORE the "Crafted" stamp below, so the new entry appends onto the
-            // carried-over chronicle rather than a blank one.
-            var histBytes = sourceStack.Attributes.GetBytes("scribeHistory");
-            if (histBytes is not null)
-                outputSlot.Itemstack.Attributes.SetBytes("scribeHistory", histBytes);
-        }
-
+        // Resolve the crafting player from the inventory's opener set.
         var playerUid = outputSlot.Inventory.openedByPlayerGUIds.FirstOrDefault();
         var playerName = (playerUid is not null
             ? (api.World.PlayerByUid(playerUid) as IServerPlayer)?.PlayerName
@@ -112,16 +99,17 @@ public class ItemClockmakerNotebook : Item, IScribeDocumentItem
         outputSlot.Itemstack.Attributes.SetBytes("scribeHistory", history.Serialize());
     }
 
-    private void OpenNotebookDialog(ItemSlot slot, ICoreClientAPI capi)
+    private void OpenTabletDialog(ItemSlot slot, ICoreClientAPI capi)
     {
-        var host = new NotebookHost(slot, ScribeBackdrops.ClockmakerPage);
+        var host = new TabletHost(slot);
         var modSystem = capi.ModLoader.GetModSystem<ScribeModSystem>();
         modSystem.RegisterHost(host);
-        // Tell the server we opened this notebook so it can record the one-time PickedUp entry
+        // Tell the server we opened this tablet so it can record the one-time PickedUp entry
         // (opening the dialog is client-only; the server never sees it otherwise).
         modSystem.NotifyServerNotebookOpened(host.Document.DocId);
 
-        var dialog = new GuiDialogClockmakerNotebook(host, capi);
+        // Interim: reuse the existing notebook dialog until the bespoke tablet dialog (Proposal C).
+        var dialog = new GuiDialogScribeNotebook(host, capi);
         dialog.OnClosed += () => modSystem.UnregisterHost(host.Document.DocId);
         dialog.TryOpen();
     }

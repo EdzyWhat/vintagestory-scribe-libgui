@@ -1,0 +1,11 @@
+{
+	ingredientPattern: "C,S",
+	ingredients: {
+		"C": { type: "item", code: "game:clay-blue" },
+		"S": { type: "item", code: "game:stick" }
+	},
+	width: 1,
+	height: 2,
+	name: "scribe:scribetablet-clay",
+	output: { type: "item", code: "scribe:scribetablet-clay", quantity: 1 }
+}

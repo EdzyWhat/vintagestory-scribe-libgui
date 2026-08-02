@@ -75,6 +75,9 @@ public abstract partial class ScribeDialogBase
         var current = scratch.Blocks[index];
         if (current.IsTask && string.IsNullOrWhiteSpace(current.Text)) return;
 
+        // Tier cap (scribe-document-policy): the Enter=new-task gesture also stops at the tablet cap.
+        if (!CanAddTaskUnderPolicy()) return;
+
         NormalizeRowOnCommit(index);
         FlushIfDirty();
 
@@ -296,7 +299,10 @@ public abstract partial class ScribeDialogBase
         if (scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
         var block = scratch.Blocks[index];
         if (!block.IsTask) return; // no pin control on a text section
-        SendSetPin(block.TaskId, !IsPinnedForMe(block.TaskId));
+        // Tier cap (scribe-document-policy): the tablet tier allows only 1 pin. Unpinning is always
+        // allowed; pinning a new task at the cap seamlessly SWAPS — the older pin is released so the
+        // new one fits. Uncapped tiers (Lectern/Notebook) just pin.
+        TogglePinWithPolicy(block.TaskId);
     }
 
     /// <summary>Fire-and-forget a pin/unpin for a task by stable identity. The document's DocId plus
@@ -369,6 +375,10 @@ public abstract partial class ScribeDialogBase
     private void OnClickAddTask()
     {
         if (scratch is null) return;
+        // Tier cap (scribe-document-policy): the tablet tier stops at 10 task blocks. Uncapped tiers
+        // (Lectern, Notebook) never trip this. The footer "Add task" button is also disabled at the cap,
+        // so this is a defensive backstop for any other add path.
+        if (!CanAddTaskUnderPolicy()) return;
         if (focusedEditIndex is { } leaving) NormalizeRowOnCommit(leaving);
         scratch.AddTask("");
         isDirty = true;

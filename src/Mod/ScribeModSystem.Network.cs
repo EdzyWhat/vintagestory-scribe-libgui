@@ -163,7 +163,7 @@ public sealed partial class ScribeModSystem
         // classes flush through this handler, so accept the Clockmaker's Notebook too — otherwise
         // its task/note edits are silently dropped server-side.
         var slot = fromPlayer.Entity?.ActiveHandItemSlot;
-        if (slot?.Itemstack?.Collectible is not (ItemScribeNotebook or ItemClockmakerNotebook)) return;
+        if (slot?.Itemstack?.Collectible is not IScribeDocumentItem) return;
         // Verify the packet's DocId matches the document already in the stack (if any).
         // A fresh stack with no prior save has no stored DocId yet — allow that write.
         if (ScribeDocumentAttributes.TryReadFrom(slot.Itemstack, out var existing)
@@ -202,7 +202,7 @@ public sealed partial class ScribeModSystem
     {
         if (sapi is null) return;
         var slot = fromPlayer.Entity?.ActiveHandItemSlot;
-        if (slot?.Itemstack?.Collectible is not (ItemScribeNotebook or ItemClockmakerNotebook)) return;
+        if (slot?.Itemstack?.Collectible is not IScribeDocumentItem) return;
 
         var historyBytes = NotebookHost.TryRecordPickedUpOnSlot(sapi, slot, fromPlayer);
         if (historyBytes is null) return; // crafter, or this player already has a PickedUp entry

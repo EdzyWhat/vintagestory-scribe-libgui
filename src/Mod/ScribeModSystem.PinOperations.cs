@@ -227,10 +227,14 @@ public sealed partial class ScribeModSystem
             foreach (var slot in slots)
             {
                 if (slot is null) continue;
-                if (slot.Itemstack?.Collectible is not (ItemScribeNotebook or ItemClockmakerNotebook)) continue;
+                if (slot.Itemstack?.Collectible is not IScribeDocumentItem) continue;
                 if (!ScribeDocumentAttributes.TryReadFrom(slot.Itemstack, out var doc) || doc is null) continue;
                 if (doc.DocId != docId) continue;
-                var nbHost = new NotebookHost(slot);
+                // Construct the tier-correct host (TabletHost for a tablet) so its policy/title apply
+                // server-side too; both derive from NotebookHost, so the write-through path is identical.
+                var nbHost = slot.Itemstack.Collectible is ItemScribeTablet
+                    ? new TabletHost(slot)
+                    : new NotebookHost(slot);
                 nbHost.AttachServerContext(sapi, player);
                 host = nbHost;
                 return true;

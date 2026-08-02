@@ -197,6 +197,17 @@
    "item-clockmakerschematic": "Clockmaker's Notebook Schematic",
    "item-clockmakerschematic-desc": "A trader's blueprint. Lets anyone craft a Clockmaker's Notebook, no Clockmaker class needed. Not used up when crafting.",
 
+   "item-scribetablet-clay": "Clay Tablet",
+   "item-scribetablet-clay-desc": "A simple early-game writing surface. Scratch a short list of tasks and notes into the clay.",
+   "item-scribetablet-wax": "Wax Tablet",
+   "item-scribetablet-wax-desc": "A simple early-game writing surface. Scratch a short list of tasks and notes into the wax.",
+   "itemhelp-scribetablet-open": "Open Tablet",
+
+   "handbook-scribetablet-about-title": "The Tablet",
+   "handbook-scribetablet-about-text": "The clay and wax Tablets are the earliest Scribe writing surfaces — cheap to craft long before a <a href=\"handbook://item-scribe:scribenotebook\">Notebook</a> or <a href=\"handbook://block-scribe:scribelectern\">Lectern</a> is within reach. Right-click while holding a Tablet to open its document of tasks and notes; like the Notebook, it belongs to whoever carries it.<br><br>A Tablet is deliberately limited: it holds a short list (up to 10 tasks) and a single pinned task, keeping it a quick scratchpad rather than a full journal.",
+   "handbook-scribetablet-craft-title": "Crafting a Tablet",
+   "handbook-scribetablet-craft-text": "Craft a Clay Tablet on the crafting grid from clay over a stick, or a Wax Tablet from beeswax over a stick — see the recipes on this page.",
+
 
    "handbook-scribenotebook-about-title": "The Notebook",
    "handbook-scribenotebook-about-text": "The Notebook is a personal, carried version of the <a href=\"handbook://block-scribe:scribelectern\">Lectern</a>. Right-click while holding it to open your own document of tasks and notes — it travels with you in your inventory, so your list is always at hand, even far from any Lectern.<br><br>Unlike a Lectern, a Notebook belongs to whoever carries it: there is no shared editor lock and no Guestbook. It also keeps a private <strong>History</strong> chronicle, automatically logging notable events (deaths, temporal storms, boss kills) that happen while you carry it.",

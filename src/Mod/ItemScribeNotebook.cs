@@ -13,7 +13,7 @@ namespace Scribe;
 /// Pinned / Settings) for the document stored in this specific item stack. No Guestbook tab.
 /// Owner-only: only the player currently holding the item can edit it.
 /// </summary>
-public class ItemScribeNotebook : Item
+public class ItemScribeNotebook : Item, IScribeDocumentItem
 {
     private WorldInteraction[] _interactions = System.Array.Empty<WorldInteraction>();
 

@@ -458,7 +458,10 @@ public abstract partial class ScribeDialogBase
             departingRows: departing,
             collapseRegistry: editorCollapseRegistry,
             onDepartingCollapsed: OnEditorRowCollapsed,
-            hintLangKey: EmptyHintLangKey);
+            hintLangKey: EmptyHintLangKey,
+            // Tier cap (scribe-document-policy): dim + disable "Add task" at the tablet's 10-task cap.
+            // Uncapped tiers (Lectern, Notebook) always pass true, so their footer is unchanged.
+            addTaskEnabled: CanAddTaskUnderPolicy());
     }
 
     /// <summary>Footer "Editor Features" (ⓘ) button: open the "Scribe Editor Features" handbook page
@@ -496,7 +499,7 @@ public abstract partial class ScribeDialogBase
     /// rebuild — capturing here (pre-network-round-trip) was too early and the restore loop expired
     /// before the async callback arrived (v1-playtest-fixes second pass).</para></summary>
     private void OnReadViewTogglePinned(Guid taskId)
-    {
-        SendSetPin(taskId, !IsPinnedForMe(taskId));
-    }
+        // Tier cap (scribe-document-policy): honor the tablet's 1-pin cap on the read view too, with the
+        // same seamless swap as the editor — pinning a new task at the cap releases the older pin.
+        => TogglePinWithPolicy(taskId);
 }

@@ -94,6 +94,15 @@ public interface IScribeDocumentHost
     /// <summary>The guestbook for this block — visitor entries recorded server-side on GUI open.</summary>
     GuestbookStore Guestbook { get; }
 
+    /// <summary>The per-tier cap this host enforces on its document (max task blocks, max pins,
+    /// read-only). Defaults to <see cref="ScribeDocumentPolicy.Unlimited"/> so every existing host
+    /// (Lectern, Notebook, Clockmaker's) is uncapped and behaviorally unchanged; only the tablet tier
+    /// (<see cref="TabletHost"/>) overrides it. The dialog consults <see cref="ScribeDocumentPolicy.CanAdd"/>
+    /// before adding a task and <see cref="ScribeDocumentPolicy.CanPin"/> before pinning one, so the cap
+    /// is applied at the editor mutation boundary rather than inside the shared <see cref="ScribeDocument"/>
+    /// model (scribe-document-policy).</summary>
+    ScribeDocumentPolicy Policy => ScribeDocumentPolicy.Unlimited;
+
     // ── Server-side document write-through (lock-free, called from completion/pin handlers) ──
 
     /// <summary>Server-side: set a task's done flag by stable TaskId. No-op if not found.
