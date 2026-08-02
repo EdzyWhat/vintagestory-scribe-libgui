@@ -58,15 +58,15 @@
 
 - [x] 6.1 `dotnet build` clean; `dotnet test` — existing Core suite still green (no Core changes
   expected in this proposal).
-- [ ] 6.2 In-game: open a Lectern and both Notebooks; confirm all views (Read/Edit/Pinned/Settings,
+- [x] 6.2 In-game: open a Lectern and both Notebooks; confirm all views (Read/Edit/Pinned/Settings,
   plus History on the notebook) still work — the seam did not disturb the incumbents.
-- [ ] 6.3 In-game: right-click a clay tablet and a wax tablet; confirm each opens the bespoke
+- [x] 6.3 In-game: right-click a clay tablet and a wax tablet; confirm each opens the bespoke
   `GuiDialogScribeTablet` (always-edit, no tabs) with the earthen theme + material backdrop, that
   title edit / grip drag / close all work, and that adding/editing/checking/pinning tasks still works
   under the 10-task / 1-pin caps (no regression of Proposal B's editor).
-- [ ] 6.4 In-game: confirm the cuneiform title banner renders crisp filled strokes at a legible fixed
+- [x] 6.4 In-game: confirm the cuneiform title banner renders crisp filled strokes at a legible fixed
   height above the task list.
-- [ ] 6.5 In-game: toggle `DisableCuneiformFont` on; confirm the banner falls back to the normal
+- [x] 6.5 In-game: toggle `DisableCuneiformFont` on; confirm the banner falls back to the normal
   resolved task font, and back off restores cuneiform.
 - [ ] 6.6 Atlas/integration: the local pre-push gate stages the `gui` dep and exercises the tablet
   open path; keep synthetic player names ≤16 chars.
