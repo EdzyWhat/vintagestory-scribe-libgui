@@ -127,6 +127,30 @@ public sealed class CuneiformLineLayout
 {
     private readonly GlyphBundle _bundle;
 
+    /// <summary>
+    /// Many-to-one character alias map, applied at the SAME pre-lookup layer as uppercase-folding (after
+    /// folding, before <see cref="GlyphBundle.Get"/>). It redirects a character with no authored glyph of
+    /// its own onto an existing authored glyph it visually resembles, so more everyday characters render
+    /// as real ink instead of the missing-glyph gap. Because the substitution happens before lookup, an
+    /// aliased character produces byte-identical strokes and advance to its target (same glyph, same math).
+    ///
+    /// The map is pure DATA so entries are trivial to add/remove without touching layout logic. Entries are
+    /// grouped by dependency:
+    ///   • Ship-now (target already authored): the bracket/brace forms reuse the parenthesis glyphs.
+    ///   • Was waits-on-art, now shippable: <c>&amp; → +</c>. The <c>+</c> glyph landed with the glyph-forge
+    ///     symbol sync (the shipped bundle now carries + / = % # * @), so the ampersand alias resolves to a
+    ///     real glyph today. If a target is ever absent, its alias simply falls through to the safe
+    ///     missing-glyph gap (no crash), so an alias to an unauthored target is harmless but pointless.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<char, char> Aliases = new Dictionary<char, char>
+    {
+        ['['] = '(',
+        ['{'] = '(',
+        [']'] = ')',
+        ['}'] = ')',
+        ['&'] = '+',
+    };
+
     /// <summary>Word-gap advance (grid units) for a space character, which has no authored glyph.
     /// Tunable against the in-game harness. Roughly half an em reads as a clear word break without the
     /// script feeling loose.</summary>
@@ -301,6 +325,13 @@ public sealed class CuneiformLineLayout
             }
 
             char c = char.ToUpperInvariant(raw);
+            // Alias substitution: at the same pre-lookup layer as folding, redirect a character onto the
+            // authored glyph it resembles (e.g. '[' → '('). Anything neither authored nor aliased still
+            // falls through to the safe missing-glyph gap below.
+            if (Aliases.TryGetValue(c, out char alias))
+            {
+                c = alias;
+            }
             Glyph? glyph = _bundle.Get(c);
 
             if (glyph is null)

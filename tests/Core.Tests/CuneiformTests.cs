@@ -553,10 +553,98 @@ public class CuneiformTests
         Assert.Equal(90, last.TotalWidth, 6);
     }
 
+    // ---- Character-coverage alias map (add-cuneiform-character-coverage) ---------------------
+
+    [Fact]
+    public void Layout_BracketAliases_RenderIdenticallyToOpenParen()
+    {
+        // '[' and '{' alias to the authored '(' at the pre-lookup layer, so each lays out to byte-identical
+        // strokes and advance as '(' — real ink, not the missing-glyph gap. Uses the shipped bundle (the
+        // sample bundle has no '(' glyph); '(' is one of the 47 original authored punctuation marks.
+        var layout = ShippedLayout();
+
+        AssertSameLayout(layout.Layout("("), layout.Layout("["));
+        AssertSameLayout(layout.Layout("("), layout.Layout("{"));
+    }
+
+    [Fact]
+    public void Layout_BraceAndBracketCloseAliases_RenderIdenticallyToCloseParen()
+    {
+        // ']' and '}' alias to the authored ')'.
+        var layout = ShippedLayout();
+
+        AssertSameLayout(layout.Layout(")"), layout.Layout("]"));
+        AssertSameLayout(layout.Layout(")"), layout.Layout("}"));
+    }
+
+    [Fact]
+    public void Layout_AmpersandAlias_RendersIdenticallyToPlus()
+    {
+        // '&' aliases to '+'. The '+' glyph landed with the glyph-forge symbol sync (the shipped bundle now
+        // carries + / = % # * @), so this alias resolves to a real glyph today rather than falling through.
+        var layout = ShippedLayout();
+        Assert.True(GlyphBundle.Parse(ShippedBundleJson()).Contains('+'), "the '&' alias requires an authored '+'");
+
+        AssertSameLayout(layout.Layout("+"), layout.Layout("&"));
+    }
+
+    [Fact]
+    public void Layout_UnaliasedUnauthoredCharacter_StillDegradesToMissingGap()
+    {
+        // Guards the fall-through: a character that is neither authored nor aliased (e.g. '~') still advances
+        // the small missing-glyph gap with no strokes and no throw — the alias step must not disturb this.
+        var layout = new CuneiformLineLayout(GlyphBundle.Parse(SampleBundleJson));
+
+        CuneiformLine line = layout.Layout("~");
+
+        Assert.Empty(line.Strokes);
+        Assert.Equal(layout.MissingGlyphGapUnits, line.TotalWidth, 6);
+    }
+
+    [Fact]
+    public void ShippedBundle_ContainsAliasTargets()
+    {
+        // The shippable aliases must point at glyphs the bundle actually carries, so they render real ink
+        // from the moment they ship: '(' and ')' (bracket/brace targets) and '+' (the '&' target).
+        GlyphBundle bundle = GlyphBundle.Parse(ShippedBundleJson());
+
+        Assert.True(bundle.Contains('('), "'[' '{' alias to '('");
+        Assert.True(bundle.Contains(')'), "']' '}' alias to ')'");
+        Assert.True(bundle.Contains('+'), "'&' aliases to '+'");
+    }
+
     // ---- Helpers ----------------------------------------------------------------------------
 
     private static CuneiformLine Layout(string text) =>
         new CuneiformLineLayout(GlyphBundle.Parse(SampleBundleJson)).Layout(text);
+
+    private static string ShippedBundleJson()
+    {
+        string path = Path.Combine(AppContext.BaseDirectory, "cuneiform-glyphs-1.json");
+        Assert.True(File.Exists(path), $"Shipped glyph bundle not found at {path}");
+        return File.ReadAllText(path);
+    }
+
+    private static CuneiformLineLayout ShippedLayout() =>
+        new CuneiformLineLayout(GlyphBundle.Parse(ShippedBundleJson()));
+
+    /// <summary>Assert two laid-out lines are byte-identical in advance width and positioned strokes —
+    /// the contract for an aliased character rendering exactly as its target glyph.</summary>
+    private static void AssertSameLayout(CuneiformLine expected, CuneiformLine actual)
+    {
+        Assert.Equal(expected.TotalWidth, actual.TotalWidth, 6);
+        Assert.Equal(expected.Strokes.Count, actual.Strokes.Count);
+        for (int i = 0; i < expected.Strokes.Count; i++)
+        {
+            Vec2[] e = expected.Strokes[i].Stroke.Corners();
+            Vec2[] a = actual.Strokes[i].Stroke.Corners();
+            for (int c = 0; c < e.Length; c++)
+            {
+                Assert.Equal(e[c].X, a[c].X, 6);
+                Assert.Equal(e[c].Y, a[c].Y, 6);
+            }
+        }
+    }
 
     private static void AssertVec(Vec2 expected, Vec2 actual)
     {
