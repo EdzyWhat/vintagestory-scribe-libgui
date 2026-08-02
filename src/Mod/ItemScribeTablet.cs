@@ -17,9 +17,9 @@ namespace Scribe;
 ///
 /// <para>The document persists on the ItemStack exactly like the notebook — pure reuse of
 /// <see cref="ScribeDocumentAttributes"/> — via a <see cref="TabletHost"/> that caps the tier at 10 task
-/// blocks and 1 pin. Interim behavior (this change): the tablet opens the EXISTING
-/// <see cref="GuiDialogScribeNotebook"/> so the item is fully testable before the bespoke tablet dialog
-/// (Proposal C) exists.</para>
+/// blocks and 1 pin. Right-click opens the bespoke <see cref="GuiDialogScribeTablet"/> (add-tablet-dialog,
+/// Proposal C): an always-edit, no-tabs surface with the earthen theme, the clay/wax backdrop matching the
+/// item's material, and a cuneiform title banner over the inherited editable task list.</para>
 /// </summary>
 public class ItemScribeTablet : Item, IScribeDocumentItem
 {
@@ -101,15 +101,19 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
 
     private void OpenTabletDialog(ItemSlot slot, ICoreClientAPI capi)
     {
-        var host = new TabletHost(slot);
+        // The backdrop matches the tablet's material variant (clay/wax) — the item and its dialog agree on
+        // the mapping through ScribeBackdrops (add-tablet-dialog D6). Both slots point at the shared
+        // placeholder art this round.
+        var host = new TabletHost(slot, ScribeBackdrops.ForTabletMaterial(Variant["material"]));
         var modSystem = capi.ModLoader.GetModSystem<ScribeModSystem>();
         modSystem.RegisterHost(host);
         // Tell the server we opened this tablet so it can record the one-time PickedUp entry
         // (opening the dialog is client-only; the server never sees it otherwise).
         modSystem.NotifyServerNotebookOpened(host.Document.DocId);
 
-        // Interim: reuse the existing notebook dialog until the bespoke tablet dialog (Proposal C).
-        var dialog = new GuiDialogScribeNotebook(host, capi);
+        // The bespoke always-edit tablet dialog (Proposal C): earthen theme, no tabs, cuneiform title
+        // banner over the inherited editable task list.
+        var dialog = new GuiDialogScribeTablet(host, capi);
         dialog.OnClosed += () => modSystem.UnregisterHost(host.Document.DocId);
         dialog.TryOpen();
     }

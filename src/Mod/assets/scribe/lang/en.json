@@ -23,6 +23,7 @@
 	"scribe-gui-expand": "Expand",
 	"scribe-gui-edit-hint": "This lectern is empty.\nClick Task Editor to add tasks or notes.",
 	"scribe-gui-edit-hint-notebook": "This notebook is empty.\nClick Task Editor to add tasks or notes.",
+	"scribe-gui-edit-hint-tablet": "This tablet is empty.\nClick Add task to press your first note.",
 	"scribe-gui-save-failed": "Your changes could not be saved — the lectern is no longer locked to you.",
 	"scribe-gui-close": "Close",
 	"scribe-gui-drag": "Drag to move",

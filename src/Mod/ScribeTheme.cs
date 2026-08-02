@@ -77,9 +77,67 @@ internal static class ScribeTheme
         StateSelected = new Vector4(Accent.X, Accent.Y, Accent.Z, 0.20f),
     });
 
+    /// <summary>Deep clay ink — a dark red-brown, one notch warmer and redder than <see cref="Ink"/> — so
+    /// tablet body/title text reads as pressed into earthenware rather than penned on paper.</summary>
+    private static readonly Vector4 TabletInk = new(0.20f, 0.10f, 0.05f, 1.0f);
+
+    /// <summary>The tablet's warm accent — a terracotta/brick tone deeper than the parchment
+    /// <see cref="Accent"/> ochre, to sit against the clay/wax backdrops.</summary>
+    private static readonly Vector4 TabletAccent = new(0.55f, 0.30f, 0.15f, 1.0f);
+
+    /// <summary>
+    /// The tablet tier's earthen/clay palette (add-tablet-dialog, Proposal C). A warm clay surface with
+    /// dark red-brown ink — sibling to <see cref="Light"/> but pushed from parchment toward fired earth.
+    ///
+    /// <para><b>Placeholder this round.</b> The real text-contrast decision is deliberately DEFERRED until
+    /// the clay/wax backdrops render in-game: the VS materials those backdrops target span the color gamut
+    /// (pale-blue and pale-pink unfired clays, dark-grey and brown fired clays, gold beeswax), so a single
+    /// fixed ink color may not stay legible across all of them. The eventual choice — one ink color / dark
+    /// text + a light shadow-glow / per-backdrop ink — is captured in the
+    /// <c>tablet-theme-contrast-vs-backdrops</c> note and revisited once the art exists. Authored role-by-
+    /// role from the same rules as <see cref="Light"/> (see the class remarks for the two semantic
+    /// inversions).</para>
+    /// </summary>
+    internal static readonly ThemeData Tablet = new(new ColorScheme
+    {
+        Primary = TabletAccent,
+        OnPrimary = new Vector4(0.96f, 0.90f, 0.78f, 1.0f),
+        Secondary = new Vector4(0.60f, 0.42f, 0.26f, 1.0f),
+        OnSecondary = new Vector4(0.96f, 0.90f, 0.78f, 1.0f),
+
+        // Surfaces: warm fired-clay tones. Background is the deepest (a darker earthen tone), Surface the
+        // tablet face on top, SurfaceHigh raised (lightest), SurfaceLow recessed (darker) — the
+        // raised/recessed ordering kept semantically correct for a light-ish scheme.
+        Surface = new Vector4(0.80f, 0.66f, 0.50f, 1.0f),
+        OnSurface = TabletInk,
+        OnSurfaceVariant = new Vector4(0.40f, 0.28f, 0.18f, 1.0f),
+        Background = new Vector4(0.72f, 0.57f, 0.41f, 1.0f),
+        OnBackground = TabletInk,
+        SurfaceLow = new Vector4(0.70f, 0.55f, 0.39f, 1.0f),
+        SurfaceHigh = new Vector4(0.87f, 0.74f, 0.58f, 1.0f),
+
+        // Borders/dividers: a deep brown with alpha, so they read on the clay surface.
+        Border = new Vector4(0.36f, 0.24f, 0.12f, 0.55f),
+        OutlineVariant = new Vector4(0.36f, 0.24f, 0.12f, 0.28f),
+
+        Error = new Vector4(0.70f, 0.17f, 0.11f, 1.0f),
+        OnError = new Vector4(0.96f, 0.90f, 0.78f, 1.0f),
+
+        // Semantic (not mechanical) inversion: hover/select DARKEN a light-ish surface — dark ink / accent
+        // tints at low alpha (see the Light theme's matching note).
+        StateHover = new Vector4(TabletInk.X, TabletInk.Y, TabletInk.Z, 0.08f),
+        StateSelected = new Vector4(TabletAccent.X, TabletAccent.Y, TabletAccent.Z, 0.20f),
+    });
+
     /// <summary>The single theme selector Scribe's core views call: the net-new <see cref="Light"/>
     /// parchment theme when Pixel-Art Display is on, or the player's global theme
     /// (<see cref="ThemeData.Default"/>, loaded from their <c>libgui.json</c> by LibGUI) when it is off.
     /// The off path depends on no art, keeping the mod fully usable with zero assets.</summary>
     public static ThemeData For(bool pixelArt) => pixelArt ? Light : ThemeData.Default;
+
+    /// <summary>The tablet-tier selector: the earthen <see cref="Tablet"/> palette when Pixel-Art Display
+    /// is on, else the player's global theme (same off-path rule as <see cref="For"/>). The tablet dialog
+    /// calls this in its <c>Build()</c> theme wrapper instead of <see cref="For"/> so it draws its own
+    /// clay palette rather than the parchment one (add-tablet-dialog D6).</summary>
+    public static ThemeData ForTablet(bool pixelArt) => pixelArt ? Tablet : ThemeData.Default;
 }

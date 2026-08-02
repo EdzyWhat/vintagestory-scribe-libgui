@@ -44,9 +44,16 @@ public abstract partial class ScribeDialogBase
         // WindowFrame: the tree below IS the header + content, so the art frames everything rather than
         // sitting as a strip beneath a stock bar.
         return new Theme(
-            ScribeTheme.For(pixelArt),
+            ResolveTheme(pixelArt),
             child: WrapBackdrop(pixelArt, layout, BuildOuterArtBox(layout)));
     }
+
+    /// <summary>The <see cref="ThemeData"/> this dialog wraps its tree in — <c>protected virtual</c> so a
+    /// subclass can pick its own palette without forking <see cref="Build"/> (the tablet returns the
+    /// earthen <see cref="ScribeTheme.Tablet"/> instead of the parchment <see cref="ScribeTheme.Light"/>).
+    /// The default selects the shared parchment/global theme, so the three incumbents are unchanged
+    /// (add-tablet-dialog D6).</summary>
+    protected virtual ThemeData ResolveTheme(bool pixelArt) => ScribeTheme.For(pixelArt);
 
     /// <summary>Wrap the layout tree in the OuterArtBox: the notebook backdrop <see cref="Container"/> sized to
     /// <c>W × H</c> when Pixel-Art Display is ON, or the tree in a bare same-sized box when OFF (the existing
@@ -287,7 +294,12 @@ public abstract partial class ScribeDialogBase
     /// standalone settings window), Read view (check glyph), Edit view (pencil), Pinned tasks (pin). All
     /// reuse the mod's registered SVGs (scribe-notebook-frame D3). Read/Edit switch the dialog's own view;
     /// Pinned switches to the Pin Tab (scribe-pin-editor).</summary>
-    private Widget BuildRightColNav()
+    /// <summary>SectionRightCol builder — <c>protected virtual</c> so a subclass may replace the entire
+    /// right column (the tablet returns an empty, nav-less column whose <c>SideColW</c> width still
+    /// preserves the symmetric side margin). The default body builds the baseline nav stack; the three
+    /// incumbent dialogs (Lectern + both Notebooks) override nothing and take this path unchanged
+    /// (add-tablet-dialog D2).</summary>
+    protected virtual Widget BuildRightColNav()
     {
         var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
         // Sidebar nav buttons enlarged (v1-playtest-fixes 5.6): the base was RowCheckboxSize × 1.2; ×1.7 on
@@ -370,10 +382,13 @@ public abstract partial class ScribeDialogBase
                 })),
             useGlobalOverlay: true);
 
-    /// <summary>The tasks column's content region: the read or editor view. Its former gear-header chrome row
-    /// moved to the SectionRightCol nav stack (scribe-notebook-frame), so this is now just the active view
-    /// filling the column.</summary>
-    private Widget BuildCentralRegion() => viewMode switch
+    /// <summary>The tasks column's content builder — <c>protected virtual</c> so a subclass may supply
+    /// its own single-view center instead of the <see cref="viewMode"/>-switched view (the tablet returns
+    /// a cuneiform title banner over the inherited editable task list). The default body routes on
+    /// <see cref="viewMode"/>; the three incumbent dialogs override nothing and take this path unchanged
+    /// (add-tablet-dialog D2). Its former gear-header chrome row moved to the SectionRightCol nav stack
+    /// (scribe-notebook-frame), so this is now just the active view filling the column.</summary>
+    protected virtual Widget BuildCentralRegion() => viewMode switch
     {
         ScribeLecternView.Editor   => BuildEditorContent(),
         ScribeLecternView.Pinned   => BuildPinnedContent(),
@@ -391,6 +406,19 @@ public abstract partial class ScribeDialogBase
     /// <summary>Lang key for the empty-document hint shown in the Read and Edit views. Notebook
     /// subclasses override this to show "This notebook is empty…" instead of the Lectern phrasing.</summary>
     protected virtual string EmptyHintLangKey => "scribe:scribe-gui-edit-hint";
+
+    /// <summary>The document's display title as the title bar renders it: the live scratch title (or the
+    /// persisted document title when not editing), with the codec default ("Untitled") mapped to the host's
+    /// meaningful default (e.g. "Tablet"). Exposed so a subclass banner (the tablet's cuneiform title) shows
+    /// exactly the title the bar shows. Never blank (falls back to <see cref="IScribeDocumentHost.DefaultDocumentTitle"/>).</summary>
+    protected string DisplayDocumentTitle
+    {
+        get
+        {
+            var raw = scratch?.Title ?? host.Document.Title;
+            return (raw == ScribeDocument.DefaultTitle ? null : raw) ?? host.DefaultDocumentTitle;
+        }
+    }
 
     private Widget BuildReadContent() =>
         new ScribeReadContent(
@@ -417,7 +445,12 @@ public abstract partial class ScribeDialogBase
             scrollController: sharedScrollController,
             hintLangKey: EmptyHintLangKey);
 
-    private Widget BuildEditorContent()
+    /// <summary>The editable task list for the current scratch document. Promoted from <c>private</c> to
+    /// <c>protected</c> so a subclass may reuse the inherited editor rather than fork it — the tablet
+    /// stacks it under a display-only cuneiform title banner (add-tablet-dialog D4). Bound to the same
+    /// <see cref="scratch"/>, focus nodes, and mutation handlers, so task add/edit/check/pin behave
+    /// identically wherever it is rebuilt.</summary>
+    protected Widget BuildEditorContent()
     {
         var blocks = scratch!.Blocks
             .Select((b, i) => new ScribeEditRowData(i, b.IsTask, b.Done, IsPinnedForMe(b.TaskId), b.TaskId, b.Text))
@@ -461,8 +494,18 @@ public abstract partial class ScribeDialogBase
             hintLangKey: EmptyHintLangKey,
             // Tier cap (scribe-document-policy): dim + disable "Add task" at the tablet's 10-task cap.
             // Uncapped tiers (Lectern, Notebook) always pass true, so their footer is unchanged.
-            addTaskEnabled: CanAddTaskUnderPolicy());
+            addTaskEnabled: CanAddTaskUnderPolicy(),
+            // Whether the "Done editing" (switch-to-read) footer button renders. True for the tabbed
+            // dialogs; the always-edit tablet overrides ShowEditorSwitchToRead to false since it has no
+            // Read view (add-tablet-dialog D4).
+            showSwitchToRead: ShowEditorSwitchToRead);
     }
+
+    /// <summary>Whether the editor footer shows the "Done editing" (switch-to-read) button. True for the
+    /// tabbed dialogs (Lectern/Notebook), which have a Read view to return to. The always-edit tablet
+    /// overrides this to false: it has no Read view, and leaving editor mode would null the scratch the
+    /// central region reads (add-tablet-dialog D4).</summary>
+    protected virtual bool ShowEditorSwitchToRead => true;
 
     /// <summary>Footer "Editor Features" (ⓘ) button: open the "Scribe Editor Features" handbook page
     /// (v1-release-checklist 9.5 — surfaces the keyboard-navigation reference at the point of use). We fire

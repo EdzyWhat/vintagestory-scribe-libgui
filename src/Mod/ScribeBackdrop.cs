@@ -38,6 +38,27 @@ internal static class ScribeBackdrops
     public static readonly ScribeBackdropSpec ClockmakerPage =
         new(new AssetLocation("scribe", "textures/gui/scribe-clockmakers-notebook.png"));
 
-    // Desk / Clay Tablet / future page specs are added here as those items ship — each is just another
+    /// <summary>The clay tablet's editing page (add-tablet-dialog, Proposal C). Keyed to the tablet item's
+    /// <c>material: clay</c> variant. Points at the existing <see cref="LecternPage"/> art
+    /// (<c>scribe-lectern.png</c>, 1024×1160) as a PLACEHOLDER this round — its ratio already matches the
+    /// tablet layout aspect (<c>1160/1024</c>). Authentic clay art (and the fuller 3-clay-type × fired/
+    /// unfired set) is the followup <c>add-tablet-clay-type-backdrops</c>; swapping it later is just a new
+    /// PNG path here.</summary>
+    public static readonly ScribeBackdropSpec TabletClayPage =
+        new(new AssetLocation("scribe", "textures/gui/scribe-lectern.png"));
+
+    /// <summary>The wax tablet's editing page (add-tablet-dialog, Proposal C). Keyed to the tablet item's
+    /// <c>material: wax</c> variant. Also points at the <see cref="LecternPage"/> placeholder for now (see
+    /// <see cref="TabletClayPage"/>).</summary>
+    public static readonly ScribeBackdropSpec TabletWaxPage =
+        new(new AssetLocation("scribe", "textures/gui/scribe-lectern.png"));
+
+    /// <summary>The tablet backdrop for a given <c>material</c> variant code (<c>clay</c>/<c>wax</c>);
+    /// falls back to <see cref="TabletClayPage"/> for any unrecognized value. Central so the item and its
+    /// dialog agree on the mapping (add-tablet-dialog D6).</summary>
+    public static ScribeBackdropSpec ForTabletMaterial(string? material) =>
+        material == "wax" ? TabletWaxPage : TabletClayPage;
+
+    // Desk / future page specs are added here as those items ship — each is just another
     // spec plus its PNG; ScribeDialogBase.WrapBackdrop and the bitmap cache stay unchanged.
 }

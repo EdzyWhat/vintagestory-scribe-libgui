@@ -133,7 +133,8 @@ internal sealed class ScribeEditorContent : StatefulWidget
         ScribeCollapseRegistry collapseRegistry,
         Action<Guid> onDepartingCollapsed,
         string hintLangKey = "scribe:scribe-gui-edit-hint",
-        bool addTaskEnabled = true)
+        bool addTaskEnabled = true,
+        bool showSwitchToRead = true)
     {
         Blocks = blocks;
         FocusNodes = focusNodes;
@@ -158,6 +159,7 @@ internal sealed class ScribeEditorContent : StatefulWidget
         OnDepartingCollapsed = onDepartingCollapsed;
         HintLangKey = hintLangKey;
         AddTaskEnabled = addTaskEnabled;
+        ShowSwitchToRead = showSwitchToRead;
     }
 
     public IReadOnlyList<ScribeEditRowData> Blocks { get; }
@@ -183,6 +185,11 @@ internal sealed class ScribeEditorContent : StatefulWidget
     /// visible affordance, not just a silent backstop.</summary>
     public bool AddTaskEnabled { get; }
     public Action OnSwitchToRead { get; }
+    /// <summary>Whether the footer shows the "Done editing" (switch-to-read) button. Default true for the
+    /// tabbed dialogs (Lectern/Notebook), which have a Read view to switch to. The always-edit tablet
+    /// (add-tablet-dialog) passes false: it has no Read view, so leaving editor mode would null the scratch
+    /// and there would be nowhere to land — the button is simply omitted there.</summary>
+    public bool ShowSwitchToRead { get; }
     /// <summary>Open the "Scribe Editor Features" handbook page (v1-release-checklist 9.5). Wired from the
     /// dialog (which holds the client API); this widget stays free of the VS API. See
     /// <see cref="ScribeDialogBase.OpenEditorReferenceHandbook"/>.</summary>
@@ -359,20 +366,36 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                         // already renders at ~the 14px label's line height, so natural heights match anyway.
                         crossAxisAlignment: CrossAxisAlignment.Center,
                         mainAxisSize: MainAxisSize.Max,
-                        children: new Widget[]
-                        {
-                            // "Add task": dimmed + inert once the tier cap is reached (tablet at 10 tasks);
-                            // uncapped tiers always pass AddTaskEnabled=true, so this renders exactly as before.
-                            new Expanded(child: new Button(
-                                child: new Text(
-                                    Lang.Get("scribe:scribe-gui-addtask"),
-                                    Widget.AddTaskEnabled
-                                        ? buttonTextStyle
-                                        : buttonTextStyle with { Color = colors.OnPrimary with { W = 0.4f } }),
-                                onTap: Widget.AddTaskEnabled ? _ => Widget.OnAddTask() : null)),
-                            new Expanded(child: new Button(
-                                child: new Text(Lang.Get("scribe:scribe-gui-switch-to-read"), buttonTextStyle),
-                                onTap: _ => Widget.OnSwitchToRead())),
+                        children: BuildFooterButtons(buttonTextStyle, colors, context))),
+                })));
+    }
+
+    /// <summary>The footer button row: "Add task", optionally "Done editing", and the trailing ⓘ info
+    /// button. The always-edit tablet omits "Done editing" (<see cref="ScribeEditorContent.ShowSwitchToRead"/>
+    /// false) since it has no Read view to switch to; the tabbed dialogs keep it.</summary>
+    private Widget[] BuildFooterButtons(TextStyle buttonTextStyle, ColorScheme colors, BuildContext context)
+    {
+        var buttons = new List<Widget>
+        {
+            // "Add task": dimmed + inert once the tier cap is reached (tablet at 10 tasks);
+            // uncapped tiers always pass AddTaskEnabled=true, so this renders exactly as before.
+            new Expanded(child: new Button(
+                child: new Text(
+                    Lang.Get("scribe:scribe-gui-addtask"),
+                    Widget.AddTaskEnabled
+                        ? buttonTextStyle
+                        : buttonTextStyle with { Color = colors.OnPrimary with { W = 0.4f } }),
+                onTap: Widget.AddTaskEnabled ? _ => Widget.OnAddTask() : null)),
+        };
+
+        if (Widget.ShowSwitchToRead)
+        {
+            buttons.Add(new Expanded(child: new Button(
+                child: new Text(Lang.Get("scribe:scribe-gui-switch-to-read"), buttonTextStyle),
+                onTap: _ => Widget.OnSwitchToRead())));
+        }
+
+        buttons.Add(
                             // Trailing info button — a peer of the Add/Done buttons: same LibGUI Button (Primary
                             // variant, so it inherits the identical background, border, padding, and hover/press
                             // feedback), just NON-Expanded so it hugs the right edge at its natural width while
@@ -404,9 +427,9 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                                         SoftWrap = true,
                                         Color = colors.OnBackground,
                                     })),
-                                useGlobalOverlay: true),
-                        })),
-                })));
+                                useGlobalOverlay: true));
+
+        return buttons.ToArray();
     }
 }
 
