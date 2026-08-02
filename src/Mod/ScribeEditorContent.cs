@@ -409,6 +409,15 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
     /// false) since it has no Read view to switch to; the tabbed dialogs keep it.</summary>
     private Widget[] BuildFooterButtons(TextStyle buttonTextStyle, ColorScheme colors, BuildContext context)
     {
+        // On the cuneiform path the label is a ratio-boosted CuneiformText (D7), which renders taller than
+        // the equivalent TTF label; trim the labelled buttons' vertical padding ~8px (Symmetric vertical
+        // 10 → 6) so the taller glyph doesn't inflate the footer button height past its readable-text form.
+        // Cuneiform-only: the normal path keeps the default theme padding so the Lectern/Notebook footers
+        // are byte-identical (task 8.4).
+        ButtonStyle? labelButtonStyle = Widget.Style.UseCuneiform
+            ? Theme.Of(context).ButtonStyle with { Padding = EdgeInsets.Symmetric(6, 20) }
+            : null;
+
         var buttons = new List<Widget>
         {
             // "Add task": dimmed + inert once the tier cap is reached (tablet at 10 tasks);
@@ -419,6 +428,7 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                     Widget.AddTaskEnabled
                         ? buttonTextStyle
                         : buttonTextStyle with { Color = colors.OnPrimary with { W = 0.4f } }),
+                style: labelButtonStyle,
                 onTap: Widget.AddTaskEnabled ? _ => Widget.OnAddTask() : null)),
         };
 
@@ -426,6 +436,7 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
         {
             buttons.Add(new Expanded(child: new Button(
                 child: BuildButtonLabel(Lang.Get("scribe:scribe-gui-switch-to-read"), buttonTextStyle),
+                style: labelButtonStyle,
                 onTap: _ => Widget.OnSwitchToRead())));
         }
 

@@ -24,6 +24,7 @@ using System.Text;
 using Gui.Core.Framework;         // RenderObject, RenderBox
 using Gui.Rendering;              // PaintingContext
 using Gui.Rendering.Text;         // TextLayoutHelper, FontWeight
+using Gui.Widgets.Animations;     // Ticker (caret blink)
 using Gui.Widgets.Events;         // KeyboardEvent, IKeyDownHandler, IKeyCharHandler
 using Gui.Widgets.Framework;      // Widget, StatefulWidget, State, RenderObjectWidget, Theme, IFocusable
 using Gui.Widgets.Input;          // FocusNode, GestureDetector
@@ -61,6 +62,7 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
     private int caret;
     private int selectionAnchor;
     private bool hasFocus;
+    private bool caretVisible = true;
     private float fontSize = 15f;
     private Vector4 textColor = Vector4.One;
     private Vector4 placeholderColor = new(1f, 1f, 1f, 0.4f);
@@ -82,6 +84,10 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
     public int Caret { get => caret; set => SetProperty(ref caret, value, repaint: true); }
     public int SelectionAnchor { get => selectionAnchor; set => SetProperty(ref selectionAnchor, value, repaint: true); }
     public bool FieldHasFocus { get => hasFocus; set => SetProperty(ref hasFocus, value, repaint: true); }
+    /// <summary>Blink gate: false paints no caret (the OFF half of the blink), driven by the shared caret
+    /// ticker in <see cref="ScribeMultilineFieldState"/>. Focus still gates whether a caret exists at all;
+    /// a live selection keeps the caret solid (the State pins this true), mirroring LibGUI's TextField.</summary>
+    public bool CaretVisible { get => caretVisible; set => SetProperty(ref caretVisible, value, repaint: true); }
     public float FontSize { get => fontSize; set => SetProperty(ref fontSize, value, relayout: true); }
     /// <summary>Task-text font family (v1-release-checklist §6). Coalesces null/empty to "sans-serif" so an
     /// unset value keeps the built-in body face; changing it relayouts (family changes line metrics).</summary>
@@ -157,7 +163,7 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
         }
 
         // Caret: map the flat caret offset onto (line, column) of the wrapped text, then draw a bar.
-        if (hasFocus)
+        if (hasFocus && caretVisible)
         {
             (int line, int col) = CaretToLineCol(caret);
             string upto = line < visualLines.Count ? visualLines[line].Text.Substring(0, Math.Min(col, visualLines[line].Text.Length)) : "";
@@ -328,13 +334,14 @@ internal sealed class ScribeMultilineFieldRenderWidget : RenderObjectWidget
 {
     public ScribeMultilineFieldRenderWidget(string text, string placeholder, int caret, int selectionAnchor, bool hasFocus,
         float fontSize, float padX, float padY, Vector4 textColor, Vector4 placeholderColor, Vector4 caretColor, Vector4 selectionColor,
-        Vector4 boxColor, Vector4 borderColor, float borderThickness, Vector4 cornerRadii, string fontFamily)
+        Vector4 boxColor, Vector4 borderColor, float borderThickness, Vector4 cornerRadii, string fontFamily, bool caretVisible = true)
     {
         Text = text;
         Placeholder = placeholder;
         Caret = caret;
         SelectionAnchor = selectionAnchor;
         HasFocus = hasFocus;
+        CaretVisible = caretVisible;
         FontSize = fontSize;
         FontFamily = fontFamily;
         PadX = padX;
@@ -354,6 +361,7 @@ internal sealed class ScribeMultilineFieldRenderWidget : RenderObjectWidget
     public int Caret { get; }
     public int SelectionAnchor { get; }
     public bool HasFocus { get; }
+    public bool CaretVisible { get; }
     public float FontSize { get; }
     public string FontFamily { get; }
     public float PadX { get; }
@@ -377,6 +385,7 @@ internal sealed class ScribeMultilineFieldRenderWidget : RenderObjectWidget
         ro.Caret = Caret;
         ro.SelectionAnchor = SelectionAnchor;
         ro.FieldHasFocus = HasFocus;
+        ro.CaretVisible = CaretVisible;
         ro.FontSize = FontSize;
         ro.FontFamily = FontFamily;
         ro.PadX = PadX;
@@ -493,6 +502,16 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
     private FocusNode focusNode = null!;
     private FocusNode? internalFocusNode;
     private bool hadFocus;
+
+    // ---- Caret blink (mirrors LibGUI's own TextField: a ticker toggles caretVisible on a fixed cadence,
+    // reset to solid on any edit/caret move, paused while a selection is active or focus is lost). Lives
+    // in the shared State so BOTH render paths — the normal field and the cuneiform tablet field — blink
+    // at the identical cadence (add-tablet-cuneiform-chrome task 8.1). ----
+    /// <summary>Blink half-period in milliseconds, matching LibGUI <c>TextField.CursorBlinkMs</c>.</summary>
+    private const double CaretBlinkMs = 500;
+    private Ticker? caretTicker;
+    private bool caretVisible = true;
+    private DateTime caretLastToggle = DateTime.MinValue;
     /// <summary>True between an onPress and its onRelease: a click-drag is selecting text, so onMove
     /// extends the selection to the cursor. The event dispatcher auto-captures the field on press, so
     /// moves keep arriving even when the cursor leaves the field's bounds mid-drag. Cleared for a
@@ -523,10 +542,15 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
         focusNode.AddListener(OnFocusChanged);
         hadFocus = focusNode.HasFocus;
 
+        // Caret-blink ticker (same provider LibGUI's TextField uses). Started only while focused with a
+        // collapsed selection; OnCaretTick toggles caretVisible every CaretBlinkMs and rebuilds.
+        caretTicker = Element.Owner!.GetTickerProvider().CreateTicker(OnCaretTick);
+
         if (Widget.AutoFocus)
         {
             focusNode.RequestFocus();
         }
+        RestartCaretBlink();
     }
 
     private void OnFocusChanged()
@@ -539,14 +563,58 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
             Widget.OnBlur?.Invoke();
         }
         hadFocus = now;
-        MarkNeedsBuild(); // repaint caret + focus border on focus change
+        RestartCaretBlink(); // gaining focus shows a solid caret then blinks; losing it stops the ticker
+        MarkNeedsBuild();    // repaint caret + focus border on focus change
     }
 
     public override void Dispose()
     {
         focusNode.RemoveListener(OnFocusChanged);
+        caretTicker?.Dispose();
         internalFocusNode?.Dispose();
         base.Dispose();
+    }
+
+    /// <summary>Show the caret solid and (re)start the blink cadence — called on focus gain and after any
+    /// edit or caret move, mirroring LibGUI's TextField (a moving/typing caret stays solid, then resumes
+    /// blinking). The ticker only runs while focused with a collapsed selection; otherwise it is stopped
+    /// and the caret is pinned solid (a selection shows no separate blinking caret).</summary>
+    private void RestartCaretBlink()
+    {
+        caretVisible = true;
+        caretLastToggle = DateTime.Now;
+        if (focusNode.HasFocus && !HasSelection)
+        {
+            if (caretTicker is { IsTicking: false })
+            {
+                caretTicker.Start();
+            }
+        }
+        else
+        {
+            caretTicker?.Stop();
+        }
+    }
+
+    /// <summary>Ticker callback: while focused with a collapsed selection, flip <see cref="caretVisible"/>
+    /// every <see cref="CaretBlinkMs"/> and rebuild so the caret bar blinks. Bails (caret solid, ticker
+    /// stopped) the moment focus is lost or a selection becomes active.</summary>
+    private void OnCaretTick(TimeSpan frameDelta)
+    {
+        if (!focusNode.HasFocus || HasSelection)
+        {
+            caretVisible = true;
+            caretTicker?.Stop();
+            return;
+        }
+
+        var now = DateTime.Now;
+        if ((now - caretLastToggle).TotalMilliseconds >= CaretBlinkMs)
+        {
+            caretLastToggle = now;
+            caretVisible = !caretVisible;
+            MarkNeedsBuild();
+        }
     }
 
     public void OnKeyChar(KeyboardEvent e)
@@ -702,6 +770,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
         {
             anchor = caret;
         }
+        RestartCaretBlink(); // a moving caret shows solid, then resumes blinking (pauses if now selecting)
         MarkNeedsBuild();
     }
 
@@ -792,6 +861,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
     private void Commit()
     {
         Widget.OnChanged?.Invoke(text);
+        RestartCaretBlink(); // any edit shows the caret solid, then resumes blinking
         MarkNeedsBuild();
     }
 
@@ -872,6 +942,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 break;
         }
 
+        RestartCaretBlink(); // a fresh click resets the caret solid (or stops the blink if it selected a range)
         MarkNeedsBuild();
     }
 
@@ -939,7 +1010,8 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 boxColor: Vector4.Zero,
                 borderColor: Vector4.Zero,
                 borderThickness: 0f,
-                cornerRadii: Vector4.Zero)
+                cornerRadii: Vector4.Zero,
+                caretVisible: caretVisible)
             : new ScribeMultilineFieldRenderWidget(
                 text: text,
                 placeholder: Widget.Placeholder,
@@ -957,7 +1029,8 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 borderColor: focusNode.HasFocus ? colors.Primary : colors.Border,
                 borderThickness: 1f,
                 cornerRadii: Vector4.One * 4f,
-                fontFamily: Widget.FontFamily);
+                fontFamily: Widget.FontFamily,
+                caretVisible: caretVisible);
 
         return new GestureDetector(
             onPress: OnFieldPress,

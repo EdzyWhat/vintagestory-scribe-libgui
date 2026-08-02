@@ -146,14 +146,15 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         value: settings.StormCorruption,
                         onChanged: v => onMutate(s => s.StormCorruption = v))),
 
-                // Disable-cuneiform accessibility toggle (add-cuneiform-glyph-font): when on, the tablet
-                // tier's carved-wedge script is rendered in the player's selected task font instead. A
-                // behavior switch (it changes what the reader sees, not the window's chrome), so it lives
-                // here; hugs its label like the pixel-art toggle.
+                // Cuneiform-tablets toggle (add-cuneiform-glyph-font; positive polarity per D8): when on
+                // (the default), the tablet tier writes in the carved-wedge cuneiform script; when off, that
+                // text renders in the player's selected task font instead. A behavior switch (it changes
+                // what the reader sees, not the window's chrome), so it lives here; hugs its label like the
+                // pixel-art toggle.
                 HuggingCheckbox(
-                    "settings-disablecuneiform", colors, scale,
-                    value: settings.DisableCuneiformFont,
-                    onChanged: v => onMutate(s => s.DisableCuneiformFont = v)),
+                    "settings-cuneiformtablets", colors, scale,
+                    value: settings.CuneiformTablets,
+                    onChanged: v => onMutate(s => s.CuneiformTablets = v)),
             });
     }
 

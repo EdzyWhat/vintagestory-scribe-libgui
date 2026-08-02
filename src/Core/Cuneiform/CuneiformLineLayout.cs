@@ -162,33 +162,63 @@ public sealed class CuneiformLineLayout
     }
 
     /// <summary>
-    /// Lays <paramref name="text"/> out into ONE OR MORE <see cref="CuneiformLine"/>s, soft-wrapping at
-    /// word-gap (space/tab) boundaries so that no line exceeds <paramref name="maxWidthGridUnits"/> grid
-    /// units where a break point exists. This is the cuneiform analogue of normal text soft-wrap.
+    /// Lays <paramref name="text"/> out into ONE OR MORE <see cref="CuneiformLine"/>s. A hard line break
+    /// (<c>'\n'</c>, e.g. from Shift+Enter) ALWAYS splits into a new line — even when soft-wrap is
+    /// disabled — so an edited row grows a line per paragraph. Within each paragraph the text
+    /// soft-wraps at word-gap (space/tab) boundaries so that no line exceeds
+    /// <paramref name="maxWidthGridUnits"/> grid units where a break point exists. This is the cuneiform
+    /// analogue of the normal field's wrap (which likewise splits paragraphs on <c>'\n'</c> first, then
+    /// word-wraps each).
     ///
     /// A word that is itself wider than the maximum occupies its own line rather than being split
     /// mid-glyph (layout never throws). A non-positive or infinite <paramref name="maxWidthGridUnits"/>
-    /// disables wrapping and returns exactly one line, identical to <see cref="Layout"/>. Each returned
-    /// line's <see cref="CuneiformLine.SourceStart"/> is the index of its first character in
-    /// <paramref name="text"/>, and its <see cref="CuneiformLine.CharBoundaries"/> are local to that line.
+    /// disables SOFT wrapping (hard <c>'\n'</c> breaks still apply) and returns one line per paragraph,
+    /// each identical to <see cref="Layout"/>. Each returned line's <see cref="CuneiformLine.SourceStart"/>
+    /// is the index of its first character in <paramref name="text"/> (accounting for the <c>'\n'</c>
+    /// separators consumed between paragraphs), and its <see cref="CuneiformLine.CharBoundaries"/> are
+    /// local to that line.
     /// </summary>
     public IReadOnlyList<CuneiformLine> LayoutWrapped(string text, double maxWidthGridUnits)
     {
         string source = text ?? string.Empty;
+        bool noSoftWrap = !(maxWidthGridUnits > 0.0) || double.IsInfinity(maxWidthGridUnits);
 
-        if (!(maxWidthGridUnits > 0.0) || double.IsInfinity(maxWidthGridUnits))
+        // Split on hard line breaks first (like the normal field's WrapInto), tracking each paragraph's
+        // global start so wrapped-line SourceStarts stay absolute. An empty paragraph (a bare '\n' or a
+        // trailing '\n') yields one empty line, so a caret can sit on the new blank line.
+        var lines = new List<CuneiformLine>();
+        int paragraphStart = 0;
+        foreach (string paragraph in source.Split('\n'))
         {
-            return new[] { LayoutSegment(source, 0) };
+            WrapParagraph(paragraph, paragraphStart, maxWidthGridUnits, noSoftWrap, lines);
+            paragraphStart += paragraph.Length + 1; // + the consumed '\n'
+        }
+        return lines;
+    }
+
+    /// <summary>
+    /// Soft-wraps a single paragraph (no interior <c>'\n'</c>) into <paramref name="outLines"/>, stamping
+    /// each line's <see cref="CuneiformLine.SourceStart"/> with its ABSOLUTE index (<paramref name="globalStart"/>
+    /// plus the in-paragraph offset). When <paramref name="noSoftWrap"/> is set, the whole paragraph is one
+    /// line. The final line runs to the paragraph end so trailing whitespace is kept (task 8.3).
+    /// </summary>
+    private void WrapParagraph(
+        string paragraph, int globalStart, double maxWidthGridUnits, bool noSoftWrap, List<CuneiformLine> outLines)
+    {
+        if (noSoftWrap)
+        {
+            outLines.Add(LayoutSegment(paragraph, globalStart));
+            return;
         }
 
         // Tokenize into words — maximal runs of non-space/tab characters — recording each word's
-        // half-open [start, end) source range. Wrapping happens between words only (there is no
-        // kerning across a space, so words lay out independently), so this is the natural unit.
+        // half-open [start, end) range within the paragraph. Wrapping happens between words only (there
+        // is no kerning across a space, so words lay out independently), so this is the natural unit.
         var words = new List<(int Start, int End)>();
         int wordStart = -1;
-        for (int i = 0; i < source.Length; i++)
+        for (int i = 0; i < paragraph.Length; i++)
         {
-            bool isSpace = source[i] == ' ' || source[i] == '\t';
+            bool isSpace = paragraph[i] == ' ' || paragraph[i] == '\t';
             if (!isSpace)
             {
                 if (wordStart < 0) wordStart = i;
@@ -201,19 +231,19 @@ public sealed class CuneiformLineLayout
         }
         if (wordStart >= 0)
         {
-            words.Add((wordStart, source.Length));
+            words.Add((wordStart, paragraph.Length));
         }
 
-        // Empty or whitespace-only input: one line, identical to the single-line layout.
+        // Empty or whitespace-only paragraph: one line, keeping its whitespace so the caret can sit in it.
         if (words.Count == 0)
         {
-            return new[] { LayoutSegment(source, 0) };
+            outLines.Add(LayoutSegment(paragraph, globalStart));
+            return;
         }
 
         double WordWidth((int Start, int End) w) =>
-            LayoutSegment(source.Substring(w.Start, w.End - w.Start), 0).TotalWidth;
+            LayoutSegment(paragraph.Substring(w.Start, w.End - w.Start), 0).TotalWidth;
 
-        var lines = new List<CuneiformLine>();
         int lineStart = words[0].Start;
         int lineEnd = words[0].End;
         double lineWidth = WordWidth(words[0]);
@@ -227,7 +257,7 @@ public sealed class CuneiformLineLayout
             {
                 // Overflow: flush the current line and start a new one with this word. An over-long
                 // word (wider than max on its own) simply becomes a one-word line — never split.
-                lines.Add(LayoutSegment(source.Substring(lineStart, lineEnd - lineStart), lineStart));
+                outLines.Add(LayoutSegment(paragraph.Substring(lineStart, lineEnd - lineStart), globalStart + lineStart));
                 lineStart = words[k].Start;
                 lineEnd = words[k].End;
                 lineWidth = wordWidth;
@@ -239,8 +269,12 @@ public sealed class CuneiformLineLayout
             }
         }
 
-        lines.Add(LayoutSegment(source.Substring(lineStart, lineEnd - lineStart), lineStart));
-        return lines;
+        // The FINAL line runs to the end of the paragraph (not just the last word's end) so a trailing
+        // run of spaces still advances the caret — a space typed at the very end must move the caret
+        // immediately, not vanish until a following glyph forces a new word token. Interior break-spaces
+        // between wrapped lines stay dropped (they are the wrap separators consumed above); only this
+        // last line keeps its trailing whitespace.
+        outLines.Add(LayoutSegment(paragraph.Substring(lineStart), globalStart + lineStart));
     }
 
     /// <summary>

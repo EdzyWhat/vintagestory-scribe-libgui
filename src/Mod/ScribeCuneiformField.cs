@@ -53,6 +53,7 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     private string text = "";
     private int caret;
     private bool hasFocus;
+    private bool caretVisible = true;
     private float fontSizeEm = 28f;
     private Vector4 inkColor = Vector4.One;
     private Vector4 caretColor = Vector4.One;
@@ -70,6 +71,10 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     public string Text { get => text; set => SetProperty(ref text, value ?? "", relayout: true); }
     public int Caret { get => caret; set => SetProperty(ref caret, value, repaint: true); }
     public bool FieldHasFocus { get => hasFocus; set => SetProperty(ref hasFocus, value, repaint: true); }
+    /// <summary>Blink gate: when false the synthetic caret bar is not painted (the OFF half of the blink),
+    /// driven by <see cref="ScribeMultilineFieldState"/>'s shared caret ticker so this caret blinks at the
+    /// same cadence as the normal editable field. Focus still gates whether a caret exists at all.</summary>
+    public bool CaretVisible { get => caretVisible; set => SetProperty(ref caretVisible, value, repaint: true); }
     public float FontSizeEm { get => fontSizeEm; set => SetProperty(ref fontSizeEm, value, relayout: true); }
     public Vector4 InkColor { get => inkColor; set => SetProperty(ref inkColor, value, repaint: true); }
     public Vector4 CaretColor { get => caretColor; set => SetProperty(ref caretColor, value, repaint: true); }
@@ -86,10 +91,12 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     {
         lines.Clear();
 
-        // One em of grid maps to fontSizeEm pixels. Use the fixed default grid size for the scale so it
-        // is stable and independent of the (circular) laid-out line height; all authored glyphs share it.
-        scale = (float)(fontSizeEm / CuneiformLineLayout.DefaultGridSize);
-        lineHeightPx = fontSizeEm;
+        // Match the rendered cuneiform height to adjacent readable text's line-height, not its raw em, so
+        // the tablet's live rows/title read at the same height as normal text (D7 — same global ratio the
+        // display CuneiformText uses). One em of grid maps to this boosted height; use the fixed default
+        // grid size for the scale so it is stable and independent of the (circular) laid-out line height.
+        lineHeightPx = fontSizeEm * CuneiformMetrics.LineHeightRatio;
+        scale = (float)(lineHeightPx / CuneiformLineLayout.DefaultGridSize);
 
         float availWidth = float.IsPositiveInfinity(Constraints.MaxWidth) ? 300f : Constraints.MaxWidth;
 
@@ -160,7 +167,7 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
 
         // Synthetic caret: cuneiform has no native caret, so draw a thin bar at the current character
         // boundary on its wrapped line (same DrawBox the normal field uses for its caret).
-        if (hasFocus && lines.Count > 0)
+        if (hasFocus && caretVisible && lines.Count > 0)
         {
             (int lineIndex, int localIndex) = CaretToLineLocal(caret);
             double caretXGrid = lines[lineIndex].CaretXAt(localIndex);
@@ -251,11 +258,12 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
         string text, int caret, bool hasFocus, float fontSizeEm, Vector4 inkColor, Vector4 caretColor,
         GlyphBundle? bundle, float padX, float padY,
         Vector4 boxColor, Vector4 borderColor, float borderThickness, Vector4 cornerRadii,
-        bool singleLine = false)
+        bool singleLine = false, bool caretVisible = true)
     {
         Text = text;
         Caret = caret;
         HasFocus = hasFocus;
+        CaretVisible = caretVisible;
         FontSizeEm = fontSizeEm;
         InkColor = inkColor;
         CaretColor = caretColor;
@@ -272,6 +280,7 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
     public string Text { get; }
     public int Caret { get; }
     public bool HasFocus { get; }
+    public bool CaretVisible { get; }
     public float FontSizeEm { get; }
     public Vector4 InkColor { get; }
     public Vector4 CaretColor { get; }
@@ -292,6 +301,7 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
         ro.Text = Text;
         ro.Caret = Caret;
         ro.FieldHasFocus = HasFocus;
+        ro.CaretVisible = CaretVisible;
         ro.FontSizeEm = FontSizeEm;
         ro.InkColor = InkColor;
         ro.CaretColor = CaretColor;

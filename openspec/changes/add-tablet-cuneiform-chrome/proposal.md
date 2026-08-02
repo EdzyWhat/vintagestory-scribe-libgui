@@ -21,9 +21,11 @@ legible in the normal font.
   strokes in place, with a **synthetic caret** (a drawn bar at the current character boundary, since
   cuneiform has no native caret). This reuses the existing `ScribeMultilineFieldState` buffer/keyboard
   brain (which is already decoupled from rendering) driving a cuneiform render object instead of the
-  normal `DrawText` renderer. Caret-only editing this round — type, backspace, arrow-navigate, and
-  click-to-place the caret; **text selection over cuneiform is deferred** (captured as a separate
-  explore stub, `explore-cuneiform-text-selection`).
+  normal `DrawText` renderer. Caret-only editing this round — type, backspace, arrow-navigate,
+  click-to-place the caret, and **Shift+Enter to insert a line break**; the **synthetic caret blinks**
+  (matching the normal field's cadence) and **advances immediately on a trailing space**. **Text
+  selection over cuneiform is deferred** (captured as a separate explore stub,
+  `explore-cuneiform-text-selection`).
 - Make the **title bar live cuneiform input** too, consistent with the rows. The title uses a stock
   LibGUI `TextField` (not the custom field), so this needs a **single-line cuneiform input** path; its
   pencil-edit → focus → commit-save machinery stays intact — only the rendering becomes cuneiform.
@@ -46,6 +48,18 @@ legible in the normal font.
   becomes real work. Add an explicit wrap-or-truncate policy to the cuneiform layout/render path so
   long cuneiform strings behave predictably in bounded chrome. The same Core work surfaces the
   **per-character X map** the synthetic caret and click-hit-testing need.
+- **Bump the global cuneiform em-scale.** `CuneiformText` sizes its rendered height to exactly its em
+  value, whereas normal `Text` renders at ~1.4× line-height — so at the same nominal font size a
+  cuneiform label reads ~30% shorter than the surrounding readable text (the ~52px-vs-62px footer-button
+  gap the 2026-08-02 playtest measured). Scale cuneiform up **globally** (every `CuneiformText` surface,
+  not just the footer label) so it matches the readable text's rendered line-height, and trim the "Add
+  task" button's vertical padding to close the residual gap.
+- **Rename the cuneiform setting to a positive polarity.** Replace the `DisableCuneiformFont` toggle
+  (default false) with a positive **`CuneiformTablets`** boolean (default **true**): "on" shows the
+  custom cuneiform font, "off" reverts the tablet to the standard task font. This inverts the persisted
+  client-config key and its Settings label, flips `ScribeTaskFont.UseCuneiform` and the single tablet
+  branch accordingly, and migrates any existing on-disk `DisableCuneiformFont` value
+  (`CuneiformTablets = !DisableCuneiformFont`, else the true default).
 
 ## Capabilities
 
@@ -91,9 +105,13 @@ legible in the normal font.
 - **Consumes:** `CuneiformText`, `ScribeTaskFont.UseCuneiform` / `.Resolve`, the registered `scribegear`
   icon, `modSystem.OpenSettings`, and the base-dialog virtual seams — all already present from earlier
   work.
-- **No new dependencies, no new network packets, no persistence change** — this is a render/layout +
-  input-routing change; saves still route through the existing `ScribeNotebookSaveMessage`
-  write-through, following the vanilla Sign pattern.
+- **No new dependencies, no new network packets, no document-persistence change** — task/document
+  saves still route through the existing `ScribeNotebookSaveMessage` write-through (vanilla Sign
+  pattern). **One client-config schema change** does widen this beyond a pure render/layout change: the
+  `DisableCuneiformFont` client setting is renamed/inverted to `CuneiformTablets` (default true), which
+  touches `ScribePlayerSettings`, the Settings label/lang, and a one-time migration of existing on-disk
+  values. This is client-local preference only (not synced world/document state), so it carries no
+  network or document-migration impact.
 - **Sequencing:** this change SUPERSEDES the "display-only cuneiform title banner" requirement that
   `add-tablet-dialog` (archived 2026-08-02) folded into the `tablet-dialog` capability. Implementing
   this change retires that banner requirement rather than contradicting the new title-bar rendering.

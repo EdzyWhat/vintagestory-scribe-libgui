@@ -8,6 +8,12 @@ click-to-place caret) but **no text selection**. The underlying `ScribeMultiline
 already tracks a selection anchor/range (it drives the normal field); the gap is purely on
 the cuneiform RENDER side, which has no way to paint a highlight over the glyph strokes.
 
+**Confirmed in the 2026-08-02 playtest** (add-tablet-cuneiform-chrome retest): Shift+arrow
+already *extends* the selection in the cuneiform row, but there is no visual feedback — the
+selected range is invisible over the strokes. That is exactly the render-side gap this stub
+covers, and it is why selection was scoped out of add-tablet-cuneiform-chrome rather than
+shipped half-visible.
+
 ## What Changes
 
 - Add text-selection over cuneiform in the tablet's editable rows/title, reusing the

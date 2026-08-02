@@ -6,11 +6,14 @@ The tablet dialog SHALL render its editable task rows as a live cuneiform input 
 is enabled: as the player types, edits, or deletes text, the row's content SHALL render as cuneiform
 strokes in place (not as normal font that converts on blur). Each focused row SHALL display a
 **synthetic caret** — a drawn bar positioned at the current character boundary — because cuneiform has
-no native caret. The row SHALL reuse the existing multiline-field text buffer and keyboard handling
-(typing, backspace/delete, and arrow-key caret navigation), driving a cuneiform renderer instead of
-the normal text renderer. Clicking within a row SHALL place the caret at the nearest character
-boundary. This live-cuneiform input SHALL be tablet-only and SHALL NOT affect the Lectern or Notebook
-editor.
+no native caret. The synthetic caret SHALL **blink** at the same cadence as the normal editable field
+(a static, non-blinking caret is not sufficient). The row SHALL reuse the existing multiline-field text
+buffer and keyboard handling (typing, backspace/delete, arrow-key caret navigation, and **Shift+Enter to
+insert a line break**), driving a cuneiform renderer instead of the normal text renderer. A **trailing
+space** typed at the end of the text SHALL advance the caret immediately (the caret position SHALL NOT
+wait for a following non-space character). Clicking within a row SHALL place the caret at the nearest
+character boundary. This live-cuneiform input SHALL be tablet-only and SHALL NOT affect the Lectern or
+Notebook editor.
 
 #### Scenario: Typing renders live cuneiform in a row
 
@@ -23,6 +26,24 @@ editor.
 - **WHEN** a player presses the left/right arrow keys or clicks within a cuneiform row
 - **THEN** the caret moves to the corresponding character boundary, positioned against the cuneiform
   glyph advances
+
+#### Scenario: The caret blinks while a row is focused
+
+- **WHEN** a cuneiform row is focused and idle
+- **THEN** its synthetic caret blinks at the same cadence as the normal editable field, rather than
+  rendering as a static bar
+
+#### Scenario: Shift+Enter inserts a line break
+
+- **WHEN** a player presses Shift+Enter while editing a cuneiform row
+- **THEN** a line break is inserted at the caret and the row grows to a new wrapped line, matching the
+  normal field's Shift+Enter behavior
+
+#### Scenario: A trailing space advances the caret immediately
+
+- **WHEN** a player types a space at the end of a cuneiform row's text
+- **THEN** the caret advances by the space's width immediately, without waiting for a following
+  non-space character
 
 #### Scenario: Editing persists exactly as before
 
@@ -72,12 +93,20 @@ font.
 ### Requirement: The tablet button labels render in the cuneiform font
 
 The tablet dialog SHALL render its button labels (e.g. "Add task") in the cuneiform glyph font when
-cuneiform is enabled, under the same single fallback branch as the title and rows.
+cuneiform is enabled, under the same single fallback branch as the title and rows. A cuneiform button
+label SHALL be sized to read at the same rendered height as the adjacent readable-text buttons — the
+label SHALL NOT render visibly shorter than the sibling info/gear buttons in the same footer row.
 
 #### Scenario: Button labels render cuneiform
 
 - **WHEN** a player opens a tablet with cuneiform enabled
 - **THEN** the button labels are rendered as cuneiform strokes
+
+#### Scenario: Cuneiform labels match the sibling buttons' height
+
+- **WHEN** the footer renders a cuneiform "Add task" label beside the info and gear buttons
+- **THEN** the cuneiform label reads at the same rendered height as those buttons, not noticeably
+  smaller
 
 ### Requirement: The tablet footer has a settings gear button beside the info button
 

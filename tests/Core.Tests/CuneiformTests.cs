@@ -436,6 +436,123 @@ public class CuneiformTests
         Assert.Single(layout.LayoutWrapped("   ", 100.0));
     }
 
+    // ---- Trailing-space caret advance (task 8.3) --------------------------------------------
+
+    [Fact]
+    public void Layout_TrailingSpace_AdvancesCaretImmediately()
+    {
+        // A single-line layout already counts every source char: "A " has a boundary past the glyph
+        // AND past the trailing space, so a caret at the end sits WordGapUnits beyond the A.
+        var layout = new CuneiformLineLayout(GlyphBundle.Parse(SampleBundleJson));
+
+        CuneiformLine line = layout.Layout("A ");
+
+        Assert.Equal(3, line.CharBoundaries.Count); // 'A', ' ', +1
+        Assert.Equal(40, line.CharBoundaries[1], 6);                        // after A
+        Assert.Equal(40 + layout.WordGapUnits, line.CharBoundaries[2], 6);  // after trailing space
+        Assert.Equal(40 + layout.WordGapUnits, line.CaretXAt(2), 6);        // caret past the space
+    }
+
+    [Fact]
+    public void Layout_ConsecutiveTrailingSpaces_EachAdvanceTheCaret()
+    {
+        var layout = new CuneiformLineLayout(GlyphBundle.Parse(SampleBundleJson));
+
+        CuneiformLine line = layout.Layout("A   ");
+
+        Assert.Equal(5, line.CharBoundaries.Count); // 'A' + three spaces + 1
+        Assert.Equal(40 + layout.WordGapUnits * 3, line.CharBoundaries[^1], 6);
+        // Strictly increasing — every trailing space moves the caret, none collapse to zero width.
+        for (int i = 1; i < line.CharBoundaries.Count; i++)
+        {
+            Assert.True(line.CharBoundaries[i] > line.CharBoundaries[i - 1]);
+        }
+    }
+
+    [Fact]
+    public void LayoutWrapped_TrailingSpaceOnFinalLine_IsKeptSoCaretCanAdvance()
+    {
+        // The wrap path tokenizes into words and would otherwise flush the final line at the last WORD's
+        // end, dropping trailing spaces so a space typed at the very end of a row never moved the caret.
+        // The final line must now run to the source end and keep its trailing whitespace.
+        var layout = new CuneiformLineLayout(GlyphBundle.Parse(SampleBundleJson));
+
+        IReadOnlyList<CuneiformLine> lines = layout.LayoutWrapped("AA ", 500.0);
+
+        Assert.Single(lines); // fits on one line
+        CuneiformLine last = lines[^1];
+        // "AA" is 90 wide; the trailing space adds one WordGapUnits and its own boundary entry.
+        Assert.Equal(4, last.CharBoundaries.Count); // 'A','A',' ', +1
+        Assert.Equal(90 + layout.WordGapUnits, last.TotalWidth, 6);
+        Assert.Equal(90 + layout.WordGapUnits, last.CaretXAt(3), 6); // caret sits past the trailing space
+    }
+
+    [Fact]
+    public void LayoutWrapped_InteriorBreakSpacesStayDropped_OnlyFinalLineKeepsTrailing()
+    {
+        // Regression guard for the trailing-space fix: the space that CAUSES a wrap is still consumed
+        // as a separator (not re-added to either line), so only the genuine trailing space survives.
+        // "AA AA " wraps after the first word under a tight max; line 0 ends at the first "AA" (no
+        // trailing gap), and the final line keeps its one trailing space.
+        var layout = new CuneiformLineLayout(GlyphBundle.Parse(SampleBundleJson));
+
+        IReadOnlyList<CuneiformLine> lines = layout.LayoutWrapped("AA AA ", 100.0);
+
+        Assert.True(lines.Count >= 2, "a 225-wide string must wrap under a 100 max");
+        // First line is exactly the first word — the break space is dropped, not trailing.
+        Assert.Equal(90, lines[0].TotalWidth, 6);
+        // Final line keeps its trailing space (word 90 + one word gap).
+        Assert.Equal(90 + layout.WordGapUnits, lines[^1].TotalWidth, 6);
+    }
+
+    // ---- Hard line breaks ('\n' / Shift+Enter, task 8.2) ------------------------------------
+
+    [Fact]
+    public void LayoutWrapped_HardNewline_SplitsIntoLinesEvenWithoutSoftWrap()
+    {
+        // A '\n' (Shift+Enter in a row) must always start a new line, even when soft-wrap is disabled.
+        var layout = new CuneiformLineLayout(GlyphBundle.Parse(SampleBundleJson));
+
+        IReadOnlyList<CuneiformLine> lines = layout.LayoutWrapped("AA\nAA", 0.0);
+
+        Assert.Equal(2, lines.Count);
+        Assert.Equal(0, lines[0].SourceStart);
+        Assert.Equal(3, lines[1].SourceStart); // past "AA" (2) + the consumed '\n' (1)
+        Assert.Equal(90, lines[0].TotalWidth, 6);
+        Assert.Equal(90, lines[1].TotalWidth, 6);
+    }
+
+    [Fact]
+    public void LayoutWrapped_BlankParagraph_YieldsAnEmptyLineForTheCaret()
+    {
+        // A bare/consecutive '\n' produces an empty line so a caret can rest on the new blank line.
+        var layout = new CuneiformLineLayout(GlyphBundle.Parse(SampleBundleJson));
+
+        IReadOnlyList<CuneiformLine> lines = layout.LayoutWrapped("A\n\nA", 0.0);
+
+        Assert.Equal(3, lines.Count);
+        Assert.Empty(lines[1].Strokes);        // the blank middle line
+        Assert.Equal(0, lines[1].TotalWidth, 6);
+        Assert.Equal(2, lines[1].SourceStart); // 'A' (1) + '\n' (1)
+        Assert.Equal(3, lines[2].SourceStart); // + the blank line's '\n'
+    }
+
+    [Fact]
+    public void LayoutWrapped_HardNewlineThenSoftWrap_BothApply()
+    {
+        // Each paragraph independently soft-wraps: "AA AA\nAA" with a tight max wraps the first
+        // paragraph AND keeps the '\n' split, so SourceStarts stay absolute across the newline.
+        var layout = new CuneiformLineLayout(GlyphBundle.Parse(SampleBundleJson));
+
+        IReadOnlyList<CuneiformLine> lines = layout.LayoutWrapped("AA AA\nAA", 100.0);
+
+        Assert.True(lines.Count >= 3, "first paragraph wraps to 2 lines + the 3rd after '\\n'");
+        // The last line is the post-newline "AA": its source start is past "AA AA\n" (= index 6).
+        CuneiformLine last = lines[^1];
+        Assert.Equal(6, last.SourceStart);
+        Assert.Equal(90, last.TotalWidth, 6);
+    }
+
     // ---- Helpers ----------------------------------------------------------------------------
 
     private static CuneiformLine Layout(string text) =>

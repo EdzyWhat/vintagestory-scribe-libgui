@@ -60,13 +60,30 @@ public sealed class ScribePlayerSettings
     /// state, for players who rely on HUD legibility or are motion-sensitive.</summary>
     public bool StormCorruption { get; set; } = true;
 
-    /// <summary>Whether to DISABLE the cuneiform pseudo-font used by the tablet tier and render that text
-    /// in the player's selected task font instead (cuneiform-glyph-font). Default <c>false</c> (cuneiform
-    /// on — the distinctive carved-wedge script). A per-player, client-local accessibility/legibility
-    /// fallback: never server-synced. When <c>true</c>, the single <c>UseCuneiform</c> branch point resolves
-    /// to normal text through the existing <see cref="TaskFontFamily"/> chokepoint. A plain bool, so
-    /// <see cref="Normalized"/> leaves it untouched.</summary>
-    public bool DisableCuneiformFont { get; set; }
+    /// <summary>Whether the tablet tier renders its text in the custom cuneiform pseudo-font
+    /// (cuneiform-glyph-font). Default <c>true</c> (cuneiform on — the distinctive carved-wedge script).
+    /// A per-player, client-local accessibility/legibility preference: never server-synced. When
+    /// <c>false</c>, the single <c>UseCuneiform</c> branch point resolves to normal text through the
+    /// existing <see cref="TaskFontFamily"/> chokepoint. Positive polarity (true = cuneiform) so the field
+    /// reads the same direction as its UI label, avoiding a double-negative at every read site (D8). A
+    /// plain bool, so <see cref="Normalized"/> leaves it untouched; the legacy negative key is folded in by
+    /// <see cref="MigrateLegacyKeys"/>.</summary>
+    public bool CuneiformTablets { get; set; } = true;
+
+    /// <summary>Legacy on-disk key for the cuneiform setting before it was flipped to the positive
+    /// <see cref="CuneiformTablets"/> (D8). Populated by the JSON deserializer only when reading a
+    /// pre-flip config file (<c>"DisableCuneiformFont": true/false</c>); null for any config written by
+    /// the current code. <see cref="MigrateLegacyKeys"/> maps it once (<c>CuneiformTablets =
+    /// !DisableCuneiformFont</c>) and clears it. <see cref="ShouldSerializeDisableCuneiformFont"/> returns
+    /// false so the migrated key is never written back — the file carries only the new key afterward.
+    /// Nullable so an absent old key (the common case) is distinguishable from an explicit
+    /// <c>false</c>.</summary>
+    public bool? DisableCuneiformFont { get; set; }
+
+    /// <summary>Newtonsoft.Json serialization convention (no library reference needed in Core): returning
+    /// <c>false</c> tells the serializer to omit the legacy <see cref="DisableCuneiformFont"/> key when
+    /// writing the config, so once migrated the file carries only <see cref="CuneiformTablets"/>.</summary>
+    public bool ShouldSerializeDisableCuneiformFont() => false;
 
     /// <summary>The timer type the Clockmaker's Notebook's "set timer" form pre-selects: the last type the
     /// player chose, remembered across close/reopen. Default <see cref="TimerMode.RealTime"/> — the first
@@ -260,13 +277,34 @@ public sealed class ScribePlayerSettings
     public static TimerMode NormalizeTimerMode(TimerMode value) =>
         Enum.IsDefined(typeof(TimerMode), value) ? value : TimerMode.RealTime;
 
+    /// <summary>Folds any legacy on-disk keys into their current successors, in place. Currently maps the
+    /// pre-flip cuneiform key (D8): a config written before the polarity flip carries
+    /// <c>DisableCuneiformFont</c> but not <c>CuneiformTablets</c>, so when the legacy key is present it
+    /// wins (<c>CuneiformTablets = !DisableCuneiformFont</c>) — a player who had cuneiform OFF
+    /// (<c>DisableCuneiformFont = true</c>) lands at <c>CuneiformTablets = false</c> rather than the new
+    /// <c>true</c> default. Absent legacy key = leave the (defaulted or explicitly-set) new value alone.
+    /// The legacy field is then cleared and never re-serialized (see
+    /// <see cref="ShouldSerializeDisableCuneiformFont"/>). Idempotent: a second call is a no-op once the
+    /// key is cleared. Called by <see cref="Normalized"/> on load. Returns this for chaining.</summary>
+    public ScribePlayerSettings MigrateLegacyKeys()
+    {
+        if (DisableCuneiformFont is bool legacyDisabled)
+        {
+            CuneiformTablets = !legacyDisabled;
+            DisableCuneiformFont = null;
+        }
+        return this;
+    }
+
     /// <summary>Normalizes this instance's fields in place after a load from an untrusted source
-    /// (hand-edited JSON): clamps each numeric preference to its safe range (row count, row width, the
-    /// Pixel Art Size — snapped to the 10px grid, the HUD offsets, and both font scales — snapping each
-    /// scale to its nearest notch) and falls an unknown <see cref="CompletionPolicy"/>/<see cref="HudAnchor"/>
-    /// back to its default. Returns this for chaining.</summary>
+    /// (hand-edited JSON): folds legacy keys (<see cref="MigrateLegacyKeys"/>), clamps each numeric
+    /// preference to its safe range (row count, row width, the Pixel Art Size — snapped to the 10px grid,
+    /// the HUD offsets, and both font scales — snapping each scale to its nearest notch) and falls an
+    /// unknown <see cref="CompletionPolicy"/>/<see cref="HudAnchor"/> back to its default. Returns this for
+    /// chaining.</summary>
     public ScribePlayerSettings Normalized()
     {
+        MigrateLegacyKeys();
         HudMaxRows = ClampHudMaxRows(HudMaxRows);
         CompletionPolicy = NormalizePolicy(CompletionPolicy);
         PreferredTimerMode = NormalizeTimerMode(PreferredTimerMode);

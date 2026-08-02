@@ -183,6 +183,62 @@ public class ScribePlayerSettingsTests
         Assert.Equal(ScribePlayerSettings.MaxHudRowWidth, s.HudRowWidth);
     }
 
+    [Fact]
+    public void Default_CuneiformTablets_IsOn()
+    {
+        // Positive polarity per D8: a fresh profile writes in cuneiform by default. Normalized() leaves a
+        // plain bool untouched, so an explicit false round-trips.
+        Assert.True(new ScribePlayerSettings().CuneiformTablets);
+        Assert.True(new ScribePlayerSettings().Normalized().CuneiformTablets);
+        Assert.False(new ScribePlayerSettings { CuneiformTablets = false }.Normalized().CuneiformTablets);
+    }
+
+    [Fact]
+    public void Migrate_LegacyDisableCuneiform_InvertsToCuneiformTablets()
+    {
+        // A pre-flip config carried the negative DisableCuneiformFont key. The migration inverts it once
+        // (D8): a player who had cuneiform OFF (DisableCuneiformFont = true) must land at
+        // CuneiformTablets = false, NOT the new true default — so the flip doesn't silently re-enable
+        // cuneiform for someone who deliberately turned it off.
+        var hadItOff = new ScribePlayerSettings { DisableCuneiformFont = true }.Normalized();
+        Assert.False(hadItOff.CuneiformTablets);
+
+        var hadItOn = new ScribePlayerSettings { DisableCuneiformFont = false }.Normalized();
+        Assert.True(hadItOn.CuneiformTablets);
+    }
+
+    [Fact]
+    public void Migrate_AbsentLegacyKey_KeepsNewDefault()
+    {
+        // A config written by the current code has no legacy key (DisableCuneiformFont is null), so the
+        // migration is a no-op and the CuneiformTablets value (its true default here) is left alone.
+        var s = new ScribePlayerSettings().Normalized();
+        Assert.Null(s.DisableCuneiformFont);
+        Assert.True(s.CuneiformTablets);
+    }
+
+    [Fact]
+    public void Migrate_ClearsLegacyKey_AndIsIdempotent()
+    {
+        // After migrating, the legacy field is cleared (so it is never re-serialized) and a second call is
+        // a no-op — it must not re-invert an already-migrated value back to the default.
+        var s = new ScribePlayerSettings { DisableCuneiformFont = true };
+        s.MigrateLegacyKeys();
+        Assert.Null(s.DisableCuneiformFont);
+        Assert.False(s.CuneiformTablets);
+
+        s.MigrateLegacyKeys();
+        Assert.False(s.CuneiformTablets);
+    }
+
+    [Fact]
+    public void ShouldSerializeDisableCuneiformFont_IsFalse()
+    {
+        // The Newtonsoft ShouldSerialize convention keeps the migrated legacy key out of the written file,
+        // so a saved config carries only the new positive key.
+        Assert.False(new ScribePlayerSettings().ShouldSerializeDisableCuneiformFont());
+    }
+
     [Theory]
     [InlineData(ScribeHudAnchor.TopLeft, true)]
     [InlineData(ScribeHudAnchor.MiddleLeft, true)]

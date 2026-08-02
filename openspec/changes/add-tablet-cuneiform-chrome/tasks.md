@@ -63,3 +63,60 @@
 - [ ] 7.2 Manual in-game check: type live cuneiform in a row (glyphs appear with a blinking caret); arrow-nav and click-to-place the caret; row shows no border at rest and gains border+background on focus; edit the title live in cuneiform; long title truncates in the band; long rows wrap; the gear opens Settings and matches the ⓘ styling; button labels are cuneiform; disable-cuneiform reverts every surface while Settings stays legible; works on both clay and wax tablets
 - [ ] 7.3 Update `VSAPI-NOTES.md` LibGUI section if a cuneiform caret/wrap/hit-testing gotcha is learned
 - [x] 7.4 Run `openspec validate add-tablet-cuneiform-chrome --strict` and reconcile any remaining issues — valid (2026-08-02)
+
+## 8. Playtest refinements (2026-08-02 retest)
+
+<!-- Surfaced by the 2026-08-02 in-game retest (7/9 items pass; see TESTING.md). The balloon regression
+     from the first playtest is already fixed (see task 5.4 / TESTING.md a029001d). These are the
+     remaining fails + author-requested polish, folded into this change per the 2026-08-02 update. Text
+     selection over cuneiform stays OUT of scope (explore-cuneiform-text-selection). -->
+
+- [x] 8.1 Make the synthetic caret **blink** at the normal editable field's cadence (it currently renders
+      static). Reuse the normal field's blink timing rather than inventing a new one. (Resolves design D-Q3;
+      retests `6017abe3`.) — done: added a `Ticker` (via `Element.Owner.GetTickerProvider()`) in the SHARED
+      `ScribeMultilineFieldState` toggling a `caretVisible` gate every 500ms (`CaretBlinkMs`, matching LibGUI
+      `TextField.CursorBlinkMs`); reset-to-solid on edit/caret-move/click/focus-gain, paused while a selection
+      is active or focus is lost. `caretVisible` threads into BOTH render objects (normal + cuneiform), so the
+      Lectern/Notebook and tablet carets blink at the identical cadence. The reimplemented field never blinked
+      before; both paths now do.
+- [x] 8.2 Handle **Shift+Enter** as a line break in a cuneiform row (it currently does nothing). Route it
+      through the same buffer path the normal field uses so the row grows a wrapped line. (Retests `6017abe3`.)
+      — done: the State already inserted `\n` on Shift+Enter, but the cuneiform Core layout ignored it. Made
+      `CuneiformLineLayout.LayoutWrapped` paragraph-aware — it splits on `\n` FIRST (always, even with soft-wrap
+      off), then word-wraps each paragraph, stamping absolute `SourceStart`s across the newline; a blank
+      paragraph yields an empty line so the caret can rest on it. 3 new Core tests (hard-newline split, blank
+      paragraph, newline + soft-wrap together).
+- [x] 8.3 Fix the **trailing-space caret advance** in the Core per-character X map: a space typed at the end
+      must advance the caret by its `WordGapUnits` immediately, not wait for the next non-space char. Add a
+      Core xUnit test covering trailing/consecutive spaces in the char→X map. — done: `LayoutWrapped`'s final
+      line now runs to the source end (`source.Substring(lineStart)`) so trailing whitespace is kept (interior
+      wrap-separator spaces stay dropped); the single-line `Layout` already counted every char. 4 new Core tests
+      (trailing/consecutive spaces single-line + wrapped final-line + interior-separator regression guard), 242 pass.
+- [x] 8.4 Bump the **global cuneiform em-scale** (D7): correct `CuneiformText`'s rendered height to match the
+      surrounding readable text's line-height (~1.4× ratio) so cuneiform no longer reads ~30% short, applied
+      at the `CuneiformText` level (all surfaces), then trim the "Add task" button's vertical padding (~8px).
+      Re-check the title bar, rows, and footer label fit/wrap after the bump (not just the footer). — done:
+      added a shared `CuneiformMetrics.LineHeightRatio` (1.4f) and multiplied it into the em→pixel scale AND
+      rendered height in BOTH cuneiform render objects (`CuneiformTextRender` display + `ScribeCuneiformFieldRender`
+      rows/title), so every surface grows together, scale-independently. Trimmed the labelled footer buttons'
+      vertical padding on the cuneiform path only (`Symmetric(10,20)` → `Symmetric(6,20)`, −8px); normal path
+      keeps the default theme padding so Lectern/Notebook footers are byte-identical. Fit/wrap of the title
+      band + rows is the in-game retest (8.6).
+- [x] 8.5 Rename the setting `DisableCuneiformFont` → **`CuneiformTablets`** (default true) (D8): flip the
+      `ScribePlayerSettings` field and every read site (incl. `ScribeTaskFont.UseCuneiform`, the tablet
+      branch, `ScribeRowConstants`, the harness), the Settings checkbox + its lang label, and add a one-time
+      on-disk migration `CuneiformTablets = !DisableCuneiformFont`. Add a unit test for the migration mapping.
+      — done: `ScribePlayerSettings.CuneiformTablets` (default true, positive polarity) replaces the negative
+      field; the old key survives as a nullable legacy shim `DisableCuneiformFont` (deserialized only from a
+      pre-flip file) folded in by a new `MigrateLegacyKeys()` (`CuneiformTablets = !DisableCuneiformFont`,
+      then cleared) called from `Normalized()`, and `ShouldSerializeDisableCuneiformFont() => false` keeps
+      the legacy key out of any file the current code writes (no Newtonsoft ref needed in Core — just the
+      ShouldSerialize convention). `ScribeTaskFont.UseCuneiform` is now a straight pass-through; the tablet
+      branch (`ActiveCuneiformBundle`), harness, and Settings checkbox read the positive field; lang key
+      renamed `settings-disablecuneiform` → `settings-cuneiformtablets` ("Cuneiform tablets", "Turn off …").
+      5 new Core migration tests (invert / absent-key no-op / clear+idempotent / ShouldSerialize / default);
+      250 Core pass, Mod build 0 errors.
+- [ ] 8.6 Re-run the manual playtest items (`6017abe3` type-live-cuneiform, `a029001d` label scale) after
+      8.1–8.5 and record verdicts in TESTING.md.
+- [x] 8.7 Run `openspec validate add-tablet-cuneiform-chrome --strict` again after these refinements land.
+      — valid (2026-08-02).

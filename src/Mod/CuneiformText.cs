@@ -27,9 +27,30 @@ using SkiaSharp;                  // SKPath, SKPoint
 namespace Scribe;
 
 /// <summary>
+/// Shared cuneiform rendering metrics (add-tablet-cuneiform-chrome D7). Every cuneiform render object —
+/// the display <see cref="CuneiformTextRender"/>, the editable row (<see cref="ScribeCuneiformFieldRender"/>),
+/// and the title field — sizes a line to <c>fontSizeEm</c> pixels. But normal TTF <c>Text</c> at the same
+/// nominal font size occupies a line-height of roughly <see cref="LineHeightRatio"/>× that font size, so a
+/// cuneiform glyph authored to fill its em box reads visibly SHORTER than adjacent readable text (the
+/// 2026-08-02 playtest measured the footer label ~30% short). Scaling the cuneiform em by this ratio at
+/// render time brings the rendered cuneiform height in line with the readable text's rendered line-height —
+/// applied globally here (not as a per-call fudge) so rows, title, and labels all match. Scale-independent
+/// (a ratio, not a pixel target), so it holds at any GUI scale.
+/// </summary>
+internal static class CuneiformMetrics
+{
+    /// <summary>Rendered-line-height ÷ nominal-font-size for the normal TTF body text the cuneiform sits
+    /// beside; cuneiform's em→pixel scale is multiplied by this so its glyphs read at the same height as
+    /// that text rather than ~30% short. ~1.4 matches the measured TTF line-height ratio; tuned against the
+    /// in-game retest (task 8.6).</summary>
+    public const float LineHeightRatio = 1.4f;
+}
+
+/// <summary>
 /// The render object: lays a string out through the Core cuneiform engine and paints its strokes as
 /// filled quads, auto-sizing to the laid-out line. The line height in pixels equals
-/// <see cref="FontSizeEm"/> (grid units scale to pixels by <c>FontSizeEm / lineHeightGridUnits</c>).
+/// <see cref="FontSizeEm"/> × <see cref="CuneiformMetrics.LineHeightRatio"/> (grid units scale to pixels by
+/// <c>renderedHeight / lineHeightGridUnits</c>) so cuneiform matches adjacent readable text (D7).
 /// </summary>
 internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
 {
@@ -69,22 +90,25 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
 
     protected override void PerformLayout()
     {
+        // Match the rendered cuneiform height to adjacent readable text's line-height, not its raw em (D7).
+        float renderedHeight = fontSizeEm * CuneiformMetrics.LineHeightRatio;
+
         if (bundle is null)
         {
             line = null;
-            Size = Constraints.Constrain(new Vector2(0f, fontSizeEm));
+            Size = Constraints.Constrain(new Vector2(0f, renderedHeight));
             return;
         }
 
         var layout = new CuneiformLineLayout(bundle);
         line = layout.Layout(text);
 
-        // Grid units → pixels: one line-height of grid units maps to fontSizeEm pixels.
+        // Grid units → pixels: one line-height of grid units maps to the rendered (ratio-boosted) height.
         double gridHeight = line.LineHeight > 0 ? line.LineHeight : CuneiformLineLayout.DefaultGridSize;
-        scale = (float)(fontSizeEm / gridHeight);
+        scale = (float)(renderedHeight / gridHeight);
 
         float width = (float)(line.TotalWidth * scale);
-        Size = Constraints.Constrain(new Vector2(width, fontSizeEm));
+        Size = Constraints.Constrain(new Vector2(width, renderedHeight));
     }
 
     protected override void PaintInternal(PaintingContext context)

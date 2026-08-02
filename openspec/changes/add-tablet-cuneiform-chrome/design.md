@@ -182,6 +182,38 @@ resolved theme (`ResolveTheme`/`ScribeTheme.ForTablet`) and never branches on ma
 backdrop set that would exercise multiple materials is the separate `add-tablet-clay-type-backdrops`
 followup; this change must not introduce a per-material code path.
 
+### D7 — Global cuneiform em-scale so cuneiform matches surrounding readable text (2026-08-02 playtest)
+
+`CuneiformText.PerformLayout` sizes its rendered height to exactly `FontSizeEm` (grid units scale so one
+line-height maps to the em value). Normal `Text` at the same nominal font size renders at ~1.4× that in
+line-height, so a cuneiform label reads ~30% shorter than adjacent readable text — the playtest measured
+the footer "Add task" cuneiform label at ~52px against ~62px sibling buttons.
+
+Decision: apply the scale correction **globally at the `CuneiformText` level** (so every cuneiform
+surface — rows, title, labels — benefits), not as a per-call fudge at the footer. Bring the rendered
+cuneiform height in line with the surrounding readable text's *rendered line-height* rather than its raw
+font-size — the scale-independent framing (multiply em by the ~1.4 line-height ratio, or expose a
+line-height-matched sizing mode) so it holds at any GUI scale rather than hardcoding a pixel target.
+Measured reference: footer label em 14 → ~52px; parity ≈ em 20–26 depending on the exact ratio. Also trim
+the "Add task" button's vertical padding (~8px) to close the residual gap after the scale bump.
+
+*Alternative considered:* bump only the footer label's em. Rejected — the same short-glyph mismatch
+affects the title bar and rows, and the author explicitly wants the fix applied globally.
+
+### D8 — Flip the cuneiform setting to positive polarity, with migration (2026-08-02 playtest)
+
+The `DisableCuneiformFont` client setting (default false) reads awkwardly. Rename it to a positive
+`CuneiformTablets` boolean (default true): true = custom cuneiform font, false = standard task font.
+`ScribeTaskFont.UseCuneiform` and the single tablet branch invert accordingly (the branch stays a single
+decision — only its polarity flips). On load, migrate any existing on-disk client config carrying the old
+key: `CuneiformTablets = !DisableCuneiformFont`; absent → the `true` default. This is client-local
+preference (`ScribePlayerSettings`), not synced world/document state, so there is no network or document
+migration.
+
+*Alternative considered:* keep `DisableCuneiformFont` and only relabel the UI. Rejected — a negative
+field behind a positive label invites the classic double-negative bug at every read site; inverting the
+field itself is clearer at the source.
+
 ## Risks / Trade-offs
 
 - **[Cuneiform wrap + caret map are genuinely new layout code]** → Put both in Core with xUnit
@@ -209,6 +241,15 @@ followup; this change must not introduce a per-material code path.
 - **[Truncation with no ellipsis glyph looks abrupt]** → Prefer wrapping where height allows (rows);
   reserve truncation for the fixed-height title band, and pick a deliberate cutoff affordance
   (D-Q1) rather than a raw clip.
+- **[Setting polarity flip could strand an existing preference]** (D8) → A player who had turned
+  cuneiform OFF (`DisableCuneiformFont = true`) must land at `CuneiformTablets = false`, not the `true`
+  default. The migration reads the old key once (`CuneiformTablets = !DisableCuneiformFont`) before
+  falling back to the default; a Core/unit test on the migration mapping guards the inversion, and every
+  read site must be audited so no lingering `DisableCuneiformFont` reference survives the rename.
+- **[Global em-scale could overshoot other cuneiform surfaces]** (D7) → Scaling `CuneiformText` globally
+  changes the title bar and rows too, not just the footer label; re-run the row/title/label playtest
+  items after the bump to confirm the larger glyphs still fit their bands and wrap correctly, rather than
+  eyeballing only the footer.
 - **[ForceRebuild churn]** → The GUI rebuilds via `ForceRebuild` (see MEMORY / animation-lessons);
   the cuneiform render object is a stateless render box, so a rebuild re-lays-out cheaply — but confirm
   the wrapped-line layout + caret map don't allocate per-frame beyond the existing per-stroke path.
@@ -232,9 +273,13 @@ followup; this change must not introduce a per-material code path.
 - **D-Q2:** Do the tablet's footer/handbook (ⓘ) affordance labels also go cuneiform, or only the
   primary "Add task" button? (Leaning: primary action labels cuneiform; icon-only affordances
   unaffected.)
-- **D-Q3:** Caret behavior details to settle in-game — blink cadence (reuse the normal field's, if
-  any), caret width/height against the cuneiform stroke weight, and whether click-to-place should snap
-  to the nearest boundary or the boundary under the cursor. Tune against the harness/tablet.
+- **D-Q3 (RESOLVED — 2026-08-02 playtest):** Caret behavior. The synthetic caret SHALL **blink** at the
+  normal field's cadence (it currently renders static — rejected). **Shift+Enter** SHALL insert a line
+  break in a cuneiform row. A **trailing space** SHALL advance the caret immediately (today the caret
+  doesn't move until the next non-space char, because a trailing space contributes no glyph advance — the
+  per-character X map must count the pending space's `WordGapUnits`). Click-to-place snaps to the nearest
+  boundary (accepted as tested). Remaining caret width/height tuning against stroke weight is cosmetic and
+  deferred to implementation. See D7 (scale) and the tasks group 8.
 - **D-Q4:** Whether the cuneiform editable render object should be a distinct class or a render-mode
   flag on the existing `ScribeMultilineField` render object. (Leaning: distinct render object reusing
   the same State, to keep the normal path untouched.)

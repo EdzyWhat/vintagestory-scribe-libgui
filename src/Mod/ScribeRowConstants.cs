@@ -157,8 +157,9 @@ internal static class ScribeTaskFont
     /// pseudo-font or falls back to normal text (add-cuneiform-glyph-font). Returns <c>true</c> to use
     /// cuneiform (the <c>CuneiformText</c> widget), <c>false</c> to render through the normal
     /// <see cref="Resolve"/> path in the player's task font. Centralizing the decision here (rather than
-    /// scattering <c>settings.DisableCuneiformFont</c> checks across the tablet dialog and its rows) keeps
+    /// scattering <c>settings.CuneiformTablets</c> checks across the tablet dialog and its rows) keeps
     /// the accessibility fallback a one-line change and guarantees every tablet surface agrees. Callers pass
-    /// the player's own client-local <see cref="ScribePlayerSettings.DisableCuneiformFont"/> preference.</summary>
-    public static bool UseCuneiform(bool disableCuneiformFont) => !disableCuneiformFont;
+    /// the player's own client-local <see cref="ScribePlayerSettings.CuneiformTablets"/> preference; with
+    /// its positive polarity (true = cuneiform) this is now a straight pass-through (D8).</summary>
+    public static bool UseCuneiform(bool cuneiformTablets) => cuneiformTablets;
 }

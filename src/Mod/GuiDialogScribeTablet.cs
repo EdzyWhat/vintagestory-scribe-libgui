@@ -142,7 +142,7 @@ public class GuiDialogScribeTablet : ScribeDialogBase
     /// (cuneiform disabled OR the asset hasn't loaded). One place that resolves the branch so the title
     /// display, title input, rows, and labels all agree (add-tablet-cuneiform-chrome D4).</summary>
     private GlyphBundle? ActiveCuneiformBundle =>
-        ScribeTaskFont.UseCuneiform(modSystem.MySettings.DisableCuneiformFont)
+        ScribeTaskFont.UseCuneiform(modSystem.MySettings.CuneiformTablets)
             ? modSystem.GetCuneiformBundle()
             : null;
 

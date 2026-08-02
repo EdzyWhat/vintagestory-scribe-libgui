@@ -22,8 +22,8 @@ namespace Scribe;
 ///
 /// <para>Renders the demo line at three em sizes plus one stroke-by-stroke animated reveal, so the
 /// riskiest-unknowns checklist (crisp filled strokes, box sizing, legibility/spacing, animation) can be
-/// eyeballed at a glance. When the player's <see cref="ScribePlayerSettings.DisableCuneiformFont"/>
-/// preference is on, every line falls back to a normal <see cref="Text"/> in the resolved task font
+/// eyeballed at a glance. When the player's <see cref="ScribePlayerSettings.CuneiformTablets"/>
+/// preference is off, every line falls back to a normal <see cref="Text"/> in the resolved task font
 /// through the single <see cref="ScribeTaskFont.UseCuneiform"/> branch point — proving the accessibility
 /// path in the same window.</para>
 /// </summary>
@@ -61,7 +61,7 @@ public sealed class GuiDialogCuneiformHarness : GuiBase
         Vector4 ink = colors.OnSurface;
 
         GlyphBundle? bundle = modSystem.GetCuneiformBundle();
-        bool useCuneiform = ScribeTaskFont.UseCuneiform(modSystem.MySettings.DisableCuneiformFont);
+        bool useCuneiform = ScribeTaskFont.UseCuneiform(modSystem.MySettings.CuneiformTablets);
         string fallbackFamily = ScribeTaskFont.Resolve(modSystem.MySettings.TaskFontFamily);
 
         // One demo line at each em size; the last one animates its stroke-by-stroke reveal on open.
