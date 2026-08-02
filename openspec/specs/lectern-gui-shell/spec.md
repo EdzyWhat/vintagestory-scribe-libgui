@@ -440,7 +440,9 @@ macOS modifier combinations are honored rather than ignored.
 ### Requirement: Editor rows navigate and commit by keyboard
 The editor SHALL let the player move between rows and add rows from the keyboard while editing. Pressing
 Tab (without Shift) SHALL commit the current row's edit and move focus to the next row WITHOUT inserting a
-tab glyph; pressing Shift+Tab SHALL commit and move focus to the previous row. Pressing Enter (without
+tab glyph; pressing Shift+Tab SHALL commit and move focus to the previous row. Tab / Shift+Tab traversal
+SHALL visit only the rows' editable text fields, in row order; it SHALL NOT stop focus on a row's
+completion checkbox (the checkbox remains operable by mouse click). Pressing Enter (without
 Shift) SHALL commit the current row's edit and insert a NEW empty task directly beneath it, moving focus to
 that new row, WITHOUT inserting a line break into the current row; pressing Shift+Enter SHALL instead insert
 a hard line break into the row's text (growing the row) rather than committing. Pressing Enter on a row that
@@ -457,6 +459,11 @@ preserving interior newlines, and the read view SHALL render those interior newl
 - **WHEN** the player finishes typing in a row and presses Tab (without Shift)
 - **THEN** the row's new text is committed through the server edit path and focus moves to the next row,
   and no tab glyph is inserted into the row's text
+
+#### Scenario: Tab traversal skips the row checkbox
+- **WHEN** the player presses Tab or Shift+Tab to move between rows in the editor
+- **THEN** focus moves directly from one row's editable text field to an adjacent row's editable text
+  field, never landing on a row's completion checkbox, so a single Tab advances one row
 
 #### Scenario: Enter commits and inserts a new empty task below
 - **WHEN** the player presses Enter (without Shift) while editing a non-empty row

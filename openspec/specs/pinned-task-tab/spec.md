@@ -40,7 +40,9 @@ control to delete the underlying task, a control to unpin (remove the pin withou
 an affordance to reorder the pin within the player's list. Each control SHALL act on the pin by its stable
 identity `(DocId, TaskId)` and SHALL drive the server-authoritative pin operations lock-free
 (complete / edit-text / delete / unpin / reorder), never through the document's edit lock and never by
-mutating pins locally without the server round-trip.
+mutating pins locally without the server round-trip. Tab / Shift+Tab traversal within the Pin Tab SHALL
+visit only the rows' editable text fields, in row order; it SHALL NOT stop focus on a row's completion
+checkbox (the checkbox remains operable by mouse click).
 
 #### Scenario: A row exposes every edit action
 - **WHEN** a player views any pin row in the Pin Tab
@@ -51,6 +53,11 @@ mutating pins locally without the server round-trip.
 - **WHEN** a player edits a row's text and commits it
 - **THEN** the Pin Tab sends the edit addressed by that pin's `(DocId, TaskId)` and the row reflects the
   server-synced result
+
+#### Scenario: Tab traversal skips the row checkbox
+- **WHEN** the player presses Tab or Shift+Tab to move between rows in the Pin Tab
+- **THEN** focus moves directly from one row's editable text field to an adjacent row's editable text
+  field, never landing on a row's completion checkbox
 
 #### Scenario: Unpin removes only the pin
 - **WHEN** a player uses a row's unpin control
