@@ -21,6 +21,31 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## exclude-checkboxes-from-tab-focus
+
+> gui@3.1.0 made every row checkbox focusable AND routed Tab through the FocusManager traversal policy,
+> so Tab/Shift+Tab began stopping on each row's checkbox before its text field (doubling keystrokes). A
+> mod-owned allow-list `ScribeFieldOnlyTraversalPolicy` on the dialog's FocusManager now returns only the
+> active view's editable field nodes, in row order — checkboxes are never Tab-focused (still mouse-clickable).
+> Fully relaunch the client to pick up the new build.
+
+- [x] `f9a90c56` **Tab skips checkbox (Editor).** Open the Lectern editor with several task rows and press
+      Tab repeatedly — focus advances one ROW per Tab, landing in each row's text field, never on a
+      checkbox; Shift+Tab retreats the same way; confirm each row still commits as focus leaves it.
+      *(exclude-checkboxes-from-tab-focus 4.2)*
+      - **Confirmed 2026-08-01** (user report): "works as described." Tab/Shift+Tab advance one row per press
+        to the text field, never the checkbox, and the row still commits as focus leaves it.
+- [x] `bae6ef0a` **Tab skips checkbox (Pinned).** With several pinned tasks, Tab/Shift+Tab through the Pin
+      Tab — focus moves field-to-field in row order, never onto a checkbox.
+      *(exclude-checkboxes-from-tab-focus 4.3)*
+      - **Confirmed 2026-08-01** (user report): "works as described." Pin Tab traversal moves field-to-field
+        in row order, never onto a checkbox.
+- [x] `f5d02948` **Keyboard regression guard.** Confirm Enter (new task below), Shift+Enter (line break),
+      Esc (commit + close), mouse-clicking a checkbox to toggle done, and empty-row removal all still
+      behave as before. *(exclude-checkboxes-from-tab-focus 4.4)*
+      - **Confirmed 2026-08-01** (user report): "works as described." Enter/Shift+Enter/Esc, mouse checkbox
+        toggle, and empty-row removal all behave as before — no regressions from the traversal-policy change.
+
 ## hud-temporal-storm-corruption
 
 > The pinned-task HUD reacts to temporal instability: it corrupts all its own text (Zalgo-style
@@ -1892,6 +1917,20 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [x] `30895563` **Note-less entries pruned past the soft cap.** Visit a lectern on more than 10 in-game days without leaving notes — confirm oldest empty entries drop so your list stays around ten, while any entry you left a note on is never dropped. *(1.3)*
       - **Confirmed 2026-08-01** (playtest submission 2026-08-01T16-54-36): "Works."
 
+## split-large-gui-files
+
+> Refactor-only: the two ~2000-line GUI god-files were split into concern-named partials with no
+> behavior change. Nothing new to see — the smoke test just confirms every dialog still renders and
+> functions exactly as before the split.
+
+- [x] `2aec8921` **Smoke all three dialogs.** Open the Lectern, plain Notebook, and Clockmaker's
+      Notebook; step through Read / Editor / Pinned / Guestbook / Timer views, plus title editing,
+      lock/autosave, and backdrops — everything renders and functions as it did before the file
+      split. *(split-large-gui-files 3.2)*
+      - **Confirmed 2026-08-01** (playtest submission 2026-08-01T17-59-16): "It's a lot of tests, but
+        it works." All three dialogs render and function across every view after the file split — no
+        behavior change, as intended.
+
 ## add-title-to-scribe-tooltips
 
 > Shows a Scribe document's title on the Lectern's placed-block tooltip and both Notebook items'
@@ -1906,7 +1945,9 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Confirmed 2026-08-01** (playtest submission 2026-08-01T16-54-36): "Works."
 - [x] `5babbc80` **Never-opened notebook tooltip.** Hover a freshly crafted Notebook that has never been opened — confirm the tooltip shows `Title: "(untitled)"`. *(4.4)*
       - **Confirmed 2026-08-01** (playtest submission 2026-08-01T16-54-36): "Works."
-- [ ] `6ca225ff` **Lectern item tooltip.** Break or pick up a titled Lectern and hover the resulting block item in the inventory — confirm the tooltip shows `Title: "<title>"`, matching the Notebook. *(4.6)*
+- [x] `6ca225ff` **Lectern item tooltip.** Break or pick up a titled Lectern and hover the resulting block item in the inventory — confirm the tooltip shows `Title: "<title>"`, matching the Notebook. *(4.6)*
+      - **Confirmed 2026-08-01** (playtest submission 2026-08-01T17-59-16): "Works." The broken/picked-up
+        Lectern's block item shows `Title: "<title>"` in its inventory tooltip, matching the Notebook.
 
 ## scribe-0-2-0-release-content
 
@@ -1959,6 +2000,9 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         config found" everywhere. Also set `onCustomizeScreen: false` (operator command only, no world-creation
         GUI toggle — user's call) and pointed the handbook craft text at the concrete `/worldconfig …` command.
         Re-test legs (b)/(c) with the fresh restage; the existing-world migration concern is resolved (non-issue).
+      - **Confirmed 2026-08-01** (playtest submission 2026-08-01T17-59-16): "It has been properly tested." Tester
+        closing this out — all three legs (ON tinkerer-only, `/worldconfig` bypass, classless world) exercised;
+        the earlier worldconfig-staging blockers are fixed. Done.
 - [x] `0213647b` **Handbook sections render.** Open the in-game handbook for both the Notebook and
       Clockmaker's Notebook and confirm the new extra sections show; the getting-started + editor-reference
       guide pages read coherently with working cross-links. *(scribe-0-2-0-release-content 2.4)*

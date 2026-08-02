@@ -747,6 +747,34 @@ with no confirm dialog needed. Third-person animation via the `HeldTpUseAnimatio
 `byEntity.AnimManager?.StartAnimation(name)`. (The specific animation clip for a Scribe gesture is
 a placeholder until art exists — verify the clip name.)
 
+## Model transform tuning — the built-in `.tfedit` has NO First-Person target (2026-08-01)
+
+**Symptom: `.tfedit fp` (or `/dev tfedit fp`) always emits `tpHandTransform`, never
+`fpHandTransform`.** The built-in transform editor (`GuiDialogTransformEditor` in
+`VintagestoryLib.dll`) is **client-side** — invoke it with a leading dot (`.tfedit`), not `/`
+(`/tfedit` / `/dev` route to the survival mod's *server* `/dev`, which has different subcommands
+and no `tfedit`). Its internal target list is `[Gui=0, Fp=1, Tp=2, TpOff=3, Ground=4]`, but the
+sidebar only draws buttons for Gui / Main Hand / Off Hand / Ground, and `CmdTransformEditor` has
+**no `"fp"` case** — so `.tfedit fp` silently leaves the target at its default (2 = Main Hand). The
+dialog titles itself "Transform Editor (2)" and edits `tpHandTransform` even when `fp` is typed.
+Hugo Cortell's Transform Designer mod (`.tfdesign`) has the same gap by deliberate scope — its
+`TFDesignContext` enum is `{ Gui, MainHand, OffHand, Ground }`. Its gizmos render in the world-space
+`Opaque` pass; the first-person hand is a separate near-camera projection, so world-space drag
+gizmos can't line up with FP — which is *why* FP is omitted (gizmos are the hard part for FP).
+
+**Fix for tuning `fpHandTransform` live:** Scribe ships two dev tools that edit the transform
+objects directly (client-side, session-only — they mutate `item.FpHandTransform` etc. and call
+`slot.MarkDirty()`; nothing persisted/synced, so relaunch resets and you bake final values into the
+itemtype JSON by hand). Sliders/numbers sidestep the gizmo problem entirely — no screen→world
+raycast, the game just re-renders the held item in whatever pass it belongs to (including FP) for
+free. See `ScribeTransformTuning` (shared target→JSON-key mapping + formatter),
+`GuiDialogScribeTransformPanel` (`.scribetfpanel`, slider panel, the preferred FP tool), and the
+`/scripttf` command (no-GUI fallback, one axis per typed command).
+
+**When tuning FP:** set `.clientconfig immersiveFpMode false` first. With immersive FP on, the real
+body arms animate to an idle rest pose so the item drifts/lowers and the preview doesn't match the
+floating-hands pose the transform actually targets.
+
 ## Always-on HUD overlays and hotkeys
 
 **Question: how do you draw an always-on, per-tick-updated HUD overlay, and register a
@@ -1655,6 +1683,32 @@ version.) Consequences that actually shape the code:
   (`ScribeMultilineField`) and non-`Text` widgets (`TextField`/`TextFieldStyle`, `Dropdown`) do NOT read
   `DefaultTextStyle`, so they keep an explicit family; so does anything in a `useGlobalOverlay: true`
   subtree (renders outside the ancestor). See `ScribeTextDefaults.cs`.
+
+**Fact (gui@3.1.0): every `Checkbox` is now focusable, and Tab traversal is engine-driven — excluding a
+widget from Tab needs a custom `FocusTraversalPolicy`, not a per-widget flag.** Two 3.1.0 changes combine
+into a regression (symptom: Tab / Shift+Tab in the Lectern editor + Pin Tab began stopping on each row's
+completion **checkbox** before its text field, doubling keystrokes). (1) `CheckboxState` now derives from
+`FocusableState<Checkbox>` and lazily creates its own `FocusNode` (`_focusNode ??= new FocusNode()`), so
+every mounted checkbox is focusable — but the `Checkbox` **widget** ctor exposes NO focus/traversal
+parameter, so that node lives on internal state a mod can't reach. (2) `GuiBase.OnKeyDown` now intercepts
+Tab globally (`IsTabKey` == GlKey code **52**) and runs `FocusManager.FocusNext/FocusPrevious`, which walk
+`FocusManager.TraversalPolicy.GetTraversalOrder(root, manager)`; the default `ReadingOrderTraversalPolicy`
+(sealed) collects EVERY node in the tree where `CanRequestFocus && !SkipTraversal`, checkboxes included.
+This Tab handling runs **before** `_inputRouter.KeyDown`, so a field's own Tab handler (e.g. our old
+`ScribeMultilineField` Tab→advance) is now dead code — commit-on-Tab must ride the blur path instead
+(`FocusManager.RequestFocus` blurs the outgoing node first, firing its focus-lost/gained listeners).
+Fix seams that actually work: `FocusManager.TraversalPolicy` is a public settable prop (defaults to
+`new ReadingOrderTraversalPolicy()`); `FocusTraversalPolicy` is `public abstract` with one method
+`IReadOnlyList<FocusNode> GetTraversalOrder(Element root, FocusManager)`. `FocusNode` has public settable
+`CanRequestFocus`/`SkipTraversal`/`TraversalOrder` — but you can't reach the checkbox's node to set them,
+so per-widget exclusion is impossible. The robust fix is an **allow-list policy**: return only the nodes
+you want Tab to visit (Scribe's `ScribeFieldOnlyTraversalPolicy` returns just the active view's ordered
+field nodes), so anything not opted in — checkboxes now, any future focusable control — can never be
+Tab-focused. Installed per-dialog on `GuiBase.FocusManager` (a field-initialized instance available from
+construction), so it scopes to that dialog only; a separate dialog (e.g. the Settings window) keeps its
+own default policy. **Ground truth for all of this is the decompiled vendored `src/Mod/lib/Gui.dll`
+(`ilspycmd -t <FullTypeName>`) — the `reference/vslibgui/` clone is STALE (single commit 2026-06-06,
+pre-3.1.0) and has NO traversal system at all, so it must NOT be trusted for focus/traversal questions.**
 
 ## Two different `BadImageFormatException` crashes — don't conflate them
 

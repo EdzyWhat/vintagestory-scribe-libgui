@@ -43,14 +43,7 @@ public abstract partial class ScribeDialogBase
         Guid? autoFocus = autoFocusPinTaskId;
         autoFocusPinTaskId = null; // one-shot
 
-        // Apply sink ordering only when the policy actually sinks done pins. Under Keep, done pins
-        // hold their position (same behaviour as the HUD's SunkForOrder). Unpin/Delete remove the
-        // pin entirely, so ordering is moot for them and raw order is fine.
-        var policy = modSystem.MySettings.CompletionPolicy;
-        bool sinkOrder = policy is ScribeCompletionPolicy.Sink or ScribeCompletionPolicy.UnpinSink;
-        var orderedPins = sinkOrder
-            ? ScribePinOrdering.ForDisplay(modSystem.MyPins)
-            : (IReadOnlyList<ScribePinnedRef>)modSystem.MyPins;
+        var orderedPins = OrderedPinsForDisplay();
 
         // Each row's text seeds from its live edit buffer if one is in flight (a keystroke mid-resync),
         // else the authoritative server snapshot — the Pin Tab's equivalent of the editor re-seeding from
@@ -120,6 +113,22 @@ public abstract partial class ScribeDialogBase
         // A different row just gained focus (click-to-edit another row): commit the row we left.
         if (focusedPinTaskId is { } prev && prev != taskId) CommitPinTextEdit(prev);
         focusedPinTaskId = taskId;
+    }
+
+    /// <summary>The player's pins in the on-screen row order the Pin Tab renders them in. Shared by
+    /// <see cref="BuildPinnedContent"/> (which builds the rows) and <see cref="EditorFieldTraversalNodes"/>
+    /// (which orders the Tab-traversal nodes to match), so the two can't drift.
+    ///
+    /// <para>Sink ordering is applied only when the policy actually sinks done pins; under Keep, done pins
+    /// hold their position (matching the HUD's <c>SunkForOrder</c>), and Unpin/Delete remove the pin
+    /// entirely so ordering is moot and raw order is fine.</para></summary>
+    private IReadOnlyList<ScribePinnedRef> OrderedPinsForDisplay()
+    {
+        var policy = modSystem.MySettings.CompletionPolicy;
+        bool sinkOrder = policy is ScribeCompletionPolicy.Sink or ScribeCompletionPolicy.UnpinSink;
+        return sinkOrder
+            ? ScribePinOrdering.ForDisplay(modSystem.MyPins)
+            : modSystem.MyPins;
     }
 
     /// <summary>Live text-change from a focused Pin Tab field: buffer it (write-through, so a resync

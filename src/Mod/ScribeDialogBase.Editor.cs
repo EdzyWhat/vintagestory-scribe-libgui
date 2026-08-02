@@ -130,9 +130,12 @@ public abstract partial class ScribeDialogBase
     /// snapshot reconcile keeps the pin); that is sent explicitly via the identity pin path.</para>
     ///
     /// <para>Focus preservation (8.5 "toggling a checkbox should NOT disturb the caret in another focused
-    /// row"): the checkbox isn't <c>IFocusable</c>, so pressing it blurs whatever field was focused via
-    /// LibGUI's <c>DispatchPointerDown</c> focus-clear (same root cause as the delete/pin/reorder controls
-    /// — a05caret1). Keep/Unpin do no rebuild (the checkbox flips optimistically in its own State, leaving
+    /// row"): clicking the checkbox blurs whatever field was focused via LibGUI's
+    /// <c>DispatchPointerDown</c> focus-clear (same root cause as the delete/pin/reorder controls —
+    /// a05caret1). (In gui@3.1.0 the checkbox IS focusable — <c>CheckboxState : FocusableState</c> — but it's
+    /// deliberately excluded from Tab traversal by <see cref="ScribeFieldOnlyTraversalPolicy"/>, so it's
+    /// still mouse-only from the keyboard's point of view.) Keep/Unpin do no rebuild (the checkbox flips
+    /// optimistically in its own State, leaving
     /// the focused field's State mounted), so re-request focus directly on the row that held it; the
     /// Sink/Delete branches delegate to <see cref="ReorderEditorBlock"/>/<see cref="DeleteEditorBlock"/>,
     /// which own their own rebuild + focus fix-up.</para></summary>
@@ -567,5 +570,31 @@ public abstract partial class ScribeDialogBase
     {
         foreach (var node in editorFocusNodes) node.Dispose();
         editorFocusNodes.Clear();
+    }
+
+    /// <summary>The field focus nodes Tab / Shift+Tab may visit in the CURRENT view, in on-screen row
+    /// order — the allow-list consulted by <see cref="ScribeFieldOnlyTraversalPolicy"/>
+    /// (exclude-checkboxes-from-tab-focus). Returns the editor rows' nodes in the Editor view and the pin
+    /// rows' nodes (ordered to match the visible rows via <see cref="OrderedPinsForDisplay"/>) in the
+    /// Pinned view; empty in every other view, so Tab does nothing there rather than landing on a
+    /// checkbox. Only nodes with a live <c>Owner</c> (currently mounted) are returned, so a node awaiting
+    /// disposal after a row removal can't be focused. Rebuilt fresh on every Tab press (LibGUI re-reads the
+    /// order each <c>FocusNext</c>/<c>FocusPrevious</c>), so it always tracks the live row set.</summary>
+    private IReadOnlyList<FocusNode> EditorFieldTraversalNodes()
+    {
+        var result = new List<FocusNode>();
+        switch (viewMode)
+        {
+            case ScribeLecternView.Editor:
+                foreach (var node in editorFocusNodes)
+                    if (node.Owner is not null) result.Add(node);
+                break;
+            case ScribeLecternView.Pinned:
+                foreach (var pin in OrderedPinsForDisplay())
+                    if (pinFocusNodes.TryGetValue(pin.TaskId, out var node) && node.Owner is not null)
+                        result.Add(node);
+                break;
+        }
+        return result;
     }
 }

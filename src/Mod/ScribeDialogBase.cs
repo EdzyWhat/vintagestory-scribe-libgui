@@ -254,6 +254,15 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
         // so we can't rely on a lectern interaction to trigger the rebuild. Unsubscribed in OnGuiClosed.
         modSystem.SettingsVisibilityChanged += OnSettingsVisibilityChanged;
 
+        // Restrict Tab / Shift+Tab to this dialog's own editable text fields (exclude-checkboxes-from-tab-focus).
+        // gui@3.1.0 made every checkbox focusable AND made GuiBase.OnKeyDown drive Tab through
+        // FocusManager.TraversalPolicy, so the stock ReadingOrderTraversalPolicy began stopping Tab on each
+        // row's completion checkbox before its text field. There's no public seam to mark the checkbox's
+        // node non-traversable, so we install an allow-list policy that returns ONLY our field nodes, in the
+        // active view's row order (see EditorFieldTraversalNodes). The Settings window is a separate dialog
+        // with its own FocusManager, so it's unaffected.
+        FocusManager.TraversalPolicy = new ScribeFieldOnlyTraversalPolicy(EditorFieldTraversalNodes);
+
         _titleController = new TextEditingController("");
         _titleFocusNode = new FocusNode();
         _titleFocusNode.AddListener(OnTitleFocusChanged);
