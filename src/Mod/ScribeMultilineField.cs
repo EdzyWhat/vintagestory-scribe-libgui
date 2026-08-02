@@ -294,6 +294,30 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox
 
         return lineStart + bestCol;
     }
+
+    /// <summary>Move a caret offset one visual line up (<paramref name="direction"/> = -1) or down (+1),
+    /// landing on the column nearest the caret's current X — the vertical analogue of
+    /// <see cref="OffsetAtPosition"/>. Derives the caret's live X from the same paint math
+    /// (<c>PadX + MeasureWidth(prefix)</c>), then reuses <see cref="OffsetAtPosition"/> at that X on the
+    /// target line, so the caret lands exactly where a click there would. Edges follow desktop editors:
+    /// Up on the first line goes to the text start (0), Down on the last line to the text end. There is no
+    /// preferred-column memory across presses (the target X is read fresh each call) — see design.md.
+    /// Valid only after a layout pass (like the click path); a focused, painted field always satisfies this.</summary>
+    public int CaretOffsetVertical(int fromCaret, int direction)
+    {
+        if (visualLines.Count == 0) return 0;
+
+        var (line, col) = CaretToLineCol(fromCaret);
+        int targetLine = line + direction;
+        if (targetLine < 0) return 0;
+        if (targetLine >= visualLines.Count) return text.Length;
+
+        string curText = visualLines[line].Text;
+        float caretX = PadX + MeasureWidth(curText.Substring(0, Math.Min(col, curText.Length)));
+        // Aim at the vertical middle of the target line so OffsetAtPosition's Y→line pick lands on it.
+        float targetY = PadY + (targetLine + 0.5f) * lineHeight;
+        return OffsetAtPosition(new Vector2(caretX, targetY));
+    }
 }
 
 /// <summary>RenderObjectWidget bridge: pushes text/caret/selection/focus/colors into the render object.</summary>
@@ -627,6 +651,16 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 Handled(e);
                 break;
 
+            case (int)GlKeys.Up:
+                if (CaretVertical(-1) is { } up) MoveCaret(up, e.Shift);
+                Handled(e);
+                break;
+
+            case (int)GlKeys.Down:
+                if (CaretVertical(+1) is { } down) MoveCaret(down, e.Shift);
+                Handled(e);
+                break;
+
             case (int)GlKeys.Home:
                 MoveCaret(LineStart(caret), e.Shift);
                 Handled(e);
@@ -763,6 +797,21 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
 
         Vector2 local = proxy.GlobalToLocal(new Vector2(e.X, e.Y));
         return Math.Clamp(textRender.OffsetAtPosition(local), 0, text.Length);
+    }
+
+    /// <summary>Move the caret one visual line up (<paramref name="direction"/> = -1) or down (+1),
+    /// returning the new source offset, or null if the render geometry isn't reachable yet. Delegates the
+    /// column-nearest-X math to <see cref="ScribeMultilineFieldRender.CaretOffsetVertical"/> on the same
+    /// render object the click path uses (resolved through the GestureDetector proxy).</summary>
+    private int? CaretVertical(int direction)
+    {
+        if (Element?.RenderObject is not { } proxy) return null;
+        var textRender = proxy is ScribeMultilineFieldRender direct
+            ? direct
+            : proxy.Children.Count > 0 ? proxy.Children[0] as ScribeMultilineFieldRender : null;
+        if (textRender is null) return null;
+
+        return Math.Clamp(textRender.CaretOffsetVertical(caret, direction), 0, text.Length);
     }
 
     /// <summary>Press: focus the field and act on the click. A single click moves the caret to the click

@@ -21,6 +21,34 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## arrow-key-line-caret-nav
+
+> Up/Down arrows now move the caret between the visual lines of a focused multi-line row (they were
+> dead keys before). The move lands on the column nearest the caret's current X on the adjacent line;
+> Up on the first line jumps to text start, Down on the last line to text end; Shift extends the
+> selection. It stays within the row (no focus change, no commit) and applies to both the Lectern
+> editor and Pin Tab (shared `ScribeMultilineField`). Fully relaunch the client to pick up the new build.
+
+- [x] `6076bd50` **Up/Down between lines (Editor).** In the Lectern editor with a multi-line row, press
+      Up/Down; caret moves to the nearest column on the visual line above/below, staying in the row (no
+      focus change, no commit). Works across soft-wrapped and \n-broken lines.
+      *(arrow-key-line-caret-nav 3.1)*
+      - **Confirmed 2026-08-01** (user report): "works." Up/Down move the caret between visual lines
+        within the row.
+- [x] `83d68ffd` **Edge lines jump to text ends.** Up on the first visual line jumps the caret to the
+      start of the text; Down on the last visual line jumps it to the end; an empty/single-line row is a
+      harmless no-op-ish move. *(arrow-key-line-caret-nav 3.2)*
+      - **Confirmed 2026-08-01** (user report): "this is awesome, it works." Up on the first line / Down
+        on the last jump the caret to the text start / end.
+- [x] `7bc7a0bc` **Shift+Up/Down extends selection.** Hold Shift with Up/Down and confirm the selection
+      extends to the new caret rather than collapsing. *(arrow-key-line-caret-nav 3.3)*
+      - **Confirmed 2026-08-01** (user report): "works." Shift+Up/Down extends the selection to the new caret.
+- [x] `63d445b4` **Same behavior in Pin Tab.** Repeat the Up/Down, edge, and Shift tests on a multi-line
+      Pin Tab row; behavior is identical (shared field), with no row-to-row focus movement.
+      *(arrow-key-line-caret-nav 3.4)*
+      - **Confirmed 2026-08-01** (user report): "works." Identical Up/Down/edge/Shift behavior on a Pin Tab
+        row, no row-to-row focus movement.
+
 ## exclude-checkboxes-from-tab-focus
 
 > gui@3.1.0 made every row checkbox focusable AND routed Tab through the FocusManager traversal policy,
