@@ -2309,7 +2309,10 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 
 ## explore-cuneiform-text-selection
 
-- [ ] `beba0994` **Cuneiform selection highlight.** In a tablet row/title, use shift-arrow, drag-select,
+- [x] `beba0994` **Cuneiform selection highlight.** In a tablet row/title, use shift-arrow, drag-select,
       double-click (word) and triple-click (line) and confirm a highlight box appears behind the cuneiform
       strokes on both a single-line and a wrapped multi-line row; the title band highlights and clips
       overflow; Ctrl+C copies the underlying plain text. *(explore-cuneiform-text-selection 3.3)*
+  - **Confirmed 2026-08-02:** tester — "All selection modes work and are visually clear with the new
+    highlight box." Shift-arrow, drag, double-click word, triple-click line all render the highlight over
+    cuneiform on single-line + wrapped rows and the title band; Ctrl+C yields plain text.
