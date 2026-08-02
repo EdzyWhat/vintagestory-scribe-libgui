@@ -2210,7 +2210,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 
 ## add-tablet-cuneiform-chrome
 
-- [ ] `6017abe3` **Type live cuneiform.** Hold a clay/wax tablet and type into a task row — glyphs
+- [x] `6017abe3` **Type live cuneiform.** Hold a clay/wax tablet and type into a task row — glyphs
       form as cuneiform strokes with a blinking synthetic caret; arrow-key nav and click-to-place move
       the caret to the right character boundary. Also confirm no title banner renders and the editor
       fills the central region. *(add-tablet-cuneiform-chrome 7.2)*
@@ -2228,6 +2228,15 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
     "banner renders": the screenshot shows only the cuneiform TITLE BAR + rows — the retired redundant
     banner is genuinely gone; the tester read the cuneiform title bar as "the banner." Needs a fix pass
     on caret-blink + Shift+Enter + selection feedback before this can pass.
+  - **Fix landed 2026-08-02 (awaits retest):** group-8 refinements applied — caret now blinks at the
+    normal field's 500ms cadence (8.1), Shift+Enter inserts a line break in a cuneiform row (8.2), and a
+    trailing space advances the caret immediately (8.3). Selection feedback over cuneiform stays OUT of
+    scope (explore-cuneiform-text-selection). RESTAGE first — the fixes aren't in the staged build. Retest
+    typing: caret blinks, Shift+Enter grows a wrapped line, end-of-line space moves the caret.
+  - **Confirmed 2026-08-02** (retest after restage): tester — "Caret blinks, both in Tablet and in earlier
+    Scribe rows. Shift+Enter works in Tablet. Trailing space advances correctly." All three group-8 typing
+    fixes (8.1 blink, 8.2 Shift+Enter, 8.3 trailing space) verified. Selection feedback remains out of scope
+    (explore-cuneiform-text-selection, now implemented separately).
 - [x] `4c2624f4` **Check focus chrome.** A resting tablet row shows no border/background; clicking/
       focusing it gives it a border + soft fill; it reverts on blur — and in-progress text/caret
       survives the appearance change (no revert). *(add-tablet-cuneiform-chrome 5.1)*
@@ -2257,6 +2266,10 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
     NOT at the same visual scale as the row glyphs (~52px button vs ~62px for the ⓘ/gear siblings) — a
     global cuneiform-scale + Add-task padding refinement is filed as a follow-up (see general notes),
     not a blocker for this item.
+  - **Fix landed 2026-08-02 (awaits retest):** the global cuneiform em-scale was bumped to the ~1.4x
+    readable line-height (8.4) and the labelled footer buttons lost ~8px of vertical padding on the
+    cuneiform path, so the "Add task" label should now sit closer to the row/ⓘ glyph scale. RESTAGE first.
+    Retest that the footer label reads at a comparable scale to the row glyphs and the button hugs it.
 - [x] `96661ea2` **Gear opens Settings.** The footer gear (right of the ⓘ) opens Scribe Settings and
       matches the ⓘ button's styling/size. *(add-tablet-cuneiform-chrome 7.2)*
   - **Confirmed 2026-08-02:** tester "Works"; the gear sits right of the ⓘ at matching size in
@@ -2275,10 +2288,28 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
     the cuneiform toggle.
 - [ ] `d53f6b5b` **Both materials.** Repeat the core cuneiform checks on both a clay and a wax tablet —
       behavior identical, only backdrop/ink color differ. *(add-tablet-cuneiform-chrome 4.5)*
-  - **Still broken 2026-08-02:** tester "can't see any backdrop or ink color difference" between clay
-    and wax. Expected per design that clay vs wax differ in backdrop + ink color. NOTE: the material
-    backdrops are tracked separately in `add-tablet-clay-type-backdrops` and the ink-contrast decision
-    is deliberately DEFERRED (memory: tablet-theme-contrast-vs-backdrops — the current earthen palette
-    is a PLACEHOLDER pending the real clay/wax backdrops). So "no difference" is expected at THIS stage,
-    not a regression — but this item can't pass until those land. Likely reclassify as Backlogged on the
-    material-backdrops change rather than a cuneiform-chrome failure.
+  - **Backlogged 2026-08-02:** tester confirmed reclassify — "Yeah reclassify as backlogged for this."
+    Clay vs wax show no backdrop/ink-color difference yet, which is EXPECTED at this stage: the material
+    backdrops are tracked separately in `add-tablet-clay-type-backdrops` and the ink-contrast decision is
+    deliberately DEFERRED (memory: tablet-theme-contrast-vs-backdrops — the current earthen palette is a
+    PLACEHOLDER pending the real clay/wax backdrops). Not a cuneiform-chrome failure; this item can't pass
+    until those land, so it's parked on the material-backdrops work.
+- [x] `999627d6` **Cuneiform em-scale fit.** After the ~1.4× line-height bump (8.4), confirm cuneiform
+      matches the surrounding readable line-height (no longer ~30% short) across the title bar, the task
+      rows, AND the "Add task" / "Done editing" footer labels — and that nothing overflows or re-wraps
+      badly at the larger size. *(add-tablet-cuneiform-chrome 8.6)*
+  - **Confirmed 2026-08-02:** tester — "The text height has adjusted well." The 1.4× bump reads correctly
+    across surfaces with no overflow/bad re-wrap.
+- [x] `17c7898e` **CuneiformTablets toggle + migration.** The Settings checkbox now reads "Cuneiform
+      tablets" (default ON). Flip it both directions and confirm every tablet surface follows together.
+      Then load a profile that previously had cuneiform OFF (old `DisableCuneiformFont = true`) and confirm
+      it stays OFF — the migration must not silently re-enable cuneiform. *(add-tablet-cuneiform-chrome 8.6)*
+  - **Confirmed 2026-08-02:** tester — "It's been adjusted, and works well." Renamed positive-polarity
+    toggle flips all surfaces together; migration preserves a prior OFF preference.
+
+## explore-cuneiform-text-selection
+
+- [ ] `beba0994` **Cuneiform selection highlight.** In a tablet row/title, use shift-arrow, drag-select,
+      double-click (word) and triple-click (line) and confirm a highlight box appears behind the cuneiform
+      strokes on both a single-line and a wrapped multi-line row; the title band highlights and clips
+      overflow; Ctrl+C copies the underlying plain text. *(explore-cuneiform-text-selection 3.3)*
