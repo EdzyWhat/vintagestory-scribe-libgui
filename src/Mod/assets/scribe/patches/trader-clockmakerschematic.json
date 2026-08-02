@@ -1,0 +1,26 @@
+[
+	{
+		"op": "add",
+		"file": "game:config/tradelists/trader-commodities.json",
+		"path": "/selling/list/-",
+		"value": {
+			"code": "scribe:clockmakerschematic",
+			"type": "item",
+			"stacksize": 1,
+			"stock": { "avg": 1, "var": 0 },
+			"price": { "avg": 12, "var": 3 }
+		}
+	},
+	{
+		"op": "add",
+		"file": "game:config/tradelists/trader-treasurehunter.json",
+		"path": "/selling/list/-",
+		"value": {
+			"code": "scribe:clockmakerschematic",
+			"type": "item",
+			"stacksize": 1,
+			"stock": { "avg": 1, "var": 0 },
+			"price": { "avg": 12, "var": 3 }
+		}
+	}
+]

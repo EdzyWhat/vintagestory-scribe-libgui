@@ -2169,3 +2169,29 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       relogs) and confirm P2 can now edit. *(fix-transient-lectern-editor-lock 5.4)*
       - **Confirmed 2026-07-31** (two-client MP session): the original permanent-lockout no longer
         reproduces — after P1 leaves and P2 relogs, P2 can enter the editor.
+
+## add-clockmaker-notebook-schematic
+
+- [ ] `de045c46` **Schematic item exists.** Open Creative search for "schematic" — confirm the
+      Clockmaker's Notebook Schematic shows up with its name/description and a handbook page, and that
+      when held or ground-stored it renders as the (borrowed) glider-blueprint scroll art.
+      *(add-clockmaker-notebook-schematic 1.4)*
+- [ ] `429072f0` **Craft without the trait.** On a NON-Clockmaker character, put Notebook + temporal
+      gear + metal parts + the schematic in the grid — confirm it yields a Clockmaker's Notebook, the
+      schematic STAYS in the grid (reusable), and the other three are consumed. Craft a second from the
+      retained schematic to confirm reuse. *(add-clockmaker-notebook-schematic 2.3)*
+- [ ] `297731fd` **Trait path unchanged.** Confirm a Clockmaker (Tinkerer trait) still crafts via the
+      original 3-item no-schematic recipe, AND a non-Clockmaker with no schematic still CANNOT craft via
+      that trait recipe. *(add-clockmaker-notebook-schematic 2.4)*
+- [ ] `e093c2ad` **Carryover via schematic.** Craft the Clockmaker's Notebook via the schematic recipe
+      from a Notebook that already has tasks/notes/History — confirm the document and History carry into
+      the result. *(add-clockmaker-notebook-schematic 2.5)*
+- [ ] `2a7c88a0` **Patch loads clean.** Check the game log on boot — confirm no "could not find
+      file/path" warning for trader-commodities or trader-treasurehunter tradelists (the ware patch
+      resolved). *(add-clockmaker-notebook-schematic 3.2)*
+- [ ] `0efc1fa5` **Traders sell it.** Spawn fresh Commodities and Treasure Hunter traders (already-
+      spawned ones won't restock immediately) and check stock until the schematic appears — confirm the
+      gear price/stock look right and buying it yields a working schematic. Note it's a probabilistic
+      appearance. *(add-clockmaker-notebook-schematic 3.3)*
+- [ ] `7d43b5d3` **Other traders exclude it.** Check a non-target trader (e.g. Survival Goods or
+      Artisan) and confirm the schematic is NOT in its wares. *(add-clockmaker-notebook-schematic 3.4)*
