@@ -42,7 +42,10 @@ identity `(DocId, TaskId)` and SHALL drive the server-authoritative pin operatio
 (complete / edit-text / delete / unpin / reorder), never through the document's edit lock and never by
 mutating pins locally without the server round-trip. Tab / Shift+Tab traversal within the Pin Tab SHALL
 visit only the rows' editable text fields, in row order; it SHALL NOT stop focus on a row's completion
-checkbox (the checkbox remains operable by mouse click).
+checkbox (the checkbox remains operable by mouse click). Because a Pin Tab row reuses the editor's
+multi-line text field, its caret navigation SHALL match the editor's: the Up / Down arrows SHALL move the
+caret between the row's visual lines (to the text start / end when already on the first / last line),
+within the row, without moving focus to another row or committing the edit.
 
 #### Scenario: A row exposes every edit action
 - **WHEN** a player views any pin row in the Pin Tab
@@ -58,6 +61,11 @@ checkbox (the checkbox remains operable by mouse click).
 - **WHEN** the player presses Tab or Shift+Tab to move between rows in the Pin Tab
 - **THEN** focus moves directly from one row's editable text field to an adjacent row's editable text
   field, never landing on a row's completion checkbox
+
+#### Scenario: Up/Down navigate lines within a pin row
+- **WHEN** the player presses Up or Down while editing a multi-line pin row
+- **THEN** the caret moves to the adjacent visual line within that same row (or to the text start/end
+  at the first/last line), without moving focus to another pin row or committing the edit
 
 #### Scenario: Unpin removes only the pin
 - **WHEN** a player uses a row's unpin control

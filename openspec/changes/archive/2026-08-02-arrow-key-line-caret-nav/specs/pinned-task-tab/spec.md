@@ -38,3 +38,5 @@ within the row, without moving focus to another row or committing the edit.
 
 #### Scenario: Unpin removes only the pin
 - **WHEN** a player uses a row's unpin control
+- **THEN** that player's pin is removed without deleting the underlying task, distinct from the delete
+  control which removes the task itself
