@@ -19,10 +19,10 @@
 ## 4. Build and manual in-game playtest
 
 - [x] 4.1 Build the mod (0 errors) and confirm the `Core` suite still passes (no Core change expected — this is a Mod-only change; the run is a guard) — Mod build clean (0 errors; the 3 warnings are pre-existing, the transient nullable warning I introduced was fixed); Core suite 255/255 pass.
-- [ ] 4.2 In-game (all four footers share this button — spot-check at least the Lectern and the tablet): with the handbook CLOSED, click ⓘ → the Scribe Editor Features page opens (unchanged from today)
-- [ ] 4.3 In-game: with the handbook OPEN on the Scribe Editor Features page, click ⓘ → the handbook closes
-- [ ] 4.4 In-game: with the handbook OPEN on a DIFFERENT page, click ⓘ → the handbook navigates to the Scribe Editor Features page (the "focus, don't hide" rule, D3); a further click then closes it — confirm the two-click flow feels right (D-Q1)
-- [ ] 4.5 In-game: confirm the ⓘ tooltip now reads the updated toggle wording, and that closing plays/omits the handbook sound acceptably (D-Q3)
+- [x] 4.2 In-game (all four footers share this button — spot-check at least the Lectern and the tablet): with the handbook CLOSED, click ⓘ → the Scribe Editor Features page opens (unchanged from today) — confirmed 2026-08-02 (playtest submission 2026-08-02T16-46-27: "works.")
+- [x] 4.3 In-game: with the handbook OPEN on the Scribe Editor Features page, click ⓘ → the handbook closes — confirmed 2026-08-02 (playtest: "works.")
+- [x] 4.4 In-game: with the handbook OPEN on a DIFFERENT page, click ⓘ → the handbook navigates to the Scribe Editor Features page (the "focus, don't hide" rule, D3); a further click then closes it — confirm the two-click flow feels right (D-Q1) — confirmed 2026-08-02 (playtest: two-click flow "Works.")
+- [x] 4.5 In-game: confirm the ⓘ tooltip now reads the updated toggle wording, and that closing plays/omits the handbook sound acceptably (D-Q3) — confirmed 2026-08-02 (playtest: tooltip + sound "Works")
 - [x] 4.6 Graceful-degradation sanity: confirm no crash/exception path exists when the survival mod / `"handbook"` protocol is absent (both branches no-op) — reason through the code if a no-survival test world isn't readily available — reasoned through: with no survival mod, `OpenedGuis` never holds a handbook dialog, so `FirstOrDefault` returns `null` (guarded by `!= null`) and control falls to the open branch; `LinkProtocols` has no `"handbook"` entry so `TryGetValue` is false → no-op. No null-deref, no exception on either path.
 - [x] 4.7 Record verdicts via the `what-to-test` skill / `TESTING.md` — added an `add-info-button-handbook-toggle` group to `TESTING.md` with 4 in-game items (4.2 `9f96bb03`, 4.3 `f5ea01dd`, 4.4 `6103f6f8`, 4.5 `11c74a8d`), awaiting the playtest.
 

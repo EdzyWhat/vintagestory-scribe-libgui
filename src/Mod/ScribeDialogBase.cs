@@ -474,12 +474,28 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// so <see cref="focusedEditIndex"/> stays non-null after a click-away, keeping capture live after
     /// unfocus. Guard with a live <see cref="FocusNode.HasFocus"/> check so capture drops the moment no
     /// field holds the active focus token.</para>
+    ///
+    /// <para><b>Gate on <see cref="Vintagestory.API.Client.GuiDialog.Focused"/>
+    /// (fix-settings-numeric-arrow-focus-leak).</b> <c>GuiManager.OnKeyDown</c> runs a FIRST pass over
+    /// every open dialog whose <see cref="CaptureAllInputs"/> is true — BEFORE the normal focused-dialog
+    /// pass — and stops on the first that marks the key Handled. Each LibGUI <see cref="GuiBase"/> owns its
+    /// OWN <c>FocusManager</c>, so when the standalone Scribe Settings window is on top and a document
+    /// editor is also open, the editor's row still reports <c>HasFocus == true</c> in the editor's private
+    /// manager even though the editor is no longer the focused VS dialog (clicking the settings field ran
+    /// <c>capi.Gui.RequestFocus(settingsDialog)</c>, which <c>UnFocus()</c>es the editor but never touches
+    /// the editor's LibGUI focus). Ungated, the editor therefore CAPTURED the settings window's Up/Down
+    /// arrow presses in that first pass and drove the row's caret instead of stepping the numeric field —
+    /// the arrow-key focus-leak. Requiring <c>Focused</c> means an editor that is not the active dialog no
+    /// longer pre-empts keyboard input, so the key reaches the focused settings dialog. This cannot regress
+    /// the capture's real job (blocking movement/hotbar keys from the game WHILE typing into the editor),
+    /// which only applies when the editor IS the focused dialog.</para>
     /// </summary>
     public override bool CaptureAllInputs()
-        => (isEditorMode && focusedEditIndex is { } idx && idx < editorFocusNodes.Count && editorFocusNodes[idx].HasFocus)
+        => Focused
+        && ((isEditorMode && focusedEditIndex is { } idx && idx < editorFocusNodes.Count && editorFocusNodes[idx].HasFocus)
         || (viewMode == ScribeLecternView.Pinned && focusedPinTaskId is { } pinId
             && pinFocusNodes.TryGetValue(pinId, out var pn) && pn.HasFocus)
-        || _guestbookNoteFocusNodes.Values.Any(n => n.HasFocus);
+        || _guestbookNoteFocusNodes.Values.Any(n => n.HasFocus));
 
     /// <summary>
     /// LibGUI's <see cref="Gui.Widgets.Events.KeyboardEvent"/> carries only Shift/Ctrl/Alt — it drops

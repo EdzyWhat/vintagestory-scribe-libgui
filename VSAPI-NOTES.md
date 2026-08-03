@@ -1309,6 +1309,23 @@ field's `OnKeyDown`, when focused, mark `e.Handled = true` for any key that shou
 editor" (i.e. a `default:` that swallows). Scribe's native `GuiDialogScribeLectern`/`ScribeRowTextInput`
 already solved this class of problem; the real migration must reproduce it.
 
+**Gotcha (fix-settings-numeric-arrow-focus-leak, 2026-08-02): `CaptureAllInputs() => true` makes a
+dialog steal keys even when it is NOT the focused dialog — gate it on `Focused`.** `GuiManager.OnKeyDown`
+(VintagestoryLib) dispatches a keydown in TWO passes: **first** over every open dialog whose
+`CaptureAllInputs()` is true (breaking on the first that marks the key `Handled`), and **only then** the
+normal `ShouldReceiveKeyboardEvents()` (`=> Focused`) pass. So a `CaptureAllInputs`-returning dialog
+pre-empts keyboard input ahead of whatever dialog the player is actually focused on. This bit us with two
+open dialogs: the standalone Scribe Settings window on top, and a document editor behind it. Each LibGUI
+`GuiBase` owns its **own** `FocusManager` (instance field), and `capi.Gui.RequestFocus(settingsDialog)`
+(fired when the settings field is clicked) `UnFocus()`es the editor at the VS-dialog level but never
+touches the editor's LibGUI focus — so the editor's row still reports `HasFocus == true` in the editor's
+private manager. With the editor's `CaptureAllInputs()` keyed only on that `HasFocus`, the editor grabbed
+the settings window's Up/Down arrows in the first pass and drove its row caret. Fix: gate
+`CaptureAllInputs()` on `Focused` so a non-active dialog never pre-empts input. This does NOT weaken the
+capture's real job (blocking movement/hotbar keys from the game while typing), which only matters when the
+editor IS the focused dialog. General rule: `CaptureAllInputs()` should mean "capture input **while I am
+the active dialog**," never unconditionally.
+
 **Watch: macOS is a single `osx` RID in LibGUI's native loader** (`NativeLibraryLoader.cs`) — no
 `osx-arm64` split for the bundled HarfBuzz `.dylib`. Same class of native-render risk that makes
 VSImGui dead on Apple Silicon (see the VSImGui section above). The spike's primary gate is "does it

@@ -21,6 +21,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   next closes it). Its tooltip now reads "Show / hide Editor Features". Shared across the Lectern,
   both Notebooks, and the tablet editors.
 
+### Fixed
+- Stepping a Scribe Settings numeric field with the Up/Down arrow keys now works on **every**
+  consecutive press instead of only the first. With a document editor (Lectern, Notebook, or Tablet)
+  also open, the arrow keys previously leaked to the editor's last-touched row after the first step —
+  driving that row's text caret instead of the numeric field — because the open editor kept capturing
+  keyboard input even when the settings window was the active dialog. The editor now only captures
+  input while it is the focused dialog.
+
 ## [0.2.0] - 2026-08-01
 
 ### Added

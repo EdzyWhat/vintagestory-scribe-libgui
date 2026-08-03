@@ -2319,14 +2319,33 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 
 ## add-info-button-handbook-toggle
 
-- [ ] `9f96bb03` **Open closed → opens reference.** In the editor (spot-check the Lectern AND a tablet)
+- [x] `9f96bb03` **Open closed → opens reference.** In the editor (spot-check the Lectern AND a tablet)
       with the handbook CLOSED, click the ⓘ button — the survival handbook opens to the Scribe Editor
       Features page (unchanged from before). *(add-info-button-handbook-toggle 4.2)*
-- [ ] `f5ea01dd` **Open-on-our-page → closes.** With the handbook already OPEN on the Scribe Editor
+      - **Confirmed 2026-08-02** via playtest submission 2026-08-02T16-46-27: tester reported "works."
+- [x] `f5ea01dd` **Open-on-our-page → closes.** With the handbook already OPEN on the Scribe Editor
       Features page, click ⓘ — the handbook closes. *(add-info-button-handbook-toggle 4.3)*
-- [ ] `6103f6f8` **Open-elsewhere → navigates then closes.** With the handbook OPEN on a DIFFERENT page,
+      - **Confirmed 2026-08-02** via playtest submission 2026-08-02T16-46-27: tester reported "works."
+- [x] `6103f6f8` **Open-elsewhere → navigates then closes.** With the handbook OPEN on a DIFFERENT page,
       click ⓘ — it navigates to the Scribe Editor Features page (NOT closed); a further click then closes
       it. Confirm the two-click flow feels right. *(add-info-button-handbook-toggle 4.4)*
-- [ ] `11c74a8d` **Tooltip + close sound.** Hover ⓘ — the tooltip reads the toggle wording ("Show /
+      - **Confirmed 2026-08-02** via playtest submission 2026-08-02T16-46-27: two-click flow "Works."
+- [x] `11c74a8d` **Tooltip + close sound.** Hover ⓘ — the tooltip reads the toggle wording ("Show /
       hide Editor Features"); confirm the handbook close plays/omits its sound acceptably.
       *(add-info-button-handbook-toggle 4.5)*
+      - **Confirmed 2026-08-02** via playtest submission 2026-08-02T16-46-27: tooltip + sound "Works".
+
+## fix-settings-numeric-arrow-focus-leak
+
+- [ ] `fd0066db` **Arrow-step with editor open.** Focused numeric field, WITH a document editor open:
+      press Up/Down 3+ times in a row — value steps on EVERY press and focus stays on the field (the
+      arrow never jumps to an editor row's caret). *(fix-settings-numeric-arrow-focus-leak 3.1)*
+- [ ] `52944f44` **Arrow-step, no editor.** No document open, several fields (rows, width, offsets,
+      font scales): press Up/Down repeatedly on each — every press steps that field.
+      *(fix-settings-numeric-arrow-focus-leak 3.2)*
+- [ ] `eb436828` **Editor caret unregressed.** Genuinely focus a document editor row
+      (Lectern/Notebook/Tablet AND Pin Tab) and press Up/Down — the caret still moves by visual line
+      (arrow-key-line-caret-nav unregressed). *(fix-settings-numeric-arrow-focus-leak 3.3)*
+- [ ] `4f2c0c8e` **+/- buttons + clamp.** +/- step buttons still step and keep focus; select-all-and-
+      retype an out-of-range value still clamps only on blur.
+      *(fix-settings-numeric-arrow-focus-leak 3.4)*
