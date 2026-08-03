@@ -293,10 +293,12 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                     focusNode: b.Index < Widget.FocusNodes.Count ? Widget.FocusNodes[b.Index] : null,
                     autoFocus: Widget.AutoFocusIndex == b.Index,
                     isDropTarget: dragFromIndex is not null && dragOverIndex == b.Index,
-                    // The origin row of the in-progress drag (null-safe: false when no drag is active). The
-                    // row's Build gives this white-wash priority over the drop-target black wash when the
-                    // cursor hovers back over the source.
+                    // The origin row of the in-progress drag (null-safe: false when no drag is active). Its
+                    // Build shows the ◀ grip glyph + dims the row, and takes priority over the ▶ drop-target
+                    // glyph when the cursor hovers back over the source.
                     isDragSource: dragFromIndex == b.Index,
+                    // Any drag in progress → non-source/non-target rows hide their grip glyph.
+                    dragActive: dragFromIndex is not null,
                     onTextChanged: Widget.OnTextChanged,
                     onCommitAndAdvance: Widget.OnCommitAndAdvance,
                     onCommitAndRetreat: Widget.OnCommitAndRetreat,
@@ -546,6 +548,7 @@ internal sealed class ScribeEditRow : StatefulWidget
         bool autoFocus,
         bool isDropTarget,
         bool isDragSource,
+        bool dragActive,
         Action<int, string> onTextChanged,
         Action<int> onCommitAndAdvance,
         Action<int> onCommitAndRetreat,
@@ -566,6 +569,7 @@ internal sealed class ScribeEditRow : StatefulWidget
         AutoFocus = autoFocus;
         IsDropTarget = isDropTarget;
         IsDragSource = isDragSource;
+        DragActive = dragActive;
         OnTextChanged = onTextChanged;
         OnCommitAndAdvance = onCommitAndAdvance;
         OnCommitAndRetreat = onCommitAndRetreat;
@@ -587,10 +591,13 @@ internal sealed class ScribeEditRow : StatefulWidget
     /// paints a theme-derived darker wash + border so the player sees where the dragged row would land.</summary>
     public bool IsDropTarget { get; }
     /// <summary>True while a drag is in progress and this row is the one being dragged (its origin) — the
-    /// row paints a theme-derived brighter wash + border so the player sees where the dragged row came
-    /// from. Takes priority over <see cref="IsDropTarget"/> when the cursor is hovering back over the
-    /// source row.</summary>
+    /// row shows a left-pointing (◀) grip glyph and dims to read as lifted. Takes priority over
+    /// <see cref="IsDropTarget"/> when the cursor is hovering back over the source row.</summary>
     public bool IsDragSource { get; }
+    /// <summary>True while ANY grip-drag is in progress (this row may be neither source nor target).
+    /// A non-participating row hides its grip glyph so the list declutters down to just the ◀ source
+    /// and ▶ drop-target rows (replace-drag-wash-with-grip-arrows).</summary>
+    public bool DragActive { get; }
     public Action<int, string> OnTextChanged { get; }
     public Action<int> OnCommitAndAdvance { get; }
     public Action<int> OnCommitAndRetreat { get; }
@@ -666,12 +673,26 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         // drag hit-target still covers the visible glyph. The negative right inset cancels the Row's
         // CheckboxTextGap that would otherwise sit between the grip and the checkbox, so the grip's
         // trailing margin is 0 and the text column reclaims that width (§10.4). See ScribeRowGripInsets.
+        //
+        // The grip glyph is state-driven during a drag (replace-drag-wash-with-grip-arrows): the drag
+        // feedback lives on this glyph now, not on the row background — the darkened-Primary drop-target
+        // wash collided visually with the strengthened Secondary pinned tint. Source (grabbed) row → ◀
+        // (muted OnSurfaceVariant); the prospective drop row under the cursor → ▶ (accent Primary); any
+        // OTHER row while a drag is in progress → a same-size empty box (glyph hidden) so the list
+        // declutters to just the ◀/▶ pair while the grip column width is unchanged (no mid-drag reflow).
+        // Source wins over drop-target when the cursor hovers back over the origin row.
+        Widget gripGlyph =
+            Widget.IsDragSource ? new ScribeVsIconGlyph("scribetriangleleft", style.ControlSize, colors.OnSurfaceVariant)
+            : Widget.IsDropTarget ? new ScribeVsIconGlyph("scribetriangleright", style.ControlSize, colors.Primary)
+            : Widget.DragActive ? new SizedBox(width: style.ControlSize, height: style.ControlSize)
+            : new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant);
+
         children.Add(new Padding(
             ScribeRowControlNudge.GripInsets(style),
             child: new GestureDetector(
                 onPress: _ => Widget.OnDragStart(index),
                 onRelease: _ => Widget.OnDragEnd(),
-                child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant))));
+                child: gripGlyph)));
 
         if (Widget.Data.IsTask)
         {
@@ -735,50 +756,42 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                 mainAxisSize: MainAxisSize.Max,
                 children: children));
 
-        // Drag-reorder wash / resting pinned tint, drawn behind the row content. The Container is
-        // ALWAYS present (fill may be transparent Vector4.Zero) — see the structural-stability note below
-        // — so toggling the fill is a cheap property update, not a widget-type swap.
+        // Resting pinned tint, drawn behind the row content. The Container is ALWAYS present (fill may be
+        // transparent Vector4.Zero) — see the structural-stability note below — so toggling the fill is a
+        // cheap property update, not a widget-type swap.
         //
-        // The two drag states use DELIBERATELY DISTINCT, non-pin colors so drag signalling reads clearly
-        // and doesn't collide with the pin resting tint (which used to share the drop-target's ochre):
-        //   • SOURCE (the row you grabbed)  → theme Primary brightened +20, half-saturated — "came from".
-        //   • DROP TARGET (row under cursor)→ theme Primary darkened  -20, half-saturated — "lands here".
-        // Both are theme-derived (via ShiftBrightness) so they read as "the theme, brighter/darker" under
-        // any LibGUI theme rather than stark white/black. Fill sits at 0.4 alpha; a 1px border of the SAME
-        // shifted color at 0.5 alpha crisps the row edge. Source wins when the cursor hovers back over the
-        // origin row (releasing there is a no-op reorder, so signalling "this is home" is clearer than
-        // re-showing the drop tint). Neither drag state active → the resting pin tint (task + pinned) or
-        // nothing.
-        Vector4? dragShift =
-            Widget.IsDragSource ? ScribeRowConstants.ShiftBrightness(colors.Primary, +20f, saturationScale: 0.5f)
-            : Widget.IsDropTarget ? ScribeRowConstants.ShiftBrightness(colors.Primary, -20f, saturationScale: 0.5f)
-            : (Vector4?)null;
-
-        // The row Container carries only whole-row state: the drag source/drop-target washes and the
-        // resting pinned tint. Focus chrome is NOT drawn here — on the cuneiform (tablet) path the focused
-        // input draws its own SurfaceHigh+Primary box scoped to the input element (see
-        // ScribeMultilineField's cuneiform render widget), matching the normal Lectern/Notebook path. That
-        // keeps a focused input on a PINNED row distinct from the pinned wash — a small bordered input
-        // inside the row tint, two shapes, not one ambiguous whole-row fill (scope-focus-affordance-to-input,
-        // playtest fail f640f9ab). The Container is still ALWAYS present with transparent defaults so the
-        // widget type never swaps and the field's live caret/text survive the repaint.
+        // Drag feedback is NO LONGER a row-background wash (replace-drag-wash-with-grip-arrows): the old
+        // source/drop-target washes (brightened/darkened Primary) collided with the strengthened Secondary
+        // pinned tint, so drag signalling moved entirely onto the grip glyph (◀/▶ above) plus a source-row
+        // opacity dim (below). The Container now carries ONLY the resting pinned tint, leaving nothing on
+        // the row background that could collide with the pinned wash during a drag.
+        //
+        // Focus chrome is NOT drawn here either — on the cuneiform (tablet) path the focused input draws its
+        // own SurfaceHigh+Primary box scoped to the input element (see ScribeMultilineField's cuneiform
+        // render widget), matching the normal Lectern/Notebook path. That keeps a focused input on a PINNED
+        // row distinct from the pinned wash — a small bordered input inside the row tint, two shapes, not one
+        // ambiguous whole-row fill (scope-focus-affordance-to-input, playtest fail f640f9ab). The Container
+        // is still ALWAYS present with transparent defaults so the widget type never swaps and the field's
+        // live caret/text survive the repaint.
         Vector4 rowFill =
-            dragShift is Vector4 d ? d with { W = 0.4f }
-            : (Widget.Data.IsTask && Widget.Data.Pinned ? ScribeRowConstants.PinnedTint(colors) : Vector4.Zero);
-
-        Vector4 rowBorder =
-            dragShift is Vector4 b ? b with { W = 0.5f }
-            : Vector4.Zero;
+            Widget.Data.IsTask && Widget.Data.Pinned ? ScribeRowConstants.PinnedTint(colors) : Vector4.Zero;
 
         rowBody = new Container(
             style: new BoxStyle
             {
                 Color = rowFill,
-                BorderColor = rowBorder,
-                BorderThickness = dragShift is not null ? 1f : 0f,
+                BorderColor = Vector4.Zero,
+                BorderThickness = 0f,
                 CornerRadius = Vector4.Zero,
             },
             child: rowBody);
+
+        // Source-row "lifted / in-hand" dim (replace-drag-wash-with-grip-arrows): the grabbed row paints at
+        // ~half opacity so it reads as picked up, while every other row stays fully opaque. Opacity is
+        // paint-only (no layout change) and ALWAYS present — a constant widget type whose value flips
+        // 1.0↔0.5 — so it never swaps the widget subtree mid-drag (structural-stability rule); the field's
+        // live caret/text survive the repaint.
+        rowBody = new Opacity(Widget.IsDragSource ? 0.5f : 1f, child: rowBody);
 
         // Delete + pin float on the RIGHT of the row as real buttons (2026-07-24 feedback), shown only
         // on hover. A Stack sizes to the non-positioned rowBody and lays the Positioned buttons on top,

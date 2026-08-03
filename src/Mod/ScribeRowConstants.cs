@@ -72,10 +72,18 @@ internal static class ScribeRowConstants
     public const float FieldInnerPaddingY = 6f;
 
     /// <summary>Alpha applied to the theme's <c>Secondary</c> color to make the resting pinned-row tint
-    /// (add-settings-tab D1b). Low enough to read as a subtle wash under the row content rather than a
-    /// solid fill; the former fixed amber constant is dropped in favor of this theme-derived tint so
-    /// switching the LibGUI theme re-tints pinned rows automatically.</summary>
-    public const float PinnedTintAlpha = 0.33f;
+    /// (add-settings-tab D1b). Raised 0.33 → 0.55 (2026-08-03) after the subtler wash read as too
+    /// transparent to spot pinned tasks at a glance — this is an assertive wash that stays under the row
+    /// content without hiding it. The former fixed amber constant is dropped in favor of this
+    /// theme-derived tint so switching the LibGUI theme re-tints pinned rows automatically.</summary>
+    public const float PinnedTintAlpha = 0.55f;
+
+    /// <summary>Saturation multiplier applied to the theme's <c>Secondary</c> before it becomes the pinned
+    /// wash (2026-08-03). The wash read as clearly-pinned at <see cref="PinnedTintAlpha"/> 0.55 but a touch
+    /// desaturated against the surrounding rows; boosting chroma ~1.35× gives pinned tasks an extra splash
+    /// of color so they pop out of the list. Clamped inside <see cref="ShiftBrightness"/>, so an over-boost
+    /// on an already-saturated theme just saturates fully rather than wrapping.</summary>
+    public const float PinnedTintSaturationScale = 1.35f;
 
     /// <summary>The resting pinned-row tint, derived at build time from the active LibGUI theme's
     /// <see cref="ColorScheme.Secondary"/> at <see cref="PinnedTintAlpha"/>. Used by both the read and editor
@@ -86,7 +94,7 @@ internal static class ScribeRowConstants
     /// shared helper (tablet + Lectern/Notebook + pinned HUD), so the remap is global; every theme's
     /// <c>Secondary</c> is authored to read as a low-alpha wash distinct from its <c>Primary</c>.</summary>
     public static Vector4 PinnedTint(ColorScheme colors) =>
-        colors.Secondary with { W = PinnedTintAlpha };
+        ShiftBrightness(colors.Secondary, 0f, PinnedTintSaturationScale) with { W = PinnedTintAlpha };
 
     /// <summary>Returns <paramref name="color"/> with its HSV Brightness (Value) shifted by
     /// <paramref name="deltaValue"/> points and its Saturation scaled by <paramref name="saturationScale"/>
@@ -98,7 +106,7 @@ internal static class ScribeRowConstants
     public static Vector4 ShiftBrightness(Vector4 color, float deltaValue, float saturationScale = 1f)
     {
         color.ToSkColor().ToHsv(out float h, out float s, out float v);
-        var shifted = SKColor.FromHsv(h, s * saturationScale, Math.Clamp(v + deltaValue, 0f, 100f));
+        var shifted = SKColor.FromHsv(h, Math.Clamp(s * saturationScale, 0f, 100f), Math.Clamp(v + deltaValue, 0f, 100f));
         return new Vector4(shifted.Red / 255f, shifted.Green / 255f, shifted.Blue / 255f, color.W);
     }
 

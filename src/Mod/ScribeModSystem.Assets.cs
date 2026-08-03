@@ -41,6 +41,10 @@ public sealed partial class ScribeModSystem
         RegisterSvgIcon(api, "scribehistory", new AssetLocation("scribe", "textures/icons/guestbook.svg"));
         RegisterSvgIcon(api, "scribetimer",   new AssetLocation("scribe", "textures/icons/timer.svg"));
         RegisterSvgIcon(api, "scribeinfo",    new AssetLocation("scribe", "textures/icons/info.svg"));
+        // Drag-reorder feedback glyphs (replace-drag-wash-with-grip-arrows): the grabbed row's grip
+        // becomes ◀ and the prospective drop row's grip becomes ▶, replacing the old row-background washes.
+        RegisterSvgIcon(api, "scribetriangleleft",  new AssetLocation("scribe", "textures/icons/triangle-left.svg"));
+        RegisterSvgIcon(api, "scribetriangleright", new AssetLocation("scribe", "textures/icons/triangle-right.svg"));
     }
 
     /// <summary>

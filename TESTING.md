@@ -21,6 +21,26 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## replace-drag-wash-with-grip-arrows
+
+> Drag-reorder feedback moved OFF the row-background washes (which collided with the strengthened pinned
+> tint) and ONTO the grip glyph: source row → ◀ + ~50% dim, other grips hidden, drop-target row → ▶. No
+> row-background wash is drawn during a drag anymore.
+
+- [ ] `4a7af359` **Editor drag arrows.** Grip-drag a task in the editor: the grabbed row
+      shows ◀ and dims to ~half opacity, all other grips vanish, the row under the cursor
+      shows ▶, and NO row-background drag wash appears. Release commits the move; releasing
+      in place is a no-op. *(5.2)*
+- [ ] `8c93a8fb` **Drag over pinned row.** In the editor, drag a row over a PINNED row: the
+      pinned wash stays visible and is clearly distinct from the ▶ drop-target glyph (the
+      collision this change fixes — no colored wash competing with the pin tint). *(5.3)*
+- [ ] `0f4b21c7` **Pin Tab drag arrows.** On the Pin Tab (every row pinned), grip-drag a row:
+      the ◀ source / ▶ target glyphs are the clear differentiator against the uniform pinned
+      wash, and the reorder commits correctly. *(5.4)*
+- [ ] `8424c9a3` **Smallest-size legibility.** At the SMALLEST text-size preference, grip-drag:
+      the ◀/▶ triangles stay legible and the grip column width does NOT change when a grip is
+      hidden or swapped (no mid-drag row reflow). *(5.5)*
+
 ## add-cuneiform-handwriting-feel
 
 > The tablet's cuneiform renders with a hand-written wobble (per-stroke jitter, strength `0.8`) and can
