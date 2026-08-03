@@ -2450,3 +2450,13 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       blurred by the shared-paint mask filter. *(add-tablet-clay-type-themes 6.6)*
 - [ ] `e7417e7a` **Keep or strip dev command.** Decide whether the `.cuneiformglow` dev command stays in
       the shipped tree; note the decision. *(add-tablet-clay-type-themes 6.7)*
+- [ ] `8c429d67` **No top divider.** Open a tablet in each view (edit/read/pinned) with Pixel-Art ON and
+      confirm there is no top divider/hard rule above the scroll region on the clay backdrop.
+      *(add-tablet-clay-type-themes 8.7)*
+- [ ] `78802251` **Crisp button labels.** Confirm the footer button labels render crisp with NO halo, while
+      the task rows and the title still show their glow. *(add-tablet-clay-type-themes 8.7)*
+- [ ] `0a95e5b2` **Softer wider glow.** Confirm the row/title glow is softer and more spread than before
+      (strength down, radius wider) — a diffuse lift, not a bright ring. *(add-tablet-clay-type-themes 8.7)*
+- [ ] `03eda46a` **Engraved chrome glyphs.** On red/blue/fire tablets confirm the title-bar pencil +
+      drag-grip read as darkened engraved impressions in the clay (distinct dark ink, not washed-out gray),
+      with clear transparent backgrounds (no pale tile). *(add-tablet-clay-type-themes 8.7)*

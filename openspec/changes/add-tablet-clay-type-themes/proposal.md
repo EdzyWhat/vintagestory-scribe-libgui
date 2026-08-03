@@ -35,6 +35,26 @@ soft per-stroke glow.
 - Add a **client dev console command** to live-adjust the glow at runtime (strength/blur, and halo
   light-vs-dark), so tuning values can be found in-game and reported back — mirroring the existing
   `.cuneiform` dev harness pattern. No persisted setting; a tuning aid only.
+- **Tablet chrome refinements (2026-08-03 playtest):** four adjustments folded in after the first
+  in-game pass at the clay themes:
+  - **Drop the top divider on every Tablet view.** The `Divider()` above the scroll region in the
+    editor/read/pinned content views reads as an unwanted hard rule against the clay backdrop. Gate it
+    off on the cuneiform/tablet path (`UseCuneiform`) only; the Lectern/Notebook readable path keeps it.
+  - **Remove the glow from button labels.** The footer button labels (`BuildButtonLabel`) currently
+    reuse the row glow; on the solid `Primary`-filled buttons the halo muddies the label rather than
+    lifting it, so cuneiform button labels render crisp (no glow) while the rows/title keep theirs.
+  - **Reduce + spread the glow.** Lower the per-material halo strength (alpha `0.55 → 0.30`) and widen
+    its radius ~30% (`BlurFraction 0.09 → 0.117`) so the lift is softer and more diffuse. Still
+    live-tunable via `.cuneiformglow` and finalized in the in-game tuning pass.
+  - **Engrave the title-bar pencil + drag-grip.** Today `BuildTitleBar` colors these two glyphs from
+    the *global* theme's `OnSurfaceVariant` (a mid-gray), so they read washed-out on clay. Color them
+    from the tablet's own dark material ink (`OnSurface`) at partial alpha so the clay texture bleeds
+    faintly through the strokes — a darkened, engraved impression — while the transparent icon
+    background stays clear. The tint uses the normal glyph-only `SKBlendMode.SrcIn` path, via a
+    `TitleChromeGlyphColor` seam on `ScribeDialogBase`; the Lectern/Notebook title bar keeps the gray
+    glyphs unchanged. (A Multiply blend was tried first but `VsIcon` applies its tint as a color filter,
+    which fills the whole transparent icon quad under Multiply — a pale tile — so SrcIn + a partial-alpha
+    dark ink is used instead.)
 - **Unchanged:** when Pixel-Art Display is OFF the tablet still follows the player's global theme
   (the current `off = global theme` contract holds); per-clay theming and the backdrop art both apply
   only when Pixel-Art is ON. Core takes no color decisions (stays VS-API-free). The Lectern/Notebook
@@ -63,6 +83,14 @@ soft per-stroke glow.
   - `src/Mod/CuneiformText.cs` and `src/Mod/ScribeCuneiformField.cs` — two-pass glow in
     `PaintInternal`, with `SharedPaint.MaskFilter` set/nulled correctly per the shared-paint discipline.
   - New per-material glow constants (color/sigma/light-or-dark) and a dev console command registration.
+  - `src/Mod/ScribeEditorContent.cs` — drop the button-label glow; drop the editor-view divider on the
+    cuneiform path.
+  - `src/Mod/ScribeReadContent.cs`, `src/Mod/ScribePinnedContent.cs` — drop the top divider on the
+    cuneiform path (Lectern/Notebook readable path unchanged).
+  - `src/Mod/CuneiformGlow.cs` — lower the seed alpha to `0.30` and widen `BlurFraction` to `0.117`.
+  - `src/Mod/ScribeDialogBase.Layout.cs` — a `TitleChromeGlyphColor` seam; `BuildTitleBar` colors the
+    pencil + grip through it. The tablet override returns a partial-alpha dark material ink (glyph-only
+    `SrcIn`, so the transparent tile stays clear).
 - **No new dependencies**, no asset changes (colors are authored constants informed by sampling — no
   runtime pixel-sampling code), no Core changes, no persistence/settings changes.
 - **Cross-project export (final deliverable):** the three authored clay palettes are exported as

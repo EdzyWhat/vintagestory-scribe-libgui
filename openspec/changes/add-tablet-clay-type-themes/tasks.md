@@ -103,3 +103,36 @@
   the three clay palettes render side-by-side and read distinctly. Commit the JSONs + regenerated
   `themes-data.js` in that repo separately from the mod change. (Committed as `42f7fca` in the gallery
   repo; the visual side-by-side check in `index.html` is a manual step for the user.)
+
+## 8. Tablet chrome refinements (2026-08-03 playtest)
+
+- [x] 8.1 **Drop the top divider on the tablet path.** In `src/Mod/ScribeEditorContent.cs`,
+  `src/Mod/ScribeReadContent.cs`, and `src/Mod/ScribePinnedContent.cs`, gate the `new Divider()` above
+  the scroll region behind `!Widget.Style.UseCuneiform` (render it only on the readable path). All three
+  content widgets already hold `Widget.Style`. The Lectern/Notebook (non-cuneiform) views keep the
+  divider byte-identical.
+- [x] 8.2 **Remove the glow from button labels.** In `src/Mod/ScribeEditorContent.cs`
+  `BuildButtonLabel`, pass `glow: default` (not `Widget.Style.CuneiformGlow`) to the `CuneiformText` so
+  the footer button labels render crisp. The rows and title keep their glow (unchanged).
+- [x] 8.3 **Reduce + widen the glow seed.** In `src/Mod/CuneiformGlow.cs`, lower the strength alpha of
+  `FireDefault`/`RedDefault`/`BlueDefault` from `0.55` to `0.30` and widen `BlurFraction` from `0.09` to
+  `0.117` (~+30% radius). Keep it live-overridable via `.cuneiformglow`; these become the new bake
+  baseline for the task 6.4 tuning pass.
+- [x] 8.4 ~~Thread a blend mode through `ScribeVsIconGlyph`.~~ **Superseded** by the 8.5 revision below:
+  the Multiply approach was abandoned (it paints the whole transparent icon tile — see 8.5), so no blend-
+  mode plumbing is needed. `ScribeVsIconGlyph` stays glyph-only `SrcIn` (unchanged from before this change).
+- [x] 8.5 **Engrave the title-bar pencil + grip on the tablet path** *(revised 2026-08-03 after the "pale
+  tile" playtest regression)*. Add a `private protected virtual Vector4 TitleChromeGlyphColor(ColorScheme)`
+  seam on `ScribeDialogBase` (default: global `OnSurfaceVariant` — unchanged Lectern/Notebook). Override it
+  in `GuiDialogScribeTablet` to return the material ink (`ResolveTheme(...).ColorScheme.OnSurface`) at
+  partial alpha (~0.8) on the Pixel-Art path (defer to base gray when Pixel-Art is OFF). The glyph is tinted
+  the normal `VsIcon` way (`SKBlendMode.SrcIn`, glyph-only), so a partial-alpha color fades just the STROKES
+  — the clay bleeds faintly through them (engraved look) — and never fills the transparent tile. (Multiply
+  was rejected: `RenderVsIcon` applies its tint as a color FILTER, which under Multiply paints the whole
+  transparent quad — the pale-tile bug.) Wire `BuildTitleBar`'s pencil + both grip glyphs to the seam. The
+  close button (`Error`) is unchanged.
+- [x] 8.6 `dotnet build src/Mod/Mod.csproj -c Debug` clean; `dotnet test tests/Core.Tests` green.
+- [ ] 8.7 In-game (restage first): open a tablet and confirm (a) no top divider in any view, (b) footer
+  button labels have no halo while rows/title still glow, (c) the glow is softer and more spread, and
+  (d) the pencil + drag-grip read as darkened engraved impressions in the clay (distinct, not gray),
+  on red/blue/fire.

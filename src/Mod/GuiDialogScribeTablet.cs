@@ -1,7 +1,8 @@
 using System;                    // Action (footer Settings gear seam)
 using Gui.Rendering.Text;        // TextStyle (cuneiform title seam overrides)
-using Gui.Widgets.Framework;     // Widget, ThemeData
+using Gui.Widgets.Framework;     // Widget, ThemeData, ColorScheme
 using Gui.Widgets.Layout;        // SizedBox
+using OpenTK.Mathematics;        // Vector4 (title-chrome engrave color, add-tablet-clay-type-themes 8.5)
 using Scribe.Core;               // ScribeDocumentCodec, ScribePlayerSettings
 using Scribe.Core.Cuneiform;     // GlyphBundle (cuneiform title path)
 using Vintagestory.API.Client;
@@ -88,6 +89,25 @@ public class GuiDialogScribeTablet : ScribeDialogBase
     /// resolve their own colors, and the resolved theme agrees with the resolved backdrop (both key off the
     /// same material). Pixel-Art off still falls back to the player's global theme.</summary>
     protected override ThemeData ResolveTheme(bool pixelArt) => ScribeTheme.ForTablet(_material, pixelArt);
+
+    /// <summary>Engrave the title-bar pencil + drag-grip into the clay (add-tablet-clay-type-themes 8.5):
+    /// tint them with this tablet's dark material ink (<c>OnSurface</c>) at partial alpha instead of the
+    /// global gray. The base applies it via <see cref="SKBlendMode.SrcIn"/> (glyph-only), so the partial
+    /// alpha fades only the STROKES — the clay texture bleeds faintly through them, reading as a darkened
+    /// engraved impression — while the transparent icon tile stays clear. (An earlier attempt used a
+    /// Multiply blend, but VsIcon applies its tint as a color FILTER, which fills the whole transparent
+    /// quad under Multiply — the 2026-08-03 "pale tile" regression. SrcIn + a dark alpha avoids that.)
+    /// Only on the Pixel-Art (backdrop) path — with Pixel-Art OFF the tablet follows the global theme over
+    /// a flat panel, so we defer to the base gray chrome there.</summary>
+    private protected override Vector4 TitleChromeGlyphColor(ColorScheme colors)
+    {
+        if (!modSystem.MySettings.PixelArtDisplay)
+        {
+            return base.TitleChromeGlyphColor(colors);
+        }
+        // 0.8 alpha keeps the strokes firmly dark while letting a hint of clay show through.
+        return colors.OnSurface with { W = 0.8f };
+    }
 
     /// <summary>Flip the editable rows to live cuneiform under the single <see cref="ScribeTaskFont.UseCuneiform"/>
     /// branch (add-tablet-cuneiform-chrome). When the player disables cuneiform, the flag resolves false and

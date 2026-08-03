@@ -136,8 +136,10 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
                 {
                     // A straight edge directly above the scroll region, matching the editor and pinned
                     // views (scribe-lectern-view-consistency §1). Reuses the theme-border Divider the
-                    // settings form uses; inherits the Column's spacing gap below it.
-                    new Divider(),
+                    // settings form uses; inherits the Column's spacing gap below it. Dropped on the
+                    // cuneiform tablet path (add-tablet-clay-type-themes 8.1) — the hard rule reads wrong
+                    // against the clay backdrop; the readable Lectern/Notebook view keeps it.
+                    Widget.Style.UseCuneiform ? new SizedBox() : new Divider(),
                     new Expanded(child: rowList),
                     new Padding(Widget.FooterButtonPadding, child: new Button(
                         child: new Text(Lang.Get("scribe:scribe-gui-switch-to-editor"), switchTextStyle),

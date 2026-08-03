@@ -55,6 +55,18 @@ public abstract partial class ScribeDialogBase
     /// (add-tablet-dialog D6).</summary>
     protected virtual ThemeData ResolveTheme(bool pixelArt) => ScribeTheme.For(pixelArt);
 
+    /// <summary>Tint color for the title-bar chrome glyphs (the editor pencil and the drag grip) —
+    /// <c>private protected virtual</c> so a subclass can restyle them without forking
+    /// <see cref="BuildTitleBar"/>. The default is the global theme's mid-gray <c>OnSurfaceVariant</c>;
+    /// the three incumbent dialogs are unchanged (add-tablet-clay-type-themes 8.5). The tablet overrides
+    /// this to a semi-transparent dark material ink so the clay texture bleeds faintly through the strokes
+    /// and the glyphs read as darkened/engraved rather than a washed-out gray. The tint is applied the same
+    /// way every <see cref="VsIcon"/> applies it — <see cref="SKBlendMode.SrcIn"/>, glyph-only — so a
+    /// partial-alpha color fades the STROKES, never fills the transparent icon tile (a Multiply color-filter
+    /// WOULD paint the whole quad; that was the 2026-08-03 "pale tile" regression). Does NOT apply to the
+    /// close button, which keeps its <c>Error</c> color.</summary>
+    private protected virtual Vector4 TitleChromeGlyphColor(ColorScheme colors) => colors.OnSurfaceVariant;
+
     /// <summary>Wrap the layout tree in the OuterArtBox: the notebook backdrop <see cref="Container"/> sized to
     /// <c>W × H</c> when Pixel-Art Display is ON, or the tree in a bare same-sized box when OFF (the existing
     /// gate — scribe-gui-backdrops D5). The single <see cref="host.BackdropSpec"/> spec backs both
@@ -121,6 +133,10 @@ public abstract partial class ScribeDialogBase
         // meaningful default (e.g. "Notebook" vs "Lectern") rather than always showing "Untitled".
         var displayTitle = (rawTitle == ScribeDocument.DefaultTitle ? null : rawTitle) ?? host.DefaultDocumentTitle;
 
+        // Pencil + grip chrome tint — the default is the global gray; the tablet overrides it to a
+        // semi-transparent dark material ink so the strokes read as engraved (add-tablet-clay-type-themes 8.5).
+        Vector4 chromeColor = TitleChromeGlyphColor(colors);
+
         const float titleBtnSpacing = 6f;
         Widget titleSlot = new Expanded(_isTitleEditing
             ? BuildTitleField(titleStyle)
@@ -146,7 +162,7 @@ public abstract partial class ScribeDialogBase
                             _pendingTitleEditRebuild = true;
                             _pendingTitleFocus = true;
                         },
-                        child: new ScribeVsIconGlyph("scribeedit", pencilSize, colors.OnSurfaceVariant))))
+                        child: new ScribeVsIconGlyph("scribeedit", pencilSize, chromeColor))))
             : null;
 
         Widget titleRow = new Row(
@@ -181,7 +197,7 @@ public abstract partial class ScribeDialogBase
                                     onMove: OnGripDragMove,
                                     onRelease: OnGripDragEnd,
                                     child: new ScribeVsIconGlyph("scribegrip", ScribeRowConstants.RowCheckboxSize * 1.1f,
-                                        colors.OnSurfaceVariant))),
+                                        chromeColor))),
                             TitleButton("scribeclose", "scribe-gui-close", colors.Error,
                                 size: ScribeRowConstants.RowCheckboxSize * 1.4f, onTap: () => TryClose()),
                         }
@@ -193,7 +209,7 @@ public abstract partial class ScribeDialogBase
                                     onMove: OnGripDragMove,
                                     onRelease: OnGripDragEnd,
                                     child: new ScribeVsIconGlyph("scribegrip", ScribeRowConstants.RowCheckboxSize * 1.1f,
-                                        colors.OnSurfaceVariant))),
+                                        chromeColor))),
                             TitleButton("scribeclose", "scribe-gui-close", colors.Error,
                                 size: ScribeRowConstants.RowCheckboxSize * 1.4f, onTap: () => TryClose()),
                         }),

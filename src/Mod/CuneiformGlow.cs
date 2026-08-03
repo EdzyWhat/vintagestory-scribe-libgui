@@ -43,9 +43,11 @@ public readonly record struct CuneiformGlow(Vector4 Color, float BlurFraction)
 internal static class CuneiformGlowTable
 {
     // Baked per-material seeds (halo RGB, strength alpha, blur-as-fraction-of-em). Tuned in-game, then baked.
-    private static readonly CuneiformGlow FireDefault = new(new Vector4(0.98f, 0.94f, 0.85f, 0.55f), 0.09f);
-    private static readonly CuneiformGlow RedDefault  = new(new Vector4(0.98f, 0.92f, 0.88f, 0.55f), 0.09f);
-    private static readonly CuneiformGlow BlueDefault = new(new Vector4(0.95f, 0.97f, 0.99f, 0.55f), 0.09f);
+    // 2026-08-03 playtest (add-tablet-clay-type-themes 8.3): softer + wider — strength 0.55 → 0.30, blur
+    // fraction 0.09 → 0.117 (~+30% radius) — so the lift reads as a diffuse aura, not a bright rim.
+    private static readonly CuneiformGlow FireDefault = new(new Vector4(0.98f, 0.94f, 0.85f, 0.30f), 0.117f);
+    private static readonly CuneiformGlow RedDefault  = new(new Vector4(0.98f, 0.92f, 0.88f, 0.30f), 0.117f);
+    private static readonly CuneiformGlow BlueDefault = new(new Vector4(0.95f, 0.97f, 0.99f, 0.30f), 0.117f);
 
     // In-memory dev-command overrides (null = use the baked default). Mutated ONLY by the .cuneiformglow
     // client command; never persisted. A single override applies to all materials so tuning is one dial.

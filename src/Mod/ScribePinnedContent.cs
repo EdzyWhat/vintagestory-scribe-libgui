@@ -241,7 +241,9 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                     // The picker is inset horizontally to match the title row's padding (added on request);
                     // the divider + list keep the outer EdgeInsets.All(10) so only the picker shifts in.
                     new Padding(Widget.PolicyPickerPadding, child: policyPicker),
-                    new Divider(),
+                    // Dropped on the cuneiform tablet path (add-tablet-clay-type-themes 8.1) — the hard
+                    // rule reads wrong against the clay backdrop; the readable path keeps it.
+                    Widget.Style.UseCuneiform ? new SizedBox() : new Divider(),
                     new Expanded(child: scrollBody),
                 })));
     }

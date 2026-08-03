@@ -363,7 +363,9 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                 children: new Widget[]
                 {
                     // Straight edge above the scroll region (scribe-lectern-view-consistency §1).
-                    new Divider(),
+                    // Dropped on the cuneiform tablet path (add-tablet-clay-type-themes 8.1) — the hard
+                    // rule reads wrong against the clay backdrop; the readable path keeps it.
+                    Widget.Style.UseCuneiform ? new SizedBox() : new Divider(),
                     new Expanded(child: scrollBody),
                     new Padding(Widget.FooterButtonPadding, child: new Row(
                         spacing: 8,
@@ -400,8 +402,10 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                 fontSizeEm: labelStyle.FontSize,
                 inkColor: labelStyle.Color,
                 bundle: bundle,
-                // Same per-material glow the rows use, so a cuneiform button label lifts off the clay too.
-                glow: Widget.Style.CuneiformGlow);
+                // No glow on button labels (add-tablet-clay-type-themes 8.2): the halo muddies the label
+                // against the solid Primary-filled button rather than lifting it. The rows/title keep the
+                // per-material glow; only the footer labels render crisp.
+                glow: default);
         }
         return new Text(label, labelStyle);
     }
