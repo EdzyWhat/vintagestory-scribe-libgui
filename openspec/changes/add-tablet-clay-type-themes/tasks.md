@@ -81,11 +81,11 @@
 - [x] 6.5 In-game: confirm Pixel-Art OFF still follows the global theme (no per-clay coloring, no
   backdrop), and that the Lectern/Notebook dialogs and the readable path are visually unchanged EXCEPT
   the intended pinned-tint shift to `Secondary`. — Confirmed 2026-08-03 playtest (`355c3d5e`).
-- [ ] 6.8 In-game: focus an input on a PINNED row (tablet, and Lectern) and confirm the focus border
+- [x] 6.8 In-game: focus an input on a PINNED row (tablet, and Lectern) and confirm the focus border
   (`Primary`) is clearly distinguishable from the pinned-row wash (`Secondary`) — the ambiguity this
-  remap fixes. — Still broken 2026-08-03 playtest (`f640f9ab`): whole-row focus wash still collides
-  with the pinned wash. Directed fix: draw the focus border+background around just the INPUT ELEMENT,
-  not the whole row (pinning keeps the whole-row wash). Needs re-scope + retest.
+  remap fixes. — Confirmed 2026-08-03 playtest (`f640f9ab`/`8e7526ee`) after the re-scope shipped as its
+  own change `scope-focus-affordance-to-input`: the focus border+fill now wrap just the INPUT ELEMENT
+  (not the whole row), so on a pinned row the focused input reads as a distinct shape inside the wash.
 - [x] 6.6 Confirm no rendering regression from the shared-paint filter: text/icons drawn after
   cuneiform in the same frame are not blurred. — Confirmed 2026-08-03 playtest (`7cb07fc0`).
 - [x] 6.7 Decide whether to keep or strip the `.cuneiformglow` dev command in the shipped tree; update

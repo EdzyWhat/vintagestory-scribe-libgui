@@ -2467,7 +2467,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." With Pixel-Art OFF
         tablets follow the global theme (no per-clay color/backdrop); other surfaces unchanged apart from
         the intended pinned-tint shift to Secondary.
-- [ ] `f640f9ab` **Focus border vs pinned wash.** Focus an input on a PINNED row (tablet AND Lectern) and
+- [x] `f640f9ab` **Focus border vs pinned wash.** Focus an input on a PINNED row (tablet AND Lectern) and
       confirm the Primary focus border is clearly distinguishable from the Secondary pinned-row wash.
       *(add-tablet-clay-type-themes 6.8)*
       - **Still broken 2026-08-03** (playtest submission 2026-08-03T14-59-44): the current approach draws
@@ -2477,6 +2477,10 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         just the INPUT ELEMENT, not the whole row (pinning keeps the whole-row wash). That makes the focus
         indicator a distinct, smaller shape inside the pinned row rather than a competing full-row wash.
         Needs a re-scope of the focus-affordance target + retest.
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T15-45-38, via `8e7526ee`): re-scope shipped
+        (change `scope-focus-affordance-to-input`) — the focus border+fill now wrap just the input element,
+        not the row. Tester confirmed on a pinned tablet row the focused input's border sits inside the
+        pinned-row wash without clipping, so the two read as distinct shapes. Fixed.
 - [x] `7cb07fc0` **No blur leak.** Confirm text/icons drawn after cuneiform in the same frame are NOT
       blurred by the shared-paint mask filter. *(add-tablet-clay-type-themes 6.6)*
       - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." Text/icons drawn
@@ -2507,3 +2511,21 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." The title-bar pencil
         + drag-grip read as darkened engraved impressions with clear transparent backgrounds (no pale
         tile) on each material — closes out the SrcIn + dark-alpha fix for the earlier pale-tile regression.
+
+## scope-focus-affordance-to-input
+
+The retest for the pinned-focus-vs-wash fix is the still-broken `f640f9ab` item above
+(add-tablet-clay-type-themes 6.8) — that's the primary check. These two are additional
+regression checks specific to this change's scoped-to-the-input approach.
+
+- [x] `57aa784e` **Normal path unchanged.** On a Lectern/Notebook (non-cuneiform) dialog, click into a
+      text field and confirm its focus box looks exactly as before; also confirm a RESTING (unfocused)
+      cuneiform tablet row shows no input border or fill over the clay. *(scope-focus-affordance-to-input 3.3)*
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T15-45-38): "Works." Normal Lectern/Notebook
+        focus box unchanged; resting cuneiform tablet rows show no input border/fill over the clay.
+- [x] `8e7526ee` **Row-height parity.** On a tablet, toggle a single-line cuneiform row between focused
+      and unfocused and confirm the row height doesn't jump (read vs. edit parity holds), and the focused
+      input's border doesn't clip against the pinned-row wash edge. *(scope-focus-affordance-to-input 3.4)*
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T15-45-38): "Perfect." Single-line row
+        height holds across focus↔unfocus; the focused input's border sits inside the pinned-row wash
+        without clipping — the input box and the pinned wash read as two distinct shapes.

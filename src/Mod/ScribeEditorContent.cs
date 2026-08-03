@@ -754,22 +754,20 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             : Widget.IsDropTarget ? ScribeRowConstants.ShiftBrightness(colors.Primary, -20f, saturationScale: 0.5f)
             : (Vector4?)null;
 
-        // Focus-driven row chrome, TABLET (cuneiform) PATH ONLY (add-tablet-cuneiform-chrome D3/task 5.1):
-        // the cuneiform field paints no box of its own, so the always-present row Container is the sole
-        // appearance driver — borderless/transparent at rest, bordered + a soft surface fill on focus. The
-        // widget type never swaps (only these BoxStyle properties change), so the field's live caret/text
-        // survives the repaint. The normal (Lectern/Notebook) path is untouched: UseCuneiform is false, so
-        // the field keeps drawing its own focus border and this stays transparent.
-        bool focusedCuneiform = style.UseCuneiform && (Widget.FocusNode?.HasFocus ?? false);
-
+        // The row Container carries only whole-row state: the drag source/drop-target washes and the
+        // resting pinned tint. Focus chrome is NOT drawn here — on the cuneiform (tablet) path the focused
+        // input draws its own SurfaceHigh+Primary box scoped to the input element (see
+        // ScribeMultilineField's cuneiform render widget), matching the normal Lectern/Notebook path. That
+        // keeps a focused input on a PINNED row distinct from the pinned wash — a small bordered input
+        // inside the row tint, two shapes, not one ambiguous whole-row fill (scope-focus-affordance-to-input,
+        // playtest fail f640f9ab). The Container is still ALWAYS present with transparent defaults so the
+        // widget type never swaps and the field's live caret/text survive the repaint.
         Vector4 rowFill =
             dragShift is Vector4 d ? d with { W = 0.4f }
-            : focusedCuneiform ? colors.SurfaceHigh
             : (Widget.Data.IsTask && Widget.Data.Pinned ? ScribeRowConstants.PinnedTint(colors) : Vector4.Zero);
 
         Vector4 rowBorder =
             dragShift is Vector4 b ? b with { W = 0.5f }
-            : focusedCuneiform ? colors.Primary
             : Vector4.Zero;
 
         rowBody = new Container(
@@ -777,8 +775,8 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             {
                 Color = rowFill,
                 BorderColor = rowBorder,
-                BorderThickness = dragShift is not null || focusedCuneiform ? 1f : 0f,
-                CornerRadius = focusedCuneiform ? Vector4.One * 4f : Vector4.Zero,
+                BorderThickness = dragShift is not null ? 1f : 0f,
+                CornerRadius = Vector4.Zero,
             },
             child: rowBody);
 

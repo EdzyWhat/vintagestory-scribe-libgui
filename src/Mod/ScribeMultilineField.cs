@@ -1134,13 +1134,17 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 bundle: Widget.CuneiformBundle,
                 padX: Widget.PadX,
                 padY: Widget.PadY,
-                // No field-level box on the cuneiform (tablet) path: the row is borderless/transparent at
-                // rest and gains its border + background from the enclosing ScribeEditRow Container on focus
-                // (add-tablet-cuneiform-chrome D3 / task 5.1) — one appearance driver, no doubled chrome.
-                boxColor: Vector4.Zero,
-                borderColor: Vector4.Zero,
-                borderThickness: 0f,
-                cornerRadii: Vector4.Zero,
+                // Focus box on the cuneiform (tablet) path, scoped to the INPUT — mirrors the normal path
+                // just below (scope-focus-affordance-to-input). At rest the fill+border are transparent so a
+                // resting cuneiform row shows no box over the clay; on focus they light to SurfaceHigh +
+                // Primary. Thickness and corner stay CONSTANT (only the colors toggle) so the content box
+                // never reflows focus↔unfocus, keeping read/edit row heights in parity. The enclosing row
+                // Container no longer draws focus chrome, so a focused input on a PINNED row now reads as a
+                // small bordered input inside the row's pinned wash — two distinct shapes.
+                boxColor: focusNode.HasFocus ? colors.SurfaceHigh : Vector4.Zero,
+                borderColor: focusNode.HasFocus ? colors.Primary : Vector4.Zero,
+                borderThickness: 1f,
+                cornerRadii: Vector4.One * 4f,
                 caretVisible: caretVisible,
                 jitterStrength: Widget.CuneiformJitter,
                 jitterSeed: Widget.CuneiformJitterSeed,
