@@ -1,11 +1,35 @@
-{
-	ingredientPattern: "C,S",
-	ingredients: {
-		"C": { type: "item", code: "game:clay-blue" },
-		"S": { type: "item", code: "game:stick" }
+[
+	{
+		ingredientPattern: "C,S",
+		ingredients: {
+			"C": { type: "item", code: "game:clay-red" },
+			"S": { type: "item", code: "game:stick" }
+		},
+		width: 1,
+		height: 2,
+		name: "scribe:scribetablet-clay-red",
+		output: { type: "item", code: "scribe:scribetablet-clay", quantity: 1, attributes: { clayType: "red" } }
 	},
-	width: 1,
-	height: 2,
-	name: "scribe:scribetablet-clay",
-	output: { type: "item", code: "scribe:scribetablet-clay", quantity: 1 }
-}
+	{
+		ingredientPattern: "C,S",
+		ingredients: {
+			"C": { type: "item", code: "game:clay-blue" },
+			"S": { type: "item", code: "game:stick" }
+		},
+		width: 1,
+		height: 2,
+		name: "scribe:scribetablet-clay-blue",
+		output: { type: "item", code: "scribe:scribetablet-clay", quantity: 1, attributes: { clayType: "blue" } }
+	},
+	{
+		ingredientPattern: "C,S",
+		ingredients: {
+			"C": { type: "item", code: "game:clay-fire" },
+			"S": { type: "item", code: "game:stick" }
+		},
+		width: 1,
+		height: 2,
+		name: "scribe:scribetablet-clay-fire",
+		output: { type: "item", code: "scribe:scribetablet-clay", quantity: 1, attributes: { clayType: "fire" } }
+	}
+]

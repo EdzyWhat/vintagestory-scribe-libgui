@@ -7,6 +7,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Clay-type tablet backdrops** — a clay tablet now opens with a backdrop matching the clay it was
+  crafted from: distinct full-page art for **red**, **blue**, and **fire** clay. The clay type is
+  recorded on the tablet when crafted (three recipes, one per clay type) and preserved across
+  close/reopen and drop/pickup. A tablet with no recorded type (legacy or creative) falls back to red.
+  (A fired-ceramic appearance per clay type is wired but not yet reachable in normal play — no gameplay
+  fires a tablet this round.)
 - **Clockmaker's Notebook Schematic** — a reusable blueprint item sold occasionally by wandering
   **Commodities** and **Treasure Hunter** traders. Added to the crafting grid alongside the usual
   Notebook + temporal gear + metal parts, it lets **any** player craft a Clockmaker's Notebook

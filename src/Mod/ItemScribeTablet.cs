@@ -99,12 +99,31 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
         outputSlot.Itemstack.Attributes.SetBytes("scribeHistory", history.Serialize());
     }
 
+    /// <summary>Read the recorded clay type (<c>red</c>/<c>blue</c>/<c>fire</c>) from a tablet stack, or
+    /// <c>null</c> when absent — a legacy/creative stack with no recorded type, which callers treat as red
+    /// (clay-wax-tablet-item). Set at craft by the per-type recipe's output attributes; no ingredient
+    /// sniffing needed. Wax tablets carry no <c>clayType</c>.</summary>
+    public static string? ReadClayType(ItemStack? stack) =>
+        stack?.Attributes.HasAttribute(ClayTypeAttributeKey) == true
+            ? stack.Attributes.GetString(ClayTypeAttributeKey)
+            : null;
+
+    /// <summary>Read the recorded fired appearance from a tablet stack; absent defaults to <c>false</c>
+    /// (soft). An APPEARANCE record only — nothing here fires a tablet (clay-wax-tablet-item).</summary>
+    public static bool ReadFired(ItemStack? stack) =>
+        stack?.Attributes.GetBool(FiredAttributeKey, false) ?? false;
+
+    private const string ClayTypeAttributeKey = "clayType";
+    private const string FiredAttributeKey = "fired";
+
     private void OpenTabletDialog(ItemSlot slot, ICoreClientAPI capi)
     {
-        // The backdrop matches the tablet's material variant (clay/wax) — the item and its dialog agree on
-        // the mapping through ScribeBackdrops (add-tablet-dialog D6). Both slots point at the shared
-        // placeholder art this round.
-        var host = new TabletHost(slot, ScribeBackdrops.ForTabletMaterial(Variant["material"]));
+        // The backdrop matches the tablet's material variant + recorded clay type + fired appearance — the
+        // item and its dialog agree on the mapping through ScribeBackdrops.ForTablet (add-tablet-dialog D6,
+        // add-tablet-clay-type-backdrops). Absent clayType/fired attributes default to red + soft.
+        var stack = slot.Itemstack;
+        var host = new TabletHost(slot,
+            ScribeBackdrops.ForTablet(Variant["material"], ReadClayType(stack), ReadFired(stack)));
         var modSystem = capi.ModLoader.GetModSystem<ScribeModSystem>();
         modSystem.RegisterHost(host);
         // Tell the server we opened this tablet so it can record the one-time PickedUp entry

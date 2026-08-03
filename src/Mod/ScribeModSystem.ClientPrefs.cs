@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Gui.Rendering;             // SkiaAssetLoader
 using Gui.Rendering.Text;        // FontRegistry, FontWeight
 using Gui.Sound;                 // ISoundPlayer, SoundPlayer (UI click sound)
+using OpenTK.Mathematics;        // Vector4 (backdrop tint)
 using Scribe.Core;
 using SkiaSharp;
 using Vintagestory.API.Client;
@@ -33,8 +34,10 @@ public sealed partial class ScribeModSystem
 
     /// <summary>
     /// Client-side: load (once) and return the decoded backdrop bitmap for a dialog backdrop, or
-    /// <c>null</c> if the asset is missing/unloadable. The decoded bitmap is cached and shared across
-    /// every dialog open; a caller must NOT dispose it — all entries are disposed in <see cref="Dispose"/>.
+    /// <c>null</c> if the asset is missing/unloadable. When the spec carries a <see cref="ScribeBackdropSpec.Tint"/>
+    /// the tint is baked into a cached tinted COPY (leaving the untinted source cached separately, so the
+    /// same PNG can back both a plain and a tinted spec). The decoded/derived bitmap is cached and shared
+    /// across every dialog open; a caller must NOT dispose it — all entries are disposed in <see cref="Dispose"/>.
     ///
     /// <para>Self-loads via <c>TryGet(loc, loadAsset: true)</c> + <see cref="SKBitmap.Decode(byte[])"/>,
     /// mirroring <see cref="RegisterSvgIcon"/> (~:236): the naive <c>Image</c>/<c>SkiaAssetLoader.LoadBitmap</c>
@@ -43,15 +46,33 @@ public sealed partial class ScribeModSystem
     /// cached too, so an unloadable asset logs exactly one warning and repeat opens don't retry the failing
     /// load. Returns null before <see cref="StartClientSide"/> (e.g. server side).</para>
     /// </summary>
-    public SKBitmap? GetBackdropBitmap(AssetLocation loc)
+    public SKBitmap? GetBackdropBitmap(ScribeBackdropSpec spec)
     {
         if (capi is null) return null; // client-only
         backdropCache ??= new Dictionary<string, SKBitmap?>();
 
+        // Key on both the asset AND the tint so a plain and a tinted use of the same PNG cache distinctly.
+        var t = spec.Tint;
+        string key = t is { } v
+            ? $"{spec.Texture}|tint={v.X:F3},{v.Y:F3},{v.Z:F3},{v.W:F3}"
+            : spec.Texture.ToString();
+        if (backdropCache.TryGetValue(key, out var cached)) return cached;
+
+        var source = GetBackdropSource(spec.Texture);
+        SKBitmap? bmp = t is { } tint && source is not null ? BakeTint(source, tint) : source;
+        backdropCache[key] = bmp;
+        return bmp;
+    }
+
+    /// <summary>Load + decode the raw (untinted) backdrop PNG once, caching it under its plain asset key so
+    /// both a tinted and an untinted spec on the same PNG share a single decode. Warns once on a miss.</summary>
+    private SKBitmap? GetBackdropSource(AssetLocation loc)
+    {
+        backdropCache ??= new Dictionary<string, SKBitmap?>();
         string key = loc.ToString();
         if (backdropCache.TryGetValue(key, out var cached)) return cached;
 
-        var asset = capi.Assets.TryGet(loc, loadAsset: true);
+        var asset = capi!.Assets.TryGet(loc, loadAsset: true);
         SKBitmap? bmp = asset?.Data is not null ? SKBitmap.Decode(asset.Data) : null;
         if (bmp is null)
         {
@@ -61,6 +82,24 @@ public sealed partial class ScribeModSystem
         }
         backdropCache[key] = bmp;
         return bmp;
+    }
+
+    /// <summary>Return a NEW bitmap that is <paramref name="source"/> multiplied by <paramref name="tint"/>,
+    /// via an <c>SKColorFilter.CreateBlendMode(..., Modulate)</c> — the same tint primitive LibGUI's icon
+    /// renderer uses (<c>RenderIcon</c>). Baked once at load and cached, so the per-frame draw stays the
+    /// plain stretch-to-fill texture path (no LibGUI change; <c>BoxStyle</c> has no tint of its own).</summary>
+    private static SKBitmap BakeTint(SKBitmap source, Vector4 tint)
+    {
+        var tinted = new SKBitmap(source.Width, source.Height, source.ColorType, source.AlphaType);
+        using var canvas = new SKCanvas(tinted);
+        using var paint = new SKPaint
+        {
+            ColorFilter = SKColorFilter.CreateBlendMode(
+                new SKColor((byte)(tint.X * 255), (byte)(tint.Y * 255), (byte)(tint.Z * 255), (byte)(tint.W * 255)),
+                SKBlendMode.Modulate),
+        };
+        canvas.DrawBitmap(source, 0, 0, paint);
+        return tinted;
     }
 
     /// <summary>Asset location of the committed cuneiform glyph-geometry bundle, produced by

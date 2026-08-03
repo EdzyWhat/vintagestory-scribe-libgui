@@ -68,7 +68,7 @@ public abstract partial class ScribeDialogBase
         {
             return new SizedBox(width: layout.W, height: layout.H, child: tree);
         }
-        var bmp = modSystem.GetBackdropBitmap(host.BackdropSpec.Texture);
+        var bmp = modSystem.GetBackdropBitmap(host.BackdropSpec);
         var style = bmp is not null
             ? new BoxStyle { Texture = bmp, Width = layout.W, Height = layout.H }
             : new BoxStyle { Color = new Vector4(0.85f, 0.78f, 0.62f, 1.0f), Width = layout.W, Height = layout.H };

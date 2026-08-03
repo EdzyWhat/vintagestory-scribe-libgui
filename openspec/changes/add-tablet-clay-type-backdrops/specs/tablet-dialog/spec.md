@@ -14,17 +14,17 @@ fired) and one wax backdrop — and SHALL select exactly one of them from the ta
 `clayType`, and `fired` state. When `material` is wax the wax backdrop SHALL be selected; otherwise the
 backdrop SHALL be chosen from the stack's `clayType` (red / blue / fire) and `fired` (soft / fired)
 appearance values. When those attributes are absent the selection SHALL default to red + soft so every
-tablet resolves to a valid backdrop. The six clay backdrops SHALL be sourced from verified vanilla
-Vintage Story pottery textures (the unfired per-type clay swatches and the fired ceramic swatch), and
-the wax backdrop MAY use a placeholder swatch until bespoke wax art exists. The backdrop SHALL be
-applied through the `gui-backdrop` mechanism, rendered so a small material swatch appears crisp rather
-than a blurrily upscaled full-page stretch.
+tablet resolves to a valid backdrop. The three soft-clay backdrops SHALL be sourced from authored
+full-page clay-tablet illustrations (one per clay type), rendered through the existing stretch-to-fill
+backdrop path. The three fired backdrops SHALL, until bespoke fired art exists, reuse the matching
+soft-clay art under a per-type ceramic tint (so red/blue/fire stay distinguishable once fired), and the
+wax backdrop MAY reuse a clay illustration as a placeholder until bespoke wax art exists.
 
 #### Scenario: A soft clay tablet opens with its clay-type backdrop
 
 - **WHEN** a player opens an unfired clay tablet whose stack records `clayType = blue`
-- **THEN** the dialog is drawn with the earthen `Tablet` theme and the blue-soft clay backdrop, sourced
-  from the vanilla blue-clay swatch and rendered crisply (not a blurry full-page stretch)
+- **THEN** the dialog is drawn with the earthen `Tablet` theme and the authored blue-clay full-page
+  backdrop
 
 #### Scenario: Each of the three clay types selects a distinct backdrop
 
@@ -36,14 +36,15 @@ than a blurrily upscaled full-page stretch.
 
 - **WHEN** a player opens a clay tablet with `fired = false` and one with `fired = true` of the same
   clay type
-- **THEN** the unfired tablet shows a soft-clay backdrop and the fired tablet shows a fired-ceramic
-  backdrop
+- **THEN** the unfired tablet shows the untinted soft-clay backdrop and the fired tablet shows the same
+  art under its per-type ceramic tint (`fired = true` is unreachable in normal play this round —
+  reachable only via creative — since no gameplay yet fires a tablet)
 
 #### Scenario: A wax tablet opens with the wax backdrop
 
 - **WHEN** a player opens a tablet whose `material` is wax
-- **THEN** the dialog shows the single wax backdrop (a placeholder swatch this round), not any clay
-  backdrop
+- **THEN** the dialog shows the single wax backdrop (a placeholder illustration this round), not any
+  clay-type-keyed backdrop
 
 #### Scenario: A tablet with no recorded clay-type falls back to a default backdrop
 

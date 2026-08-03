@@ -1,34 +1,29 @@
 ## ADDED Requirements
 
-### Requirement: A backdrop spec may tile a material swatch and composite a frame overlay
+### Requirement: A backdrop spec may tint its texture
 
-A backdrop specification MAY declare that its texture is a small tiling material swatch rather than a
-full-page illustration. When it does, the dialog backdrop-wrapping logic SHALL paint that swatch at its
-native pixel resolution repeated (tiled) across the dialog area instead of stretching one copy to fill,
-so the material reads crisp rather than blurrily upscaled. A backdrop specification MAY also declare an
-optional tint color applied to the swatch, and an optional page-frame overlay texture composited on top
-of the tiled swatch so the result reads as a framed page. A backdrop specification that declares none of
-these (the existing full-page specs) SHALL continue to be rendered by the current stretch-to-fill path
-unchanged.
+A backdrop specification MAY declare an optional tint color multiplied into its texture. When a tint is
+declared, the dialog backdrop-loading logic SHALL bake that tint into a cached copy of the decoded bitmap
+(an `SKColorFilter` modulate — the same tint primitive the GUI framework's icon renderer uses) and render
+the tinted copy through the existing stretch-to-fill texture path, so the same source PNG can back several
+visually-distinct specs without additional art. A backdrop specification that declares no tint (every
+full-page illustration spec) SHALL be rendered from the decoded bitmap unchanged through the existing
+stretch-to-fill path.
 
-#### Scenario: A tiling swatch is rendered crisp, not stretched
+Note: an earlier draft of this requirement anticipated tiling a small vanilla material swatch at native
+resolution plus a composited page-frame overlay. Implementation found (a) the authored clay backdrops are
+full-page illustrations that take the existing stretch path directly, so no tiling was needed, and (b) the
+GUI framework's `BoxStyle` texture path only ever stretches one bitmap to fill and exposes no tint, and it
+lives in the read-only `gui` dependency, so tiling/frame-overlay could not be added there. The tint is
+therefore baked at the bitmap level and the tiling/overlay machinery was dropped — the full-page authored
+art is the design's own stated target state, reached directly.
 
-- **WHEN** a backdrop spec declaring a small tiling material swatch is drawn behind a dialog with
-  themed mode ON
-- **THEN** the swatch is painted at native resolution tiled across the dialog area, rather than a single
-  copy stretched to fill and upscaled blurry
+#### Scenario: An optional tint distinguishes same-source specs
 
-#### Scenario: An optional tint distinguishes same-source swatches
-
-- **WHEN** two backdrop specs name the same material swatch but declare different tint colors
-- **THEN** each renders the swatch in its own tint so the two are visually distinguishable
-
-#### Scenario: An optional frame overlay is composited over the tile
-
-- **WHEN** a tiling backdrop spec also declares a page-frame overlay texture
-- **THEN** the frame overlay is drawn on top of the tiled swatch so the backdrop reads as a framed page
+- **WHEN** two backdrop specs name the same source PNG but declare different tint colors
+- **THEN** each renders that PNG in its own tint so the two are visually distinguishable
 
 #### Scenario: Full-page specs are unchanged
 
-- **WHEN** an existing full-page backdrop spec (declaring no tiling, tint, or frame overlay) is drawn
+- **WHEN** an existing full-page backdrop spec (declaring no tint) is drawn
 - **THEN** it renders through the existing stretch-to-fill path exactly as before

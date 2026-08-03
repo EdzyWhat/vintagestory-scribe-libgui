@@ -163,6 +163,26 @@ tasks, not blocking the proposal.
   deltas exist in `openspec/specs/`). Rollback is a straight revert — clearing the new specs restores
   C's four-placeholder behavior; leftover stack attributes are simply ignored by the older code.
 
+## Implementation note (2026-08-02): renderer approach reshaped
+
+Decisions 3–4 above anticipated tiling a small vanilla pottery swatch at native resolution, plus an
+optional shared page-frame overlay. Two facts found during implementation collapsed that plan:
+
+1. **The user authored full-page clay art.** The three unfired-clay backdrops shipped as authored
+   1024×1160 illustrations (`scribe-clay-tablet-{red,blue,fire}.png`) — the same shape as the
+   lectern/notebook pages — so they take the existing stretch-to-fill path directly. This is the design's
+   own stated *target* state (Decision 4, "authored full-page backdrops … no further renderer change"),
+   reached now rather than deferred, so no tiling and no frame overlay is needed.
+2. **`BoxStyle` cannot tile or tint, and is read-only.** LibGUI's texture path (`DrawMaskedBox` →
+   `DrawBitmap(texture, rect)`) only ever stretches one bitmap to fill, and `BoxStyle` exposes no tint; it
+   lives in the read-only `gui` dependency, so tiling/overlay could not be added there anyway.
+
+Net: `ScribeBackdropSpec` gained only an optional `Vector4? Tint` (no `Tile`/`FrameOverlay`). The per-type
+fired tint (Decision 3) is baked into a cached SKBitmap copy via `SKColorFilter` modulate (mirroring
+LibGUI's `RenderIcon` tinting) and fed through the unchanged stretch path. The three fired specs reuse the
+soft-clay art under that tint until bespoke fired art exists. The `gui-backdrop` and `tablet-dialog` spec
+deltas were revised to match.
+
 ## Open Questions
 
 1. **Does anything ever set `fired = true`?** This change records a fired *appearance* but does not add
