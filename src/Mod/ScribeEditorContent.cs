@@ -414,9 +414,39 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
         // 10 → 6) so the taller glyph doesn't inflate the footer button height past its readable-text form.
         // Cuneiform-only: the normal path keeps the default theme padding so the Lectern/Notebook footers
         // are byte-identical (task 8.4).
+        const float cuneiformLabelPadY = 6f;
         ButtonStyle? labelButtonStyle = Widget.Style.UseCuneiform
-            ? Theme.Of(context).ButtonStyle with { Padding = EdgeInsets.Symmetric(6, 20) }
+            ? Theme.Of(context).ButtonStyle with { Padding = EdgeInsets.Symmetric(cuneiformLabelPadY, 20) }
             : null;
+
+        // Height parity for the trailing icon (ⓘ / gear) buttons (2026-08-03 feedback: "same height as the
+        // taller 'add task' button"). On the cuneiform path the Add-task label is a CuneiformText whose
+        // CONTENT height is exactly FontSize × LineHeightRatio (see CuneiformTextRender.PerformLayout), and
+        // its button adds cuneiformLabelPadY top+bottom. To match, we force each icon button's content box to
+        // that same content height via a FULLY-BOUNDED SizedBox (both axes tight → the inner Center cannot
+        // grow on EITHER axis — the balloon regression only happens with an unbounded axis) and give it the
+        // same vertical padding, so total heights are equal by construction regardless of the glyph's natural
+        // size. On the normal (readable) path we keep the original bare 17f glyph + All(7), so the
+        // Lectern/Notebook footers stay byte-identical (task 8.4).
+        const float iconGlyphSize = 17f;
+        float? iconContentHeight = Widget.Style.UseCuneiform
+            ? buttonTextStyle.FontSize * CuneiformMetrics.LineHeightRatio
+            : null;
+        Widget IconButtonChild(string iconName)
+        {
+            var glyph = new ScribeVsIconGlyph(iconName, iconGlyphSize, colors.OnPrimary);
+            return iconContentHeight is { } h
+                // Square, height-locked box centering the glyph so the button matches the label height and
+                // stays a square (width == height) rather than the label-shaped landscape box.
+                ? new SizedBox(width: h, height: h, child: new Center(child: glyph))
+                : glyph;
+        }
+        ButtonStyle iconButtonStyle = Theme.Of(context).ButtonStyle with
+        {
+            Padding = Widget.Style.UseCuneiform
+                ? EdgeInsets.Symmetric(cuneiformLabelPadY, cuneiformLabelPadY)
+                : EdgeInsets.All(7),
+        };
 
         var buttons = new List<Widget>
         {
@@ -453,16 +483,12 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                             // matching ScribePinnedContent's inline tooltip using the tab theme's OnBackground.
                             new Tooltip(
                                 child: new Button(
-                                    // 17f (nudged down from 18) so the glyph's rendered content matches the
-                                    // label text's height rather than overshooting it.
-                                    child: new ScribeVsIconGlyph("scribeinfo", 17f, colors.OnPrimary),
-                                    // Copy the theme button style but replace the default label padding
-                                    // (Symmetric(10, 20)) with a tight, equal All(7): equal on all sides keeps
-                                    // the square glyph in a square box (not the label-shaped landscape one), and
-                                    // the reduced amount brings total height (~38px) in line with the Add/Done
-                                    // buttons — the glyph content renders taller than label text, so it needs
-                                    // less padding to match, not the same.
-                                    style: Theme.Of(context).ButtonStyle with { Padding = EdgeInsets.All(7) },
+                                    // 17f glyph, centered in a height-locked square box on the cuneiform path
+                                    // (see IconButtonChild / iconButtonStyle above) so this matches the taller
+                                    // Add-task cuneiform label; on the normal path it's the bare glyph + All(7),
+                                    // byte-identical to before.
+                                    child: IconButtonChild("scribeinfo"),
+                                    style: iconButtonStyle,
                                     onTap: _ => Widget.OnOpenEditorReference()),
                                 content: new Padding(
                                     EdgeInsets.All(6),
@@ -482,8 +508,8 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
         {
             buttons.Add(new Tooltip(
                 child: new Button(
-                    child: new ScribeVsIconGlyph("scribegear", 17f, colors.OnPrimary),
-                    style: Theme.Of(context).ButtonStyle with { Padding = EdgeInsets.All(7) },
+                    child: IconButtonChild("scribegear"),
+                    style: iconButtonStyle,
                     onTap: _ => openSettings()),
                 content: new Padding(
                     EdgeInsets.All(6),

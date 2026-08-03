@@ -48,9 +48,9 @@ internal static class CuneiformMetrics
 
     /// <summary>Default hand-written jitter strength (add-cuneiform-handwriting-feel) applied to cuneiform
     /// text until the client config knob (task 6) overrides it. Reads as a hand-pressed wobble without
-    /// hurting legibility; 0 reproduces today's crisp geometry exactly. Raised 0.5 → 0.8 per the
-    /// 2026-08-03 playtest (wanted a stronger hand-written feel). Tuned in-game.</summary>
-    public const float DefaultJitterStrength = 0.8f;
+    /// hurting legibility; 0 reproduces today's crisp geometry exactly. Tuned in-game across the 2026-08-03
+    /// playtest passes (0.5 → 0.8 too strong → settled at 0.6).</summary>
+    public const float DefaultJitterStrength = 0.6f;
 
     /// <summary>Derives a stable base jitter seed from a string (e.g. a label's text), so the same text
     /// always wobbles the same way and different texts differ. Order-independent of frame/wall-clock — a

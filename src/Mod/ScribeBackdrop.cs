@@ -50,42 +50,41 @@ internal static class ScribeBackdrops
         new(new AssetLocation("scribe", "textures/gui/scribe-clockmakers-notebook.png"));
 
     // ---- Clay tablet backdrops (add-tablet-clay-type-backdrops) ---------------------------------------
-    // Each clay type has an authored full-page 1024×1160 backdrop (same shape as the pages above, so they
-    // take the identical stretch-to-fill path — NO tiling/renderer change). The three "fired" specs reuse
-    // the same authored art under a per-type ceramic tint, since (a) no bespoke fired art exists yet and
-    // (b) vanilla fired ceramic is not color-keyed by source clay — the tint keeps red/blue/fire
-    // distinguishable once fired. When real fired art lands, each fired spec becomes a straight PNG-path
-    // swap with its Tint cleared.
+    // Each clay type has authored full-page 1024×1160 backdrops (same shape as the pages above, so they
+    // take the identical stretch-to-fill path — NO tiling/renderer change). Art now exists per drying
+    // STATE: "-soft" (wet/malleable, the editable tablet) and "-fired" (kiln-fired ceramic). The soft art
+    // is the one an editable tablet shows; the fired art is its own PNG, so the fired specs are straight
+    // PNG paths with NO tint (the earlier interim scheme tinted a single un-suffixed file to fake the fired
+    // look — retired now that real fired art is authored). A "-hard" (dried-but-unfired) state exists on
+    // disk for the planned hardness progression but is not wired here yet.
 
-    private static AssetLocation Clay(string type) =>
-        new("scribe", $"textures/gui/scribe-clay-tablet-{type}.png");
+    private static AssetLocation Clay(string type, string state) =>
+        new("scribe", $"textures/gui/scribe-clay-tablet-{type}-{state}.png");
 
-    /// <summary>Unfired red-clay tablet page (authored art).</summary>
-    public static readonly ScribeBackdropSpec ClayRedSoft = new(Clay("red"));
+    /// <summary>Unfired red-clay tablet page — wet/malleable soft-clay art (the editable tablet).</summary>
+    public static readonly ScribeBackdropSpec ClayRedSoft = new(Clay("red", "soft"));
 
-    /// <summary>Unfired blue-clay tablet page (authored art).</summary>
-    public static readonly ScribeBackdropSpec ClayBlueSoft = new(Clay("blue"));
+    /// <summary>Unfired blue-clay tablet page — wet/malleable soft-clay art (the editable tablet).</summary>
+    public static readonly ScribeBackdropSpec ClayBlueSoft = new(Clay("blue", "soft"));
 
-    /// <summary>Unfired fire-clay tablet page (authored art).</summary>
-    public static readonly ScribeBackdropSpec ClayFireSoft = new(Clay("fire"));
+    /// <summary>Unfired fire-clay tablet page — wet/malleable soft-clay art (the editable tablet).</summary>
+    public static readonly ScribeBackdropSpec ClayFireSoft = new(Clay("fire", "soft"));
 
-    /// <summary>Fired red-clay tablet page: the red art under a warm terracotta ceramic tint. Interim
-    /// (unreachable in normal play this round — nothing sets <c>fired = true</c>); reachable via creative.
-    /// Tint values are eyeballed and tuned in-game.</summary>
-    public static readonly ScribeBackdropSpec ClayRedFired =
-        new(Clay("red"), new Vector4(1.00f, 0.62f, 0.52f, 1f));
+    /// <summary>Fired red-clay tablet page — authored kiln-fired ceramic art (its own PNG, no tint).
+    /// Interim-unreachable in normal play this round (nothing sets <c>fired = true</c>); reachable via
+    /// creative.</summary>
+    public static readonly ScribeBackdropSpec ClayRedFired = new(Clay("red", "fired"));
 
-    /// <summary>Fired blue-clay tablet page: the blue art under a cool slate-ceramic tint (interim).</summary>
-    public static readonly ScribeBackdropSpec ClayBlueFired =
-        new(Clay("blue"), new Vector4(0.66f, 0.74f, 0.86f, 1f));
+    /// <summary>Fired blue-clay tablet page — authored kiln-fired ceramic art (its own PNG, no tint).</summary>
+    public static readonly ScribeBackdropSpec ClayBlueFired = new(Clay("blue", "fired"));
 
-    /// <summary>Fired fire-clay tablet page: the fire art under a pale buff-ceramic tint (interim).</summary>
-    public static readonly ScribeBackdropSpec ClayFireFired =
-        new(Clay("fire"), new Vector4(0.96f, 0.88f, 0.70f, 1f));
+    /// <summary>Fired fire-clay tablet page — authored kiln-fired ceramic art (its own PNG, no tint).</summary>
+    public static readonly ScribeBackdropSpec ClayFireFired = new(Clay("fire", "fired"));
 
     /// <summary>The wax tablet page. No bespoke wax art exists yet, so this reuses the warm fire-clay
-    /// art as an interim placeholder (closest in tone to beeswax); it swaps to real diptych art later.</summary>
-    public static readonly ScribeBackdropSpec Wax = new(Clay("fire"));
+    /// soft art as an interim placeholder (closest in tone to beeswax); it swaps to real diptych art
+    /// later.</summary>
+    public static readonly ScribeBackdropSpec Wax = new(Clay("fire", "soft"));
 
     /// <summary>Select the tablet backdrop for a stack's <c>material</c> variant + recorded <c>fired</c>
     /// appearance, in ONE place so the item and its dialog agree on the mapping (add-tablet-dialog D6). The
