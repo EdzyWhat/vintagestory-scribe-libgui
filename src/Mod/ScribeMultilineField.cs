@@ -422,6 +422,7 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         GlyphBundle? cuneiformBundle = null,
         float cuneiformJitter = 0f,
         int cuneiformJitterSeed = 0,
+        bool cuneiformProgression = false,
         Action<string>? onChanged = null,
         Action? onCommitAndAdvance = null,
         Action? onCommitAndRetreat = null,
@@ -443,6 +444,7 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         CuneiformBundle = cuneiformBundle;
         CuneiformJitter = cuneiformJitter;
         CuneiformJitterSeed = cuneiformJitterSeed;
+        CuneiformProgression = cuneiformProgression;
         OnChanged = onChanged;
         OnCommitAndAdvance = onCommitAndAdvance;
         OnCommitAndRetreat = onCommitAndRetreat;
@@ -490,6 +492,9 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
     /// consistently and typing does not reseed the letters already on screen. Ignored when
     /// <see cref="UseCuneiform"/> is false.</summary>
     public int CuneiformJitterSeed { get; }
+    /// <summary>Whether newly-typed cuneiform text presses in stroke-by-stroke (per-letter progression).
+    /// Ignored when <see cref="UseCuneiform"/> is false; off reproduces the instant reveal.</summary>
+    public bool CuneiformProgression { get; }
     public Action<string>? OnChanged { get; }
     /// <summary>Tab (no Shift): the field has committed its text via <see cref="OnChanged"/>; the
     /// parent should normalize + flush the row and move focus to the next row.</summary>
@@ -523,6 +528,22 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
     private Ticker? caretTicker;
     private bool caretVisible = true;
     private DateTime caretLastToggle = DateTime.MinValue;
+
+    // ---- Cuneiform stroke-progression reveal (add-cuneiform-handwriting-feel). Only the newly-typed run
+    // presses in; already-revealed text never replays, and non-append edits (deletion, mid-line change)
+    // snap to fully revealed. Inactive unless UseCuneiform + CuneiformProgression are both on. ----
+    /// <summary>Per-stroke / per-letter reveal timing (ms). Tuned in-game; the client-config knob (task 6)
+    /// will source these.</summary>
+    private const double RevealPerStrokeMs = 28;
+    private const double RevealPerLetterMs = 90;
+    private AnimationController? revealController;
+    /// <summary>Whether a reveal is currently animating. When false the field paints every stroke.</summary>
+    private bool revealActive;
+    /// <summary>Characters already fully pressed (never re-animated) for the current reveal run.</summary>
+    private int revealBaselineChars;
+    /// <summary>The buffer text as of the last reveal decision, so a commit can classify the edit
+    /// (append → animate the suffix; anything else → snap).</summary>
+    private string revealTrackedText = "";
     /// <summary>True between an onPress and its onRelease: a click-drag is selecting text, so onMove
     /// extends the selection to the cursor. The event dispatcher auto-captures the field on press, so
     /// moves keep arriving even when the cursor leaves the field's bounds mid-drag. Cleared for a
@@ -545,6 +566,9 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
         text = Widget.InitialText;
         caret = text.Length;
         anchor = caret;
+        // The initial text is pre-existing content, not freshly typed, so it starts fully revealed (no
+        // animation on open). Only text added after this baseline presses in.
+        revealTrackedText = text;
         focusNode = Widget.FocusNode ?? (internalFocusNode = new FocusNode());
         // FocusNode.RequestFocus() resolves its manager via Owner?.Owner?.FocusManager; without an
         // Owner it can't reach the manager, focus never takes, and the HasFocus-gated key handlers
@@ -556,6 +580,16 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
         // Caret-blink ticker (same provider LibGUI's TextField uses). Started only while focused with a
         // collapsed selection; OnCaretTick toggles caretVisible every CaretBlinkMs and rebuilds.
         caretTicker = Element.Owner!.GetTickerProvider().CreateTicker(OnCaretTick);
+
+        // Reveal driver (cuneiform stroke-progression). Built only when the feature is on; its Value (0→1)
+        // scales to elapsed-ms in the render each tick. Duration is reset per reveal to the run's length.
+        if (Widget.UseCuneiform && Widget.CuneiformProgression)
+        {
+            revealController = new AnimationController(
+                TimeSpan.FromMilliseconds(1), Element.Owner!.GetTickerProvider());
+            revealController.OnValueChanged += OnRevealTick;
+            revealController.OnStatusChanged += OnRevealStatus;
+        }
 
         if (Widget.AutoFocus)
         {
@@ -582,6 +616,13 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
     {
         focusNode.RemoveListener(OnFocusChanged);
         caretTicker?.Dispose();
+        if (revealController is not null)
+        {
+            revealController.OnValueChanged -= OnRevealTick;
+            revealController.OnStatusChanged -= OnRevealStatus;
+            revealController.Dispose();
+            revealController = null;
+        }
         internalFocusNode?.Dispose();
         base.Dispose();
     }
@@ -871,9 +912,75 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
 
     private void Commit()
     {
+        UpdateReveal();
         Widget.OnChanged?.Invoke(text);
         RestartCaretBlink(); // any edit shows the caret solid, then resumes blinking
         MarkNeedsBuild();
+    }
+
+    /// <summary>
+    /// Decide how the just-committed <see cref="text"/> reveals, when cuneiform stroke-progression is on.
+    /// A pure APPEND to the previously-tracked text (typing at/after the end) animates only the newly-added
+    /// suffix: the prior length becomes the always-revealed baseline and the controller runs from 0. Any
+    /// other change (deletion, mid-line insert, paste that isn't a suffix) snaps to fully revealed with no
+    /// reverse animation, so earlier letters never replay. A no-op when the feature is off.
+    /// </summary>
+    private void UpdateReveal()
+    {
+        if (revealController is null)
+        {
+            return;
+        }
+
+        // Append iff the new text starts with the old text and is longer (Ordinal — exact code units).
+        bool isAppend = text.Length > revealTrackedText.Length
+            && text.StartsWith(revealTrackedText, StringComparison.Ordinal);
+
+        if (isAppend)
+        {
+            // Preserve the elapsed time already accumulated (so letters pressed mid-flight are NOT re-hidden
+            // when the run is extended by more typing). elapsed = Value × current Duration.
+            double elapsedMs = revealActive
+                ? revealController.Value * revealController.Duration.TotalMilliseconds
+                : 0.0;
+
+            // Starting a fresh run: everything present before this keystroke is the always-revealed baseline.
+            if (!revealActive)
+            {
+                revealBaselineChars = revealTrackedText.Length;
+            }
+
+            double durationMs = Scribe.Core.Cuneiform.CuneiformReveal.TotalDurationMs(
+                revealBaselineChars, text.Length, new Scribe.Core.Cuneiform.RevealSchedule(RevealPerStrokeMs, RevealPerLetterMs));
+            if (durationMs > 0)
+            {
+                revealActive = true;
+                revealController.Duration = TimeSpan.FromMilliseconds(durationMs);
+                // Resume from the same absolute elapsed against the NEW duration, so the frontier keeps
+                // moving forward and prior strokes stay pressed (the render gates on elapsed-vs-schedule).
+                revealController.Forward(from: Math.Clamp(elapsedMs / durationMs, 0.0, 1.0));
+            }
+        }
+        else
+        {
+            // Deletion / mid-line edit / non-suffix change: snap to fully revealed, no reverse animation.
+            revealActive = false;
+            revealController.Stop();
+        }
+
+        revealTrackedText = text;
+    }
+
+    private void OnRevealTick(double _) => MarkNeedsBuild();
+
+    private void OnRevealStatus(AnimationStatus status)
+    {
+        // Reveal finished: drop out of reveal mode so the field paints every stroke (fully pressed) again.
+        if (status == AnimationStatus.Completed)
+        {
+            revealActive = false;
+            MarkNeedsBuild();
+        }
     }
 
     private void MarkNeedsBuild() => SetState(() => { });
@@ -1026,7 +1133,14 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 cornerRadii: Vector4.Zero,
                 caretVisible: caretVisible,
                 jitterStrength: Widget.CuneiformJitter,
-                jitterSeed: Widget.CuneiformJitterSeed)
+                jitterSeed: Widget.CuneiformJitterSeed,
+                revealActive: revealActive,
+                revealBaselineChars: revealBaselineChars,
+                revealElapsedMs: revealController is not null
+                    ? revealController.Value * revealController.Duration.TotalMilliseconds
+                    : 0.0,
+                revealPerStrokeMs: RevealPerStrokeMs,
+                revealPerLetterMs: RevealPerLetterMs)
             : new ScribeMultilineFieldRenderWidget(
                 text: text,
                 placeholder: Widget.Placeholder,

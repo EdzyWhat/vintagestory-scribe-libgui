@@ -13,6 +13,7 @@
 
 using System;
 using Gui.Core.Framework;         // RenderObject
+using Gui.Widgets.Animations;     // AnimationController, AnimationStatus (stroke-progression reveal)
 using Gui.Widgets.Events;         // KeyboardEvent, PointerEvent, IKeyDownHandler, IKeyCharHandler
 using Gui.Widgets.Framework;      // Widget, StatefulWidget, State, Theme, IFocusable
 using Gui.Widgets.Input;          // FocusNode, GestureDetector, TextEditingController, TextSelection, TextEditingValue
@@ -73,6 +74,17 @@ internal sealed class ScribeCuneiformTitleFieldState : State<ScribeCuneiformTitl
     private TextEditingController Controller => Widget.Controller;
     private FocusNode FocusNode => Widget.FocusNode;
 
+    // Stroke-progression reveal (add-cuneiform-handwriting-feel), mirroring the row field: only a pure
+    // APPEND to the tracked title animates its new suffix; any other change snaps to fully revealed. Active
+    // only when the field carries a non-zero jitter/progression config (Widget.JitterStrength gates jitter;
+    // progression is enabled whenever the tablet builds this field).
+    private const double RevealPerStrokeMs = 28;
+    private const double RevealPerLetterMs = 90;
+    private AnimationController? revealController;
+    private bool revealActive;
+    private int revealBaselineChars;
+    private string revealTrackedText = "";
+
     public override void InitState()
     {
         base.InitState();
@@ -81,17 +93,90 @@ internal sealed class ScribeCuneiformTitleFieldState : State<ScribeCuneiformTitl
         FocusNode.Owner = Element;
         Controller.AddListener(OnControllerChanged);
         FocusNode.AddListener(OnFocusChanged);
+
+        // Existing title text starts fully revealed (no animation on open); only later appends press in.
+        revealTrackedText = Controller.Text;
+        revealController = new AnimationController(
+            TimeSpan.FromMilliseconds(1), Element.Owner!.GetTickerProvider());
+        revealController.OnValueChanged += OnRevealTick;
+        revealController.OnStatusChanged += OnRevealStatus;
     }
 
     public override void Dispose()
     {
         Controller.RemoveListener(OnControllerChanged);
         FocusNode.RemoveListener(OnFocusChanged);
+        if (revealController is not null)
+        {
+            revealController.OnValueChanged -= OnRevealTick;
+            revealController.OnStatusChanged -= OnRevealStatus;
+            revealController.Dispose();
+            revealController = null;
+        }
         base.Dispose();
     }
 
-    private void OnControllerChanged() => SetState(() => { });
+    private void OnControllerChanged()
+    {
+        UpdateReveal();
+        SetState(() => { });
+    }
+
     private void OnFocusChanged() => SetState(() => { });
+
+    /// <summary>Classify the latest controller text against the tracked title: a pure append animates only
+    /// the new suffix (prior letters become the always-revealed baseline); anything else snaps to fully
+    /// revealed. Mirrors the row field's <c>UpdateReveal</c>.</summary>
+    private void UpdateReveal()
+    {
+        if (revealController is null)
+        {
+            return;
+        }
+
+        string text = Controller.Text;
+        bool isAppend = text.Length > revealTrackedText.Length
+            && text.StartsWith(revealTrackedText, StringComparison.Ordinal);
+
+        if (isAppend)
+        {
+            double elapsedMs = revealActive
+                ? revealController.Value * revealController.Duration.TotalMilliseconds
+                : 0.0;
+            if (!revealActive)
+            {
+                revealBaselineChars = revealTrackedText.Length;
+            }
+
+            double durationMs = Scribe.Core.Cuneiform.CuneiformReveal.TotalDurationMs(
+                revealBaselineChars, text.Length,
+                new Scribe.Core.Cuneiform.RevealSchedule(RevealPerStrokeMs, RevealPerLetterMs));
+            if (durationMs > 0)
+            {
+                revealActive = true;
+                revealController.Duration = TimeSpan.FromMilliseconds(durationMs);
+                revealController.Forward(from: Math.Clamp(elapsedMs / durationMs, 0.0, 1.0));
+            }
+        }
+        else
+        {
+            revealActive = false;
+            revealController.Stop();
+        }
+
+        revealTrackedText = text;
+    }
+
+    private void OnRevealTick(double _) => SetState(() => { });
+
+    private void OnRevealStatus(AnimationStatus status)
+    {
+        if (status == AnimationStatus.Completed)
+        {
+            revealActive = false;
+            SetState(() => { });
+        }
+    }
 
     public void OnKeyChar(KeyboardEvent e)
     {
@@ -224,6 +309,13 @@ internal sealed class ScribeCuneiformTitleFieldState : State<ScribeCuneiformTitl
                 cornerRadii: Vector4.Zero,
                 singleLine: true,
                 jitterStrength: Widget.JitterStrength,
-                jitterSeed: Widget.JitterSeed));
+                jitterSeed: Widget.JitterSeed,
+                revealActive: revealActive,
+                revealBaselineChars: revealBaselineChars,
+                revealElapsedMs: revealController is not null
+                    ? revealController.Value * revealController.Duration.TotalMilliseconds
+                    : 0.0,
+                revealPerStrokeMs: RevealPerStrokeMs,
+                revealPerLetterMs: RevealPerLetterMs));
     }
 }

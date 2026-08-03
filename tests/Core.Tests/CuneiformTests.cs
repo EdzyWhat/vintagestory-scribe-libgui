@@ -867,6 +867,67 @@ public class CuneiformTests
         }
     }
 
+    [Fact]
+    public void Reveal_BaselineChars_AreAlwaysShown()
+    {
+        var schedule = new RevealSchedule(perStrokeMs: 30, perLetterMs: 100);
+        // Char 0 and 1 are below the baseline of 2 → always revealed, regardless of elapsed (even 0).
+        Assert.True(CuneiformReveal.IsStrokeRevealed(0, 0, baselineChars: 2, elapsedMs: 0, schedule));
+        Assert.True(CuneiformReveal.IsStrokeRevealed(1, 5, baselineChars: 2, elapsedMs: 0, schedule));
+    }
+
+    [Fact]
+    public void Reveal_NewLetters_PressInOnSchedule()
+    {
+        var schedule = new RevealSchedule(perStrokeMs: 30, perLetterMs: 100);
+        // Baseline 0: char 0 starts at t=0, char 1 at t=100, char 2 at t=200.
+        // Char 1, stroke ordinal 0, needs elapsed >= 100.
+        Assert.False(CuneiformReveal.IsStrokeRevealed(1, 0, baselineChars: 0, elapsedMs: 99, schedule));
+        Assert.True(CuneiformReveal.IsStrokeRevealed(1, 0, baselineChars: 0, elapsedMs: 100, schedule));
+        // Within a letter, ordinal 2 of char 1 needs 100 + 2*30 = 160.
+        Assert.False(CuneiformReveal.IsStrokeRevealed(1, 2, baselineChars: 0, elapsedMs: 159, schedule));
+        Assert.True(CuneiformReveal.IsStrokeRevealed(1, 2, baselineChars: 0, elapsedMs: 160, schedule));
+    }
+
+    [Fact]
+    public void Reveal_StrokeOrdinalOffsetsFromLetterStart()
+    {
+        var schedule = new RevealSchedule(perStrokeMs: 30, perLetterMs: 100);
+        // Each stroke of a letter presses in at letterStart + ordinal*perStrokeMs. Char 1 starts at 100;
+        // its stroke ordinal 0 is in at 100, ordinal 1 at 130 — the second stroke lags the first.
+        Assert.True(CuneiformReveal.IsStrokeRevealed(1, 0, baselineChars: 0, elapsedMs: 100, schedule));
+        Assert.False(CuneiformReveal.IsStrokeRevealed(1, 1, baselineChars: 0, elapsedMs: 100, schedule));
+        Assert.True(CuneiformReveal.IsStrokeRevealed(1, 1, baselineChars: 0, elapsedMs: 130, schedule));
+    }
+
+    [Fact]
+    public void Reveal_BaselineOffsetsTheSchedule()
+    {
+        var schedule = new RevealSchedule(perStrokeMs: 30, perLetterMs: 100);
+        // With baseline 3, char 3 is the first new letter (offset 0 → starts at t=0), char 4 at t=100.
+        Assert.True(CuneiformReveal.IsStrokeRevealed(3, 0, baselineChars: 3, elapsedMs: 0, schedule));
+        Assert.False(CuneiformReveal.IsStrokeRevealed(4, 0, baselineChars: 3, elapsedMs: 99, schedule));
+        Assert.True(CuneiformReveal.IsStrokeRevealed(4, 0, baselineChars: 3, elapsedMs: 100, schedule));
+    }
+
+    [Fact]
+    public void Reveal_TotalDuration_IsZeroWhenNothingNew()
+    {
+        var schedule = new RevealSchedule(perStrokeMs: 30, perLetterMs: 100);
+        Assert.Equal(0.0, CuneiformReveal.TotalDurationMs(baselineChars: 5, totalChars: 5, schedule));
+        Assert.Equal(0.0, CuneiformReveal.TotalDurationMs(baselineChars: 8, totalChars: 5, schedule));
+    }
+
+    [Fact]
+    public void Reveal_TotalDuration_CoversAllNewLetters()
+    {
+        var schedule = new RevealSchedule(perStrokeMs: 30, perLetterMs: 100);
+        // 3 new letters (5 - 2); last starts at 2*100=200. Duration must be >= the last letter's start so
+        // the whole run has time to complete inside the window.
+        double d = CuneiformReveal.TotalDurationMs(baselineChars: 2, totalChars: 5, schedule);
+        Assert.True(d >= 200, $"duration {d} should cover the last new letter's start (200ms)");
+    }
+
     // A tiny hand-authored bundle: A (plain), X (kerns +10 before Y), Z (kerns -100 before Y), Y.
     // All share gridSize 100, widths 20/20, paddings 5/5, so advance = 40 and the floor gap = 10.
     private const string SampleBundleJson = """

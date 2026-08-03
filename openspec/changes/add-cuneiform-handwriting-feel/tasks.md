@@ -1,19 +1,19 @@
 ## 1. Thread stroke identity through layout (Core)
 
-- [ ] 1.1 Add stable identity fields to `PositionedStroke` (`src/Core/Cuneiform/CuneiformLineLayout.cs`): the
+- [x] 1.1 Add stable identity fields to `PositionedStroke` (`src/Core/Cuneiform/CuneiformLineLayout.cs`): the
   source character index within the line and the glyph-local stroke ordinal. Keep the struct game-agnostic.
-- [ ] 1.2 Populate them in `CuneiformLineLayout.LayoutSegment` at emit time (line ~362), deriving the source
+- [x] 1.2 Populate them in `CuneiformLineLayout.LayoutSegment` at emit time (line ~362), deriving the source
   char index from the pen walk / `CharBoundaries` and the ordinal from the glyph's stroke position.
-- [ ] 1.3 Assert the addition changes nothing else: emitted stroke geometry, construction order, `TotalWidth`,
+- [x] 1.3 Assert the addition changes nothing else: emitted stroke geometry, construction order, `TotalWidth`,
   and `CharBoundaries` are unchanged. Add/extend a Core test to lock this.
 
 ## 2. Deterministic jitter transform (Core)
 
-- [ ] 2.1 Add a pure Core type (e.g. `GlyphStrokeJitter`) with `Jitter(GlyphStroke stroke, int seed, double
+- [x] 2.1 Add a pure Core type (e.g. `GlyphStrokeJitter`) with `Jitter(GlyphStroke stroke, int seed, double
   strength) -> GlyphStroke` using `new Random(seed)`, mirroring `ScribeTextCorruptor`. Perturb both endpoints
   (position → angle/length) and `Weight`; bound displacement as a fraction of grid size.
-- [ ] 2.2 Strength 0 returns the input unchanged (identity). Keep it allocation-light (struct in/out).
-- [ ] 2.3 Core tests: pure/reproducible (same inputs → identical output), strength 0 == identity, different
+- [x] 2.2 Strength 0 returns the input unchanged (identity). Keep it allocation-light (struct in/out).
+- [x] 2.3 Core tests: pure/reproducible (same inputs → identical output), strength 0 == identity, different
   seeds diverge, and perturbation stays within the bounded range.
 
 ## 3. Apply jitter at paint time (Mod) — visual only
@@ -33,19 +33,23 @@
 
 ## 4. Per-letter stroke progression (Mod)
 
-- [ ] 4.1 Generalize the display-only reveal (`CuneiformTextRender.RevealFraction`,
+- [~] 4.1 Generalize the display-only reveal (`CuneiformTextRender.RevealFraction`,
   `src/Mod/CuneiformText.cs:85-89`) to a stroke-count / per-letter-progress model driven off the source
-  character index (task 1.1), so within-letter strokes reveal fast and letters are gapped.
-- [ ] 4.2 Add reveal state (a revealed stroke count + a driver) to the editable `ScribeCuneiformFieldRender`,
-  which has none today — model the driver on the existing caret-blink ticker in `ScribeMultilineFieldState`
-  or a new `AnimationController`.
-- [ ] 4.3 Trigger at the commit seam: hook `ScribeMultilineFieldState.Commit()`
-  (`src/Mod/ScribeMultilineField.cs:861`) / the render `Text` setter (`ScribeCuneiformField.cs:75`). Diff old
-  vs new text, animate ONLY the newly-added run (advance revealed count from prior total to new total).
-- [ ] 4.4 Deletions/mid-line edits snap to the new total (no reverse animation); already-revealed letters do
-  not replay on later keystrokes.
-- [ ] 4.5 Mirror the trigger for the single-line title field via its `TextEditingController` seam
-  (`ScribeCuneiformTitleField.cs:84`).
+  character index (task 1.1), so within-letter strokes reveal fast and letters are gapped. DEFERRED: the
+  display-only render is harness-only (no live typing); the per-letter model was implemented on the editable
+  path where it matters. The pure timing math lives in Core `CuneiformReveal` and is reusable if the display
+  path ever needs it.
+- [x] 4.2 Add reveal state (a revealed stroke count + a driver) to the editable `ScribeCuneiformFieldRender`.
+  Uses a new `AnimationController` in `ScribeMultilineFieldState` driving elapsed-ms; the render converts
+  elapsed-ms + baseline char count into revealed strokes per `Scribe.Core.Cuneiform.CuneiformReveal`.
+- [x] 4.3 Trigger at the commit seam: `ScribeMultilineFieldState.Commit()` calls `UpdateReveal()`, which diffs
+  the tracked text vs the new text and animates ONLY a pure-append suffix (baseline = prior length; new run
+  presses in on the per-letter schedule).
+- [x] 4.4 Deletions/mid-line edits (any non-append change) snap: reveal is deactivated and the controller
+  stopped, so text shows fully. Prior letters keep their baseline when a run is extended mid-flight (elapsed
+  preserved across the Duration change), so already-revealed letters don't replay.
+- [x] 4.5 Mirror the trigger for the single-line title field via its `TextEditingController` seam
+  (`ScribeCuneiformTitleField.cs` `UpdateReveal`, called from `OnControllerChanged`).
 
 ## 5. Optional ghost lead-in (Mod)
 

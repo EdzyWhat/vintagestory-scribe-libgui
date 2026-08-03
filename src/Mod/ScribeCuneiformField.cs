@@ -70,6 +70,14 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     // thus does not re-wobble — the letters already on screen.
     private float jitterStrength;
     private int jitterSeed;
+    // Per-letter stroke-progression reveal (add-cuneiform-handwriting-feel). When active, strokes appear over
+    // time: characters below the baseline are already fully pressed; characters at/after it press in on the
+    // schedule as elapsed advances. Inactive (the default) paints every stroke immediately, as today.
+    private bool revealActive;
+    private int revealBaselineChars;
+    private double revealElapsedMs;
+    private double revealPerStrokeMs = 28;
+    private double revealPerLetterMs = 90;
 
     // Cached from the last PerformLayout, reused by PaintInternal and the geometry queries so layout,
     // paint, caret, and hit-testing all agree on the same wrapped lines.
@@ -107,6 +115,18 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     /// <summary>Fixed per-field base seed for the jitter; combined with each stroke's stable identity so the
     /// same character position wobbles the same way and typing doesn't reseed prior letters. Repaint only.</summary>
     public int JitterSeed { get => jitterSeed; set => SetProperty(ref jitterSeed, value, repaint: true); }
+    /// <summary>Whether the stroke-progression reveal is active. When false (the default), every stroke is
+    /// painted immediately (today's behaviour). Repaint only.</summary>
+    public bool RevealActive { get => revealActive; set => SetProperty(ref revealActive, value, repaint: true); }
+    /// <summary>Characters (absolute index in the buffer) already fully revealed and never re-animated —
+    /// the run that existed before the current reveal began. Repaint only.</summary>
+    public int RevealBaselineChars { get => revealBaselineChars; set => SetProperty(ref revealBaselineChars, value, repaint: true); }
+    /// <summary>Elapsed reveal time in ms, driven by the field State's animation controller. Repaint only.</summary>
+    public double RevealElapsedMs { get => revealElapsedMs; set => SetProperty(ref revealElapsedMs, value, repaint: true); }
+    /// <summary>Milliseconds between strokes within a letter (fast). Repaint only.</summary>
+    public double RevealPerStrokeMs { get => revealPerStrokeMs; set => SetProperty(ref revealPerStrokeMs, value, repaint: true); }
+    /// <summary>Milliseconds between successive letters (the pause). Repaint only.</summary>
+    public double RevealPerLetterMs { get => revealPerLetterMs; set => SetProperty(ref revealPerLetterMs, value, repaint: true); }
 
     protected override void PerformLayout()
     {
@@ -190,13 +210,24 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
         paint.Color = inkColor.ToSkColor();
         paint.IsAntialias = true;
 
+        var schedule = new RevealSchedule(revealPerStrokeMs, revealPerLetterMs);
         using var path = new SKPath();
         for (int i = 0; i < lines.Count; i++)
         {
             float originX = padX;
             float originY = padY + i * lineHeightPx;
+            int lineStart = lines[i].SourceStart;
             foreach (PositionedStroke ps in lines[i].Strokes)
             {
+                // Stroke-progression reveal: while active, hide strokes whose letter hasn't pressed in yet.
+                // Keyed off the stroke's ABSOLUTE character index so the schedule is continuous across
+                // wrapped lines; characters below the baseline are always shown (no replay of prior text).
+                if (revealActive && !CuneiformReveal.IsStrokeRevealed(
+                        lineStart + ps.SourceCharIndex, ps.StrokeOrdinal, revealBaselineChars, revealElapsedMs, schedule))
+                {
+                    continue;
+                }
+
                 // Hand-written wobble (visual only): perturb the drawn geometry, keyed off the stroke's
                 // stable identity so the SAME character position jitters identically each frame — no shimmer.
                 // The caret/selection/hit-testing below all read the UN-jittered layout, untouched.
@@ -316,7 +347,9 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
         GlyphBundle? bundle, float padX, float padY,
         Vector4 boxColor, Vector4 borderColor, float borderThickness, Vector4 cornerRadii,
         bool singleLine = false, bool caretVisible = true,
-        float jitterStrength = 0f, int jitterSeed = 0)
+        float jitterStrength = 0f, int jitterSeed = 0,
+        bool revealActive = false, int revealBaselineChars = 0, double revealElapsedMs = 0,
+        double revealPerStrokeMs = 28, double revealPerLetterMs = 90)
     {
         Text = text;
         Caret = caret;
@@ -337,6 +370,11 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
         SingleLine = singleLine;
         JitterStrength = jitterStrength;
         JitterSeed = jitterSeed;
+        RevealActive = revealActive;
+        RevealBaselineChars = revealBaselineChars;
+        RevealElapsedMs = revealElapsedMs;
+        RevealPerStrokeMs = revealPerStrokeMs;
+        RevealPerLetterMs = revealPerLetterMs;
     }
 
     public string Text { get; }
@@ -358,6 +396,11 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
     public bool SingleLine { get; }
     public float JitterStrength { get; }
     public int JitterSeed { get; }
+    public bool RevealActive { get; }
+    public int RevealBaselineChars { get; }
+    public double RevealElapsedMs { get; }
+    public double RevealPerStrokeMs { get; }
+    public double RevealPerLetterMs { get; }
 
     public override RenderObject CreateRenderObject() => new ScribeCuneiformFieldRender();
 
@@ -383,5 +426,10 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
         ro.SingleLine = SingleLine;
         ro.JitterStrength = JitterStrength;
         ro.JitterSeed = JitterSeed;
+        ro.RevealActive = RevealActive;
+        ro.RevealBaselineChars = RevealBaselineChars;
+        ro.RevealElapsedMs = RevealElapsedMs;
+        ro.RevealPerStrokeMs = RevealPerStrokeMs;
+        ro.RevealPerLetterMs = RevealPerLetterMs;
     }
 }

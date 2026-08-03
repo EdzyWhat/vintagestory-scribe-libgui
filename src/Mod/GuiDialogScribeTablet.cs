@@ -97,6 +97,8 @@ public class GuiDialogScribeTablet : ScribeDialogBase
             // per-row seed (its stable TaskId) is supplied at the field; strength comes from the default
             // until the client-config knob (task 6) sources it. 0 would reproduce the crisp geometry.
             CuneiformJitter = CuneiformMetrics.DefaultJitterStrength,
+            // Newly-typed text presses in stroke-by-stroke (task 6 will make this a client toggle).
+            CuneiformProgression = true,
         };
     }
 

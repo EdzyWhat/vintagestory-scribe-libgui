@@ -39,6 +39,11 @@ internal readonly record struct ScribeRowStyle(
     /// valid (defaults to 0).</summary>
     public float CuneiformJitter { get; init; }
 
+    /// <summary>Whether newly-typed cuneiform row text presses in stroke-by-stroke (per-letter progression).
+    /// Set on the tablet path only; ignored when <see cref="UseCuneiform"/> is false. Defaults to false so
+    /// the Lectern/Notebook rows and the disable-cuneiform fallback reveal instantly.</summary>
+    public bool CuneiformProgression { get; init; }
+
     /// <summary>
     /// Builds a row style from the player's consolidated settings. THIS IS THE SINGLE PLACE where the
     /// window font-size scale is applied: the scalable values are multiplied by
