@@ -247,7 +247,6 @@ public sealed partial class ScribeModSystem : ModSystem
 
         RegisterNotebookTuneCommand(api);
         RegisterCuneiformHarnessCommand(api);
-        RegisterCuneiformGlowCommand(api);
 
         // Rebindable collapse/expand hotkey (design D6). GUIOrOtherControls so it fires even while a
         // dialog is open; default P, no modifiers. The HUD flips its client-local collapse preference.

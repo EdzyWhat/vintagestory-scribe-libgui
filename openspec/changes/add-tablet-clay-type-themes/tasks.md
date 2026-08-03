@@ -89,7 +89,8 @@
 - [x] 6.6 Confirm no rendering regression from the shared-paint filter: text/icons drawn after
   cuneiform in the same frame are not blurred. — Confirmed 2026-08-03 playtest (`7cb07fc0`).
 - [x] 6.7 Decide whether to keep or strip the `.cuneiformglow` dev command in the shipped tree; update
-  accordingly. — Decided 2026-08-03 playtest (`e7417e7a`): STRIP it (values baked). Removal pending.
+  accordingly. — Decided 2026-08-03 playtest (`e7417e7a`): STRIP it (values baked). Command + handler +
+  in-memory override machinery removed; `CuneiformGlowTable.For` now returns the baked seeds directly.
 
 ## 7. Export palettes to the libGUI-Theme-Library gallery
 

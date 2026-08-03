@@ -34,11 +34,9 @@ public readonly record struct CuneiformGlow(Vector4 Color, float BlurFraction)
 }
 
 /// <summary>
-/// Per-material cuneiform glow defaults plus in-memory tuning state the dev command
-/// (<c>.cuneiformglow</c>) overrides at runtime. All three clay backdrops are mid-tone with DARK ink, so
-/// every default is a LIGHT halo (the "polarity" the design mentions is captured directly in the halo
-/// color: a light halo lifts dark ink; a dark halo would be for light ink on a dark clay). Seeds are tuned
-/// in-game via the dev command and then baked back here (tasks 6.4 / 3.1).
+/// Per-material cuneiform glow seeds. All three clay backdrops are mid-tone with DARK ink, so every seed is
+/// a LIGHT halo (a light halo lifts dark ink; a dark halo would be for light ink on a dark clay). The values
+/// were tuned in-game via a since-removed <c>.cuneiformglow</c> dev command and baked here (tasks 6.4 / 6.7).
 /// </summary>
 internal static class CuneiformGlowTable
 {
@@ -49,54 +47,15 @@ internal static class CuneiformGlowTable
     private static readonly CuneiformGlow RedDefault  = new(new Vector4(0.98f, 0.92f, 0.88f, 0.30f), 0.117f);
     private static readonly CuneiformGlow BlueDefault = new(new Vector4(0.95f, 0.97f, 0.99f, 0.30f), 0.117f);
 
-    // In-memory dev-command overrides (null = use the baked default). Mutated ONLY by the .cuneiformglow
-    // client command; never persisted. A single override applies to all materials so tuning is one dial.
-    private static float? _strengthOverride;   // halo alpha
-    private static float? _blurOverride;        // blur fraction of em
-    private static bool _darkPolarity;          // true → flip the halo to dark (light-ink-on-dark-clay case)
-
-    /// <summary>Resolve the glow for a tablet's <c>material</c> variant, applying any live dev-command
-    /// overrides. <c>clay-red</c>/<c>clay-blue</c>/<c>clay-fire</c> map to their seed; <c>wax</c> and any
-    /// unrecognized material ride the fire seed (its backdrop twin), mirroring the theme/backdrop fallback.</summary>
-    public static CuneiformGlow For(string? material)
+    /// <summary>Resolve the glow for a tablet's <c>material</c> variant.
+    /// <c>clay-red</c>/<c>clay-blue</c>/<c>clay-fire</c> map to their seed; <c>wax</c> and any unrecognized
+    /// material ride the fire seed (its backdrop twin), mirroring the theme/backdrop fallback.</summary>
+    public static CuneiformGlow For(string? material) => material switch
     {
-        CuneiformGlow g = material switch
-        {
-            "clay-blue" => BlueDefault,
-            "clay-red" => RedDefault,
-            _ => FireDefault, // clay-fire, wax, unknown
-        };
-
-        Vector4 color = g.Color;
-        if (_darkPolarity)
-        {
-            // Flip to a dark halo at the same alpha (for a hypothetical light-ink surface); keeps the dial.
-            color = new Vector4(0.05f, 0.04f, 0.03f, color.W);
-        }
-        if (_strengthOverride is { } a)
-        {
-            color = color with { W = a };
-        }
-        return new CuneiformGlow(color, _blurOverride ?? g.BlurFraction);
-    }
-
-    /// <summary>Apply a live tuning override from the dev command; null args leave that dial unchanged.
-    /// Returns the resulting fire-material glow so the command can echo the effective values.</summary>
-    public static CuneiformGlow SetOverride(float? strength, float? blurFraction, bool? darkPolarity)
-    {
-        if (strength is { } s) _strengthOverride = s;
-        if (blurFraction is { } b) _blurOverride = b;
-        if (darkPolarity is { } d) _darkPolarity = d;
-        return For("clay-fire");
-    }
-
-    /// <summary>Clear all dev overrides, reverting to the baked per-material seeds.</summary>
-    public static void ResetOverride()
-    {
-        _strengthOverride = null;
-        _blurOverride = null;
-        _darkPolarity = false;
-    }
+        "clay-blue" => BlueDefault,
+        "clay-red" => RedDefault,
+        _ => FireDefault, // clay-fire, wax, unknown
+    };
 }
 
 /// <summary>

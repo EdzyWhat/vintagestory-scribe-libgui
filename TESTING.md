@@ -2484,8 +2484,10 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [x] `e7417e7a` **Keep or strip dev command.** Decide whether the `.cuneiformglow` dev command stays in
       the shipped tree; note the decision. *(add-tablet-clay-type-themes 6.7)*
       - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): decision is **STRIP** — the
-        `.cuneiformglow` dev command should be removed from the shipped tree now that the glow values are
-        baked into the per-material seeds. (Follow-up: remove the command registration + handler.)
+        `.cuneiformglow` dev command is removed from the shipped tree now that the glow values are baked
+        into the per-material seeds. Command registration, handler, `ToHex` echo helper, and the
+        in-memory override machinery in `CuneiformGlowTable` are all gone; `For(material)` returns the
+        baked seed directly.
 - [x] `8c429d67` **No top divider.** Open a tablet in each view (edit/read/pinned) with Pixel-Art ON and
       confirm there is no top divider/hard rule above the scroll region on the clay backdrop.
       *(add-tablet-clay-type-themes 8.7)*
