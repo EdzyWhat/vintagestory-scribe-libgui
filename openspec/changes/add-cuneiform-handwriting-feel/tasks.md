@@ -77,13 +77,15 @@
 
 - [ ] 7.1 `dotnet build` clean; `dotnet test` — Core coverage for jitter (task 2.3) and stroke identity
   (task 1.3) and the layout-metrics-invariant-under-jitter check (task 3.4).
-- [ ] 7.2 In-game: type a line with repeated characters; confirm repeated glyphs look different (jitter) and
-  the line does NOT shimmer frame to frame.
-- [ ] 7.3 In-game: confirm the caret sits correctly and clicking selects the right character with jitter on
-  (jitter must not move the caret or shift hit-testing).
-- [ ] 7.4 In-game: type into a tablet/lectern cuneiform field; confirm new letters press in stroke-by-stroke
-  with a pause between letters, and earlier letters don't re-animate on each keystroke.
-- [ ] 7.5 In-game: delete/edit mid-line; confirm text snaps to the new state with no reverse animation.
+- [x] 7.2 In-game: type a line with repeated characters; confirm repeated glyphs look different (jitter) and
+  the line does NOT shimmer frame to frame. — Confirmed 2026-08-03 playtest (`1d8a57eb`).
+- [x] 7.3 In-game: confirm the caret sits correctly and clicking selects the right character with jitter on
+  (jitter must not move the caret or shift hit-testing). — Confirmed 2026-08-03 playtest (`d76d4f84`).
+- [x] 7.4 In-game: type into a tablet/lectern cuneiform field; confirm new letters press in stroke-by-stroke
+  with a pause between letters, and earlier letters don't re-animate on each keystroke. — Confirmed
+  2026-08-03 playtest (`d077766c`).
+- [x] 7.5 In-game: delete/edit mid-line; confirm text snaps to the new state with no reverse animation.
+  — Confirmed 2026-08-03 playtest (`8fccf5a0`).
 - [ ] 7.6 In-game: set jitter 0 + progression off; confirm rendering is identical to current crisp behaviour.
 - [ ] 7.7 In-game (if built): evaluate the ghost lead-in; keep only if it reads well, else leave it off by
   default.

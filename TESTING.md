@@ -29,28 +29,42 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > default** — turn it on to test the progression. Jitter + size are always on (tablet path only). Fully
 > relaunch the client to pick up the new build after the 2026-08-03 tuning pass.
 
-- [ ] `11ec19a1` **Glyph size and legibility.** Open a tablet and read a cuneiform line — confirm the
+- [x] `11ec19a1` **Glyph size and legibility.** Open a tablet and read a cuneiform line — confirm the
       glyphs (~20% larger this pass) read comfortably and sit well against the surrounding readable text /
       row height without overflowing or clipping. *(add-cuneiform-handwriting-feel 7.2b)*
-- [ ] `1d8a57eb` **Repeated-glyph variety.** In a tablet cuneiform field, type a line with repeated
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works, its bigger." The
+        larger glyphs read comfortably against the row height without overflow/clipping.
+- [x] `1d8a57eb` **Repeated-glyph variety.** In a tablet cuneiform field, type a line with repeated
       characters (e.g. "aaaa mmmm") at jitter 0.8 — confirm the repeats look hand-varied, not stamped, and
       the line does NOT shimmer or re-wobble frame to frame or as you keep typing.
       *(add-cuneiform-handwriting-feel 7.2)*
-- [ ] `3fbce4e9` **Press-in toggle.** In Scribe Settings confirm "Cuneiform press-in" is OFF by default
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." Repeats look
+        hand-varied with no shimmer/re-wobble. (Tester note: jitter is no longer at 0.8 — it was lowered
+        to 0.6 per an earlier tuning adjustment, commit `1b5f660`.)
+- [x] `3fbce4e9` **Press-in toggle.** In Scribe Settings confirm "Cuneiform press-in" is OFF by default
       (fresh text appears instantly); turn it ON, reopen a tablet, and confirm new text now presses in
       stroke-by-stroke — and that toggling it repaints without a restart.
       *(add-cuneiform-handwriting-feel 6.3)*
-- [ ] `d76d4f84` **Caret and click with jitter.** With jitter on, click into the middle of an existing
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." Press-in is off by
+        default, turns on and presses text in stroke-by-stroke, and toggling repaints without a restart.
+- [x] `d76d4f84` **Caret and click with jitter.** With jitter on, click into the middle of an existing
       cuneiform line and type — confirm the caret sits at the right character and clicking selects the
       character you aimed at (jitter must not shift the caret or hit-testing).
       *(add-cuneiform-handwriting-feel 7.3)*
-- [ ] `d077766c` **Stroke-by-stroke reveal.** With "Cuneiform press-in" ON, type a fresh word into a
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." The caret lands on
+        the right character and clicking selects the aimed-at character — jitter doesn't shift the caret
+        or hit-testing.
+- [x] `d077766c` **Stroke-by-stroke reveal.** With "Cuneiform press-in" ON, type a fresh word into a
       tablet cuneiform field (row AND title) — confirm new letters lay down stroke-by-stroke (~50ms/stroke)
       with a pause between letters (~150ms), at a pace that feels natural/fun, and earlier letters don't
       re-animate on each new keystroke. *(add-cuneiform-handwriting-feel 7.4)*
-- [ ] `8fccf5a0` **Edit snaps, no rewind.** With press-in ON, after a word animates in, delete a character
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." New letters lay down
+        stroke-by-stroke with an inter-letter pause; earlier letters don't re-animate on each keystroke.
+- [x] `8fccf5a0` **Edit snaps, no rewind.** With press-in ON, after a word animates in, delete a character
       or edit mid-line — confirm the text snaps to its new state fully revealed, with no reverse/rewind
       animation. *(add-cuneiform-handwriting-feel 7.5)*
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." Editing after an
+        animate-in snaps to the fully-revealed new state with no reverse/rewind.
 - [ ] `42a3a1d1` **Zero-jitter crisp baseline.** (Deferred until task 6 exposes the knobs.) Once a
       jitter-0 + progression-off setting exists, confirm rendering is byte-identical to today's crisp,
       instant cuneiform. *(add-cuneiform-handwriting-feel 7.6)*
@@ -2431,32 +2445,63 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > `.cuneiformglow <strength|blur|polarity|reset> [value]` tunes the glow live on an open tablet.
 > Restaged Debug 2026-08-03 — fully relaunch the client first.
 
-- [ ] `4659ba2f` **Per-material palette.** With Pixel-Art ON, open red/blue/fire tablets and confirm each
+- [x] `4659ba2f` **Per-material palette.** With Pixel-Art ON, open red/blue/fire tablets and confirm each
       reads as its own material — ink, buttons + hover/press, input background/border, pinned tint, panel
       background — and harmonizes with its clay backdrop. *(add-tablet-clay-type-themes 6.2)*
-- [ ] `b6ff53f5` **Glow lifts ink.** On each clay backdrop confirm the outer glow lifts the cuneiform ink
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." Each of red/blue/fire
+        reads as its own material and harmonizes with its clay backdrop.
+- [x] `b6ff53f5` **Glow lifts ink.** On each clay backdrop confirm the outer glow lifts the cuneiform ink
       off the clay, and that overlapping strokes within a glyph show ONE uniform halo (no darkened/doubled
       seam). *(add-tablet-clay-type-themes 6.3)*
-- [ ] `b5bc4914` **Tune glow live.** Use `.cuneiformglow strength/blur/polarity` on an open tablet to dial
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." The outer glow lifts
+        the ink off each clay backdrop with one uniform halo per glyph (no doubled seam).
+- [x] `b5bc4914` **Tune glow live.** Use `.cuneiformglow strength/blur/polarity` on an open tablet to dial
       in each material; confirm it repaints without reopening, then report the values back to bake into the
       seeds. *(add-tablet-clay-type-themes 6.4)*
-- [ ] `355c3d5e` **Pixel-Art OFF unchanged.** With Pixel-Art OFF confirm tablets follow the global theme
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." The `.cuneiformglow`
+        command repaints the open tablet live; tuned values were folded into the softer/wider glow
+        confirmed by `0a95e5b2` (commit `d6858d4`).
+- [x] `355c3d5e` **Pixel-Art OFF unchanged.** With Pixel-Art OFF confirm tablets follow the global theme
       (no per-clay color, no backdrop) and the Lectern/Notebook + readable path look unchanged EXCEPT the
       intended pinned-tint shift to Secondary. *(add-tablet-clay-type-themes 6.5)*
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." With Pixel-Art OFF
+        tablets follow the global theme (no per-clay color/backdrop); other surfaces unchanged apart from
+        the intended pinned-tint shift to Secondary.
 - [ ] `f640f9ab` **Focus border vs pinned wash.** Focus an input on a PINNED row (tablet AND Lectern) and
       confirm the Primary focus border is clearly distinguishable from the Secondary pinned-row wash.
       *(add-tablet-clay-type-themes 6.8)*
-- [ ] `7cb07fc0` **No blur leak.** Confirm text/icons drawn after cuneiform in the same frame are NOT
+      - **Still broken 2026-08-03** (playtest submission 2026-08-03T14-59-44): the current approach draws
+        the focus border+background around the ENTIRE row — the same target as the pin wash — so on a
+        pinned row the two still read as the same shape and can't be told apart. Tester's directed fix:
+        change WHAT is drawn on focus. When a row's input is focused, the border + background should wrap
+        just the INPUT ELEMENT, not the whole row (pinning keeps the whole-row wash). That makes the focus
+        indicator a distinct, smaller shape inside the pinned row rather than a competing full-row wash.
+        Needs a re-scope of the focus-affordance target + retest.
+- [x] `7cb07fc0` **No blur leak.** Confirm text/icons drawn after cuneiform in the same frame are NOT
       blurred by the shared-paint mask filter. *(add-tablet-clay-type-themes 6.6)*
-- [ ] `e7417e7a` **Keep or strip dev command.** Decide whether the `.cuneiformglow` dev command stays in
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." Text/icons drawn
+        after the cuneiform in the same frame are not blurred by the mask filter.
+- [x] `e7417e7a` **Keep or strip dev command.** Decide whether the `.cuneiformglow` dev command stays in
       the shipped tree; note the decision. *(add-tablet-clay-type-themes 6.7)*
-- [ ] `8c429d67` **No top divider.** Open a tablet in each view (edit/read/pinned) with Pixel-Art ON and
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): decision is **STRIP** — the
+        `.cuneiformglow` dev command should be removed from the shipped tree now that the glow values are
+        baked into the per-material seeds. (Follow-up: remove the command registration + handler.)
+- [x] `8c429d67` **No top divider.** Open a tablet in each view (edit/read/pinned) with Pixel-Art ON and
       confirm there is no top divider/hard rule above the scroll region on the clay backdrop.
       *(add-tablet-clay-type-themes 8.7)*
-- [ ] `78802251` **Crisp button labels.** Confirm the footer button labels render crisp with NO halo, while
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." No top divider/hard
+        rule above the scroll region on the clay backdrop in any view.
+- [x] `78802251` **Crisp button labels.** Confirm the footer button labels render crisp with NO halo, while
       the task rows and the title still show their glow. *(add-tablet-clay-type-themes 8.7)*
-- [ ] `0a95e5b2` **Softer wider glow.** Confirm the row/title glow is softer and more spread than before
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." Footer button labels
+        render crisp with no halo while rows + title keep their glow.
+- [x] `0a95e5b2` **Softer wider glow.** Confirm the row/title glow is softer and more spread than before
       (strength down, radius wider) — a diffuse lift, not a bright ring. *(add-tablet-clay-type-themes 8.7)*
-- [ ] `03eda46a` **Engraved chrome glyphs.** On red/blue/fire tablets confirm the title-bar pencil +
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." The row/title glow
+        reads as a softer, wider diffuse lift rather than a bright ring.
+- [x] `03eda46a` **Engraved chrome glyphs.** On red/blue/fire tablets confirm the title-bar pencil +
       drag-grip read as darkened engraved impressions in the clay (distinct dark ink, not washed-out gray),
       with clear transparent backgrounds (no pale tile). *(add-tablet-clay-type-themes 8.7)*
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." The title-bar pencil
+        + drag-grip read as darkened engraved impressions with clear transparent backgrounds (no pale
+        tile) on each material — closes out the SrcIn + dark-alpha fix for the earlier pale-tile regression.

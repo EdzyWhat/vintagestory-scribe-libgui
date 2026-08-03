@@ -68,23 +68,28 @@
 
 - [x] 6.1 `dotnet build src/Mod/Mod.csproj -c Debug` clean; `dotnet test tests/Core.Tests` green (no
   Core change expected, but keep it passing).
-- [ ] 6.2 Restage (`bash build/restage.sh Debug`); in-game, open red/blue/fire tablets with Pixel-Art
+- [x] 6.2 Restage (`bash build/restage.sh Debug`); in-game, open red/blue/fire tablets with Pixel-Art
   ON and confirm each reads as its own material (ink, buttons + hover/press, input background/border,
-  pinned tint, panel background) and harmonizes with its backdrop.
-- [ ] 6.3 In-game: confirm the glow lifts the ink off each clay backdrop and that overlapping strokes
-  within a glyph show one uniform halo (no darkened/doubled seam).
-- [ ] 6.4 In-game: use `.cuneiformglow` to tune per-material glow strength/blur/polarity; report values
-  back, then bake the tuned constants into the table (task 3.1).
-- [ ] 6.5 In-game: confirm Pixel-Art OFF still follows the global theme (no per-clay coloring, no
+  pinned tint, panel background) and harmonizes with its backdrop. — Confirmed 2026-08-03 playtest
+  (`4659ba2f`).
+- [x] 6.3 In-game: confirm the glow lifts the ink off each clay backdrop and that overlapping strokes
+  within a glyph show one uniform halo (no darkened/doubled seam). — Confirmed 2026-08-03 playtest
+  (`b6ff53f5`).
+- [x] 6.4 In-game: use `.cuneiformglow` to tune per-material glow strength/blur/polarity; report values
+  back, then bake the tuned constants into the table (task 3.1). — Confirmed 2026-08-03 playtest
+  (`b5bc4914`); tuned values baked in commit `d6858d4`.
+- [x] 6.5 In-game: confirm Pixel-Art OFF still follows the global theme (no per-clay coloring, no
   backdrop), and that the Lectern/Notebook dialogs and the readable path are visually unchanged EXCEPT
-  the intended pinned-tint shift to `Secondary`.
+  the intended pinned-tint shift to `Secondary`. — Confirmed 2026-08-03 playtest (`355c3d5e`).
 - [ ] 6.8 In-game: focus an input on a PINNED row (tablet, and Lectern) and confirm the focus border
   (`Primary`) is clearly distinguishable from the pinned-row wash (`Secondary`) — the ambiguity this
-  remap fixes.
-- [ ] 6.6 Confirm no rendering regression from the shared-paint filter: text/icons drawn after
-  cuneiform in the same frame are not blurred.
-- [ ] 6.7 Decide whether to keep or strip the `.cuneiformglow` dev command in the shipped tree; update
-  accordingly.
+  remap fixes. — Still broken 2026-08-03 playtest (`f640f9ab`): whole-row focus wash still collides
+  with the pinned wash. Directed fix: draw the focus border+background around just the INPUT ELEMENT,
+  not the whole row (pinning keeps the whole-row wash). Needs re-scope + retest.
+- [x] 6.6 Confirm no rendering regression from the shared-paint filter: text/icons drawn after
+  cuneiform in the same frame are not blurred. — Confirmed 2026-08-03 playtest (`7cb07fc0`).
+- [x] 6.7 Decide whether to keep or strip the `.cuneiformglow` dev command in the shipped tree; update
+  accordingly. — Decided 2026-08-03 playtest (`e7417e7a`): STRIP it (values baked). Removal pending.
 
 ## 7. Export palettes to the libGUI-Theme-Library gallery
 
@@ -132,7 +137,8 @@
   transparent quad — the pale-tile bug.) Wire `BuildTitleBar`'s pencil + both grip glyphs to the seam. The
   close button (`Error`) is unchanged.
 - [x] 8.6 `dotnet build src/Mod/Mod.csproj -c Debug` clean; `dotnet test tests/Core.Tests` green.
-- [ ] 8.7 In-game (restage first): open a tablet and confirm (a) no top divider in any view, (b) footer
+- [x] 8.7 In-game (restage first): open a tablet and confirm (a) no top divider in any view, (b) footer
   button labels have no halo while rows/title still glow, (c) the glow is softer and more spread, and
   (d) the pencil + drag-grip read as darkened engraved impressions in the clay (distinct, not gray),
-  on red/blue/fire.
+  on red/blue/fire. — Confirmed 2026-08-03 playtest, all four sub-checks: (a) `8c429d67`,
+  (b) `78802251`, (c) `0a95e5b2`, (d) `03eda46a`.
