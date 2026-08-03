@@ -1,24 +1,36 @@
 ## ADDED Requirements
 
-### Requirement: A clay tablet records its clay type and fired appearance on the stack
+### Requirement: Each clay type is a discrete tablet item; fired appearance is a stack attribute
 
-A clay tablet SHALL record on its `ItemStack` a `clayType` value of `red`, `blue`, or `fire`, set at
-craft time from the clay ingredient consumed, and a `fired` appearance value (soft or fired). These
-values SHALL be stored as stack attributes and SHALL be preserved across dialog close/reopen and across
-drop/pickup, carried by the existing document save and pickup flow (no new network packet). They SHALL
-be an appearance record only: this requirement SHALL NOT add the soft→fired firing gameplay
-transformation (still deferred). A wax tablet SHALL NOT be required to carry a `clayType`. When a
-clay tablet carries no `clayType` or `fired` attribute, consumers SHALL treat it as `red` + soft.
+The clay tablet SHALL exist as three discrete registered items — one per Vintage Story clay type (red,
+blue, fire) — expressed as composite states of the tablet's `material` variant axis
+(`clay-red`, `clay-blue`, `clay-fire`), alongside the `wax` state. Each of the four items SHALL have its
+own handbook entry and its own crafting recipe. The clay type SHALL therefore be the item's own variant,
+NOT a stack attribute.
 
-#### Scenario: Clay type is captured at craft
+A clay tablet SHALL additionally record a `fired` appearance value (soft or fired) as a stack attribute,
+preserved across dialog close/reopen and across drop/pickup by the existing document save and pickup flow
+(no new network packet). The `fired` value SHALL be an appearance record only: this requirement SHALL NOT
+add the soft→fired firing gameplay transformation (still deferred). When a tablet's `material` variant is
+unrecognized or a `fired` attribute is absent, consumers SHALL treat it as red + soft.
 
-- **WHEN** a clay tablet is crafted from blue clay
-- **THEN** the resulting tablet stack records `clayType = blue`
+#### Scenario: The three clay types are discrete craftable items
 
-#### Scenario: Clay type and fired persist across drop and pickup
+- **WHEN** a player browses the handbook or creative inventory
+- **THEN** a Red Clay Tablet, a Blue Clay Tablet, and a Fire Clay Tablet appear as separate entries, each
+  with its own recipe, alongside the Wax Tablet
 
-- **WHEN** a clay tablet recording a given `clayType` and `fired` value is dropped and picked back up
-- **THEN** the picked-up stack still records the same `clayType` and `fired` value
+#### Scenario: Clay type is fixed by the item, not a stack attribute
+
+- **WHEN** a blue clay tablet is crafted from blue clay
+- **THEN** the resulting item is the `clay-blue` variant (its clay type is the item itself, requiring no
+  stack attribute to record it)
+
+#### Scenario: Fired appearance persists across drop and pickup
+
+- **WHEN** a clay tablet recording a given `fired` value is dropped and picked back up
+- **THEN** the picked-up stack still records the same `fired` value, and the item is still the same clay
+  variant
 
 #### Scenario: Recording fired does not fire the tablet
 
@@ -26,7 +38,7 @@ clay tablet carries no `clayType` or `fired` attribute, consumers SHALL treat it
 - **THEN** no soft→fired transformation, archive-on-fire, or other firing gameplay occurs — the value
   only influences the tablet's recorded appearance
 
-#### Scenario: A clay tablet with no recorded type defaults to red + soft
+#### Scenario: An unrecognized variant or absent fired attribute defaults to red + soft
 
-- **WHEN** a clay tablet stack carries no `clayType` or `fired` attribute
-- **THEN** consumers treat it as `clayType = red` and unfired
+- **WHEN** a tablet stack has an unrecognized `material` variant or carries no `fired` attribute
+- **THEN** consumers treat it as red + soft

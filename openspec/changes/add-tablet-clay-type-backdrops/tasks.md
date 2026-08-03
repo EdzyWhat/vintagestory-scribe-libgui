@@ -8,25 +8,36 @@
   fired specs. Q3: user authored **full-page** clay art (3 PNGs), so the interim swatch/frame-overlay is
   moot — soft clay uses the existing stretch path. Q4: three separate clay recipes.
 
-## 1. Record clay-type and fired on the tablet stack
+## 1. Clay type is a VS variant; only `fired` is a stack attribute
 
-- [x] 1.1 Record `clayType` (`red`/`blue`/`fire`) at craft. — DEVIATION (cleaner than sniffing the
-  ingredient in `OnCreatedByCrafting`): set declaratively via each clay recipe's `output.attributes`
-  (`clayType: "..."`), verified against `CraftingRecipeIngredient.Attributes`/`ResolvedAttributes` and
-  vanilla `lantern.json` precedent. `fired` is left absent (defaults false per Q1); wax carries no
-  `clayType`.
-- [x] 1.2 Add read helpers `ItemScribeTablet.ReadClayType(stack)` / `ReadFired(stack)` that default an
-  absent value to red + soft, reusing the stack-attribute discipline (`Attributes.GetString/GetBool`); no
-  new packet.
-- [x] 1.3 Attributes ride the existing save/pickup flow (same stack as the docId) — no new persistence
-  code. No `src/Core/` change. (In-game persistence check: task 6.5.)
+- [x] 1.1 REVISED 2026-08-02 (reverses the original attribute approach — see design Decision 1): clay type
+  is now a real **VS variant**, not a stack attribute. `scribetablet.json`'s `material` axis enumerates
+  composite states `[clay-red, clay-blue, clay-fire, wax]` (the single-group composite idiom vanilla uses
+  for `fishfillet`), producing four discrete registered items each with its own handbook page + recipe. The
+  earlier `output.attributes.clayType` mechanism is removed. Reason: attributes never yield discrete
+  handbook/creative entries (VS lists by variant), which the user requires as a base expectation.
+- [x] 1.2 Removed the `ReadClayType` helper and `clayType`/`ClayTypeAttributeKey` (dead now — type lives in
+  the variant). `ReadFired(stack)` remains (fired is still an attribute, defaulting false). No new packet.
+- [x] 1.3 `fired` rides the existing save/pickup flow; clay type rides the item code itself (variant). No
+  new persistence code, no `src/Core/` change. (In-game persistence check: task 6.5.)
 
-## 2. Update the tablet recipe to carry clay type at craft
+## 2. Recipes output the three discrete clay-tablet items
 
-- [x] 2.1 Q4: `scribetablet-clay.json` is now THREE recipes (red/blue/fire), each consuming
-  `game:clay-{type}` and writing `output.attributes.clayType`. Wax recipe unchanged.
-- [x] 2.2 `scribetablet.json` still declares only `material: [clay, wax]` (clayType/fired are attributes,
-  not variant axes).
+- [x] 2.1 `scribetablet-clay.json` is THREE recipes (red/blue/fire), each outputting its discrete variant
+  code `scribe:scribetablet-clay-{type}` (no `output.attributes` — the type is the item). Wax recipe
+  unchanged (`scribetablet-wax`).
+- [x] 2.1a RECIPE SHAPE (2026-08-02, user direction): each clay recipe is pattern `KCC,SCC` (width 3,
+  height 2): a knife top-left, a stick mid-left, and a 2×2 clay block at `quantity: 2` per cell =
+  **8 `game:clay-{type}` + 1 `game:stick` + 1 knife**. The knife is
+  `{ tags: ["tool-knife"], isTool: true, toolDurabilityCost: 3 }` — NOT consumed, loses 3 durability per
+  craft (vanilla `bed.json` precedent). Any knife material works. Replaced the earlier thin `1 clay + 1
+  stick` recipe (reported not discoverable).
+- [x] 2.2 `scribetablet.json` `material` axis = `[clay-red, clay-blue, clay-fire, wax]`; `shapeByType`
+  updated to `*-clay-red`/`*-clay-blue`/`*-clay-fire`/`*-wax`; four `item-scribetablet-*` lang name/desc
+  keys ("Red/Blue/Fire Clay Tablet", "Wax Tablet").
+- [ ] 2.3 In-game: confirm FOUR discrete tablet entries appear in the handbook and creative (Red/Blue/Fire
+  Clay Tablet + Wax Tablet), each clay type craftable via its own recipe, and each opens its matching
+  backdrop. (Unblocks 6.2; supersedes the earlier "one collapsed entry" symptom.)
 
 ## 3. Seven backdrop specs
 
@@ -57,23 +68,25 @@
 
 ## 5. Select the backdrop in the tablet dialog
 
-- [x] 5.1 Selection lives in ONE place: `ScribeBackdrops.ForTablet(material, clayType, fired)`, called from
-  `ItemScribeTablet.OpenTabletDialog` with the stack's read attributes; wax → `Wax`, else keyed on
-  clayType × fired, defaulting to `ClayRedSoft` when attributes are absent.
+- [x] 5.1 Selection lives in ONE place: `ScribeBackdrops.ForTablet(material, fired)`, called from
+  `ItemScribeTablet.OpenTabletDialog` with the item's `Variant["material"]` (`clay-red`/`clay-blue`/
+  `clay-fire`/`wax`) + read `fired` attribute; wax → `Wax`, else keyed on the clay material variant ×
+  fired, defaulting to `ClayRedSoft` for an unknown/absent material. REVISED 2026-08-02: takes the
+  material variant, not a separate `clayType` argument (clay type is now the variant — Decision 1).
 
 ## 6. Verification
 
 - [x] 6.1 `dotnet build` clean (0 errors, 3 pre-existing warnings); `dotnet test` Core suite 255/255 (no
   Core change).
-- [ ] 6.2 In-game: craft clay tablets from red, blue, and fire clay; confirm each opens with a distinct,
-  crisp clay-type backdrop.
+- [ ] 6.2 In-game: obtain each clay tablet — from creative (now three discrete items) OR by crafting from
+  red/blue/fire clay — and confirm each opens with its own distinct, crisp clay-type backdrop.
 - [ ] 6.3 In-game: reach a fired clay tablet via creative (fired=true is not craftable this round) and
   confirm the fired-ceramic tint reads distinctly per clay type; tune tint values if needed.
-- [x] 6.4 In-game: confirm a wax tablet shows the wax placeholder backdrop, and a legacy/creative clay
-  tablet with no attributes falls back to red + soft without error. — CONFIRMED (2026-08-02 playtest):
-  both the Creative-Inventory Wax and Clay tablet backdrops render; the clay one is the red+soft default
-  since a Creative stack carries no `clayType`. (This exercises the DEFAULT path only — per-type red/blue/
-  fire art still needs crafting: task 6.2.)
+- [x] 6.4 SUPERSEDED by the variant pivot (2026-08-02): the earlier playtest confirmed the wax + a single
+  collapsed creative "Clay Tablet" (red+soft default) rendered without error — but clay type is now a
+  variant, so creative offers three discrete typed clay items instead of one attribute-less stack. The
+  fallback path (unknown/absent material → red + soft) still exists in `ForTablet` for legacy stacks; the
+  live "four discrete entries render correctly" check folds into task 2.3 / 6.2.
 - [ ] 6.5 In-game: confirm clayType/fired persist across close/reopen and drop/pickup.
 - [ ] 6.6 In-game: confirm the Lectern and both Notebooks are visually unchanged (renderer seam did not
   disturb the full-page backdrops).

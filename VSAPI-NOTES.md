@@ -1764,6 +1764,33 @@ own default policy. **Ground truth for all of this is the decompiled vendored `s
 (`ilspycmd -t <FullTypeName>`) — the `reference/vslibgui/` clone is STALE (single commit 2026-06-06,
 pre-3.1.0) and has NO traversal system at all, so it must NOT be trusted for focus/traversal questions.**
 
+## Item state-transition (`Harden`/`Dry`) and firepit smelt both DROP stack attributes on transform (2026-08-02)
+
+**Symptom: a tablet/food item that "becomes" another item over time (dries, hardens, fires) loses its
+custom stack attributes (our `scribeDocument`, `fired`, etc.) at the moment of transformation.**
+
+VS has a native time-based transition system separate from firepit smelting: `EnumTransitionType` includes
+`Perish, Dry, Burn, Cure, Convert, Ripen, Melt, Harden, None`, and `TransitionableProperties` (declared in
+JSON as `transitionableProps` / `transitionablePropsByType`) carries `FreshHours` (stays in current state),
+`TransitionHours` (how long the transition takes once it starts), and `TransitionedStack` (the resulting
+item). This is the engine-native way to model "dries out over N hours into another item" — e.g. clay tablet
+`Harden`: `FreshHours ≈ 48` game-hours wet, then `TransitionHours` to become the hard variant. The engine
+ticks it via `UpdateAndGetTransitionStatesNative` (server-side; skipped for `ItemSlotCreative` and when the
+stack attr `timeFrozen` is set), tracking `createdTotalHours`/`transitionedHours` under the stack's
+`transitionstate` tree attribute against `world.Calendar.TotalHours`.
+
+BUT the conversion has the SAME gotcha as firepit `DoSmelt`: `CollectibleObject.OnTransitionNow(slot, props)`
+(virtual) does `props.TransitionedStack.ResolvedItemstack.Clone()` and the caller `SetFrom`s it — it clones
+the FIXED output stack and does NOT copy the input's custom attributes. So a plain-JSON `Harden` would dry a
+tablet into a *blank* hard tablet, dropping the document. (`DoSmelt` clones `combustibleProps.SmeltedStack`
+the same way — confirmed separately for the firing mechanic.)
+
+**Fix pattern:** override `OnTransitionNow` (for drying) and `DoSmelt` (for firing) on the item; let base
+build the output, then copy `scribeDocument` (+ set/clear our state flags) from the input onto the output,
+guarding nulls. Note transition is NOT inherently reversible — rehydration (hard→wet) is a separate action
+you implement yourself (e.g. an interaction that swaps the stack back to the wet variant and re-copies the
+document), not an engine feature.
+
 ## Two different `BadImageFormatException` crashes — don't conflate them
 
 There are TWO distinct `BadImageFormatException` crashes on this project; they have different error

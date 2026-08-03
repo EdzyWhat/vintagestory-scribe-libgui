@@ -23,8 +23,9 @@ public sealed record ScribeBackdropSpec(AssetLocation Texture, Vector4? Tint = n
 /// and the Clockmaker's Notebook each name a different illustrated background (the plain Notebook and
 /// Clockmaker share the <see cref="NotebookHost"/> class, so the Clockmaker item passes
 /// <see cref="ClockmakerPage"/> to its host's ctor to override the default). The clay tablet declares six
-/// clay specs (three clay types × soft/fired) plus a wax spec, selected per-stack by
-/// <see cref="ForTablet"/>. Adding a new full-page backdrop is only a new spec here plus its PNG — no
+/// clay specs (three clay types × soft/fired) plus a wax spec, selected by <see cref="ForTablet"/> from the
+/// item's own <c>material</c> variant (one discrete item per clay type). Adding a new full-page backdrop is
+/// only a new spec here plus its PNG — no
 /// change to <c>ScribeDialogBase.WrapBackdrop</c> or the bitmap cache
 /// (<see cref="ScribeModSystem.GetBackdropBitmap"/>).
 /// </summary>
@@ -86,22 +87,23 @@ internal static class ScribeBackdrops
     /// art as an interim placeholder (closest in tone to beeswax); it swaps to real diptych art later.</summary>
     public static readonly ScribeBackdropSpec Wax = new(Clay("fire"));
 
-    /// <summary>Select the tablet backdrop for a stack's <c>material</c> + <c>clayType</c> + <c>fired</c>
-    /// state, in ONE place so the item and its dialog agree on the mapping (add-tablet-dialog D6). A wax
-    /// tablet gets <see cref="Wax"/>; otherwise the spec is keyed on clay type × fired. Absent/unknown
-    /// attributes default to red + soft, so a legacy or creative-inventory stack always resolves to a valid
-    /// backdrop (clay-wax-tablet-item: "consumers treat it as red + soft").</summary>
-    public static ScribeBackdropSpec ForTablet(string? material, string? clayType, bool fired)
+    /// <summary>Select the tablet backdrop for a stack's <c>material</c> variant + recorded <c>fired</c>
+    /// appearance, in ONE place so the item and its dialog agree on the mapping (add-tablet-dialog D6). The
+    /// clay type is the item's own registered variant (<c>clay-red</c>/<c>clay-blue</c>/<c>clay-fire</c>) —
+    /// one discrete item per type — not a stack attribute; <c>wax</c> gets <see cref="Wax"/>. An unknown or
+    /// absent material defaults to red + soft, so a legacy or creative-inventory stack always resolves to a
+    /// valid backdrop (clay-wax-tablet-item: "consumers treat it as red + soft").</summary>
+    public static ScribeBackdropSpec ForTablet(string? material, bool fired)
     {
         if (material == "wax") return Wax;
-        return (clayType, fired) switch
+        return (material, fired) switch
         {
-            ("blue", false) => ClayBlueSoft,
-            ("blue", true)  => ClayBlueFired,
-            ("fire", false) => ClayFireSoft,
-            ("fire", true)  => ClayFireFired,
-            (_, true)       => ClayRedFired,   // red + any unrecognized type, fired
-            _               => ClayRedSoft,    // red + any unrecognized type, soft (the default)
+            ("clay-blue", false) => ClayBlueSoft,
+            ("clay-blue", true)  => ClayBlueFired,
+            ("clay-fire", false) => ClayFireSoft,
+            ("clay-fire", true)  => ClayFireFired,
+            (_, true)            => ClayRedFired,   // clay-red or any unrecognized material, fired
+            _                    => ClayRedSoft,    // clay-red or any unrecognized material, soft (default)
         };
     }
 

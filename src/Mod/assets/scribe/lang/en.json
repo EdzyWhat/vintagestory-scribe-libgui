@@ -198,8 +198,12 @@
    "item-clockmakerschematic": "Clockmaker's Notebook Schematic",
    "item-clockmakerschematic-desc": "A trader's blueprint. Lets anyone craft a Clockmaker's Notebook, no Clockmaker class needed. Not used up when crafting.",
 
-   "item-scribetablet-clay": "Clay Tablet",
-   "item-scribetablet-clay-desc": "A simple early-game writing surface. Scratch a short list of tasks and notes into the clay.",
+   "item-scribetablet-clay-red": "Red Clay Tablet",
+   "item-scribetablet-clay-red-desc": "A simple early-game writing surface. Scratch a short list of tasks and notes into the red clay.",
+   "item-scribetablet-clay-blue": "Blue Clay Tablet",
+   "item-scribetablet-clay-blue-desc": "A simple early-game writing surface. Scratch a short list of tasks and notes into the blue clay.",
+   "item-scribetablet-clay-fire": "Fire Clay Tablet",
+   "item-scribetablet-clay-fire-desc": "A simple early-game writing surface. Scratch a short list of tasks and notes into the fire clay.",
    "item-scribetablet-wax": "Wax Tablet",
    "item-scribetablet-wax-desc": "A simple early-game writing surface. Scratch a short list of tasks and notes into the wax.",
    "itemhelp-scribetablet-open": "Open Tablet",
@@ -207,7 +211,7 @@
    "handbook-scribetablet-about-title": "The Tablet",
    "handbook-scribetablet-about-text": "The clay and wax Tablets are the earliest Scribe writing surfaces — cheap to craft long before a <a href=\"handbook://item-scribe:scribenotebook\">Notebook</a> or <a href=\"handbook://block-scribe:scribelectern\">Lectern</a> is within reach. Right-click while holding a Tablet to open its document of tasks and notes; like the Notebook, it belongs to whoever carries it.<br><br>A Tablet is deliberately limited: it holds a short list (up to 10 tasks) and a single pinned task, keeping it a quick scratchpad rather than a full journal.",
    "handbook-scribetablet-craft-title": "Crafting a Tablet",
-   "handbook-scribetablet-craft-text": "Craft a Clay Tablet on the crafting grid from clay over a stick, or a Wax Tablet from beeswax over a stick — see the recipes on this page.",
+   "handbook-scribetablet-craft-text": "Craft a Clay Tablet on the crafting grid from eight pieces of a single clay type, a stick, and a knife — the knife is not used up, but scoring the clay wears its edge. Blue, red, and fire clay each make their own Tablet. A Wax Tablet is simpler: beeswax over a stick. See the recipes on this page.",
 
 
    "handbook-scribenotebook-about-title": "The Notebook",

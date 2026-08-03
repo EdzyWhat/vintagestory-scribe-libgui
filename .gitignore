@@ -79,3 +79,7 @@ reference/atlas-wiki/
 
 # Base-game texture copies pulled for local art reference (proprietary; scratch, never committed)
 reference/base-game-textures/
+
+# Base-game tablet shape/textures copied as a starting point for custom tablet models
+# (proprietary; scratch, never committed)
+reference/tablet-model/

@@ -14,15 +14,17 @@ first.
 
 ## What Changes
 
-- **Record clay-type and fired-state on the tablet stack.** The item has no such data today — it
-  declares only `material: [clay, wax]` (firing was deferred as a non-goal of Proposal B). This
-  change records a `clayType` (red/blue/fire) and a `fired` (soft/fired) value on the tablet
-  `ItemStack` as attributes, set at craft time from the clay ingredient used and preserved across
-  persistence and drop/pickup — the same stack-attribute discipline the existing docId uses. This is
-  the appearance-record ONLY; it does not add the soft→fired firing gameplay mechanic (still deferred).
-- **Select one of seven backdrops from that stack state.** `GuiDialogScribeTablet` picks its backdrop
-  from `material` + `clayType` + `fired`: 6 clay backdrops (3 types × soft/fired) + 1 wax. Absent
-  attributes default to red + soft so older/handbook stacks still resolve.
+- **Make each clay type a discrete tablet item (REVISED 2026-08-02 — see design Decision 1).** The item
+  declared only `material: [clay, wax]` (firing deferred by Proposal B). This change expands the
+  `material` variant axis to the composite states `[clay-red, clay-blue, clay-fire, wax]`, so red/blue/fire
+  clay tablets are **three discrete registered items** (`scribetablet-clay-red/blue/fire`), each with its
+  own handbook page and recipe — a VS base expectation the user requires. `fired` (soft/fired) remains a
+  stack **attribute** (appearance only; nothing fires a tablet this round). *(Originally clay type was to
+  be a stack attribute set at craft; that produced a single collapsed handbook/creative entry because VS
+  lists by variant, so it was reversed to a variant. The tablet is unreleased → no save migration.)*
+- **Select one of seven backdrops from the item + fired state.** `ScribeBackdrops.ForTablet(material,
+  fired)` picks the backdrop from the `material` variant + `fired`: 6 clay backdrops (3 types × soft/fired)
+  + 1 wax. An unknown/absent material defaults to red + soft so legacy/handbook stacks still resolve.
 - **Source the backdrop art from vanilla VS pottery textures** (verified codes below) rather than the
   `scribe-lectern.png` placeholder: unfired uses the per-type clay swatches, fired uses the ceramic
   swatch, wax uses the beeswax swatch as an explicit placeholder.
@@ -43,21 +45,28 @@ first.
 
 - `tablet-dialog`: the "Tablet dialog uses its own theme and a placeholder backdrop" requirement
   changes from **two** slots pointing at a shared placeholder to **seven** distinct backdrops selected
-  from the tablet stack's `material` / `clayType` / `fired` state.
-- `clay-wax-tablet-item`: gains a requirement that the tablet **records** its clay type and
-  fired-state on the stack, set at craft from the clay ingredient and preserved across persistence and
-  drop/pickup — without adding the firing gameplay mechanic.
+  from the tablet's `material` variant + `fired` state.
+- `clay-wax-tablet-item`: the clay tablet becomes **three discrete items** (a `material` variant per clay
+  type: `clay-red`/`clay-blue`/`clay-fire`, plus `wax`), each with its own handbook entry and recipe; the
+  tablet also **records** a `fired` appearance attribute (preserved across persistence and drop/pickup)
+  without adding the firing gameplay mechanic.
 - `gui-backdrop`: gains a rendering mode so a backdrop spec can tile a small material swatch at native
   resolution and/or composite a shared page-frame overlay, not only stretch a single full-page texture
   to fill.
 
 ## Impact
 
-- **Modified code:** `src/Mod/ScribeBackdrop.cs` (7 specs + optional tiling/frame fields on
-  `ScribeBackdropSpec`), `src/Mod/ScribeDialogBase.Layout.cs` (`WrapBackdrop` composites tile + frame),
-  `src/Mod/GuiDialogScribeTablet.cs` (select backdrop from stack state), `src/Mod/ItemScribeTablet.cs`
-  and/or `src/Mod/TabletHost.cs` (read/write `clayType` + `fired` attributes),
-  `src/Mod/assets/scribe/itemtypes/scribetablet.json` and the grid recipes (record clay type at craft).
+- **Modified code:** `src/Mod/ScribeBackdrop.cs` (7 specs + `ForTablet(material, fired)` keyed on the
+  variant), `src/Mod/ScribeDialogBase.Layout.cs` (`WrapBackdrop` passes the spec), `src/Mod/ItemScribeTablet.cs`
+  (`ReadFired` only — `ReadClayType`/`clayType` attribute removed; select backdrop from `Variant["material"]`),
+  `src/Mod/assets/scribe/itemtypes/scribetablet.json` (`material` axis → the four composite states +
+  `shapeByType`), the grid recipes (output the discrete variant codes), and `lang/en.json` (four
+  `item-scribetablet-*` name/desc keys).
+- **Recipe (revised 2026-08-02):** `scribetablet-clay.json` is three shaped recipes (red/blue/fire),
+  each `KCC,SCC` (3×2): 8 clay (`game:clay-{type}` ×2 per `C` cell) + 1 `game:stick` + 1 knife
+  (`tags: ["tool-knife"]`, `isTool: true`, `toolDurabilityCost: 3` — not consumed, wears durability).
+  Replaces the earlier thin `1 clay + 1 stick` recipe, which was reported not discoverable in-game and
+  blocked testing the per-type backdrops.
 - **New assets (small):** possibly one shared page-frame overlay PNG (if the framed rendering path is
   taken); no bespoke full-page art this round — the six clay backdrops pull vanilla textures and wax is
   a placeholder swatch.

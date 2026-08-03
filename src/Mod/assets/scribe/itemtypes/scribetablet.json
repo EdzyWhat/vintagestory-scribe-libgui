@@ -2,7 +2,7 @@
 	"code": "scribetablet",
 	"class": "ItemScribeTablet",
 	"variantgroups": [
-		{ "code": "material", "states": ["clay", "wax"] }
+		{ "code": "material", "states": ["clay-red", "clay-blue", "clay-fire", "wax"] }
 	],
 	"maxstacksize": 1,
 	"behaviors": [
@@ -28,7 +28,9 @@
 		}
 	},
 	"shapeByType": {
-		"*-clay": { "base": "game:block/clutter/tablet-clay1" },
+		"*-clay-red": { "base": "game:block/clutter/tablet-clay1" },
+		"*-clay-blue": { "base": "game:block/clutter/tablet-clay1" },
+		"*-clay-fire": { "base": "game:block/clutter/tablet-clay1" },
 		"*-wax": { "base": "game:block/clutter/tablet-clay1" }
 	},
 	"textures": {

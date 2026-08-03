@@ -59,31 +59,46 @@ Constraints carried from the plan and prior proposals:
 
 ## Decisions
 
-### 1. Record clay-type and fired as ItemStack attributes, set at craft — NOT new variant axes
-The tablet records `clayType` ("red" | "blue" | "fire") and `fired` (bool) as **stack attributes**
-(`itemstack.Attributes`), written at craft time in `OnCreatedByCrafting` from the clay ingredient
-consumed, and read by the dialog to pick a backdrop. They ride the existing save/pickup flow (the same
-way the docId already persists on the stack), so no new packet and no persistence invention.
+### 1. Clay type is a VS variant axis (discrete items); only `fired` is a stack attribute — REVISED 2026-08-02
+**Current decision:** clay type is a real **VS variant** of the tablet item, not a stack attribute. The
+`material` axis in `scribetablet.json` enumerates composite states `[clay-red, clay-blue, clay-fire, wax]`
+(the single-group "composite state" idiom vanilla uses for `fishfillet` `[raw, cooked, cured, smoked,
+cured-smoked]`), yielding four discrete registered items — `scribetablet-clay-red/blue/fire` and
+`scribetablet-wax` — each with its **own handbook page and its own recipe**. `fired` remains a stack
+**attribute** (nothing sets it true this round). The dialog derives the backdrop from the `material`
+variant + `fired` in one place (`ScribeBackdrops.ForTablet(material, fired)`).
 
-*Alternative considered — add `clay-type` and `fired` VS **variant axes** to `scribetablet.json`
-(`material × clayType × fired`).* Rejected as the primary mechanism: it multiplies the item into
-2×3×2 = 12 registered variants (many nonsensical, e.g. wax × fireclay × fired), needs 12 recipe
-outputs, and coupling the fired axis to the item type edges toward the deferred firing mechanic (a
-fired variant implies a firing transformation). Attributes keep the item as its existing
-`material: [clay, wax]` shape and record appearance data orthogonally. *(If in-hand/inventory model
-tinting per clay type is later wanted, a `clayType` variant axis could be added then; out of scope
-here — the backdrop only needs the attribute.)*
+*Why revised (user direction 2026-08-02):* the original attribute-only approach below produced a SINGLE
+collapsed handbook/creative entry — VS lists items by registered variant, not by stack attribute, so three
+recipes that output the same `scribetablet-clay` code differing only in an attribute cannot yield three
+handbook pages. Discrete per-type handbook entries + recipes are a VS base expectation ("the handbook is
+the source of truth"), so clay type had to become a variant. The tablet is unreleased (`[Unreleased]` in
+CHANGELOG), so renaming the item codes needs **no save migration**.
 
-*Default when absent:* older stacks, creative-inventory stacks, and handbook renders carry no
-attribute — default to `clayType = "red"`, `fired = false` so every tablet resolves to a valid
-backdrop.
+*Why a single composite `material` axis, not two axes (`material × clayType`):* two axes would generate
+nonsensical `wax × clayType` combos, and `skipVariants` can only *remove* combinations — it cannot make
+wax stand alone as a single item. One axis enumerating composite states gives exactly the four items with
+no pruning.
 
-### 2. Seven named backdrop specs selected by (material, clayType, fired)
+*Default when absent:* creative-inventory / legacy / handbook stacks with an unknown or absent `material`
+still default to red + soft in `ForTablet`, so every tablet resolves to a valid backdrop.
+
+---
+*ORIGINAL decision (superseded 2026-08-02, kept for the record):* record `clayType` ("red"/"blue"/"fire")
+and `fired` (bool) as **stack attributes**, `clayType` written at craft via each recipe's
+`output.attributes`. Rejected the variant-axis alternative then on the grounds that a full `material ×
+clayType × fired` cross would be 12 mostly-nonsensical registered variants. That reasoning missed that a
+single composite `material` axis (above) avoids the cross entirely — and that discrete handbook entries
+*require* variants. `clayType` as an attribute is now removed; only `fired` remains an attribute.
+
+### 2. Seven named backdrop specs selected by (material, fired)
 Replace Proposal C's four placeholder slots with seven specs in `ScribeBackdrops`:
 `ClayRedSoft`, `ClayRedFired`, `ClayBlueSoft`, `ClayBlueFired`, `ClayFireSoft`, `ClayFireFired`, and
-`Wax`. `GuiDialogScribeTablet` selects one via a small switch: `material == wax` → `Wax`; else key on
-`clayType` + `fired`. The selection lives in one place in the tablet dialog (mirroring C's single
-`UseCuneiform` branch discipline).
+`Wax`. `ScribeBackdrops.ForTablet(material, fired)` selects one via a small switch: `material == "wax"` →
+`Wax`; else key on the clay `material` variant (`clay-red`/`clay-blue`/`clay-fire`) + `fired`. The
+selection lives in one place (mirroring C's single `UseCuneiform` branch discipline). *(Revised with
+Decision 1: the clay type comes from the item's variant, so `ForTablet` takes no separate `clayType`
+argument.)*
 
 ### 3. Backdrop art: verified vanilla textures now, tint the fired set, wax stays placeholder
 Verified against the installed 1.22.6 assets:
