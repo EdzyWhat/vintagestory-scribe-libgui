@@ -127,7 +127,7 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
 
         // The bespoke always-edit tablet dialog (Proposal C): earthen theme, no tabs, cuneiform title
         // banner over the inherited editable task list.
-        var dialog = new GuiDialogScribeTablet(host, capi);
+        var dialog = new GuiDialogScribeTablet(host, capi, Variant["material"]);
         dialog.OnClosed += () => modSystem.UnregisterHost(host.Document.DocId);
         dialog.TryOpen();
     }

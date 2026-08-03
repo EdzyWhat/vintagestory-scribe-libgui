@@ -94,6 +94,8 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
     // seed anchors the (deterministic) wobble so the SAME text jitters identically each frame/open.
     private float jitterStrength;
     private int jitterSeed;
+    // Per-stroke outer glow (add-tablet-clay-type-themes). Default disabled — non-tablet surfaces pay nothing.
+    private CuneiformGlow glow;
 
     // Cached from the last PerformLayout, reused by PaintInternal so layout and paint agree.
     private CuneiformLine? line;
@@ -132,6 +134,11 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
     /// <summary>Base seed the per-stroke jitter is derived from (combined with each stroke's stable identity).
     /// The Mod layer picks it (per field/text) so the same text wobbles the same way. Repaint only.</summary>
     public int JitterSeed { get => jitterSeed; set => SetProperty(ref jitterSeed, value, repaint: true); }
+
+    /// <summary>The per-stroke outer glow (halo color/strength + blur fraction). Disabled by default; the
+    /// tablet sets a per-material glow to lift the ink off its clay backdrop. Repaint only — the glow is a
+    /// paint-time effect that never touches layout.</summary>
+    public CuneiformGlow Glow { get => glow; set => SetProperty(ref glow, value, repaint: true); }
 
     protected override void PerformLayout()
     {
@@ -176,40 +183,65 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
         SKPaint paint = context.SharedPaint;
         SKColor prevColor = paint.Color;
         SKPaintStyle prevStyle = paint.Style;
+        bool prevAntialias = paint.IsAntialias;   // pre-existing leak: restore this too (task 3.4).
 
         paint.Style = SKPaintStyle.Fill;
-        paint.Color = inkColor.ToSkColor();
         paint.IsAntialias = true;
 
         // A reused path, cleared per stroke — allocation-light across the whole line.
         using var path = new SKPath();
+
+        // Pass 1 (optional): every revealed stroke's HALO, blurred, in the glow color. Drawing all halos
+        // BEFORE any crisp ink means the crisp fills in pass 2 overwrite the halos inside each glyph, so
+        // overlapping strokes never darken/double each other's glow — the halo only shows where it spills
+        // past the ink onto the backdrop (design D3). The mask filter is a cached, shared blur (D4).
+        if (glow.Enabled && CuneiformGlowMask.ForSigma(fontSizeEm * glow.BlurFraction) is { } mask)
+        {
+            paint.Color = glow.Color.ToSkColor();
+            paint.MaskFilter = mask;
+            for (int i = 0; i < revealCount; i++)
+            {
+                BuildStrokePath(path, line.Strokes[i]);
+                context.Canvas.DrawPath(path, paint);
+            }
+            paint.MaskFilter = null;   // clear before the crisp pass (and before return) — SharedPaint hygiene.
+        }
+
+        // Pass 2: every revealed stroke's crisp ink fill, on top of the halos.
+        paint.Color = inkColor.ToSkColor();
         for (int i = 0; i < revealCount; i++)
         {
-            PositionedStroke ps = line.Strokes[i];
-            // Hand-written wobble (visual only): perturb the drawn geometry, never the layout. Seed off the
-            // stroke's stable identity so the SAME stroke jitters identically every frame — no shimmer.
-            GlyphStroke stroke = jitterStrength > 0f
-                ? GlyphStrokeJitter.Jitter(
-                    ps.Stroke,
-                    GlyphStrokeJitter.SeedFor(jitterSeed, ps.SourceCharIndex, ps.StrokeOrdinal),
-                    jitterStrength,
-                    ps.GridSize)
-                : ps.Stroke;
-            Scribe.Core.Cuneiform.Vec2[] corners = stroke.Corners();
-
-            path.Reset();
-            path.MoveTo((float)(corners[0].X * scale), (float)(corners[0].Y * scale));
-            path.LineTo((float)(corners[1].X * scale), (float)(corners[1].Y * scale));
-            path.LineTo((float)(corners[2].X * scale), (float)(corners[2].Y * scale));
-            path.LineTo((float)(corners[3].X * scale), (float)(corners[3].Y * scale));
-            path.Close();
-
+            BuildStrokePath(path, line.Strokes[i]);
             context.Canvas.DrawPath(path, paint);
         }
 
         // Restore the shared paint's mutated properties (SharedPaint is reused across draw ops).
         paint.Color = prevColor;
         paint.Style = prevStyle;
+        paint.IsAntialias = prevAntialias;
+        paint.MaskFilter = null;   // defensive: never leave a blur mask on the shared paint.
+    }
+
+    /// <summary>Rebuild <paramref name="path"/> (cleared in place) as one stroke's oriented quad in pixel
+    /// space, applying the same hand-written jitter both glow passes use so the halo tracks the drawn ink.
+    /// Seeded off the stroke's stable identity, so the SAME stroke jitters identically every frame.</summary>
+    private void BuildStrokePath(SKPath path, PositionedStroke ps)
+    {
+        GlyphStroke stroke = jitterStrength > 0f
+            ? GlyphStrokeJitter.Jitter(
+                ps.Stroke,
+                GlyphStrokeJitter.SeedFor(jitterSeed, ps.SourceCharIndex, ps.StrokeOrdinal),
+                jitterStrength,
+                ps.GridSize)
+            : ps.Stroke;
+        Scribe.Core.Cuneiform.Vec2[] corners = stroke.Corners();
+
+        path.Reset();
+        path.MoveTo((float)(corners[0].X * scale), (float)(corners[0].Y * scale));
+        path.LineTo((float)(corners[1].X * scale), (float)(corners[1].Y * scale));
+        path.LineTo((float)(corners[2].X * scale), (float)(corners[2].Y * scale));
+        path.LineTo((float)(corners[3].X * scale), (float)(corners[3].Y * scale));
+        path.Close();
     }
 }
 
@@ -218,7 +250,7 @@ internal sealed class CuneiformTextRenderWidget : RenderObjectWidget
 {
     public CuneiformTextRenderWidget(
         string text, float fontSizeEm, Vector4 inkColor, GlyphBundle? bundle, float revealFraction,
-        float jitterStrength = 0f, int jitterSeed = 0)
+        float jitterStrength = 0f, int jitterSeed = 0, CuneiformGlow glow = default)
     {
         Text = text;
         FontSizeEm = fontSizeEm;
@@ -227,6 +259,7 @@ internal sealed class CuneiformTextRenderWidget : RenderObjectWidget
         RevealFraction = revealFraction;
         JitterStrength = jitterStrength;
         JitterSeed = jitterSeed;
+        Glow = glow;
     }
 
     public string Text { get; }
@@ -236,6 +269,7 @@ internal sealed class CuneiformTextRenderWidget : RenderObjectWidget
     public float RevealFraction { get; }
     public float JitterStrength { get; }
     public int JitterSeed { get; }
+    public CuneiformGlow Glow { get; }
 
     public override RenderObject CreateRenderObject() => new CuneiformTextRender();
 
@@ -249,6 +283,7 @@ internal sealed class CuneiformTextRenderWidget : RenderObjectWidget
         ro.RevealFraction = RevealFraction;
         ro.JitterStrength = JitterStrength;
         ro.JitterSeed = JitterSeed;
+        ro.Glow = Glow;
     }
 }
 
@@ -269,6 +304,7 @@ public sealed class CuneiformText : StatefulWidget
         bool animateReveal = false,
         int revealDurationMs = 1200,
         float? jitterStrength = null,
+        CuneiformGlow glow = default,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
@@ -279,6 +315,7 @@ public sealed class CuneiformText : StatefulWidget
         AnimateReveal = animateReveal;
         RevealDurationMs = revealDurationMs;
         JitterStrength = jitterStrength ?? CuneiformMetrics.DefaultJitterStrength;
+        Glow = glow;
     }
 
     /// <summary>The line of text to render.</summary>
@@ -303,6 +340,10 @@ public sealed class CuneiformText : StatefulWidget
     /// pass 0 for crisp authored geometry. The base seed is derived from <see cref="Text"/> so the same text
     /// wobbles consistently.</summary>
     public float JitterStrength { get; }
+
+    /// <summary>The per-stroke outer glow. Disabled by default (non-tablet display text pays nothing); the
+    /// tablet passes a per-material glow so its cuneiform title/label lifts off the clay backdrop.</summary>
+    public CuneiformGlow Glow { get; }
 
     public override State CreateState() => new CuneiformTextState();
 }
@@ -357,5 +398,6 @@ internal sealed class CuneiformTextState : State<CuneiformText>
         revealFraction: revealFraction,
         jitterStrength: Widget.JitterStrength,
         // Static display text seeds off its own content, so the same label always wobbles identically.
-        jitterSeed: CuneiformMetrics.SeedFromString(Widget.Text));
+        jitterSeed: CuneiformMetrics.SeedFromString(Widget.Text),
+        glow: Widget.Glow);
 }

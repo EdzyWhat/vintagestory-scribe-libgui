@@ -71,17 +71,22 @@ internal static class ScribeRowConstants
     /// <c>ScribeClientConfig.FieldInnerPaddingY</c>.</summary>
     public const float FieldInnerPaddingY = 6f;
 
-    /// <summary>Alpha applied to the theme's <c>Primary</c> color to make the resting pinned-row tint
+    /// <summary>Alpha applied to the theme's <c>Secondary</c> color to make the resting pinned-row tint
     /// (add-settings-tab D1b). Low enough to read as a subtle wash under the row content rather than a
     /// solid fill; the former fixed amber constant is dropped in favor of this theme-derived tint so
     /// switching the LibGUI theme re-tints pinned rows automatically.</summary>
     public const float PinnedTintAlpha = 0.33f;
 
     /// <summary>The resting pinned-row tint, derived at build time from the active LibGUI theme's
-    /// <see cref="ColorScheme.Primary"/> at <see cref="PinnedTintAlpha"/> (add-settings-tab D1b). Used by
-    /// both the read and editor rows for a pinned task's whole-row background wash.</summary>
+    /// <see cref="ColorScheme.Secondary"/> at <see cref="PinnedTintAlpha"/>. Used by both the read and editor
+    /// rows for a pinned task's whole-row background wash. Sourced from <c>Secondary</c> rather than
+    /// <c>Primary</c> (add-tablet-clay-type-themes D2a): the focused-input border also reads <c>Primary</c>,
+    /// so a focused input inside a pinned row would otherwise draw its border and the row wash from the same
+    /// hue and the focus cue reads weakly — <c>Secondary</c> keeps the two visually distinct. This is a
+    /// shared helper (tablet + Lectern/Notebook + pinned HUD), so the remap is global; every theme's
+    /// <c>Secondary</c> is authored to read as a low-alpha wash distinct from its <c>Primary</c>.</summary>
     public static Vector4 PinnedTint(ColorScheme colors) =>
-        colors.Primary with { W = PinnedTintAlpha };
+        colors.Secondary with { W = PinnedTintAlpha };
 
     /// <summary>Returns <paramref name="color"/> with its HSV Brightness (Value) shifted by
     /// <paramref name="deltaValue"/> points and its Saturation scaled by <paramref name="saturationScale"/>

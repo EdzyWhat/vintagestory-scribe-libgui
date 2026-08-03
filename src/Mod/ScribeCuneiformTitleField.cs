@@ -41,6 +41,7 @@ public sealed class ScribeCuneiformTitleField : StatefulWidget, IFocusable
         float jitterStrength = 0f,
         int jitterSeed = 0,
         bool progression = false,
+        CuneiformGlow glow = default,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
@@ -52,6 +53,7 @@ public sealed class ScribeCuneiformTitleField : StatefulWidget, IFocusable
         JitterStrength = jitterStrength;
         JitterSeed = jitterSeed;
         Progression = progression;
+        Glow = glow;
     }
 
     public TextEditingController Controller { get; }
@@ -66,6 +68,9 @@ public sealed class ScribeCuneiformTitleField : StatefulWidget, IFocusable
     /// <summary>Whether newly-typed title text presses in stroke-by-stroke. When false (the default), the
     /// title reveals instantly. Gated by the player's client setting, mirroring the rows.</summary>
     public bool Progression { get; }
+    /// <summary>Per-material outer glow behind the title strokes (add-tablet-clay-type-themes); default
+    /// disabled. Lifts the editing title off the clay backdrop the same way the resting title and rows do.</summary>
+    public CuneiformGlow Glow { get; }
     /// <summary>Parent key hook, invoked BEFORE this field acts on a key (mirrors LibGUI's TextField). The
     /// tablet points this at the base's shared title key handler for the maxlength gate + Enter/Escape
     /// commit, so a cuneiform title honors the identical limit and commit rules as the normal title field.</summary>
@@ -320,6 +325,7 @@ internal sealed class ScribeCuneiformTitleFieldState : State<ScribeCuneiformTitl
                 singleLine: true,
                 jitterStrength: Widget.JitterStrength,
                 jitterSeed: Widget.JitterSeed,
+                glow: Widget.Glow,
                 revealActive: revealActive,
                 revealBaselineChars: revealBaselineChars,
                 revealElapsedMs: revealController is not null

@@ -423,6 +423,7 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         float cuneiformJitter = 0f,
         int cuneiformJitterSeed = 0,
         bool cuneiformProgression = false,
+        CuneiformGlow cuneiformGlow = default,
         Action<string>? onChanged = null,
         Action? onCommitAndAdvance = null,
         Action? onCommitAndRetreat = null,
@@ -445,6 +446,7 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         CuneiformJitter = cuneiformJitter;
         CuneiformJitterSeed = cuneiformJitterSeed;
         CuneiformProgression = cuneiformProgression;
+        CuneiformGlow = cuneiformGlow;
         OnChanged = onChanged;
         OnCommitAndAdvance = onCommitAndAdvance;
         OnCommitAndRetreat = onCommitAndRetreat;
@@ -495,6 +497,9 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
     /// <summary>Whether newly-typed cuneiform text presses in stroke-by-stroke (per-letter progression).
     /// Ignored when <see cref="UseCuneiform"/> is false; off reproduces the instant reveal.</summary>
     public bool CuneiformProgression { get; }
+    /// <summary>Per-material outer glow behind the cuneiform strokes (add-tablet-clay-type-themes); default
+    /// disabled. Ignored when <see cref="UseCuneiform"/> is false.</summary>
+    public CuneiformGlow CuneiformGlow { get; }
     public Action<string>? OnChanged { get; }
     /// <summary>Tab (no Shift): the field has committed its text via <see cref="OnChanged"/>; the
     /// parent should normalize + flush the row and move focus to the next row.</summary>
@@ -1134,6 +1139,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 caretVisible: caretVisible,
                 jitterStrength: Widget.CuneiformJitter,
                 jitterSeed: Widget.CuneiformJitterSeed,
+                glow: Widget.CuneiformGlow,
                 revealActive: revealActive,
                 revealBaselineChars: revealBaselineChars,
                 revealElapsedMs: revealController is not null

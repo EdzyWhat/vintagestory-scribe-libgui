@@ -70,6 +70,8 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     // thus does not re-wobble — the letters already on screen.
     private float jitterStrength;
     private int jitterSeed;
+    // Per-stroke outer glow (add-tablet-clay-type-themes). Default disabled — non-tablet fields pay nothing.
+    private CuneiformGlow glow;
     // Per-letter stroke-progression reveal (add-cuneiform-handwriting-feel). When active, strokes appear over
     // time: characters below the baseline are already fully pressed; characters at/after it press in on the
     // schedule as elapsed advances. Inactive (the default) paints every stroke immediately, as today.
@@ -115,6 +117,10 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     /// <summary>Fixed per-field base seed for the jitter; combined with each stroke's stable identity so the
     /// same character position wobbles the same way and typing doesn't reseed prior letters. Repaint only.</summary>
     public int JitterSeed { get => jitterSeed; set => SetProperty(ref jitterSeed, value, repaint: true); }
+    /// <summary>The per-stroke outer glow (halo color/strength + blur fraction). Disabled by default; the
+    /// tablet sets a per-material glow. Repaint only — a paint-time effect that never touches layout, caret,
+    /// selection, or hit-testing.</summary>
+    public CuneiformGlow Glow { get => glow; set => SetProperty(ref glow, value, repaint: true); }
     /// <summary>Whether the stroke-progression reveal is active. When false (the default), every stroke is
     /// painted immediately (today's behaviour). Repaint only.</summary>
     public bool RevealActive { get => revealActive; set => SetProperty(ref revealActive, value, repaint: true); }
@@ -206,12 +212,53 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
         SKPaint paint = context.SharedPaint;
         SKColor prevColor = paint.Color;
         SKPaintStyle prevStyle = paint.Style;
+        bool prevAntialias = paint.IsAntialias;   // pre-existing leak: restore this too (task 4.2).
         paint.Style = SKPaintStyle.Fill;
-        paint.Color = inkColor.ToSkColor();
         paint.IsAntialias = true;
 
         var schedule = new RevealSchedule(revealPerStrokeMs, revealPerLetterMs);
         using var path = new SKPath();
+
+        // Pass 1 (optional): every revealed stroke's blurred HALO, in the glow color, across ALL wrapped
+        // lines before any crisp ink. The crisp fills in pass 2 then overwrite the halos inside each glyph,
+        // so overlapping strokes never double their glow — it shows only where it spills onto the backdrop
+        // (design D3). Shared cached blur mask (D4). Every stroke uses the SAME jitter + reveal test the
+        // crisp pass uses, so the halo tracks exactly what the ink draws.
+        if (glow.Enabled && CuneiformGlowMask.ForSigma(fontSizeEm * glow.BlurFraction) is { } mask)
+        {
+            paint.Color = glow.Color.ToSkColor();
+            paint.MaskFilter = mask;
+            DrawStrokePass(context, path, schedule);
+            paint.MaskFilter = null;   // clear before the crisp pass (and before return) — SharedPaint hygiene.
+        }
+
+        // Pass 2: every revealed stroke's crisp ink fill, on top of the halos.
+        paint.Color = inkColor.ToSkColor();
+        DrawStrokePass(context, path, schedule);
+
+        paint.Color = prevColor;
+        paint.Style = prevStyle;
+        paint.IsAntialias = prevAntialias;
+        paint.MaskFilter = null;   // defensive: never leave a blur mask on the shared paint.
+
+        // Synthetic caret: cuneiform has no native caret, so draw a thin bar at the current character
+        // boundary on its wrapped line (same DrawBox the normal field uses for its caret).
+        if (hasFocus && caretVisible && lines.Count > 0)
+        {
+            (int lineIndex, int localIndex) = CaretToLineLocal(caret);
+            double caretXGrid = lines[lineIndex].CaretXAt(localIndex);
+            float caretX = padX + (float)(caretXGrid * scale);
+            float caretY = padY + lineIndex * lineHeightPx;
+            context.DrawBox(new Vector2(caretX, caretY), new Vector2(2f, lineHeightPx), caretColor, Vector4.Zero, 0f, Vector4.Zero);
+        }
+    }
+
+    /// <summary>Draw one full pass over every wrapped line's revealed strokes with the shared paint's CURRENT
+    /// color/mask — called twice by <see cref="PaintInternal"/> (halo then crisp ink) so both passes see the
+    /// identical stroke set, jitter, and reveal gating. The reveal test and hand-written wobble match the
+    /// crisp geometry exactly; caret/selection/hit-testing read the UN-jittered layout and are untouched.</summary>
+    private void DrawStrokePass(PaintingContext context, SKPath path, RevealSchedule schedule)
+    {
         for (int i = 0; i < lines.Count; i++)
         {
             float originX = padX;
@@ -228,9 +275,6 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
                     continue;
                 }
 
-                // Hand-written wobble (visual only): perturb the drawn geometry, keyed off the stroke's
-                // stable identity so the SAME character position jitters identically each frame — no shimmer.
-                // The caret/selection/hit-testing below all read the UN-jittered layout, untouched.
                 GlyphStroke drawStroke = jitterStrength > 0f
                     ? GlyphStrokeJitter.Jitter(
                         ps.Stroke,
@@ -245,22 +289,8 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
                 path.LineTo(originX + (float)(corners[2].X * scale), originY + (float)(corners[2].Y * scale));
                 path.LineTo(originX + (float)(corners[3].X * scale), originY + (float)(corners[3].Y * scale));
                 path.Close();
-                context.Canvas.DrawPath(path, paint);
+                context.Canvas!.DrawPath(path, paint: context.SharedPaint);
             }
-        }
-
-        paint.Color = prevColor;
-        paint.Style = prevStyle;
-
-        // Synthetic caret: cuneiform has no native caret, so draw a thin bar at the current character
-        // boundary on its wrapped line (same DrawBox the normal field uses for its caret).
-        if (hasFocus && caretVisible && lines.Count > 0)
-        {
-            (int lineIndex, int localIndex) = CaretToLineLocal(caret);
-            double caretXGrid = lines[lineIndex].CaretXAt(localIndex);
-            float caretX = padX + (float)(caretXGrid * scale);
-            float caretY = padY + lineIndex * lineHeightPx;
-            context.DrawBox(new Vector2(caretX, caretY), new Vector2(2f, lineHeightPx), caretColor, Vector4.Zero, 0f, Vector4.Zero);
         }
     }
 
@@ -347,7 +377,7 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
         GlyphBundle? bundle, float padX, float padY,
         Vector4 boxColor, Vector4 borderColor, float borderThickness, Vector4 cornerRadii,
         bool singleLine = false, bool caretVisible = true,
-        float jitterStrength = 0f, int jitterSeed = 0,
+        float jitterStrength = 0f, int jitterSeed = 0, CuneiformGlow glow = default,
         bool revealActive = false, int revealBaselineChars = 0, double revealElapsedMs = 0,
         double revealPerStrokeMs = 28, double revealPerLetterMs = 90)
     {
@@ -370,6 +400,7 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
         SingleLine = singleLine;
         JitterStrength = jitterStrength;
         JitterSeed = jitterSeed;
+        Glow = glow;
         RevealActive = revealActive;
         RevealBaselineChars = revealBaselineChars;
         RevealElapsedMs = revealElapsedMs;
@@ -396,6 +427,7 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
     public bool SingleLine { get; }
     public float JitterStrength { get; }
     public int JitterSeed { get; }
+    public CuneiformGlow Glow { get; }
     public bool RevealActive { get; }
     public int RevealBaselineChars { get; }
     public double RevealElapsedMs { get; }
@@ -426,6 +458,7 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
         ro.SingleLine = SingleLine;
         ro.JitterStrength = JitterStrength;
         ro.JitterSeed = JitterSeed;
+        ro.Glow = Glow;
         ro.RevealActive = RevealActive;
         ro.RevealBaselineChars = RevealBaselineChars;
         ro.RevealElapsedMs = RevealElapsedMs;

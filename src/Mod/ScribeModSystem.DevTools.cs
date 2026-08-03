@@ -101,6 +101,90 @@ public sealed partial class ScribeModSystem
             });
     }
 
+    /// <summary>Dev-only client command for tuning the per-material cuneiform outer glow live
+    /// (add-tablet-clay-type-themes, task 5): <c>.cuneiformglow &lt;strength|blur|polarity|reset&gt; [value]</c>.
+    /// It mutates the in-memory override in <see cref="CuneiformGlowTable"/> (nothing is persisted) and
+    /// forces every open tablet dialog to rebuild so the change shows without reopening. The tuned values
+    /// are then baked back into the per-material seeds by hand (task 6.4). Client-registered (<c>.</c>
+    /// prefix), like the <c>.cuneiform</c> harness — glow is a pure render concern with no server state.
+    ///
+    /// <para>Usage: <c>strength 0.55</c> sets the halo alpha; <c>blur 0.09</c> sets the blur as a fraction
+    /// of the em; <c>polarity dark|light</c> flips the halo dark (for light ink) or back to light;
+    /// <c>reset</c> clears all overrides back to the baked seeds.</para></summary>
+    private void RegisterCuneiformGlowCommand(ICoreClientAPI api)
+    {
+        api.ChatCommands.Create("cuneiformglow")
+            .WithDescription("[scribe dev] Tune the cuneiform outer glow live. Usage: .cuneiformglow <strength|blur|polarity|reset> [value]")
+            .WithArgs(
+                api.ChatCommands.Parsers.WordRange("dial", "strength", "blur", "polarity", "reset"),
+                api.ChatCommands.Parsers.OptionalAll("value"))
+            .HandleWith(args =>
+            {
+                string dial = (string)args[0];
+                string value = (args[1] as string ?? "").Trim();
+
+                CuneiformGlow effective;
+                switch (dial)
+                {
+                    case "reset":
+                        CuneiformGlowTable.ResetOverride();
+                        effective = CuneiformGlowTable.For("clay-fire");
+                        break;
+
+                    case "strength":
+                        if (!float.TryParse(value, System.Globalization.NumberStyles.Float,
+                                System.Globalization.CultureInfo.InvariantCulture, out float strength))
+                            return TextCommandResult.Error("Usage: .cuneiformglow strength <0..1>");
+                        effective = CuneiformGlowTable.SetOverride(strength: strength, blurFraction: null, darkPolarity: null);
+                        break;
+
+                    case "blur":
+                        if (!float.TryParse(value, System.Globalization.NumberStyles.Float,
+                                System.Globalization.CultureInfo.InvariantCulture, out float blur))
+                            return TextCommandResult.Error("Usage: .cuneiformglow blur <fraction-of-em, e.g. 0.09>");
+                        effective = CuneiformGlowTable.SetOverride(strength: null, blurFraction: blur, darkPolarity: null);
+                        break;
+
+                    case "polarity":
+                        bool? dark = value switch
+                        {
+                            "dark" => true,
+                            "light" => false,
+                            _ => null,
+                        };
+                        if (dark is null)
+                            return TextCommandResult.Error("Usage: .cuneiformglow polarity <dark|light>");
+                        effective = CuneiformGlowTable.SetOverride(strength: null, blurFraction: null, darkPolarity: dark);
+                        break;
+
+                    default:
+                        return TextCommandResult.Error($"Unknown dial '{dial}'.");
+                }
+
+                // Rebuild every open tablet so the new glow shows without reopening (mirrors how a
+                // settings change repaints the tablet). Other dialogs don't paint cuneiform glow, so they
+                // are left alone.
+                int rebuilt = 0;
+                foreach (var dlg in api.Gui.OpenedGuis)
+                {
+                    if (dlg is GuiDialogScribeTablet tablet)
+                    {
+                        tablet.ForceRebuild();
+                        rebuilt++;
+                    }
+                }
+
+                return TextCommandResult.Success(
+                    $"[scribe] glow → color=(#{ToHex(effective.Color)}, a={effective.Color.W:0.##}), " +
+                    $"blur={effective.BlurFraction:0.###}×em. Rebuilt {rebuilt} open tablet(s).");
+            });
+    }
+
+    /// <summary>Format the RGB of a glow color as <c>RRGGBB</c> hex for the command echo (alpha is reported
+    /// separately as the strength dial).</summary>
+    private static string ToHex(OpenTK.Mathematics.Vector4 c) =>
+        $"{(int)System.Math.Round(c.X * 255):X2}{(int)System.Math.Round(c.Y * 255):X2}{(int)System.Math.Round(c.Z * 255):X2}";
+
     // ── Demo-content seeding (dev/creative tool) ────────────────────────────────────────────────────
 
     /// <summary>Fictional visitor names for seeded Lectern guestbooks. Kept ≤16 chars each so they read

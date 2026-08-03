@@ -399,7 +399,9 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                 text: label,
                 fontSizeEm: labelStyle.FontSize,
                 inkColor: labelStyle.Color,
-                bundle: bundle);
+                bundle: bundle,
+                // Same per-material glow the rows use, so a cuneiform button label lifts off the clay too.
+                glow: Widget.Style.CuneiformGlow);
         }
         return new Text(label, labelStyle);
     }
@@ -704,6 +706,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             // new character does not reseed (re-wobble) the letters already pressed into the row.
             cuneiformJitterSeed: Widget.Data.TaskId.GetHashCode(),
             cuneiformProgression: style.UseCuneiform && style.CuneiformProgression,
+            cuneiformGlow: style.UseCuneiform ? style.CuneiformGlow : default,
             // Task rows are held to the soft task cap as a maxlength affordance; freeform Text sections
             // stay uncapped in-editor (bounded only by the codec's larger hard limit). The codec clips
             // Task text on read regardless, so this is the UX half of the same limit (RELEASE.md A1).

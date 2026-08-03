@@ -2419,3 +2419,34 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       red/blue/fire; tune tint values if flat. *(add-tablet-clay-type-backdrops 6.3 — BLOCKED on reachability)*
       - **Backlogged 2026-08-02** nothing sets `fired = true` in-game this round; not testable until a
         firing mechanic or a dev command to set the attribute exists.
+
+## add-tablet-clay-type-themes
+
+> Per-clay-type tablet PALETTES (red/blue/fire), not just backdrops: with Pixel-Art ON each tablet
+> resolves its own 17-role theme seeded from its `-soft.png` backdrop, so ink, buttons + hover/press,
+> input background/border, pinned tint, and panel all recolor per material. The pinned-row tint was
+> globally remapped from `Primary` to `Secondary` (so a focused input's accent border reads apart from
+> the pinned wash — affects Lectern/Notebook/HUD too). Cuneiform strokes now paint a two-pass per-stroke
+> outer glow (halos first, then crisp fills) to lift dark ink off the mid-tone clay. A dev command
+> `.cuneiformglow <strength|blur|polarity|reset> [value]` tunes the glow live on an open tablet.
+> Restaged Debug 2026-08-03 — fully relaunch the client first.
+
+- [ ] `4659ba2f` **Per-material palette.** With Pixel-Art ON, open red/blue/fire tablets and confirm each
+      reads as its own material — ink, buttons + hover/press, input background/border, pinned tint, panel
+      background — and harmonizes with its clay backdrop. *(add-tablet-clay-type-themes 6.2)*
+- [ ] `b6ff53f5` **Glow lifts ink.** On each clay backdrop confirm the outer glow lifts the cuneiform ink
+      off the clay, and that overlapping strokes within a glyph show ONE uniform halo (no darkened/doubled
+      seam). *(add-tablet-clay-type-themes 6.3)*
+- [ ] `b5bc4914` **Tune glow live.** Use `.cuneiformglow strength/blur/polarity` on an open tablet to dial
+      in each material; confirm it repaints without reopening, then report the values back to bake into the
+      seeds. *(add-tablet-clay-type-themes 6.4)*
+- [ ] `355c3d5e` **Pixel-Art OFF unchanged.** With Pixel-Art OFF confirm tablets follow the global theme
+      (no per-clay color, no backdrop) and the Lectern/Notebook + readable path look unchanged EXCEPT the
+      intended pinned-tint shift to Secondary. *(add-tablet-clay-type-themes 6.5)*
+- [ ] `f640f9ab` **Focus border vs pinned wash.** Focus an input on a PINNED row (tablet AND Lectern) and
+      confirm the Primary focus border is clearly distinguishable from the Secondary pinned-row wash.
+      *(add-tablet-clay-type-themes 6.8)*
+- [ ] `7cb07fc0` **No blur leak.** Confirm text/icons drawn after cuneiform in the same frame are NOT
+      blurred by the shared-paint mask filter. *(add-tablet-clay-type-themes 6.6)*
+- [ ] `e7417e7a` **Keep or strip dev command.** Decide whether the `.cuneiformglow` dev command stays in
+      the shipped tree; note the decision. *(add-tablet-clay-type-themes 6.7)*

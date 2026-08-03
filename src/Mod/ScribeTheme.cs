@@ -77,57 +77,112 @@ internal static class ScribeTheme
         StateSelected = new Vector4(Accent.X, Accent.Y, Accent.Z, 0.20f),
     });
 
-    /// <summary>Deep clay ink — a dark red-brown, one notch warmer and redder than <see cref="Ink"/> — so
-    /// tablet body/title text reads as pressed into earthenware rather than penned on paper.</summary>
-    private static readonly Vector4 TabletInk = new(0.20f, 0.10f, 0.05f, 1.0f);
-
-    /// <summary>The tablet's warm accent — a terracotta/brick tone deeper than the parchment
-    /// <see cref="Accent"/> ochre, to sit against the clay/wax backdrops.</summary>
-    private static readonly Vector4 TabletAccent = new(0.55f, 0.30f, 0.15f, 1.0f);
-
     /// <summary>
-    /// The tablet tier's earthen/clay palette (add-tablet-dialog, Proposal C). A warm clay surface with
-    /// dark red-brown ink — sibling to <see cref="Light"/> but pushed from parchment toward fired earth.
-    ///
-    /// <para><b>Placeholder this round.</b> The real text-contrast decision is deliberately DEFERRED until
-    /// the clay/wax backdrops render in-game: the VS materials those backdrops target span the color gamut
-    /// (pale-blue and pale-pink unfired clays, dark-grey and brown fired clays, gold beeswax), so a single
-    /// fixed ink color may not stay legible across all of them. The eventual choice — one ink color / dark
-    /// text + a light shadow-glow / per-backdrop ink — is captured in the
-    /// <c>tablet-theme-contrast-vs-backdrops</c> note and revisited once the art exists. Authored role-by-
-    /// role from the same rules as <see cref="Light"/> (see the class remarks for the two semantic
-    /// inversions).</para>
+    /// Author one clay-tablet <see cref="ThemeData"/> from the roles that carry a material's identity, filling
+    /// the material-NEUTRAL roles (error, and the two translucent state overlays) from shared clay rules so
+    /// the three clay palettes can't drift apart on those (add-tablet-clay-type-themes D1/D2). Every clay
+    /// palette is a sibling of <see cref="Light"/> — a light-ish surface with dark ink — so it inherits the
+    /// same two SEMANTIC (not mechanical) inversions the class remarks describe: <c>StateHover</c>/
+    /// <c>StateSelected</c> DARKEN the surface (ink/accent tints at low alpha), and <c>SurfaceHigh</c> is
+    /// raised (lighter) while <c>SurfaceLow</c> is recessed (darker).
     /// </summary>
-    internal static readonly ThemeData Tablet = new(new ColorScheme
-    {
-        Primary = TabletAccent,
-        OnPrimary = new Vector4(0.96f, 0.90f, 0.78f, 1.0f),
-        Secondary = new Vector4(0.60f, 0.42f, 0.26f, 1.0f),
-        OnSecondary = new Vector4(0.96f, 0.90f, 0.78f, 1.0f),
+    /// <param name="ink">Body/title text (<c>OnSurface</c>/<c>OnBackground</c>) — a dark, saturated tone of
+    /// the material hue so it reads (with the cuneiform glow's help) against the mid-tone backdrop.</param>
+    /// <param name="accent">The <c>Primary</c> accent. Programmatically drives button fill + its hover
+    /// (<c>+0.1</c>) / press (<c>−0.08</c>) states, the caret, the focused-input border, and text selection —
+    /// so authoring this per material recolors all of them at once.</param>
+    /// <param name="onAccent">Light content drawn on the accent fill (<c>OnPrimary</c>/<c>OnSecondary</c>).</param>
+    /// <param name="secondary">The <c>Secondary</c> tone that now drives the pinned-row wash
+    /// (<c>ScribeRowConstants.PinnedTint</c>, remapped off <c>Primary</c> in this change). MUST read clearly
+    /// distinct from <paramref name="accent"/> so a focused input's accent border stays legible against the
+    /// pinned wash on the same row.</param>
+    /// <param name="onSurfaceVariant">Muted/secondary text (hints, placeholders).</param>
+    /// <param name="surface">The tablet face panel tone.</param>
+    /// <param name="surfaceLow">Recessed surface (darker than <paramref name="surface"/>).</param>
+    /// <param name="surfaceHigh">Raised surface (lighter) — the input-field background.</param>
+    /// <param name="background">The deepest panel/desk tone behind <paramref name="surface"/>.</param>
+    /// <param name="border">Input/divider border, RGBA with its own alpha; <c>OutlineVariant</c> reuses the
+    /// same RGB at a fainter alpha.</param>
+    private static ThemeData ClayPalette(
+        Vector4 ink, Vector4 accent, Vector4 onAccent, Vector4 secondary, Vector4 onSurfaceVariant,
+        Vector4 surface, Vector4 surfaceLow, Vector4 surfaceHigh, Vector4 background, Vector4 border) =>
+        new(new ColorScheme
+        {
+            Primary = accent,
+            OnPrimary = onAccent,
+            Secondary = secondary,
+            OnSecondary = onAccent,
 
-        // Surfaces: warm fired-clay tones. Background is the deepest (a darker earthen tone), Surface the
-        // tablet face on top, SurfaceHigh raised (lightest), SurfaceLow recessed (darker) — the
-        // raised/recessed ordering kept semantically correct for a light-ish scheme.
-        Surface = new Vector4(0.80f, 0.66f, 0.50f, 1.0f),
-        OnSurface = TabletInk,
-        OnSurfaceVariant = new Vector4(0.40f, 0.28f, 0.18f, 1.0f),
-        Background = new Vector4(0.72f, 0.57f, 0.41f, 1.0f),
-        OnBackground = TabletInk,
-        SurfaceLow = new Vector4(0.70f, 0.55f, 0.39f, 1.0f),
-        SurfaceHigh = new Vector4(0.87f, 0.74f, 0.58f, 1.0f),
+            Surface = surface,
+            OnSurface = ink,
+            OnSurfaceVariant = onSurfaceVariant,
+            Background = background,
+            OnBackground = ink,
+            SurfaceLow = surfaceLow,
+            SurfaceHigh = surfaceHigh,
 
-        // Borders/dividers: a deep brown with alpha, so they read on the clay surface.
-        Border = new Vector4(0.36f, 0.24f, 0.12f, 0.55f),
-        OutlineVariant = new Vector4(0.36f, 0.24f, 0.12f, 0.28f),
+            Border = border,
+            OutlineVariant = border with { W = 0.28f },
 
-        Error = new Vector4(0.70f, 0.17f, 0.11f, 1.0f),
-        OnError = new Vector4(0.96f, 0.90f, 0.78f, 1.0f),
+            // Material-neutral: a deep clay-red error and its light content, shared across all clay types.
+            Error = new Vector4(0.70f, 0.17f, 0.11f, 1.0f),
+            OnError = new Vector4(0.96f, 0.90f, 0.78f, 1.0f),
 
-        // Semantic (not mechanical) inversion: hover/select DARKEN a light-ish surface — dark ink / accent
-        // tints at low alpha (see the Light theme's matching note).
-        StateHover = new Vector4(TabletInk.X, TabletInk.Y, TabletInk.Z, 0.08f),
-        StateSelected = new Vector4(TabletAccent.X, TabletAccent.Y, TabletAccent.Z, 0.20f),
-    });
+            // Semantic (not mechanical) inversion: hover/select DARKEN a light-ish surface — dark ink / accent
+            // tints at low alpha (see the Light theme's matching note). Shared alphas across clay types.
+            StateHover = new Vector4(ink.X, ink.Y, ink.Z, 0.08f),
+            StateSelected = new Vector4(accent.X, accent.Y, accent.Z, 0.20f),
+        });
+
+    /// <summary>Fire-clay tablet palette — warm tan earthenware. The original single-tablet palette
+    /// (add-tablet-dialog, Proposal C) rebased through <see cref="ClayPalette"/>; also the fallback for
+    /// <c>wax</c> and unknown materials, matching its interim backdrop twin. Seeded to sit against the fire
+    /// <c>-soft.png</c> backdrop (sampled center ≈ <c>#ccaf89</c>). <c>Secondary</c> is a deep umber, pulled
+    /// off the terracotta <c>Primary</c> so the pinned wash and the focus border read apart.</summary>
+    internal static readonly ThemeData TabletFire = ClayPalette(
+        ink:              new Vector4(0.20f, 0.10f, 0.05f, 1.0f),
+        accent:           new Vector4(0.55f, 0.30f, 0.15f, 1.0f),
+        onAccent:         new Vector4(0.96f, 0.90f, 0.78f, 1.0f),
+        secondary:        new Vector4(0.42f, 0.32f, 0.18f, 1.0f),
+        onSurfaceVariant: new Vector4(0.40f, 0.28f, 0.18f, 1.0f),
+        surface:          new Vector4(0.80f, 0.66f, 0.50f, 1.0f),
+        surfaceLow:       new Vector4(0.70f, 0.55f, 0.39f, 1.0f),
+        surfaceHigh:      new Vector4(0.87f, 0.74f, 0.58f, 1.0f),
+        background:       new Vector4(0.72f, 0.57f, 0.41f, 1.0f),
+        border:           new Vector4(0.36f, 0.24f, 0.12f, 0.55f));
+
+    /// <summary>Red-clay tablet palette — dusty terracotta rose. Seeded to sit against the red
+    /// <c>-soft.png</c> backdrop (sampled center ≈ <c>#aa6f6d</c>): brick-red <c>Primary</c>, deep-maroon
+    /// ink, and a muted rosy-taupe <c>Secondary</c> that stays distinct from the brick accent as a pinned
+    /// wash.</summary>
+    internal static readonly ThemeData TabletRed = ClayPalette(
+        ink:              new Vector4(0.24f, 0.10f, 0.08f, 1.0f),
+        accent:           new Vector4(0.60f, 0.26f, 0.20f, 1.0f),
+        onAccent:         new Vector4(0.97f, 0.90f, 0.84f, 1.0f),
+        secondary:        new Vector4(0.46f, 0.32f, 0.30f, 1.0f),
+        onSurfaceVariant: new Vector4(0.44f, 0.26f, 0.22f, 1.0f),
+        surface:          new Vector4(0.82f, 0.62f, 0.58f, 1.0f),
+        surfaceLow:       new Vector4(0.72f, 0.52f, 0.49f, 1.0f),
+        surfaceHigh:      new Vector4(0.88f, 0.72f, 0.68f, 1.0f),
+        background:       new Vector4(0.74f, 0.54f, 0.50f, 1.0f),
+        border:           new Vector4(0.42f, 0.20f, 0.16f, 0.55f));
+
+    /// <summary>Blue-clay tablet palette — cool slate blue-grey. Seeded to sit against the blue
+    /// <c>-soft.png</c> backdrop (sampled center ≈ <c>#98a6af</c>): steel-blue <c>Primary</c>, deep-slate
+    /// ink, and a neutral warm-grey <c>Secondary</c> whose pinned wash reads apart from the blue accent
+    /// border. The one cool clay palette — its <c>onAccent</c> is a cool near-white rather than the warm
+    /// cream the earthen palettes use.</summary>
+    internal static readonly ThemeData TabletBlue = ClayPalette(
+        ink:              new Vector4(0.12f, 0.16f, 0.20f, 1.0f),
+        accent:           new Vector4(0.26f, 0.42f, 0.52f, 1.0f),
+        onAccent:         new Vector4(0.93f, 0.96f, 0.98f, 1.0f),
+        secondary:        new Vector4(0.42f, 0.46f, 0.48f, 1.0f),
+        onSurfaceVariant: new Vector4(0.30f, 0.36f, 0.40f, 1.0f),
+        surface:          new Vector4(0.76f, 0.82f, 0.86f, 1.0f),
+        surfaceLow:       new Vector4(0.64f, 0.71f, 0.76f, 1.0f),
+        surfaceHigh:      new Vector4(0.84f, 0.89f, 0.92f, 1.0f),
+        background:       new Vector4(0.66f, 0.73f, 0.78f, 1.0f),
+        border:           new Vector4(0.20f, 0.30f, 0.36f, 0.55f));
 
     /// <summary>The single theme selector Scribe's core views call: the net-new <see cref="Light"/>
     /// parchment theme when Pixel-Art Display is on, or the player's global theme
@@ -135,9 +190,23 @@ internal static class ScribeTheme
     /// The off path depends on no art, keeping the mod fully usable with zero assets.</summary>
     public static ThemeData For(bool pixelArt) => pixelArt ? Light : ThemeData.Default;
 
-    /// <summary>The tablet-tier selector: the earthen <see cref="Tablet"/> palette when Pixel-Art Display
-    /// is on, else the player's global theme (same off-path rule as <see cref="For"/>). The tablet dialog
-    /// calls this in its <c>Build()</c> theme wrapper instead of <see cref="For"/> so it draws its own
-    /// clay palette rather than the parchment one (add-tablet-dialog D6).</summary>
-    public static ThemeData ForTablet(bool pixelArt) => pixelArt ? Tablet : ThemeData.Default;
+    /// <summary>The tablet-tier selector: a per-clay-type palette when Pixel-Art Display is on, keyed to the
+    /// item's <c>material</c> variant (add-tablet-clay-type-themes D1) — <c>clay-red</c>→<see cref="TabletRed"/>,
+    /// <c>clay-blue</c>→<see cref="TabletBlue"/>, <c>clay-fire</c>→<see cref="TabletFire"/>, and <c>wax</c> or
+    /// any unrecognized material→<see cref="TabletFire"/> (its interim backdrop twin, so the resolved theme
+    /// and backdrop always agree — mirrors <c>ScribeBackdrops.ForTablet</c>'s default arm). When Pixel-Art
+    /// Display is off it returns the player's global theme (<see cref="ThemeData.Default"/>), same off-path
+    /// rule as <see cref="For"/> — per-clay coloring applies ONLY with Pixel-Art on. The tablet dialog calls
+    /// this in its <c>Build()</c> theme wrapper instead of <see cref="For"/>.</summary>
+    public static ThemeData ForTablet(string? material, bool pixelArt)
+    {
+        if (!pixelArt) return ThemeData.Default;
+        return material switch
+        {
+            "clay-blue" => TabletBlue,
+            "clay-fire" => TabletFire,
+            "clay-red" => TabletRed,
+            _ => TabletFire, // wax + any unrecognized material ride the fire palette (its backdrop twin)
+        };
+    }
 }

@@ -40,9 +40,17 @@ public class GuiDialogScribeTablet : ScribeDialogBase
 {
     private IInventory? _hotbar;
 
-    public GuiDialogScribeTablet(IScribeDocumentHost host, ICoreClientAPI capi)
+    /// <summary>The tablet item's <c>material</c> variant (<c>clay-red</c>/<c>clay-blue</c>/<c>clay-fire</c>/
+    /// <c>wax</c>), threaded from the item's open path so <see cref="ResolveTheme"/> can pick this tablet's
+    /// per-clay palette — the same seam backdrop selection reads (add-tablet-clay-type-themes). Null when the
+    /// dialog is opened without a known material; the theme selector then falls back to the fire palette.</summary>
+    private readonly string? _material;
+
+    public GuiDialogScribeTablet(IScribeDocumentHost host, ICoreClientAPI capi, string? material = null)
         : base(new BlockPos(0), host, capi)
     {
+        _material = material;
+
         // Always-edit: seed the editor scratch from the current document NOW, before TryOpen calls Build()
         // (GuiBase.TryOpen inflates the tree before OnGuiOpened runs). Mirrors the Notebook's immediate
         // grant — there is no lock to wait on for an item-hosted document.
@@ -75,8 +83,11 @@ public class GuiDialogScribeTablet : ScribeDialogBase
     /// (add-tablet-dialog D4).</summary>
     protected override bool ShowEditorSwitchToRead => false;
 
-    /// <summary>The tablet uses its own earthen palette rather than the parchment one (add-tablet-dialog D6).</summary>
-    protected override ThemeData ResolveTheme(bool pixelArt) => ScribeTheme.ForTablet(pixelArt);
+    /// <summary>The tablet uses its own per-clay-type palette rather than the parchment one, keyed to the
+    /// item's <see cref="_material"/> variant (add-tablet-clay-type-themes) — red/blue/fire tablets each
+    /// resolve their own colors, and the resolved theme agrees with the resolved backdrop (both key off the
+    /// same material). Pixel-Art off still falls back to the player's global theme.</summary>
+    protected override ThemeData ResolveTheme(bool pixelArt) => ScribeTheme.ForTablet(_material, pixelArt);
 
     /// <summary>Flip the editable rows to live cuneiform under the single <see cref="ScribeTaskFont.UseCuneiform"/>
     /// branch (add-tablet-cuneiform-chrome). When the player disables cuneiform, the flag resolves false and
@@ -101,6 +112,9 @@ public class GuiDialogScribeTablet : ScribeDialogBase
             // off). Re-deriving the row style per build means toggling it in Scribe Settings repaints an
             // open tablet.
             CuneiformProgression = modSystem.MySettings.CuneiformProgression,
+            // Per-material outer glow to lift the row ink off this tablet's clay backdrop
+            // (add-tablet-clay-type-themes). Keyed off the same material the theme/backdrop use.
+            CuneiformGlow = CuneiformGlowTable.For(_material),
         };
     }
 
@@ -122,7 +136,9 @@ public class GuiDialogScribeTablet : ScribeDialogBase
                 text: displayTitle,
                 fontSizeEm: titleStyle.FontSize,
                 inkColor: colors.OnSurface,
-                bundle: bundle));
+                bundle: bundle,
+                // Per-material glow so the resting title lifts off the clay backdrop like the rows do.
+                glow: CuneiformGlowTable.For(_material)));
     }
 
     /// <summary>Editing title: a live single-line cuneiform input bound to the SAME title controller/focus
@@ -149,7 +165,9 @@ public class GuiDialogScribeTablet : ScribeDialogBase
             // typing (a text-derived seed would re-wobble the whole title on every keystroke).
             jitterSeed: TitleJitterSeed,
             // Stroke-by-stroke title reveal, gated by the same player setting as the rows (defaults off).
-            progression: modSystem.MySettings.CuneiformProgression);
+            progression: modSystem.MySettings.CuneiformProgression,
+            // Per-material glow so the editing title lifts off the clay backdrop like the rows/resting title.
+            glow: CuneiformGlowTable.For(_material));
     }
 
     /// <summary>Fixed base seed for the title band's cuneiform jitter — arbitrary constant, distinct from

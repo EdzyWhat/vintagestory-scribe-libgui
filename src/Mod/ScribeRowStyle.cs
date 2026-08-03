@@ -44,6 +44,12 @@ internal readonly record struct ScribeRowStyle(
     /// the Lectern/Notebook rows and the disable-cuneiform fallback reveal instantly.</summary>
     public bool CuneiformProgression { get; init; }
 
+    /// <summary>The per-material outer glow painted behind the cuneiform row/label strokes to lift the ink
+    /// off the clay backdrop (add-tablet-clay-type-themes). Set on the tablet path only (keyed to the
+    /// tablet's material); the default (disabled) leaves every non-tablet cuneiform surface un-glowed.
+    /// Ignored when <see cref="UseCuneiform"/> is false.</summary>
+    public CuneiformGlow CuneiformGlow { get; init; }
+
     /// <summary>
     /// Builds a row style from the player's consolidated settings. THIS IS THE SINGLE PLACE where the
     /// window font-size scale is applied: the scalable values are multiplied by
