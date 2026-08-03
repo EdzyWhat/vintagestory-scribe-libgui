@@ -69,8 +69,11 @@
   crisp clay-type backdrop.
 - [ ] 6.3 In-game: reach a fired clay tablet via creative (fired=true is not craftable this round) and
   confirm the fired-ceramic tint reads distinctly per clay type; tune tint values if needed.
-- [ ] 6.4 In-game: confirm a wax tablet shows the wax placeholder backdrop, and a legacy/creative clay
-  tablet with no attributes falls back to red + soft without error.
+- [x] 6.4 In-game: confirm a wax tablet shows the wax placeholder backdrop, and a legacy/creative clay
+  tablet with no attributes falls back to red + soft without error. — CONFIRMED (2026-08-02 playtest):
+  both the Creative-Inventory Wax and Clay tablet backdrops render; the clay one is the red+soft default
+  since a Creative stack carries no `clayType`. (This exercises the DEFAULT path only — per-type red/blue/
+  fire art still needs crafting: task 6.2.)
 - [ ] 6.5 In-game: confirm clayType/fired persist across close/reopen and drop/pickup.
 - [ ] 6.6 In-game: confirm the Lectern and both Notebooks are visually unchanged (renderer seam did not
   disturb the full-page backdrops).

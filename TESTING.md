@@ -2349,3 +2349,25 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [ ] `4f2c0c8e` **+/- buttons + clamp.** +/- step buttons still step and keep focus; select-all-and-
       retype an out-of-range value still clamps only on blur.
       *(fix-settings-numeric-arrow-focus-leak 3.4)*
+
+## add-tablet-clay-type-backdrops
+
+- [ ] `d7925815` **Craft each clay type.** Craft a tablet from red, blue, AND fire clay (1 clay + 1
+      stick, vertical) — each opens with a distinct full-page clay backdrop matching its type. NOTE:
+      Creative Inventory only gives the base clay tablet (always red default), so this needs real
+      crafting. *(add-tablet-clay-type-backdrops 6.2)*
+- [x] `6a903898` **Wax + default fallback.** A wax tablet shows the wax placeholder backdrop; a
+      creative/legacy clay tablet with no recorded type falls back to red+soft without error.
+      *(add-tablet-clay-type-backdrops 6.4)*
+      - **Confirmed 2026-08-02** via playtest: both the Creative-Inventory Wax and Clay tablet backdrops
+        render correctly (the clay one is the red+soft default, since a Creative stack carries no clayType).
+- [ ] `7008f8f7` **Persistence.** A crafted blue/fire tablet keeps its clay-type backdrop across
+      close/reopen and after dropping and picking it back up. *(add-tablet-clay-type-backdrops 6.5)*
+- [ ] `a26c11e0` **Incumbents unchanged.** Open the Lectern and both Notebooks — their backdrops look
+      exactly as before (the tint seam didn't disturb the full-page art).
+      *(add-tablet-clay-type-backdrops 6.6)*
+- [ ] `fed17c00` **Fired tint (dev-gated).** Reach a fired tablet (needs a dev affordance — not
+      craftable/creative-reachable yet) and confirm the per-type ceramic tint reads distinctly for
+      red/blue/fire; tune tint values if flat. *(add-tablet-clay-type-backdrops 6.3 — BLOCKED on reachability)*
+      - **Backlogged 2026-08-02** nothing sets `fired = true` in-game this round; not testable until a
+        firing mechanic or a dev command to set the attribute exists.
