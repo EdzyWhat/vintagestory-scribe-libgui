@@ -37,6 +37,8 @@ public sealed class ScribeCuneiformTitleField : StatefulWidget, IFocusable
         float fontSizeEm,
         GlyphBundle? bundle,
         Action<KeyboardEvent>? onKeyDown = null,
+        float jitterStrength = 0f,
+        int jitterSeed = 0,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
@@ -45,12 +47,19 @@ public sealed class ScribeCuneiformTitleField : StatefulWidget, IFocusable
         FontSizeEm = fontSizeEm;
         Bundle = bundle;
         OnKeyDown = onKeyDown;
+        JitterStrength = jitterStrength;
+        JitterSeed = jitterSeed;
     }
 
     public TextEditingController Controller { get; }
     public FocusNode FocusNode { get; }
     public float FontSizeEm { get; }
     public GlyphBundle? Bundle { get; }
+    /// <summary>Hand-written jitter strength (0..1) for the title strokes; 0 = crisp.</summary>
+    public float JitterStrength { get; }
+    /// <summary>Fixed base seed for the title jitter, so the title wobbles consistently and typing does not
+    /// reseed the letters already on screen.</summary>
+    public int JitterSeed { get; }
     /// <summary>Parent key hook, invoked BEFORE this field acts on a key (mirrors LibGUI's TextField). The
     /// tablet points this at the base's shared title key handler for the maxlength gate + Enter/Escape
     /// commit, so a cuneiform title honors the identical limit and commit rules as the normal title field.</summary>
@@ -213,6 +222,8 @@ internal sealed class ScribeCuneiformTitleFieldState : State<ScribeCuneiformTitl
                 borderColor: Vector4.Zero,
                 borderThickness: 0f,
                 cornerRadii: Vector4.Zero,
-                singleLine: true));
+                singleLine: true,
+                jitterStrength: Widget.JitterStrength,
+                jitterSeed: Widget.JitterSeed));
     }
 }

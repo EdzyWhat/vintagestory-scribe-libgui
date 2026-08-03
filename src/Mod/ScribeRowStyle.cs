@@ -33,6 +33,12 @@ internal readonly record struct ScribeRowStyle(
     /// no strokes (asset not yet loaded). Ignored when <see cref="UseCuneiform"/> is false.</summary>
     public GlyphBundle? CuneiformBundle { get; init; }
 
+    /// <summary>Hand-written jitter strength (0..1) applied to the cuneiform row strokes at paint time
+    /// (add-cuneiform-handwriting-feel); 0 = crisp authored geometry. Set on the tablet path only; ignored
+    /// when <see cref="UseCuneiform"/> is false. An <c>init</c>-only add-on so existing constructions stay
+    /// valid (defaults to 0).</summary>
+    public float CuneiformJitter { get; init; }
+
     /// <summary>
     /// Builds a row style from the player's consolidated settings. THIS IS THE SINGLE PLACE where the
     /// window font-size scale is applied: the scalable values are multiplied by

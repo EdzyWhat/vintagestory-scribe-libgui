@@ -673,6 +673,10 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             // those surfaces stay on the normal editable renderer.
             useCuneiform: style.UseCuneiform,
             cuneiformBundle: style.CuneiformBundle,
+            cuneiformJitter: style.UseCuneiform ? style.CuneiformJitter : 0f,
+            // Fixed per-row seed from the stable TaskId, so a row's letters wobble consistently and typing a
+            // new character does not reseed (re-wobble) the letters already pressed into the row.
+            cuneiformJitterSeed: Widget.Data.TaskId.GetHashCode(),
             // Task rows are held to the soft task cap as a maxlength affordance; freeform Text sections
             // stay uncapped in-editor (bounded only by the codec's larger hard limit). The codec clips
             // Task text on read regardless, so this is the UX half of the same limit (RELEASE.md A1).

@@ -65,6 +65,11 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     private float padX = 8f;
     private float padY = 6f;
     private bool singleLine;
+    // Per-stroke hand-written jitter (add-cuneiform-handwriting-feel). 0 = crisp authored geometry. The seed
+    // is a FIXED per-field value (not derived from the buffer), so typing a character does not reseed — and
+    // thus does not re-wobble — the letters already on screen.
+    private float jitterStrength;
+    private int jitterSeed;
 
     // Cached from the last PerformLayout, reused by PaintInternal and the geometry queries so layout,
     // paint, caret, and hit-testing all agree on the same wrapped lines.
@@ -96,6 +101,12 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     /// enclosing clip rather than growing the band taller (design D5/D-Q1). Default false = the auto-growing
     /// multi-line row behavior.</summary>
     public bool SingleLine { get => singleLine; set => SetProperty(ref singleLine, value, relayout: true); }
+    /// <summary>Hand-written jitter strength (0..1; 0 = crisp authored geometry). Repaint only — jitter is a
+    /// visual transform on the drawn quads and never touches layout, caret, selection, or hit-testing.</summary>
+    public float JitterStrength { get => jitterStrength; set => SetProperty(ref jitterStrength, Math.Clamp(value, 0f, 1f), repaint: true); }
+    /// <summary>Fixed per-field base seed for the jitter; combined with each stroke's stable identity so the
+    /// same character position wobbles the same way and typing doesn't reseed prior letters. Repaint only.</summary>
+    public int JitterSeed { get => jitterSeed; set => SetProperty(ref jitterSeed, value, repaint: true); }
 
     protected override void PerformLayout()
     {
@@ -186,7 +197,17 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
             float originY = padY + i * lineHeightPx;
             foreach (PositionedStroke ps in lines[i].Strokes)
             {
-                Scribe.Core.Cuneiform.Vec2[] corners = ps.Stroke.Corners();
+                // Hand-written wobble (visual only): perturb the drawn geometry, keyed off the stroke's
+                // stable identity so the SAME character position jitters identically each frame — no shimmer.
+                // The caret/selection/hit-testing below all read the UN-jittered layout, untouched.
+                GlyphStroke drawStroke = jitterStrength > 0f
+                    ? GlyphStrokeJitter.Jitter(
+                        ps.Stroke,
+                        GlyphStrokeJitter.SeedFor(jitterSeed, ps.SourceCharIndex, ps.StrokeOrdinal),
+                        jitterStrength,
+                        ps.GridSize)
+                    : ps.Stroke;
+                Scribe.Core.Cuneiform.Vec2[] corners = drawStroke.Corners();
                 path.Reset();
                 path.MoveTo(originX + (float)(corners[0].X * scale), originY + (float)(corners[0].Y * scale));
                 path.LineTo(originX + (float)(corners[1].X * scale), originY + (float)(corners[1].Y * scale));
@@ -294,7 +315,8 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
         Vector4 caretColor, Vector4 selectionColor,
         GlyphBundle? bundle, float padX, float padY,
         Vector4 boxColor, Vector4 borderColor, float borderThickness, Vector4 cornerRadii,
-        bool singleLine = false, bool caretVisible = true)
+        bool singleLine = false, bool caretVisible = true,
+        float jitterStrength = 0f, int jitterSeed = 0)
     {
         Text = text;
         Caret = caret;
@@ -313,6 +335,8 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
         BorderThickness = borderThickness;
         CornerRadii = cornerRadii;
         SingleLine = singleLine;
+        JitterStrength = jitterStrength;
+        JitterSeed = jitterSeed;
     }
 
     public string Text { get; }
@@ -332,6 +356,8 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
     public float BorderThickness { get; }
     public Vector4 CornerRadii { get; }
     public bool SingleLine { get; }
+    public float JitterStrength { get; }
+    public int JitterSeed { get; }
 
     public override RenderObject CreateRenderObject() => new ScribeCuneiformFieldRender();
 
@@ -355,5 +381,7 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
         ro.BorderThickness = BorderThickness;
         ro.CornerRadii = CornerRadii;
         ro.SingleLine = SingleLine;
+        ro.JitterStrength = JitterStrength;
+        ro.JitterSeed = JitterSeed;
     }
 }

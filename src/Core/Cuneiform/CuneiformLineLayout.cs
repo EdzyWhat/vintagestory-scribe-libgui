@@ -5,6 +5,12 @@ namespace Scribe.Core.Cuneiform;
 /// runs along x; y is the glyph's own grid y). Carries the source glyph's <see cref="GridSize"/> so a
 /// renderer can scale grid units → pixels per glyph. Produced in AUTHORED CONSTRUCTION ORDER across the
 /// whole line, so rendering the first N entries yields a partial reveal.
+///
+/// It also carries a STABLE IDENTITY — the source character index within the line
+/// (<see cref="SourceCharIndex"/>) and the stroke's ordinal within its glyph (<see cref="StrokeOrdinal"/>)
+/// — so a renderer can derive a per-stroke seed (for deterministic hand-written jitter) or a per-letter
+/// reveal schedule that stays stable frame to frame, rather than keying off a frame counter. The identity
+/// does not affect the emitted geometry or order in any way.
 /// </summary>
 public readonly struct PositionedStroke
 {
@@ -14,10 +20,22 @@ public readonly struct PositionedStroke
     /// <summary>The source glyph's em-grid size, for grid→pixel scaling.</summary>
     public double GridSize { get; }
 
-    public PositionedStroke(GlyphStroke stroke, double gridSize)
+    /// <summary>Index of the source character (within THIS line) this stroke belongs to — i.e. the same
+    /// local index space as <see cref="CuneiformLine.CharBoundaries"/>. Stable identity for a per-stroke
+    /// jitter seed and a per-letter reveal schedule; never affects geometry.</summary>
+    public int SourceCharIndex { get; }
+
+    /// <summary>This stroke's ordinal within its own glyph (0-based, in authored construction order).
+    /// Combined with <see cref="SourceCharIndex"/> it uniquely and stably identifies a stroke within a
+    /// line without depending on frame or wall-clock state.</summary>
+    public int StrokeOrdinal { get; }
+
+    public PositionedStroke(GlyphStroke stroke, double gridSize, int sourceCharIndex, int strokeOrdinal)
     {
         Stroke = stroke;
         GridSize = gridSize;
+        SourceCharIndex = sourceCharIndex;
+        StrokeOrdinal = strokeOrdinal;
     }
 }
 
@@ -351,15 +369,23 @@ public sealed class CuneiformLineLayout
                 pen += GapBetween(prev, glyph);
             }
 
+            // This glyph's source-character index within the line. boundaries starts as {0.0} and appends
+            // exactly one entry per source character, so before this char's boundary is added its count
+            // minus one is the current character index (0 for the first char, 1 for the second, …). Used as
+            // stable identity on each emitted stroke — it never affects geometry.
+            int sourceCharIndex = boundaries.Count - 1;
+
             // Align the glyph's local box-left edge with the pen: renderedX = strokeX - localBoxLeft + pen.
             double xOffset = pen - glyph.LocalBoxLeft;
+            int strokeOrdinal = 0;
             foreach (GlyphStroke s in glyph.Strokes)
             {
                 var shifted = new GlyphStroke(
                     new Vec2(s.Start.X + xOffset, s.Start.Y),
                     new Vec2(s.End.X + xOffset, s.End.Y),
                     s.Weight);
-                positioned.Add(new PositionedStroke(shifted, glyph.GridSize));
+                positioned.Add(new PositionedStroke(shifted, glyph.GridSize, sourceCharIndex, strokeOrdinal));
+                strokeOrdinal++;
             }
 
             pen += glyph.AdvanceWidth;

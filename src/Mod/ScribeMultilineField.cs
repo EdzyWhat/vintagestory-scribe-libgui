@@ -420,6 +420,8 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         int? maxLength = null,
         bool useCuneiform = false,
         GlyphBundle? cuneiformBundle = null,
+        float cuneiformJitter = 0f,
+        int cuneiformJitterSeed = 0,
         Action<string>? onChanged = null,
         Action? onCommitAndAdvance = null,
         Action? onCommitAndRetreat = null,
@@ -439,6 +441,8 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         MaxLength = maxLength;
         UseCuneiform = useCuneiform;
         CuneiformBundle = cuneiformBundle;
+        CuneiformJitter = cuneiformJitter;
+        CuneiformJitterSeed = cuneiformJitterSeed;
         OnChanged = onChanged;
         OnCommitAndAdvance = onCommitAndAdvance;
         OnCommitAndRetreat = onCommitAndRetreat;
@@ -479,6 +483,13 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
     /// <summary>Parsed cuneiform glyph geometry for the <see cref="UseCuneiform"/> path; null renders no
     /// strokes (asset not yet loaded). Ignored when <see cref="UseCuneiform"/> is false.</summary>
     public GlyphBundle? CuneiformBundle { get; }
+    /// <summary>Hand-written jitter strength (0..1) for the cuneiform path; 0 = crisp. Ignored when
+    /// <see cref="UseCuneiform"/> is false.</summary>
+    public float CuneiformJitter { get; }
+    /// <summary>Fixed per-field base seed for the cuneiform jitter, so this field's letters wobble
+    /// consistently and typing does not reseed the letters already on screen. Ignored when
+    /// <see cref="UseCuneiform"/> is false.</summary>
+    public int CuneiformJitterSeed { get; }
     public Action<string>? OnChanged { get; }
     /// <summary>Tab (no Shift): the field has committed its text via <see cref="OnChanged"/>; the
     /// parent should normalize + flush the row and move focus to the next row.</summary>
@@ -1013,7 +1024,9 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 borderColor: Vector4.Zero,
                 borderThickness: 0f,
                 cornerRadii: Vector4.Zero,
-                caretVisible: caretVisible)
+                caretVisible: caretVisible,
+                jitterStrength: Widget.CuneiformJitter,
+                jitterSeed: Widget.CuneiformJitterSeed)
             : new ScribeMultilineFieldRenderWidget(
                 text: text,
                 placeholder: Widget.Placeholder,

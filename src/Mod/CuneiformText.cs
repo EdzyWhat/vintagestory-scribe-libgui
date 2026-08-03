@@ -44,6 +44,33 @@ internal static class CuneiformMetrics
     /// that text rather than ~30% short. ~1.4 matches the measured TTF line-height ratio; tuned against the
     /// in-game retest (task 8.6).</summary>
     public const float LineHeightRatio = 1.4f;
+
+    /// <summary>Default hand-written jitter strength (add-cuneiform-handwriting-feel) applied to cuneiform
+    /// text until the client config knob (task 6) overrides it. A low value reads as a hand-pressed wobble
+    /// without hurting legibility; 0 reproduces today's crisp geometry exactly. Tuned in-game.</summary>
+    public const float DefaultJitterStrength = 0.5f;
+
+    /// <summary>Derives a stable base jitter seed from a string (e.g. a label's text), so the same text
+    /// always wobbles the same way and different texts differ. Order-independent of frame/wall-clock — a
+    /// plain deterministic string hash. Used for static display text; editable fields use a fixed per-field
+    /// seed instead so typing a character does not reseed the letters already on screen.</summary>
+    public static int SeedFromString(string? s)
+    {
+        // Deterministic FNV-1a over UTF-16 code units (String.GetHashCode is randomized per process, so it
+        // must NOT be used for a seed that has to be stable across sessions).
+        unchecked
+        {
+            uint h = 2166136261u;
+            if (s is not null)
+            {
+                foreach (char c in s)
+                {
+                    h = (h ^ c) * 16777619u;
+                }
+            }
+            return (int)h;
+        }
+    }
 }
 
 /// <summary>
@@ -61,6 +88,10 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
     // Fraction of the line's strokes to reveal, in authored construction order (1 = whole line). Idle
     // at 1 for the static prototype; the animation drives it 0→1 when active.
     private float revealFraction = 1f;
+    // Per-stroke hand-written jitter (add-cuneiform-handwriting-feel). 0 = crisp/authored geometry; the
+    // seed anchors the (deterministic) wobble so the SAME text jitters identically each frame/open.
+    private float jitterStrength;
+    private int jitterSeed;
 
     // Cached from the last PerformLayout, reused by PaintInternal so layout and paint agree.
     private CuneiformLine? line;
@@ -87,6 +118,18 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
         get => revealFraction;
         set => SetProperty(ref revealFraction, Math.Clamp(value, 0f, 1f), repaint: true);
     }
+
+    /// <summary>Hand-written jitter strength (0..1; 0 = crisp authored geometry). Repaint only — jitter is a
+    /// visual transform applied at paint time to the drawn quads, never to the layout metrics.</summary>
+    public float JitterStrength
+    {
+        get => jitterStrength;
+        set => SetProperty(ref jitterStrength, Math.Clamp(value, 0f, 1f), repaint: true);
+    }
+
+    /// <summary>Base seed the per-stroke jitter is derived from (combined with each stroke's stable identity).
+    /// The Mod layer picks it (per field/text) so the same text wobbles the same way. Repaint only.</summary>
+    public int JitterSeed { get => jitterSeed; set => SetProperty(ref jitterSeed, value, repaint: true); }
 
     protected override void PerformLayout()
     {
@@ -140,7 +183,16 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
         using var path = new SKPath();
         for (int i = 0; i < revealCount; i++)
         {
-            GlyphStroke stroke = line.Strokes[i].Stroke;
+            PositionedStroke ps = line.Strokes[i];
+            // Hand-written wobble (visual only): perturb the drawn geometry, never the layout. Seed off the
+            // stroke's stable identity so the SAME stroke jitters identically every frame — no shimmer.
+            GlyphStroke stroke = jitterStrength > 0f
+                ? GlyphStrokeJitter.Jitter(
+                    ps.Stroke,
+                    GlyphStrokeJitter.SeedFor(jitterSeed, ps.SourceCharIndex, ps.StrokeOrdinal),
+                    jitterStrength,
+                    ps.GridSize)
+                : ps.Stroke;
             Scribe.Core.Cuneiform.Vec2[] corners = stroke.Corners();
 
             path.Reset();
@@ -163,13 +215,16 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
 internal sealed class CuneiformTextRenderWidget : RenderObjectWidget
 {
     public CuneiformTextRenderWidget(
-        string text, float fontSizeEm, Vector4 inkColor, GlyphBundle? bundle, float revealFraction)
+        string text, float fontSizeEm, Vector4 inkColor, GlyphBundle? bundle, float revealFraction,
+        float jitterStrength = 0f, int jitterSeed = 0)
     {
         Text = text;
         FontSizeEm = fontSizeEm;
         InkColor = inkColor;
         Bundle = bundle;
         RevealFraction = revealFraction;
+        JitterStrength = jitterStrength;
+        JitterSeed = jitterSeed;
     }
 
     public string Text { get; }
@@ -177,6 +232,8 @@ internal sealed class CuneiformTextRenderWidget : RenderObjectWidget
     public Vector4 InkColor { get; }
     public GlyphBundle? Bundle { get; }
     public float RevealFraction { get; }
+    public float JitterStrength { get; }
+    public int JitterSeed { get; }
 
     public override RenderObject CreateRenderObject() => new CuneiformTextRender();
 
@@ -188,6 +245,8 @@ internal sealed class CuneiformTextRenderWidget : RenderObjectWidget
         ro.InkColor = InkColor;
         ro.Bundle = Bundle;
         ro.RevealFraction = RevealFraction;
+        ro.JitterStrength = JitterStrength;
+        ro.JitterSeed = JitterSeed;
     }
 }
 
@@ -207,6 +266,7 @@ public sealed class CuneiformText : StatefulWidget
         GlyphBundle? bundle = null,
         bool animateReveal = false,
         int revealDurationMs = 1200,
+        float? jitterStrength = null,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
@@ -216,6 +276,7 @@ public sealed class CuneiformText : StatefulWidget
         Bundle = bundle;
         AnimateReveal = animateReveal;
         RevealDurationMs = revealDurationMs;
+        JitterStrength = jitterStrength ?? CuneiformMetrics.DefaultJitterStrength;
     }
 
     /// <summary>The line of text to render.</summary>
@@ -235,6 +296,11 @@ public sealed class CuneiformText : StatefulWidget
 
     /// <summary>Reveal duration in ms when <see cref="AnimateReveal"/> is on.</summary>
     public int RevealDurationMs { get; }
+
+    /// <summary>Hand-written jitter strength (0..1). Defaults to <see cref="CuneiformMetrics.DefaultJitterStrength"/>;
+    /// pass 0 for crisp authored geometry. The base seed is derived from <see cref="Text"/> so the same text
+    /// wobbles consistently.</summary>
+    public float JitterStrength { get; }
 
     public override State CreateState() => new CuneiformTextState();
 }
@@ -286,5 +352,8 @@ internal sealed class CuneiformTextState : State<CuneiformText>
         fontSizeEm: Widget.FontSizeEm,
         inkColor: Widget.InkColor,
         bundle: Widget.Bundle,
-        revealFraction: revealFraction);
+        revealFraction: revealFraction,
+        jitterStrength: Widget.JitterStrength,
+        // Static display text seeds off its own content, so the same label always wobbles identically.
+        jitterSeed: CuneiformMetrics.SeedFromString(Widget.Text));
 }

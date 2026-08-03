@@ -93,6 +93,10 @@ public class GuiDialogScribeTablet : ScribeDialogBase
         {
             UseCuneiform = true,
             CuneiformBundle = bundle,
+            // Hand-written wobble on the tablet's cuneiform rows (add-cuneiform-handwriting-feel). The
+            // per-row seed (its stable TaskId) is supplied at the field; strength comes from the default
+            // until the client-config knob (task 6) sources it. 0 would reproduce the crisp geometry.
+            CuneiformJitter = CuneiformMetrics.DefaultJitterStrength,
         };
     }
 
@@ -135,8 +139,16 @@ public class GuiDialogScribeTablet : ScribeDialogBase
             TitleFocusNode,
             fontSizeEm: titleStyle.FontSize,
             bundle: bundle,
-            onKeyDown: OnTitleFieldKeyDown);
+            onKeyDown: OnTitleFieldKeyDown,
+            jitterStrength: CuneiformMetrics.DefaultJitterStrength,
+            // A fixed seed: one title band per tablet, so a constant keeps it stable across rebuilds while
+            // typing (a text-derived seed would re-wobble the whole title on every keystroke).
+            jitterSeed: TitleJitterSeed);
     }
+
+    /// <summary>Fixed base seed for the title band's cuneiform jitter — arbitrary constant, distinct from
+    /// the rows' TaskId seeds so the title doesn't share a wobble pattern with any row.</summary>
+    private const int TitleJitterSeed = 0x5C71B7;
 
     /// <summary>The parsed glyph bundle when the single cuneiform branch is active for the tablet, else null
     /// (cuneiform disabled OR the asset hasn't loaded). One place that resolves the branch so the title

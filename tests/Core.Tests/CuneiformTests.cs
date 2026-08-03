@@ -652,6 +652,221 @@ public class CuneiformTests
         Assert.Equal(expected.Y, actual.Y, 6);
     }
 
+    // ---- Stroke identity threaded through layout (add-cuneiform-handwriting-feel task 1) ------
+
+    [Fact]
+    public void Layout_PositionedStroke_CarriesSourceCharIndexAndOrdinal()
+    {
+        // "AA X A": each 'A' has one stroke; the space and the (missing-glyph) gap emit none. The
+        // SourceCharIndex must be the LOCAL character index of each stroke's source glyph, and the
+        // StrokeOrdinal 0 (single-stroke glyphs). 'X' also has one stroke.
+        var layout = new CuneiformLineLayout(GlyphBundle.Parse(SampleBundleJson));
+
+        CuneiformLine line = layout.Layout("AA X A");
+
+        // Strokes come from indices: 0 (A), 1 (A), 3 (X); indices 2 (space) and 4 (space) emit nothing,
+        // index 5 (A) emits one. So the emitted strokes map to source chars 0, 1, 3, 5.
+        int[] expectedChars = { 0, 1, 3, 5 };
+        Assert.Equal(expectedChars.Length, line.Strokes.Count);
+        for (int i = 0; i < expectedChars.Length; i++)
+        {
+            Assert.Equal(expectedChars[i], line.Strokes[i].SourceCharIndex);
+            Assert.Equal(0, line.Strokes[i].StrokeOrdinal); // every sample glyph has a single stroke
+        }
+    }
+
+    [Fact]
+    public void Layout_StrokeOrdinal_CountsWithinGlyph()
+    {
+        // A glyph with three strokes: the ordinals must be 0,1,2 in authored construction order, and the
+        // single character's SourceCharIndex must be 0 for all three.
+        const string threeStrokeBundle = """
+            {
+              "generatedFrom": "test", "characterCount": 1,
+              "characters": {
+                "A": { "character": "A", "gridSize": 100, "leftWidth": 20, "rightWidth": 20,
+                       "leftPadding": 5, "rightPadding": 5,
+                       "strokes": [
+                         { "start": { "x": 0, "y": 0 }, "end": { "x": 10, "y": 0 }, "weight": 4 },
+                         { "start": { "x": 0, "y": 5 }, "end": { "x": 10, "y": 5 }, "weight": 4 },
+                         { "start": { "x": 0, "y": 9 }, "end": { "x": 10, "y": 9 }, "weight": 4 }
+                       ] }
+              }
+            }
+            """;
+        var layout = new CuneiformLineLayout(GlyphBundle.Parse(threeStrokeBundle));
+
+        CuneiformLine line = layout.Layout("A");
+
+        Assert.Equal(3, line.Strokes.Count);
+        for (int i = 0; i < 3; i++)
+        {
+            Assert.Equal(0, line.Strokes[i].SourceCharIndex);
+            Assert.Equal(i, line.Strokes[i].StrokeOrdinal);
+        }
+    }
+
+    // ---- Deterministic jitter transform (add-cuneiform-handwriting-feel task 2) ---------------
+
+    [Fact]
+    public void Jitter_StrengthZero_IsIdentity()
+    {
+        var stroke = new GlyphStroke(new Vec2(10, 20), new Vec2(40, 55), 8);
+
+        GlyphStroke result = GlyphStrokeJitter.Jitter(stroke, seed: 12345, strength: 0.0, gridSize: 100);
+
+        AssertVec(stroke.Start, result.Start);
+        AssertVec(stroke.End, result.End);
+        Assert.Equal(stroke.Weight, result.Weight, 6);
+    }
+
+    [Fact]
+    public void Jitter_NegativeStrength_IsIdentity()
+    {
+        var stroke = new GlyphStroke(new Vec2(10, 20), new Vec2(40, 55), 8);
+
+        GlyphStroke result = GlyphStrokeJitter.Jitter(stroke, seed: 7, strength: -0.5, gridSize: 100);
+
+        AssertVec(stroke.Start, result.Start);
+        AssertVec(stroke.End, result.End);
+        Assert.Equal(stroke.Weight, result.Weight, 6);
+    }
+
+    [Fact]
+    public void Jitter_SameInputs_AreReproducible()
+    {
+        var stroke = new GlyphStroke(new Vec2(10, 20), new Vec2(40, 55), 8);
+
+        GlyphStroke a = GlyphStrokeJitter.Jitter(stroke, seed: 99, strength: 0.6, gridSize: 100);
+        GlyphStroke b = GlyphStrokeJitter.Jitter(stroke, seed: 99, strength: 0.6, gridSize: 100);
+
+        AssertVec(a.Start, b.Start);
+        AssertVec(a.End, b.End);
+        Assert.Equal(a.Weight, b.Weight, 6);
+    }
+
+    [Fact]
+    public void Jitter_DifferentSeeds_Diverge()
+    {
+        var stroke = new GlyphStroke(new Vec2(10, 20), new Vec2(40, 55), 8);
+
+        GlyphStroke a = GlyphStrokeJitter.Jitter(stroke, seed: 1, strength: 0.6, gridSize: 100);
+        GlyphStroke b = GlyphStrokeJitter.Jitter(stroke, seed: 2, strength: 0.6, gridSize: 100);
+
+        bool differs = Math.Abs(a.Start.X - b.Start.X) > 1e-9
+            || Math.Abs(a.Start.Y - b.Start.Y) > 1e-9
+            || Math.Abs(a.End.X - b.End.X) > 1e-9
+            || Math.Abs(a.End.Y - b.End.Y) > 1e-9
+            || Math.Abs(a.Weight - b.Weight) > 1e-9;
+        Assert.True(differs, "different seeds should perturb the stroke differently");
+    }
+
+    [Fact]
+    public void Jitter_Displacement_StaysWithinBounds()
+    {
+        var stroke = new GlyphStroke(new Vec2(10, 20), new Vec2(40, 55), 8);
+        const double gridSize = 100;
+        const double strength = 1.0;
+        double maxOffset = GlyphStrokeJitter.MaxPositionFraction * strength * gridSize;
+        double maxWeight = GlyphStrokeJitter.MaxWeightFraction * strength;
+
+        // Sweep many seeds; every result must stay inside the strength-bounded envelope.
+        for (int seed = 0; seed < 500; seed++)
+        {
+            GlyphStroke r = GlyphStrokeJitter.Jitter(stroke, seed, strength, gridSize);
+
+            Assert.True(Math.Abs(r.Start.X - stroke.Start.X) <= maxOffset + 1e-9);
+            Assert.True(Math.Abs(r.Start.Y - stroke.Start.Y) <= maxOffset + 1e-9);
+            Assert.True(Math.Abs(r.End.X - stroke.End.X) <= maxOffset + 1e-9);
+            Assert.True(Math.Abs(r.End.Y - stroke.End.Y) <= maxOffset + 1e-9);
+
+            Assert.True(r.Weight >= stroke.Weight * (1 - maxWeight) - 1e-9);
+            Assert.True(r.Weight <= stroke.Weight * (1 + maxWeight) + 1e-9);
+            Assert.True(r.Weight >= 0.0);
+        }
+    }
+
+    [Fact]
+    public void Jitter_ScalesWithGridSize()
+    {
+        // Position jitter is a fraction of grid size, so a larger grid permits a proportionally larger
+        // maximum displacement. Verify the observed max over a seed sweep tracks grid size.
+        var stroke = new GlyphStroke(new Vec2(50, 50), new Vec2(60, 60), 8);
+
+        double MaxDx(double gridSize)
+        {
+            double max = 0;
+            for (int seed = 0; seed < 300; seed++)
+            {
+                GlyphStroke r = GlyphStrokeJitter.Jitter(stroke, seed, strength: 1.0, gridSize: gridSize);
+                max = Math.Max(max, Math.Abs(r.Start.X - stroke.Start.X));
+            }
+            return max;
+        }
+
+        Assert.True(MaxDx(200) > MaxDx(100), "larger grid size should allow larger position jitter");
+    }
+
+    [Fact]
+    public void SeedFor_IsDeterministic()
+    {
+        Assert.Equal(
+            GlyphStrokeJitter.SeedFor(12345, 3, 2),
+            GlyphStrokeJitter.SeedFor(12345, 3, 2));
+    }
+
+    [Fact]
+    public void SeedFor_DistinctIdentitiesDiverge()
+    {
+        // Adjacent strokes within one glyph, adjacent glyphs, and different base seeds must all produce
+        // distinct seeds — the whole point of mixing identity in (no shimmer across strokes that happen to
+        // sit at neighbouring indices).
+        int baseSeed = 777;
+        var seeds = new System.Collections.Generic.HashSet<int>();
+        for (int ch = 0; ch < 8; ch++)
+        {
+            for (int ord = 0; ord < 8; ord++)
+            {
+                Assert.True(seeds.Add(GlyphStrokeJitter.SeedFor(baseSeed, ch, ord)),
+                    $"collision at char {ch}, ordinal {ord}");
+            }
+        }
+
+        // A different base seed shifts the whole family.
+        Assert.NotEqual(GlyphStrokeJitter.SeedFor(1, 0, 0), GlyphStrokeJitter.SeedFor(2, 0, 0));
+    }
+
+    [Fact]
+    public void Jitter_DoesNotAlterLayoutMetrics()
+    {
+        // The renderer applies jitter to a COPY of each stroke at paint time; layout must be untouched.
+        // Prove it here at the Core level: laying the same text out is byte-identical regardless of any
+        // jitter a caller might apply downstream (the layout never calls Jitter), and jittering a stroke
+        // leaves the ORIGINAL PositionedStroke — the one layout/caret/hit-testing read — unchanged.
+        var layout = new CuneiformLineLayout(GlyphBundle.Parse(SampleBundleJson));
+        CuneiformLine line = layout.Layout("AXA");
+        double widthBefore = line.TotalWidth;
+        var boundariesBefore = new System.Collections.Generic.List<double>(line.CharBoundaries);
+
+        foreach (PositionedStroke ps in line.Strokes)
+        {
+            Vec2 sourceStartBefore = ps.Stroke.Start;
+            GlyphStroke jittered = GlyphStrokeJitter.Jitter(
+                ps.Stroke, GlyphStrokeJitter.SeedFor(42, ps.SourceCharIndex, ps.StrokeOrdinal),
+                strength: 1.0, gridSize: ps.GridSize);
+            // Jitter returns a NEW stroke; the source stroke that layout/caret/hit-testing read is unchanged.
+            AssertVec(sourceStartBefore, ps.Stroke.Start);
+            _ = jittered;
+        }
+
+        Assert.Equal(widthBefore, line.TotalWidth);
+        Assert.Equal(boundariesBefore.Count, line.CharBoundaries.Count);
+        for (int i = 0; i < boundariesBefore.Count; i++)
+        {
+            Assert.Equal(boundariesBefore[i], line.CharBoundaries[i], 9);
+        }
+    }
+
     // A tiny hand-authored bundle: A (plain), X (kerns +10 before Y), Z (kerns -100 before Y), Y.
     // All share gridSize 100, widths 20/20, paddings 5/5, so advance = 40 and the floor gap = 10.
     private const string SampleBundleJson = """

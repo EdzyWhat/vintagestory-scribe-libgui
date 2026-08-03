@@ -18,16 +18,18 @@
 
 ## 3. Apply jitter at paint time (Mod) — visual only
 
-- [ ] 3.1 In `CuneiformTextRender.PaintInternal` (`src/Mod/CuneiformText.cs:114-159`), apply the jitter
-  transform to each `PositionedStroke.Stroke` immediately before `Corners()`, seeding from the base seed +
-  stroke identity. Layout metrics untouched.
-- [ ] 3.2 Same in `ScribeCuneiformFieldRender.PaintInternal` (`src/Mod/ScribeCuneiformField.cs:141-213`), for
-  every wrapped line. The caret bar (205-212), selection box (152-173), and hit-testing continue to read the
-  un-jittered layout.
-- [ ] 3.3 Establish the per-field/document base seed in the Mod layer (ScribeTextCorruptor precedent — Core
-  never picks a seed). Same field/text → same seed → stable handwriting each frame/open.
-- [ ] 3.4 Audit: confirm no jittered stroke ever feeds `TotalWidth`/`CharBoundaries`/wrapping/caret. Add a
-  test (or assertion) that layout metrics are identical with jitter on vs off.
+- [x] 3.1 In `CuneiformTextRender.PaintInternal` (`src/Mod/CuneiformText.cs`), apply the jitter transform to
+  each `PositionedStroke.Stroke` immediately before `Corners()`, seeding from the base seed + stroke identity
+  (`GlyphStrokeJitter.SeedFor`). Layout metrics untouched.
+- [x] 3.2 Same in `ScribeCuneiformFieldRender.PaintInternal` (`src/Mod/ScribeCuneiformField.cs`), for every
+  wrapped line. The caret bar, selection box, and hit-testing continue to read the un-jittered layout.
+- [x] 3.3 Establish the per-field/document base seed in the Mod layer (ScribeTextCorruptor precedent — Core
+  never picks a seed). Editable rows seed off the stable `TaskId`; the title band uses a fixed constant;
+  display `CuneiformText` seeds off its own text (`CuneiformMetrics.SeedFromString`). Same field → same seed →
+  stable handwriting each frame/open; typing does not reseed prior letters.
+- [x] 3.4 Audit: confirm no jittered stroke ever feeds `TotalWidth`/`CharBoundaries`/wrapping/caret. Core test
+  `Jitter_DoesNotAlterLayoutMetrics` locks that the source `PositionedStroke` layout reads is never mutated by
+  a jitter call; jitter is applied only to a returned copy at paint time. (266 Core tests green.)
 
 ## 4. Per-letter stroke progression (Mod)
 
