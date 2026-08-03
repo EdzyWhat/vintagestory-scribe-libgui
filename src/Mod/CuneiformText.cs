@@ -52,6 +52,13 @@ internal static class CuneiformMetrics
     /// playtest passes (0.5 → 0.8 too strong → settled at 0.6).</summary>
     public const float DefaultJitterStrength = 0.6f;
 
+    /// <summary>Default whole-character rotation, in degrees, applied to cuneiform text
+    /// (tune-tablet-jitter-add-rotation). Each glyph tilts by a deterministic random angle in
+    /// [-max, +max] about its box center, so the text reads as hand-pressed rather than mechanically
+    /// upright. Stacks with (and is applied after) the per-endpoint jitter; 0 keeps every glyph upright.
+    /// Prototyped in the glyph-forge tool at ±8°. Tuned in-game.</summary>
+    public const float DefaultRotationDegrees = (float)GlyphStrokeRotation.DefaultMaxDegrees;
+
     /// <summary>Derives a stable base jitter seed from a string (e.g. a label's text), so the same text
     /// always wobbles the same way and different texts differ. Order-independent of frame/wall-clock — a
     /// plain deterministic string hash. Used for static display text; editable fields use a fixed per-field
@@ -94,6 +101,9 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
     // seed anchors the (deterministic) wobble so the SAME text jitters identically each frame/open.
     private float jitterStrength;
     private int jitterSeed;
+    // Whole-character rotation (tune-tablet-jitter-add-rotation). 0 = upright; each glyph tilts by a
+    // deterministic angle in [-max, +max]° about its box center, applied AFTER jitter, paint-time only.
+    private float rotationDegrees;
     // Per-stroke outer glow (add-tablet-clay-type-themes). Default disabled — non-tablet surfaces pay nothing.
     private CuneiformGlow glow;
 
@@ -134,6 +144,14 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
     /// <summary>Base seed the per-stroke jitter is derived from (combined with each stroke's stable identity).
     /// The Mod layer picks it (per field/text) so the same text wobbles the same way. Repaint only.</summary>
     public int JitterSeed { get => jitterSeed; set => SetProperty(ref jitterSeed, value, repaint: true); }
+
+    /// <summary>Whole-character rotation in degrees (>= 0; 0 = upright). Repaint only — like jitter it is a
+    /// visual transform applied at paint time to the drawn quads, never to the layout metrics.</summary>
+    public float RotationDegrees
+    {
+        get => rotationDegrees;
+        set => SetProperty(ref rotationDegrees, Math.Max(0f, value), repaint: true);
+    }
 
     /// <summary>The per-stroke outer glow (halo color/strength + blur fraction). Disabled by default; the
     /// tablet sets a per-material glow to lift the ink off its clay backdrop. Repaint only — the glow is a
@@ -223,8 +241,9 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
     }
 
     /// <summary>Rebuild <paramref name="path"/> (cleared in place) as one stroke's oriented quad in pixel
-    /// space, applying the same hand-written jitter both glow passes use so the halo tracks the drawn ink.
-    /// Seeded off the stroke's stable identity, so the SAME stroke jitters identically every frame.</summary>
+    /// space, applying the same hand-written jitter (then whole-character rotation) both glow passes use so
+    /// the halo tracks the drawn ink. Seeded off the stroke's stable identity, so the SAME stroke transforms
+    /// identically every frame. Order: jitter → rotate → corners.</summary>
     private void BuildStrokePath(SKPath path, PositionedStroke ps)
     {
         GlyphStroke stroke = jitterStrength > 0f
@@ -234,6 +253,14 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
                 jitterStrength,
                 ps.GridSize)
             : ps.Stroke;
+        if (rotationDegrees > 0f && line is not null)
+        {
+            stroke = GlyphStrokeRotation.Rotate(
+                stroke,
+                GlyphRotationPivot(line, ps),
+                GlyphStrokeRotation.SeedFor(jitterSeed, ps.SourceCharIndex),
+                rotationDegrees);
+        }
         Scribe.Core.Cuneiform.Vec2[] corners = stroke.Corners();
 
         path.Reset();
@@ -243,6 +270,22 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
         path.LineTo((float)(corners[3].X * scale), (float)(corners[3].Y * scale));
         path.Close();
     }
+
+    /// <summary>The glyph box center to rotate a character's strokes about, in grid-unit space (the same
+    /// space the strokes live in, before the pixel scale is applied). X is the midpoint of the source
+    /// character's advance span from the un-jittered layout (<see cref="CuneiformLine.CharBoundaries"/>);
+    /// Y is half the glyph grid. Reading the pivot from the layout — never from a transformed stroke — keeps
+    /// rotation a pure paint-time transform that never feeds back into metrics/caret/hit-testing.</summary>
+    private static Scribe.Core.Cuneiform.Vec2 GlyphRotationPivot(CuneiformLine line, PositionedStroke ps)
+    {
+        var b = line.CharBoundaries;
+        int i = ps.SourceCharIndex;
+        // Guard the boundary range: CharBoundaries has (charCount + 1) entries, so the char at index i has
+        // its span in [i, i+1]. Fall back to the stroke's own start x if the index is somehow out of range.
+        double left = i >= 0 && i < b.Count ? b[i] : ps.Stroke.Start.X;
+        double right = i + 1 >= 0 && i + 1 < b.Count ? b[i + 1] : left;
+        return new Scribe.Core.Cuneiform.Vec2((left + right) / 2.0, ps.GridSize / 2.0);
+    }
 }
 
 /// <summary>RenderObjectWidget bridge: forwards text, em size, ink color, bundle, and reveal fraction.</summary>
@@ -250,7 +293,7 @@ internal sealed class CuneiformTextRenderWidget : RenderObjectWidget
 {
     public CuneiformTextRenderWidget(
         string text, float fontSizeEm, Vector4 inkColor, GlyphBundle? bundle, float revealFraction,
-        float jitterStrength = 0f, int jitterSeed = 0, CuneiformGlow glow = default)
+        float jitterStrength = 0f, int jitterSeed = 0, float rotationDegrees = 0f, CuneiformGlow glow = default)
     {
         Text = text;
         FontSizeEm = fontSizeEm;
@@ -259,6 +302,7 @@ internal sealed class CuneiformTextRenderWidget : RenderObjectWidget
         RevealFraction = revealFraction;
         JitterStrength = jitterStrength;
         JitterSeed = jitterSeed;
+        RotationDegrees = rotationDegrees;
         Glow = glow;
     }
 
@@ -269,6 +313,7 @@ internal sealed class CuneiformTextRenderWidget : RenderObjectWidget
     public float RevealFraction { get; }
     public float JitterStrength { get; }
     public int JitterSeed { get; }
+    public float RotationDegrees { get; }
     public CuneiformGlow Glow { get; }
 
     public override RenderObject CreateRenderObject() => new CuneiformTextRender();
@@ -283,6 +328,7 @@ internal sealed class CuneiformTextRenderWidget : RenderObjectWidget
         ro.RevealFraction = RevealFraction;
         ro.JitterStrength = JitterStrength;
         ro.JitterSeed = JitterSeed;
+        ro.RotationDegrees = RotationDegrees;
         ro.Glow = Glow;
     }
 }
@@ -304,6 +350,7 @@ public sealed class CuneiformText : StatefulWidget
         bool animateReveal = false,
         int revealDurationMs = 1200,
         float? jitterStrength = null,
+        float? rotationDegrees = null,
         CuneiformGlow glow = default,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
@@ -315,6 +362,7 @@ public sealed class CuneiformText : StatefulWidget
         AnimateReveal = animateReveal;
         RevealDurationMs = revealDurationMs;
         JitterStrength = jitterStrength ?? CuneiformMetrics.DefaultJitterStrength;
+        RotationDegrees = rotationDegrees ?? CuneiformMetrics.DefaultRotationDegrees;
         Glow = glow;
     }
 
@@ -340,6 +388,11 @@ public sealed class CuneiformText : StatefulWidget
     /// pass 0 for crisp authored geometry. The base seed is derived from <see cref="Text"/> so the same text
     /// wobbles consistently.</summary>
     public float JitterStrength { get; }
+
+    /// <summary>Whole-character rotation in degrees (tune-tablet-jitter-add-rotation). Defaults to
+    /// <see cref="CuneiformMetrics.DefaultRotationDegrees"/>; pass 0 to keep every glyph upright. Applied
+    /// after jitter, at paint time only.</summary>
+    public float RotationDegrees { get; }
 
     /// <summary>The per-stroke outer glow. Disabled by default (non-tablet display text pays nothing); the
     /// tablet passes a per-material glow so its cuneiform title/label lifts off the clay backdrop.</summary>
@@ -399,5 +452,6 @@ internal sealed class CuneiformTextState : State<CuneiformText>
         jitterStrength: Widget.JitterStrength,
         // Static display text seeds off its own content, so the same label always wobbles identically.
         jitterSeed: CuneiformMetrics.SeedFromString(Widget.Text),
+        rotationDegrees: Widget.RotationDegrees,
         glow: Widget.Glow);
 }

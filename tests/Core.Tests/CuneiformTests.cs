@@ -867,6 +867,143 @@ public class CuneiformTests
         }
     }
 
+    // ---- Deterministic whole-character rotation transform (tune-tablet-jitter-add-rotation task 2) ------
+
+    [Fact]
+    public void Rotate_MaxDegreesZero_IsIdentity()
+    {
+        var stroke = new GlyphStroke(new Vec2(10, 20), new Vec2(40, 55), 8);
+        var pivot = new Vec2(25, 50);
+
+        GlyphStroke result = GlyphStrokeRotation.Rotate(stroke, pivot, seed: 12345, maxDegrees: 0.0);
+
+        AssertVec(stroke.Start, result.Start);
+        AssertVec(stroke.End, result.End);
+        Assert.Equal(stroke.Weight, result.Weight, 6);
+    }
+
+    [Fact]
+    public void Rotate_NegativeMaxDegrees_IsIdentity()
+    {
+        var stroke = new GlyphStroke(new Vec2(10, 20), new Vec2(40, 55), 8);
+        var pivot = new Vec2(25, 50);
+
+        GlyphStroke result = GlyphStrokeRotation.Rotate(stroke, pivot, seed: 7, maxDegrees: -8.0);
+
+        AssertVec(stroke.Start, result.Start);
+        AssertVec(stroke.End, result.End);
+        Assert.Equal(stroke.Weight, result.Weight, 6);
+    }
+
+    [Fact]
+    public void Rotate_SameInputs_AreReproducible()
+    {
+        var stroke = new GlyphStroke(new Vec2(10, 20), new Vec2(40, 55), 8);
+        var pivot = new Vec2(25, 50);
+
+        GlyphStroke a = GlyphStrokeRotation.Rotate(stroke, pivot, seed: 99, maxDegrees: 8.0);
+        GlyphStroke b = GlyphStrokeRotation.Rotate(stroke, pivot, seed: 99, maxDegrees: 8.0);
+
+        AssertVec(a.Start, b.Start);
+        AssertVec(a.End, b.End);
+        Assert.Equal(a.Weight, b.Weight, 6);
+    }
+
+    [Fact]
+    public void Rotate_PreservesWeightAndLength()
+    {
+        // A rigid rotation moves the endpoints but changes neither the stroke width nor the distance
+        // between the endpoints — it is an isometry.
+        var stroke = new GlyphStroke(new Vec2(10, 20), new Vec2(40, 55), 8);
+        var pivot = new Vec2(25, 50);
+        double lenBefore = Dist(stroke.Start, stroke.End);
+
+        GlyphStroke r = GlyphStrokeRotation.Rotate(stroke, pivot, seed: 3, maxDegrees: 8.0);
+
+        Assert.Equal(stroke.Weight, r.Weight, 9);
+        Assert.Equal(lenBefore, Dist(r.Start, r.End), 6);
+    }
+
+    [Fact]
+    public void Rotate_AllStrokesOfOneCharacter_ShareAngleAndPivot()
+    {
+        // The whole point of omitting the stroke ordinal from the seed: every stroke of one character
+        // tilts by the same angle about the same pivot, so the glyph rotates as a rigid unit (no shear).
+        // Rotating two different strokes with the same seed+pivot must apply the identical transform,
+        // which we verify by checking the rotation angle recovered from each is equal.
+        var pivot = new Vec2(50, 50);
+        int seed = GlyphStrokeRotation.SeedFor(baseSeed: 42, sourceCharIndex: 3);
+
+        var s1 = new GlyphStroke(new Vec2(10, 10), new Vec2(90, 10), 4);
+        var s2 = new GlyphStroke(new Vec2(30, 70), new Vec2(70, 20), 4);
+
+        GlyphStroke r1 = GlyphStrokeRotation.Rotate(s1, pivot, seed, maxDegrees: 8.0);
+        GlyphStroke r2 = GlyphStrokeRotation.Rotate(s2, pivot, seed, maxDegrees: 8.0);
+
+        double angle1 = AngleAbout(s1.Start, r1.Start, pivot);
+        double angle2 = AngleAbout(s2.Start, r2.Start, pivot);
+        Assert.Equal(angle1, angle2, 9);
+    }
+
+    [Fact]
+    public void Rotate_AngleStaysWithinBounds()
+    {
+        // Sweep many seeds; the recovered rotation angle must always lie inside [-max, +max].
+        var stroke = new GlyphStroke(new Vec2(10, 20), new Vec2(90, 20), 4);
+        var pivot = new Vec2(50, 50);
+        const double maxDegrees = 8.0;
+        double maxRad = maxDegrees * Math.PI / 180.0;
+
+        for (int seed = 0; seed < 500; seed++)
+        {
+            GlyphStroke r = GlyphStrokeRotation.Rotate(stroke, pivot, seed, maxDegrees);
+            double angle = AngleAbout(stroke.Start, r.Start, pivot);
+            Assert.True(Math.Abs(angle) <= maxRad + 1e-9, $"angle {angle} exceeded ±{maxRad} at seed {seed}");
+        }
+    }
+
+    [Fact]
+    public void RotationSeedFor_IsDeterministic()
+    {
+        Assert.Equal(
+            GlyphStrokeRotation.SeedFor(12345, 3),
+            GlyphStrokeRotation.SeedFor(12345, 3));
+    }
+
+    [Fact]
+    public void RotationSeedFor_DistinctCharactersDiverge()
+    {
+        // Adjacent characters (and repeated copies of one character at different source indices) must
+        // seed distinctly, so no two neighbouring glyphs share the same tilt by construction.
+        int baseSeed = 777;
+        var seeds = new System.Collections.Generic.HashSet<int>();
+        for (int ch = 0; ch < 32; ch++)
+        {
+            Assert.True(seeds.Add(GlyphStrokeRotation.SeedFor(baseSeed, ch)), $"collision at char {ch}");
+        }
+
+        // A different base seed shifts the whole family.
+        Assert.NotEqual(GlyphStrokeRotation.SeedFor(1, 0), GlyphStrokeRotation.SeedFor(2, 0));
+    }
+
+    private static double Dist(Vec2 a, Vec2 b)
+    {
+        double dx = a.X - b.X, dy = a.Y - b.Y;
+        return Math.Sqrt(dx * dx + dy * dy);
+    }
+
+    /// <summary>The signed angle (radians) that rotates the vector (pivot→before) onto (pivot→after).</summary>
+    private static double AngleAbout(Vec2 before, Vec2 after, Vec2 pivot)
+    {
+        double a1 = Math.Atan2(before.Y - pivot.Y, before.X - pivot.X);
+        double a2 = Math.Atan2(after.Y - pivot.Y, after.X - pivot.X);
+        double d = a2 - a1;
+        // Normalize to (-π, π] so small tilts near ±180° don't wrap.
+        while (d > Math.PI) d -= 2 * Math.PI;
+        while (d <= -Math.PI) d += 2 * Math.PI;
+        return d;
+    }
+
     [Fact]
     public void Reveal_BaselineChars_AreAlwaysShown()
     {

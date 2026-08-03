@@ -128,6 +128,9 @@ public class GuiDialogScribeTablet : ScribeDialogBase
             // per-row seed (its stable TaskId) is supplied at the field; strength comes from the default
             // until the client-config knob (task 6) sources it. 0 would reproduce the crisp geometry.
             CuneiformJitter = CuneiformMetrics.DefaultJitterStrength,
+            // Whole-character tilt stacked on top of the per-endpoint wobble (tune-tablet-jitter-add-rotation):
+            // each glyph leans a few degrees so the rows read as hand-pressed, not mechanically upright.
+            CuneiformRotation = CuneiformMetrics.DefaultRotationDegrees,
             // Newly-typed text presses in stroke-by-stroke, gated by the player's opt-in setting (defaults
             // off). Re-deriving the row style per build means toggling it in Scribe Settings repaints an
             // open tablet.
@@ -181,6 +184,8 @@ public class GuiDialogScribeTablet : ScribeDialogBase
             bundle: bundle,
             onKeyDown: OnTitleFieldKeyDown,
             jitterStrength: CuneiformMetrics.DefaultJitterStrength,
+            // Match the rows' whole-character tilt so the editing title reads hand-pressed like everything else.
+            rotationDegrees: CuneiformMetrics.DefaultRotationDegrees,
             // A fixed seed: one title band per tablet, so a constant keeps it stable across rebuilds while
             // typing (a text-derived seed would re-wobble the whole title on every keystroke).
             jitterSeed: TitleJitterSeed,

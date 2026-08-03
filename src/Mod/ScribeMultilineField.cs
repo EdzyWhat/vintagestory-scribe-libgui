@@ -422,6 +422,7 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         GlyphBundle? cuneiformBundle = null,
         float cuneiformJitter = 0f,
         int cuneiformJitterSeed = 0,
+        float cuneiformRotation = 0f,
         bool cuneiformProgression = false,
         CuneiformGlow cuneiformGlow = default,
         Action<string>? onChanged = null,
@@ -445,6 +446,7 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         CuneiformBundle = cuneiformBundle;
         CuneiformJitter = cuneiformJitter;
         CuneiformJitterSeed = cuneiformJitterSeed;
+        CuneiformRotation = cuneiformRotation;
         CuneiformProgression = cuneiformProgression;
         CuneiformGlow = cuneiformGlow;
         OnChanged = onChanged;
@@ -494,6 +496,9 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
     /// consistently and typing does not reseed the letters already on screen. Ignored when
     /// <see cref="UseCuneiform"/> is false.</summary>
     public int CuneiformJitterSeed { get; }
+    /// <summary>Whole-character rotation in degrees for the cuneiform path (tune-tablet-jitter-add-rotation);
+    /// 0 = upright. Ignored when <see cref="UseCuneiform"/> is false. Applied after jitter, at paint time.</summary>
+    public float CuneiformRotation { get; }
     /// <summary>Whether newly-typed cuneiform text presses in stroke-by-stroke (per-letter progression).
     /// Ignored when <see cref="UseCuneiform"/> is false; off reproduces the instant reveal.</summary>
     public bool CuneiformProgression { get; }
@@ -1139,6 +1144,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 caretVisible: caretVisible,
                 jitterStrength: Widget.CuneiformJitter,
                 jitterSeed: Widget.CuneiformJitterSeed,
+                rotationDegrees: Widget.CuneiformRotation,
                 glow: Widget.CuneiformGlow,
                 revealActive: revealActive,
                 revealBaselineChars: revealBaselineChars,

@@ -70,6 +70,9 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     // thus does not re-wobble — the letters already on screen.
     private float jitterStrength;
     private int jitterSeed;
+    // Whole-character rotation (tune-tablet-jitter-add-rotation). 0 = upright; each glyph tilts by a
+    // deterministic angle in [-max, +max]° about its box center, applied AFTER jitter, paint-time only.
+    private float rotationDegrees;
     // Per-stroke outer glow (add-tablet-clay-type-themes). Default disabled — non-tablet fields pay nothing.
     private CuneiformGlow glow;
     // Per-letter stroke-progression reveal (add-cuneiform-handwriting-feel). When active, strokes appear over
@@ -117,6 +120,9 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     /// <summary>Fixed per-field base seed for the jitter; combined with each stroke's stable identity so the
     /// same character position wobbles the same way and typing doesn't reseed prior letters. Repaint only.</summary>
     public int JitterSeed { get => jitterSeed; set => SetProperty(ref jitterSeed, value, repaint: true); }
+    /// <summary>Whole-character rotation in degrees (>= 0; 0 = upright). Repaint only — like jitter it is a
+    /// paint-time transform on the drawn quads that never touches layout, caret, selection, or hit-testing.</summary>
+    public float RotationDegrees { get => rotationDegrees; set => SetProperty(ref rotationDegrees, Math.Max(0f, value), repaint: true); }
     /// <summary>The per-stroke outer glow (halo color/strength + blur fraction). Disabled by default; the
     /// tablet sets a per-material glow. Repaint only — a paint-time effect that never touches layout, caret,
     /// selection, or hit-testing.</summary>
@@ -282,6 +288,17 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
                         jitterStrength,
                         ps.GridSize)
                     : ps.Stroke;
+                if (rotationDegrees > 0f)
+                {
+                    // Rigid per-character tilt about the glyph box center, from the UN-jittered layout
+                    // boundaries — applied after jitter, so both effects stack. Seeded without the stroke
+                    // ordinal so every stroke of one character shares the angle.
+                    drawStroke = GlyphStrokeRotation.Rotate(
+                        drawStroke,
+                        GlyphRotationPivot(lines[i], ps),
+                        GlyphStrokeRotation.SeedFor(jitterSeed, ps.SourceCharIndex),
+                        rotationDegrees);
+                }
                 Scribe.Core.Cuneiform.Vec2[] corners = drawStroke.Corners();
                 path.Reset();
                 path.MoveTo(originX + (float)(corners[0].X * scale), originY + (float)(corners[0].Y * scale));
@@ -292,6 +309,20 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
                 context.Canvas!.DrawPath(path, paint: context.SharedPaint);
             }
         }
+    }
+
+    /// <summary>The glyph box center to rotate a character's strokes about, in grid-unit space (the space the
+    /// strokes live in, before the pixel scale). X is the midpoint of the source character's advance span from
+    /// the un-jittered layout (<see cref="CuneiformLine.CharBoundaries"/>); Y is half the glyph grid. Reading
+    /// the pivot from the layout — never from a transformed stroke — keeps rotation a pure paint-time transform
+    /// that never feeds back into metrics/caret/selection/hit-testing.</summary>
+    private static Scribe.Core.Cuneiform.Vec2 GlyphRotationPivot(CuneiformLine line, PositionedStroke ps)
+    {
+        var b = line.CharBoundaries;
+        int i = ps.SourceCharIndex;
+        double left = i >= 0 && i < b.Count ? b[i] : ps.Stroke.Start.X;
+        double right = i + 1 >= 0 && i + 1 < b.Count ? b[i + 1] : left;
+        return new Scribe.Core.Cuneiform.Vec2((left + right) / 2.0, ps.GridSize / 2.0);
     }
 
     /// <summary>Map a flat source caret offset onto (wrapped line index, local boundary index within that
@@ -377,7 +408,7 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
         GlyphBundle? bundle, float padX, float padY,
         Vector4 boxColor, Vector4 borderColor, float borderThickness, Vector4 cornerRadii,
         bool singleLine = false, bool caretVisible = true,
-        float jitterStrength = 0f, int jitterSeed = 0, CuneiformGlow glow = default,
+        float jitterStrength = 0f, int jitterSeed = 0, float rotationDegrees = 0f, CuneiformGlow glow = default,
         bool revealActive = false, int revealBaselineChars = 0, double revealElapsedMs = 0,
         double revealPerStrokeMs = 28, double revealPerLetterMs = 90)
     {
@@ -400,6 +431,7 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
         SingleLine = singleLine;
         JitterStrength = jitterStrength;
         JitterSeed = jitterSeed;
+        RotationDegrees = rotationDegrees;
         Glow = glow;
         RevealActive = revealActive;
         RevealBaselineChars = revealBaselineChars;
@@ -427,6 +459,7 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
     public bool SingleLine { get; }
     public float JitterStrength { get; }
     public int JitterSeed { get; }
+    public float RotationDegrees { get; }
     public CuneiformGlow Glow { get; }
     public bool RevealActive { get; }
     public int RevealBaselineChars { get; }
@@ -458,6 +491,7 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
         ro.SingleLine = SingleLine;
         ro.JitterStrength = JitterStrength;
         ro.JitterSeed = JitterSeed;
+        ro.RotationDegrees = RotationDegrees;
         ro.Glow = Glow;
         ro.RevealActive = RevealActive;
         ro.RevealBaselineChars = RevealBaselineChars;

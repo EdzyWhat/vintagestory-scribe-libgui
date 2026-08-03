@@ -39,6 +39,12 @@ internal readonly record struct ScribeRowStyle(
     /// valid (defaults to 0).</summary>
     public float CuneiformJitter { get; init; }
 
+    /// <summary>Whole-character rotation in degrees applied to the cuneiform row strokes at paint time
+    /// (tune-tablet-jitter-add-rotation); 0 = upright. Set on the tablet path only; ignored when
+    /// <see cref="UseCuneiform"/> is false. An <c>init</c>-only add-on so existing constructions stay valid
+    /// (defaults to 0). Stacks with (and is applied after) <see cref="CuneiformJitter"/>.</summary>
+    public float CuneiformRotation { get; init; }
+
     /// <summary>Whether newly-typed cuneiform row text presses in stroke-by-stroke (per-letter progression).
     /// Set on the tablet path only; ignored when <see cref="UseCuneiform"/> is false. Defaults to false so
     /// the Lectern/Notebook rows and the disable-cuneiform fallback reveal instantly.</summary>

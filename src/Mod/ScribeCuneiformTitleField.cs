@@ -40,6 +40,7 @@ public sealed class ScribeCuneiformTitleField : StatefulWidget, IFocusable
         Action<KeyboardEvent>? onKeyDown = null,
         float jitterStrength = 0f,
         int jitterSeed = 0,
+        float rotationDegrees = 0f,
         bool progression = false,
         CuneiformGlow glow = default,
         Gui.Widgets.Framework.Key? key = null)
@@ -52,6 +53,7 @@ public sealed class ScribeCuneiformTitleField : StatefulWidget, IFocusable
         OnKeyDown = onKeyDown;
         JitterStrength = jitterStrength;
         JitterSeed = jitterSeed;
+        RotationDegrees = rotationDegrees;
         Progression = progression;
         Glow = glow;
     }
@@ -65,6 +67,9 @@ public sealed class ScribeCuneiformTitleField : StatefulWidget, IFocusable
     /// <summary>Fixed base seed for the title jitter, so the title wobbles consistently and typing does not
     /// reseed the letters already on screen.</summary>
     public int JitterSeed { get; }
+    /// <summary>Whole-character rotation in degrees for the title glyphs (tune-tablet-jitter-add-rotation);
+    /// 0 = upright. Applied after jitter, at paint time only.</summary>
+    public float RotationDegrees { get; }
     /// <summary>Whether newly-typed title text presses in stroke-by-stroke. When false (the default), the
     /// title reveals instantly. Gated by the player's client setting, mirroring the rows.</summary>
     public bool Progression { get; }
@@ -325,6 +330,7 @@ internal sealed class ScribeCuneiformTitleFieldState : State<ScribeCuneiformTitl
                 singleLine: true,
                 jitterStrength: Widget.JitterStrength,
                 jitterSeed: Widget.JitterSeed,
+                rotationDegrees: Widget.RotationDegrees,
                 glow: Widget.Glow,
                 revealActive: revealActive,
                 revealBaselineChars: revealBaselineChars,

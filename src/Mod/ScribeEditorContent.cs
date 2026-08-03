@@ -706,6 +706,10 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             useCuneiform: style.UseCuneiform,
             cuneiformBundle: style.CuneiformBundle,
             cuneiformJitter: style.UseCuneiform ? style.CuneiformJitter : 0f,
+            // Whole-character tilt (tune-tablet-jitter-add-rotation), tablet path only. Shares the per-row
+            // TaskId seed with the jitter, but its SeedFor omits the stroke ordinal so every stroke of a
+            // character tilts as one rigid unit (independent stream from the jitter's per-stroke wobble).
+            cuneiformRotation: style.UseCuneiform ? style.CuneiformRotation : 0f,
             // Fixed per-row seed from the stable TaskId, so a row's letters wobble consistently and typing a
             // new character does not reseed (re-wobble) the letters already pressed into the row.
             cuneiformJitterSeed: Widget.Data.TaskId.GetHashCode(),
