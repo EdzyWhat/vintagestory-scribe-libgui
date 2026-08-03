@@ -146,15 +146,22 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         value: settings.StormCorruption,
                         onChanged: v => onMutate(s => s.StormCorruption = v))),
 
-                // Cuneiform-tablets toggle (add-cuneiform-glyph-font; positive polarity per D8): when on
-                // (the default), the tablet tier writes in the carved-wedge cuneiform script; when off, that
-                // text renders in the player's selected task font instead. A behavior switch (it changes
-                // what the reader sees, not the window's chrome), so it lives here; hugs its label like the
-                // pixel-art toggle.
-                HuggingCheckbox(
-                    "settings-cuneiformtablets", colors, scale,
-                    value: settings.CuneiformTablets,
-                    onChanged: v => onMutate(s => s.CuneiformTablets = v)),
+                // Cuneiform toggles share one paired row. "Cuneiform tablets" (add-cuneiform-glyph-font;
+                // positive polarity per D8): when on (the default), the tablet tier writes in the
+                // carved-wedge cuneiform script; when off, that text renders in the player's selected task
+                // font instead. "Cuneiform press-in" (add-cuneiform-handwriting-feel): when on, newly-typed
+                // cuneiform presses in stroke-by-stroke; off by default, and only has an effect while
+                // Cuneiform tablets is on (it animates the cuneiform glyphs). Both are behavior switches, so
+                // they live here; each hugs its own label.
+                PairedControls(colors, scale,
+                    HuggingCheckbox(
+                        "settings-cuneiformtablets", colors, scale,
+                        value: settings.CuneiformTablets,
+                        onChanged: v => onMutate(s => s.CuneiformTablets = v)),
+                    HuggingCheckbox(
+                        "settings-cuneiformprogression", colors, scale,
+                        value: settings.CuneiformProgression,
+                        onChanged: v => onMutate(s => s.CuneiformProgression = v))),
             });
     }
 

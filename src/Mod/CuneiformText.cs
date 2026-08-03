@@ -39,16 +39,18 @@ namespace Scribe;
 /// </summary>
 internal static class CuneiformMetrics
 {
-    /// <summary>Rendered-line-height ÷ nominal-font-size for the normal TTF body text the cuneiform sits
-    /// beside; cuneiform's em→pixel scale is multiplied by this so its glyphs read at the same height as
-    /// that text rather than ~30% short. ~1.4 matches the measured TTF line-height ratio; tuned against the
-    /// in-game retest (task 8.6).</summary>
-    public const float LineHeightRatio = 1.4f;
+    /// <summary>Cuneiform's em→pixel scale is multiplied by this so its rendered glyph height reads well
+    /// against the surrounding readable text. ~1.4 matched the measured TTF line-height ratio (so cuneiform
+    /// sat at the same height as adjacent text); the 2026-08-03 playtest then asked for the glyphs ~20%
+    /// larger than that for legibility, so this is now a deliberate oversize (1.4 × 1.2 = 1.68), not a
+    /// height-match. Applied globally (rows, title, labels) so every surface scales together; tuned in-game.</summary>
+    public const float LineHeightRatio = 1.68f;
 
     /// <summary>Default hand-written jitter strength (add-cuneiform-handwriting-feel) applied to cuneiform
-    /// text until the client config knob (task 6) overrides it. A low value reads as a hand-pressed wobble
-    /// without hurting legibility; 0 reproduces today's crisp geometry exactly. Tuned in-game.</summary>
-    public const float DefaultJitterStrength = 0.5f;
+    /// text until the client config knob (task 6) overrides it. Reads as a hand-pressed wobble without
+    /// hurting legibility; 0 reproduces today's crisp geometry exactly. Raised 0.5 → 0.8 per the
+    /// 2026-08-03 playtest (wanted a stronger hand-written feel). Tuned in-game.</summary>
+    public const float DefaultJitterStrength = 0.8f;
 
     /// <summary>Derives a stable base jitter seed from a string (e.g. a label's text), so the same text
     /// always wobbles the same way and different texts differ. Order-independent of frame/wall-clock — a

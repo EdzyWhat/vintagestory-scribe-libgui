@@ -533,9 +533,9 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
     // presses in; already-revealed text never replays, and non-append edits (deletion, mid-line change)
     // snap to fully revealed. Inactive unless UseCuneiform + CuneiformProgression are both on. ----
     /// <summary>Per-stroke / per-letter reveal timing (ms). Tuned in-game; the client-config knob (task 6)
-    /// will source these.</summary>
-    private const double RevealPerStrokeMs = 28;
-    private const double RevealPerLetterMs = 90;
+    /// will source these. Slowed 28→50 / 90→150 per the 2026-08-03 playtest (the press-in read too fast).</summary>
+    private const double RevealPerStrokeMs = 50;
+    private const double RevealPerLetterMs = 150;
     private AnimationController? revealController;
     /// <summary>Whether a reveal is currently animating. When false the field paints every stroke.</summary>
     private bool revealActive;

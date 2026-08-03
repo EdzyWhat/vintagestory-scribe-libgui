@@ -21,6 +21,43 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## add-cuneiform-handwriting-feel
+
+> The tablet's cuneiform renders with a hand-written wobble (per-stroke jitter, strength `0.8`) and can
+> press newly-typed text in stroke-by-stroke (reveal `50ms`/stroke, `150ms`/letter). Glyphs are also ~20%
+> larger than before. The press-in is now a Scribe Settings toggle, **"Cuneiform press-in," off by
+> default** — turn it on to test the progression. Jitter + size are always on (tablet path only). Fully
+> relaunch the client to pick up the new build after the 2026-08-03 tuning pass.
+
+- [ ] `11ec19a1` **Glyph size and legibility.** Open a tablet and read a cuneiform line — confirm the
+      glyphs (~20% larger this pass) read comfortably and sit well against the surrounding readable text /
+      row height without overflowing or clipping. *(add-cuneiform-handwriting-feel 7.2b)*
+- [ ] `1d8a57eb` **Repeated-glyph variety.** In a tablet cuneiform field, type a line with repeated
+      characters (e.g. "aaaa mmmm") at jitter 0.8 — confirm the repeats look hand-varied, not stamped, and
+      the line does NOT shimmer or re-wobble frame to frame or as you keep typing.
+      *(add-cuneiform-handwriting-feel 7.2)*
+- [ ] `3fbce4e9` **Press-in toggle.** In Scribe Settings confirm "Cuneiform press-in" is OFF by default
+      (fresh text appears instantly); turn it ON, reopen a tablet, and confirm new text now presses in
+      stroke-by-stroke — and that toggling it repaints without a restart.
+      *(add-cuneiform-handwriting-feel 6.3)*
+- [ ] `d76d4f84` **Caret and click with jitter.** With jitter on, click into the middle of an existing
+      cuneiform line and type — confirm the caret sits at the right character and clicking selects the
+      character you aimed at (jitter must not shift the caret or hit-testing).
+      *(add-cuneiform-handwriting-feel 7.3)*
+- [ ] `d077766c` **Stroke-by-stroke reveal.** With "Cuneiform press-in" ON, type a fresh word into a
+      tablet cuneiform field (row AND title) — confirm new letters lay down stroke-by-stroke (~50ms/stroke)
+      with a pause between letters (~150ms), at a pace that feels natural/fun, and earlier letters don't
+      re-animate on each new keystroke. *(add-cuneiform-handwriting-feel 7.4)*
+- [ ] `8fccf5a0` **Edit snaps, no rewind.** With press-in ON, after a word animates in, delete a character
+      or edit mid-line — confirm the text snaps to its new state fully revealed, with no reverse/rewind
+      animation. *(add-cuneiform-handwriting-feel 7.5)*
+- [ ] `42a3a1d1` **Zero-jitter crisp baseline.** (Deferred until task 6 exposes the knobs.) Once a
+      jitter-0 + progression-off setting exists, confirm rendering is byte-identical to today's crisp,
+      instant cuneiform. *(add-cuneiform-handwriting-feel 7.6)*
+      - **Backlogged 2026-08-03** the jitter-strength / progression-enable client setting (task 6) is
+        not built yet — there's no in-game way to set jitter to 0, so this can't be exercised until
+        those knobs land.
+
 ## arrow-key-line-caret-nav
 
 > Up/Down arrows now move the caret between the visual lines of a focused multi-line row (they were
@@ -2337,35 +2374,46 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 
 ## fix-settings-numeric-arrow-focus-leak
 
-- [ ] `fd0066db` **Arrow-step with editor open.** Focused numeric field, WITH a document editor open:
+- [x] `fd0066db` **Arrow-step with editor open.** Focused numeric field, WITH a document editor open:
       press Up/Down 3+ times in a row — value steps on EVERY press and focus stays on the field (the
       arrow never jumps to an editor row's caret). *(fix-settings-numeric-arrow-focus-leak 3.1)*
-- [ ] `52944f44` **Arrow-step, no editor.** No document open, several fields (rows, width, offsets,
+      - **Confirmed 2026-08-02** via playtest submission 2026-08-02T18-17-16: tester "Works."
+- [x] `52944f44` **Arrow-step, no editor.** No document open, several fields (rows, width, offsets,
       font scales): press Up/Down repeatedly on each — every press steps that field.
       *(fix-settings-numeric-arrow-focus-leak 3.2)*
-- [ ] `eb436828` **Editor caret unregressed.** Genuinely focus a document editor row
+      - **Confirmed 2026-08-02** via playtest submission 2026-08-02T18-17-16: tester "Works."
+- [x] `eb436828` **Editor caret unregressed.** Genuinely focus a document editor row
       (Lectern/Notebook/Tablet AND Pin Tab) and press Up/Down — the caret still moves by visual line
       (arrow-key-line-caret-nav unregressed). *(fix-settings-numeric-arrow-focus-leak 3.3)*
-- [ ] `4f2c0c8e` **+/- buttons + clamp.** +/- step buttons still step and keep focus; select-all-and-
+      - **Confirmed 2026-08-02** via playtest submission 2026-08-02T18-17-16: tester "Works."
+- [x] `4f2c0c8e` **+/- buttons + clamp.** +/- step buttons still step and keep focus; select-all-and-
       retype an out-of-range value still clamps only on blur.
       *(fix-settings-numeric-arrow-focus-leak 3.4)*
+      - **Confirmed 2026-08-02** via playtest submission 2026-08-02T18-17-16: tester "Works."
 
 ## add-tablet-clay-type-backdrops
 
-- [ ] `d7925815` **Craft each clay type.** Craft a tablet from red, blue, AND fire clay (1 clay + 1
+- [x] `d7925815` **Craft each clay type.** Craft a tablet from red, blue, AND fire clay (1 clay + 1
       stick, vertical) — each opens with a distinct full-page clay backdrop matching its type. NOTE:
       Creative Inventory only gives the base clay tablet (always red default), so this needs real
       crafting. *(add-tablet-clay-type-backdrops 6.2)*
+      - **Confirmed 2026-08-03** via playtest submission 2026-08-03T00-18-44: tester "Works." FOLLOW-UP
+        raised: there are now 9 distinct backdrops — 3 colors (red/blue/fire) × 3 hardness states
+        (soft/hard/fired) — and the soft/hard/fired variant PNGs still need to be wired to the
+        material→texture selection (tracked under the clay-hardness-progression work; art authored but
+        not yet keyed by hardness state).
 - [x] `6a903898` **Wax + default fallback.** A wax tablet shows the wax placeholder backdrop; a
       creative/legacy clay tablet with no recorded type falls back to red+soft without error.
       *(add-tablet-clay-type-backdrops 6.4)*
       - **Confirmed 2026-08-02** via playtest: both the Creative-Inventory Wax and Clay tablet backdrops
         render correctly (the clay one is the red+soft default, since a Creative stack carries no clayType).
-- [ ] `7008f8f7` **Persistence.** A crafted blue/fire tablet keeps its clay-type backdrop across
+- [x] `7008f8f7` **Persistence.** A crafted blue/fire tablet keeps its clay-type backdrop across
       close/reopen and after dropping and picking it back up. *(add-tablet-clay-type-backdrops 6.5)*
-- [ ] `a26c11e0` **Incumbents unchanged.** Open the Lectern and both Notebooks — their backdrops look
+      - **Confirmed 2026-08-03** via playtest submission 2026-08-03T00-18-44: tester "Works."
+- [x] `a26c11e0` **Incumbents unchanged.** Open the Lectern and both Notebooks — their backdrops look
       exactly as before (the tint seam didn't disturb the full-page art).
       *(add-tablet-clay-type-backdrops 6.6)*
+      - **Confirmed 2026-08-03** via playtest submission 2026-08-03T00-18-44: tester "Works."
 - [ ] `fed17c00` **Fired tint (dev-gated).** Reach a fired tablet (needs a dev affordance — not
       craftable/creative-reachable yet) and confirm the per-type ceramic tint reads distinctly for
       red/blue/fire; tune tint values if flat. *(add-tablet-clay-type-backdrops 6.3 — BLOCKED on reachability)*

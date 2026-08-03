@@ -140,6 +140,9 @@
 	"settings-cuneiformtablets": "Cuneiform tablets",
 	"settings-cuneiformtablets-help": "The tablet tier writes in a carved-wedge cuneiform script. Turn off to render that text in your selected task font instead, for easier reading.",
 
+	"settings-cuneiformprogression": "Cuneiform press-in",
+	"settings-cuneiformprogression-help": "Newly-typed cuneiform text presses in stroke-by-stroke, with a short pause between letters, like it's being carved as you write. Off by default; only applies while Cuneiform tablets is on.",
+
 	"settings-hudanchor": "HUD position",
 	"settings-hudanchor-help": "Which screen corner or edge the pinned-task HUD is anchored to.",
 	"settings-hudmaxrows": "Max HUD rows",

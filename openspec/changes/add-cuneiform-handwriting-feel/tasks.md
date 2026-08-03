@@ -60,12 +60,18 @@
 
 ## 6. Client config (Mod)
 
-- [ ] 6.1 Add to `ScribeClientConfig`: jitter strength (0 = off; default a low tasteful value) and a
-  stroke-progression enable + reveal speed (reuse/extend the `RevealDurationMs` notion). Read at (re)build
-  time like other settings. Document that this is client-side only (no persistence, no sync).
+- [~] 6.1 Add a stroke-progression enable to the client settings. DONE for the enable toggle:
+  `ScribePlayerSettings.CuneiformProgression` (default false, client-local, never synced), read at
+  (re)build time by the tablet so toggling repaints an open tablet. NOT done: jitter strength and reveal
+  speed are still code constants (`DefaultJitterStrength`, `RevealPerStrokeMs`/`RevealPerLetterMs`), tuned
+  in-game 2026-08-03 rather than exposed. Note: `ScribeClientConfig` is retired — the real settings home is
+  `ScribePlayerSettings` / `scribe-hud-config.json`.
 - [ ] 6.2 Confirm jitter strength 0 + progression off reproduces today's crisp/instant rendering exactly.
-- [ ] 6.3 Surface the toggles where the other client display settings live (Scribe Settings), if that fits the
-  existing settings UI; otherwise config-file only for this round (note which).
+  (Progression off is now toggleable and confirmable; jitter 0 still needs a knob before this can be fully
+  exercised.)
+- [x] 6.3 Surfaced the progression toggle in Scribe Settings ("Cuneiform press-in"), paired with the
+  existing "Cuneiform tablets" toggle; lang key + help added. Jitter strength/speed remain unsurfaced
+  (constants) for this round.
 
 ## 7. Verification
 

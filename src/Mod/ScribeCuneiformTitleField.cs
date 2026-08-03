@@ -40,6 +40,7 @@ public sealed class ScribeCuneiformTitleField : StatefulWidget, IFocusable
         Action<KeyboardEvent>? onKeyDown = null,
         float jitterStrength = 0f,
         int jitterSeed = 0,
+        bool progression = false,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
@@ -50,6 +51,7 @@ public sealed class ScribeCuneiformTitleField : StatefulWidget, IFocusable
         OnKeyDown = onKeyDown;
         JitterStrength = jitterStrength;
         JitterSeed = jitterSeed;
+        Progression = progression;
     }
 
     public TextEditingController Controller { get; }
@@ -61,6 +63,9 @@ public sealed class ScribeCuneiformTitleField : StatefulWidget, IFocusable
     /// <summary>Fixed base seed for the title jitter, so the title wobbles consistently and typing does not
     /// reseed the letters already on screen.</summary>
     public int JitterSeed { get; }
+    /// <summary>Whether newly-typed title text presses in stroke-by-stroke. When false (the default), the
+    /// title reveals instantly. Gated by the player's client setting, mirroring the rows.</summary>
+    public bool Progression { get; }
     /// <summary>Parent key hook, invoked BEFORE this field acts on a key (mirrors LibGUI's TextField). The
     /// tablet points this at the base's shared title key handler for the maxlength gate + Enter/Escape
     /// commit, so a cuneiform title honors the identical limit and commit rules as the normal title field.</summary>
@@ -78,8 +83,8 @@ internal sealed class ScribeCuneiformTitleFieldState : State<ScribeCuneiformTitl
     // APPEND to the tracked title animates its new suffix; any other change snaps to fully revealed. Active
     // only when the field carries a non-zero jitter/progression config (Widget.JitterStrength gates jitter;
     // progression is enabled whenever the tablet builds this field).
-    private const double RevealPerStrokeMs = 28;
-    private const double RevealPerLetterMs = 90;
+    private const double RevealPerStrokeMs = 50;
+    private const double RevealPerLetterMs = 150;
     private AnimationController? revealController;
     private bool revealActive;
     private int revealBaselineChars;
@@ -95,11 +100,16 @@ internal sealed class ScribeCuneiformTitleFieldState : State<ScribeCuneiformTitl
         FocusNode.AddListener(OnFocusChanged);
 
         // Existing title text starts fully revealed (no animation on open); only later appends press in.
+        // The controller only exists when progression is enabled — off means UpdateReveal is a no-op and
+        // the title reveals instantly, matching the rows' gate.
         revealTrackedText = Controller.Text;
-        revealController = new AnimationController(
-            TimeSpan.FromMilliseconds(1), Element.Owner!.GetTickerProvider());
-        revealController.OnValueChanged += OnRevealTick;
-        revealController.OnStatusChanged += OnRevealStatus;
+        if (Widget.Progression)
+        {
+            revealController = new AnimationController(
+                TimeSpan.FromMilliseconds(1), Element.Owner!.GetTickerProvider());
+            revealController.OnValueChanged += OnRevealTick;
+            revealController.OnStatusChanged += OnRevealStatus;
+        }
     }
 
     public override void Dispose()

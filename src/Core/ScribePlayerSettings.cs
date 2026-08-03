@@ -70,6 +70,14 @@ public sealed class ScribePlayerSettings
     /// <see cref="MigrateLegacyKeys"/>.</summary>
     public bool CuneiformTablets { get; set; } = true;
 
+    /// <summary>Whether newly-typed cuneiform text presses in stroke-by-stroke — within a letter the strokes
+    /// lay down fast, with a longer pause between letters (add-cuneiform-handwriting-feel). Default
+    /// <c>false</c> (instant reveal) per the 2026-08-03 playtest: the progression is a playful extra, opt-in
+    /// rather than on by default. A per-player, client-local preference, never server-synced; only has an
+    /// effect while <see cref="CuneiformTablets"/> is also on (it animates the cuneiform glyphs). A plain
+    /// bool, so <see cref="Normalized"/> leaves it untouched.</summary>
+    public bool CuneiformProgression { get; set; }
+
     /// <summary>Legacy on-disk key for the cuneiform setting before it was flipped to the positive
     /// <see cref="CuneiformTablets"/> (D8). Populated by the JSON deserializer only when reading a
     /// pre-flip config file (<c>"DisableCuneiformFont": true/false</c>); null for any config written by

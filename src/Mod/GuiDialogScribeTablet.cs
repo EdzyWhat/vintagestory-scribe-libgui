@@ -97,8 +97,10 @@ public class GuiDialogScribeTablet : ScribeDialogBase
             // per-row seed (its stable TaskId) is supplied at the field; strength comes from the default
             // until the client-config knob (task 6) sources it. 0 would reproduce the crisp geometry.
             CuneiformJitter = CuneiformMetrics.DefaultJitterStrength,
-            // Newly-typed text presses in stroke-by-stroke (task 6 will make this a client toggle).
-            CuneiformProgression = true,
+            // Newly-typed text presses in stroke-by-stroke, gated by the player's opt-in setting (defaults
+            // off). Re-deriving the row style per build means toggling it in Scribe Settings repaints an
+            // open tablet.
+            CuneiformProgression = modSystem.MySettings.CuneiformProgression,
         };
     }
 
@@ -145,7 +147,9 @@ public class GuiDialogScribeTablet : ScribeDialogBase
             jitterStrength: CuneiformMetrics.DefaultJitterStrength,
             // A fixed seed: one title band per tablet, so a constant keeps it stable across rebuilds while
             // typing (a text-derived seed would re-wobble the whole title on every keystroke).
-            jitterSeed: TitleJitterSeed);
+            jitterSeed: TitleJitterSeed,
+            // Stroke-by-stroke title reveal, gated by the same player setting as the rows (defaults off).
+            progression: modSystem.MySettings.CuneiformProgression);
     }
 
     /// <summary>Fixed base seed for the title band's cuneiform jitter — arbitrary constant, distinct from
