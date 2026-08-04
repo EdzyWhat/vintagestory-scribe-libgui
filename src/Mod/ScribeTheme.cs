@@ -77,6 +77,17 @@ internal static class ScribeTheme
         StateSelected = new Vector4(Accent.X, Accent.Y, Accent.Z, 0.20f),
     });
 
+    /// <summary>HSV <b>Value</b> points (Skia's 0–100 scale) the muted-text role (<c>OnSurfaceVariant</c>)
+    /// is lifted ABOVE each clay palette's own <c>ink</c> — the single shared knob governing muted/hint/
+    /// placeholder contrast across fire, red, and blue (tune-tablet-clay-text-contrast D1). Because every
+    /// clay <c>ink</c> is near-black, lifting Value by a fixed amount produces a consistent perceptual
+    /// muted-vs-ink step per hue. The three previously hand-authored <c>onSurfaceVariant</c> colors all sat
+    /// at exactly +20 above their ink; this seeds LOWER (darker) than that so the empty-list hint reads on
+    /// the mid-tone clay backdrops (the screenshot symptom). Lower this to darken the muted text further,
+    /// raise it toward 20 to lighten — one edit moves all three palettes in lockstep. Finalized in-game
+    /// (D3). Muted must stay clearly above ink so it still reads as SECONDARY text, not body ink.</summary>
+    private const float MutedTextValueLift = 14f;
+
     /// <summary>
     /// Author one clay-tablet <see cref="ThemeData"/> from the roles that carry a material's identity, filling
     /// the material-NEUTRAL roles (error, and the two translucent state overlays) from shared clay rules so
@@ -96,7 +107,6 @@ internal static class ScribeTheme
     /// (<c>ScribeRowConstants.PinnedTint</c>, remapped off <c>Primary</c> in this change). MUST read clearly
     /// distinct from <paramref name="accent"/> so a focused input's accent border stays legible against the
     /// pinned wash on the same row.</param>
-    /// <param name="onSurfaceVariant">Muted/secondary text (hints, placeholders).</param>
     /// <param name="surface">The tablet face panel tone.</param>
     /// <param name="surfaceLow">Recessed surface (darker than <paramref name="surface"/>).</param>
     /// <param name="surfaceHigh">Raised surface (lighter) — the input-field background.</param>
@@ -104,7 +114,7 @@ internal static class ScribeTheme
     /// <param name="border">Input/divider border, RGBA with its own alpha; <c>OutlineVariant</c> reuses the
     /// same RGB at a fainter alpha.</param>
     private static ThemeData ClayPalette(
-        Vector4 ink, Vector4 accent, Vector4 onAccent, Vector4 secondary, Vector4 onSurfaceVariant,
+        Vector4 ink, Vector4 accent, Vector4 onAccent, Vector4 secondary,
         Vector4 surface, Vector4 surfaceLow, Vector4 surfaceHigh, Vector4 background, Vector4 border) =>
         new(new ColorScheme
         {
@@ -115,7 +125,12 @@ internal static class ScribeTheme
 
             Surface = surface,
             OnSurface = ink,
-            OnSurfaceVariant = onSurfaceVariant,
+            // Muted/secondary text (hints, placeholders) is DERIVED from this palette's own ink by one
+            // shared HSV Value lift (tune-tablet-clay-text-contrast D1), not authored per clay. Lifting the
+            // near-black ink UP by MutedTextValueLift points yields a muted tone that tracks each clay's own
+            // ink/surface relationship, so the muted-vs-ink contrast step is a perceptually equal amount
+            // across fire/red/blue. To darken the muted text everywhere, lower the one constant below.
+            OnSurfaceVariant = ScribeRowConstants.ShiftBrightness(ink, MutedTextValueLift),
             Background = background,
             OnBackground = ink,
             SurfaceLow = surfaceLow,
@@ -144,7 +159,6 @@ internal static class ScribeTheme
         accent:           new Vector4(0.55f, 0.30f, 0.15f, 1.0f),
         onAccent:         new Vector4(0.96f, 0.90f, 0.78f, 1.0f),
         secondary:        new Vector4(0.42f, 0.32f, 0.18f, 1.0f),
-        onSurfaceVariant: new Vector4(0.40f, 0.28f, 0.18f, 1.0f),
         surface:          new Vector4(0.80f, 0.66f, 0.50f, 1.0f),
         surfaceLow:       new Vector4(0.70f, 0.55f, 0.39f, 1.0f),
         surfaceHigh:      new Vector4(0.87f, 0.74f, 0.58f, 1.0f),
@@ -160,7 +174,6 @@ internal static class ScribeTheme
         accent:           new Vector4(0.60f, 0.26f, 0.20f, 1.0f),
         onAccent:         new Vector4(0.97f, 0.90f, 0.84f, 1.0f),
         secondary:        new Vector4(0.46f, 0.32f, 0.30f, 1.0f),
-        onSurfaceVariant: new Vector4(0.44f, 0.26f, 0.22f, 1.0f),
         surface:          new Vector4(0.82f, 0.62f, 0.58f, 1.0f),
         surfaceLow:       new Vector4(0.72f, 0.52f, 0.49f, 1.0f),
         surfaceHigh:      new Vector4(0.88f, 0.72f, 0.68f, 1.0f),
@@ -177,7 +190,6 @@ internal static class ScribeTheme
         accent:           new Vector4(0.26f, 0.42f, 0.52f, 1.0f),
         onAccent:         new Vector4(0.93f, 0.96f, 0.98f, 1.0f),
         secondary:        new Vector4(0.42f, 0.46f, 0.48f, 1.0f),
-        onSurfaceVariant: new Vector4(0.30f, 0.36f, 0.40f, 1.0f),
         surface:          new Vector4(0.76f, 0.82f, 0.86f, 1.0f),
         surfaceLow:       new Vector4(0.64f, 0.71f, 0.76f, 1.0f),
         surfaceHigh:      new Vector4(0.84f, 0.89f, 0.92f, 1.0f),

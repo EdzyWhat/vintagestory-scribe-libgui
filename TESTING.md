@@ -21,6 +21,16 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## tune-tablet-clay-text-contrast
+
+- [ ] `fa4e26e8` **Empty-tablet hint legible.** Open a red, a blue, and a fire tablet with an empty
+      task list and Pixel-Art Display ON; confirm the empty-list hint text reads legibly against all
+      three clay backdrops (especially blue, the one cool palette). *(4.1)*
+- [ ] `ce460e26` **Muted stays secondary.** Confirm the muted/hint text still reads as secondary
+      (clearly weaker than body ink) on all three clay tablets — it must not approach body-ink weight
+      and collapse the hierarchy. Finalize `MutedTextValueLift` (seeded 14) and record it in design D3;
+      re-run the gallery export if the final value differs. *(4.2/4.3)*
+
 ## replace-drag-wash-with-grip-arrows
 
 > Drag-reorder feedback moved OFF the row-background washes (which collided with the strengthened pinned
