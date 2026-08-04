@@ -115,6 +115,14 @@ public class GuiDialogScribeTablet : ScribeDialogBase
     /// glyph bundle is the client-cached parse; null (asset not yet loaded) simply renders no strokes.</summary>
     private protected override ScribeRowStyle DecorateRowStyle(ScribeRowStyle style)
     {
+        // Row grip/arrow glyphs borrow the SAME darker ink the title-bar grip + pencil use, so the drag
+        // handle reads as firmly engraved on the clay instead of the washed-out global mid-gray
+        // (replace-drag-wash-with-grip-arrows follow-up). TitleChromeGlyphColor is OnSurface @ 0.8 on the
+        // Pixel-Art backdrop path and the base gray otherwise, so this tracks the backdrop toggle and applies
+        // whether or not cuneiform is on (it's about clay contrast, not the font).
+        var chromeColor = TitleChromeGlyphColor(ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme);
+        style = style with { GripGlyphColor = chromeColor };
+
         if (ActiveCuneiformBundle is not { } bundle)
         {
             return style;

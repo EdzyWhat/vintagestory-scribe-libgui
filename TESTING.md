@@ -25,21 +25,42 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 
 > Drag-reorder feedback moved OFF the row-background washes (which collided with the strengthened pinned
 > tint) and ONTO the grip glyph: source row → ◀ + ~50% dim, other grips hidden, drop-target row → ▶. No
-> row-background wash is drawn during a drag anymore.
+> row-background wash is drawn during a drag anymore. Follow-up (2026-08-03) fixed three things: a no-op
+> release now resets state, the ◀ arrow no longer dims with its row, and the handles borrow the darker
+> title-bar ink.
 
-- [ ] `4a7af359` **Editor drag arrows.** Grip-drag a task in the editor: the grabbed row
+- [x] `b733878c` **No-op release resets.** Grab a row's grip, DON'T move, release on the
+      same row: the ghost dim and ◀/▶ handles revert to rest immediately — no row left stuck
+      dimmed with a ◀ handle. *(5.2)*
+      - **Confirmed 2026-08-03** playtest pass ("Works."): grab-release-in-place now clears
+        the drag state via the SetState-always fix.
+- [x] `a64b5f81` **Source arrow stays lit.** While dragging, the source ◀ arrow keeps FULL
+      opacity even though the grabbed row's content (checkbox + text) dims to ~half — the
+      arrow itself is not dimmed. *(5.2)*
+      - **Confirmed 2026-08-03** playtest pass ("Works."): per-child opacity leaves the grip
+        column full-opacity while the row content dims.
+- [x] `da40e0f1` **Handle ink darkness.** Confirm the drag handles read as dark/engraved on
+      the clay backdrop (same ink as the title-bar grip/pencil), not washed-out gray. *(5.2)*
+      - **Confirmed 2026-08-03** playtest pass ("Works."): row grip/arrows now borrow the
+        tablet's TitleChromeGlyphColor ink.
+- [x] `4a7af359` **Editor drag arrows.** Grip-drag a task in the editor: the grabbed row
       shows ◀ and dims to ~half opacity, all other grips vanish, the row under the cursor
       shows ▶, and NO row-background drag wash appears. Release commits the move; releasing
       in place is a no-op. *(5.2)*
-- [ ] `8c93a8fb` **Drag over pinned row.** In the editor, drag a row over a PINNED row: the
+      - **Confirmed 2026-08-03** playtest pass ("Works.").
+- [x] `8c93a8fb` **Drag over pinned row.** In the editor, drag a row over a PINNED row: the
       pinned wash stays visible and is clearly distinct from the ▶ drop-target glyph (the
       collision this change fixes — no colored wash competing with the pin tint). *(5.3)*
-- [ ] `0f4b21c7` **Pin Tab drag arrows.** On the Pin Tab (every row pinned), grip-drag a row:
+      - **Confirmed 2026-08-03** playtest pass ("Works."): the collision this change targeted
+        is resolved.
+- [x] `0f4b21c7` **Pin Tab drag arrows.** On the Pin Tab (every row pinned), grip-drag a row:
       the ◀ source / ▶ target glyphs are the clear differentiator against the uniform pinned
       wash, and the reorder commits correctly. *(5.4)*
-- [ ] `8424c9a3` **Smallest-size legibility.** At the SMALLEST text-size preference, grip-drag:
+      - **Confirmed 2026-08-03** playtest pass ("Works.").
+- [x] `8424c9a3` **Smallest-size legibility.** At the SMALLEST text-size preference, grip-drag:
       the ◀/▶ triangles stay legible and the grip column width does NOT change when a grip is
       hidden or swapped (no mid-drag row reflow). *(5.5)*
+      - **Confirmed 2026-08-03** playtest pass ("Works.").
 
 ## add-cuneiform-handwriting-feel
 

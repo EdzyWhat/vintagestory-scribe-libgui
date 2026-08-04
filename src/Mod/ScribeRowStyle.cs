@@ -1,3 +1,4 @@
+using OpenTK.Mathematics;      // Vector4 (control-glyph color override)
 using Scribe.Core;
 using Scribe.Core.Cuneiform;   // GlyphBundle (tablet cuneiform row path)
 
@@ -55,6 +56,14 @@ internal readonly record struct ScribeRowStyle(
     /// tablet's material); the default (disabled) leaves every non-tablet cuneiform surface un-glowed.
     /// Ignored when <see cref="UseCuneiform"/> is false.</summary>
     public CuneiformGlow CuneiformGlow { get; init; }
+
+    /// <summary>Optional override for the per-row grip glyph's ink color (the drag handle, and its ◀/▶
+    /// drag-state arrows). Null → the row uses the theme's <c>OnSurfaceVariant</c> mid-gray as before. The
+    /// tablet sets this to the same darker material ink the title-bar grip/pencil use
+    /// (<c>GuiDialogScribeTablet.TitleChromeGlyphColor</c>) so the row handle reads as firmly engraved
+    /// against the clay rather than washing out (replace-drag-wash-with-grip-arrows follow-up). An
+    /// <c>init</c>-only add-on so existing constructions stay valid.</summary>
+    public Vector4? GripGlyphColor { get; init; }
 
     /// <summary>
     /// Builds a row style from the player's consolidated settings. THIS IS THE SINGLE PLACE where the

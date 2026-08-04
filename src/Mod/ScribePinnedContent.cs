@@ -107,15 +107,16 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
 
     private void OnRowDragEnd()
     {
-        if (dragFromIndex is { } from && dragOverIndex is { } to)
+        // ALWAYS repaint on release (see the editor's OnRowDragEnd): clear the drag under SetState so the
+        // ghost row's dimmed content and the ◀/▶ grip arrows revert even on a no-op release. OnReorder's
+        // from==to path sends no packet and triggers no rebuild, so without this the row stayed stuck dimmed
+        // with a ◀ handle (replace-drag-wash-with-grip-arrows follow-up).
+        int? from = dragFromIndex;
+        int? to = dragOverIndex;
+        SetState(() => { dragFromIndex = null; dragOverIndex = null; });
+        if (from is { } f && to is { } t)
         {
-            dragFromIndex = null;
-            dragOverIndex = null;
-            Widget.OnReorder(from, to); // no-op inside if from == to
-        }
-        else
-        {
-            SetState(() => { dragFromIndex = null; dragOverIndex = null; });
+            Widget.OnReorder(f, t); // no-op inside if from == to
         }
     }
 
@@ -358,11 +359,15 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
         // the cursor hovers back over the origin row. This replaces the old row-background washes, which
         // collided with the strengthened pinned tint (though a Pin Tab row has no resting tint of its own,
         // the two views share this machinery and must behave identically).
+        // Ink for the grip + its ◀/▶ arrows: the tablet supplies a darker material ink (matching the
+        // title-bar grip/pencil) via style.GripGlyphColor so the handle reads as engraved on the clay;
+        // other surfaces fall back to the theme's mid-gray OnSurfaceVariant.
+        Vector4 gripColor = style.GripGlyphColor ?? colors.OnSurfaceVariant;
         Widget gripGlyph =
-            Widget.IsDragSource ? new ScribeVsIconGlyph("scribetriangleleft", style.ControlSize, colors.OnSurfaceVariant)
+            Widget.IsDragSource ? new ScribeVsIconGlyph("scribetriangleleft", style.ControlSize, gripColor)
             : Widget.IsDropTarget ? new ScribeVsIconGlyph("scribetriangleright", style.ControlSize, colors.Primary)
             : Widget.DragActive ? new SizedBox(width: style.ControlSize, height: style.ControlSize)
-            : new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant);
+            : new ScribeVsIconGlyph("scribegrip", style.ControlSize, gripColor);
 
         children.Add(new Padding(
             ScribeRowControlNudge.GripInsets(style),
@@ -371,9 +376,14 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
                 onRelease: _ => Widget.OnDragEnd(),
                 child: gripGlyph)));
 
+        // Source-row "lifted / in-hand" dim (matching the editor): while THIS row is dragged, its CONTENT
+        // (checkbox + text) paints at ~half opacity, applied per-child so the grip column keeps full opacity
+        // and the ◀ source arrow retains its ink. Always-present (value flips 1.0↔0.5) so no widget swap.
+        float contentOpacity = Widget.IsDragSource ? 0.5f : 1f;
+
         // Completion checkbox — completes with NO undo delay (the send fires immediately; see the dialog's
         // OnPinCompleteTask). Flips optimistically in its own State; the server re-push reconciles it.
-        children.Add(new Padding(
+        children.Add(new Opacity(contentOpacity, child: new Padding(
             EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
             child: new Checkbox(
                 value: done,
@@ -382,12 +392,12 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
                     SetState(() => done = !done);
                     Widget.OnToggleComplete(data.DocId, data.TaskId);
                 },
-                size: style.CheckboxSize)));
+                size: style.CheckboxSize))));
 
         // Directly-editable text field (editable by default — no separate edit mode). Held to the same
         // task-text cap as the editor. Writes through on every keystroke (OnTextChanged buffers it);
         // commits on Enter/blur (OnCommitText). Enter commits in place (no insert-below on the Pin Tab).
-        children.Add(new Expanded(child: new ScribeMultilineField(
+        children.Add(new Expanded(child: new Opacity(contentOpacity, child: new ScribeMultilineField(
             initialText: data.Text,
             focusNode: Widget.FocusNode,
             fontSize: style.FontSize,
@@ -400,7 +410,7 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
             onCommitAndAdvance: () => Widget.OnCommitText(data.TaskId),
             onCommitAndRetreat: () => Widget.OnCommitText(data.TaskId),
             onInsertTaskBelow: () => Widget.OnCommitText(data.TaskId),
-            onBlur: () => Widget.OnCommitText(data.TaskId))));
+            onBlur: () => Widget.OnCommitText(data.TaskId)))));
 
         Widget rowBody = new Padding(
             EdgeInsets.Symmetric(vertical: style.RowVerticalPadding, horizontal: style.RowHorizontalPadding),
@@ -424,10 +434,6 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
                 BorderThickness = 0f,
             },
             child: rowBody);
-
-        // Source-row "lifted / in-hand" dim, matching the editor: the grabbed row paints at ~half opacity.
-        // Opacity is paint-only and ALWAYS present (value flips 1.0↔0.5) so the widget subtree never swaps.
-        rowBody = new Opacity(Widget.IsDragSource ? 0.5f : 1f, child: rowBody);
 
         // Delete + unpin float on the RIGHT as real buttons, shown only on hover. delete = right-most (the
         // task itself), unpin to its left (remove only the pin). Same Stack overlay the editor uses.

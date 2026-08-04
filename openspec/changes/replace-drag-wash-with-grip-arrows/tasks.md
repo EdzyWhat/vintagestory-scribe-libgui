@@ -42,12 +42,12 @@
 
 - [x] 5.1 `dotnet build src/Mod/Mod.csproj -c Debug` clean; `dotnet test tests/Core.Tests` green
   (no Core change expected — reorder logic untouched).
-- [ ] 5.2 Restage (`bash build/restage.sh Debug`); in the editor view, grip-drag a task and confirm:
+- [x] 5.2 Restage (`bash build/restage.sh Debug`); in the editor view, grip-drag a task and confirm:
   the grabbed row shows ◀ and is dimmed, all other grips vanish, the row under the cursor shows ▶,
   and no row-background drag wash appears. Release commits the move; releasing in place is a no-op.
-- [ ] 5.3 In-game: drag a row over a PINNED row and confirm the pinned wash stays visible and is not
+- [x] 5.3 In-game: drag a row over a PINNED row and confirm the pinned wash stays visible and is not
   confusable with the drop feedback (the collision this change fixes).
-- [ ] 5.4 In-game: repeat 5.2/5.3 on the Pin Tab, where every row is pinned — confirm the ◀/▶ glyphs
+- [x] 5.4 In-game: repeat 5.2/5.3 on the Pin Tab, where every row is pinned — confirm the ◀/▶ glyphs
   are the clear differentiator and the drag reads correctly with the uniform pinned wash behind it.
-- [ ] 5.5 In-game: at the smallest text-size preference, confirm the triangles are legible and the
+- [x] 5.5 In-game: at the smallest text-size preference, confirm the triangles are legible and the
   grip column width does not change when a grip is hidden/swapped (no mid-drag row reflow).

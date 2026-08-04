@@ -259,15 +259,17 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
     /// the drag. The actual MoveBlock + rebuild happens in the dialog (OnReorderBlock).</summary>
     private void OnRowDragEnd()
     {
-        if (dragFromIndex is { } from && dragOverIndex is { } to)
+        // ALWAYS repaint on release: clear the drag under SetState so the ghost row's dimmed content and the
+        // ◀/▶ grip arrows revert to rest, even on a no-op release. OnReorderBlock's from==to branch does NOT
+        // ForceRebuild (there's no doc edit to apply), so without this SetState a grab-and-release-in-place
+        // left the row stuck dimmed with a ◀ handle until the next unrelated rebuild
+        // (replace-drag-wash-with-grip-arrows follow-up).
+        int? from = dragFromIndex;
+        int? to = dragOverIndex;
+        SetState(() => { dragFromIndex = null; dragOverIndex = null; });
+        if (from is { } f && to is { } t)
         {
-            dragFromIndex = null;
-            dragOverIndex = null;
-            Widget.OnReorderBlock(from, to); // no-op inside if from == to
-        }
-        else
-        {
-            SetState(() => { dragFromIndex = null; dragOverIndex = null; });
+            Widget.OnReorderBlock(f, t); // no-op inside if from == to
         }
     }
 
@@ -681,11 +683,15 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         // OTHER row while a drag is in progress → a same-size empty box (glyph hidden) so the list
         // declutters to just the ◀/▶ pair while the grip column width is unchanged (no mid-drag reflow).
         // Source wins over drop-target when the cursor hovers back over the origin row.
+        // Ink for the grip + its ◀/▶ arrows: the tablet supplies a darker material ink (matching the
+        // title-bar grip/pencil) via style.GripGlyphColor so the handle reads as engraved on the clay;
+        // other surfaces fall back to the theme's mid-gray OnSurfaceVariant.
+        Vector4 gripColor = style.GripGlyphColor ?? colors.OnSurfaceVariant;
         Widget gripGlyph =
-            Widget.IsDragSource ? new ScribeVsIconGlyph("scribetriangleleft", style.ControlSize, colors.OnSurfaceVariant)
+            Widget.IsDragSource ? new ScribeVsIconGlyph("scribetriangleleft", style.ControlSize, gripColor)
             : Widget.IsDropTarget ? new ScribeVsIconGlyph("scribetriangleright", style.ControlSize, colors.Primary)
             : Widget.DragActive ? new SizedBox(width: style.ControlSize, height: style.ControlSize)
-            : new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant);
+            : new ScribeVsIconGlyph("scribegrip", style.ControlSize, gripColor);
 
         children.Add(new Padding(
             ScribeRowControlNudge.GripInsets(style),
@@ -694,9 +700,16 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                 onRelease: _ => Widget.OnDragEnd(),
                 child: gripGlyph)));
 
+        // Source-row "lifted / in-hand" dim (replace-drag-wash-with-grip-arrows): while THIS row is the one
+        // being dragged, its CONTENT (checkbox + text) paints at ~half opacity so the row reads as picked up.
+        // The dim is applied per-child, NOT to the whole row — the grip column stays full opacity so the ◀
+        // source arrow keeps its ink (the arrow IS the "you grabbed this" signal; dimming it would defeat it).
+        // Opacity is paint-only and ALWAYS present (value flips 1.0↔0.5) so no widget-type swap mid-drag.
+        float contentOpacity = Widget.IsDragSource ? 0.5f : 1f;
+
         if (Widget.Data.IsTask)
         {
-            children.Add(new Padding(
+            children.Add(new Opacity(contentOpacity, child: new Padding(
                 EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
                 child: new Checkbox(
                     value: done,
@@ -705,14 +718,14 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                         SetState(() => done = !done);
                         Widget.OnToggleTask(index);
                     },
-                    size: style.CheckboxSize)));
+                    size: style.CheckboxSize))));
         }
 
         // Ghost hint only on TASK rows (add-empty-task-lifecycle D6b) — a text section is legitimately
         // empty and needs no "New task…" prompt. Painted dimmed while the field is empty; not committed.
         string placeholder = Widget.Data.IsTask ? Lang.Get("scribe:scribe-gui-newtask-placeholder") : "";
 
-        children.Add(new Expanded(child: new ScribeMultilineField(
+        children.Add(new Expanded(child: new Opacity(contentOpacity, child: new ScribeMultilineField(
             initialText: Widget.Data.Text,
             placeholder: placeholder,
             focusNode: Widget.FocusNode,
@@ -744,7 +757,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             onCommitAndAdvance: () => Widget.OnCommitAndAdvance(index),
             onCommitAndRetreat: () => Widget.OnCommitAndRetreat(index),
             onInsertTaskBelow: () => Widget.OnInsertTaskBelow(index),
-            onBlur: () => Widget.OnRowBlurred(index))));
+            onBlur: () => Widget.OnRowBlurred(index)))));
 
         // Row body: [grip][checkbox][text]. Delete/pin no longer reserve columns here — they float on
         // top of the row (see below), so the text can use the full width.
@@ -785,13 +798,6 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                 CornerRadius = Vector4.Zero,
             },
             child: rowBody);
-
-        // Source-row "lifted / in-hand" dim (replace-drag-wash-with-grip-arrows): the grabbed row paints at
-        // ~half opacity so it reads as picked up, while every other row stays fully opaque. Opacity is
-        // paint-only (no layout change) and ALWAYS present — a constant widget type whose value flips
-        // 1.0↔0.5 — so it never swaps the widget subtree mid-drag (structural-stability rule); the field's
-        // live caret/text survive the repaint.
-        rowBody = new Opacity(Widget.IsDragSource ? 0.5f : 1f, child: rowBody);
 
         // Delete + pin float on the RIGHT of the row as real buttons (2026-07-24 feedback), shown only
         // on hover. A Stack sizes to the non-positioned rowBody and lays the Positioned buttons on top,
