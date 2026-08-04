@@ -31,7 +31,7 @@ reorderable row surface (the editor view and the Pin Tab), which share the same 
 - **THEN** the reserved grip column's width scales with it, consistent with the row's other
   affordance columns and checkbox
 
-#### Scenario: Dragging the grip shows arrow feedback on the grips
+#### Scenario: Dragging the grip reorders the row with drop feedback
 - **WHEN** the player presses a row's grip and moves the pointer over a different row
 - **THEN** the grabbed row's grip shows a left-pointing indicator and that row is dimmed, every other
   non-target row's grip is hidden, and the row under the pointer shows a right-pointing indicator
