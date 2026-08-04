@@ -35,9 +35,10 @@
 - [x] 2.2 `scribetablet.json` `material` axis = `[clay-red, clay-blue, clay-fire, wax]`; `shapeByType`
   updated to `*-clay-red`/`*-clay-blue`/`*-clay-fire`/`*-wax`; four `item-scribetablet-*` lang name/desc
   keys ("Red/Blue/Fire Clay Tablet", "Wax Tablet").
-- [ ] 2.3 In-game: confirm FOUR discrete tablet entries appear in the handbook and creative (Red/Blue/Fire
+- [x] 2.3 In-game: confirm FOUR discrete tablet entries appear in the handbook and creative (Red/Blue/Fire
   Clay Tablet + Wax Tablet), each clay type craftable via its own recipe, and each opens its matching
-  backdrop. (Unblocks 6.2; supersedes the earlier "one collapsed entry" symptom.)
+  backdrop. (Unblocks 6.2; supersedes the earlier "one collapsed entry" symptom.) — CONFIRMED 2026-08-03:
+  four discrete entries present in-game.
 
 ## 3. Seven backdrop specs
 
@@ -62,9 +63,10 @@
   fired tablets stay distinguishable (values eyeballed; tune in-game — task 6.3).
 - [x] 4.4 (Q3) SUPERSEDED: no shared page-frame overlay authored — the user supplied full-page framed art,
   so each backdrop is already a framed page. No `FrameOverlay` field exists.
-- [ ] 4.5 Diff-review + in-game smoke test that the Lectern and both Notebook backdrops render unchanged
+- [x] 4.5 Diff-review + in-game smoke test that the Lectern and both Notebook backdrops render unchanged
   (they pass a null-tint spec, so `GetBackdropBitmap` returns the same decoded bitmap as before). — code
-  path verified null-tint = identical bitmap; in-game confirm is task 6.6.
+  path verified null-tint = identical bitmap; in-game confirm is task 6.6. — CONFIRMED 2026-08-03:
+  diff-review good, backdrops look distinct per type and unaffected surfaces render unchanged.
 
 ## 5. Select the backdrop in the tablet dialog
 
@@ -78,17 +80,23 @@
 
 - [x] 6.1 `dotnet build` clean (0 errors, 3 pre-existing warnings); `dotnet test` Core suite 255/255 (no
   Core change).
-- [ ] 6.2 In-game: obtain each clay tablet — from creative (now three discrete items) OR by crafting from
-  red/blue/fire clay — and confirm each opens with its own distinct, crisp clay-type backdrop.
+- [x] 6.2 In-game: obtain each clay tablet — from creative (now three discrete items) OR by crafting from
+  red/blue/fire clay — and confirm each opens with its own distinct, crisp clay-type backdrop. — CONFIRMED
+  2026-08-03: each is obtainable and opens the correct version.
 - [ ] 6.3 In-game: reach a fired clay tablet via creative (fired=true is not craftable this round) and
-  confirm the fired-ceramic tint reads distinctly per clay type; tune tint values if needed.
+  confirm the fired-ceramic tint reads distinctly per clay type; tune tint values if needed. — DEFERRED
+  2026-08-03: fired clay tablets not obtainable at the moment; folds into the next change
+  (add-tablet-firing-mechanic), which supplies the path to a fired tablet.
 - [x] 6.4 SUPERSEDED by the variant pivot (2026-08-02): the earlier playtest confirmed the wax + a single
   collapsed creative "Clay Tablet" (red+soft default) rendered without error — but clay type is now a
   variant, so creative offers three discrete typed clay items instead of one attribute-less stack. The
   fallback path (unknown/absent material → red + soft) still exists in `ForTablet` for legacy stacks; the
   live "four discrete entries render correctly" check folds into task 2.3 / 6.2.
-- [ ] 6.5 In-game: confirm clayType/fired persist across close/reopen and drop/pickup.
-- [ ] 6.6 In-game: confirm the Lectern and both Notebooks are visually unchanged (renderer seam did not
-  disturb the full-page backdrops).
+- [x] 6.5 In-game: confirm clayType/fired persist across close/reopen and drop/pickup. — CONFIRMED
+  2026-08-03: they persist.
+- [x] 6.6 In-game: confirm the Lectern and both Notebooks are visually unchanged (renderer seam did not
+  disturb the full-page backdrops). — CONFIRMED 2026-08-03 (folded into 4.5 in-game check): unaffected
+  surfaces render unchanged.
 - [ ] 6.7 Atlas/integration: the local pre-push gate stages the `gui` dep and exercises the tablet open
-  path; keep synthetic player names ≤16 chars.
+  path; keep synthetic player names ≤16 chars. — runs at push time (the pre-push gate); not a manual
+  in-game step.
