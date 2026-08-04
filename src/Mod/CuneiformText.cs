@@ -42,9 +42,10 @@ internal static class CuneiformMetrics
     /// <summary>Cuneiform's em→pixel scale is multiplied by this so its rendered glyph height reads well
     /// against the surrounding readable text. ~1.4 matched the measured TTF line-height ratio (so cuneiform
     /// sat at the same height as adjacent text); the 2026-08-03 playtest then asked for the glyphs ~20%
-    /// larger than that for legibility, so this is now a deliberate oversize (1.4 × 1.2 = 1.68), not a
+    /// larger than that for legibility (1.4 × 1.2 = 1.68), and a follow-up pass asked for another bump — +20%
+    /// read too big, so it settled at +10% on top (1.68 × 1.1 = 1.848). This is a deliberate oversize, not a
     /// height-match. Applied globally (rows, title, labels) so every surface scales together; tuned in-game.</summary>
-    public const float LineHeightRatio = 1.68f;
+    public const float LineHeightRatio = 1.848f;
 
     /// <summary>Default hand-written jitter strength (add-cuneiform-handwriting-feel) applied to cuneiform
     /// text until the client config knob (task 6) overrides it. Reads as a hand-pressed wobble without
