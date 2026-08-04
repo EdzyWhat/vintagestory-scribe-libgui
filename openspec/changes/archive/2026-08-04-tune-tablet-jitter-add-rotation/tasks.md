@@ -48,7 +48,7 @@
 ## 5. Verify in-game
 
 - [x] 5.1 `dotnet test` green; build and stage the mod.
-- [ ] 5.2 Open a tablet/editor in-game: confirm glyphs tilt slightly (≤8°) and differently per
+- [x] 5.2 Open a tablet/editor in-game: confirm glyphs tilt slightly (≤8°) and differently per
   instance, the jitter reads tighter, text is stable frame-to-frame (no wobble/shimmer), and the
   caret/selection still land correctly. Check line edges for clipping (see design Risks) and note any
   over-tilt of tall glyphs for the open questions.

@@ -102,7 +102,7 @@
       Notebook) in `docs/media/reddit-announcement-0.2.md`, reusing the existing draft's voice.
 - [x] 4.4 Update `docs/media/video-script.md` (0.2 outro + three new beats) and add a shot-list +
       demo-seed cheat sheet keyed to features and the `/scribe seed` command each shot needs.
-- [ ] 4.5 Capture screenshots into `docs/media/screenshots/0.2/` using the seed command.
+- [x] 4.5 Capture screenshots into `docs/media/screenshots/0.2/` using the seed command.
 
 ## 5. Release mechanics
 

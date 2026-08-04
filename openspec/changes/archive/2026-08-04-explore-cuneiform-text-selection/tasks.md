@@ -32,7 +32,7 @@
       `Clip` (unchanged) clips overflow. Live confirmation folded into 3.3.
 - [x] 3.2 Build (`0 errors`) and run the Core suite (no Core changes expected to break; confirm still
       green). — done: Mod builds 0 errors; Core 250 pass / 0 fail (no Core changes, as designed).
-- [ ] 3.3 Manual in-game check (tablet): shift-arrow, drag-select, double-click word, triple-click line all
+- [x] 3.3 Manual in-game check (tablet): shift-arrow, drag-select, double-click word, triple-click line all
       show a highlight behind the cuneiform strokes on both a single-line row and a wrapped multi-line row;
       the title band highlights and clips; Ctrl+C copies the underlying plain text. Record in TESTING.md.
 - [x] 3.4 Update the caret-only note in `ScribeCuneiformField.cs`'s header comment (it currently says

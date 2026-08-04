@@ -19,11 +19,17 @@ When Pixel-Art Display is OFF, the tablet dialog SHALL follow the player's globa
 ON. The backdrop SHALL continue to be applied through the existing `WrapBackdrop` / `BuildOuterArtBox`
 mechanism, and backdrop selection SHALL remain keyed to the `material` variant as before.
 
-#### Scenario: Tablet opens with its clay-type theme
+#### Scenario: Tablet opens with its own theme and backdrop
 
 - **WHEN** a player opens a red, blue, or fire clay tablet with Pixel-Art Display ON
 - **THEN** the dialog is drawn with that clay type's palette (its own ink, accent, input
   background/border, and panel background) and the backdrop slot for that material
+
+#### Scenario: Backdrop slots reuse the placeholder art
+
+- **WHEN** the tablet dialog resolves the `clay` or `wax` backdrop slot
+- **THEN** each resolves to `textures/gui/scribe-lectern.png` for now, with the ratio matching the
+  tablet layout
 
 #### Scenario: Wax and unknown materials fall back to the fire palette
 

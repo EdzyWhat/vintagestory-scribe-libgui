@@ -222,13 +222,13 @@
 
 ## 9. Post-release (not ship gates — do after 8.5)
 
-- [ ] 9.1 Draft and post the reddit release post. Must answer: recipe (planks + nails + parchment +
+- [x] 9.1 Draft and post the reddit release post. Must answer: recipe (planks + nails + parchment +
       feather + leather + ink bowl), no temporal gear, LibGUI required (no ImGui), multiplayer
       confirmed, sound toggle exists, timers deferred to Clockmaker's Notebook (v2), Scapholene
       credit to Artekuno's suggestion. Reference the teaser thread.
 - [x] 9.2 Capture B2 feature screenshots: HUD in-world with active pins, Settings window, notebook
       backdrop, task checklist in the editor. Store under `docs/media/screenshots/` (gitignored).
-- [ ] 9.3 Produce the 60–90s feature showcase video: place lectern → add/check tasks → pin to HUD →
+- [x] 9.3 Produce the 60–90s feature showcase video: place lectern → add/check tasks → pin to HUD →
       HUD in-world → settings/themes → outro/download link. Script draft at `docs/media/video-script.md`.
 - [x] 9.4 Reach out to the LibGUI author with a courtesy message (attribution, feedback, and optionally
       a link to the released mod).

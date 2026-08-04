@@ -61,7 +61,7 @@
   in-memory glow tuning state (strength/blur, halo polarity) and forces a repaint of the open tablet
   (`ForceRebuild`/rebuild path), mirroring the `.cuneiform` harness. Mutates memory only; persists
   nothing.
-- [ ] 5.2 Verify a value change takes effect on an open tablet without reopening, and that the command
+- [x] 5.2 Verify a value change takes effect on an open tablet without reopening, and that the command
   is client-registered (`.` prefix), not a server command.
 
 ## 6. Verification
