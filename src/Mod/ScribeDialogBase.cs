@@ -28,6 +28,26 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
 {
     protected readonly IScribeDocumentHost host;
 
+    /// <summary>Whether the player's active hand item is still the SAME document this dialog opened, keyed
+    /// by the stable <see cref="ScribeDocument.DocId"/>. The item-hosted dialogs (Notebook, Clockmaker's
+    /// Notebook, Tablet) close when the player switches hotbar slots away from the item they opened — but
+    /// the switch guard must compare document IDENTITY, not merely "is the new hand item some Scribe item."
+    /// An earlier guard tested <c>ActiveHandItemSlot is IScribeDocumentItem</c>, which wrongly kept the
+    /// dialog OPEN when the player scrolled/keyed the hotbar to a DIFFERENT Scribe item (e.g. a second
+    /// notebook, or a tablet): the old dialog stayed up, still bound to the now-unheld document. Comparing
+    /// the DocId closes on any real switch-away while still tolerating a hotbar reorder that keeps the same
+    /// item active (its DocId is unchanged). A non-Scribe hand item (or an empty hand) has no document, so
+    /// this returns false and the dialog closes. Reads the doc straight off the stack attributes — the same
+    /// source the host was seeded from — so it needs no live host↔slot back-reference.</summary>
+    private protected bool ActiveHandItemHostsThisDocument()
+    {
+        var stack = capi.World.Player?.Entity?.ActiveHandItemSlot?.Itemstack;
+        if (stack?.Collectible is not IScribeDocumentItem) return false;
+        return ScribeDocumentAttributes.TryReadFrom(stack, out var doc)
+            && doc is not null
+            && doc.DocId == host.Document.DocId;
+    }
+
     /// <summary>One scroll controller shared by BOTH views' scroll regions, owned by the dialog rather
     /// than each view's <c>State</c>. Because a view switch is a <see cref="GuiBase.ForceRebuild"/> that
     /// tears down the outgoing view's <c>State</c> (which would dispose a State-owned controller and

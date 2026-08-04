@@ -235,10 +235,11 @@ public class GuiDialogScribeTablet : ScribeDialogBase
 
     private void OnActiveSlotChanged(ActiveSlotChangeEventArgs _)
     {
-        // Any Scribe document item may host this dialog; keep it open only while a document item remains
-        // the active hand item (same guard as the Notebook).
-        if (capi.World.Player.Entity.ActiveHandItemSlot?.Itemstack?.Collectible
-            is not IScribeDocumentItem)
+        // Close when the player switches the active hand AWAY from THIS tablet — keyed on the document's
+        // stable DocId, not merely "still some Scribe item" (same guard as the Notebook). Switching to a
+        // DIFFERENT Scribe item must still close this dialog; only a hotbar reorder that keeps the same
+        // item active leaves it open. See ActiveHandItemHostsThisDocument.
+        if (!ActiveHandItemHostsThisDocument())
             TryClose();
     }
 
