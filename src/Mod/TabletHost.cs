@@ -34,4 +34,18 @@ public sealed class TabletHost : NotebookHost
 
     /// <summary>The scratch-tier cap enforced at the editor mutation boundary: 10 task blocks, 1 pin.</summary>
     public override ScribeDocumentPolicy Policy => ScribeDocumentPolicy.Tablet;
+
+    /// <summary>Re-proportion the tablet dialog to fill more of the clay: a shorter title band
+    /// (<c>0.11</c> vs the <c>0.13</c> default), a taller scrolling inner section (<c>0.83</c> vs
+    /// <c>0.80</c>), and narrower side margins (<c>0.06</c> per side vs <c>0.10</c>) so the center writing
+    /// column grows to <c>0.88·W</c>. Aspect is unchanged (the tablet reuses the notebook art's
+    /// <c>1160/1024</c>); only the interior proportions differ. Overrides <see cref="NotebookHost.GetLayout"/>
+    /// so the notebook's own layout is untouched.</summary>
+    public override ScribeLayout GetLayout(float pixelArtSize) =>
+        new ScribeLayout(pixelArtSize, 1160f / 1024f, ScribeLayoutProportions.Default with
+        {
+            TitleBarFrac = 0.11f,
+            InnerHFrac   = 0.83f,
+            SideColFrac  = 0.06f,
+        });
 }

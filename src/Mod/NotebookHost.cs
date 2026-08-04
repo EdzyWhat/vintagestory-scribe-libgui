@@ -75,7 +75,10 @@ public class NotebookHost : IScribeDocumentHost
 
     public ScribeBackdropSpec BackdropSpec => _backdrop;
 
-    public ScribeLayout GetLayout(float pixelArtSize) => new ScribeLayout(pixelArtSize, 1160f / 1024f);
+    /// <summary>The dialog layout for this item. <c>virtual</c> so a subclass can re-proportion its own
+    /// dialog (the tablet overrides the side-column / title-band / inner-height fractions) without touching
+    /// the notebook's; the base keeps the default proportions and the notebook art's 1160/1024 aspect.</summary>
+    public virtual ScribeLayout GetLayout(float pixelArtSize) => new ScribeLayout(pixelArtSize, 1160f / 1024f);
 
     public virtual string DefaultDocumentTitle => "Notebook";
 
