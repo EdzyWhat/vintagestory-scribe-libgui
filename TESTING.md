@@ -2694,10 +2694,17 @@ regression checks specific to this change's scoped-to-the-input approach.
         The original "leave ungrouped → shows side-by-side" plan was backwards. Fix: distinct `recipegroup`
         (trait=1, schematic=2) → two separate grids. Also reshaped schematic to `BGM,S__` (3×2, schematic
         bottom-left) to mirror the trait `BGM` row. Retest: expect TWO grids, trait one asterisked.
-- [ ] `3e7fce6a` **Quench a hard tablet.** Crouch + right-click a bucket/barrel of water while holding a
+- [x] `3e7fce6a` **Quench a hard tablet.** Crouch + right-click a bucket/barrel of water while holding a
       HARD clay tablet → it softens to wet and keeps its document; repeat aimed at an empty/non-water
       container and at open ground → no softening and ground-storage placement still works; confirm a wet
       and a fired tablet both no-op on the gesture. *(zero-point-three-fixes 4.3)*
+      - **Confirmed 2026-08-04** (user retest + server-main.log): quench softened both a creative-pre-hardened
+        and a freshly-dried tablet; the two passive paths (jump-in-water, throw-in-water) also worked again.
+        Instrumented `Soften` logged the two quench events resolving correctly —
+        `variant='clay-red-hard' → (clay-red,Hard) softItemFound=True` and the `clay-fire-hard` equivalent —
+        with all other calls being harmless `(…,Wet)` idle-tick no-ops. The earlier "all broken" report was
+        legacy stacks hardened under the OLD attribute system on 08-03, stranded by the variant pivot; any
+        tablet created under the current system softens fine. Diagnostic log since removed.
       - **Still broken 2026-08-04** (submission 2026-08-04T21-28-56): quench does nothing AND it regressed
         ALL softening — "drop in water, bring it in water with you in hand, or quenching" all now fail to
         unharden. (Liked the quench sounds.) This is a regression introduced alongside the quench branch:

@@ -68,7 +68,7 @@
 - [ ] 4.2 `bash build/restage.sh Debug`, then in-game: confirm the schematic recipe is craftable at 2×2 and the
   Clockmaker's Notebook handbook shows both recipes as separate grids with the `* Requires Tinkerer trait`
   asterisk on the trait one only.
-- [ ] 4.3 In-game: crouch + right-click a bucket/barrel of water while holding a hard tablet → it softens and
+- [x] 4.3 In-game: crouch + right-click a bucket/barrel of water while holding a hard tablet → it softens and
   keeps its document; repeat aimed at an empty/non-water container and at open ground → no softening and the
   ground-storage placement still works; confirm a wet tablet and a fired tablet both no-op on the gesture.
 - [ ] 4.4 In-game: craft a clay tablet of each color and confirm the recipe now consumes 12 clay (a 2×3 block)
