@@ -126,6 +126,15 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Backlogged 2026-08-03** the jitter-strength / progression-enable client setting (task 6) is
         not built yet — there's no in-game way to set jitter to 0, so this can't be exercised until
         those knobs land.
+- [ ] `06cddc5a` **Ghost lead-in verdict.** With cuneiform on, watch a fresh word form and judge the
+      ghost lead-in stroke that precedes each glyph — keep it only if it reads well, otherwise confirm
+      it stays off by default. A pure look-and-feel keep/cut call. *(add-cuneiform-handwriting-feel 7.7)*
+      - **Still broken 2026-08-05** (submission 2026-08-05T08-29-22): the ghost lead-in isn't visible at all.
+        Intended behavior: the ghost should IMMEDIATELY show exactly what the player typed at low opacity, so a
+        fast typist sees the full word ahead of the progressive "Cuneiform press-in" stroke reveal catching up.
+        Observed: with press-in progressively adding strokes, nothing ghosts ahead — no low-opacity preview
+        shows. Needs the ghost layer to render the full typed text immediately (decoupled from the press-in
+        progression) rather than lagging behind it.
 
 ## arrow-key-line-caret-nav
 
@@ -2288,6 +2297,23 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       gear + metal parts + the schematic in the grid — confirm it yields a Clockmaker's Notebook, the
       schematic STAYS in the grid (reusable), and the other three are consumed. Craft a second from the
       retained schematic to confirm reuse. *(add-clockmaker-notebook-schematic 2.3)*
+      - **Still broken 2026-08-04** (submission 2026-08-04T23-16-17): "The schematic is consumed when
+        crafting the Clockmaker's Notebook." Despite `consume: false` on the `S` (schematic) ingredient in
+        `scribeclockmakernotebook-schematic.json`, the schematic is eaten by the craft.
+      - **Cannot reproduce in code 2026-08-04** (decompile + staged-asset + server-log investigation): every
+        code path checks out and the engine SHOULD honor `consume: false` here. Confirmed: (a) the field name/
+        placement is correct and matches vanilla `schematiccopy.json` verbatim; (b) `CraftingRecipeIngredient.Consume`
+        (default true) is honored in `CollectibleObject.OnConsumedByCrafting` — when false the stack is left in
+        place; (c) the consume path maps grid cells to ingredients by POSITION (`GridRecipe.ConsumeInputAt`), so
+        the `S` cell in the `"BGM,S__"` layout maps to the `consume:false` S ingredient and returns early; (d) the
+        co-existing 3×1 `"BGM"` trait recipe CANNOT be misrouted to for an S-bearing layout (the extra S cell fails
+        `MatchesAtPosition`); (e) the staged recipe is present and correct, resolved with NO "cannot be resolved"
+        error; (f) the notebook item (`ItemClockmakerNotebook`) overrides `OnCreatedByCrafting` but only READS
+        input slots (copies doc bytes) — it never consumes them, and it does NOT override `ConsumeCraftingIngredients`.
+        Remaining unverified suspects (need in-game measurement, not code): the notebook that appeared may have been
+        crafted from the 3×1 recipe (no S present) rather than the 3×2 schematic layout; or a stale CLIENT build
+        mispredicted the craft (no server→client mod sync — verify client+server on the same build). NEXT: retest
+        with a server log line on `MatchingRecipe.Name` in the craft, confirming the 3×2 recipe is the one that fired.
 - [ ] `297731fd` **Trait path unchanged.** Confirm a Clockmaker (Tinkerer trait) still crafts via the
       original 3-item no-schematic recipe, AND a non-Clockmaker with no schematic still CANNOT craft via
       that trait recipe. *(add-clockmaker-notebook-schematic 2.4)*
@@ -2299,6 +2325,23 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         marker appears, suggesting the schematic recipe didn't register and/or the trait recipe lost its
         trait gate. Next: check the recipe JSON registration + the handbook's recipe aggregation for
         this item.
+      - **Still broken 2026-08-04** (submission 2026-08-04T23-16-17, screenshot 2026-08-04T23-12-17-297731fd.png):
+        HALF-FIXED. The dual-grid fix landed — the handbook now shows TWO separate "Created by" grids (the
+        3-item trait recipe and the schematic recipe side by side, confirming the distinct-`recipegroup`
+        fix). BUT: (1) NEITHER grid shows the `* Requires Tinkerer trait` asterisk, and (2) as a Commoner
+        the user can STILL craft the Notebook via the no-schematic 3-item recipe.
+      - **NOT A BUG — world config 2026-08-04** (decompile + server-log investigation): both 2.4 symptoms
+        have ONE cause, and it is working-as-designed. `requiresTrait`/`consume` field names, casing, and
+        placement are all CORRECT and match vanilla verbatim (`RecipeBase.RequiresTrait`, recipe-level;
+        enforced by `CharacterSystem.Event_MatchesRecipe`; asterisk drawn by `SlideshowGridRecipeTextComponent`
+        from that same field). The server log shows the mod deliberately clearing the gate at load:
+        `[scribe] scribeClockmakerRequiresTrait disabled: cleared the tinkerer trait requirement on 1 …
+        recipe(s).` This world has the operator toggle `scribeClockmakerRequiresTrait` set to FALSE (mod
+        default is TRUE); `ApplyClockmakerTraitGate` (ScribeModSystem.ServerLifecycle.cs) then nulls out
+        `recipe.RequiresTrait`, which removes BOTH the craft gate AND the asterisk in one stroke (the asterisk
+        is driven entirely by `RequiresTrait` being non-null). To actually verify the gate: run
+        `/worldconfig scribeClockmakerRequiresTrait true`, restart the world, re-log as a Commoner — the
+        craft should then be blocked and the asterisk should appear on the trait grid. No code change.
 - [ ] `e093c2ad` **Carryover via schematic.** Craft the Clockmaker's Notebook via the schematic recipe
       from a Notebook that already has tasks/notes/History — confirm the document and History carry into
       the result. *(add-clockmaker-notebook-schematic 2.5)*
@@ -2597,9 +2640,12 @@ regression checks specific to this change's scoped-to-the-input approach.
 
 ## add-tablet-firing-mechanic
 
-- [ ] `1d20ffc0` **Dry to hard.** Hold or drop a WET clay tablet that has a few tasks/notes and let it sit
+- [x] `1d20ffc0` **Dry to hard.** Hold or drop a WET clay tablet that has a few tasks/notes and let it sit
       ~2 in-game days; confirm it becomes a hard tablet that KEEPS its tasks/notes/title, opens read-only,
       and shows the dried (hard) backdrop. *(add-tablet-firing-mechanic 8.2)*
+      - **Confirmed 2026-08-04** (submission 2026-08-04T23-16-17): "Works." The wet→hard transition keeps
+        content, opens read-only, and (with the backdrop fix landed, see d6d7f03f) the hard backdrop now
+        renders opaque.
       - **Still broken 2026-08-03:** (submission 2026-08-03T21-30-46) the hardening/read-only transition
         works but the hard backdrop does NOT render as a normal opaque page — appears to be the hard.png
         drawn at very low opacity. Backdrop-render issue, not a state issue.
@@ -2635,6 +2681,10 @@ regression checks specific to this change's scoped-to-the-input approach.
         the variant-swap rework (state moved from a stack attribute to the material variant): `Soften` now
         rebuilds the soft-variant item via `world.GetItem(CodeWithVariant("material", material))` and every
         path no-ops if that resolves null. Fix once, reverify all three paths.
+      - **Confirmed 2026-08-04** (submission 2026-08-04T23-16-17): "Works." Both rehydration paths
+        (drop-in-water and swim-while-holding) soften a hard tablet back to wet + editable again. The
+        08-04 regression is resolved; the earlier "all broken" was legacy attribute-hardened stacks
+        stranded by the variant pivot, not a code defect (see 3e7fce6a).
 - [x] `879acfb4` **Fire in a firepit.** Fire an unfired tablet — try one WET and one HARD — in a firepit;
       confirm each becomes a fired tablet that keeps its content, opens read-only, and shows the fired
       backdrop with the correct per-type tint. *(add-tablet-firing-mechanic 8.4)*
@@ -2674,6 +2724,15 @@ regression checks specific to this change's scoped-to-the-input approach.
       *(wire-tablet-clay-art-and-variants 5.6)*
       - **Confirmed 2026-08-04** (submission 2026-08-04T21-28-56): "Works! Love the detail." All six
         `-hard`/`-fired` variants appear with correct names and none carries a recipe.
+- [ ] `07d0b3cd` **Bespoke wax model renders.** Pull a wax tablet from Creative and hold it (and
+      ground-place it); confirm all 6 cubes of the new bespoke wax model render as authored wax, with
+      NO clay-texture bleed on any interior/frame face — the interior faces were disabled to kill the
+      `#default` fallback that was leaking clay. Do a FULL client relaunch first (assets load at boot).
+      *(wire-tablet-clay-art-and-variants — wax-asset recompose, commit 87c9c2d)*
+      - **Confirmed 2026-08-05** (submission 2026-08-05T08-29-22): "The wax tablet is perfect, including how
+        it shows and positions textures and the layout of the model. 10/10." (After the initial pass a further
+        round dialed in the writing-slab UV overflow → red-bleed fix, the writing-element shrink/centering, and
+        the wax-specific dialog layout + pale-honey theme.)
 
 ## zero-point-three-fixes
 
@@ -2694,6 +2753,14 @@ regression checks specific to this change's scoped-to-the-input approach.
         The original "leave ungrouped → shows side-by-side" plan was backwards. Fix: distinct `recipegroup`
         (trait=1, schematic=2) → two separate grids. Also reshaped schematic to `BGM,S__` (3×2, schematic
         bottom-left) to mirror the trait `BGM` row. Retest: expect TWO grids, trait one asterisked.
+      - **Still broken 2026-08-05** (submission 2026-08-05T08-29-22): the dual grids now render, but the
+        `* Requires Tinkerer trait` asterisk/note is STILL missing from the trait grid. User asked to pull the
+        vanilla Sling handbook entry to compare side by side. This is the SAME root as `297731fd`: the asterisk
+        is driven entirely by `RecipeBase.RequiresTrait` being non-null, and this world has
+        `scribeClockmakerRequiresTrait` set to FALSE, so `ApplyClockmakerTraitGate` nulls it out at load →
+        no asterisk. NEXT: (a) confirm the world config via server log / `/worldconfig`, set it TRUE, restart,
+        and re-check the asterisk; (b) pull `assets/survival/recipes/grid/tool/sling.json` +
+        `SlideshowGridRecipeTextComponent` to walk the Sling asterisk path together.
 - [x] `3e7fce6a` **Quench a hard tablet.** Crouch + right-click a bucket/barrel of water while holding a
       HARD clay tablet → it softens to wet and keeps its document; repeat aimed at an empty/non-water
       container and at open ground → no softening and ground-storage placement still works; confirm a wet
@@ -2713,17 +2780,28 @@ regression checks specific to this change's scoped-to-the-input approach.
         variant code is wrong) every path silently no-ops. Prime suspect: the softened variant code / item
         resolution. Was passing at d6131da1 (2026-08-03) BEFORE the variant-swap rework, so the swap is the
         regression point. Fix + reverify d6131da1 (drop/swim) together with this.
+      - **Confirmed 2026-08-05** (submission 2026-08-05T08-29-22): "Works." Quench softens a hard tablet and
+        keeps its document; empty-container / ground gestures no-op and ground-storage placement still works;
+        wet and fired tablets no-op on the gesture. The 08-04 softening regression is resolved.
 - [x] `f16baa37` **Clay recipe now 12.** Craft a clay tablet of each color and confirm the recipe now
       consumes 12 clay (a 2×3 block) rather than 8 and still yields one tablet; confirm the wax tablet
       recipe is unchanged. *(zero-point-three-fixes 4.4)*
       - **Confirmed 2026-08-04** (submission 2026-08-04T21-28-56): "Works." Clay tablet now costs 12 clay
         and still yields one tablet; wax recipe unchanged.
 
-- [ ] `d6d7f03f` **Backdrop fully opaque.** Open a hand-FIRED and a HARDENED (dried, unfired) clay tablet
+- [x] `d6d7f03f` **Backdrop fully opaque.** Open a hand-FIRED and a HARDENED (dried, unfired) clay tablet
       and confirm the GUI backdrop is fully OPAQUE — no uniform see-through onto the world — at every scroll
       position; then open a wet tablet's editor and a tabbed Lectern/Notebook view and confirm those look
       unchanged. (Requires a full client relaunch after restage.) *(zero-point-three-fixes 4.6)*
+      - **Confirmed 2026-08-04** (submission 2026-08-04T23-16-17): "Looks like it works in all scenarios
+        now!" The `ScribeResetPaintColor` shared-paint reset wrapper fixes the cross-frame color leak —
+        fired and hardened backdrops render fully opaque at every scroll position, and the wet editor +
+        tabbed views are unchanged.
 
-- [ ] `7e15958a` **Tablet lies flat on ground.** Crouch + right-click a tablet onto open ground → it now
+- [x] `7e15958a` **Tablet lies flat on ground.** Crouch + right-click a tablet onto open ground → it now
       lies FLAT, writing face up (slight `y:35` diagonal), NOT standing/rolled on its edge. Check a wet, a
       hard, and a fired tablet; confirm the held/dropped-item render is unchanged. *(zero-point-three-fixes 4.7)*
+      - **Confirmed 2026-08-04** (submission 2026-08-04T23-16-17, general note): "The tablets are now lying
+        flat, and just need to be nudged." The `rotation.z` 90→0 fix lands the tablet flat with the writing
+        face up. Minor remaining polish: the resting position could use a small translation nudge (not a
+        blocker — the orientation defect is fixed).

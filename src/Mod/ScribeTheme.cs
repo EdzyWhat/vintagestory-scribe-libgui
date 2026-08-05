@@ -165,15 +165,20 @@ internal static class ScribeTheme
         background:       new Vector4(0.72f, 0.57f, 0.41f, 1.0f),
         border:           new Vector4(0.36f, 0.24f, 0.12f, 0.55f));
 
-    /// <summary>Red-clay tablet palette — dusty terracotta rose. Seeded to sit against the red
-    /// <c>-soft.png</c> backdrop (sampled center ≈ <c>#aa6f6d</c>): brick-red <c>Primary</c>, deep-maroon
-    /// ink, and a muted rosy-taupe <c>Secondary</c> that stays distinct from the brick accent as a pinned
-    /// wash.</summary>
+    /// <summary>Red-clay tablet palette — dusty rose, NOT brick terracotta. The accent was retuned to match
+    /// the red <c>-soft.png</c> backdrop after playtest: the art's writing panel samples ≈<c>#926f6d</c>
+    /// (HSV ≈3° / 25 % sat — a muted mauve-rose), but the old <c>Primary</c> was a brick-orange
+    /// (HSV ≈9° / 67 % sat) that read too orange and too saturated against it. The accent now sits at
+    /// ≈4° / 50 % sat (<c>#8e4c47</c>) — same rosy family as the backdrop, a shade deeper/more saturated than
+    /// the panel so a button fill still reads as a distinct element. Ink/secondary follow the same hue pull.
+    /// Surfaces already tracked the backdrop and are unchanged. <c>Secondary</c> (the pinned-row wash) stays a
+    /// desaturated rosy-taupe, distinct from the accent so a focused input's accent border reads apart on a
+    /// pinned row.</summary>
     internal static readonly ThemeData TabletRed = ClayPalette(
-        ink:              new Vector4(0.24f, 0.10f, 0.08f, 1.0f),
-        accent:           new Vector4(0.60f, 0.26f, 0.20f, 1.0f),
+        ink:              new Vector4(0.24f, 0.10f, 0.09f, 1.0f),
+        accent:           new Vector4(0.56f, 0.30f, 0.28f, 1.0f),
         onAccent:         new Vector4(0.97f, 0.90f, 0.84f, 1.0f),
-        secondary:        new Vector4(0.46f, 0.32f, 0.30f, 1.0f),
+        secondary:        new Vector4(0.46f, 0.34f, 0.33f, 1.0f),
         surface:          new Vector4(0.82f, 0.62f, 0.58f, 1.0f),
         surfaceLow:       new Vector4(0.72f, 0.52f, 0.49f, 1.0f),
         surfaceHigh:      new Vector4(0.88f, 0.72f, 0.68f, 1.0f),
@@ -196,6 +201,26 @@ internal static class ScribeTheme
         background:       new Vector4(0.66f, 0.73f, 0.78f, 1.0f),
         border:           new Vector4(0.20f, 0.30f, 0.36f, 0.55f));
 
+    /// <summary>Wax tablet palette — pale honey/beeswax, NOT the terracotta the clay palettes use. Wax rode
+    /// <see cref="TabletFire"/> as a stopgap while it shared the fire backdrop, but that terracotta accent
+    /// (HSV ≈22° / 73 % sat) read too orange against the bespoke wax GUI art, whose beige writing panel
+    /// samples ≈<c>#dfc8a9</c> (HSV ≈34° / 24 % sat — a much paler, less saturated warm tan). This palette
+    /// pulls the whole scheme toward that hue: a soft honey <c>Primary</c> at far lower saturation, a warm
+    /// mid-brown ink that still reads on the light panel, and surfaces seeded just off the sampled panel tone
+    /// so the flat-panel fallback and the art agree. Authored through the shared <see cref="ClayPalette"/>
+    /// factory like the three clays, so it inherits the same semantic hover/select inversions and the derived
+    /// muted-text lift.</summary>
+    internal static readonly ThemeData TabletWax = ClayPalette(
+        ink:              new Vector4(0.28f, 0.22f, 0.12f, 1.0f),
+        accent:           new Vector4(0.62f, 0.49f, 0.26f, 1.0f),
+        onAccent:         new Vector4(0.98f, 0.95f, 0.86f, 1.0f),
+        secondary:        new Vector4(0.56f, 0.47f, 0.32f, 1.0f),
+        surface:          new Vector4(0.87f, 0.78f, 0.62f, 1.0f),
+        surfaceLow:       new Vector4(0.80f, 0.70f, 0.53f, 1.0f),
+        surfaceHigh:      new Vector4(0.93f, 0.86f, 0.72f, 1.0f),
+        background:       new Vector4(0.83f, 0.73f, 0.57f, 1.0f),
+        border:           new Vector4(0.44f, 0.34f, 0.18f, 0.55f));
+
     /// <summary>The single theme selector Scribe's core views call: the net-new <see cref="Light"/>
     /// parchment theme when Pixel-Art Display is on, or the player's global theme
     /// (<see cref="ThemeData.Default"/>, loaded from their <c>libgui.json</c> by LibGUI) when it is off.
@@ -204,8 +229,9 @@ internal static class ScribeTheme
 
     /// <summary>The tablet-tier selector: a per-clay-type palette when Pixel-Art Display is on, keyed to the
     /// item's <c>material</c> variant (add-tablet-clay-type-themes D1) — <c>clay-red</c>→<see cref="TabletRed"/>,
-    /// <c>clay-blue</c>→<see cref="TabletBlue"/>, <c>clay-fire</c>→<see cref="TabletFire"/>, and <c>wax</c> or
-    /// any unrecognized material→<see cref="TabletFire"/> (its interim backdrop twin, so the resolved theme
+    /// <c>clay-blue</c>→<see cref="TabletBlue"/>, <c>clay-fire</c>→<see cref="TabletFire"/>,
+    /// <c>wax</c>→<see cref="TabletWax"/> (its own pale-honey palette matched to the bespoke wax GUI art), and
+    /// any unrecognized material→<see cref="TabletFire"/> (the fire backdrop twin, so the resolved theme
     /// and backdrop always agree — mirrors <c>ScribeBackdrops.ForTablet</c>'s default arm). When Pixel-Art
     /// Display is off it returns the player's global theme (<see cref="ThemeData.Default"/>), same off-path
     /// rule as <see cref="For"/> — per-clay coloring applies ONLY with Pixel-Art on. The tablet dialog calls
@@ -218,7 +244,8 @@ internal static class ScribeTheme
             "clay-blue" => TabletBlue,
             "clay-fire" => TabletFire,
             "clay-red" => TabletRed,
-            _ => TabletFire, // wax + any unrecognized material ride the fire palette (its backdrop twin)
+            "wax" => TabletWax, // bespoke pale-honey palette matched to the wax GUI art (not the fire twin)
+            _ => TabletFire, // any unrecognized material rides the fire palette (its backdrop twin)
         };
     }
 }
