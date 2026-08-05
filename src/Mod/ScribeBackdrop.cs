@@ -99,10 +99,10 @@ internal static class ScribeBackdrops
     /// <summary>Fired fire-clay tablet page — authored kiln-fired ceramic art (its own PNG, no tint).</summary>
     public static readonly ScribeBackdropSpec ClayFireFired = new(Clay("fire", "fired"));
 
-    /// <summary>The wax tablet page. No bespoke wax art exists yet, so this reuses the warm fire-clay
-    /// soft art as an interim placeholder (closest in tone to beeswax); it swaps to real diptych art
-    /// later.</summary>
-    public static readonly ScribeBackdropSpec Wax = new(Clay("fire", "soft"));
+    /// <summary>The wax tablet page — bespoke authored wax art (its own PNG, no tint), replacing the
+    /// earlier fire-clay-soft placeholder.</summary>
+    public static readonly ScribeBackdropSpec Wax =
+        new(new AssetLocation("scribe", "textures/gui/scribe-wax-tablet.png"));
 
     /// <summary>Select the tablet backdrop for a stack's <c>material</c> variant + drying <c>state</c>, in
     /// ONE place so the item and its dialog agree on the mapping (add-tablet-dialog D6, add-tablet-firing-

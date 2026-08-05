@@ -1,0 +1,526 @@
+{
+ "editor": {
+  "allAngles": false,
+  "entityTextureMode": false
+ },
+ "textureWidth": 32,
+ "textureHeight": 32,
+ "textureSizes": {
+  "writing": [
+   16,
+   16
+  ],
+  "scribe-wax-32": [
+   32,
+   32
+  ]
+ },
+ "textures": {
+  "writing": "writing",
+  "scribe-wax-32": "scribe-wax-32"
+ },
+ "elements": [
+  {
+   "name": "root",
+   "from": [
+    0,
+    0,
+    0
+   ],
+   "to": [
+    0,
+    0,
+    0
+   ],
+   "faces": {},
+   "children": [
+    {
+     "name": "tablet1",
+     "from": [
+      6.5,
+      0.1,
+      6.5
+     ],
+     "to": [
+      9.5,
+      0.9,
+      10.5
+     ],
+     "rotationOrigin": [
+      16,
+      0.5,
+      17.75
+     ],
+     "faces": {
+      "north": {
+       "texture": "#default",
+       "uv": [
+        0,
+        0,
+        2,
+        2
+       ],
+       "enabled": false,
+       "snapUv": false,
+       "autoUv": false
+      },
+      "east": {
+       "texture": "#default",
+       "uv": [
+        0,
+        0,
+        2,
+        2
+       ],
+       "enabled": false,
+       "snapUv": false,
+       "autoUv": false
+      },
+      "south": {
+       "texture": "#default",
+       "uv": [
+        0,
+        0,
+        2,
+        2
+       ],
+       "enabled": false,
+       "snapUv": false,
+       "autoUv": false
+      },
+      "west": {
+       "texture": "#default",
+       "uv": [
+        0,
+        0,
+        2,
+        2
+       ],
+       "enabled": false,
+       "snapUv": false,
+       "autoUv": false
+      },
+      "up": {
+       "texture": "#scribe-wax-32",
+       "uv": [
+        3,
+        3.2182,
+        29,
+        31
+       ]
+      },
+      "down": {
+       "texture": "#scribe-wax-32",
+       "uv": [
+        3,
+        3.109,
+        29,
+        30.8908
+       ]
+      }
+     }
+    },
+    {
+     "name": "writing1",
+     "from": [
+      6.5,
+      0.9,
+      6.5
+     ],
+     "to": [
+      9.5,
+      1.05,
+      10.5
+     ],
+     "rotationOrigin": [
+      9,
+      0.5,
+      8
+     ],
+     "faces": {
+      "north": {
+       "texture": "#default",
+       "uv": [
+        0,
+        0,
+        2,
+        2
+       ],
+       "enabled": false,
+       "snapUv": false,
+       "autoUv": false
+      },
+      "east": {
+       "texture": "#default",
+       "uv": [
+        0,
+        0,
+        2,
+        2
+       ],
+       "enabled": false,
+       "snapUv": false,
+       "autoUv": false
+      },
+      "south": {
+       "texture": "#default",
+       "uv": [
+        0,
+        0,
+        2,
+        2
+       ],
+       "enabled": false,
+       "snapUv": false,
+       "autoUv": false
+      },
+      "west": {
+       "texture": "#default",
+       "uv": [
+        0,
+        0,
+        2,
+        2
+       ],
+       "enabled": false,
+       "snapUv": false,
+       "autoUv": false
+      },
+      "up": {
+       "texture": "#writing",
+       "uv": [
+        6.4,
+        5.8182,
+        25.6,
+        26.1818
+       ]
+      },
+      "down": {
+       "texture": "#default",
+       "uv": [
+        0,
+        0,
+        2,
+        2
+       ],
+       "enabled": false,
+       "snapUv": false,
+       "autoUv": false
+      }
+     }
+    },
+    {
+     "name": "tablet2",
+     "from": [
+      6,
+      0,
+      10.5
+     ],
+     "to": [
+      10,
+      1,
+      11
+     ],
+     "rotationOrigin": [
+      14,
+      0.5,
+      17.75
+     ],
+     "faces": {
+      "north": {
+       "texture": "#scribe-wax-32",
+       "uv": [
+        1,
+        1,
+        9,
+        3
+       ]
+      },
+      "east": {
+       "texture": "#scribe-wax-32",
+       "uv": [
+        0,
+        0,
+        1,
+        2
+       ]
+      },
+      "south": {
+       "texture": "#scribe-wax-32",
+       "uv": [
+        0,
+        0,
+        8,
+        2
+       ]
+      },
+      "west": {
+       "texture": "#scribe-wax-32",
+       "uv": [
+        1,
+        1,
+        2,
+        3
+       ]
+      },
+      "up": {
+       "texture": "#scribe-wax-32",
+       "uv": [
+        9,
+        0,
+        17,
+        1
+       ]
+      },
+      "down": {
+       "texture": "#scribe-wax-32",
+       "uv": [
+        18,
+        1,
+        26,
+        2
+       ]
+      }
+     }
+    },
+    {
+     "name": "tablet3",
+     "from": [
+      6,
+      0,
+      6
+     ],
+     "to": [
+      10,
+      1,
+      6.5
+     ],
+     "rotationOrigin": [
+      14,
+      0.5,
+      17.75
+     ],
+     "faces": {
+      "north": {
+       "texture": "#scribe-wax-32",
+       "uv": [
+        8,
+        0,
+        18,
+        2
+       ]
+      },
+      "east": {
+       "texture": "#scribe-wax-32",
+       "uv": [
+        29,
+        0,
+        30,
+        2
+       ]
+      },
+      "south": {
+       "texture": "#scribe-wax-32",
+       "uv": [
+        3,
+        0,
+        29,
+        2
+       ]
+      },
+      "west": {
+       "texture": "#scribe-wax-32",
+       "uv": [
+        1,
+        0,
+        3,
+        2
+       ]
+      },
+      "up": {
+       "texture": "#scribe-wax-32",
+       "uv": [
+        0,
+        0,
+        8,
+        1
+       ]
+      },
+      "down": {
+       "texture": "#scribe-wax-32",
+       "uv": [
+        14,
+        0,
+        22,
+        1
+       ]
+      }
+     }
+    },
+    {
+     "name": "tablet4",
+     "from": [
+      6,
+      0,
+      6.5
+     ],
+     "to": [
+      6.5,
+      1,
+      10.5
+     ],
+     "rotationOrigin": [
+      14,
+      0.5,
+      18.75
+     ],
+     "faces": {
+      "north": {
+       "texture": "#default",
+       "uv": [
+        0,
+        0,
+        2,
+        2
+       ],
+       "enabled": false,
+       "snapUv": false,
+       "autoUv": false
+      },
+      "east": {
+       "texture": "#default",
+       "uv": [
+        0,
+        0,
+        2,
+        2
+       ],
+       "enabled": false,
+       "snapUv": false,
+       "autoUv": false
+      },
+      "south": {
+       "texture": "#default",
+       "uv": [
+        0,
+        0,
+        2,
+        2
+       ],
+       "enabled": false,
+       "snapUv": false,
+       "autoUv": false
+      },
+      "west": {
+       "texture": "#scribe-wax-32",
+       "uv": [
+        22,
+        0,
+        30,
+        2
+       ]
+      },
+      "up": {
+       "texture": "#scribe-wax-32",
+       "uv": [
+        1,
+        4,
+        2,
+        12
+       ]
+      },
+      "down": {
+       "texture": "#scribe-wax-32",
+       "uv": [
+        1,
+        11,
+        2,
+        19
+       ]
+      }
+     }
+    },
+    {
+     "name": "tablet5",
+     "from": [
+      9.5,
+      0,
+      6.5
+     ],
+     "to": [
+      10,
+      1,
+      10.5
+     ],
+     "rotationOrigin": [
+      18,
+      0.5,
+      18.75
+     ],
+     "faces": {
+      "north": {
+       "texture": "#default",
+       "uv": [
+        0,
+        0,
+        2,
+        2
+       ],
+       "enabled": false,
+       "snapUv": false,
+       "autoUv": false
+      },
+      "east": {
+       "texture": "#scribe-wax-32",
+       "uv": [
+        23,
+        0,
+        31,
+        2
+       ]
+      },
+      "south": {
+       "texture": "#default",
+       "uv": [
+        0,
+        0,
+        2,
+        2
+       ],
+       "enabled": false,
+       "snapUv": false,
+       "autoUv": false
+      },
+      "west": {
+       "texture": "#scribe-wax-32",
+       "uv": [
+        18,
+        0,
+        26,
+        2
+       ]
+      },
+      "up": {
+       "texture": "#scribe-wax-32",
+       "uv": [
+        0.2,
+        4,
+        1.2,
+        12
+       ]
+      },
+      "down": {
+       "texture": "#scribe-wax-32",
+       "uv": [
+        1,
+        10,
+        2,
+        18
+       ]
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

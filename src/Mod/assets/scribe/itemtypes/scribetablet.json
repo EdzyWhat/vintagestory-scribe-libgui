@@ -51,7 +51,7 @@
 		}
 	},
 	"shapeByType": {
-		"*-wax": { "base": "game:block/clutter/tablet-clay1" },
+		"*-wax": { "base": "scribe:item/tablet-wax" },
 		"*-clay-*": { "base": "scribe:item/tablet-clay" }
 	},
 	"transitionablePropsByType": {
@@ -83,7 +83,7 @@
 		"*-clay-red-fired":  { "default": { "base": "scribe:items/rf" }, "ff": { "base": "scribe:items/rf" }, "writing": { "base": "scribe:items/writing" } },
 		"*-clay-blue-fired": { "default": { "base": "scribe:items/bf" }, "ff": { "base": "scribe:items/bf" }, "writing": { "base": "scribe:items/writing" } },
 		"*-clay-fire-fired": { "default": { "base": "scribe:items/ff" }, "ff": { "base": "scribe:items/ff" }, "writing": { "base": "scribe:items/writing" } },
-		"*-wax":             { "ceramic": { "base": "game:block/clay/aged-ceramic1" }, "writing": { "base": "game:block/overlay/writing" } }
+		"*-wax":             { "default": { "base": "scribe:items/scribe-wax-32" }, "scribe-wax-32": { "base": "scribe:items/scribe-wax-32" }, "writing": { "base": "scribe:items/writing" } }
 	},
 	"guiTransform": {
 		"translation": { "x": 10.204777, "y": -12.232302, "z": 0 },
