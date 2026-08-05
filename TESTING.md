@@ -126,7 +126,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Backlogged 2026-08-03** the jitter-strength / progression-enable client setting (task 6) is
         not built yet — there's no in-game way to set jitter to 0, so this can't be exercised until
         those knobs land.
-- [ ] `06cddc5a` **Ghost lead-in verdict.** With cuneiform on, watch a fresh word form and judge the
+- [x] `06cddc5a` **Ghost lead-in verdict.** With cuneiform on, watch a fresh word form and judge the
       ghost lead-in stroke that precedes each glyph — keep it only if it reads well, otherwise confirm
       it stays off by default. A pure look-and-feel keep/cut call. *(add-cuneiform-handwriting-feel 7.7)*
       - **Still broken 2026-08-05** (submission 2026-08-05T08-29-22): the ghost lead-in isn't visible at all.
@@ -135,16 +135,15 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         Observed: with press-in progressively adding strokes, nothing ghosts ahead — no low-opacity preview
         shows. Needs the ghost layer to render the full typed text immediately (decoupled from the press-in
         progression) rather than lagging behind it.
-      - **Still broken 2026-08-05** (now IMPLEMENTED, awaiting retest): the ghost lead-in was spec'd (task 5.1)
-        but had never been built — the change shipped the plain progressive fill first and deferred the ghost.
-        Implemented it in `ScribeCuneiformField.cs`: while the reveal is active, a new `StrokePass.Ghost` pass
-        paints the NOT-yet-pressed strokes (the complement of the crisp reveal set) once at low alpha
-        (`GhostLeadInOpacity = 0.28`), so the full typed word shows immediately and the crisp press-in catches up
-        to it — the expanded playtest ask (whole tail, not just the current letter). Centralized in the shared
-        render object, so it covers BOTH the multiline editor and the single-line title field. Gated by the same
-        reveal state as the press-in (no separate setting); no halo on the ghost. Retest with cuneiform +
-        stroke-progression ON: type a word quickly and confirm a faint full-word preview leads the filled
-        strokes. Fully relaunch the client first.
+      - **Confirmed 2026-08-05** (user report): "The ghost/preview works!" Implemented the ghost lead-in in
+        `ScribeCuneiformField.cs` — it had been spec'd (task 5.1) but never built; the change shipped the plain
+        progressive fill first and deferred the ghost. While the reveal is active, a new `StrokePass.Ghost` pass
+        paints the NOT-yet-pressed strokes (the complement of the crisp reveal set) once at low alpha, so the
+        full typed word shows immediately and the crisp press-in catches up — the expanded playtest ask (whole
+        tail, not just the current letter). Centralized in the shared render object, so it covers BOTH the
+        multiline editor and the single-line title field. Gated by the same reveal state as the press-in (no
+        separate setting); no halo on the ghost. Opacity tuned in-game from 0.28 → `GhostLeadInOpacity = 0.22`
+        (0.28 read a touch too strong).
 
 ## arrow-key-line-caret-nav
 

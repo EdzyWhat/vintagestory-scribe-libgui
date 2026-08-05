@@ -89,7 +89,7 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     /// so the full typed word is visible immediately and the crisp progressive fill catches up to it — the
     /// playtest ask ("a fast typist sees the whole word ahead"). It reuses the same reveal gate as the press-in,
     /// so it only shows when stroke-progression is on; there is no separate setting. 0 would disable the ghost.</summary>
-    private const float GhostLeadInOpacity = 0.28f;
+    private const float GhostLeadInOpacity = 0.22f;
 
     // Cached from the last PerformLayout, reused by PaintInternal and the geometry queries so layout,
     // paint, caret, and hit-testing all agree on the same wrapped lines.

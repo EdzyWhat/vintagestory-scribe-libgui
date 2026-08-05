@@ -57,10 +57,10 @@
   filled pressings. Shipped the plain progressive fill first; this adds the ghost. SCOPE EXPANDED per the
   2026-08-05 playtest: the ghost paints the WHOLE not-yet-pressed tail (all remaining strokes), not just the
   currently-animating letter, so a fast typist sees the full word immediately with the crisp fill catching up.
-  Implemented as a `StrokePass.Ghost` pass in `ScribeCuneiformField.cs` at `GhostLeadInOpacity = 0.28`, over
-  the exact complement of the crisp reveal set (no double-draw), centralized so it covers the multiline editor
-  AND the title field. Final appearance matches the no-ghost result once every stroke presses in (the tail
-  empties → ghost draws nothing). In-game evaluation is task 7.7.
+  Implemented as a `StrokePass.Ghost` pass in `ScribeCuneiformField.cs` at `GhostLeadInOpacity = 0.22` (tuned
+  in-game from 0.28), over the exact complement of the crisp reveal set (no double-draw), centralized so it
+  covers the multiline editor AND the title field. Final appearance matches the no-ghost result once every
+  stroke presses in (the tail empties → ghost draws nothing). Confirmed 2026-08-05 (7.7).
 
 ## 6. Client config (Mod)
 
@@ -91,5 +91,6 @@
 - [x] 7.5 In-game: delete/edit mid-line; confirm text snaps to the new state with no reverse animation.
   — Confirmed 2026-08-03 playtest (`8fccf5a0`).
 - [ ] 7.6 In-game: set jitter 0 + progression off; confirm rendering is identical to current crisp behaviour.
-- [ ] 7.7 In-game (if built): evaluate the ghost lead-in; keep only if it reads well, else leave it off by
-  default.
+- [x] 7.7 In-game: evaluate the ghost lead-in; keep only if it reads well, else leave it off by default.
+  — Confirmed 2026-08-05 playtest ("the ghost/preview works!"). Opacity tuned 0.28 → 0.22 to read as a
+  subtle lead-in. Kept on whenever stroke-progression is on (no separate setting).
