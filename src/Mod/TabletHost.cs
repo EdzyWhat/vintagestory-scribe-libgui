@@ -24,16 +24,32 @@ namespace Scribe;
 /// </summary>
 public sealed class TabletHost : NotebookHost
 {
+    /// <summary>The player's held tablet slot, kept so <see cref="Policy"/> can read the live stack's
+    /// hard/fired state. The base <see cref="NotebookHost"/> keeps its own private copy for its
+    /// write-through; this is a second reference to the same slot (no new state, just visibility).</summary>
+    private readonly ItemSlot _slot;
+
     /// <param name="slot">The player's held tablet slot. Passed straight to the base
     /// <see cref="NotebookHost"/> ctor, which reads/initializes the document + history on the stack.</param>
     /// <param name="backdrop">Interim backdrop; defaults to the notebook page since this change reuses the
     /// notebook dialog. Proposal C passes the tablet's own backdrop.</param>
-    public TabletHost(ItemSlot slot, ScribeBackdropSpec? backdrop = null) : base(slot, backdrop) { }
+    public TabletHost(ItemSlot slot, ScribeBackdropSpec? backdrop = null) : base(slot, backdrop)
+    {
+        _slot = slot;
+    }
 
     public override string DefaultDocumentTitle => "Tablet";
 
-    /// <summary>The scratch-tier cap enforced at the editor mutation boundary: 10 task blocks, 1 pin.</summary>
-    public override ScribeDocumentPolicy Policy => ScribeDocumentPolicy.Tablet;
+    /// <summary>The document policy enforced at the editor's add/pin mutation boundary. A WET tablet reports
+    /// the scratch-tier cap (10 task blocks, 1 pin); a HARD or FIRED tablet reports
+    /// <see cref="ScribeDocumentPolicy.UneditableTablet"/> so <c>CanAdd</c>/<c>CanPin</c> deny outright
+    /// (tablet-firing Decision 8). This is the policy half of the same read-only switch the dialog keys off
+    /// <see cref="ItemScribeTablet.IsEditable"/> — belt-and-suspenders with the dialog dropping every edit
+    /// affordance, so a mutation can't slip through even if some path reached the boundary.</summary>
+    public override ScribeDocumentPolicy Policy =>
+        ItemScribeTablet.IsEditable(_slot.Itemstack)
+            ? ScribeDocumentPolicy.Tablet
+            : ScribeDocumentPolicy.UneditableTablet;
 
     /// <summary>Re-proportion the tablet dialog to fill more of the clay: a shorter title band
     /// (<c>0.11</c> vs the <c>0.13</c> default), a taller scrolling inner section (<c>0.83</c> vs

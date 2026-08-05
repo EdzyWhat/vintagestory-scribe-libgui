@@ -47,15 +47,31 @@ public class GuiDialogScribeTablet : ScribeDialogBase
     /// dialog is opened without a known material; the theme selector then falls back to the fire palette.</summary>
     private readonly string? _material;
 
-    public GuiDialogScribeTablet(IScribeDocumentHost host, ICoreClientAPI capi, string? material = null)
+    /// <summary>The tablet's drying state (wet/hard/fired), threaded from the item's open path. A WET tablet
+    /// is the always-edit surface; a HARD or FIRED tablet opens read-only (tablet-firing). Drives
+    /// <see cref="IsEditable"/>, the read-only affordance suppression, and the empty-state message wording.</summary>
+    private readonly TabletState _state;
+
+    /// <summary>Whether this tablet is editable: only a WET tablet. A hard tablet is read-only until
+    /// rehydrated; a fired tablet is permanently read-only (tablet-firing Decision 5). The single resolve
+    /// point every read-only branch below keys off.</summary>
+    private bool IsEditable => _state == TabletState.Wet;
+
+    public GuiDialogScribeTablet(IScribeDocumentHost host, ICoreClientAPI capi, string? material = null,
+        TabletState state = TabletState.Wet)
         : base(new BlockPos(0), host, capi)
     {
         _material = material;
+        _state = state;
 
-        // Always-edit: seed the editor scratch from the current document NOW, before TryOpen calls Build()
-        // (GuiBase.TryOpen inflates the tree before OnGuiOpened runs). Mirrors the Notebook's immediate
-        // grant — there is no lock to wait on for an item-hosted document.
-        EnterEditorMode(ScribeDocumentCodec.Serialize(host.Document));
+        // Wet tablet = always-edit: seed the editor scratch from the current document NOW, before TryOpen
+        // calls Build() (GuiBase.TryOpen inflates the tree before OnGuiOpened runs). Mirrors the Notebook's
+        // immediate grant — there is no lock to wait on for an item-hosted document. A hard/fired tablet
+        // stays in the base's default Read view (scratch null), so it never enters editor mode.
+        if (IsEditable)
+        {
+            EnterEditorMode(ScribeDocumentCodec.Serialize(host.Document));
+        }
 
         capi.Event.AfterActiveSlotChanged += OnActiveSlotChanged;
         _hotbar = capi.World.Player.InventoryManager.GetOwnInventory(GlobalConstants.hotBarInvClassName);
@@ -67,12 +83,29 @@ public class GuiDialogScribeTablet : ScribeDialogBase
     /// a block position, so distance must never auto-close it (matches the Notebook).</summary>
     protected override double InteractionRange => double.MaxValue;
 
-    protected override string EmptyHintLangKey => "scribe:scribe-gui-edit-hint-tablet";
+    /// <summary>The centered empty-document message. A WET tablet shows the editable "write here" hint; a
+    /// read-only tablet's empty document (e.g. pulled blank from Creative, or fired without writing) shows a
+    /// state-appropriate line instead of an empty task list, so it reads as intentional rather than broken
+    /// (tablet-firing Decision 6): dried → "dunk in water to edit", fired → "fired without writing".</summary>
+    protected override string EmptyHintLangKey => _state switch
+    {
+        TabletState.Fired => "scribe:tablet-fired-empty",
+        TabletState.Hard  => "scribe:tablet-hard-empty",
+        _                                 => "scribe:scribe-gui-edit-hint-tablet",
+    };
 
-    /// <summary>The tablet grants editor access immediately without a server round-trip (item-hosted, no
-    /// lock contention). Seeds the scratch from the host's current document.</summary>
+    /// <summary>A hard or fired tablet is a permanently-read-only surface: the read view drops its "switch
+    /// to editor" footer button and its rows' checkbox/pin go inert (tablet-firing task 5.2).</summary>
+    private protected override bool ReadViewIsReadOnly => !IsEditable;
+
+    /// <summary>A WET tablet grants editor access immediately without a server round-trip (item-hosted, no
+    /// lock contention), seeding the scratch from the host's current document. A HARD or FIRED tablet is
+    /// read-only: this is a hard no-op, so even if some path tried to enter the editor (there is none — no
+    /// nav column, no read-view "switch to editor" button), a set tablet can never become editable
+    /// (tablet-firing read-only audit, task 5.2).</summary>
     protected override void RequestEditorAccess()
     {
+        if (!IsEditable) return;
         EnterEditorMode(ScribeDocumentCodec.Serialize(host.Document));
     }
 
@@ -231,7 +264,8 @@ public class GuiDialogScribeTablet : ScribeDialogBase
     /// (add-tablet-dialog D2/D4); its rows type in live cuneiform via <see cref="DecorateRowStyle"/>, and the
     /// title itself renders in cuneiform through the base title bar. Task add/edit/check/pin keep working
     /// under the tablet's 10-task / 1-pin policy.</summary>
-    protected override Widget BuildCentralRegion() => BuildEditorContent();
+    protected override Widget BuildCentralRegion() =>
+        IsEditable ? BuildEditorContent() : BuildReadContent();
 
     private void OnActiveSlotChanged(ActiveSlotChangeEventArgs _)
     {

@@ -23,13 +23,17 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 
 ## tune-tablet-clay-text-contrast
 
-- [ ] `fa4e26e8` **Empty-tablet hint legible.** Open a red, a blue, and a fire tablet with an empty
+- [x] `fa4e26e8` **Empty-tablet hint legible.** Open a red, a blue, and a fire tablet with an empty
       task list and Pixel-Art Display ON; confirm the empty-list hint text reads legibly against all
       three clay backdrops (especially blue, the one cool palette). *(4.1)*
-- [ ] `ce460e26` **Muted stays secondary.** Confirm the muted/hint text still reads as secondary
+      - **Confirmed 2026-08-04** via playtest submission (2026-08-04T17-53-45): "Works." Empty-list
+        hint legible on all three clay backdrops at the derived muted role (lift +14).
+- [x] `ce460e26` **Muted stays secondary.** Confirm the muted/hint text still reads as secondary
       (clearly weaker than body ink) on all three clay tablets — it must not approach body-ink weight
       and collapse the hierarchy. Finalize `MutedTextValueLift` (seeded 14) and record it in design D3;
       re-run the gallery export if the final value differs. *(4.2/4.3)*
+      - **Confirmed 2026-08-04** via playtest submission (2026-08-04T17-53-45): "Works." Muted text
+        still reads as secondary; `MutedTextValueLift = 14` finalized at its seed (no re-export needed).
 
 ## replace-drag-wash-with-grip-arrows
 
@@ -2298,17 +2302,27 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [ ] `e093c2ad` **Carryover via schematic.** Craft the Clockmaker's Notebook via the schematic recipe
       from a Notebook that already has tasks/notes/History — confirm the document and History carry into
       the result. *(add-clockmaker-notebook-schematic 2.5)*
+      - **Still broken 2026-08-04** via playtest submission (2026-08-04T17-53-45): the schematic recipe
+        isn't discoverable — the Clockmaker's Notebook handbook entry shows ONLY the single 3-ingredient
+        recipe, with no indication it's Tinkerer-gated and no sign the schematic does anything. Player
+        wants the handbook to show TWO visible recipes on the entry (like the Sling page): a schematic
+        recipe, and a no-schematic recipe with an asterisk marking the Tinkerer-trait requirement. Needs
+        a proposal (see the two queued proposals below).
 - [x] `2a7c88a0` **Patch loads clean.** Check the game log on boot — confirm no "could not find
       file/path" warning for trader-commodities or trader-treasurehunter tradelists (the ware patch
       resolved). *(add-clockmaker-notebook-schematic 3.2)*
       - **Confirmed 2026-08-02** via playtest submission (2026-08-02T12-40-23): no missing-file/path
         warning for the trader tradelist patches on boot.
-- [ ] `0efc1fa5` **Traders sell it.** Spawn fresh Commodities and Treasure Hunter traders (already-
+- [x] `0efc1fa5` **Traders sell it.** Spawn fresh Commodities and Treasure Hunter traders (already-
       spawned ones won't restock immediately) and check stock until the schematic appears — confirm the
       gear price/stock look right and buying it yields a working schematic. Note it's a probabilistic
       appearance. *(add-clockmaker-notebook-schematic 3.3)*
-- [ ] `7d43b5d3` **Other traders exclude it.** Check a non-target trader (e.g. Survival Goods or
+      - **Confirmed 2026-08-04** via playtest submission (2026-08-04T17-53-45): "Works." Schematic
+        appears in Commodities/Treasure Hunter stock and buying it yields a working schematic.
+- [x] `7d43b5d3` **Other traders exclude it.** Check a non-target trader (e.g. Survival Goods or
       Artisan) and confirm the schematic is NOT in its wares. *(add-clockmaker-notebook-schematic 3.4)*
+      - **Confirmed 2026-08-04** via playtest submission (2026-08-04T17-53-45): "Correct." Non-target
+        traders do not carry the schematic.
 
 ## add-tablet-cuneiform-chrome
 
@@ -2580,3 +2594,114 @@ regression checks specific to this change's scoped-to-the-input approach.
       - **Confirmed 2026-08-03** (playtest submission 2026-08-03T15-45-38): "Perfect." Single-line row
         height holds across focus↔unfocus; the focused input's border sits inside the pinned-row wash
         without clipping — the input box and the pinned wash read as two distinct shapes.
+
+## add-tablet-firing-mechanic
+
+- [ ] `1d20ffc0` **Dry to hard.** Hold or drop a WET clay tablet that has a few tasks/notes and let it sit
+      ~2 in-game days; confirm it becomes a hard tablet that KEEPS its tasks/notes/title, opens read-only,
+      and shows the dried (hard) backdrop. *(add-tablet-firing-mechanic 8.2)*
+      - **Still broken 2026-08-03:** (submission 2026-08-03T21-30-46) the hardening/read-only transition
+        works but the hard backdrop does NOT render as a normal opaque page — appears to be the hard.png
+        drawn at very low opacity. Backdrop-render issue, not a state issue.
+      - **Fix applied 2026-08-04 (awaiting retest):** root cause found — a shared-paint COLOR leak, not a
+        low-opacity texture. `PaintingContext.SharedPaint` is one `SKPaint` reused across draws and frames;
+        `DrawMaskedBox` (the clay-texture draw) is the one framework op that reuses `SharedPaint.Color`
+        without re-setting it, and `DrawBitmap` modulates the texture by that color's alpha. The cuneiform
+        row widgets restored the paint Color they inherited — which was the resting row box's alpha-0
+        `boxColor` — so on a read-only tablet (footer button/divider dropped) the last op each frame left
+        the shared paint at alpha 0, and the next frame's backdrop rendered transparent. Only data-bearing
+        tablets hit it (empty tablets draw the hint as opaque `Text`, never reaching the glow teardown) —
+        matching the playtest clue exactly. Fixed by leaving the shared paint OPAQUE white on teardown in
+        both `ScribeCuneiformField.cs` and `CuneiformText.cs` (the neutral every sibling draw sets). Retest
+        the SAME repro (dry a tablet with tasks; also fire a tablet with tasks — 2610/2618 companions).
+      - **Still broken 2026-08-04** (submission 2026-08-04T21-28-56): "the underlying technical behavior of
+        the hardening works. But when last tested, it still produces the transparent GUI background." The
+        White-teardown fix is confirmed present in the STAGED Scribe.dll yet the bug persists — so that
+        diagnosis was incomplete. RE-DIAGNOSED with measurement: the backdrop is ~uniformly semi-transparent
+        (alpha ~0.2), NOT a texture-alpha issue (soft/hard/fired PNGs measured byte-identical alpha profiles)
+        and NOT only the earlier alpha-0 Color leak. Real cause: `PaintingContext.DrawBox` sets
+        `SharedPaint.Color` and never resets it on exit (Gui.dll:23038/23052); `SharedPaint` persists across
+        frames (`Reset` doesn't clear Color); the backdrop's `DrawMaskedBox` (first op each frame) modulates
+        the bitmap by the leftover color. On the read-only tablet the LAST box painted each frame is the
+        always-on scrollbar track (theme default alpha=0.1) — the wet editor & tabbed read view paint an
+        opaque footer Button last, so they never leak. Fix pending.
+- [ ] `d6131da1` **Rehydrate both ways.** Take a hard tablet and (a) drop it into water, then (b) swim while
+      holding it as the active item; confirm EACH returns it to wet + editable, keeps the document, and
+      restarts the dry-out timer. *(add-tablet-firing-mechanic 8.3)*
+      - **Confirmed 2026-08-03** (submission 2026-08-03T21-30-46): "Both work." Drop-in-water and
+        swim-while-holding each soften the hard tablet back to wet + editable.
+      - **Still broken 2026-08-04** (submission 2026-08-04T21-28-56, reported under 3e7fce6a): REGRESSED —
+        no softening method works anymore (drop-in-water, swim-while-holding, or quench). Regression point is
+        the variant-swap rework (state moved from a stack attribute to the material variant): `Soften` now
+        rebuilds the soft-variant item via `world.GetItem(CodeWithVariant("material", material))` and every
+        path no-ops if that resolves null. Fix once, reverify all three paths.
+- [x] `879acfb4` **Fire in a firepit.** Fire an unfired tablet — try one WET and one HARD — in a firepit;
+      confirm each becomes a fired tablet that keeps its content, opens read-only, and shows the fired
+      backdrop with the correct per-type tint. *(add-tablet-firing-mechanic 8.4)*
+      - **Still broken 2026-08-03:** (submission 2026-08-03T21-30-46) the firepit refuses the tablet —
+        "Can't smelt, requires a kiln." Clay combustibleProps route to the PIT KILN, not the firepit.
+      - **Confirmed 2026-08-04** (submission 2026-08-04T21-28-56): "Confirmed working in firepit." The
+        earlier "requires a kiln" refusal is resolved; firing keeps content and opens read-only. (Note the
+        fired backdrop's tint reads through the transparency bug tracked under 1d20ffc0 until that lands.)
+- [x] `0e59b606` **Variant + wax exclusion.** Fire a blue tablet and confirm it stays blue (→ fired blue);
+      confirm a WAX tablet neither fires in a firepit nor dries out over time. *(add-tablet-firing-mechanic 8.5)*
+      - **Untested 2026-08-03:** (submission 2026-08-03T21-30-46) blocked behind the 8.4 firing failure.
+      - **Confirmed 2026-08-04** (submission 2026-08-04T21-28-56): "The exclusion works." Blue stays blue
+        through firing and wax neither fires nor dries.
+- [x] `8d653ddd` **Creative blank empties.** Pull a FIRED clay tablet and a HARD clay tablet from Creative
+      Inventory; confirm each opens blank + uneditable with its own centered empty-state message
+      (fired-without-writing vs dried-dunk-to-edit). *(add-tablet-firing-mechanic 8.6)*
+      - **Confirmed 2026-08-04** via playtest submission (2026-08-04T17-53-45): "Works. Each visible as
+        its own variant." The 2026-08-03 scope-drift blocker is resolved — hard/fired are now registered
+        material variants (wire-tablet-clay-art-and-variants), so each is pullable from Creative and opens
+        blank + uneditable with its own centered empty-state message.
+- [x] `5261a22e` **Read-only guards.** Confirm a fired tablet can't be re-fired, can't rehydrate in water,
+      and can't be edited by ANY affordance; confirm a hard tablet stays uneditable until rehydrated.
+      *(add-tablet-firing-mechanic 8.7)*
+      - **Confirmed 2026-08-04** via playtest submission (2026-08-04T17-53-45): "Works." Fired tablet
+        can't be re-fired, doesn't rehydrate, and has no edit affordance; hard tablet stays uneditable
+        until rehydrated.
+
+## wire-tablet-clay-art-and-variants
+
+- [x] `87e944e4` **Nine variants render distinct.** Pull each of the nine clay variants from Creative
+      and confirm each renders the `item/tablet-clay` model with its own color+state texture (red/blue/fire
+      × soft/hard/fired all distinct); wax still shows the placeholder. *(wire-tablet-clay-art-and-variants 5.2)*
+      - **Confirmed 2026-08-04** (submission 2026-08-04T21-28-56): "Beautiful! They're all there." All nine
+        clay variants render with distinct color+state textures.
+- [x] `7173d530` **Hard/fired listed, no recipe.** Confirm the six `-hard`/`-fired` variants each appear
+      in the handbook and Creative search with correct names, and none has a crafting recipe.
+      *(wire-tablet-clay-art-and-variants 5.6)*
+      - **Confirmed 2026-08-04** (submission 2026-08-04T21-28-56): "Works! Love the detail." All six
+        `-hard`/`-fired` variants appear with correct names and none carries a recipe.
+
+## zero-point-three-fixes
+
+- [ ] `89f55f28` **Schematic craftable + dual handbook.** Craft the Clockmaker's Notebook via the schematic
+      recipe (2×2 block) on a non-Clockmaker; then open the Notebook handbook and confirm TWO separate
+      "Created by" grids show — the trait one carrying the `* Requires Tinkerer trait` asterisk and the
+      schematic one none. *(zero-point-three-fixes 4.2)*
+      - **Still broken 2026-08-04** (submission 2026-08-04T21-28-56): "Two grids do not show." The schematic
+        recipe is craftable but only ONE "Created by" grid renders. User confirms the intent: emulate the
+        Sling model — TWO separate grids, one with the Clockmaker/Tinkerer trait + no schematic (with the
+        `* Requires ... trait` asterisk), one without the trait + WITH the schematic. Current recipes must be
+        sharing a `recipegroup` (which cycles into one grid) or the handbook isn't rendering both. NOTE: user
+        ALSO wants the schematic recipe reshaped from 2×2 to 1×3 with the schematic on the left-middle of the
+        next row (see general notes) — reconcile with this before retest.
+- [ ] `3e7fce6a` **Quench a hard tablet.** Crouch + right-click a bucket/barrel of water while holding a
+      HARD clay tablet → it softens to wet and keeps its document; repeat aimed at an empty/non-water
+      container and at open ground → no softening and ground-storage placement still works; confirm a wet
+      and a fired tablet both no-op on the gesture. *(zero-point-three-fixes 4.3)*
+      - **Still broken 2026-08-04** (submission 2026-08-04T21-28-56): quench does nothing AND it regressed
+        ALL softening — "drop in water, bring it in water with you in hand, or quenching" all now fail to
+        unharden. (Liked the quench sounds.) This is a regression introduced alongside the quench branch:
+        every softening path routes through `Soften`, which now swaps to a NEW soft-variant item via
+        `world.GetItem(CodeWithVariant("material", material))`; if that lookup returns null (or the -hard→base
+        variant code is wrong) every path silently no-ops. Prime suspect: the softened variant code / item
+        resolution. Was passing at d6131da1 (2026-08-03) BEFORE the variant-swap rework, so the swap is the
+        regression point. Fix + reverify d6131da1 (drop/swim) together with this.
+- [x] `f16baa37` **Clay recipe now 12.** Craft a clay tablet of each color and confirm the recipe now
+      consumes 12 clay (a 2×3 block) rather than 8 and still yields one tablet; confirm the wax tablet
+      recipe is unchanged. *(zero-point-three-fixes 4.4)*
+      - **Confirmed 2026-08-04** (submission 2026-08-04T21-28-56): "Works." Clay tablet now costs 12 clay
+        and still yields one tablet; wax recipe unchanged.

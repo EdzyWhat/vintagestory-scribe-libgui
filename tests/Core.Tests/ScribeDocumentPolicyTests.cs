@@ -75,13 +75,39 @@ public class ScribeDocumentPolicyTests
     }
 
     [Fact]
-    public void ReadOnly_RefusesAddingEvenWhenUncapped()
+    public void ReadOnly_RefusesAddingAndPinningEvenWhenUncapped()
     {
         var policy = new ScribeDocumentPolicy { ReadOnly = true };
 
         Assert.False(policy.CanAdd(0));
-        // ...but a read-side pin is still allowed (ReadOnly gates edits, not pins).
-        Assert.True(policy.CanPin(0));
+        // ReadOnly now gates pins too (tablet-firing: a hard/fired tablet denies CanAdd AND CanPin).
+        Assert.False(policy.CanPin(0));
+    }
+
+    // --- UneditableTablet preset: a hard or fired tablet denies all mutation ---
+
+    [Fact]
+    public void UneditableTablet_DeniesAddingRegardlessOfCount()
+    {
+        var policy = ScribeDocumentPolicy.UneditableTablet;
+
+        Assert.False(policy.CanAdd(0));
+        Assert.False(policy.CanAdd(5));
+    }
+
+    [Fact]
+    public void UneditableTablet_DeniesPinningRegardlessOfCount()
+    {
+        var policy = ScribeDocumentPolicy.UneditableTablet;
+
+        Assert.False(policy.CanPin(0));
+        Assert.False(policy.CanPin(5));
+    }
+
+    [Fact]
+    public void UneditableTablet_IsReadOnly()
+    {
+        Assert.True(ScribeDocumentPolicy.UneditableTablet.ReadOnly);
     }
 
     // --- The cap lives at the boundary, NOT in ScribeDocument ---

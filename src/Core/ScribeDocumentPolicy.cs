@@ -24,16 +24,26 @@ public readonly record struct ScribeDocumentPolicy
     /// uncapped.</summary>
     public int? MaxPins { get; init; }
 
-    /// <summary>When <c>true</c>, the document may not be edited at all. Reserved for future tiers
-    /// (e.g. a fired/archived tablet); no current host reports it.</summary>
+    /// <summary>When <c>true</c>, the document may not be edited at all: both <see cref="CanAdd"/> and
+    /// <see cref="CanPin"/> deny regardless of count. Reported by <see cref="UneditableTablet"/> for a hard
+    /// or fired tablet (tablet-firing); the editable tiers leave it false.</summary>
     public bool ReadOnly { get; init; }
 
     /// <summary>The uncapped policy every existing host (Lectern, Notebook, Clockmaker's) reports, so
     /// those tiers stay behaviorally unchanged: no block cap, no pin cap, editable.</summary>
     public static readonly ScribeDocumentPolicy Unlimited = new();
 
-    /// <summary>The scratch-tier tablet cap: at most 10 task blocks and 1 pin. Editable.</summary>
+    /// <summary>The scratch-tier tablet cap: at most 10 task blocks and 1 pin. Editable. Applies to a WET
+    /// clay/wax tablet only; a hardened or fired tablet reports <see cref="UneditableTablet"/> instead.</summary>
     public static readonly ScribeDocumentPolicy Tablet = new() { MaxBlocks = 10, MaxPins = 1 };
+
+    /// <summary>The read-only preset a non-editable tablet (hardened or fired — tablet-firing) reports:
+    /// <see cref="CanAdd"/> and <see cref="CanPin"/> always deny, so no task can be added and no task can be
+    /// pinned. The block/pin caps are also pinned to 0 so the preset denies even if <see cref="ReadOnly"/>
+    /// were ever cleared. Distinct from <see cref="Tablet"/> so a wet tablet's editable behavior is
+    /// untouched.</summary>
+    public static readonly ScribeDocumentPolicy UneditableTablet =
+        new() { MaxBlocks = 0, MaxPins = 0, ReadOnly = true };
 
     /// <summary>Whether one more task block may be added given the document's <paramref name="currentTaskCount"/>.
     /// Always <c>true</c> when <see cref="MaxBlocks"/> is <c>null</c> (uncapped) and always <c>false</c> when
@@ -47,11 +57,12 @@ public readonly record struct ScribeDocumentPolicy
     }
 
     /// <summary>Whether one more pin may be added given the player's <paramref name="currentPinCount"/> for
-    /// this document. Always <c>true</c> when <see cref="MaxPins"/> is <c>null</c> (uncapped); otherwise
-    /// <c>true</c> only while the count is still below the cap. Unlike <see cref="CanAdd"/>, pinning is a
-    /// read-side action, so <see cref="ReadOnly"/> does not block it. A negative count is treated as 0.</summary>
+    /// this document. Always <c>false</c> when <see cref="ReadOnly"/> (a hard/fired tablet — tablet-firing),
+    /// always <c>true</c> when <see cref="MaxPins"/> is <c>null</c> (uncapped); otherwise <c>true</c> only
+    /// while the count is still below the cap. A negative count is treated as 0.</summary>
     public bool CanPin(int currentPinCount)
     {
+        if (ReadOnly) return false;
         if (MaxPins is not int max) return true;
         return Math.Max(0, currentPinCount) < max;
     }

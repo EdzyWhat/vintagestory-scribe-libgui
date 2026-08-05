@@ -705,6 +705,25 @@ server-authoritatively (the held-item analogue of the Sign block pattern)?**
   (`CollectibleObject.OnGroundIdle`, server-only, ~1%/tick destroy). Liquid state while held:
   `Entity.Swimming` / `Entity.FeetInLiquid` public fields (VintagestoryLib).
 
+**Water-exposure detection for an item (rehydration hook, confirmed for the hard→wet tablet, task
+0.4).** There is NO single "item touched water" event — the two exposure cases are two different
+per-tick virtuals, and there is no torch-specific extinguish callback to piggyback on (a lit torch
+is a *block* whose `BlockEntityTorch` isn't the model here; a carried item uses the two hooks
+below). Both are `CollectibleObject` virtuals the engine already ticks, so no scheduler/registration
+is needed:
+- **Dropped stack floating in water** → `OnGroundIdle(EntityItem entityItem)`, gated on
+  `entityItem.Swimming`. Runs server-side already but is NOT hard-gated to server, so gate it
+  yourself (`api.Side == Server`) and call `entityItem.WatchedAttributes.MarkPathDirty("itemstack")`
+  after mutating the stack so the change syncs.
+- **Active held item while the holder swims** → `OnHeldIdle(ItemSlot slot, EntityAgent byEntity)`,
+  gated on `byEntity.Swimming`; gate on `byEntity.World.Side == Server` and `slot.MarkDirty()` to
+  sync the swap. This is the same pair vanilla uses for held/dropped idle ticks (the spin-in-hand
+  items write `OnHeldIdle`, above).
+The rehydration itself is a plain in-place attribute edit — clear our `hard` flag and
+`RemoveAttribute("transitionstate")` so the engine re-seeds the `Harden` clock from "now" on its
+next tick (restarting the ~2-day dry-out), keeping the document. No item-code swap (clay type is the
+registered item variant), no new packet — it rides existing stack-attribute persistence.
+
 **Symptom: an item with custom `docId`/attributes on its ItemStack loses them after being fired
 in a kiln (blank/orphaned archive).** `BlockEntityPitKiln.OnFired()` (VSSurvivalMod) does
 `slot.Itemstack = combustibleProps.SmeltedStack.ResolvedItemstack.Clone()` and only copies
@@ -1763,6 +1782,28 @@ construction), so it scopes to that dialog only; a separate dialog (e.g. the Set
 own default policy. **Ground truth for all of this is the decompiled vendored `src/Mod/lib/Gui.dll`
 (`ilspycmd -t <FullTypeName>`) — the `reference/vslibgui/` clone is STALE (single commit 2026-06-06,
 pre-3.1.0) and has NO traversal system at all, so it must NOT be trusted for focus/traversal questions.**
+
+**Fact (2026-08-04): `PaintingContext.SharedPaint` is ONE `SKPaint` reused across every draw op AND
+across frames — and `DrawMaskedBox` (the textured-`Container`/`BoxStyle.Texture` draw) is the one draw
+that reuses `SharedPaint.Color` WITHOUT re-setting it.** Symptom that led here: a clay-texture tablet
+backdrop rendered fully transparent, but ONLY on a read-only tablet that had rows of content — an empty
+tablet, or the editable (wet) tablet, showed the backdrop opaque. Root cause, confirmed against the
+vendored `src/Mod/lib/Gui.dll` (3.1.0 ground truth, NOT the stale `reference/vslibgui/` clone):
+`PaintingContext.SharedPaint` is created once (`new() { IsAntialias = true }`) and mutated in place by
+every draw. `DrawBox`/`DrawImage`/`DrawNineSlice` all assign `SharedPaint.Color = …` before painting, so
+they're self-contained. But `DrawMaskedBox` sets only `FilterQuality` before `Canvas.DrawBitmap(texture,
+rect, SharedPaint)` — and `DrawBitmap` MODULATES the bitmap by `paint.Color`'s alpha. So whatever alpha
+the previous draw op left on `SharedPaint.Color` scales the whole backdrop texture. A widget that draws
+a resting/transparent box (`boxColor` alpha 0) via `base.PaintInternal`, captures that color as
+"previous", then RESTORES it on teardown, leaves the shared paint at alpha 0 → the next frame's backdrop
+`DrawBitmap` renders at 0 opacity. Two things made it intermittent-looking: (1) the whole root re-records
+into an `SKPicture` only when something is dirty (`GuiBase._rootPaintCache` / `RenderRepaintBoundary`),
+so it bites when animated glyph rows force a re-record every frame; (2) it needs the leaking widget to be
+the LAST painter — on a normal read view a footer Divider/Button repaints after the rows and re-sets the
+color, masking it; drop the footer (read-only tablet) and the rows are last. **Takeaway for our render
+objects: never RESTORE an inherited `SharedPaint.Color` on teardown — leave it OPAQUE (`SKColors.White`),
+the neutral every framework draw except `DrawMaskedBox` sets before painting.** Fixed in
+`ScribeCuneiformField.cs` + `CuneiformText.cs` (both cuneiform stroke render objects).
 
 ## Item state-transition (`Harden`/`Dry`) and firepit smelt both DROP stack attributes on transform (2026-08-02)
 

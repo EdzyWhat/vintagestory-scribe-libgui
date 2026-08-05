@@ -200,7 +200,6 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
         }
 
         SKPaint paint = context.SharedPaint;
-        SKColor prevColor = paint.Color;
         SKPaintStyle prevStyle = paint.Style;
         bool prevAntialias = paint.IsAntialias;   // pre-existing leak: restore this too (task 3.4).
 
@@ -234,8 +233,13 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
             context.Canvas.DrawPath(path, paint);
         }
 
-        // Restore the shared paint's mutated properties (SharedPaint is reused across draw ops).
-        paint.Color = prevColor;
+        // Restore the shared paint's mutated properties (SharedPaint is reused across draw ops). Leave Color
+        // OPAQUE rather than restored to the inherited value: base.PaintInternal drew this row's resting box
+        // at boxColor alpha 0 just before we captured it, so restoring would leave the shared paint at alpha
+        // 0 for the next op — which rendered the read-only tablet's clay backdrop transparent, since
+        // DrawMaskedBox reuses SharedPaint.Color unset and DrawBitmap modulates by its alpha. Opaque white is
+        // the neutral every sibling draw sets before painting. (tablet-firing / see ScribeCuneiformField.)
+        paint.Color = SKColors.White;
         paint.Style = prevStyle;
         paint.IsAntialias = prevAntialias;
         paint.MaskFilter = null;   // defensive: never leave a blur mask on the shared paint.

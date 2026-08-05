@@ -84,7 +84,12 @@ public abstract partial class ScribeDialogBase
         var style = bmp is not null
             ? new BoxStyle { Texture = bmp, Width = layout.W, Height = layout.H }
             : new BoxStyle { Color = new Vector4(0.85f, 0.78f, 0.62f, 1.0f), Width = layout.W, Height = layout.H };
-        return new Container(style: style, child: tree);
+        // Force the LibGUI shared paint opaque immediately before the backdrop draws. A textured BoxStyle
+        // paints via DrawMaskedBox, the one draw op that reuses SharedPaint.Color without setting it, so it
+        // would otherwise modulate the clay art by whatever color the previous frame's last op left — the
+        // read-only tablet's transparent-backdrop bug (see ScribeResetPaintColor). The flat-color fallback
+        // sets its own Color, so it needs no reset, but wrapping unconditionally keeps one code path.
+        return new ScribeResetPaintColor(new Container(style: style, child: tree));
     }
 
     /// <summary>The OuterArtBox's contents: a vertical stack of the draggable TitleBar band and the
@@ -475,7 +480,16 @@ public abstract partial class ScribeDialogBase
         }
     }
 
-    private Widget BuildReadContent() =>
+    /// <summary>Whether the read view is a permanently-read-only surface: the "switch to editor" footer
+    /// button is dropped and each row's checkbox/pin goes inert (a hard or fired tablet — tablet-firing).
+    /// The default is false, so the Lectern/Notebook read view keeps its Edit button and completable rows.
+    /// The tablet overrides it to true when the stack is not editable.</summary>
+    private protected virtual bool ReadViewIsReadOnly => false;
+
+    /// <summary>Build the read view. Promoted from <c>private</c> so the always-edit tablet can render it
+    /// directly for a non-editable (hard/fired) stack — it has no <see cref="viewMode"/> switching, so it
+    /// can't reach the read view through the default <see cref="BuildCentralRegion"/> routing.</summary>
+    protected Widget BuildReadContent() =>
         new ScribeReadContent(
             // Snapshot the block list for this build into value copies (never a live block
             // reference), so a later mutation of the authoritative document can't alias into a built
@@ -498,7 +512,8 @@ public abstract partial class ScribeDialogBase
                 horizontal: 0.04f * host.GetLayout(modSystem.MySettings.PixelArtSize).W),
             style: RowStyle,
             scrollController: sharedScrollController,
-            hintLangKey: EmptyHintLangKey);
+            hintLangKey: EmptyHintLangKey,
+            readOnly: ReadViewIsReadOnly);
 
     /// <summary>The editable task list for the current scratch document. Promoted from <c>private</c> to
     /// <c>protected</c> so a subclass may reuse the inherited editor rather than fork it — the tablet

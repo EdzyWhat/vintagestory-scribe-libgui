@@ -83,3 +83,7 @@ reference/base-game-textures/
 # Base-game tablet shape/textures copied as a starting point for custom tablet models
 # (proprietary; scratch, never committed)
 reference/tablet-model/
+reference/tablet-placeholder/
+
+# Base-game oak textures pulled for local art reference (proprietary; scratch, never committed)
+reference/oak-textures/

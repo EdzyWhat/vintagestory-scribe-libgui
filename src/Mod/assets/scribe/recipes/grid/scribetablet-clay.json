@@ -1,37 +1,37 @@
 [
 	{
-		ingredientPattern: "KCC,SCC",
+		ingredientPattern: "KCC,SCC,_CC",
 		ingredients: {
 			"K": { type: "item", tags: ["tool-knife"], isTool: true, toolDurabilityCost: 3 },
 			"S": { type: "item", code: "game:stick" },
 			"C": { type: "item", code: "game:clay-red", quantity: 2 }
 		},
 		width: 3,
-		height: 2,
+		height: 3,
 		name: "scribe:scribetablet-clay-red",
 		output: { type: "item", code: "scribe:scribetablet-clay-red", quantity: 1 }
 	},
 	{
-		ingredientPattern: "KCC,SCC",
+		ingredientPattern: "KCC,SCC,_CC",
 		ingredients: {
 			"K": { type: "item", tags: ["tool-knife"], isTool: true, toolDurabilityCost: 3 },
 			"S": { type: "item", code: "game:stick" },
 			"C": { type: "item", code: "game:clay-blue", quantity: 2 }
 		},
 		width: 3,
-		height: 2,
+		height: 3,
 		name: "scribe:scribetablet-clay-blue",
 		output: { type: "item", code: "scribe:scribetablet-clay-blue", quantity: 1 }
 	},
 	{
-		ingredientPattern: "KCC,SCC",
+		ingredientPattern: "KCC,SCC,_CC",
 		ingredients: {
 			"K": { type: "item", tags: ["tool-knife"], isTool: true, toolDurabilityCost: 3 },
 			"S": { type: "item", code: "game:stick" },
 			"C": { type: "item", code: "game:clay-fire", quantity: 2 }
 		},
 		width: 3,
-		height: 2,
+		height: 3,
 		name: "scribe:scribetablet-clay-fire",
 		output: { type: "item", code: "scribe:scribetablet-clay-fire", quantity: 1 }
 	}

@@ -1,14 +1,14 @@
 [
 	{
-		ingredientPattern: "BGMS",
+		ingredientPattern: "BG,MS",
 		ingredients: {
 			"B": { type: "item", code: "scribe:scribenotebook" },
 			"G": { type: "item", code: "game:gear-temporal" },
 			"M": { type: "block", code: "game:metal-parts" },
 			"S": { type: "item", code: "scribe:clockmakerschematic", consume: false }
 		},
-		width: 4,
-		height: 1,
+		width: 2,
+		height: 2,
 		name: "scribe:scribeclockmakernotebook-schematic",
 		output: { type: "item", code: "scribe:scribeclockmakernotebook", quantity: 1 }
 	}

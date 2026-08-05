@@ -2,7 +2,7 @@
 	"code": "scribetablet",
 	"class": "ItemScribeTablet",
 	"variantgroups": [
-		{ "code": "material", "states": ["clay-red", "clay-blue", "clay-fire", "wax"] }
+		{ "code": "material", "states": ["clay-red", "clay-blue", "clay-fire", "clay-red-hard", "clay-blue-hard", "clay-fire-hard", "clay-red-fired", "clay-blue-fired", "clay-fire-fired", "wax"] }
 	],
 	"maxstacksize": 1,
 	"behaviors": [
@@ -16,38 +16,92 @@
 		},
 		"handbook": {
 			"extraSections": [
-				{
-					"title": "scribe:handbook-scribetablet-about-title",
-					"text": "scribe:handbook-scribetablet-about-text"
-				},
-				{
-					"title": "scribe:handbook-scribetablet-craft-title",
-					"text": "scribe:handbook-scribetablet-craft-text"
-				}
+				{ "title": "scribe:handbook-scribetablet-about-title", "text": "scribe:handbook-scribetablet-about-text" },
+				{ "title": "scribe:handbook-scribetablet-states-title", "text": "scribe:handbook-scribetablet-states-text" },
+				{ "title": "scribe:handbook-scribetablet-craft-title", "text": "scribe:handbook-scribetablet-craft-text" }
 			]
 		}
 	},
-	"shapeByType": {
-		"*-clay-red": { "base": "game:block/clutter/tablet-clay1" },
-		"*-clay-blue": { "base": "game:block/clutter/tablet-clay1" },
-		"*-clay-fire": { "base": "game:block/clutter/tablet-clay1" },
-		"*-wax": { "base": "game:block/clutter/tablet-clay1" }
+	"attributesByType": {
+		"*-hard": {
+			"groundStorageTransform": {
+				"translation": { "x": 0.12, "y": 0, "z": -0.04 },
+				"rotation": { "x": 0, "y": 35, "z": 90 },
+				"origin": { "x": 0.5, "y": 0.05, "z": 0.5 }
+			},
+			"handbook": {
+				"extraSections": [
+					{ "title": "scribe:handbook-scribetablet-about-title", "text": "scribe:handbook-scribetablet-about-text" },
+					{ "title": "scribe:handbook-scribetablet-hard-title", "text": "scribe:handbook-scribetablet-hard-text" }
+				]
+			}
+		},
+		"*-fired": {
+			"groundStorageTransform": {
+				"translation": { "x": 0.12, "y": 0, "z": -0.04 },
+				"rotation": { "x": 0, "y": 35, "z": 90 },
+				"origin": { "x": 0.5, "y": 0.05, "z": 0.5 }
+			},
+			"handbook": {
+				"extraSections": [
+					{ "title": "scribe:handbook-scribetablet-about-title", "text": "scribe:handbook-scribetablet-about-text" },
+					{ "title": "scribe:handbook-scribetablet-fired-title", "text": "scribe:handbook-scribetablet-fired-text" }
+				]
+			}
+		}
 	},
-	"textures": {
-		"ceramic": { "base": "game:block/clay/aged-ceramic1" },
-		"writing": { "base": "game:block/overlay/writing" }
+	"shapeByType": {
+		"*-wax": { "base": "game:block/clutter/tablet-clay1" },
+		"*-clay-*": { "base": "scribe:item/tablet-clay" }
+	},
+	"transitionablePropsByType": {
+		"*-clay-red": [
+			{ "type": "Harden", "freshHours": { "avg": 48 }, "transitionHours": { "avg": 6 }, "transitionedStack": { "type": "item", "code": "scribe:scribetablet-clay-red-hard" }, "transitionRatio": 1 }
+		],
+		"*-clay-blue": [
+			{ "type": "Harden", "freshHours": { "avg": 48 }, "transitionHours": { "avg": 6 }, "transitionedStack": { "type": "item", "code": "scribe:scribetablet-clay-blue-hard" }, "transitionRatio": 1 }
+		],
+		"*-clay-fire": [
+			{ "type": "Harden", "freshHours": { "avg": 48 }, "transitionHours": { "avg": 6 }, "transitionedStack": { "type": "item", "code": "scribe:scribetablet-clay-fire-hard" }, "transitionRatio": 1 }
+		]
+	},
+	"combustiblePropsByType": {
+		"*-clay-red": { "meltingPoint": 650, "meltingDuration": 30, "smeltedRatio": 1, "smeltingType": "cook", "requiresContainer": false, "smeltedStack": { "type": "item", "code": "scribe:scribetablet-clay-red-fired" } },
+		"*-clay-blue": { "meltingPoint": 650, "meltingDuration": 30, "smeltedRatio": 1, "smeltingType": "cook", "requiresContainer": false, "smeltedStack": { "type": "item", "code": "scribe:scribetablet-clay-blue-fired" } },
+		"*-clay-fire": { "meltingPoint": 650, "meltingDuration": 30, "smeltedRatio": 1, "smeltingType": "cook", "requiresContainer": false, "smeltedStack": { "type": "item", "code": "scribe:scribetablet-clay-fire-fired" } },
+		"*-clay-red-hard": { "meltingPoint": 650, "meltingDuration": 30, "smeltedRatio": 1, "smeltingType": "cook", "requiresContainer": false, "smeltedStack": { "type": "item", "code": "scribe:scribetablet-clay-red-fired" } },
+		"*-clay-blue-hard": { "meltingPoint": 650, "meltingDuration": 30, "smeltedRatio": 1, "smeltingType": "cook", "requiresContainer": false, "smeltedStack": { "type": "item", "code": "scribe:scribetablet-clay-blue-fired" } },
+		"*-clay-fire-hard": { "meltingPoint": 650, "meltingDuration": 30, "smeltedRatio": 1, "smeltingType": "cook", "requiresContainer": false, "smeltedStack": { "type": "item", "code": "scribe:scribetablet-clay-fire-fired" } }
+	},
+	"texturesByType": {
+		"*-clay-red":        { "default": { "base": "scribe:items/rs" }, "ff": { "base": "scribe:items/rs" }, "writing": { "base": "scribe:items/writing" } },
+		"*-clay-blue":       { "default": { "base": "scribe:items/bs" }, "ff": { "base": "scribe:items/bs" }, "writing": { "base": "scribe:items/writing" } },
+		"*-clay-fire":       { "default": { "base": "scribe:items/fs" }, "ff": { "base": "scribe:items/fs" }, "writing": { "base": "scribe:items/writing" } },
+		"*-clay-red-hard":   { "default": { "base": "scribe:items/rh" }, "ff": { "base": "scribe:items/rh" }, "writing": { "base": "scribe:items/writing" } },
+		"*-clay-blue-hard":  { "default": { "base": "scribe:items/bh" }, "ff": { "base": "scribe:items/bh" }, "writing": { "base": "scribe:items/writing" } },
+		"*-clay-fire-hard":  { "default": { "base": "scribe:items/fh" }, "ff": { "base": "scribe:items/fh" }, "writing": { "base": "scribe:items/writing" } },
+		"*-clay-red-fired":  { "default": { "base": "scribe:items/rf" }, "ff": { "base": "scribe:items/rf" }, "writing": { "base": "scribe:items/writing" } },
+		"*-clay-blue-fired": { "default": { "base": "scribe:items/bf" }, "ff": { "base": "scribe:items/bf" }, "writing": { "base": "scribe:items/writing" } },
+		"*-clay-fire-fired": { "default": { "base": "scribe:items/ff" }, "ff": { "base": "scribe:items/ff" }, "writing": { "base": "scribe:items/writing" } },
+		"*-wax":             { "ceramic": { "base": "game:block/clay/aged-ceramic1" }, "writing": { "base": "game:block/overlay/writing" } }
 	},
 	"guiTransform": {
-		"translation": { "x": 0, "y": 0, "z": 0 },
-		"rotation": { "x": -22, "y": -45, "z": 0 },
+		"translation": { "x": 10.204777, "y": -12.232302, "z": 0 },
+		"rotation": { "x": 122, "y": -12, "z": -18 },
 		"origin": { "x": 0.5, "y": 0.4, "z": 0.5 },
-		"scale": 2.4
+		"scale": 3
 	},
 	"tpHandTransform": {
-		"translation": { "x": -0.85, "y": -0.3, "z": -0.5 },
-		"rotation": { "x": 0, "y": 0, "z": 0 },
+		"translation": { "x": -1.05, "y": -0.2, "z": -0.6 },
+		"rotation": { "x": -81, "y": -116, "z": 97 },
 		"origin": { "x": 0.5, "y": 0.1, "z": 0.5 },
-		"scale": 0.6
+		"scale": 0.68
+	},
+	"fpHandTransform": {
+		"translation": { "x": -1.05, "y": -0.2, "z": -0.6 },
+		"rotation": { "x": -81, "y": -116, "z": 97 },
+		"origin": { "x": 0.5, "y": 0.1, "z": 0.5 },
+		"scale": 0.68
 	},
 	"groundTransform": {
 		"translation": { "x": 0, "y": 0, "z": 0 },

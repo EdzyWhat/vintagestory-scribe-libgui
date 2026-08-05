@@ -216,7 +216,6 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
         }
 
         SKPaint paint = context.SharedPaint;
-        SKColor prevColor = paint.Color;
         SKPaintStyle prevStyle = paint.Style;
         bool prevAntialias = paint.IsAntialias;   // pre-existing leak: restore this too (task 4.2).
         paint.Style = SKPaintStyle.Fill;
@@ -242,7 +241,15 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
         paint.Color = inkColor.ToSkColor();
         DrawStrokePass(context, path, schedule);
 
-        paint.Color = prevColor;
+        // Leave the shared paint OPAQUE, not restored to the color we inherited. That inherited color came
+        // from `base.PaintInternal` having just drawn this row's resting box at boxColor alpha 0 — restoring
+        // it would leave PaintingContext.SharedPaint.Color at alpha 0 for the NEXT draw op. That bit the
+        // read-only tablet backdrop: DrawMaskedBox (the clay-texture draw) is the one framework draw op that
+        // reuses SharedPaint.Color without re-setting it, and DrawBitmap modulates the texture by the paint's
+        // alpha — so an alpha-0 leftover rendered the whole clay backdrop transparent, but ONLY once glow rows
+        // (the sole painters that reach this teardown) were present. Resetting to opaque white matches the
+        // neutral every sibling draw (DrawBox/DrawImage/DrawNineSlice) sets before it paints. (tablet-firing.)
+        paint.Color = SKColors.White;
         paint.Style = prevStyle;
         paint.IsAntialias = prevAntialias;
         paint.MaskFilter = null;   // defensive: never leave a blur mask on the shared paint.

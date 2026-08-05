@@ -40,7 +40,8 @@ internal sealed class ScribeReadContent : StatefulWidget
         EdgeInsets footerButtonPadding,
         ScribeRowStyle style,
         ScrollController scrollController,
-        string hintLangKey = "scribe:scribe-gui-edit-hint")
+        string hintLangKey = "scribe:scribe-gui-edit-hint",
+        bool readOnly = false)
     {
         Blocks = blocks;
         OnToggleTask = onToggleTask;
@@ -50,6 +51,7 @@ internal sealed class ScribeReadContent : StatefulWidget
         Style = style;
         ScrollController = scrollController;
         HintLangKey = hintLangKey;
+        ReadOnly = readOnly;
     }
 
     public IReadOnlyList<ScribeReadRowData> Blocks { get; }
@@ -66,6 +68,11 @@ internal sealed class ScribeReadContent : StatefulWidget
     /// here — the dialog owns its lifetime so the scroll offset survives the view-switch rebuild.</summary>
     public ScrollController ScrollController { get; }
     public string HintLangKey { get; }
+    /// <summary>When true this is a permanently-read-only surface (a hard or fired tablet — tablet-firing):
+    /// the "switch to editor" footer button is omitted and each row's checkbox/pin becomes non-interactive.
+    /// The tabbed Lectern/Notebook read view passes false, so it keeps its "Edit" footer button and its
+    /// completable checkbox / pinnable rows exactly as before.</summary>
+    public bool ReadOnly { get; }
 
     public override State CreateState() => new ScribeReadContentState();
 }
@@ -103,7 +110,7 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
                 controller: Widget.ScrollController,
                 child: new ListView(
                     children: Widget.Blocks
-                        .Select(b => (Widget)new ScribeReadRow(b, Widget.OnToggleTask, Widget.OnTogglePinned, style, new ValueKey<int>(b.Index)))
+                        .Select(b => (Widget)new ScribeReadRow(b, Widget.OnToggleTask, Widget.OnTogglePinned, style, Widget.ReadOnly, new ValueKey<int>(b.Index)))
                         .ToList(),
                     // Scroll estimate for rows not yet mounted (variableHeight measures the real height
                     // of mounted rows). This MUST equal a true single-line row height, because the
@@ -122,6 +129,27 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
             { AutoHide = false };
         }
 
+        // The "switch to editor" footer button — the read view's only edit affordance. A permanently
+        // read-only surface (hard/fired tablet — tablet-firing) omits it entirely so there is no path back
+        // into the editor; the tabbed Lectern/Notebook keep it. Built as a list so the whole footer slot
+        // (Padding + Button) drops out cleanly rather than rendering an empty gap.
+        var children = new List<Widget>
+        {
+            // A straight edge directly above the scroll region, matching the editor and pinned
+            // views (scribe-lectern-view-consistency §1). Reuses the theme-border Divider the
+            // settings form uses; inherits the Column's spacing gap below it. Dropped on the
+            // cuneiform tablet path (add-tablet-clay-type-themes 8.1) — the hard rule reads wrong
+            // against the clay backdrop; the readable Lectern/Notebook view keeps it.
+            Widget.Style.UseCuneiform ? new SizedBox() : new Divider(),
+            new Expanded(child: rowList),
+        };
+        if (!Widget.ReadOnly)
+        {
+            children.Add(new Padding(Widget.FooterButtonPadding, child: new Button(
+                child: new Text(Lang.Get("scribe:scribe-gui-switch-to-editor"), switchTextStyle),
+                onTap: _ => Widget.OnSwitchToEditor())));
+        }
+
         // Root the whole tab subtree in the player's Task Text Font + window-scaled base size, so the
         // row text and empty hint inherit them (adopt-libgui-31-improvements). The row widgets live in
         // the ListView below, which is a descendant of this ancestor. The switch/Edit button keeps its
@@ -132,19 +160,7 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
                 spacing: 8,
                 crossAxisAlignment: CrossAxisAlignment.Stretch,
                 mainAxisSize: MainAxisSize.Max,
-                children: new Widget[]
-                {
-                    // A straight edge directly above the scroll region, matching the editor and pinned
-                    // views (scribe-lectern-view-consistency §1). Reuses the theme-border Divider the
-                    // settings form uses; inherits the Column's spacing gap below it. Dropped on the
-                    // cuneiform tablet path (add-tablet-clay-type-themes 8.1) — the hard rule reads wrong
-                    // against the clay backdrop; the readable Lectern/Notebook view keeps it.
-                    Widget.Style.UseCuneiform ? new SizedBox() : new Divider(),
-                    new Expanded(child: rowList),
-                    new Padding(Widget.FooterButtonPadding, child: new Button(
-                        child: new Text(Lang.Get("scribe:scribe-gui-switch-to-editor"), switchTextStyle),
-                        onTap: _ => Widget.OnSwitchToEditor())),
-                })));
+                children: children)));
     }
 }
 
@@ -154,19 +170,24 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
 /// </summary>
 internal sealed class ScribeReadRow : StatefulWidget
 {
-    public ScribeReadRow(ScribeReadRowData data, Action<Guid> onToggleTask, Action<Guid> onTogglePinned, ScribeRowStyle style, Gui.Widgets.Framework.Key? key = null)
+    public ScribeReadRow(ScribeReadRowData data, Action<Guid> onToggleTask, Action<Guid> onTogglePinned, ScribeRowStyle style, bool readOnly = false, Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
         Data = data;
         OnToggleTask = onToggleTask;
         OnTogglePinned = onTogglePinned;
         Style = style;
+        ReadOnly = readOnly;
     }
 
     public ScribeReadRowData Data { get; }
     public Action<Guid> OnToggleTask { get; }
     public Action<Guid> OnTogglePinned { get; }
     public ScribeRowStyle Style { get; }
+    /// <summary>Permanently-read-only surface (hard/fired tablet — tablet-firing): the checkbox reflects
+    /// Done but can't be toggled, and the hover pin is never offered. The tabbed read view passes false and
+    /// keeps its completable checkbox + hover pin.</summary>
+    public bool ReadOnly { get; }
 
     public override State CreateState() => new ScribeReadRowState();
 }
@@ -213,7 +234,10 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                 EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
                 child: new Checkbox(
                     value: done,
-                    onChanged: _ =>
+                    // Read-only surface (hard/fired tablet): a null onChanged makes the checkbox reflect
+                    // Done but ignore taps, so a set tablet can't be completed. The tabbed read view passes
+                    // ReadOnly=false and keeps the completing checkbox.
+                    onChanged: Widget.ReadOnly ? null : _ =>
                     {
                         SetState(() => done = !done);
                         Widget.OnToggleTask(Widget.Data.TaskId);
@@ -221,12 +245,39 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                     size: style.CheckboxSize)));
         }
 
-        // Inset the read text by the editor field's internal padding so a single-line read row is the
-        // same height as the editor field (vertical) and its text's left edge aligns (horizontal) across
-        // a view switch. No border here -- only the editor field draws one (inside its own padding).
-        children.Add(new Expanded(child: new Padding(
-            EdgeInsets.Symmetric(vertical: style.FieldPadY, horizontal: style.FieldPadX),
-            child: new Text(Widget.Data.Text, textStyle))));
+        // The row text. On the cuneiform tablet path (add-tablet-firing-mechanic) render it as display-only
+        // cuneiform strokes so a dried/fired tablet reads in the SAME glyphs the wet tablet types in —
+        // reusing the editable field's wrapping render object with focus/caret OFF (no new rendering code),
+        // seeded off the same TaskId so a row wobbles identically whether wet-editable or read-only. Off the
+        // cuneiform path (Lectern/Notebook, or cuneiform disabled) it stays the normal wrapped Text, inset by
+        // the editor field's internal padding so a single-line read row matches the editor field height and
+        // its text's left edge aligns across a view switch.
+        children.Add(new Expanded(child: style.UseCuneiform
+            ? new ScribeCuneiformFieldRenderWidget(
+                text: Widget.Data.Text,
+                caret: 0,
+                selectionAnchor: 0,
+                hasFocus: false,
+                fontSizeEm: style.FontSize,
+                inkColor: colors.OnSurface,
+                caretColor: colors.Primary,
+                selectionColor: Vector4.Zero,
+                bundle: style.CuneiformBundle,
+                padX: style.FieldPadX,
+                padY: style.FieldPadY,
+                // Resting (unfocused) box is transparent, exactly like a resting editable cuneiform row.
+                boxColor: Vector4.Zero,
+                borderColor: Vector4.Zero,
+                borderThickness: 1f,
+                cornerRadii: Vector4.One * 4f,
+                caretVisible: false,
+                jitterStrength: style.CuneiformJitter,
+                jitterSeed: Widget.Data.TaskId.GetHashCode(),
+                rotationDegrees: style.CuneiformRotation,
+                glow: style.CuneiformGlow)
+            : new Padding(
+                EdgeInsets.Symmetric(vertical: style.FieldPadY, horizontal: style.FieldPadX),
+                child: new Text(Widget.Data.Text, textStyle))));
 
         Widget rowBody = new Padding(
             EdgeInsets.Symmetric(vertical: style.RowVerticalPadding, horizontal: style.RowHorizontalPadding),
@@ -252,8 +303,10 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         // Pin toggle floats on the right, task-only, shown on hover — mirroring the editor row's pin
         // button (scribe-lectern-view-consistency §2). The read view still exposes no edit/delete/drag;
         // only pin + the checkbox are interactive here.
+        // Read-only surface (hard/fired tablet): no pin affordance at all — pinning is an edit action. The
+        // tabbed read view keeps the hover pin.
         var stackChildren = new List<Widget> { rowBody };
-        if (hovered && Widget.Data.IsTask)
+        if (hovered && Widget.Data.IsTask && !Widget.ReadOnly)
         {
             stackChildren.Add(new Positioned(
                 right: 5f, top: ScribeRowControlNudge.FloatingButtonTop(style),
