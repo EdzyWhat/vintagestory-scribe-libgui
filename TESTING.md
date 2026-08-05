@@ -135,6 +135,16 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         Observed: with press-in progressively adding strokes, nothing ghosts ahead — no low-opacity preview
         shows. Needs the ghost layer to render the full typed text immediately (decoupled from the press-in
         progression) rather than lagging behind it.
+      - **Still broken 2026-08-05** (now IMPLEMENTED, awaiting retest): the ghost lead-in was spec'd (task 5.1)
+        but had never been built — the change shipped the plain progressive fill first and deferred the ghost.
+        Implemented it in `ScribeCuneiformField.cs`: while the reveal is active, a new `StrokePass.Ghost` pass
+        paints the NOT-yet-pressed strokes (the complement of the crisp reveal set) once at low alpha
+        (`GhostLeadInOpacity = 0.28`), so the full typed word shows immediately and the crisp press-in catches up
+        to it — the expanded playtest ask (whole tail, not just the current letter). Centralized in the shared
+        render object, so it covers BOTH the multiline editor and the single-line title field. Gated by the same
+        reveal state as the press-in (no separate setting); no halo on the ghost. Retest with cuneiform +
+        stroke-progression ON: type a word quickly and confirm a faint full-word preview leads the filled
+        strokes. Fully relaunch the client first.
 
 ## arrow-key-line-caret-nav
 
@@ -2736,7 +2746,7 @@ regression checks specific to this change's scoped-to-the-input approach.
 
 ## zero-point-three-fixes
 
-- [ ] `89f55f28` **Schematic craftable + dual handbook.** Craft the Clockmaker's Notebook via the schematic
+- [x] `89f55f28` **Schematic craftable + dual handbook.** Craft the Clockmaker's Notebook via the schematic
       recipe (2×2 block) on a non-Clockmaker; then open the Notebook handbook and confirm TWO separate
       "Created by" grids show — the trait one carrying the `* Requires Tinkerer trait` asterisk and the
       schematic one none. *(zero-point-three-fixes 4.2)*
@@ -2761,6 +2771,12 @@ regression checks specific to this change's scoped-to-the-input approach.
         no asterisk. NEXT: (a) confirm the world config via server log / `/worldconfig`, set it TRUE, restart,
         and re-check the asterisk; (b) pull `assets/survival/recipes/grid/tool/sling.json` +
         `SlideshowGridRecipeTextComponent` to walk the Sling asterisk path together.
+      - **Confirmed 2026-08-05**: pulled the vanilla Sling recipe + `SlideshowGridRecipeTextComponent` and
+        confirmed the asterisk is driven purely by `GridRecipe.RequiresTrait` being non-null (source lines
+        97-100: `RequiresTrait != null` → renders the `gridrecipe-requirestrait` line). The missing asterisk
+        WAS the `scribeClockmakerRequiresTrait=false` world config nulling `RequiresTrait` at load (same root
+        as `297731fd`) — working as designed, not a bug. With the config set TRUE and the world restarted:
+        both grids render AND the trait grid shows the Tinkerer trait line, matching the Sling model. Done.
 - [x] `3e7fce6a` **Quench a hard tablet.** Crouch + right-click a bucket/barrel of water while holding a
       HARD clay tablet → it softens to wet and keeps its document; repeat aimed at an empty/non-water
       container and at open ground → no softening and ground-storage placement still works; confirm a wet

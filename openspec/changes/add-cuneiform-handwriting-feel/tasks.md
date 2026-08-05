@@ -53,10 +53,14 @@
 
 ## 5. Optional ghost lead-in (Mod)
 
-- [ ] 5.1 Behind the same setting, render the not-yet-revealed strokes of the currently-animating letter as a
-  faint outline (low-alpha fill or `SKPaintStyle.Stroke`) ahead of the filled pressings. Ship the plain
-  progressive fill first; add the ghost only if it reads well in-game. Final appearance must match the
-  no-ghost result once the letter finishes.
+- [x] 5.1 Behind the same setting, render the not-yet-revealed strokes as a faint low-alpha fill ahead of the
+  filled pressings. Shipped the plain progressive fill first; this adds the ghost. SCOPE EXPANDED per the
+  2026-08-05 playtest: the ghost paints the WHOLE not-yet-pressed tail (all remaining strokes), not just the
+  currently-animating letter, so a fast typist sees the full word immediately with the crisp fill catching up.
+  Implemented as a `StrokePass.Ghost` pass in `ScribeCuneiformField.cs` at `GhostLeadInOpacity = 0.28`, over
+  the exact complement of the crisp reveal set (no double-draw), centralized so it covers the multiline editor
+  AND the title field. Final appearance matches the no-ghost result once every stroke presses in (the tail
+  empties → ghost draws nothing). In-game evaluation is task 7.7.
 
 ## 6. Client config (Mod)
 

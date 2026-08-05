@@ -84,6 +84,13 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     private double revealPerStrokeMs = 28;
     private double revealPerLetterMs = 90;
 
+    /// <summary>Ghost lead-in opacity, as a fraction of the ink alpha (add-cuneiform-handwriting-feel 5.1/7.7).
+    /// While the reveal is active, the strokes that have NOT yet pressed in are drawn once at this faint alpha
+    /// so the full typed word is visible immediately and the crisp progressive fill catches up to it — the
+    /// playtest ask ("a fast typist sees the whole word ahead"). It reuses the same reveal gate as the press-in,
+    /// so it only shows when stroke-progression is on; there is no separate setting. 0 would disable the ghost.</summary>
+    private const float GhostLeadInOpacity = 0.28f;
+
     // Cached from the last PerformLayout, reused by PaintInternal and the geometry queries so layout,
     // paint, caret, and hit-testing all agree on the same wrapped lines.
     private readonly List<CuneiformLine> lines = new();
@@ -233,13 +240,27 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
         {
             paint.Color = glow.Color.ToSkColor();
             paint.MaskFilter = mask;
-            DrawStrokePass(context, path, schedule);
+            DrawStrokePass(context, path, schedule, StrokePass.Revealed);
             paint.MaskFilter = null;   // clear before the crisp pass (and before return) — SharedPaint hygiene.
         }
 
-        // Pass 2: every revealed stroke's crisp ink fill, on top of the halos.
+        // Ghost lead-in: while the reveal is running, paint the NOT-yet-pressed strokes once at a faint alpha
+        // so the full typed text shows immediately and the crisp fill catches up to it (design 5.1/7.7, expanded
+        // per playtest to the whole tail rather than only the current letter). Drawn BEFORE the crisp pass, and
+        // over a stroke set disjoint from it (revealed vs. un-revealed), so nothing double-draws. Skipped
+        // entirely when the reveal is inactive — there is no tail to lead. No halo on the ghost (crisp ink only
+        // haloes). The ghost tints the ink color's own alpha so it tracks the material's ink hue.
+        if (revealActive && GhostLeadInOpacity > 0f)
+        {
+            var ghostColor = inkColor;
+            ghostColor.W *= GhostLeadInOpacity;
+            paint.Color = ghostColor.ToSkColor();
+            DrawStrokePass(context, path, schedule, StrokePass.Ghost);
+        }
+
+        // Pass 2: every revealed stroke's crisp ink fill, on top of the halos (and the ghost tail).
         paint.Color = inkColor.ToSkColor();
-        DrawStrokePass(context, path, schedule);
+        DrawStrokePass(context, path, schedule, StrokePass.Revealed);
 
         // Leave the shared paint OPAQUE, not restored to the color we inherited. That inherited color came
         // from `base.PaintInternal` having just drawn this row's resting box at boxColor alpha 0 — restoring
@@ -266,11 +287,22 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
         }
     }
 
-    /// <summary>Draw one full pass over every wrapped line's revealed strokes with the shared paint's CURRENT
-    /// color/mask — called twice by <see cref="PaintInternal"/> (halo then crisp ink) so both passes see the
-    /// identical stroke set, jitter, and reveal gating. The reveal test and hand-written wobble match the
-    /// crisp geometry exactly; caret/selection/hit-testing read the UN-jittered layout and are untouched.</summary>
-    private void DrawStrokePass(PaintingContext context, SKPath path, RevealSchedule schedule)
+    /// <summary>Which subset of strokes a <see cref="DrawStrokePass"/> call paints, so the same geometry/jitter/
+    /// rotation code serves every layer. <see cref="Revealed"/> is the pressed-in ink (and its halo): every
+    /// stroke when the reveal is inactive, else only those past the schedule. <see cref="Ghost"/> is the
+    /// complement — the not-yet-pressed lead-in tail — and is only ever requested while the reveal is active.</summary>
+    private enum StrokePass
+    {
+        Revealed,
+        Ghost,
+    }
+
+    /// <summary>Draw one full pass over every wrapped line's strokes with the shared paint's CURRENT color/mask,
+    /// restricted to the subset named by <paramref name="pass"/> — called by <see cref="PaintInternal"/> for the
+    /// halo, the ghost lead-in, and the crisp ink so all three see identical jitter/rotation geometry and a
+    /// consistent reveal split. The reveal test and hand-written wobble match the crisp geometry exactly;
+    /// caret/selection/hit-testing read the UN-jittered layout and are untouched.</summary>
+    private void DrawStrokePass(PaintingContext context, SKPath path, RevealSchedule schedule, StrokePass pass)
     {
         for (int i = 0; i < lines.Count; i++)
         {
@@ -279,11 +311,16 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
             int lineStart = lines[i].SourceStart;
             foreach (PositionedStroke ps in lines[i].Strokes)
             {
-                // Stroke-progression reveal: while active, hide strokes whose letter hasn't pressed in yet.
-                // Keyed off the stroke's ABSOLUTE character index so the schedule is continuous across
-                // wrapped lines; characters below the baseline are always shown (no replay of prior text).
-                if (revealActive && !CuneiformReveal.IsStrokeRevealed(
-                        lineStart + ps.SourceCharIndex, ps.StrokeOrdinal, revealBaselineChars, revealElapsedMs, schedule))
+                // Stroke-progression reveal split. When active, every stroke is either pressed-in (revealed) or
+                // still in the lead-in tail (un-revealed); the two passes paint disjoint halves so nothing
+                // double-draws. Keyed off the stroke's ABSOLUTE character index so the schedule is continuous
+                // across wrapped lines; characters below the baseline count as always-revealed (no replay of
+                // prior text). When the reveal is inactive there is no tail — the Revealed pass draws everything
+                // and the Ghost pass is never requested.
+                bool strokeRevealed = !revealActive || CuneiformReveal.IsStrokeRevealed(
+                    lineStart + ps.SourceCharIndex, ps.StrokeOrdinal, revealBaselineChars, revealElapsedMs, schedule);
+                bool wantThisStroke = pass == StrokePass.Ghost ? !strokeRevealed : strokeRevealed;
+                if (!wantThisStroke)
                 {
                     continue;
                 }
