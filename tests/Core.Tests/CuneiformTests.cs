@@ -1004,65 +1004,124 @@ public class CuneiformTests
         return d;
     }
 
+    // ---- Stroke-count reveal timing (zero-point-three-fixes §5 — no fixed per-letter slot) ----
+    // The reveal clock is a pure running total of stroke-units: each glyph contributes its authored stroke
+    // count, each space CuneiformReveal.SpaceStrokeUnits, so a complex letter genuinely takes longer to press
+    // in than a simple one. IsStrokeRevealed / TotalDurationMs read a prefix-sum of per-character stroke-units
+    // (built by CuneiformReveal.CumulativeStrokeUnits from CuneiformLineLayout.StrokeUnitsFor).
+
+    private static int[] Cumulative(params int[] perCharStrokeUnits) =>
+        CuneiformReveal.CumulativeStrokeUnits(perCharStrokeUnits);
+
     [Fact]
     public void Reveal_BaselineChars_AreAlwaysShown()
     {
-        var schedule = new RevealSchedule(perStrokeMs: 30, perLetterMs: 100);
+        var schedule = new RevealSchedule(perStrokeMs: 30);
+        int[] units = Cumulative(3, 3, 3); // three 3-stroke letters
         // Char 0 and 1 are below the baseline of 2 → always revealed, regardless of elapsed (even 0).
-        Assert.True(CuneiformReveal.IsStrokeRevealed(0, 0, baselineChars: 2, elapsedMs: 0, schedule));
-        Assert.True(CuneiformReveal.IsStrokeRevealed(1, 5, baselineChars: 2, elapsedMs: 0, schedule));
+        Assert.True(CuneiformReveal.IsStrokeRevealed(0, 0, baselineChars: 2, elapsedMs: 0, schedule, units));
+        Assert.True(CuneiformReveal.IsStrokeRevealed(1, 5, baselineChars: 2, elapsedMs: 0, schedule, units));
     }
 
     [Fact]
-    public void Reveal_NewLetters_PressInOnSchedule()
+    public void Reveal_WorkedExample_ABSpaceB_At80MsPerStroke()
     {
-        var schedule = new RevealSchedule(perStrokeMs: 30, perLetterMs: 100);
-        // Baseline 0: char 0 starts at t=0, char 1 at t=100, char 2 at t=200.
-        // Char 1, stroke ordinal 0, needs elapsed >= 100.
-        Assert.False(CuneiformReveal.IsStrokeRevealed(1, 0, baselineChars: 0, elapsedMs: 99, schedule));
-        Assert.True(CuneiformReveal.IsStrokeRevealed(1, 0, baselineChars: 0, elapsedMs: 100, schedule));
-        // Within a letter, ordinal 2 of char 1 needs 100 + 2*30 = 160.
-        Assert.False(CuneiformReveal.IsStrokeRevealed(1, 2, baselineChars: 0, elapsedMs: 159, schedule));
-        Assert.True(CuneiformReveal.IsStrokeRevealed(1, 2, baselineChars: 0, elapsedMs: 160, schedule));
+        // The author's pinned example: typing "A B" at 80 ms/stroke with per-char units [3, 2(space), 5].
+        // A (3 strokes) = 240 ms of press-in, the space (2 units) = 160 ms of pause, then B (5 strokes).
+        // So B's first stroke reveals at 240 + 160 = 400 ms, and its last (5th, ordinal 4) at 400 + 4*80 = 720.
+        var schedule = new RevealSchedule(perStrokeMs: 80);
+        int[] units = Cumulative(3, 2, 5); // A, space, B
+
+        // B is source char index 2. Its first stroke reveals at exactly 400 ms.
+        Assert.False(CuneiformReveal.IsStrokeRevealed(2, 0, baselineChars: 0, elapsedMs: 399, schedule, units));
+        Assert.True(CuneiformReveal.IsStrokeRevealed(2, 0, baselineChars: 0, elapsedMs: 400, schedule, units));
+        // B's last stroke (ordinal 4) reveals at 720 ms.
+        Assert.False(CuneiformReveal.IsStrokeRevealed(2, 4, baselineChars: 0, elapsedMs: 719, schedule, units));
+        Assert.True(CuneiformReveal.IsStrokeRevealed(2, 4, baselineChars: 0, elapsedMs: 720, schedule, units));
+        // A's own strokes lead: ordinal 0 at t=0, ordinal 2 at 160 ms.
+        Assert.True(CuneiformReveal.IsStrokeRevealed(0, 0, baselineChars: 0, elapsedMs: 0, schedule, units));
+        Assert.False(CuneiformReveal.IsStrokeRevealed(0, 2, baselineChars: 0, elapsedMs: 159, schedule, units));
+        Assert.True(CuneiformReveal.IsStrokeRevealed(0, 2, baselineChars: 0, elapsedMs: 160, schedule, units));
     }
 
     [Fact]
-    public void Reveal_StrokeOrdinalOffsetsFromLetterStart()
+    public void Reveal_ComplexLetterDelaysTheNextLetterMoreThanASimpleOne()
     {
-        var schedule = new RevealSchedule(perStrokeMs: 30, perLetterMs: 100);
-        // Each stroke of a letter presses in at letterStart + ordinal*perStrokeMs. Char 1 starts at 100;
-        // its stroke ordinal 0 is in at 100, ordinal 1 at 130 — the second stroke lags the first.
-        Assert.True(CuneiformReveal.IsStrokeRevealed(1, 0, baselineChars: 0, elapsedMs: 100, schedule));
-        Assert.False(CuneiformReveal.IsStrokeRevealed(1, 1, baselineChars: 0, elapsedMs: 100, schedule));
-        Assert.True(CuneiformReveal.IsStrokeRevealed(1, 1, baselineChars: 0, elapsedMs: 130, schedule));
+        // The whole point of the recast: a 5-stroke first letter pushes the second letter's start later than
+        // a 2-stroke first letter does. Same schedule, same second letter — only the first letter's cost differs.
+        var schedule = new RevealSchedule(perStrokeMs: 80);
+        int[] afterSimple = Cumulative(2, 3); // 2-stroke letter, then a letter
+        int[] afterComplex = Cumulative(5, 3); // 5-stroke letter, then a letter
+
+        // Char 1's first stroke starts at (units before it)*80: 160 ms vs 400 ms.
+        Assert.True(CuneiformReveal.IsStrokeRevealed(1, 0, baselineChars: 0, elapsedMs: 160, schedule, afterSimple));
+        Assert.False(CuneiformReveal.IsStrokeRevealed(1, 0, baselineChars: 0, elapsedMs: 160, schedule, afterComplex));
+        Assert.True(CuneiformReveal.IsStrokeRevealed(1, 0, baselineChars: 0, elapsedMs: 400, schedule, afterComplex));
+    }
+
+    [Fact]
+    public void Reveal_StrokeOrdinalOffsetsWithinALetter()
+    {
+        var schedule = new RevealSchedule(perStrokeMs: 30);
+        int[] units = Cumulative(3, 3); // char 0 has 3 strokes; char 1 starts after them (at 3*30 = 90)
+        // Char 1 starts at 90; its stroke ordinal 0 is in at 90, ordinal 1 at 120 — the second stroke lags.
+        Assert.True(CuneiformReveal.IsStrokeRevealed(1, 0, baselineChars: 0, elapsedMs: 90, schedule, units));
+        Assert.False(CuneiformReveal.IsStrokeRevealed(1, 1, baselineChars: 0, elapsedMs: 90, schedule, units));
+        Assert.True(CuneiformReveal.IsStrokeRevealed(1, 1, baselineChars: 0, elapsedMs: 120, schedule, units));
     }
 
     [Fact]
     public void Reveal_BaselineOffsetsTheSchedule()
     {
-        var schedule = new RevealSchedule(perStrokeMs: 30, perLetterMs: 100);
-        // With baseline 3, char 3 is the first new letter (offset 0 → starts at t=0), char 4 at t=100.
-        Assert.True(CuneiformReveal.IsStrokeRevealed(3, 0, baselineChars: 3, elapsedMs: 0, schedule));
-        Assert.False(CuneiformReveal.IsStrokeRevealed(4, 0, baselineChars: 3, elapsedMs: 99, schedule));
-        Assert.True(CuneiformReveal.IsStrokeRevealed(4, 0, baselineChars: 3, elapsedMs: 100, schedule));
+        var schedule = new RevealSchedule(perStrokeMs: 30);
+        int[] units = Cumulative(3, 3, 3, 4, 4); // baseline covers the first three (3+3+3 = 9 units)
+        // With baseline 3, char 3 is the first new letter (its strokes start at t=0), char 4 at 4*30 = 120.
+        Assert.True(CuneiformReveal.IsStrokeRevealed(3, 0, baselineChars: 3, elapsedMs: 0, schedule, units));
+        Assert.False(CuneiformReveal.IsStrokeRevealed(4, 0, baselineChars: 3, elapsedMs: 119, schedule, units));
+        Assert.True(CuneiformReveal.IsStrokeRevealed(4, 0, baselineChars: 3, elapsedMs: 120, schedule, units));
     }
 
     [Fact]
     public void Reveal_TotalDuration_IsZeroWhenNothingNew()
     {
-        var schedule = new RevealSchedule(perStrokeMs: 30, perLetterMs: 100);
-        Assert.Equal(0.0, CuneiformReveal.TotalDurationMs(baselineChars: 5, totalChars: 5, schedule));
-        Assert.Equal(0.0, CuneiformReveal.TotalDurationMs(baselineChars: 8, totalChars: 5, schedule));
+        var schedule = new RevealSchedule(perStrokeMs: 30);
+        int[] units = Cumulative(3, 3, 3, 3, 3); // 5 chars
+        Assert.Equal(0.0, CuneiformReveal.TotalDurationMs(baselineChars: 5, units, schedule));
+        Assert.Equal(0.0, CuneiformReveal.TotalDurationMs(baselineChars: 8, units, schedule)); // past the end clamps
     }
 
     [Fact]
-    public void Reveal_TotalDuration_CoversAllNewLetters()
+    public void Reveal_TotalDuration_IsTheNewRunsStrokeUnitsTimesPerStroke()
     {
-        var schedule = new RevealSchedule(perStrokeMs: 30, perLetterMs: 100);
-        // 3 new letters (5 - 2); last starts at 2*100=200. Duration must be >= the last letter's start so
-        // the whole run has time to complete inside the window.
-        double d = CuneiformReveal.TotalDurationMs(baselineChars: 2, totalChars: 5, schedule);
-        Assert.True(d >= 200, $"duration {d} should cover the last new letter's start (200ms)");
+        var schedule = new RevealSchedule(perStrokeMs: 80);
+        int[] units = Cumulative(3, 2, 5); // "A B": 10 stroke-units total
+        // Whole run from baseline 0: 10 units * 80 = 800 ms (the last stroke reveals at 720; the run ends at 800).
+        Assert.Equal(800.0, CuneiformReveal.TotalDurationMs(baselineChars: 0, units, schedule));
+        // From baseline 1 (A already pressed): 10 - 3 = 7 new units * 80 = 560 ms.
+        Assert.Equal(560.0, CuneiformReveal.TotalDurationMs(baselineChars: 1, units, schedule));
+    }
+
+    [Fact]
+    public void StrokeUnitsFor_CountsGlyphStrokesSpacesAndMissingGlyphs()
+    {
+        // The layer that turns text into per-character stroke-units, using the same fold/alias/lookup as
+        // layout. In the sample bundle A/X have one stroke each and Z/Y have none; a space is SpaceStrokeUnits
+        // and an unauthored char is MissingGlyphStrokeUnits — so the units line up with the drawn strokes.
+        var layout = new CuneiformLineLayout(GlyphBundle.Parse(SampleBundleJson));
+
+        Assert.Equal(new[] { 1, CuneiformReveal.SpaceStrokeUnits, 1 }, layout.StrokeUnitsFor("A X"));
+        Assert.Equal(new[] { 0, 0 }, layout.StrokeUnitsFor("ZY")); // Z and Y have no strokes in the sample
+        Assert.Equal(new[] { CuneiformReveal.MissingGlyphStrokeUnits }, layout.StrokeUnitsFor("@"));
+    }
+
+    [Fact]
+    public void StrokeUnitsFor_ShippedBundle_MatchesTheWorkedExample()
+    {
+        // Ties the pinned worked example to real authored data: in the shipped bundle A is 3 strokes and B is
+        // 5, and a space is SpaceStrokeUnits (2), so "A B" lays out to exactly the [3, 2, 5] the timing test uses.
+        var layout = new CuneiformLineLayout(GlyphBundle.Parse(ShippedBundleJson()));
+
+        Assert.Equal(new[] { 3, CuneiformReveal.SpaceStrokeUnits, 5 }, layout.StrokeUnitsFor("A B"));
     }
 
     // A tiny hand-authored bundle: A (plain), X (kerns +10 before Y), Z (kerns -100 before Y), Y.

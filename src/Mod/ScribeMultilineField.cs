@@ -542,10 +542,11 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
     // ---- Cuneiform stroke-progression reveal (add-cuneiform-handwriting-feel). Only the newly-typed run
     // presses in; already-revealed text never replays, and non-append edits (deletion, mid-line change)
     // snap to fully revealed. Inactive unless UseCuneiform + CuneiformProgression are both on. ----
-    /// <summary>Per-stroke / per-letter reveal timing (ms). Tuned in-game; the client-config knob (task 6)
-    /// will source these. Slowed 28→50 / 90→150 per the 2026-08-03 playtest (the press-in read too fast).</summary>
-    private const double RevealPerStrokeMs = 50;
-    private const double RevealPerLetterMs = 150;
+    /// <summary>The reveal schedule — a pure stroke-count model (no per-letter slot). Its single speed knob,
+    /// <see cref="Scribe.Core.Cuneiform.CuneiformReveal.PerStrokeMs"/>, lives in Core so the rows and the
+    /// title band share one value and can't drift.</summary>
+    private static readonly Scribe.Core.Cuneiform.RevealSchedule RevealScheduleShared =
+        new(Scribe.Core.Cuneiform.CuneiformReveal.PerStrokeMs);
     private AnimationController? revealController;
     /// <summary>Whether a reveal is currently animating. When false the field paints every stroke.</summary>
     private bool revealActive;
@@ -961,7 +962,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
             }
 
             double durationMs = Scribe.Core.Cuneiform.CuneiformReveal.TotalDurationMs(
-                revealBaselineChars, text.Length, new Scribe.Core.Cuneiform.RevealSchedule(RevealPerStrokeMs, RevealPerLetterMs));
+                revealBaselineChars, CumulativeRevealUnits(text), RevealScheduleShared);
             if (durationMs > 0)
             {
                 revealActive = true;
@@ -979,6 +980,23 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
         }
 
         revealTrackedText = text;
+    }
+
+    /// <summary>Prefix-sum of the per-character stroke-units for <paramref name="forText"/>, sizing the reveal
+    /// controller's duration to match the render object's per-stroke timing exactly. Uses the same bundle +
+    /// layout rules the renderer uses, so the duration covers precisely the strokes it will draw. When the
+    /// bundle isn't loaded yet, falls back to one unit per character so the duration is still non-zero.</summary>
+    private int[] CumulativeRevealUnits(string forText)
+    {
+        if (Widget.CuneiformBundle is not { } bundle)
+        {
+            var flat = new int[forText.Length];
+            Array.Fill(flat, 1);
+            return Scribe.Core.Cuneiform.CuneiformReveal.CumulativeStrokeUnits(flat);
+        }
+
+        var layout = new Scribe.Core.Cuneiform.CuneiformLineLayout(bundle);
+        return Scribe.Core.Cuneiform.CuneiformReveal.CumulativeStrokeUnits(layout.StrokeUnitsFor(forText));
     }
 
     private void OnRevealTick(double _) => MarkNeedsBuild();
@@ -1154,9 +1172,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 revealBaselineChars: revealBaselineChars,
                 revealElapsedMs: revealController is not null
                     ? revealController.Value * revealController.Duration.TotalMilliseconds
-                    : 0.0,
-                revealPerStrokeMs: RevealPerStrokeMs,
-                revealPerLetterMs: RevealPerLetterMs)
+                    : 0.0)
             : new ScribeMultilineFieldRenderWidget(
                 text: text,
                 placeholder: Widget.Placeholder,

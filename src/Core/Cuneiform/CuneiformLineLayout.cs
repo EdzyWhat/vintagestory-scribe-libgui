@@ -320,6 +320,41 @@ public sealed class CuneiformLineLayout
     }
 
     /// <summary>
+    /// The per-character stroke-unit count that drives the stroke-progression reveal timing
+    /// (<see cref="CuneiformReveal"/>): one entry per source character of <paramref name="text"/>, in order,
+    /// so entry <c>i</c> is how long (in stroke-units) character <c>i</c> takes to press in. Each authored
+    /// glyph contributes its stroke count; a space contributes <see cref="CuneiformReveal.SpaceStrokeUnits"/>
+    /// and a character with no authored glyph <see cref="CuneiformReveal.MissingGlyphStrokeUnits"/> (both draw
+    /// nothing but still take time, so a word break / unknown char reads as a beat). It applies the SAME
+    /// uppercase-fold + alias + glyph lookup as <see cref="LayoutSegment"/>, so the units line up exactly with
+    /// the strokes the renderer draws. Pure/BCL — safe for the Core reveal math.
+    /// </summary>
+    public IReadOnlyList<int> StrokeUnitsFor(string text)
+    {
+        string source = text ?? string.Empty;
+        var units = new int[source.Length];
+        for (int i = 0; i < source.Length; i++)
+        {
+            char raw = source[i];
+            if (raw == ' ' || raw == '\t' || raw == '\n')
+            {
+                units[i] = CuneiformReveal.SpaceStrokeUnits;
+                continue;
+            }
+
+            char c = char.ToUpperInvariant(raw);
+            if (Aliases.TryGetValue(c, out char alias))
+            {
+                c = alias;
+            }
+            Glyph? glyph = _bundle.Get(c);
+            units[i] = glyph is null ? CuneiformReveal.MissingGlyphStrokeUnits : glyph.Strokes.Count;
+        }
+
+        return units;
+    }
+
+    /// <summary>
     /// Lays a single segment out, recording the cumulative pen position at every source-character
     /// boundary. <paramref name="sourceStart"/> is stamped onto the result as
     /// <see cref="CuneiformLine.SourceStart"/> so wrapped lines can be mapped back to the original string.

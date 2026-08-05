@@ -101,7 +101,7 @@
 > Stroke counts per glyph are authored data (A–Z average ≈3.1, min 2, max 5; punctuation 1–7); see
 > `src/Mod/assets/scribe/textures/fonts/cuneiform-glyphs-1.json` and `GlyphBundle`.
 
-- [ ] 5.1 **Core — make the reveal engine stroke-count aware (`src/Core/Cuneiform/CuneiformReveal.cs`).** The
+- [x] 5.1 **Core — make the reveal engine stroke-count aware (`src/Core/Cuneiform/CuneiformReveal.cs`).** The
   current `IsStrokeRevealed(globalCharIndex, strokeOrdinal, baselineChars, elapsedMs, schedule)` computes
   `letterOffset * PerLetterMs + strokeOrdinal * PerStrokeMs`, which assumes the fixed-slot model. Replace the
   time basis with a cumulative stroke-unit count. The pure function no longer has enough info from
@@ -114,11 +114,19 @@
   in. Keep it pure and VS-API-free (Core invariant). `RevealSchedule` should drop `PerLetterMs`; keep
   `PerStrokeMs`. Also decide how a space's "2 units" is expressed — a named constant (e.g.
   `SpaceStrokeUnits = 2`) is clearest.
-- [ ] 5.2 **Core — rewrite `TotalDurationMs`** to return `(total stroke-units from baseline to end) *
+  *(DONE. `RevealSchedule` now carries only `PerStrokeMs`. `IsStrokeRevealed` takes a new
+  `IReadOnlyList<int> cumulativeStrokeUnits` prefix-sum (design option a) and prices a stroke at
+  `(unitsBeforeChar − unitsBeforeBaseline + strokeOrdinal) × PerStrokeMs`. Added `CumulativeStrokeUnits`
+  (prefix-sum builder), named constants `SpaceStrokeUnits = 2` and `MissingGlyphStrokeUnits = 2` (the
+  5.1 decision: a missing glyph reads as the same 2-unit pause as a space, so it never zero-times), and the
+  hoisted speed `CuneiformReveal.PerStrokeMs = 80`. The per-character units come from a new
+  `CuneiformLineLayout.StrokeUnitsFor(text)` that applies the SAME fold/alias/glyph lookup as layout, so
+  units line up exactly with drawn strokes. All pure/BCL — Core purity intact.)*
+- [x] 5.2 **Core — rewrite `TotalDurationMs`** to return `(total stroke-units from baseline to end) *
   PerStrokeMs` instead of `newChars * PerLetterMs`, so the animation controller's Duration matches the new
   model exactly (the last stroke must reveal at or before Duration). Include the trailing letter's own strokes
   (the old +1 letter-slot tail is no longer needed — the sum already covers every stroke).
-- [ ] 5.3 **Mod — feed per-character stroke-units into the reveal at both call sites.** In
+- [x] 5.3 **Mod — feed per-character stroke-units into the reveal at both call sites.** In
   `ScribeMultilineField.cs` (`UpdateReveal`, ~L938) and `ScribeCuneiformTitleField.cs` (`UpdateReveal`, ~L150),
   the State already has the laid-out `CuneiformLine`(s) via the render path and the `GlyphBundle`
   (`Widget.CuneiformBundle`). Build the per-character stroke-unit list for the current text (glyph → authored
@@ -129,22 +137,44 @@
   same line the strokes came from, so consider computing it render-side from `lines` rather than plumbing a
   parallel array through the widget (whichever keeps the widget's prop surface smaller — the render object is
   the natural owner since it already holds the laid-out lines).
-- [ ] 5.4 **Set `PerStrokeMs = 80`** and REMOVE `PerLetterMs` at both Mod constant sites
+  *(DONE. The render object (`ScribeCuneiformField.cs`) is the owner: it builds
+  `revealCumulativeUnits` in `PerformLayout` from the WHOLE buffer via `layout.StrokeUnitsFor(text)` →
+  `CumulativeStrokeUnits` (absolute char indices, wrapping-independent) and passes it to the updated
+  `IsStrokeRevealed` in `DrawStrokePass`. Both field states build the same prefix-sum via a small
+  `CumulativeRevealUnits(text)` helper (bundle → `StrokeUnitsFor`; falls back to 1-unit-per-char before the
+  bundle loads) purely to size `TotalDurationMs`. The two `revealPerStrokeMs`/`revealPerLetterMs` widget
+  props were REMOVED (smaller prop surface) since the speed is now single-homed in Core.)*
+- [x] 5.4 **Set `PerStrokeMs = 80`** and REMOVE `PerLetterMs` at both Mod constant sites
   (`ScribeMultilineField.cs:547-548`, `ScribeCuneiformTitleField.cs:96-97`) and anywhere the render object
   defaults it (`ScribeCuneiformField.cs` `revealPerLetterMs`, and the widget ctor params
   `revealPerLetterMs`). These two constants are DUPLICATED across the two field files today — while here,
   hoist them into ONE shared constant (e.g. a `CuneiformRevealTiming` static in Core, or a shared const on the
   render object) so the editor and title band can't drift. The author explicitly wants them unified.
-- [ ] 5.5 **Core tests (`tests/Core.Tests/CuneiformTests.cs`).** The existing reveal tests
+  *(DONE. Hoisted to `CuneiformReveal.PerStrokeMs = 80` in Core — the ONE home. Both field states hold a
+  `static readonly RevealScheduleShared = new(CuneiformReveal.PerStrokeMs)` and the render object reads
+  `CuneiformReveal.PerStrokeMs` directly, so editor rows and the title band share one value. `PerLetterMs`
+  is gone from the model everywhere — the `RevealSchedule` struct, both field constants, and the render
+  object/widget defaults + ctor params.)*
+- [x] 5.5 **Core tests (`tests/Core.Tests/CuneiformTests.cs`).** The existing reveal tests
   (`Reveal_NewLetters_PressInOnSchedule`, `Reveal_StrokeOrdinalOffsetsFromLetterStart`,
   `Reveal_BaselineOffsetsTheSchedule`, `Reveal_TotalDuration_*`) all encode the OLD per-letter-slot math
   (`perLetterMs: 100`) and WILL fail — rewrite them for the stroke-count model. Add a test that pins the
   author's worked example: with `PerStrokeMs = 80` and per-char units `[3, 2(space), 5]` for `"A B"`, the
   space-then-`B` boundary reveals `B`'s first stroke at 400 ms (399 → false, 400 → true) and `B`'s last stroke
   at 400 + 4*80 = 720 ms. Keep the baseline-always-revealed and snap-on-non-append behaviors covered.
-- [ ] 5.6 **Verify + playtest.** `dotnet build` clean, Core suite green, no `Vintagestory.*` in `src/Core/`.
+  *(DONE. Rewrote the reveal tests for the stroke-count model: `Reveal_WorkedExample_ABSpaceB_At80MsPerStroke`
+  pins the author's example (B's first stroke 399→false / 400→true, last stroke 720),
+  `Reveal_ComplexLetterDelaysTheNextLetterMoreThanASimpleOne` proves a 5-stroke letter pushes the next later
+  than a 2-stroke one, plus baseline/ordinal/duration coverage. Added `StrokeUnitsFor_*` tests, including one
+  that reads the SHIPPED bundle and confirms "A B" → `[3, 2, 5]` — tying the pinned numbers to real authored
+  data (A=3, B=5 strokes).)*
+- [~] 5.6 **Verify + playtest.** `dotnet build` clean, Core suite green, no `Vintagestory.*` in `src/Core/`.
   Then `bash build/restage.sh Debug`, fully relaunch, and with cuneiform + stroke-progression ON: type a word
   and confirm complex letters (B/Q/G/M/O/R/W) visibly take longer to press in than simple ones (C/L/T/V/X/Y),
   spaces read as a short pause, and the overall pace feels right at 80 ms/stroke. Tune `PerStrokeMs` from
   there if needed. Confirm the ghost lead-in still leads correctly under the new timing (it shares the same
   reveal gate).
+  *(Code half DONE: `dotnet build` clean (0 errors; the 4 warnings are pre-existing/unrelated), Core suite
+  286/286 green, Core purity intact (no `Vintagestory.*` in `src/Core/`). The in-game restage + playtest
+  (complex-vs-simple letter pacing, space pause, ghost lead-in under the new timing) is DEFERRED to the
+  author — left unchecked as `[~]`.)*

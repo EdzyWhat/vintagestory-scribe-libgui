@@ -93,8 +93,10 @@ internal sealed class ScribeCuneiformTitleFieldState : State<ScribeCuneiformTitl
     // APPEND to the tracked title animates its new suffix; any other change snaps to fully revealed. Active
     // only when the field carries a non-zero jitter/progression config (Widget.JitterStrength gates jitter;
     // progression is enabled whenever the tablet builds this field).
-    private const double RevealPerStrokeMs = 50;
-    private const double RevealPerLetterMs = 150;
+    /// <summary>The shared stroke-count reveal schedule (same single Core speed knob as the rows, so the
+    /// title band can't drift from them).</summary>
+    private static readonly Scribe.Core.Cuneiform.RevealSchedule RevealScheduleShared =
+        new(Scribe.Core.Cuneiform.CuneiformReveal.PerStrokeMs);
     private AnimationController? revealController;
     private bool revealActive;
     private int revealBaselineChars;
@@ -169,8 +171,7 @@ internal sealed class ScribeCuneiformTitleFieldState : State<ScribeCuneiformTitl
             }
 
             double durationMs = Scribe.Core.Cuneiform.CuneiformReveal.TotalDurationMs(
-                revealBaselineChars, text.Length,
-                new Scribe.Core.Cuneiform.RevealSchedule(RevealPerStrokeMs, RevealPerLetterMs));
+                revealBaselineChars, CumulativeRevealUnits(text), RevealScheduleShared);
             if (durationMs > 0)
             {
                 revealActive = true;
@@ -185,6 +186,22 @@ internal sealed class ScribeCuneiformTitleFieldState : State<ScribeCuneiformTitl
         }
 
         revealTrackedText = text;
+    }
+
+    /// <summary>Prefix-sum of the per-character stroke-units for <paramref name="forText"/>, so the title's
+    /// reveal duration matches the render object's per-stroke timing exactly (mirrors the row field). Falls
+    /// back to one unit per character when the bundle isn't loaded yet.</summary>
+    private int[] CumulativeRevealUnits(string forText)
+    {
+        if (Widget.Bundle is not { } bundle)
+        {
+            var flat = new int[forText.Length];
+            Array.Fill(flat, 1);
+            return Scribe.Core.Cuneiform.CuneiformReveal.CumulativeStrokeUnits(flat);
+        }
+
+        var layout = new Scribe.Core.Cuneiform.CuneiformLineLayout(bundle);
+        return Scribe.Core.Cuneiform.CuneiformReveal.CumulativeStrokeUnits(layout.StrokeUnitsFor(forText));
     }
 
     private void OnRevealTick(double _) => SetState(() => { });
@@ -336,8 +353,6 @@ internal sealed class ScribeCuneiformTitleFieldState : State<ScribeCuneiformTitl
                 revealBaselineChars: revealBaselineChars,
                 revealElapsedMs: revealController is not null
                     ? revealController.Value * revealController.Duration.TotalMilliseconds
-                    : 0.0,
-                revealPerStrokeMs: RevealPerStrokeMs,
-                revealPerLetterMs: RevealPerLetterMs));
+                    : 0.0));
     }
 }

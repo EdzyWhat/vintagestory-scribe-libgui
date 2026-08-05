@@ -81,8 +81,6 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     private bool revealActive;
     private int revealBaselineChars;
     private double revealElapsedMs;
-    private double revealPerStrokeMs = 28;
-    private double revealPerLetterMs = 90;
 
     /// <summary>Ghost lead-in opacity, as a fraction of the ink alpha (add-cuneiform-handwriting-feel 5.1/7.7).
     /// While the reveal is active, the strokes that have NOT yet pressed in are drawn once at this faint alpha
@@ -96,6 +94,11 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     private readonly List<CuneiformLine> lines = new();
     private float scale = 1f;       // grid units → pixels
     private float lineHeightPx = 28f;
+    // Prefix-sum of per-character stroke-units for the WHOLE buffer (absolute char indices), rebuilt each
+    // layout. The reveal keys off absolute indices continuous across wrapped lines, and stroke-units depend
+    // only on the source text (not on where it wraps), so this is computed once from `text` here and read by
+    // the per-stroke reveal test in DrawStrokePass. Length is text.Length + 1 (see CumulativeStrokeUnits).
+    private int[] revealCumulativeUnits = { 0 };
 
     public string Text { get => text; set => SetProperty(ref text, value ?? "", relayout: true); }
     public int Caret { get => caret; set => SetProperty(ref caret, value, repaint: true); }
@@ -142,10 +145,6 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     public int RevealBaselineChars { get => revealBaselineChars; set => SetProperty(ref revealBaselineChars, value, repaint: true); }
     /// <summary>Elapsed reveal time in ms, driven by the field State's animation controller. Repaint only.</summary>
     public double RevealElapsedMs { get => revealElapsedMs; set => SetProperty(ref revealElapsedMs, value, repaint: true); }
-    /// <summary>Milliseconds between strokes within a letter (fast). Repaint only.</summary>
-    public double RevealPerStrokeMs { get => revealPerStrokeMs; set => SetProperty(ref revealPerStrokeMs, value, repaint: true); }
-    /// <summary>Milliseconds between successive letters (the pause). Repaint only.</summary>
-    public double RevealPerLetterMs { get => revealPerLetterMs; set => SetProperty(ref revealPerLetterMs, value, repaint: true); }
 
     protected override void PerformLayout()
     {
@@ -167,6 +166,10 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
         }
 
         var layout = new CuneiformLineLayout(bundle);
+        // Per-character stroke-units for the whole buffer → prefix sum, so the reveal test can price each
+        // stroke's press-in time by how many stroke-units precede its character. Depends only on the source
+        // text (not on wrapping), so it's built once from the full buffer here and read by DrawStrokePass.
+        revealCumulativeUnits = CuneiformReveal.CumulativeStrokeUnits(layout.StrokeUnitsFor(text));
         if (singleLine)
         {
             // Title band: one line, no wrap. Overflow is hard-clipped by the enclosing clip at the band's
@@ -228,7 +231,7 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
         paint.Style = SKPaintStyle.Fill;
         paint.IsAntialias = true;
 
-        var schedule = new RevealSchedule(revealPerStrokeMs, revealPerLetterMs);
+        var schedule = new RevealSchedule(CuneiformReveal.PerStrokeMs);
         using var path = new SKPath();
 
         // Pass 1 (optional): every revealed stroke's blurred HALO, in the glow color, across ALL wrapped
@@ -318,7 +321,8 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
                 // prior text). When the reveal is inactive there is no tail — the Revealed pass draws everything
                 // and the Ghost pass is never requested.
                 bool strokeRevealed = !revealActive || CuneiformReveal.IsStrokeRevealed(
-                    lineStart + ps.SourceCharIndex, ps.StrokeOrdinal, revealBaselineChars, revealElapsedMs, schedule);
+                    lineStart + ps.SourceCharIndex, ps.StrokeOrdinal, revealBaselineChars, revealElapsedMs,
+                    schedule, revealCumulativeUnits);
                 bool wantThisStroke = pass == StrokePass.Ghost ? !strokeRevealed : strokeRevealed;
                 if (!wantThisStroke)
                 {
@@ -453,8 +457,7 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
         Vector4 boxColor, Vector4 borderColor, float borderThickness, Vector4 cornerRadii,
         bool singleLine = false, bool caretVisible = true,
         float jitterStrength = 0f, int jitterSeed = 0, float rotationDegrees = 0f, CuneiformGlow glow = default,
-        bool revealActive = false, int revealBaselineChars = 0, double revealElapsedMs = 0,
-        double revealPerStrokeMs = 28, double revealPerLetterMs = 90)
+        bool revealActive = false, int revealBaselineChars = 0, double revealElapsedMs = 0)
     {
         Text = text;
         Caret = caret;
@@ -480,8 +483,6 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
         RevealActive = revealActive;
         RevealBaselineChars = revealBaselineChars;
         RevealElapsedMs = revealElapsedMs;
-        RevealPerStrokeMs = revealPerStrokeMs;
-        RevealPerLetterMs = revealPerLetterMs;
     }
 
     public string Text { get; }
@@ -508,8 +509,6 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
     public bool RevealActive { get; }
     public int RevealBaselineChars { get; }
     public double RevealElapsedMs { get; }
-    public double RevealPerStrokeMs { get; }
-    public double RevealPerLetterMs { get; }
 
     public override RenderObject CreateRenderObject() => new ScribeCuneiformFieldRender();
 
@@ -540,7 +539,5 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
         ro.RevealActive = RevealActive;
         ro.RevealBaselineChars = RevealBaselineChars;
         ro.RevealElapsedMs = RevealElapsedMs;
-        ro.RevealPerStrokeMs = RevealPerStrokeMs;
-        ro.RevealPerLetterMs = RevealPerLetterMs;
     }
 }
