@@ -300,9 +300,21 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
     {
         if (stack?.Collectible is null) return null;
         var (material, state) = ResolveMaterialState(stack);
+
+        // TEMP DIAGNOSTIC (softening-regression, zero-point-three-fixes): all three rehydration paths funnel
+        // through here, so one log answers the open question — do the "hard" tablets in-game actually resolve
+        // to state==Hard, or are they reading Wet (e.g. legacy attribute-hardened stacks stranded by the
+        // variant pivot, or a Collectible that never got swapped to the -hard sibling)? Also confirms the soft
+        // sibling code + GetItem lookup. Remove once the playtest pins the cause.
+        var wantSoft = stack.Collectible.CodeWithVariant("material", material);
+        world.Logger.Notification(
+            "[scribe] Soften: variant='{0}' resolved=({1},{2}) softCode='{3}' softItemFound={4}",
+            stack.Collectible.Variant?["material"] ?? "<null>", material, state, wantSoft,
+            world.GetItem(wantSoft) is not null);
+
         if (state != TabletState.Hard) return null;
 
-        var softItem = world.GetItem(stack.Collectible.CodeWithVariant("material", material));
+        var softItem = world.GetItem(wantSoft);
         if (softItem is null) return null;
 
         var softStack = new ItemStack(softItem);

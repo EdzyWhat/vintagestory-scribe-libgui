@@ -2688,6 +2688,12 @@ regression checks specific to this change's scoped-to-the-input approach.
         sharing a `recipegroup` (which cycles into one grid) or the handbook isn't rendering both. NOTE: user
         ALSO wants the schematic recipe reshaped from 2×2 to 1×3 with the schematic on the left-middle of the
         next row (see general notes) — reconcile with this before retest.
+      - **Still broken 2026-08-04** (root-caused + fixed, awaiting retest): decompiled `addCreatedByInfo` —
+        the handbook buckets grid recipes by `RecipeGroup` and renders ONE cycling grid per distinct value;
+        recipes that OMIT `recipegroup` all default to `0`, so BOTH scribe recipes collapsed into one grid.
+        The original "leave ungrouped → shows side-by-side" plan was backwards. Fix: distinct `recipegroup`
+        (trait=1, schematic=2) → two separate grids. Also reshaped schematic to `BGM,S__` (3×2, schematic
+        bottom-left) to mirror the trait `BGM` row. Retest: expect TWO grids, trait one asterisked.
 - [ ] `3e7fce6a` **Quench a hard tablet.** Crouch + right-click a bucket/barrel of water while holding a
       HARD clay tablet → it softens to wet and keeps its document; repeat aimed at an empty/non-water
       container and at open ground → no softening and ground-storage placement still works; confirm a wet
@@ -2705,3 +2711,12 @@ regression checks specific to this change's scoped-to-the-input approach.
       recipe is unchanged. *(zero-point-three-fixes 4.4)*
       - **Confirmed 2026-08-04** (submission 2026-08-04T21-28-56): "Works." Clay tablet now costs 12 clay
         and still yields one tablet; wax recipe unchanged.
+
+- [ ] `d6d7f03f` **Backdrop fully opaque.** Open a hand-FIRED and a HARDENED (dried, unfired) clay tablet
+      and confirm the GUI backdrop is fully OPAQUE — no uniform see-through onto the world — at every scroll
+      position; then open a wet tablet's editor and a tabbed Lectern/Notebook view and confirm those look
+      unchanged. (Requires a full client relaunch after restage.) *(zero-point-three-fixes 4.6)*
+
+- [ ] `7e15958a` **Tablet lies flat on ground.** Crouch + right-click a tablet onto open ground → it now
+      lies FLAT, writing face up (slight `y:35` diagonal), NOT standing/rolled on its edge. Check a wet, a
+      hard, and a fired tablet; confirm the held/dropped-item render is unchanged. *(zero-point-three-fixes 4.7)*

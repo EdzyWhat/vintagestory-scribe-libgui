@@ -44,6 +44,11 @@ land here as they're triaged.
   the clay art by opaque white regardless of what the previous frame's last op left. The fix lives in Scribe
   code because the leaky draw ops are in the vendored `Gui.dll` (can't edit). Frame-order-independent and
   view-agnostic; draws nothing of its own, so views that already rendered correctly are unchanged.
+- **Fix the tablet's ground-placement orientation.** A tablet placed on the ground via `GroundStorable`
+  lies on its edge instead of flat, writing-face-up. Root cause: its `groundStorageTransform` was
+  copy-pasted from the notebook, whose `rotation z:90` correctly lays a spine-up BOOK model flat — but the
+  tablet model is already built lying flat, so the same `z:90` rolls it onto its edge. Fix: set
+  `rotation.z` to `0` in all three transform blocks (wet/wax, `-hard`, `-fired`), keeping the `y:35` yaw.
 - **Raise the clay-tablet recipe cost from 8 to 12 clay.** Each of the three clay tablet grid recipes
   (`clay-red`/`clay-blue`/`clay-fire`) currently uses a `3×2` layout with clay in 4 cells at quantity 2 =
   8 clay. Repack the clay into a `2×3` block (6 cells × quantity 2 = 12 clay), keeping the same knife +
@@ -73,9 +78,12 @@ land here as they're triaged.
 
 - **Code:** `src/Mod/ItemScribeTablet.cs` (`OnHeldInteractStart` gains the quench branch; reuses existing
   `Soften`/`CarryStackData`/`ResolveMaterialState`). Possibly a splash/sizzle sound + `PreventDefault`
-  handling. `src/Mod/assets/scribe/recipes/grid/scribeclockmakernotebook-schematic.json` (grid reshape).
+  handling. `src/Mod/assets/scribe/recipes/grid/scribeclockmakernotebook-schematic.json` (grid reshape to
+  `BGM,S__` 3×2 + `recipegroup: 2`) and `scribeclockmakernotebook.json` (`recipegroup: 1`).
   `src/Mod/assets/scribe/recipes/grid/scribetablet-clay.json` (clay 8→12 via a 2×3 clay block, all three
-  color variants). Possibly `src/Mod/assets/scribe/lang/en.json` (a world-interaction hint for the quench).
+  color variants). `src/Mod/assets/scribe/itemtypes/scribetablet.json` (`groundStorageTransform.rotation.z`
+  90→0 in all three transform blocks — the flat-lie fix). Possibly `src/Mod/assets/scribe/lang/en.json` (a
+  world-interaction hint for the quench).
   `src/Mod/ScribeBackdropPaintReset.cs` (NEW — the `ScribeResetPaintColor` shared-paint reset wrapper) and
   `src/Mod/ScribeDialogBase.Layout.cs` (`WrapBackdrop` wraps the backdrop `Container` in it).
 - **APIs:** vanilla `BlockLiquidContainerBase.GetContent(pos)` / `WaterTightContainableProps` /

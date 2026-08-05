@@ -45,17 +45,26 @@ so there is no gesture to inherit; we author the trigger and reuse `Soften` unch
 
 ## Decisions
 
-**D1 — Reshape the schematic recipe to 2×2, not 3×2 or a 3×3 cross.**
-`ingredientPattern: "BGMS"` becomes `width: 2, height: 2` (`"BG"` / `"MS"`, or any 2×2 arrangement).
-2×2 is the tightest layout that fits all four ingredients in the grid and reads as a compact block.
-*Alternatives:* 3×2 with two empty cells (wastes space, and empty cells need the pattern's `_` filler,
-which is more error-prone); a 3×3 arrangement (overkill). 2×2 is the minimal correct fix.
+**D1 — Reshape the schematic recipe to `BGM,S__` (3×2), mirroring the trait recipe's `BGM` row.**
+`ingredientPattern: "BGMS"` (unusable 1×4) becomes `width: 3, height: 2`, pattern `"BGM,S__"`: the top
+row is Notebook-Gear-MetalParts (identical to the trait recipe's single row), with the reusable schematic
+in the bottom-left cell (the two trailing `_` are empty cells). This makes the schematic path read as
+"the same craft, plus a blueprint on the shelf below" and keeps the two handbook grids visually parallel
+(both share the `BGM` row). *Alternatives:* a compact 2×2 `"BG,MS"` block (fits, but doesn't visually
+echo the trait recipe); a 3×3 cross (overkill). Any layout fitting the 3×3 grid is craftable — the shape
+is cosmetic — so it's chosen to parallel the trait recipe per the product ask.
 
-**D2 — Keep the two recipes ungrouped (no shared `recipegroup`).**
-Per the product decision, the handbook should show both paths as distinct "Created by" grids rather than
-one cycling entry. `addCreatedByInfo` does this by default when recipes lack a shared `recipegroup`.
-*Alternative:* Sling-style `recipegroup` collapses alternates into one cycling grid — tidier but hides
-that there are two genuinely different acquisition paths (trait vs. blueprint), which is the point.
+**D2 — Give the two recipes DISTINCT `recipegroup` values (1 = trait, 2 = schematic).**
+Corrected from the original plan (which said to leave them ungrouped): decompiling
+`CollectibleBehaviorHandbookTextAndExtraInfo.addCreatedByInfo` shows the "Created by" section buckets
+grid recipes into an `OrderedDictionary` keyed by `RecipeGroup` and renders ONE cycling slideshow grid per
+distinct group value. Recipes that omit `recipegroup` all default to `0`, so leaving both ungrouped puts
+them in the SAME bucket → they collapse into ONE cycling grid (exactly the "only one grid shows" playtest
+symptom). To get TWO side-by-side grids they must have DIFFERENT group values. Vanilla confirms both
+readings: planks all share `recipeGroup: 1` (one cycling grid); Sling uses `1/2/3` (separate). `RecipeGroup`
+is display-only — it is not referenced in `GridRecipe.Matches`/`MatchesAtPosition`, so it never affects
+craftability. *Alternative:* a single shared group to cycle both in one grid — rejected because the two
+acquisition paths (trait vs. blueprint) should read as genuinely distinct, per the product ask.
 
 **D3 — Quench trigger lives in `OnHeldInteractStart`, gated on ShiftKey + a water-container `blockSel`.**
 The tablet's `OnHeldInteractStart` already branches on `byEntity.Controls.ShiftKey` to pass through to

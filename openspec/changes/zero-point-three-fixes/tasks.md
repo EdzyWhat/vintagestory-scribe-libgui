@@ -1,12 +1,17 @@
 ## 1. Fix the schematic recipe grid fit
 
 - [x] 1.1 Repack `src/Mod/assets/scribe/recipes/grid/scribeclockmakernotebook-schematic.json` from the
-  unusable `width: 4, height: 1` (`"BGMS"`) to a 2×2 layout (`width: 2, height: 2`, pattern `"BG"`/`"MS"`),
+  unusable `width: 4, height: 1` (`"BGMS"`) to a 3×2 layout (`width: 3, height: 2`, pattern `"BGM,S__"` —
+  Notebook-Gear-MetalParts on the top row mirroring the trait recipe, schematic in the bottom-left cell),
   keeping the same four ingredient definitions, the same output (one Clockmaker's Notebook), and
   `consume: false` on the schematic ingredient. No ingredient or output change.
-- [x] 1.2 Confirm the trait-gated recipe `scribeclockmakernotebook.json` is left unchanged (still
-  `"BGM"`, `width: 3, height: 1`, `requiresTrait: "tinkerer"`) and that neither recipe declares a shared
-  `recipegroup`, so the handbook renders them as two separate "Created by" grids.
+- [x] 1.2 Give the two recipes DISTINCT `recipegroup` values so the handbook renders them as two separate
+  "Created by" grids: `recipegroup: 1` on the trait-gated `scribeclockmakernotebook.json` (otherwise
+  unchanged — still `"BGM"`, `width: 3, height: 1`, `requiresTrait: "tinkerer"`) and `recipegroup: 2` on the
+  schematic recipe. NOTE (corrected via decompile of `addCreatedByInfo`): the handbook buckets grid recipes
+  by `RecipeGroup` and renders one cycling grid per distinct value; recipes that OMIT `recipegroup` all
+  default to `0` and collapse into ONE cycling grid — the original "leave them ungrouped" plan was backwards.
+  `RecipeGroup` is display-only (not in `GridRecipe.Matches`), so this doesn't affect craftability.
 
 ## 2. Add the crouch + right-click quench rehydration path
 
@@ -44,6 +49,16 @@
   `WrapBackdrop` (pixel-art path) in `ScribeResetPaintColor` so the reset runs each frame before the
   backdrop's `DrawMaskedBox`. Frame-order-independent (does not rely on painting an opaque element last).
 
+## 5. Fix the tablet's ground-placement orientation (lies on its edge)
+
+- [x] 5.1 In `src/Mod/assets/scribe/itemtypes/scribetablet.json`, change `groundStorageTransform.rotation.z`
+  from `90` to `0` in all three transform blocks (base wet/wax, `*-hard`, `*-fired`). Root cause: the
+  transform was copy-pasted from `scribenotebook.json`, whose `z:90` roll correctly lays a spine-up BOOK
+  model flat — but the `item/tablet-clay` model is already built lying flat (body `tablet1` is thin in Y with
+  the `writing1` face on top), so the same `z:90` rolls the tablet onto its edge. Keep the `y:35` yaw (a
+  pleasant diagonal, matching the notebook convention) and the translation/origin. Leave the notebook and the
+  tablet's `groundTransform` (already `z:0`) unchanged.
+
 ## 4. Verification
 
 - [x] 4.1 Build the solution and run the Core test suite — confirm 0 errors and the suite stays green; verify no
@@ -64,3 +79,6 @@
   backdrop is fully OPAQUE — no uniform see-through onto the world behind it — at every scroll position.
   Then open a wet tablet's editor and a tabbed Lectern/Notebook view and confirm those backdrops look
   unchanged. (Requires a full client relaunch after restage, since assets load at boot.)
+- [ ] 4.7 In-game: crouch + right-click a tablet onto open ground and confirm it now lies FLAT with the
+  writing face up (at a slight `y:35` diagonal), not standing/rolled on its edge. Check a wet, a hard, and a
+  fired tablet (all three transform blocks). Confirm the held/dropped-item render is unchanged.

@@ -1,6 +1,7 @@
 [
 	{
 		ingredientPattern: "BGM",
+		recipegroup: 1,
 		requiresTrait: "tinkerer",
 		ingredients: {
 			"B": { type: "item", code: "scribe:scribenotebook" },
