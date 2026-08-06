@@ -2000,8 +2000,16 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       selector falls back to the default font without crashing, and task text renders normally. Restore the
       TTF after. *(v1-release-checklist 6.10)*
       - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "Works."
-
-## scribe-notebook-frame (remaining)
+- [ ] `04e53d95` **Save-compat v4->v5.** ⚠️ HARD 1.0 BLOCKER. Load a pre-tablet (v4) world under the
+      v5 build; confirm lectern and notebook documents survive with no data loss. Procedure: (1) run the
+      staged `scribe_0.1.2.zip` (writes codec v4), create a world, place a lectern + a notebook, write a
+      few tasks in each, save & quit. (2) Swap in the v5 dev build, reload the SAME world. (3) Confirm the
+      lectern and notebook open and every task is intact; v4 docs (which had no title) should show the
+      default title, not vanish. *(RELEASE.md V.3)*
+      - **Confirmed 2026-08-06** (manual v4->v5 migration test): created a lectern world under the
+        staged v0.1.2 build (codec v4), reloaded the same world under the v5 dev build — the lectern
+        opened clean and every task survived intact. (v0.1.2 predates notebooks, so lectern docs are the
+        only v4 payload; there is no v4 notebook data to migrate.) Clears the hard 1.0 save-compat gate.
 
 > Post-playtest fix: Pixel Art canvas now tracks the live W value (re-applies WindowSize + SyncLayoutSize
 > in OnRenderGUI when W changes), so raising Pixel Art Size above the opened value grows the art canvas

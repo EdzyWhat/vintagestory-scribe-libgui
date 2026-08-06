@@ -26,14 +26,21 @@ included — no fast-follow split. Deps unchanged: `game 1.22.x`, hard `gui 3.1.
       `scribetablet.json`; `Harden` `freshHours ≈48` + `transitionHours` tuned. Confirmed in-game via the
       dry→hard→fire→rehydrate chain (`add-tablet-firing-mechanic` 8.2–8.7 all confirmed). Firing-tuning
       OpenSpec tasks 0.2/0.3 still show `[ ]` — reconcile the checkboxes when archiving that change.
-- [ ] **V.3. SAVE-COMPAT LOAD TEST — ⚠️ HARD BLOCKER.** Codec is `Version=5` accepting `PriorVersion=4`;
-      versions were bumped inline, not in an isolated migration change. With 700+ downloads live, a
-      save-break is unacceptable. **Open a real pre-tablet (v4) world and confirm it loads clean under a
-      v5 build** — lectern + notebook documents intact, no data loss. Non-negotiable gate before tagging.
-      *(No `TESTING.md` item covers this yet; add one and run it deliberately.)*
+- [x] **V.3. SAVE-COMPAT LOAD TEST — was the ⚠️ HARD BLOCKER, now PASSED (2026-08-06).** Codec is
+      `Version=5` accepting `PriorVersion=4`. Verified live: created a lectern world under the staged
+      v0.1.2 build (codec v4), reloaded the same world under the v5 dev build — the lectern opened clean
+      and every task survived intact. v0.1.2 predates notebooks, so lectern docs are the only v4 payload;
+      there is no v4 notebook data to migrate. Recorded in `TESTING.md` (`04e53d95`).
 - [ ] **V.4. Localization sweep** — confirm every user-facing string routes through `Lang.Get` (no
       hardcoded English in C#) so future translators need no refactor. English-only ship is fine;
       `TriggerIngameError` paths already spot-checked clean — finish the sweep.
+- [ ] **V.5. FIRST-OPEN FLICKER FIX — ⚠️ HARD BLOCKER (found 2026-08-06).** The first open of any
+      not-yet-crafted Scribe item (notebook/clockmaker/tablet) flickers closed and needs a second
+      right-click. Root cause traced: the one-time server "Picked up" history re-sync fires `SlotModified`
+      and the DocId-strict close-guard mis-reads it as a switch-away. Spec'd as OpenSpec change
+      `fix-item-dialog-first-open-flicker` (proposal/design/specs/tasks complete, apply-ready). Every
+      player hits this on first contact — must fix + verify before tagging 1.0.0. Archive this change in
+      Track A once applied.
 
 ## Track A — Archive completed OpenSpec changes (in dependency order)
 

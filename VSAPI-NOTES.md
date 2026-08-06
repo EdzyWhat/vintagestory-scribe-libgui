@@ -1805,6 +1805,40 @@ objects: never RESTORE an inherited `SharedPaint.Color` on teardown — leave it
 the neutral every framework draw except `DrawMaskedBox` sets before painting.** Fixed in
 `ScribeCuneiformField.cs` + `CuneiformText.cs` (both cuneiform stroke render objects).
 
+## Held-item dialog flickers closed on FIRST open of a not-yet-crafted item (2026-08-06)
+
+**Symptom: the first time a player opens a Scribe item they did NOT craft (notebook, clockmaker's
+notebook, tablet), the dialog opens and immediately flickers closed; a second right-click makes it
+stay. Reproduces for every item-hosted dialog; a self-crafted item does NOT flicker.**
+
+Root cause is a collision between three correct-in-isolation behaviors, traced end-to-end in source
+(not guessed — this is the "measure, don't theorize" class):
+
+1. Opening a brand-new item generates a fresh `ScribeDocument`/`DocId` **client-side** in the host
+   ctor (`NotebookHost`/`TabletHost`) and writes it to the local stack.
+2. The open path fires `NotifyServerNotebookOpened`. Server-side, `OnServerReceivedNotebookOpened`
+   adds the one-time "Picked up" `HistoryEntry`, `slot.MarkDirty()`s, and re-syncs the stack to the
+   client — but **deliberately without the document** (`TryRecordPickedUpOnSlot` touches only
+   `scribeHistory`, because the server doesn't know the client-generated DocId; stamping a
+   server-random doc would make the owner's later edits get rejected on DocId mismatch).
+3. That re-sync fires `IInventory.SlotModified` on the active hotbar slot. The dialog's
+   `OnHotbarSlotModified` forwards to the close-guard `ActiveHandItemHostsThisDocument()`, which
+   compares the re-synced stack's DocId to the open dialog's — they no longer match (the re-sync
+   dropped/replaced the client doc), so it reads as "switched away" and calls `TryClose()`.
+
+Second open doesn't flicker because the `PickedUp` entry now already exists →
+`TryRecordPickedUpOnSlot` returns null → no `MarkDirty` → no `SlotModified` → guard never fires. And
+a self-crafted item never flickers because the crafter is suppressed from the PickedUp entry.
+
+**Fix pattern (see change `fix-item-dialog-first-open-flicker`):** the DocId-strict identity check is
+right for `AfterActiveSlotChanged` (a real hotbar-slot-number change — "am I still holding the item
+this dialog is for?") but WRONG for `SlotModified` (an in-place content rewrite of the slot I'm still
+holding — "did the thing in my hand stop being a Scribe item?"). Split the two: keep
+`OnActiveSlotChanged` on the DocId-strict guard; make `OnHotbarSlotModified` close only when the
+active hand no longer holds ANY `IScribeDocumentItem` (a presence check, not identity). Avoid
+frame-count/grace-period hacks — this project has moved away from timing-based GUI workarounds.
+Note the tablet's legit wet→hard/fired transition ALSO rides `SlotModified`, so don't break it.
+
 ## Item state-transition (`Harden`/`Dry`) and firepit smelt both DROP stack attributes on transform (2026-08-02)
 
 **Symptom: a tablet/food item that "becomes" another item over time (dries, hardens, fires) loses its
