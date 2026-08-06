@@ -1,11 +1,13 @@
 {
-	ingredientPattern: "W,S",
+	ingredientPattern: "SPP,TWW,_WW",
 	ingredients: {
-		"W": { type: "item", code: "game:beeswax" },
-		"S": { type: "item", code: "game:stick" }
+		"S": { type: "item", tags: ["tool-saw"], isTool: true, toolDurabilityCost: 3 },
+		"P": { type: "item", code: "game:plank-*" },
+		"T": { type: "item", code: "game:stick" },
+		"W": { type: "item", code: "game:beeswax" }
 	},
-	width: 1,
-	height: 2,
+	width: 3,
+	height: 3,
 	name: "scribe:scribetablet-wax",
 	output: { type: "item", code: "scribe:scribetablet-wax", quantity: 1 }
 }

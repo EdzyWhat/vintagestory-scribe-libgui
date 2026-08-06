@@ -178,3 +178,92 @@
   286/286 green, Core purity intact (no `Vintagestory.*` in `src/Core/`). The in-game restage + playtest
   (complex-vs-simple letter pacing, space pause, ghost lead-in under the new timing) is DEFERRED to the
   author — left unchecked as `[~]`.)*
+
+## 6. Wax Tablet recipe + tablet handbook cleanup (asset/lang only)
+
+- [x] 6.1 Repack `src/Mod/assets/scribe/recipes/grid/scribetablet-wax.json` from the 1×2
+  (`"W,S"`, beeswax over stick) to a tech-heavy 3×3 (`width: 3, height: 3`, pattern `"SPP,TWW,_WW"`):
+  Row 1 = saw + plank + plank, Row 2 = stick + beeswax + beeswax, Row 3 = empty + beeswax + beeswax.
+  Saw = `{ tags: ["tool-saw"], isTool: true, toolDurabilityCost: 3 }` (not consumed); Plank = `game:plank-*`
+  (any wood); Stick = `game:stick`; Beeswax = `game:beeswax` (×4). Output unchanged (one `scribetablet-wax`).
+  *(DONE — recipe rewritten and JSON-validated.)*
+- [x] 6.2 In `src/Mod/assets/scribe/itemtypes/scribetablet.json`, give wax its OWN handbook by adding an
+  `attributesByType["*-wax"]` block (its own `groundStorageTransform` copy + a handbook with only a single
+  wax "about" section — NO Wet/Dried/Fired, NO Crafting), so wax stops inheriting the clay sections. Remove
+  the shared "Crafting a Tablet" section from the base `attributes.handbook.extraSections` (base now = about
+  + states only). `*-hard`/`*-fired` blocks unchanged. *(DONE — JSON-validated.)*
+- [x] 6.3 In `src/Mod/assets/scribe/lang/en.json`: add `handbook-scribetablet-wax-title`/`-wax-text`
+  ("a small step up from the clay Tablet"; never dries or fires; NOT "earliest"); remove the now-orphaned
+  `handbook-scribetablet-craft-title`/`-craft-text` keys (which still said "eight pieces" and "beeswax over a
+  stick"); drop all wax cross-references from the clay/shared entries (the states-text "A wax Tablet does
+  neither…" tail); reframe `item-scribetablet-wax-desc` off "earliest early-game"; and compress every tablet
+  entry (~40% shorter on the clay handbook path), less flowery, no duplication. *(DONE — lang JSON-validated;
+  clay-path entries measured ~44% shorter.)*
+
+## 7. Tablet edit-restriction feedback (2026-08-05 playtest follow-up)
+
+> **Context / intent.** The 2026-08-05 playtest confirmed hardening/firing works but flagged that every edit
+> restriction is SILENT. Author's decisions (confirmed): (a) adding an 11th task must show a standard in-game
+> error; (b) a hard/fired tablet must block TEXT edits with a material-specific message but KEEP checkboxes
+> and pin/unpin LIVE (so a fired tablet's pin is never stranded on the HUD); (c) on a read-only tablet the
+> Delete / Sink / Unpin-and-Sink completion policies all collapse to unpin-only (no document mutation). See
+> design.md D6–D9 for the seams. Reuse the existing `capi.TriggerIngameError(this, code, Lang.Get(key))` path
+> (used at `ScribeDialogBase.ViewSwitching.cs:306` and `BlockEntityScribeLectern.cs:549`).
+
+- [x] 7.1 **Lang keys.** Add to `src/Mod/assets/scribe/lang/en.json`: `scribe:tablet-full`
+  ("A tablet holds at most 10 tasks." — final wording author's call), `scribe:tablet-hard-locked`
+  ("This tablet has hardened. Soften it in water to make changes."), and `scribe:tablet-fired-locked`
+  ("This tablet was fire-hardened. It cannot be changed.").
+- [x] 7.2 **Over-cap add feedback (D6).** In `src/Mod/ScribeDialogBase.Editor.cs`, at BOTH silent add-guards —
+  `OnClickAddTask()` (~`:381`, `if (!CanAddTaskUnderPolicy()) return;`) and `EditorInsertTaskBelow()`
+  (~`:79`) — when the guard refuses AND the host is a tablet at its cap (not an uncapped notebook/lectern),
+  call `capi.TriggerIngameError(this, "scribe-tablet-full", Lang.Get("scribe:tablet-full"))` before
+  returning. Do NOT change the `ScribeEditorContent.cs:472` dim-at-cap visual (keep it; the message
+  complements it). Keep Core pure — `CanAdd` stays a boolean; the error call is Mod-side only.
+- [x] 7.3 **Keep checkbox + pin live on a read-only TABLET read view (D7).** In `src/Mod/ScribeReadContent.cs`,
+  the checkbox (`:240`, `onChanged: Widget.ReadOnly ? null : …`) and the hover pin (`:309`,
+  `… && !Widget.ReadOnly`) are currently disabled/hidden whenever `ReadOnly`. Introduce a distinction so the
+  TABLET's read-only read view keeps BOTH interactive while the tabbed Lectern/Notebook read view is
+  untouched — e.g. thread a `tabletReadOnly` / `completionAndPinLive` flag from the tablet layout path
+  (`ScribeDialogBase.Layout.cs:516`, `readOnly: ReadViewIsReadOnly`) that gates only text affordances, not
+  the checkbox/pin. Verify the tabbed read view still passes its existing behavior (it already sends
+  `ReadOnly=false`, so it must remain visually/behaviorally identical).
+- [x] 7.4 **Text-tap message on a read-only tablet (D9).** On a read-only tablet read row, make the row's
+  TEXT region (distinct from the now-live checkbox and pin) raise the material-specific message via
+  `TriggerIngameError` — `scribe:tablet-hard-locked` when hard, `scribe:tablet-fired-locked` when fired.
+  Source the hard-vs-fired choice from the dialog state (`GuiDialogScribeTablet` `_state` / `ReadFired`).
+  *(Interpretation flag from design D9: author's note paired "checkboxes or click the text" as edits, but
+  the closing line makes checkboxes live — so ONLY the text tap raises the message. Revisit at review if a
+  silent no-op is preferred.)*
+- [x] 7.5 **Collapse completion policy to unpin-only on a read-only tablet (D8).** In
+  `src/Mod/ScribeModSystem.PinOperations.cs`, at the server completion chokepoint `NormalizePolicy` (~`:279`,
+  called from `ScribeModSystem.Network.cs:84`), when the target document belongs to a hard/fired tablet,
+  normalize `Delete`, `Sink`, and `UnpinSink` all to `Unpin` (leave `Keep` as `Keep`, `Unpin` as `Unpin`).
+  This single seam covers both the read-view completion (`CompleteTaskForPlayer` `:101-135` /
+  `CompleteUnpinnedTaskAtSource` `:276-286`) and the HUD path (`HudScribePins` → `ScribeCompleteTaskMessage`).
+  Determine tablet read-only state server-side from the stack variant (reuse `ItemScribeTablet.ReadHard` /
+  `ReadFired` on the resolved source stack). Note the enum member is `ScribeCompletionPolicy.UnpinSink`.
+
+## 8. Verification (sections 6–7)
+
+- [x] 8.1 `dotnet build` clean (0 new errors/warnings); Core suite green; no new `Vintagestory.*` reference in
+  `src/Core/` (the policy predicate stays pure — feedback is Mod-side).
+- [ ] 8.2 `bash build/restage.sh Debug`, relaunch. **Wax:** craft the wax tablet at 3×3 (saw + 2 planks +
+  stick + 4 beeswax → one wax tablet; saw not consumed); confirm the clay recipe is unchanged (still 12
+  clay). **Wax handbook:** the Wax Tablet page shows only the "The Wax Tablet" about section (a step up from
+  clay; never dries/fires) — no Wet/Dried/Fired, no Crafting section. **Clay handbook:** clay pages show
+  about + states + hard/fired, no Crafting section, no mention of wax anywhere.
+- [ ] 8.3 In-game: on a WET tablet add tasks until 10, then attempt an 11th via the footer control AND via
+  the Enter-insert gesture — both show the "tablet is full" in-game error and add nothing.
+- [ ] 8.4 In-game: open a HARDENED tablet with a pinned, incomplete task — confirm the checkbox toggles
+  completion, the pin control unpins (row leaves the HUD), and tapping a row's TEXT shows
+  "This tablet has hardened. Soften it in water to make changes." Repeat on a FIRED tablet (message =
+  "This tablet was fire-hardened. It cannot be changed."). Confirm no text edit / add / delete / reorder is
+  possible in either state.
+- [ ] 8.5 In-game: with completion policy set to Delete, then Sink, then Unpin-and-Sink, complete a pinned
+  task on a hard tablet AND on a fired tablet — each only unpins (task stays in the document, order
+  unchanged, row leaves the HUD). Complete from the HUD row too and confirm the same collapse. On a WET
+  tablet, confirm Delete still deletes and Sink still sinks (unchanged).
+- [ ] 8.6 In-game: open a tabbed Lectern and Notebook read view — confirm the checkbox/pin behavior and
+  appearance are UNCHANGED by the 7.3 read-view change (no regression from making the tablet's read-only
+  checkbox/pin live).

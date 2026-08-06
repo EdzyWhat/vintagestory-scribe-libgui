@@ -6,7 +6,7 @@
 	],
 	"maxstacksize": 1,
 	"behaviors": [
-		{ "name": "GroundStorable", "properties": { "layout": "Quadrants", "collisionBox": { "x1": 0, "y1": 0, "z1": 0, "x2": 1, "y2": 0.125, "z2": 1 } } }
+		{ "name": "GroundStorable", "properties": { "layout": "Quadrants", "ctrlKey": true, "collisionBox": { "x1": 0, "y1": 0, "z1": 0, "x2": 1, "y2": 0.125, "z2": 1 } } }
 	],
 	"attributes": {
 		"groundStorageTransform": {
@@ -17,8 +17,7 @@
 		"handbook": {
 			"extraSections": [
 				{ "title": "scribe:handbook-scribetablet-about-title", "text": "scribe:handbook-scribetablet-about-text" },
-				{ "title": "scribe:handbook-scribetablet-states-title", "text": "scribe:handbook-scribetablet-states-text" },
-				{ "title": "scribe:handbook-scribetablet-craft-title", "text": "scribe:handbook-scribetablet-craft-text" }
+				{ "title": "scribe:handbook-scribetablet-states-title", "text": "scribe:handbook-scribetablet-states-text" }
 			]
 		}
 	},
@@ -46,6 +45,18 @@
 				"extraSections": [
 					{ "title": "scribe:handbook-scribetablet-about-title", "text": "scribe:handbook-scribetablet-about-text" },
 					{ "title": "scribe:handbook-scribetablet-fired-title", "text": "scribe:handbook-scribetablet-fired-text" }
+				]
+			}
+		},
+		"*-wax": {
+			"groundStorageTransform": {
+				"translation": { "x": 0.12, "y": 0, "z": -0.04 },
+				"rotation": { "x": 0, "y": 35, "z": 0 },
+				"origin": { "x": 0.5, "y": 0.05, "z": 0.5 }
+			},
+			"handbook": {
+				"extraSections": [
+					{ "title": "scribe:handbook-scribetablet-wax-title", "text": "scribe:handbook-scribetablet-wax-text" }
 				]
 			}
 		}

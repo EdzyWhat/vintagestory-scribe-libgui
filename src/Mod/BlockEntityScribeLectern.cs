@@ -286,25 +286,27 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
     /// running (client immediately for responsiveness, server via the synced interaction).
     /// We only act server-side: decide access and reply to the requesting player.
     /// </summary>
-    public void OnRightClick(IPlayer byPlayer, bool wantEditor)
+    public void OnRightClick(IPlayer byPlayer, bool wantEditor, bool quickAdd)
     {
         if (Api is not ICoreServerAPI sapi || byPlayer is not IServerPlayer serverPlayer)
         {
             return;
         }
 
-        RequestAccess(sapi, serverPlayer, wantEditor);
+        RequestAccess(sapi, serverPlayer, wantEditor, quickAdd);
     }
 
-    /// <summary>Server-side: handles a mid-session read/editor mode-switch request.</summary>
-    public void OnRequestAccess(IServerPlayer fromPlayer, bool wantEditor)
+    /// <summary>Server-side: handles a mid-session read/editor mode-switch request. Quick-add rides the
+    /// message flag (the nav-button switch is never a quick-add, but the recovery re-acquire path is
+    /// also never quick-add, so both pass false).</summary>
+    public void OnRequestAccess(IServerPlayer fromPlayer, bool wantEditor, bool quickAdd)
     {
         if (Api is not ICoreServerAPI sapi)
         {
             return;
         }
 
-        RequestAccess(sapi, fromPlayer, wantEditor);
+        RequestAccess(sapi, fromPlayer, wantEditor, quickAdd);
     }
 
     /// <summary>
@@ -314,7 +316,7 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
     /// a refusal still attaches the current document so the requester can fall back to reading
     /// it rather than seeing nothing.
     /// </summary>
-    private void RequestAccess(ICoreServerAPI sapi, IServerPlayer byPlayer, bool wantEditor)
+    private void RequestAccess(ICoreServerAPI sapi, IServerPlayer byPlayer, bool wantEditor, bool quickAdd)
     {
         if (!wantEditor)
         {
@@ -333,7 +335,7 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
         // (fix-multiplayer-editor-lock §2.1). redrawOnClient:false — this only changes lock state, not the
         // document, so no read-view rebuild is needed; the tree attr rides the next block-entity packet.
         MarkDirty();
-        SendReply(sapi, byPlayer, granted: true, editorMode: true, refusalReason: null);
+        SendReply(sapi, byPlayer, granted: true, editorMode: true, refusalReason: null, quickAdd: quickAdd);
     }
 
     /// <summary>
@@ -497,7 +499,7 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
         ReleaseLock(player.PlayerUID);
     }
 
-    private void SendReply(ICoreServerAPI sapi, IServerPlayer toPlayer, bool granted, bool editorMode, string? refusalReason)
+    private void SendReply(ICoreServerAPI sapi, IServerPlayer toPlayer, bool granted, bool editorMode, string? refusalReason, bool quickAdd = false)
     {
         var reply = new ScribeEditDocumentMessage
         {
@@ -505,6 +507,7 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
             Granted = granted,
             EditorMode = editorMode,
             RefusalReason = refusalReason,
+            QuickAdd = quickAdd,
             DocumentBytes = ScribeDocumentCodec.Serialize(Document),
         };
 
@@ -586,6 +589,10 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
         if (message.EditorMode)
         {
             dialog!.EnterEditorMode(message.DocumentBytes);
+            // Quick-add gesture (Shift+right-click): now that the editor holds the lock and the scratch is
+            // seeded, insert a fresh empty task at the top and focus its caret (add-unified-quick-add-
+            // interaction). Threaded through the round-trip because the dialog didn't exist at interact time.
+            if (message.QuickAdd) dialog!.QuickAddTopTask();
         }
         else
         {

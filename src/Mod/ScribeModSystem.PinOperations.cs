@@ -95,6 +95,11 @@ public sealed partial class ScribeModSystem
         bool resolved = TryResolveDocHost(docId, out var docHost, player);
         if (resolved) docHost!.SetTaskDoneFromReader(taskId, nowDone);
 
+        // On a read-only (hard/fired) tablet, the source can't be reordered or have tasks removed, and
+        // firing must never strand a pin on the HUD. Every document-mutating policy therefore collapses
+        // to a plain Unpin (zero-point-three-fixes §7.5 / D8) — so completing simply clears the pin.
+        policy = CollapsePolicyForReadOnlySource(policy, resolved ? docHost : null);
+
         // Apply the completion policy — only on a transition INTO done (unchecking never removes).
         if (nowDone)
         {
@@ -207,6 +212,22 @@ public sealed partial class ScribeModSystem
         if (pinStore.ReorderPins(player.PlayerUID, order)) PushPinsTo(player);
     }
 
+    /// <summary>Collapses a completion policy to <see cref="ScribeCompletionPolicy.Unpin"/> when the target
+    /// document is a read-only (hard/fired) tablet (zero-point-three-fixes §7.5 / D8). A read-only source can
+    /// neither be reordered (<c>Sink</c>/<c>UnpinSink</c>) nor have tasks removed (<c>Delete</c>), and firing
+    /// a tablet with a pinned task must not strand that pin on the HUD — so every document-mutating policy
+    /// becomes a plain unpin. <c>Keep</c> is left alone (leaving the pin is a valid read-only outcome), and
+    /// <c>Unpin</c> is already the target. An editable/uncapped source (<c>ReadOnly == false</c>, or an
+    /// unresolvable one passed as null) keeps its policy verbatim. Read-only-ness is sourced from the host's
+    /// own <see cref="ScribeDocumentPolicy.ReadOnly"/>, which <see cref="TabletHost"/> reports from the live
+    /// stack's hard/fired state — no re-reading of tablet attributes here.</summary>
+    private static ScribeCompletionPolicy CollapsePolicyForReadOnlySource(
+        ScribeCompletionPolicy policy, IScribeDocumentHost? host)
+    {
+        if (host is null || !host.Policy.ReadOnly) return policy;
+        return policy == ScribeCompletionPolicy.Keep ? policy : ScribeCompletionPolicy.Unpin;
+    }
+
     /// <summary>Resolves a docId to an <see cref="IScribeDocumentHost"/>. Checks the registry first
     /// (covers Lecterns, which register server-side on Initialize). If not found, searches the acting
     /// player's inventory for a Notebook whose stored DocId matches and creates a transient host from
@@ -266,6 +287,11 @@ public sealed partial class ScribeModSystem
         bool nowDone = !block.Done;
         docHost.SetTaskDoneFromReader(taskId, nowDone);
         Trace("  complete(unpinned): task {0} toggled to done={1}", taskId, nowDone);
+
+        // A read-only (hard/fired) tablet can't be reordered or have tasks removed; collapse every
+        // document-mutating policy to Unpin (zero-point-three-fixes §7.5). With no pin here that leaves a
+        // plain toggle, so a hardened tablet's checkbox flips done-state without disturbing the document.
+        policy = CollapsePolicyForReadOnlySource(policy, docHost);
 
         // Apply the policy on the shared document — only on a transition INTO done (unchecking never moves
         // or removes). No pin to unpin here, so Unpin/Keep are plain toggles.

@@ -39,6 +39,10 @@
 		handbook: {
 			extraSections: [
 				{
+					title: "scribe:handbook-scribelectern-about-title",
+					text: "scribe:handbook-scribelectern-about-text"
+				},
+				{
 					title: "scribe:handbook-scribelectern-views-title",
 					text: "scribe:handbook-scribelectern-views-text"
 				},

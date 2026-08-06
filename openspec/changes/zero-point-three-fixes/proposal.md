@@ -54,6 +54,27 @@ land here as they're triaged.
   8 clay. Repack the clay into a `2×3` block (6 cells × quantity 2 = 12 clay), keeping the same knife +
   stick and the same single-tablet output. No change to the wax recipe (no clay). This makes a clay tablet
   cost a bit more raw clay, matching the intended material budget.
+- **Make the Wax Tablet recipe tech-heavier and correct its handbook.** Repack the wax recipe from the
+  1×2 beeswax-over-stick into a 3×3 (saw + 2 planks / stick + 2 beeswax / 2 beeswax) — a wooden frame
+  filled with wax, reading as a step up from clay. Give wax its own handbook "about" section (framed as
+  "a small step up from the clay Tablet," never "the earliest") and stop it inheriting the clay-only
+  Wet/Dried/Fired and Crafting sections. Trim the clay-tablet handbook entries (drop the now-wrong
+  Crafting section that still said "eight pieces" and "beeswax over a stick," compress the prose, and
+  remove all cross-references to wax from the clay entries). *(Asset/lang-only; no spec delta — the
+  `clay-wax-tablet-item` canon says only "clay + sticks style," not a recipe shape or handbook copy.)*
+- **Surface a standard in-game error when a tablet edit is refused.** When a player tries to add an 11th
+  task to a tablet (over the 10-task cap), the system SHALL notify them via Vintage Story's standard
+  ingame-error path instead of silently no-opping. When a player tries to **edit the text** of a task — or
+  add/delete/reorder rows — on a hardened or fired tablet, the system SHALL likewise surface a
+  material-specific message: *"This tablet has hardened. Soften it in water to make changes."* for hard,
+  *"This tablet was fire-hardened. It cannot be changed."* for fired.
+- **Keep checkboxes and pins live on hardened and fired tablets.** Toggling task completion and
+  pinning/unpinning SHALL always be allowed on a hard or fired tablet — only *text* editing is blocked.
+  This resolves a stranded-pin problem: firing a tablet with a pinned task must not permanently strand it
+  on the HUD, so unpin must remain reachable. Consequently, on a read-only (hard/fired) tablet a
+  completion policy of **Unpin**, **Delete**, or **Unpin and Sink** SHALL all collapse to the same effect —
+  simply unpin the task — because deleting or sinking a row would mutate the locked document, which is not
+  allowed. Checking a box on a read-only tablet toggles completion and (per policy) unpins, nothing more.
 
 ## Capabilities
 
@@ -73,6 +94,13 @@ land here as they're triaged.
 - `gui-backdrop`: a themed-mode textured backdrop SHALL render at its authored opacity independent of
   what any prior frame drew (a new ADDED requirement guarding against the shared-paint cross-frame color
   leak that faded the read-only tablet backdrop).
+- `scribe-document-policy`: a refused mutation (over-cap add) SHALL be reportable to the caller so the
+  host can surface a standard in-game error, rather than the boundary silently swallowing it — an ADDED
+  requirement that the `CanAdd`/`CanPin` refusal is observable, not just a no-op.
+- `tablet-dialog`: text editing (task text, add/delete/reorder rows) on a hardened or fired tablet SHALL
+  be refused with a material-specific in-game message, while checkbox completion and pin/unpin SHALL
+  remain enabled on hard and fired tablets; on a read-only tablet the Unpin / Delete / Unpin-and-Sink
+  completion policies SHALL all resolve to unpin-only (no row mutation).
 
 ## Impact
 
@@ -86,6 +114,15 @@ land here as they're triaged.
   world-interaction hint for the quench).
   `src/Mod/ScribeBackdropPaintReset.cs` (NEW — the `ScribeResetPaintColor` shared-paint reset wrapper) and
   `src/Mod/ScribeDialogBase.Layout.cs` (`WrapBackdrop` wraps the backdrop `Container` in it).
+  `src/Mod/assets/scribe/recipes/grid/scribetablet-wax.json` (1×2 → tech-heavy 3×3 saw+planks+beeswax),
+  `src/Mod/assets/scribe/itemtypes/scribetablet.json` (new `*-wax` handbook block; base drops the craft
+  section), `src/Mod/assets/scribe/lang/en.json` (wax about section, trimmed clay entries, removed craft
+  keys). For the edit-feedback work: `src/Mod/ScribeDialogBase.Editor.cs` (the two silent add-guards at
+  `:79` / `:381` call `TriggerIngameError` on refusal), `src/Mod/ScribeReadContent.cs` (`:240` checkbox and
+  `:309` pin become live on a tablet read view; a text-tap on a read-only tablet raises the material message),
+  `src/Mod/ScribeModSystem.PinOperations.cs` / `NormalizePolicy` (collapse delete/sink/unpin-sink → unpin on
+  a read-only tablet), and `src/Mod/assets/scribe/lang/en.json` (new keys `scribe:tablet-full`,
+  `scribe:tablet-hard-locked`, `scribe:tablet-fired-locked`).
 - **APIs:** vanilla `BlockLiquidContainerBase.GetContent(pos)` / `WaterTightContainableProps` /
   `ICoolingMedium` to detect a water container; `blockSel.Position` + `world.BlockAccessor.GetBlockEntity`.
   Vanilla `requiresTrait` grid-recipe field + the handbook's automatic `addCreatedByInfo` rendering (no
@@ -97,9 +134,19 @@ land here as they're triaged.
   This change's deltas MODIFY requirements those changes introduce, so it must archive AFTER them — and its
   delta headers must match the canon wording those changes establish on archive (see the archive-order
   header-drift lesson). The `gui-backdrop` delta is a self-contained ADDED requirement against already-canon
-  `gui-backdrop`, so it has no such ordering constraint.
+  `gui-backdrop`, so it has no such ordering constraint. The `tablet-dialog` delta MODIFIES the already-canon
+  "Central region keeps the editable task list" requirement (its header is reproduced verbatim from
+  `openspec/specs/tablet-dialog/spec.md`) plus adds two new requirements; `scribe-document-policy` is a
+  self-contained ADDED requirement against already-canon `scribe-document-policy` — neither has a
+  sibling-change ordering constraint.
 - **Testing:** in-game — schematic becomes craftable (2×2) and both recipes render in the handbook with
   the trait asterisk on the trait one; crouch + right-click a bucket/barrel of water softens a hard tablet
   while an empty or non-water container does nothing and the ground-storage placement still works; a
   hand-fired or hardened tablet opens with a fully OPAQUE backdrop (no semi-transparent see-through), while
-  the wet editor and the tabbed Lectern/Notebook views look unchanged.
+  the wet editor and the tabbed Lectern/Notebook views look unchanged. For the edit-feedback work: adding an
+  11th task to a tablet shows a "tablet is full" in-game error at both add gestures; a hard and a fired
+  tablet each let the player check off and unpin tasks but block text edits (with a material-specific
+  message on a text tap); completing a pinned task on a hard/fired tablet under delete/sink/unpin-sink only
+  unpins it (document order and rows unchanged), while a wet tablet's policy behavior is unchanged; and the
+  tabbed Lectern/Notebook read view is verified unchanged. Wax recipe crafts at 3×3 (saw+planks+beeswax) and
+  its handbook shows the wax "step up from clay" section with no Wet/Dried/Fired or Crafting section.

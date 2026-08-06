@@ -481,10 +481,25 @@ public abstract partial class ScribeDialogBase
     }
 
     /// <summary>Whether the read view is a permanently-read-only surface: the "switch to editor" footer
-    /// button is dropped and each row's checkbox/pin goes inert (a hard or fired tablet — tablet-firing).
-    /// The default is false, so the Lectern/Notebook read view keeps its Edit button and completable rows.
-    /// The tablet overrides it to true when the stack is not editable.</summary>
+    /// button is dropped and TEXT editing is blocked (a hard or fired tablet — tablet-firing).
+    /// The default is false, so the Lectern/Notebook read view keeps its Edit button. The tablet overrides it
+    /// to true when the stack is not editable.
+    ///
+    /// <para>NOTE (zero-point-three-fixes §7.3): read-only no longer forces the checkbox/pin inert — that is
+    /// governed by <see cref="ReadViewCompletionAndPinLive"/>, so a hard/fired tablet keeps completion + pin
+    /// live while its text stays locked.</para></summary>
     private protected virtual bool ReadViewIsReadOnly => false;
+
+    /// <summary>Whether a read-only read view keeps its checkbox and pin INTERACTIVE (zero-point-three-fixes
+    /// §7.3). Default false: irrelevant on the Lectern/Notebook (they are not read-only, so their toggles are
+    /// live off <see cref="ReadViewIsReadOnly"/> = false anyway). The tablet overrides it true so a hard/fired
+    /// tablet can still complete and unpin — preventing a fired tablet's pin from being stranded on the HUD.</summary>
+    private protected virtual bool ReadViewCompletionAndPinLive => false;
+
+    /// <summary>Invoked when the player taps a locked row's text on a read-only tablet, so the surface can
+    /// raise its material-specific "soften it / cannot be changed" in-game message (zero-point-three-fixes
+    /// §7.4). Null on the Lectern/Notebook and on a wet tablet, where a text tap is not a blocked edit.</summary>
+    private protected virtual Action<Guid>? ReadViewTextEditRefused => null;
 
     /// <summary>Build the read view. Promoted from <c>private</c> so the always-edit tablet can render it
     /// directly for a non-editable (hard/fired) stack — it has no <see cref="viewMode"/> switching, so it
@@ -513,7 +528,9 @@ public abstract partial class ScribeDialogBase
             style: RowStyle,
             scrollController: sharedScrollController,
             hintLangKey: EmptyHintLangKey,
-            readOnly: ReadViewIsReadOnly);
+            readOnly: ReadViewIsReadOnly,
+            completionAndPinLive: ReadViewCompletionAndPinLive,
+            onTextEditRefused: ReadViewTextEditRefused);
 
     /// <summary>The editable task list for the current scratch document. Promoted from <c>private</c> to
     /// <c>protected</c> so a subclass may reuse the inherited editor rather than fork it — the tablet

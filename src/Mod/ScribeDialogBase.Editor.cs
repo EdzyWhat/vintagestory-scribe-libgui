@@ -76,7 +76,7 @@ public abstract partial class ScribeDialogBase
         if (current.IsTask && string.IsNullOrWhiteSpace(current.Text)) return;
 
         // Tier cap (scribe-document-policy): the Enter=new-task gesture also stops at the tablet cap.
-        if (!CanAddTaskUnderPolicy()) return;
+        if (!CanAddTaskUnderPolicy()) { NotifyTabletFull(); return; }
 
         NormalizeRowOnCommit(index);
         FlushIfDirty();
@@ -94,6 +94,40 @@ public abstract partial class ScribeDialogBase
         else
         {
             FocusEditorRow(Math.Min(index + 1, scratch.Blocks.Count - 1));
+        }
+    }
+
+    /// <summary>Quick-add seam (add-unified-quick-add-interaction): insert a fresh EMPTY task at the TOP
+    /// of the document and focus its caret, so the Shift+right-click capture gesture drops the player
+    /// straight into a new top-of-list row. Called AFTER the editor view is already active (the lectern's
+    /// server round-trip lands here via <see cref="EnterEditorMode"/> → <see cref="QuickAddTopTask"/>; the
+    /// item hosts call it right after their immediate <see cref="RequestEditorAccess"/> grant). Reuses the
+    /// existing add path (<see cref="ScribeDocument.InsertTask"/> at index 0 + the focus/rebuild machinery
+    /// <see cref="EditorInsertTaskBelow"/> uses) rather than a new Core mutation.
+    ///
+    /// <para>Respects the tier cap exactly like the editor's own add controls: at the cap the editor still
+    /// opens but no task is inserted and the same "document full" feedback (<see cref="NotifyTabletFull"/>)
+    /// is surfaced. A no-op if the editor isn't active (defensive — every caller enters it first).</para></summary>
+    public void QuickAddTopTask()
+    {
+        if (!isEditorMode || scratch is null) return;
+        TraceScroll("quick-add-top");
+
+        // Tier cap (scribe-document-policy): mirror OnClickAddTask / EditorInsertTaskBelow — open the editor
+        // but refuse the insert at the cap, surfacing the same transient "document full" notice.
+        if (!CanAddTaskUnderPolicy()) { NotifyTabletFull(); return; }
+
+        // Commit whatever row was focused before we shift indices (parity with OnClickAddTask).
+        if (focusedEditIndex is { } leaving) NormalizeRowOnCommit(leaving);
+
+        if (scratch.InsertTask(0, ""))
+        {
+            isDirty = true;
+            SyncFocusNodesToScratch();
+            autoFocusRowOnRebuild = 0;
+            focusedEditIndex = 0;
+            pendingEnsureVisible = true;
+            if (IsOpened()) ForceRebuild();
         }
     }
 
@@ -378,7 +412,7 @@ public abstract partial class ScribeDialogBase
         // Tier cap (scribe-document-policy): the tablet tier stops at 10 task blocks. Uncapped tiers
         // (Lectern, Notebook) never trip this. The footer "Add task" button is also disabled at the cap,
         // so this is a defensive backstop for any other add path.
-        if (!CanAddTaskUnderPolicy()) return;
+        if (!CanAddTaskUnderPolicy()) { NotifyTabletFull(); return; }
         if (focusedEditIndex is { } leaving) NormalizeRowOnCommit(leaving);
         scratch.AddTask("");
         isDirty = true;

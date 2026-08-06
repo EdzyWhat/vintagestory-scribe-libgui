@@ -29,6 +29,14 @@ public class ItemClockmakerNotebook : Item, IScribeDocumentItem
                 ActionLangCode = "scribe:itemhelp-scribeclockmakernotebook-open",
                 MouseButton = EnumMouseButton.Right,
             },
+            new WorldInteraction
+            {
+                ActionLangCode = "scribe:itemhelp-scribeclockmakernotebook-quickadd",
+                HotKeyCode = "shift",
+                MouseButton = EnumMouseButton.Right,
+            },
+            // The Ctrl+Shift "place on ground" hint comes from the base GroundStorable behavior itself
+            // (its JSON has ctrlKey:true), so we don't add a redundant one here.
         });
     }
 
@@ -52,7 +60,10 @@ public class ItemClockmakerNotebook : Item, IScribeDocumentItem
         EntitySelection entitySel, bool firstEvent, ref EnumHandHandling handling)
     {
         if (!firstEvent) return;
-        if (byEntity.Controls.ShiftKey)
+        // Ctrl+Shift+right-click: ground placement via base CollectibleBehaviors, matching ItemScribeNotebook
+        // and the vanilla spear convention (add-unified-quick-add-interaction). Requiring both modifiers keeps
+        // a Shift-only press off the base ground-storable gate (which keys on ShiftKey only).
+        if (byEntity.Controls.CtrlKey && byEntity.Controls.ShiftKey)
         {
             base.OnHeldInteractStart(slot, byEntity, blockSel, entitySel, firstEvent, ref handling);
             return;
@@ -60,8 +71,9 @@ public class ItemClockmakerNotebook : Item, IScribeDocumentItem
         if (byEntity.Api.Side != EnumAppSide.Client) return;
         if (byEntity.Api is not ICoreClientAPI capi) return;
 
+        // Shift+right-click (no Ctrl): unified quick-add. Plain right-click opens Read.
         handling = EnumHandHandling.PreventDefault;
-        OpenNotebookDialog(slot, capi);
+        OpenNotebookDialog(slot, capi, quickAdd: byEntity.Controls.ShiftKey);
     }
 
     public override void OnCreatedByCrafting(ItemSlot[] allInputSlots, ItemSlot outputSlot, IRecipeBase byRecipe)
@@ -112,7 +124,7 @@ public class ItemClockmakerNotebook : Item, IScribeDocumentItem
         outputSlot.Itemstack.Attributes.SetBytes("scribeHistory", history.Serialize());
     }
 
-    private void OpenNotebookDialog(ItemSlot slot, ICoreClientAPI capi)
+    private void OpenNotebookDialog(ItemSlot slot, ICoreClientAPI capi, bool quickAdd = false)
     {
         var host = new NotebookHost(slot, ScribeBackdrops.ClockmakerPage);
         var modSystem = capi.ModLoader.GetModSystem<ScribeModSystem>();
@@ -124,5 +136,12 @@ public class ItemClockmakerNotebook : Item, IScribeDocumentItem
         var dialog = new GuiDialogClockmakerNotebook(host, capi);
         dialog.OnClosed += () => modSystem.UnregisterHost(host.Document.DocId);
         dialog.TryOpen();
+        // Quick-add (Shift+right-click): enter the editor immediately (no server lock) and drop a fresh
+        // empty top task with the caret focused (add-unified-quick-add-interaction).
+        if (quickAdd)
+        {
+            dialog.EnterEditorMode(ScribeDocumentCodec.Serialize(host.Document));
+            dialog.QuickAddTopTask();
+        }
     }
 }

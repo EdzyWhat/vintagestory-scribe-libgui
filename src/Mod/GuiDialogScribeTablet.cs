@@ -95,8 +95,24 @@ public class GuiDialogScribeTablet : ScribeDialogBase
     };
 
     /// <summary>A hard or fired tablet is a permanently-read-only surface: the read view drops its "switch
-    /// to editor" footer button and its rows' checkbox/pin go inert (tablet-firing task 5.2).</summary>
+    /// to editor" footer button and blocks TEXT editing (tablet-firing task 5.2). It does NOT force the
+    /// checkbox/pin inert — see <see cref="ReadViewCompletionAndPinLive"/> (zero-point-three-fixes §7.3).</summary>
     private protected override bool ReadViewIsReadOnly => !IsEditable;
+
+    /// <summary>Keep the checkbox and pin interactive on a read-only (hard/fired) tablet
+    /// (zero-point-three-fixes §7.3): completing and unpinning stay reachable, so firing a tablet with a
+    /// pinned task never strands that pin on the HUD. Only text editing is blocked. A wet tablet is fully
+    /// editable, so this only matters when read-only — return true whenever the tablet is not editable.</summary>
+    private protected override bool ReadViewCompletionAndPinLive => !IsEditable;
+
+    /// <summary>On a read-only (hard/fired) tablet, tapping a row's text surfaces the material-specific
+    /// locked message via the game's transient-error path (zero-point-three-fixes §7.4) — hardened tablets
+    /// can be softened; fired tablets are permanent. Null on a wet tablet (text is edited normally there).</summary>
+    private protected override Action<Guid>? ReadViewTextEditRefused => IsEditable
+        ? null
+        : _ => capi.TriggerIngameError(this, "scribe-tablet-locked", Lang.Get(_state == TabletState.Fired
+            ? "scribe:tablet-fired-locked"
+            : "scribe:tablet-hard-locked"));
 
     /// <summary>A WET tablet grants editor access immediately without a server round-trip (item-hosted, no
     /// lock contention), seeding the scratch from the host's current document. A HARD or FIRED tablet is

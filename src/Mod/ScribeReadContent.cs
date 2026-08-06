@@ -41,7 +41,9 @@ internal sealed class ScribeReadContent : StatefulWidget
         ScribeRowStyle style,
         ScrollController scrollController,
         string hintLangKey = "scribe:scribe-gui-edit-hint",
-        bool readOnly = false)
+        bool readOnly = false,
+        bool completionAndPinLive = false,
+        Action<Guid>? onTextEditRefused = null)
     {
         Blocks = blocks;
         OnToggleTask = onToggleTask;
@@ -52,6 +54,8 @@ internal sealed class ScribeReadContent : StatefulWidget
         ScrollController = scrollController;
         HintLangKey = hintLangKey;
         ReadOnly = readOnly;
+        CompletionAndPinLive = completionAndPinLive;
+        OnTextEditRefused = onTextEditRefused;
     }
 
     public IReadOnlyList<ScribeReadRowData> Blocks { get; }
@@ -69,10 +73,26 @@ internal sealed class ScribeReadContent : StatefulWidget
     public ScrollController ScrollController { get; }
     public string HintLangKey { get; }
     /// <summary>When true this is a permanently-read-only surface (a hard or fired tablet — tablet-firing):
-    /// the "switch to editor" footer button is omitted and each row's checkbox/pin becomes non-interactive.
-    /// The tabbed Lectern/Notebook read view passes false, so it keeps its "Edit" footer button and its
-    /// completable checkbox / pinnable rows exactly as before.</summary>
+    /// the "switch to editor" footer button is omitted. It also gates row text-editing affordances (there are
+    /// none in the read view, so this is mostly about the footer). The tabbed Lectern/Notebook read view
+    /// passes false, so it keeps its "Edit" footer button exactly as before.
+    ///
+    /// <para>NOTE (zero-point-three-fixes §7.3): read-only no longer implies inert checkbox/pin. Whether a
+    /// read-only row's checkbox and pin stay interactive is governed by <see cref="CompletionAndPinLive"/>,
+    /// decoupled so a hard/fired TABLET keeps completion + pin live (so a fired tablet's pin is never stranded
+    /// on the HUD) while its text stays locked.</para></summary>
     public bool ReadOnly { get; }
+    /// <summary>When true, each task row's completion checkbox and hover pin stay INTERACTIVE even on a
+    /// read-only surface (a hard/fired tablet — zero-point-three-fixes §7.3). The tabbed Lectern/Notebook read
+    /// view leaves this false: it is already <see cref="ReadOnly"/> = false and drives its checkbox/pin off
+    /// that, so its behavior is unchanged. Only the tablet's read view sets this true alongside
+    /// <see cref="ReadOnly"/> = true, to keep toggles live while blocking text.</summary>
+    public bool CompletionAndPinLive { get; }
+    /// <summary>Invoked when the player taps a locked row's TEXT on a read-only tablet (zero-point-three-fixes
+    /// §7.4), carrying the row's TaskId, so the dialog can surface the material-specific "soften it / cannot
+    /// be changed" in-game message. Null on the tabbed read view (and on a wet tablet), where the text isn't a
+    /// blocked-edit affordance.</summary>
+    public Action<Guid>? OnTextEditRefused { get; }
 
     public override State CreateState() => new ScribeReadContentState();
 }
@@ -110,7 +130,7 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
                 controller: Widget.ScrollController,
                 child: new ListView(
                     children: Widget.Blocks
-                        .Select(b => (Widget)new ScribeReadRow(b, Widget.OnToggleTask, Widget.OnTogglePinned, style, Widget.ReadOnly, new ValueKey<int>(b.Index)))
+                        .Select(b => (Widget)new ScribeReadRow(b, Widget.OnToggleTask, Widget.OnTogglePinned, style, Widget.ReadOnly, Widget.CompletionAndPinLive, Widget.OnTextEditRefused, new ValueKey<int>(b.Index)))
                         .ToList(),
                     // Scroll estimate for rows not yet mounted (variableHeight measures the real height
                     // of mounted rows). This MUST equal a true single-line row height, because the
@@ -170,7 +190,7 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
 /// </summary>
 internal sealed class ScribeReadRow : StatefulWidget
 {
-    public ScribeReadRow(ScribeReadRowData data, Action<Guid> onToggleTask, Action<Guid> onTogglePinned, ScribeRowStyle style, bool readOnly = false, Gui.Widgets.Framework.Key? key = null)
+    public ScribeReadRow(ScribeReadRowData data, Action<Guid> onToggleTask, Action<Guid> onTogglePinned, ScribeRowStyle style, bool readOnly = false, bool completionAndPinLive = false, Action<Guid>? onTextEditRefused = null, Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
         Data = data;
@@ -178,16 +198,30 @@ internal sealed class ScribeReadRow : StatefulWidget
         OnTogglePinned = onTogglePinned;
         Style = style;
         ReadOnly = readOnly;
+        CompletionAndPinLive = completionAndPinLive;
+        OnTextEditRefused = onTextEditRefused;
     }
 
     public ScribeReadRowData Data { get; }
     public Action<Guid> OnToggleTask { get; }
     public Action<Guid> OnTogglePinned { get; }
     public ScribeRowStyle Style { get; }
-    /// <summary>Permanently-read-only surface (hard/fired tablet — tablet-firing): the checkbox reflects
-    /// Done but can't be toggled, and the hover pin is never offered. The tabbed read view passes false and
-    /// keeps its completable checkbox + hover pin.</summary>
+    /// <summary>Permanently-read-only surface (hard/fired tablet — tablet-firing): the "switch to editor"
+    /// footer is dropped and text stays locked. Whether the checkbox/pin stay live is governed separately by
+    /// <see cref="CompletionAndPinLive"/> (zero-point-three-fixes §7.3), not by this flag alone.</summary>
     public bool ReadOnly { get; }
+    /// <summary>When true, keep the checkbox and hover pin INTERACTIVE even though <see cref="ReadOnly"/> is
+    /// true — the hard/fired tablet case (§7.3), so completion and unpin stay reachable. False on the tabbed
+    /// read view, which drives its live controls off <see cref="ReadOnly"/> = false instead (unchanged).</summary>
+    public bool CompletionAndPinLive { get; }
+    /// <summary>Tapping the row's TEXT on a read-only tablet surfaces the material-specific locked message
+    /// through this callback (§7.4). Null where a text tap is not a blocked-edit affordance (tabbed read view,
+    /// wet tablet).</summary>
+    public Action<Guid>? OnTextEditRefused { get; }
+    /// <summary>Whether this row's checkbox and pin should behave as interactive: true on any editable read
+    /// view (<see cref="ReadOnly"/> = false) OR on a read-only surface that keeps completion/pin live
+    /// (<see cref="CompletionAndPinLive"/>). Consolidates the two so the checkbox/pin render off one predicate.</summary>
+    public bool TogglesLive => !ReadOnly || CompletionAndPinLive;
 
     public override State CreateState() => new ScribeReadRowState();
 }
@@ -234,10 +268,12 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                 EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
                 child: new Checkbox(
                     value: done,
-                    // Read-only surface (hard/fired tablet): a null onChanged makes the checkbox reflect
-                    // Done but ignore taps, so a set tablet can't be completed. The tabbed read view passes
-                    // ReadOnly=false and keeps the completing checkbox.
-                    onChanged: Widget.ReadOnly ? null : _ =>
+                    // The checkbox stays interactive whenever toggles are live: on any editable read view AND
+                    // on a hard/fired tablet, which keeps completion live so a pinned task can still be
+                    // completed/unpinned (zero-point-three-fixes §7.3). A null onChanged (only when toggles
+                    // are NOT live — not currently reached, but the safe inert fallback) reflects Done and
+                    // ignores taps.
+                    onChanged: !Widget.TogglesLive ? null : _ =>
                     {
                         SetState(() => done = !done);
                         Widget.OnToggleTask(Widget.Data.TaskId);
@@ -252,7 +288,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         // cuneiform path (Lectern/Notebook, or cuneiform disabled) it stays the normal wrapped Text, inset by
         // the editor field's internal padding so a single-line read row matches the editor field height and
         // its text's left edge aligns across a view switch.
-        children.Add(new Expanded(child: style.UseCuneiform
+        Widget textChild = style.UseCuneiform
             ? new ScribeCuneiformFieldRenderWidget(
                 text: Widget.Data.Text,
                 caret: 0,
@@ -277,7 +313,22 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                 glow: style.CuneiformGlow)
             : new Padding(
                 EdgeInsets.Symmetric(vertical: style.FieldPadY, horizontal: style.FieldPadX),
-                child: new Text(Widget.Data.Text, textStyle))));
+                child: new Text(Widget.Data.Text, textStyle));
+
+        // On a read-only tablet, tapping the row TEXT is the "I want to edit this" gesture — there is no text
+        // field to click into, so this is where the material-specific locked message is surfaced
+        // (zero-point-three-fixes §7.4). Tasks only (a text-tap on a note has no completion/pin alternative to
+        // disambiguate from, and the note is equally locked); the checkbox and pin sit in their own hit
+        // regions, so this doesn't intercept them. Null callback (tabbed read view, wet tablet) leaves the
+        // text inert as before.
+        if (Widget.OnTextEditRefused is { } onTextEditRefused && Widget.Data.IsTask)
+        {
+            textChild = new GestureDetector(
+                onPress: e => { e.Handled = true; onTextEditRefused(Widget.Data.TaskId); },
+                child: textChild);
+        }
+
+        children.Add(new Expanded(child: textChild));
 
         Widget rowBody = new Padding(
             EdgeInsets.Symmetric(vertical: style.RowVerticalPadding, horizontal: style.RowHorizontalPadding),
@@ -303,10 +354,11 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         // Pin toggle floats on the right, task-only, shown on hover — mirroring the editor row's pin
         // button (scribe-lectern-view-consistency §2). The read view still exposes no edit/delete/drag;
         // only pin + the checkbox are interactive here.
-        // Read-only surface (hard/fired tablet): no pin affordance at all — pinning is an edit action. The
-        // tabbed read view keeps the hover pin.
+        // The hover pin follows the same live-toggle rule as the checkbox: offered on any editable read view
+        // AND on a hard/fired tablet (zero-point-three-fixes §7.3 — pin/unpin stays reachable so a fired
+        // tablet's pin is never stranded on the HUD). Only a non-live surface would hide it.
         var stackChildren = new List<Widget> { rowBody };
-        if (hovered && Widget.Data.IsTask && !Widget.ReadOnly)
+        if (hovered && Widget.Data.IsTask && Widget.TogglesLive)
         {
             stackChildren.Add(new Positioned(
                 right: 5f, top: ScribeRowControlNudge.FloatingButtonTop(style),

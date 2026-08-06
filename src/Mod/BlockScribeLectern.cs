@@ -74,8 +74,13 @@ public sealed class BlockScribeLectern : Block
     {
         if (world.BlockAccessor.GetBlockEntity(blockSel.Position) is BlockEntityScribeLectern lectern)
         {
-            bool wantEditor = byPlayer.Entity?.Controls?.ShiftKey == true;
-            lectern.OnRightClick(byPlayer, wantEditor);
+            // Shift+right-click is the unified quick-add gesture (add-unified-quick-add-interaction):
+            // take the editor lock AND drop a fresh empty task at the top with the caret focused. Plain
+            // right-click opens Read; the plain-editor view is still reachable via the Editor nav tab.
+            // (A lectern is placed furniture, so there is no Ctrl+Shift ground-place branch here — that
+            // only applies to the carried Notebook/Tablet items.)
+            bool quickAdd = byPlayer.Entity?.Controls?.ShiftKey == true;
+            lectern.OnRightClick(byPlayer, wantEditor: quickAdd, quickAdd: quickAdd);
         }
         return true;
     }

@@ -928,7 +928,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         a hard `visibility = 1f` and `_Show()` is skipped when `AutoHide` is false.
       - **Confirmed 2026-07-24** (user playtest, submission 2026-07-24T07-24-24): "Works. The scrollbar
         does not unnecessarily animate. It is always shown, as expected."
-- [ ] `7c22da1a` **Scroll position survives view switch.** With enough rows to scroll, scroll down in the
+- [x] `7c22da1a` **Scroll position survives view switch.** With enough rows to scroll, scroll down in the
       read view, then switch to the editor (and back) → confirm you're still looking at the same part of
       the list, not jumped back to the top. *(new — shared scroll controller, 2026-07-24)*
       - **Still broken 2026-07-24** (user playtest, submission 2026-07-24T07-24-24): only ONE direction
@@ -1034,7 +1034,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         float over the row's right edge as real buttons with hover/press feedback; text no longer reserves
         space for them.
       - **Confirmed 2026-07-24** (user playtest, submission 2026-07-24T07-53-46): "Works."
-- [ ] `f07783f7` **Read view reserves the grip column.** The read view has no drag-reorder, but to keep
+- [x] `f07783f7` **Read view reserves the grip column.** The read view has no drag-reorder, but to keep
       read/edit rows column-identical (so the views align seamlessly on switch — the height difference the
       user flagged), the read row should reserve the SAME left grip-column space, just uninteractable and
       opacity 0. *(new — from 2026-07-24 general note; unblocks the `18cd5c60` parity retest)*
@@ -1200,7 +1200,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         read↔editor round-trip now lives wholly in the LibGUI dialog and is retested under
         `migrate-editor-view-libgui` item `b3e11029` (return-to-LibGUI-read-view). The old
         backlogged-return-path concern no longer applies as written.
-- [ ] `5832ad8c` **Survival walk-away auto-close.** In SURVIVAL, open the lectern (read view) then
+- [x] `5832ad8c` **Survival walk-away auto-close.** In SURVIVAL, open the lectern (read view) then
       walk out of range without closing → the dialog auto-closes (LibGUI's `InteractionRange` override
       pins it to the fixed survival reach, mirroring the native fix). *(6.4)*
       - **Confirmed 2026-07-28** (playtest submission 2026-07-28T09-46-45): "Works in survival." Dialog
@@ -1532,7 +1532,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       the text-size preference stuck.
       - **Confirmed 2026-07-21** (playtest report 2026-07-21T08-13-42): drag-reorder, tool-panel
         collapse/expand, and text-size scaling + persistence all function as expected.
-- [ ] `9c04c5c7` **(7.8) Walk-away flushes the edit.** Open the editor view, make an edit, then
+- [x] `9c04c5c7` **(7.8) Walk-away flushes the edit.** Open the editor view, make an edit, then
       walk out of range without closing the dialog. The dialog should auto-close and the edit
       should be saved (reopen and confirm it persisted) rather than lost.
       - **Still broken 2026-07-21** (playtest report 2026-07-21T08-13-42): the editor view never
@@ -1684,7 +1684,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       each, not fighting the notebook frame. *(scribe-lectern-view-consistency 1.4 / 5.3)*
       - **Confirmed 2026-07-27** (playtest submission 2026-07-27T10-16-26): "Works." A divider sits above
         the scroll list in all three views.
-- [ ] `1fac0462` **Pin from read view.** Pin/unpin a task from the READ view: it gets the pinned
+- [x] `1fac0462` **Pin from read view.** Pin/unpin a task from the READ view: it gets the pinned
       indicator in read AND editor, appears on the HUD, and persists across relog. Text sections show no
       pin control. *(scribe-lectern-view-consistency 2.4 / 5.4)*
       - **Confirmed 2026-07-27 (base functionality)** (playtest submission 2026-07-27T10-16-26): the pin/unpin
@@ -2302,7 +2302,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       *(add-clockmaker-notebook-schematic 1.4)*
       - **Confirmed 2026-08-02** via playtest submission (2026-08-02T12-40-23): the schematic item
         appears in Creative search and reads correctly. No screenshot on file; existence check only.
-- [ ] `429072f0` **Craft without the trait.** On a NON-Clockmaker character, put Notebook + temporal
+- [x] `429072f0` **Craft without the trait.** On a NON-Clockmaker character, put Notebook + temporal
       gear + metal parts + the schematic in the grid — confirm it yields a Clockmaker's Notebook, the
       schematic STAYS in the grid (reusable), and the other three are consumed. Craft a second from the
       retained schematic to confirm reuse. *(add-clockmaker-notebook-schematic 2.3)*
@@ -2322,8 +2322,13 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         Remaining unverified suspects (need in-game measurement, not code): the notebook that appeared may have been
         crafted from the 3×1 recipe (no S present) rather than the 3×2 schematic layout; or a stale CLIENT build
         mispredicted the craft (no server→client mod sync — verify client+server on the same build). NEXT: retest
-        with a server log line on `MatchingRecipe.Name` in the craft, confirming the 3×2 recipe is the one that fired.
-- [ ] `297731fd` **Trait path unchanged.** Confirm a Clockmaker (Tinkerer trait) still crafts via the
+        with a server log line on `MatchingRecipe.Name` in the craft to confirm which recipe fired.
+      - **Confirmed 2026-08-05** (submission 2026-08-05T12-01-33): "Confirmed." On a non-Clockmaker the
+        schematic craft yields a Clockmaker's Notebook, the schematic STAYS in the grid (reusable), and a
+        second Notebook crafts from the retained schematic — resolving the earlier "schematic consumed"
+        report (the prior "cannot reproduce in code" analysis held; the consume path was correct all along).
+      - **(prior NEXT note)** confirm the 3×2 recipe is the one that fired.
+- [x] `297731fd` **Trait path unchanged.** Confirm a Clockmaker (Tinkerer trait) still crafts via the
       original 3-item no-schematic recipe, AND a non-Clockmaker with no schematic still CANNOT craft via
       that trait recipe. *(add-clockmaker-notebook-schematic 2.4)*
       - **Still broken 2026-08-02:** the CM Notebook handbook entry (Desktop capture "Screenshot
@@ -2351,7 +2356,11 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         is driven entirely by `RequiresTrait` being non-null). To actually verify the gate: run
         `/worldconfig scribeClockmakerRequiresTrait true`, restart the world, re-log as a Commoner — the
         craft should then be blocked and the asterisk should appear on the trait grid. No code change.
-- [ ] `e093c2ad` **Carryover via schematic.** Craft the Clockmaker's Notebook via the schematic recipe
+      - **Confirmed 2026-08-05** (submission 2026-08-05T12-01-33): "Confirmed working." A Clockmaker still
+        crafts via the original 3-item no-schematic recipe, and (with the world config set TRUE, per sibling
+        item `89f55f28`) a non-Clockmaker without the schematic cannot use the trait recipe. The gate behaves
+        as designed.
+- [x] `e093c2ad` **Carryover via schematic.** Craft the Clockmaker's Notebook via the schematic recipe
       from a Notebook that already has tasks/notes/History — confirm the document and History carry into
       the result. *(add-clockmaker-notebook-schematic 2.5)*
       - **Still broken 2026-08-04** via playtest submission (2026-08-04T17-53-45): the schematic recipe
@@ -2360,6 +2369,9 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         wants the handbook to show TWO visible recipes on the entry (like the Sling page): a schematic
         recipe, and a no-schematic recipe with an asterisk marking the Tinkerer-trait requirement. Needs
         a proposal (see the two queued proposals below).
+      - **Confirmed 2026-08-05** (submission 2026-08-05T12-01-33): "The new CM Notebook carries over its
+        contents." With the schematic recipe now discoverable (dual-grid fix), crafting from a Notebook that
+        already has tasks/notes/History produces a Clockmaker's Notebook that retains the document and History.
 - [x] `2a7c88a0` **Patch loads clean.** Check the game log on boot — confirm no "could not find
       file/path" warning for trader-commodities or trader-treasurehunter tradelists (the ware patch
       resolved). *(add-clockmaker-notebook-schematic 3.2)*
@@ -2680,7 +2692,7 @@ regression checks specific to this change's scoped-to-the-input approach.
         the bitmap by the leftover color. On the read-only tablet the LAST box painted each frame is the
         always-on scrollbar track (theme default alpha=0.1) — the wet editor & tabbed read view paint an
         opaque footer Button last, so they never leak. Fix pending.
-- [ ] `d6131da1` **Rehydrate both ways.** Take a hard tablet and (a) drop it into water, then (b) swim while
+- [x] `d6131da1` **Rehydrate both ways.** Take a hard tablet and (a) drop it into water, then (b) swim while
       holding it as the active item; confirm EACH returns it to wet + editable, keeps the document, and
       restarts the dry-out timer. *(add-tablet-firing-mechanic 8.3)*
       - **Confirmed 2026-08-03** (submission 2026-08-03T21-30-46): "Both work." Drop-in-water and
@@ -2733,7 +2745,7 @@ regression checks specific to this change's scoped-to-the-input approach.
       *(wire-tablet-clay-art-and-variants 5.6)*
       - **Confirmed 2026-08-04** (submission 2026-08-04T21-28-56): "Works! Love the detail." All six
         `-hard`/`-fired` variants appear with correct names and none carries a recipe.
-- [ ] `07d0b3cd` **Bespoke wax model renders.** Pull a wax tablet from Creative and hold it (and
+- [x] `07d0b3cd` **Bespoke wax model renders.** Pull a wax tablet from Creative and hold it (and
       ground-place it); confirm all 6 cubes of the new bespoke wax model render as authored wax, with
       NO clay-texture bleed on any interior/frame face — the interior faces were disabled to kill the
       `#default` fallback that was leaking clay. Do a FULL client relaunch first (assets load at boot).
@@ -2820,3 +2832,35 @@ regression checks specific to this change's scoped-to-the-input approach.
         flat, and just need to be nudged." The `rotation.z` 90→0 fix lands the tablet flat with the writing
         face up. Minor remaining polish: the resting position could use a small translation nudge (not a
         blocker — the orientation defect is fixed).
+
+- [x] `bfa13b3a` **Wax recipe + handbook cleanup.** Craft the wax tablet at 3×3 (saw + 2 planks + stick + 4
+      beeswax → one wax tablet, saw NOT consumed); confirm the clay recipe is unchanged (still 12 clay). Wax
+      handbook page shows only the "The Wax Tablet" about section (a step up from clay; never dries/fires) —
+      no Wet/Dried/Fired, no Crafting section. Clay pages show about + states + hard/fired, no Crafting
+      section, no mention of wax. *(zero-point-three-fixes 8.2)*
+      - **Confirmed 2026-08-05** (submission 2026-08-05T15-15-08): "Wax recipe works and shows." The 3×3
+        wax recipe crafts and the reframed wax handbook page renders as specced.
+- [x] `01c2348b` **11th-task full error.** On a WET tablet add tasks until 10, then attempt an 11th via the
+      footer add control AND via the Enter-insert gesture — both show the "A tablet holds at most 10 tasks."
+      in-game error and add nothing. *(zero-point-three-fixes 8.3)*
+      - **Confirmed 2026-08-05** (submission 2026-08-05T15-15-08): "Works." The 11th-task attempt (footer and
+        Enter-insert) raises the in-game full error and adds nothing.
+- [x] `39de1992` **Hard/fired text-lock, live checkbox/pin.** Open a HARDENED tablet with a pinned,
+      incomplete task — confirm the checkbox still toggles completion, the pin control still unpins (row
+      leaves the HUD), and tapping a row's TEXT shows "This tablet has hardened. Soften it in water to make
+      changes." Repeat on a FIRED tablet (message "This tablet was fire-hardened. It cannot be changed.").
+      Confirm no text edit / add / delete / reorder is possible in either state. *(zero-point-three-fixes 8.4)*
+      - **Confirmed 2026-08-05** (submission 2026-08-05T15-15-08): "Works." Hard/fired tablets keep the
+        checkbox + pin live while blocking text edits with the material-specific locked message.
+- [x] `affeee16` **Policy collapses to unpin.** With completion policy set to Delete, then Sink, then
+      Unpin-and-Sink, complete a pinned task on a hard tablet AND a fired tablet — each only unpins (task
+      stays in the document, order unchanged, row leaves the HUD). Complete from the HUD row too and confirm
+      the same collapse. On a WET tablet, confirm Delete still deletes and Sink still sinks.
+      *(zero-point-three-fixes 8.5)*
+      - **Confirmed 2026-08-05** (submission 2026-08-05T15-15-08): "Works." On hard/fired tablets every
+        document-mutating completion policy collapses to unpin-only; wet-tablet Delete/Sink unaffected.
+- [x] `2156c9e8` **No Lectern/Notebook regression.** Open a tabbed Lectern and Notebook read view — confirm
+      the checkbox/pin behavior and appearance are UNCHANGED by the read-view decoupling (no regression from
+      making the tablet's read-only checkbox/pin live). *(zero-point-three-fixes 8.6)*
+      - **Confirmed 2026-08-05** (submission 2026-08-05T15-15-08): "Works." The tabbed Lectern/Notebook read
+        view is unchanged by the read-view decoupling — no regression.

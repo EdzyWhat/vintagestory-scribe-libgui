@@ -49,7 +49,7 @@ public sealed partial class ScribeModSystem
         if (sapi is null) return;
         if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeLectern lectern)
         {
-            lectern.OnRequestAccess(fromPlayer, message.WantEditor);
+            lectern.OnRequestAccess(fromPlayer, message.WantEditor, message.QuickAdd);
         }
     }
 

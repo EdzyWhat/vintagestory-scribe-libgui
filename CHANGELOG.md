@@ -7,6 +7,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Quick-add task (Shift+right-click)** — Shift+right-clicking any Scribe surface (Lectern,
+  Notebook, Clockmaker's Notebook, or a wet Tablet) now opens its editor with a fresh empty task
+  already added at the **top** of the list and the caret focused, so you can capture a task in one
+  gesture without scrolling to an "Add task" button. A quick-add at a full tablet (10-task cap) opens
+  the editor and shows the "tablet is full" notice without adding a row. On a hard or fired (read-only)
+  tablet it simply opens the tablet — nothing can be added there.
 - **Clay-type tablets** — the Clay Tablet is now three distinct items — **Red**, **Blue**, and **Fire
   Clay Tablet** — each with its own handbook entry and its own crafting recipe (8 clay of that type + a
   stick + a knife; the knife is not consumed but loses a little durability). Each opens with a
@@ -20,6 +26,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   setting are unchanged — this is an additional path, not a replacement.
 
 ### Changed
+- **BREAKING — right-click modifier gestures changed.** With quick-add taking Shift+right-click, two
+  older gestures move:
+  - **Lectern:** Shift+right-click no longer opens the plain editor view — it now quick-adds. To open
+    the editor without adding a task, right-click to Read, then use the **Editor** nav tab.
+  - **Notebook, Clockmaker's Notebook, and Tablet:** placing the held item on the ground now requires
+    **Ctrl+Shift+right-click** (following the vanilla spear convention), since plain Shift+right-click
+    now quick-adds. The Tablet's water-soften gesture is unchanged — Shift+right-click **aimed at
+    water** still softens a hard tablet; only Shift+right-click *not* aimed at water changed (it now
+    quick-adds instead of placing on the ground).
 - The editor footer's Information (ⓘ) button now **toggles** the "Scribe Editor Features" handbook
   page: clicking it opens the reference when the handbook is closed and closes the handbook when it
   is already open (if the handbook is open on another page, the first click navigates there and the

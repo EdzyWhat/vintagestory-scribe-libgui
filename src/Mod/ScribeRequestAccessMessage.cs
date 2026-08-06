@@ -19,4 +19,10 @@ public sealed class ScribeRequestAccessMessage
     /// <summary>True to request the editor view (takes the lock); false to switch to read view.</summary>
     [ProtoMember(4)]
     public bool WantEditor { get; set; }
+
+    /// <summary>True when this editor request is the quick-add gesture (Shift+right-click): the server
+    /// echoes it back on the grant so the client inserts a fresh empty task at the top and focuses it
+    /// (add-unified-quick-add-interaction). Only meaningful together with <see cref="WantEditor"/>.</summary>
+    [ProtoMember(5)]
+    public bool QuickAdd { get; set; }
 }

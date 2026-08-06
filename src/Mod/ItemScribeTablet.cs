@@ -26,7 +26,13 @@ namespace Scribe;
 /// </summary>
 public class ItemScribeTablet : Item, IScribeDocumentItem
 {
-    private WorldInteraction[] _interactions = System.Array.Empty<WorldInteraction>();
+    /// <summary>Held-interaction help for a WET (editable) tablet: open, quick-add, and ground-place.</summary>
+    private WorldInteraction[] _wetInteractions = System.Array.Empty<WorldInteraction>();
+
+    /// <summary>Held-interaction help for a HARD/FIRED (read-only) tablet: open + ground-place, plus a
+    /// water-aim "soften" hint that is only meaningful (and only reversible) on a HARD tablet. Quick-add is
+    /// omitted since a read-only tablet cannot take new text.</summary>
+    private WorldInteraction[] _readonlyInteractions = System.Array.Empty<WorldInteraction>();
 
     public override void OnLoaded(ICoreAPI api)
     {
@@ -34,18 +40,40 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
         MaxStackSize = 1;
 
         if (api.Side != EnumAppSide.Client) return;
-        _interactions = ObjectCacheUtil.GetOrCreate(api, "scribeTabletInteractions", () => new WorldInteraction[]
+
+        var open = new WorldInteraction
         {
-            new WorldInteraction
-            {
-                ActionLangCode = "scribe:itemhelp-scribetablet-open",
-                MouseButton = EnumMouseButton.Right,
-            },
-        });
+            ActionLangCode = "scribe:itemhelp-scribetablet-open",
+            MouseButton = EnumMouseButton.Right,
+        };
+        var quickAdd = new WorldInteraction
+        {
+            ActionLangCode = "scribe:itemhelp-scribetablet-quickadd",
+            HotKeyCode = "shift",
+            MouseButton = EnumMouseButton.Right,
+        };
+        var soften = new WorldInteraction
+        {
+            ActionLangCode = "scribe:itemhelp-scribetablet-quench",
+            HotKeyCode = "shift",
+            MouseButton = EnumMouseButton.Right,
+        };
+
+        // The Ctrl+Shift "place on ground" hint comes from the base GroundStorable behavior itself
+        // (the item JSON has ctrlKey:true), so neither array adds a redundant place hint.
+        _wetInteractions = ObjectCacheUtil.GetOrCreate(api, "scribeTabletWetInteractions",
+            () => new[] { open, quickAdd });
+        _readonlyInteractions = ObjectCacheUtil.GetOrCreate(api, "scribeTabletReadonlyInteractions",
+            () => new[] { open, soften });
     }
 
     public override WorldInteraction[] GetHeldInteractionHelp(ItemSlot inSlot)
-        => _interactions.Append(base.GetHeldInteractionHelp(inSlot));
+    {
+        // A wet tablet advertises quick-add; a hard/fired (read-only) tablet advertises the water-soften
+        // gesture instead, since it can't take new text. Ground-place (Ctrl+Shift) shows for both.
+        var interactions = IsEditable(inSlot.Itemstack) ? _wetInteractions : _readonlyInteractions;
+        return interactions.Append(base.GetHeldInteractionHelp(inSlot));
+    }
 
     /// <summary>Append the stored document's title (quoted, or an untitled placeholder) to the
     /// held/inventory tooltip. A never-opened tablet carries no document attribute yet, so
@@ -70,21 +98,32 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
         EntitySelection entitySel, bool firstEvent, ref EnumHandHandling handling)
     {
         if (!firstEvent) return;
-        // Shift+right-click: quench a hard tablet against a water container if aimed at one, otherwise let
-        // base run CollectibleBehaviors (including GroundStorable). The quench takes precedence ONLY when the
-        // aimed-at block is a water-filled liquid container, so every other crouch-right-click still falls
-        // through to the existing ground-storage passthrough unchanged (tablet-clay-hardening).
-        if (byEntity.Controls.ShiftKey)
+        // Ctrl+Shift+right-click: ground placement via base CollectibleBehaviors (including GroundStorable),
+        // following the vanilla spear convention (add-unified-quick-add-interaction). Checked BEFORE the
+        // Shift branch because Ctrl+Shift also has ShiftKey set; taking it here keeps ground placement off
+        // the plain-Shift gestures below.
+        if (byEntity.Controls.CtrlKey && byEntity.Controls.ShiftKey)
         {
-            if (TryQuench(slot, byEntity, blockSel)) { handling = EnumHandHandling.PreventDefault; return; }
             base.OnHeldInteractStart(slot, byEntity, blockSel, entitySel, firstEvent, ref handling);
+            return;
+        }
+        // Shift+right-click (no Ctrl): quench a hard tablet against a water container if aimed at one; the
+        // quench takes precedence ONLY when the aimed-at block is a water-filled liquid container
+        // (tablet-clay-hardening). If NOT aimed at water, fall through to the unified quick-add gesture
+        // instead of ground placement (add-unified-quick-add-interaction) — aim is the discriminator.
+        if (byEntity.Controls.ShiftKey && TryQuench(slot, byEntity, blockSel))
+        {
+            handling = EnumHandHandling.PreventDefault;
             return;
         }
         if (byEntity.Api.Side != EnumAppSide.Client) return;
         if (byEntity.Api is not ICoreClientAPI capi) return;
 
+        // Plain right-click opens the tablet dialog; Shift+right-click off water opens it AND quick-adds a
+        // fresh empty top task (a no-op quick-add on a read-only hard/fired tablet, which never enters the
+        // editor — the write is simply refused there).
         handling = EnumHandHandling.PreventDefault;
-        OpenTabletDialog(slot, capi);
+        OpenTabletDialog(slot, capi, quickAdd: byEntity.Controls.ShiftKey);
     }
 
     public override void OnCreatedByCrafting(ItemSlot[] allInputSlots, ItemSlot outputSlot, IRecipeBase byRecipe)
@@ -324,7 +363,7 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
             to.Attributes.SetBytes("scribeHistory", historyBytes);
     }
 
-    private void OpenTabletDialog(ItemSlot slot, ICoreClientAPI capi)
+    private void OpenTabletDialog(ItemSlot slot, ICoreClientAPI capi, bool quickAdd = false)
     {
         // The backdrop/theme/glow key off the tablet's BASE clay color (clay-red/blue/fire/wax) and its
         // life-cycle state (wet/hard/fired) — BOTH now carried by the material variant, so a single parse
@@ -348,5 +387,10 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
         var dialog = new GuiDialogScribeTablet(host, capi, material, state);
         dialog.OnClosed += () => modSystem.UnregisterHost(host.Document.DocId);
         dialog.TryOpen();
+        // Quick-add (Shift+right-click off water): a WET tablet is always-edit — its ctor already entered
+        // the editor before TryOpen built the tree — so just drop a fresh empty top task with the caret
+        // focused (add-unified-quick-add-interaction). On a HARD/FIRED (read-only) tablet the seam no-ops
+        // (never in editor mode), so a stray Shift+right-click merely opens the read-only dialog.
+        if (quickAdd) dialog.QuickAddTopTask();
     }
 }

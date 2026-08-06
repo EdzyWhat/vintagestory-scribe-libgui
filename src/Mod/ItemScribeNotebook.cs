@@ -30,6 +30,14 @@ public class ItemScribeNotebook : Item, IScribeDocumentItem
                 ActionLangCode = "scribe:itemhelp-scribenotebook-open",
                 MouseButton = EnumMouseButton.Right,
             },
+            new WorldInteraction
+            {
+                ActionLangCode = "scribe:itemhelp-scribenotebook-quickadd",
+                HotKeyCode = "shift",
+                MouseButton = EnumMouseButton.Right,
+            },
+            // The Ctrl+Shift "place on ground" hint comes from the base GroundStorable behavior itself
+            // (its JSON has ctrlKey:true), so we don't add a redundant one here.
         });
     }
 
@@ -53,8 +61,11 @@ public class ItemScribeNotebook : Item, IScribeDocumentItem
         EntitySelection entitySel, bool firstEvent, ref EnumHandHandling handling)
     {
         if (!firstEvent) return;
-        // Shift+right-click: let base run CollectibleBehaviors (including GroundStorable).
-        if (byEntity.Controls.ShiftKey)
+        // Ctrl+Shift+right-click: let base run CollectibleBehaviors (including GroundStorable) for ground
+        // placement, following the vanilla spear convention (add-unified-quick-add-interaction). We verified
+        // the base ground-storable gate keys on ShiftKey ONLY, so requiring BOTH modifiers here means a
+        // Shift-only press never reaches it — no double-action with the quick-add branch below.
+        if (byEntity.Controls.CtrlKey && byEntity.Controls.ShiftKey)
         {
             base.OnHeldInteractStart(slot, byEntity, blockSel, entitySel, firstEvent, ref handling);
             return;
@@ -62,8 +73,10 @@ public class ItemScribeNotebook : Item, IScribeDocumentItem
         if (byEntity.Api.Side != EnumAppSide.Client) return;
         if (byEntity.Api is not ICoreClientAPI capi) return;
 
+        // Shift+right-click (no Ctrl): unified quick-add — open the editor with a fresh empty task at the
+        // top and the caret focused. Plain right-click opens Read.
         handling = EnumHandHandling.PreventDefault;
-        OpenNotebookDialog(slot, capi);
+        OpenNotebookDialog(slot, capi, quickAdd: byEntity.Controls.ShiftKey);
     }
 
     public override void OnCreatedByCrafting(ItemSlot[] allInputSlots, ItemSlot outputSlot, IRecipeBase byRecipe)
@@ -91,7 +104,7 @@ public class ItemScribeNotebook : Item, IScribeDocumentItem
         outputSlot.Itemstack.Attributes.SetBytes("scribeHistory", history.Serialize());
     }
 
-    private void OpenNotebookDialog(ItemSlot slot, ICoreClientAPI capi)
+    private void OpenNotebookDialog(ItemSlot slot, ICoreClientAPI capi, bool quickAdd = false)
     {
         var host = new NotebookHost(slot);
         var modSystem = capi.ModLoader.GetModSystem<ScribeModSystem>();
@@ -103,5 +116,13 @@ public class ItemScribeNotebook : Item, IScribeDocumentItem
         var dialog = new GuiDialogScribeNotebook(host, capi);
         dialog.OnClosed += () => modSystem.UnregisterHost(host.Document.DocId);
         dialog.TryOpen();
+        // Quick-add (Shift+right-click): the Notebook grants editor access immediately (no server lock),
+        // so enter the editor and drop a fresh empty top task with the caret focused — right after TryOpen
+        // has built the tree (add-unified-quick-add-interaction).
+        if (quickAdd)
+        {
+            dialog.EnterEditorMode(ScribeDocumentCodec.Serialize(host.Document));
+            dialog.QuickAddTopTask();
+        }
     }
 }

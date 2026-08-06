@@ -363,6 +363,21 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
         return host.Policy.CanAdd(taskCount);
     }
 
+    /// <summary>Surface the "tablet is full" in-game error when an add is refused by a FINITE task cap
+    /// (zero-point-three-fixes §7.2). Only fires for a capped tier (the tablet's
+    /// <see cref="ScribeDocumentPolicy.MaxBlocks"/> is set) — uncapped tiers (Lectern, Notebook) never
+    /// refuse, so this is inert there. Called from the add-task gestures right where they used to return
+    /// silently, so the dimmed "Add task" button and the Enter-insert gesture now both explain themselves
+    /// via the same transient-error path the lock notice uses. Keeps Core pure: the refusal is decided by
+    /// the boolean <see cref="ScribeDocumentPolicy.CanAdd"/>; only the feedback lives here in the Mod.</summary>
+    private void NotifyTabletFull()
+    {
+        if (host.Policy.MaxBlocks is int)
+        {
+            capi.TriggerIngameError(this, "scribe-tablet-full", Lang.Get("scribe:tablet-full"));
+        }
+    }
+
     /// <summary>Toggle THIS player's pin on the given task, honoring the tier's pin cap
     /// (<see cref="IScribeDocumentHost.Policy"/>) with SWAP semantics rather than refusal. Unpinning is
     /// always allowed. When pinning would exceed a finite <see cref="ScribeDocumentPolicy.MaxPins"/>
