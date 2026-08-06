@@ -47,8 +47,8 @@
 					text: "scribe:handbook-scribelectern-views-text"
 				},
 				{
-					title: "scribe:handbook-scribelectern-hud-title",
-					text: "scribe:handbook-scribelectern-hud-text"
+					title: "scribe:handbook-scribe-hud-ref-title",
+					text: "scribe:handbook-scribe-hud-ref-text"
 				}
 			]
 		}

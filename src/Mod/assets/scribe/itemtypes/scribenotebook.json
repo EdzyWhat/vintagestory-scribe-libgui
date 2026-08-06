@@ -26,6 +26,10 @@
 					"text": "scribe:handbook-scribenotebook-history-text"
 				},
 				{
+					"title": "scribe:handbook-scribe-hud-ref-title",
+					"text": "scribe:handbook-scribe-hud-ref-text"
+				},
+				{
 					"title": "scribe:handbook-scribenotebook-craft-title",
 					"text": "scribe:handbook-scribenotebook-craft-text"
 				}

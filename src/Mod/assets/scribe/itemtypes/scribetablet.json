@@ -17,7 +17,8 @@
 		"handbook": {
 			"extraSections": [
 				{ "title": "scribe:handbook-scribetablet-about-title", "text": "scribe:handbook-scribetablet-about-text" },
-				{ "title": "scribe:handbook-scribetablet-states-title", "text": "scribe:handbook-scribetablet-states-text" }
+				{ "title": "scribe:handbook-scribetablet-states-title", "text": "scribe:handbook-scribetablet-states-text" },
+				{ "title": "scribe:handbook-scribe-hud-ref-title", "text": "scribe:handbook-scribe-hud-ref-text" }
 			]
 		}
 	},
@@ -31,7 +32,8 @@
 			"handbook": {
 				"extraSections": [
 					{ "title": "scribe:handbook-scribetablet-about-title", "text": "scribe:handbook-scribetablet-about-text" },
-					{ "title": "scribe:handbook-scribetablet-hard-title", "text": "scribe:handbook-scribetablet-hard-text" }
+					{ "title": "scribe:handbook-scribetablet-hard-title", "text": "scribe:handbook-scribetablet-hard-text" },
+					{ "title": "scribe:handbook-scribe-hud-ref-title", "text": "scribe:handbook-scribe-hud-ref-text" }
 				]
 			}
 		},
@@ -44,7 +46,8 @@
 			"handbook": {
 				"extraSections": [
 					{ "title": "scribe:handbook-scribetablet-about-title", "text": "scribe:handbook-scribetablet-about-text" },
-					{ "title": "scribe:handbook-scribetablet-fired-title", "text": "scribe:handbook-scribetablet-fired-text" }
+					{ "title": "scribe:handbook-scribetablet-fired-title", "text": "scribe:handbook-scribetablet-fired-text" },
+					{ "title": "scribe:handbook-scribe-hud-ref-title", "text": "scribe:handbook-scribe-hud-ref-text" }
 				]
 			}
 		},
@@ -56,7 +59,8 @@
 			},
 			"handbook": {
 				"extraSections": [
-					{ "title": "scribe:handbook-scribetablet-wax-title", "text": "scribe:handbook-scribetablet-wax-text" }
+					{ "title": "scribe:handbook-scribetablet-wax-title", "text": "scribe:handbook-scribetablet-wax-text" },
+					{ "title": "scribe:handbook-scribe-hud-ref-title", "text": "scribe:handbook-scribe-hud-ref-text" }
 				]
 			}
 		}
