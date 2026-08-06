@@ -2755,6 +2755,26 @@ regression checks specific to this change's scoped-to-the-input approach.
         round dialed in the writing-slab UV overflow → red-bleed fix, the writing-element shrink/centering, and
         the wax-specific dialog layout + pale-honey theme.)
 
+## add-unified-quick-add-interaction
+
+- [ ] `4071743f` **Lectern quick-add.** Shift+right-click a lectern → editor opens with a new
+      empty task at the top and the caret focused in it; plain right-click still opens Read; the
+      Editor nav tab opens the editor with NO new task inserted.
+      *(add-unified-quick-add-interaction 6.1)*
+- [ ] `5a45bc16` **Notebook gestures.** Shift+right-click a held Notebook quick-adds a top task
+      with the caret focused; Ctrl+Shift+right-click places it on the ground; plain right-click
+      opens Read. *(add-unified-quick-add-interaction 6.2)*
+- [ ] `6aaf6c3b` **Tablet gestures.** Shift+right-click a held HARD Tablet aimed at water quenches
+      it; Shift+right-click NOT aimed at water quick-adds a top task; Ctrl+Shift+right-click places
+      it on the ground; plain right-click opens the tablet dialog.
+      *(add-unified-quick-add-interaction 6.3)*
+- [ ] `336e408a` **Full-cap quick-add.** Quick-add (Shift+right-click) on a surface already at its
+      10-task cap → the editor opens, NO task is inserted, and the "document full" feedback shows.
+      *(add-unified-quick-add-interaction 6.4)*
+- [ ] `46cdfa2b` **Interaction help.** Hover-tooltip / held-interaction help for both the Notebook
+      and the Tablet lists BOTH the quick-add gesture and the Ctrl+Shift ground-placement gesture
+      (tablet keeps an accurate quench/soften hint). *(add-unified-quick-add-interaction 6.5)*
+
 ## zero-point-three-fixes
 
 - [x] `89f55f28` **Schematic craftable + dual handbook.** Craft the Clockmaker's Notebook via the schematic
