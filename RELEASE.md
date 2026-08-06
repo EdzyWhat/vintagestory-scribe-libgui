@@ -1,48 +1,105 @@
-# Release plan — Scribe v0.2.0 (Notebook & Clockmaker's Notebook)
+# Release plan — Scribe v1.0.0 (Tablets tier + first "complete" cut)
 
-Tracked checklist for the **in-flight** release cut. This is the **map**; per-task detail lives
-in the linked OpenSpec change and `docs/`. Update the boxes here as tracks land. Shipped
-releases are recorded in [`CHANGELOG.md`](./CHANGELOG.md); the forward tier-map is
-[`ROADMAP.md`](./ROADMAP.md).
+Tracked checklist for the **in-flight** release cut. This is the **map**; the framing/rationale
+hub is the Slack canvas *"Scribe v1.0.0 — Release Hub"* (`F0BMW2XE2H5`), per-task detail lives in
+the linked OpenSpec changes and `docs/`, shipped releases are recorded in
+[`CHANGELOG.md`](./CHANGELOG.md), and the forward tier-map is [`ROADMAP.md`](./ROADMAP.md).
 
-Adds the Notebook + Clockmaker's Notebook (built in prior changes), the plain Notebook's survival
-recipe, in-game handbook coverage, a `tinkerer`-trait craft gate for the Clockmaker's Notebook (+
-worldconfig bypass), a Clockmaker's-Notebook detection bugfix, a creative-only `/scribe seed` demo
-command, and refreshed launch material. Map lives in the OpenSpec change
-`scribe-0-2-0-release-content`; per-task detail is in that change's `tasks.md`. Deps unchanged:
-`game 1.22.x`, hard `gui 3.1.0`. **Current: in progress.**
+**v1.0.0 is LOCKED** (2026-08-05). The first "complete" cut: a feature-complete handheld + lectern
+writing system across three tiers (Lectern, Notebooks, **Tablets** — the marquee new tier), with an
+entirely *additive* remaining roadmap. Ships **everything** currently in flight, cuneiform and firing
+included — no fast-follow split. Deps unchanged: `game 1.22.x`, hard `gui 3.1.0`.
+
+> **The one thing to internalize:** the code is done. The gate to release is a **verify → archive →
+> cleanup → ship** sweep, not a build sprint. The full in-game playtest sweep is complete
+> (`TESTING.md`: 286 confirmed / 27 obsolete / 1 parked, 0 broken, 0 untested). What's left is the
+> save-compat gate, archiving in dependency order, doc/cleanup, and the mechanical cut.
 
 **Status legend:** `[ ]` not started · `[~]` in progress · `[x]` done.
 
-## Track A2 — Product (content + code)
+## Track V — Verification (the real gate)
 
-- [x] **A2.1. Notebook survival recipe** (`recipes/grid/scribenotebook.json`) — data-only, 3×2 writing set.
-- [x] **A2.2. Clockmaker's Notebook trait gate** — `requiresTrait: tinkerer` + `scribeClockmakerRequiresTrait`
-      worldconfig + startup null-out bypass.
-- [x] **A2.3. In-game handbook** — `handbook.extraSections` on both notebook items + refreshed guide pages.
-- [x] **A2.4. Detection bugfix** — widened all sibling-exclusion sites to include `ItemClockmakerNotebook`.
-- [x] **A2.5. `/scribe seed` demo command** — server-side, creative + `controlserver`-gated; seeds tasks,
-      notes, Notebook History, Lectern Guestbook.
-- [x] **A2.6. Build + Core suite green** — Mod builds; 183 Core tests pass.
-- [ ] **A2.7. In-game verification** — recipe craftable + full chain; trait gate on/off; handbook renders;
-      seed populates + persists + syncs on both a Notebook and a Lectern. *(needs the game — see tasks 1.4,
-      1b.4, 2.4, 3.9.)*
+- [x] **V.1. In-game playtest sweep** — every in-game-testable item across all in-flight changes has a
+      recorded verdict in `TESTING.md`. Complete: 286 confirmed, 27 obsolete, 1 parked (`7a86b890`
+      sink-ordering, a known non-blocking fix deferred), 0 still-broken, 0 untested.
+- [x] **V.2. Firing tuning values** — `meltingPoint 650` / `meltingDuration 30` set in
+      `scribetablet.json`; `Harden` `freshHours ≈48` + `transitionHours` tuned. Confirmed in-game via the
+      dry→hard→fire→rehydrate chain (`add-tablet-firing-mechanic` 8.2–8.7 all confirmed). Firing-tuning
+      OpenSpec tasks 0.2/0.3 still show `[ ]` — reconcile the checkboxes when archiving that change.
+- [ ] **V.3. SAVE-COMPAT LOAD TEST — ⚠️ HARD BLOCKER.** Codec is `Version=5` accepting `PriorVersion=4`;
+      versions were bumped inline, not in an isolated migration change. With 700+ downloads live, a
+      save-break is unacceptable. **Open a real pre-tablet (v4) world and confirm it loads clean under a
+      v5 build** — lectern + notebook documents intact, no data loss. Non-negotiable gate before tagging.
+      *(No `TESTING.md` item covers this yet; add one and run it deliberately.)*
+- [ ] **V.4. Localization sweep** — confirm every user-facing string routes through `Lang.Get` (no
+      hardcoded English in C#) so future translators need no refactor. English-only ship is fine;
+      `TriggerIngameError` paths already spot-checked clean — finish the sweep.
 
-## Track B2 — Launch material
+## Track A — Archive completed OpenSpec changes (in dependency order)
 
-- [x] **B2.1. Mod page** (`docs/media/mod-page.txt`) — LibGUI 3.1.0, notebook section, roadmap bump.
-- [x] **B2.2. Wiki drafts** (`docs/media/wiki/`) — 7 refreshed + 3 new pages + publishing README.
-- [x] **B2.3. Reddit 0.2 announcement** (`docs/media/reddit-announcement-0.2.md`).
-- [x] **B2.4. Video script + shot-list** (`docs/media/video-script.md`) — 0.2 beats + seed cheat sheet.
-- [ ] **B2.5. Screenshots** into `docs/media/screenshots/0.2/` via `/scribe seed`. *(needs the game.)*
+All 11 in-flight changes are code-complete and playtest-confirmed. Archive each with
+`openspec archive <name>` **in dependency order** or the delta headers drift. Ordering gates:
+`add-tablet-firing-mechanic` archives AFTER `add-tablet-clay-type-backdrops`;
+`wire-tablet-clay-art-and-variants` archives AFTER both.
 
-## Track G2 — Ship (mechanical, after A2/B2)
+- [ ] **A.1.** `add-tablet-clay-type-backdrops` (archive first — others gate on it)
+- [ ] **A.2.** `add-tablet-firing-mechanic` (after A.1)
+- [ ] **A.3.** `wire-tablet-clay-art-and-variants` (after A.1 + A.2)
+- [ ] **A.4.** `tune-tablet-clay-text-contrast`
+- [ ] **A.5.** `add-tablet-cuneiform-chrome`
+- [ ] **A.6.** `add-cuneiform-handwriting-feel`
+- [ ] **A.7.** `add-clockmaker-notebook-schematic`
+- [ ] **A.8.** `add-unified-quick-add-interaction` (code done; testable items confirmed)
+- [ ] **A.9.** `fix-settings-numeric-arrow-focus-leak`
+- [ ] **A.10.** `zero-point-three-fixes`
+- [ ] **A.11.** `add-handbook-web-editor`
 
-- [x] **G2.1. Version bump** — `modinfo.json` → 0.2.0.
-- [x] **G2.2. CHANGELOG** — `[0.2.0]` entry.
-- [ ] **G2.3. Build the release zip**, tag `v0.2.0`, create the GitHub Release, upload, publish to mod DB.
-- [ ] **G2.4. Post** the reddit announcement + refreshed wiki pages.
+> Before archiving each: reconcile any `tasks.md` `[ ]` boxes that are actually done-but-unchecked
+> (in-game verifications now confirmed in `TESTING.md`, bookkeeping `0.x` "apply after" gates) so the
+> archived delta reflects reality.
 
-### Consistency check (task 5.4)
-modinfo `0.2.0` · CHANGELOG `[0.2.0]` · mod page + wiki + video script all state **0.2.0** and
-**LibGUI 3.1.0**. ✅ verified 2026-07-31.
+## Track C — Cleanup pass ("what have we missed")
+
+- [ ] **C.1. Dead code / dev harness sweep** — grep for stray dev commands, `#if DEBUG` overlays,
+      `.cuneiform*` diagnostic harnesses, and `diagnostic`/`TODO`/`HACK`/`placeholder` markers. The
+      cuneiform harness + `.cuneiformglow` were already stripped — sweep for stragglers.
+- [ ] **C.2. In-game handbook audit** — tablets are a whole new tier; confirm `handbook.extraSections`
+      exist and read correctly for every new item (clay red/blue/fire + wax + hard/fired states). The
+      shared HUD-ref refactor + new Pinned-Task-HUD guide page already landed (commit `ee7806e`).
+- [ ] **C.3. Wiki: new Tablets page** — `docs/media/wiki/` has 11 pages for 0.2; add a **Tablets** page
+      and update Items / Home / Crafting for the new tier before publishing.
+- [ ] **C.4. ROADMAP.md** — mark v3 (Tablets) shipped; strike the cut **Scratch+ paper** tier row;
+      reconcile "wets out in water" → the shipped harden/rehydrate/fire mechanic; mark the deferred
+      **error surface** partially resolved (`zero-point-three-fixes` §7 shipped `TriggerIngameError`);
+      confirm the runway is just Desk (v1.1) + Board.
+- [ ] **C.5. CHANGELOG.md** — fold the `[Unreleased]` block into a real `[1.0.0]` header and complete
+      it with the full tablet tier (cuneiform, firing, wax, per-clay themes) + the BREAKING quick-add
+      gesture change, called out prominently.
+- [ ] **C.6. README.md** — verify feature list + version references match the release.
+- [x] **C.7. CREDITS** — JeanPierre (Wanderer's Sketchbook) already credited; keep in the consistency check.
+
+## Track B — Launch material
+
+- [ ] **B.1. Mod-page text** (`docs/media/mod-page.txt`) — new tier, roadmap bump, dep line; fix the
+      stale `v0.3 Writing Desk` next-tier line (Desk is now v1.1).
+- [ ] **B.2. Screenshots** into `docs/media/screenshots/1.0/` via `/scribe seed` — tablets, cuneiform, firing.
+- [ ] **B.3. Announcement drafts** for all four channels (0.2 reddit + teaser exist as templates in
+      `docs/media/`) — **call out the BREAKING quick-add gesture change** (lectern Shift+RC and
+      held-item ground placement both change).
+
+## Track G — Ship (mechanical, after V + A + C)
+
+- [ ] **G.1. Version bump** — `modinfo.json` `0.2.0` → `1.0.0`.
+- [ ] **G.2. Version consistency check** — `modinfo.json` · `CHANGELOG` header · mod page · wiki ·
+      video script all state **1.0.0** and **gui 3.1.0**.
+- [ ] **G.3. Build the release zip**, tag `v1.0.0`, create the GitHub Release, upload, publish to mod DB.
+- [ ] **G.4. Announce — wiki-first:** publish/refresh the **wiki** (source of truth), then **Mod DB**
+      (`mods.vintagestory.at/scribe`), then **Reddit (r/VintageStory)**, then **VS Discord**. Seed the
+      FAQ for "where did my ground-place go" (the quick-add gesture change).
+
+## After ship
+
+- Watch mod-DB comments + reddit + Discord for early-adopter reports; triage into a `1.0.1` fixes change.
+- Open **Writing Desk (v1.1)** planning: scope is genuinely open (copy/paste export
+  lectern↔notebook↔Desk + CSV/Excel interchange; kanban/search deprioritized) — needs a definition
+  pass before it's a clean `openspec-propose`.

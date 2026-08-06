@@ -123,9 +123,12 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [ ] `42a3a1d1` **Zero-jitter crisp baseline.** (Deferred until task 6 exposes the knobs.) Once a
       jitter-0 + progression-off setting exists, confirm rendering is byte-identical to today's crisp,
       instant cuneiform. *(add-cuneiform-handwriting-feel 7.6)*
-      - **Backlogged 2026-08-03** the jitter-strength / progression-enable client setting (task 6) is
-        not built yet — there's no in-game way to set jitter to 0, so this can't be exercised until
-        those knobs land.
+      - Previously parked 2026-08-03: the jitter-strength / progression-enable client setting (task 6) was
+        not built yet — there was no in-game way to set jitter to 0, so this couldn't be exercised.
+      - **Obsolete 2026-08-06** (user decision): the jitter-strength knob was designed away rather than
+        shipped — progression is a toggle (default off) and jitter stays a fixed constant, so there's no
+        "jitter-0" setting to establish a baseline against. The test no longer describes a reachable state;
+        retiring it rather than leaving it parked on a knob that isn't coming.
 - [x] `06cddc5a` **Ghost lead-in verdict.** With cuneiform on, watch a fresh word form and judge the
       ghost lead-in stroke that precedes each glyph — keep it only if it reads well, otherwise confirm
       it stays off by default. A pure look-and-feel keep/cut call. *(add-cuneiform-handwriting-feel 7.7)*
@@ -215,14 +218,15 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Confirmed 2026-07-31** (playtest submission 2026-07-31T21-39-18): "Works." Storm triggers the
         "Survive the Storm" title + corrupted HUD text at storm intensity, reverting to "Pinned"/clean when
         the storm ends.
-- [ ] `e289157a` **Low-stability ramp.** Without a storm, drop personal stability below 50% (e.g. stand
+- [x] `e289157a` **Low-stability ramp.** Without a storm, drop personal stability below 50% (e.g. stand
       near a rift); confirm HUD text corruption ramps up as stability falls toward 10%, and the title
       stays "Pinned" (no storm swap). *(hud-temporal-storm-corruption 6.3)*
-      - **Backlogged 2026-07-31** (user decision): shipping the storm-corruption change without exercising
-        the no-storm low-stability ramp for now. The ramp is the same `max(storm, stability)` path already
-        confirmed under storms (`cc124162`/`d6f9d273`) and is unit-covered in the corruptor; the sub-50%
-        stability trigger just needs a deliberate rift-proximity session to watch it ramp on its own. Not
-        broken — deferred.
+      - Previously parked 2026-07-31 (user decision): shipped the storm-corruption change without exercising
+        the no-storm low-stability ramp.
+      - Unblocked 2026-08-06: no code blocker — this was a ship-now deferral, not a dependency. The ramp is
+        the same `max(storm, stability)` path already confirmed under storms (`cc124162`/`d6f9d273`).
+      - **Confirmed 2026-08-06** (submission 2026-08-06T16-10-31): "Works." Near a rift with no storm, HUD
+        text corruption ramps up as personal stability falls and the title stays "Pinned" (no storm swap).
 - [x] `d6f9d273` **Re-scramble + layout.** While a trigger is active, watch the HUD for several seconds;
       confirm the injected marks shift on a ~0–5 s cadence and that wrapping rows, title, and timer render
       the combining marks without broken width/wrapping or clipping. *(hud-temporal-storm-corruption 6.4)*
@@ -296,13 +300,14 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [x] `b5fd19de` **Storm entry logged.** Trigger a temporal storm (`/time set storm`); confirm a
       TemporalStorm entry appears on all open notebooks. *(notebook-history-tab 9.6)*
       - **Confirmed 2026-07-31**: temporal storm logs a TemporalStorm entry on open notebooks.
-- [ ] `71d5916f` **Boss-kill entry + range gate.** Kill an Eidolon within 100 blocks while holding the
+- [x] `71d5916f` **Boss-kill entry + range gate.** Kill an Eidolon within 100 blocks while holding the
       notebook; confirm a BossKill entry reads "Eidolon", and a kill >100 blocks records nothing.
       *(notebook-history-tab 9.7)*
-      - **Backlogged 2026-07-31** (user decision): shipping without the deliberate Eidolon-kill session. The
-        BossKill path shares the same `OnEntityDeath` hook as the confirmed Death/PvpKill/Storm entries
-        (`a4c22c79`/`03699a3d`/`b5fd19de`); the 100-block range gate is the only untested piece. Not broken —
-        deferred.
+      - Previously parked 2026-07-31 (user decision): shipped without the deliberate Eidolon-kill session.
+      - Unblocked 2026-08-06: no code blocker — this was a ship-now deferral. The BossKill path shares the
+        same `OnEntityDeath` hook as the confirmed Death/PvpKill/Storm entries (`a4c22c79`/`03699a3d`/`b5fd19de`).
+      - **Confirmed 2026-08-06** (submission 2026-08-06T16-10-31): "Works." An Eidolon kill within 100 blocks
+        writes a BossKill "Eidolon" entry, and the range gate holds (a far kill records nothing).
 
 ## timer-auto-disappear-setting
 
@@ -2466,14 +2471,17 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       *(add-tablet-cuneiform-chrome 6.3)*
   - **Confirmed 2026-08-02:** tester "Works" — Settings stays in the normal readable font regardless of
     the cuneiform toggle.
-- [ ] `d53f6b5b` **Both materials.** Repeat the core cuneiform checks on both a clay and a wax tablet —
+- [x] `d53f6b5b` **Both materials.** Repeat the core cuneiform checks on both a clay and a wax tablet —
       behavior identical, only backdrop/ink color differ. *(add-tablet-cuneiform-chrome 4.5)*
-  - **Backlogged 2026-08-02:** tester confirmed reclassify — "Yeah reclassify as backlogged for this."
-    Clay vs wax show no backdrop/ink-color difference yet, which is EXPECTED at this stage: the material
-    backdrops are tracked separately in `add-tablet-clay-type-backdrops` and the ink-contrast decision is
-    deliberately DEFERRED (memory: tablet-theme-contrast-vs-backdrops — the current earthen palette is a
-    PLACEHOLDER pending the real clay/wax backdrops). Not a cuneiform-chrome failure; this item can't pass
-    until those land, so it's parked on the material-backdrops work.
+  - Previously parked 2026-08-02: tester confirmed reclassify — "Yeah reclassify as backlogged for this."
+    Clay vs wax showed no backdrop/ink-color difference yet because the material backdrops were tracked
+    separately in `add-tablet-clay-type-backdrops` and the ink-contrast decision was deferred (placeholder
+    earthen palette). Not a cuneiform-chrome failure — it was parked on that backdrops work, which is now done.
+  - Unblocked 2026-08-06: the material backdrops this was parked on landed — per-type clay backdrops
+    (`scribe-clay-tablet-{red,blue,fire}-{soft,hard,fired}.png`) and the wax backdrop (`scribe-wax-tablet.png`)
+    all shipped, and per-material palettes resolve from them, so clay vs wax genuinely differ now.
+  - **Confirmed 2026-08-06** (submission 2026-08-06T16-10-31): "This is all solved. Works." Cuneiform
+    behavior is identical across a clay and a wax tablet; only the backdrop/ink color differs, as intended.
 - [x] `999627d6` **Cuneiform em-scale fit.** After the ~1.4× line-height bump (8.4), confirm cuneiform
       matches the surrounding readable line-height (no longer ~30% short) across the title bar, the task
       rows, AND the "Add task" / "Done editing" footer labels — and that nothing overflows or re-wraps
@@ -2557,11 +2565,15 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       exactly as before (the tint seam didn't disturb the full-page art).
       *(add-tablet-clay-type-backdrops 6.6)*
       - **Confirmed 2026-08-03** via playtest submission 2026-08-03T00-18-44: tester "Works."
-- [ ] `fed17c00` **Fired tint (dev-gated).** Reach a fired tablet (needs a dev affordance — not
-      craftable/creative-reachable yet) and confirm the per-type ceramic tint reads distinctly for
-      red/blue/fire; tune tint values if flat. *(add-tablet-clay-type-backdrops 6.3 — BLOCKED on reachability)*
-      - **Backlogged 2026-08-02** nothing sets `fired = true` in-game this round; not testable until a
-        firing mechanic or a dev command to set the attribute exists.
+- [x] `fed17c00` **Fired tint.** Pull a FIRED clay tablet from Creative Inventory in each color
+      (red/blue/fire) and confirm the per-type ceramic tint reads distinctly between them; tune tint
+      values if any read flat. *(add-tablet-clay-type-backdrops 6.3)*
+      - Previously parked 2026-08-02: nothing set `fired = true` in-game, so the fired backdrop tint was
+        never visible to judge.
+      - Unblocked 2026-08-06: fired tablets became reachable — the firing mechanic landed and a fired
+        tablet pulls from Creative Inventory (confirmed under add-tablet-firing-mechanic 8.6).
+      - **Confirmed 2026-08-06** (submission 2026-08-06T16-10-31): "Works." The per-type fired ceramic tint
+        reads distinctly across red/blue/fire.
 
 ## add-tablet-clay-type-themes
 
@@ -2664,6 +2676,10 @@ regression checks specific to this change's scoped-to-the-input approach.
 - [x] `1d20ffc0` **Dry to hard.** Hold or drop a WET clay tablet that has a few tasks/notes and let it sit
       ~2 in-game days; confirm it becomes a hard tablet that KEEPS its tasks/notes/title, opens read-only,
       and shows the dried (hard) backdrop. *(add-tablet-firing-mechanic 8.2)*
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "The functionality works. The visual on
+        the GUI also works. Complete." Wet→hard keeps content and opens read-only, AND the hard backdrop now
+        renders as a normal opaque page — the long-running transparent-backdrop defect (the SharedPaint color
+        leak tracked across the verdicts below) is resolved.
       - **Confirmed 2026-08-04** (submission 2026-08-04T23-16-17): "Works." The wet→hard transition keeps
         content, opens read-only, and (with the backdrop fix landed, see d6d7f03f) the hard backdrop now
         renders opaque.
@@ -2692,6 +2708,12 @@ regression checks specific to this change's scoped-to-the-input approach.
         the bitmap by the leftover color. On the read-only tablet the LAST box painted each frame is the
         always-on scrollbar track (theme default alpha=0.1) — the wet editor & tabbed read view paint an
         opaque footer Button last, so they never leak. Fix pending.
+      - **Confirmed 2026-08-06** (submission 2026-08-06T16-10-31): "The fix works. This works." Re-verified
+        after the SharedPaint teardown fix landed — wet→hard keeps content, opens read-only, and the hard
+        backdrop renders as a normal opaque page. (This line is intentionally the LAST in the chain: the
+        checklist app buckets an item by its final verdict line in document order, and the chain above is
+        written newest-first, so without a Confirmed here the app would keep reading the old bottom "Still
+        broken" line and mis-show this done item in To Test.)
 - [x] `d6131da1` **Rehydrate both ways.** Take a hard tablet and (a) drop it into water, then (b) swim while
       holding it as the active item; confirm EACH returns it to wet + editable, keeps the document, and
       restarts the dry-out timer. *(add-tablet-firing-mechanic 8.3)*
@@ -2757,23 +2779,33 @@ regression checks specific to this change's scoped-to-the-input approach.
 
 ## add-unified-quick-add-interaction
 
-- [ ] `4071743f` **Lectern quick-add.** Shift+right-click a lectern → editor opens with a new
+- [x] `4071743f` **Lectern quick-add.** Shift+right-click a lectern → editor opens with a new
       empty task at the top and the caret focused in it; plain right-click still opens Read; the
       Editor nav tab opens the editor with NO new task inserted.
       *(add-unified-quick-add-interaction 6.1)*
-- [ ] `5a45bc16` **Notebook gestures.** Shift+right-click a held Notebook quick-adds a top task
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." Shift+RC opens the editor with a
+        focused top task; plain RC still opens Read.
+- [x] `5a45bc16` **Notebook gestures.** Shift+right-click a held Notebook quick-adds a top task
       with the caret focused; Ctrl+Shift+right-click places it on the ground; plain right-click
       opens Read. *(add-unified-quick-add-interaction 6.2)*
-- [ ] `6aaf6c3b` **Tablet gestures.** Shift+right-click a held HARD Tablet aimed at water quenches
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." Shift+RC quick-adds, Ctrl+Shift+RC
+        ground-places, plain RC opens Read.
+- [x] `6aaf6c3b` **Tablet gestures.** Shift+right-click a held HARD Tablet aimed at water quenches
       it; Shift+right-click NOT aimed at water quick-adds a top task; Ctrl+Shift+right-click places
       it on the ground; plain right-click opens the tablet dialog.
       *(add-unified-quick-add-interaction 6.3)*
-- [ ] `336e408a` **Full-cap quick-add.** Quick-add (Shift+right-click) on a surface already at its
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." Shift+RC at water quenches the
+        hard tablet; away from water it quick-adds; Ctrl+Shift+RC ground-places; plain RC opens the dialog.
+- [x] `336e408a` **Full-cap quick-add.** Quick-add (Shift+right-click) on a surface already at its
       10-task cap → the editor opens, NO task is inserted, and the "document full" feedback shows.
       *(add-unified-quick-add-interaction 6.4)*
-- [ ] `46cdfa2b` **Interaction help.** Hover-tooltip / held-interaction help for both the Notebook
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." At the 10-task cap the editor
+        opens, no task is inserted, and the document-full feedback shows.
+- [x] `46cdfa2b` **Interaction help.** Hover-tooltip / held-interaction help for both the Notebook
       and the Tablet lists BOTH the quick-add gesture and the Ctrl+Shift ground-placement gesture
       (tablet keeps an accurate quench/soften hint). *(add-unified-quick-add-interaction 6.5)*
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." Held-interaction help for the
+        Notebook and Tablet lists both the quick-add and the Ctrl+Shift ground-placement gestures.
 
 ## zero-point-three-fixes
 
@@ -2884,3 +2916,42 @@ regression checks specific to this change's scoped-to-the-input approach.
       making the tablet's read-only checkbox/pin live). *(zero-point-three-fixes 8.6)*
       - **Confirmed 2026-08-05** (submission 2026-08-05T15-15-08): "Works." The tabbed Lectern/Notebook read
         view is unchanged by the read-view decoupling — no regression.
+
+## add-handbook-web-editor
+
+- [x] `c584cd1d` **Diff is surgical.** In the handbook editor, edit one section's prose and save; confirm the
+      git diff on `en.json` touches only that one key and nothing else. *(add-handbook-web-editor 7.1)*
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." A prose edit + save produced a
+        git diff touching only that one key.
+- [x] `3a02c8bb` **Structure edits write back.** Add, reorder, and remove a section via the tool; confirm the
+      owning registration JSON and `en.json` update correctly and untouched entries keep their relaxed-JSON
+      formatting. *(add-handbook-web-editor 7.2)*
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." Add/reorder/remove wrote back to
+        the registration JSON + en.json with untouched entries' relaxed-JSON formatting preserved.
+- [x] `1a7365bc` **Tool edit renders in-game.** Launch VS and open the handbook for an entry you edited in the
+      tool; confirm its structure, prose, and cross-links render correctly. *(add-handbook-web-editor 7.3)*
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." A tool-edited entry rendered
+        correctly in the in-game handbook (structure, prose, cross-links).
+- [x] `f5835b60` **New HUD article renders.** In the in-game handbook find "Scribe Mod: The Pinned Task HUD";
+      confirm the full prose renders and its link (to the Clockmaker's Notebook) works. *(add-handbook-web-editor 7.3)*
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." The new "Scribe Mod: The Pinned
+        Task HUD" article renders with full prose and a working link.
+- [x] `7332fe47` **Shared HUD ref on every item.** Open the handbook page for a tablet, a notebook, and the
+      lectern; confirm each shows the one-line "The Pinned Task HUD" section linking to the new article.
+      *(add-handbook-web-editor 7.3)*
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." Tablet, notebook, and lectern
+        handbook pages each show the shared one-line HUD ref linking to the new article.
+- [x] `e3b0b21a` **Preview matches game.** Compare the tool's preview against the in-game handbook for the same
+      entry; confirm wrapping/line-count and apparent width match closely enough to trust real-estate
+      judgments. *(add-handbook-web-editor 7.4)*
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." The tool's preview matches the
+        in-game handbook closely enough (wrapping/width) to trust real-estate judgments.
+- [x] `d63f840d` **Dock alias launches.** Double-click the `~/Launchers/` alias for the handbook editor and
+      confirm it starts the server and opens the app. *(add-handbook-web-editor 7.6)*
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." The ~/Launchers/ Dock alias
+        starts the server and opens the app on double-click.
+- [x] `26356371` **Before/after baseline.** Make edits, save, then toggle before/after; confirm both editor and
+      preview show the session-original baseline (not the just-saved state) and restore correctly.
+      *(add-handbook-web-editor 7.8)*
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." After edit+save, the before/after
+        toggle shows the session-original baseline in both editor and preview and restores correctly.
