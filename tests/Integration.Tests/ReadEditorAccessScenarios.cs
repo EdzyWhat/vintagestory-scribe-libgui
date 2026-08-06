@@ -29,11 +29,11 @@ public class ReadEditorAccessScenarios : AtlasScenarioBase
         var lectern = World.BlockEntityAt<BlockEntityScribeLectern>(pos);
         Assert.NotNull(lectern);
 
-        lectern!.OnRightClick(holder.Player, wantEditor: true); // holder acquires the lock
+        lectern!.OnRightClick(holder.Player, wantEditor: true, quickAdd: false); // holder acquires the lock
 
         // A plain (non-editor) request from the bystander must not throw and must not disturb
         // the existing lock -- read access never checks or touches lockHolderUid.
-        lectern.OnRequestAccess(reader.Player, wantEditor: false);
+        lectern.OnRequestAccess(reader.Player, wantEditor: false, quickAdd: false);
 
         var holderEdit = new ScribeDocument();
         holderEdit.AddTask("Holder can still edit after a read request came in");
@@ -57,7 +57,7 @@ public class ReadEditorAccessScenarios : AtlasScenarioBase
 
         // The in-GUI toggle entry point, not the initial right-click -- OnRequestAccess must
         // make the identical grant decision since both share the RequestAccess helper.
-        lectern!.OnRequestAccess(player.Player, wantEditor: true);
+        lectern!.OnRequestAccess(player.Player, wantEditor: true, quickAdd: false);
 
         var doc = new ScribeDocument();
         doc.AddTask("Granted via the mid-session toggle");
@@ -76,8 +76,8 @@ public class ReadEditorAccessScenarios : AtlasScenarioBase
         var lectern = World.BlockEntityAt<BlockEntityScribeLectern>(pos);
         Assert.NotNull(lectern);
 
-        lectern!.OnRightClick(holder.Player, wantEditor: true);
-        lectern.OnRequestAccess(challenger.Player, wantEditor: true); // must be refused
+        lectern!.OnRightClick(holder.Player, wantEditor: true, quickAdd: false);
+        lectern.OnRequestAccess(challenger.Player, wantEditor: true, quickAdd: false); // must be refused
 
         var challengerEdit = new ScribeDocument();
         challengerEdit.AddTask("Should not apply");
@@ -100,14 +100,14 @@ public class ReadEditorAccessScenarios : AtlasScenarioBase
         var lectern = World.BlockEntityAt<BlockEntityScribeLectern>(pos);
         Assert.NotNull(lectern);
 
-        lectern!.OnRightClick(holder.Player, wantEditor: true);
+        lectern!.OnRightClick(holder.Player, wantEditor: true, quickAdd: false);
 
         // Simulates the holder clicking "Done Editing" in the GUI: only ReleaseLock (sent
         // separately, on dialog close/mode-exit) frees the lock -- a plain read request must
         // not have that side effect on its own.
-        lectern.OnRequestAccess(holder.Player, wantEditor: false);
+        lectern.OnRequestAccess(holder.Player, wantEditor: false, quickAdd: false);
 
-        lectern.OnRequestAccess(second.Player, wantEditor: true); // must still be refused
+        lectern.OnRequestAccess(second.Player, wantEditor: true, quickAdd: false); // must still be refused
 
         var secondEdit = new ScribeDocument();
         secondEdit.AddTask("Should not apply -- lock was never released");

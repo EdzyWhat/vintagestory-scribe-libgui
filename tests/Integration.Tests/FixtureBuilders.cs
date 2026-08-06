@@ -25,7 +25,7 @@ public class FixtureBuilders : AtlasScenarioBase
         var lectern = World.BlockEntityAt<Scribe.BlockEntityScribeLectern>(pos);
         Assert.NotNull(lectern);
 
-        lectern!.OnRightClick(player.Player, wantEditor: true);
+        lectern!.OnRightClick(player.Player, wantEditor: true, quickAdd: false);
 
         var doc = new ScribeDocument();
         doc.AddTask("Find copper");

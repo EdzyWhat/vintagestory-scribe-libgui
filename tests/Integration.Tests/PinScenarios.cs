@@ -26,7 +26,7 @@ public class PinScenarios : AtlasScenarioBase
         var lectern = World.BlockEntityAt<BlockEntityScribeLectern>(pos);
         Assert.NotNull(lectern);
 
-        lectern!.OnRightClick(editor.Player, wantEditor: true); // acquire the lock
+        lectern!.OnRightClick(editor.Player, wantEditor: true, quickAdd: false); // acquire the lock
         var doc = new ScribeDocument();
         doc.AddTask(taskText);
         Assert.True(lectern.ApplyEdit(editor.Player, ScribeDocumentCodec.Serialize(doc)));
@@ -66,7 +66,7 @@ public class PinScenarios : AtlasScenarioBase
         var (lectern, docId, taskId) = await SeedLectern(alice, World.Spawn.Offset(5, 0, 0));
 
         // Add a second task so the two players pin different tasks.
-        lectern.OnRightClick(alice.Player, wantEditor: true);
+        lectern.OnRightClick(alice.Player, wantEditor: true, quickAdd: false);
         var doc = new ScribeDocument();
         doc.AddTask("Find copper");
         doc.AddTask("Find tin");
@@ -250,7 +250,7 @@ public class PinScenarios : AtlasScenarioBase
         var lectern = World.BlockEntityAt<BlockEntityScribeLectern>(pos);
         Assert.NotNull(lectern);
 
-        lectern!.OnRightClick(player.Player, wantEditor: true);
+        lectern!.OnRightClick(player.Player, wantEditor: true, quickAdd: false);
         var doc = new ScribeDocument();
         doc.AddTask("Find copper");
         doc.AddTask("Find tin");
@@ -288,7 +288,7 @@ public class PinScenarios : AtlasScenarioBase
         Mod.SetPinForPlayer(pinner.Player, docId, taskId, pinned: true);
 
         // The owner rewrites the task text to something else, then deletes it — a griefing sequence.
-        lectern.OnRightClick(owner.Player, wantEditor: true);
+        lectern.OnRightClick(owner.Player, wantEditor: true, quickAdd: false);
         Assert.True(ScribeDocumentCodec.TryDeserialize(ScribeDocumentCodec.Serialize(lectern.Document), out var edited));
         Assert.True(edited!.SetBlockText(0, "You have been griefed"));
         Assert.True(lectern.ApplyEdit(owner.Player, ScribeDocumentCodec.Serialize(edited)));

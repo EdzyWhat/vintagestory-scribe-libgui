@@ -22,13 +22,13 @@ public class SingleEditorLockScenarios : AtlasScenarioBase
         var lectern = World.BlockEntityAt<BlockEntityScribeLectern>(pos);
         Assert.NotNull(lectern);
 
-        lectern!.OnRightClick(first.Player, wantEditor: true);
+        lectern!.OnRightClick(first.Player, wantEditor: true, quickAdd: false);
 
         // The second player's edit must be rejected: they never held the lock, because the
         // server never granted them one (OnRightClick only replies to the requester; the
         // effect we can observe here is that their ApplyEdit is a no-op, exactly like the
         // non-holder case in ServerAuthoritativeEditScenarios).
-        lectern.OnRightClick(second.Player, wantEditor: true);
+        lectern.OnRightClick(second.Player, wantEditor: true, quickAdd: false);
 
         var doc = new Scribe.Core.ScribeDocument();
         doc.AddTask("Should not apply");
@@ -49,10 +49,10 @@ public class SingleEditorLockScenarios : AtlasScenarioBase
         var lectern = World.BlockEntityAt<BlockEntityScribeLectern>(pos);
         Assert.NotNull(lectern);
 
-        lectern!.OnRightClick(first.Player, wantEditor: true);
+        lectern!.OnRightClick(first.Player, wantEditor: true, quickAdd: false);
         lectern.ReleaseLock(first.Player.PlayerUID); // e.g. sent when the first player's GUI closes
 
-        lectern.OnRightClick(second.Player, wantEditor: true); // now grantable
+        lectern.OnRightClick(second.Player, wantEditor: true, quickAdd: false); // now grantable
 
         var doc = new Scribe.Core.ScribeDocument();
         doc.AddTask("Now this applies");
@@ -72,7 +72,7 @@ public class SingleEditorLockScenarios : AtlasScenarioBase
         var lectern = World.BlockEntityAt<BlockEntityScribeLectern>(pos);
         Assert.NotNull(lectern);
 
-        lectern!.OnRightClick(first.Player, wantEditor: true);
+        lectern!.OnRightClick(first.Player, wantEditor: true, quickAdd: false);
 
         // A genuine disconnect, exercising the real ICoreServerAPI.Event.PlayerDisconnect
         // path BlockEntityScribeLectern subscribes to in Initialize -- not a simulation.
@@ -80,7 +80,7 @@ public class SingleEditorLockScenarios : AtlasScenarioBase
         await World.Until(() => !first.IsConnected);
 
         var second = await World.JoinPlayer("Locker6");
-        lectern.OnRightClick(second.Player, wantEditor: true);
+        lectern.OnRightClick(second.Player, wantEditor: true, quickAdd: false);
 
         var doc = new Scribe.Core.ScribeDocument();
         doc.AddTask("Lock was released");

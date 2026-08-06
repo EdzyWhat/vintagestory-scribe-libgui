@@ -25,7 +25,7 @@ public class ServerAuthoritativeEditScenarios : AtlasScenarioBase
         var lectern = World.BlockEntityAt<BlockEntityScribeLectern>(pos);
         Assert.NotNull(lectern);
 
-        lectern!.OnRightClick(player.Player, wantEditor: true); // acquires the lock
+        lectern!.OnRightClick(player.Player, wantEditor: true, quickAdd: false); // acquires the lock
 
         var doc = new ScribeDocument();
         doc.AddTask("Build a forge");
@@ -47,7 +47,7 @@ public class ServerAuthoritativeEditScenarios : AtlasScenarioBase
         var lectern = World.BlockEntityAt<BlockEntityScribeLectern>(pos);
         Assert.NotNull(lectern);
 
-        lectern!.OnRightClick(holder.Player, wantEditor: true); // holder acquires the lock
+        lectern!.OnRightClick(holder.Player, wantEditor: true, quickAdd: false); // holder acquires the lock
 
         var attemptedEdit = new ScribeDocument();
         attemptedEdit.AddTask("This should not be applied");
