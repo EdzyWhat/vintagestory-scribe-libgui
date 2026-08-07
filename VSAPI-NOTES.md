@@ -1866,6 +1866,29 @@ guarding nulls. Note transition is NOT inherently reversible — rehydration (ha
 you implement yourself (e.g. an interaction that swaps the stack back to the wet variant and re-copies the
 document), not an engine feature.
 
+## A near-opaque body texture (stray alpha 252–254) demotes a mesh into the WBOIT transparent pass, so an overlaid semi-transparent layer bleeds THROUGH it (2026-08-07)
+
+**Symptom: the wax tablet's semi-transparent "writing" layer (dark etched marks, alpha ~124) applied its
+transparency to the wax BODY underneath it — you could see through the whole wax slab to the ground/item it
+rested on, and the show-through shimmered as the camera moved. The IDENTICAL writing layer on the clay
+tablet rendered correctly (opaque body, marks etched on top).**
+
+Root cause was NOT the model (clay and wax share the same thin `#writing`-textured element floating just above
+the body). It was the BODY texture's alpha channel. VS routes a mesh to a render pass based on its texture
+alpha (`EnumChunkRenderPass`): a fully-opaque texture → `Opaque` pass (depth-writing, occludes); ANY sub-255
+alpha → the `Transparent` pass, which is **Weighted Blended Order-Independent Transparency (WBOIT)** — it does
+not occlude the same way, so a translucent layer in front blends against whatever is BEHIND the slab instead
+of against the slab. `scribe-wax-32.png` had **92 stray pixels at alpha 252/254** (an imperceptible art-export
+artifact, scattered edge-to-edge across the 32×32) — enough to push the entire wax body into the transparent
+pass. `ff.png` (clay body) was 100% alpha-255, so clay stayed opaque and looked right.
+
+**Fix:** flatten the body texture's alpha to a single value of 255 (any pixel with `0 < a < 255` → `a = 255`).
+The 252→255 shift is visually undetectable but moves the slab back to the opaque pass, so the writing layer
+blends against solid wax again. Diagnose this class of bug by measuring the texture's alpha histogram, not by
+theorizing about the model — a "why is only ONE of two near-identical items translucent?" question is almost
+always a stray-alpha / render-pass split, not geometry. (Kept the writing texture semi-transparent — that
+layer is *supposed* to be in the transparent pass; only the opaque body must be truly opaque.)
+
 ## `*ByType` resolution DEEP-MERGES onto the base block; arrays CONCATENATE (2026-08-07)
 
 **Symptom: a per-variant `handbookByType`-style list (or any array) declared in BOTH a base block and

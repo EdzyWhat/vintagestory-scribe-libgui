@@ -21,16 +21,16 @@
 				"size": { "width": 2, "height": 5, "length": 6 },
 				"randYRotAngle": 0,
 				"transform": {
-					"translation": { "x": 0, "y": 0.12, "z": 0 },
-					"rotation": { "x": -90, "y": 0, "z": 90 },
+					"translation": { "x": 0, "y": 0.19, "z": 0 },
+					"rotation": { "x": 90, "y": 0, "z": 90 },
 					"origin": { "x": 0.5, "y": 0.03, "z": 0.5 },
 					"scale": 1
 				}
 			}
 		},
 		"onshelfTransform": {
-			"translation": { "x": 0, "y": 0.12, "z": 0 },
-			"rotation": { "x": -90, "y": 0, "z": 90 },
+			"translation": { "x": 0, "y": 0.19, "z": 0 },
+			"rotation": { "x": 90, "y": 0, "z": 90 },
 			"origin": { "x": 0.5, "y": 0.03, "z": 0.5 },
 			"scale": 1
 		},
@@ -76,16 +76,16 @@
 					"size": { "width": 2, "height": 5, "length": 6 },
 					"randYRotAngle": 0,
 					"transform": {
-						"translation": { "x": 0, "y": 0.12, "z": 0 },
-						"rotation": { "x": -90, "y": 0, "z": 90 },
+						"translation": { "x": 0, "y": 0.19, "z": 0 },
+						"rotation": { "x": 90, "y": 0, "z": 90 },
 						"origin": { "x": 0.5, "y": 0.03, "z": 0.5 },
 						"scale": 1.15
 					}
 				}
 			},
 			"onshelfTransform": {
-				"translation": { "x": 0, "y": 0.12, "z": 0 },
-				"rotation": { "x": -90, "y": 0, "z": 90 },
+				"translation": { "x": 0, "y": 0.19, "z": 0 },
+				"rotation": { "x": 90, "y": 0, "z": 90 },
 				"origin": { "x": 0.5, "y": 0.03, "z": 0.5 },
 				"scale": 1.15
 			}
@@ -124,7 +124,7 @@
 		"*-clay-red-fired":  { "default": { "base": "scribe:items/rf" }, "ff": { "base": "scribe:items/rf" }, "writing": { "base": "scribe:items/writing" } },
 		"*-clay-blue-fired": { "default": { "base": "scribe:items/bf" }, "ff": { "base": "scribe:items/bf" }, "writing": { "base": "scribe:items/writing" } },
 		"*-clay-fire-fired": { "default": { "base": "scribe:items/ff" }, "ff": { "base": "scribe:items/ff" }, "writing": { "base": "scribe:items/writing" } },
-		"*-wax":             { "default": { "base": "scribe:items/scribe-wax-32" }, "scribe-wax-32": { "base": "scribe:items/scribe-wax-32" }, "writing": { "base": "scribe:items/writing" } }
+		"*-wax":             { "default": { "base": "scribe:items/scribe-wax-32" }, "scribe-wax-32": { "base": "scribe:items/scribe-wax-32" } }
 	},
 	"guiTransform": {
 		"translation": { "x": 10.204777, "y": -12.232302, "z": 0 },
