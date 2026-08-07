@@ -162,8 +162,16 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
 
     private void OnHotbarSlotModified(int slotId)
     {
-        if (slotId == capi.World.Player.InventoryManager.ActiveHotbarSlotNumber)
-            OnActiveSlotChanged(default!);
+        // An in-place content re-sync of the STILL-HELD active slot (not a hand-switch) must use a
+        // presence-only check, NOT the strict DocId identity guard OnActiveSlotChanged runs
+        // (fix-item-dialog-first-open-flicker). A first open of a not-yet-crafted item makes the server
+        // re-sync the stack WITHOUT the client-generated document, so its DocId no longer matches — the
+        // strict guard closed the dialog one frame after opening, and only a second right-click stuck.
+        // Since the physical item never left the hand, close only if it stopped being a Scribe item at all.
+        // See ActiveHandHoldsAnyScribeDocumentItem for the full rationale.
+        if (slotId == capi.World.Player.InventoryManager.ActiveHotbarSlotNumber
+            && !ActiveHandHoldsAnyScribeDocumentItem())
+            TryClose();
     }
 
     public override void OnGuiClosed()

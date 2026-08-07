@@ -2963,3 +2963,41 @@ regression checks specific to this change's scoped-to-the-input approach.
       *(add-handbook-web-editor 7.8)*
       - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." After edit+save, the before/after
         toggle shows the session-original baseline in both editor and preview and restores correctly.
+
+## fix-item-dialog-first-open-flicker
+
+- [x] `f991b645` **First-open notebook stays.** Get a notebook you did NOT craft (creative-give or pick one
+      up) and right-click to open it for the FIRST time; confirm it opens and STAYS — no flicker, no second
+      right-click needed. *(fix-item-dialog-first-open-flicker 6.1)*
+      - **Confirmed 2026-08-06** via live playtest: a creative-given notebook opens and stays on the first
+        right-click (no flicker, no second click); also worked via the Shift+RC quick-add gesture on a fresh
+        item.
+- [x] `582eaeb0` **First-open clockmaker stays.** Same first-open test with a not-crafted clockmaker's
+      notebook: right-click once, confirm the dialog opens and stays without flickering closed.
+      *(fix-item-dialog-first-open-flicker 6.1)*
+      - **Confirmed 2026-08-06** via live playtest: creative-given clockmaker's notebook opens and stays on
+        first right-click; Shift+RC on a fresh item also worked.
+- [x] `341ebeae` **First-open tablet stays.** Same first-open test with a not-crafted wet tablet: right-click
+      once, confirm the dialog opens and stays without flickering closed.
+      *(fix-item-dialog-first-open-flicker 6.1)*
+      - **Confirmed 2026-08-06** via live playtest: creative-given wet tablet (and a wax tablet) opens and
+        stays on first right-click; Shift+RC on a fresh item also worked. (The lectern was also spot-checked
+        and opens/stays fine.)
+- [x] `eaa0965b` **Self-crafted opens clean.** Control: a self-CRAFTED item still opens cleanly on first
+      right-click (crafter is suppressed from the PickedUp entry, so it never flickered).
+      *(fix-item-dialog-first-open-flicker 6.2)*
+      - **Confirmed 2026-08-06** via live playtest: self-crafted notebook/clockmaker/tablet still open
+        cleanly on first right-click (no regression from the fix).
+- [x] `0b36d79f` **Drop closes dialog.** With an item dialog open, drop the held item; confirm the dialog
+      closes. *(fix-item-dialog-first-open-flicker 6.2)*
+      - **Confirmed 2026-08-06** via live playtest: dropping the held item closes the open dialog as expected
+        (the loosened presence-only rule still closes on a genuine hand-empty).
+- [x] `5d0e9322` **Switch-away closes.** With an item dialog open, scroll/key the hotbar to a DIFFERENT
+      Scribe item; confirm the first dialog closes. *(fix-item-dialog-first-open-flicker 6.2)*
+      - **Confirmed 2026-08-06** via live playtest: switching the hotbar to a different Scribe item closes the
+        first dialog (the untouched strict-DocId `AfterActiveSlotChanged` path still fires).
+- [x] `45462079` **Wet-to-hard not regressed.** With a wet tablet's dialog open, let it (or force it to) dry
+      wet→hard; confirm the transition still behaves correctly and the dialog is not disrupted.
+      *(fix-item-dialog-first-open-flicker 6.3)*
+      - **Confirmed 2026-08-06** via live playtest: wet→hard transition still behaves correctly with the
+        dialog open (not disrupted by the presence-only close rule).

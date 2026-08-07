@@ -295,8 +295,16 @@ public class GuiDialogScribeTablet : ScribeDialogBase
 
     private void OnHotbarSlotModified(int slotId)
     {
-        if (slotId == capi.World.Player.InventoryManager.ActiveHotbarSlotNumber)
-            OnActiveSlotChanged(default!);
+        // In-place content re-sync of the STILL-HELD active slot uses a presence-only check, NOT the strict
+        // DocId identity guard OnActiveSlotChanged runs (fix-item-dialog-first-open-flicker) — same fix as the
+        // Notebook. The first open of a not-yet-crafted tablet triggers a server re-sync WITHOUT the
+        // client-generated document, whose DocId then mismatched and closed the dialog one frame after it
+        // opened. The tablet's legitimate wet→hard/fired transition also rides SlotModified but carries the
+        // document forward (same DocId, same IScribeDocumentItem), so it passes the presence check exactly as
+        // it passed the old strict one — this change is additive for it. See ActiveHandHoldsAnyScribeDocumentItem.
+        if (slotId == capi.World.Player.InventoryManager.ActiveHotbarSlotNumber
+            && !ActiveHandHoldsAnyScribeDocumentItem())
+            TryClose();
     }
 
     public override void OnGuiClosed()

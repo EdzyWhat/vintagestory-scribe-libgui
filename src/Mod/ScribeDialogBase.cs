@@ -48,6 +48,28 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
             && doc.DocId == host.Document.DocId;
     }
 
+    /// <summary>The presence half of <see cref="ActiveHandItemHostsThisDocument"/>, WITHOUT the DocId
+    /// comparison: true when the active hand still holds SOME Scribe document item, regardless of which
+    /// document. Used ONLY by the item-hosted dialogs' <c>OnHotbarSlotModified</c> (an in-place same-slot
+    /// content re-sync), NOT by the real hand-switch path (<c>OnActiveSlotChanged</c>), which keeps the
+    /// strict DocId identity check above.
+    ///
+    /// <para>Why the two triggers need different rules (fix-item-dialog-first-open-flicker): opening a
+    /// not-yet-crafted item makes the client generate a fresh <see cref="ScribeDocument"/>/<c>DocId</c>
+    /// locally and notify the server. The server records the one-time "Picked up" history entry,
+    /// <c>MarkDirty()</c>s the slot, and re-syncs the stack back — deliberately WITHOUT the client's
+    /// document (it can't know the client-generated DocId). That re-sync fires <c>SlotModified</c> on the
+    /// STILL-HELD slot; the strict guard read a stack whose DocId no longer matched and closed the dialog
+    /// one frame after it opened (the "first open flickers closed, second sticks" bug). A slot-number change
+    /// asks "am I still holding the item this dialog is for?" — identity is right. An in-place content
+    /// rewrite of the slot I'm still holding asks "did the thing in my hand stop being a Scribe item?" —
+    /// presence is right, because the physical item didn't change, only its bytes were re-synced. The tablet's
+    /// legitimate wet→hard/fired transition also rides <c>SlotModified</c> but carries the document (same
+    /// DocId, same <c>IScribeDocumentItem</c>), so it passes the presence check just as it passed the strict
+    /// one — the fix is additive there.</para></summary>
+    private protected bool ActiveHandHoldsAnyScribeDocumentItem()
+        => capi.World.Player?.Entity?.ActiveHandItemSlot?.Itemstack?.Collectible is IScribeDocumentItem;
+
     /// <summary>One scroll controller shared by BOTH views' scroll regions, owned by the dialog rather
     /// than each view's <c>State</c>. Because a view switch is a <see cref="GuiBase.ForceRebuild"/> that
     /// tears down the outgoing view's <c>State</c> (which would dispose a State-owned controller and

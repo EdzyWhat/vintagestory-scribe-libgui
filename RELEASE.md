@@ -38,9 +38,12 @@ included — no fast-follow split. Deps unchanged: `game 1.22.x`, hard `gui 3.1.
       not-yet-crafted Scribe item (notebook/clockmaker/tablet) flickers closed and needs a second
       right-click. Root cause traced: the one-time server "Picked up" history re-sync fires `SlotModified`
       and the DocId-strict close-guard mis-reads it as a switch-away. Spec'd as OpenSpec change
-      `fix-item-dialog-first-open-flicker` (proposal/design/specs/tasks complete, apply-ready). Every
-      player hits this on first contact — must fix + verify before tagging 1.0.0. Archive this change in
-      Track A once applied.
+      `fix-item-dialog-first-open-flicker`. **FIXED + CONFIRMED 2026-08-06** — `OnHotbarSlotModified` now uses
+      a presence-only check (`ActiveHandHoldsAnyScribeDocumentItem`) instead of the DocId-strict guard, in
+      both `GuiDialogScribeNotebook` and `GuiDialogScribeTablet` (clockmaker inherits); verify.sh green
+      (Core 286/286, Atlas 25/25, restaged). In-game confirmed across all TESTING.md items (first-open
+      notebook/clockmaker/wet+wax tablet, self-crafted control, drop-closes, switch-away-closes, wet→hard
+      transition). No longer a blocker — ready to archive this change in Track A.
 
 ## Track A — Archive completed OpenSpec changes (in dependency order)
 
