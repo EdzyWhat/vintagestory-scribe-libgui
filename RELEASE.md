@@ -166,10 +166,16 @@ full spec sync; a single consolidated manual spec-sync then rewrote the 7 contes
       shows the marquee tier, and pointed the seed cheat-sheet at `screenshots/1.0/`. Swept for stale
       current-version tags — only legitimate historical refs remain (the archived
       `reddit-announcement-0.2.md`, and `v0.2 … (released)` roadmap-history lines).
-- [ ] **G.3. Build the release zip**, tag `v1.0.0`, create the GitHub Release, upload, publish to mod DB.
-- [ ] **G.4. Announce — wiki-first:** publish/refresh the **wiki** (source of truth), then **Mod DB**
+- [x] **G.3. Build the release zip**, tag `v1.0.0`, create the GitHub Release, upload, publish to mod DB.
+      Done 2026-08-07. `v1.0.0` tag points at `cd13a31` (icon+README); GitHub Release published with the
+      correct-icon `scribe_1.0.0.zip`; live on the mod DB at https://mods.vintagestory.at/scribe.
+- [~] **G.4. Announce — wiki-first:** publish/refresh the **wiki** (source of truth), then **Mod DB**
       (`mods.vintagestory.at/scribe`), then **Reddit (r/VintageStory)**, then **VS Discord**. Seed the
       FAQ for "where did my ground-place go" (the quick-add gesture change).
+      - [x] Wiki — updated to v1.0.0 (Track C.3).
+      - [x] Mod DB — description synced from `mod-page-inline.html`; 1.0.0 published.
+      - [x] Reddit — posted 2026-08-07: https://www.reddit.com/r/VintageStory/comments/1vidkiy/mod_scribe_10_is_out_adding_earlygame_clay_wax/
+      - [ ] VS Discord `#mods-releases` — short post still pending (draft in `docs/media/announcements-1.0.md` §3).
 
 ## After ship
 
