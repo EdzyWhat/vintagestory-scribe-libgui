@@ -142,9 +142,13 @@ full spec sync; a single consolidated manual spec-sync then rewrote the 7 contes
       (v1.0 Tablets = shipped, v1.1 Writing Desk, Later Bulletin Board — replacing the stale
       v0.3 Desk / v0.4 Tablets lines). Dep line still gui 3.1.0.
 - [ ] **B.2. Screenshots** into `docs/media/screenshots/1.0/` via `/scribe seed` — tablets, cuneiform, firing.
-- [ ] **B.3. Announcement drafts** for all four channels (0.2 reddit + teaser exist as templates in
-      `docs/media/`) — **call out the BREAKING quick-add gesture change** (lectern Shift+RC and
-      held-item ground placement both change).
+- [x] **B.3. Announcement drafts** — done 2026-08-06. `docs/media/announcements-1.0.md` covers all
+      four channels (Reddit r/VintageStory with 3 title options + full body, Mod DB release blurb,
+      VS Discord #mods-releases short post, wiki `Home.md` banner note) plus a "where did my
+      ground-place go?" **FAQ seed** for G.4. Every draft leads with or prominently flags the
+      **BREAKING** gesture change (Shift+RC = quick-add; Ctrl+Shift+RC = ground place; water-soften
+      unchanged), matching the tone of the existing `reddit-announcement-0.2.md` template. Reddit
+      body has a `(video/gif: …)` media placeholder to fill after B.2 screenshots.
 
 ## Track G — Ship (mechanical, after V + A + C)
 
