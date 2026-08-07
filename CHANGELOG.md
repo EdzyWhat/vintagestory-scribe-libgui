@@ -4,20 +4,42 @@ All notable changes to Scribe are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.0] - 2026-08-06
+
+Scribe's first "complete" cut: the new **Tablets** tier fills in the earliest end of the
+progression, giving a full handheld → carried → placed writing system. This release also changes
+the right-click modifier gestures — **see the BREAKING note under Changed.**
 
 ### Added
+- **Clay & Wax Tablets — a new early-game writing tier.** A cheap handheld tablet you can craft
+  long before a Notebook or Lectern, holding a short list (up to **10 tasks and 1 pinned task**) as
+  a quick scratchpad. Grid-crafted from a knife, a stick, and clay (or a saw, planks, a stick, and
+  beeswax for the wax variant) — no writing set or fired ink bowl required. Each has an in-game
+  handbook entry.
+- **Clay life-cycle: dry, re-wet, and fire.** A freshly crafted clay Tablet is **wet** and freely
+  editable. Left alone it dries **hard** over about two in-game days, locking its writing. From
+  there you can **dunk it in water** (drop it into a water block, or Shift+right-click aimed at
+  water) to soften it back to a wet, editable tablet — resetting its drying timer — or **fire it in
+  a fire pit**, like pottery, to make its writing **permanent** (water no longer softens it). Firing
+  a blank tablet sets its empty surface in stone.
+- **Clay-type tablets** — the Clay Tablet comes in three colours: **Red**, **Blue**, and **Fire
+  Clay**. The colour is cosmetic (all three behave identically), each with its own crafting recipe
+  and a distinct full-page dialog backdrop, and — once fired — a distinct fired-ceramic appearance.
+- **Wax Tablet** — a reusable step up from clay: a wooden frame filled with beeswax that **never
+  dries or fires**, so it can always be rewritten. Same 10-task / 1-pin limits as the clay Tablet.
+- **Cuneiform script** — Tablet text is written in a bespoke carved-wedge **cuneiform** font by
+  default, in keeping with the tier's ancient-writing theme. Prefer plain text? Turn off **Cuneiform
+  tablets** in Scribe Settings to render Tablet text in your selected task font instead.
 - **Quick-add task (Shift+right-click)** — Shift+right-clicking any Scribe surface (Lectern,
   Notebook, Clockmaker's Notebook, or a wet Tablet) now opens its editor with a fresh empty task
   already added at the **top** of the list and the caret focused, so you can capture a task in one
   gesture without scrolling to an "Add task" button. A quick-add at a full tablet (10-task cap) opens
   the editor and shows the "tablet is full" notice without adding a row. On a hard or fired (read-only)
   tablet it simply opens the tablet — nothing can be added there.
-- **Clay-type tablets** — the Clay Tablet is now three distinct items — **Red**, **Blue**, and **Fire
-  Clay Tablet** — each with its own handbook entry and its own crafting recipe (8 clay of that type + a
-  stick + a knife; the knife is not consumed but loses a little durability). Each opens with a
-  distinct full-page backdrop matching its clay. (A fired-ceramic appearance per clay type is wired but
-  not yet reachable in normal play — no gameplay fires a tablet this round.)
+- **In-game error notices** — a refused edit now tells you *why* through the vanilla client error
+  channel instead of failing silently: e.g. a tablet at its 10-task cap shows "A tablet holds at most
+  10 tasks", a locked (hardened/fired) tablet explains it can't be changed, and a held Lectern edit
+  lock surfaces the reason.
 - **Clockmaker's Notebook Schematic** — a reusable blueprint item sold occasionally by wandering
   **Commodities** and **Treasure Hunter** traders. Added to the crafting grid alongside the usual
   Notebook + temporal gear + metal parts, it lets **any** player craft a Clockmaker's Notebook
@@ -42,6 +64,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   both Notebooks, and the tablet editors.
 
 ### Fixed
+- The **first** right-click on a not-yet-crafted Scribe item (Notebook, Clockmaker's Notebook, or
+  Tablet) no longer flickers its dialog closed, requiring a second click to open. The one-time server
+  "picked up" history sync was being misread as a switch to a different item and closing the
+  just-opened dialog.
 - Stepping a Scribe Settings numeric field with the Up/Down arrow keys now works on **every**
   consecutive press instead of only the first. With a document editor (Lectern, Notebook, or Tablet)
   also open, the arrow keys previously leaked to the editor's last-touched row after the first step —
@@ -144,6 +170,7 @@ First public release.
 - `game` 1.22.0
 - `gui` 2.0.0 (LibGUI)
 
+[1.0.0]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v0.1.0...v0.1.1

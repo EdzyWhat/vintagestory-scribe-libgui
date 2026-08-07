@@ -117,9 +117,13 @@ full spec sync; a single consolidated manual spec-sync then rewrote the 7 contes
       actually ships at 4 sites (tablet-full, tablet-locked, lectern-locked) with real lang keys, not
       just claimed. v4 Desk retagged **planned v1.1**, backpack container marked **cut** (HUD delivered
       portability), v5 HUD/quick-add status corrected. Runway confirmed = Desk (v1.1) + Board.
-- [ ] **C.5. CHANGELOG.md** — fold the `[Unreleased]` block into a real `[1.0.0]` header and complete
-      it with the full tablet tier (cuneiform, firing, wax, per-clay themes) + the BREAKING quick-add
-      gesture change, called out prominently.
+- [x] **C.5. CHANGELOG.md** — done 2026-08-06. Folded `[Unreleased]` into `[1.0.0] - 2026-08-06` with
+      a lead paragraph framing the first "complete" cut. Completed the tablet tier the block was missing:
+      the tier itself + 10-task/1-pin limits, the dry→hard→re-wet/fire life-cycle, per-clay colours +
+      fired appearance, the wax tablet, cuneiform script + toggle, and the in-game error notices. Removed
+      the now-false "no gameplay fires a tablet this round" note. Added the V.5 first-open flicker fix to
+      Fixed. **BREAKING** quick-add gesture change kept called out prominently at the top of Changed +
+      flagged in the lead paragraph. Added the `[1.0.0]` compare link.
 - [ ] **C.6. README.md** — verify feature list + version references match the release.
 - [x] **C.7. CREDITS** — JeanPierre (Wanderer's Sketchbook) already credited; keep in the consistency check.
 
