@@ -11,6 +11,24 @@
 			"rotation": { "x": 0, "y": 35, "z": 90 },
 			"origin": { "x": 0.5, "y": 0.05, "z": 0.5 }
 		},
+		"shelvable": "Quadrants",
+		"bookshelveable": true,
+		"displayable": {
+			"shelf": {
+				"size": { "width": 2, "height": 6, "length": 6 },
+				"randYRotAngle": 0,
+				"transform": {
+					"translation": { "x": 0, "y": 0, "z": 0 },
+					"rotation": { "x": 0, "y": 0, "z": 0 },
+					"origin": { "x": 0.5, "y": 0.5, "z": 0.5 }
+				}
+			}
+		},
+		"onshelfTransform": {
+			"translation": { "x": 0, "y": 0, "z": 0 },
+			"rotation": { "x": 0, "y": 0, "z": 0 },
+			"origin": { "x": 0.5, "y": 0.5, "z": 0.5 }
+		},
 		"handbook": {
 			"extraSections": [
 				{

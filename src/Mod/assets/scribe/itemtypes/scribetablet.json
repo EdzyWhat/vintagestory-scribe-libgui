@@ -14,6 +14,26 @@
 			"rotation": { "x": 0, "y": 35, "z": 0 },
 			"origin": { "x": 0.5, "y": 0.05, "z": 0.5 }
 		},
+		"shelvable": "Quadrants",
+		"bookshelveable": true,
+		"displayable": {
+			"shelf": {
+				"size": { "width": 6, "height": 15, "length": 2 },
+				"randYRotAngle": 0,
+				"transform": {
+					"translation": { "x": 0, "y": 0.2, "z": 0 },
+					"rotation": { "x": -90, "y": 0, "z": 90 },
+					"origin": { "x": 0.5, "y": 0.03, "z": 0.5 },
+					"scale": 0.8
+				}
+			}
+		},
+		"onshelfTransform": {
+			"translation": { "x": 0, "y": 0.2, "z": 0 },
+			"rotation": { "x": 0, "y": 0, "z": 90 },
+			"origin": { "x": 0.5, "y": 0.03, "z": 0.5 },
+			"scale": 0.8
+		},
 		"handbook": {
 			"extraSections": [
 				{ "title": "scribe:handbook-scribetablet-about-title", "text": "scribe:handbook-scribetablet-about-text" },
@@ -29,6 +49,26 @@
 				"rotation": { "x": 0, "y": 35, "z": 0 },
 				"origin": { "x": 0.5, "y": 0.05, "z": 0.5 }
 			},
+			"shelvable": "Quadrants",
+			"bookshelveable": true,
+			"displayable": {
+				"shelf": {
+					"size": { "width": 6, "height": 15, "length": 2 },
+					"randYRotAngle": 0,
+					"transform": {
+						"translation": { "x": 0, "y": 0.2, "z": 0 },
+						"rotation": { "x": -90, "y": 0, "z": 90 },
+						"origin": { "x": 0.5, "y": 0.03, "z": 0.5 },
+						"scale": 0.8
+					}
+				}
+			},
+			"onshelfTransform": {
+				"translation": { "x": 0, "y": 0.2, "z": 0 },
+				"rotation": { "x": 0, "y": 0, "z": 90 },
+				"origin": { "x": 0.5, "y": 0.03, "z": 0.5 },
+				"scale": 0.8
+			},
 			"handbook": {
 				"extraSections": [
 					{ "title": "scribe:handbook-scribetablet-about-title", "text": "scribe:handbook-scribetablet-about-text" },
@@ -43,6 +83,26 @@
 				"rotation": { "x": 0, "y": 35, "z": 0 },
 				"origin": { "x": 0.5, "y": 0.05, "z": 0.5 }
 			},
+			"shelvable": "Quadrants",
+			"bookshelveable": true,
+			"displayable": {
+				"shelf": {
+					"size": { "width": 6, "height": 15, "length": 2 },
+					"randYRotAngle": 0,
+					"transform": {
+						"translation": { "x": 0, "y": 0.2, "z": 0 },
+						"rotation": { "x": -90, "y": 0, "z": 90 },
+						"origin": { "x": 0.5, "y": 0.03, "z": 0.5 },
+						"scale": 0.8
+					}
+				}
+			},
+			"onshelfTransform": {
+				"translation": { "x": 0, "y": 0.2, "z": 0 },
+				"rotation": { "x": 0, "y": 0, "z": 90 },
+				"origin": { "x": 0.5, "y": 0.03, "z": 0.5 },
+				"scale": 0.8
+			},
 			"handbook": {
 				"extraSections": [
 					{ "title": "scribe:handbook-scribetablet-about-title", "text": "scribe:handbook-scribetablet-about-text" },
@@ -56,6 +116,26 @@
 				"translation": { "x": -0.018, "y": 0, "z": -0.025 },
 				"rotation": { "x": 0, "y": 35, "z": 0 },
 				"origin": { "x": 0.5, "y": 0.05, "z": 0.5 }
+			},
+			"shelvable": "Quadrants",
+			"bookshelveable": true,
+			"displayable": {
+				"shelf": {
+					"size": { "width": 6, "height": 15, "length": 2 },
+					"randYRotAngle": 0,
+					"transform": {
+						"translation": { "x": 0, "y": 0.2, "z": 0 },
+						"rotation": { "x": -90, "y": 0, "z": 90 },
+						"origin": { "x": 0.5, "y": 0.03, "z": 0.5 },
+						"scale": 0.8
+					}
+				}
+			},
+			"onshelfTransform": {
+				"translation": { "x": 0, "y": 0.2, "z": 0 },
+				"rotation": { "x": 0, "y": 0, "z": 90 },
+				"origin": { "x": 0.5, "y": 0.03, "z": 0.5 },
+				"scale": 0.8
 			},
 			"handbook": {
 				"extraSections": [
