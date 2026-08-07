@@ -44,34 +44,52 @@
 
 ## 3. In-game placement verification (all three surfaces)
 
-- [ ] 3.1 Manually test: place a Notebook on a **general shelf** — it accepts, renders, and
+- [x] 3.1 Manually test: place a Notebook on a **general shelf** — it accepts, renders, and
       can be retrieved.
-- [ ] 3.2 Manually test: place a Notebook on a **bookshelf** — accepts, renders, retrieves.
-- [ ] 3.3 Manually test: place a Notebook in a **cabinet** — accepts (no "too large" error),
+- [x] 3.2 Manually test: place a Notebook on a **bookshelf** — accepts, renders, retrieves.
+- [x] 3.3 Manually test: place a Notebook in a **cabinet** — accepts (no "too large" error),
       renders, retrieves. If "too large" fires, shrink `displayable.shelf` `size`.
-- [ ] 3.4 Manually test: repeat 3.1–3.3 for the Clockmaker's Notebook.
-- [ ] 3.5 Manually test: repeat 3.1–3.3 for a **wet clay Tablet**, a **hardened** Tablet, a
+- [x] 3.4 Manually test: repeat 3.1–3.3 for the Clockmaker's Notebook.
+- [x] 3.5 Manually test: repeat 3.1–3.3 for a **wet clay Tablet**, a **hardened** Tablet, a
       **fired** Tablet, and a **wax** Tablet (confirms every `attributesByType` branch is
       shelvable, per task 1.4).
+      - **Confirmed 2026-08-07** (live playtest): all three items place/render/retrieve on
+        shelf, bookshelf, and cabinet. The CM Notebook needed its `displayable.shelf` height
+        lowered 6→5 (was the only one too tall for a general-shelf slot); all tablet variants
+        (wet/hard/fired/wax) are shelvable. `randYRotAngle:0` locks the cabinet placement angle.
 
 ## 4. Document identity preservation
 
-- [ ] 4.1 Manually test: shelve a Notebook that has tasks + notes, retrieve it, reopen —
+- [x] 4.1 Manually test: shelve a Notebook that has tasks + notes, retrieve it, reopen —
       confirm the same tasks and notes are present (docId survived the shelf inventory).
-- [ ] 4.2 Manually test: shelve a **hardened** clay Tablet, retrieve it — confirm it is still
+- [x] 4.2 Manually test: shelve a **hardened** clay Tablet, retrieve it — confirm it is still
       hardened and its edit-lock behaves as before shelving.
+      - **Confirmed 2026-08-07** (live playtest): documents keep all their data across
+        shelve → retrieve → reopen; hardened tablets retain their state and edit-lock.
 
 ## 5. Transform tuning pass
 
-- [ ] 5.1 Tune each item's `onshelfTransform` in-game until the model sits within slot bounds
+- [x] 5.1 Tune each item's `onshelfTransform` in-game until the model sits within slot bounds
       on shelf, bookshelf, and cabinet without clipping/floating (break-and-replace to
       re-tesselate after each edit; screenshot-compare, same method as the ground-storage
       fix). Confirm the wax tablet's distinct mesh looks right with the shared transform, or
       give it its own.
-- [ ] 5.2 Record per-surface verdicts in `TESTING.md` (via the `what-to-test` skill) and
+      - **Confirmed 2026-08-07** (iterative screenshot tuning): final values — clay lift y:0.12
+        scale 1, wax lift y:0.12 scale 1.15, shared rotation `{x:-90, z:90}` for the
+        narrow-edge-forward (spine-out) look matching books/notebooks. Wax got its OWN
+        transform block (smaller mesh) via `attributesByType."*-wax"`; clay wet/hard/fired
+        share the base block through the `attributesByType` deep-merge.
+- [x] 5.2 Record per-surface verdicts in `TESTING.md` (via the `what-to-test` skill) and
       restage the final values.
+      - **Done 2026-08-07:** 8 items recorded under the `add-shelf-placement-for-scribe-items`
+        group in `TESTING.md`, all Confirmed. Final values restaged and pushed (commit 50f92f6).
 
 ## 6. Docs
 
 - [ ] 6.1 Note shelf/bookshelf/cabinet placement on the wiki Items and Tablets pages (and the
       in-game handbook if it lists placement affordances). Not release-gating.
+      - **2026-08-07 decision:** in-game handbook SKIPPED — the tablet/notebook "about" entries
+        don't currently list any placement affordance (not even ground storage), so this would
+        be net-new content, not an addition to an existing list. Wiki edit remains a manual
+        step for the author (external, can't be done from here). Left unchecked as the only
+        open task; not release-gating.

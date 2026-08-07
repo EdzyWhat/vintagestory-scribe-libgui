@@ -3001,3 +3001,46 @@ regression checks specific to this change's scoped-to-the-input approach.
       *(fix-item-dialog-first-open-flicker 6.3)*
       - **Confirmed 2026-08-06** via live playtest: wet→hard transition still behaves correctly with the
         dialog open (not disrupted by the presence-only close rule).
+
+## add-shelf-placement-for-scribe-items
+
+- [x] `dd400c94` **Notebook on shelf.** Place a Notebook on a general shelf; confirm it accepts,
+      renders, and can be retrieved. *(add-shelf-placement-for-scribe-items 3.1)*
+      - **Confirmed 2026-08-07** via live playtest: Notebook places on a general shelf, renders
+        spine-out, and retrieves cleanly (after lowering displayable.shelf height 6→5 to fit the slot).
+- [x] `82eb23da` **Notebook on bookshelf.** Place a Notebook on a bookshelf; confirm accepts,
+      renders, retrieves. *(add-shelf-placement-for-scribe-items 3.2)*
+      - **Confirmed 2026-08-07** via live playtest: placement, render, and retrieval all work on the
+        bookshelf (shares onshelfTransform with the general shelf).
+- [x] `61eba6fe` **Notebook in cabinet.** Place a Notebook in a cabinet; confirm no too-large error,
+      renders, retrieves. *(add-shelf-placement-for-scribe-items 3.3)*
+      - **Confirmed 2026-08-07** via live playtest: accepts into the cabinet with no too-large error;
+        randYRotAngle:0 locks the placement angle (no longer varies with player look direction).
+- [x] `3c3d5cab` **Clockmaker's Notebook, all surfaces.** Place the Clockmaker's Notebook on shelf,
+      bookshelf, and cabinet; confirm each accepts/renders/retrieves.
+      *(add-shelf-placement-for-scribe-items 3.4)*
+      - **Confirmed 2026-08-07** via live playtest ("It works!"): CM Notebook places on a shelf after
+        matching its displayable.shelf height to the plain Notebook's (6→5); it was the only one still
+        too tall. Same mesh/transform as the Notebook, so bookshelf + cabinet follow.
+- [x] `52710113` **All tablet variants shelvable.** Place a wet clay, hardened, fired, and wax Tablet
+      on shelf, bookshelf, and cabinet; confirm every attributesByType branch is shelvable.
+      *(add-shelf-placement-for-scribe-items 3.5)*
+      - **Confirmed 2026-08-07** via live playtest: all tablet variants place on all three surfaces.
+        Wax keeps its own transform block (its mesh is smaller than the clay mesh); clay wet/hard/fired
+        share the base block via the attributesByType deep-merge.
+- [x] `3a8ee259` **Notebook data survives shelving.** Shelve a Notebook holding tasks + notes,
+      retrieve it, reopen; confirm the same tasks and notes are present.
+      *(add-shelf-placement-for-scribe-items 4.1)*
+      - **Confirmed 2026-08-07** via live playtest: documents keep all their data across
+        shelve → retrieve → reopen (docId preserved through the shelf inventory).
+- [x] `fbde6a78` **Hardened tablet keeps state.** Shelve a hardened clay Tablet, retrieve it; confirm
+      it is still hardened and its edit-lock behaves as before shelving.
+      *(add-shelf-placement-for-scribe-items 4.2)*
+      - **Confirmed 2026-08-07** via live playtest: hardened tablets retain their state and edit-lock
+        across shelving (part of the "keep all their data" confirmation).
+- [x] `774d52a0` **Transforms sit right on all surfaces.** Confirm each item's model sits within slot
+      bounds on shelf, bookshelf, and cabinet without clipping/floating; wax mesh reads right with its
+      own transform. *(add-shelf-placement-for-scribe-items 5.1)*
+      - **Confirmed 2026-08-07** via iterative screenshot tuning: final values — clay lift y:0.12
+        scale 1, wax lift y:0.12 scale 1.15, shared rotation {x:-90,z:90} for the narrow-edge-forward
+        (spine-out) look the user wanted, matching books/notebooks. Restaged and approved in-game.
