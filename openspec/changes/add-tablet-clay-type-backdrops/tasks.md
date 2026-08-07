@@ -83,10 +83,11 @@
 - [x] 6.2 In-game: obtain each clay tablet — from creative (now three discrete items) OR by crafting from
   red/blue/fire clay — and confirm each opens with its own distinct, crisp clay-type backdrop. — CONFIRMED
   2026-08-03: each is obtainable and opens the correct version.
-- [ ] 6.3 In-game: reach a fired clay tablet via creative (fired=true is not craftable this round) and
-  confirm the fired-ceramic tint reads distinctly per clay type; tune tint values if needed. — DEFERRED
-  2026-08-03: fired clay tablets not obtainable at the moment; folds into the next change
-  (add-tablet-firing-mechanic), which supplies the path to a fired tablet.
+- [x] 6.3 In-game: reach a fired clay tablet via creative (fired=true is not craftable this round) and
+  confirm the fired-ceramic tint reads distinctly per clay type; tune tint values if needed. — CONFIRMED
+  2026-08-06: once the firing mechanic (add-tablet-firing-mechanic) made fired tablets reachable, a fired
+  tablet pulled from Creative in each color and the per-type ceramic tint read distinctly (TESTING.md
+  `fed17c00`, submission 2026-08-06T16-10-31). No tint tuning needed.
 - [x] 6.4 SUPERSEDED by the variant pivot (2026-08-02): the earlier playtest confirmed the wax + a single
   collapsed creative "Clay Tablet" (red+soft default) rendered without error — but clay type is now a
   variant, so creative offers three discrete typed clay items instead of one attribute-less stack. The
@@ -97,6 +98,6 @@
 - [x] 6.6 In-game: confirm the Lectern and both Notebooks are visually unchanged (renderer seam did not
   disturb the full-page backdrops). — CONFIRMED 2026-08-03 (folded into 4.5 in-game check): unaffected
   surfaces render unchanged.
-- [ ] 6.7 Atlas/integration: the local pre-push gate stages the `gui` dep and exercises the tablet open
+- [x] 6.7 Atlas/integration: the local pre-push gate stages the `gui` dep and exercises the tablet open
   path; keep synthetic player names ≤16 chars. — runs at push time (the pre-push gate); not a manual
-  in-game step.
+  in-game step. CONFIRMED: the Atlas suite (25/25) passes on every push to main, most recently 2026-08-06.
