@@ -17,9 +17,60 @@ a per-player pinned-task **HUD** that keeps your goals on screen while you play.
 > See [`ROADMAP.md`](./ROADMAP.md) for the staged plan ahead and [`CHANGELOG.md`](./CHANGELOG.md)
 > for what has shipped.
 
+## Features
+
+Scribe's writing tools unlock in step with your tech tree — you keep notes the way the era
+lets you — and everything you write feeds one always-on task overlay.
+
+### 📿 Tablets — the scratch tier
+
+Cheap handheld scratchpads you can craft in the stone age, each holding a short list (up to
+10 tasks, 1 pin). Text is carved in a bespoke **cuneiform** script by default (switch it off
+in settings for plain text).
+
+- **Clay Tablet** (red, blue, or fire clay) — fresh clay is wet and editable, dries **hard**
+  over ~2 in-game days to lock the writing, then either **re-wet in water** to revise or
+  **fire it** like pottery to keep it forever.
+- **Wax Tablet** — a beeswax-filled wooden frame that never dries or fires, so it's always
+  rewritable.
+
+### 📖 Notebook — the carried document
+
+A leather-bound book that holds your full task checklist and freeform notes in your
+inventory, with no editor lock. Each notebook keeps a private, auto-recorded **History** —
+crafted, picked up, deaths, PvP and boss kills, temporal storms weathered — so it reads like
+the journal of its owner.
+
+- **Clockmaker's Notebook** — a variant that adds a **Timer** tab for real-time and
+  in-game-time countdowns; a running timer rides along on the HUD and blinks when it fires.
+  Craftable by the Clockmaker class, or by anyone with the trader-sold **Schematic**.
+
+### 📚 Lectern — the shared block
+
+A placeable, multiplayer-safe note board. Anyone in reach can read it and check tasks off;
+one player edits at a time (server-authoritative, with a single-editor lock). It logs its
+visitors on a **Guest Book** tab — handy for a base or trader stall.
+
+### 📌 Pinned Task HUD
+
+Pin a task from any Scribe item and it appears on an always-on overlay over the game world —
+your goals stay in view without opening anything. Pins are **per-player** (yours don't touch
+anyone else's), aggregated across every tablet, notebook, and lectern you use, positioned to
+any screen edge, and checked off with a 1.5-second undo window.
+
+### ✍️ Editing that gets out of your way
+
+A shared in-place editor across every writing surface: type directly into rows, **Enter** to
+add a task, drag to reorder, full caret/selection/clipboard support (including Mac
+conventions), and a **Shift + right-click quick-add** gesture that opens any item straight to
+a fresh, focused task. Configurable completion policies decide what a checked task does —
+keep, sink to bottom, unpin, or delete.
+
 ## Requirements
 
 - Vintage Story **1.22.x** (targets .NET 10)
+- **[LibGUI](https://mods.vintagestory.at/libgui)** (`gui` mod, **3.1.0**) — a hard
+  dependency; install it alongside Scribe on every client and server.
 
 ## Building from source
 
