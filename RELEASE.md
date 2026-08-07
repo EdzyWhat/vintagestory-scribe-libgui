@@ -92,9 +92,15 @@ full spec sync; a single consolidated manual spec-sync then rewrote the 7 contes
       `.cuneiformglow` confirmed already gone (only a historical comment at `CuneiformGlow.cs:39`). No
       dead code found; `#if DEBUG` blocks compile out of Release; `placeholder` hits are all live
       UI hint/fallback code. verify.sh green (Core 286/286, Atlas 25/25, restaged).
-- [ ] **C.2. In-game handbook audit** — tablets are a whole new tier; confirm `handbook.extraSections`
-      exist and read correctly for every new item (clay red/blue/fire + wax + hard/fired states). The
-      shared HUD-ref refactor + new Pinned-Task-HUD guide page already landed (commit `ee7806e`).
+- [x] **C.2. In-game handbook audit** — done 2026-08-06. Audited all 10 `scribetablet` variants
+      (clay red/blue/fire × wet/hard/fired + wax) in `itemtypes/scribetablet.json`: every variant
+      resolves handbook `extraSections` (base `about`/`states`/`hud-ref`; `*-hard`→`hard`, `*-fired`→
+      `fired`, `*-wax`→`wax`), and **every referenced lang key exists** in `scribe/lang/en.json` — no
+      key-echo misses. Tablets correctly reuse the shared `handbook-scribe-hud-ref-*` section like the
+      notebook/lectern. Two optional polish items surfaced and were declined for 1.0.0: (a) no dedicated
+      `craft` section like the notebooks have (tablets cover crafting inline + recipes auto-render), and
+      (b) all state variants stay handbook-visible (no `handbook.exclude` on intermediate `-hard`/
+      `-fired`) — intentional. Ships as-is.
 - [ ] **C.3. Wiki: new Tablets page** — `docs/media/wiki/` has 11 pages for 0.2; add a **Tablets** page
       and update Items / Home / Crafting for the new tier before publishing.
 - [ ] **C.4. ROADMAP.md** — mark v3 (Tablets) shipped; strike the cut **Scratch+ paper** tier row;
