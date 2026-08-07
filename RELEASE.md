@@ -124,7 +124,11 @@ full spec sync; a single consolidated manual spec-sync then rewrote the 7 contes
       the now-false "no gameplay fires a tablet this round" note. Added the V.5 first-open flicker fix to
       Fixed. **BREAKING** quick-add gesture change kept called out prominently at the top of Changed +
       flagged in the lead paragraph. Added the `[1.0.0]` compare link.
-- [ ] **C.6. README.md** — verify feature list + version references match the release.
+- [x] **C.6. README.md** — done 2026-08-06. Bumped the status line v0.2.0 → **v1.0.0**. Added a
+      three-tier feature paragraph (Tablets + Notebook/Clockmaker + Lectern → pinned HUD) so the intro
+      reflects what actually ships, not just the aspirational stone-age→bulletin-board arc. Build/test/
+      Atlas/OpenSpec sections all still accurate (gui 3.1.0, 1.22.x, .NET 10 unchanged). Version
+      cross-check with modinfo/CHANGELOG/mod page/wiki happens at G.2.
 - [x] **C.7. CREDITS** — JeanPierre (Wanderer's Sketchbook) already credited; keep in the consistency check.
 
 ## Track B — Launch material
