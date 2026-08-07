@@ -51,6 +51,15 @@ if [[ -f src/Mod/modicon.png ]]; then
   cp src/Mod/modicon.png "$STAGE/modicon.png"
 fi
 
+# Prune non-game working/reference files from the staged copy. The distributable zip (uploaded
+# to the mod DB, and attached to the GitHub Release) must contain ONLY assets the running game
+# loads -- no art sources or reference material. The game loads compiled `.json` shapes, not the
+# Blockbench `.bbmodel` sources; textures are the exported `.png`s, not the Photoshop `.psd`
+# sources; and `reference-*` art is design reference the game never reads. These all live under
+# `assets/` in the repo (so they still ship in the GitHub "Source code" archives and full clones),
+# but they don't belong in the deliverable. Keep this list in sync if new source-file types appear.
+find "$STAGE/assets" \( -name '*.psd' -o -name '*.bbmodel' -o -name 'reference-*' \) -type f -delete 2>/dev/null || true
+
 # Zip it up.
 mkdir -p Releases
 OUT="$REPO_ROOT/Releases/${MODID}_${VERSION}.zip"
