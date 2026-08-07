@@ -15,7 +15,7 @@
 		"bookshelveable": true,
 		"displayable": {
 			"shelf": {
-				"size": { "width": 2, "height": 6, "length": 6 },
+				"size": { "width": 2, "height": 5, "length": 6 },
 				"randYRotAngle": 0,
 				"transform": {
 					"translation": { "x": 0, "y": 0, "z": 0 },

@@ -18,21 +18,21 @@
 		"bookshelveable": true,
 		"displayable": {
 			"shelf": {
-				"size": { "width": 6, "height": 15, "length": 2 },
+				"size": { "width": 2, "height": 5, "length": 6 },
 				"randYRotAngle": 0,
 				"transform": {
-					"translation": { "x": 0, "y": 0.2, "z": 0 },
+					"translation": { "x": 0, "y": 0.12, "z": 0 },
 					"rotation": { "x": -90, "y": 0, "z": 90 },
 					"origin": { "x": 0.5, "y": 0.03, "z": 0.5 },
-					"scale": 0.8
+					"scale": 1
 				}
 			}
 		},
 		"onshelfTransform": {
-			"translation": { "x": 0, "y": 0.2, "z": 0 },
+			"translation": { "x": 0, "y": 0.12, "z": 0 },
 			"rotation": { "x": -90, "y": 0, "z": 90 },
 			"origin": { "x": 0.5, "y": 0.03, "z": 0.5 },
-			"scale": 0.8
+			"scale": 1
 		},
 		"handbookByType": {
 			"*-hard": {
@@ -73,21 +73,21 @@
 			},
 			"displayable": {
 				"shelf": {
-					"size": { "width": 6, "height": 15, "length": 2 },
+					"size": { "width": 2, "height": 5, "length": 6 },
 					"randYRotAngle": 0,
 					"transform": {
-						"translation": { "x": 0, "y": 0.2, "z": 0 },
+						"translation": { "x": 0, "y": 0.12, "z": 0 },
 						"rotation": { "x": -90, "y": 0, "z": 90 },
 						"origin": { "x": 0.5, "y": 0.03, "z": 0.5 },
-						"scale": 0.8
+						"scale": 1.15
 					}
 				}
 			},
 			"onshelfTransform": {
-				"translation": { "x": 0, "y": 0.2, "z": 0 },
+				"translation": { "x": 0, "y": 0.12, "z": 0 },
 				"rotation": { "x": -90, "y": 0, "z": 90 },
 				"origin": { "x": 0.5, "y": 0.03, "z": 0.5 },
-				"scale": 0.8
+				"scale": 1.15
 			}
 		}
 	},
