@@ -148,7 +148,8 @@ full spec sync; a single consolidated manual spec-sync then rewrote the 7 contes
 
 ## Track G — Ship (mechanical, after V + A + C)
 
-- [ ] **G.1. Version bump** — `modinfo.json` `0.2.0` → `1.0.0`.
+- [x] **G.1. Version bump** — done 2026-08-06. `src/Mod/modinfo.json` `version` `0.2.0` → `1.0.0`.
+      Deps unchanged (`game 1.22.0`, `gui 3.1.0`).
 - [ ] **G.2. Version consistency check** — `modinfo.json` · `CHANGELOG` header · mod page · wiki ·
       video script all state **1.0.0** and **gui 3.1.0**.
 - [ ] **G.3. Build the release zip**, tag `v1.0.0`, create the GitHub Release, upload, publish to mod DB.
