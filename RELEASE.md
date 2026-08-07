@@ -109,10 +109,14 @@ full spec sync; a single consolidated manual spec-sync then rewrote the 7 contes
       from the actual recipe JSON), and the wiki `README.md` (1.0.0 changelog + publish checklist).
       Swept for stale refs (v0.4 / "two items" / 0.2.0) — none remain; dep line still gui 3.1.0.
       Tablets page has no images yet — add tablet/cuneiform/firing screenshots after Track B.2.
-- [ ] **C.4. ROADMAP.md** — mark v3 (Tablets) shipped; strike the cut **Scratch+ paper** tier row;
-      reconcile "wets out in water" → the shipped harden/rehydrate/fire mechanic; mark the deferred
-      **error surface** partially resolved (`zero-point-three-fixes` §7 shipped `TriggerIngameError`);
-      confirm the runway is just Desk (v1.1) + Board.
+- [x] **C.4. ROADMAP.md** — done 2026-08-06. Marked v3 Tablets **shipped v1.0.0** (tier table + staged
+      plan); struck the cut **Scratch+ paper** row (strikethrough + why); reconciled the spec's "wets
+      out / `dissolveInWater`" to the SHIPPED dry→hard→re-wet-or-fire life-cycle (water is reversible,
+      never destructive) and noted the two spec deltas (grid-craft not clayforming; cuneiform + quick-add
+      added beyond spec). Marked the **error surface PARTIALLY resolved** — verified `TriggerIngameError`
+      actually ships at 4 sites (tablet-full, tablet-locked, lectern-locked) with real lang keys, not
+      just claimed. v4 Desk retagged **planned v1.1**, backpack container marked **cut** (HUD delivered
+      portability), v5 HUD/quick-add status corrected. Runway confirmed = Desk (v1.1) + Board.
 - [ ] **C.5. CHANGELOG.md** — fold the `[Unreleased]` block into a real `[1.0.0]` header and complete
       it with the full tablet tier (cuneiform, firing, wax, per-clay themes) + the BREAKING quick-add
       gesture change, called out prominently.

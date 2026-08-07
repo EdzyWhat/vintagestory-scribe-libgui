@@ -14,14 +14,14 @@ writing *and* vanilla mechanics (you write *into* clay with a stylus — stone a
 you write *on* paper with ink + pen — metal age). Fully unlocked by the early metal
 age (the saw); anything past that is cosmetic.
 
-| Tier | Artifact | Capability |
-|------|----------|-----------|
-| Scratch | Clay tablet (soft/unfired) | 3 lines; wets out if you fall in water holding it |
-| Scratch+ | Reed/cattail paper | a few more lines |
-| Collection | Leather-bound notebook | infinite pages; built-in implement holder |
-| Organization | Writing desk (private block) | consolidates all your notes + categories |
-| Portability | Note-taker's backpack + HUD | whole collection on the go; pin ≤3 tasks to HUD |
-| Social | Bulletin board (public) + chalkboard | shared board; chalkboard is drawable |
+| Tier | Artifact | Capability | Status |
+|------|----------|-----------|--------|
+| Scratch | Clay & wax tablet (handheld) | up to 10 tasks, 1 pin; clay dries hard → re-wet in water or fire to make permanent; wax always rewritable | **shipped v1.0** |
+| ~~Scratch+~~ | ~~Reed/cattail paper~~ | ~~a few more lines~~ | **cut** — the clay→wax step already covers the low tier; a paper micro-tier added no capability |
+| Collection | Leather-bound notebook | infinite pages | **shipped v0.2** |
+| Organization | Writing desk (private block) | consolidates notes; copy/paste export between Lectern/Notebook/Desk | planned **v1.1** |
+| Portability | Pinned-task HUD | pins from any source shown on an always-on HUD; quick-add gesture | **HUD shipped** (v0.1); backpack container **cut** |
+| Social | Bulletin board (public) + chalkboard | shared board; chalkboard is drawable | planned (Board) |
 
 ## Staged plan
 
@@ -41,29 +41,36 @@ age (the saw); anything past that is cosmetic.
     exists; poll `Calendar.TotalHours`/`DateTime.UtcNow`), gated to the clockmaker's `tinkerer` trait.
     The timer PAGE lives on the notebook. Does NOT add due-dates to tasks (respects the discipline
     reminder below) — it's a separate opt-in feature that may reference a task by id.
-- **v3 — Scratch tier: clay & wax tablets** → `docs/specs/v3-clay-tablet.md` (retitled in place;
-  the filename is unchanged so existing pointers still resolve). Two sibling artifacts:
-  - **Clay tablet:** soft/unfired item, 3-line UI, clayform-a-flat-slab, stylus in offhand,
-    **wets out in water**, rack-storable. Mostly JSON (clayforming pattern, `dissolveInWater`,
-    `scrollrackable`, stylus = `writingTool` item). The fire-to-permanent-archive trade-off has a
-    real gotcha (kiln firing drops stack attributes — see the spec and VSAPI-NOTES).
-  - **Wax tablet (addendum 2026-07-21):** the reusable Roman-era surface. **Does NOT wet out in
-    water** (water-immune by simply omitting clay's water code). Balanced against clay not by an
-    invented punishment but by material cost (beekeeping-gated beeswax) and **no path to a
-    permanent fired archive** — wax is erasable/reusable (smooth-flat = reset) but never
-    permanent. The two tablets are mutually non-dominating. (A heat/melt-fragility inverse was
-    considered and cut: nothing in vanilla damages a held item when the player is on fire, and
-    open-air proximity heating of a hotbar item is unconfirmed — see VSAPI-NOTES.)
-- **v4 — Writing desk (organization)** → `docs/specs/v4-writing-desk.md`. Private owner-gated
+- **v3 — Scratch tier: clay & wax tablets** *(shipped, v1.0.0)* → `docs/specs/v3-clay-tablet.md`
+  (retitled in place; the filename is unchanged so existing pointers still resolve). Two sibling
+  artifacts. **What actually shipped differs from the original spec in three ways** — reconciled here:
+  - **Clay tablet:** grid-crafted from knife + stick + clay (not clayforming), up to 10 tasks / 1
+    pin, in red / blue / fire-clay colours. **The "wets out / dissolves in water" mechanic was
+    replaced by a dry→hard→re-wet life-cycle:** a fresh tablet is wet and editable; left alone it
+    dries **hard** over ~2 in-game days (locking the writing); a hardened tablet is **softened back
+    to wet by dunking it in water** (`Harden`/rehydrate, not `dissolveInWater` — the tablet is never
+    destroyed), or **fired in a fire pit** to make its writing permanent. The fire-to-permanent
+    archive trade-off shipped as designed. Not rack-storable; no offhand stylus.
+  - **Wax tablet:** the reusable surface — a wooden frame of beeswax, grid-crafted (saw + planks +
+    stick + beeswax). **Never dries or fires**, so always rewritable; same 10-task / 1-pin limits as
+    clay. Balanced against clay by material cost (beeswax) and no permanent-archive path, not by a
+    water punishment. (The considered heat/melt-fragility inverse stayed cut.)
+  - **Added beyond the spec:** tablet text renders in a bespoke **cuneiform script** by default
+    (toggleable in Settings), and the unified **Shift+right-click quick-add** gesture (see v5) — a
+    BREAKING change to the lectern/held-item interaction map — landed alongside this tier.
+- **v4 — Writing desk (organization)** *(planned, v1.1)* → `docs/specs/v4-writing-desk.md`. Private owner-gated
   block; consolidates notes + categories; **kanban tabs** (Active / Backlog / Completed) as
   the fuller home for the completed-task funnel. Also the home for **within-document search**
   (a text box filtering the desk's rows by typed query — reuses the kanban filtered-row-list
   mechanism, no Core/server change; global cross-document search is a later, separate change)
   and the **faction/shared task-assignment** idea — VS ships a first-party player-group system,
   so this may need no external dependency (see open decision below).
-- **v5 — Backpack (portability)** → `docs/specs/v5-backpack-hud.md`. Hotkey-accessed;
-  always-on **pinned-task HUD** (≤3 pins, native `HudElement` — not ImGui); plus a
-  **quick-add hotkey** for one-line capture without opening the full document.
+- **v5 — Portability** → `docs/specs/v5-backpack-hud.md`. **The HUD half shipped early (v0.1.0):**
+  the always-on **pinned-task HUD** (native `HudElement`, not ImGui) now aggregates pins from every
+  source — lectern, notebook, and tablet — not just a held document. **Quick-add shipped in v1.0** but
+  as a unified **Shift+right-click** gesture on the writing item rather than a standalone hotkey (see
+  the v3 note; it's a BREAKING change to the interaction map). **The backpack container itself was
+  cut** — the HUD delivered the portability goal (your tasks are ambient) without a new container item.
 - **v6 — Bulletin board (social)** → `docs/specs/v6-bulletin-board.md`. Public shared block +
   signatures + a guestbook (append-only) variant. The **drawable chalkboard** is recommended
   as a v6.1 sub-change (no vanilla drawable precedent → from-scratch stroke GUI).
@@ -88,12 +95,16 @@ age (the saw); anything past that is cosmetic.
   (~1000 chars) surfaced through the same channel. NOTE: the earlier ToastLib approach was rejected
   (see Done/superseded); pick a mechanism that fits the LibGUI rebuild (an in-dialog inline notice or
   a native `HudElement`, not ToastLib). Promote to an OpenSpec change when picked up.
-  - **UPDATE 2026-07-26 — the error SURFACE is DEFERRED past v1; the length case is solved by CLIPPING
-    instead of reporting.** v1 (RELEASE.md A1) caps task text at 1000 chars: the editor field enforces a
-    maxlength and the codec clips-instead-of-rejects on read (which also fixes the `fe168d81` silent-
-    rejection bug). No user-facing error notice ships for it. The general feedback surface (lost lock,
-    save failure) stays a post-v1 item — the specific v1 errors are being solved individually (clipping
-    here) rather than by building the shared notice channel now.
+  - **UPDATE 2026-07-26 — the length case is solved by CLIPPING instead of reporting.** v1 caps task
+    text at 1000 chars: the editor field enforces a maxlength and the codec clips-instead-of-rejects on
+    read (which also fixes the `fe168d81` silent-rejection bug). No user-facing error notice ships for it.
+  - **UPDATE 2026-08-06 — the error surface is now PARTIALLY RESOLVED (shipped in v1.0.0).**
+    `zero-point-three-fixes` §7 shipped a real in-Vintage-Story notice via `TriggerIngameError` —
+    the vanilla client error channel — so refused edits now tell the player *what* went wrong (e.g.
+    the tablet 10-task cap surfaces "A tablet holds at most 10 tasks", and the lost-lock / blocked-edit
+    cases route through the same channel). This is the LibGUI-appropriate mechanism the earlier note
+    called for (not ToastLib). Still open: a fuller inline notice for save-failure and other edge
+    cases — the channel exists, coverage is incremental.
 - **Lectern GUI polish** → `docs/specs/lectern-gui-polish.md`. Most items are now delivered
   or retired. **Shipped:** placement facing (v0.1.0), custom SVG icon set
   (`add-custom-svg-row-icons`), side-rail nav column (the LibGUI right-col nav IS the side
@@ -136,11 +147,13 @@ Grounded, distinctive ideas worth tracking. The clay-tier and social-tier ones a
 their specs above (`v3-clay-tablet.md`, `v6-bulletin-board.md`); the chronicle-style ones into
 `chronicle-and-integrations.md`. Still-open highlights:
 
-- **Firing a tablet is a real crafting decision** — a fired tablet becomes a permanent,
-  read-only archive vs. staying soft/editable but water-fragile. The single most
-  historically-grounded mechanic on the list (v3 spec).
-- **Fire vs. water asymmetric fragility across tiers** — clay is fireproof but water-fragile;
-  paper/leather should invert this. Keeps later tiers from being strictly "better."
+- **Firing a tablet is a real crafting decision** *(shipped v1.0)* — a fired tablet becomes a
+  permanent, read-only archive vs. a hardened one that can be re-wet and revised. The single most
+  historically-grounded mechanic on the list; shipped as the dry→hard→re-wet/fire life-cycle (see
+  the v3 note above — the final mechanic is water-**reversible** hardening, not water-fragility).
+- **Fire vs. water asymmetric fragility across tiers** — as shipped, clay's water axis is
+  *reversible* (dunking re-wets a hardened tablet) rather than *destructive*. If a later paper/leather
+  tier wants an inverse, it would invert this reversibility, not a lost-to-water punishment.
 - **Death leaves a last entry**, **calendar-stamped passive chronicle**, **signed vs. unsigned
   notes**, **guestbook board variant**, **milestone-suggested tasks** — all specced (see
   chronicle + v6 specs).
