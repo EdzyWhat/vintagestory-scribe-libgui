@@ -13,10 +13,22 @@
       `*-wax`) inherit or shadow the base `attributes`. If they shadow, duplicate the four
       new attributes into each branch (matching how `groundStorageTransform` is already
       duplicated per branch in that file).
-      - **Resolved:** `attributesByType` REPLACES the base `attributes` (the file already
-        re-declares `groundStorageTransform` in every branch). Added the four opt-in
-        attributes to the base block AND all three branches (`*-hard`, `*-fired`, `*-wax`).
-        Base block covers the three wet clay variants (which match no branch pattern).
+      - **Resolved (corrected 2026-08-07):** an earlier note here claimed `attributesByType`
+        REPLACES the base `attributes` — that was WRONG. Verified against
+        `RegistryObjectType.solveByType` (VSEssentials.dll) and the game's own Newtonsoft
+        DLL: the matched branch is **deep-merged onto** the base block
+        (`base["attributes"].Merge(branch)`, no merge settings). Object keys OVERWRITE
+        (so a branch value identical to base is a no-op), but ARRAYS CONCATENATE.
+      - Consequence 1: the per-branch transform duplicates (`groundStorageTransform`,
+        `displayable`, `onshelfTransform`) bought nothing for `*-hard`/`*-fired` — those
+        share the clay mesh, so they now inherit from base. Only `*-wax` keeps its own
+        transform block (distinct, smaller mesh: X0..10/Z0..11 vs clay X0..12.4/Z0..15.2).
+      - Consequence 2 (latent bug this refactor fixed): because arrays concat, the old
+        per-branch `handbook.extraSections` was APPENDING to base's — hard/fired resolved
+        to 6 sections (about/hud-ref listed twice), wax to 5. Converted `handbook` →
+        `handbookByType` with a `*` fallback so each variant gets exactly its own list
+        (`...ByType` replaces instead of concatenating). Verified: wet=3, hard=3, fired=3,
+        wax=2, no dupes.
 
 ## 2. Stage and load-test
 

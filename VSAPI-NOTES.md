@@ -1866,6 +1866,47 @@ guarding nulls. Note transition is NOT inherently reversible — rehydration (ha
 you implement yourself (e.g. an interaction that swaps the stack back to the wet variant and re-copies the
 document), not an engine feature.
 
+## `*ByType` resolution DEEP-MERGES onto the base block; arrays CONCATENATE (2026-08-07)
+
+**Symptom: a per-variant `handbookByType`-style list (or any array) declared in BOTH a base block and
+a matching `attributesByType` branch shows up DOUBLED in-game (e.g. a hardened tablet listed 6 handbook
+sections — the base's 3 + the branch's 3, with entries repeated).** Also relevant when deciding whether
+per-branch property duplication is even necessary.
+
+The `*ByType` suffix (`attributesByType`, `texturesByType`, `handbookByType`, `shapeByType`, …) is
+resolved by `RegistryObjectType.solveByType` in **VSEssentials.dll**
+(`Vintagestory.ServerMods.NoObf.RegistryObjectType`; dump with
+`ilspycmd -t Vintagestory.ServerMods.NoObf.RegistryObjectType "/Applications/Vintage Story.app/Mods/VSEssentials.dll"`).
+For each key `"<x>ByType"`, it wildcard-matches the item's full variant code against the branch patterns,
+takes the FIRST match, then:
+
+```csharp
+JToken obj = val["<x>"];                    // the sibling base block, if any
+if (obj is JObject existing)
+    existing.Merge(matchedBranchValue);     // <-- DEEP MERGE, no JsonMergeSettings
+else
+    val["<x>"] = matchedBranchValue;        // replace only when there is NO base block
+```
+
+So it does **NOT replace** a sibling base block — it deep-merges the matched branch *onto* it. Two
+consequences, both verified empirically against the game's own `Lib/Newtonsoft.Json.dll`:
+
+- **Object keys OVERWRITE.** A branch property whose value equals the base value is a pure no-op —
+  duplicating an identical transform object across branches buys nothing. Put the shared value in the
+  base block once; only branches that genuinely DIFFER need their own copy (e.g. our `*-wax` tablet keeps
+  its own `onshelfTransform`/`displayable` because its mesh is smaller than the clay mesh).
+- **Arrays CONCATENATE.** `JObject.Merge` with no settings uses `MergeArrayHandling.Concat` by default, so
+  a branch array *appends* to the base array rather than replacing it. This is the doubling bug above.
+  **Fix: don't keep a base array AND a per-branch array of the same key.** Either (a) put the whole thing
+  in one place, or (b) move it entirely into a `<x>ByType` map with a `"*"` catch-all branch for the
+  otherwise-unmatched variants — because `...ByType` sets the key from the matched branch (replace),
+  there's no base sibling to concat with, so each variant gets exactly its own list.
+
+Note the wildcard match takes the FIRST matching branch, so order matters and a broad `"*"` must come
+LAST. Test the resolution by faithfully porting `solveByType` and running it against the real JSON (a
+~20-line C# harness referencing the game's Newtonsoft DLL) rather than guessing — that's how the merge
+semantics above were confirmed after an earlier note wrongly assumed `attributesByType` replaces the base.
+
 ## Two different `BadImageFormatException` crashes — don't conflate them
 
 There are TWO distinct `BadImageFormatException` crashes on this project; they have different error
