@@ -101,8 +101,14 @@ full spec sync; a single consolidated manual spec-sync then rewrote the 7 contes
       `craft` section like the notebooks have (tablets cover crafting inline + recipes auto-render), and
       (b) all state variants stay handbook-visible (no `handbook.exclude` on intermediate `-hard`/
       `-fired`) — intentional. Ships as-is.
-- [ ] **C.3. Wiki: new Tablets page** — `docs/media/wiki/` has 11 pages for 0.2; add a **Tablets** page
-      and update Items / Home / Crafting for the new tier before publishing.
+- [x] **C.3. Wiki: new Tablets page** — done 2026-08-06. Added `Clay-and-Wax-Tablets.md` (wet→hard→
+      fired life-cycle, water re-wet, never-drying wax, 10-task/1-pin limits, Shift+RC quick-add,
+      cuneiform toggle, clay colours), sourcing all mechanics from the shipped handbook/lang text.
+      Updated `Home.md` (nav link + intro + roadmap: Tablets = shipped **v1.0**, Writing Desk → v1.1),
+      `Items.md` (Tablets section + reframed intro), `Crafting-the-Lectern.md` (clay + wax grid recipes
+      from the actual recipe JSON), and the wiki `README.md` (1.0.0 changelog + publish checklist).
+      Swept for stale refs (v0.4 / "two items" / 0.2.0) — none remain; dep line still gui 3.1.0.
+      Tablets page has no images yet — add tablet/cuneiform/firing screenshots after Track B.2.
 - [ ] **C.4. ROADMAP.md** — mark v3 (Tablets) shipped; strike the cut **Scratch+ paper** tier row;
       reconcile "wets out in water" → the shipped harden/rehydrate/fire mechanic; mark the deferred
       **error surface** partially resolved (`zero-point-three-fixes` §7 shipped `TriggerIngameError`);

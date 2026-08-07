@@ -1,6 +1,6 @@
 # Scribe
 
-Scribe is a note-taking and task-management mod for Vintage Story 1.22.x. Place a **Lectern** or carry a **Notebook**, write tasks and notes, check them off, and pin important items to a persistent **HUD overlay** visible while you play — no need to keep the window open.
+Scribe is a note-taking and task-management mod for Vintage Story 1.22.x. Scratch a quick list into a **clay Tablet**, place a **Lectern**, or carry a **Notebook** — write tasks and notes, check them off, and pin important items to a persistent **HUD overlay** visible while you play, no need to keep the window open.
 
 ![Welcome to Scribe!](https://i.imgur.com/r4kNzN7.png)
 
@@ -11,6 +11,7 @@ Scribe is a note-taking and task-management mod for Vintage Story 1.22.x. Place 
 - [Using the Lectern](Using-the-Lectern) — the Read, Edit, Pinned, and Settings views
 - [The Notebook](The-Notebook) — the carried, personal document
 - [Clockmaker's Notebook & Timers](Clockmakers-Notebook-and-Timers) — the advanced Notebook with reminders
+- [Clay & Wax Tablets](Clay-and-Wax-Tablets) — the early-game handheld tablets, with drying and firing
 - [History & Guestbook](History-and-Guestbook) — the two automatic logs
 - [Pinned Task HUD](Pinned-Task-HUD) — the always-on task overlay
 - [Scribe Settings](Scribe-Settings) — all preferences explained
@@ -26,11 +27,11 @@ A placeable Lectern block, a per-player pinned-task HUD, and Scribe Settings.
 **v0.2 — Notebook & Clockmaker's Notebook** *(released)*
 A carried Notebook item that brings your tasks with you and keeps a passive **History** chronicle of what happened while you carried it. The **Clockmaker's Notebook** variant adds a **Timer** tab for real-time and in-game-time reminders.
 
-**v0.3 — Writing Desk** *(planned)*
-A private desk block that expands on the Lectern with group task-assignment. Intended for groups.
+**v1.0 — Clay & Wax Tablets** *(released)*
+The earliest writing tier: simple handheld [Tablets](Clay-and-Wax-Tablets) grounded in the archaeology of writing. Scratch a short list into wet clay, let it dry hard, then re-wet it to revise or fire it in a fire pit to keep it forever. Written in a carved-wedge cuneiform script. This is Scribe's first "complete" cut.
 
-**v0.4 — Clay & Wax Tablets** *(planned)*
-Simple early-game handheld tablets, grounded in the archaeology of writing.
+**v1.1 — Writing Desk** *(planned)*
+A private desk block that expands on the Lectern with copy/paste export between the Lectern, Notebook, and Desk.
 
 The goal is a natural progression of capability through Vintage Story's tiers.
 

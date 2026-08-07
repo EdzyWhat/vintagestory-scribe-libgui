@@ -1,25 +1,24 @@
-# Scribe wiki drafts (0.2.0)
+# Scribe wiki drafts (1.0.0)
 
-In-repo working copies of the GitHub wiki pages, refreshed for the **0.2.0** release. These are
+In-repo working copies of the GitHub wiki pages, refreshed for the **1.0.0** release. These are
 authored here and published to the wiki manually (`../vintagestory-scribe-libgui.wiki`), matching
 the launch-material convention in `docs/media/` (design decision 8).
 
-## What changed for 0.2.0
+## What changed for 1.0.0
 
-- Refreshed the seven existing 0.1 Lectern pages (dependency bumped to LibGUI 3.1.0, roadmap
-  updated, "one block" → "block + two items").
-- Added coverage for the two new items and their features:
-  - **Notebook** (`The-Notebook.md`) — the carried document, its History chronicle.
-  - **Clockmaker's Notebook & Timers** (`Clockmakers-Notebook-and-Timers.md`) — the advanced
-    sibling, the Timer tab, the tinkerer-trait craft gate + worldconfig bypass.
-  - **History & Guestbook** (`History-and-Guestbook.md`) — the two append-only logs (History on
-    the Notebook, Guestbook on the Lectern).
+- Added the **Tablets** tier:
+  - **Clay & Wax Tablets** (`Clay-and-Wax-Tablets.md`) — the new early-game handheld tier: the
+    wet → hardened → fired clay life-cycle, water re-wetting, the never-drying Wax Tablet, the
+    10-task/1-pin limits, the Shift+right-click quick-add gesture, and the cuneiform script toggle.
+  - **Items** (`Items.md`) — added a Tablets section.
+  - **Crafting** (`Crafting-the-Lectern.md`) — added the clay and wax Tablet grid recipes.
+  - **Home** (`Home.md`) — added the Tablets nav link and intro mention; roadmap updated (Tablets
+    shipped as **v1.0**, Writing Desk moved to **v1.1**).
 
 ## Publishing checklist
 
 1. Copy each page here over the same-named file in the wiki clone.
-2. Add the three new pages to the wiki sidebar / `Home` page nav (already linked in `Home.md`).
-3. Verify image links still resolve (imgur URLs are carried over unchanged; 0.2 screenshots go in
-   `docs/media/screenshots/0.2/` and can be swapped in once uploaded).
-</content>
-</invoke>
+2. Add the new **Clay & Wax Tablets** page to the wiki sidebar / `Home` page nav (already linked in `Home.md`).
+3. Verify image links still resolve (imgur URLs are carried over unchanged; 1.0 screenshots go in
+   `docs/media/screenshots/1.0/` and can be swapped in once uploaded). The Tablets page currently
+   has no images — add tablet/cuneiform/firing screenshots once captured (Track B.2).

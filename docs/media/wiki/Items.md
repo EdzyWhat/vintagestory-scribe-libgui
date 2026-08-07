@@ -1,6 +1,6 @@
 # Items
 
-Scribe adds one block and two items to the game.
+Scribe adds one block and a family of writing items to the game: the shared **Lectern** block, the carried **Notebook** and its **Clockmaker's** variant, and the early-game **clay and wax Tablets**.
 
 ## Lectern
 
@@ -27,4 +27,12 @@ The Notebook quietly keeps a **[History](History-and-Guestbook)** chronicle of n
 The Notebook's advanced sibling. It has everything the Notebook does — tasks, notes, History — plus a **Timer** tab for real-time and in-game-time reminders that fire a toast and a sound. Its craft is gated to the Clockmaker character class by default.
 
 **See also:** [Clockmaker's Notebook & Timers](Clockmakers-Notebook-and-Timers)
+
+## Clay & Wax Tablets
+
+The earliest, cheapest writing surface — handheld tablets you can craft in the very early game, long before a Notebook or Lectern. A Tablet holds a short list (up to 10 tasks, one pin) and is meant as a quick scratchpad.
+
+Clay Tablets have a life-cycle: fresh ones are **wet** and editable, dry **hard** over about two in-game days (locking the writing), and can then be **re-wet** in water to revise or **fired** in a fire pit to make the writing permanent. Clay comes in red, blue, and fire-clay colours. The **Wax Tablet** is a reusable step up that never dries or fires. Tablet text is written in a cuneiform script by default (toggleable in Settings).
+
+**See also:** [Clay & Wax Tablets](Clay-and-Wax-Tablets)
 </content>
