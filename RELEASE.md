@@ -133,8 +133,14 @@ full spec sync; a single consolidated manual spec-sync then rewrote the 7 contes
 
 ## Track B — Launch material
 
-- [ ] **B.1. Mod-page text** (`docs/media/mod-page.txt`) — new tier, roadmap bump, dep line; fix the
-      stale `v0.3 Writing Desk` next-tier line (Desk is now v1.1).
+- [x] **B.1. Mod-page text** — done 2026-08-06. Synced all three parallel mod-page files
+      (`mod-page.txt` source, `mod-page.html` CSS-class, `mod-page-inline.html` inline-style):
+      added the **Clay & Wax Tablets** feature bullet (marked *NEW in v1.0*) leading the "what you
+      get" list, fixed the stale "Shift + right-click to edit" getting-started step to the shipped
+      quick-add wording, added a "⚠️ Updating from v0.2?" **BREAKING** gesture callout (Shift+RC =
+      quick-add, Ctrl+Shift+RC = ground place, water-soften unchanged), and rewrote the roadmap
+      (v1.0 Tablets = shipped, v1.1 Writing Desk, Later Bulletin Board — replacing the stale
+      v0.3 Desk / v0.4 Tablets lines). Dep line still gui 3.1.0.
 - [ ] **B.2. Screenshots** into `docs/media/screenshots/1.0/` via `/scribe seed` — tablets, cuneiform, firing.
 - [ ] **B.3. Announcement drafts** for all four channels (0.2 reddit + teaser exist as templates in
       `docs/media/`) — **call out the BREAKING quick-add gesture change** (lectern Shift+RC and
