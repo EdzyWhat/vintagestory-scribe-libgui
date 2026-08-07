@@ -154,8 +154,15 @@ full spec sync; a single consolidated manual spec-sync then rewrote the 7 contes
 
 - [x] **G.1. Version bump** — done 2026-08-06. `src/Mod/modinfo.json` `version` `0.2.0` → `1.0.0`.
       Deps unchanged (`game 1.22.0`, `gui 3.1.0`).
-- [ ] **G.2. Version consistency check** — `modinfo.json` · `CHANGELOG` header · mod page · wiki ·
-      video script all state **1.0.0** and **gui 3.1.0**.
+- [x] **G.2. Version consistency check** — done 2026-08-06. All surfaces agree on **1.0.0** and
+      **gui 3.1.0**: `modinfo.json` (`version 1.0.0`, `gui 3.1.0`), `CHANGELOG.md` top header
+      `[1.0.0] - 2026-08-06`, all three mod-page files (dep line `gui 3.1.0`, roadmap `v1.0 Tablets
+      released`), wiki (`README.md` "1.0.0", `Home.md` `v1.0 released`), and README status line
+      `v1.0.0`. Fixed the **video script**: outro tag `v0.2` → `v1.0`, added a "1.0 additions" tablet
+      beat block (craft/cuneiform → dry+water-soften → fire+wax) so a 1.0-tagged script actually
+      shows the marquee tier, and pointed the seed cheat-sheet at `screenshots/1.0/`. Swept for stale
+      current-version tags — only legitimate historical refs remain (the archived
+      `reddit-announcement-0.2.md`, and `v0.2 … (released)` roadmap-history lines).
 - [ ] **G.3. Build the release zip**, tag `v1.0.0`, create the GitHub Release, upload, publish to mod DB.
 - [ ] **G.4. Announce — wiki-first:** publish/refresh the **wiki** (source of truth), then **Mod DB**
       (`mods.vintagestory.at/scribe`), then **Reddit (r/VintageStory)**, then **VS Discord**. Seed the

@@ -67,7 +67,7 @@ Player walks around the world with tasks visible.
 ### Beat 8 — Outro / CTA (1:30–end)
 **Shot:** pull back to the world. Lectern in the environment. HUD with a couple tasks pinned.  
 **Overlay:**
-- *"Scribe v0.2 — available on the Vintage Story Mod DB"*
+- *"Scribe v1.0 — available on the Vintage Story Mod DB"*
 - *"Requires LibGUI (free, one-click install)"*  
 *Fade to title card / mod DB URL.*
 
@@ -97,6 +97,36 @@ a boss kill). Then a Lectern's **Guestbook** tab with a few signed visitors.
 
 ---
 
+## 1.0 additions — the stone-age tablet tier
+
+Insert these beats near the front (a clay tablet is the *earliest* writing surface, so it fits before
+the Lectern) or cut a short 1.0-focused clip from just these. They lead with the headline: *you can
+write from day one, and the tablet lives a real clay life-cycle.* If cutting a standalone 1.0 clip,
+open on the tablet and close on the firing shot.
+
+### Beat 1.1 — Craft & scratch a clay tablet (cuneiform)
+**Shot:** craft a **clay tablet** at the grid (knife + stick + clay), pull it out, right-click to open
+it in-hand. Type a couple of tasks — they render in **cuneiform**. Briefly show the Settings toggle
+flipping cuneiform ↔ plain text so viewers know it's optional.  
+**Overlay:** *"New in 1.0 — clay tablets. The earliest way to write, scratched in cuneiform."*
+
+### Beat 1.2 — It dries hard (and water brings it back)
+**Shot:** show a **hardened** tablet (dried over a couple in-game days) — the writing is locked, the
+editor won't open. Then **Shift + right-click the tablet on water** to soften it back to editable, and
+change a task to prove it's revisable.  
+**Overlay:** *"Leave it and it dries hard — locking the text. Dunk it in water to revise."*
+
+### Beat 1.3 — Fire it to keep it forever (+ the wax option)
+**Shot:** place a hardened tablet in a **firepit** and fire it — the fired tablet is permanent. Then
+show the **wax tablet** as the reusable alternative that never dries or fires.  
+**Overlay:** *"Fire it in a firepit to make it permanent — or use a wax tablet you can rewrite forever."*
+
+> **Gesture note for any beat that adds a task:** **Shift + right-click quick-adds** a task; to
+> **place** a held Notebook/Tablet on the ground use **Ctrl + Shift + right-click**. Worth a one-line
+> overlay if the clip targets existing 0.2 users.
+
+---
+
 ## Shot-list & demo-seed cheat sheet
 
 The History and Guestbook logs can't be authored by hand, and empty task lists look unconvincing on
@@ -113,7 +143,11 @@ creative mode + the `controlserver` privilege.
 | Pinned HUD | A few pins | seed tasks, then pin 2–3 from Read view | pins aren't seeded (they're per-player state) |
 
 `/scribe seed all` with no target auto-picks the Lectern you're looking at, else the Notebook you
-hold. Screenshots land in `docs/media/screenshots/0.2/`.
+hold. For 1.0 captures, screenshots land in `docs/media/screenshots/1.0/`.
+
+The tablet beats (1.1–1.3) are best captured live rather than seeded: hold a wet clay tablet and
+`/scribe seed all` to fill its task list, then film the dry → water-soften → fire chain in real time
+(the hardening/firing states aren't seedable — they're driven by in-game time and the firepit).
 
 ## Production notes
 - Keep the world tidy — a clean, mid-game survival base is more relatable than a Creative sandbox.
