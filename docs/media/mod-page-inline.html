@@ -12,45 +12,47 @@
 </div>
 
 <p>
-  Vintage Story is a long game. Sessions end mid-project, tech trees branch in five directions at once,
-  and that vague mental note about "I should smelt more copper before winter" evaporates somewhere between
-  Tuesday and Saturday. Scribe is my attempt to fix that — a mod for keeping your goals inside the world
-  instead of on a sticky note next to your monitor.
+  Vintage Story is an epic journey — and a logistical nightmare. You log off mid-project, trek 3,000 blocks
+  for ore, and by the time you return, that vital mental note to <em>'smelt bronze before winter'</em> has
+  completely evaporated somewhere between baking pies and clayforming.
+</p>
+<p>
+  <em><strong>Scribe</strong></em> is my attempt to bridge that gap — a mod for keeping your goals inside the
+  world, instead of on a sticky note next to your monitor.
 </p>
 
 <hr style="border: none; border-top: 1px solid #ddd; margin: 2rem 0;">
 
-<h2 style="margin-top: 2rem;">📖 What you get</h2>
+<h3 style="margin-top: 2rem;">📖 What you get</h3>
 <ul style="padding-left: 1.4rem;">
   <li style="margin-bottom: 0.4rem;"><strong>Clay &amp; Wax Tablets</strong> <em>(NEW in v1.0)</em> — the earliest, cheapest writing surface, craftable in the stone age long before a Notebook or Lectern. A quick handheld scratchpad (up to 10 tasks, 1 pin). A fresh clay tablet is wet and editable; left alone it dries hard over a couple of in-game days, locking the writing — then dunk it in water to soften it back and revise, or fire it in a fire pit to make the writing permanent. The Wax Tablet is a reusable step up that never dries or fires. Tablet text is written in a carved-wedge <strong>cuneiform</strong> script by default (toggle to plain text in Settings). Clay comes in red, blue, and fire-clay colours.</li>
-  <li style="margin-bottom: 0.4rem;"><strong>Lectern block</strong> — a craftable, placeable notebook you write directly on. Task checklist + freeform note section. Multiplayer-safe: edits sync live, one person edits at a time while everyone else reads.</li>
+  <li style="margin-bottom: 0.4rem;"><strong>Lectern block</strong> — a craftable, placeable notebook you write directly on. Task checklist + freeform note section. Multiplayer-safe: edits sync live, one person edits at a time while everyone else reads. Drop one outside your base and its <strong>Guest Book</strong> tab records visitors, who can leave a note.</li>
   <li style="margin-bottom: 0.4rem;"><strong>Notebook</strong> — a carried, craftable item you write in anywhere. Same task checklist + notes as the Lectern, but personal and portable: it's yours, it travels with you, and it quietly keeps a History chronicle of what happened while you carried it (crafted, picked up, deaths, PvP and boss kills, temporal storms).</li>
-  <li style="margin-bottom: 0.4rem;"><strong>Clockmaker's Notebook</strong> — the Notebook's advanced sibling, adding a Timer tab for real-time and in-game-time reminders that fire a toast and sound (optionally alongside your pinned tasks). Crafted from a Notebook + a temporal gear + metal parts. Its craft is gated to the Clockmaker character class (the tinkerer trait) by default — a server can lift that with a world setting.</li>
-  <li style="margin-bottom: 0.4rem;"><strong>Pinned Task HUD</strong> — hover any task in the Lectern, click the pin icon, and it appears on an always-on overlay visible while you play. Your pins are yours — pinning doesn't affect other players on the same Lectern.</li>
-  <li style="margin-bottom: 0.4rem;"><strong>Pin Tab</strong> — a dedicated view inside the Lectern that lists all your pinned tasks across every Lectern in the world, editable in place.</li>
+  <li style="margin-bottom: 0.4rem;"><strong>Clockmaker's Notebook</strong> — the Notebook's advanced sibling, adding a Timer tab for real-time and in-game-time reminders that fire a toast and sound (optionally alongside your pinned tasks). Crafted from a Notebook + a temporal gear + metal parts. Its craft is gated to the Clockmaker character class (the tinkerer trait) by default; a server can lift that with <code style="background: #f5f5f5;">/worldconfig scribeClockmakerRequiresTrait false</code> (takes effect on restart), or anyone can craft it with the trader-sold Schematic.</li>
+  <li style="margin-bottom: 0.4rem;"><strong>Pinned Task HUD</strong> — hover any task, click the pin icon, and it appears on an always-on overlay visible while you play. Your pins are yours — pinning doesn't affect other players on the same Lectern.</li>
+  <li style="margin-bottom: 0.4rem;"><strong>Pin Tab</strong> — a dedicated view that lists all your pinned tasks across every Scribe item and Lectern in the world, editable in place.</li>
   <li style="margin-bottom: 0.4rem;"><strong>Scribe Settings</strong> — all preferences in one panel: pixel-art notebook theme, window size, HUD anchor and size, completion policy, font selector, and a UI sound mute. Everything updates live.</li>
   <li style="margin-bottom: 0.4rem;"><strong>Font selector</strong> — pick the typeface for your task and note text: Scapholène, Caudex, La Belle Aurore, Noto Sans, Noto Serif, Playfair Display, or Cormorant Unicase.</li>
 </ul>
 
 <hr style="border: none; border-top: 1px solid #ddd; margin: 2rem 0;">
 
-<h2 style="margin-top: 2rem;">🔧 Getting started</h2>
+<h3 style="margin-top: 2rem;">🔧 Getting started</h3>
 <ol style="padding-left: 1.4rem;">
-  <li style="margin-bottom: 0.6rem;">Install <a href="https://mods.vintagestory.at/libgui">LibGUI</a> from the mod DB (hard dependency — don't skip this).</li>
+  <li style="margin-bottom: 0.6rem;">Install the required mod: <a href="https://mods.vintagestory.at/libgui">LibGUI</a> from the mod DB (hard dependency — don't skip this).</li>
   <li style="margin-bottom: 0.6rem;">
-    Craft the Lectern at a 3×3 crafting grid:
+    In game, craft a <strong>Clay Tablet</strong> — the fastest way in, no writing set or fired ink needed:
     <br><br>
-    <pre style="background: #f5f5f5; padding: 0.75rem 1rem; font-size: 0.9em; line-height: 1.4; display: inline-block;">Feather    Parchment  Leather
-Plank      Plank      Plank
-Ink bowl   Plank      Nails</pre>
+    <img src="https://i.imgur.com/kZPeJ7V.png" alt="Clay tablet crafting recipe" width="203" height="190" />
     <br>
-    The bowl must be fired and hold at least 1 L of black dye. The bowl is consumed. Any plank type and any metal nails work.
+    A knife, a stick, and six clay — red, blue, or fire clay; pick one colour. The knife isn't consumed (it just takes a little durability). Crafts one wet, ready-to-write tablet. Prefer something reusable? The Wax Tablet uses a saw, planks, a stick, and beeswax, and never dries or fires.
   </li>
-  <li style="margin-bottom: 0.6rem;">Place the Lectern. It faces you on placement. <strong>Right-click</strong> to read, then use the <strong>Editor</strong> tab to edit; <strong>Shift + right-click</strong> to quick-add a task.</li>
+  <li style="margin-bottom: 0.6rem;">Hold the tablet and <strong>right-click</strong> to open it, then type your tasks straight in. <strong>Shift + right-click</strong> quick-adds a task. Leave a clay tablet alone and it dries hard, locking the writing — dunk it in water to soften it back, or fire it in a fire pit to keep it forever.</li>
   <li style="margin-bottom: 0.6rem;">Hover a task row → click the pin icon → task appears on your HUD immediately.</li>
+  <li style="margin-bottom: 0.6rem;">Ready for more room? Craft a <strong>Notebook</strong> to carry a full checklist and notes anywhere, or place a <strong>Lectern</strong> to write on and share with others.</li>
 </ol>
 <p>
-  For keyboard shortcuts, completion policies, and the full settings reference, see the
+  For crafting recipes, keyboard shortcuts, completion policies, and the full settings reference, see the
   <a href="https://github.com/EdzyWhat/vintagestory-scribe-libgui/wiki">Scribe wiki on GitHub</a>.
 </p>
 
@@ -63,7 +65,7 @@ Ink bowl   Plank      Nails</pre>
 
 <hr style="border: none; border-top: 1px solid #ddd; margin: 2rem 0;">
 
-<h2 style="margin-top: 2rem;">📌 The Pinned Task HUD</h2>
+<h3 style="margin-top: 2rem;">📌 The Pinned Task HUD</h3>
 <p>
   Pinned tasks show as a compact, glow-outlined list over the game world — no background plate, just readable
   text wherever you've anchored it. It defaults to the top-right corner with enough clearance for the minimap
@@ -83,7 +85,7 @@ Ink bowl   Plank      Nails</pre>
 
 <hr style="border: none; border-top: 1px solid #ddd; margin: 2rem 0;">
 
-<h2 style="margin-top: 2rem;">⚙️ Scribe Settings</h2>
+<h3 style="margin-top: 2rem;">⚙️ Scribe Settings</h3>
 <p>Open from the gear icon in the Lectern sidebar or the gear on the HUD header — same panel either way. Notable options:</p>
 <ul style="padding-left: 1.4rem;">
   <li style="margin-bottom: 0.4rem;"><strong>Pixel-Art Display</strong> — toggles the notebook backdrop art and Scribe's parchment theme on/off. Off = your global game GUI theme.</li>
@@ -95,7 +97,7 @@ Ink bowl   Plank      Nails</pre>
 
 <hr style="border: none; border-top: 1px solid #ddd; margin: 2rem 0;">
 
-<h2 style="margin-top: 2rem;">🗺️ Roadmap</h2>
+<h3 style="margin-top: 2rem;">🗺️ Roadmap</h3>
 <p>Note-taking tools grow with your tech tree — scratchy clay in the stone age, carried books and placed lecterns in the metal age, shared boards later. v1.0 completes that early-to-mid arc.</p>
 <ul style="padding-left: 1.4rem;">
   <li style="margin-bottom: 0.4rem;">✅ <strong>v0.1 — Lectern + Pinned HUD</strong> (released)</li>
@@ -107,7 +109,7 @@ Ink bowl   Plank      Nails</pre>
 
 <hr style="border: none; border-top: 1px solid #ddd; margin: 2rem 0;">
 
-<h2 style="margin-top: 2rem;">📚 You might also like</h2>
+<h3 style="margin-top: 2rem;">📚 You might also like</h3>
 <p>If you're into putting your mark on the world, these mods pair well with Scribe:</p>
 <table style="width: 100%; border-collapse: collapse;">
   <tr>
@@ -134,7 +136,7 @@ Ink bowl   Plank      Nails</pre>
 
 <hr style="border: none; border-top: 1px solid #ddd; margin: 2rem 0;">
 
-<h2 style="margin-top: 2rem;">🔗 Requirements</h2>
+<h3 style="margin-top: 2rem;">🔗 Requirements</h3>
 <ul style="padding-left: 1.4rem;">
   <li style="margin-bottom: 0.4rem;">Vintage Story <strong>1.22.x</strong></li>
   <li style="margin-bottom: 0.4rem;"><a href="https://mods.vintagestory.at/libgui"><strong>LibGUI (gui)</strong></a> <strong>3.1.0</strong> — required on both client and server</li>
@@ -143,11 +145,11 @@ Ink bowl   Plank      Nails</pre>
 
 <hr style="border: none; border-top: 1px solid #ddd; margin: 2rem 0;">
 
-<h2 style="margin-top: 2rem;">💬 Credits &amp; thanks</h2>
+<h3 style="margin-top: 2rem;">💬 Credits &amp; thanks</h3>
 <ul style="padding-left: 1.4rem;">
   <li style="margin-bottom: 0.4rem;"><strong><a href="https://mods.vintagestory.at/libgui">LibGUI</a></strong> by ripls — the UI framework that powers Scribe's interface. Saved an enormous amount of work.</li>
   <li style="margin-bottom: 0.4rem;"><strong><a href="https://mods.vintagestory.at/atlas">Atlas</a></strong> by Pixnop — a headless VS server test harness that made integration testing actually possible.</li>
-  <li style="margin-bottom: 0.4rem;"><strong>Artekuno</strong> — suggested the Scapholène font, which became the default recommendation.</li>
+  <li style="margin-bottom: 0.4rem;"><strong>Artekuno</strong> — suggested the Scapholène font (now the default recommendation) and the option to mute Scribe's audio.</li>
   <li style="margin-bottom: 0.4rem;"><strong>JeanPierre</strong> (Wanderer's Sketchbook) — inspiration for the task-pinning concept.</li>
 </ul>
 <p><strong>Bundled fonts:</strong> Caudex (SIL OFL), Scapholène (Scapholène Font License v1.0), La Belle Aurore (SIL OFL), Noto Sans (SIL OFL), Noto Serif (SIL OFL). All shipped unmodified. Playfair Display and Cormorant Unicase provided by LibGUI.</p>
