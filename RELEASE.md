@@ -34,7 +34,7 @@ included — no fast-follow split. Deps unchanged: `game 1.22.x`, hard `gui 3.1.
 - [ ] **V.4. Localization sweep** — confirm every user-facing string routes through `Lang.Get` (no
       hardcoded English in C#) so future translators need no refactor. English-only ship is fine;
       `TriggerIngameError` paths already spot-checked clean — finish the sweep.
-- [ ] **V.5. FIRST-OPEN FLICKER FIX — ⚠️ HARD BLOCKER (found 2026-08-06).** The first open of any
+- [x] **V.5. FIRST-OPEN FLICKER FIX — was a ⚠️ HARD BLOCKER (found 2026-08-06), now DONE + ARCHIVED.** The first open of any
       not-yet-crafted Scribe item (notebook/clockmaker/tablet) flickers closed and needs a second
       right-click. Root cause traced: the one-time server "Picked up" history re-sync fires `SlotModified`
       and the DocId-strict close-guard mis-reads it as a switch-away. Spec'd as OpenSpec change
