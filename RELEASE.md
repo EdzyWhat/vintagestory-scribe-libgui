@@ -83,9 +83,15 @@ full spec sync; a single consolidated manual spec-sync then rewrote the 7 contes
 
 ## Track C — Cleanup pass ("what have we missed")
 
-- [ ] **C.1. Dead code / dev harness sweep** — grep for stray dev commands, `#if DEBUG` overlays,
-      `.cuneiform*` diagnostic harnesses, and `diagnostic`/`TODO`/`HACK`/`placeholder` markers. The
-      cuneiform harness + `.cuneiformglow` were already stripped — sweep for stragglers.
+- [x] **C.1. Dead code / dev harness sweep** — done 2026-08-06. The prior note here (and a memory)
+      was WRONG: the cuneiform harness was NOT already stripped. Found + removed two **ungated client**
+      dev commands still shipping to survival players — `/scripttf` (live model-transform tuner) and
+      `/cuneiform` (`GuiDialogCuneiformHarness`, 115 lines) — plus the cached `cuneiformHarness` field,
+      its registration, and its disposal; deleted `GuiDialogCuneiformHarness.cs`. Kept `/scribe seed`
+      (double-gated: `controlserver` privilege + creative check; needed for B.2 screenshots).
+      `.cuneiformglow` confirmed already gone (only a historical comment at `CuneiformGlow.cs:39`). No
+      dead code found; `#if DEBUG` blocks compile out of Release; `placeholder` hits are all live
+      UI hint/fallback code. verify.sh green (Core 286/286, Atlas 25/25, restaged).
 - [ ] **C.2. In-game handbook audit** — tablets are a whole new tier; confirm `handbook.extraSections`
       exist and read correctly for every new item (clay red/blue/fire + wax + hard/fired states). The
       shared HUD-ref refactor + new Pinned-Task-HUD guide page already landed (commit `ee7806e`).

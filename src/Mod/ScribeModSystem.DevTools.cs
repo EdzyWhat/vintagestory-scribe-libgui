@@ -1,11 +1,6 @@
 using System;
 using System.Collections.Generic;
-using Gui.Rendering;             // SkiaAssetLoader
-using Gui.Rendering.Text;        // FontRegistry, FontWeight
-using Gui.Sound;                 // ISoundPlayer, SoundPlayer (UI click sound)
 using Scribe.Core;
-using SkiaSharp;
-using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
 using Vintagestory.API.Server;
@@ -14,93 +9,6 @@ namespace Scribe;
 
 public sealed partial class ScribeModSystem
 {
-    /// <summary>
-    /// Dev-only client command: <c>/scripttf &lt;target&gt; &lt;prop&gt; &lt;value&gt;</c>
-    /// Mutates the held Notebook item's model transforms live so rotation/scale/translation
-    /// can be tuned in-game. Prints the full current transform block after each change so
-    /// the result can be pasted directly into scribenotebook.json.
-    ///
-    /// <c>target</c>: tp | ground | gui | fp
-    /// <c>prop</c>:   rx | ry | rz | tx | ty | tz | scale
-    /// </summary>
-    private static void RegisterNotebookTuneCommand(ICoreClientAPI api)
-    {
-        api.ChatCommands.Create("scripttf")
-            .WithDescription("[scribe dev] Tune Notebook item model transforms live. Usage: /scripttf <tp|ground|gui|fp> <rx|ry|rz|tx|ty|tz|scale> <value>")
-            .WithArgs(
-                api.ChatCommands.Parsers.WordRange("target", "tp", "ground", "gui", "fp"),
-                api.ChatCommands.Parsers.WordRange("prop", "rx", "ry", "rz", "tx", "ty", "tz", "scale"),
-                api.ChatCommands.Parsers.Float("value"))
-            .HandleWith(args =>
-            {
-                var slot = api.World.Player.InventoryManager.ActiveHotbarSlot;
-                if (slot?.Itemstack?.Collectible is not ItemScribeNotebook item)
-                    return TextCommandResult.Error("Hold the Notebook in your active hotbar slot first.");
-
-                string target = (string)args[0];
-                string prop   = (string)args[1];
-                float  value  = (float)args[2];
-
-                var tf = target switch
-                {
-                    "tp"     => item.TpHandTransform,
-                    "ground" => item.GroundTransform,
-                    "gui"    => item.GuiTransform,
-                    "fp"     => item.FpHandTransform,
-                    _        => null,
-                };
-
-                if (tf is null)
-                    return TextCommandResult.Error($"Unknown target '{target}'.");
-
-                switch (prop)
-                {
-                    case "rx":    tf.Rotation.X = value; break;
-                    case "ry":    tf.Rotation.Y = value; break;
-                    case "rz":    tf.Rotation.Z = value; break;
-                    case "tx":    tf.Translation.X = value; break;
-                    case "ty":    tf.Translation.Y = value; break;
-                    case "tz":    tf.Translation.Z = value; break;
-                    case "scale": tf.ScaleXYZ.Set(value, value, value); break;
-                    default:      return TextCommandResult.Error($"Unknown prop '{prop}'.");
-                }
-
-                // Force a re-render of the held item.
-                slot.MarkDirty();
-
-                return TextCommandResult.Success(
-                    $"[scribe] {target}: rotation=({tf.Rotation.X:0.##}, {tf.Rotation.Y:0.##}, {tf.Rotation.Z:0.##})  " +
-                    $"translation=({tf.Translation.X:0.##}, {tf.Translation.Y:0.##}, {tf.Translation.Z:0.##})  " +
-                    $"scale={tf.ScaleXYZ.X:0.##}");
-            });
-    }
-
-    /// <summary>Dev-only client-side surface for the cuneiform font (add-cuneiform-glyph-font, Proposal A):
-    /// <c>/cuneiform [text]</c> opens the <see cref="GuiDialogCuneiformHarness"/>, which renders the given
-    /// (or a default) demo string through <see cref="CuneiformText"/> at several sizes plus an animated
-    /// reveal. It exists ONLY to prove the render/layout path and the disable-cuneiform fallback in-game
-    /// before any tablet item/dialog exists — it is behind no player-facing feature. Reuses a single cached
-    /// dialog instance, reopening it with fresh text so repeated runs don't leak windows.</summary>
-    private void RegisterCuneiformHarnessCommand(ICoreClientAPI api)
-    {
-        api.ChatCommands.Create("cuneiform")
-            .WithDescription("[scribe dev] Open the cuneiform font harness. Usage: /cuneiform [demo text]")
-            .WithArgs(api.ChatCommands.Parsers.OptionalAll("text"))
-            .HandleWith(args =>
-            {
-                string text = args[0] as string ?? "";
-
-                // Close any prior harness so the window rebuilds with the new demo text (the dialog captures
-                // its text at construction).
-                cuneiformHarness?.TryClose();
-                cuneiformHarness?.Dispose();
-                cuneiformHarness = new GuiDialogCuneiformHarness(api, this, text);
-                cuneiformHarness.TryOpen();
-
-                return TextCommandResult.Success("[scribe] Cuneiform harness opened.");
-            });
-    }
-
     // ── Demo-content seeding (dev/creative tool) ────────────────────────────────────────────────────
 
     /// <summary>Fictional visitor names for seeded Lectern guestbooks. Kept ≤16 chars each so they read

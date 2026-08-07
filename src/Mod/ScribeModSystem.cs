@@ -104,11 +104,6 @@ public sealed partial class ScribeModSystem : ModSystem
     private Scribe.Core.Cuneiform.GlyphBundle? cuneiformBundle;
     private bool cuneiformBundleLoaded;
 
-    /// <summary>The dev-only cuneiform font harness window opened by <c>/cuneiform</c> (see
-    /// <see cref="RegisterCuneiformHarnessCommand"/>). Reused across runs — reopened with fresh demo text
-    /// each command — and disposed in <see cref="Dispose"/>. Null until first opened, and on a pure server.</summary>
-    private GuiDialogCuneiformHarness? cuneiformHarness;
-
     /// <summary>
     /// Runtime registry that maps each active <see cref="Guid"/> DocId to the
     /// <see cref="IScribeDocumentHost"/> currently hosting it. Lecterns register on
@@ -245,9 +240,6 @@ public sealed partial class ScribeModSystem : ModSystem
         // is one authoritative second-boundary rather than two out-of-phase 250ms listeners.
         timerDisplayTickId = api.World.RegisterGameTickListener(_ => TimerDisplayTick?.Invoke(), 1000);
 
-        RegisterNotebookTuneCommand(api);
-        RegisterCuneiformHarnessCommand(api);
-
         // Rebindable collapse/expand hotkey (design D6). GUIOrOtherControls so it fires even while a
         // dialog is open; default P, no modifiers. The HUD flips its client-local collapse preference.
         api.Input.RegisterHotKey(HudHotkeyCode, Lang.Get("scribe:hotkey-scribepinhud"), GlKeys.P,
@@ -273,8 +265,6 @@ public sealed partial class ScribeModSystem : ModSystem
         }
         settingsDialog?.Dispose();
         settingsDialog = null;
-        cuneiformHarness?.Dispose();
-        cuneiformHarness = null;
         if (backdropCache is not null)
         {
             foreach (var bmp in backdropCache.Values) bmp?.Dispose();
