@@ -4,6 +4,16 @@ All notable changes to Scribe are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-08-07
+
+A small display fix for shelved Scribe items.
+
+### Fixed
+- **Scribe items no longer clip through the cabinet's bottom shelf.** The clay & wax Tablets, the
+  Notebook, and the Clockmaker's Notebook had their in-cabinet display transform hand-tuned (scale
+  and vertical offset) so they sit cleanly on a shelf instead of poking through the shelf above.
+  Display-only — no change to items already stored, and shelf/bookshelf placement is unchanged.
+
 ## [1.0.0] - 2026-08-06
 
 Scribe's first "complete" cut: the new **Tablets** tier fills in the earliest end of the
@@ -170,6 +180,7 @@ First public release.
 - `game` 1.22.0
 - `gui` 2.0.0 (LibGUI)
 
+[1.0.1]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v0.1.1...v0.1.2
