@@ -263,8 +263,13 @@ public sealed partial class ScribeModSystem
 
         if (!rising) return;
 
-        string strength = stormSys.StormData.nextStormStrength.ToString();
-        string date     = NotebookHost.FormatDate(sapi);
+        // Localize the strength word (Light/Medium/Heavy) via a per-value key; the raw enum name is a
+        // developer token, not player prose. An unknown future value echoes its own name as a fallback.
+        string strengthName = stormSys.StormData.nextStormStrength.ToString();
+        string strengthKey  = "scribe:storm-strength-" + strengthName.ToLowerInvariant();
+        string strength     = Lang.Get(strengthKey);
+        if (strength == strengthKey) strength = strengthName; // key-echo miss → fall back to the raw name
+        string date         = NotebookHost.FormatDate(sapi);
 
         foreach (var player in sapi.World.AllOnlinePlayers.OfType<IServerPlayer>())
         {
@@ -294,7 +299,7 @@ public sealed partial class ScribeModSystem
     /// </summary>
     private string BuildDeathMessage(string playerName, Vintagestory.API.Common.DamageSource? dmg)
     {
-        if (dmg is null) return $"{playerName} died.";
+        if (dmg is null) return Lang.Get("scribe:death-generic", playerName);
 
         // Resolve the attacker via GetCauseEntity() (CauseEntity ?? SourceEntity): SourceEntity is
         // null for melee, so reading it alone drops melee attackers into the "died." fallback.
@@ -311,7 +316,7 @@ public sealed partial class ScribeModSystem
                 int idx = sapi!.World.Rand.Next(poolSize);
                 return Lang.Get($"scribe:scribe-mob-death-{idx}", playerName, creature);
             }
-            return $"{playerName} was slain by {creature}."; // defensive; keys ship with the mod
+            return Lang.Get("scribe:death-slain-by", playerName, creature); // defensive; keys ship with the mod
         }
 
         // Environmental death — rebuild the vanilla deathmsg-{cause}-{N} string the way vanilla does.
@@ -325,7 +330,7 @@ public sealed partial class ScribeModSystem
             string msg = Vintagestory.API.Config.Lang.Get(key, playerName);
             if (msg != key) return msg; // Lang.Get returns the key unchanged on a miss
         }
-        return $"{playerName} died.";
+        return Lang.Get("scribe:death-generic", playerName);
     }
 
 }

@@ -80,7 +80,7 @@ public class NotebookHost : IScribeDocumentHost
     /// the notebook's; the base keeps the default proportions and the notebook art's 1160/1024 aspect.</summary>
     public virtual ScribeLayout GetLayout(float pixelArtSize) => new ScribeLayout(pixelArtSize, 1160f / 1024f);
 
-    public virtual string DefaultDocumentTitle => "Notebook";
+    public virtual string DefaultDocumentTitle => Lang.Get("scribe:doctitle-notebook");
 
     /// <summary>The notebook tier is uncapped. Declared here (implementing the interface member for the
     /// whole <see cref="NotebookHost"/> hierarchy) and <c>virtual</c> so <see cref="TabletHost"/> can
@@ -229,8 +229,15 @@ public class NotebookHost : IScribeDocumentHost
     {
         var cal = sapi.World.Calendar;
         int dayOfMonth = (int)(cal.TotalDays % cal.DaysPerMonth) + 1;
-        return $"{dayOfMonth} {Vintagestory.API.Config.Lang.Get("month-" + cal.MonthName)}, Year {cal.Year}";
+        return FormatCalendarDate(dayOfMonth, cal.MonthName, cal.Year);
     }
+
+    /// <summary>Builds the player-facing in-game date string from its parts through the localizable
+    /// <c>scribe:date-format</c> template ({0}=day, {1}=localized month, {2}=year), so the surrounding
+    /// prose (the word "Year", ordering) is translatable rather than baked into C#. Every history/guestbook
+    /// date stamp in the mod routes through here so the format lives in exactly one place.</summary>
+    internal static string FormatCalendarDate(int dayOfMonth, EnumMonth monthName, int year)
+        => Lang.Get("scribe:date-format", dayOfMonth, Lang.Get("month-" + monthName), year);
 
     /// <summary>Formats the calendar date <paramref name="daysAgo"/> in-game days before now, so seeded
     /// demo History/Guestbook entries span multiple days instead of all reading "today". Mirrors
@@ -245,7 +252,7 @@ public class NotebookHost : IScribeDocumentHost
         int dayOfMonth = (int)(totalDays % cal.DaysPerMonth) + 1;
         int monthIndex = (int)(totalDays / cal.DaysPerMonth) % monthsPerYear + 1;
         int year = (int)(totalDays / cal.DaysPerYear) + 1;
-        var monthName = (Vintagestory.API.Common.EnumMonth)monthIndex;
-        return $"{dayOfMonth} {Vintagestory.API.Config.Lang.Get("month-" + monthName)}, Year {year}";
+        var monthName = (EnumMonth)monthIndex;
+        return FormatCalendarDate(dayOfMonth, monthName, year);
     }
 }

@@ -105,7 +105,7 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
     void IScribeDocumentHost.ApplyLocalOptimisticEdit(ScribeDocument doc) => ApplyLocalOptimisticEdit(doc);
     ScribeBackdropSpec IScribeDocumentHost.BackdropSpec => ScribeBackdrops.LecternPage;
     ScribeLayout IScribeDocumentHost.GetLayout(float w) => new ScribeLayout(w, 1160f / 1024f);
-    string IScribeDocumentHost.DefaultDocumentTitle => "Lectern";
+    string IScribeDocumentHost.DefaultDocumentTitle => Lang.Get("scribe:doctitle-lectern");
     GuestbookStore IScribeDocumentHost.Guestbook => _guestbook;
     void IScribeDocumentHost.SetTaskDoneFromReader(Guid taskId, bool done) => SetTaskDoneFromReader(taskId, done);
     bool IScribeDocumentHost.DeleteTaskFromReader(Guid taskId) => DeleteTaskFromReader(taskId);
@@ -615,9 +615,7 @@ public sealed class BlockEntityScribeLectern : BlockEntity, IRotatable, IScribeD
     /// the block dirty and sends the updated guestbook back to the opening client.</summary>
     public void RecordVisitor(ICoreServerAPI sapi, IServerPlayer player)
     {
-        var cal     = sapi.World.Calendar;
-        int dayOfMonth = (int)(cal.TotalDays % cal.DaysPerMonth) + 1;
-        var date = $"{dayOfMonth} {Lang.Get("month-" + cal.MonthName)}, Year {cal.Year}";
+        var date = NotebookHost.FormatDate(sapi);
         if (_guestbook.TryAddEntry(player.PlayerName, date))
         {
             MarkDirty();

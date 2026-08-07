@@ -91,9 +91,7 @@ public class ItemScribeNotebook : Item, IScribeDocumentItem
             : null) ?? "Unknown";
 
         var sapi = (ICoreServerAPI)api;
-        var cal  = sapi.World.Calendar;
-        int dayOfMonth = (int)(cal.TotalDays % cal.DaysPerMonth) + 1;
-        string date = $"{dayOfMonth} {Vintagestory.API.Config.Lang.Get("month-" + cal.MonthName)}, Year {cal.Year}";
+        string date = NotebookHost.FormatDate(sapi);
         var history = HistoryStore.Deserialize(outputSlot.Itemstack.Attributes.GetBytes("scribeHistory"));
         history.TryAddEntry(new HistoryEntry
         {

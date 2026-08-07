@@ -1,5 +1,6 @@
 using Scribe.Core;
 using Vintagestory.API.Common;
+using Vintagestory.API.Config;
 
 namespace Scribe;
 
@@ -47,7 +48,7 @@ public sealed class TabletHost : NotebookHost
         _material = material;
     }
 
-    public override string DefaultDocumentTitle => "Tablet";
+    public override string DefaultDocumentTitle => Lang.Get("scribe:doctitle-tablet");
 
     /// <summary>The document policy enforced at the editor's add/pin mutation boundary. A WET tablet reports
     /// the scratch-tier cap (10 task blocks, 1 pin); a HARD or FIRED tablet reports

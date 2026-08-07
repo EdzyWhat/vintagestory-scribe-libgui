@@ -31,9 +31,13 @@ included — no fast-follow split. Deps unchanged: `game 1.22.x`, hard `gui 3.1.
       v0.1.2 build (codec v4), reloaded the same world under the v5 dev build — the lectern opened clean
       and every task survived intact. v0.1.2 predates notebooks, so lectern docs are the only v4 payload;
       there is no v4 notebook data to migrate. Recorded in `TESTING.md` (`04e53d95`).
-- [ ] **V.4. Localization sweep** — confirm every user-facing string routes through `Lang.Get` (no
-      hardcoded English in C#) so future translators need no refactor. English-only ship is fine;
-      `TriggerIngameError` paths already spot-checked clean — finish the sweep.
+- [x] **V.4. Localization sweep** — done 2026-08-06. Swept all 72 `src/Mod/*.cs`; all GUI/HUD/error
+      text already routed through `Lang.Get`. Fixed the residue: the ` Year ` date prose (6 sites,
+      centralized to `NotebookHost.FormatCalendarDate` + `scribe:date-format` key, collapsing 4 inline
+      dupes), the 3 default document titles (`doctitle-{lectern,notebook,tablet}`), the storm-strength
+      word (`storm-strength-{light,medium,heavy}`), and the 3 defensive death-message fallbacks
+      (`death-generic`, `death-slain-by`). English output byte-identical; verify.sh green (Core 286/286,
+      Atlas 25/25).
 - [x] **V.5. FIRST-OPEN FLICKER FIX — was a ⚠️ HARD BLOCKER (found 2026-08-06), now DONE + ARCHIVED.** The first open of any
       not-yet-crafted Scribe item (notebook/clockmaker/tablet) flickers closed and needs a second
       right-click. Root cause traced: the one-time server "Picked up" history re-sync fires `SlotModified`
