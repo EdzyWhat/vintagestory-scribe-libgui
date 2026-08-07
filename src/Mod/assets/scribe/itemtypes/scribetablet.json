@@ -21,10 +21,10 @@
 				"size": { "width": 2, "height": 5, "length": 6 },
 				"randYRotAngle": 0,
 				"transform": {
-					"translation": { "x": 0, "y": 0.19, "z": 0 },
+					"translation": { "x": 0, "y": 0.15, "z": 0 },
 					"rotation": { "x": 90, "y": 0, "z": 90 },
 					"origin": { "x": 0.5, "y": 0.03, "z": 0.5 },
-					"scale": 1
+					"scale": 0.8
 				}
 			}
 		},
@@ -76,10 +76,10 @@
 					"size": { "width": 2, "height": 5, "length": 6 },
 					"randYRotAngle": 0,
 					"transform": {
-						"translation": { "x": 0, "y": 0.19, "z": 0 },
+						"translation": { "x": 0, "y": 0.138, "z": 0 },
 						"rotation": { "x": 90, "y": 0, "z": 90 },
 						"origin": { "x": 0.5, "y": 0.03, "z": 0.5 },
-						"scale": 1.15
+						"scale": 0.92
 					}
 				}
 			},

@@ -18,9 +18,10 @@
 				"size": { "width": 2, "height": 5, "length": 6 },
 				"randYRotAngle": 0,
 				"transform": {
-					"translation": { "x": 0, "y": 0, "z": 0 },
+					"translation": { "x": 0, "y": -0.1, "z": 0 },
 					"rotation": { "x": 0, "y": 0, "z": 0 },
-					"origin": { "x": 0.5, "y": 0.5, "z": 0.5 }
+					"origin": { "x": 0.5, "y": 0.5, "z": 0.5 },
+					"scale": 0.8
 				}
 			}
 		},
