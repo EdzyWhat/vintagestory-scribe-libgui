@@ -141,7 +141,10 @@ full spec sync; a single consolidated manual spec-sync then rewrote the 7 contes
       quick-add, Ctrl+Shift+RC = ground place, water-soften unchanged), and rewrote the roadmap
       (v1.0 Tablets = shipped, v1.1 Writing Desk, Later Bulletin Board — replacing the stale
       v0.3 Desk / v0.4 Tablets lines). Dep line still gui 3.1.0.
-- [ ] **B.2. Screenshots** into `docs/media/screenshots/1.0/` via `/scribe seed` — tablets, cuneiform, firing.
+- [x] **B.2. Screenshots** — done 2026-08-07. Four captured into `docs/media/screenshots/1.0/`
+      (gitignored, staging only): `TabletsFeatures.png` (four-variety hero + caption), `TabletsClay.png`
+      (clay editor: cuneiform font + harden/fire tooltip), `TabletsWax.png` (wax editor), `ShelfStorage.png`
+      (tablets shelved). Reddit/Mod DB media placeholders resolved against these.
 - [x] **B.3. Announcement drafts** — done 2026-08-06. `docs/media/announcements-1.0.md` covers all
       four channels (Reddit r/VintageStory with 3 title options + full body, Mod DB release blurb,
       VS Discord #mods-releases short post, wiki `Home.md` banner note) plus a "where did my

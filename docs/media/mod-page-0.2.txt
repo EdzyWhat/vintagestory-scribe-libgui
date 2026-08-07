@@ -1,0 +1,63 @@
+⚠️ Requires LibGUI (gui mod 3.1.0) — Scribe won't load without it. Install LibGUI from the mod DB first, on both client and server.
+Vintage Story is a long game. Sessions end mid-project, tech trees branch in five directions at once, and that vague mental note about "I should smelt more copper before winter" evaporates somewhere between Tuesday and Saturday. Scribe is my attempt to fix that — a mod for keeping your goals inside the world instead of on a sticky note next to your monitor.
+
+📖 What you get
+	•	Lectern block — a craftable, placeable notebook you write directly on. Task checklist + freeform note section. Multiplayer-safe: edits sync live, one person edits at a time while everyone else reads.
+	•	Notebook — a carried, craftable item you write in anywhere. Same task checklist + notes as the Lectern, but personal and portable: it's yours, it travels with you, and it quietly keeps a History chronicle of what happened while you carried it (crafted, picked up, deaths, PvP and boss kills, temporal storms).
+	•	Clockmaker's Notebook — the Notebook's advanced sibling, adding a Timer tab for real-time and in-game-time reminders that fire a toast and sound (optionally alongside your pinned tasks). Crafted from a Notebook + a temporal gear + metal parts. Its craft is gated to the Clockmaker character class (the tinkerer trait) by default — a server can lift that with a world setting.
+	•	Pinned Task HUD — hover any task in the Lectern, click the pin icon, and it appears on an always-on overlay visible while you play. Your pins are yours — pinning doesn't affect other players on the same Lectern.
+	•	Pin Tab — a dedicated view inside the Lectern that lists all your pinned tasks across every Lectern in the world, editable in place.
+	•	Scribe Settings — all preferences in one panel: pixel-art notebook theme, window size, HUD anchor and size, completion policy, font selector, and a UI sound mute. Everything updates live.
+	•	Font selector — pick the typeface for your task and note text: Scapholène, Caudex, La Belle Aurore, Noto Sans, Noto Serif, Playfair Display, or Cormorant Unicase.
+
+🔧 Getting started
+	1	Install LibGUI from the mod DB (hard dependency — don't skip this).
+	2	Craft the Lectern at a 3×3 crafting grid:   Feather    Parchment  Leather
+	3	Plank      Plank      Plank
+	4	Ink bowl   Plank      Nails  The bowl must be fired and hold at least 1 L of black dye. The bowl is consumed. Any plank type and any metal nails work.
+	5	Place the Lectern. It faces you on placement. Right-click to read, Shift + right-click to edit.
+	6	Hover a task row → click the pin icon → task appears on your HUD immediately.
+For keyboard shortcuts, completion policies, and the full settings reference, see the Scribe wiki on GitHub.
+
+📌 The Pinned Task HUD
+Pinned tasks show as a compact, glow-outlined list over the game world — no background plate, just readable text wherever you've anchored it. It defaults to the top-right corner with enough clearance for the minimap (and automatically removes that clearance if you've hidden the minimap).
+Checking a task off from the HUD starts a 1.5-second undo window — the text fades as a countdown. Uncheck within the window to fully cancel (nothing is sent to the server). When the window elapses, your chosen completion policy fires: keep it pinned, keep and sink to bottom, unpin, unpin and sink to bottom, or delete the task from the document entirely.
+Press P (rebindable under Controls → Scribe) or click the ▾ header to collapse the HUD to just its header. Position, size, row cap, and text scale are all configurable in Scribe Settings.
+
+⚙️ Scribe Settings
+Open from the gear icon in the Lectern sidebar or the gear on the HUD header — same panel either way. Notable options:
+	•	Pixel-Art Display — toggles the notebook backdrop art and Scribe's parchment theme on/off. Off = your global game GUI theme.
+	•	Pixel Art Size — the Lectern window width. Scales the whole layout live.
+	•	Task text font — font selector for task and note row text.
+	•	HUD position — pick any corner or mid-edge anchor, nudge with X/Y offsets.
+	•	Mute Scribe UI sounds — silences Scribe's own button clicks without affecting the rest of the game.
+
+🗺️ Roadmap
+The Lectern is just the first tier. The plan is for note-taking tools to grow with your tech tree — scratchy clay in the stone age, paper and parchment later, shared boards for multiplayer.
+	•	✅ v0.1 — Lectern + Pinned HUD (released)
+	•	✅ v0.2 — Notebook & Clockmaker's Notebook — a carried item for personal notes with a passive History chronicle; the Clockmaker's variant adds timers and reminders (released)
+	•	⬜ v0.3 — Writing Desk — a private block with richer organization and group task-assignment
+	•	⬜ v0.4 — Clay & Wax Tablets — early-game handheld tablets grounded in real archaeology
+
+📚 You might also like
+If you're into putting your mark on the world, these mods pair well with Scribe:
+Billposting by Moby_
+Pin written parchments to walls as in-world notices and announcements.
+Wanderer's Sketchbook by JeanPierre
+An in-game sketchbook for freehand drawing, journaling, and sharing between worlds.
+Frontier's Map by JeanPierre
+A physical map with drawing tools and 130+ hand-drawn stamps for charting your world.
+Vintage Canvas by TonyMurchison
+Oil painting on canvas and directly onto walls as frescos.
+
+🔗 Requirements
+	•	Vintage Story 1.22.x
+	•	LibGUI (gui) 3.1.0 — required on both client and server
+Source and issue tracker: github.com/EdzyWhat/vintagestory-scribe-libgui
+
+💬 Credits & thanks
+	•	LibGUI by ripls — the UI framework that powers Scribe's interface. Saved an enormous amount of work.
+	•	Atlas by Pixnop — a headless VS server test harness that made integration testing actually possible.
+	•	Artekuno — suggested the Scapholène font, which became the default recommendation.
+	•	JeanPierre (Wanderer's Sketchbook) — inspiration for the task-pinning concept.
+Bundled fonts: Caudex (SIL OFL), Scapholène (Scapholène Font License v1.0), La Belle Aurore (SIL OFL), Noto Sans (SIL OFL), Noto Serif (SIL OFL). All shipped unmodified. Playfair Display and Cormorant Unicase provided by LibGUI.
