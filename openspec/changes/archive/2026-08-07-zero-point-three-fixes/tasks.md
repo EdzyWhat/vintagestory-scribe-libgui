@@ -65,23 +65,30 @@
   new `Vintagestory.*` reference leaked into `src/Core/`. *(Build clean 0 errors; Core 283/283; Core purity
   intact — all changes in `src/Mod/`. `BlockLiquidContainerBase` comes from the already-referenced
   VSSurvivalMod assembly, no new dependency.)*
-- [ ] 4.2 `bash build/restage.sh Debug`, then in-game: confirm the schematic recipe is craftable at 2×2 and the
+- [x] 4.2 `bash build/restage.sh Debug`, then in-game: confirm the schematic recipe is craftable at 2×2 and the
   Clockmaker's Notebook handbook shows both recipes as separate grids with the `* Requires Tinkerer trait`
-  asterisk on the trait one only.
+  asterisk on the trait one only. — Confirmed 2026-08-05 playtest (TESTING.md `89f55f28`): dual grids render; the
+  single-`*`-suffix is the vanilla `SlideshowGridRecipeTextComponent` behavior (working as designed).
 - [x] 4.3 In-game: crouch + right-click a bucket/barrel of water while holding a hard tablet → it softens and
   keeps its document; repeat aimed at an empty/non-water container and at open ground → no softening and the
   ground-storage placement still works; confirm a wet tablet and a fired tablet both no-op on the gesture.
-- [ ] 4.4 In-game: craft a clay tablet of each color and confirm the recipe now consumes 12 clay (a 2×3 block)
-  rather than 8, still yields one tablet, and the wax tablet recipe is unchanged.
-- [ ] 4.5 If the container swallows the crouch-right-click (quench does nothing in-game), add
-  `handleLiquidContainerInteract: true` to `scribetablet.json` (design D5 fallback) and retest.
-- [ ] 4.6 In-game: open a hand-fired AND a hardened (dried-but-unfired) clay tablet and confirm the GUI
+- [x] 4.4 In-game: craft a clay tablet of each color and confirm the recipe now consumes 12 clay (a 2×3 block)
+  rather than 8, still yields one tablet, and the wax tablet recipe is unchanged. — Confirmed 2026-08-04
+  playtest (TESTING.md `f16baa37`: "Works." Clay tablet now costs 12 clay; wax unchanged).
+- [x] 4.5 If the container swallows the crouch-right-click (quench does nothing in-game), add
+  `handleLiquidContainerInteract: true` to `scribetablet.json` (design D5 fallback) and retest. — NOT NEEDED
+  (conditional fallback): quench works without it — confirmed 2026-08-05 (TESTING.md `3e7fce6a`) — and
+  `handleLiquidContainerInteract` is confirmed absent from `scribetablet.json`. The container does not swallow
+  the gesture, so the D5 fallback never triggered.
+- [x] 4.6 In-game: open a hand-fired AND a hardened (dried-but-unfired) clay tablet and confirm the GUI
   backdrop is fully OPAQUE — no uniform see-through onto the world behind it — at every scroll position.
   Then open a wet tablet's editor and a tabbed Lectern/Notebook view and confirm those backdrops look
-  unchanged. (Requires a full client relaunch after restage, since assets load at boot.)
-- [ ] 4.7 In-game: crouch + right-click a tablet onto open ground and confirm it now lies FLAT with the
+  unchanged. (Requires a full client relaunch after restage, since assets load at boot.) — Confirmed
+  2026-08-04 playtest (TESTING.md `d6d7f03f`: opaque in all scenarios).
+- [x] 4.7 In-game: crouch + right-click a tablet onto open ground and confirm it now lies FLAT with the
   writing face up (at a slight `y:35` diagonal), not standing/rolled on its edge. Check a wet, a hard, and a
-  fired tablet (all three transform blocks). Confirm the held/dropped-item render is unchanged.
+  fired tablet (all three transform blocks). Confirm the held/dropped-item render is unchanged. — Confirmed
+  2026-08-04 playtest (TESTING.md `7e15958a`: tablets lie flat, held/dropped render unchanged).
 
 ## 5. Recast the cuneiform reveal timing model (stroke-count-driven, no fixed per-letter slot)
 
@@ -248,22 +255,25 @@
 
 - [x] 8.1 `dotnet build` clean (0 new errors/warnings); Core suite green; no new `Vintagestory.*` reference in
   `src/Core/` (the policy predicate stays pure — feedback is Mod-side).
-- [ ] 8.2 `bash build/restage.sh Debug`, relaunch. **Wax:** craft the wax tablet at 3×3 (saw + 2 planks +
+- [x] 8.2 `bash build/restage.sh Debug`, relaunch. **Wax:** craft the wax tablet at 3×3 (saw + 2 planks +
   stick + 4 beeswax → one wax tablet; saw not consumed); confirm the clay recipe is unchanged (still 12
   clay). **Wax handbook:** the Wax Tablet page shows only the "The Wax Tablet" about section (a step up from
   clay; never dries/fires) — no Wet/Dried/Fired, no Crafting section. **Clay handbook:** clay pages show
-  about + states + hard/fired, no Crafting section, no mention of wax anywhere.
-- [ ] 8.3 In-game: on a WET tablet add tasks until 10, then attempt an 11th via the footer control AND via
-  the Enter-insert gesture — both show the "tablet is full" in-game error and add nothing.
-- [ ] 8.4 In-game: open a HARDENED tablet with a pinned, incomplete task — confirm the checkbox toggles
+  about + states + hard/fired, no Crafting section, no mention of wax anywhere. — Confirmed 2026-08-05
+  playtest (TESTING.md `bfa13b3a`: "Wax recipe works and shows.").
+- [x] 8.3 In-game: on a WET tablet add tasks until 10, then attempt an 11th via the footer control AND via
+  the Enter-insert gesture — both show the "tablet is full" in-game error and add nothing. — Confirmed
+  2026-08-05 playtest (TESTING.md `01c2348b`: both paths show the error and add nothing).
+- [x] 8.4 In-game: open a HARDENED tablet with a pinned, incomplete task — confirm the checkbox toggles
   completion, the pin control unpins (row leaves the HUD), and tapping a row's TEXT shows
   "This tablet has hardened. Soften it in water to make changes." Repeat on a FIRED tablet (message =
   "This tablet was fire-hardened. It cannot be changed."). Confirm no text edit / add / delete / reorder is
-  possible in either state.
-- [ ] 8.5 In-game: with completion policy set to Delete, then Sink, then Unpin-and-Sink, complete a pinned
+  possible in either state. — Confirmed 2026-08-05 playtest (TESTING.md `39de1992`).
+- [x] 8.5 In-game: with completion policy set to Delete, then Sink, then Unpin-and-Sink, complete a pinned
   task on a hard tablet AND on a fired tablet — each only unpins (task stays in the document, order
   unchanged, row leaves the HUD). Complete from the HUD row too and confirm the same collapse. On a WET
-  tablet, confirm Delete still deletes and Sink still sinks (unchanged).
-- [ ] 8.6 In-game: open a tabbed Lectern and Notebook read view — confirm the checkbox/pin behavior and
+  tablet, confirm Delete still deletes and Sink still sinks (unchanged). — Confirmed 2026-08-05 playtest
+  (TESTING.md `affeee16`).
+- [x] 8.6 In-game: open a tabbed Lectern and Notebook read view — confirm the checkbox/pin behavior and
   appearance are UNCHANGED by the 7.3 read-view change (no regression from making the tablet's read-only
-  checkbox/pin live).
+  checkbox/pin live). — Confirmed 2026-08-05 playtest (TESTING.md `2156c9e8`).

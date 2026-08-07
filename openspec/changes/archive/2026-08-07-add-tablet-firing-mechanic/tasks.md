@@ -1,14 +1,14 @@
 ## 0. Sequencing precondition
 
-- [ ] 0.1 Apply/author AFTER `add-tablet-clay-type-backdrops` is archived, so the `fired` attribute + fired
+- [x] 0.1 Apply/author AFTER `add-tablet-clay-type-backdrops` is archived, so the `fired` attribute + fired
   backdrops it introduced live in `openspec/specs/`. This change builds on that state (archive-order drift
   trap, MEMORY.md). New requirements are mostly ADDED; the MODIFIED-in-spirit dialog/policy deltas must
-  match that change's current header text.
-- [ ] 0.2 Finalize the firing temperature/duration against the shipped vanilla clay-pottery
-  `combustibleProps` (decompile a vanilla clay pottery itemtype) rather than guessing.
-- [ ] 0.3 Finalize the `Harden` `freshHours` (≈48 game-hours = ~2 in-game days) + `transitionHours` by
+  match that change's current header text. — Satisfied: A.1 archived first per dependency order; this change is archived move-only (--skip-specs) with a consolidated manual spec-sync, so the archive-order drift trap is handled outside the delta path.
+- [x] 0.2 Finalize the firing temperature/duration against the shipped vanilla clay-pottery
+  `combustibleProps` (decompile a vanilla clay pottery itemtype) rather than guessing. — DONE: shipped `scribetablet.json` sets `combustiblePropsByType` meltingPoint 650 / meltingDuration 30 (smeltingType cook) for every clay + hard variant; values tuned against vanilla clay-pottery combustibleProps.
+- [x] 0.3 Finalize the `Harden` `freshHours` (≈48 game-hours = ~2 in-game days) + `transitionHours` by
   eyeballing against a shipped `transitionableProps` example (decompile a vanilla item that hardens/dries);
-  treat as a finalize-in-play detail.
+  treat as a finalize-in-play detail. — DONE: shipped `scribetablet.json` `transitionablePropsByType` Harden uses freshHours avg 48 / transitionHours avg 6 per clay color.
 - [x] 0.4 Confirm the vanilla "item/holder exposed to water" hook by decompiling the torch-extinguish path
   (dropped-item water check + held-while-swimming), so the rehydration hook targets a real signal, not a
   guess. Record the finding in VSAPI-NOTES.md.
@@ -116,18 +116,18 @@
   - `dotnet build src/Mod/Mod.csproj -c Debug`: clean (0 warnings, 0 errors). Core.Tests: 283 passed
     (incl. 3 new `UneditableTablet` tests — CanAdd/CanPin deny). Integration.Tests (Atlas) fail with
     "VintagestoryAPI not found" as expected off the local game-DLL gate — not a regression.
-- [ ] 8.2 In-game: let a wet clay tablet (with tasks) dry ~2 in-game days; confirm it becomes a hard tablet
-  that KEEPS its tasks/notes/title, shows them read-only, and shows the dried backdrop.
-- [ ] 8.3 In-game: rehydrate a hard tablet BOTH ways — drop it in water, and enter water while holding it;
-  confirm each returns it to wet + editable, keeps the document, and restarts the dry-out timer.
-- [ ] 8.4 In-game: fire an unfired clay tablet (try both a wet one and a hard one) in a firepit; confirm it
+- [x] 8.2 In-game: let a wet clay tablet (with tasks) dry ~2 in-game days; confirm it becomes a hard tablet
+  that KEEPS its tasks/notes/title, shows them read-only, and shows the dried backdrop. — Confirmed 2026-08-06 playtest (recorded in TESTING.md under add-tablet-firing-mechanic §8).
+- [x] 8.3 In-game: rehydrate a hard tablet BOTH ways — drop it in water, and enter water while holding it;
+  confirm each returns it to wet + editable, keeps the document, and restarts the dry-out timer. — Confirmed 2026-08-06 playtest (TESTING.md add-tablet-firing-mechanic §8).
+- [x] 8.4 In-game: fire an unfired clay tablet (try both a wet one and a hard one) in a firepit; confirm it
   becomes a fired tablet that keeps its tasks/notes/title, shows them read-only, and shows the fired backdrop
-  with the correct per-type tint (unblocks add-tablet-clay-type-backdrops task 6.3 — tune tints now if flat).
-- [ ] 8.5 In-game: confirm firing preserves the clay variant (blue → fired blue) and that a wax tablet does
-  NOT fire and does NOT dry.
-- [ ] 8.6 In-game: pull a fired clay tablet and a hard clay tablet from Creative Inventory; confirm each opens
-  blank + uneditable with its own centered empty-state message (fired-without-writing vs dried-dunk-to-edit).
-- [ ] 8.7 In-game: confirm a fired tablet cannot be re-fired, cannot rehydrate in water, and cannot be edited
-  by any affordance; confirm a hard tablet cannot be edited until rehydrated.
+  with the correct per-type tint (unblocks add-tablet-clay-type-backdrops task 6.3 — tune tints now if flat). — Confirmed 2026-08-06 playtest (TESTING.md add-tablet-firing-mechanic §8; unblocked add-tablet-clay-type-backdrops 6.3 fired-tint = fed17c00).
+- [x] 8.5 In-game: confirm firing preserves the clay variant (blue → fired blue) and that a wax tablet does
+  NOT fire and does NOT dry. — Confirmed 2026-08-06 playtest (TESTING.md add-tablet-firing-mechanic §8).
+- [x] 8.6 In-game: pull a fired clay tablet and a hard clay tablet from Creative Inventory; confirm each opens
+  blank + uneditable with its own centered empty-state message (fired-without-writing vs dried-dunk-to-edit). — Confirmed 2026-08-06 playtest (TESTING.md add-tablet-firing-mechanic §8).
+- [x] 8.7 In-game: confirm a fired tablet cannot be re-fired, cannot rehydrate in water, and cannot be edited
+  by any affordance; confirm a hard tablet cannot be edited until rehydrated. — Confirmed 2026-08-06 playtest (TESTING.md add-tablet-firing-mechanic §8).
 - [ ] 8.8 Atlas/integration: exercise the smelt AND harden transforms (output retains document bytes) if
-  feasible in the local pre-push gate; keep synthetic player names ≤16 chars.
+  feasible in the local pre-push gate; keep synthetic player names ≤16 chars. — NOT DONE (optional, conditioned on "if feasible"): the local Atlas suite has no tablet smelt/harden transition scenario (tests/Integration.Tests has no tablet-transition coverage); the smelt/harden document-carry-forward is instead exercised in-game (8.4/8.5 confirmed). Left unchecked intentionally — this was a best-effort optional item, not a shipped requirement.

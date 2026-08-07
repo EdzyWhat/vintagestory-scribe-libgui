@@ -12,10 +12,10 @@
 
 ## 3. Verify
 
-- [ ] 3.1 Confirm consecutive arrow presses (3+) step a focused numeric field every time, focus staying on it, WITH a document editor open (the primary repro from 1.1). — awaits in-game playtest.
-- [ ] 3.2 Confirm the same with no document open, and across several different numeric fields (rows, width, offsets, font scales). — awaits in-game playtest.
-- [ ] 3.3 Confirm no regression: a genuinely focused editor row (Lectern/Notebook/Tablet, and Pin Tab) still moves the caret by visual line on Up/Down per `arrow-key-line-caret-nav`. — awaits in-game playtest (the fix leaves capture fully live when the editor IS the focused dialog, so this should hold).
-- [ ] 3.4 Confirm no regression to the +/- step BUTTONS (they still step and keep focus) or the blur-commit/clamp behavior (select-all-and-retype, out-of-range clamps on blur). — awaits in-game playtest (ScribeNumericField untouched).
+- [x] 3.1 Confirm consecutive arrow presses (3+) step a focused numeric field every time, focus staying on it, WITH a document editor open (the primary repro from 1.1). — Confirmed 2026-08-02 playtest (TESTING.md `fd0066db`, submission 2026-08-02T18-17-16: "Works.").
+- [x] 3.2 Confirm the same with no document open, and across several different numeric fields (rows, width, offsets, font scales). — Confirmed 2026-08-02 playtest (TESTING.md `52944f44`).
+- [x] 3.3 Confirm no regression: a genuinely focused editor row (Lectern/Notebook/Tablet, and Pin Tab) still moves the caret by visual line on Up/Down per `arrow-key-line-caret-nav`. — Confirmed 2026-08-02 playtest (TESTING.md `eb436828`).
+- [x] 3.4 Confirm no regression to the +/- step BUTTONS (they still step and keep focus) or the blur-commit/clamp behavior (select-all-and-retype, out-of-range clamps on blur). — Confirmed 2026-08-02 playtest (TESTING.md `4f2c0c8e`).
 - [x] 3.5 Remove the DEBUG focus trace added in 1.2. — no-op: no runtime trace was added (1.2 was resolved by source analysis instead).
 
 ## 4. Land

@@ -38,49 +38,54 @@ tab navigation. Adding, editing, checking off, and pinning tasks SHALL continue 
 tablet document policy (10-task / 1-pin caps). This change SHALL NOT remove task-editing capability
 that the tablet has today.
 
+When an add is refused because the tablet already holds the maximum number of task blocks (10), the
+dialog SHALL surface a standard in-game error through the game's transient-error path rather than
+silently doing nothing, so the player learns why no row appeared. The refusal SHALL be reported at
+every add gesture that the cap governs (the footer add-task control and the keyboard insert-below
+gesture), and the add-task control MAY additionally remain visually disabled at the cap.
+
 #### Scenario: Tasks remain editable on the tablet
 
 - **WHEN** a player opens a tablet and adds, edits, checks, or pins a task
 - **THEN** the edit is applied and saved exactly as before, subject to the tablet's 10-task / 1-pin
   policy, with no tab navigation shown
 
-### Requirement: A display-only cuneiform title banner renders above the task list
+#### Scenario: Adding an 11th task shows an in-game error
 
-The tablet dialog SHALL render a display-only cuneiform banner above the editable task list, showing
-the document's **title** via the `CuneiformText` widget from the cuneiform-font capability. The
-banner SHALL be given an explicit pixel height derived from `fontSizeEm` rather than relying on an
-`Expanded` (which is inert inside a scroll view). The banner SHALL be display-only this round — the
-title is still edited through the inherited title field, not by interacting with the banner, and the
-task rows themselves are not yet rendered in cuneiform (that is a later proposal).
-
-#### Scenario: Title appears in cuneiform above the tasks
-
-- **WHEN** a player opens a tablet with cuneiform enabled
-- **THEN** the document's title is shown as cuneiform strokes at a fixed, legible height above the
-  editable task list
-
-#### Scenario: Banner is display-only this round
-
-- **WHEN** a player interacts with the cuneiform title banner
-- **THEN** the banner does not become an editable field (the title is edited via the inherited title
-  control, and cuneiform-editable task rows are a later proposal)
+- **WHEN** a player attempts to add a task to a wet tablet that already holds 10 task blocks (via the
+  add-task control or the keyboard insert gesture)
+- **THEN** no task is added and a standard in-game error message tells the player the tablet is full
 
 ### Requirement: A single branch honors the disable-cuneiform setting
 
-The tablet dialog SHALL compute a single `UseCuneiform` value from the player's `DisableCuneiformFont`
-setting. When cuneiform is enabled the title banner SHALL render via `CuneiformText`; when disabled
-the same title text SHALL render through the normal text path using `ScribeTaskFont.Resolve`. The
-branch SHALL be evaluated in one place, not scattered per widget.
+The tablet dialog SHALL compute a single `UseCuneiform` value from the player's positive
+`CuneiformTablets` setting (default **true**), via `ScribeTaskFont.UseCuneiform`. When the setting is on
+(cuneiform enabled), this single branch SHALL route the tablet's cuneiform surfaces — the editable title
+bar text, the editable task-row text (both at rest and while being typed), and the tablet's button
+labels — to the cuneiform render path; when off, the same surfaces SHALL render through the normal text
+path using `ScribeTaskFont.Resolve` in the player's resolved task font (and rows/title use the normal
+editable field). The branch SHALL be evaluated in one place and threaded to every surface, not scattered
+per widget. An existing client config carrying the former `DisableCuneiformFont` key SHALL migrate to
+`CuneiformTablets = !DisableCuneiformFont`; absent, the setting SHALL default to true.
 
-#### Scenario: Fallback to normal font when cuneiform is disabled
+#### Scenario: Fallback to normal font when cuneiform is turned off
 
-- **WHEN** a player has `DisableCuneiformFont` enabled and opens a tablet
-- **THEN** the title banner renders with the normal resolved task font instead of cuneiform strokes
+- **WHEN** a player has `CuneiformTablets` turned off and opens a tablet
+- **THEN** the title bar, task rows, and button labels all render and edit in the normal resolved task
+  font instead of cuneiform strokes
 
-#### Scenario: Cuneiform renders when the setting is off
+#### Scenario: Cuneiform renders when the setting is on
 
-- **WHEN** a player has `DisableCuneiformFont` disabled (the default) and opens a tablet
-- **THEN** the title banner renders as cuneiform strokes
+- **WHEN** a player has `CuneiformTablets` on (the default) and opens a tablet
+- **THEN** the title bar, task rows, and button labels all render as cuneiform strokes, and typing in
+  the title or a row produces cuneiform
+
+#### Scenario: A prior disable-cuneiform preference is preserved across the rename
+
+- **WHEN** a player who had previously enabled `DisableCuneiformFont` loads the mod after the setting is
+  renamed
+- **THEN** their preference migrates to `CuneiformTablets = false`, so cuneiform stays off for them
+  rather than reverting to the on-by-default state
 
 ### Requirement: Tablet dialog uses its own theme and material-keyed backdrops
 
@@ -96,10 +101,19 @@ input field background (`SurfaceHigh`), the input/divider border (`Border`), and
 `Background`. Within each palette, `Secondary` SHALL read clearly distinct from `Primary` so a focused
 input inside a pinned row shows a legible focus border against the pinned wash.
 
+The per-material **muted-text role (`OnSurfaceVariant`)** — used for hint/placeholder and secondary
+text — SHALL be **derived from that palette's own ink** by a single shared HSV **Value** lift (via
+`ScribeRowConstants.ShiftBrightness`, which preserves hue and chroma), governed by one shared constant
+across all three clay palettes, rather than authored as an independent per-palette color. This makes the
+muted-vs-ink contrast a consistent perceptual step across fire, red, and blue, and makes "darken the
+muted text" a single-constant adjustment. The derived muted tone SHALL remain clearly lighter/weaker
+than the body `ink` so it still reads as secondary text, not body text.
+
 When Pixel-Art Display is OFF, the tablet dialog SHALL follow the player's global theme
 (`ThemeData.Default`), unchanged — per-clay theming and backdrop art both apply only when Pixel-Art is
 ON. The backdrop SHALL continue to be applied through the existing `WrapBackdrop` / `BuildOuterArtBox`
-mechanism, and backdrop selection SHALL remain keyed to the `material` variant as before.
+mechanism, and backdrop selection SHALL remain keyed to the `material` variant as before (see "The
+tablet dialog backdrop is chosen by clay type and state").
 
 #### Scenario: Tablet opens with its own theme and backdrop
 
@@ -107,11 +121,19 @@ mechanism, and backdrop selection SHALL remain keyed to the `material` variant a
 - **THEN** the dialog is drawn with that clay type's palette (its own ink, accent, input
   background/border, and panel background) and the backdrop slot for that material
 
-#### Scenario: Backdrop slots reuse the placeholder art
+#### Scenario: Muted text contrast is consistent across clay types
 
-- **WHEN** the tablet dialog resolves the `clay` or `wax` backdrop slot
-- **THEN** each resolves to `textures/gui/scribe-lectern.png` for now, with the ratio matching the
-  tablet layout
+- **WHEN** a red, blue, and fire tablet are each opened with Pixel-Art Display ON
+- **THEN** each palette's `OnSurfaceVariant` is the palette's own `ink` lifted by the same shared HSV
+  Value amount, so the muted-vs-ink contrast step is perceptually equal across all three clay types
+- **AND** each derived muted tone stays recognizably that clay's hue and reads as secondary (weaker
+  than the body ink), not as body text
+
+#### Scenario: Muted text darkens via a single constant
+
+- **WHEN** the shared muted-text lift constant is lowered
+- **THEN** the muted/placeholder text on all three clay palettes darkens by the same perceptual amount,
+  with no per-palette color edits required
 
 #### Scenario: Wax and unknown materials fall back to the fire palette
 
@@ -138,4 +160,150 @@ mechanism, and backdrop selection SHALL remain keyed to the `material` variant a
 - **THEN** its theme is unchanged from before this change (the parchment `Light`/global theme), EXCEPT
   the pinned-row tint, which is now derived from `Secondary` instead of `Primary` (the same global
   remap applied for focus clarity)
+
+### Requirement: Empty-tablet hint text reads legibly on the clay backdrops
+
+The tablet's empty-field hint text (drawn from `OnSurfaceVariant`) SHALL read clearly against the
+mid-tone clay backdrops. On the tablet, this text is the empty-task-list hint rendered at **full alpha**
+from the muted role — NOT the multiline field's `0.55` placeholder, which the cuneiform (tablet) render
+path never applies. Its legibility is therefore governed by the muted role's **color**, which the derived
+`OnSurfaceVariant` (see the muted-text requirement above) makes darker and consistent across clay types.
+No alpha change to the multiline field's placeholder path SHALL be made, because that `0.55` seam serves
+only the readable (Pixel-Art-off) Lectern/Notebook path — raising it would darken that path, which this
+change leaves unchanged.
+
+#### Scenario: Empty tablet shows a legible hint
+
+- **WHEN** a player opens a red, blue, or fire clay tablet with an empty task list and Pixel-Art
+  Display ON
+- **THEN** the empty-task-list hint text is clearly legible against that clay's backdrop (not barely
+  visible), by virtue of the darker derived muted role
+
+#### Scenario: Readable path placeholder is unchanged
+
+- **WHEN** a player opens a Lectern or Notebook (readable / Pixel-Art-off path) with an empty field
+- **THEN** its placeholder alpha (`0.55`) is unchanged from before this change
+
+### Requirement: The tablet dialog backdrop is chosen by clay type and state
+
+The tablet dialog SHALL declare named backdrop slots in `ScribeBackdrops` and select exactly one from
+both the clay type (the item variant) and the tablet state (wet, hard, or fired), so each of the three
+states reads as visually distinct: wet is the smoother/glossier soft appearance, hard is a
+lighter/drier appearance, and fired is the final ceramic appearance. The three soft-clay backdrops SHALL
+be sourced from authored full-page clay-tablet illustrations (one per clay type), rendered through the
+existing stretch-to-fill backdrop path; hard and fired backdrops MAY, until bespoke art exists, reuse
+the matching clay art under a per-type tint so the clay types stay distinguishable. When `material` is
+wax the wax backdrop SHALL be selected; when the material variant is unrecognized the selection SHALL
+default to red + soft so every tablet resolves to a valid backdrop. Where `hard` and `fired` are both
+set, the fired appearance SHALL take precedence.
+
+#### Scenario: Each state shows a distinct backdrop
+
+- **WHEN** the same clay-variant tablet is opened wet, then hard, then fired
+- **THEN** the dialog shows three visually distinct backdrops (glossy wet, dried hard, ceramic fired) for
+  that clay type
+
+#### Scenario: Each of the three clay types selects a distinct backdrop
+
+- **WHEN** a player opens the `clay-red`, `clay-blue`, and `clay-fire` tablet items in turn
+- **THEN** each opens with a backdrop distinct to its clay type, so the three clay types are visually
+  distinguishable
+
+#### Scenario: A wax tablet opens with the wax backdrop
+
+- **WHEN** a player opens a tablet whose `material` variant is wax
+- **THEN** the dialog shows the single wax backdrop, not any clay-type-keyed backdrop
+
+#### Scenario: A tablet with an unrecognized variant falls back to a default backdrop
+
+- **WHEN** a player opens a clay tablet whose `material` variant is unrecognized (e.g. a legacy stack)
+- **THEN** the dialog selects the red + soft clay backdrop as the default and does not fail
+
+### Requirement: The tablet dialog has a read-only mode for a non-editable tablet
+
+The tablet dialog SHALL resolve whether its stack is editable — editable ⇔ NOT hard AND NOT fired, via the
+tablet's `hard`/`fired` read helpers — at one place and, when not editable, open in a read-only mode: it
+SHALL NOT enter editor mode in its constructor, SHALL render the document view-only, and SHALL present no
+editor entry, add/check/pin, reorder, or title-edit affordance. A wet (editable) tablet SHALL keep its
+existing always-edit behaviour unchanged.
+
+#### Scenario: A hard or fired tablet opens view-only
+
+- **WHEN** a player opens a hard clay tablet or a fired clay tablet
+- **THEN** the dialog does not enter editor mode and shows the document read-only with no editing
+  affordances
+
+#### Scenario: A wet tablet is unaffected
+
+- **WHEN** a player opens a wet (unfired, un-hardened) clay tablet
+- **THEN** the dialog opens always-edit exactly as before
+
+### Requirement: The non-editable tablet dialog shows a state-appropriate empty-state message when blank
+
+When the tablet dialog opens a non-editable tablet (hard or fired) whose document has no tasks and no notes,
+it SHALL show a small centered message (a Scribe lang key) in place of an empty content region: for a fired
+tablet, that it was fired without any writing; for a hard tablet, that it has dried out and can be edited
+again after being dunked in water.
+
+#### Scenario: Blank fired tablet shows the fired message
+
+- **WHEN** a player opens a fired clay tablet with no tasks and no notes
+- **THEN** the dialog shows a small centered "fired without any writing" message and no editable surface
+
+#### Scenario: Blank hard tablet shows the dried message
+
+- **WHEN** a player opens a hard clay tablet with no tasks and no notes
+- **THEN** the dialog shows a small centered "dried out — dunk in water to edit" message and no editable
+  surface
+
+### Requirement: A hardened or fired tablet keeps checkboxes and pins live while blocking text edits
+
+A hardened or fired tablet SHALL present its task list read-only with respect to **text** — the player
+SHALL NOT be able to edit task text, add rows, delete rows, or reorder rows — while its **completion
+checkboxes and pin toggles SHALL remain interactive**. Checking a task complete and pinning or unpinning
+a task SHALL work on a hard or fired tablet exactly as on a wet one. This ensures a task pinned to the HUD
+before the tablet hardened or was fired can still be unpinned, so firing a tablet never permanently strands
+a pin. This behavior is specific to the tablet's read view; the tabbed Lectern/Notebook read view is
+unaffected.
+
+#### Scenario: Completing and unpinning work on a fired tablet
+
+- **WHEN** a player opens a fired (or hardened) tablet and taps a task's checkbox or its pin control
+- **THEN** the task's completion toggles and its pin toggles respectively, and the change is saved — the
+  read-only state does not disable the checkbox or hide the pin control
+
+#### Scenario: Text remains uneditable on a hardened tablet
+
+- **WHEN** a player attempts to edit a task's text, add a row, delete a row, or reorder rows on a hardened
+  or fired tablet
+- **THEN** no such text edit is possible, and attempting to edit a row's text surfaces a material-specific
+  in-game message explaining why (hardened: soften it in water to make changes; fired: it cannot be changed)
+
+### Requirement: Completion policy collapses to unpin-only on a read-only tablet
+
+When a task on a hardened or fired tablet is completed, any completion policy that would MUTATE the locked
+document — *delete*, *sink*, or *unpin-and-sink* — SHALL resolve to *unpin* only, and *keep* SHALL remain
+*keep*. The task's completion state and its pin removal SHALL still apply, but the underlying locked
+document SHALL NOT be reordered or have rows deleted. This collapse SHALL be enforced at the
+server-authoritative completion path so it holds for completion from the read view and from the HUD alike.
+On a wet (editable) tablet the completion policy SHALL behave unchanged.
+
+#### Scenario: Delete policy unpins instead of deleting on a fired tablet
+
+- **WHEN** a player whose completion policy is *delete* completes a pinned task that belongs to a fired
+  tablet
+- **THEN** the task is marked complete and its pin is removed, but the task is not deleted from the tablet's
+  document
+
+#### Scenario: Sink policy unpins instead of reordering on a hardened tablet
+
+- **WHEN** a player whose completion policy is *sink* or *unpin-and-sink* completes a pinned task on a
+  hardened tablet
+- **THEN** the task is marked complete and its pin is removed, but the tablet's document order is unchanged
+
+#### Scenario: Wet tablet completion is unchanged
+
+- **WHEN** a player completes a task on a wet tablet under any completion policy
+- **THEN** the policy applies with its full effect (delete, sink, unpin, unpin-and-sink, or keep) exactly as
+  before
 

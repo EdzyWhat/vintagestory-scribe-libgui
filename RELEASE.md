@@ -52,21 +52,30 @@ All 11 in-flight changes are code-complete and playtest-confirmed. Archive each 
 `add-tablet-firing-mechanic` archives AFTER `add-tablet-clay-type-backdrops`;
 `wire-tablet-clay-art-and-variants` archives AFTER both.
 
-- [ ] **A.1.** `add-tablet-clay-type-backdrops` (archive first — others gate on it)
-- [ ] **A.2.** `add-tablet-firing-mechanic` (after A.1)
-- [ ] **A.3.** `wire-tablet-clay-art-and-variants` (after A.1 + A.2)
-- [ ] **A.4.** `tune-tablet-clay-text-contrast`
-- [ ] **A.5.** `add-tablet-cuneiform-chrome`
-- [ ] **A.6.** `add-cuneiform-handwriting-feel`
-- [ ] **A.7.** `add-clockmaker-notebook-schematic`
-- [ ] **A.8.** `add-unified-quick-add-interaction` (code done; testable items confirmed)
-- [ ] **A.9.** `fix-settings-numeric-arrow-focus-leak`
-- [ ] **A.10.** `zero-point-three-fixes`
-- [ ] **A.11.** `add-handbook-web-editor`
+- [x] **A.1.** `add-tablet-clay-type-backdrops` (archive first — others gate on it)
+- [x] **A.2.** `add-tablet-firing-mechanic` (after A.1)
+- [x] **A.3.** `wire-tablet-clay-art-and-variants` (after A.1 + A.2)
+- [x] **A.4.** `tune-tablet-clay-text-contrast`
+- [x] **A.5.** `add-tablet-cuneiform-chrome`
+- [x] **A.6.** `add-cuneiform-handwriting-feel`
+- [x] **A.7.** `add-clockmaker-notebook-schematic`
+- [x] **A.8.** `add-unified-quick-add-interaction` (code done; testable items confirmed)
+- [x] **A.9.** `fix-settings-numeric-arrow-focus-leak`
+- [x] **A.10.** `zero-point-three-fixes`
+- [x] **A.11.** `add-handbook-web-editor`
 
 > Before archiving each: reconcile any `tasks.md` `[ ]` boxes that are actually done-but-unchecked
 > (in-game verifications now confirmed in `TESTING.md`, bookkeeping `0.x` "apply after" gates) so the
 > archived delta reflects reality.
+
+**Done 2026-08-06.** All 11 changes archived to `openspec/changes/archive/2026-08-*/` and `tasks.md`
+boxes reconciled from `TESTING.md` verdicts first. Because 7 capabilities were touched by more than one
+pending change (header drift — see `[[openspec-archive-order-header-drift]]`), those 8 changes were
+archived `--skip-specs` (move-only) and the 3 changes touching only unique capabilities archived with
+full spec sync; a single consolidated manual spec-sync then rewrote the 7 contested main specs
+(`tablet-dialog`, `clay-wax-tablet-item`, `tablet-clay-hardening`, `tablet-firing`,
+`clockmaker-notebook-schematic`, `gui-backdrop`, `scribe-document-policy`) to the shipped end-state
+(last-writer-wins across date-ordered deltas). `openspec validate --specs` → 52 passed, 0 failed.
 
 ## Track C — Cleanup pass ("what have we missed")
 

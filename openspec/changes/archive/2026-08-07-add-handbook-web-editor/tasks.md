@@ -54,11 +54,11 @@
 
 ## 7. Verification
 
-- [ ] 7.1 Manually edit one section's prose via the tool, save, and confirm the git diff touches only that key in `en.json`.
-- [ ] 7.2 Add, reorder, and remove a section via the tool; confirm the owning registration file and `en.json` update correctly and the relaxed-JSON formatting of untouched entries is preserved.
-- [ ] 7.3 Launch Vintage Story and confirm a tool-edited entry renders correctly in the in-game handbook (structure, prose, and working cross-links).
-- [ ] 7.4 Compare the tool's preview against the in-game handbook for the same entry; confirm wrapping/line-count and apparent width match closely enough to trust real-estate judgments.
+- [x] 7.1 Manually edit one section's prose via the tool, save, and confirm the git diff touches only that key in `en.json`. — Confirmed 2026-08-06 playtest (TESTING.md `c584cd1d`, submission 2026-08-06T15-47-42: "Works.").
+- [x] 7.2 Add, reorder, and remove a section via the tool; confirm the owning registration file and `en.json` update correctly and the relaxed-JSON formatting of untouched entries is preserved. — Confirmed 2026-08-06 playtest (TESTING.md `3a02c8bb`).
+- [x] 7.3 Launch Vintage Story and confirm a tool-edited entry renders correctly in the in-game handbook (structure, prose, and working cross-links). — Confirmed 2026-08-06 playtest (TESTING.md `1a7365bc`, plus `f5835b60`/`7332fe47` for the new HUD article + shared ref).
+- [x] 7.4 Compare the tool's preview against the in-game handbook for the same entry; confirm wrapping/line-count and apparent width match closely enough to trust real-estate judgments. — Confirmed 2026-08-06 playtest (TESTING.md `e3b0b21a`).
 - [x] 7.5 Confirm an intentionally-broken save (would-be invalid JSON) is rejected and leaves files unchanged.
-- [ ] 7.6 Confirm the `~/Launchers/` Dock alias launches the tool by double-click.
+- [x] 7.6 Confirm the `~/Launchers/` Dock alias launches the tool by double-click. — Confirmed 2026-08-06 playtest (TESTING.md `d63f840d`).
 - [x] 7.7 Copy a variant item's link (e.g. the clay Tablet) and confirm it contains a concrete variant code and resolves in-game when pasted into another entry.
-- [ ] 7.8 Make edits, save, then toggle before/after and confirm both editor and preview show the session-original baseline (not the just-saved state) and restore correctly.
+- [x] 7.8 Make edits, save, then toggle before/after and confirm both editor and preview show the session-original baseline (not the just-saved state) and restore correctly. — Confirmed 2026-08-06 playtest (TESTING.md `26356371`).

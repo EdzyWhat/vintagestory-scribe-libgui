@@ -3,7 +3,7 @@
 - [x] 1.1 Delete `BuildTitleBanner()` from `src/Mod/GuiDialogScribeTablet.cs` and any supporting fields/usings that become unused
 - [x] 1.2 Collapse `GuiDialogScribeTablet.BuildCentralRegion()` to return `BuildEditorContent()` directly (remove the `Column`/`Expanded` banner stack)
 - [x] 1.3 Update the class XML doc-comment to drop the "cuneiform title banner" bullet and describe the live cuneiform title/row rendering
-- [ ] 1.4 Build and open a tablet to confirm no banner renders and the editor fills the central region
+- [x] 1.4 Build and open a tablet to confirm no banner renders and the editor fills the central region — Confirmed in-game 2026-08-06 (no banner; editor fills central region), folded into the §7.2/§8 tablet playtest sweep.
 
 ## 2. Core: per-character advance map + wrap in `CuneiformLineLayout`
 
@@ -24,7 +24,7 @@
 - [x] 4.2 Thread the `UseCuneiform` flag (plus ink color / `GlyphBundle`) from `GuiDialogScribeTablet` down to its editor rows only — the Lectern/Notebook editor passes false (default)
 - [x] 4.3 Add a `protected virtual` title seam on `ScribeDialogBase` (e.g. `BuildTitleDisplay`/`BuildTitleField`) whose default returns today's `RichText`/`TextField`, leaving the Lectern and Notebooks byte-identical — done in `ScribeDialogBase.Layout.cs`: `BuildTitleBar` now calls `private protected virtual BuildTitleDisplay/BuildTitleField`; the maxlength + Enter/Escape commit logic is extracted to `private protected OnTitleFieldKeyDown`; the shared `_titleController`/`_titleFocusNode` are exposed via `private protected TitleController`/`TitleFocusNode` in `ScribeDialogBase.cs`
 - [x] 4.4 Override the title seam in `GuiDialogScribeTablet` to render/edit the title as single-line cuneiform under the `UseCuneiform` branch, keeping the `_isTitleEditing` / `CommitTitleIfEditing` / `_pending*` machinery intact — done: tablet overrides `BuildTitleDisplay` (display-only `CuneiformText` in a `Clip`) and `BuildTitleField` (new `ScribeCuneiformTitleField`, a single-line cuneiform input BOUND to the shared controller/focus node so all base commit/blur/deferred-rebuild machinery is untouched; falls back to `base.*` when cuneiform disabled OR bundle not yet loaded, via `ActiveCuneiformBundle`)
-- [ ] 4.5 Confirm the incumbent dialogs (Lectern, both Notebooks) still render and edit their titles and rows in the normal font — deferred to the in-game playtest (task 7.2)
+- [x] 4.5 Confirm the incumbent dialogs (Lectern, both Notebooks) still render and edit their titles and rows in the normal font — deferred to the in-game playtest (task 7.2) — Confirmed 2026-08-06 playtest (incumbent dialogs unaffected; recorded in TESTING.md under add-tablet-cuneiform-chrome).
 
 <!-- ========================================================================================
      SESSION CHECKPOINT (2026-08-02, second session) — pick up here.
@@ -54,14 +54,14 @@
 ## 6. Single fallback branch + settings legibility
 
 - [x] 6.1 Evaluate `ScribeTaskFont.UseCuneiform(...)` once per tablet build and thread the boolean (plus resolved fallback family and `GlyphBundle`) into title, rows, and buttons — no per-widget `DisableCuneiformFont` reads — done: consolidated into the single `ActiveCuneiformBundle` property (evaluates `ScribeTaskFont.UseCuneiform` once, returns the bundle or null); `DecorateRowStyle` now reads it (so rows + button labels get `UseCuneiform`/bundle via `ScribeRowStyle`), and both title overrides read it. No widget reads `DisableCuneiformFont` directly (only the two dialog-level entry points via that one property)
-- [ ] 6.2 Verify toggling `DisableCuneiformFont` flips all tablet surfaces together (cuneiform ↔ normal editable font) and rows/title stay editable in both states
-- [ ] 6.3 Verify Scribe Settings renders in the normal readable font in both cuneiform states
+- [x] 6.2 Verify toggling `DisableCuneiformFont` flips all tablet surfaces together (cuneiform ↔ normal editable font) and rows/title stay editable in both states — Confirmed 2026-08-06 playtest (TESTING.md add-tablet-cuneiform-chrome).
+- [x] 6.3 Verify Scribe Settings renders in the normal readable font in both cuneiform states — Confirmed 2026-08-06 playtest (TESTING.md add-tablet-cuneiform-chrome).
 
 ## 7. Validation and cleanup
 
 - [x] 7.1 Run `dotnet test` (Core suite) and confirm the new caret-map + wrap tests pass — 238 pass, 0 fail (2026-08-02)
-- [ ] 7.2 Manual in-game check: type live cuneiform in a row (glyphs appear with a blinking caret); arrow-nav and click-to-place the caret; row shows no border at rest and gains border+background on focus; edit the title live in cuneiform; long title truncates in the band; long rows wrap; the gear opens Settings and matches the ⓘ styling; button labels are cuneiform; disable-cuneiform reverts every surface while Settings stays legible; works on both clay and wax tablets
-- [ ] 7.3 Update `VSAPI-NOTES.md` LibGUI section if a cuneiform caret/wrap/hit-testing gotcha is learned
+- [x] 7.2 Manual in-game check: type live cuneiform in a row (glyphs appear with a blinking caret); arrow-nav and click-to-place the caret; row shows no border at rest and gains border+background on focus; edit the title live in cuneiform; long title truncates in the band; long rows wrap; the gear opens Settings and matches the ⓘ styling; button labels are cuneiform; disable-cuneiform reverts every surface while Settings stays legible; works on both clay and wax tablets — Confirmed 2026-08-06 playtest (TESTING.md add-tablet-cuneiform-chrome `6017abe3` type-live-cuneiform + related items).
+- [x] 7.3 Update `VSAPI-NOTES.md` LibGUI section if a cuneiform caret/wrap/hit-testing gotcha is learned — DONE (conditional, satisfied): the LibGUI section of VSAPI-NOTES.md already documents the cuneiform-relevant caret/wrap/hit-testing gotchas (focus-jump-to-element-0 on recompose + caret capture/restore; GuiElementTextInput vs TextArea wrap behavior; row-kind hit-testing). No NEW gotcha surfaced this round that isn't already recorded.
 - [x] 7.4 Run `openspec validate add-tablet-cuneiform-chrome --strict` and reconcile any remaining issues — valid (2026-08-02)
 
 ## 8. Playtest refinements (2026-08-02 retest)
@@ -116,7 +116,7 @@
       renamed `settings-disablecuneiform` → `settings-cuneiformtablets` ("Cuneiform tablets", "Turn off …").
       5 new Core migration tests (invert / absent-key no-op / clear+idempotent / ShouldSerialize / default);
       250 Core pass, Mod build 0 errors.
-- [ ] 8.6 Re-run the manual playtest items (`6017abe3` type-live-cuneiform, `a029001d` label scale) after
-      8.1–8.5 and record verdicts in TESTING.md.
+- [x] 8.6 Re-run the manual playtest items (`6017abe3` type-live-cuneiform, `a029001d` label scale) after
+      8.1–8.5 and record verdicts in TESTING.md. — Confirmed 2026-08-06 playtest (both re-run items recorded in TESTING.md add-tablet-cuneiform-chrome).
 - [x] 8.7 Run `openspec validate add-tablet-cuneiform-chrome --strict` again after these refinements land.
       — valid (2026-08-02).

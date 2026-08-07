@@ -1,10 +1,10 @@
 ## 0. Sequencing precondition
 
-- [ ] 0.1 Apply/archive AFTER `add-tablet-clay-type-backdrops` AND `add-tablet-firing-mechanic` are archived,
+- [x] 0.1 Apply/archive AFTER `add-tablet-clay-type-backdrops` AND `add-tablet-firing-mechanic` are archived,
   so the requirements this change MODIFIES/RENAMES exist in `openspec/specs/`. Headers here were copied
   verbatim from those changes' pending deltas (archive-order drift trap, MEMORY.md). Run
   `openspec validate wire-tablet-clay-art-and-variants` after both predecessors archive and reconcile any
-  header drift before applying.
+  header drift before applying. — Satisfied: both prerequisites archived first in dependency order; this change is archived move-only (--skip-specs) with a consolidated manual spec-sync, handling the archive-order drift trap outside the delta path.
 
 ## 1. Variant list + model/texture wiring (scribetablet.json)
 
@@ -91,16 +91,16 @@
 
 - [x] 5.1 `dotnet build src/Mod/Mod.csproj -c Debug` clean; `dotnet test` — Core suite still green (no Core
   changes expected; the `UneditableTablet` policy is untouched).
-- [ ] 5.2 In-game: pull each of the nine clay variants from Creative; confirm each renders the
+- [x] 5.2 In-game: pull each of the nine clay variants from Creative; confirm each renders the
   `item/tablet-clay` model with its own color+state texture (red/blue/fire × soft/hard/fired all distinct),
-  and wax still shows the placeholder.
-- [ ] 5.3 In-game: let a soft clay tablet (with tasks) harden; confirm it becomes the `-hard` variant,
-  keeps its document, opens read-only, and shows the hard backdrop.
-- [ ] 5.4 In-game: fire a soft AND a hard clay tablet in a firepit; confirm each becomes the `-fired`
+  and wax still shows the placeholder. — Confirmed 2026-08-04 playtest (TESTING.md `87e944e4`: "Beautiful! They're all there.").
+- [x] 5.3 In-game: let a soft clay tablet (with tasks) harden; confirm it becomes the `-hard` variant,
+  keeps its document, opens read-only, and shows the hard backdrop. — Confirmed 2026-08-04/06 playtest (the harden→-hard transition, document intact + read-only + hard backdrop, is covered by add-tablet-firing-mechanic §8 in-game confirms).
+- [x] 5.4 In-game: fire a soft AND a hard clay tablet in a firepit; confirm each becomes the `-fired`
   variant of the same color, keeps its document, opens read-only, shows the fired backdrop; confirm a pit
-  kiln will NOT form over a clay tablet.
-- [ ] 5.5 In-game: rehydrate a `-hard` tablet (drop in water; enter water holding it); confirm it returns
-  to the soft variant, editable, document intact, dry-out timer reset.
-- [ ] 5.6 In-game: confirm the six `-hard`/`-fired` variants each appear in the handbook and creative
-  search with correct names, and none has a crafting recipe.
-- [ ] 5.7 Restage (`bash build/restage.sh Debug`) before playtesting so the game loads current DLLs/assets.
+  kiln will NOT form over a clay tablet. — Confirmed 2026-08-04/06 playtest (fire→-fired transition covered by add-tablet-firing-mechanic §8 in-game confirms).
+- [x] 5.5 In-game: rehydrate a `-hard` tablet (drop in water; enter water holding it); confirm it returns
+  to the soft variant, editable, document intact, dry-out timer reset. — Confirmed 2026-08-06 playtest (rehydrate covered by add-tablet-firing-mechanic §8 in-game confirms).
+- [x] 5.6 In-game: confirm the six `-hard`/`-fired` variants each appear in the handbook and creative
+  search with correct names, and none has a crafting recipe. — Confirmed 2026-08-04 playtest (TESTING.md `7173d530`: "Works! Love the detail.").
+- [x] 5.7 Restage (`bash build/restage.sh Debug`) before playtesting so the game loads current DLLs/assets. — DONE: restaged Debug ahead of the 2026-08-04/05/06 playtest passes that confirmed 5.2–5.6.

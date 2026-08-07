@@ -47,15 +47,15 @@
 
 ## 4. In-game tuning pass (settle the numbers)
 
-- [ ] 4.1 With Pixel-Art Display ON, open a **red**, a **blue**, and a **fire** tablet with an empty task
+- [x] 4.1 With Pixel-Art Display ON, open a **red**, a **blue**, and a **fire** tablet with an empty task
   field. Confirm the placeholder + any hint text read legibly on all three backdrops (esp. blue, the one
   cool palette with a different ink hue). *(IN-GAME — restaged 2026-08-04; needs a game relaunch. TESTING.md
-  `fa4e26e8`.)*
-- [ ] 4.2 Confirm the muted text still reads as *secondary* (clearly weaker than body ink) on all three —
-  it must not approach body-ink weight and collapse the hierarchy. *(IN-GAME — TESTING.md `ce460e26`.)*
-- [ ] 4.3 Finalize `MutedTextValueLift` (seeded `14`); the placeholder alpha raise was dropped (see D2/2.2).
+  `fa4e26e8`.)* — Confirmed 2026-08-04 playtest (TESTING.md `fa4e26e8`, submission 2026-08-04T17-53-45: "Works." Empty-list hint legible on all three clay backdrops at the derived muted role, lift +14).
+- [x] 4.2 Confirm the muted text still reads as *secondary* (clearly weaker than body ink) on all three —
+  it must not approach body-ink weight and collapse the hierarchy. *(IN-GAME — TESTING.md `ce460e26`.)* — Confirmed 2026-08-04 playtest (TESTING.md `ce460e26`: muted text still reads as secondary).
+- [x] 4.3 Finalize `MutedTextValueLift` (seeded `14`); the placeholder alpha raise was dropped (see D2/2.2).
   Record the chosen lift in this change (design D3) before archiving. Re-run task 3 export if the muted
-  role's final value differs from the seed. *(BLOCKED on the 4.1/4.2 in-game read.)*
+  role's final value differs from the seed. *(BLOCKED on the 4.1/4.2 in-game read.)* — DONE: `MutedTextValueLift = 14` finalized at its seed (the in-game read at lift +14 confirmed legible and secondary, TESTING.md `ce460e26`); no re-export needed since the value equals the seed the §3 gallery export already used. Design D3 already records the tune-in-play decision.
 
 ## 5. Verification & docs
 

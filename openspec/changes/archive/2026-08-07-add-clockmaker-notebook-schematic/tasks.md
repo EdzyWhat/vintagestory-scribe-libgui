@@ -11,9 +11,9 @@
   (`item-clockmakerschematic`) + `-desc`, and handbook `extraSections` title/text
   (`handbook-clockmakerschematic-about-*`) explaining it unlocks the craft without the Clockmaker
   class. Wired the `handbook.extraSections` block in the itemtype.
-- [ ] 1.4 Build + restage done (build clean, 52 files staged). **Relaunch and confirm in-game:**
+- [x] 1.4 Build + restage done (build clean, 52 files staged). **Relaunch and confirm in-game:**
   the schematic appears in Creative search, shows its name/desc + handbook page, and renders as the
-  glider-blueprint scroll when held/ground-stored.
+  glider-blueprint scroll when held/ground-stored. — Confirmed 2026-08-06 playtest (TESTING.md add-clockmaker-notebook-schematic).
 
 ## 2. Trait-free schematic recipe
 
@@ -22,14 +22,14 @@
   schematic `S` with **`consume: false`**, no `requiresTrait`. Original trait recipe untouched.
 - [x] 2.2 Updated `handbook-scribeclockmakernotebook-craft-text` to add a "No Clockmaker class?"
   paragraph pointing at the schematic path, plus the schematic's own handbook page.
-- [ ] 2.3 Manually test (non-Clockmaker character): with the schematic in the grid the recipe
+- [x] 2.3 Manually test (non-Clockmaker character): with the schematic in the grid the recipe
   completes and yields the Clockmaker's Notebook; the schematic **remains** in the grid afterward
   (reusable) and the other ingredients are consumed. Craft a second one from the retained
-  schematic to confirm reuse.
-- [ ] 2.4 Manually test (regression): a Clockmaker (tinkerer trait) still crafts via the original
-  no-schematic recipe; a non-Clockmaker with no schematic still cannot craft via the trait recipe.
-- [ ] 2.5 Manually test (carryover): crafting via the schematic recipe from a Notebook that has
-  tasks/notes/history carries the document + history into the result (per `notebook-craft-carryover`).
+  schematic to confirm reuse. — Confirmed 2026-08-06 playtest (TESTING.md add-clockmaker-notebook-schematic).
+- [x] 2.4 Manually test (regression): a Clockmaker (tinkerer trait) still crafts via the original
+  no-schematic recipe; a non-Clockmaker with no schematic still cannot craft via the trait recipe. — Confirmed 2026-08-06 playtest (TESTING.md add-clockmaker-notebook-schematic).
+- [x] 2.5 Manually test (carryover): crafting via the schematic recipe from a Notebook that has
+  tasks/notes/history carries the document + history into the result (per `notebook-craft-carryover`). — Confirmed 2026-08-06 playtest (TESTING.md add-clockmaker-notebook-schematic).
 
 ## 3. Trader availability
 
@@ -37,15 +37,15 @@
   ops appending the ware to `/selling/list/-` of `game:config/tradelists/trader-commodities.json`
   and `trader-treasurehunter.json`. Entry: `{ code: "scribe:clockmakerschematic", type: "item",
   stacksize: 1, stock: {avg:1, var:0}, price: {avg:12, var:3} }`. `maxItems`/other wares untouched.
-- [ ] 3.2 Confirm the patch resolves at load: check the game log for patch-apply confirmation / no
+- [x] 3.2 Confirm the patch resolves at load: check the game log for patch-apply confirmation / no
   "could not find file/path" warning for the two tradelists (verify the `game:` domain and the
-  `/selling/list/-` pointer are accepted).
-- [ ] 3.3 Manually test in-game: spawn/visit Commodities and Treasure Hunter traders (creative
+  `/selling/list/-` pointer are accepted). — Confirmed 2026-08-06 playtest (TESTING.md add-clockmaker-notebook-schematic).
+- [x] 3.3 Manually test in-game: spawn/visit Commodities and Treasure Hunter traders (creative
   `/entity spawn` or worldgen) until the schematic appears for sale; confirm price/stock look right
   and buying it yields a working schematic. Note appearance is probabilistic (only `maxItems` of the
   shuffled list show) and already-spawned traders won't restock immediately — spawn fresh ones.
-  Tune the gear price if it feels off.
-- [ ] 3.4 Confirm a non-target trader (e.g. Survival Goods or Artisan) does NOT list the schematic.
+  Tune the gear price if it feels off. — Confirmed 2026-08-06 playtest (TESTING.md add-clockmaker-notebook-schematic).
+- [x] 3.4 Confirm a non-target trader (e.g. Survival Goods or Artisan) does NOT list the schematic. — Confirmed 2026-08-06 playtest (TESTING.md add-clockmaker-notebook-schematic).
 
 ## 4. Staging, docs, and close-out
 

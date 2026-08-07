@@ -86,3 +86,55 @@ appearance with zero art required.
 - **THEN** no backdrop texture or placeholder color is drawn behind the content, and the view renders
   as the plain LibGUI fallback
 
+### Requirement: A backdrop spec may tint its texture
+
+A backdrop specification MAY declare an optional tint color multiplied into its texture. When a tint is
+declared, the dialog backdrop-loading logic SHALL bake that tint into a cached copy of the decoded bitmap
+(an `SKColorFilter` modulate — the same tint primitive the GUI framework's icon renderer uses) and render
+the tinted copy through the existing stretch-to-fill texture path, so the same source PNG can back several
+visually-distinct specs without additional art. A backdrop specification that declares no tint (every
+full-page illustration spec) SHALL be rendered from the decoded bitmap unchanged through the existing
+stretch-to-fill path.
+
+Note: an earlier draft of this requirement anticipated tiling a small vanilla material swatch at native
+resolution plus a composited page-frame overlay. Implementation found (a) the authored clay backdrops are
+full-page illustrations that take the existing stretch path directly, so no tiling was needed, and (b) the
+GUI framework's `BoxStyle` texture path only ever stretches one bitmap to fill and exposes no tint, and it
+lives in the read-only `gui` dependency, so tiling/frame-overlay could not be added there. The tint is
+therefore baked at the bitmap level and the tiling/overlay machinery was dropped — the full-page authored
+art is the design's own stated target state, reached directly.
+
+#### Scenario: An optional tint distinguishes same-source specs
+
+- **WHEN** two backdrop specs name the same source PNG but declare different tint colors
+- **THEN** each renders that PNG in its own tint so the two are visually distinguishable
+
+#### Scenario: Full-page specs are unchanged
+
+- **WHEN** an existing full-page backdrop spec (declaring no tint) is drawn
+- **THEN** it renders through the existing stretch-to-fill path exactly as before
+
+### Requirement: A textured backdrop always renders at full opacity
+
+A themed-mode textured backdrop SHALL render at the opacity authored into its PNG, independent of what any
+prior frame drew. The backdrop-wrapping logic SHALL guarantee this even though the underlying GUI framework
+reuses a single shared paint across draw operations and across frames and its textured-box draw op reuses
+that paint's color without re-setting it — so an unguarded backdrop would be modulated by whatever color the
+previous frame's last draw op happened to leave (e.g. a read-only view whose last painted element is a
+low-alpha scrollbar track, which uniformly faded the backdrop). The guarantee SHALL hold for every themed
+view regardless of which element paints last, and SHALL NOT alter the appearance of any view that was
+already rendering correctly.
+
+#### Scenario: A read-only view's backdrop is fully opaque
+
+- **WHEN** the player opens a themed-mode view whose last-painted element is a low-alpha element (such as
+  the always-visible scrollbar track on a read-only tablet)
+- **THEN** the backdrop renders at its authored opacity rather than being modulated toward transparency by
+  the prior frame's residual paint color
+
+#### Scenario: Correctly-rendering views are unchanged
+
+- **WHEN** the player opens a themed-mode view that already rendered its backdrop opaquely (such as the
+  editor or a tabbed Lectern/Notebook view that paints an opaque element last)
+- **THEN** its backdrop appearance is unchanged
+

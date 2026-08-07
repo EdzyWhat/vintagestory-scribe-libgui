@@ -64,15 +64,15 @@
 
 ## 6. Manual in-game verification
 
-- [ ] 6.1 Manually test in-game: `Shift`+right-click a lectern opens the editor with a new
+- [x] 6.1 Manually test in-game: `Shift`+right-click a lectern opens the editor with a new
       empty task at the top and the caret focused; plain right-click still opens Read; the
-      Editor nav tab still opens the editor with no new task.
-- [ ] 6.2 Manually test in-game: `Shift`+right-click a held Notebook quick-adds (top task +
-      caret); `Ctrl`+`Shift`+right-click places it on the ground; plain right-click opens Read.
-- [ ] 6.3 Manually test in-game: `Shift`+right-click a held Tablet aimed at water quenches a
+      Editor nav tab still opens the editor with no new task. — Confirmed 2026-08-06 playtest (TESTING.md add-unified-quick-add-interaction).
+- [x] 6.2 Manually test in-game: `Shift`+right-click a held Notebook quick-adds (top task +
+      caret); `Ctrl`+`Shift`+right-click places it on the ground; plain right-click opens Read. — Confirmed 2026-08-06 playtest (TESTING.md add-unified-quick-add-interaction).
+- [x] 6.3 Manually test in-game: `Shift`+right-click a held Tablet aimed at water quenches a
       hard tablet; `Shift`+right-click NOT aimed at water quick-adds; `Ctrl`+`Shift`+right-click
-      places it on the ground.
-- [ ] 6.4 Manually test in-game: quick-add on a surface at its task cap opens the editor,
-      inserts no task, and shows the "document full" feedback.
-- [ ] 6.5 Manually test in-game: held-interaction help for Notebook and Tablet lists both the
-      quick-add and the `Ctrl`+`Shift` ground-placement gestures.
+      places it on the ground. — Confirmed 2026-08-06 playtest (TESTING.md add-unified-quick-add-interaction).
+- [x] 6.4 Manually test in-game: quick-add on a surface at its task cap opens the editor,
+      inserts no task, and shows the "document full" feedback. — Confirmed 2026-08-06 playtest (TESTING.md add-unified-quick-add-interaction).
+- [x] 6.5 Manually test in-game: held-interaction help for Notebook and Tablet lists both the
+      quick-add and the `Ctrl`+`Shift` ground-placement gestures. — Confirmed 2026-08-06 playtest (TESTING.md add-unified-quick-add-interaction).

@@ -70,17 +70,22 @@
   speed are still code constants (`DefaultJitterStrength`, `RevealPerStrokeMs`/`RevealPerLetterMs`), tuned
   in-game 2026-08-03 rather than exposed. Note: `ScribeClientConfig` is retired — the real settings home is
   `ScribePlayerSettings` / `scribe-hud-config.json`.
-- [ ] 6.2 Confirm jitter strength 0 + progression off reproduces today's crisp/instant rendering exactly.
-  (Progression off is now toggleable and confirmable; jitter 0 still needs a knob before this can be fully
-  exercised.)
+- [~] 6.2 OBSOLETE 2026-08-06: jitter strength 0 + progression off can't be exercised because the
+  jitter-strength knob was deliberately designed away (progression is a default-off toggle; jitter is a
+  fixed constant), so there is no "jitter-0" state to verify against. Retired, not done — see TESTING.md
+  `42a3a1d1`. Superseded by the shipped design (constants, not knobs).
 - [x] 6.3 Surfaced the progression toggle in Scribe Settings ("Cuneiform press-in"), paired with the
   existing "Cuneiform tablets" toggle; lang key + help added. Jitter strength/speed remain unsurfaced
   (constants) for this round.
 
 ## 7. Verification
 
-- [ ] 7.1 `dotnet build` clean; `dotnet test` — Core coverage for jitter (task 2.3) and stroke identity
-  (task 1.3) and the layout-metrics-invariant-under-jitter check (task 3.4).
+- [x] 7.1 `dotnet build` clean; `dotnet test` — Core coverage for jitter (task 2.3) and stroke identity
+  (task 1.3) and the layout-metrics-invariant-under-jitter check (task 3.4). DONE: `CuneiformTests.cs`
+  covers jitter (`Jitter_StrengthZero_IsIdentity`, `_SameInputs_AreReproducible`, `_Displacement_StaysWithinBounds`,
+  `_ScalesWithGridSize`, …), stroke identity (`Layout_PositionedStroke_CarriesSourceCharIndexAndOrdinal`,
+  `Layout_StrokeOrdinal_CountsWithinGlyph`), and the layout invariant (`Jitter_DoesNotAlterLayoutMetrics`);
+  Core suite green (286/286).
 - [x] 7.2 In-game: type a line with repeated characters; confirm repeated glyphs look different (jitter) and
   the line does NOT shimmer frame to frame. — Confirmed 2026-08-03 playtest (`1d8a57eb`).
 - [x] 7.3 In-game: confirm the caret sits correctly and clicking selects the right character with jitter on
@@ -90,7 +95,9 @@
   2026-08-03 playtest (`d077766c`).
 - [x] 7.5 In-game: delete/edit mid-line; confirm text snaps to the new state with no reverse animation.
   — Confirmed 2026-08-03 playtest (`8fccf5a0`).
-- [ ] 7.6 In-game: set jitter 0 + progression off; confirm rendering is identical to current crisp behaviour.
+- [~] 7.6 OBSOLETE 2026-08-06: same as 6.2 — no jitter-0 setting exists (jitter is a fixed constant by
+  design), so "identical to crisp behaviour" has no reachable state to test. Retired, not done (TESTING.md
+  `42a3a1d1`).
 - [x] 7.7 In-game: evaluate the ghost lead-in; keep only if it reads well, else leave it off by default.
   — Confirmed 2026-08-05 playtest ("the ghost/preview works!"). Opacity tuned 0.28 → 0.22 to read as a
   subtle lead-in. Kept on whenever stroke-progression is on (no separate setting).
