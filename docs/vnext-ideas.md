@@ -236,6 +236,46 @@ if you're **hovering a Scribe item** (in inventory), a hotkey to open *that* ite
   implementation, not an engine or design unknown. Rides along with the v1.2 New Task dropdown (that's
   what makes cross-window use matter).
 
+### 4.4 Draggable pinned-task HUD — 🆕 new (proposed for v1.1)
+Let the player **drag the pinned-task HUD to reposition it**, the way VS windows offer a
+fixed↔movable toggle that frees a grab handle. Author wants this in **v1.1** and wants it
+**nondestructive** to a player's existing HUD placement across the update.
+- **Why NOT the native mechanism (the load-bearing constraint):** VS's built-in movable-window
+  affordance is `WindowConfig.Draggable` — it frees the OS/native window grab handle, which is
+  exactly the "goofy Mac chrome" to avoid. **On macOS the native button/chrome hit-test is broken:**
+  every default VS button's clickable area is only **50% width × 50% height pinned to the top-left**
+  (a Retina/scaling bug), so the top-right, bottom-left, and bottom-right quadrants are *dead pixels*.
+  A native grab handle inherits that same broken hit-test. So the drag handle must be a **custom
+  LibGUI affordance**, since LibGUI does its own hit-testing and isn't subject to the native chrome
+  bug. The HUD already deliberately sets `Draggable = false` (`HudScribePins.CreateWindowConfig`) —
+  keep it false; do not flip it.
+- **Nondestructive is essentially free — the position is ALREADY persisted, and not as raw pixels.**
+  The HUD position is stored in `ScribePlayerSettings` as `HudAnchor` (1 of 7 corners/edges) +
+  `HudOffsetX`/`HudOffsetY` nudge (clamped ±300), re-applied every frame in `HudScribePins.ApplyAnchor()`.
+  There is *already* a Settings UI writing those exact fields (anchor picker + offset sliders). So a
+  drag gesture is just a **second, direct way to write the same two offset fields** the sliders
+  already write — no new persisted state, no schema/codec bump, and a pre-1.1 player's stored
+  anchor+offset is read unchanged after the update (fully nondestructive by construction).
+- **No new engine primitive needed.** LibGUI's `GestureDetector` already exposes
+  `onPress`/`onMove`/`onRelease` (confirmed in `reference/vslibgui/.../GestureDetector.cs`). A drag =
+  onPress captures the grab anchor + starting offset → onMove converts the cursor delta into
+  `HudOffsetX`/`HudOffsetY` (respecting each anchor's sign convention, since +offset always means
+  "toward center" — see the `ApplyAnchor` switch) → onRelease commits via
+  `modSystem.UpdateMySettings(...)` (the same persist path `ToggleCollapsed` uses). Clamp to the
+  existing ±300 `MinHudOffset`/`MaxHudOffset` and the on-screen clamp `ApplyAnchor` already applies.
+- *Open Qs:* (a) **Grab affordance** — a dedicated drag handle glyph in the header row (next to the
+  chevron/gear), or make the whole header draggable (it already has a `GestureDetector` for collapse —
+  would need press-drag vs. tap-collapse disambiguation)? A dedicated handle is cleaner and dodges the
+  tap/drag conflict. (b) **Does dragging across screen quadrants re-pick the `HudAnchor`** (so dragging
+  to the bottom-left snaps the anchor to `BottomLeft` and zeroes the offset), or does it only ever move
+  the offset within the current anchor? Anchor-re-pick is more intuitive for a big move but is more
+  work; offset-only is trivial but caps how far you can drag (±300 from the current anchor). Lean:
+  offset-only for v1.1 (trivial, ships fast), anchor-re-pick as a later polish. (c) **Live preview vs.
+  commit-on-release** — almost certainly live (move the window as you drag, persist on release).
+- *Value/effort feel:* :star::star: value (direct-manipulation QoL that the Settings sliders already
+  approximate), **S effort** — no new primitive, no new persisted state, reuses the existing
+  offset fields + persist path. A clean, self-contained v1.1 inclusion.
+
 ---
 
 ## 5. The Writing Desk (later big tier) — 🗺️ on roadmap (v4)
@@ -452,14 +492,19 @@ the row already carries pin + delete. Two facts keep the picker cheap here:
 *Not specced yet — sequenced into the task-kinds cluster (2.2/2.3), not pulled forward.*
 
 ### :rocket: v1.1 — interim polish release (NEXT)
-Two cheap, visible wins bundled into a fast follow-up:
+Cheap, visible wins bundled into a fast follow-up:
 - **4.1 Faster delete** — kill the mouse-wiggle-to-reveal loop after a row deletes. Small,
   high-satisfaction, closest to a bug.
 - **1.2 Per-tab subtitles + colour theming** — tabs feel like distinct places, not just paper
   swaps.
+- **4.4 Draggable HUD** (author-requested for v1.1, 2026-08-08) — custom LibGUI drag handle on the
+  pinned-task HUD, writing the existing `HudOffsetX/Y` fields (nondestructive; no new state). Small,
+  self-contained, direct-manipulation QoL. Avoids the native movable-window chrome (broken on macOS —
+  50%×50% top-left hit-test).
 
-*Why these two:* both small, both immediately visible to a returning player, and together they
-justify a release note without a big build. Keeps us high on the "recently updated" board.
+*Why these:* all small, all immediately visible to a returning player, and together they justify a
+release note without a big build. Keeps us high on the "recently updated" board. (4.4 is the newest
+add; if it slips, 4.1 + 1.2 still stand as the release on their own.)
 
 ### :mag: Exploration candidate (scope-check before building)
 - **2.2 Tracked (numeric progression) tasks** — high value, but *feels* like a big chunk. Author
