@@ -185,18 +185,47 @@ if you're **hovering a Scribe item** (in inventory), a hotkey to open *that* ite
   is open, and `TryOpen()` **coexists** (never closes the others — it only un-focuses them). One
   hazard: a focused text field (Handbook search / Scribe editor row) eats plain keys → bind a
   **modifier combo** or mark the hotkey global. **No coexistence spike needed.**
-- *Which Scribe item opens (decided):* design for the **majority case — the player carries exactly
-  one Scribe item** — and open that. If they carry **multiple**, pop an error ("You have multiple
-  Scribe items") rather than guessing. This defers the disambiguation UX (hovered slot? active
-  hotbar? last-used doc?) down the roadmap until it's actually needed.
-- *Still open (UX research queued):* trigger pattern (global hotkey vs. hover-target key vs. in-UI
-  button vs. right-click-in-inventory), VS-native precedents so it doesn't feel bolted-on,
-  multi-window ergonomics (positioning/focus handoff), default key + Scribe Settings keybind. A deep
-  UX-pattern research pass is planned when there's time.
+- **Trigger design (decided 2026-08-07 after a two-front UX-research pass — VS-native precedents +
+  cross-game/note-app patterns):** ship a **single hover-aware toggle hotkey**, mirroring vanilla's
+  Survival Handbook (`H`/`Shift+H`) and Scribe's own pin-HUD (`P`) rather than inventing a pattern.
+  - *Hotkey type:* register in `HotkeyType.GUIOrOtherControls` (a **modifier combo or a free
+    non-letter key**, never a bare letter under the default `CharacterControls` type — that type is
+    suppressed while a dialog is focused and a focused text field swallows plain letters). Scribe's
+    `scribepinhud` on `P` already does exactly this (`ScribeModSystem.cs:245`, with a comment
+    "so it fires even while a dialog is open") — mirror it. Default key + a Scribe Settings rebind;
+    avoid the taken defaults (E, C, H, M, T, Q, P, F-keys).
+  - *Dialog exposes `ToggleKeyCombinationCode`* so re-pressing the key closes just that window (the
+    vanilla World Map / Macro Editor toggle idiom).
+  - *Which item opens — resolution ladder (revised from the old "error on multiple"):* **(1) hovered
+    inventory slot** (`InventoryManager.CurrentHoveredSlot` — the exact field the Handbook's H/Shift+H
+    and the Q-drop key use; if you're hovering a Scribe item, *that* one opens, zero ambiguity) → **(2)
+    active hotbar slot** if it's a Scribe item → **(3) last-used Scribe item** (cheap to store, correct
+    ~90% of the time) → **(4) single-candidate auto-open** if the player owns exactly one anywhere. Only
+    if none of those resolve does anything user-facing happen. This replaces the earlier plan to pop a
+    "you have multiple Scribe items" error — research flagged that error as the one dead-end in the
+    flow (it punishes a legitimate state with no path forward); last-used-wins removes it at near-zero
+    cost.
+- **Quick-capture path folded in (decided 2026-08-07):** design the full-open trigger *and* a
+  lightweight **quick-jot** path (one keypress → type a line → done, distinct from opening the full
+  tablet) together in this v1.2 change. Note-app research is emphatic that **capture friction is the
+  #1 killer of note tools** — a survival note tool wants a near-zero-context-switch "get the thought
+  out" flow separate from the full editor. The v1.0 `Shift+right-click` quick-add covers the
+  world/held gesture; this adds the keyboard-first jot for when a GUI is already up. (Its own hotkey,
+  same `GUIOrOtherControls` discipline; lands where the jot goes must be visible so there's no
+  "where did my note go" gap.)
+- **Multi-window ergonomics to bank (DLL-confirmed, flag to the eventual spec):** (a) **Escape closes
+  *every* open dialog at once** — vanilla has no per-window Escape (`GuiManager.OnEscapePressed` loops
+  the whole open set), so single-window dismissal must be the window's own X button or a re-press of
+  its toggle key. (b) **Vanilla draws no focus indicator** — with Scribe + Handbook both open, nothing
+  shows which one keyboard input goes to; if that matters (it does, since both have text fields),
+  Scribe must render the active-window cue itself. (c) LibGUI's `WindowConfig.Position` lets us anchor
+  Scribe **off-center** so it doesn't open exactly atop a center-anchored inventory/handbook (the
+  "did the first window vanish?" failure mode); persist a user-dragged position rather than
+  re-centering on reopen.
 - *Value/effort feel:* :star::star: value (quality-of-life, grows with cross-window features),
-  **S–M effort now** that the mechanics are known — the remaining work is the trigger-UX decision,
-  not an engine unknown. Rides along with the v1.2 New Task dropdown (that's what makes cross-window
-  use matter).
+  **S–M effort now** that the mechanics are known and the trigger is decided — the remaining work is
+  implementation, not an engine or design unknown. Rides along with the v1.2 New Task dropdown (that's
+  what makes cross-window use matter).
 
 ---
 
