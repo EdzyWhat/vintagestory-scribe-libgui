@@ -56,6 +56,29 @@ A long pen-like **stylus** modelled attached to the side of each Tablet, reinfor
 - *Note:* the v3 spec explicitly shipped "no offhand stylus" as a mechanic — this is a purely
   cosmetic model element, not a held offhand item, so it doesn't reopen that decision.
 
+### 1.6 Add `<` and `>` glyphs to the cuneiform font — 🆕 new (proposed for v1.1, art-gated)
+Author two new cuneiform glyphs for the **less-than / greater-than** characters so tablet text can
+render them. Author wants this in **v1.1**.
+- **This is NEW ART, not a Core alias.** The shipped bundle
+  (`src/Mod/assets/scribe/textures/fonts/cuneiform-glyphs-1.json`) carries **54** authored
+  characters today — `A–Z 0–9 . , ' - : ; ! ? " ( ) + / = % # * @` — with **no `<` or `>`** (verified
+  2026-08-08). Unlike the `& → +` and `[ ] { } → ( )` aliases in `CuneiformLineLayout.Aliases` (which
+  only work because an existing glyph resembles the target), `<`/`>` have no lookalike to alias to —
+  the nearest, `(`/`)`, are semantically wrong. So they must be **drawn** in the sibling **glyph-forge**
+  tool (`~/claude/glyph-forge/`), which is where the individual `glyph-*.json` source files live (the
+  bundle is `generatedFrom: glyphs/glyph-*.json` — the per-glyph sources are NOT in this repo).
+- **Work involved (small, well-trodden path — same as the prior `+ / = % # * @` symbol sync):**
+  (1) author `<` and `>` glyph strokes in glyph-forge; (2) regenerate/re-sync the combined bundle
+  JSON; (3) bump `characterCount` 54 → 56; (4) update the `CuneiformTests` authored-count assertion
+  (`Parse_ShippedBundle_ContainsAllAuthoredCharacters`, currently expecting 54); (5) smoke-test the
+  render via the `.cuneiform <text>` client harness (dot-prefix client command). No Core alias entry
+  needed (they're real authored glyphs, not stand-ins).
+- *Why now:* rounds out the ASCII-symbol coverage and pairs naturally with any future comparison/
+  arrow-ish plaintext conventions; also just completes the "type any symbol on a tablet" expectation.
+- *Value/effort feel:* :star: value (completeness/polish), **S effort but art-gated** — the code path
+  is trivial and proven; the gate is drawing two legible glyphs that read as `<`/`>` in the cuneiform
+  style. Cross-reference [[cuneiform-character-coverage-plan]] for the prior coverage pass.
+
 ---
 
 ## 2. New task types — "New Task" dropdown
@@ -501,10 +524,14 @@ Cheap, visible wins bundled into a fast follow-up:
   pinned-task HUD, writing the existing `HudOffsetX/Y` fields (nondestructive; no new state). Small,
   self-contained, direct-manipulation QoL. Avoids the native movable-window chrome (broken on macOS —
   50%×50% top-left hit-test).
+- **1.6 Cuneiform `<`/`>` glyphs** (author-requested for v1.1, 2026-08-08) — draw two new glyphs in
+  glyph-forge, regenerate the bundle (count 54 → 56), bump the `CuneiformTests` assertion. Trivial,
+  proven code path; art-gated on drawing the two glyphs.
 
 *Why these:* all small, all immediately visible to a returning player, and together they justify a
-release note without a big build. Keeps us high on the "recently updated" board. (4.4 is the newest
-add; if it slips, 4.1 + 1.2 still stand as the release on their own.)
+release note without a big build. Keeps us high on the "recently updated" board. (4.4 and 1.6 are the
+newest adds; each is self-contained, so if any slips the rest still stand as the release. 1.6 is
+art-gated — it ships only once the two glyphs are drawn.)
 
 ### :mag: Exploration candidate (scope-check before building)
 - **2.2 Tracked (numeric progression) tasks** — high value, but *feels* like a big chunk. Author
