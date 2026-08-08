@@ -73,9 +73,12 @@ Options: **Standard** · **Linked (Handbook)** · **Tracked (numeric goal)** · 
 Track collecting items against a goal (e.g. "collect 32 reeds"). When editing a row, an extra
 button (alongside pin & delete) spins out a **wizard/modal**: pick an item + a count, and the task
 then tracks against the player's inventory, showing progress.
-- *Open Qs:* how is the item picked (a creative-style item search? handbook picker?)? Does progress
-  auto-complete the task at goal? Polling inventory (we already poll inventory for
-  milestone-suggested tasks per the chronicle spec — reuse that mechanism). Client-local vs. synced.
+- *Item picking — RESOLVED 2026-08-08:* a creative-style **search-first picker**, embedded as a
+  temporary sub-view (see §Picker — RESOLVED in the Prioritization section). Open Q narrows to the
+  *entry point*, not the picker itself (see the real-estate note in that subsection).
+- *Open Qs:* Does progress auto-complete the task at goal? Polling inventory (we already poll
+  inventory for milestone-suggested tasks per the chronicle spec — reuse that mechanism).
+  Client-local vs. synced.
 - *Design overlap:* the chronicle spec's "milestone-suggested tasks (self-detected via inventory
   polling)" is the same primitive — build once, use for both.
 
@@ -353,13 +356,12 @@ A single-dev backlog single-threads, so the useful question isn't "what's the ve
   rationale — mechanically they're independent).
 - **New Task dropdown (2.1)** — a cheap shell (M), but *pointless without at least one non-Standard
   kind to host*. So it never ships alone; it ships *with* Linked or Tracked.
-- **Linked (2.3)** and **Tracked (2.2)** — **both sit on ONE shared, unsolved dependency: an easy
-  in-game *picker*.** Linked needs "pick a Handbook entry"; Tracked needs "pick an item type." This
-  is the keystone — and it's exactly the author's stated fear ("it has to be EASY, and there's no
-  type-ahead search in the game"). *Crack the picker and both kinds open up.* A focused picker-UX
-  research pass is queued (2026-08-07) to confirm/refute whether VS's creative-inventory search,
-  handbook search, or the hovered-slot gesture can be reused instead of building a search UI from
-  scratch.
+- **Linked (2.3)** and **Tracked (2.2)** — **both sit on ONE shared dependency: an easy in-game
+  *picker*.** Linked needs "pick a Handbook entry"; Tracked needs "pick an item type." This is the
+  keystone — and it was the author's stated fear ("it has to be EASY, and there's no type-ahead
+  search in the game"). *Crack the picker and both kinds open up.* **RESOLVED 2026-08-08** — see
+  the "Picker — RESOLVED" subsection below. Bottom line: it's a *Small* embedded search-first
+  sub-view, not a scary new screen and not an XL rebuild.
 - **Crafting (2.5)** — sits *on top of* Tracked (same inventory-poll + progress machinery; a recipe
   is just the *source* of the goals). Gated on Tracked existing. A later follow-up, not a peer.
 - **Mapped (2.4)** — orthogonal; its own map-UI surface, doesn't touch the picker. Independent, heavier.
@@ -368,6 +370,79 @@ A single-dev backlog single-threads, so the useful question isn't "what's the ve
 research question*, not an open-ended build — resolve it first, and the sequencing of 2.1/2.2/2.3
 falls out of the answer. Until then, the trigger (4.3) is the one post-v1.1 feature that can move
 with no blockers.
+
+### :key: Picker — RESOLVED (2026-08-08, two research passes: discoverability UX + VS-native feasibility)
+
+**Decision — first cut is search-only, embedded, Small.** An **auto-focused search field sitting
+on top of an always-populated, virtualized result list**, opened by a labeled **"+ Add item"**
+button (never a bare hotkey/gesture as the sole opener — a curious, non-super-user player only
+reliably finds a labeled button). This is the creative-inventory / JEI model the player is already
+trained on: a novice sees a default set of clickable items and clicks; a power-user types "flax"
+and hits Enter. It **never shows an empty resultless box** (the exact failure mode that makes raw
+type-ahead undiscoverable), because a default result set is visible from the moment it opens.
+Directly serves the real use case — *"I need 100 flax and have zero"* — which hover-to-pick
+**cannot** (you can't hover an item you don't have). Category browsing is deferred (see below).
+
+**The author's two fears, both refuted with source evidence:**
+
+- **"A scary new screen suddenly pops up" — NO.** Scribe already switches among 6 views inside its
+  one window (Read / Editor / Pinned / Visitors / History / Timer) via a `viewMode` flag +
+  `ForceRebuild()` (`src/Mod/ScribeDialogBase.ViewSwitching.cs`, `ScribeDialogBase.cs:87`). The
+  picker is just a **7th view in that same machinery** — same "the dialog changed pages" feel the
+  player already knows, no new `GuiDialog`, no context switch. (LibGUI also ships `Overlay` +
+  `Stack`/`Positioned` if a float-over-current-view drawer is ever preferred, but the existing
+  view-switch is lowest-risk.)
+- **"An insane amount to rebuild from scratch" — NO, it's S.** The heavy parts already ship in the
+  `gui` 3.1.0 dep. Reuse: `TextField` + `TextEditingController` (Scribe already uses these),
+  `ListView.Builder` (virtualizes — keeps ~15 live rows out of thousands, so a full catalog is
+  performance-safe), and `ItemStackDisplay(new ItemStack(collectible))` to draw each item's icon
+  from just its collectible. Filter is a **public API**: `ItemStack.MatchesSearchText(world, text)`
+  / `StringUtil.ToSearchFriendly`. Catalog source is `capi.World.Collectibles`. Net-new is just a
+  row widget (icon + name), the controller→refilter wiring, and the on-pick callback. **The XL fear
+  was imagining a reimplementation of the creative-inventory `GuiElementItemSlotGrid` — which is
+  welded to `IInventory` and which you never touch.** Precedent: the survival Handbook builds its
+  whole browsable catalog off exactly this seam (`ModSystemSurvivalHandbook.SetupBehaviorAndGetItemStacks`
+  → `GetHandBookStacks` over `capi.World.Collectibles`).
+
+**Categories exist and cost zero taxonomy — but are deferred to a later cut.** Every item carries
+`CollectibleObject.CreativeInventoryTabs` (14 fixed tab codes: `general, flora, terrain, decorative,
+clutter, construction, mechanics, aquatic, items, liquids, tools, clothing, creatures, meta`), plus
+`EnumTool Tool` (Pickaxe/Axe/Sword/…) and 1.22's `TagSet Tags`. Other mods self-register into these
+same tabs, so the taxonomy auto-extends across mods/updates — **Scribe authors and maintains
+nothing.** The one honest asterisk: tabs are *coarse* — most items dump into a giant `"general"`
+bucket — so category **drill-down works but isn't granular**. Therefore, when categories are added
+they should be an **optional filter chip on top of search**, never a mandatory drill-down over VS's
+coarse taxonomy. Not in the first (search-only) cut.
+
+**Icon rendering confirmed:** `new ItemStack(CollectibleObject, stacksize)` is a valid display stack
+for any collectible (no inventory slot needed); LibGUI's `ItemStackDisplay` renders it via a cached
+offscreen `ItemStackRenderer`, so a list of many icons doesn't re-render each frame.
+
+**Needs-confirmation before build (small):** exact vanilla collectible count (functionally moot —
+both `ListView` and `GridView.Builder` virtualize); how thoroughly vanilla items populate 1.22
+`Tags` (only matters if we ever prefer tag facets over creative-tab facets); and a sanity-check that
+`GridView.Builder` virtualization in shipped `Gui.dll` 3.1.0 matches the 2.0.0 source clone (only
+relevant if a *grid* cut is chosen later — the search-only list cut doesn't need it).
+
+**Real-estate constraint (author, 2026-08-08) — the picker must not permanently cost chrome.** The
+task manager is deliberately kept *small* (< 500 px wide in-game); buttons must earn their place and
+the row already carries pin + delete. Two facts keep the picker cheap here:
+- **The picker sub-view itself is free** — it's a temporary full-window takeover (the 7th
+  `viewMode`) that borrows the whole dialog while open and hands it back. Nothing new sits in the
+  steady-state layout.
+- **Two entry points, different costs.** (a) Picking the task *kind* rides on the existing **New
+  Task** action — upgrading it to a dropdown (2.1) adds *no* new button. (b) Picking the *item*
+  inside a Tracked task is per-row, and this is where a third always-visible row icon would violate
+  the "earn its place" rule. Author's steer: surface item-picking via a **collapsible / right-click
+  / dropdown affordance**, not a permanent per-row button. *Open fork — pick before speccing:*
+  (i) **right-click a row** opens the item picker (zero chrome; discoverability risk for a curious
+  player — mitigate with an instructive empty-state hint on a fresh Tracked row); (ii) **the row
+  expands** only when it's a Tracked kind, revealing an inline "pick item" control (chrome only when
+  the kind needs it — costs nothing on Standard rows); (iii) **a hover-revealed row icon** (like the
+  existing pin/delete affordances). Leaning (ii) — it keeps Standard rows pristine and makes the
+  control appear exactly when it's relevant.
+
+*Not specced yet — sequenced into the task-kinds cluster (2.2/2.3), not pulled forward.*
 
 ### :rocket: v1.1 — interim polish release (NEXT)
 Two cheap, visible wins bundled into a fast follow-up:
