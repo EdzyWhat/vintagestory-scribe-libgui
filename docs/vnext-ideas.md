@@ -175,13 +175,28 @@ if you're **hovering a Scribe item** (in inventory), a hotkey to open *that* ite
 - *Why it matters now:* the crafting task (2.5) and linked/handbook task (2.3) both create moments
   where the player is in the Handbook and wants to jot into Scribe, or is in inventory and wants to
   check a list — the current close-everything flow fights that.
-- *Open Qs:* global hotkey (opens the held/active Scribe doc) vs. hover-target hotkey (opens the
-  item under the cursor in inventory) — or both? How do two stacked GUI dialogs coexist (VS dialog
-  stacking / focus rules — check whether a `GuiDialog` can open over the inventory/handbook without
-  the game auto-closing one)? Does it respect the same open/close guards as right-click open? Which
-  default key, and does it belong in Scribe Settings' keybinds?
+- **Reframe (2026-08-07):** this is NOT a coexistence problem. VS already runs many dialogs at once
+  (Scribe+inventory, Handbook+inventory, dozens of block inventories), with **Alt** toggling
+  cursor-vs-camera mode. The *only* missing piece is a **trigger** to open a held Scribe item while
+  a GUI already has focus — today the sole open-path is a world-space right-click, which requires no
+  GUI be open, so you're forced to close everything.
+- **Engine facts confirmed** (decompiled — see `VSAPI-NOTES.md` "can a client hotkey OPEN a dialog
+  while another GUI is focused"): a client hotkey CAN open a Scribe dialog while inventory/Handbook
+  is open, and `TryOpen()` **coexists** (never closes the others — it only un-focuses them). One
+  hazard: a focused text field (Handbook search / Scribe editor row) eats plain keys → bind a
+  **modifier combo** or mark the hotkey global. **No coexistence spike needed.**
+- *Which Scribe item opens (decided):* design for the **majority case — the player carries exactly
+  one Scribe item** — and open that. If they carry **multiple**, pop an error ("You have multiple
+  Scribe items") rather than guessing. This defers the disambiguation UX (hovered slot? active
+  hotbar? last-used doc?) down the roadmap until it's actually needed.
+- *Still open (UX research queued):* trigger pattern (global hotkey vs. hover-target key vs. in-UI
+  button vs. right-click-in-inventory), VS-native precedents so it doesn't feel bolted-on,
+  multi-window ergonomics (positioning/focus handoff), default key + Scribe Settings keybind. A deep
+  UX-pattern research pass is planned when there's time.
 - *Value/effort feel:* :star::star: value (quality-of-life, grows with cross-window features),
-  **M effort** — the unknown is VS's dialog-stacking behavior; may need a spike.
+  **S–M effort now** that the mechanics are known — the remaining work is the trigger-UX decision,
+  not an engine unknown. Rides along with the v1.2 New Task dropdown (that's what makes cross-window
+  use matter).
 
 ---
 
@@ -338,3 +353,13 @@ justify a release note without a big build. Keeps us high on the "recently updat
   (and future VS-modding) planning, instead of living in the Salesforce enterprise workspace where
   the Big Board canvas currently sits. Low effort, purely organizational. (Added to the board
   half-jokingly, but genuinely useful for keeping game-dev context separate.)
+  - **Verdict (2026-08-07): parked — leaning strongly no.** The decisive issue is **MCP
+    portability**: the Claude↔Slack connection is authorized against the Salesforce *Enterprise
+    Grid* org (`enterprise.slack.com`, team `T01G0063H29`), which is employer-provisioned. A
+    personal free workspace is a separate tenant, and there's no reason to expect the existing MCP
+    grant to reach it — so we'd likely **lose CLI/MCP Slack access entirely** on the new workspace.
+    That trades the *big* convenience (agent-driven canvas/message editing) for the *small* one
+    (tidiness), whose upside was never clear. Free-tier limits pile on: 90-day history (>1yr
+    permanently deleted), max 10 app integrations, one-to-one external only — more ways for the MCP
+    to fail to attach. Only way to fully confirm portability is to actually try adding the connector
+    to a new workspace; not worth the spend unless that itch returns.

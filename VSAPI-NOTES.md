@@ -833,6 +833,37 @@ rebindable hotkey?** (For the v5 pinned-task HUD — decompiled, not yet exercis
   shift)` + `SetHotKeyHandler(code, ActionConsumable<KeyCombination>)` (handler returns bool =
   consumed); register in `StartClientSide`; rebindings persist by code in `clientsettings.json`.
 
+**Question: can a client hotkey OPEN a dialog while another GUI (inventory/Handbook) is already
+open and focused, and will they coexist?** (For the backlog "open held Scribe item without closing
+other windows" idea — decompiled `VintagestoryLib.dll`/`VintagestoryAPI.dll`, not yet exercised.)
+
+- **Yes to both.** `ClientMain.OnKeyDown` dispatches every keydown in a fixed order: (1) mod
+  `IClientEventAPI` keydown hook, (2) **global** hotkeys (`IsGlobalHotkey == true`), (3) the client
+  systems — **`GuiManager` is here, forwarding to open dialogs**, (4) **normal** hotkeys. Each stops
+  the chain if it sets `args.Handled`. So the GUI system gets the key BEFORE normal hotkeys.
+- A normal (non-global) hotkey therefore fires while a dialog is open **as long as the focused
+  dialog doesn't consume that exact key**. `GuiManager.OnKeyDown` only forwards to dialogs where
+  `ShouldReceiveKeyboardEvents()` (base: `=> focused`) — i.e. only the ONE focused dialog — and a
+  `GuiComposer` only marks `Handled` when an interactive element eats the key. **The real hazard is
+  a focused text input** (Handbook search box, Scribe editor rows) swallowing plain letter/number
+  keys. Avoid it by binding a **modifier combo** (Ctrl/Alt/Shift+key) or a function key, OR set the
+  hotkey `IsGlobalHotkey = true` (`capi.Input.GetHotKeyByCode(code).IsGlobalHotkey = true`) so it
+  fires in step 2 **before any dialog sees the key** — vanilla does this for screenshot/fullscreen.
+  Use a non-`CharacterControls` `HotkeyType` (e.g. `GUIOrOtherControls`) or the key is gated on
+  `allowCharacterControls`, false while a dialog is focused.
+- **Opening a dialog does NOT close others.** `GuiDialog.TryOpen(withFocus)` registers into
+  `capi.Gui.LoadedGuis`, sets `opened`, and (for `DialogType == Dialog` with focus) calls
+  `Gui.RequestFocus(this)` — which reorders to front and calls `UnFocus()` on every OTHER dialog.
+  It **un-focuses, never closes** them; they stay `opened` and rendering. So a hotkey-opened Scribe
+  dialog **coexists** with the inventory/Handbook. Focus model: exactly one focused dialog gets
+  keyboard; mouse goes to any opened dialog and clicking a background one refocuses it
+  (`RequestFocus`). On close, `GuiManager.OnGuiClosed` auto-refocuses the first remaining focusable.
+- **Alt mouse-mode is unaffected by stacking.** Alt = hotkey `"togglemousecontrol"`. Any open
+  `Dialog`-type with `PrefersUngrabbedMouse` (default true) already frees the cursor;
+  `ClientMain.UpdateFreeMouse()` XORs that with Alt-held. Inventory/Handbook already ungrab, so
+  opening another `PrefersUngrabbedMouse` Scribe dialog on top changes nothing — Alt still toggles
+  camera-look for the whole open set.
+
 ## World config (`worldconfig.json`) — staging + the `playStyles` main-menu crash
 
 **Symptom: main menu crashes with `NullReferenceException` in
