@@ -205,14 +205,15 @@ if you're **hovering a Scribe item** (in inventory), a hotkey to open *that* ite
     "you have multiple Scribe items" error — research flagged that error as the one dead-end in the
     flow (it punishes a legitimate state with no path forward); last-used-wins removes it at near-zero
     cost.
-- **Quick-capture path folded in (decided 2026-08-07):** design the full-open trigger *and* a
-  lightweight **quick-jot** path (one keypress → type a line → done, distinct from opening the full
-  tablet) together in this v1.2 change. Note-app research is emphatic that **capture friction is the
-  #1 killer of note tools** — a survival note tool wants a near-zero-context-switch "get the thought
-  out" flow separate from the full editor. The v1.0 `Shift+right-click` quick-add covers the
-  world/held gesture; this adds the keyboard-first jot for when a GUI is already up. (Its own hotkey,
-  same `GUIOrOtherControls` discipline; lands where the jot goes must be visible so there's no
-  "where did my note go" gap.)
+- **Quick-capture — reconsidered, likely redundant (2026-08-07):** an earlier note here proposed a
+  separate one-key "quick-jot" mini-dialog (the v5 spec's `scribequickadd`). On review that is
+  **largely already shipped**: the v1.0 **Shift+right-click quick-add** opens the editor with a fresh
+  task at the top, caret focused — one gesture, no scrolling. And the *plain-Enter* editor gesture
+  already commits-and-inserts-a-new-task-below (`ScribeMultilineField.cs`), so in-editor capture is
+  also a single key. Once the hover-aware **open trigger** above exists, a distinct one-line dialog
+  adds little over "open the item + Enter." **Not carrying quick-capture as its own feature** unless a
+  concrete gap surfaces that the trigger + Shift+RC + Enter don't already cover. (Guards against the
+  recurring trap of re-listing shipped capability as backlog — checked against CHANGELOG 1.0.)
 - **Multi-window ergonomics to bank (DLL-confirmed, flag to the eventual spec):** (a) **Escape closes
   *every* open dialog at once** — vanilla has no per-window Escape (`GuiManager.OnEscapePressed` loops
   the whole open set), so single-window dismissal must be the window's own X button or a re-press of
@@ -341,6 +342,32 @@ delivery order is whatever sparks joy. A bias toward **frequent, small releases*
 each release bumps Scribe up the ModDB "recently updated" board, which plausibly drives downloads
 — a source of genuine motivation. (Perspective check: v1.0 shipped today; the mod didn't exist 10
 days ago. We're fine. Ship often, enjoy it.)
+
+### :link: Dependency map (pressure-test 2026-08-07 — what actually gates what)
+
+A single-dev backlog single-threads, so the useful question isn't "what's the version list" but
+"what unlocks what." The post-v1.1 items untangle like this:
+
+- **Held-item open trigger (4.3)** — *zero dependencies*, fully designed, S–M. Can ship as its own
+  small release **anytime**; it does not need the New Task dropdown (we'd coupled them on a soft
+  rationale — mechanically they're independent).
+- **New Task dropdown (2.1)** — a cheap shell (M), but *pointless without at least one non-Standard
+  kind to host*. So it never ships alone; it ships *with* Linked or Tracked.
+- **Linked (2.3)** and **Tracked (2.2)** — **both sit on ONE shared, unsolved dependency: an easy
+  in-game *picker*.** Linked needs "pick a Handbook entry"; Tracked needs "pick an item type." This
+  is the keystone — and it's exactly the author's stated fear ("it has to be EASY, and there's no
+  type-ahead search in the game"). *Crack the picker and both kinds open up.* A focused picker-UX
+  research pass is queued (2026-08-07) to confirm/refute whether VS's creative-inventory search,
+  handbook search, or the hovered-slot gesture can be reused instead of building a search UI from
+  scratch.
+- **Crafting (2.5)** — sits *on top of* Tracked (same inventory-poll + progress machinery; a recipe
+  is just the *source* of the goals). Gated on Tracked existing. A later follow-up, not a peer.
+- **Mapped (2.4)** — orthogonal; its own map-UI surface, doesn't touch the picker. Independent, heavier.
+
+**Keystone takeaway:** the picker is the lock on the entire "task kinds" family. It's a *bounded
+research question*, not an open-ended build — resolve it first, and the sequencing of 2.1/2.2/2.3
+falls out of the answer. Until then, the trigger (4.3) is the one post-v1.1 feature that can move
+with no blockers.
 
 ### :rocket: v1.1 — interim polish release (NEXT)
 Two cheap, visible wins bundled into a fast follow-up:
