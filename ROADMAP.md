@@ -19,7 +19,7 @@ age (the saw); anything past that is cosmetic.
 | Scratch | Clay & wax tablet (handheld) | up to 10 tasks, 1 pin; clay dries hard → re-wet in water or fire to make permanent; wax always rewritable | **shipped v1.0** |
 | ~~Scratch+~~ | ~~Reed/cattail paper~~ | ~~a few more lines~~ | **cut** — the clay→wax step already covers the low tier; a paper micro-tier added no capability |
 | Collection | Leather-bound notebook | infinite pages | **shipped v0.2** |
-| Organization | Writing desk (private block) | consolidates notes; copy/paste export between Lectern/Notebook/Desk | planned **v1.1** |
+| Organization | Writing desk (private block) | consolidates notes; copy/paste export between Lectern/Notebook/Desk | planned **v1.2+** (after the v1.1 polish release) |
 | Portability | Pinned-task HUD | pins from any source shown on an always-on HUD; quick-add gesture | **HUD shipped** (v0.1); backpack container **cut** |
 | Social | Bulletin board (public) + chalkboard | shared board; chalkboard is drawable | planned (Board) |
 
@@ -58,7 +58,7 @@ age (the saw); anything past that is cosmetic.
   - **Added beyond the spec:** tablet text renders in a bespoke **cuneiform script** by default
     (toggleable in Settings), and the unified **Shift+right-click quick-add** gesture (see v5) — a
     BREAKING change to the lectern/held-item interaction map — landed alongside this tier.
-- **v4 — Writing desk (organization)** *(planned, v1.1)* → `docs/specs/v4-writing-desk.md`. Private owner-gated
+- **v4 — Writing desk (organization)** *(planned, v1.2+ — after the v1.1 polish release)* → `docs/specs/v4-writing-desk.md`. Private owner-gated
   block; consolidates notes + categories; **kanban tabs** (Active / Backlog / Completed) as
   the fuller home for the completed-task funnel. Also the home for **within-document search**
   (a text box filtering the desk's rows by typed query — reuses the kanban filtered-row-list

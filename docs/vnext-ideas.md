@@ -98,6 +98,22 @@ Notebook.
 - *Open Qs:* does it create a real vanilla waypoint/marker? Two-way sync (edit on map ↔ edit in
   notebook)? Does this need the Desk, or work on a held Notebook?
 
+### 2.5 Crafting task — 🆕 new
+Pick a target **item to craft**, and Scribe captures **all its ingredients** into a numeric task
+(or a checklist of numeric sub-goals) so the player gets help gathering everything the recipe
+needs. Essentially "Tracked task, auto-populated from a recipe."
+- *Relationship to 2.2:* builds directly on the Tracked (numeric goal) primitive — the difference
+  is the *source* of the goals: 2.2 is a single hand-entered item+count; 2.5 derives the whole set
+  from a recipe. Almost certainly should be built after (or with) 2.2, sharing the inventory-poll +
+  progress-render machinery.
+- *Open Qs:* how deep does ingredient capture go — just the **direct** grid/recipe inputs, or
+  **recursively** down to raw materials (e.g. planks → logs)? Recursive is far more useful but much
+  harder (multi-level recipe graph + intermediate crafting steps). Start with direct inputs. Which
+  recipe does it read (grid recipe by item code — VS exposes these)? How are multi-output or
+  variant recipes handled? Does completing the gather auto-suggest the craft?
+- *Value/effort feel:* :star::star::star: value (this is a genuinely useful survival aid), but
+  **L effort** — gated on 2.2 existing first and on the direct-vs-recursive scope decision.
+
 ---
 
 ## 3. Ambient / world-visible tasks
@@ -150,11 +166,28 @@ just **undo of task deletion**.
 - *Triage lean:* if pursued, undo-delete-only is dramatically cheaper than full text undo and
   covers the most painful loss. Full undo is likely out of scope / off-theme.
 
+### 4.3 Open a held Scribe item without closing other windows — 🆕 new
+Today the only way to open a Scribe item is to close everything else first. As features start to
+bleed across windows (handbook links, crafting tasks referencing recipes, etc.), it becomes
+valuable to open your Tablet/Notebook/carried Scribe item **while the inventory or Handbook is
+already open**. Idea: a **hotkey** that opens the held Scribe item over the current screen — or,
+if you're **hovering a Scribe item** (in inventory), a hotkey to open *that* item.
+- *Why it matters now:* the crafting task (2.5) and linked/handbook task (2.3) both create moments
+  where the player is in the Handbook and wants to jot into Scribe, or is in inventory and wants to
+  check a list — the current close-everything flow fights that.
+- *Open Qs:* global hotkey (opens the held/active Scribe doc) vs. hover-target hotkey (opens the
+  item under the cursor in inventory) — or both? How do two stacked GUI dialogs coexist (VS dialog
+  stacking / focus rules — check whether a `GuiDialog` can open over the inventory/handbook without
+  the game auto-closing one)? Does it respect the same open/close guards as right-click open? Which
+  default key, and does it belong in Scribe Settings' keybinds?
+- *Value/effort feel:* :star::star: value (quality-of-life, grows with cross-window features),
+  **M effort** — the unknown is VS's dialog-stacking behavior; may need a spike.
+
 ---
 
-## 5. The Writing Desk (v1.1 tier) — 🗺️ on roadmap (v4)
+## 5. The Writing Desk (later big tier) — 🗺️ on roadmap (v4)
 
-The Desk is already the planned **v1.1** tier (`docs/specs/v4-writing-desk.md`): private
+The Desk is the next *big* tier (`docs/specs/v4-writing-desk.md`): private
 owner-gated block, consolidates notes, kanban tabs, within-document search, faction/shared
 task-assignment. The ideas below expand or stress-test that scope.
 
@@ -210,7 +243,7 @@ drawers).
 Author's own framing, preserved verbatim in spirit: *"The Desk's fantasy is really expansive, and
 very developed — but it might not feel as grounded and real as the rest of Vintage Story, which is
 the main thing that concerns me. That and the massive scope. Maybe it's an iterative thing..."*
-- **Triage implication:** the Desk should ship as a **minimal v1.1 core** (place block + copy/paste
+- **Triage implication:** the Desk should ship as a **minimal core release** (place block + copy/paste
   + maybe kanban tabs) with the expansive features (CSV, assignment, search) as later increments —
   each earning its place against real player demand and the immersion bar.
 
@@ -265,7 +298,7 @@ each release bumps Scribe up the ModDB "recently updated" board, which plausibly
 — a source of genuine motivation. (Perspective check: v1.0 shipped today; the mod didn't exist 10
 days ago. We're fine. Ship often, enjoy it.)
 
-### :rocket: v1.2 — interim polish release (NEXT)
+### :rocket: v1.1 — interim polish release (NEXT)
 Two cheap, visible wins bundled into a fast follow-up:
 - **4.1 Faster delete** — kill the mouse-wiggle-to-reveal loop after a row deletes. Small,
   high-satisfaction, closest to a bug.

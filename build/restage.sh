@@ -60,6 +60,12 @@ rm -rf "$STAGE/assets"
 if [[ -d src/Mod/assets ]]; then
   cp -R src/Mod/assets "$STAGE/assets"
 fi
+# modicon.png (shown in the in-game mod manager). package.sh ships this too; stage it here so a
+# playtest reflects icon changes -- without this the staged copy went stale and the old icon
+# lingered in-game long after the repo icon was updated.
+if [[ -f src/Mod/modicon.png ]]; then
+  cp src/Mod/modicon.png "$STAGE/modicon.png"
+fi
 
 echo "Staged: $(find "$STAGE" -type f | wc -l | tr -d ' ') files"
 echo "Fully quit and relaunch the game client to pick up the new build (lang/assets load once at boot, not per-world-join)."
