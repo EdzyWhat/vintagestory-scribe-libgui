@@ -65,9 +65,14 @@ The unifying idea: the **New Task** action becomes a small dropdown offering sev
 
 ### 2.1 Dropdown itself — 🆕 new
 Options: **Standard** · **Linked (Handbook)** · **Tracked (numeric goal)** · **Mapped**.
+- *Chrome — DECIDED 2026-08-08:* this dropdown is the entry point for choosing a task *kind*, and it
+  adds **no new button** — it upgrades the existing **New Task** action. Picking Tracked creates a
+  row already-expanded with its inline "pick item" control (which opens the search picker; see
+  §Picker — RESOLVED). This satisfies the < 500 px real-estate constraint.
 - *Open Qs:* does this live on the Lectern/Notebook only, or Tablets too (Tablets are the "quick
   scratchpad" tier — maybe standard-only there to keep them simple)? How does it interact with the
-  Shift+RC quick-add gesture (which always makes a *standard* task at top)?
+  Shift+RC quick-add gesture (which always makes a *standard* task at top — likely stays
+  standard-only, as quick-add is by definition the zero-friction path)?
 
 ### 2.2 Tracked (numeric progression) task — 🆕 new
 Track collecting items against a goal (e.g. "collect 32 reeds"). When editing a row, an extra
@@ -430,17 +435,19 @@ the row already carries pin + delete. Two facts keep the picker cheap here:
 - **The picker sub-view itself is free** — it's a temporary full-window takeover (the 7th
   `viewMode`) that borrows the whole dialog while open and hands it back. Nothing new sits in the
   steady-state layout.
-- **Two entry points, different costs.** (a) Picking the task *kind* rides on the existing **New
-  Task** action — upgrading it to a dropdown (2.1) adds *no* new button. (b) Picking the *item*
-  inside a Tracked task is per-row, and this is where a third always-visible row icon would violate
-  the "earn its place" rule. Author's steer: surface item-picking via a **collapsible / right-click
-  / dropdown affordance**, not a permanent per-row button. *Open fork — pick before speccing:*
-  (i) **right-click a row** opens the item picker (zero chrome; discoverability risk for a curious
-  player — mitigate with an instructive empty-state hint on a fresh Tracked row); (ii) **the row
-  expands** only when it's a Tracked kind, revealing an inline "pick item" control (chrome only when
-  the kind needs it — costs nothing on Standard rows); (iii) **a hover-revealed row icon** (like the
-  existing pin/delete affordances). Leaning (ii) — it keeps Standard rows pristine and makes the
-  control appear exactly when it's relevant.
+- **Two entry points, both DECIDED 2026-08-08:**
+  - **(a) Task *kind* — via the New Task dropdown (2.1).** Choosing Standard / Tracked / Linked
+    rides on upgrading the existing **New Task** action to a small dropdown — it adds *no* new
+    button, just upgrades chrome we already have. (This is 2.1 exactly as specced.)
+  - **(b) *Item* pick — via a kind-gated expanding row.** A row reveals its inline "pick item"
+    control **only when its kind is Tracked**; Standard rows stay pristine. Chrome appears exactly
+    when it's relevant and costs nothing on the common case, honoring the "earn its place" rule
+    without a permanent per-row button. (Chosen over right-click-a-row — discoverability risk for a
+    curious player — and over a hover-revealed icon — visual noise on every Tracked row.)
+  - *Note the clean composition:* the New Task dropdown picks the kind → a Tracked row is created
+    already-expanded with its "pick item" control visible → clicking that control opens the
+    search-first picker sub-view. Kind-choice and item-pick never both crowd the row at once, and
+    the < 500 px steady-state layout is untouched.
 
 *Not specced yet — sequenced into the task-kinds cluster (2.2/2.3), not pulled forward.*
 
