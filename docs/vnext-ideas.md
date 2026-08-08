@@ -1,10 +1,12 @@
 # Scribe — vNext idea backlog
 
 A durable parking lot for post-1.0 feature ideas, captured before they're sketched in detail.
-**Nothing here is a commitment.** When an item is ready to build, it graduates to an
+**Nothing here is a commitment** — this is a personal project, so the delivery order is whatever
+sparks joy (see Prioritization below). When an item is ready to build, it graduates to an
 `openspec-propose` (or folds into an existing `docs/specs/*` tier). This doc is the raw
-brainstorm + triage layer *above* [`ROADMAP.md`](../ROADMAP.md); the roadmap stays the committed
-tier map and the specs hold the "how."
+brainstorm + triage layer *above* [`ROADMAP.md`](../ROADMAP.md); the roadmap holds the tier map and
+the specs hold the "how." The companion **"Scribe — The Big Board"** Slack canvas is the
+pretty, at-a-glance front-end for this doc + the roadmap.
 
 **How to read the status tags:**
 - 🆕 **new** — not yet represented anywhere in the roadmap/specs.
@@ -160,6 +162,10 @@ task-assignment. The ideas below expand or stress-test that scope.
 Take the full data of one Notebook (or other item) and copy it onto another. **Author calls this
 the one the Desk "definitely should include."** Aligns with the roadmap's existing "copy/paste
 export between Lectern/Notebook/Desk."
+- *Decided 2026-08-07:* this is a **Desk-only feature** — explicitly distinct from the basic
+  in-text copy/paste already shipped in the editor. Copying a *whole document's data* between items
+  is part of the Desk's serious-organization fantasy, so it does **not** get pulled into an interim
+  release. Stays parked with the Desk tier.
 
 ### 5.2 CSV / spreadsheet import-export — 🗺️ on roadmap ⚠️ concern flagged
 Take tasks **out of and into** the game as CSV, pasteable directly into Excel / Google Docs; build
@@ -251,15 +257,51 @@ screenshots.
 | Lectern model / block refinement (1.4) | lectern-gui-polish "block shape refinement" (art-gated) |
 | Everything else (1.1–1.3, 1.5, 2.1, 2.4, 3.1, 4.1, 4.2, 5.5–5.8, 6.x, 7.1) | 🆕 net-new — no roadmap home yet |
 
-## Suggested triage buckets (for the breakout pass)
+## Prioritization — our chosen order (decided 2026-08-07)
 
-- **Quick wins (small, standalone, high satisfaction):** 4.1 faster-delete, 1.2 tab
-  subtitles/theming, 1.4/1.5 model polish (art-gated).
-- **New task-type cluster (one coherent change):** 2.1 dropdown + 2.2 tracked + 2.3 linked
-  (2.4 mapped is heavier — maybe its own change).
-- **Desk increment (v1.1, ship minimal):** 5.1 copy/paste core first; 5.2/5.3/5.4 as later
-  increments gated on demand + immersion.
-- **Investigation spikes (effort unknown):** 6.1 backpacks, 6.2 VTML, 3.2 in-world board render,
-  3.1 hover preview — scope before committing.
-- **Parked / leaning-no:** 4.2 undo, 5.5 custom tabs — keep on file, don't build without a strong
-  reason.
+**Framing (decided):** there are no "commitments" here — this is a personal project, so the
+delivery order is whatever sparks joy. A bias toward **frequent, small releases** is deliberate:
+each release bumps Scribe up the ModDB "recently updated" board, which plausibly drives downloads
+— a source of genuine motivation. (Perspective check: v1.0 shipped today; the mod didn't exist 10
+days ago. We're fine. Ship often, enjoy it.)
+
+### :rocket: v1.2 — interim polish release (NEXT)
+Two cheap, visible wins bundled into a fast follow-up:
+- **4.1 Faster delete** — kill the mouse-wiggle-to-reveal loop after a row deletes. Small,
+  high-satisfaction, closest to a bug.
+- **1.2 Per-tab subtitles + colour theming** — tabs feel like distinct places, not just paper
+  swaps.
+
+*Why these two:* both small, both immediately visible to a returning player, and together they
+justify a release note without a big build. Keeps us high on the "recently updated" board.
+
+### :mag: Exploration candidate (scope-check before building)
+- **2.2 Tracked (numeric progression) tasks** — high value, but *feels* like a big chunk. Author
+  is open to being proven wrong: **run an exploration/spike first** to size it honestly before
+  deciding whether it's one release or a mini-tier. Don't commit to a version until scoped.
+
+### :desktop_computer: Desk-bound (do NOT pull forward)
+- **5.1 Copy/paste a whole Scribe item** — **reclassified as a Desk feature**, distinct from the
+  basic in-text copy/paste already shipped. This is "clone the full document data from one item to
+  another," which belongs to the Desk's serious-organization fantasy, not an interim release. Stays
+  parked with the Desk (v4), not a near-term item.
+
+### :thinking_face: Investigation spikes (effort unknown — scope before committing)
+6.1 Modular Backpacks (dependency ask), 6.2 VTML, 3.2 in-world board render, 3.1 hover preview.
+
+### :snowflake: Parked / leaning-no
+4.2 undo (off-theme, "age-of-computers"), 5.5 custom renamable tabs ("turns VS into a JOB").
+
+### Later clusters (when we get to them)
+- **New Task dropdown** = 2.1 dropdown + 2.2 tracked + 2.3 linked (2.4 mapped is heavier — its own
+  change). *Note: 2.2 may graduate out of this cluster if the exploration says it's release-sized
+  on its own.*
+- **Desk (minimal first)** = place block + 5.1 copy/paste; then 5.2 CSV / 5.3 assignment / 5.4
+  search as later increments gated on real demand + the immersion bar.
+
+## Meta / off-project ideas
+
+- **Start a dedicated Vintage Story Slack workspace** — a separate workspace to organize Scribe
+  (and future VS-modding) planning, instead of living in the Salesforce enterprise workspace where
+  the Big Board canvas currently sits. Low effort, purely organizational. (Added to the board
+  half-jokingly, but genuinely useful for keeping game-dev context separate.)
