@@ -29,6 +29,77 @@ using SkiaSharp;                  // SKRect
 namespace Scribe;
 
 /// <summary>
+/// Pure coordinate math for the collapse-time hover refresh (fix-list-collapse-stale-hover), factored
+/// out of the two hosts so the load-bearing conversion has one definition (and could be unit-tested
+/// without a game if it ever needs to be — it touches no VS API).
+/// </summary>
+internal static class ScribeHoverRefresh
+{
+    /// <summary>Convert raw-pixel mouse coordinates to window-local coordinates, exactly as LibGUI's
+    /// private <c>GuiBase.ToWindowLocal(ToLogicalScreen(rawX, rawY))</c> does: divide by the UI scale to
+    /// get logical-screen coords, then subtract the window's top-left position. This is the same
+    /// conversion the title-bar grip drag already relies on (<c>ScribeDialogBase.Layout.cs</c>).</summary>
+    public static Vector2 ToWindowLocal(int rawMouseX, int rawMouseY, float uiScale, Vector2 windowPos)
+        => new Vector2(rawMouseX / uiScale, rawMouseY / uiScale) - windowPos;
+}
+
+/// <summary>
+/// A tiny frame countdown that keeps a synthetic hover refresh running for a few frames PAST whatever
+/// triggered it (fix-list-collapse-stale-hover). Its whole reason to exist is the <c>ForceRebuild</c>
+/// after-effect: <c>GuiBase.ForceRebuild</c> unmounts the tree and mounts a brand-new one where every
+/// element is <c>hovered = false</c>, and that rebuilt tree isn't laid out until a LATER frame — so a
+/// single same-frame refresh hit-tests nothing (the new tree has no geometry yet) and the row under a
+/// stationary cursor loses its hover-gated delete/pin controls until the user wiggles the mouse. Lingering
+/// a few frames guarantees at least one refresh lands after the new tree has laid out.
+///
+/// Two things arm it: (1) an in-flight collapse (re-armed every animating frame + on the collapse-cleanup
+/// rebuild), and (2) via <see cref="ArmIfRebuilt"/>, ANY tree rebuild at all — unpin, new-row insert,
+/// title-edit toggle, corruption rebuild — because every one of those goes through <c>ForceRebuild</c> and
+/// hits the exact same stale-hover-after-rebuild problem, animated or not. Detecting the rebuild centrally
+/// (by <c>RootElement</c> identity) means no per-call-site wiring: every current and future
+/// <c>ForceRebuild</c> path is covered automatically.
+/// </summary>
+internal sealed class ScribeHoverRefreshLatch
+{
+    /// <summary>Frames to keep refreshing after the last trigger. 3 comfortably spans the
+    /// trigger → <c>ForceRebuild</c> → layout → paint gap on both hosts' <c>OnRenderGUI</c> orderings
+    /// (the dialog rebuilds after its <c>base</c> layout, the HUD before — 3 covers either).</summary>
+    private const int LingerFrames = 3;
+
+    private int remaining;
+
+    /// <summary>Identity of the <c>RootElement</c> last seen by <see cref="ArmIfRebuilt"/>, so a change
+    /// (which only <c>ForceRebuild</c> causes post-mount) is detected as a rebuild.</summary>
+    private object? lastRoot;
+
+    /// <summary>Re-arm to the full linger window. Call each frame a collapse is animating and on the
+    /// frame a collapse-cleanup rebuild fires.</summary>
+    public void Arm() => remaining = LingerFrames;
+
+    /// <summary>Arm the latch if the tree was rebuilt since the last call — i.e. if <paramref name="currentRoot"/>
+    /// is a different instance than last seen (<c>GuiBase.ForceRebuild</c> assigns a fresh <c>RootElement</c>,
+    /// the only post-mount change). Catches EVERY rebuild path (unpin, new-row, title edit, …) with no
+    /// per-call-site code. Call once per frame from <c>OnRenderGUI</c>, passing <c>RootElement</c>. The first
+    /// call (from null) counts as a rebuild, which is a harmless one-time refresh on open.</summary>
+    public void ArmIfRebuilt(object? currentRoot)
+    {
+        if (!ReferenceEquals(currentRoot, lastRoot))
+        {
+            lastRoot = currentRoot;
+            Arm();
+        }
+    }
+
+    /// <summary>Consume one frame; returns true if a hover refresh should be dispatched this frame.</summary>
+    public bool Tick()
+    {
+        if (remaining <= 0) return false;
+        remaining--;
+        return true;
+    }
+}
+
+/// <summary>
 /// The render object behind <see cref="ScribeHeightFactorWidget"/>: lays its child out at full
 /// constraints but reports its OWN height as <c>childHeight * factor</c> and clips paint to that box.
 /// Because the reported <see cref="RenderObject.Size"/> shrinks as <see cref="Factor"/> goes 1→0 (and
@@ -136,6 +207,21 @@ internal sealed class ScribeCollapseRegistry
     /// this to guard against re-arming a completed collapse before its removal is processed.</summary>
     public bool IsComplete(string id) =>
         controllers.TryGetValue(id, out var c) && c.Status == AnimationStatus.Completed;
+
+    /// <summary>Whether ANY owned collapse is still animating (has not reached
+    /// <see cref="AnimationStatus.Completed"/>). While this is true the list geometry is still reflowing
+    /// each frame, so a row can slide under a stationary cursor — the host uses this to drive a per-frame
+    /// hover refresh (fix-list-collapse-stale-hover) since LibGUI only recomputes hover on real mouse
+    /// motion. False (the steady state) means the host skips the refresh entirely.</summary>
+    public bool AnyAnimating
+    {
+        get
+        {
+            foreach (var c in controllers.Values)
+                if (c.Status != AnimationStatus.Completed) return true;
+            return false;
+        }
+    }
 
     /// <summary>Release a row's collapse controller once its removal has been handled, so the id is free
     /// to be reused by a future row without inheriting stale animation state.</summary>

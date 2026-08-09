@@ -212,6 +212,12 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// (scribe-list-collapse). Disposed with the dialog.</summary>
     private readonly ScribeCollapseRegistry editorCollapseRegistry = new();
 
+    /// <summary>Keeps the collapse-time hover refresh running a few frames past the last animating frame so a
+    /// refresh lands AFTER the completion-triggered <see cref="ForceRebuild"/> re-lays-out the fresh tree
+    /// (fix-list-collapse-stale-hover); without it the row under a stationary cursor loses its hover controls
+    /// exactly when the collapse ends. See <see cref="ScribeHoverRefreshLatch"/>.</summary>
+    private readonly ScribeHoverRefreshLatch hoverRefreshLatch = new();
+
     /// <summary>Set when an editor row's collapse completes, so its removal + rebuild is deferred to the next
     /// <see cref="OnRenderGUI"/> — the completion callback fires from inside the animation pump, where
     /// unmounting + rebuilding the tree would be re-entrant.</summary>

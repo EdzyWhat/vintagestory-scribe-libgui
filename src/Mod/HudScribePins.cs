@@ -135,6 +135,11 @@ public sealed class HudScribePins : GuiBase
     /// (scribe-list-collapse). Disposed with the HUD.</summary>
     private readonly ScribeCollapseRegistry collapseRegistry = new();
 
+    /// <summary>Keeps the collapse-time hover refresh running a few frames past the last animating frame so a
+    /// refresh lands AFTER the completion-triggered <see cref="ForceRebuild"/> re-lays-out the fresh tree
+    /// (fix-list-collapse-stale-hover). See <see cref="ScribeHoverRefreshLatch"/>.</summary>
+    private readonly ScribeHoverRefreshLatch hoverRefreshLatch = new();
+
     /// <summary>Set when a row's collapse completes, so the row's removal + rebuild is deferred to the next
     /// <see cref="OnRenderGUI"/> — the completion callback fires from inside the ticker pump, so we must not
     /// unmount + rebuild the tree re-entrantly there.</summary>
@@ -295,11 +300,35 @@ public sealed class HudScribePins : GuiBase
             if (IsOpened()) ForceRebuild();
         }
 
+        // Keep hover self-healing under a STATIONARY cursor (LibGUI only recomputes hover on real mouse
+        // motion). Two triggers: a collapse reflowing the list every frame, and ANY ForceRebuild mounting a
+        // fresh tree where every element is hovered=false. The latter is why an UNPIN (which just rebuilds
+        // with no collapse animation, so AnyAnimating never fires) previously dropped the hover controls on
+        // the row that slid under the cursor — ArmIfRebuilt catches every rebuild path by RootElement
+        // identity. The latch re-dispatches a synthetic pointer-move for a few frames past either trigger so
+        // the rebuilt tree (laid out a frame later) regains hover without a mouse wiggle. No-op when idle.
+        if (collapseRegistry.AnyAnimating) hoverRefreshLatch.Arm();
+        hoverRefreshLatch.ArmIfRebuilt(RootElement);
+        if (hoverRefreshLatch.Tick()) RefreshHoverAtCursor();
+
         // Keep positioned every frame (handles a game-window resize, which needn't re-run layout). Uses
         // the last laid-out WindowSize; on the very first frame that is the shrink-wrap estimate,
         // self-correcting once real content lays out.
         ApplyAnchor();
         base.OnRenderGUI(deltaTime);
+    }
+
+    /// <summary>Re-dispatch a synthetic pointer-move at the current cursor so LibGUI re-runs its hit-test
+    /// and refreshes hover (fix-list-collapse-stale-hover) — called each frame while an unpin collapse is
+    /// animating, since LibGUI otherwise only updates hover on real mouse motion. Mirrors the lectern
+    /// dialog's <c>RefreshHoverAtCursor</c>; shares the raw→window-local conversion in
+    /// <see cref="ScribeHoverRefresh"/>.</summary>
+    private void RefreshHoverAtCursor()
+    {
+        if (RootElement?.RenderObject == null) return;
+        var local = ScribeHoverRefresh.ToWindowLocal(
+            capi.Input.MouseX, capi.Input.MouseY, GetUiScale(), WindowPos);
+        EventDispatcher.DispatchPointerMove(RootElement, new PointerEvent(local.X, local.Y));
     }
 
     /// <summary>

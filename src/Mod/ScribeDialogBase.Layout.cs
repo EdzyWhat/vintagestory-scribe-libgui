@@ -316,6 +316,21 @@ public abstract partial class ScribeDialogBase
         capi.Gui.SetDialogPosition(DialogCode, new Vec2i((int)WindowPos.X, (int)WindowPos.Y));
     }
 
+    /// <summary>Re-dispatch a synthetic pointer-move at the current cursor position so LibGUI re-runs its
+    /// hit-test and updates hover (fix-list-collapse-stale-hover). Called each frame while a list collapse
+    /// is animating, because LibGUI otherwise only recomputes hover on real mouse motion — so a row that
+    /// slides under a stationary cursor keeps stale hover and its delete/pin controls stay hidden until the
+    /// mouse moves. This reuses LibGUI's own idiom (GuiBase.OnMouseMove itself synthesizes a PointerEvent to
+    /// correct hover) and the exact raw→window-local conversion the grip drag uses; all members are reachable
+    /// on the GuiBase subclass without a gui-dep change.</summary>
+    private void RefreshHoverAtCursor()
+    {
+        if (RootElement?.RenderObject == null) return;
+        var local = ScribeHoverRefresh.ToWindowLocal(
+            capi.Input.MouseX, capi.Input.MouseY, GetUiScale(), WindowPos);
+        EventDispatcher.DispatchPointerMove(RootElement, new PointerEvent(local.X, local.Y));
+    }
+
     /// <summary>The SectionInnerBox (<c>0.9W × 0.8H</c>, centered): a row of three full-height columns —
     /// a left spacer, the center tasks column hosting the existing scrolling read/editor content, and a
     /// right column of tooltipped nav icons. The three widths sum to <see cref="ScribeLayout.InnerW"/>

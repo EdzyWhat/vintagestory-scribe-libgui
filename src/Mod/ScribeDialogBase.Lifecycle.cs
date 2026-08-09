@@ -59,6 +59,18 @@ public abstract partial class ScribeDialogBase
             if (IsOpened()) ForceRebuild();
         }
 
+        // Keep hover self-healing under a STATIONARY cursor, because LibGUI only recomputes hover on real
+        // mouse motion (EventDispatcher.DispatchPointerMove is called only from GuiBase.OnMouseMove). Two
+        // things leave the wrong element hovered: (1) a collapse reflowing the list every frame so a
+        // different row slides under the cursor, and (2) ANY ForceRebuild — collapse cleanup, new-row
+        // insert, title-edit toggle — mounting a fresh tree where every element is hovered=false. The latch
+        // re-dispatches a synthetic pointer-move for a few frames past either trigger (long enough for the
+        // rebuilt tree to lay out on a later frame), so the row under the cursor regains its hover-gated
+        // delete/pin controls without a mouse wiggle (fix-list-collapse-stale-hover). No-op when idle.
+        if (editorCollapseRegistry.AnyAnimating) hoverRefreshLatch.Arm();
+        hoverRefreshLatch.ArmIfRebuilt(RootElement);
+        if (hoverRefreshLatch.Tick()) RefreshHoverAtCursor();
+
         // A task row lost focus while empty (add-empty-task-lifecycle): remove it now, deferred out of the
         // blur notification so we don't dispose focus nodes mid focus-transition. Re-read from live scratch
         // and re-check emptiness so a stale index or a row that gained text in the meantime is a safe no-op

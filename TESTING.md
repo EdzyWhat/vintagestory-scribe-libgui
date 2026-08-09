@@ -3044,3 +3044,37 @@ regression checks specific to this change's scoped-to-the-input approach.
       - **Confirmed 2026-08-07** via iterative screenshot tuning: final values — clay lift y:0.12
         scale 1, wax lift y:0.12 scale 1.15, shared rotation {x:-90,z:90} for the narrow-edge-forward
         (spine-out) look the user wanted, matching books/notebooks. Restaged and approved in-game.
+
+## fix-list-collapse-stale-hover
+
+- [x] `f86a3718` **Delete without wiggle.** In the lectern editor with several rows, hover a row's
+      delete button and click delete WITHOUT moving the mouse — confirm the delete/pin controls of the
+      row that slides under the cursor appear immediately, no wiggle. *(4.2)*
+      - **Confirmed 2026-08-08:** works. The boundary latch holds hover through the collapse and past
+        the completion rebuild.
+- [ ] `94c447c8` **Fluid mass-delete.** Repeatedly click delete on the row under a stationary cursor,
+      faster than the ~200ms collapse — confirm each delete control is available mid-collapse and rows
+      delete with no mouse movement. *(4.3)*
+      - **Still broken 2026-08-08:** hover now shows the delete button mid-collapse (the hover half is
+        fixed), but *clicking* it mid-collapse does nothing — the click only lands once the collapse
+        completes. This is a click-TARGET problem (the departing snapshot row still occupies the
+        shrinking space under the cursor), distinct from the hover problem this change fixed. User's
+        call: "90% of the way there… not sure it's worth solving" — candidate to backlog.
+- [x] `aca0ad08` **HUD unpin refresh.** Unpin a pinned task on the HUD while hovering, without moving
+      the mouse — confirm the next row's hover controls refresh. *(4.4)*
+      - **Confirmed 2026-08-08** (after generalizing the latch to `ArmIfRebuilt`): "works and it's so
+        smooth and fast." First attempt failed because unpin isn't collapse-animated, so `AnyAnimating`
+        never fired; detecting the `ForceRebuild` by `RootElement` identity fixed it and covers every
+        rebuild path.
+- [x] `347321ce` **New-row hover preserved.** Hover a row, press Enter to create a new row, keep the
+      cursor still — confirm the row under the cursor keeps its hover-gated controls. *(4b.2)*
+      - **Confirmed 2026-08-08:** hover/mouse position is tracked correctly across the rebuild and the
+        controls stay on screen. One-frame flicker on the rebuild remains (the fresh tree paints once
+        with `hovered=false` before the next-frame synthetic refresh lands) — minor cosmetic; see the
+        flicker note in `docs/vnext-ideas.md` §4.1.
+- [x] `c2633f76` **Empty-row cleanup.** Create an empty task row and leave it (blur) so it self-removes
+      while the cursor is stationary over the list — confirm no stale-hover artifact. *(4.5)*
+      - **Confirmed 2026-08-08:** no stale-hover artifact.
+- [x] `f37f4a2a` **Regression: no flicker.** With nothing collapsing, confirm normal hover on real
+      mouse motion is unchanged, and tooltips/press-states don't flicker during a collapse. *(4.6)*
+      - **Confirmed 2026-08-08:** works, no flicker.

@@ -1836,6 +1836,141 @@ objects: never RESTORE an inherited `SharedPaint.Color` on teardown — leave it
 the neutral every framework draw except `DrawMaskedBox` sets before painting.** Fixed in
 `ScribeCuneiformField.cs` + `CuneiformText.cs` (both cuneiform stroke render objects).
 
+### Hover is never re-evaluated when geometry moves under a STILL cursor — no MouseTracker (2026-08-08)
+
+LibGUI computes hover enter/exit in exactly ONE place — `EventDispatcher.DispatchPointerMove`
+(`Gestures/EventDispatcher.cs`, hit-test → compare to `_hoveredElement` → fire exit/enter) — and that
+is called from exactly ONE non-test site: `GuiBase.OnMouseMove` (real cursor motion). There is **no
+post-layout / post-frame hover re-check** (no equivalent of Flutter's `MouseTracker`). Consequence:
+when the widget tree relayouts and a *different* element slides under a *stationary* cursor (a Scribe
+list row collapsing after delete, or expanding on insert), the framework never notices — the element
+under the cursor keeps its stale `hovered=false`, so hover-gated affordances (the row's delete/pin
+buttons) stay hidden until the user physically moves the mouse. This is the root cause of the
+"delete-button-doesn't-reappear-until-you-wiggle" bug (docs §4.1).
+- **The fix is a mod-side synthetic re-dispatch, and that's an ESTABLISHED LibGUI idiom, not a kludge**
+  — `GuiBase.OnMouseMove` itself fabricates `new PointerEvent(-1, -1)` (off-screen) to force a
+  `PointerLeave` when another dialog handled the move (GuiBase.cs:689). Re-dispatching
+  `EventDispatcher.DispatchPointerMove(RootElement, new PointerEvent(localX, localY))` at the CURRENT
+  cursor pos re-runs the hit-test and self-heals hover.
+- **All the plumbing is reachable from a `GuiBase` subclass** (no gui-dep change, no private access):
+  `EventDispatcher` (public), `DispatchPointerMove` (public), `RootElement` (public), `WindowPos`
+  (protected), `GetUiScale()` (protected). Reconstruct window-local coords exactly as the private
+  `ToWindowLocal(ToLogicalScreen(...))` does: `local = capi.Input.Mouse{X,Y} / GetUiScale() - WindowPos`
+  — the SAME math the drag-grip already uses (`ScribeDialogBase.Layout.cs:293-305`). `_lastMouseLocal`
+  is private, so source the cursor from `capi.Input`, not from LibGUI's cache.
+- **Conclusion-only re-hover under-solves it; continuous is nearly free.** Firing the re-dispatch once
+  when a collapse *finishes* leaves hover stale for the whole 200ms while geometry slides, so a fast
+  mass-delete still stutters. Firing it EVERY frame *while any collapse controller is animating* fixes
+  fluid mass-delete. Continuous costs almost nothing extra because the frame loop is ALREADY spinning
+  during the animation (`ScribeCollapsible`'s `OnValueChanged → MarkNeedsBuild`) and the host registry
+  ALREADY tracks in-flight controllers — the added trigger is one `AnyAnimating` predicate on
+  `ScribeCollapseRegistry`, sibling to its existing `IsComplete`.
+- **But gating PURELY on `AnyAnimating` stops ONE FRAME TOO EARLY — the hover drops exactly when the
+  collapse *ends* (2026-08-08 playtest).** The collapse-completion callback (fired inside the ticker pump
+  within `base.OnRenderGUI`) flips its controller to `Completed` (so `AnyAnimating` is ALREADY false) AND
+  arms the deferred `needsCollapseCleanup` → `ForceRebuild()`. `ForceRebuild` (`GuiBase.cs:1404-1416`)
+  `Unmount()`s the tree and mounts a **brand-new one where every element is `hovered=false`**, and that
+  fresh tree is **not laid out until a later frame** (layout runs in `base.OnRenderGUI` via
+  `rootRo.Layout`). So on the cleanup frame the re-hover is skipped (`AnyAnimating` false) AND a synthetic
+  move would hit-test nothing anyway (new tree has zero geometry) — no pointer-move ever lands on the
+  rebuilt+laid-out tree, and the row's delete/pin button vanishes right as the collapse finishes. Fix: a
+  small **frame latch** (`ScribeHoverRefreshLatch`, ~3 frames) re-armed both while animating and on the
+  cleanup-rebuild frame, so at least one refresh lands *after* the new tree lays out. This mirrors the
+  general LibGUI rule that anything triggered by a `ForceRebuild` must account for the fresh tree needing a
+  later frame to lay out (see the `ForceRebuild`/settling notes).
+- **The stale hover is a property of `ForceRebuild` ITSELF, not of collapse — gate the refresh on ANY
+  rebuild, detected by `RootElement` identity (2026-08-08 playtest).** HUD *unpin* and *new-row creation*
+  drop hover the same way but aren't collapse-animated, so an `AnyAnimating`-only trigger never fires for
+  them. `GuiBase.ForceRebuild` assigns a brand-new `RootElement` instance (`GuiBase.cs:1414`) and that is
+  the ONLY post-mount replacement, so "`RootElement` differs from last frame" is an exact,
+  zero-false-positive rebuild signal. `ScribeHoverRefreshLatch.ArmIfRebuilt(RootElement)` called once per
+  frame from `OnRenderGUI` arms the linger on every rebuild path with no per-call-site wiring — subsumes
+  the collapse-cleanup arm. This is the reusable pattern for "keep hover correct after a rebuild."
+- **A ONE-FRAME hover flicker after such a rebuild is UNAVOIDABLE from mod code and is inherent LibGUI
+  behavior (seen in other LibGUI mods) — accepted, don't chase it.** The fresh tree paints once with
+  `hovered=false` before the next-frame synthetic refresh can hit-test it, because LibGUI runs
+  build→layout→paint as one sealed sequence and a `GuiBase` subclass can't inject a hover dispatch in the
+  layout↔paint gap (would need a `gui`-dep hook, or re-implementing LibGUI's layout — both rejected).
+  Fixable only if LibGUI ever exposes a post-layout/pre-paint hook.
+
+### `ScribeCollapsible` is DIRECTION-AGNOSTIC — row-EXPAND-into-view is ~80% already built (2026-08-08)
+
+Explored while scoping §4.1 (the "new tasks expand into view" wish). The collapse primitive generalizes
+to expansion with no new animation type, and the exploration de-risks that future feature:
+- **`ScribeHeightFactorRender` never hard-codes a height** — `PerformLayout` lays the child out at FULL
+  constraints, measures the child's real `Size.Y`, and reports `Size.Y * Factor` (clipping paint to the
+  shrinking box). So the SAME render object drives an expand by running the factor 0→1
+  (`factor = curve(value)`) instead of collapse's `1 - curve(value)`. `AnimationController` already has
+  `Forward()`/`Reverse()`/settable `Value` and a `Reverse` status the tick loop honors, so no new
+  controller work. **A "wildly different task size" is a non-issue for the primitive** — it re-measures
+  the child every layout, so a 40px Standard row and a 300px Tracked-with-picker row both expand
+  correctly with zero config.
+- **No permanent invisible 0-height placeholder row is needed.** Collapse needs a ghost *snapshot* only
+  because the data is already gone from `scratch`; expansion is the EASIER case — the row's data has
+  just been ADDED, so real freshly-mounted content animates in. Wrap the new row in the height-factor
+  widget with factor 0→1.
+- **The host-owned `ScribeCollapseRegistry` resume-across-`ForceRebuild` pattern is reusable as-is** —
+  a controller keyed by the new row's stable id, resumed on remount, is exactly what an expand needs
+  (same reason collapse needs it: `ForceRebuild` remounts the widget every frame).
+- **The ONE genuinely new problem is content that changes height MID-animation.** Collapse animates
+  frozen departing content, so its measured target is stable. An expanding EDITABLE row (auto-focused,
+  user types, or a task-type picker swaps its body) has a child whose natural height moves DURING the
+  0→1 expand; since the render re-measures each frame and scales, a growing target can read as jitter
+  (the row races its own growth). Two sub-risks fall out: (1) auto-focusing into a near-0-height clipped
+  row — layout is full-size so caret SHOULD work while visually clipped, but that's unverified; (2) the
+  final content is the task-type-DESIGN problem (docs §2.x), not an animation problem — the animation is
+  ready; what mounts inside it is blocked on the picker/kind decisions. **Takeaway: build the §4.1
+  continuous re-hover now and it covers expand's identical stale-hover bug for free (direction-agnostic
+  trigger); the expand animation itself is a small follow-up once task-type content is decided.**
+
+### Row-CREATION animation — SLIDE (paint-only), not height-expand, for an editable row (2026-08-08)
+
+Two independent LibGUI-source explorations (for the "make row creation visceral" goal behind docs §1.2)
+converged on the same verdict. This SUPERSEDES the naive "just run the collapse primitive backwards"
+idea for an editable/auto-focused row — height-expand is the WRONG tool there.
+- **Slide-in via a paint-only `Transform` translate is the pick.** `Transform`/`RenderTransform` leave
+  layout constraints untouched ("purely visual"; `RenderTransform.PerformLayout` just calls `base` then
+  updates the matrix) — so the child is laid out at FULL natural size every frame. An auto-focused input
+  can grow/wrap/swap its body mid-animation without ever fighting the animation. This structurally avoids
+  the mid-animation height-change JITTER that a height-expand (`ScribeHeightFactorRender`, which
+  re-measures the live child and scales it) suffers with live editable content.
+- **Auto-focus safety differs by approach — this is the decider.** Focus + keyboard route through
+  `FocusManager.PrimaryFocus` (`EventDispatcher.DispatchKeyDown/Char` → `focus.Owner`), INDEPENDENT of
+  paint-clip and hit-test geometry — so programmatic auto-focus-on-create always works. BUT: (a) the
+  visible caret paints only under a full-size box — height-expand's `ScribeHeightFactorRender.Paint`
+  `ClipRect`s to the near-0 box, so the caret is CLIPPED INVISIBLE near t=0; (b) MOUSE hit-testing uses
+  layout `Size` (`Element.HitTest`, `RenderObject.HitTest` test `pos ≤ Size.Y`), so during a height-expand
+  a click on the un-revealed part MISSES — and per the pointer-down-clears-focus rule it would BLUR the
+  row. Slide/fade never clip and stay full-size → caret visible, clicks land. So height-expand is unsafe
+  for an immediately-focused editable row; slide/fade are safe.
+- **Fade is OPTIONAL, on the SAME controller via `Curves.Interval`** (slide `Interval(0,0.7,EaseOutCubic)`,
+  fade `Interval(0,0.5)`) — one controller, two tween reads, no second registry entry. Fade ALONE reads
+  too subtle/"computery"; it softens the slide's arrival. Gotcha: `RenderOpacity` early-returns without
+  painting below α≈0.001, so a fade literally starting at 0 shows one frame of an invisible-but-focused
+  row — start at a small non-zero α, or let the slide carry t=0.
+- **Needs the collapse registry pattern; stock `Animated*` widgets DON'T work.** Confirmed every
+  `ImplicitlyAnimatedWidget` (`AnimatedSlide`/`AnimatedOpacity`/`AnimatedScale`/`AnimatedSize`/…) SNAPS
+  under `ForceRebuild`: first `InitState`/`TweenVisitor.Visit` seeds Begin==End==target, and motion only
+  happens in `UpdateWidget` on a RECONCILED element — but `ForceRebuild` unmounts+recreates, so it always
+  hits fresh `InitState` and snaps (`AnimatedSize`/`RenderAnimatedSize` snaps for the analogous
+  `_hasLayoutOnce==false` reason). The fix is the SAME as `ScribeCollapsible`: a host-owned persisted
+  `AnimationController` in a registry (`ScribeCreateRegistry` sibling to `ScribeCollapseRegistry`), keyed
+  by the new row's stable id, `Forward()` on first mount / `Resume()` on remount, driving stock
+  `Transform`(+`Opacity`) render primitives (NOT the `Animated*` wrappers) via a self-ticking
+  `StatefulWidget` mirroring `ScribeCollapsibleState`. Stock `AnimatedBuilder` is the idiomatic
+  external-controller bridge if not hand-rolling. `AnimationController` already exposes
+  `Forward`/`Reverse`/`Resume`/settable `Value` — no new controller work.
+- **4 things NOT source-answerable — need in-game feel tests:** (1) paint-only slide reserves the row's
+  full-height slot on frame 1 (rows below snap to final positions, then the row slides into the open slot)
+  — it CANNOT open the gap progressively without reintroducing the jitter/clip; whether "instant gap then
+  glide" reads as concrete vs. "rows jump, one glides" is a taste call; (2) slide direction vs. the list
+  container's clip rect (does an off-edge slide emerge cleanly or overlap the neighbor?); (3) duration
+  (~180–220ms to match the collapse `DefaultDurationMs`) + curve (`EaseOutCubic` vs. slight `EaseOutBack`
+  overshoot); (4) confirm no fade lower-bound flash. Key file refs: `Widgets/Painting/Transform.cs` +
+  `Core/Painting/RenderTransform.cs`; `Widgets/Painting/Opacity.cs` + `Core/Painting/RenderOpacity.cs`;
+  `Widgets/Animations/AnimationController.cs`, `AnimatedBuilder.cs`, `Curves.cs` (`Interval`); focus path
+  `Widgets/Input/Focus.cs` + `Gestures/EventDispatcher.cs`; caret gate `Core/Input/RenderTextField.cs`.
+
 ## Held-item dialog flickers closed on FIRST open of a not-yet-crafted item (2026-08-06)
 
 **Symptom: the first time a player opens a Scribe item they did NOT craft (notebook, clockmaker's

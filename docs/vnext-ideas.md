@@ -35,6 +35,43 @@ theme** — not just a different paper texture. Make tabs feel like separate pla
 - *Open Qs:* which tabs (Tasks / Pins / Timer / Settings)? Is theming per-tab colour accents on
   chrome, or fuller backdrop swaps? Interaction with the existing per-material tablet backdrops.
 
+#### Row-CREATION animation — verdict DECIDED 2026-08-08 (drastically reshapes 1.2's "feel")
+Broader goal behind 1.2: the GUI's instantaneous nature feels "too computery"; make the Notebook and
+other advanced items feel visceral/concrete. A new task/note row should **arrive** with motion, not pop
+in. Two independent LibGUI-source explorations converged on the same verdict (findings in `VSAPI-NOTES.md`
+→ "Row-CREATION animation" under the LibGUI section):
+- **Use a SLIDE-in (paint-only `Transform` translate), NOT a height-expand.** The load-bearing reason:
+  `Transform`/`Opacity` animate **paint only** — layout passes through untouched — so the new row is laid
+  out at **full natural size every frame**. That *structurally* eliminates the mid-animation
+  height-change jitter that ANY measured-height approach (height-expand, `AnimatedSize`) suffers when the
+  auto-focused editable row grows/wraps/swaps its body mid-animation. Height-expand (extending
+  `ScribeHeightFactorRender` 0→1) re-measures the live child every frame, so the content races the expand.
+- **Auto-focus-on-create is only safe with slide/fade.** Focus + keystrokes route through `FocusManager`,
+  independent of geometry — but the *visible caret* and *mouse* hit-testing both depend on layout `Size`.
+  Under height-expand the caret is clipped invisible near t=0 and a click misses (and would blur the row);
+  slide/fade keep the row full-size, so caret shows and clicks land.
+- **Fade is optional, layered on the SAME controller via `Curves.Interval`** (e.g. slide over `Interval(0,
+  0.7)`, fade over `Interval(0, 0.5)`) — no second controller. Fade alone reads too subtle ("computery");
+  its job is to soften the slide's arrival. Gotcha: `RenderOpacity` skips paint below α≈0.001, so start a
+  fade at a small non-zero α (or let the slide carry t=0) to avoid a one-frame invisible-but-focused row.
+- **Same registry pattern as collapse.** All stock `Animated*` widgets SNAP under `ForceRebuild` (Begin==
+  End==target on fresh `InitState`), so this needs a host-owned persisted `AnimationController` keyed by
+  the new row's stable id — a `ScribeCreateRegistry` sibling to `ScribeCollapseRegistry`, driving stock
+  `Transform`(+`Opacity`) from the controller value. `AnimationController` already has `Forward`/`Resume`/
+  settable `Value`; no new controller machinery. Reuses [[scribe-collapsible-direction-agnostic-expand]]'s
+  infrastructure. The §4.1 continuous re-hover (fix-list-collapse-stale-hover) already covers the identical
+  stale-hover-on-reflow bug this animation would otherwise reintroduce, since its trigger is
+  animation-direction-agnostic.
+- **Trade-off + 4 in-game unknowns (feel judgments, not source-answerable):** paint-only means the row's
+  full-height slot opens **instantly** on frame 1 (rows below snap to final positions), then the row slides
+  into that open slot — it CANNOT open the gap progressively without reintroducing the jitter/clip. Whether
+  "instant gap, then glide in" reads as concrete or as "rows jump, one glides" needs playtest. Also unknown
+  until tested: slide direction vs. the list's clip rect, exact duration (~180–220ms to match collapse) +
+  curve (`EaseOutCubic` vs. a slight `EaseOutBack` overshoot), and confirming no fade lower-bound flash.
+- *Scope note:* this is a **1.2** input, explored during 1.1 planning — NOT part of 4.1. It also depends on
+  the task-type content decisions (what mounts inside a freshly-created row) tracked in
+  [[picker-keystone-resolved]] §2.x.
+
 ### 1.3 Clay Tablet **block** variant — 🆕 new ⚠️ concern flagged
 A wall-mountable / leaning block version of the Clay Tablet that's **still usable** (openable to
 edit) while placed. Think: propped against a wall or hung like a small plaque.
@@ -205,6 +242,46 @@ a tiny mouse wiggle between every delete — a frustrating loop.
   `[[forcerebuild-vs-reconciling-libgui]]` and `[[libgui-settling-loops-and-race-diagnosis]]`
   notes — the post-layout settling machinery is where the stale hover state lives.
 - *Likely small + high-satisfaction — a good early standalone change.*
+- **STATUS 2026-08-08 — the hover half is DONE, split into two parts:**
+  - ✅ The stale-**hover** bug is fixed by the `fix-list-collapse-stale-hover` change (a per-frame
+    synthetic pointer-move re-dispatch, armed by both an in-flight collapse and any `ForceRebuild` via
+    `RootElement`-identity detection). Playtest-confirmed: delete-without-wiggle, empty-row cleanup, and
+    no-flicker all pass; HUD-unpin fixed by the general rebuild detector (re-test pending).
+  - ⏳ The stale-**click-target** bug remains — see 4.1b below. This is the other half of "faster delete"
+    and is a committed v1.1 item.
+  - 🐛 **Known minor artifact (accepted 2026-08-08):** on a `ForceRebuild` that isn't collapse-animated
+    (new-row creation, unpin), there's a **single-frame flicker** — the fresh tree paints once with
+    `hovered=false` (controls off) before the next-frame synthetic hover-refresh lands. Root cause: the
+    refresh needs a laid-out tree to hit-test, and LibGUI runs build→layout→paint as one sealed sequence,
+    so our dispatch can only land *after* that first paint. Eliminating it fully needs to dispatch hover
+    in the layout↔paint gap, which we can't reach from a `GuiBase` subclass without a `gui`-dep hook
+    (forbidden) or manually re-laying-out the tree ourselves (duplicates LibGUI constraint logic —
+    fragile). **Judged not worth chasing and left as-is (author, 2026-08-08):** the same one-frame
+    rebuild flash is visible in OTHER mods built on LibGUI, i.e. it's inherent library behavior, not a
+    Scribe defect. Playtest verdict: "single frame flicker… we keep proper track of the mouse and the
+    hover stuff stays on screen properly." Revisit only if it becomes objectionable, or for free if
+    LibGUI ever exposes a post-layout/pre-paint hook.
+
+### 4.1b Fluid mass-delete — fix the stale CLICK target mid-collapse — 🆕 new (proposed for v1.1, 2026-08-08)
+The sibling of 4.1, surfaced by its playtest. After the hover fix you can **see** the delete button on
+the row that slides under a stationary cursor mid-collapse — but **clicking** it does nothing until the
+~200ms collapse finishes; the click only lands on the second press. So true fluid mass-delete (delete,
+delete, delete without moving the mouse) still stutters.
+- *Root cause (diagnosed, not yet fixed):* the departing row's **ghost-snapshot** — the visual copy that
+  animates the collapse in place — still occupies the shrinking layout box under the cursor, so it
+  **intercepts the hit-test** and swallows the click that was meant for the live row sliding up behind
+  it. This is a hit-test/click-target problem, distinct from the hover problem 4.1 solved (hover is a
+  read; the click is a write that lands on the wrong element).
+- *Likely fix direction:* make the departing ghost-snapshot **transparent to hit-testing** while it
+  collapses (it's a non-interactive visual, so it should never claim pointer events) — or route the click
+  through it to the live row beneath. Check whether LibGUI's `RenderObject` hit-test has an
+  ignore/hit-test-behavior flag we can set on the snapshot, mirroring Flutter's `IgnorePointer` /
+  `HitTestBehavior.translucent`. Cross-ref the `ScribeCollapsible` / ghost-snapshot logic and the
+  `[[libgui-settling-loops-and-race-diagnosis]]` note.
+- *Scope:* its own small `openspec-propose` change (NOT folded into `fix-list-collapse-stale-hover`, whose
+  Non-Goals explicitly exclude it). Bundle it into the **v1.1** release alongside 4.1 so "faster delete"
+  ships whole. Author confirmed 2026-08-08: "include the mass-delete click-target in 1.1… make sure we
+  tackle it soon."
 
 ### 4.2 Undo — 🆕 new ⚠️ concern flagged (author leans "maybe not")
 An undo button, maybe at the bottom of the Edit page. Would need to store the last X changes
@@ -616,8 +693,13 @@ picker is a decoupled follow-up.*
 
 ### :rocket: v1.1 — interim polish release (NEXT)
 Cheap, visible wins bundled into a fast follow-up:
-- **4.1 Faster delete** — kill the mouse-wiggle-to-reveal loop after a row deletes. Small,
-  high-satisfaction, closest to a bug.
+- **4.1 Faster delete (hover half)** — kill the mouse-wiggle-to-reveal loop after a row deletes.
+  Small, high-satisfaction, closest to a bug. ✅ implemented (`fix-list-collapse-stale-hover`),
+  playtest-confirmed 2026-08-08 (HUD-unpin re-test pending).
+- **4.1b Fluid mass-delete (click half)** — the sibling bug the 4.1 playtest surfaced: mid-collapse the
+  delete button is now *visible* but the *click* misses until the collapse ends, because the departing
+  ghost-snapshot intercepts the hit-test. Own small change (make the snapshot hit-test-transparent).
+  Author-committed to v1.1 2026-08-08 so "faster delete" ships whole.
 - **1.2 Per-tab subtitles + colour theming** — tabs feel like distinct places, not just paper
   swaps.
 - **4.4 Draggable HUD** (author-requested for v1.1, 2026-08-08) — custom LibGUI drag handle on the
