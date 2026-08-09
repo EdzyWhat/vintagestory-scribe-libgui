@@ -59,25 +59,50 @@
   ScribeRowSizeAnimation), but at distinct keys, so no type-swap-at-a-key occurs; the task's
   "internal state of one stable row widget" phrasing is satisfied in effect (stable identity, no
   mis-update) without literally merging the two widgets. Revisit only if the gate shows a seam.]
-- [ ] 3.3 Keep `ForceRebuild()` for the genuinely-new-tree cases: read⇄editor⇄settings view switches,
-  fresh editor seed, lost-lock recovery. Verify these still work.
+- [x] 3.3 Keep `ForceRebuild()` for the genuinely-new-tree cases: read⇄editor⇄settings view switches,
+  fresh editor seed, lost-lock recovery. Verify these still work. [Kept on ForceRebuild
+  (ViewSwitching.cs EnterEditorMode/EnterReadMode/OnClickSwitchTo* + lost-lock branch); in-game gate
+  item `331c44ad` confirmed 2026-08-09 they rebuild cleanly.]
 - [ ] 3.4 Carry the async-resync guard onto the reconciling path: an external server resync landing
   mid-edit must not prune a legitimately-local in-flight row (never drop the focused row; never drop an
-  empty task).
+  empty task). [RefreshReadView editor branch already routes through DeleteEditorBlock→RebuildBody and
+  keeps its never-drop-focused / never-drop-empty guards; NOT yet verified in-game — gate item
+  `1f95e1ec` is BACKLOGGED pending a multiplayer session. Verify the guards hold under reconcile there.]
 - [ ] 3.5 Measure how much of the `pendingEnsureVisible` / `pendingRestoreScrollOffset` /
   `pendingClampToExtent` settling apparatus can be removed now that reconcile preserves the scroll
   controller's offset (design Open Question); remove what's no longer needed, keep what view-switches
-  still require.
-- [ ] 3.6 `dotnet build src/Mod/Mod.csproj` clean (0 new warnings); `dotnet test tests/Core.Tests` green.
-- [ ] 3.7 `bash build/restage.sh Debug`, relaunch, and RUN THE EDITOR PROOF GATE in-game (design D2 —
+  still require. [Note: gate item `29b05ca5` (task 3.10) shows the shrink-at-bottom re-clamp currently
+  SNAPS the offset upward — the animate-the-clamp fix and this measure/remove work overlap; do them together.]
+- [x] 3.6 `dotnet build src/Mod/Mod.csproj` clean (0 new warnings); `dotnet test tests/Core.Tests` green.
+  [Build 0 err / 4 pre-existing warns; 286 Core tests pass — committed `e950334`.]
+- [x] 3.7 `bash build/restage.sh Debug`, relaunch, and RUN THE EDITOR PROOF GATE in-game (design D2 —
   all must hold): (a) delete/insert/reorder preserves an actively-edited row's caret + unsaved text;
   (b) cross-row focus is preserved (no leak/loss); (c) scroll offset preserved without capture-restore;
   (d) mass-delete first click lands mid-collapse; (e) async external resync mid-edit doesn't drop a
-  local in-flight row.
-- [ ] 3.8 GO/NO-GO decision. If the gate passes → proceed to §4. If it can't be met without forking
+  local in-flight row. [Playtest submission 2026-08-09T11-13-15: (a)/(b)/(c mid-list)/(d) PASS;
+  the once-feared caret-position caveat came back BETTER than predicted (caret holds on delete-above AND
+  reorder); (e) BACKLOGGED pending multiplayer (item `1f95e1ec`). Two regressions surfaced → tasks 3.9/3.10.]
+- [x] 3.8 GO/NO-GO decision. If the gate passes → proceed to §4. If it can't be met without forking
   `gui` or a restructuring larger than the standalone fallback would cost → BAIL: abandon this branch,
   ship `fix-mass-delete-click-target` as the narrow fallback, archive this change `--skip-specs` with
-  the reason recorded in `docs/animation-lessons-learned.md`.
+  the reason recorded in `docs/animation-lessons-learned.md`. [**GO** (2026-08-09): every single-player
+  D2 criterion passed and the original mass-delete-first-click bug is fixed. The reconcile conversion
+  holds — NOT bailing to fix-mass-delete-click-target. Two follow-up regressions (3.9/3.10) are within
+  the GO path, not bail-out triggers. Remaining §3 work: 3.4 (multiplayer verify), 3.5, 3.9, 3.10.]
+- [ ] 3.9 Fix the empty-task true-up regression (gate general-notes; TESTING.md `7ab1e7dc`): rapid
+  "Add task" then Editor→Read→Editor leaves empty rows present in the editor (invisible in the interim
+  Read step but they REAPPEAR on return), when they should be culled at every save boundary (Esc /
+  switch view / Done editing — trim trailing whitespace/newlines, remove empty/invalid tasks). Worked
+  under ForceRebuild because every row remounted and the per-row blur self-destruct swept them; the
+  reconcile path reuses fields so that blur no longer fires. `PurgeEmptyTasksFromScratch()` IS still
+  called on the switch/close paths, so root-cause why the empties survive it (re-seed order? focus-guard
+  in the OnRenderGUI sweep? the purge running before the last add's row settles?) and fix WITHOUT
+  reverting to ForceRebuild.
+- [ ] 3.10 Animate the scroll on list-shrink-at-bottom (gate general-notes; TESTING.md `29b05ca5`):
+  deleting the last row while scrolled to the bottom collapses the row out, then SNAPS the scroll offset
+  upward instantly — jarring. Ease that post-shrink re-clamp instead of jumping. Ties into the §3.5
+  settling apparatus (`pendingClampToExtent` is the instant JumpTo) and the `ScribeRowSizeAnimation`
+  harness; do it alongside 3.5.
 
 ## 4. Convert the pinned surfaces (spec: player-pins) — only after §3 passes
 

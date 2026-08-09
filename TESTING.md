@@ -21,6 +21,64 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## reconcile-animating-surfaces
+
+> §3.7 editor proof gate (design D2) for the ForceRebuild→in-place-reconcile conversion. All must hold,
+> or §3.8 bails to the parked fix-mass-delete-click-target fallback. Test in the LECTERN editor view (the
+> hardest case). Two known positional-reconciler caveats are called out as their own item to judge, not
+> assume broken.
+
+- [x] `a6a9fd2f` **Caret survives edits.** Type into a task row (leave unsaved text + a mid-word caret),
+      then delete a DIFFERENT row, insert a row below another, and drag-reorder another — after each,
+      confirm your row still holds its exact caret position and unsaved text. *(reconcile-animating-surfaces 3.7)*
+      - **Confirmed 2026-08-09** via playtest submission (2026-08-09T11-13-15): "All work as expected."
+- [x] `4c90c394` **Focus doesn't leak.** After a delete or reorder, confirm keyboard focus lands on the
+      intended neighbor row and nowhere else — typing goes to that row, no phantom focus on a stale/other
+      row. *(reconcile-animating-surfaces 3.7)*
+      - **Confirmed 2026-08-09** via playtest submission (2026-08-09T11-13-15): "Works." Focus lands on the
+        intended neighbor after delete/reorder.
+- [x] `2bd024a2` **Scroll holds steady.** Scroll a long task list mid-way, then add/delete/reorder a row —
+      confirm the viewport stays put with no jump-to-top or one-frame bounce (reconcile now preserves the
+      offset without capture-restore). *(reconcile-animating-surfaces 3.7)*
+      - **Confirmed 2026-08-09** via playtest submission (2026-08-09T11-13-15): viewport holds steady on
+        add/delete/reorder (mid-list). NOTE a distinct edge remains — deleting the LAST row while scrolled
+        to the bottom jumps the offset upward (see `29b05ca5` below); the mid-list steady-state is confirmed.
+- [x] `dff1dff6` **Mass-delete first click.** Rapidly delete several rows in a row (Delete policy or the
+      delete button) — confirm the FIRST click on each delete button lands while the prior row is still
+      collapsing; no dead first-click that you have to repeat. *(reconcile-animating-surfaces 3.7)*
+      - **Confirmed 2026-08-09** via playtest submission (2026-08-09T11-13-15): "Works." First click lands
+        mid-collapse — the original mass-delete bug this whole change targets is resolved.
+- [ ] `1f95e1ec` **Resync keeps local row.** While editing (a focused row, and separately a brand-new
+      empty row), have a second client change the doc so a resync lands mid-edit — confirm your in-flight
+      row is NOT yanked out from under you. *(reconcile-animating-surfaces 3.7)*
+      - **Backlogged 2026-08-09** (playtest submission 2026-08-09T11-13-15): "Wait for multiplayer test."
+        Needs a second client; retest when a multiplayer session is available (§3.4 guard verifies here).
+- [x] `1d685c84` **Judge caret-position caveat.** Specifically delete a row ABOVE the one you're editing,
+      and separately reorder the edited row — the caret POSITION is expected to reset (text is preserved).
+      Judge whether that residual reset is acceptable to ship or trips the §3.8 bail-out.
+      *(reconcile-animating-surfaces 3.7)*
+      - **Confirmed 2026-08-09** via playtest submission (2026-08-09T11-13-15): BETTER than the predicted
+        caveat — "when you delete a row above the one you're editing, the caret stays" and "when you reorder
+        the edited row, the caret stays where the player expects." No unacceptable reset; does NOT trip §3.8.
+- [x] `331c44ad` **View switches still work.** Switch read⇄editor⇄settings, open a fresh (empty) editor,
+      and force a lost-lock recovery — confirm each still rebuilds cleanly (these deliberately KEEP
+      ForceRebuild, so they must be unaffected by the reconcile conversion). *(reconcile-animating-surfaces 3.3)*
+      - **Confirmed 2026-08-09** via playtest submission (2026-08-09T11-13-15): "Work." View switches / fresh
+        seed / lost-lock recovery all rebuild cleanly.
+- [ ] `7ab1e7dc` **Empty-task true-up on save.** Rapidly press "Add task" to make several empty rows, then
+      Editor→Read→Editor. Empty tasks must be culled at every save boundary (Esc / switch view / Done
+      editing) — trailing whitespace/newlines trimmed, empty/invalid tasks removed. *(reconcile-animating-surfaces follow-up)*
+      - **Still broken 2026-08-09** (playtest submission 2026-08-09T11-13-15): empty rows are invisible in the
+        interim Read step but REAPPEAR on switching back to Editor — they should have been culled. This
+        true-up worked better under ForceRebuild; the reconcile path no longer fires the per-row blur
+        self-destruct that used to sweep them. Fix the cull WITHOUT reverting to ForceRebuild.
+- [ ] `29b05ca5` **Animate scroll on shrink.** Fill the list past one scroll page, scroll to the bottom,
+      then delete the last row. The resulting upward scroll should ease smoothly, not snap.
+      *(reconcile-animating-surfaces follow-up)*
+      - **Still broken 2026-08-09** (playtest submission 2026-08-09T11-13-15): the row collapses out of view
+        but the scroll offset is then set upward INSTANTLY — a jarring jump. Wanted: animate the post-shrink
+        clamp (relates to §3.5 settling apparatus + the row-size animation harness).
+
 ## tune-tablet-clay-text-contrast
 
 - [x] `fa4e26e8` **Empty-tablet hint legible.** Open a red, a blue, and a fire tablet with an empty
