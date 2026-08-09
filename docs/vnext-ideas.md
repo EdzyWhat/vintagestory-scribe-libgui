@@ -101,14 +101,27 @@ Options: **Standard** · **Linked (Handbook)** · **Tracked (numeric goal)** · 
 Track collecting items against a goal (e.g. "collect 32 reeds"). When editing a row, an extra
 button (alongside pin & delete) spins out a **wizard/modal**: pick an item + a count, and the task
 then tracks against the player's inventory, showing progress.
-- *Item picking — RESOLVED 2026-08-08:* a creative-style **search-first picker**, embedded as a
-  temporary sub-view (see §Picker — RESOLVED in the Prioritization section). Open Q narrows to the
-  *entry point*, not the picker itself (see the real-estate note in that subsection).
-- *Open Qs:* Does progress auto-complete the task at goal? Polling inventory (we already poll
-  inventory for milestone-suggested tasks per the chronicle spec — reuse that mechanism).
-  Client-local vs. synced.
+- *Item picking — RESOLVED 2026-08-08:* two entry methods, **support both but sequence them** — a
+  handbook "Add to task" link **first** (smaller build; captures the exact variant), then a decoupled
+  in-Scribe creative-style **search-first picker** as the follow-up (see §Picker — RESOLVED in the
+  Prioritization section). Open Q narrows to the *entry point*, not the picker itself (see the
+  real-estate note in that subsection).
+- *Count scope — OPEN FORK, decide in the Tracked design phase (2026-08-08):* what inventory counts
+  toward progress? **Tallybook (decompiled 2026-08-08) counts carried-only** — it walks
+  `player.InventoryManager.Inventories.Values` filtered to `ClassName == "hotbar" || "backpack"`,
+  event-driven off inventory change, **no polling, no chest scan** ("what are you carrying, updated
+  the instant it changes"). That's the snappy/simple option but ignores stockpiles. The competing
+  option — **carried + nearby containers** — better matches the "do I have 100 flax" stockpile
+  fantasy but reopens polling/scanning and "which containers count." Not locked now; settle inside
+  this change's design phase (consistent with how Tracked sizing is already deferred there).
+- *Open Qs:* Does progress auto-complete the task at goal? Polling vs. event-driven (Tallybook is
+  event-driven; the chronicle spec's milestone-suggested tasks poll — pick deliberately, don't
+  assume). Client-local vs. synced (note: Scribe lectern data is *server-authoritative* per the Sign
+  pattern, unlike Tallybook which is fully client-side + read-only — a Tracked count that must sync
+  to a placed lectern for other players is a harder problem than a personal client HUD).
 - *Design overlap:* the chronicle spec's "milestone-suggested tasks (self-detected via inventory
-  polling)" is the same primitive — build once, use for both.
+  polling)" is a related primitive — but see the polling-vs-event-driven fork above before assuming
+  it's build-once-use-both.
 
 ### 2.3 Linked (Handbook) task — 🆕 new
 A task that links to a handbook entry: in read view the player clicks the link and it **opens the
@@ -511,8 +524,49 @@ the row already carries pin + delete. Two facts keep the picker cheap here:
     already-expanded with its "pick item" control visible → clicking that control opens the
     search-first picker sub-view. Kind-choice and item-pick never both crowd the row at once, and
     the < 500 px steady-state layout is untouched.
+  - **(c) *Item* pick — via a handbook "Add to task" link (a SECOND, decoupled method).** In
+    addition to the in-Scribe search picker, an "→ Add to task" link is injected into the vanilla
+    handbook page for any item, so the player can pin the *exact item they're reading about* straight
+    into a Tracked task. Modelled on **Tallybook** (`tallybook` mod, decompiled 2026-08-08). Decided
+    2026-08-08 to **support both** entry methods — but explicitly **NOT committed to shipping them in
+    the same release** (author, 2026-08-08). **Handbook-pin is the first cut** (author, 2026-08-08:
+    *"the handbook pin is easier, frankly — let's prioritize that first"*) — it's genuinely the
+    smaller build: a Harmony postfix + a "create Tracked task from this ItemStack" callback, with no
+    new viewMode. The in-Scribe search picker (a/b) is the decoupled follow-up (it needs the whole
+    7th viewMode: search field + virtualized list + row widget + filter wiring). Two reasons it's
+    worth the extra surface, not just
+    redundancy: (i) it captures the **exact variant** the handbook is showing (a plain search hit
+    resolves to the *base* `ItemStack`, which is ambiguous for multi-variant items like soil), and
+    (ii) it's in-context discovery — you're already looking at the thing. See §Handbook-pin
+    (Harmony) below for the mechanism + the technique decision it requires.
 
-*Not specced yet — sequenced into the task-kinds cluster (2.2/2.3), not pulled forward.*
+**Handbook-pin mechanism + technique decision (from decompiling Tallybook 0.3.6, 2026-08-08).**
+Tallybook adds its handbook link via a **Harmony `Postfix` on
+`CollectibleBehaviorHandbookTextAndExtraInfo.GetHandbookInfo`** — the per-*item* method that builds a
+page's `RichTextComponentBase[]` body. The postfix just *appends* a `LinkTextComponent` to the
+returned array. Key facts this settles:
+- **It's robust to handbook-overwrite mods** (the author's stated worry) *because* it patches the
+  collectible's content-builder, **not** `GuiDialogHandbook`. Any handbook dialog — vanilla,
+  survival, or a third-party replacement — that renders item pages calls `GetHandbookInfo` for the
+  body, so the link appears regardless of which dialog mod "won." And a `Postfix` appends, so multiple
+  mods can patch the same method without excluding each other (the opposite of dialog-replacement
+  mods that stomp one another). Only breaks if a handbook mod rewrites/bypasses `GetHandbookInfo`
+  itself — rare.
+- **Harmony is NOT a new dependency.** It ships *inside* Vintage Story at
+  `/Applications/Vintage Story.app/Lib/0Harmony.dll` — any code mod can `using HarmonyLib` with zero
+  download and nothing declared in `modinfo.json` (Tallybook declares only `game >= 1.22.0`). So the
+  CLAUDE.md "no new mod dependencies" guardrail **does not apply** here — there is nothing to bundle,
+  install, or version-track.
+- **What it IS is a technique decision: runtime IL-patching in Scribe's codebase.** Scribe has been
+  deliberately Harmony-free (it rebuilt the GUI on LibGUI rather than patch anything). A
+  `GetHandbookInfo` postfix is low-risk as patches go (append to a return array, wrapped in
+  try/catch, degrade gracefully if the patch ever fails to apply — exactly what Tallybook does), but
+  any IL patch is inherently more update-fragile than pure-API use. **Decided 2026-08-08: accept
+  Harmony as an acceptable technique for this feature.** This is a first for the project — keep the
+  patch minimal, defensive, and confined to this one seam.
+
+*Not specced yet — sequenced into the task-kinds cluster (2.2/2.3), not pulled forward. Handbook-pin
+is the first cut; the in-Scribe search picker is a decoupled follow-up.*
 
 ### :rocket: v1.1 — interim polish release (NEXT)
 Cheap, visible wins bundled into a fast follow-up:

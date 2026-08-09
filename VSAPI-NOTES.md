@@ -2105,6 +2105,39 @@ wiki cloned to `reference/atlas` / `reference/atlas-wiki`, gitignored):
 
 **Fix pattern:** Never call `ForceRebuild()` from a high-frequency tick listener when the rebuilt tree contains `Button` widgets. Instead, drive countdown display with a self-owned `StatefulWidget` (like `ScribeFadeText`) that calls `Element.MarkNeedsBuild()` directly — this diffs against the existing element tree without full unmount/remount. For server-pushed updates (1 s cadence), `ForceRebuild` is safe because it's infrequent enough. See `GuiDialogClockmakerNotebook.cs`.
 
+## Injecting content into ANY item's handbook page — patch `GetHandbookInfo`, not the dialog (2026-08-08)
+
+**Goal: add a line/link (e.g. "→ Add to task") to the vanilla handbook page for every item, in a
+way that survives handbook-*replacement* mods.** There is **no vanilla event/hook** for "append to a
+handbook page" — the only seam is a Harmony patch. Confirmed by decompiling **Tallybook 0.3.6**
+(`~/Downloads/tallybook_0.3.6.zip` → `Tallybook.dll`, class `HandbookPin`).
+
+- **Patch target: `Vintagestory.GameContent.CollectibleBehaviorHandbookTextAndExtraInfo.GetHandbookInfo`**
+  (in `VSSurvivalMod.dll`), a **`Postfix`**. This is the per-*item* method that builds the page body
+  as a `RichTextComponentBase[]`. Signature seen in the wild:
+  `Postfix(ItemSlot inSlot, ICoreClientAPI capi, ref RichTextComponentBase[] __result)`. The postfix
+  reads `inSlot.Itemstack`, then appends to `__result` (rebuild the list, `list.Add(...)`, reassign).
+- **Append a `LinkTextComponent`** for a clickable action:
+  `new LinkTextComponent(capi, "→ Add to task", CairoFont.WhiteSmallText(), onClickAction)`; a
+  `ClearFloatTextComponent(capi, 12f)` before it gives spacing. The click delegate captures a
+  **cloned** `ItemStack` (`stack.Clone()`) — this is how you get the **exact variant** the page is
+  showing (a search-picker's `new ItemStack(collectible)` only yields the *base* variant).
+- **Why this is robust to handbook-overwrite mods:** it patches the *collectible's content-builder*,
+  not `GuiDialogHandbook`. Any dialog (vanilla `GuiDialogSurvivalHandbook`, or a third-party
+  replacement) that shows item pages still calls `GetHandbookInfo` for the body, so the injected
+  content appears regardless of which dialog "won." And a `Postfix` *appends* — multiple mods can
+  postfix the same method without excluding each other (unlike dialog-replacement mods that stomp one
+  another). Only fails if a mod rewrites/bypasses `GetHandbookInfo` itself.
+- **Harmony is already in the game — not a new dependency.** It ships at
+  `/Applications/Vintage Story.app/Lib/0Harmony.dll`; `using HarmonyLib;` needs zero download and no
+  `modinfo.json` dependency entry. Guard the whole `Apply()` in try/catch and log a warning on
+  failure so a missing/renamed method just disables the button instead of crashing (Tallybook does
+  exactly this). `harmony.UnpatchAll("<your-id>")` on dispose.
+- **Finding the open handbook dialog** (to programmatically open/return to it):
+  `capi.Gui.LoadedGuis.OfType<GuiDialogHandbook>().FirstOrDefault()`, or reflect the private `dialog`
+  field off `ModLoader.GetModSystem<ModSystemSurvivalHandbook>()`. To open it "like the player would,"
+  invoke the `handbook` / `survivalhandbook` / `guihandbook` hotkey handler.
+
 ## Entry template
 
 ```
