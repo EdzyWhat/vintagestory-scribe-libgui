@@ -1,19 +1,30 @@
-// A reusable "collapse a departing list row to zero height" animation (scribe-list-collapse).
+// A reusable "animate a list row's height" primitive (gui-row-animation-harness) — the ONE harness
+// every Scribe animating row shares, in either direction:
+//   • Collapse (exit): a departing row shrinks its height 1→0 so the rows below slide up to meet it,
+//     then it is removed once the collapse finishes (a HUD unpin/delete completion, a lectern editor
+//     delete).
+//   • Reveal (enter): a freshly-mounted row grows its height 0→1 so it slides into place instead of
+//     popping in. No removal — the row just settles at full height (the "ScribeRevealable" sketch in
+//     docs/animation-lessons-learned.md).
 //
-// When a row leaves a Scribe list (a HUD unpin/delete completion, or a lectern editor delete) it
-// should not vanish in one frame with the rows below snapping up — its height should animate
-// smoothly to zero so the rows below slide up to meet it, and it should be removed only once that
-// collapse finishes.
-//
-// The load-bearing constraint (verified against LibGUI source): both the HUD and the lectern
-// rebuild via GuiBase.ForceRebuild, which UNMOUNTS and recreates the whole widget tree rather than
+// The load-bearing constraint (verified against LibGUI source): the HUD and the lectern both push
+// content via GuiBase.ForceRebuild, which UNMOUNTS and recreates the whole widget tree rather than
 // reconciling it. Any stock/implicit animation widget (AnimatedSize/AnimatedContainer/…) recreated
 // fresh inits Begin==End==target and SNAPS to the end — no motion. So, exactly like ScribeFadeText,
-// the collapse is a self-ticking StatefulWidget that drives its own AnimationController. And because
-// EACH ForceRebuild remounts the widget, a State-owned controller would restart from zero every
-// rebuild and stutter/never finish — so the controller is owned by a host-held ScribeCollapseRegistry,
+// this is a self-ticking StatefulWidget that drives its own AnimationController. And because EACH
+// ForceRebuild remounts the widget, a State-owned controller would restart from zero every rebuild
+// and stutter/never finish — so the controller is owned by a host-held ScribeAnimationRegistry,
 // keyed by the row's stable identity, and RESUMED on remount (mirrors the ScribeNumericFocusRegistry
-// persistent-node pattern used for the settings fields).
+// persistent-node pattern used for the settings fields). The identity-keyed registry is exactly what
+// lets a motion resume across BOTH a ForceRebuild AND a reconcile SetState (design D5): the same
+// controller is found by id no matter how the row's element was rebuilt.
+//
+// Harness shape (design Open Question, resolved 2026-08-09): ONE widget with a direction enum over
+// ONE shared registry, NOT a family. The substrate (ScribeHeightFactorRender/Widget, the registry)
+// is direction-neutral; only the Build factor mapping and whether the terminal callback removes the
+// row differ between Collapse and Reveal, and both live in the single ScribeRowSizeAnimationState so
+// the load-bearing survival logic (registry lookup, resume-on-remount, fire-if-already-completed,
+// detach-but-don't-dispose) can't drift between the two motions.
 //
 // This file is Mod-side only (LibGUI + AnimationController); Core stays API-free and untouched.
 
@@ -171,21 +182,26 @@ internal sealed class ScribeHeightFactorWidget : SingleChildWidget
 }
 
 /// <summary>
-/// Host-owned collapse state for a list's departing rows (scribe-list-collapse). The host (HUD or
-/// lectern dialog) owns one registry for its lifetime and passes it into each <see cref="ScribeCollapsible"/>,
+/// Host-owned animation state for a list's animating rows (gui-row-animation-harness). The host (HUD or
+/// lectern dialog) owns one registry for its lifetime and passes it into each <see cref="ScribeRowSizeAnimation"/>,
 /// which looks up its <see cref="AnimationController"/> by the row's stable id. Because the controller
 /// lives here — not in the transient widget's <c>State</c> — it SURVIVES the host's <c>ForceRebuild</c>
-/// (which remounts the widget) and RESUMES from its elapsed progress instead of restarting. Mirrors the
+/// (which remounts the widget) AND a reconcile <c>SetState</c> (which reuses the element only when
+/// type+key match), and RESUMES from its elapsed progress instead of restarting. Mirrors the
 /// <see cref="ScribeNumericFocusRegistry"/> persistent-node pattern.
+///
+/// <para>Direction-neutral: the controller always runs 0→1; the widget maps that value to a height
+/// factor per its <see cref="ScribeRowSizeDirection"/> (collapse renders <c>1 − value</c>, reveal
+/// renders <c>value</c>), so one registry serves both motions.</para>
 /// </summary>
-internal sealed class ScribeCollapseRegistry
+internal sealed class ScribeAnimationRegistry
 {
     private readonly Dictionary<string, AnimationController> controllers = new();
 
-    /// <summary>The persistent collapse controller for a row id, created (and started
+    /// <summary>The persistent animation controller for a row id, created (and started
     /// <see cref="AnimationController.Forward"/>) on first request and resumed on later requests, so a
-    /// remounted <see cref="ScribeCollapsible"/> picks up where it left off. The animation runs 0→1; the
-    /// widget renders height factor <c>1 − value</c>, so the row collapses over the duration.</summary>
+    /// remounted <see cref="ScribeRowSizeAnimation"/> picks up where it left off. The controller runs
+    /// 0→1 over the duration; the widget maps that value to its height factor per its direction.</summary>
     public AnimationController Controller(string id, TimeSpan duration, ITickerProvider vsync)
     {
         if (!controllers.TryGetValue(id, out var controller))
@@ -203,12 +219,12 @@ internal sealed class ScribeCollapseRegistry
         return controller;
     }
 
-    /// <summary>Whether a collapse for this id has already finished (reached height zero). The host uses
-    /// this to guard against re-arming a completed collapse before its removal is processed.</summary>
+    /// <summary>Whether the animation for this id has already finished (reached its terminal factor). The
+    /// host uses this to guard against re-arming a completed animation before its cleanup is processed.</summary>
     public bool IsComplete(string id) =>
         controllers.TryGetValue(id, out var c) && c.Status == AnimationStatus.Completed;
 
-    /// <summary>Whether ANY owned collapse is still animating (has not reached
+    /// <summary>Whether ANY owned animation is still running (has not reached
     /// <see cref="AnimationStatus.Completed"/>). While this is true the list geometry is still reflowing
     /// each frame, so a row can slide under a stationary cursor — the host uses this to drive a per-frame
     /// hover refresh (fix-list-collapse-stale-hover) since LibGUI only recomputes hover on real mouse
@@ -223,8 +239,8 @@ internal sealed class ScribeCollapseRegistry
         }
     }
 
-    /// <summary>Release a row's collapse controller once its removal has been handled, so the id is free
-    /// to be reused by a future row without inheriting stale animation state.</summary>
+    /// <summary>Release a row's animation controller once its cleanup (removal, or settle) has been
+    /// handled, so the id is free to be reused by a future row without inheriting stale animation state.</summary>
     public void Release(string id)
     {
         if (controllers.Remove(id, out var controller)) controller.Dispose();
@@ -238,92 +254,121 @@ internal sealed class ScribeCollapseRegistry
     }
 }
 
-/// <summary>
-/// Wraps a departing list row so its height collapses smoothly to zero, sliding the rows below up to
-/// meet it, then fires <see cref="OnCollapsed"/> once so the host can remove it (scribe-list-collapse).
-///
-/// <para>When <c>collapsing</c> is false this is a pass-through at full height (no controller, no cost).
-/// When true, it obtains its <see cref="AnimationController"/> from the host-owned
-/// <see cref="ScribeCollapseRegistry"/> by <c>id</c> — so the animation resumes rather than restarts
-/// across the host's <c>ForceRebuild</c> remounts — subscribes a per-frame repaint, and renders a
-/// height factor of <c>1 − value</c> via <see cref="ScribeHeightFactorWidget"/>. <see cref="OnCollapsed"/>
-/// fires exactly once, when the controller reaches <see cref="AnimationStatus.Completed"/>.</para>
-/// </summary>
-internal sealed class ScribeCollapsible : StatefulWidget
+/// <summary>Which way a <see cref="ScribeRowSizeAnimation"/> drives its height (gui-row-animation-harness).
+/// The underlying controller always runs 0→1; the direction only changes how that value maps to the
+/// rendered height factor and what the terminal state means.</summary>
+internal enum ScribeRowSizeDirection
 {
-    /// <summary>Default collapse duration. Short enough to feel snappy, long enough to read as motion;
+    /// <summary>Exit: shrink 1→0 (factor <c>1 − value</c>), then fire <c>onEnd</c> so the host removes the
+    /// row. The load-bearing original case (a departing list row sliding closed).</summary>
+    Collapse,
+
+    /// <summary>Enter: grow 0→1 (factor <c>value</c>). A freshly-mounted row slides into place instead of
+    /// popping in; there is nothing to remove, so <c>onEnd</c> is optional (a settle hook). The
+    /// "ScribeRevealable" sketch (docs/animation-lessons-learned.md) — the on-ramp for future
+    /// enter animations; no caller ships in this change.</summary>
+    Reveal,
+}
+
+/// <summary>
+/// Wraps a list row so its height animates in one direction (gui-row-animation-harness): a
+/// <see cref="ScribeRowSizeDirection.Collapse"/> shrinks it 1→0 (rows below slide up to meet it) then
+/// fires <see cref="OnEnd"/> so the host can remove it; a <see cref="ScribeRowSizeDirection.Reveal"/>
+/// grows it 0→1 so it slides into place, with <see cref="OnEnd"/> an optional settle hook.
+///
+/// <para>When <c>animating</c> is false this is a pass-through at full height (no controller, no cost).
+/// When true, it obtains its <see cref="AnimationController"/> from the host-owned
+/// <see cref="ScribeAnimationRegistry"/> by <c>id</c> — so the animation resumes rather than restarts
+/// across the host's <c>ForceRebuild</c> remounts <em>and</em> across a reconcile <c>SetState</c> —
+/// subscribes a per-frame repaint, and renders a height factor per its <see cref="Direction"/> via
+/// <see cref="ScribeHeightFactorWidget"/>. <see cref="OnEnd"/> fires exactly once, when the controller
+/// reaches <see cref="AnimationStatus.Completed"/>.</para>
+/// </summary>
+internal sealed class ScribeRowSizeAnimation : StatefulWidget
+{
+    /// <summary>Default animation duration. Short enough to feel snappy, long enough to read as motion;
     /// tunable if playtest wants a different feel.</summary>
     public const int DefaultDurationMs = 200;
 
-    public ScribeCollapsible(
+    public ScribeRowSizeAnimation(
         string id,
-        bool collapsing,
-        ScribeCollapseRegistry registry,
-        Action onCollapsed,
+        bool animating,
+        ScribeRowSizeDirection direction,
+        ScribeAnimationRegistry registry,
         Widget child,
+        Action? onEnd = null,
         int durationMs = DefaultDurationMs,
         Gui.Widgets.Framework.Key? key = null) : base(key)
     {
         Id = id;
-        Collapsing = collapsing;
+        Animating = animating;
+        Direction = direction;
         Registry = registry;
-        OnCollapsed = onCollapsed;
+        OnEnd = onEnd;
         Child = child;
         DurationMs = durationMs;
     }
 
-    /// <summary>Stable identity of the departing row, keying its controller in the registry.</summary>
+    /// <summary>Stable identity of the animating row, keying its controller in the registry.</summary>
     public string Id { get; }
-    public bool Collapsing { get; }
-    public ScribeCollapseRegistry Registry { get; }
-    public Action OnCollapsed { get; }
+    public bool Animating { get; }
+    public ScribeRowSizeDirection Direction { get; }
+    public ScribeAnimationRegistry Registry { get; }
+    /// <summary>Fired exactly once when the animation completes. Required in practice for
+    /// <see cref="ScribeRowSizeDirection.Collapse"/> (the host removes the departing row); optional for
+    /// <see cref="ScribeRowSizeDirection.Reveal"/> (nothing to remove — a settle hook).</summary>
+    public Action? OnEnd { get; }
     public Widget Child { get; }
     public int DurationMs { get; }
 
-    public override State CreateState() => new ScribeCollapsibleState();
+    public override State CreateState() => new ScribeRowSizeAnimationState();
 }
 
-internal sealed class ScribeCollapsibleState : State<ScribeCollapsible>
+internal sealed class ScribeRowSizeAnimationState : State<ScribeRowSizeAnimation>
 {
-    /// <summary>Eased so the collapse decelerates as it closes (calmer than linear).</summary>
-    private static readonly Curve CollapseCurve = Curves.EaseInOutCubic;
+    /// <summary>Eased so the motion decelerates as it settles (calmer than linear). Shared by both
+    /// directions — a symmetric ease reads the same opening and closing.</summary>
+    private static readonly Curve SizeCurve = Curves.EaseInOutCubic;
 
     private AnimationController? controller;
 
     public override void InitState()
     {
         base.InitState();
-        if (!Widget.Collapsing) return;
+        if (!Widget.Animating) return;
 
         controller = Widget.Registry.Controller(
             Widget.Id, TimeSpan.FromMilliseconds(Widget.DurationMs), Element.Owner!.GetTickerProvider());
         controller.OnValueChanged += OnValueChanged;
         controller.OnStatusChanged += OnStatusChanged;
 
-        // If the collapse already finished while this row was between remounts, fire the removal now
+        // If the animation already finished while this row was between remounts, fire the end callback now
         // (the status-changed event won't fire again for an already-Completed controller).
-        if (controller.Status == AnimationStatus.Completed) Widget.OnCollapsed();
+        if (controller.Status == AnimationStatus.Completed) Widget.OnEnd?.Invoke();
     }
 
     private void OnValueChanged(double _) => Element.MarkNeedsBuild();
 
     private void OnStatusChanged(AnimationStatus status)
     {
-        if (status == AnimationStatus.Completed) Widget.OnCollapsed();
+        if (status == AnimationStatus.Completed) Widget.OnEnd?.Invoke();
     }
 
     public override Widget Build(BuildContext context)
     {
-        if (controller == null) return Widget.Child; // not collapsing: full height, pass-through
+        if (controller == null) return Widget.Child; // not animating: full height, pass-through
 
-        float factor = 1f - (float)CollapseCurve.Transform(controller.Value);
+        // The controller always runs 0→1; map it to a height factor per direction. Collapse closes
+        // (1→0), Reveal opens (0→1).
+        float eased = (float)SizeCurve.Transform(controller.Value);
+        float factor = Widget.Direction == ScribeRowSizeDirection.Collapse ? 1f - eased : eased;
         return new ScribeHeightFactorWidget(factor, Widget.Child);
     }
 
     public override void Dispose()
     {
         // Detach this (transient) widget's handlers, but do NOT dispose the controller — it is owned by
-        // the host registry so it survives the ForceRebuild remount and the next mount resumes it.
+        // the host registry so it survives the ForceRebuild remount / reconcile and the next mount resumes it.
         if (controller != null)
         {
             controller.OnValueChanged -= OnValueChanged;

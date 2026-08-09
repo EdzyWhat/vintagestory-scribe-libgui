@@ -30,7 +30,7 @@ internal readonly record struct ScribeEditRowData(int Index, bool IsTask, bool D
 /// (scribe-list-collapse). The row's scratch block and focus node are already gone, so this renders a
 /// FROZEN copy — the same [grip-spacer][checkbox][text] column an editor row uses (so it aligns and
 /// collapses seamlessly), but with no editable field, no gestures, and no delete/pin/drag controls. It is
-/// never focused and never mutates anything; the <see cref="ScribeCollapsible"/> wrapping it animates its
+/// never focused and never mutates anything; the <see cref="ScribeRowSizeAnimation"/> wrapping it animates its
 /// height to zero and then removes it.
 /// </summary>
 internal sealed class ScribeFrozenEditorRow : StatelessWidget
@@ -131,7 +131,7 @@ internal sealed class ScribeEditorContent : StatefulWidget
         ScribeRowStyle style,
         ScrollController scrollController,
         IReadOnlyList<ScribeDepartingEditorRow> departingRows,
-        ScribeCollapseRegistry collapseRegistry,
+        ScribeAnimationRegistry collapseRegistry,
         Action<Guid> onDepartingCollapsed,
         string hintLangKey = "scribe:scribe-gui-edit-hint",
         bool addTaskEnabled = true,
@@ -215,7 +215,7 @@ internal sealed class ScribeEditorContent : StatefulWidget
     public IReadOnlyList<ScribeDepartingEditorRow> DepartingRows { get; }
     /// <summary>Host-owned collapse controllers for the departing rows (keyed by TaskId), so a collapse
     /// resumes across the dialog's ForceRebuild remounts.</summary>
-    public ScribeCollapseRegistry CollapseRegistry { get; }
+    public ScribeAnimationRegistry CollapseRegistry { get; }
     /// <summary>Fired (with the row's TaskId) when a departing row's collapse completes, so the dialog can
     /// remove its ghost and re-clamp the scroll extent.</summary>
     public Action<Guid> OnDepartingCollapsed { get; }
@@ -319,18 +319,19 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
             // Splice each deleted-but-collapsing row back in at the display index it held, as a static,
             // non-interactive ghost that collapses its height to zero then removes itself
             // (scribe-list-collapse). Its scratch block + focus node are gone, so it renders as a frozen
-            // read-style row (no field, no drag/delete controls) wrapped in ScribeCollapsible. Keyed by
+            // read-style row (no field, no drag/delete controls) wrapped in ScribeRowSizeAnimation. Keyed by
             // TaskId (OUTSIDE the collapsible) so its identity is stable across rebuilds and never collides
             // with a live index-keyed row. Insert ascending, clamped to the current list length.
             foreach (var d in Widget.DepartingRows.OrderBy(d => d.Index))
             {
                 int at = Math.Clamp(d.Index, 0, rows.Count);
                 Guid taskId = d.Row.TaskId;
-                rows.Insert(at, new ScribeCollapsible(
+                rows.Insert(at, new ScribeRowSizeAnimation(
                     id: taskId.ToString("N"),
-                    collapsing: true,
+                    animating: true,
+                    direction: ScribeRowSizeDirection.Collapse,
                     registry: Widget.CollapseRegistry,
-                    onCollapsed: () => Widget.OnDepartingCollapsed(taskId),
+                    onEnd: () => Widget.OnDepartingCollapsed(taskId),
                     child: new ScribeFrozenEditorRow(d.Row, Widget.Style),
                     key: new ValueKey<Guid>(taskId)));
             }

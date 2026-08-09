@@ -1,27 +1,37 @@
 ## 1. Branch & baseline
 
-- [ ] 1.1 Confirm work is on the dedicated `reconcile-animating-surfaces` branch (already created off
+- [x] 1.1 Confirm work is on the dedicated `reconcile-animating-surfaces` branch (already created off
   main). This is droppable — do NOT layer it onto a feature branch.
-- [ ] 1.2 Capture a pre-conversion baseline: `dotnet build src/Mod/Mod.csproj` clean, `dotnet test
+- [x] 1.2 Capture a pre-conversion baseline: `dotnet build src/Mod/Mod.csproj` clean, `dotnet test
   tests/Core.Tests` green. Note the current `TESTING.md` items that must still pass after the editor
   conversion (caret survival, cross-row focus, scroll-offset preservation, external resync, collapse
-  animation, mass-delete).
+  animation, mass-delete). [Baseline 2026-08-09: build 0 errors / 4 pre-existing warnings; 286 Core
+  tests pass.]
 - [ ] 1.3 Read the abandoned branch's `src/Mod/ScribeListView.cs` (`git show
   refactor-reconciling-gui-rebuild:src/Mod/ScribeListView.cs`) as reference for the D4 container — do
   NOT merge/rebase that branch (259 commits behind, rewrote a since-split file).
 
 ## 2. Generalize the animation harness (spec: gui-row-animation-harness)
 
-- [ ] 2.1 Decide the harness shape (design Open Question): one widget with a direction/mode, or a small
-  family sharing the registry. Record the decision in the change.
-- [ ] 2.2 Generalize `ScribeCollapsible` + `ScribeCollapseRegistry` into the reusable primitive:
+- [x] 2.1 Decide the harness shape (design Open Question): one widget with a direction/mode, or a small
+  family sharing the registry. Record the decision in the change. [RESOLVED: one widget
+  (`ScribeRowSizeAnimation` + `ScribeRowSizeDirection`) over one shared `ScribeAnimationRegistry` —
+  rationale in design.md Open Questions.]
+- [x] 2.2 Generalize `ScribeCollapsible` + `ScribeCollapseRegistry` into the reusable primitive:
   self-ticking controller, host-owned + TaskId-keyed, deferred cleanup out of the ticker callback,
   supporting exit (collapse 1→0 then remove) and enter (grow 0→1, no onEnd needed). Keep the existing
-  collapse behavior intact for current callers.
-- [ ] 2.3 Verify the harness resumes an in-flight animation across BOTH a reconcile and a
-  `ForceRebuild` (identity lookup by TaskId), and releases the identity on completion.
-- [ ] 2.4 `dotnet build` clean; existing collapse behavior unchanged (Core tests green — note the
-  harness itself is not Core-unit-testable, so this is a build + no-regression check).
+  collapse behavior intact for current callers. [File → `ScribeRowSizeAnimation.cs`; both callers
+  (editor, HUD) pass `direction: Collapse` + `onEnd`; behavior byte-equivalent to the old collapse.]
+- [x] 2.3 Verify the harness resumes an in-flight animation across BOTH a reconcile and a
+  `ForceRebuild` (identity lookup by TaskId), and releases the identity on completion. [Structural:
+  reconcile reuses the element (State + controller untouched); a remount — ForceRebuild OR a positional
+  reconcile shift — detaches handlers in Dispose but the registry keeps the controller, and the next
+  `InitState → registry.Controller(id)` resumes from elapsed progress. `Release(id)` frees it on
+  completion. Both paths share one lookup, so resume-across-reconcile ≡ the shipped
+  resume-across-ForceRebuild.]
+- [x] 2.4 `dotnet build` clean; existing collapse behavior unchanged (Core tests green — note the
+  harness itself is not Core-unit-testable, so this is a build + no-regression check). [Build 0 errors /
+  4 pre-existing warnings; 286 Core tests pass.]
 
 ## 3. Convert the editor to reconcile — THE PROOF-OF-CONCEPT (specs: scribe-dialog-base, gui-foundation-policy, gui-list-collapse)
 

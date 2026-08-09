@@ -133,7 +133,7 @@ public sealed class HudScribePins : GuiBase
     /// <summary>Host-owned collapse controllers for <see cref="departing"/> rows, keyed by identity so a
     /// collapse RESUMES (not restarts) across the HUD's <see cref="ForceRebuild"/> remounts
     /// (scribe-list-collapse). Disposed with the HUD.</summary>
-    private readonly ScribeCollapseRegistry collapseRegistry = new();
+    private readonly ScribeAnimationRegistry collapseRegistry = new();
 
     /// <summary>Keeps the collapse-time hover refresh running a few frames past the last animating frame so a
     /// refresh lands AFTER the completion-triggered <see cref="ForceRebuild"/> re-lays-out the fresh tree
@@ -485,7 +485,7 @@ public sealed class HudScribePins : GuiBase
     /// <summary>Start collapsing a destructive-completed row out of the HUD (scribe-list-collapse). Snapshots
     /// the row (with its current display index, so it collapses IN PLACE) into <see cref="departing"/> and
     /// suppresses the live pin via <see cref="awaitingRemoval"/> so only the collapsing snapshot renders.
-    /// Its collapse controller is lazily created (and started) by the <see cref="ScribeCollapsible"/> on its
+    /// Its collapse controller is lazily created (and started) by the <see cref="ScribeRowSizeAnimation"/> on its
     /// first build.</summary>
     private void BeginDeparting((Guid, Guid) key)
     {
@@ -977,7 +977,7 @@ internal sealed class HudPinsContent : StatelessWidget
     private readonly bool stormActive;
     /// <summary>Seed for the corruptor this build; the host advances it on the re-scramble cadence.</summary>
     private readonly int corruptionSeed;
-    private readonly ScribeCollapseRegistry collapseRegistry;
+    private readonly ScribeAnimationRegistry collapseRegistry;
     private readonly Action<Guid, Guid> onDepartingCollapsed;
     private readonly bool collapsed;
     private readonly bool leftAligned;
@@ -997,7 +997,7 @@ internal sealed class HudPinsContent : StatelessWidget
         double corruptionStrength,
         bool stormActive,
         int corruptionSeed,
-        ScribeCollapseRegistry collapseRegistry,
+        ScribeAnimationRegistry collapseRegistry,
         Action<Guid, Guid> onDepartingCollapsed,
         bool collapsed,
         bool leftAligned,
@@ -1241,11 +1241,12 @@ internal sealed class HudPinsContent : StatelessWidget
         // host-owned (keyed by identity) so it resumes across the HUD's ForceRebuild remounts. Wrapping keeps
         // the ValueKey OUTSIDE the collapsible so the row's identity (and its AnimatedOpacity state) is stable.
         if (!row.Departing) return styled;
-        return new ScribeCollapsible(
+        return new ScribeRowSizeAnimation(
             id: $"{row.DocId:N}:{row.TaskId:N}",
-            collapsing: true,
+            animating: true,
+            direction: ScribeRowSizeDirection.Collapse,
             registry: collapseRegistry,
-            onCollapsed: () => onDepartingCollapsed(row.DocId, row.TaskId),
+            onEnd: () => onDepartingCollapsed(row.DocId, row.TaskId),
             child: styled,
             key: new ValueKey<Guid>(row.TaskId));
     }

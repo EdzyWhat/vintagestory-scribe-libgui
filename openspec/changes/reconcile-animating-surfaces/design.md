@@ -169,9 +169,21 @@ full manual checklist. Rollback = abandon the branch; `fix-mass-delete-click-tar
 
 ## Open Questions
 
-- **Harness shape:** does the generalized primitive expose enter/exit/reorder as one widget with a
-  direction/mode, or a small family sharing the registry? Resolve while doing D5, before the editor
-  conversion depends on it.
+- **Harness shape — RESOLVED 2026-08-09 (task 2.1):** *one widget with a direction/mode over the one
+  shared registry*, not a family. Rationale, decided with the code open: the substrate is already
+  direction-neutral (`ScribeHeightFactorRender/Widget` just renders a `factor ∈ [0,1]`; the registry
+  just owns controllers by id and runs them `Forward()` 0→1, resuming across remount and releasing on
+  completion). The *only* difference between exit (collapse) and enter (reveal) is (a) the Build factor
+  mapping — exit `1 − curve(value)` vs enter `curve(value)` — and (b) whether the terminal callback
+  removes the row (exit: required) or just settles (enter: optional). A family would duplicate the
+  load-bearing survival `State` (registry lookup, resume-on-remount, fire-if-already-completed,
+  detach-but-don't-dispose) across two classes that must stay in lockstep; one widget with a
+  `direction` enum keeps a single survival story that can't drift between the two motions, and matches
+  task 2.2's "into *the* reusable primitive … supporting exit … and enter." Concretely:
+  `ScribeCollapseRegistry` → `ScribeAnimationRegistry` (direction-neutral substrate);
+  `ScribeCollapsible` → `ScribeRowSizeAnimation` taking `ScribeRowSizeDirection { Collapse, Reveal }`
+  and an optional `onEnd`. Reveal ships with no caller yet (Non-Goal: no new animations this change);
+  it is the future-animation on-ramp per goal 3, verified only by build + the resume test (2.3).
 - **Read-view tier (D4):** spike Tier 1 (`DataIdentity`) to see if it's cleanly reachable without a
   `gui` fork, or go straight to Tier 2? Deferred until after the editor gate — not on the critical path.
 - **Scroll machinery:** how much of the `pendingEnsureVisible` / `pendingRestoreScrollOffset` /

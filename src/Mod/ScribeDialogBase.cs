@@ -210,7 +210,7 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// <summary>Host-owned collapse controllers for <see cref="departingEditorRows"/>, keyed by TaskId so a
     /// collapse RESUMES (not restarts) across the dialog's <see cref="ForceRebuild"/> remounts
     /// (scribe-list-collapse). Disposed with the dialog.</summary>
-    private readonly ScribeCollapseRegistry editorCollapseRegistry = new();
+    private readonly ScribeAnimationRegistry editorCollapseRegistry = new();
 
     /// <summary>Keeps the collapse-time hover refresh running a few frames past the last animating frame so a
     /// refresh lands AFTER the completion-triggered <see cref="ForceRebuild"/> re-lays-out the fresh tree
