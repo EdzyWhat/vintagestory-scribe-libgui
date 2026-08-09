@@ -313,7 +313,18 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                     onDragOver: OnRowDragOver,
                     onDragEnd: OnRowDragEnd,
                     style: Widget.Style,
-                    key: new ValueKey<int>(b.Index)))
+                    // Stable per-row identity (reconcile-animating-surfaces §3.2): keyed by the block's
+                    // TaskId, NOT its list index. Under the in-place reconcile a RebuildBody() drives
+                    // (RebuildBody → BodyState.Build → this Build re-runs → MultiChildElement.Update walks
+                    // the rows POSITIONALLY), a Guid key lets an unshifted slot's row be REUSED — its
+                    // ScribeMultilineField State, hence caret + unsaved buffer, survives the repaint. An
+                    // int index keyed every slot to its position, so any structural change looked like a
+                    // brand-new widget at that slot and remounted the field (dropping the caret). LibGUI's
+                    // reconciler is positional (no keyed reordering), so this preserves identity only where
+                    // the slot is unchanged — deleting the collapsing ghost holds the deleted slot, keeping
+                    // rows below in place; a delete/insert ABOVE the focused row still shifts + remounts it
+                    // (the accepted positional caveat — text survives via the scratch write-through).
+                    key: new ValueKey<Guid>(b.TaskId)))
                 .ToList();
 
             // Splice each deleted-but-collapsing row back in at the display index it held, as a static,

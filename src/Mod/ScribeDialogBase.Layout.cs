@@ -28,21 +28,32 @@ public abstract partial class ScribeDialogBase
 {
     // ---------------- Build ----------------
 
-    protected override Widget Build()
+    protected override Widget Build() =>
+        // Wrap the whole dialog body in the single persistent-root StatefulWidget
+        // (reconcile-animating-surfaces §3.1). GuiBase runs this Build() only once per open (and again on
+        // each ForceRebuild); the body it returns then persists, so an in-place update reconciles the body
+        // via RebuildBody() (reusing the live editor rows + fields) rather than tearing the tree down. The
+        // body tree itself is BuildBodyTree(), re-invoked on every reconcile so it re-reads live state.
+        new ScribeDialogBody(bodyKey, BuildBodyTree);
+
+    /// <summary>The dialog body subtree, re-invoked on every reconcile by <see cref="ScribeDialogBody"/>
+    /// (reconcile-animating-surfaces §3.1) so it reflects the dialog's current live state. Reads the
+    /// Pixel-Art Display preference AND the Pixel Art Size (W) fresh each build (mirrors how RowStyle reads
+    /// WindowFontScale fresh) so toggling either relays out this dialog on the MyPinsChanged/UpdateMySettings
+    /// rebuild with no reopen. On = Scribe's light theme + notebook art; off = the player's global LibGUI
+    /// theme with no art. W drives the whole proportional layout via ScribeLayout; the window Size is derived
+    /// from the same W in CreateWindowConfig (applied at open).
+    ///
+    /// <para>The OuterArtBox is the notebook art itself (or a bare box when Pixel-Art Display is OFF, or the
+    /// flat placeholder color when the PNG is missing — the existing gate + fallback, now at the root).
+    /// Sized to W × H so the stretch-to-fill backdrop is a uniform, distortion-free scale. There is no
+    /// WindowFrame: the tree below IS the header + content, so the art frames everything rather than
+    /// sitting as a strip beneath a stock bar.</para></summary>
+    private Widget BuildBodyTree()
     {
-        // Read the Pixel-Art Display preference AND the Pixel Art Size (W) fresh each build (mirrors how
-        // RowStyle reads WindowFontScale fresh) so toggling either relays out this dialog on the
-        // MyPinsChanged/UpdateMySettings rebuild with no reopen. On = Scribe's light theme + notebook art;
-        // off = the player's global LibGUI theme with no art. W drives the whole proportional layout via
-        // ScribeLayout; the window Size is derived from the same W in CreateWindowConfig (applied at open).
         bool pixelArt = modSystem.MySettings.PixelArtDisplay;
         var layout = host.GetLayout(modSystem.MySettings.PixelArtSize);
 
-        // The OuterArtBox is the notebook art itself (or a bare box when Pixel-Art Display is OFF, or the
-        // flat placeholder color when the PNG is missing — the existing gate + fallback, now at the root).
-        // Sized to W × H so the stretch-to-fill backdrop is a uniform, distortion-free scale. There is no
-        // WindowFrame: the tree below IS the header + content, so the art frames everything rather than
-        // sitting as a strip beneath a stock bar.
         return new Theme(
             ResolveTheme(pixelArt),
             child: WrapBackdrop(pixelArt, layout, BuildOuterArtBox(layout)));
@@ -273,7 +284,12 @@ public abstract partial class ScribeDialogBase
         if (e.KeyCode is (int)GlKeys.Enter or (int)GlKeys.KeypadEnter or (int)GlKeys.Escape)
         {
             CommitTitleIfEditing();
-            ForceRebuild();
+            // Swap the title slot back from inline-input to display via an in-place reconcile
+            // (reconcile-animating-surfaces §3.1). RebuildBody marks the body dirty for the NEXT frame's
+            // build pass rather than unmounting the tree synchronously, so it also sidesteps the
+            // mid-dispatch orphan-button NPE the old ForceRebuild had to defer around (see
+            // _pendingTitleEditRebuild) — and the editor rows are reused, so any focused row keeps its caret.
+            RebuildBody();
             e.Handled = true;
         }
     }

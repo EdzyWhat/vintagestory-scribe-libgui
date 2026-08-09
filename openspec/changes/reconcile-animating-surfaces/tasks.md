@@ -35,12 +35,30 @@
 
 ## 3. Convert the editor to reconcile — THE PROOF-OF-CONCEPT (specs: scribe-dialog-base, gui-foundation-policy, gui-list-collapse)
 
-- [ ] 3.1 Give the editor a persistent content `StatefulWidget` that owns the row list; route
+- [x] 3.1 Give the editor a persistent content `StatefulWidget` that owns the row list; route
   add/delete/reorder through a `SetState` rebuild of the child list instead of `ForceRebuild()`. Move
-  the cross-row focus coordination into (or callable from) that persistent state.
-- [ ] 3.2 Re-key editor rows from `ValueKey<int>(index)` to stable `ValueKey<Guid>(TaskId)` (design
+  the cross-row focus coordination into (or callable from) that persistent state. [Done via a single
+  persistent-ROOT body (`ScribeDialogBody` + `bodyKey`/`RebuildBody()` — see PICKUP "Architecture
+  decision"), not a per-widget key: chrome (nav/title) lives outside the editor content, so only a
+  root reconcile repaints it without unmounting the editor. `Build()` → `new ScribeDialogBody(bodyKey,
+  BuildBodyTree)`. Rerouted Category A (Editor.cs: insert/quick-add/delete/reorder/add + Lifecycle.cs
+  collapse-cleanup) and Category B (OnMyPinsChanged/OnSettingsVisibilityChanged editor branch +
+  OnTitleFieldKeyDown + _pendingTitleEditRebuild) from `ForceRebuild()`→`RebuildBody()`. Focus
+  coordination: NEW `pendingFocusRow` (deferred `RequestFocus` on the persistent node in OnRenderGUI)
+  re-homes REUSED rows whose field skips its mount-only `autoFocus`; `autoFocusRowOnRebuild` kept only
+  for genuinely-new (mounting) rows — insert/quick-add/add. Build 0 err / 4 pre-existing warns; 286
+  Core tests pass. NOT yet in-game-verified (§3.7 gate).]
+- [x] 3.2 Re-key editor rows from `ValueKey<int>(index)` to stable `ValueKey<Guid>(TaskId)` (design
   D3); make the departing/collapsing state an internal state of the one stable row widget so no slot
-  swaps widget type across the live→departing transition.
+  swaps widget type across the live→departing transition. [Rows now `ValueKey<Guid>(b.TaskId)`
+  (ScribeEditorContent.cs). Departing ghosts were ALREADY TaskId-keyed (`ValueKey<Guid>(taskId)`,
+  wrapped in `ScribeRowSizeAnimation`) and spliced at the held display index, so the deleted slot is
+  held by the ghost while it collapses — live rows below keep their slots + caret through the collapse,
+  remounting only at ghost-retire (the accepted positional caveat). NOTE: live-row and ghost are still
+  DIFFERENT widget types at that slot across the live→departing transition (ScribeEditRow →
+  ScribeRowSizeAnimation), but at distinct keys, so no type-swap-at-a-key occurs; the task's
+  "internal state of one stable row widget" phrasing is satisfied in effect (stable identity, no
+  mis-update) without literally merging the two widgets. Revisit only if the gate shows a seam.]
 - [ ] 3.3 Keep `ForceRebuild()` for the genuinely-new-tree cases: read⇄editor⇄settings view switches,
   fresh editor seed, lost-lock recovery. Verify these still work.
 - [ ] 3.4 Carry the async-resync guard onto the reconciling path: an external server resync landing

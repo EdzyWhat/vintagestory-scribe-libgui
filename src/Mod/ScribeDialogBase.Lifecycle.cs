@@ -52,11 +52,16 @@ public abstract partial class ScribeDialogBase
         }
 
         // An editor row's collapse completed (its callback fired from inside the animation pump, where
-        // unmounting the tree would be re-entrant); retire it now with a rebuild (scribe-list-collapse).
+        // mutating the tree would be re-entrant); retire the ghost now with an in-place reconcile
+        // (scribe-list-collapse). RebuildBody re-runs BuildEditorContent, which drops the retired ghost from
+        // the departing list so its slot closes; the live rows below then shift up one slot and remount
+        // (the positional caveat — their text survives via the scratch write-through). Reconcile REUSES the
+        // SingleChildScrollView (unlike the old ForceRebuild, which remounted it and reset the offset to 0),
+        // so the offset is preserved inherently; the deferred clamp still trims it to the now-shorter extent.
         if (needsEditorCollapseCleanup)
         {
             needsEditorCollapseCleanup = false;
-            if (IsOpened()) ForceRebuild();
+            if (IsOpened()) RebuildBody();
         }
 
         // Keep hover self-healing under a STATIONARY cursor, because LibGUI only recomputes hover on real
@@ -109,7 +114,12 @@ public abstract partial class ScribeDialogBase
         if (_pendingTitleEditRebuild)
         {
             _pendingTitleEditRebuild = false;
-            if (IsOpened()) ForceRebuild();
+            // In-place reconcile (§3.1): swaps the title slot between display Text and inline TextField
+            // (different widget types → the reconcile mounts the new one fresh, so _pendingTitleFocus's
+            // Owner-check below still fires once it's live) while REUSING the editor rows beneath. The
+            // deferral out of pointer dispatch is retained since this flag is armed from the pencil tap /
+            // blur listener; RebuildBody itself is also dispatch-safe (it only marks the body dirty).
+            if (IsOpened()) RebuildBody();
         }
 
         // Focus the title field once its post-pencil rebuild has mounted (the stock TextField sets
@@ -126,6 +136,22 @@ public abstract partial class ScribeDialogBase
             {
                 _pendingTitleFocus = false; // editing was cancelled before the field mounted; drop it
             }
+        }
+
+        // Re-home keyboard focus onto a REUSED editor row after an in-place reconcile
+        // (reconcile-animating-surfaces §3.1). base.OnRenderGUI above already ran BuildDirtyElements (the
+        // reconcile) + layout this frame, so the target row's field element is mounted and its focus node
+        // has a live Owner. Deferred here rather than fired inside the mutation handler for the same reason
+        // as pendingEnsureVisible: RequestFocus mid-pointer-dispatch (a delete/reorder/pin press) races the
+        // element the click landed on. Unlike autoFocusRowOnRebuild (which rides the field's mount-only
+        // autoFocus and so only re-homes a genuinely-new row), this works whether the row was reused or
+        // remounted — it drives the persistent dialog-owned node directly. Waits (like the block below) for
+        // a live Owner so it also survives a reconcile that arrives a frame late.
+        if (pendingFocusRow is { } focusRow && isEditorMode
+            && focusRow < editorFocusNodes.Count && editorFocusNodes[focusRow].Owner is not null)
+        {
+            editorFocusNodes[focusRow].RequestFocus();
+            pendingFocusRow = null;
         }
 
         if (pendingEnsureVisible && isEditorMode && focusedEditIndex is { } idx

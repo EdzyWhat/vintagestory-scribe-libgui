@@ -86,10 +86,13 @@ public abstract partial class ScribeDialogBase
         {
             isDirty = true;
             SyncFocusNodesToScratch();
+            // A genuinely-new row MOUNTS this reconcile, so its field's mount-only autoFocus fires — keep
+            // autoFocusRowOnRebuild rather than pendingFocusRow. Rows ABOVE the insertion keep their slots
+            // and are reused (caret intact); rows below shift and remount (unfocused — no loss).
             autoFocusRowOnRebuild = insertAt;
             focusedEditIndex = insertAt;
             pendingEnsureVisible = true;
-            ForceRebuild();
+            RebuildBody();
         }
         else
         {
@@ -124,10 +127,11 @@ public abstract partial class ScribeDialogBase
         {
             isDirty = true;
             SyncFocusNodesToScratch();
+            // The fresh top row MOUNTS, so autoFocus fires on it (reconcile path — see EditorInsertTaskBelow).
             autoFocusRowOnRebuild = 0;
             focusedEditIndex = 0;
             pendingEnsureVisible = true;
-            if (IsOpened()) ForceRebuild();
+            if (IsOpened()) RebuildBody();
         }
     }
 
@@ -274,17 +278,23 @@ public abstract partial class ScribeDialogBase
             else if (f > index) focusedEditIndex = f - 1;
         }
 
-        // Re-home the caret after the rebuild. Pressing the (non-IFocusable) delete button already blurred
+        // Re-home the caret after the reconcile. Pressing the (non-IFocusable) delete button already blurred
         // the field via LibGUI's DispatchPointerDown focus-clear, so even a surviving edited row needs its
         // focus re-requested — nothing re-grants it otherwise, which is why the caret vanished (a05caret1).
         // If we deleted the focused row, land on the neighbor per design Q1: the row above (index-1), or the
         // new first row when the top row was deleted; an emptied document gets no focus (empty-state hint).
+        // Reconcile path (§3.1): a delete never MOUNTS a new row, so the focus target is always a REUSED row
+        // whose field skips its mount-only autoFocus — re-home via pendingFocusRow (the deferred RequestFocus
+        // on the persistent node), NOT autoFocusRowOnRebuild. Because the departing ghost holds the deleted
+        // slot while it collapses, rows below keep their slots and stay reused with their caret intact FOR
+        // THE COLLAPSE; the below rows only remount (losing caret POSITION, text preserved via write-through)
+        // when the ghost retires and they shift up — the accepted positional caveat re-armed in the cleanup.
         if (scratch.Blocks.Count > 0)
         {
             int target = focusedEditIndex ?? Math.Max(0, index - 1);
             target = Math.Min(target, scratch.Blocks.Count - 1);
             focusedEditIndex = target;
-            autoFocusRowOnRebuild = target;
+            pendingFocusRow = target;
         }
         else
         {
@@ -298,7 +308,7 @@ public abstract partial class ScribeDialogBase
         // content extent doesn't actually shrink until the row reaches zero — clamping now would fight the
         // collapsing height (scribe-list-collapse). LibGUI's own clamp ignores a sub-50px overshoot, so the
         // deferred clamp is still needed once the row is gone (see pendingClampToExtent).
-        ForceRebuild();
+        RebuildBody();
     }
 
     /// <summary>A deleted editor row finished collapsing to zero height (scribe-list-collapse): retire its
@@ -388,18 +398,24 @@ public abstract partial class ScribeDialogBase
         isDirty = true;
         focusedEditIndex = to;
         SyncFocusNodesToScratch();
-        autoFocusRowOnRebuild = to;
+        // Re-home focus onto the moved row through the persistent node (§3.1). A reorder shifts every slot
+        // between from and to, so the moved row remounts at its new slot under the positional reconciler —
+        // but we drive focus via pendingFocusRow (the deferred RequestFocus) rather than the field's
+        // mount-only autoFocus, per the finalized reconcile decision: it's robust whether the row is reused
+        // or remounted and keeps delete/reorder on one focus path.
+        pendingFocusRow = to;
         if (anchorViewport)
         {
-            // Sink: hold the viewport still across the rebuild instead of scrolling to the sunk row.
-            CaptureScrollForRestore();
+            // Sink: reconcile preserves the shared controller's scroll offset in place (no ForceRebuild
+            // resets it to 0 anymore), so the "hold the viewport still" behavior is now inherent — no
+            // capture-restore needed. (§3.5 revisits whether the capture apparatus can be removed wholesale.)
         }
         else
         {
             // Drag: follow the moved row into view.
             pendingEnsureVisible = true;
         }
-        ForceRebuild();
+        RebuildBody();
     }
 
     /// <summary>"Add task" button: append an EMPTY task, grow the focus-node list, and rebuild with the
@@ -417,9 +433,11 @@ public abstract partial class ScribeDialogBase
         scratch.AddTask("");
         isDirty = true;
         SyncFocusNodesToScratch();
+        // Appended row MOUNTS at the new last slot, so its field's mount-only autoFocus fires; every
+        // existing row keeps its slot and is reused (carets intact). Reconcile path — see EditorInsertTaskBelow.
         autoFocusRowOnRebuild = scratch.Blocks.Count - 1;
         pendingEnsureVisible = true;
-        ForceRebuild();
+        RebuildBody();
     }
 
     /// <summary>Moves editor focus to <paramref name="index"/> by requesting focus on that row's node
