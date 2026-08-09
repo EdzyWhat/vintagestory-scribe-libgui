@@ -290,6 +290,71 @@ the `ForceRebuild` host is the gate, and `AnimatedSize` is still callback-less. 
 legitimately easier case than the DELETE-collapse this doc killed, and Path B is a modest, proven way
 to get it without touching the reconciler.
 
+## Re-evaluation: reconcile for IDENTITY, not for stock animations (2026-08-09)
+
+Prompted by a fresh round of animation pain — the list-collapse **stale-hover** fix (shipped),
+plus the **mass-delete first-click-doesn't-register** bug and a general "every animation is a
+bespoke fight, and I keep abandoning them" frustration. This section reframes what reconcile is
+*for*, because the framing above (and Path C) quietly conflated two different goals and, having
+killed one, looked like it killed both.
+
+**The trap this doc itself fell into.** Everything above weighs reconcile **in service of making
+animations stock** — and against *that* goal, reconcile is correctly buried (R1: no `AnimatedSize`
+`onEnd`; R2: positional reconciler restarts in-flight collapses). Path C is "a grave already dug."
+**All true, and it still stands: the stock-animation goal stays dead.** But that is not the only
+reason to reconcile, and it was never the one that maps to the day-to-day pain.
+
+**The goal reconcile actually serves: killing the identity-loss class.** `ForceRebuild` disposes
+*every* `State` / `AnimationController` / `RenderObject` and mounts a brand-new tree. Everything
+that is *identity* — hover state, focus/caret, `EventDispatcher`'s press-capture (`_capturedElement`
+is a concrete Element **reference**), a live animation controller — is destroyed at the rebuild.
+That single fact is the root of a whole family of bugs we have each fixed bespoke:
+
+- the **one-frame flicker** after a rebuild (accepted as inherent),
+- **lost hover** when a row slides/rebuilds under a still cursor (fixed via the `ScribeHoverRefreshLatch`),
+- **first-click-doesn't-delete** mid-collapse (a moving-target *and* a rebuild-divide race: press
+  captures Element A, a rebuild replaces it, release can never match `hit == target`),
+- caret/scroll-offset loss across a rebuild (fixed via `autoFocusRowOnRebuild` + capture-restore).
+
+Each of those is a **scaffold to smuggle identity past a `ForceRebuild` that need not happen on that
+surface.** On the **reconcile** path (`SetState` → dirty-only rebuild → `UpdateChild`/`CanUpdate`
+*reuses* the same Element+State+RenderObject when type+key match) that identity is **never torn
+down**, so the entire class evaporates — no latch, no re-home, no capture-restore. That is the
+value proposition this doc never scored, because it was only ever asking "does reconcile make
+animations stock?" (no) and never "does reconcile stop the identity churn?" (yes, definitively).
+
+**What does NOT change, and must not be re-litigated:**
+
+- **The self-ticking animation stack STAYS and gets *generalized*, not deleted.** R1 and R2 are
+  permanent: `AnimatedSize` has no completion callback, and the reconciler is positional, so a
+  mid-list delete still remounts trailing rows and restarts their motion. The host-owned,
+  identity-keyed, self-ticking controller (`ScribeCollapsible` + `ScribeCollapseRegistry`) is the
+  load-bearing answer to *motion* **regardless of reconcile**. The 2026-07-27 refactor died
+  because it tried to *delete* this stack (task group 6, "simplify toward stock"); the whole change
+  was thrown out with that one false sub-goal. **This time the harness is the deliverable, not the
+  casualty** — generalize it into one reusable enter/exit/reorder primitive.
+- **Fade is not an escape hatch.** `AnimatedOpacity` is the *same* live-controller-vs-rebuild class
+  (snaps on `ForceRebuild`), plus it composites to an offscreen `SaveLayer` for the entire mid-fade
+  duration and stays hit-testable at α=0. Look-choice only; rides the same harness.
+
+**Why this is not the same grave (the honest differences from 2026-07-27):**
+
+1. **Different, correct value proposition** — kill identity churn (flicker/hover/click/caret), NOT
+   "stock animations." The measurable wins are the bug class, not code deletion.
+2. **Keep + generalize the self-ticking harness** — the exact thing last time tried to delete.
+3. **Playtest is a per-surface gate, first-class** — last time was "build-clean, 102/102 tests,
+   **never playtested**," and died before the only gate that matters for GUI work.
+4. **Mine, don't merge.** The abandoned `refactor-reconciling-gui-rebuild` branch is **259 commits
+   behind main** and rewrote `GuiDialogScribeLecternLibGui.cs`, which has since been split into the
+   `ScribeDialogBase*.cs` partials — un-rebaseable. Its one durable artifact is
+   `src/Mod/ScribeListView.cs` (107 lines, never adopted): lift it as a **reference**, don't merge.
+
+**Standing guidance for the next person (including future me):** if you are reaching for reconcile,
+be explicit about *which* goal. "Make animations stock" → stop, read R1/R2, it's dead. "Stop the
+identity churn / make the rebuild stop destroying hover/focus/capture/controllers" → valid, and the
+subject of the `reconcile-animating-surfaces` change (2026-08-09). Do not sell the second goal on the
+first goal's promises, or it gets buried with them again.
+
 ## Pointers
 
 - `src/Mod/GuiDialogScribeLecternLibGui.cs` — the three `OnRenderGUI` settling loops,

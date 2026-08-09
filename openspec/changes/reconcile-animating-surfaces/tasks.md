@@ -1,0 +1,95 @@
+## 1. Branch & baseline
+
+- [ ] 1.1 Confirm work is on the dedicated `reconcile-animating-surfaces` branch (already created off
+  main). This is droppable — do NOT layer it onto a feature branch.
+- [ ] 1.2 Capture a pre-conversion baseline: `dotnet build src/Mod/Mod.csproj` clean, `dotnet test
+  tests/Core.Tests` green. Note the current `TESTING.md` items that must still pass after the editor
+  conversion (caret survival, cross-row focus, scroll-offset preservation, external resync, collapse
+  animation, mass-delete).
+- [ ] 1.3 Read the abandoned branch's `src/Mod/ScribeListView.cs` (`git show
+  refactor-reconciling-gui-rebuild:src/Mod/ScribeListView.cs`) as reference for the D4 container — do
+  NOT merge/rebase that branch (259 commits behind, rewrote a since-split file).
+
+## 2. Generalize the animation harness (spec: gui-row-animation-harness)
+
+- [ ] 2.1 Decide the harness shape (design Open Question): one widget with a direction/mode, or a small
+  family sharing the registry. Record the decision in the change.
+- [ ] 2.2 Generalize `ScribeCollapsible` + `ScribeCollapseRegistry` into the reusable primitive:
+  self-ticking controller, host-owned + TaskId-keyed, deferred cleanup out of the ticker callback,
+  supporting exit (collapse 1→0 then remove) and enter (grow 0→1, no onEnd needed). Keep the existing
+  collapse behavior intact for current callers.
+- [ ] 2.3 Verify the harness resumes an in-flight animation across BOTH a reconcile and a
+  `ForceRebuild` (identity lookup by TaskId), and releases the identity on completion.
+- [ ] 2.4 `dotnet build` clean; existing collapse behavior unchanged (Core tests green — note the
+  harness itself is not Core-unit-testable, so this is a build + no-regression check).
+
+## 3. Convert the editor to reconcile — THE PROOF-OF-CONCEPT (specs: scribe-dialog-base, gui-foundation-policy, gui-list-collapse)
+
+- [ ] 3.1 Give the editor a persistent content `StatefulWidget` that owns the row list; route
+  add/delete/reorder through a `SetState` rebuild of the child list instead of `ForceRebuild()`. Move
+  the cross-row focus coordination into (or callable from) that persistent state.
+- [ ] 3.2 Re-key editor rows from `ValueKey<int>(index)` to stable `ValueKey<Guid>(TaskId)` (design
+  D3); make the departing/collapsing state an internal state of the one stable row widget so no slot
+  swaps widget type across the live→departing transition.
+- [ ] 3.3 Keep `ForceRebuild()` for the genuinely-new-tree cases: read⇄editor⇄settings view switches,
+  fresh editor seed, lost-lock recovery. Verify these still work.
+- [ ] 3.4 Carry the async-resync guard onto the reconciling path: an external server resync landing
+  mid-edit must not prune a legitimately-local in-flight row (never drop the focused row; never drop an
+  empty task).
+- [ ] 3.5 Measure how much of the `pendingEnsureVisible` / `pendingRestoreScrollOffset` /
+  `pendingClampToExtent` settling apparatus can be removed now that reconcile preserves the scroll
+  controller's offset (design Open Question); remove what's no longer needed, keep what view-switches
+  still require.
+- [ ] 3.6 `dotnet build src/Mod/Mod.csproj` clean (0 new warnings); `dotnet test tests/Core.Tests` green.
+- [ ] 3.7 `bash build/restage.sh Debug`, relaunch, and RUN THE EDITOR PROOF GATE in-game (design D2 —
+  all must hold): (a) delete/insert/reorder preserves an actively-edited row's caret + unsaved text;
+  (b) cross-row focus is preserved (no leak/loss); (c) scroll offset preserved without capture-restore;
+  (d) mass-delete first click lands mid-collapse; (e) async external resync mid-edit doesn't drop a
+  local in-flight row.
+- [ ] 3.8 GO/NO-GO decision. If the gate passes → proceed to §4. If it can't be met without forking
+  `gui` or a restructuring larger than the standalone fallback would cost → BAIL: abandon this branch,
+  ship `fix-mass-delete-click-target` as the narrow fallback, archive this change `--skip-specs` with
+  the reason recorded in `docs/animation-lessons-learned.md`.
+
+## 4. Convert the pinned surfaces (spec: player-pins) — only after §3 passes
+
+- [ ] 4.1 Give the HUD (`HudScribePins`) a persistent content state that owns the ordered/capped row
+  list; route pin-push (`OnMyPinsChanged` in-place branch), tick-expiry, and toggle through `SetState`
+  instead of `ForceRebuild()`. Key HUD rows by stable TaskId; no type-swap at a slot for departing rows.
+- [ ] 4.2 Keep the 0⇄1 self-open/close as a host concern (`TryOpen`/`TryClose`), distinct from the
+  in-place row-list reconcile.
+- [ ] 4.3 Convert the Pinned tab (`ScribePinnedContent`) structural mutations to reconcile the same way.
+- [ ] 4.4 `dotnet build` clean; playtest the pinned surfaces: pin add/remove/complete, undo window,
+  sink, fade, collapse, rapid removals, re-pin, and hover-under-still-cursor — all correct, no flicker,
+  no lost hover, deletes land first-click.
+
+## 5. Read-view external resync (design D4) — after §4
+
+- [ ] 5.1 Choose the tier: spike Tier 1 (`DataIdentity` token into stock `ListView`) timeboxed; fall
+  back to Tier 2 (Scribe-owned `ScribeListView`, mined from the reference impl) if the non-public cache
+  path isn't cleanly reachable without forking `gui`.
+- [ ] 5.2 Move `RefreshReadView` (and the per-player pin-tint repaint) onto the chosen container so a
+  same-count external change reconciles instead of `ForceRebuild()`.
+- [ ] 5.3 Playtest: a second client toggling a task repaints the read view (external resync) without a
+  full-tree rebuild; scroll offset holds.
+
+## 6. Later surfaces & wrap-up
+
+- [ ] 6.1 Evaluate the tablet and any other animating surfaces for the same conversion; convert or
+  explicitly descope (record which, and why, in the change).
+- [ ] 6.2 Update `VSAPI-NOTES.md` `## LibGUI` with the reconciling-rebuild discipline (persistent
+  content + `SetState`; `ForceRebuild` reserved for new trees / hot-reload) and point the `ListView`
+  child-cache note at the chosen D4 resolution.
+- [ ] 6.3 Simplify the hover-refresh latch / scroll capture-restore where reconcile now makes them
+  dead code on the converted surfaces (keep them where `ForceRebuild` surfaces still need them).
+- [ ] 6.4 If the whole strategy succeeds, retire `fix-mass-delete-click-target` (its bug is resolved
+  here). If any surface was descoped and still `ForceRebuild`s, note the residual identity workarounds
+  it keeps.
+
+## 7. Merge gate
+
+- [ ] 7.1 `dotnet build src/Mod/Mod.csproj` clean (0 warnings); `dotnet test tests/Core.Tests` green.
+- [ ] 7.2 `openspec validate reconcile-animating-surfaces` passes.
+- [ ] 7.3 Full manual `TESTING.md` checklist green on every converted surface (focus/caret, scroll,
+  external resync, animation, mass-delete, multiplayer). The branch merges ONLY when the converted
+  surfaces pass — the per-surface playtest gate the prior attempt skipped.
