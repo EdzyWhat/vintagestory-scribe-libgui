@@ -85,8 +85,14 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       then delete the last row. The resulting upward scroll should ease smoothly, not snap.
       *(reconcile-animating-surfaces follow-up)*
       - **Still broken 2026-08-09** (playtest submission 2026-08-09T11-13-15): the row collapses out of view
-        but the scroll offset is then set upward INSTANTLY — a jarring jump. Wanted: animate the post-shrink
-        clamp (relates to §3.5 settling apparatus + the row-size animation harness).
+        but the scroll offset is then set upward INSTANTLY — a jarring jump.
+      - **Fix landed 2026-08-09, AWAITING RETEST** (not confirmed — verify in-game before checking). Rather
+        than animate the offset after the collapse, the viewport is now PINNED to the bottom DURING the
+        collapse: each frame a row collapses, the offset is clamped down to the shrinking MaxScrollExtent, so
+        it glides in lockstep with the collapse's own EaseInOutCubic and the bottom edge tracks smoothly — no
+        dead space opens, so nothing snaps. No-op unless the offset is actually stranded past the new max
+        (i.e. you were scrolled to the bottom). RETEST: fill the list past one scroll page, scroll to the
+        bottom, delete the last row — the close-up should ease smoothly, not snap. *(reconcile-animating-surfaces 3.10)*
 
 ## tune-tablet-clay-text-contrast
 

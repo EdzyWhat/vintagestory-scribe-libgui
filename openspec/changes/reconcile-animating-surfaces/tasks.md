@@ -104,11 +104,19 @@
   host/path-independent, no ForceRebuild. Build 0 err / 4 pre-existing warns; 286 Core tests pass;
   restaged. AWAITING in-game re-verification (this bug class has a misdiagnosis history — confirm, don't
   assume).]
-- [ ] 3.10 Animate the scroll on list-shrink-at-bottom (gate general-notes; TESTING.md `29b05ca5`):
+- [~] 3.10 Animate the scroll on list-shrink-at-bottom (gate general-notes; TESTING.md `29b05ca5`):
   deleting the last row while scrolled to the bottom collapses the row out, then SNAPS the scroll offset
-  upward instantly — jarring. Ease that post-shrink re-clamp instead of jumping. Ties into the §3.5
-  settling apparatus (`pendingClampToExtent` is the instant JumpTo) and the `ScribeRowSizeAnimation`
-  harness; do it alongside 3.5.
+  upward instantly — jarring. [FIX LANDED, awaiting in-game retest. Approach chosen after reading
+  ScrollController (AnimateTo exists) + SingleChildScrollView: rather than animate the offset AFTER the
+  collapse (a second animation racing LibGUI's ClampOffset), PIN the viewport to the bottom DURING the
+  collapse. Each frame a row is collapsing, clamp Offset down to the (shrinking) MaxScrollExtent — the
+  collapse's own EaseInOutCubic drives the content height down, so the offset glides in lockstep and the
+  bottom edge tracks smoothly; no dead space ever opens, so there's nothing left to snap. Guarded to
+  Offset > max, so a delete that leaves the viewport in-bounds is a no-op. In OnRenderGUI after
+  base.OnRenderGUI (so MaxScrollExtent is this frame's collapsed height). The post-collapse
+  CaptureScrollForRestore + pendingClampToExtent settle stays as the final no-op safety net (its removal
+  is §3.5, not this fix). Build 0 err / 4 pre-existing warns; 286 Core tests pass; restaged. RETEST: fill
+  past one scroll page, scroll to bottom, delete the last row — the close-up should ease, not snap.]
 
 ## 4. Convert the pinned surfaces (spec: player-pins) — only after §3 passes
 

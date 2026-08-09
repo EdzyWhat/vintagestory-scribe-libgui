@@ -76,6 +76,30 @@ public abstract partial class ScribeDialogBase
         hoverRefreshLatch.ArmIfRebuilt(RootElement);
         if (hoverRefreshLatch.Tick()) RefreshHoverAtCursor();
 
+        // Keep the viewport pinned to the bottom WHILE an editor row collapses, so deleting the last row
+        // (or any row while scrolled to the bottom) closes the list up smoothly instead of snapping upward
+        // (reconcile-animating-surfaces §3.10). The collapse shrinks the content height a little each frame;
+        // reconcile holds the scroll offset fixed across the repaint, so without this the offset stays put
+        // and dead space opens below the last row, which the post-collapse re-clamp (pendingClampToExtent)
+        // then removes in one instant JumpTo — the jarring snap that was reported. Clamping the offset down
+        // to the shrinking MaxScrollExtent every frame of the collapse makes it glide in lockstep with the
+        // content, so the bottom edge tracks smoothly (the collapse's own EaseInOutCubic timing drives it —
+        // no separate scroll animation needed). Acts ONLY when the offset is genuinely stranded past the
+        // now-smaller max: a delete that leaves the viewport within bounds (not scrolled to the bottom) has
+        // Offset <= max, so this is a no-op and that view is left undisturbed. Read here (after
+        // base.OnRenderGUI ran BuildDirtyElements + layout above) so MaxScrollExtent reflects THIS frame's
+        // collapsed height. pendingClampToExtent below remains as the final settle for the rare shrink not
+        // covered by a live collapse (e.g. LibGUI's >50px wheel-slop clamp firing mid-collapse).
+        if (editorCollapseRegistry.AnyAnimating)
+        {
+            float collapseMax = sharedScrollController.MaxScrollExtent;
+            if (sharedScrollController.Offset > collapseMax)
+            {
+                TraceScroll("collapse-pin");
+                sharedScrollController.JumpTo(collapseMax);
+            }
+        }
+
         // A task row lost focus while empty (add-empty-task-lifecycle): remove it now, deferred out of the
         // blur notification so we don't dispose focus nodes mid focus-transition. Re-read from live scratch
         // and re-check emptiness so a stale index or a row that gained text in the meantime is a safe no-op
