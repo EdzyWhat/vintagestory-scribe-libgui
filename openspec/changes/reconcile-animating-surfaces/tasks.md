@@ -89,15 +89,21 @@
   D2 criterion passed and the original mass-delete-first-click bug is fixed. The reconcile conversion
   holds — NOT bailing to fix-mass-delete-click-target. Two follow-up regressions (3.9/3.10) are within
   the GO path, not bail-out triggers. Remaining §3 work: 3.4 (multiplayer verify), 3.5, 3.9, 3.10.]
-- [ ] 3.9 Fix the empty-task true-up regression (gate general-notes; TESTING.md `7ab1e7dc`): rapid
+- [~] 3.9 Fix the empty-task true-up regression (gate general-notes; TESTING.md `7ab1e7dc`): rapid
   "Add task" then Editor→Read→Editor leaves empty rows present in the editor (invisible in the interim
-  Read step but they REAPPEAR on return), when they should be culled at every save boundary (Esc /
-  switch view / Done editing — trim trailing whitespace/newlines, remove empty/invalid tasks). Worked
-  under ForceRebuild because every row remounted and the per-row blur self-destruct swept them; the
-  reconcile path reuses fields so that blur no longer fires. `PurgeEmptyTasksFromScratch()` IS still
-  called on the switch/close paths, so root-cause why the empties survive it (re-seed order? focus-guard
-  in the OnRenderGUI sweep? the purge running before the last add's row settles?) and fix WITHOUT
-  reverting to ForceRebuild.
+  Read step but they REAPPEAR on return). [ROOT CAUSE (read, not theorized): NOT a lost blur — the blur
+  self-destruct fires on a focus TRANSITION, not on unmount (ScribeMultilineField.cs:617), so reconcile
+  reusing the field doesn't stop it; and Read merely MASKS empty tasks (Layout.cs:551 filter), so the
+  empties genuinely PERSIST in the seed. The leave-time PurgeEmptyTasksFromScratch()+flush is intact and
+  reconcile-independent, BUT the invariant "empty tasks are never persisted" was only enforced at the
+  LEAVE boundary — never at the LOAD boundary. Re-entering the editor re-seeds `scratch` from bytes
+  (EnterEditorMode); on the lectern that round-trips to the SERVER, so a purge-flush and the re-access
+  request can cross on the wire and the grant carries the PRE-purge doc. FIX: call
+  PurgeEmptyTasksFromScratch() on the freshly-seeded scratch in EnterEditorMode (before
+  SyncFocusNodesToScratch, after isDirty=false so the purge's dirty flag re-flushes a stale seed clean) —
+  host/path-independent, no ForceRebuild. Build 0 err / 4 pre-existing warns; 286 Core tests pass;
+  restaged. AWAITING in-game re-verification (this bug class has a misdiagnosis history — confirm, don't
+  assume).]
 - [ ] 3.10 Animate the scroll on list-shrink-at-bottom (gate general-notes; TESTING.md `29b05ca5`):
   deleting the last row while scrolled to the bottom collapses the row out, then SNAPS the scroll offset
   upward instantly — jarring. Ease that post-shrink re-clamp instead of jumping. Ties into the §3.5

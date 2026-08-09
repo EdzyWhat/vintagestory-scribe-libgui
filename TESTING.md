@@ -69,9 +69,18 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       Editor→Read→Editor. Empty tasks must be culled at every save boundary (Esc / switch view / Done
       editing) — trailing whitespace/newlines trimmed, empty/invalid tasks removed. *(reconcile-animating-surfaces follow-up)*
       - **Still broken 2026-08-09** (playtest submission 2026-08-09T11-13-15): empty rows are invisible in the
-        interim Read step but REAPPEAR on switching back to Editor — they should have been culled. This
-        true-up worked better under ForceRebuild; the reconcile path no longer fires the per-row blur
-        self-destruct that used to sweep them. Fix the cull WITHOUT reverting to ForceRebuild.
+        interim Read step but REAPPEAR on switching back to Editor — they should have been culled.
+      - **Fix landed 2026-08-09, AWAITING RETEST** (not confirmed — this bug class has a misdiagnosis
+        history; verify in-game before checking). Root cause corrected on inspection: it is NOT a lost blur
+        (the blur self-destruct fires on a focus transition, not on unmount, so reconcile reusing the field
+        doesn't stop it) and Read merely MASKS empty tasks (they persist in the doc). The real gap: the
+        "empty tasks are never persisted" invariant was enforced only at the LEAVE boundary, not the LOAD
+        boundary — re-entering re-seeds scratch from bytes that (on the lectern's server round-trip) can be
+        the PRE-purge doc when the purge-flush and re-access request cross on the wire. Fix:
+        EnterEditorMode now purges empty tasks from the freshly-seeded scratch (re-flushing a stale seed
+        clean), host/path-independent, no ForceRebuild. RETEST on the LECTERN specifically (the race needs
+        the server round-trip) — rapid Add-task → Read → Editor, then close/reopen; no empty rows should
+        survive. *(reconcile-animating-surfaces 3.9)*
 - [ ] `29b05ca5` **Animate scroll on shrink.** Fill the list past one scroll page, scroll to the bottom,
       then delete the last row. The resulting upward scroll should ease smoothly, not snap.
       *(reconcile-animating-surfaces follow-up)*
