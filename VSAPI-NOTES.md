@@ -2137,6 +2137,34 @@ handbook page" — the only seam is a Harmony patch. Confirmed by decompiling **
   `capi.Gui.LoadedGuis.OfType<GuiDialogHandbook>().FirstOrDefault()`, or reflect the private `dialog`
   field off `ModLoader.GetModSystem<ModSystemSurvivalHandbook>()`. To open it "like the player would,"
   invoke the `handbook` / `survivalhandbook` / `guihandbook` hotkey handler.
+- **You CANNOT put a real button inline in a handbook page.** The page body is rich-text
+  (`RichTextComponentBase[]`); the only inline-clickable component is `LinkTextComponent` (clickable
+  text). A genuine button is only possible as a **separate floating `GuiDialog` overlay** that anchors
+  itself to the handbook window each tick — this is how Tallybook draws "← Back to Tallybook"
+  (`HandbookReturnButton`: a `GuiDialog` with `AddShadedDialogBG` + `AddSmallButton`, a tick listener
+  that finds the handbook's largest composer bounds and re-`Compose`s at that position). Caveats:
+  such an overlay floats *detached* from any specific item (it reflects the currently-open page, can't
+  sit on an item's line or scroll with the page), and a *vanilla* `AddSmallButton` overlay hits the
+  macOS top-left-quadrant hit-test bug (a LibGUI overlay avoids that but is still detached). For an
+  affordance that belongs to a specific item, prefer the inline `LinkTextComponent` + `IconComponent`.
+- **Embedding a CUSTOM SVG icon inline in the appended text** — use `IconComponent` (a
+  `RichTextComponentBase`, `VintagestoryAPI.dll`): `new IconComponent(capi, iconName, iconPath, font)`.
+  When `iconPath` is set it loads that asset via `capi.Assets.TryGet(new AssetLocation(iconPath)
+  .WithPathPrefixOnce("textures/"))` and draws it with `capi.Gui.DrawSvg(asset, …, ColorFromRgba(font.Color))`
+  — i.e. a mod's own SVG, tinted to the font color, sized to `font.UnscaledFontsize * sizeMulSvg`
+  (default 0.7). This is the *same* `DrawSvg` path Scribe already uses for its icon-buttons, so a
+  Scribe glyph can prefix a handbook link. (If `iconPath` is null it falls back to a named vanilla
+  icon via `capi.Gui.Icons.DrawIcon`.) Add it to the component list right before the `LinkTextComponent`.
+- **"Is this item craftable?" — one-time index over `capi.World.GridRecipes`.** No direct
+  "recipes-for-output" API; build it yourself (Tallybook's `RecipeProbe` does exactly this): walk
+  `((IWorldAccessor)capi.World).GridRecipes` once into a `Dictionary<outputShortCode, List<GridRecipe>>`
+  (key = `recipe.Output.ResolvedItemStack.Collectible.Code.ToShortString()`), cache it, invalidate on
+  recipe reload. Craftability = key lookup. Tallybook also skips recipes that *consume their own
+  output* (self-cycle guard). **⚠️ `GridRecipes` is GRID CRAFTING ONLY** — it excludes smelting,
+  cooking, knapping, clayforming, barrel, and firepit recipes (each is a separate
+  `capi.World.*Recipes`-style registry). A gate built on `GridRecipes` alone will report "not
+  craftable" for a smelted ingot or knapped tool head. Same limit bounds any recursive
+  ingredient-graph walk.
 
 ## Entry template
 

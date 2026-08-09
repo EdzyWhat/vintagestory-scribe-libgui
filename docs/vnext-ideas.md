@@ -150,6 +150,11 @@ needs. Essentially "Tracked task, auto-populated from a recipe."
   is the *source* of the goals: 2.2 is a single hand-entered item+count; 2.5 derives the whole set
   from a recipe. Almost certainly should be built after (or with) 2.2, sharing the inventory-poll +
   progress-render machinery.
+- *Entry point — shares handbook-pin with 2.2 (DECIDED 2026-08-08):* the same injected handbook
+  content offers a **"Craft this"** link alongside "Track this" — but it appears **only when the item
+  is craftable** (recipe lookup over `capi.World.GridRecipes`; see §Handbook-pin in the Picker
+  section for detection + the grid-only scope caveat). So Crafting's item-entry rides on the same
+  Harmony postfix as Tracked — no separate picker surface needed to *start* a Craft task.
 - *Open Qs:* how deep does ingredient capture go — just the **direct** grid/recipe inputs, or
   **recursively** down to raw materials (e.g. planks → logs)? Recursive is far more useful but much
   harder (multi-level recipe graph + intermediate crafting steps). Start with direct inputs. Which
@@ -524,6 +529,30 @@ the row already carries pin + delete. Two facts keep the picker cheap here:
     already-expanded with its "pick item" control visible → clicking that control opens the
     search-first picker sub-view. Kind-choice and item-pick never both crowd the row at once, and
     the < 500 px steady-state layout is untouched.
+  - **Handbook-pin serves BOTH Tracked AND Crafting (author, 2026-08-08).** The injected handbook
+    content should offer **two** actions on the item's page, each its own link/button with a short
+    description and a **custom Scribe SVG icon inline** to set it apart:
+    - **"Track this"** → creates a Tracked task (collect *N* of this item).
+    - **"Craft this"** → creates a Crafting task (§2.5): capture the item's ingredients × the desired
+      count. **This link appears ONLY if the item is actually craftable** — gate it on a recipe
+      lookup (see the craftability-detection note under §Handbook-pin below).
+  - *Inline SVG icon — CONFIRMED FEASIBLE:* vanilla `IconComponent` (a `RichTextComponentBase`,
+    `VintagestoryAPI.dll`) takes an `iconPath`, loads it as an SVG asset
+    (`capi.Assets.TryGet(...WithPathPrefixOnce("textures/"))`), and draws it via `capi.Gui.DrawSvg`
+    tinted to the font color — the *same* DrawSvg path Scribe already uses for its icon-buttons. So a
+    Scribe glyph can be embedded inline in the handbook link text. (Details in `VSAPI-NOTES.md`.)
+    Since custom SVG works, no Unicode-symbol fallback is needed.
+  - *Link vs. button — DECIDED 2026-08-08: inline clickable text (`LinkTextComponent`) + inline SVG.*
+    Author's first preference was a real button, even a vanilla one. But a handbook page body is
+    **rich-text** (`RichTextComponentBase[]`) — you **cannot** embed an interactive button widget in
+    the text flow; the only inline-clickable component is `LinkTextComponent`. A real button is only
+    possible as a **separate floating `GuiDialog` overlay** anchored to the handbook window via a tick
+    listener (exactly Tallybook's "← Back to Tallybook" pattern, `HandbookReturnButton`) — which
+    **floats detached from the specific item** (it reads the currently-open page, can't sit on the
+    item's own line or scroll with it) and, if built with vanilla `AddSmallButton`, hits the
+    **macOS top-left-quadrant hit-test bug** (a LibGUI overlay would dodge that but is still detached).
+    Chosen the inline link because it visibly belongs to the item and scrolls with it; the custom SVG
+    gives it enough visual weight to read as an affordance, not plain prose.
   - **(c) *Item* pick — via a handbook "Add to task" link (a SECOND, decoupled method).** In
     addition to the in-Scribe search picker, an "→ Add to task" link is injected into the vanilla
     handbook page for any item, so the player can pin the *exact item they're reading about* straight
@@ -565,8 +594,25 @@ returned array. Key facts this settles:
   Harmony as an acceptable technique for this feature.** This is a first for the project — keep the
   patch minimal, defensive, and confined to this one seam.
 
-*Not specced yet — sequenced into the task-kinds cluster (2.2/2.3), not pulled forward. Handbook-pin
-is the first cut; the in-Scribe search picker is a decoupled follow-up.*
+**Two links, both custom-SVG-labelled; Craft is craftability-gated (author, 2026-08-08).** The
+postfix appends **two** actions to the page (each a link with a short description + an inline Scribe
+SVG via `IconComponent`, confirmed feasible above): **"Track this"** (always) and **"Craft this"**
+(only when the item is craftable).
+- *Craftability detection — cheap, from Tallybook's `RecipeProbe`:* build a
+  `Dictionary<outputShortCode, List<GridRecipe>>` by walking `capi.World.GridRecipes` **once** (cache
+  it; invalidate on recipe reload), then "is this craftable" is a key lookup on the page's item code.
+  Tallybook also excludes recipes that *consume their own output* (avoids degenerate self-cycles) and
+  groups genuinely-distinct recipes (vanilla vs. modded) for an alt-recipe chooser.
+- *⚠️ Scope caveat to decide in design:* `capi.World.GridRecipes` is **grid crafting only** — it does
+  NOT include smelting / cooking / knapping / clayforming / barrel / firepit recipes. A naive gate
+  therefore hides "Craft this" for e.g. a smelted ingot or a knapped tool head even though the player
+  *can* make it. Options: accept grid-only for the first cut (simplest, matches Tallybook), or fold
+  in the other recipe registries later (each is its own `capi.World.*Recipes`-style list). Note this
+  same grid-only limit bounds the §2.5 recursive-ingredient ambition too.
+
+*Not specced yet — sequenced into the task-kinds cluster (2.2/2.3/2.5), not pulled forward.
+Handbook-pin is the first cut and serves both Tracked (2.2) and Crafting (2.5); the in-Scribe search
+picker is a decoupled follow-up.*
 
 ### :rocket: v1.1 — interim polish release (NEXT)
 Cheap, visible wins bundled into a fast follow-up:
