@@ -120,28 +120,32 @@
   past one scroll page, scroll to bottom, delete the last row — the close-up should ease, not snap.
   CONFIRMED 2026-08-10 (playtest 2026-08-10T09-02-17): "It's so goooooood." Fix commit `fcf1a5d`.]
 
-- [x] 3.11 Investigate the first-open WHITE FLASH (playtest 2026-08-10T09-02-17 general notes).
-  [DIAGNOSED 2026-08-10 — NOT a regression of this change; NOT a GUI white-clear. Measured, not
-  theorized: extracted the flash frames from `~/Desktop/WhiteFlashOnOpen.mov` with OpenCV and looked at
-  them. The flash frame's DIALOG is pixel-identical to its resolved state — the GUI is fine. What
-  differs is the 3D WORLD behind it: the opaque chunk-terrain pass is missing for exactly one frame, so
-  the pale sky gradient shows through (reads as "white") while the entity pass (distant figures) and the
-  transparent pass (the room's leaded-glass window, floating detached) survive on top, and the dialog
-  composites correctly over all of it. It's a one-frame vanilla world-render stall on the frame the
-  block-entity dialog first goes live — a cold-path GPU/asset hitch (first-use-per-session signature).
-  SOURCE-VERIFIED it is not ours: the `gui` mod flushes Skia straight into the game framebuffer with NO
-  full-screen clear / scene-capture / blur / dim quad (SkiaRenderer/Pre/PostSkiaPipeline), so LibGUI
-  never paints a layer behind a dialog; Scribe registers no IRenderer and touches no GL/framebuffer/
-  stage code; and the branch diff (`git diff main...HEAD`) touches ZERO render/GL/Skia/stage code — a
-  pure widget-reconcile refactor cannot regress the world pass. The reconcile move can at most have
-  re-timed WHEN the session's first LibGUI paint happens (SkiaRenderer.Begin lazily compiles the Skia
-  GRContext shaders + the 1024×1160 backdrop PNG is lazily decoded/uploaded on first GetBackdropBitmap —
-  both once-per-session costs landing on the first dialog open), not introduced a white layer.
-  Full write-up in VSAPI-NOTES.md `## "White flash" behind a dialog on the FIRST open…`. NO Scribe
-  render/GL code should be added to "fix" it. If the author still wants it gone, it's a decoupled polish
-  task (§6, optional): PRE-WARM the once-per-session cost off the hot path — decode+upload the backdrop
-  bitmap during StartClientSide/SaveGameLoaded and/or force one throwaway LibGUI paint at load so the
-  GRContext/shaders compile before the player opens anything; verify with the DEBUG frame-trace method.]
+- [ ] 3.11 Eliminate the WHITE FLASH on Scribe dialog open (playtest 2026-08-10; author demands a fix,
+  not just a diagnosis). CHARACTERIZED but NOT yet fixed (2026-08-10). It is a one-frame **opaque
+  chunk-terrain pass dropout** (OpenCV frame extract: dialog pixel-identical, sky shows through where
+  near geometry should be; entities + OIT-transparent glass panes + selection wireframe all survive).
+  Two initial guesses were DISPROVEN by measurement — (1) NOT first-open-only: it flashes on EVERY open
+  of every Scribe item/block, same magnitude (kills the once-per-session cold-cost/pre-warm theory);
+  (2) NOT a regression of this change: BISECT built pre-reconcile `5f6022a` (ScribeDialogBody absent),
+  tester confirmed the flash STILL happens → pre-existing vanilla artifact (branch diff also touches
+  zero render/GL/stage code). LOCALIZED by an in-game discriminator: Lectern + Notebook + Tablet flash;
+  `.ui showcase` LibGUI windows do NOT; clicking inside an open Scribe window does NOT; the HUD-gear
+  Scribe Settings window does NOT. Settings is `ScribeSettingsDialog : GuiBase`, deliberately NOT wrapped
+  in the pixel-art parchment backdrop; the three that flash all go through ScribeDialogBase/
+  GuiDialogBlockEntityBase AND paint the 1024×1160 parchment backdrop (WrapBackdrop, Layout.cs:88 —
+  pixel-art ON = BoxStyle{Texture=bmp}, OFF = plain SizedBox no texture). So the isolated variable is
+  **painting the backdrop bitmap on open** — not generic LibGUI, not the Skia flush (shared with the
+  clean showcase path), not block interaction (Notebook/Tablet are held items, TryOpen() only, no
+  MarkDirty/chunk touch). Source-cleared as NOT the mechanism: SystemRenderTerrain.OnRenderOpaque has no
+  dialog gate (blank = chunk pools momentarily empty = a re-tesselation, not the engine hiding terrain);
+  ClientMain.RedrawAllBlocks (requeue all chunks) fires only from `.redrawall` + smoothShadows/
+  instancedGrass watchers, none on open; GuiManager.OnGuiOpened only reorders the GUI list.
+  NEXT (decisive): open a flashing surface with Pixel Art Display OFF (backdrop → plain SizedBox). Gone
+  → backdrop paint confirmed; fix = pre-decode/upload the backdrop as a persistent GPU texture at load so
+  no cold per-open upload lands on a live frame (+ find why Skia's texture looks evicted between closes).
+  Survives → not the backdrop; trace what else ScribeDialogBase/GuiDialogBlockEntityBase do on open that
+  GuiBase skips. Full write-up: VSAPI-NOTES.md `## "White flash" behind a Scribe dialog…`. Do NOT add
+  render/GL code to Scribe blindly; verify any fix with the DEBUG frame-trace method.]
 
 ## 4. Convert the pinned surfaces (spec: player-pins) — only after §3 passes
 
