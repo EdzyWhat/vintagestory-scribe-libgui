@@ -2005,6 +2005,58 @@ active hand no longer holds ANY `IScribeDocumentItem` (a presence check, not ide
 frame-count/grace-period hacks — this project has moved away from timing-based GUI workarounds.
 Note the tablet's legit wet→hard/fired transition ALSO rides `SlotModified`, so don't break it.
 
+## "White flash" behind a dialog on the FIRST open of a session is a one-frame WORLD-TERRAIN dropout, NOT a GUI white-clear (2026-08-10)
+
+**Symptom (reported): opening a Scribe item shows a single-frame flash of WHITE before resolving into
+the dialog, but ONLY the first open after a full quit→relaunch→load-save; later reopens same session
+don't repeat it.** Filed as a suspected regression of `reconcile-animating-surfaces` (the
+ForceRebuild→reconcile move). **It is NOT.** Measure-don't-theorize applied (this is the misdiagnosis-
+prone render-state class): I extracted the flash frames from the tester's screen capture
+(`~/Desktop/WhiteFlashOnOpen.mov`) with OpenCV and looked at them directly.
+
+**What the frames actually show:**
+- The flash frame's **dialog is pixel-identical to its resolved state** — same title, rows, buttons,
+  chrome. The GUI is NOT painting white.
+- What differs is the **3D world BEHIND the dialog**: the near room geometry is gone, leaving the pale
+  sky gradient (which reads as "white"), while a couple of distant entities, the room's leaded-glass
+  window pane floating detached in space, and the faint lectern selection wireframe all survive.
+- The two captured flash instances are byte-identical (same figures, same floating pane) → it's the
+  same stationary repro reopened, not motion.
+
+**Mechanism:** VS renders the frame in passes — sky first, then the **opaque chunk-terrain pass**, then
+entities and translucent/transparent geometry, then the Ortho GUI pass. On the flash frame the opaque
+chunk pass is missing for one frame, so sky shows through; the entity pass (distant figures) and the
+transparent pass (the leaded-glass window) still run, so those float on the empty sky, and the GUI
+composites correctly on top. It's a one-frame world-render stall on the frame the block-entity dialog
+first goes live, i.e. a cold-path GPU/asset hitch — classic first-use-per-session signature.
+
+**Why it is NOT this change (source-verified, first-resort DLL/vendored-source reads):**
+- The `gui` mod flushes Skia **straight into the game framebuffer** with NO full-screen clear and NO
+  scene-capture/blur/dim quad behind dialogs (`Gui/Rendering/SkiaRenderer.cs`, `PreSkiaPipeline.cs`,
+  `PostSkiaPipeline.cs`). So LibGUI never draws a white layer behind a dialog — a "white behind the
+  dialog" cannot originate in GUI paint code.
+- Scribe registers **no `IRenderer`/`IPreSkiaRenderer`** and touches no `GL.*`/framebuffer/render-stage
+  code anywhere (`grep` of `src/Mod`), so the mod cannot drop the terrain pass either.
+- The `reconcile-animating-surfaces` branch diff touches ZERO render/GL/Skia/stage code (`git diff
+  main...HEAD | grep GL.\|framebuffer\|RenderStage\|RegisterRenderer` → empty) — it changed only the
+  widget tree + `RebuildBody()`/`SetState`. A pure widget-reconcile refactor cannot regress the world
+  render pass.
+- `SkiaRenderer.Begin` lazily creates the Skia GL context (`GRContext.CreateGl`, compiling shaders — a
+  heavy one-time cost) on the session's FIRST LibGUI paint, and Scribe's 1024×1160 backdrop PNG is
+  lazily `SKBitmap.Decode`d + GPU-uploaded on first `GetBackdropBitmap` (`ScribeModSystem.ClientPrefs.cs`).
+  Both are once-per-session costs that land on the frame the first dialog opens — a plausible source of
+  the one-frame stall that lets the world skip its opaque pass, and a clean explanation for
+  "first-open-only." (The reconcile move can only have shifted WHEN that first paint happens, not
+  introduced a white layer.)
+
+**Takeaway / if it needs to actually go away:** don't chase it in the reconcile change — it's a vanilla
+cold-frame render artifact surfaced (at worst re-timed) by the first LibGUI paint, not a defect in the
+reconcile conversion. If a fix is wanted, PRE-WARM the once-per-session cost off the hot path: decode +
+GPU-upload the item's backdrop bitmap (call `GetBackdropBitmap` for the likely specs) during
+`StartClientSide`/`SaveGameLoaded`, and/or force one throwaway LibGUI paint at load so the Skia
+`GRContext` + shaders compile before the player opens anything. Do NOT add render-path/GL code to Scribe
+to "fix" it. Verify any pre-warm with the DEBUG frame-trace method before trusting it.
+
 ## Item state-transition (`Harden`/`Dry`) and firepit smelt both DROP stack attributes on transform (2026-08-02)
 
 **Symptom: a tablet/food item that "becomes" another item over time (dries, hardens, fires) loses its

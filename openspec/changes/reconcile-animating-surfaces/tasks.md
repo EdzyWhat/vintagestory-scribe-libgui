@@ -120,18 +120,28 @@
   past one scroll page, scroll to bottom, delete the last row — the close-up should ease, not snap.
   CONFIRMED 2026-08-10 (playtest 2026-08-10T09-02-17): "It's so goooooood." Fix commit `fcf1a5d`.]
 
-- [ ] 3.11 Fix the first-open WHITE FLASH regression (playtest 2026-08-10T09-02-17 general notes):
-  opening a Scribe item shows a single-frame flash of WHITE before resolving into the dialog, but ONLY
-  the FIRST time after a full quit-to-desktop + relaunch + load-save; reopening later in the same
-  session doesn't repeat it. Tester confirms it is reproducible day-to-day and was NEVER present before
-  the ForceRebuild→reconcile move — so it is a regression of this change, distinct from the known §4.1
-  one-frame hover flicker (that's a fresh-tree hovered=false repaint, judged inherent LibGUI behavior;
-  this is a full-GUI white frame on the very first reconcile/build after a cold start). Video evidence:
-  `~/Desktop/WhiteFlashOnOpen.mov`. Hypothesis to check: the persistent-root body's first Build/layout
-  runs a frame before the backdrop/theme paints (cold JIT/asset-load path), so one frame paints the
-  default white clear before the reconciled tree lands — investigate whether the old ForceRebuild
-  happened to mask it by building synchronously at open. Reproduce with the DEBUG frame-trace method
-  (memory libgui-settling-loops-and-race-diagnosis).
+- [x] 3.11 Investigate the first-open WHITE FLASH (playtest 2026-08-10T09-02-17 general notes).
+  [DIAGNOSED 2026-08-10 — NOT a regression of this change; NOT a GUI white-clear. Measured, not
+  theorized: extracted the flash frames from `~/Desktop/WhiteFlashOnOpen.mov` with OpenCV and looked at
+  them. The flash frame's DIALOG is pixel-identical to its resolved state — the GUI is fine. What
+  differs is the 3D WORLD behind it: the opaque chunk-terrain pass is missing for exactly one frame, so
+  the pale sky gradient shows through (reads as "white") while the entity pass (distant figures) and the
+  transparent pass (the room's leaded-glass window, floating detached) survive on top, and the dialog
+  composites correctly over all of it. It's a one-frame vanilla world-render stall on the frame the
+  block-entity dialog first goes live — a cold-path GPU/asset hitch (first-use-per-session signature).
+  SOURCE-VERIFIED it is not ours: the `gui` mod flushes Skia straight into the game framebuffer with NO
+  full-screen clear / scene-capture / blur / dim quad (SkiaRenderer/Pre/PostSkiaPipeline), so LibGUI
+  never paints a layer behind a dialog; Scribe registers no IRenderer and touches no GL/framebuffer/
+  stage code; and the branch diff (`git diff main...HEAD`) touches ZERO render/GL/Skia/stage code — a
+  pure widget-reconcile refactor cannot regress the world pass. The reconcile move can at most have
+  re-timed WHEN the session's first LibGUI paint happens (SkiaRenderer.Begin lazily compiles the Skia
+  GRContext shaders + the 1024×1160 backdrop PNG is lazily decoded/uploaded on first GetBackdropBitmap —
+  both once-per-session costs landing on the first dialog open), not introduced a white layer.
+  Full write-up in VSAPI-NOTES.md `## "White flash" behind a dialog on the FIRST open…`. NO Scribe
+  render/GL code should be added to "fix" it. If the author still wants it gone, it's a decoupled polish
+  task (§6, optional): PRE-WARM the once-per-session cost off the hot path — decode+upload the backdrop
+  bitmap during StartClientSide/SaveGameLoaded and/or force one throwaway LibGUI paint at load so the
+  GRContext/shaders compile before the player opens anything; verify with the DEBUG frame-trace method.]
 
 ## 4. Convert the pinned surfaces (spec: player-pins) — only after §3 passes
 
