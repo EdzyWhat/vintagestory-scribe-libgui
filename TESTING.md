@@ -65,34 +65,22 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       ForceRebuild, so they must be unaffected by the reconcile conversion). *(reconcile-animating-surfaces 3.3)*
       - **Confirmed 2026-08-09** via playtest submission (2026-08-09T11-13-15): "Work." View switches / fresh
         seed / lost-lock recovery all rebuild cleanly.
-- [ ] `7ab1e7dc` **Empty-task true-up on save.** Rapidly press "Add task" to make several empty rows, then
+- [x] `7ab1e7dc` **Empty-task true-up on save.** Rapidly press "Add task" to make several empty rows, then
       Editor→Read→Editor. Empty tasks must be culled at every save boundary (Esc / switch view / Done
       editing) — trailing whitespace/newlines trimmed, empty/invalid tasks removed. *(reconcile-animating-surfaces follow-up)*
       - **Still broken 2026-08-09** (playtest submission 2026-08-09T11-13-15): empty rows are invisible in the
         interim Read step but REAPPEAR on switching back to Editor — they should have been culled.
-      - **Fix landed 2026-08-09, AWAITING RETEST** (not confirmed — this bug class has a misdiagnosis
-        history; verify in-game before checking). Root cause corrected on inspection: it is NOT a lost blur
-        (the blur self-destruct fires on a focus transition, not on unmount, so reconcile reusing the field
-        doesn't stop it) and Read merely MASKS empty tasks (they persist in the doc). The real gap: the
-        "empty tasks are never persisted" invariant was enforced only at the LEAVE boundary, not the LOAD
-        boundary — re-entering re-seeds scratch from bytes that (on the lectern's server round-trip) can be
-        the PRE-purge doc when the purge-flush and re-access request cross on the wire. Fix:
-        EnterEditorMode now purges empty tasks from the freshly-seeded scratch (re-flushing a stale seed
-        clean), host/path-independent, no ForceRebuild. RETEST on the LECTERN specifically (the race needs
-        the server round-trip) — rapid Add-task → Read → Editor, then close/reopen; no empty rows should
-        survive. *(reconcile-animating-surfaces 3.9)*
-- [ ] `29b05ca5` **Animate scroll on shrink.** Fill the list past one scroll page, scroll to the bottom,
+      - **Confirmed 2026-08-10** (playtest submission 2026-08-10T09-02-17): "Properly fixed. Now if I use
+        'Add Task' to create 20 empty tasks, on going Edit → Read → Edit, they are all properly culled." The
+        LOAD-boundary purge in EnterEditorMode (fix `7d9489e`) holds. *(reconcile-animating-surfaces 3.9)*
+- [x] `29b05ca5` **Animate scroll on shrink.** Fill the list past one scroll page, scroll to the bottom,
       then delete the last row. The resulting upward scroll should ease smoothly, not snap.
       *(reconcile-animating-surfaces follow-up)*
       - **Still broken 2026-08-09** (playtest submission 2026-08-09T11-13-15): the row collapses out of view
         but the scroll offset is then set upward INSTANTLY — a jarring jump.
-      - **Fix landed 2026-08-09, AWAITING RETEST** (not confirmed — verify in-game before checking). Rather
-        than animate the offset after the collapse, the viewport is now PINNED to the bottom DURING the
-        collapse: each frame a row collapses, the offset is clamped down to the shrinking MaxScrollExtent, so
-        it glides in lockstep with the collapse's own EaseInOutCubic and the bottom edge tracks smoothly — no
-        dead space opens, so nothing snaps. No-op unless the offset is actually stranded past the new max
-        (i.e. you were scrolled to the bottom). RETEST: fill the list past one scroll page, scroll to the
-        bottom, delete the last row — the close-up should ease smoothly, not snap. *(reconcile-animating-surfaces 3.10)*
+      - **Confirmed 2026-08-10** (playtest submission 2026-08-10T09-02-17): "It's so goooooood." The
+        pin-during-collapse fix (`fcf1a5d`) glides the offset in lockstep with the collapse — no snap.
+        *(reconcile-animating-surfaces 3.10)*
 
 ## tune-tablet-clay-text-contrast
 
@@ -3125,7 +3113,7 @@ regression checks specific to this change's scoped-to-the-input approach.
       row that slides under the cursor appear immediately, no wiggle. *(4.2)*
       - **Confirmed 2026-08-08:** works. The boundary latch holds hover through the collapse and past
         the completion rebuild.
-- [ ] `94c447c8` **Fluid mass-delete.** Repeatedly click delete on the row under a stationary cursor,
+- [x] `94c447c8` **Fluid mass-delete.** Repeatedly click delete on the row under a stationary cursor,
       faster than the ~200ms collapse — confirm each delete control is available mid-collapse and rows
       delete with no mouse movement. *(4.3)*
       - **Still broken 2026-08-08:** hover now shows the delete button mid-collapse (the hover half is
@@ -3133,6 +3121,10 @@ regression checks specific to this change's scoped-to-the-input approach.
         completes. This is a click-TARGET problem (the departing snapshot row still occupies the
         shrinking space under the cursor), distinct from the hover problem this change fixed. User's
         call: "90% of the way there… not sure it's worth solving" — candidate to backlog.
+      - **Confirmed 2026-08-10** (playtest submission 2026-08-10T09-02-17): "Works." Fixed as a
+        side-effect of the reconcile-animating-surfaces editor conversion (the click-target problem this
+        was parked on is gone). This is the bug `fix-mass-delete-click-target` was the parked fallback
+        for — that standalone change can now be retired (reconcile-animating-surfaces §6.4).
 - [x] `aca0ad08` **HUD unpin refresh.** Unpin a pinned task on the HUD while hovering, without moving
       the mouse — confirm the next row's hover controls refresh. *(4.4)*
       - **Confirmed 2026-08-08** (after generalizing the latch to `ArmIfRebuilt`): "works and it's so

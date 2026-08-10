@@ -89,7 +89,7 @@
   D2 criterion passed and the original mass-delete-first-click bug is fixed. The reconcile conversion
   holds — NOT bailing to fix-mass-delete-click-target. Two follow-up regressions (3.9/3.10) are within
   the GO path, not bail-out triggers. Remaining §3 work: 3.4 (multiplayer verify), 3.5, 3.9, 3.10.]
-- [~] 3.9 Fix the empty-task true-up regression (gate general-notes; TESTING.md `7ab1e7dc`): rapid
+- [x] 3.9 Fix the empty-task true-up regression (gate general-notes; TESTING.md `7ab1e7dc`): rapid
   "Add task" then Editor→Read→Editor leaves empty rows present in the editor (invisible in the interim
   Read step but they REAPPEAR on return). [ROOT CAUSE (read, not theorized): NOT a lost blur — the blur
   self-destruct fires on a focus TRANSITION, not on unmount (ScribeMultilineField.cs:617), so reconcile
@@ -103,8 +103,9 @@
   SyncFocusNodesToScratch, after isDirty=false so the purge's dirty flag re-flushes a stale seed clean) —
   host/path-independent, no ForceRebuild. Build 0 err / 4 pre-existing warns; 286 Core tests pass;
   restaged. AWAITING in-game re-verification (this bug class has a misdiagnosis history — confirm, don't
-  assume).]
-- [~] 3.10 Animate the scroll on list-shrink-at-bottom (gate general-notes; TESTING.md `29b05ca5`):
+  assume). CONFIRMED 2026-08-10 (playtest 2026-08-10T09-02-17): 20 empty tasks all culled on
+  Edit→Read→Edit. Fix commit `7d9489e`.]
+- [x] 3.10 Animate the scroll on list-shrink-at-bottom (gate general-notes; TESTING.md `29b05ca5`):
   deleting the last row while scrolled to the bottom collapses the row out, then SNAPS the scroll offset
   upward instantly — jarring. [FIX LANDED, awaiting in-game retest. Approach chosen after reading
   ScrollController (AnimateTo exists) + SingleChildScrollView: rather than animate the offset AFTER the
@@ -116,7 +117,21 @@
   base.OnRenderGUI (so MaxScrollExtent is this frame's collapsed height). The post-collapse
   CaptureScrollForRestore + pendingClampToExtent settle stays as the final no-op safety net (its removal
   is §3.5, not this fix). Build 0 err / 4 pre-existing warns; 286 Core tests pass; restaged. RETEST: fill
-  past one scroll page, scroll to bottom, delete the last row — the close-up should ease, not snap.]
+  past one scroll page, scroll to bottom, delete the last row — the close-up should ease, not snap.
+  CONFIRMED 2026-08-10 (playtest 2026-08-10T09-02-17): "It's so goooooood." Fix commit `fcf1a5d`.]
+
+- [ ] 3.11 Fix the first-open WHITE FLASH regression (playtest 2026-08-10T09-02-17 general notes):
+  opening a Scribe item shows a single-frame flash of WHITE before resolving into the dialog, but ONLY
+  the FIRST time after a full quit-to-desktop + relaunch + load-save; reopening later in the same
+  session doesn't repeat it. Tester confirms it is reproducible day-to-day and was NEVER present before
+  the ForceRebuild→reconcile move — so it is a regression of this change, distinct from the known §4.1
+  one-frame hover flicker (that's a fresh-tree hovered=false repaint, judged inherent LibGUI behavior;
+  this is a full-GUI white frame on the very first reconcile/build after a cold start). Video evidence:
+  `~/Desktop/WhiteFlashOnOpen.mov`. Hypothesis to check: the persistent-root body's first Build/layout
+  runs a frame before the backdrop/theme paints (cold JIT/asset-load path), so one frame paints the
+  default white clear before the reconciled tree lands — investigate whether the old ForceRebuild
+  happened to mask it by building synchronously at open. Reproduce with the DEBUG frame-trace method
+  (memory libgui-settling-loops-and-race-diagnosis).
 
 ## 4. Convert the pinned surfaces (spec: player-pins) — only after §3 passes
 
@@ -151,7 +166,10 @@
   dead code on the converted surfaces (keep them where `ForceRebuild` surfaces still need them).
 - [ ] 6.4 If the whole strategy succeeds, retire `fix-mass-delete-click-target` (its bug is resolved
   here). If any surface was descoped and still `ForceRebuild`s, note the residual identity workarounds
-  it keeps.
+  it keeps. [The mass-delete click-target bug (TESTING.md `94c447c8`, the exact bug that change was the
+  parked fallback for) is CONFIRMED FIXED in-game 2026-08-10 (playtest 2026-08-10T09-02-17: "Works.") as
+  a side-effect of the editor reconcile conversion. `fix-mass-delete-click-target/` (untracked) can be
+  removed once the branch merges. Do this at wrap-up, not now.]
 
 ## 7. Merge gate
 
