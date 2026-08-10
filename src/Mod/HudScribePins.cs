@@ -145,6 +145,34 @@ public sealed class HudScribePins : GuiBase
     /// unmount + rebuild the tree re-entrantly there.</summary>
     private bool needsCollapseCleanup;
 
+    /// <summary>Stable identity of the single persistent-root <see cref="ScribeDialogBody"/> that wraps the
+    /// HUD content (reconcile-animating-surfaces §4.1). Allocated ONCE here (never in <see cref="Build"/>,
+    /// per the <see cref="GlobalKey"/> contract) so <see cref="RebuildHudBody"/> can reach the live body
+    /// State and reconcile the row list in place — REUSING each row's live State (its <see cref="ScribeFadeText"/>
+    /// fade controller, <see cref="AnimatedOpacity"/> sink tween, <see cref="ScribeHudGearButton"/> hover) —
+    /// instead of tearing the tree down with <see cref="GuiBase.ForceRebuild"/> (which remounts everything,
+    /// snapping those animations and dropping hover). The 0⇄1 self-open/close stays a host concern
+    /// (<c>TryOpen</c>/<c>TryClose</c> — §4.2); this only replaces the in-place repaint path.</summary>
+    private readonly GlobalKey bodyKey = new();
+
+    /// <summary>Reconcile the HUD content in place (reconcile-animating-surfaces §4.1): the replacement for
+    /// <see cref="GuiBase.ForceRebuild"/> at every in-place update site — a pin push, a completion toggle, a
+    /// tick-expiry, the collapse/corruption/timer repaints. A no-op <c>SetState</c> on the persistent body
+    /// State reconciles the subtree, REUSING matching rows (same type + <c>ValueKey&lt;Guid&gt;(TaskId)</c>)
+    /// so their animation State survives, rather than remounting them. A no-op before the body has mounted
+    /// (defensive) or while the HUD is closed. Also arms the hover-refresh latch: unlike a
+    /// <c>ForceRebuild</c> (which swaps <see cref="GuiBase.RootElement"/>, caught by
+    /// <see cref="ScribeHoverRefreshLatch.ArmIfRebuilt"/>), a reconcile leaves RootElement unchanged, so a
+    /// row-list reorder that slides a different row under a stationary cursor would otherwise leave stale
+    /// hover — arming here re-dispatches a synthetic pointer-move over the next few frames
+    /// (fix-list-collapse-stale-hover).</summary>
+    private void RebuildHudBody()
+    {
+        if (!IsOpened()) return;
+        bodyKey.CurrentState<ScribeDialogBody.BodyState>()?.Rebuild();
+        hoverRefreshLatch.Arm();
+    }
+
     private record struct AnchorInputs(float ScreenW, float ScreenH, ScribeHudAnchor Anchor, float OffX, float OffY, bool MinimapOn);
     private AnchorInputs? _lastAnchorInputs;
 
@@ -248,7 +276,7 @@ public sealed class HudScribePins : GuiBase
         }
 
         if (timer?.Status == Scribe.Core.TimerStatus.Running && IsOpened())
-            ForceRebuild();
+            RebuildHudBody();
     }
 
     // ---------------- HUD dialog semantics ----------------
@@ -297,16 +325,23 @@ public sealed class HudScribePins : GuiBase
         if (needsCollapseCleanup)
         {
             needsCollapseCleanup = false;
-            if (IsOpened()) ForceRebuild();
+            RebuildHudBody();
         }
 
         // Keep hover self-healing under a STATIONARY cursor (LibGUI only recomputes hover on real mouse
-        // motion). Two triggers: a collapse reflowing the list every frame, and ANY ForceRebuild mounting a
-        // fresh tree where every element is hovered=false. The latter is why an UNPIN (which just rebuilds
-        // with no collapse animation, so AnyAnimating never fires) previously dropped the hover controls on
-        // the row that slid under the cursor — ArmIfRebuilt catches every rebuild path by RootElement
-        // identity. The latch re-dispatches a synthetic pointer-move for a few frames past either trigger so
-        // the rebuilt tree (laid out a frame later) regains hover without a mouse wiggle. No-op when idle.
+        // motion). Three arming paths, now that in-place updates reconcile instead of ForceRebuild
+        // (reconcile-animating-surfaces §4.1):
+        //  1. A collapse reflowing the list every frame (AnyAnimating).
+        //  2. Any reconcile that reorders rows — armed INSIDE RebuildHudBody, because a reconcile does NOT
+        //     swap RootElement, so ArmIfRebuilt below can't catch it. This is the unpin/complete case: a
+        //     row leaving slides a different row under the stationary cursor. (Under reconcile the reused
+        //     elements KEEP their hovered flag — unlike a ForceRebuild's fresh hovered=false tree — so only
+        //     a row that genuinely CHANGED slot needs the synthetic re-dispatch; arming is harmless when it
+        //     didn't.)
+        //  3. A genuine tree remount that DOES swap RootElement — the self-open (TryOpen) path — still
+        //     caught here by identity. (There are no in-place ForceRebuilds left; this now only fires on open.)
+        // The latch re-dispatches a synthetic pointer-move for a few frames past any trigger so the
+        // reconciled/rebuilt tree (laid out a frame later) regains hover without a mouse wiggle. No-op idle.
         if (collapseRegistry.AnyAnimating) hoverRefreshLatch.Arm();
         hoverRefreshLatch.ArmIfRebuilt(RootElement);
         if (hoverRefreshLatch.Tick()) RefreshHoverAtCursor();
@@ -427,7 +462,7 @@ public sealed class HudScribePins : GuiBase
         }
         else if (IsOpened())
         {
-            ForceRebuild();
+            RebuildHudBody();
         }
     }
 
@@ -463,7 +498,7 @@ public sealed class HudScribePins : GuiBase
         // running push does NOT rebuild — TimerDisplayTick owns the steady countdown repaint, so the HUD
         // rebuilds once per second, not twice.
         else if (statusChanged && IsOpened())
-            ForceRebuild();
+            RebuildHudBody();
     }
 
     /// <summary>Clear each optimistic override that the latest snapshot already agrees with, so the row
@@ -602,7 +637,7 @@ public sealed class HudScribePins : GuiBase
         }
 
         // TickCorruption may already have rebuilt this tick; don't rebuild twice.
-        if (anyExpired && !corruptionRebuilt && IsOpened()) ForceRebuild();
+        if (anyExpired && !corruptionRebuilt && IsOpened()) RebuildHudBody();
     }
 
     // ---------------- Row state helpers ----------------
@@ -692,7 +727,7 @@ public sealed class HudScribePins : GuiBase
             }
         }
 
-        if (IsOpened()) ForceRebuild();
+        if (IsOpened()) RebuildHudBody();
     }
 
     /// <summary>Fire the deferred completion request for a pin, carrying the policy captured when the
@@ -787,7 +822,7 @@ public sealed class HudScribePins : GuiBase
             // A fresh trigger (or title-swap) transition: reschedule and rebuild now so the effect is prompt.
             _corruptionSeed++;
             _nextRescrambleMs = now + NextRescrambleInterval();
-            if (IsOpened()) { ForceRebuild(); return true; }
+            if (IsOpened()) { RebuildHudBody(); return true; }
             return false;
         }
 
@@ -796,7 +831,7 @@ public sealed class HudScribePins : GuiBase
         {
             _corruptionSeed++;
             _nextRescrambleMs = now + NextRescrambleInterval();
-            if (IsOpened()) { ForceRebuild(); return true; }
+            if (IsOpened()) { RebuildHudBody(); return true; }
         }
 
         return false;
@@ -846,7 +881,18 @@ public sealed class HudScribePins : GuiBase
     }
 
     /// <inheritdoc />
-    protected override Widget Build()
+    /// <remarks>Returns the ONE persistent-root <see cref="ScribeDialogBody"/> that owns the reconcilable
+    /// HUD subtree (reconcile-animating-surfaces §4.1). <see cref="GuiBase"/> calls this once per open (and
+    /// once per <see cref="GuiBase.ForceRebuild"/>); the body then persists, and every in-place update goes
+    /// through <see cref="RebuildHudBody"/> (a reconciling <c>SetState</c>) which re-invokes
+    /// <see cref="BuildHudTree"/> to re-read the HUD's live state. The self-open/close (§4.2) still rides
+    /// <c>TryOpen</c>/<c>TryClose</c>, and the genuinely-new-tree cases keep <see cref="GuiBase.ForceRebuild"/>.</remarks>
+    protected override Widget Build() => new ScribeDialogBody(bodyKey, BuildHudTree);
+
+    /// <summary>Builds the HUD widget subtree from the current live state (pin set, timer, corruption,
+    /// settings). Re-invoked on every reconcile via <see cref="ScribeDialogBody.BodyState.Build"/>, so it
+    /// always reflects the latest state — this is the body of what used to be <see cref="Build"/> directly.</summary>
+    private Widget BuildHudTree()
     {
         var shown = BuildOrderedRows();
 
@@ -1317,13 +1363,21 @@ internal sealed class HudPinsContent : StatelessWidget
 /// <c>fading</c> is set, using a self-owned <see cref="AnimationController"/> that it drives frame-by-frame
 /// (scribe-settings-followups 1.1).
 ///
-/// <para><b>Why not <see cref="AnimatedOpacity"/>?</b> The HUD's only rebuild path is
+/// <para><b>Why not <see cref="AnimatedOpacity"/>?</b> Originally the HUD's only rebuild path was
 /// <see cref="GuiBase.ForceRebuild"/>, which UNMOUNTS and recreates the whole widget tree rather than
-/// reconciling it. An implicitly-animated widget only animates across a reconciling <c>UpdateWidget</c>
+/// reconciling it. A stock implicitly-animated widget only animates across a reconciling <c>UpdateWidget</c>
 /// (retarget tween → <c>Forward()</c>); recreated fresh, its tween inits <c>Begin=End=target</c> and
 /// evaluates to the target instantly — which is exactly the "snap straight to 0" bug. This widget instead
-/// starts its own controller in <see cref="InitState"/> and ticks itself, so it ramps correctly the
-/// moment it is (re)mounted in the fading state, needing no per-frame rebuild from the HUD.</para>
+/// owns its controller and ticks itself, so it ramps correctly regardless of the host's rebuild strategy.</para>
+///
+/// <para><b>Reconcile-safety (reconcile-animating-surfaces §4.1).</b> Now that the HUD rebuilds via a
+/// reconciling <c>SetState</c> (not <c>ForceRebuild</c>), a row element is REUSED across a rebuild rather
+/// than remounted — so <see cref="InitState"/> does NOT re-run when a row's <see cref="Fading"/> flips
+/// <c>false→true</c> (the checkbox-click → destructive-pending transition). Starting the fade only in
+/// <c>InitState</c> would therefore silently never fire on a reused row. So the fade is (re)started from a
+/// single <c>EnsureFading</c> helper called from BOTH <c>InitState</c> (fresh mount — e.g. a row that
+/// mounts already-pending) AND <see cref="UpdateWidget"/> (reused element whose prop just flipped). Idempotent:
+/// it no-ops if a controller is already running, so a plain repaint doesn't restart the ramp.</para>
 /// </summary>
 internal sealed class ScribeFadeText : StatefulWidget
 {
@@ -1350,11 +1404,29 @@ internal sealed class ScribeFadeTextState : State<ScribeFadeText>
     public override void InitState()
     {
         base.InitState();
-        if (!Widget.Fading) return;
+        // Fresh mount: if this row mounts already in the fading state (e.g. reconcile added a new row that
+        // is already destructive-pending), start the fade now.
+        EnsureFading();
+    }
+
+    public override void UpdateWidget(ScribeFadeText oldWidget)
+    {
+        base.UpdateWidget(oldWidget);
+        // Reused element (reconcile): InitState did NOT re-run, so a false→true Fading flip must (re)start
+        // the fade here. Idempotent — EnsureFading no-ops if the controller is already running.
+        EnsureFading();
+    }
+
+    /// <summary>Start the self-owned fade controller if the widget is fading and one isn't already running.
+    /// Called from both <see cref="InitState"/> (mount) and <see cref="UpdateWidget"/> (reconcile reuse) so
+    /// the fade fires whichever way this state arrives in the fading configuration.</summary>
+    private void EnsureFading()
+    {
+        if (!Widget.Fading || controller != null) return;
 
         // Own ticker: ramp 0→1 over the window; opacity is 1 − value so the text fades 1→0. Repaint each
         // tick via MarkNeedsBuild (SetState) — the reconciling rebuild path, so this animates itself
-        // regardless of the parent using ForceRebuild.
+        // regardless of the host's rebuild strategy.
         controller = new AnimationController(TimeSpan.FromMilliseconds(Widget.DurationMs), Element.Owner!.GetTickerProvider());
         controller.OnValueChanged += _ => Element.MarkNeedsBuild();
         controller.Forward();
