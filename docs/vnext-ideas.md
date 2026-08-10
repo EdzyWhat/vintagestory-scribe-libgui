@@ -116,6 +116,28 @@ render them. Author wants this in **v1.1**.
   is trivial and proven; the gate is drawing two legible glyphs that read as `<`/`>` in the cuneiform
   style. Cross-reference [[cuneiform-character-coverage-plan]] for the prior coverage pass.
 
+### 1.7 Add arrow glyphs (`←`/`→`) to the cuneiform font — 🆕 new (proposed for v1.1, art-gated)
+Author cuneiform glyphs for the **left/right arrow** characters so tablet text can render the arrows
+that the plaintext auto-substitution (see **4.5**) produces. Sibling to **1.6** — same NEW-ART path,
+not a Core alias (no existing glyph resembles an arrow to alias to, the way `& → +` aliases work).
+- **Pairs directly with 4.5.** 4.5 turns typed `->`/`<-` into `→`/`←` in the text buffer for *every*
+  surface; on a tablet those characters then hit the cuneiform layout, which today has no glyph for
+  them (the shipped bundle carries the 54 ASCII chars only — verified in 1.6). So without an authored
+  arrow glyph, a tablet would drop/box the arrow. Building 4.5 first makes this glyph the thing that
+  lets the substitution look right on a tablet specifically.
+- **Open Q — how many arrows?** 4.5 as scoped only produces `←`/`→` (horizontal). If we later want
+  `↑`/`↓`/`↔` (needs a taller multi-line convention to type them), that's more glyphs — decide the
+  arrow set *before* drawing, so the bundle count bumps once. Lean: just `←`/`→` for v1.1 to match 4.5.
+- **Work involved:** identical to 1.6 — (1) draw the arrow glyph strokes in **glyph-forge**
+  (`~/claude/glyph-forge/`); (2) regenerate/re-sync the bundle
+  (`src/Mod/assets/scribe/textures/fonts/cuneiform-glyphs-1.json`); (3) bump `characterCount`
+  (56 → 58 if it lands after 1.6's `<`/`>`, or 54 → 56 if standalone); (4) update the `CuneiformTests`
+  authored-count assertion; (5) smoke-test via `.cuneiform <text>`. No Core alias entry.
+- *Value/effort feel:* :star: value (completeness — makes 4.5 look right on the tablet tier),
+  **S effort but art-gated** on drawing legible arrow glyphs in the cuneiform style. Cross-reference
+  [[cuneiform-character-coverage-plan]] and **1.6** (author together — one glyph-forge session, one
+  bundle regen, one count bump).
+
 ---
 
 ## 2. New task types — "New Task" dropdown
@@ -394,6 +416,30 @@ fixed↔movable toggle that frees a grab handle. Author wants this in **v1.1** a
   approximate), **S effort** — no new primitive, no new persisted state, reuses the existing
   offset fields + persist path. A clean, self-contained v1.1 inclusion.
 
+### 4.5 Auto-substitute typed arrows (`->`/`<-` → `→`/`←`) — 🆕 new (proposed for v1.1)
+As the player types, turn the ASCII digraphs `->` and `<-` into the Unicode arrows `→`/`←`
+automatically in their task/note text — the small "smart replacement" nicety every editor has, so a
+player can jot "mine -> smith" and get "mine → smith".
+- **Open Q — where the substitution lives:** it should be a **text-layer transform, not a Core-model
+  transform**, so it works uniformly across every writing surface (lectern, notebook, tablet) and both
+  task and note kinds, and doesn't bake presentation into the stored document. Two candidate seams:
+  (a) at the input widget, rewriting the buffer on keystroke as the digraph completes (immediate, visible
+  as you type, but has to be careful about caret position after the 2-char → 1-char shrink and about not
+  eating a legitimately-typed `->`); (b) at render/display time only, leaving the stored bytes as `->`
+  (safer, fully reversible, but the stored text and the shown text diverge, which complicates search and
+  copy/paste). Lean (a) for the "feels like a real editor" payoff, but scope the caret handling honestly.
+- **Interaction with the cuneiform tablet (see 1.7).** On a tablet the substituted `→`/`←` then hits the
+  cuneiform layout, which has **no arrow glyph today** — so this feature and **1.7** (draw the arrow
+  glyphs) are a matched pair: 4.5 produces the character, 1.7 makes it render on a tablet. On the lectern
+  and notebook (normal font) the Unicode arrow renders with no new art. Decide whether to gate 4.5 behind
+  1.7 or ship 4.5 first and let tablets show a fallback until the glyph lands.
+- **Scope guard:** keep it to the two horizontal arrows for v1.1 (matches 1.7's lean). Resist growing it
+  into a general autocorrect/emoji-substitution engine — that's off-theme (the "age-of-computers" concern
+  the author flags on 4.2 undo) and a maintenance sink. A tiny fixed digraph table is the whole feature.
+- *Value/effort feel:* :star: value (small delight, "real editor" feel), **S effort** on the lectern/
+  notebook (a bounded input-buffer transform, no Core/codec change); the tablet half is gated on 1.7's art.
+  Cross-reference **1.7** (the tablet glyph) and [[cuneiform-character-coverage-plan]].
+
 ---
 
 ## 5. The Writing Desk (later big tier) — 🗺️ on roadmap (v4)
@@ -499,7 +545,7 @@ screenshots.
 | Linked/handbook task (2.3) | chronicle "handbook bookmarking" (lighter cousin) |
 | Tracked numeric task (2.2) | chronicle "milestone-suggested via inventory polling" (shared primitive) |
 | Lectern model / block refinement (1.4) | lectern-gui-polish "block shape refinement" (art-gated) |
-| Everything else (1.1–1.3, 1.5, 2.1, 2.4, 3.1, 4.1, 4.2, 5.5–5.8, 6.x, 7.1) | 🆕 net-new — no roadmap home yet |
+| Everything else (1.1–1.3, 1.5, 1.7, 2.1, 2.4, 3.1, 4.1, 4.2, 4.5, 5.5–5.8, 6.x, 7.1) | 🆕 net-new — no roadmap home yet |
 
 ## Prioritization — our chosen order (decided 2026-08-07)
 
@@ -709,11 +755,18 @@ Cheap, visible wins bundled into a fast follow-up:
 - **1.6 Cuneiform `<`/`>` glyphs** (author-requested for v1.1, 2026-08-08) — draw two new glyphs in
   glyph-forge, regenerate the bundle (count 54 → 56), bump the `CuneiformTests` assertion. Trivial,
   proven code path; art-gated on drawing the two glyphs.
+- **4.5 Auto-substitute typed arrows** (author-requested for v1.1) — turn typed `->`/`<-` into `→`/`←`
+  in the text buffer. Bounded input-buffer transform, no Core/codec change; ships on lectern/notebook
+  immediately.
+- **1.7 Cuneiform arrow glyphs (`←`/`→`)** (author-requested for v1.1) — the tablet-tier companion to
+  4.5: draw the arrow glyphs in glyph-forge so the substituted arrows render on a tablet. Same
+  art-gated path as 1.6; author 1.6 + 1.7 together (one glyph-forge session, one bundle regen).
 
 *Why these:* all small, all immediately visible to a returning player, and together they justify a
-release note without a big build. Keeps us high on the "recently updated" board. (4.4 and 1.6 are the
-newest adds; each is self-contained, so if any slips the rest still stand as the release. 1.6 is
-art-gated — it ships only once the two glyphs are drawn.)
+release note without a big build. Keeps us high on the "recently updated" board. (4.4, 1.6, 4.5, and
+1.7 are the newest adds; each is self-contained, so if any slips the rest still stand as the release.
+1.6/1.7 are art-gated — they ship only once the glyphs are drawn; 4.5 ships on the lectern/notebook
+without waiting on 1.7, tablets picking up the arrow glyph when it lands.)
 
 ### :mag: Exploration candidate (scope-check before building)
 - **2.2 Tracked (numeric progression) tasks** — high value, but *feels* like a big chunk. Author
