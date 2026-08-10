@@ -316,19 +316,19 @@ public abstract partial class ScribeDialogBase
     /// animation callback via <see cref="needsEditorCollapseCleanup"/> so we don't unmount + rebuild the tree
     /// re-entrantly from inside the ticker pump.
     ///
-    /// <para>Scroll preservation (Phase 2 trace: delete was jumping the viewport to the TOP): the
-    /// <see cref="needsEditorCollapseCleanup"/> <see cref="ForceRebuild"/> remounts the editor's
-    /// <c>SingleChildScrollView</c>, which re-lays-out and (via LibGUI's <c>ClampOffset</c> against a
-    /// transiently-zero content height) resets the offset to 0. The <see cref="RequestClampToExtent"/> loop
-    /// can only clamp DOWN, so it can't recover from a reset-to-0. Capture the current offset so the
-    /// <see cref="OnRenderGUI"/> restore loop re-applies it across that rebuild — the same "hold the offset"
-    /// mechanism Pin uses. Restoring the pre-collapse offset and letting the natural clamp reduce it to the
-    /// now-smaller max lands the viewport at the shortened list's bottom (the correct resting spot), not 0.</para></summary>
+    /// <para>No scroll capture-restore here (reconcile-animating-surfaces §3.5): the cleanup now runs through
+    /// <see cref="RebuildBody"/> (§3.1), an in-place reconcile that REUSES the editor's
+    /// <c>SingleChildScrollView</c> and so preserves the shared offset inherently — it no longer remounts the
+    /// scroll view and resets the offset to 0 the way the old <c>ForceRebuild</c> cleanup did, which was the
+    /// only reason a <see cref="CaptureScrollForRestore"/> was needed on this path. §3.10's collapse-pin has
+    /// also already glided the viewport down to the shrinking bottom while the row collapsed, so the offset is
+    /// already at its correct resting spot by the time this fires. <see cref="RequestClampToExtent"/> is kept
+    /// as the final settle for the rare shrink not covered by a live collapse (e.g. LibGUI's >50px wheel-slop
+    /// clamp firing mid-collapse); with the collapse-pin active it is normally a no-op (Offset ≤ max).</para></summary>
     private void OnEditorRowCollapsed(Guid taskId)
     {
         if (!departingEditorRows.Remove(taskId)) return;
         editorCollapseRegistry.Release(taskId.ToString("N"));
-        CaptureScrollForRestore();
         RequestClampToExtent();
         needsEditorCollapseCleanup = true;
     }

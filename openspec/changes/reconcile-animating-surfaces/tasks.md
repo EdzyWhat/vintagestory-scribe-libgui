@@ -68,11 +68,28 @@
   empty task). [RefreshReadView editor branch already routes through DeleteEditorBlock→RebuildBody and
   keeps its never-drop-focused / never-drop-empty guards; NOT yet verified in-game — gate item
   `1f95e1ec` is BACKLOGGED pending a multiplayer session. Verify the guards hold under reconcile there.]
-- [ ] 3.5 Measure how much of the `pendingEnsureVisible` / `pendingRestoreScrollOffset` /
+- [x] 3.5 Measure how much of the `pendingEnsureVisible` / `pendingRestoreScrollOffset` /
   `pendingClampToExtent` settling apparatus can be removed now that reconcile preserves the scroll
   controller's offset (design Open Question); remove what's no longer needed, keep what view-switches
-  still require. [Note: gate item `29b05ca5` (task 3.10) shows the shrink-at-bottom re-clamp currently
-  SNAPS the offset upward — the animate-the-clamp fix and this measure/remove work overlap; do them together.]
+  still require. [MEASURED + trimmed 2026-08-10. Classification of all sites:
+  • `pendingRestoreScrollOffset` / `CaptureScrollForRestore` — REMOVED from the editor collapse path
+    (`OnEditorRowCollapsed`, Editor.cs). It was there only to survive the old `ForceRebuild` cleanup that
+    remounted the `SingleChildScrollView` and reset the offset to 0; §3.1 rerouted collapse-cleanup to
+    `RebuildBody()` (Lifecycle.cs:64), an in-place reconcile that REUSES the scroll view and preserves the
+    offset inherently, and §3.10's collapse-pin already glides the viewport to the shrinking bottom during
+    the animation — so the captured offset equalled the current offset and the restore loop was a no-op.
+    KEPT on the 4 non-editor sites (base.cs:526/547 OnMyPinsChanged+OnSettingsVisibilityChanged read/
+    non-pinned branches; ViewSwitching.cs:248/358 switch-to-read) — those still `ForceRebuild` and remount
+    the virtualized read `ListView`, so they genuinely need capture-restore; retiring them is §5's job.
+  • `pendingClampToExtent` — KEPT as the final safety-net settle (§3.10 designed it as the net for the rare
+    shrink not covered by a live collapse, e.g. LibGUI's >50px wheel-slop clamp mid-collapse); with the
+    collapse-pin active it is normally a no-op (Offset ≤ max). Fully retiring it wants a DEBUG frame-trace
+    confirming it never fires; left in place, deferred to §6.3 (hover-latch / capture-restore simplification).
+  • `pendingEnsureVisible` — KEPT: it scrolls a specific target row into view (append-below-fold, reorder-
+    chase), orthogonal to offset preservation; reconcile doesn't make it dead.
+  Build 0 err / 4 pre-existing warns; 286 Core tests pass; restaged. In-game scroll behavior already
+  CONFIRMED good by gate item `29b05ca5` (task 3.10 "It's so goooooood.") — this trims dead code beneath
+  that confirmed behavior, so no new in-game gate; a delete-at-bottom re-verify folds into the §7 checklist.]
 - [x] 3.6 `dotnet build src/Mod/Mod.csproj` clean (0 new warnings); `dotnet test tests/Core.Tests` green.
   [Build 0 err / 4 pre-existing warns; 286 Core tests pass — committed `e950334`.]
 - [x] 3.7 `bash build/restage.sh Debug`, relaunch, and RUN THE EDITOR PROOF GATE in-game (design D2 —
