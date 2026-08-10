@@ -127,6 +127,7 @@ public abstract partial class ScribeDialogBase
         viewMode = ScribeLecternView.Pinned;
         focusedPinTaskId = null;
         autoFocusPinTaskId = null;
+        pendingFocusPinTaskId = null;
         SyncPinFocusNodes();
         if (IsOpened()) ForceRebuild();
     }

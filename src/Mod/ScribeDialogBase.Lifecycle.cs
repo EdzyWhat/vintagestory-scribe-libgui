@@ -178,6 +178,18 @@ public abstract partial class ScribeDialogBase
             pendingFocusRow = null;
         }
 
+        // Re-home keyboard focus onto a REUSED Pin Tab row after an in-place pin reconcile
+        // (reconcile-animating-surfaces §4.3) — the Pin Tab twin of the editor block above. base.OnRenderGUI
+        // already ran the reconcile + layout this frame, so the target row's field element is mounted and its
+        // dialog-owned node (keyed by TaskId) has a live Owner. Waits for a live Owner so it survives a
+        // reconcile that arrives a frame late; one-shot. Only fires while still in the Pinned view.
+        if (pendingFocusPinTaskId is { } pinFocusId && viewMode == ScribeLecternView.Pinned
+            && pinFocusNodes.TryGetValue(pinFocusId, out var pinNode) && pinNode.Owner is not null)
+        {
+            pinNode.RequestFocus();
+            pendingFocusPinTaskId = null;
+        }
+
         if (pendingEnsureVisible && isEditorMode && focusedEditIndex is { } idx
             && idx < editorFocusNodes.Count && editorFocusNodes[idx].Owner is { } element)
         {

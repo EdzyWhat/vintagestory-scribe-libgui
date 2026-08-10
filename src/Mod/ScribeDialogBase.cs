@@ -295,8 +295,21 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     private Guid? focusedPinTaskId;
 
     /// <summary>Pin row to auto-focus on the next Pin Tab rebuild (caret restore across a
-    /// <see cref="ForceRebuild"/>), or null. One-shot: consumed in <see cref="BuildPinnedContent"/>.</summary>
+    /// <see cref="ForceRebuild"/>), or null. One-shot: consumed in <see cref="BuildPinnedContent"/>. Rides
+    /// the field's mount-only <c>autoFocus</c>, so it only re-homes a genuinely-NEW (freshly-mounted) row —
+    /// reserved for the view-switch/fresh-mount path. An in-place pin resync (reconcile-animating-surfaces
+    /// §4.3) REUSES the focused row's field instead, so it re-homes via <see cref="pendingFocusPinTaskId"/>.</summary>
     private Guid? autoFocusPinTaskId;
+
+    /// <summary>Pin row (by TaskId) to re-home keyboard focus onto after an in-place Pin Tab reconcile
+    /// (reconcile-animating-surfaces §4.3), or null. The Pin Tab equivalent of the editor's
+    /// <see cref="pendingFocusRow"/>: pressing a per-row pin control (checkbox/unpin/delete — none are
+    /// <c>IFocusable</c>) blurs the focused field via <c>DispatchPointerDown</c>, and the async
+    /// <see cref="OnMyPinsChanged"/> resync lands a frame or more later. Under reconcile the focused row's
+    /// field is REUSED (not remounted), so its mount-only <c>autoFocus</c> won't re-fire; instead this drives
+    /// a deferred <see cref="FocusNode.RequestFocus"/> on the dialog-owned node from <c>OnRenderGUI</c> once
+    /// the reconciled element has a live Owner. One-shot.</summary>
+    private Guid? pendingFocusPinTaskId;
 
     /// <summary>The mod system, cached for per-player pin queries and the pin/complete network sends.</summary>
     protected readonly ScribeModSystem modSystem;
@@ -507,23 +520,37 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
             return;
         }
 
-        // Non-editor views (Pinned / Read) still use ForceRebuild until their §4/§5 reconcile conversion.
-        // Pin Tab: keep the caret on the row being edited across this async resync rebuild (same hazard the
-        // editor faces). A blur doesn't clear focusedPinTaskId, so it still names the row; re-arm the
-        // one-shot only if that pin still exists in the (new) set.
-        if (viewMode == ScribeLecternView.Pinned && focusedPinTaskId is { } pinId
-            && modSystem.MyPins.Any(p => p.TaskId == pinId))
+        // Pin Tab (reconcile-animating-surfaces §4.3): like the editor, the pin resync is an in-place
+        // reconcile — ScribePinnedContent keys every row by ValueKey<Guid>(TaskId), owns its drag state
+        // internally, and re-seeds each field from pinEditBuffer, so RebuildBody REUSES every row (each
+        // ScribeMultilineField keeps its caret + unsaved buffer) and just re-tints/re-orders. Re-home the
+        // caret on the row being edited via the deferred pendingFocusPinTaskId — pressing a per-row pin
+        // control (none IFocusable) blurred the focused field via DispatchPointerDown, and a reused field
+        // skips its mount-only autoFocus, so autoFocusPinTaskId wouldn't re-fire here. A blur doesn't clear
+        // focusedPinTaskId, so it still names the row; re-arm only if that pin still exists in the new set.
+        // Reconcile preserves the shared scroll offset in place, so no capture-restore (that was only for
+        // the old ForceRebuild's offset reset).
+        if (viewMode == ScribeLecternView.Pinned)
         {
-            autoFocusPinTaskId = pinId;
+            if (focusedPinTaskId is { } pinId && modSystem.MyPins.Any(p => p.TaskId == pinId))
+                pendingFocusPinTaskId = pinId;
+            // A completion can re-order the list (sink policy), sliding a different row under a stationary
+            // cursor. Unlike a ForceRebuild (fresh hovered=false tree caught by ArmIfRebuilt), a reconcile
+            // leaves RootElement unchanged and REUSES rows with their stale hovered flag — so arm the hover
+            // latch to re-dispatch a synthetic pointer-move and re-home the hover-gated delete/unpin controls
+            // without a mouse wiggle (fix-list-collapse-stale-hover). Harmless no-op when no row moved.
+            hoverRefreshLatch.Arm();
+            RebuildBody();
+            return;
         }
+
         // The read view uses the virtualized ListView; a ForceRebuild re-derives content height and clamps
         // the shared controller's offset toward 0, losing the player's scroll position. Capture the offset
         // HERE — right before the rebuild — so the OnRenderGUI restore loop re-applies it once the content
         // height settles. Capturing in OnReadViewTogglePinned (the pre-network-round-trip site) was too
         // early: by the time this async callback fires the restore loop had already terminated
-        // (pendingRestoreScrollOffset was null). Pinned view rebuilds use a non-virtualized Column whose
-        // content height is exact from frame-1, so no restore needed there.
-        if (viewMode != ScribeLecternView.Pinned) CaptureScrollForRestore();
+        // (pendingRestoreScrollOffset was null). (Read stays on ForceRebuild until its §5 conversion.)
+        CaptureScrollForRestore();
         ForceRebuild();
     }
 
@@ -544,7 +571,17 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
             RebuildBody();
             return;
         }
-        if (viewMode != ScribeLecternView.Pinned) CaptureScrollForRestore();
+        // Pin Tab (§4.3): the nav column lives inside the persistent body, so an in-place reconcile re-tints
+        // the Settings button while REUSING the pin rows — no caret/scroll loss. Re-home the focused row via
+        // the deferred pendingFocusPinTaskId in case an earlier press cleared focus. Read stays on ForceRebuild.
+        if (viewMode == ScribeLecternView.Pinned)
+        {
+            if (focusedPinTaskId is { } pinId && modSystem.MyPins.Any(p => p.TaskId == pinId))
+                pendingFocusPinTaskId = pinId;
+            RebuildBody();
+            return;
+        }
+        CaptureScrollForRestore();
         ForceRebuild();
     }
 
