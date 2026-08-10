@@ -166,15 +166,40 @@
 
 ## 4. Convert the pinned surfaces (spec: player-pins) — only after §3 passes
 
-- [ ] 4.1 Give the HUD (`HudScribePins`) a persistent content state that owns the ordered/capped row
+- [x] 4.1 Give the HUD (`HudScribePins`) a persistent content state that owns the ordered/capped row
   list; route pin-push (`OnMyPinsChanged` in-place branch), tick-expiry, and toggle through `SetState`
   instead of `ForceRebuild()`. Key HUD rows by stable TaskId; no type-swap at a slot for departing rows.
-- [ ] 4.2 Keep the 0⇄1 self-open/close as a host concern (`TryOpen`/`TryClose`), distinct from the
-  in-place row-list reconcile.
-- [ ] 4.3 Convert the Pinned tab (`ScribePinnedContent`) structural mutations to reconcile the same way.
+  [Done (commit `ec4864a`). `Build()` now returns `new ScribeDialogBody(bodyKey, BuildHudTree)` (the
+  §3.1 persistent-root pattern reused — `ScribeDialogBody` is in the same `Scribe` namespace); the 7
+  in-place sites (`OnMyPinsChanged` else-branch, `OnMyTimerChanged` status-transition,
+  `OnTimerDisplayTick`, `OnTick` expiry, `OnToggleRow`, both `TickCorruption` paths, deferred
+  collapse-cleanup) route through a new `RebuildHudBody()`. Rows already keyed `ValueKey<Guid>(TaskId)`;
+  departing ghosts already `ScribeRowSizeAnimation` at the same key (the gate-passed §3.2 shape — stable
+  identity, no type-swap-at-a-key). Reconcile-safety: `ScribeFadeText` now (re)starts its fade from a
+  shared `EnsureFading()` called from BOTH `InitState` AND a new `UpdateWidget` override (a reused row's
+  `Fading` false→true flip no longer silently drops the fade, since `InitState` doesn't re-run under
+  reconcile); `RebuildHudBody` arms `hoverRefreshLatch` (a reconcile `SetState` doesn't swap RootElement,
+  so `ArmIfRebuilt` can't catch a row reorder under a stationary cursor). Build 0 err / 4 pre-existing
+  warns; 286 Core tests pass.]
+- [x] 4.2 Keep the 0⇄1 self-open/close as a host concern (`TryOpen`/`TryClose`), distinct from the
+  in-place row-list reconcile. [Done (commit `ec4864a`). `OnMyPinsChanged`/`OnMyTimerChanged` still call
+  `TryOpen`/`TryClose` for the 0⇄1 transitions; only the "already-open, in-place repaint" branches were
+  rerouted to `RebuildHudBody`. `RebuildHudBody` no-ops when `!IsOpened()`.]
+- [x] 4.3 Convert the Pinned tab (`ScribePinnedContent`) structural mutations to reconcile the same way.
+  [Done (commit `6eb59a7`). The in-place pin resync (`OnMyPinsChanged`/`OnSettingsVisibilityChanged`
+  WHILE already in the Pinned view) routes through `RebuildBody()`; the view-SWITCH into the tab
+  (`OnClickSwitchToPinned`) keeps `ForceRebuild()` (§3.3 genuinely-new tree). `ScribePinnedContent`
+  already keys rows `ValueKey<Guid>(TaskId)`, owns drag state internally, and re-seeds from
+  `pinEditBuffer`, so reconcile reuses every field. New `pendingFocusPinTaskId` (deferred `RequestFocus`
+  on the TaskId-keyed dialog-owned node) re-homes the focused caret — the reused field skips its
+  mount-only `autoFocus`, so the old `autoFocusPinTaskId` (kept for the fresh-mount view-switch) wouldn't
+  re-fire. Armed `hoverRefreshLatch` (sink-policy completion reorders rows under a stationary cursor);
+  dropped `CaptureScrollForRestore` for Pinned (reconcile keeps the offset). Build 0 err / 4 pre-existing
+  warns; 286 Core tests pass; restaged Debug (93 files).]
 - [ ] 4.4 `dotnet build` clean; playtest the pinned surfaces: pin add/remove/complete, undo window,
   sink, fade, collapse, rapid removals, re-pin, and hover-under-still-cursor — all correct, no flicker,
-  no lost hover, deletes land first-click.
+  no lost hover, deletes land first-click. [Build clean + restaged (Debug, 93 files) 2026-08-10 —
+  AWAITING in-game playtest. Covers BOTH the HUD (§4.1/4.2) and the Pin Tab (§4.3).]
 
 ## 5. Read-view external resync (design D4) — after §4
 
