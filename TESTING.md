@@ -21,6 +21,55 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## extract-animated-task-list
+
+> §4.3-4.5 proof gate for the `ScribeAnimatedList` diffing container, adopted FIRST on the Notebook
+> Pin Tab (Immediate removal policy — no undo window; the HUD's fade/undo is the deliberate exception,
+> deferred). The Pin Tab had no removal animation before, so every row-departure motion here is new.
+> Pass gates the follow-up (§6) that migrates the editor + HUD onto the same container.
+
+- [x] `4be1f4c9` **Pin collapse.** In the Notebook Pin Tab, complete / unpin / delete a pinned task —
+      the row collapses and neighbors slide up smoothly (no snap), immediately, with no undo window.
+      *(4.3)*
+      - **Confirmed 2026-08-10** via playtest (this session): row collapses, neighbors slide up, no snap,
+        immediate, no undo window.
+- [x] `8462e77a` **First-click delete.** Confirm the pin delete/unpin lands on the first click (no dead
+      first click), with no flicker and no lost hover, and that your caret/text is undisturbed if you
+      were editing a different row. *(4.3)*
+      - **Confirmed 2026-08-10** via playtest (this session): first click lands, no flicker/lost-hover,
+        caret undisturbed.
+- [x] `a4a1054b` **Bottom-row scroll ease.** Scroll the Pin Tab to the bottom, then remove the bottom
+      pinned row — the viewport eases upward as the row collapses instead of snapping. *(4.4)*
+      - **Confirmed 2026-08-10** via playtest (this session): viewport eases upward, no snap.
+- [x] `23699080` **Rapid multi-removal.** Remove several pinned rows in quick succession — each
+      collapses in its own slot and the surviving order is preserved (no rows jumping or overlapping).
+      *(4.4)*
+      - **Confirmed 2026-08-10** via playtest (this session): each collapses in its own slot, order preserved.
+- [x] `665a87b7` **Re-pin mid-collapse.** Unpin a task and, while its row is still collapsing, re-pin
+      the same task — the departure cancels and it renders as one live row again with no leftover ghost
+      or duplicate. *(4.4)*
+      - **Confirmed 2026-08-10** via playtest (this session): departure cancels, one live row, no ghost.
+- [x] `3b63d51e` **Slide under still cursor.** Complete a pinned row so another row slides up under a
+      stationary mouse cursor — the newly-hovered row's controls appear without moving the mouse.
+      *(4.4)*
+      - **Confirmed 2026-08-10** via playtest (this session): newly-hovered row's controls appear under a
+        stationary cursor.
+- [x] `d978dce8` **Regression: untouched surfaces.** Confirm editor delete, Tablet delete, and the HUD
+      (fade + undo window + sink) all still behave exactly as before this change. *(4.5)*
+      - **Still broken 2026-08-10** (playtest, this session): editor + Tablet delete unaffected, but the HUD
+        surfaced a real regression — under **Unpin** policy (likely any fading policy), check a HUD task,
+        then **cancel the check LATE** (text already faded to ~0). The row reverts to a checkbox with NO
+        text — a permanent invisible row. Root cause: `ScribeFadeText` only ever STARTED its fade controller,
+        never cleared it; the reconcile HUD conversion (`reconcile-animating-surfaces` §4.1/§4.2, commit
+        `ec4864a`) REUSES the row element on undo instead of remounting, so the completed fade controller
+        (`Value ≈ 1` → opacity ≈ 0) survived — hence "more reproducible than the old intermittent version"
+        the tester recalled (old `ForceRebuild` path remounted to a fresh visible state). FIX applied +
+        staged this session: `SyncFadeController` now DISPOSES the controller when `Fading` goes false, in
+        both `InitState`/`UpdateWidget`.
+      - **Confirmed 2026-08-10** (playtest, this session): retested after the fix — check a HUD task under
+        Unpin, uncheck late → the text reappears and the row persists intact. This was a genuine
+        long-standing intermittent bug (never root-caused before); flag for the ModDB changelog.
+
 ## reconcile-animating-surfaces
 
 > §3.7 editor proof gate (design D2) for the ForceRebuild→in-place-reconcile conversion. All must hold,

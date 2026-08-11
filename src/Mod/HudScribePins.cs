@@ -1406,30 +1406,52 @@ internal sealed class ScribeFadeTextState : State<ScribeFadeText>
         base.InitState();
         // Fresh mount: if this row mounts already in the fading state (e.g. reconcile added a new row that
         // is already destructive-pending), start the fade now.
-        EnsureFading();
+        SyncFadeController();
     }
 
     public override void UpdateWidget(ScribeFadeText oldWidget)
     {
         base.UpdateWidget(oldWidget);
-        // Reused element (reconcile): InitState did NOT re-run, so a false→true Fading flip must (re)start
-        // the fade here. Idempotent — EnsureFading no-ops if the controller is already running.
-        EnsureFading();
+        // Reused element (reconcile): InitState did NOT re-run, so a Fading flip must be reconciled here —
+        // false→true (re)starts the fade, true→false (an undo within the window) clears it so the text
+        // reappears. Idempotent in both directions.
+        SyncFadeController();
     }
 
-    /// <summary>Start the self-owned fade controller if the widget is fading and one isn't already running.
-    /// Called from both <see cref="InitState"/> (mount) and <see cref="UpdateWidget"/> (reconcile reuse) so
-    /// the fade fires whichever way this state arrives in the fading configuration.</summary>
-    private void EnsureFading()
+    /// <summary>Reconcile the self-owned fade controller with the widget's current <see cref="ScribeFadeText.Fading"/>
+    /// flag, in BOTH directions. Called from <see cref="InitState"/> (mount) and <see cref="UpdateWidget"/>
+    /// (reconcile reuse):
+    /// <list type="bullet">
+    /// <item><b>Fading</b>: start the ramp if one isn't already running (idempotent — a plain repaint won't
+    /// restart it).</item>
+    /// <item><b>Not fading</b>: DISPOSE any controller so <see cref="Build"/> returns to full opacity. This is
+    /// the undo path (reconcile-animating-surfaces §4.5 HUD regression): a destructive-pending row whose window
+    /// the player cancels late has a nearly-complete fade controller (<c>Value ≈ 1</c>). Because the reconcile
+    /// path REUSES the element rather than remounting it, without this the stale controller would keep the text
+    /// at ~0 opacity forever — a "checkbox with no text". (The old <see cref="GuiBase.ForceRebuild"/> path hid
+    /// this by remounting to a fresh <c>controller == null</c> state; reconcile made element-reuse the norm.)</item>
+    /// </list></summary>
+    private void SyncFadeController()
     {
-        if (!Widget.Fading || controller != null) return;
+        if (Widget.Fading)
+        {
+            if (controller != null) return; // already fading
 
-        // Own ticker: ramp 0→1 over the window; opacity is 1 − value so the text fades 1→0. Repaint each
-        // tick via MarkNeedsBuild (SetState) — the reconciling rebuild path, so this animates itself
-        // regardless of the host's rebuild strategy.
-        controller = new AnimationController(TimeSpan.FromMilliseconds(Widget.DurationMs), Element.Owner!.GetTickerProvider());
-        controller.OnValueChanged += _ => Element.MarkNeedsBuild();
-        controller.Forward();
+            // Own ticker: ramp 0→1 over the window; opacity is 1 − value so the text fades 1→0. Repaint each
+            // tick via MarkNeedsBuild (SetState) — the reconciling rebuild path, so this animates itself
+            // regardless of the host's rebuild strategy.
+            controller = new AnimationController(TimeSpan.FromMilliseconds(Widget.DurationMs), Element.Owner!.GetTickerProvider());
+            controller.OnValueChanged += _ => Element.MarkNeedsBuild();
+            controller.Forward();
+        }
+        else
+        {
+            // Undo / un-fade: drop the (possibly completed) fade so opacity snaps back to 1 and the text is
+            // visible again. Safe to dispose here — UpdateWidget/InitState run during the build phase, not
+            // from inside the ticker callback.
+            controller?.Dispose();
+            controller = null;
+        }
     }
 
     public override Widget Build(BuildContext context)

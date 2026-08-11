@@ -72,7 +72,11 @@ public abstract partial class ScribeDialogBase
         // re-dispatches a synthetic pointer-move for a few frames past either trigger (long enough for the
         // rebuilt tree to lay out on a later frame), so the row under the cursor regains its hover-gated
         // delete/pin controls without a mouse wiggle (fix-list-collapse-stale-hover). No-op when idle.
-        if (editorCollapseRegistry.AnyAnimating) hoverRefreshLatch.Arm();
+        // Both the editor's hand-wired collapse AND the Pin Tab's container-driven collapse (extract-animated-
+        // task-list) reflow the list every animating frame, so either arms the hover latch. The container owns
+        // no dialog-level state (RootElement / RefreshHoverAtCursor are the dialog's), so this loop stays here,
+        // reading the same host-owned registry the container animates against (open-question §2.7 resolution).
+        if (editorCollapseRegistry.AnyAnimating || pinCollapseRegistry.AnyAnimating) hoverRefreshLatch.Arm();
         hoverRefreshLatch.ArmIfRebuilt(RootElement);
         if (hoverRefreshLatch.Tick()) RefreshHoverAtCursor();
 
@@ -90,7 +94,11 @@ public abstract partial class ScribeDialogBase
         // base.OnRenderGUI ran BuildDirtyElements + layout above) so MaxScrollExtent reflects THIS frame's
         // collapsed height. pendingClampToExtent below remains as the final settle for the rare shrink not
         // covered by a live collapse (e.g. LibGUI's >50px wheel-slop clamp firing mid-collapse).
-        if (editorCollapseRegistry.AnyAnimating)
+        // Also pins the Pin Tab's container-driven collapse (extract-animated-task-list): removing the bottom
+        // pin while scrolled down eases the viewport up in lockstep with the shrinking content instead of
+        // snapping. Same registry-AnyAnimating gate, same no-op-when-in-bounds guard — the two views never
+        // animate at once (only one is mounted), so OR-ing their registries is safe.
+        if (editorCollapseRegistry.AnyAnimating || pinCollapseRegistry.AnyAnimating)
         {
             float collapseMax = sharedScrollController.MaxScrollExtent;
             if (sharedScrollController.Offset > collapseMax)
@@ -302,6 +310,9 @@ public abstract partial class ScribeDialogBase
         // Drop any in-flight collapse ghosts + their controllers so a reopen starts clean (scribe-list-collapse).
         departingEditorRows.Clear();
         editorCollapseRegistry.Dispose();
+        // Pin Tab collapse controllers (extract-animated-task-list) — the container owns its ghost cache
+        // (dropped when its State unmounts on close), but the dialog owns this registry, so dispose it here.
+        pinCollapseRegistry.Dispose();
         base.OnGuiClosed();
     }
 

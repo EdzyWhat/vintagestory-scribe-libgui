@@ -355,13 +355,68 @@ identity churn / make the rebuild stop destroying hover/focus/capture/controller
 subject of the `reconcile-animating-surfaces` change (2026-08-09). Do not sell the second goal on the
 first goal's promises, or it gets buried with them again.
 
+## The diffing container: motion for free by comparing frames (extract-animated-task-list, 2026-08-10)
+
+Follow-through on the 2026-08-09 reframe: with reconcile in place (a widget subtree now *survives* a
+data mutation), the departing-ghost choreography that was hand-wired into the editor — and copied into
+the HUD, and missing from the Pinned tab — becomes extractable into **one rendering-agnostic container**,
+`ScribeAnimatedList`. A surface gets the editor's collapse-on-removal animation "for free" by rendering
+its rows through it and mutating **only its data**; it never learns the animation vocabulary.
+
+**How it works.** The container is a `StatefulWidget` whose State caches the id-keyed rows it rendered
+last frame. On each rebuild it diffs the incoming live ids against the cached set (the pure math is in
+Core's `ScribeListDiff`, unit-tested game-free): an id present last frame but absent now is a **departure**
+— it is spliced back at the slot it left, wrapped in `ScribeRowSizeAnimation(Collapse)` from a host-owned
+registry, rendered as a frozen ghost. When the collapse finishes the container drops the ghost itself.
+
+**Two things it deliberately does NOT abstract:**
+
+1. **Content / layout (D6).** It touches exactly two things about a row — its stable `Guid` and its height
+   — and never inspects what the row renders. The caller supplies the row widgets AND the layout wrapper
+   (a `layoutBuilder` taking the final ordered list). So an editable task row, a static Read line, a
+   multi-column Guestbook entry are all "a widget at an id"; each view's content stays free to diverge.
+   There is **no "view behavior profile"** layer — that was explicitly rejected as a miscut that would
+   fight the divergence.
+2. **Scroll-pin + hover-refresh (open question §2.7, resolved: NOT autonomous).** Those touch
+   dialog-level state — the shared `ScrollController`, `RootElement`, `RefreshHoverAtCursor` — so they
+   **stay in the host's `OnRenderGUI`**, driven off the *same host-owned* `ScribeAnimationRegistry`'s
+   `AnyAnimating` that the container animates against. The container packages diff/ghost/slot/self-cleanup;
+   the host keeps the two inherently dialog-level loops (plus an `onDepartureSettled` callback for the final
+   scroll clamp). The registry is host-owned precisely so the host can read `AnyAnimating` without reaching
+   into the container's State. Trying to make the container fully autonomous would mean it hooking a
+   post-layout point and owning a scroll controller it doesn't create — more coupling, not less.
+
+**The one improvement over the editor's hand-wired path: self-cleanup, no host flag.** The editor defers
+its ghost retirement through a `needsEditorCollapseCleanup` bool processed in `OnRenderGUI`, because its
+`onEnd` fires from inside the animation pump and it rebuilds the *dialog* tree (a cross-tree `RebuildBody`)
+— re-entrant if done directly. The container instead calls `SetState` from its own `onEnd`: LibGUI's
+`MarkNeedsBuild` is **deferred** (it adds the element to `BuildOwner`'s dirty set, drained on the next
+`BuildDirtyElements`, which explicitly "handles cascaded rebuilds from animation controllers or state
+changes triggered inside `Build()`"). So the container schedules its *own local* rebuild with no
+re-entrancy and no host-visible flag; the next `Build` retires every ghost whose controller `IsComplete`.
+This is safe only because the rebuild is local to the container — the editor's flag exists because IT
+rebuilds a *different* (ancestor) subtree.
+
+**Ghost source (D2).** A live interactive row is unsafe to freeze in place (its checkbox/field/gestures
+would stay live mid-collapse, and its focus node is gone once the data leaves), so each `ScribeAnimatedListItem`
+supplies an explicit static `Ghost`. The Pin Tab reuses `ScribeFrozenEditorRow` via a `ScribeEditRowData`
+adapter (`Pinned:false` — a Pin Tab row has no resting tint), so it collapses byte-identically to the
+editor. The container falls back to caching the live `Child` only for a genuinely static row.
+
+**Adopted on the Pinned tab first** (no animation before → highest payoff, no risk to already-playtested
+surfaces). Editor + HUD migration onto the container — and wiring the `Delayed` (undo-window/fade) policy
+for the HUD — is a deferred follow-up; the `Delayed` enum value **throws** today so it can't ship
+half-built.
+
 ## Pointers
 
 - `src/Mod/GuiDialogScribeLecternLibGui.cs` — the three `OnRenderGUI` settling loops,
   `CaptureScrollForRestore`, and the two v1 race fixes (`RefreshReadView` guard,
   `ToggleEditorTask` re-home). Also documented in `VSAPI-NOTES.md` `## LibGUI`.
-- `src/Mod/ScribeCollapsible.cs` — the collapse widget, height-factor render box, and
-  host-owned registry (the pattern this doc defends).
+- `src/Mod/ScribeRowSizeAnimation.cs` — the collapse/reveal widget, height-factor render box, and
+  host-owned `ScribeAnimationRegistry` (the pattern this doc defends).
+- `src/Mod/ScribeAnimatedList.cs` — the diffing container (motion-only, D6); `src/Core/ScribeListDiff.cs`
+  — its pure, game-free identity diff (tested in `tests/Core.Tests/ScribeListDiffTests.cs`).
 - `src/Mod/HudScribePins.cs` — `ScribeFadeText` (self-ticking fade) lives at the bottom.
 - `VSAPI-NOTES.md` `## LibGUI` section — the `ForceRebuild`-snaps-animations note and the
   stock `ListView` child-cache note.

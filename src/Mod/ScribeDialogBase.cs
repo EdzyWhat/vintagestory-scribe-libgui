@@ -288,6 +288,13 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// in sync with the current pin set by <see cref="SyncPinFocusNodes"/>; disposed in <see cref="OnGuiClosed"/>.</summary>
     private readonly Dictionary<Guid, FocusNode> pinFocusNodes = new();
 
+    /// <summary>Host-owned collapse controllers for the Pin Tab's departing rows (extract-animated-task-list),
+    /// passed to <see cref="ScribePinnedContent"/>'s <see cref="ScribeAnimatedList"/> so a removed pin's row
+    /// collapses out instead of snapping. Owned by the dialog (like <see cref="editorCollapseRegistry"/>) so a
+    /// collapse RESUMES across the resync reconcile, and so <see cref="OnRenderGUI"/> can read
+    /// <c>AnyAnimating</c> to pin the scroll + refresh hover while a pin row collapses. Disposed with the dialog.</summary>
+    private readonly ScribeAnimationRegistry pinCollapseRegistry = new();
+
     /// <summary>The <see cref="ScribeBlock.TaskId"/> of the Pin Tab row currently focused, tracked from the
     /// rows' focus nodes so a rebuild can restore the caret and a focus move can commit the row being left.
     /// Not cleared on blur (its listener fires only on focus GAINED — the editor's pattern), so it still

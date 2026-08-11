@@ -1971,6 +1971,49 @@ idea for an editable/auto-focused row — height-expand is the WRONG tool there.
   `Widgets/Animations/AnimationController.cs`, `AnimatedBuilder.cs`, `Curves.cs` (`Interval`); focus path
   `Widgets/Input/Focus.cs` + `Gestures/EventDispatcher.cs`; caret gate `Core/Input/RenderTextField.cs`.
 
+### `SetState` / `MarkNeedsBuild` is DEFERRED — a State can safely schedule its OWN rebuild from an animation `onEnd` (2026-08-10)
+
+Confirmed against `Element.MarkNeedsBuild` + `BuildOwner.ScheduleBuildFor`/`BuildDirtyElements`
+(`Widgets/Framework/`). `SetState`/`MarkNeedsBuild` does NOT rebuild synchronously — it just adds the
+element to `BuildOwner`'s `_dirtyElements` set (idempotent: a second `MarkNeedsBuild` on an
+already-dirty element is a no-op), drained on the next `BuildDirtyElements` pass. That drain loops
+`while (_dirtyElements.Count > 0)` and its doc-comment explicitly says it "handles cascaded rebuilds
+from animation controllers or state changes triggered inside `Build()`."
+
+**Consequence:** a callback firing from inside the animation tick pump (e.g. a collapse's `onEnd`) MAY
+call `SetState` to schedule *its own* subtree's rebuild — there is no re-entrancy, because the rebuild
+is queued, not run inline. This is why `ScribeAnimatedList` retires its completed ghosts with a plain
+`SetState` from `onEnd` and needs **no** host-visible `needsCleanup` flag. The editor's hand-wired path
+DOES use such a flag (`needsEditorCollapseCleanup`) — but only because its `onEnd` rebuilds a
+*different, ancestor* subtree (`RebuildBody` on the dialog body), which would be re-entrant to walk from
+inside a descendant's tick. Rule of thumb: **scheduling a rebuild of your own element from a tick
+callback is safe; synchronously rebuilding an ancestor is not** — defer the latter to `OnRenderGUI`.
+(`BuildDirtyElements` also sorts dirty elements shallow-first and skips any element a parent rebuild
+already cleaned, so a parent+child both going dirty in one frame rebuilds the child once, not twice.)
+
+### A self-owned `AnimationController` on a reconcile-reused State must sync in BOTH directions — start-only is a latent bug ForceRebuild masks (2026-08-10)
+
+Root-caused the long-standing "HUD task loses its text, leaving a bare checkbox" bug (see memory
+[[hud-fade-text-stale-controller-bug]]). `ScribeFadeText` (`HudScribePins.cs`) drives its own
+`AnimationController` to ramp text opacity 1→0 during the destructive-pending window, and `Build`
+computes `opacity = controller == null ? 1 : 1 - controller.Value`. The `EnsureFading` helper only ever
+STARTED a controller and never cleared one. On a LATE undo (fade ≈ complete, `Value ≈ 1` → opacity ≈ 0)
+the row reverts to `Fading: false` but keeps the stale completed controller — so the text stays
+invisible forever.
+
+**Why it went from intermittent to reliable:** the reconcile HUD conversion (§ below / commit `ec4864a`)
+replaced the HUD's `ForceRebuild` repaint with a reconciling `SetState`. `ForceRebuild` unmounts +
+recreates the tree, so the undo landed on a FRESH `controller == null` state → text visible (the bug
+self-healed). Reconcile REUSES the row element (its State survives), so `InitState` doesn't re-run and
+the stale controller persists. **Element reuse turns a start-only controller into a permanent bug.**
+
+**Fix / rule:** make the sync bidirectional — dispose the controller when the driving flag goes false
+(`SyncFadeController` runs from BOTH `InitState` and `UpdateWidget`; disposing there is safe because both
+run during the build phase, not from inside the ticker callback). General lesson: **any State that owns
+an `AnimationController` and can be reconcile-reused must reconcile the controller in BOTH directions in
+`UpdateWidget` — create/start on the on-transition AND dispose/clear on the off-transition.** Don't rely
+on a remount to reset it; under reconcile there is no remount.
+
 ## Held-item dialog flickers closed on FIRST open of a not-yet-crafted item (2026-08-06)
 
 **Symptom: the first time a player opens a Scribe item they did NOT craft (notebook, clockmaker's
