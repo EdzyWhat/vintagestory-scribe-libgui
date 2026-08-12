@@ -14,6 +14,15 @@ mirroring the collapse-on-removal that already ships.
 - **New rows animate into view instead of popping in**, across all three animating surfaces
   (editor, Pin Tab, Read view) — they route through the same `ScribeAnimatedList` container that
   already animates removals, so each surface adopts it with no bespoke per-surface machinery.
+- **The editor is migrated onto `ScribeAnimatedList` as part of this change** (folding in
+  `extract-animated-task-list` §6.1, previously a deferred follow-up). Today the editor hand-wires
+  its own collapse choreography — a `DepartingRows` list on the dialog, a ghost splice in
+  `ScribeEditorContent`, an `OnDepartingCollapsed` cleanup callback — duplicating exactly what the
+  container already does for Read/Pin. Routing the editor through the container deletes that
+  duplication and, critically, means insertion-entry is wired **once** (in the container) instead
+  of once in the container plus again inline in the editor. After this change 3 of the 4 animating
+  surfaces (editor, Read, Pin Tab) share one animation path; only the HUD remains bespoke, for a
+  principled reason (its undo-window `Delayed` policy), tracked as its own follow-up.
 - **Two entry modes, chosen by focus-safety** (the load-bearing rule):
   - A **non-focused** appearance (quick-add on a closed/other surface, a row appearing on the Pin
     Tab / Read view, a peer row) uses the **height-grow slide** (`ScribeRowSizeDirection.Reveal`,
@@ -57,13 +66,22 @@ state, sync, or Core model change (this is view-layer motion only).
   which land in that change. Sequence after it (or on the same branch).
 - **Affected code (view layer only):**
   - `src/Mod/ScribeAnimatedList.cs` — wire the `lastAppeared` seam to wrap appeared ids in a
-    `Reveal` animation (or a fade for the focus-flagged row); expose an entry-mode hook.
+    `Reveal` animation (or a fade for the focus-flagged row); add a `focusedAppearedId` input so the
+    container picks fade vs. grow per D1.
   - `src/Mod/ScribeRowSizeAnimation.cs` — the `Reveal` direction is built; verify/settle its
     rebuild-stable behavior for the enter case (self-ticking, resumes across ForceRebuild/reconcile).
-  - The three surface adopters (`ScribeEditorContent` / editor path, Pin Tab, `ScribeReadContent`)
-    — pass whichever new-row is auto-focused so the container can pick fade vs. grow.
-  - Possibly a small fade primitive if the focus-safe fade isn't already available as a reusable
-    widget (`AnimatedOpacity` / a `ScribeFade*` analogue).
+  - **Editor migration onto the container** (`extract-animated-task-list` §6.1, folded in here):
+    `src/Mod/ScribeEditorContent.cs` routes its rows + `ScribeFrozenEditorRow` ghosts through
+    `ScribeAnimatedList` (drag-reorder state stays in a thin editor `State` that builds the items);
+    `src/Mod/ScribeDialogBase.Editor.cs` / `.Lifecycle.cs` shed the hand-wired `DepartingRows`
+    bookkeeping and `OnDepartingCollapsed` cleanup, delegating removal + focus fix-up to the
+    container (focus fix-up rides `OnDepartureSettled`). The `needsEditorCollapseCleanup` deferred
+    flag is removed (the container self-cleans via deferred `SetState`).
+  - The surface adopters (`ScribeEditorContent`, Pin Tab, `ScribeReadContent`) pass whichever
+    new-row is auto-focused so the container can pick fade vs. grow.
+  - A small host-owned-controller fade primitive (a `ScribeFade`-style `Opacity` wrapper driven by
+    the `ScribeAnimationRegistry`, NOT `ScribeFadeText`'s self-owned controller — that one snaps on
+    `ForceRebuild`), for the focus-safe fade-in.
 - **Core:** no model/persistence/sync change. `ScribeListDiff.Appeared` already exists; at most a
   Core.Tests addition covering the appeared-set → entry-mode selection if any pure logic is added.
 - **No new dependencies.** Vanilla `VintagestoryAPI` + the existing harness only.

@@ -84,22 +84,24 @@
       (collapsing the duplicated choreography; wire the Delayed policy for the HUD) — a separate
       proposal, gated on this one passing its playtest.
 
-## 6. Follow-up scope (separate proposal — NOT this change)
+## 6. Follow-up scope (RE-HOMED — tracked in their own changes now, NOT this one)
 
-Gated on §4.3-4.5 passing in-game. Captured here so the seam is recorded while fresh; do not
-implement under this change.
+Gated on §4.3-4.5 passing in-game (which they did). Both follow-ups have since been given real
+homes; this section is left as a pointer so the seam history stays traceable. Do not implement
+either under this change.
 
-- [ ] 6.1 Migrate the editor onto `ScribeAnimatedList`, deleting the hand-wired choreography in
-      `ScribeDialogBase.Editor.cs` (`DeleteEditorBlock`/`OnEditorRowCollapsed`), the ghost-splice in
-      `ScribeEditorContent.cs`, and the `needsEditorCollapseCleanup` deferred-rebuild flag. The
-      container's self-cleanup (deferred `SetState`, see VSAPI-NOTES §LibGUI 2026-08-10) removes the
-      need for the flag — but the editor's `onEnd` also rebuilds the dialog body (`RebuildBody`), so
-      confirm whether that ancestor rebuild still needs a deferral or whether routing removal through
-      the container's own `SetState` makes it local.
-- [ ] 6.2 Migrate the HUD (`HudScribePins.cs`) onto `ScribeAnimatedList`, wiring the `Delayed` removal
-      policy (currently a guarded stub that throws): the HUD's fade + undo-window + sink is the one
-      surface that opts into delayed removal (see [[hud-undo-window-is-policy-hiding]] — the undo
-      window exists only because the HUD hides the Completion Policy). Delete `departing`/
-      `BeginDeparting`/`ReconcileDeparting`/`OnDepartingCollapsed`.
+- [x] 6.1 **Folded into `animate-row-insertion` (§0).** Migrate the editor onto `ScribeAnimatedList`,
+      deleting the hand-wired choreography in `ScribeDialogBase.Editor.cs`
+      (`DeleteEditorBlock`/`OnEditorRowCollapsed`), the ghost-splice in `ScribeEditorContent.cs`, and
+      the `needsEditorCollapseCleanup` deferred-rebuild flag. Done there because the editor must be a
+      container consumer for the insertion-entry (fade) wiring to live in one place (D0/D1). See
+      `animate-row-insertion/design.md` D0.
+- [x] 6.2 **Promoted to its own change `migrate-hud-onto-animated-list`.** Migrate the HUD
+      (`HudScribePins.cs`) onto `ScribeAnimatedList`, wiring the `Delayed` removal policy (currently a
+      guarded stub that throws): the HUD's fade + undo-window + sink is the one surface that opts into
+      delayed removal (see [[hud-undo-window-is-policy-hiding]] — the undo window exists only because
+      the HUD hides the Completion Policy). Delete `departing`/`BeginDeparting`/`ReconcileDeparting`/
+      `OnDepartingCollapsed`.
 - [ ] 6.3 Once all three interactive surfaces (editor/Pinned/HUD) route through the container, retire
-      any now-dead duplicated primitives and confirm one choreography path remains.
+      any now-dead duplicated primitives and confirm one choreography path remains. (Final
+      consolidation — happens after `migrate-hud-onto-animated-list`.)

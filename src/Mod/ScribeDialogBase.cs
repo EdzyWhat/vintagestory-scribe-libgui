@@ -208,21 +208,15 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// The blur fires from inside the field's focus-notification (and, on a row→row move, mid-way
     /// through <c>FocusManager.RequestFocus</c> — the old node blurs before the new one focuses), so
     /// removing the row synchronously would dispose focus nodes mid-transition and strand the pending
-    /// new focus. Deferring is the same re-entrancy guard <see cref="needsEditorCollapseCleanup"/> uses.
+    /// new focus. Deferring is the same re-entrancy guard the container's self-cleanup relies on.
     /// Null when no empty row is awaiting removal.</summary>
     private int? pendingEmptyRowRemoval;
 
-    /// <summary>Editor rows that have been deleted from the scratch document but are still collapsing their
-    /// height to zero before leaving the list (scribe-list-collapse), keyed by the block's stable
-    /// <see cref="ScribeBlock.TaskId"/> (unique per block — tasks AND text sections), valued by the deleted
-    /// row's last-known snapshot and the display index it held (so it collapses IN PLACE). The row renders as
-    /// a static, non-interactive snapshot (its scratch block and focus node are already gone). The entry is
-    /// removed when its collapse completes (<see cref="OnEditorRowCollapsed"/>).</summary>
-    private readonly Dictionary<Guid, (ScribeEditRowData Row, int Index)> departingEditorRows = new();
-
-    /// <summary>Host-owned collapse controllers for <see cref="departingEditorRows"/>, keyed by TaskId so a
-    /// collapse RESUMES (not restarts) across the dialog's <see cref="ForceRebuild"/> remounts
-    /// (scribe-list-collapse). Disposed with the dialog.</summary>
+    /// <summary>Host-owned collapse controllers for the editor's row list, keyed by TaskId so a collapse
+    /// RESUMES (not restarts) across the dialog's rebuild remounts (scribe-list-collapse). Passed into
+    /// <see cref="ScribeAnimatedList"/>, which diffs the editor's TaskId-keyed row set and animates
+    /// departures against it (D0 / extract-animated-task-list §6.1 — the editor no longer hand-wires its own
+    /// departing-row map or collapse-cleanup flag). Disposed with the dialog.</summary>
     private readonly ScribeAnimationRegistry editorCollapseRegistry = new();
 
     /// <summary>Keeps the collapse-time hover refresh running a few frames past the last animating frame so a
@@ -230,11 +224,6 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// (fix-list-collapse-stale-hover); without it the row under a stationary cursor loses its hover controls
     /// exactly when the collapse ends. See <see cref="ScribeHoverRefreshLatch"/>.</summary>
     private readonly ScribeHoverRefreshLatch hoverRefreshLatch = new();
-
-    /// <summary>Set when an editor row's collapse completes, so its removal + rebuild is deferred to the next
-    /// <see cref="OnRenderGUI"/> — the completion callback fires from inside the animation pump, where
-    /// unmounting + rebuilding the tree would be re-entrant.</summary>
-    private bool needsEditorCollapseCleanup;
 
     /// <summary>Scroll offset captured just before a switch-to-read rebuild, to be re-applied after the
     /// read view lays out. Needed because the read view's virtualized <c>ListView</c> re-derives its

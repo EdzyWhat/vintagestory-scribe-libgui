@@ -79,6 +79,7 @@ internal sealed class ScribeAnimatedList : StatefulWidget
         Func<IReadOnlyList<Widget>, Widget> layoutBuilder,
         ScribeListRemovalPolicy policy = ScribeListRemovalPolicy.Immediate,
         Action? onDepartureSettled = null,
+        bool animateEntry = true,
         int durationMs = ScribeRowSizeAnimation.DefaultDurationMs,
         Gui.Widgets.Framework.Key? key = null) : base(key)
     {
@@ -97,6 +98,7 @@ internal sealed class ScribeAnimatedList : StatefulWidget
         LayoutBuilder = layoutBuilder;
         Policy = policy;
         OnDepartureSettled = onDepartureSettled;
+        AnimateEntry = animateEntry;
         DurationMs = durationMs;
     }
 
@@ -120,6 +122,11 @@ internal sealed class ScribeAnimatedList : StatefulWidget
     /// shrunk. The host uses it for a final scroll clamp — the per-frame scroll-pin only runs while
     /// <c>Registry.AnyAnimating</c>, so the settling frame (when it flips false) needs one last clamp.</summary>
     public Action? OnDepartureSettled { get; }
+
+    /// <summary>Whether appearances animate at all. True everywhere in normal use; a surface may pass false to
+    /// suppress entry motion (e.g. a bulk repopulate that should snap). The first build after mount never
+    /// animates its rows regardless (see <c>firstBuild</c>) — this only gates subsequent appearances.</summary>
+    public bool AnimateEntry { get; }
 
     public int DurationMs { get; }
 
@@ -150,12 +157,27 @@ internal sealed class ScribeAnimatedListState : State<ScribeAnimatedList>
     /// detected THIS frame can freeze the row as it looked while still live.</summary>
     private Dictionary<Guid, Widget> priorSnapshots = new();
 
-    /// <summary>SEAM (unused today): ids that appeared this frame (present now, neither live last frame nor a
-    /// ghost). Exposed by the Core diff so a future insert/reveal animation can drive off it without an API
-    /// churn; no consumer wires it in this change.</summary>
-    private IReadOnlyList<Guid> lastAppeared = Array.Empty<Guid>();
+    /// <summary>Ids currently entering (animate-row-insertion): a row appeared on a non-first build and is
+    /// sliding in. An entered id PERSISTS here for the row's whole live lifetime — it is NOT dropped when the
+    /// slide completes (a settled <see cref="ScribeSlideIn"/> renders an inert Opacity(1) > Transform(identity)
+    /// pass-through). This is load-bearing: removing the wrapper from a row on completion would type-swap the
+    /// slot (wrapper > row → bare row) under the positional reconciler and remount the row's field, dropping a
+    /// live caret mid-type. The entry controller is released when the row DEPARTS (step 4) or REVIVES (step 3),
+    /// or when the id is no longer live at all (step 1b), never on entry completion.</summary>
+    private readonly HashSet<Guid> entering = new();
+
+    /// <summary>Whether this is the first Build since mount. On the first build <see cref="prevLiveIds"/> is
+    /// empty, so the diff would report EVERY row as appeared and animate the whole list in on open / view
+    /// switch / any ForceRebuild remount. Suppress entry motion on that first pass; only rows that appear on a
+    /// LATER build (a genuine add into an already-mounted list) animate.</summary>
+    private bool firstBuild = true;
 
     private static string Key(Guid id) => id.ToString("N");
+
+    /// <summary>Registry key for a row's ENTRY controller. Distinct from the collapse key (<see cref="Key"/>)
+    /// for the same id so a grow-then-delete of one row starts a FRESH collapse instead of resuming the
+    /// already-Completed entry controller (which would render an instantly-closed ghost).</summary>
+    private static string EntryKey(Guid id) => "enter:" + id.ToString("N");
 
     public override Widget Build(BuildContext context)
     {
@@ -178,6 +200,21 @@ internal sealed class ScribeAnimatedListState : State<ScribeAnimatedList>
         }
         if (retired != null) prevRenderOrder.RemoveAll(retired.Contains);
 
+        // 1b. Drop any entry whose id is no longer live at all (row removed before its slide finished) so the
+        //     set can't leak, releasing its entry controller. A COMPLETED entry on a still-live row is
+        //     deliberately KEPT in `entering` (it renders an inert Opacity(1) > Transform(identity)
+        //     pass-through for the row's whole life) — removing the wrapper would type-swap the slot under the
+        //     positional reconciler and remount the row's field, dropping its caret. The entry controller for
+        //     a live row is released when it DEPARTS (step 4) or REVIVES (step 3), not on entry completion.
+        foreach (var id in entering.ToList())
+        {
+            if (!liveById.ContainsKey(id))
+            {
+                entering.Remove(id);
+                Widget.Registry.Release(EntryKey(id));
+            }
+        }
+
         // 2. Diff (pure Core logic): departures, revivals, appearances, and the full spliced render order.
         var diff = ScribeListDiff.Compute(prevRenderOrder, prevLiveIds, newLiveIds, ghostSlots);
 
@@ -192,13 +229,29 @@ internal sealed class ScribeAnimatedListState : State<ScribeAnimatedList>
 
         // 4. New departures: record each ghost's slot and freeze the widget it had while live. If no prior
         //    snapshot exists (shouldn't happen — it was live last frame), drop it rather than animate nothing.
+        //    A row that departs mid-entry also has its entry state cleared here (step 1b already released the
+        //    entry controller when it saw the id leave the live set, but a same-frame add-then-delete departs
+        //    from a live id, so clear defensively).
         foreach (var dep in diff.Departed)
         {
+            if (entering.Remove(dep.Id)) Widget.Registry.Release(EntryKey(dep.Id));
             if (priorSnapshots.TryGetValue(dep.Id, out var snapshot))
             {
                 ghostSlots[dep.Id] = dep.Slot;
                 capturedGhosts[dep.Id] = snapshot;
             }
+        }
+
+        // 4b. New appearances (animate-row-insertion): a row present now that was neither live last frame nor
+        //     a ghost. On the FIRST build every row looks appeared (prevLiveIds empty) — suppress those so the
+        //     list doesn't animate in wholesale on open/view-switch. Otherwise register each appeared id so it
+        //     slides in (one uniform entry motion for every appearance — the focus-safe translate holds the
+        //     row at full height in its slot, so even the auto-focused new row keeps its caret/clicks exact).
+        //     Registration is idempotent — a revived id is not "appeared" (the diff excludes it), and an id
+        //     already entering is a no-op in the set.
+        if (!firstBuild && Widget.AnimateEntry)
+        {
+            foreach (var id in diff.Appeared) entering.Add(id);
         }
 
         // 5. Materialize the render order: a ghost id → its frozen snapshot wrapped in a Collapse animation
@@ -221,7 +274,26 @@ internal sealed class ScribeAnimatedListState : State<ScribeAnimatedList>
             }
             else if (liveById.TryGetValue(id, out var live))
             {
-                rows.Add(live);
+                // A live row that is entering is wrapped in its slide-in (keyed by id so its controller is
+                // found across rebuilds); the wrapper stays for the row's whole live lifetime (a settled slide
+                // is an inert pass-through), so a completed entry never type-swaps the slot back to a bare row
+                // and remounts the field. A row that never entered (present since the first build) renders bare.
+                if (entering.Contains(id))
+                {
+                    Guid captured = id;
+                    rows.Add(new ScribeSlideIn(
+                        id: EntryKey(captured),
+                        animating: true,
+                        registry: Widget.Registry,
+                        onEnd: () => OnEntryComplete(captured),
+                        durationMs: Widget.DurationMs,
+                        child: live,
+                        key: new ValueKey<Guid>(captured)));
+                }
+                else
+                {
+                    rows.Add(live);
+                }
             }
         }
 
@@ -229,7 +301,7 @@ internal sealed class ScribeAnimatedListState : State<ScribeAnimatedList>
         priorSnapshots = Widget.Items.ToDictionary(it => it.Id, it => it.Ghost ?? it.Child);
         prevRenderOrder = new List<Guid>(diff.RenderOrder);
         prevLiveIds = new HashSet<Guid>(newLiveIds);
-        lastAppeared = diff.Appeared;
+        firstBuild = false;
 
         return Widget.LayoutBuilder(rows);
     }
@@ -242,5 +314,16 @@ internal sealed class ScribeAnimatedListState : State<ScribeAnimatedList>
         if (Element.Owner == null) return; // unmounted mid-collapse; nothing to rebuild
         SetState(() => { /* Build() retires every ghost whose controller IsComplete */ });
         Widget.OnDepartureSettled?.Invoke();
+    }
+
+    /// <summary>An entering row's slide-in finished. Schedule one settling repaint (deferred SetState) so the
+    /// final frame renders at rest (opacity 1, offset 0). The entry wrapper is deliberately KEPT for the row's
+    /// whole live lifetime (a settled ScribeSlideIn is an inert Opacity(1) > Transform(identity) pass-through),
+    /// so this never retires it — removing it would type-swap the slot and remount the row's field. Guarded
+    /// against firing after unmount (view switch / dialog close mid-entry).</summary>
+    private void OnEntryComplete(Guid id)
+    {
+        if (Element.Owner == null) return; // unmounted mid-entry; nothing to rebuild
+        SetState(() => { /* Build() renders the settled slide as an inert pass-through; the wrapper stays */ });
     }
 }

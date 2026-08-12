@@ -251,22 +251,11 @@ public abstract partial class ScribeDialogBase
         if (scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
         TraceScroll($"delete {index}");
 
-        // Snapshot the row BEFORE removing it, so it can keep rendering as a static, non-interactive ghost
-        // while it collapses its height to zero (scribe-list-collapse). The scratch deletion still happens
-        // immediately below, so the data model + autosave stay correct at once; only the visual removal is
-        // deferred until the collapse completes. Its DISPLAY index (live scratch index offset by any rows
-        // already departing above it) lets the ghost collapse in place rather than jumping.
-        var deleted = scratch.Blocks[index];
-        var snapshot = new ScribeEditRowData(index, deleted.IsTask, deleted.Done,
-            IsPinnedForMe(deleted.TaskId), deleted.TaskId, deleted.Text);
-        int displayIndex = index + departingEditorRows.Values.Count(d => d.Index <= index);
-        departingEditorRows[deleted.TaskId] = (snapshot, displayIndex);
-
-        if (!scratch.DeleteBlock(index))
-        {
-            departingEditorRows.Remove(deleted.TaskId); // deletion refused: don't leave a ghost behind
-            return;
-        }
+        // Delete the block from scratch immediately (data model + autosave stay correct at once). The
+        // visual removal is now owned by ScribeAnimatedList (D0 / extract-animated-task-list §6.1): on the
+        // RebuildBody below, the container sees this TaskId absent from the row set and collapses its frozen
+        // ghost out in place, then self-cleans — no dialog-side snapshot / departing-row map / cleanup flag.
+        if (!scratch.DeleteBlock(index)) return; // deletion refused: nothing removed, no departure
 
         isDirty = true;
 
@@ -303,34 +292,12 @@ public abstract partial class ScribeDialogBase
 
         SyncFocusNodesToScratch();
         pendingEnsureVisible = false;
-        // The re-clamp to the shrunk extent is DEFERRED to when the collapse completes (see
-        // OnEditorRowCollapsed): during the collapse the ghost still occupies (shrinking) height, so the
-        // content extent doesn't actually shrink until the row reaches zero — clamping now would fight the
-        // collapsing height (scribe-list-collapse). LibGUI's own clamp ignores a sub-50px overshoot, so the
-        // deferred clamp is still needed once the row is gone (see pendingClampToExtent).
+        // The re-clamp to the shrunk extent is DEFERRED to when the collapse completes: during the collapse
+        // the container's ghost still occupies (shrinking) height, so the content extent doesn't actually
+        // shrink until the row reaches zero — clamping now would fight the collapsing height
+        // (scribe-list-collapse). The container fires OnDepartureSettled → RequestClampToExtent once the
+        // ghost retires (D0), and §3.10's collapse-pin glides the viewport down meanwhile.
         RebuildBody();
-    }
-
-    /// <summary>A deleted editor row finished collapsing to zero height (scribe-list-collapse): retire its
-    /// ghost and, now that the content is genuinely shorter, re-clamp the scroll extent. Deferred out of the
-    /// animation callback via <see cref="needsEditorCollapseCleanup"/> so we don't unmount + rebuild the tree
-    /// re-entrantly from inside the ticker pump.
-    ///
-    /// <para>No scroll capture-restore here (reconcile-animating-surfaces §3.5): the cleanup now runs through
-    /// <see cref="RebuildBody"/> (§3.1), an in-place reconcile that REUSES the editor's
-    /// <c>SingleChildScrollView</c> and so preserves the shared offset inherently — it no longer remounts the
-    /// scroll view and resets the offset to 0 the way the old <c>ForceRebuild</c> cleanup did, which was the
-    /// only reason a <see cref="CaptureScrollForRestore"/> was needed on this path. §3.10's collapse-pin has
-    /// also already glided the viewport down to the shrinking bottom while the row collapsed, so the offset is
-    /// already at its correct resting spot by the time this fires. <see cref="RequestClampToExtent"/> is kept
-    /// as the final settle for the rare shrink not covered by a live collapse (e.g. LibGUI's >50px wheel-slop
-    /// clamp firing mid-collapse); with the collapse-pin active it is normally a no-op (Offset ≤ max).</para></summary>
-    private void OnEditorRowCollapsed(Guid taskId)
-    {
-        if (!departingEditorRows.Remove(taskId)) return;
-        editorCollapseRegistry.Release(taskId.ToString("N"));
-        RequestClampToExtent();
-        needsEditorCollapseCleanup = true;
     }
 
     /// <summary>Per-row pin toggle (task rows only; the pin control is absent on text-section rows).

@@ -259,6 +259,58 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         it recurs." Not reproducing on the current build; parked as a watch item (blank-checkbox bug class has
         recurred before via new triggers, so kept on record rather than closed).
 
+## animate-row-insertion
+
+> Row ENTRY animation + the editor→container migration (D0). The editor now renders through the same
+> `ScribeAnimatedList` as the Pin Tab / Read view (3 of 4 surfaces share one motion path; only the HUD
+> stays bespoke). Two gates: §0.5 is the collapse-PARITY gate (the migration must not change the
+> existing delete behavior) — verify it FIRST; the §5.5 items are the new entry motion. EVERY appearance
+> uses ONE uniform slide-in: the row's content translates down into place from above and fades, at full
+> height in its slot (the translate is paint-only, so the caret/hit-tests/scroll are exact from frame 1 —
+> even the auto-focused row). No fade-vs-grow split. Test in the LECTERN editor (hardest focus case)
+> unless a Pin Tab / Read view is named. Build+restage green 2026-08-12.
+
+- [x] `fbf11c49` **Editor collapse parity.** Delete a mid-list editor row (neighbors slide up, no snap),
+      delete while scrolled, rapid multi-delete (slot order preserved), delete a row mid-drag, and confirm
+      a caret in another row is undisturbed — the editor collapse must behave exactly as before the
+      container migration. *(0.5)*
+      - **Confirmed 2026-08-12** via playtest (2026-08-12T08-31-32): "Editor collapse all work as expected."
+        The editor→container migration is behavior-parity on the collapse path.
+- [ ] `d87250f4` **Focused add fades in.** Add a task in the editor — the new auto-focused row FADES in at
+      full height (does not grow), its caret is visible and usable from the first frame, and a click inside
+      it lands correctly throughout the fade. *(5.5)*
+      - **Obsolete 2026-08-12:** the full-height opacity-only fade was abandoned. Playtest
+        (2026-08-12T08-31-32) reported "the row appears instantly" — a fixed-position fade over 200ms is too
+        subtle to read as motion. The design pivoted to a uniform SLIDE (content translates in + fades) for
+        every appearance; this fade-only test no longer describes the shipped behavior. Superseded by
+        `bea8765f`.
+- [x] `bea8765f` **Focused add slides in.** Add a task in the editor — the new auto-focused row slides in
+      (content translates down from above and fades) at full height in its slot; the caret is visible and
+      usable from the first frame, and a click inside it lands correctly throughout the slide. *(5.5)*
+      - **Confirmed 2026-08-12** via playtest (2026-08-12T09-29-40): "All work." The focused editor row
+        slides in and stays usable throughout.
+- [x] `7e636d62` **Peer appearance slides.** Trigger a non-focused appearance (quick-add, or a row that
+      isn't the auto-focused one) — it slides in the same way and the rows below hold position (no height
+      pop, since the translate is paint-only). *(5.5)*
+      - **Confirmed 2026-08-12** via playtest (2026-08-12T09-29-40): "It works!" Peer appearances slide;
+        no height pop below.
+- [x] `03f024c4` **Entry survives reconcile.** Start an entry animation, then trigger a
+      ForceRebuild/reconcile mid-entry (e.g. toggle a pin) — the entry continues smoothly, does not restart
+      or snap. *(5.5)*
+      - **Confirmed 2026-08-12** via playtest (2026-08-12T09-29-40): "Works." Slide continues across a
+        mid-entry reconcile.
+- [x] `4994f711` **No scroll jump on add.** Add a row at the bottom, and add past a full page — confirm the
+      viewport does not jump. *(5.5)*
+      - **Confirmed 2026-08-12** via playtest (2026-08-12T09-29-40): "Works." No viewport jump on add.
+- [x] `ab292707` **Add-then-delete clean.** Add a row and immediately delete the same row — the transition
+      is clean, no residual or double animation. *(5.5)*
+      - **Confirmed 2026-08-12** via playtest (2026-08-12T09-29-40): "Works." Clean add-then-delete, no
+        residual/double animation.
+- [x] `c16a1b26` **Pin Tab + Read slide.** Pin Tab and Read view appearances slide in without disturbing
+      existing rows' focus, scroll, or hover. *(5.5)*
+      - **Confirmed 2026-08-12** via playtest (2026-08-12T09-29-40): "Works." Pin Tab and Read view
+        appearances slide without disturbing existing rows.
+
 ## fix-dialog-open-white-flash
 
 > The one-frame white flash on opening a backdropped Scribe surface, split out of reconcile §3.11

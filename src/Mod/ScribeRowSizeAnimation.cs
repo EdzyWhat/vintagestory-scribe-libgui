@@ -34,6 +34,7 @@ using Gui.Core.Framework;         // RenderObject, RenderProxyBox
 using Gui.Rendering;              // PaintingContext
 using Gui.Widgets.Animations;     // AnimationController, AnimationStatus, Curve, Curves
 using Gui.Widgets.Framework;      // Widget, StatefulWidget, State, BuildContext, SingleChildWidget, Key
+using Gui.Widgets.Painting;       // Opacity, Transform
 using OpenTK.Mathematics;         // Vector2
 using SkiaSharp;                  // SKRect
 
@@ -369,6 +370,143 @@ internal sealed class ScribeRowSizeAnimationState : State<ScribeRowSizeAnimation
     {
         // Detach this (transient) widget's handlers, but do NOT dispose the controller — it is owned by
         // the host registry so it survives the ForceRebuild remount / reconcile and the next mount resumes it.
+        if (controller != null)
+        {
+            controller.OnValueChanged -= OnValueChanged;
+            controller.OnStatusChanged -= OnStatusChanged;
+            controller = null;
+        }
+        base.Dispose();
+    }
+}
+
+/// <summary>
+/// Slides a row IN by translating its content into place while fading it up (gui-row-animation-harness /
+/// animate-row-insertion). The entry motion for a freshly-added row: the row takes its FULL height in its
+/// slot from the first frame (the translate is paint-only — <see cref="Transform"/> passes layout constraints
+/// through unchanged), so unlike <see cref="ScribeRowSizeDirection.Reveal"/> (which grows the row's height and
+/// so shrinks/mislocates a variable-height row's caret mid-animation) the caret, pointer hit-tests, and
+/// scroll-into-view all work against the row's final geometry immediately. Only the painted content moves:
+/// it starts offset upward and settles to rest, cross-fading in as it arrives.
+///
+/// <para>Translation is the primary read (a moving row is unmistakable where a same-position fade is too
+/// subtle — the 2026-08-12 playtest of the fade-only entry "appeared instantly"); the fade is layered polish
+/// off the SAME controller value, so there is one controller and no per-row bookkeeping doubling.
+/// <see cref="RenderTransform.GlobalToChild"/> inverts the matrix for hit-testing, so a click lands where the
+/// row is DRAWN mid-slide, not where it will rest.</para>
+///
+/// <para>Same load-bearing survival discipline as <see cref="ScribeRowSizeAnimation"/>, and deliberately NOT
+/// <c>AnimatedSlide</c>/<c>AnimatedOpacity</c>/<c>ScribeFadeText</c> (all snap on <c>ForceRebuild</c>: the
+/// implicit widgets re-init Begin==End==target on a fresh mount, <c>ScribeFadeText</c> owns its controller in
+/// its own transient State — see the resolved Open Question in animate-row-insertion/design.md). The
+/// controller lives in the host-owned <see cref="ScribeAnimationRegistry"/>, keyed by the row id, so the
+/// slide RESUMES across a <c>ForceRebuild</c> remount AND a reconcile <c>SetState</c> instead of restarting.</para>
+///
+/// <para>Opacity floor: <c>RenderOpacity</c> skips painting entirely at α ≤ 0.001, which for the auto-focused
+/// new row would be a one-frame invisible-but-focused row (a live caret in an unpainted row). So the rendered
+/// opacity is floored at a small non-zero value — the row is always painted, just faint on frame one.</para>
+/// </summary>
+internal sealed class ScribeSlideIn : StatefulWidget
+{
+    public const int DefaultDurationMs = ScribeRowSizeAnimation.DefaultDurationMs;
+
+    /// <summary>How far (logical px) the content starts ABOVE its resting position and travels down into
+    /// place. A fixed offset (the widget can't know the row's height at build time, and a fixed distance
+    /// reads consistently across one-line and wrapped rows). Small enough to feel like a settle, large
+    /// enough to unmistakably read as motion.</summary>
+    public const float DefaultSlideDistance = 18f;
+
+    public ScribeSlideIn(
+        string id,
+        bool animating,
+        ScribeAnimationRegistry registry,
+        Widget child,
+        Action? onEnd = null,
+        int durationMs = DefaultDurationMs,
+        float slideDistance = DefaultSlideDistance,
+        Gui.Widgets.Framework.Key? key = null) : base(key)
+    {
+        Id = id;
+        Animating = animating;
+        Registry = registry;
+        OnEnd = onEnd;
+        Child = child;
+        DurationMs = durationMs;
+        SlideDistance = slideDistance;
+    }
+
+    /// <summary>Stable identity of the sliding-in row, keying its controller in the registry.</summary>
+    public string Id { get; }
+    public bool Animating { get; }
+    public ScribeAnimationRegistry Registry { get; }
+    /// <summary>Fired exactly once when the slide completes (the container releases the entry controller).</summary>
+    public Action? OnEnd { get; }
+    public Widget Child { get; }
+    public int DurationMs { get; }
+    public float SlideDistance { get; }
+
+    public override State CreateState() => new ScribeSlideInState();
+}
+
+internal sealed class ScribeSlideInState : State<ScribeSlideIn>
+{
+    /// <summary>Eased so the motion decelerates as it settles, matching the size animations' curve for a
+    /// consistent feel across every Scribe row animation.</summary>
+    private static readonly Curve SlideCurve = Curves.EaseInOutCubic;
+
+    /// <summary>Opacity floor: keep the rendered opacity above <c>RenderOpacity</c>'s α≤0.001 skip-paint
+    /// threshold so the auto-focused new row is never invisible-but-focused for a frame. Small enough to
+    /// still read as a fade-in from ~nothing.</summary>
+    private const float MinOpacity = 0.02f;
+
+    private AnimationController? controller;
+
+    public override void InitState()
+    {
+        base.InitState();
+        if (!Widget.Animating) return;
+
+        controller = Widget.Registry.Controller(
+            Widget.Id, TimeSpan.FromMilliseconds(Widget.DurationMs), Element.Owner!.GetTickerProvider());
+        controller.OnValueChanged += OnValueChanged;
+        controller.OnStatusChanged += OnStatusChanged;
+
+        // If the slide already finished while this row was between remounts, fire the end callback now (the
+        // status-changed event won't fire again for an already-Completed controller).
+        if (controller.Status == AnimationStatus.Completed) Widget.OnEnd?.Invoke();
+    }
+
+    private void OnValueChanged(double _) => Element.MarkNeedsBuild();
+
+    private void OnStatusChanged(AnimationStatus status)
+    {
+        if (status == AnimationStatus.Completed) Widget.OnEnd?.Invoke();
+    }
+
+    public override Widget Build(BuildContext context)
+    {
+        // ALWAYS render the same Opacity > Transform > child shape, even settled / not animating, so the
+        // child subtree structure is IDENTICAL whether animating, completed, or a pass-through. This is
+        // load-bearing: the container keeps an entered row wrapped for its whole live lifetime to avoid a
+        // type-swap remount (the reconciler is positional-by-type+key — dropping the wrapper would unmount
+        // the row's field and drop its caret). If Build swapped between the wrapped and bare child on
+        // completion, THAT swap would itself remount the field — so we never do; a settled slide renders
+        // Opacity(1) > Transform(identity) > child, both of which delegate straight through to the child.
+        if (controller == null)
+            return new Opacity(1f, Transform.Translate(Widget.Child, Vector2.Zero)); // stable pass-through
+
+        float eased = (float)SlideCurve.Transform(controller.Value);
+        float opacity = Math.Max(MinOpacity, eased); // floor so a focused row always paints
+        // Start offset UP by SlideDistance (content sits above its slot) and travel to 0 as the animation
+        // completes, so the row drops down into place. Negative Y is up in LibGUI's top-left origin space.
+        float offsetY = -Widget.SlideDistance * (1f - eased);
+        return new Opacity(opacity, Transform.Translate(Widget.Child, new Vector2(0f, offsetY)));
+    }
+
+    public override void Dispose()
+    {
+        // Detach this (transient) widget's handlers; the controller is host-owned, so leave it for the next
+        // mount to resume (identical discipline to ScribeRowSizeAnimation).
         if (controller != null)
         {
             controller.OnValueChanged -= OnValueChanged;

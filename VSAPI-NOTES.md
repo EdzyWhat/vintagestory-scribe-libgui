@@ -2054,6 +2054,27 @@ disciplined split. The rule for any Scribe dialog surface:
   `AnimationController` note above) — start-only / arm-only logic that relied on a remount to reset is a
   latent bug once the surface reconciles.
 
+### An entry/exit wrapper that appears-then-disappears at a slot REMOUNTS the child (type-swap) — keep it on a caret-bearing row for life (animate-row-insertion, 2026-08-12)
+
+The reconciler matches a slot's widget frame-to-frame by `Widget.CanUpdate` = `GetType() == GetType() &&
+Equals(Key, Key)`. So *adding or removing a wrapper widget around a row across a reconcile changes the slot's
+type and remounts the whole child subtree* — even though the row's own key never changed. For the
+**auto-focused new editor row** that is fatal: remounting rebuilds its `GuiElementTextInput` and the
+caret/selection is lost mid-keystroke.
+
+Baked into `ScribeAnimatedList` + `ScribeSlideIn`: the entry wrapper **stays on the row for the row's entire
+live lifetime** (every appearance is kept-for-life; `entering` is a plain `HashSet<Guid>`, no per-mode retire
+logic). Once the slide completes it renders an inert `Opacity(1) > Transform(identity)` pass-through, never
+removed. `ScribeSlideIn.Build` therefore ALWAYS returns the same `Opacity > Transform > child` shape (even
+not-animating: `Opacity(1f, Transform.Translate(child, Vector2.Zero))`), so the subtree shape is identical
+whether sliding, settled, or pass-through — no type-swap ever occurs at that slot. This is why the shipped
+entry is a paint-only translate (`Transform` passes layout through unchanged → full height in-slot from frame
+one) rather than the earlier height-grow, which changed the row's height every frame under the caret; see
+`docs/animation-lessons-learned.md` "Row ENTRY animation."
+
+Corollary to the "row identity is load-bearing" bullet above: keying by a stable `Guid` is necessary but not
+sufficient — the *type* at the slot must also stay stable across the frames where you care about identity.
+
 ### CORRECTION to the `ListView` child-cache notes above — the read view no longer uses `ListView` (D4, 2026-08-10)
 
 The two facts above (~line 1394 "Scribe's `RefreshReadView` uses `ForceRebuild`"; ~line 1421 "The read view

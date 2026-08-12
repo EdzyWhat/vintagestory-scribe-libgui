@@ -148,6 +148,31 @@ public class ScribeListDiffTests
         Assert.Equal("abcd", Render(r));
     }
 
+    [Fact]
+    public void RowAppearsAtNonEndSlot_IsReportedAppeared_RenderKeepsOrder()
+    {
+        // A new row "x" arrives in the MIDDLE of the live order (e.g. insert-below, or a Sink-style reorder
+        // that presents an add at a non-end slot — animate-row-insertion open question db3c8ff4). It must
+        // still be reported appeared, and the render order must place it where the live order does — so the
+        // container's grow reads correctly for a non-last row, not just an append.
+        var r = Compute(prevRender: "ab", prevLive: "ab", newLive: "axb");
+
+        Assert.Equal(new[] { Id('x') }, r.Appeared);
+        Assert.Empty(r.Departed);
+        Assert.Equal("axb", Render(r));
+    }
+
+    [Fact]
+    public void MultipleRowsAppearSameFrame_AllReported()
+    {
+        // Two new rows at once (e.g. a bulk add) → both appeared, render order = the new live order.
+        var r = Compute(prevRender: "a", prevLive: "a", newLive: "axy");
+
+        Assert.Equal(new[] { Id('x'), Id('y') }, r.Appeared);
+        Assert.Empty(r.Departed);
+        Assert.Equal("axy", Render(r));
+    }
+
     // ---- Edge: from empty / to empty ----
 
     [Fact]

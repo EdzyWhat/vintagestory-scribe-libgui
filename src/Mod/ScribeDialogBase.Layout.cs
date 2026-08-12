@@ -585,12 +585,6 @@ public abstract partial class ScribeDialogBase
         int? autoFocus = autoFocusRowOnRebuild;
         autoFocusRowOnRebuild = null; // one-shot
 
-        // Rows that were deleted but are still collapsing out (scribe-list-collapse), each with the display
-        // index it held so the editor content can splice it back in place as a static, collapsing ghost.
-        var departing = departingEditorRows.Values
-            .Select(d => new ScribeDepartingEditorRow(d.Row, d.Index))
-            .ToList();
-
         return new ScribeEditorContent(
             blocks: blocks,
             focusNodes: editorFocusNodes,
@@ -618,9 +612,11 @@ public abstract partial class ScribeDialogBase
                 horizontal: 0.04f * host.GetLayout(modSystem.MySettings.PixelArtSize).W),
             style: RowStyle,
             scrollController: sharedScrollController,
-            departingRows: departing,
             collapseRegistry: editorCollapseRegistry,
-            onDepartingCollapsed: OnEditorRowCollapsed,
+            // A departing row finished collapsing → re-clamp the (now shorter) scroll extent, mirroring the
+            // Pin Tab / Read view (RequestClampToExtent). The container retires the ghost itself; the dialog
+            // no longer owns departing-row bookkeeping (D0 — replaces OnEditorRowCollapsed).
+            onDepartureSettled: RequestClampToExtent,
             hintLangKey: EmptyHintLangKey,
             // Tier cap (scribe-document-policy): dim + disable "Add task" at the tablet's 10-task cap.
             // Uncapped tiers (Lectern, Notebook) always pass true, so their footer is unchanged.

@@ -42,6 +42,37 @@ does not.
 
 ## Decisions
 
+### D0 — Migrate the editor onto `ScribeAnimatedList` first (folds in `extract-animated-task-list` §6.1)
+When `reconcile-animating-surfaces` shipped, only Read and Pin Tab were routed through the
+`ScribeAnimatedList` container; the **editor** (and the HUD) kept a hand-wired copy of the same
+collapse choreography. That was a deliberate deferral — but it means the editor, which carries the
+*only* focus-safe fade case, is not a container consumer, so D1 ("entry mode chosen inside the
+container") could not apply to it without either migrating it or replicating the entry logic inline.
+Replicating it inline would fork the focus-safety invariant across the container AND the editor —
+the exact drift this change should be reducing, not adding to. So this change **migrates the editor
+onto the container** as its first step:
+- `ScribeEditorContent` builds `ScribeAnimatedListItem`s (live `ScribeEditRow` + a
+  `ScribeFrozenEditorRow` ghost per row, the same ghost it already uses) and hands them to
+  `ScribeAnimatedList` with its existing `Scrollbar > SingleChildScrollView > Column` as the
+  `layoutBuilder` (identical to Read's).
+- The dialog's hand-wired departing-row machinery is deleted: `DepartingRows` /
+  `OnDepartingCollapsed` bookkeeping and the `needsEditorCollapseCleanup` deferred flag go away
+  (the container computes departures from the data diff and self-cleans via deferred `SetState`).
+  Delete's focus fix-up moves onto the container's `OnDepartureSettled` settle hook.
+- Drag-reorder state (`dragFromIndex`/`dragOverIndex`) stays in the editor's `State`; it computes
+  `isDropTarget`/`isDragSource`/`dragActive` and bakes them into each item's live child closure, so
+  the container stays content-agnostic (D6 from the container's own design).
+
+After D0 the editor, Read, and Pin Tab all share one animation path; only the HUD remains bespoke,
+for the principled `Delayed`-policy reason ([[hud-undo-window-is-policy-hiding]]), and its migration
+is promoted to its own follow-up change (`migrate-hud-onto-animated-list`, was
+`extract-animated-task-list` §6.2). This is the load-bearing reason D1/D2 below can live purely in
+the container.
+- *Alternative considered:* keep the editor hand-wired and replicate only the entry (fade) logic
+  inline in `ScribeEditorContent`. Rejected — it duplicates the focus-safety rule across two files
+  where it can rot, and leaves the editor's collapse choreography un-deduplicated, which is the
+  opposite of the "one surface mechanism" goal driving this fold-in.
+
 ### D1 — Entry mode is chosen by focus, inside the container, not by the caller's surface
 The container already knows the appeared ids (`lastAppeared`). It selects the entry animation for
 each appeared row by a single predicate: *is this the auto-focused newly-created row?* If yes →
@@ -101,9 +132,16 @@ staged gate — all three ship together.
 
 ## Open Questions
 
-- Is there already a reconcile-stable opacity wrapper to reuse for the fade, or does this add a small
-  `ScribeFade`-style widget? (Resolve during §-implementation by reading what `AnimatedOpacity` /
-  `ScribeFadeText` actually do on the reconcile path.)
+- ~~Is there already a reconcile-stable opacity wrapper to reuse for the fade, or does this add a
+  small `ScribeFade`-style widget?~~ **Resolved (read the source):** neither existing option is
+  reconcile+ForceRebuild-stable. `AnimatedOpacity` is implicitly-animated — recreated fresh under
+  `ForceRebuild` it inits `Begin==End==target` and snaps. `ScribeFadeText` owns its controller in
+  its own `State`, which likewise restarts on a `ForceRebuild` remount (it only survives *reconcile*
+  reuse). The fade must use the **same host-owned, id-keyed `ScribeAnimationRegistry` controller**
+  the collapse/grow paths use — so add a small `ScribeFade` widget (an `Opacity` wrapper) that reads
+  its controller from the registry by id, exactly parallel to `ScribeRowSizeAnimation`. This lands
+  inside the container next to the `Reveal` grow, so both entry modes resume across
+  ForceRebuild/reconcile identically.
 - Entry duration/curve: match the collapse duration for symmetry, or tune the grow slightly faster so
   adds feel snappy? Decide in-game.
 - Does `db3c8ff4`/Sink-style reordering ever present an add as an "appear at a non-end slot"? If so,

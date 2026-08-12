@@ -404,19 +404,81 @@ adapter (`Pinned:false` — a Pin Tab row has no resting tint), so it collapses 
 editor. The container falls back to caching the live `Child` only for a genuinely static row.
 
 **Adopted on the Pinned tab first** (no animation before → highest payoff, no risk to already-playtested
-surfaces). Editor + HUD migration onto the container — and wiring the `Delayed` (undo-window/fade) policy
-for the HUD — is a deferred follow-up; the `Delayed` enum value **throws** today so it can't ship
-half-built.
+surfaces), then the **editor and Read view** were migrated onto the same container in `animate-row-insertion`
+(2026-08-11) — so three of the four animating surfaces now share one motion path and only the **HUD** stays
+bespoke (its migration, plus the `Delayed` undo-window/fade policy the HUD needs, is promoted to its own
+follow-up change `migrate-hud-onto-animated-list`; the `Delayed` enum value still **throws** today so it
+can't ship half-built).
+
+## Row ENTRY animation: uniform slide-in, realized (animate-row-insertion, 2026-08-12)
+
+The 2026-07-30 re-check above sketched a "ScribeRevealable" grow-on-mount widget (Path B) as the way to
+make an added row *enter* with motion instead of popping in. With the editor now on `ScribeAnimatedList`
+and rebuilding via `RebuildBody()` (reconcile, container State survives), that sketch is **realized** — but
+as a capability *of the container*, not a standalone widget. The container already diffs frame-to-frame, so
+an id present now but absent last frame is an **appearance** (the mirror of the departure seam it already
+had). The Core `ScribeListDiff` reports appearances; the container animates them.
+
+**One uniform slide, not a height grow (the design that shipped).** The *first* cut tried a focus split:
+grow non-focused rows (`ScribeRowSizeAnimation(Reveal)`), fade the auto-focused new row at full height
+(`ScribeFade`). Two findings killed that:
+1. **The full-height fade "appeared instantly"** (playtest `d87250f4`, 2026-08-12). An opacity-only fade at
+   a fixed position over 200ms against the parchment is *too subtle to read as motion*. A moving row is
+   unmistakable; a same-position fade is not.
+2. **Growing a variable-height row is the caret hazard**, not the fix for it. Height changes every frame, so
+   a wrapped-text row shrinks/mislocates its own caret and the `pendingEnsureVisible` scroll-to fights the
+   changing height.
+
+So the shipped entry is **one motion for every appearance: `ScribeSlideIn`** — the row takes its **full
+height in its slot from frame one** (the translate is *paint-only*: `Transform` passes layout constraints
+through unchanged), and only the *painted content* translates in from above while fading up. Translation is
+the primary read; the fade is layered polish off the **same controller value** (one controller, no
+per-row bookkeeping doubling — the trap that made the old D4 symmetry-fade "not cheap"). Because height is
+final from the first frame, the caret, pointer hit-tests, and ensure-visible all work against final geometry
+immediately — which is *why* a uniform motion is now safe for the auto-focused row too (the whole reason the
+focus split existed is gone). `RenderTransform.GlobalToChild` inverts the matrix for hit-testing, so a click
+lands where the row is **drawn** mid-slide. No view learns any entry vocabulary; the container wraps every
+appeared id and the surface just supplies the row set.
+
+**The load-bearing reconciler finding: the entry wrapper must stay on the row for its whole lifetime.**
+LibGUI's reconciler is **positional by (type + key)** (`Widget.CanUpdate` = `GetType()==GetType() &&
+Equals(Key,Key)`). If a wrapper is present at a slot one frame and gone the next, the slot's widget *type*
+changes and the reconciler **remounts the inner subtree** — which for the auto-focused row would destroy its
+`GuiElementTextInput` and lose the caret mid-keystroke. So `ScribeSlideIn.Build` **always** renders the same
+`Opacity > Transform > child` shape (returning `Opacity(1f, Transform.Translate(child, Vector2.Zero))` when
+settled/not animating), and the container **keeps the wrapper on the row for its entire live lifetime** — an
+inert identity pass-through once the slide completes, never removed, never a type-swap. (This is why there is
+no per-mode retire logic anymore: every entry is kept-for-life, so `entering` is a plain `HashSet<Guid>`, not
+a mode map.)
+
+**Opacity floor.** `ScribeSlideIn` clamps rendered opacity to `MinOpacity = 0.02f` rather than starting at
+literal 0. `RenderOpacity` skips paint entirely at `Opacity <= 0.001f`, so a true-zero start frame would
+flash a one-frame gap under a live caret; the floor keeps the first frame paintable while still reading as
+"fading in."
+
+**`firstBuild` suppression.** On open / view-switch / any `ForceRebuild`, the container remounts fresh with
+an empty `prevLiveIds`, so *every* row looks like an appearance and the whole list would animate in at once.
+A `firstBuild` flag suppresses entry animation on that first build after (re)mount — only genuine
+frame-to-frame additions on a *surviving* container animate.
+
+**Distinct entry vs collapse registry keys.** Entry controllers are keyed `EntryKey(id)` = `"enter:"+id`,
+separate from the collapse `Key(id)`. Without the prefix a slide-then-delete of one id would *resume* the
+already-`Complete` entry controller instead of starting a fresh collapse — rendering an instantly-closed
+ghost. Same host-owned registry, disjoint key namespaces, so `AnyAnimating` (and thus the host's scroll-pin +
+hover-latch loops) covers entry automatically with no new wiring.
 
 ## Pointers
 
 - `src/Mod/GuiDialogScribeLecternLibGui.cs` — the three `OnRenderGUI` settling loops,
   `CaptureScrollForRestore`, and the two v1 race fixes (`RefreshReadView` guard,
   `ToggleEditorTask` re-home). Also documented in `VSAPI-NOTES.md` `## LibGUI`.
-- `src/Mod/ScribeRowSizeAnimation.cs` — the collapse/reveal widget, height-factor render box, and
-  host-owned `ScribeAnimationRegistry` (the pattern this doc defends).
-- `src/Mod/ScribeAnimatedList.cs` — the diffing container (motion-only, D6); `src/Core/ScribeListDiff.cs`
-  — its pure, game-free identity diff (tested in `tests/Core.Tests/ScribeListDiffTests.cs`).
+- `src/Mod/ScribeRowSizeAnimation.cs` — the collapse/reveal height-factor widget + render box, the
+  host-owned `ScribeAnimationRegistry` (the pattern this doc defends), and `ScribeSlideIn` (the parallel
+  registry-driven `Opacity > Transform` wrapper for the uniform row entry slide).
+- `src/Mod/ScribeAnimatedList.cs` — the diffing container (motion-only, D6), including the appearance seam
+  and the uniform `ScribeSlideIn` entry (kept-for-life, `entering` is a plain id set);
+  `src/Core/ScribeListDiff.cs` — its pure, game-free identity diff
+  (tested in `tests/Core.Tests/ScribeListDiffTests.cs`).
 - `src/Mod/HudScribePins.cs` — `ScribeFadeText` (self-ticking fade) lives at the bottom.
 - `VSAPI-NOTES.md` `## LibGUI` section — the `ForceRebuild`-snaps-animations note and the
   stock `ListView` child-cache note.

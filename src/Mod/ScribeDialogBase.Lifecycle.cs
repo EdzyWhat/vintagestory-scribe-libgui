@@ -51,18 +51,11 @@ public abstract partial class ScribeDialogBase
             SyncLayoutSize();
         }
 
-        // An editor row's collapse completed (its callback fired from inside the animation pump, where
-        // mutating the tree would be re-entrant); retire the ghost now with an in-place reconcile
-        // (scribe-list-collapse). RebuildBody re-runs BuildEditorContent, which drops the retired ghost from
-        // the departing list so its slot closes; the live rows below then shift up one slot and remount
-        // (the positional caveat — their text survives via the scratch write-through). Reconcile REUSES the
-        // SingleChildScrollView (unlike the old ForceRebuild, which remounted it and reset the offset to 0),
-        // so the offset is preserved inherently; the deferred clamp still trims it to the now-shorter extent.
-        if (needsEditorCollapseCleanup)
-        {
-            needsEditorCollapseCleanup = false;
-            if (IsOpened()) RebuildBody();
-        }
+        // Editor-row collapse cleanup is no longer the dialog's job (D0 / extract-animated-task-list §6.1):
+        // the editor now routes its rows through ScribeAnimatedList, which retires a completed ghost via its
+        // own deferred SetState (a local subtree reconcile, no cross-tree RebuildBody) — exactly as the Pin
+        // Tab and Read view already do. The container fires OnDepartureSettled → RequestClampToExtent so the
+        // scroll extent still re-clamps once the row is gone.
 
         // Keep hover self-healing under a STATIONARY cursor, because LibGUI only recomputes hover on real
         // mouse motion (EventDispatcher.DispatchPointerMove is called only from GuiBase.OnMouseMove). Two
@@ -309,11 +302,10 @@ public abstract partial class ScribeDialogBase
         // The dialog owns the shared scroll controller (see its field); dispose it once here rather
         // than in either view's State, which come and go with each view-switch ForceRebuild.
         sharedScrollController.Dispose();
-        // Drop any in-flight collapse ghosts + their controllers so a reopen starts clean (scribe-list-collapse).
-        departingEditorRows.Clear();
+        // Editor collapse controllers (D0 / extract-animated-task-list §6.1) — the container owns its ghost
+        // cache (dropped when its State unmounts on close), but the dialog owns this registry, so dispose it
+        // here. Same ownership as the Pin Tab / Read view registries below.
         editorCollapseRegistry.Dispose();
-        // Pin Tab collapse controllers (extract-animated-task-list) — the container owns its ghost cache
-        // (dropped when its State unmounts on close), but the dialog owns this registry, so dispose it here.
         pinCollapseRegistry.Dispose();
         // Read view collapse controllers (reconcile-animating-surfaces §5.5) — same ownership as the Pin Tab's.
         readCollapseRegistry.Dispose();

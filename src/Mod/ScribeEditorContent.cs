@@ -96,10 +96,6 @@ internal sealed class ScribeFrozenEditorRow : StatelessWidget
     }
 }
 
-/// <summary>A deleted editor row that is collapsing out of the list (scribe-list-collapse): its last-known
-/// data snapshot and the DISPLAY index it should collapse in place at.</summary>
-internal readonly record struct ScribeDepartingEditorRow(ScribeEditRowData Row, int Index);
-
 /// <summary>
 /// The editor view's content tree. Unlike the read view it uses a NON-virtualized
 /// <see cref="SingleChildScrollView"/> + <see cref="Column"/> of ALL rows (design D2): LibGUI's
@@ -130,9 +126,8 @@ internal sealed class ScribeEditorContent : StatefulWidget
         EdgeInsets footerButtonPadding,
         ScribeRowStyle style,
         ScrollController scrollController,
-        IReadOnlyList<ScribeDepartingEditorRow> departingRows,
         ScribeAnimationRegistry collapseRegistry,
-        Action<Guid> onDepartingCollapsed,
+        Action onDepartureSettled,
         string hintLangKey = "scribe:scribe-gui-edit-hint",
         bool addTaskEnabled = true,
         bool showSwitchToRead = true)
@@ -156,9 +151,8 @@ internal sealed class ScribeEditorContent : StatefulWidget
         FooterButtonPadding = footerButtonPadding;
         Style = style;
         ScrollController = scrollController;
-        DepartingRows = departingRows;
         CollapseRegistry = collapseRegistry;
-        OnDepartingCollapsed = onDepartingCollapsed;
+        OnDepartureSettled = onDepartureSettled;
         HintLangKey = hintLangKey;
         AddTaskEnabled = addTaskEnabled;
         ShowSwitchToRead = showSwitchToRead;
@@ -210,15 +204,16 @@ internal sealed class ScribeEditorContent : StatefulWidget
     /// here — the dialog owns its lifetime so the scroll offset survives the view-switch rebuild. The
     /// same controller <see cref="Scrollable.EnsureVisible"/> drives when a focused row grows/moves.</summary>
     public ScrollController ScrollController { get; }
-    /// <summary>Deleted rows still collapsing out of the list (scribe-list-collapse), spliced back in at
-    /// their display index as static, non-interactive ghosts by <see cref="ScribeEditorContentState.Build"/>.</summary>
-    public IReadOnlyList<ScribeDepartingEditorRow> DepartingRows { get; }
-    /// <summary>Host-owned collapse controllers for the departing rows (keyed by TaskId), so a collapse
-    /// resumes across the dialog's ForceRebuild remounts.</summary>
+    /// <summary>Host-owned collapse controllers for the editor's row list (keyed by TaskId), so a collapse
+    /// resumes across the dialog's rebuild remounts. Passed into <see cref="ScribeAnimatedList"/>, which
+    /// diffs the row set and animates departures against it (extract-animated-task-list §6.1 / D0). Lives on
+    /// the dialog so <c>OnRenderGUI</c> can read <c>AnyAnimating</c> to drive the scroll-pin + hover latch.</summary>
     public ScribeAnimationRegistry CollapseRegistry { get; }
-    /// <summary>Fired (with the row's TaskId) when a departing row's collapse completes, so the dialog can
-    /// remove its ghost and re-clamp the scroll extent.</summary>
-    public Action<Guid> OnDepartingCollapsed { get; }
+    /// <summary>Fired (deferred, safe) when a departing row's collapse completes and the list has shrunk, so
+    /// the dialog can re-clamp the scroll extent — the same settle hook the Read view and Pin Tab use
+    /// (<see cref="ScribeAnimatedList.OnDepartureSettled"/>). The container retires the ghost itself; the
+    /// dialog no longer owns departing-row bookkeeping.</summary>
+    public Action OnDepartureSettled { get; }
     public string HintLangKey { get; }
 
     public override State CreateState() => new ScribeEditorContentState();
@@ -278,19 +273,25 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
         var colors = Theme.Of(context).ColorScheme;
         TextStyle buttonTextStyle = new() { FontSize = 14, Color = colors.OnPrimary, FontFamily = ScribeTaskFont.ButtonFamily };
 
-        Widget scrollBody;
-        if (Widget.Blocks.Count == 0)
-        {
-            // Font family + base size inherited from the tab's DefaultTextStyle ancestor; only color and
-            // the centered-wrap overrides are non-default and stay explicit.
-            scrollBody = new Center(child: new Text(
-                Lang.Get(Widget.HintLangKey),
-                new TextStyle { Color = colors.OnSurfaceVariant, SoftWrap = true, Align = TextAlignment.Center }));
-        }
-        else
-        {
-            var rows = Widget.Blocks
-                .Select(b => (Widget)new ScribeEditRow(
+        // Route the editor's rows through ScribeAnimatedList (D0 / extract-animated-task-list §6.1), exactly
+        // as the Read view and Pin Tab already do. The container diffs the TaskId-keyed set frame-to-frame:
+        // a row the dialog deleted from scratch lands here as a now-absent id and the container collapses it
+        // out (rows below sliding up) from a frozen ghost, then self-cleans — replacing the dialog's former
+        // hand-wired DepartingRows / OnEditorRowCollapsed / needsEditorCollapseCleanup machinery. The
+        // container abstracts MOTION only: it decides row ORDER (live rows + collapsing ghosts at their old
+        // slots) and hands that list to OUR layoutBuilder, which keeps the editor's own
+        // Scrollbar > SingleChildScrollView > Column shape. Immediate policy (the editor delete is an
+        // affirmative tap — no undo window, matching read/pin).
+        //
+        // Each item supplies an explicit frozen ghost (ScribeFrozenEditorRow): a live editable row is unsafe
+        // to freeze in place (its field/checkbox/drag gestures would stay live mid-collapse and its focus
+        // node is gone once the scratch block leaves), so the container animates the snapshot instead of the
+        // live child. Drag-reorder state stays in THIS State (dragFromIndex/dragOverIndex) and is baked into
+        // each live row here, so the container stays content-agnostic (its D6).
+        var items = Widget.Blocks
+            .Select(b => new ScribeAnimatedListItem(
+                Id: b.TaskId,
+                Child: new ScribeEditRow(
                     data: b,
                     focusNode: b.Index < Widget.FocusNodes.Count ? Widget.FocusNodes[b.Index] : null,
                     autoFocus: Widget.AutoFocusIndex == b.Index,
@@ -321,49 +322,48 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                     // int index keyed every slot to its position, so any structural change looked like a
                     // brand-new widget at that slot and remounted the field (dropping the caret). LibGUI's
                     // reconciler is positional (no keyed reordering), so this preserves identity only where
-                    // the slot is unchanged — deleting the collapsing ghost holds the deleted slot, keeping
+                    // the slot is unchanged — the container's departing ghost holds the deleted slot, keeping
                     // rows below in place; a delete/insert ABOVE the focused row still shifts + remounts it
                     // (the accepted positional caveat — text survives via the scratch write-through).
-                    key: new ValueKey<Guid>(b.TaskId)))
-                .ToList();
+                    key: new ValueKey<Guid>(b.TaskId)),
+                Ghost: new ScribeFrozenEditorRow(b, Widget.Style)))
+            .ToList();
 
-            // Splice each deleted-but-collapsing row back in at the display index it held, as a static,
-            // non-interactive ghost that collapses its height to zero then removes itself
-            // (scribe-list-collapse). Its scratch block + focus node are gone, so it renders as a frozen
-            // read-style row (no field, no drag/delete controls) wrapped in ScribeRowSizeAnimation. Keyed by
-            // TaskId (OUTSIDE the collapsible) so its identity is stable across rebuilds and never collides
-            // with a live index-keyed row. Insert ascending, clamped to the current list length.
-            foreach (var d in Widget.DepartingRows.OrderBy(d => d.Index))
-            {
-                int at = Math.Clamp(d.Index, 0, rows.Count);
-                Guid taskId = d.Row.TaskId;
-                rows.Insert(at, new ScribeRowSizeAnimation(
-                    id: taskId.ToString("N"),
-                    animating: true,
-                    direction: ScribeRowSizeDirection.Collapse,
-                    registry: Widget.CollapseRegistry,
-                    onEnd: () => Widget.OnDepartingCollapsed(taskId),
-                    child: new ScribeFrozenEditorRow(d.Row, Widget.Style),
-                    key: new ValueKey<Guid>(taskId)));
-            }
-
-            // Wrapped in a Scrollbar so a tall editor list shows a draggable track (task 8.15). AutoHide
-            // off (see read view): permanently visible, matching the native GUI, and avoids the
-            // ForceRebuild-driven fade flicker (task 5.7).
-            scrollBody = new Scrollbar(
-                controller: Widget.ScrollController,
-                child: new SingleChildScrollView(
+        // Wrapped in a Scrollbar so a tall editor list shows a draggable track (task 8.15). AutoHide off
+        // (see read view): permanently visible, matching the native GUI, and avoids the rebuild-driven fade
+        // flicker (task 5.7). The empty-state hint check moves INTO the layoutBuilder (mirroring read/pin):
+        // checking rows.Count == 0 here (not Widget.Blocks.Count outside) keeps the hint from popping in
+        // before the LAST removed row has finished collapsing — so deleting the final row now animates its
+        // collapse before the hint appears, consistent with every other surface.
+        Widget scrollBody = new ScribeAnimatedList(
+            items: items,
+            registry: Widget.CollapseRegistry,
+            policy: ScribeListRemovalPolicy.Immediate,
+            onDepartureSettled: Widget.OnDepartureSettled,
+            // Every appearance (add / insert-below / quick-add, and any peer insert) slides in through the
+            // container via one uniform motion (animate-row-insertion): the content translates into place +
+            // fades, holding the row at FULL height in its slot the whole time — so even the auto-focused new
+            // row keeps its caret visible and its clicks exact from the first frame. The entry motion lives
+            // ENTIRELY in the container; the editor only supplies the row set.
+            layoutBuilder: rows => rows.Count == 0
+                // Font family + base size inherited from the tab's DefaultTextStyle ancestor; only color and
+                // the centered-wrap overrides are non-default and stay explicit.
+                ? new Center(child: new Text(
+                    Lang.Get(Widget.HintLangKey),
+                    new TextStyle { Color = colors.OnSurfaceVariant, SoftWrap = true, Align = TextAlignment.Center }))
+                : new Scrollbar(
                     controller: Widget.ScrollController,
-                    child: new Column(
-                        // spacing 0: all inter-row separation lives in each row's own vertical padding, so
-                        // the editor Column matches the read ListView (which adds no inter-row gap) and rows
-                        // stay pixel-aligned across a view switch.
-                        spacing: 0,
-                        crossAxisAlignment: CrossAxisAlignment.Stretch,
-                        mainAxisSize: MainAxisSize.Min,
-                        children: rows)))
-            { AutoHide = false };
-        }
+                    child: new SingleChildScrollView(
+                        controller: Widget.ScrollController,
+                        child: new Column(
+                            // spacing 0: all inter-row separation lives in each row's own vertical padding, so
+                            // the editor Column matches the read ListView (which adds no inter-row gap) and rows
+                            // stay pixel-aligned across a view switch.
+                            spacing: 0,
+                            crossAxisAlignment: CrossAxisAlignment.Stretch,
+                            mainAxisSize: MainAxisSize.Min,
+                            children: rows)))
+                { AutoHide = false });
 
         // Root the tab subtree in the player's Task Text Font + window-scaled base size, so the empty
         // hint and the frozen collapsing-ghost rows inherit them (adopt-libgui-31-improvements). The live
