@@ -135,8 +135,21 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// be moved across rows programmatically (Enter/Shift+Tab) — LibGUI has no focus-traversal API,
     /// so the parent coordinates focus manually. Kept in sync with <c>scratch.Blocks.Count</c>.</summary>
     private readonly List<FocusNode> editorFocusNodes = new();
-    /// <summary>Row index to auto-focus on the next editor rebuild (a newly added task), or null.</summary>
+    /// <summary>Row index to auto-focus on the next editor rebuild (a newly added task), or null. Rides
+    /// the field's mount-only <c>autoFocus</c>, so it only re-homes focus onto a row whose field genuinely
+    /// MOUNTS this rebuild — i.e. a brand-new appended/inserted row. On the reconcile path a REUSED row's
+    /// field does not re-init, so <see cref="pendingFocusRow"/> covers those (see its remarks).</summary>
     private int? autoFocusRowOnRebuild;
+    /// <summary>Row index to re-request keyboard focus on AFTER the next reconcile lays out
+    /// (reconcile-animating-surfaces §3.1), or null. The reconcile-path counterpart to
+    /// <see cref="autoFocusRowOnRebuild"/>: a mutation that REUSES the target row's element (delete/reorder
+    /// re-home, pin-tint repaint) can't rely on the field's <c>autoFocus</c>, which fires only in the
+    /// field's <c>InitState</c> (on mount) — a reused field never re-inits. Instead we drive focus through
+    /// the dialog-owned <see cref="editorFocusNodes"/> (which persist across everything) via a deferred
+    /// <c>RequestFocus</c> in <see cref="OnRenderGUI"/> once the node's element is live, exactly as
+    /// <see cref="pendingEnsureVisible"/> defers scroll-into-view. Works for reused AND remounted rows, so
+    /// it is the general re-home; <c>autoFocus</c> stays only as the mount-time path for genuinely-new rows.</summary>
+    private int? pendingFocusRow;
     /// <summary>Set when a focus move or a row growth needs the focused row scrolled into view; acted
     /// on in <see cref="OnRenderGUI"/> AFTER layout has run (EnsureVisible reads live geometry).</summary>
     private bool pendingEnsureVisible;
@@ -195,33 +208,22 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// The blur fires from inside the field's focus-notification (and, on a row→row move, mid-way
     /// through <c>FocusManager.RequestFocus</c> — the old node blurs before the new one focuses), so
     /// removing the row synchronously would dispose focus nodes mid-transition and strand the pending
-    /// new focus. Deferring is the same re-entrancy guard <see cref="needsEditorCollapseCleanup"/> uses.
+    /// new focus. Deferring is the same re-entrancy guard the container's self-cleanup relies on.
     /// Null when no empty row is awaiting removal.</summary>
     private int? pendingEmptyRowRemoval;
 
-    /// <summary>Editor rows that have been deleted from the scratch document but are still collapsing their
-    /// height to zero before leaving the list (scribe-list-collapse), keyed by the block's stable
-    /// <see cref="ScribeBlock.TaskId"/> (unique per block — tasks AND text sections), valued by the deleted
-    /// row's last-known snapshot and the display index it held (so it collapses IN PLACE). The row renders as
-    /// a static, non-interactive snapshot (its scratch block and focus node are already gone). The entry is
-    /// removed when its collapse completes (<see cref="OnEditorRowCollapsed"/>).</summary>
-    private readonly Dictionary<Guid, (ScribeEditRowData Row, int Index)> departingEditorRows = new();
-
-    /// <summary>Host-owned collapse controllers for <see cref="departingEditorRows"/>, keyed by TaskId so a
-    /// collapse RESUMES (not restarts) across the dialog's <see cref="ForceRebuild"/> remounts
-    /// (scribe-list-collapse). Disposed with the dialog.</summary>
-    private readonly ScribeCollapseRegistry editorCollapseRegistry = new();
+    /// <summary>Host-owned collapse controllers for the editor's row list, keyed by TaskId so a collapse
+    /// RESUMES (not restarts) across the dialog's rebuild remounts (scribe-list-collapse). Passed into
+    /// <see cref="ScribeAnimatedList"/>, which diffs the editor's TaskId-keyed row set and animates
+    /// departures against it (D0 / extract-animated-task-list §6.1 — the editor no longer hand-wires its own
+    /// departing-row map or collapse-cleanup flag). Disposed with the dialog.</summary>
+    private readonly ScribeAnimationRegistry editorCollapseRegistry = new();
 
     /// <summary>Keeps the collapse-time hover refresh running a few frames past the last animating frame so a
     /// refresh lands AFTER the completion-triggered <see cref="ForceRebuild"/> re-lays-out the fresh tree
     /// (fix-list-collapse-stale-hover); without it the row under a stationary cursor loses its hover controls
     /// exactly when the collapse ends. See <see cref="ScribeHoverRefreshLatch"/>.</summary>
     private readonly ScribeHoverRefreshLatch hoverRefreshLatch = new();
-
-    /// <summary>Set when an editor row's collapse completes, so its removal + rebuild is deferred to the next
-    /// <see cref="OnRenderGUI"/> — the completion callback fires from inside the animation pump, where
-    /// unmounting + rebuilding the tree would be re-entrant.</summary>
-    private bool needsEditorCollapseCleanup;
 
     /// <summary>Scroll offset captured just before a switch-to-read rebuild, to be re-applied after the
     /// read view lays out. Needed because the read view's virtualized <c>ListView</c> re-derives its
@@ -275,6 +277,30 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// in sync with the current pin set by <see cref="SyncPinFocusNodes"/>; disposed in <see cref="OnGuiClosed"/>.</summary>
     private readonly Dictionary<Guid, FocusNode> pinFocusNodes = new();
 
+    /// <summary>Host-owned collapse controllers for the Pin Tab's departing rows (extract-animated-task-list),
+    /// passed to <see cref="ScribePinnedContent"/>'s <see cref="ScribeAnimatedList"/> so a removed pin's row
+    /// collapses out instead of snapping. Owned by the dialog (like <see cref="editorCollapseRegistry"/>) so a
+    /// collapse RESUMES across the resync reconcile, and so <see cref="OnRenderGUI"/> can read
+    /// <c>AnyAnimating</c> to pin the scroll + refresh hover while a pin row collapses. Disposed with the dialog.</summary>
+    private readonly ScribeAnimationRegistry pinCollapseRegistry = new();
+
+    /// <summary>Host-owned collapse controllers for the read view's departing rows (reconcile-animating-surfaces
+    /// §5.5), passed to <see cref="ScribeReadContent"/>'s <see cref="ScribeAnimatedList"/> so a Delete-policy
+    /// completion collapses the removed row out instead of vanishing it. Owned by the dialog (like
+    /// <see cref="editorCollapseRegistry"/> / <see cref="pinCollapseRegistry"/>) so a collapse RESUMES across the
+    /// RefreshReadView reconcile, and so <see cref="OnRenderGUI"/> can read <c>AnyAnimating</c> to pin the scroll +
+    /// refresh hover while a read row collapses. Disposed with the dialog.</summary>
+    private readonly ScribeAnimationRegistry readCollapseRegistry = new();
+
+    /// <summary>True while ANY of the dialog's row-collapse animations (editor, Pin Tab, or read view) is still
+    /// running. Only one of these surfaces is mounted at a time, so at most one registry is ever non-idle — but
+    /// OR-ing all three is safe and lets the two <see cref="OnRenderGUI"/> collapse loops (the scroll-pin and the
+    /// hover-refresh latch) share one gate instead of repeating the three-way check. Folding a future surface's
+    /// registry in here updates both loops at once, so neither can be silently left out of step
+    /// (reconcile-animating-surfaces §6.3).</summary>
+    private bool AnyRowAnimating =>
+        editorCollapseRegistry.AnyAnimating || pinCollapseRegistry.AnyAnimating || readCollapseRegistry.AnyAnimating;
+
     /// <summary>The <see cref="ScribeBlock.TaskId"/> of the Pin Tab row currently focused, tracked from the
     /// rows' focus nodes so a rebuild can restore the caret and a focus move can commit the row being left.
     /// Not cleared on blur (its listener fires only on focus GAINED — the editor's pattern), so it still
@@ -282,17 +308,66 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     private Guid? focusedPinTaskId;
 
     /// <summary>Pin row to auto-focus on the next Pin Tab rebuild (caret restore across a
-    /// <see cref="ForceRebuild"/>), or null. One-shot: consumed in <see cref="BuildPinnedContent"/>.</summary>
+    /// <see cref="ForceRebuild"/>), or null. One-shot: consumed in <see cref="BuildPinnedContent"/>. Rides
+    /// the field's mount-only <c>autoFocus</c>, so it only re-homes a genuinely-NEW (freshly-mounted) row —
+    /// reserved for the view-switch/fresh-mount path. An in-place pin resync (reconcile-animating-surfaces
+    /// §4.3) REUSES the focused row's field instead, so it re-homes via <see cref="pendingFocusPinTaskId"/>.</summary>
     private Guid? autoFocusPinTaskId;
+
+    /// <summary>Pin row (by TaskId) to re-home keyboard focus onto after an in-place Pin Tab reconcile
+    /// (reconcile-animating-surfaces §4.3), or null. The Pin Tab equivalent of the editor's
+    /// <see cref="pendingFocusRow"/>: pressing a per-row pin control (checkbox/unpin/delete — none are
+    /// <c>IFocusable</c>) blurs the focused field via <c>DispatchPointerDown</c>, and the async
+    /// <see cref="OnMyPinsChanged"/> resync lands a frame or more later. Under reconcile the focused row's
+    /// field is REUSED (not remounted), so its mount-only <c>autoFocus</c> won't re-fire; instead this drives
+    /// a deferred <see cref="FocusNode.RequestFocus"/> on the dialog-owned node from <c>OnRenderGUI</c> once
+    /// the reconciled element has a live Owner. One-shot.</summary>
+    private Guid? pendingFocusPinTaskId;
 
     /// <summary>The mod system, cached for per-player pin queries and the pin/complete network sends.</summary>
     protected readonly ScribeModSystem modSystem;
+
+    /// <summary>Samples the light reaching the player each frame and folds it into a quantized (brightness,
+    /// tint) shade the whole dialog is rendered at (respect-local-illumination). Constructed once per dialog;
+    /// read only on the render thread in <see cref="OnRenderGUI"/>. Bound to the live
+    /// <see cref="ScribeModSystem.MySettings"/> so a floor change takes effect on the next sample.</summary>
+    private readonly ScribeAmbientLightSampler lightSampler;
+
+    /// <summary>The current quantized illumination shade, refreshed each frame from <see cref="lightSampler"/>
+    /// and read by <see cref="BuildBodyTree"/> to configure the <see cref="ScribeGlobalTint"/> wrap. Seeded to
+    /// the identity (full brightness, neutral tint) so the very first build — before the first sample — looks
+    /// exactly like the pre-illumination dialog. When the quantized value CHANGES, <see cref="OnRenderGUI"/>
+    /// calls <see cref="RebuildBody"/> so LibGUI re-records the paint cache with the new shade; on a static
+    /// scene it never changes, so the cache stays valid (D3).</summary>
+    private ScribeAmbientLightSampler.Shade currentShade = new(1f, 1f, 1f, 1f, changed: false);
+
+    /// <summary>Stable identity of the single persistent-root <see cref="ScribeDialogBody"/> that wraps the
+    /// dialog body (reconcile-animating-surfaces §3.1). Allocated ONCE here (never in <see cref="Build"/>,
+    /// per the <see cref="GlobalKey"/> contract) so <see cref="RebuildBody"/> can reach the live body State
+    /// and reconcile the tree in place instead of tearing it down with <see cref="GuiBase.ForceRebuild"/>.
+    /// A <c>GlobalKey</c> re-registers itself on mount, so it stays valid across a <c>ForceRebuild</c> too.</summary>
+    private readonly GlobalKey bodyKey = new();
+
+    /// <summary>Reconcile the dialog body in place (reconcile-animating-surfaces §3.1): the modern
+    /// replacement for <see cref="GuiBase.ForceRebuild"/> at every in-place update site — a structural row
+    /// edit (add/delete/reorder) or a chrome repaint (pin tint, nav active-color, title display⇄input swap).
+    /// A no-op <c>SetState</c> on the persistent body State marks it dirty, so the next frame's
+    /// <c>BuildOwner.BuildDirtyElements()</c> re-runs <see cref="BuildBodyTree"/> and reconciles the subtree,
+    /// REUSING matching elements — the central editor content, its rows, and each row's live
+    /// <c>ScribeMultilineField</c> (caret + unsaved buffer intact) — rather than unmounting and rebuilding
+    /// them. Reserve <c>ForceRebuild()</c> for the genuinely-new-tree cases (view switches, fresh editor
+    /// seed, lost-lock recovery — §3.3). A no-op before the body has mounted (defensive).</summary>
+    private protected void RebuildBody() => bodyKey.CurrentState<ScribeDialogBody.BodyState>()?.Rebuild();
 
     protected ScribeDialogBase(BlockPos pos, IScribeDocumentHost host, ICoreClientAPI capi)
         : base(pos, capi)
     {
         this.host = host;
         modSystem = capi.ModLoader.GetModSystem<ScribeModSystem>();
+
+        // Light sampler for the ambient-illumination shade (respect-local-illumination). Bound to the live
+        // MySettings so a floor change is picked up on the next frame's sample; only read on the render thread.
+        lightSampler = new ScribeAmbientLightSampler(capi, modSystem.MySettings);
 
         // Install the real-or-silent UI sound player for this player's current mute preference
         // (scribe-mute-ui-sounds); GuiBase's ctor already set a real SoundPlayer, so this only needs to
@@ -461,26 +536,61 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
         // A settings change may have flipped the mute preference — re-install the matching sound player
         // so a live toggle takes effect on this already-open dialog (scribe-mute-ui-sounds).
         ApplyUiSoundPreference();
-        if (isEditorMode && focusedEditIndex is { } idx && idx < editorFocusNodes.Count)
+        // Editor view (reconcile-animating-surfaces §3.1): the pin set is per-player, NOT part of scratch,
+        // so a pin change is a pure chrome repaint — the row set is structurally identical, so an in-place
+        // RebuildBody reconcile REUSES every row (each ScribeMultilineField keeps its caret + buffer) and
+        // just re-tints the pin indicators. The pin control isn't IFocusable, so pressing it blurred the
+        // focused field via DispatchPointerDown; re-home focus onto that still-focused row via the deferred
+        // RequestFocus (pendingFocusRow) — the reused field skips its mount-only autoFocus, so
+        // autoFocusRowOnRebuild wouldn't fire. Reconcile preserves the shared scroll offset in place, so no
+        // capture-restore is needed here (that was only to survive the old ForceRebuild's offset reset).
+        if (isEditorMode)
         {
-            autoFocusRowOnRebuild = idx;
+            if (focusedEditIndex is { } idx && idx < editorFocusNodes.Count) pendingFocusRow = idx;
+            RebuildBody();
+            return;
         }
-        // Pin Tab: keep the caret on the row being edited across this async resync rebuild (same hazard the
-        // editor faces — see OnMyPinsChanged remarks). A blur doesn't clear focusedPinTaskId, so it still
-        // names the row; re-arm the one-shot only if that pin still exists in the (new) set.
-        if (viewMode == ScribeLecternView.Pinned && focusedPinTaskId is { } pinId
-            && modSystem.MyPins.Any(p => p.TaskId == pinId))
+
+        // Pin Tab (reconcile-animating-surfaces §4.3): like the editor, the pin resync is an in-place
+        // reconcile — ScribePinnedContent keys every row by ValueKey<Guid>(TaskId), owns its drag state
+        // internally, and re-seeds each field from pinEditBuffer, so RebuildBody REUSES every row (each
+        // ScribeMultilineField keeps its caret + unsaved buffer) and just re-tints/re-orders. Re-home the
+        // caret on the row being edited via the deferred pendingFocusPinTaskId — pressing a per-row pin
+        // control (none IFocusable) blurred the focused field via DispatchPointerDown, and a reused field
+        // skips its mount-only autoFocus, so autoFocusPinTaskId wouldn't re-fire here. A blur doesn't clear
+        // focusedPinTaskId, so it still names the row; re-arm only if that pin still exists in the new set.
+        // Reconcile preserves the shared scroll offset in place, so no capture-restore (that was only for
+        // the old ForceRebuild's offset reset).
+        if (viewMode == ScribeLecternView.Pinned)
         {
-            autoFocusPinTaskId = pinId;
+            if (focusedPinTaskId is { } pinId && modSystem.MyPins.Any(p => p.TaskId == pinId))
+                pendingFocusPinTaskId = pinId;
+            // A completion can re-order the list (sink policy), sliding a different row under a stationary
+            // cursor. Unlike a ForceRebuild (fresh hovered=false tree caught by ArmIfRebuilt), a reconcile
+            // leaves RootElement unchanged and REUSES rows with their stale hovered flag — so arm the hover
+            // latch to re-dispatch a synthetic pointer-move and re-home the hover-gated delete/unpin controls
+            // without a mouse wiggle (fix-list-collapse-stale-hover). Harmless no-op when no row moved.
+            hoverRefreshLatch.Arm();
+            RebuildBody();
+            return;
         }
-        // Read and Editor views use the virtualized ListView / SingleChildScrollView; a ForceRebuild
-        // re-derives content height and clamps the shared controller's offset toward 0, losing the player's
-        // scroll position. Capture the offset HERE — right before the rebuild — so the OnRenderGUI restore
-        // loop re-applies it once the content height settles. Capturing in OnReadViewTogglePinned (the
-        // pre-network-round-trip site) was too early: by the time this async callback fires the restore loop
-        // had already terminated (pendingRestoreScrollOffset was null). Pinned view rebuilds use a
-        // non-virtualized Column whose content height is exact from frame-1, so no restore needed there.
-        if (viewMode != ScribeLecternView.Pinned) CaptureScrollForRestore();
+
+        // Read view (reconcile-animating-surfaces §5): the pin set is per-player, NOT part of the document,
+        // so a pin change is a pure chrome repaint — the read row set is structurally identical, so an
+        // in-place RebuildBody reconcile REUSES every row (preserving the shared scroll offset inherently)
+        // and just re-tints the pin indicators. This replaces the old ForceRebuild + capture-restore dance:
+        // the read list is now non-virtualized + TaskId-keyed (see ScribeReadContent), so it reconciles like
+        // the editor and Pin Tab. A completion elsewhere can slide a row under a stationary cursor; arm the
+        // hover latch so the hover-gated pin control re-homes without a mouse wiggle.
+        if (viewMode == ScribeLecternView.Read)
+        {
+            hoverRefreshLatch.Arm();
+            RebuildBody();
+            return;
+        }
+        // Any remaining non-editor view (History/Timer/Visitors) still ForceRebuilds; capture the offset so
+        // the OnRenderGUI restore loop re-applies it once content height settles.
+        CaptureScrollForRestore();
         ForceRebuild();
     }
 
@@ -489,12 +599,38 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// the rebuild — ForceRebuild re-derives content height and clamps the offset toward 0.</summary>
     private void OnSettingsVisibilityChanged()
     {
-        if (IsOpened())
+        if (!IsOpened()) return;
+        TraceScroll("settings-vis");
+        // Editor view (§3.1): the nav column (with the Settings button) lives inside the persistent body, so
+        // an in-place reconcile re-tints the button while REUSING the editor rows — no caret/scroll loss, no
+        // capture-restore needed (reconcile keeps the shared offset). Re-home the focused row's caret in case
+        // an earlier press cleared focus. Non-editor views keep ForceRebuild until §4/§5.
+        if (isEditorMode)
         {
-            TraceScroll("settings-vis");
-            if (viewMode != ScribeLecternView.Pinned) CaptureScrollForRestore();
-            ForceRebuild();
+            if (focusedEditIndex is { } idx && idx < editorFocusNodes.Count) pendingFocusRow = idx;
+            RebuildBody();
+            return;
         }
+        // Pin Tab (§4.3): the nav column lives inside the persistent body, so an in-place reconcile re-tints
+        // the Settings button while REUSING the pin rows — no caret/scroll loss. Re-home the focused row via
+        // the deferred pendingFocusPinTaskId in case an earlier press cleared focus. Read stays on ForceRebuild.
+        if (viewMode == ScribeLecternView.Pinned)
+        {
+            if (focusedPinTaskId is { } pinId && modSystem.MyPins.Any(p => p.TaskId == pinId))
+                pendingFocusPinTaskId = pinId;
+            RebuildBody();
+            return;
+        }
+        // Read view (§5): the nav column (with the Settings button) lives inside the persistent body, so an
+        // in-place reconcile re-tints the button while REUSING the read rows — no scroll loss, no
+        // capture-restore. Now reachable because the read list is non-virtualized + TaskId-keyed.
+        if (viewMode == ScribeLecternView.Read)
+        {
+            RebuildBody();
+            return;
+        }
+        CaptureScrollForRestore();
+        ForceRebuild();
     }
 
     protected override WindowConfig CreateWindowConfig()

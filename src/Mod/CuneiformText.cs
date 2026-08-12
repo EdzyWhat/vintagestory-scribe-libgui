@@ -415,7 +415,7 @@ internal sealed class CuneiformTextState : State<CuneiformText>
         base.InitState();
         if (Widget.AnimateReveal)
         {
-            // ITickerProvider comes from the owner, exactly like ScribeCollapsible's controller.
+            // ITickerProvider comes from the owner, exactly like ScribeRowSizeAnimation's controller.
             controller = new AnimationController(
                 TimeSpan.FromMilliseconds(Widget.RevealDurationMs), Element.Owner!.GetTickerProvider());
             controller.OnValueChanged += OnValueChanged;

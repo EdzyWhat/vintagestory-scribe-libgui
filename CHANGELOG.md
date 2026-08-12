@@ -4,6 +4,25 @@ All notable changes to Scribe are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **A clockwork gear-train now turns on the Clockmaker's Notebook Timer tab.** The Timer page shows
+  an ambient mechanism — a central teal temporal gear driving two steel cogs and a large escape
+  wheel — that ticks one tooth per real second with a spring-wound snap. It runs whenever the tab is
+  open, regardless of whether a timer is set. Starting a timer slides the escape wheel into place;
+  when the timer fires the mechanism shudders and locks, and the wheel retracts. A faint tick-tock
+  plays on the Effect volume channel while the tab is open (silenced by the "Mute Scribe UI sounds"
+  setting). Purely decorative — it never changes timer behavior or intercepts the controls.
+
+### Fixed
+- **HUD pinned tasks no longer lose their text when you cancel a completion at the last moment.**
+  Checking a pinned task on the HUD fades its text out over a short undo window; if you *un*-checked
+  it right as the text finished fading, the row could come back as a bare checkbox with no text until
+  the HUD next rebuilt. The task itself was never lost — only its on-screen label — but it looked
+  alarming. The fade now clears cleanly on undo, so the text always reappears. (This was a rare,
+  long-standing glitch that became easy to trigger after recent HUD-rendering work; both are fixed.)
+
 ## [1.0.1] - 2026-08-07
 
 A small display fix for shelved Scribe items.

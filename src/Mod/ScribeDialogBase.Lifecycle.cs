@@ -35,6 +35,18 @@ public abstract partial class ScribeDialogBase
     {
         base.OnRenderGUI(deltaTime);
 
+        // Sample the light reaching the player and shade the whole dialog to match (respect-local-illumination).
+        // Read here on the render/main thread only (block-accessor reads off the relight thread are unsafe).
+        // The sampler eases the shade toward its new value over ~100ms and quantizes the result to coarse
+        // brightness+hue buckets, reporting whether that bucket CHANGED since last frame; only then do we
+        // reconcile the body so LibGUI re-records its SKPicture with the new ScribeGlobalTint config (D3).
+        // During a light transition the bucket steps for a few frames (each a rebuild) then holds; on a static
+        // scene it's stable → no rebuild, cache intact. RebuildBody marks the body dirty for the NEXT frame's
+        // build (a frame-late tint update is imperceptible) and REUSES every row, so a live light change never
+        // disturbs the caret or scroll.
+        currentShade = lightSampler.Sample(deltaTime);
+        if (currentShade.Changed) RebuildBody();
+
         // Keep the window (hence the OuterArtBox art canvas) sized to the live Pixel Art Size (task 7.1).
         // The base only sets the window Size in CreateWindowConfig, which TryOpen runs ONCE per open — so a
         // live W change re-lays-out the content tree (via ForceRebuild) but leaves the window's _layoutSize
@@ -51,13 +63,11 @@ public abstract partial class ScribeDialogBase
             SyncLayoutSize();
         }
 
-        // An editor row's collapse completed (its callback fired from inside the animation pump, where
-        // unmounting the tree would be re-entrant); retire it now with a rebuild (scribe-list-collapse).
-        if (needsEditorCollapseCleanup)
-        {
-            needsEditorCollapseCleanup = false;
-            if (IsOpened()) ForceRebuild();
-        }
+        // Editor-row collapse cleanup is no longer the dialog's job (D0 / extract-animated-task-list §6.1):
+        // the editor now routes its rows through ScribeAnimatedList, which retires a completed ghost via its
+        // own deferred SetState (a local subtree reconcile, no cross-tree RebuildBody) — exactly as the Pin
+        // Tab and Read view already do. The container fires OnDepartureSettled → RequestClampToExtent so the
+        // scroll extent still re-clamps once the row is gone.
 
         // Keep hover self-healing under a STATIONARY cursor, because LibGUI only recomputes hover on real
         // mouse motion (EventDispatcher.DispatchPointerMove is called only from GuiBase.OnMouseMove). Two
@@ -67,9 +77,43 @@ public abstract partial class ScribeDialogBase
         // re-dispatches a synthetic pointer-move for a few frames past either trigger (long enough for the
         // rebuilt tree to lay out on a later frame), so the row under the cursor regains its hover-gated
         // delete/pin controls without a mouse wiggle (fix-list-collapse-stale-hover). No-op when idle.
-        if (editorCollapseRegistry.AnyAnimating) hoverRefreshLatch.Arm();
+        // Both the editor's hand-wired collapse AND the container-driven collapses (extract-animated-task-list:
+        // Pin Tab, and reconcile-animating-surfaces §5.5: the read view) reflow the list every animating frame,
+        // so any of them arms the hover latch. The container owns no dialog-level state (RootElement /
+        // RefreshHoverAtCursor are the dialog's), so this loop stays here, reading the same host-owned registries
+        // the containers animate against (open-question §2.7 resolution).
+        if (AnyRowAnimating) hoverRefreshLatch.Arm();
         hoverRefreshLatch.ArmIfRebuilt(RootElement);
         if (hoverRefreshLatch.Tick()) RefreshHoverAtCursor();
+
+        // Keep the viewport pinned to the bottom WHILE an editor row collapses, so deleting the last row
+        // (or any row while scrolled to the bottom) closes the list up smoothly instead of snapping upward
+        // (reconcile-animating-surfaces §3.10). The collapse shrinks the content height a little each frame;
+        // reconcile holds the scroll offset fixed across the repaint, so without this the offset stays put
+        // and dead space opens below the last row, which the post-collapse re-clamp (pendingClampToExtent)
+        // then removes in one instant JumpTo — the jarring snap that was reported. Clamping the offset down
+        // to the shrinking MaxScrollExtent every frame of the collapse makes it glide in lockstep with the
+        // content, so the bottom edge tracks smoothly (the collapse's own EaseInOutCubic timing drives it —
+        // no separate scroll animation needed). Acts ONLY when the offset is genuinely stranded past the
+        // now-smaller max: a delete that leaves the viewport within bounds (not scrolled to the bottom) has
+        // Offset <= max, so this is a no-op and that view is left undisturbed. Read here (after
+        // base.OnRenderGUI ran BuildDirtyElements + layout above) so MaxScrollExtent reflects THIS frame's
+        // collapsed height. pendingClampToExtent below remains as the final settle for the rare shrink not
+        // covered by a live collapse (e.g. LibGUI's >50px wheel-slop clamp firing mid-collapse).
+        // Also pins the container-driven collapses (extract-animated-task-list: Pin Tab; reconcile-animating-
+        // surfaces §5.5: read view): removing the bottom pin/task while scrolled down eases the viewport up in
+        // lockstep with the shrinking content instead of snapping. Same registry-AnyAnimating gate, same
+        // no-op-when-in-bounds guard — the views never animate at once (only one is mounted), so OR-ing their
+        // registries is safe.
+        if (AnyRowAnimating)
+        {
+            float collapseMax = sharedScrollController.MaxScrollExtent;
+            if (sharedScrollController.Offset > collapseMax)
+            {
+                TraceScroll("collapse-pin");
+                sharedScrollController.JumpTo(collapseMax);
+            }
+        }
 
         // A task row lost focus while empty (add-empty-task-lifecycle): remove it now, deferred out of the
         // blur notification so we don't dispose focus nodes mid focus-transition. Re-read from live scratch
@@ -109,7 +153,12 @@ public abstract partial class ScribeDialogBase
         if (_pendingTitleEditRebuild)
         {
             _pendingTitleEditRebuild = false;
-            if (IsOpened()) ForceRebuild();
+            // In-place reconcile (§3.1): swaps the title slot between display Text and inline TextField
+            // (different widget types → the reconcile mounts the new one fresh, so _pendingTitleFocus's
+            // Owner-check below still fires once it's live) while REUSING the editor rows beneath. The
+            // deferral out of pointer dispatch is retained since this flag is armed from the pencil tap /
+            // blur listener; RebuildBody itself is also dispatch-safe (it only marks the body dirty).
+            if (IsOpened()) RebuildBody();
         }
 
         // Focus the title field once its post-pencil rebuild has mounted (the stock TextField sets
@@ -126,6 +175,34 @@ public abstract partial class ScribeDialogBase
             {
                 _pendingTitleFocus = false; // editing was cancelled before the field mounted; drop it
             }
+        }
+
+        // Re-home keyboard focus onto a REUSED editor row after an in-place reconcile
+        // (reconcile-animating-surfaces §3.1). base.OnRenderGUI above already ran BuildDirtyElements (the
+        // reconcile) + layout this frame, so the target row's field element is mounted and its focus node
+        // has a live Owner. Deferred here rather than fired inside the mutation handler for the same reason
+        // as pendingEnsureVisible: RequestFocus mid-pointer-dispatch (a delete/reorder/pin press) races the
+        // element the click landed on. Unlike autoFocusRowOnRebuild (which rides the field's mount-only
+        // autoFocus and so only re-homes a genuinely-new row), this works whether the row was reused or
+        // remounted — it drives the persistent dialog-owned node directly. Waits (like the block below) for
+        // a live Owner so it also survives a reconcile that arrives a frame late.
+        if (pendingFocusRow is { } focusRow && isEditorMode
+            && focusRow < editorFocusNodes.Count && editorFocusNodes[focusRow].Owner is not null)
+        {
+            editorFocusNodes[focusRow].RequestFocus();
+            pendingFocusRow = null;
+        }
+
+        // Re-home keyboard focus onto a REUSED Pin Tab row after an in-place pin reconcile
+        // (reconcile-animating-surfaces §4.3) — the Pin Tab twin of the editor block above. base.OnRenderGUI
+        // already ran the reconcile + layout this frame, so the target row's field element is mounted and its
+        // dialog-owned node (keyed by TaskId) has a live Owner. Waits for a live Owner so it survives a
+        // reconcile that arrives a frame late; one-shot. Only fires while still in the Pinned view.
+        if (pendingFocusPinTaskId is { } pinFocusId && viewMode == ScribeLecternView.Pinned
+            && pinFocusNodes.TryGetValue(pinFocusId, out var pinNode) && pinNode.Owner is not null)
+        {
+            pinNode.RequestFocus();
+            pendingFocusPinTaskId = null;
         }
 
         if (pendingEnsureVisible && isEditorMode && focusedEditIndex is { } idx
@@ -237,9 +314,13 @@ public abstract partial class ScribeDialogBase
         // The dialog owns the shared scroll controller (see its field); dispose it once here rather
         // than in either view's State, which come and go with each view-switch ForceRebuild.
         sharedScrollController.Dispose();
-        // Drop any in-flight collapse ghosts + their controllers so a reopen starts clean (scribe-list-collapse).
-        departingEditorRows.Clear();
+        // Editor collapse controllers (D0 / extract-animated-task-list §6.1) — the container owns its ghost
+        // cache (dropped when its State unmounts on close), but the dialog owns this registry, so dispose it
+        // here. Same ownership as the Pin Tab / Read view registries below.
         editorCollapseRegistry.Dispose();
+        pinCollapseRegistry.Dispose();
+        // Read view collapse controllers (reconcile-animating-surfaces §5.5) — same ownership as the Pin Tab's.
+        readCollapseRegistry.Dispose();
         base.OnGuiClosed();
     }
 

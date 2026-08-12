@@ -26,9 +26,11 @@ namespace Scribe;
 internal readonly record struct ScribeReadRowData(int Index, bool IsTask, bool Done, bool Pinned, Guid TaskId, string Text);
 
 /// <summary>
-/// The read view's content tree: the document rendered as a scrollable <see cref="ListView"/> of
-/// rows, with a "switch to editor" control below. The interactive per-row state lives in the row
-/// widgets themselves (design D4), not here.
+/// The read view's content tree: the document rendered as a NON-virtualized scrollable
+/// <see cref="SingleChildScrollView"/> + <see cref="Column"/> of all rows (reconcile-animating-surfaces
+/// §5 — mirroring the editor), with a "switch to editor" control below. The interactive per-row state
+/// lives in the row widgets themselves (design D4), not here. Rows are keyed by stable identity so an
+/// external resync reconciles in place rather than tearing the list down.
 /// </summary>
 internal sealed class ScribeReadContent : StatefulWidget
 {
@@ -40,6 +42,8 @@ internal sealed class ScribeReadContent : StatefulWidget
         EdgeInsets footerButtonPadding,
         ScribeRowStyle style,
         ScrollController scrollController,
+        ScribeAnimationRegistry collapseRegistry,
+        Action onDepartureSettled,
         string hintLangKey = "scribe:scribe-gui-edit-hint",
         bool readOnly = false,
         bool completionAndPinLive = false,
@@ -52,6 +56,8 @@ internal sealed class ScribeReadContent : StatefulWidget
         FooterButtonPadding = footerButtonPadding;
         Style = style;
         ScrollController = scrollController;
+        CollapseRegistry = collapseRegistry;
+        OnDepartureSettled = onDepartureSettled;
         HintLangKey = hintLangKey;
         ReadOnly = readOnly;
         CompletionAndPinLive = completionAndPinLive;
@@ -71,6 +77,15 @@ internal sealed class ScribeReadContent : StatefulWidget
     /// <summary>Dialog-owned scroll controller shared by both views (see the dialog field); NOT disposed
     /// here — the dialog owns its lifetime so the scroll offset survives the view-switch rebuild.</summary>
     public ScrollController ScrollController { get; }
+    /// <summary>Host-owned collapse controllers for the read view's departing rows (extract-animated-task-list),
+    /// passed to the <see cref="ScribeAnimatedList"/> so a policy-removed read row collapses out instead of
+    /// vanishing instantly (reconcile-animating-surfaces §5.5). The dialog owns its lifetime (survives the
+    /// RefreshReadView reconcile) and reads its <c>AnyAnimating</c> to drive scroll-pin/hover in <c>OnRenderGUI</c>;
+    /// NOT disposed here.</summary>
+    public ScribeAnimationRegistry CollapseRegistry { get; }
+    /// <summary>Fired (deferred) when a departing read row's collapse completes and the list has shrunk, so the
+    /// dialog can re-clamp the shared scroll extent — see <see cref="ScribeAnimatedList.OnDepartureSettled"/>.</summary>
+    public Action OnDepartureSettled { get; }
     public string HintLangKey { get; }
     /// <summary>When true this is a permanently-read-only surface (a hard or fired tablet — tablet-firing):
     /// the "switch to editor" footer button is omitted. It also gates row text-editing affordances (there are
@@ -105,49 +120,80 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
 
         TextStyle switchTextStyle = new() { FontSize = 14, Color = colors.OnPrimary, FontFamily = ScribeTaskFont.ButtonFamily };
 
-        // The scrollable row list. Each row is a self-stateful widget keyed by its block index so the
-        // ListView tracks it across document changes (design D4). variableHeight so a wrapped
-        // multi-line note row measures to its real height. Wrapped in a Scrollbar so a list taller
-        // than the viewport shows a draggable track (wheel scroll worked before; the visible bar
-        // did not exist — task 8.15).
-        Widget rowList;
-        if (Widget.Blocks.Count == 0)
-        {
-            // Font family + base size inherited from the tab's DefaultTextStyle ancestor; only the
-            // color and the centered-wrap overrides are non-default and stay explicit.
-            rowList = new Center(child: new Text(
-                Lang.Get(Widget.HintLangKey),
-                new TextStyle { Color = colors.OnSurfaceVariant, SoftWrap = true, Align = TextAlignment.Center }));
-        }
-        else
-        {
-            var style = Widget.Style;
-            // AutoHide off: keep the bar permanently visible (matches the pre-LibGUI native GUI). This
-            // also sidesteps the flicker where a ForceRebuild (delete/pin/reorder) nudged the controller
-            // and re-triggered the auto-hide fade-in/out (task 5.7). AutoHide is an init-only property,
-            // not a ctor param, so it's set in an object initializer.
-            rowList = new Scrollbar(
-                controller: Widget.ScrollController,
-                child: new ListView(
-                    children: Widget.Blocks
-                        .Select(b => (Widget)new ScribeReadRow(b, Widget.OnToggleTask, Widget.OnTogglePinned, style, Widget.ReadOnly, Widget.CompletionAndPinLive, Widget.OnTextEditRefused, new ValueKey<int>(b.Index)))
-                        .ToList(),
-                    // Scroll estimate for rows not yet mounted (variableHeight measures the real height
-                    // of mounted rows). This MUST equal a true single-line row height, because the
-                    // ListView derives its total content height — and thus the shared controller's
-                    // max-scroll — from this estimate for every un-rendered row. A too-small estimate
-                    // (the old `FontSize * 1.2f` stand-in undercounts the real metric line height) made
-                    // the read view bottom out at a smaller offset than the editor's exact-summed
-                    // SingleChildScrollView, so after jumping/dragging to the bottom the read content sat
-                    // ~2px lower than the editor (fixes 18cd5c60). Use the SAME measured line height the
-                    // editor field uses (same "sans-serif" family — see ScribeMultilineFieldRender) plus
-                    // the identical field + row vertical padding.
-                    estimatedItemHeight: TextLayoutHelper.MeasureText("Ag", "sans-serif", style.FontSize, FontWeight.Normal).Y
-                        + style.FieldPadY * 2 + style.RowVerticalPadding * 2,
-                    variableHeight: true,
-                    controller: Widget.ScrollController))
-            { AutoHide = false };
-        }
+        var style = Widget.Style;
+        // The scrollable row list. Each row is a self-stateful widget keyed by its stable block identity
+        // (ValueKey<Guid>(TaskId)) so an external resync reconciles rows in place instead of remounting
+        // (reconcile-animating-surfaces §5). Wrapped in a Scrollbar so a list taller than the viewport
+        // shows a draggable track (task 8.15).
+        //
+        // NON-virtualized list (reconcile-animating-surfaces §5): a Column of ALL rows inside a
+        // SingleChildScrollView, mirroring the editor (ScribeEditorContent). It used to be a virtualized
+        // ListView, but LibGUI's ListView unmounts off-screen rows AND hardwires its internal
+        // reconcile-reset token to the ScrollController (no public data-identity seam — see ListView.cs;
+        // Tier 1 rejected 2026-08-10 because reaching it would fork `gui`). So an external resync (another
+        // client toggled a task, or a HUD-Delete removed one) had to ForceRebuild, which remounted the
+        // list and clamped the shared scroll offset toward 0. Keeping every row mounted and keyed by
+        // ValueKey<Guid>(TaskId) lets RefreshReadView reconcile in place: surviving rows are REUSED (the
+        // scroll offset is preserved inherently) and only changed rows repaint. It also drops the old
+        // estimatedItemHeight guess — the Column sums the exact per-row heights the editor already does,
+        // so the read/editor content heights now match by construction (subsumes fixes 18cd5c60).
+        // AutoHide off: bar permanently visible, matching the editor + the pre-LibGUI native GUI, and
+        // avoids the fade flicker a rebuild used to re-trigger (task 5.7).
+        //
+        // Route the rows through ScribeAnimatedList (reconcile-animating-surfaces §5.5), exactly as the
+        // Pin Tab does: the container diffs the TaskId-keyed set frame-to-frame, so a task removed by a
+        // Delete-policy completion — which lands here as a now-absent row on the RefreshReadView reconcile
+        // (the optimistic OnReadViewCompleteTask deleted it from the local doc, §5.4) — collapses out with
+        // rows below sliding up, instead of disappearing instantly (the playtest gap e5abb165). The
+        // container abstracts MOTION only: it decides row ORDER (live rows + collapsing ghosts spliced at
+        // their old slots) and hands that list to OUR layoutBuilder, which keeps the read view's own
+        // Scrollbar > SingleChildScrollView > Column shape. Immediate policy (no undo window — the read
+        // view's completion is an affirmative tap, matching the editor/pin surfaces).
+        //
+        // Each departing row supplies an explicit frozen ghost: a live read row is unsafe to freeze in
+        // place (its checkbox/pin/hover gestures would stay live mid-collapse), so we snapshot it as a
+        // static ScribeFrozenEditorRow — the same [grip-spacer][checkbox][text] shape the editor and Pin
+        // Tab ghosts use, so all three surfaces collapse identically. A read-only (hard/fired) tablet
+        // never reaches here as a departure: the server collapses Delete→Unpin there and the dialog skips
+        // the optimistic mutation (§5.4d), so no row is ever removed on that surface — the plain-Text ghost
+        // (which does not render cuneiform strokes) is therefore only ever used on the readable Lectern/
+        // Notebook, where it matches the live row exactly.
+        var items = Widget.Blocks
+            .Select(b => new ScribeAnimatedListItem(
+                Id: b.TaskId,
+                Child: new ScribeReadRow(b, Widget.OnToggleTask, Widget.OnTogglePinned, style, Widget.ReadOnly, Widget.CompletionAndPinLive, Widget.OnTextEditRefused, new ValueKey<Guid>(b.TaskId)),
+                Ghost: new ScribeFrozenEditorRow(
+                    new ScribeEditRowData(Index: b.Index, IsTask: b.IsTask, Done: b.Done, Pinned: b.Pinned, TaskId: b.TaskId, Text: b.Text),
+                    style)))
+            .ToList();
+
+        Widget rowList = new ScribeAnimatedList(
+            items: items,
+            registry: Widget.CollapseRegistry,
+            policy: ScribeListRemovalPolicy.Immediate,
+            onDepartureSettled: Widget.OnDepartureSettled,
+            // Our layout wrapper (D6 seam): the container passes the ordered widget list (live rows + any
+            // collapsing ghosts) and we wrap it in the read view's existing Scrollbar > scroll > Column,
+            // spacing 0 (all inter-row gap lives in each row's own padding, so read and editor stay
+            // pixel-aligned across a view switch). When that list is empty — no live rows AND no ghost still
+            // collapsing — show the empty-state hint. Checking HERE (not on Widget.Blocks.Count outside) keeps
+            // the hint from popping in before the LAST removed row has finished collapsing (mirrors the Pin
+            // Tab); the hint's font/size inherit the tab's DefaultTextStyle ancestor, only color + centered
+            // wrap stay explicit.
+            layoutBuilder: rows => rows.Count == 0
+                ? new Center(child: new Text(
+                    Lang.Get(Widget.HintLangKey),
+                    new TextStyle { Color = colors.OnSurfaceVariant, SoftWrap = true, Align = TextAlignment.Center }))
+                : new Scrollbar(
+                    controller: Widget.ScrollController,
+                    child: new SingleChildScrollView(
+                        controller: Widget.ScrollController,
+                        child: new Column(
+                            spacing: 0,
+                            crossAxisAlignment: CrossAxisAlignment.Stretch,
+                            mainAxisSize: MainAxisSize.Min,
+                            children: rows)))
+                { AutoHide = false });
 
         // The "switch to editor" footer button — the read view's only edit affordance. A permanently
         // read-only surface (hard/fired tablet — tablet-firing) omits it entirely so there is no path back
@@ -237,6 +283,20 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
     {
         base.InitState();
         done = Widget.Data.Done;
+    }
+
+    /// <summary>Resync the optimistic <see cref="done"/> when an external change flips this row's authoritative
+    /// completion (reconcile-animating-surfaces §5). The read list is now non-virtualized + TaskId-keyed, so a
+    /// server resync REUSES this row's state rather than remounting it — without this, an external toggle
+    /// (another client, or a HUD completion) would leave the checkbox showing the stale local value that
+    /// <see cref="InitState"/> seeded. Gate on the authoritative value actually CHANGING (compare old vs new
+    /// <c>Data.Done</c>): a pure chrome reconcile (e.g. a pin re-tint) leaves <c>Data.Done</c> untouched, so it
+    /// must not stomp an in-flight optimistic tick the player just made — matching the old ForceRebuild path,
+    /// which only re-seeded <c>done</c> when it genuinely remounted on a document change.</summary>
+    public override void UpdateWidget(ScribeReadRow oldWidget)
+    {
+        base.UpdateWidget(oldWidget);
+        if (oldWidget.Data.Done != Widget.Data.Done) done = Widget.Data.Done;
     }
 
     public override Widget Build(BuildContext context)

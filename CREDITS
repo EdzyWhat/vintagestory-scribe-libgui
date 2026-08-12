@@ -56,3 +56,11 @@ Inspiration
 Wanderer's Sketchbook (by JeanPierre)
   Scribe's task-pinning concept was inspired in part by Wanderer's Sketchbook.
   Credit and thanks to JeanPierre for the original mod.
+
+Gearlock Firearms (by JeanPierre) — derived gear assets
+  The Timer-tab gearworks' small/flanking gear geometry and texture are derived
+  from JeanPierre's Gearlock Firearms mod (https://mods.vintagestory.at/show/mod/60282),
+  re-skinned to Scribe's palette. Gearlock's assets are licensed for reuse and
+  modification; Scribe copies and modifies them and does not reference Gearlock at
+  runtime. The large escape/great wheel is Scribe's own procedural generation, not a
+  Gearlock asset. Thanks again to JeanPierre.

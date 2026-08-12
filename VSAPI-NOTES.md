@@ -1533,6 +1533,21 @@ NOT clear our `focusedEditIndex` (its listener fires only on focus GAINED), so t
 row to restore. See `DeleteEditorBlock`, `TogglePinnedEditorTask`/`OnMyPinsChanged`, and `ReorderEditorBlock`
 in `GuiDialogScribeLecternLibGui.cs`.
 
+**Symptom (94c447c8, "mass-delete dead first-click"): tapping a delete/pin control on a row that is
+sliding under a stationary cursor mid-collapse does nothing; the click only registers once the animation
+finishes.** A LibGUI tap fires only when the element re-hit-tested at pointer-**up** is the SAME element
+captured at pointer-**down** — `EventDispatcher.DispatchPointerUp` gates `OnPointerClick` on
+`if (hit == target)`. During a collapse the target row moves upward every frame, so between mouse-down and
+mouse-up the control slides out from under the stationary cursor, `hit != target`, and the tap is silently
+discarded; a second click after geometry settles hits the same element down/up and works. This is a
+moving-target hit-test race, NOT the departing ghost-snapshot intercepting the click (the frozen ghost has
+no gestures) — an earlier hypothesis the source disproved. **Resolution:** the
+`reconcile-animating-surfaces` conversion fixed it as a side-effect — reconcile keeps the row list stable
+(no per-frame remount that the old `ForceRebuild` did), so the row under the cursor holds its identity
+across the down→up and `hit == target` holds. Confirmed in-game 2026-08-10 (playtest 2026-08-10T09-02-17).
+The parked narrow fallback change (`fix-mass-delete-click-target`, which would have made the control
+activate on a moving target directly) was retired unused when reconcile shipped.
+
 **Symptom (0.2.0 title-pencil): clicking a button crashes with `NullReferenceException` in
 `ButtonState.PlaySound` (`Button.cs:109`, shipped `gui@3.1.0`), reached from
 `GestureDetector.OnPointerDown` → `SetState` → `PlaySound` → `base.Element.Owner.GetSoundPlayer()`.** The
@@ -1971,6 +1986,117 @@ idea for an editable/auto-focused row — height-expand is the WRONG tool there.
   `Widgets/Animations/AnimationController.cs`, `AnimatedBuilder.cs`, `Curves.cs` (`Interval`); focus path
   `Widgets/Input/Focus.cs` + `Gestures/EventDispatcher.cs`; caret gate `Core/Input/RenderTextField.cs`.
 
+### `SetState` / `MarkNeedsBuild` is DEFERRED — a State can safely schedule its OWN rebuild from an animation `onEnd` (2026-08-10)
+
+Confirmed against `Element.MarkNeedsBuild` + `BuildOwner.ScheduleBuildFor`/`BuildDirtyElements`
+(`Widgets/Framework/`). `SetState`/`MarkNeedsBuild` does NOT rebuild synchronously — it just adds the
+element to `BuildOwner`'s `_dirtyElements` set (idempotent: a second `MarkNeedsBuild` on an
+already-dirty element is a no-op), drained on the next `BuildDirtyElements` pass. That drain loops
+`while (_dirtyElements.Count > 0)` and its doc-comment explicitly says it "handles cascaded rebuilds
+from animation controllers or state changes triggered inside `Build()`."
+
+**Consequence:** a callback firing from inside the animation tick pump (e.g. a collapse's `onEnd`) MAY
+call `SetState` to schedule *its own* subtree's rebuild — there is no re-entrancy, because the rebuild
+is queued, not run inline. This is why `ScribeAnimatedList` retires its completed ghosts with a plain
+`SetState` from `onEnd` and needs **no** host-visible `needsCleanup` flag. The editor's hand-wired path
+DOES use such a flag (`needsEditorCollapseCleanup`) — but only because its `onEnd` rebuilds a
+*different, ancestor* subtree (`RebuildBody` on the dialog body), which would be re-entrant to walk from
+inside a descendant's tick. Rule of thumb: **scheduling a rebuild of your own element from a tick
+callback is safe; synchronously rebuilding an ancestor is not** — defer the latter to `OnRenderGUI`.
+(`BuildDirtyElements` also sorts dirty elements shallow-first and skips any element a parent rebuild
+already cleaned, so a parent+child both going dirty in one frame rebuilds the child once, not twice.)
+
+### A self-owned `AnimationController` on a reconcile-reused State must sync in BOTH directions — start-only is a latent bug ForceRebuild masks (2026-08-10)
+
+Root-caused the long-standing "HUD task loses its text, leaving a bare checkbox" bug (see memory
+[[hud-fade-text-stale-controller-bug]]). `ScribeFadeText` (`HudScribePins.cs`) drives its own
+`AnimationController` to ramp text opacity 1→0 during the destructive-pending window, and `Build`
+computes `opacity = controller == null ? 1 : 1 - controller.Value`. The `EnsureFading` helper only ever
+STARTED a controller and never cleared one. On a LATE undo (fade ≈ complete, `Value ≈ 1` → opacity ≈ 0)
+the row reverts to `Fading: false` but keeps the stale completed controller — so the text stays
+invisible forever.
+
+**Why it went from intermittent to reliable:** the reconcile HUD conversion (§ below / commit `ec4864a`)
+replaced the HUD's `ForceRebuild` repaint with a reconciling `SetState`. `ForceRebuild` unmounts +
+recreates the tree, so the undo landed on a FRESH `controller == null` state → text visible (the bug
+self-healed). Reconcile REUSES the row element (its State survives), so `InitState` doesn't re-run and
+the stale controller persists. **Element reuse turns a start-only controller into a permanent bug.**
+
+**Fix / rule:** make the sync bidirectional — dispose the controller when the driving flag goes false
+(`SyncFadeController` runs from BOTH `InitState` and `UpdateWidget`; disposing there is safe because both
+run during the build phase, not from inside the ticker callback). General lesson: **any State that owns
+an `AnimationController` and can be reconcile-reused must reconcile the controller in BOTH directions in
+`UpdateWidget` — create/start on the on-transition AND dispose/clear on the off-transition.** Don't rely
+on a remount to reset it; under reconcile there is no remount.
+
+### Reconciling-rebuild discipline: persistent body + `SetState`, `ForceRebuild` reserved for genuinely-new trees (2026-08-10)
+
+The `reconcile-animating-surfaces` change replaced the "every update is a `ForceRebuild()`" habit with a
+disciplined split. The rule for any Scribe dialog surface:
+
+- **In-place update (same tree, changed data) → reconcile via `SetState`.** Each dialog owns ONE
+  persistent-root `ScribeDialogBody` (allocated once via a `GlobalKey`/`bodyKey`, NEVER in `Build()`); every
+  in-place mutation — add/delete/reorder a row, a pin push, a completion toggle, a tick repaint, an external
+  resync of the SAME item-count-or-keyed set — routes through a `RebuildBody()`/`RebuildHudBody()` that does
+  a reconciling `SetState` on that body. Reconcile REUSES each row's live element + State, so caret, unsaved
+  text, scroll offset, hover, and in-flight animations all survive. This is what killed the flicker /
+  lost-hover / dead-mass-delete-first-click / caret-loss class of bugs — they were all symptoms of the tree
+  being torn down and rebuilt under the user.
+- **Genuinely-new tree → keep `ForceRebuild()`.** Reserved for: read⇄editor⇄settings VIEW SWITCHES, a fresh
+  editor seed, lost-lock recovery, and the still-`ForceRebuild` non-reconciled views (History/Timer/Visitors).
+  These legitimately want a from-scratch remount, and they pair with `CaptureScrollForRestore()` because the
+  remount re-derives content height and clamps the offset toward 0.
+- **Row identity is load-bearing.** Rows must be keyed by a STABLE `ValueKey<Guid>(TaskId)`, not
+  `ValueKey<int>(index)` — a positional key makes reconcile mis-associate a surviving row with a departed
+  one's element (wrong caret, wrong animation). A departing/collapsing row is spliced back at its held display
+  index under its OWN TaskId key (wrapped in `ScribeRowSizeAnimation`), so no slot swaps widget TYPE at a key.
+- **A reconcile-reused State must reconcile ALL its self-owned resources in BOTH directions** (see the
+  `AnimationController` note above) — start-only / arm-only logic that relied on a remount to reset is a
+  latent bug once the surface reconciles.
+
+### An entry/exit wrapper that appears-then-disappears at a slot REMOUNTS the child (type-swap) — keep it on a caret-bearing row for life (animate-row-insertion, 2026-08-12)
+
+The reconciler matches a slot's widget frame-to-frame by `Widget.CanUpdate` = `GetType() == GetType() &&
+Equals(Key, Key)`. So *adding or removing a wrapper widget around a row across a reconcile changes the slot's
+type and remounts the whole child subtree* — even though the row's own key never changed. For the
+**auto-focused new editor row** that is fatal: remounting rebuilds its `GuiElementTextInput` and the
+caret/selection is lost mid-keystroke.
+
+Baked into `ScribeAnimatedList` + `ScribeSlideIn`: the entry wrapper **stays on the row for the row's entire
+live lifetime** (every appearance is kept-for-life; `entering` is a plain `HashSet<Guid>`, no per-mode retire
+logic). Once the slide completes it renders an inert `Opacity(1) > Transform(identity)` pass-through, never
+removed. `ScribeSlideIn.Build` therefore ALWAYS returns the same `Opacity > Transform > child` shape (even
+not-animating: `Opacity(1f, Transform.Translate(child, Vector2.Zero))`), so the subtree shape is identical
+whether sliding, settled, or pass-through — no type-swap ever occurs at that slot. This is why the shipped
+entry is a paint-only translate (`Transform` passes layout through unchanged → full height in-slot from frame
+one) rather than the earlier height-grow, which changed the row's height every frame under the caret; see
+`docs/animation-lessons-learned.md` "Row ENTRY animation."
+
+Corollary to the "row identity is load-bearing" bullet above: keying by a stable `Guid` is necessary but not
+sufficient — the *type* at the slot must also stay stable across the frames where you care about identity.
+
+### CORRECTION to the `ListView` child-cache notes above — the read view no longer uses `ListView` (D4, 2026-08-10)
+
+The two facts above (~line 1394 "Scribe's `RefreshReadView` uses `ForceRebuild`"; ~line 1421 "The read view
+keeps `ListView`") were true when written but are now SUPERSEDED by `reconcile-animating-surfaces` §5 (design
+D4, Tier 2). The `ListView` child-cache trap — a same-count parent `SetState` keeps the cached row widget
+because `ListViewContent.DataIdentity` is hardwired to the `ScrollController` and has no public seam to feed a
+document-identity token (Tier 1 is UNREACHABLE without forking `gui`) — was resolved not by fighting the cache
+but by **dropping `ListView` from the read view entirely.** The read view now uses the SAME non-virtualized
+`Scrollbar > SingleChildScrollView > Column` of ALL rows the editor already used, re-keyed
+`ValueKey<Guid>(TaskId)`, and routes `RefreshReadView` through `RebuildBody()` (reconcile) instead of
+`ForceRebuild()`. So a same-count external resync now reconciles and reuses surviving rows; the child-cache
+caveat simply no longer applies to any Scribe surface (a lectern doc is a small checklist, so non-virtualized
+costs nothing, and read/editor content heights now match by construction instead of via `estimatedItemHeight`).
+
+**Fact (add-timer-gearworks, 2026-08-11): rotating a self-loaded raster in the widget tree, three ways to render a "gear," and the ForceRebuild-snap trap.** Building the Timer-tab clockwork established the working pattern for an animated textured widget:
+
+- **Rotate a self-loaded PNG:** decode it once with `capi.Assets.TryGet(loc, loadAsset:true)` → `SKBitmap.Decode` (NOT `Image`/`SkiaAssetLoader`, which silently no-op after startup — see the self-load fact elsewhere in this section), cache the `SKBitmap`, put it in a `Container { BoxStyle.Texture = bmp }`, and wrap that in `AnimatedRotation` (or a raw `Transform.Rotate` about center). `AnimatedRotation` is the crash-safe choice — a raw rotate on a zero-size box produces a NaN Skia matrix / GPU crash, so guard for non-zero size if you use `Transform.Rotate` directly.
+- **`ForceRebuild` SNAPS every stock `Animated*` widget.** This is the single biggest gotcha. An `Animated*` widget only tweens across a *reconcile*; on a fresh **mount** it seeds `Begin == End` and jumps. Any host that calls `ForceRebuild()` on a state change (the Timer tab does, in `RefreshTimerView`) remounts the subtree, so an `AnimatedRotation`/`AnimatedSlide` whose target changed across that rebuild snaps instead of animating (this caused the "wheel disappears then re-slides + half-tick on fire" glitch). **Fix pattern:** derive the animated value from a **monotonic clock / host-stamped timestamp** that survives the remount, not from widget `State`. Rotation angle = `floor(elapsedMs/period) × stepAngle`; a slide's progress = `(nowMs − hostStampedStartMs) / durationMs` eased manually. The widget is still a self-ticking `StatefulWidget` (a game-tick listener calls `SetState`/`MarkNeedsBuild` to repaint), but the *value* is a pure function of the clock, so it's rebuild-stable.
+- **Three ways to draw a "gear," and which we picked:** (1) render the REAL 3D `game:gear-temporal` item via `ItemStackDisplay` + `ItemStackRenderer` (an `IPreSkiaRenderer` in the `gui` dep, composites a real `ItemStack` into the Skia canvas through an offscreen FBO, macOS-safe) — **evaluated and rejected**: it works but the real item is an irregular *lattice* with a continuous spin, so it can neither mesh nor tick per tooth. (2) Raw GL quads rotated with `GlPushMatrix/GlRotate` in `OnRenderGUI` (the Gearlock Firearms technique) — recorded only as a **documented fallback** (the mod otherwise makes zero raw-`capi.Render` calls). (3) **Chosen:** authored/procedural 2D raster in the Skia widget tree per the first bullet. Faked mesh = one monotonic driver × per-gear `(sign, ratio)` constants (`ratio = referenceTeeth/thisGearTeeth`), positions hand-tuned so painted teeth interlock — no physics.
+- **Procedural raster sizing to avoid blur:** generate at a size LARGER than the displayed physical px (we used 512² for a ~212 logical-px wheel) so `DrawMaskedBox`'s bilinear resample only ever *downsamples* (crisp) rather than upscales (blurry). Cache + dispose the bitmap on the same path as loaded PNGs.
+- **`DrawMaskedBox` reuses `SharedPaint.Color` without setting it** (the textured-`Container` path) — so a gear is modulated by whatever the previous draw op left on the one shared `SKPaint`. A single top-level reset can't help when many ops paint between it and each gear; reset opaque-white + clear `ColorFilter`/`ImageFilter` immediately before EACH textured draw. (This is the same `SharedPaint` leak the dialog backdrops hit; see the tablet-backdrop note.)
+
 ## Held-item dialog flickers closed on FIRST open of a not-yet-crafted item (2026-08-06)
 
 **Symptom: the first time a player opens a Scribe item they did NOT craft (notebook, clockmaker's
@@ -2004,6 +2130,116 @@ holding — "did the thing in my hand stop being a Scribe item?"). Split the two
 active hand no longer holds ANY `IScribeDocumentItem` (a presence check, not identity). Avoid
 frame-count/grace-period hacks — this project has moved away from timing-based GUI workarounds.
 Note the tablet's legit wet→hard/fired transition ALSO rides `SlotModified`, so don't break it.
+
+## "White flash" behind a Scribe dialog is a one-frame WORLD-TERRAIN dropout on EVERY open, CAUSED BY the parchment-backdrop bitmap paint (root cause confirmed 2026-08-11) — NOT a GUI white-clear, NOT a reconcile regression (2026-08-10)
+
+**Symptom: opening a Scribe surface flashes WHITE for one frame before the dialog resolves.**
+Originally reported as first-open-only and suspected as a `reconcile-animating-surfaces` regression.
+BOTH of those first guesses turned out wrong; corrected below. This is the misdiagnosis-prone
+render-state class — every claim here is either an in-game measurement or a source read, not a theory.
+
+**What the frames actually show (OpenCV extract of the tester's capture, looked at directly):**
+- The flash frame's **dialog is pixel-identical to its resolved state** — the GUI is NOT painting white.
+- What's missing is the **opaque chunk-terrain pass**: near room geometry gone → the pale sky-dome
+  gradient shows through (reads as "white"). Everything else survives ON that empty sky — distant
+  entities (entity pass), the leaded-glass window's *glass* panes but not its opaque wooden frame (OIT/
+  transparent pass), the block-selection wireframe, and the composited dialog. So exactly ONE render
+  pass (opaque terrain) drops for one frame while all others render normally.
+
+**Two first guesses, both DISPROVEN by measurement:**
+1. *"First-open-per-session only" (cold GPU/asset hitch).* WRONG. In-game: it flashes on EVERY open of
+   every Scribe item and block, same magnitude each time (confirmed by the tester + a 3-flash OpenCV
+   scan, one flash per open, identical brightness). A once-per-session lazy cost (GRContext shader
+   compile, backdrop `SKBitmap.Decode`/upload) would hit open #1 only — so those are NOT the cause.
+2. *"Regression of the reconcile change."* WRONG — but ruled out the right way, by BISECT: built the
+   pre-reconcile commit `5f6022a` (verified `ScribeDialogBody` absent) in an isolated worktree, staged
+   it, tester confirmed the flash STILL happens. It is pre-existing, present before any of this branch.
+   (The `git diff main...HEAD` also touches ZERO render/GL/Skia/stage code, consistent with this.)
+
+**The discriminator that localizes it (in-game, tester-run):** the flash fires for the Lectern,
+Notebook, and Tablet — but NOT for `.ui showcase` LibGUI windows, NOT when clicking inside an open
+Scribe window, and NOT for the Scribe Settings window opened by the HUD gear. The Settings window is a
+plain `ScribeSettingsDialog : GuiBase` that is *deliberately NOT wrapped in the pixel-art parchment
+backdrop* (`ScribeSettingsDialog.Build`, comment lines 78-83); the three that DO flash all go through
+`ScribeDialogBase`/`GuiDialogBlockEntityBase` AND paint the 1024×1160 parchment backdrop
+(`WrapBackdrop`, `ScribeDialogBase.Layout.cs:88` — pixel-art ON → `BoxStyle { Texture = bmp }`; OFF →
+plain `SizedBox`, no texture). So the isolated variable is **painting the parchment backdrop bitmap on
+open** — NOT generic LibGUI (showcase is clean), NOT the Skia flush / shared framebuffer (same renderer,
+clean for showcase/Settings), NOT block interaction (Notebook/Tablet are held items — `TryOpen()` only,
+no `MarkDirty`/chunk touch).
+
+**What it is NOT, from source (first-resort DLL/vendored reads):**
+- `SystemRenderTerrain.OnRenderOpaque` has NO dialog gate — it always draws every chunk pool; the
+  terrain-blank is the pools being momentarily EMPTY (a re-tesselation), not the engine choosing to hide
+  terrain. `ClientMain.RedrawAllBlocks` (requeue every chunk) is the only "all pools empty" path, but its
+  ONLY triggers are the `.redrawall` command + the `smoothShadows`/`instancedGrass` settings watchers —
+  NONE fire on dialog open, so a full requeue is not the trigger either.
+- `GuiManager.OnGuiOpened` only reorders the GUI list — touches zero render/framebuffer/chunk state.
+- `SkiaRenderer.Begin/End` snapshots + restores GL state around its flush; it's shared with the clean
+  `.ui showcase` path, so the renderer itself is exonerated.
+
+**DISCRIMINATOR RESOLVED (2026-08-11, playtest `f79c21bf`, fix-dialog-open-white-flash §1.1):** opened a
+flashing surface with Pixel Art Display toggled OFF (backdrop → plain `SizedBox`, no texture) and the
+flash was **GONE** ("The flash is gone!"). So **painting the parchment backdrop bitmap on open is the
+confirmed mechanism** — this is the last isolated variable, now nailed down by measurement, not theory.
+The working hypothesis above is confirmed; the fix work moves to §2.
+
+**Fix direction (§2):** pre-decode/pre-upload the backdrop as a persistent GPU texture at mod load so no
+per-open cold upload lands on a live frame, and investigate why Skia's texture for it looks evicted
+between closes → re-uploaded (the per-open re-upload is what stalls the opaque-terrain pass for a frame).
+Do NOT add render-path/GL code to Scribe blindly; verify any fix with the DEBUG frame-trace method.
+Related prior first-open work: `fix-item-dialog-first-open-flicker` (a DIFFERENT bug — dialog flicker-close
+from a DocId guard, not this terrain dropout).
+
+## Sampling the light reaching the player (brightness + color) — the engine uses TWO inputs, not one (2026-08-12)
+
+**Task: shade a GUI (or anything client-side) by the real light around the player — how bright AND what
+color.** The mistake is to reach for a single scalar. The engine's own recipe (`IRenderAPI
+.PreparedStandardShader(posX,posY,posZ)`, which is what standard surfaces are lit by) combines TWO
+sources, so a faithful mod-side approximation must too:
+
+- **`IBlockAccessor.GetLightRGBs(pos)` → `Vec4f`** (also `GetLightRGBs(x,y,z)`). **XYZ = block-light RGB**
+  — a torch/lantern's warm hue is baked in here via each block's `LightHsv`, so this is where torch
+  *warmth* comes from. **W = the sun-brightness SCALAR (0..1)**, NOT a color. So `GetLightRGBs` ALONE makes
+  daylight look colorless (W has no hue) and misses weather. Fed to the shader as `RgbaLightIn`.
+- **`ICoreClientAPI.Ambient` (`IAmbientManager`)** supplies what the block grid lacks: **`BlendedAmbientColor`
+  (`Vec3f`)** = the sky/daylight HUE, and **`BlendedSceneBrightness` (`float`)** = weather/rain darkening.
+  Fed to the shader as `RgbaAmbientIn`. These vary SMOOTHLY frame-to-frame (unlike the grid).
+
+Combine them yourself: brightness ≈ `max(blockLightLuma, sunW * sceneBrightness)`; hue ≈ block-light RGB
+blended toward `BlendedAmbientColor` weighted by which is actually lighting the player. `GetLightLevel(pos,
+EnumLightLevelType.MaxTimeOfDayLight)` is a 0..32 scalar with NO color — not enough on its own.
+
+**Thread safety:** read `GetLightRGBs` on the RENDER/MAIN thread only. Relighting runs on a background
+thread; an off-thread block-accessor read races it. `OnRenderGUI` is a safe point.
+
+**Quantize before it drives a cached paint.** LibGUI caches each dialog's tree in an `SKPicture` and only
+re-records on `MarkNeedsPaint`; a continuously-varying light value would re-record EVERY frame and defeat
+the cache (measurable hitch on the pixel-art parchment backdrops). Snap brightness+hue to coarse buckets and
+only propagate a CHANGED bucket. The grid's own sun-brightness is already a 0..32 lookup, so this loses
+little. (Scribe: `ScribeAmbientLightSampler` + `ScribeGlobalTint`, respect-local-illumination.)
+
+**Flickering / dynamic PLACED point lights are UNREADABLE via public API.** VS dynamic lights are the
+`IPointLight` system — SHADER-ONLY: `IRenderAPI.AddPointLight/RemovePointLight` have no getter, and the
+active list is `internal List<IPointLight> pointlights` on `ClientMain`. A *steady placed* torch/lantern
+still registers (it's baked into the block-light grid `GetLightRGBs` reads); only the per-frame flicker of a
+*placed* source is missed, and reading it would mean reflecting into a private engine field — deferred.
+
+**BUT a HELD light's flicker (Immersive Lanterns) IS readable — for free.** IL (decompiled 0.4.1) is NOT a
+private point-light system: `ModSystemImmersiveLanterns.SetupFlickerPatching()` Harmony-**Postfixes
+`CollectibleObject.GetLightHsv(IBlockAccessor, BlockPos, ItemStack)`** (+ `BlockLantern`'s override). That
+patch (a) **early-returns when `pos != null`** — so it flickers HELD/inventory items only, never placed
+blocks (a placed-grid query passes a real pos); (b) modifies **V (brightness index) ONLY**, never H/S — pure
+brightness flicker, no hue shift; (c) sine-flickers between a min/max factor (torch `0.75..1.0` over
+100–300ms; lantern/candle/lamp `0.75..1.0` over 500–1000ms), all amplitudes/cadences read from VS
+`ClientSettings` `flickeringlights-*` keys, tunable in IL's own config dialog. So if you already sample a
+held item's light via `GetLightHsv(blockAccessor, pos: null, stack)` (as `TryHeldLight` does), **you receive
+IL's flickered V every frame with no dependency, reflection, or flicker-matching code** — the only thing that
+can erase it is your OWN temporal smoothing. Detect IL with `capi.ModLoader.IsModEnabled("immersivelanterns")`
+and, when present, stop low-pass-filtering the held-brightness term so the flicker survives (Scribe:
+unify-held-light-flicker splits the held term out of `ScribeAmbientLightSampler`'s ~400ms ease). Depends only
+on the *observable* result (a flickering `GetLightHsv` for held items) + the stable modid, not IL internals,
+so it degrades gracefully if IL changes its patch shape.
 
 ## Item state-transition (`Harden`/`Dry`) and firepit smelt both DROP stack attributes on transform (2026-08-02)
 

@@ -170,7 +170,7 @@ public sealed class ScribePlayerSettings
 
     /// <summary>Inclusive lower bound clamped on load, so a hand-edited value can't shrink the Lectern
     /// (and its center tasks column) below a usable size.</summary>
-    public const int MinPixelArtSize = 300;
+    public const int MinPixelArtSize = 400;
 
     /// <summary>Inclusive upper bound clamped on load, so a hand-edited value can't blow the Lectern up
     /// past the screen.</summary>
@@ -201,6 +201,35 @@ public sealed class ScribePlayerSettings
 
     /// <summary>The default task-font value: empty string = the built-in body font (no override).</summary>
     public const string DefaultTaskFontFamily = "";
+
+    /// <summary>Minimum brightness the Scribe GUI can be shaded down to in total darkness
+    /// (respect-local-illumination D5). The dialog's illumination shade multiplies its rendered brightness
+    /// by the light reaching the player, but never below this floor, so a player in a pitch-black cave with
+    /// no light source still sees the GUI at least this dim. Default <see cref="DefaultIlluminationFloor"/>
+    /// (dim-but-faintly-legible); lowerable toward <see cref="MinIlluminationFloor"/> (effectively
+    /// unreadable) for players who want the punishing end, or raised to <see cref="MaxIlluminationFloor"/>
+    /// (=1.0, the pre-illumination always-full-bright behavior) to opt out entirely. A per-player,
+    /// client-local preference: never server-synced. Clamped on load (<see cref="ClampIlluminationFloor"/>);
+    /// an absent key → this code default (so an old config file just gets the default floor). This is the
+    /// ONLY persisted state this feature adds — the sampled light itself is transient render-only.</summary>
+    public float IlluminationFloor { get; set; } = DefaultIlluminationFloor;
+
+    /// <summary>Default <see cref="IlluminationFloor"/> for a player who has never changed it. This is the
+    /// y-value of the leftmost control point of the author-drawn brightness response curve
+    /// (<see cref="ScribeBrightnessCurve"/>) — i.e. the GUI brightness at zero local light — so the shipped
+    /// default reproduces that curve exactly. Near-black (the "really struggle to read in total darkness"
+    /// end the feature was asked for), still a hair above the <see cref="MinIlluminationFloor"/> so it never
+    /// renders a fully-black/blank-looking dialog.</summary>
+    public const float DefaultIlluminationFloor = 0.03f;
+
+    /// <summary>Inclusive lower bound clamped on load: the "effectively unreadable" end. Not exactly 0 so a
+    /// hand-edited config can't render the GUI perfectly black (which would read as a broken/blank dialog);
+    /// a hair above black keeps it recoverable while still demanding a light source.</summary>
+    public const float MinIlluminationFloor = 0.02f;
+
+    /// <summary>Inclusive upper bound clamped on load: <c>1.0</c> = always full brightness regardless of the
+    /// surrounding light, i.e. the pre-illumination behavior, for players who want to opt the shade out.</summary>
+    public const float MaxIlluminationFloor = 1.0f;
 
     /// <summary>The task-font families the selector offers, by exact registered family name. The empty
     /// string (<see cref="DefaultTaskFontFamily"/>) is the implicit first choice (built-in body font) and
@@ -256,6 +285,12 @@ public sealed class ScribePlayerSettings
 
     /// <summary>Clamps a loaded HUD row width to the safe range (see <see cref="HudRowWidth"/>).</summary>
     public static int ClampHudRowWidth(int value) => Math.Clamp(value, MinHudRowWidth, MaxHudRowWidth);
+
+    /// <summary>Clamps a loaded illumination floor to <see cref="MinIlluminationFloor"/>..<see
+    /// cref="MaxIlluminationFloor"/>, so a hand-edited value can't drive the GUI fully black or above full
+    /// brightness (see <see cref="IlluminationFloor"/>).</summary>
+    public static float ClampIlluminationFloor(float value) =>
+        Math.Clamp(value, MinIlluminationFloor, MaxIlluminationFloor);
 
     /// <summary>Clamps a loaded Pixel Art Size to <see cref="MinPixelArtSize"/>..<see cref="MaxPixelArtSize"/>
     /// AND snaps it to the nearest 10px, so a hand-edited value settles onto the 10-step grid the UI uses
@@ -324,6 +359,7 @@ public sealed class ScribePlayerSettings
         HudFontScale = ClampFontScale(HudFontScale);
         WindowFontScale = ClampFontScale(WindowFontScale);
         TaskFontFamily = NormalizeTaskFontFamily(TaskFontFamily);
+        IlluminationFloor = ClampIlluminationFloor(IlluminationFloor);
         return this;
     }
 }

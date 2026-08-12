@@ -290,13 +290,195 @@ the `ForceRebuild` host is the gate, and `AnimatedSize` is still callback-less. 
 legitimately easier case than the DELETE-collapse this doc killed, and Path B is a modest, proven way
 to get it without touching the reconciler.
 
+## Re-evaluation: reconcile for IDENTITY, not for stock animations (2026-08-09)
+
+Prompted by a fresh round of animation pain — the list-collapse **stale-hover** fix (shipped),
+plus the **mass-delete first-click-doesn't-register** bug and a general "every animation is a
+bespoke fight, and I keep abandoning them" frustration. This section reframes what reconcile is
+*for*, because the framing above (and Path C) quietly conflated two different goals and, having
+killed one, looked like it killed both.
+
+**The trap this doc itself fell into.** Everything above weighs reconcile **in service of making
+animations stock** — and against *that* goal, reconcile is correctly buried (R1: no `AnimatedSize`
+`onEnd`; R2: positional reconciler restarts in-flight collapses). Path C is "a grave already dug."
+**All true, and it still stands: the stock-animation goal stays dead.** But that is not the only
+reason to reconcile, and it was never the one that maps to the day-to-day pain.
+
+**The goal reconcile actually serves: killing the identity-loss class.** `ForceRebuild` disposes
+*every* `State` / `AnimationController` / `RenderObject` and mounts a brand-new tree. Everything
+that is *identity* — hover state, focus/caret, `EventDispatcher`'s press-capture (`_capturedElement`
+is a concrete Element **reference**), a live animation controller — is destroyed at the rebuild.
+That single fact is the root of a whole family of bugs we have each fixed bespoke:
+
+- the **one-frame flicker** after a rebuild (accepted as inherent),
+- **lost hover** when a row slides/rebuilds under a still cursor (fixed via the `ScribeHoverRefreshLatch`),
+- **first-click-doesn't-delete** mid-collapse (a moving-target *and* a rebuild-divide race: press
+  captures Element A, a rebuild replaces it, release can never match `hit == target`),
+- caret/scroll-offset loss across a rebuild (fixed via `autoFocusRowOnRebuild` + capture-restore).
+
+Each of those is a **scaffold to smuggle identity past a `ForceRebuild` that need not happen on that
+surface.** On the **reconcile** path (`SetState` → dirty-only rebuild → `UpdateChild`/`CanUpdate`
+*reuses* the same Element+State+RenderObject when type+key match) that identity is **never torn
+down**, so the entire class evaporates — no latch, no re-home, no capture-restore. That is the
+value proposition this doc never scored, because it was only ever asking "does reconcile make
+animations stock?" (no) and never "does reconcile stop the identity churn?" (yes, definitively).
+
+**What does NOT change, and must not be re-litigated:**
+
+- **The self-ticking animation stack STAYS and gets *generalized*, not deleted.** R1 and R2 are
+  permanent: `AnimatedSize` has no completion callback, and the reconciler is positional, so a
+  mid-list delete still remounts trailing rows and restarts their motion. The host-owned,
+  identity-keyed, self-ticking controller (`ScribeCollapsible` + `ScribeCollapseRegistry`) is the
+  load-bearing answer to *motion* **regardless of reconcile**. The 2026-07-27 refactor died
+  because it tried to *delete* this stack (task group 6, "simplify toward stock"); the whole change
+  was thrown out with that one false sub-goal. **This time the harness is the deliverable, not the
+  casualty** — generalize it into one reusable enter/exit/reorder primitive.
+- **Fade is not an escape hatch.** `AnimatedOpacity` is the *same* live-controller-vs-rebuild class
+  (snaps on `ForceRebuild`), plus it composites to an offscreen `SaveLayer` for the entire mid-fade
+  duration and stays hit-testable at α=0. Look-choice only; rides the same harness.
+
+**Why this is not the same grave (the honest differences from 2026-07-27):**
+
+1. **Different, correct value proposition** — kill identity churn (flicker/hover/click/caret), NOT
+   "stock animations." The measurable wins are the bug class, not code deletion.
+2. **Keep + generalize the self-ticking harness** — the exact thing last time tried to delete.
+3. **Playtest is a per-surface gate, first-class** — last time was "build-clean, 102/102 tests,
+   **never playtested**," and died before the only gate that matters for GUI work.
+4. **Mine, don't merge.** The abandoned `refactor-reconciling-gui-rebuild` branch is **259 commits
+   behind main** and rewrote `GuiDialogScribeLecternLibGui.cs`, which has since been split into the
+   `ScribeDialogBase*.cs` partials — un-rebaseable. Its one durable artifact is
+   `src/Mod/ScribeListView.cs` (107 lines, never adopted): lift it as a **reference**, don't merge.
+
+**Standing guidance for the next person (including future me):** if you are reaching for reconcile,
+be explicit about *which* goal. "Make animations stock" → stop, read R1/R2, it's dead. "Stop the
+identity churn / make the rebuild stop destroying hover/focus/capture/controllers" → valid, and the
+subject of the `reconcile-animating-surfaces` change (2026-08-09). Do not sell the second goal on the
+first goal's promises, or it gets buried with them again.
+
+## The diffing container: motion for free by comparing frames (extract-animated-task-list, 2026-08-10)
+
+Follow-through on the 2026-08-09 reframe: with reconcile in place (a widget subtree now *survives* a
+data mutation), the departing-ghost choreography that was hand-wired into the editor — and copied into
+the HUD, and missing from the Pinned tab — becomes extractable into **one rendering-agnostic container**,
+`ScribeAnimatedList`. A surface gets the editor's collapse-on-removal animation "for free" by rendering
+its rows through it and mutating **only its data**; it never learns the animation vocabulary.
+
+**How it works.** The container is a `StatefulWidget` whose State caches the id-keyed rows it rendered
+last frame. On each rebuild it diffs the incoming live ids against the cached set (the pure math is in
+Core's `ScribeListDiff`, unit-tested game-free): an id present last frame but absent now is a **departure**
+— it is spliced back at the slot it left, wrapped in `ScribeRowSizeAnimation(Collapse)` from a host-owned
+registry, rendered as a frozen ghost. When the collapse finishes the container drops the ghost itself.
+
+**Two things it deliberately does NOT abstract:**
+
+1. **Content / layout (D6).** It touches exactly two things about a row — its stable `Guid` and its height
+   — and never inspects what the row renders. The caller supplies the row widgets AND the layout wrapper
+   (a `layoutBuilder` taking the final ordered list). So an editable task row, a static Read line, a
+   multi-column Guestbook entry are all "a widget at an id"; each view's content stays free to diverge.
+   There is **no "view behavior profile"** layer — that was explicitly rejected as a miscut that would
+   fight the divergence.
+2. **Scroll-pin + hover-refresh (open question §2.7, resolved: NOT autonomous).** Those touch
+   dialog-level state — the shared `ScrollController`, `RootElement`, `RefreshHoverAtCursor` — so they
+   **stay in the host's `OnRenderGUI`**, driven off the *same host-owned* `ScribeAnimationRegistry`'s
+   `AnyAnimating` that the container animates against. The container packages diff/ghost/slot/self-cleanup;
+   the host keeps the two inherently dialog-level loops (plus an `onDepartureSettled` callback for the final
+   scroll clamp). The registry is host-owned precisely so the host can read `AnyAnimating` without reaching
+   into the container's State. Trying to make the container fully autonomous would mean it hooking a
+   post-layout point and owning a scroll controller it doesn't create — more coupling, not less.
+
+**The one improvement over the editor's hand-wired path: self-cleanup, no host flag.** The editor defers
+its ghost retirement through a `needsEditorCollapseCleanup` bool processed in `OnRenderGUI`, because its
+`onEnd` fires from inside the animation pump and it rebuilds the *dialog* tree (a cross-tree `RebuildBody`)
+— re-entrant if done directly. The container instead calls `SetState` from its own `onEnd`: LibGUI's
+`MarkNeedsBuild` is **deferred** (it adds the element to `BuildOwner`'s dirty set, drained on the next
+`BuildDirtyElements`, which explicitly "handles cascaded rebuilds from animation controllers or state
+changes triggered inside `Build()`"). So the container schedules its *own local* rebuild with no
+re-entrancy and no host-visible flag; the next `Build` retires every ghost whose controller `IsComplete`.
+This is safe only because the rebuild is local to the container — the editor's flag exists because IT
+rebuilds a *different* (ancestor) subtree.
+
+**Ghost source (D2).** A live interactive row is unsafe to freeze in place (its checkbox/field/gestures
+would stay live mid-collapse, and its focus node is gone once the data leaves), so each `ScribeAnimatedListItem`
+supplies an explicit static `Ghost`. The Pin Tab reuses `ScribeFrozenEditorRow` via a `ScribeEditRowData`
+adapter (`Pinned:false` — a Pin Tab row has no resting tint), so it collapses byte-identically to the
+editor. The container falls back to caching the live `Child` only for a genuinely static row.
+
+**Adopted on the Pinned tab first** (no animation before → highest payoff, no risk to already-playtested
+surfaces), then the **editor and Read view** were migrated onto the same container in `animate-row-insertion`
+(2026-08-11) — so three of the four animating surfaces now share one motion path and only the **HUD** stays
+bespoke (its migration, plus the `Delayed` undo-window/fade policy the HUD needs, is promoted to its own
+follow-up change `migrate-hud-onto-animated-list`; the `Delayed` enum value still **throws** today so it
+can't ship half-built).
+
+## Row ENTRY animation: uniform slide-in, realized (animate-row-insertion, 2026-08-12)
+
+The 2026-07-30 re-check above sketched a "ScribeRevealable" grow-on-mount widget (Path B) as the way to
+make an added row *enter* with motion instead of popping in. With the editor now on `ScribeAnimatedList`
+and rebuilding via `RebuildBody()` (reconcile, container State survives), that sketch is **realized** — but
+as a capability *of the container*, not a standalone widget. The container already diffs frame-to-frame, so
+an id present now but absent last frame is an **appearance** (the mirror of the departure seam it already
+had). The Core `ScribeListDiff` reports appearances; the container animates them.
+
+**One uniform slide, not a height grow (the design that shipped).** The *first* cut tried a focus split:
+grow non-focused rows (`ScribeRowSizeAnimation(Reveal)`), fade the auto-focused new row at full height
+(`ScribeFade`). Two findings killed that:
+1. **The full-height fade "appeared instantly"** (playtest `d87250f4`, 2026-08-12). An opacity-only fade at
+   a fixed position over 200ms against the parchment is *too subtle to read as motion*. A moving row is
+   unmistakable; a same-position fade is not.
+2. **Growing a variable-height row is the caret hazard**, not the fix for it. Height changes every frame, so
+   a wrapped-text row shrinks/mislocates its own caret and the `pendingEnsureVisible` scroll-to fights the
+   changing height.
+
+So the shipped entry is **one motion for every appearance: `ScribeSlideIn`** — the row takes its **full
+height in its slot from frame one** (the translate is *paint-only*: `Transform` passes layout constraints
+through unchanged), and only the *painted content* translates in from above while fading up. Translation is
+the primary read; the fade is layered polish off the **same controller value** (one controller, no
+per-row bookkeeping doubling — the trap that made the old D4 symmetry-fade "not cheap"). Because height is
+final from the first frame, the caret, pointer hit-tests, and ensure-visible all work against final geometry
+immediately — which is *why* a uniform motion is now safe for the auto-focused row too (the whole reason the
+focus split existed is gone). `RenderTransform.GlobalToChild` inverts the matrix for hit-testing, so a click
+lands where the row is **drawn** mid-slide. No view learns any entry vocabulary; the container wraps every
+appeared id and the surface just supplies the row set.
+
+**The load-bearing reconciler finding: the entry wrapper must stay on the row for its whole lifetime.**
+LibGUI's reconciler is **positional by (type + key)** (`Widget.CanUpdate` = `GetType()==GetType() &&
+Equals(Key,Key)`). If a wrapper is present at a slot one frame and gone the next, the slot's widget *type*
+changes and the reconciler **remounts the inner subtree** — which for the auto-focused row would destroy its
+`GuiElementTextInput` and lose the caret mid-keystroke. So `ScribeSlideIn.Build` **always** renders the same
+`Opacity > Transform > child` shape (returning `Opacity(1f, Transform.Translate(child, Vector2.Zero))` when
+settled/not animating), and the container **keeps the wrapper on the row for its entire live lifetime** — an
+inert identity pass-through once the slide completes, never removed, never a type-swap. (This is why there is
+no per-mode retire logic anymore: every entry is kept-for-life, so `entering` is a plain `HashSet<Guid>`, not
+a mode map.)
+
+**Opacity floor.** `ScribeSlideIn` clamps rendered opacity to `MinOpacity = 0.02f` rather than starting at
+literal 0. `RenderOpacity` skips paint entirely at `Opacity <= 0.001f`, so a true-zero start frame would
+flash a one-frame gap under a live caret; the floor keeps the first frame paintable while still reading as
+"fading in."
+
+**`firstBuild` suppression.** On open / view-switch / any `ForceRebuild`, the container remounts fresh with
+an empty `prevLiveIds`, so *every* row looks like an appearance and the whole list would animate in at once.
+A `firstBuild` flag suppresses entry animation on that first build after (re)mount — only genuine
+frame-to-frame additions on a *surviving* container animate.
+
+**Distinct entry vs collapse registry keys.** Entry controllers are keyed `EntryKey(id)` = `"enter:"+id`,
+separate from the collapse `Key(id)`. Without the prefix a slide-then-delete of one id would *resume* the
+already-`Complete` entry controller instead of starting a fresh collapse — rendering an instantly-closed
+ghost. Same host-owned registry, disjoint key namespaces, so `AnyAnimating` (and thus the host's scroll-pin +
+hover-latch loops) covers entry automatically with no new wiring.
+
 ## Pointers
 
 - `src/Mod/GuiDialogScribeLecternLibGui.cs` — the three `OnRenderGUI` settling loops,
   `CaptureScrollForRestore`, and the two v1 race fixes (`RefreshReadView` guard,
   `ToggleEditorTask` re-home). Also documented in `VSAPI-NOTES.md` `## LibGUI`.
-- `src/Mod/ScribeCollapsible.cs` — the collapse widget, height-factor render box, and
-  host-owned registry (the pattern this doc defends).
+- `src/Mod/ScribeRowSizeAnimation.cs` — the collapse/reveal height-factor widget + render box, the
+  host-owned `ScribeAnimationRegistry` (the pattern this doc defends), and `ScribeSlideIn` (the parallel
+  registry-driven `Opacity > Transform` wrapper for the uniform row entry slide).
+- `src/Mod/ScribeAnimatedList.cs` — the diffing container (motion-only, D6), including the appearance seam
+  and the uniform `ScribeSlideIn` entry (kept-for-life, `entering` is a plain id set);
+  `src/Core/ScribeListDiff.cs` — its pure, game-free identity diff
+  (tested in `tests/Core.Tests/ScribeListDiffTests.cs`).
 - `src/Mod/HudScribePins.cs` — `ScribeFadeText` (self-ticking fade) lives at the bottom.
 - `VSAPI-NOTES.md` `## LibGUI` section — the `ForceRebuild`-snaps-animations note and the
   stock `ListView` child-cache note.

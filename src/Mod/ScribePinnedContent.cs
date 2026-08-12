@@ -49,7 +49,9 @@ internal sealed class ScribePinnedContent : StatefulWidget
         Action<ScribeCompletionPolicy> onCompletionPolicyChanged,
         EdgeInsets policyPickerPadding,
         ScribeRowStyle style,
-        ScrollController scrollController)
+        ScrollController scrollController,
+        ScribeAnimationRegistry collapseRegistry,
+        Action onDepartureSettled)
     {
         Rows = rows;
         FocusNodes = focusNodes;
@@ -65,6 +67,8 @@ internal sealed class ScribePinnedContent : StatefulWidget
         PolicyPickerPadding = policyPickerPadding;
         Style = style;
         ScrollController = scrollController;
+        CollapseRegistry = collapseRegistry;
+        OnDepartureSettled = onDepartureSettled;
     }
 
     public IReadOnlyList<ScribePinRowData> Rows { get; }
@@ -85,6 +89,14 @@ internal sealed class ScribePinnedContent : StatefulWidget
     public ScribeRowStyle Style { get; }
     /// <summary>Dialog-owned scroll controller shared by all views; NOT disposed here.</summary>
     public ScrollController ScrollController { get; }
+    /// <summary>Host-owned collapse controllers for the Pin Tab's departing rows (extract-animated-task-list),
+    /// passed through to the <see cref="ScribeAnimatedList"/> so a removed pin's row collapses out instead of
+    /// snapping. The dialog owns its lifetime (survives the resync reconcile) and reads its <c>AnyAnimating</c>
+    /// to drive scroll-pin/hover in <c>OnRenderGUI</c>; NOT disposed here.</summary>
+    public ScribeAnimationRegistry CollapseRegistry { get; }
+    /// <summary>Fired (deferred) when a departing pin row's collapse completes and the list has shrunk, so the
+    /// dialog can re-clamp the shared scroll extent — see <see cref="ScribeAnimatedList.OnDepartureSettled"/>.</summary>
+    public Action OnDepartureSettled { get; }
 
     public override State CreateState() => new ScribePinnedContentState();
 }
@@ -125,19 +137,25 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
         var colors = Theme.Of(context).ColorScheme;
         TextStyle labelStyle = new() { FontSize = 14, Color = colors.OnSurface };
 
-        Widget scrollBody;
-        if (Widget.Rows.Count == 0)
-        {
-            scrollBody = new Padding(
-                EdgeInsets.All(12),
-                child: new Text(
-                    Lang.Get("scribe:scribe-gui-pintab-empty"),
-                    new TextStyle { FontSize = 14, Color = colors.OnSurfaceVariant, SoftWrap = true }));
-        }
-        else
-        {
-            var rows = Widget.Rows
-                .Select((r, i) => (Widget)new ScribePinRow(
+        // Route the rows through ScribeAnimatedList (extract-animated-task-list): the container diffs the
+        // TaskId-keyed set frame-to-frame, so a pin removed by complete/unpin/delete — which lands here as a
+        // now-absent row on the OnMyPinsChanged reconcile — collapses out (rows below sliding up) instead of
+        // snapping. The container abstracts MOTION only: it decides row ORDER (live rows + collapsing ghosts
+        // spliced at their old slots) and hands that ordered list to OUR layoutBuilder below, which keeps the
+        // Pin Tab's own Scrollbar > SingleChildScrollView > Column shape. Immediate policy (no undo window —
+        // the Pin Tab's Completion Policy is visible/editable and it has discrete unpin/delete controls, so
+        // its removals are affirmative choices).
+        //
+        // Each live row is the same TaskId-keyed ScribePinRow as before (its ScribeMultilineField State — hence
+        // caret + unsaved buffer — reconciles across a resync). Each departing row supplies an explicit frozen
+        // ghost: a live pin row is unsafe to freeze in place (its checkbox/field/gestures would stay live mid-
+        // collapse and its focus node is gone once the pin leaves the set), so we snapshot it as a static
+        // ScribeFrozenEditorRow — the same [grip-spacer][checkbox][text] shape the editor's ghost uses, so the
+        // Pin Tab and editor collapse identically. Pinned:false → no resting tint (a Pin Tab row has none).
+        var items = Widget.Rows
+            .Select((r, i) => new ScribeAnimatedListItem(
+                Id: r.TaskId,
+                Child: new ScribePinRow(
                     data: r,
                     index: i,
                     focusNode: Widget.FocusNodes.TryGetValue(r.TaskId, out var fn) ? fn : null,
@@ -157,20 +175,37 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                     style: Widget.Style,
                     // Key by TaskId (not index) so a row's field State + element identity track the pin
                     // across a reorder/resync rebuild rather than by list position.
-                    key: new ValueKey<Guid>(r.TaskId)))
-                .ToList();
+                    key: new ValueKey<Guid>(r.TaskId)),
+                Ghost: new ScribeFrozenEditorRow(
+                    new ScribeEditRowData(Index: i, IsTask: true, Done: r.Done, Pinned: false, TaskId: r.TaskId, Text: r.Text),
+                    Widget.Style)))
+            .ToList();
 
-            scrollBody = new Scrollbar(
-                controller: Widget.ScrollController,
-                child: new SingleChildScrollView(
+        Widget scrollBody = new ScribeAnimatedList(
+            items: items,
+            registry: Widget.CollapseRegistry,
+            policy: ScribeListRemovalPolicy.Immediate,
+            onDepartureSettled: Widget.OnDepartureSettled,
+            // The layout wrapper is ours (D6 seam): the container passes the ordered widget list (live rows +
+            // any collapsing ghosts) and we wrap it exactly as before. When that list is empty — no live rows
+            // AND no ghost still collapsing — show the empty-state prompt; this keeps the placeholder from
+            // popping in before the LAST removed row has finished collapsing.
+            layoutBuilder: rows => rows.Count == 0
+                ? new Padding(
+                    EdgeInsets.All(12),
+                    child: new Text(
+                        Lang.Get("scribe:scribe-gui-pintab-empty"),
+                        new TextStyle { FontSize = 14, Color = colors.OnSurfaceVariant, SoftWrap = true }))
+                : new Scrollbar(
                     controller: Widget.ScrollController,
-                    child: new Column(
-                        spacing: 0,
-                        crossAxisAlignment: CrossAxisAlignment.Stretch,
-                        mainAxisSize: MainAxisSize.Min,
-                        children: rows)))
-            { AutoHide = false };
-        }
+                    child: new SingleChildScrollView(
+                        controller: Widget.ScrollController,
+                        child: new Column(
+                            spacing: 0,
+                            crossAxisAlignment: CrossAxisAlignment.Stretch,
+                            mainAxisSize: MainAxisSize.Min,
+                            children: rows)))
+                { AutoHide = false });
 
         // Completion-policy picker: the same control the Settings window offers, editing the one shared
         // per-player preference (scribe-pin-editor — "one value, two hosts"). Positioned as the view's

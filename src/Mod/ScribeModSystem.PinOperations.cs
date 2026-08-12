@@ -100,43 +100,30 @@ public sealed partial class ScribeModSystem
         // to a plain Unpin (zero-point-three-fixes §7.5 / D8) — so completing simply clears the pin.
         policy = CollapsePolicyForReadOnlySource(policy, resolved ? docHost : null);
 
-        // Apply the completion policy — only on a transition INTO done (unchecking never removes).
-        if (nowDone)
+        // Apply the completion policy — only on a transition INTO done (unchecking never removes). The
+        // Delete/Sink/Unpin mapping lives in the shared Core decision (reconcile-animating-surfaces D9);
+        // here we DISPATCH it through the persistence-aware write-through (MoveTaskToBottomFromReader /
+        // DeleteTaskFromReader mark the source dirty and resync) and the pin store, rather than re-deriving
+        // the switch. The pin removal is applied here regardless of whether the source resolves (the pin is
+        // store-authoritative), while the document action is best-effort (a gone source just skips it).
+        var decision = ScribeCompletion.Decide(nowDone, policy);
+        switch (decision.DocAction)
         {
-            switch (policy)
-            {
-                case ScribeCompletionPolicy.Unpin:
-                    changed |= pinStore.RemovePin(player.PlayerUID, docId, taskId);
-                    Trace("  policy Unpin: removed {0}'s pin on task {1}", player.PlayerName, taskId);
-                    break;
-                case ScribeCompletionPolicy.UnpinSink:
-                    // Unpin (stay) + Sink: remove the pin AND move the task to the bottom of the source doc.
-                    changed |= pinStore.RemovePin(player.PlayerUID, docId, taskId);
-                    if (resolved && docHost!.MoveTaskToBottomFromReader(taskId))
-                        Trace("  policy UnpinSink: removed pin and moved task {0} to bottom of source doc {1}", taskId, docId);
-                    else
-                        Trace("  policy UnpinSink: removed pin on task {0} (source unresolvable for sink)", taskId);
-                    break;
-                case ScribeCompletionPolicy.Delete:
-                    if (resolved && docHost!.DeleteTaskFromReader(taskId))
-                        Trace("  policy Delete: removed task {0} from source doc {1}", taskId, docId);
-                    else
-                        Trace("  policy Delete: source unresolvable for task {0} — pin removed only", taskId);
-                    changed |= pinStore.RemovePin(player.PlayerUID, docId, taskId);
-                    break;
-                case ScribeCompletionPolicy.Sink:
-                    // Sink is a REAL document reorder (scribe-lectern-view-consistency): move the task to
-                    // the bottom of the shared source, so every viewer — read/editor/pinned view and the
-                    // HUD — sees the same order. Keep the (now-done) pin. Best-effort: a gone source just
-                    // leaves the pin done in the store (the HUD still sinks it client-side by done-state).
-                    if (resolved && docHost!.MoveTaskToBottomFromReader(taskId))
-                        Trace("  policy Sink: moved task {0} to bottom of source doc {1}", taskId, docId);
-                    break;
-                case ScribeCompletionPolicy.Keep:
-                default:
-                    // Keep leaves the (now-done) pin in place; nothing is removed or reordered.
-                    break;
-            }
+            case ScribeCompletionDocAction.SinkToBottom:
+                if (resolved && docHost!.MoveTaskToBottomFromReader(taskId))
+                    Trace("  policy {0}: moved task {1} to bottom of source doc {2}", policy, taskId, docId);
+                break;
+            case ScribeCompletionDocAction.Delete:
+                if (resolved && docHost!.DeleteTaskFromReader(taskId))
+                    Trace("  policy Delete: removed task {0} from source doc {1}", taskId, docId);
+                else
+                    Trace("  policy Delete: source unresolvable for task {0} — pin removed only", taskId);
+                break;
+        }
+        if (decision.ShouldRemovePin)
+        {
+            changed |= pinStore.RemovePin(player.PlayerUID, docId, taskId);
+            Trace("  policy {0}: removed {1}'s pin on task {2}", policy, player.PlayerName, taskId);
         }
 
         if (changed) PushPinsTo(player);
@@ -294,25 +281,20 @@ public sealed partial class ScribeModSystem
         policy = CollapsePolicyForReadOnlySource(policy, docHost);
 
         // Apply the policy on the shared document — only on a transition INTO done (unchecking never moves
-        // or removes). No pin to unpin here, so Unpin/Keep are plain toggles.
-        if (nowDone)
+        // or removes). No pin to unpin here (Decision.ShouldRemovePin is irrelevant — there is no pin), so
+        // only the document action matters; dispatch it through the write-through. Shared decision table
+        // (reconcile-animating-surfaces D9), so this path can never drift from the pinned/editor paths.
+        var decision = ScribeCompletion.Decide(nowDone, policy);
+        switch (decision.DocAction)
         {
-            switch (policy)
-            {
-                case ScribeCompletionPolicy.Sink:
-                case ScribeCompletionPolicy.UnpinSink: // no pin to unpin for an unpinned task — just sink
-                    if (docHost.MoveTaskToBottomFromReader(taskId))
-                        Trace("  policy Sink(unpinned): moved task {0} to bottom of source doc {1}", taskId, docId);
-                    break;
-                case ScribeCompletionPolicy.Delete:
-                    if (docHost.DeleteTaskFromReader(taskId))
-                        Trace("  policy Delete(unpinned): removed task {0} from source doc {1}", taskId, docId);
-                    break;
-                case ScribeCompletionPolicy.Unpin:
-                case ScribeCompletionPolicy.Keep:
-                default:
-                    break;
-            }
+            case ScribeCompletionDocAction.SinkToBottom:
+                if (docHost.MoveTaskToBottomFromReader(taskId))
+                    Trace("  policy {0}(unpinned): moved task {1} to bottom of source doc {2}", policy, taskId, docId);
+                break;
+            case ScribeCompletionDocAction.Delete:
+                if (docHost.DeleteTaskFromReader(taskId))
+                    Trace("  policy Delete(unpinned): removed task {0} from source doc {1}", taskId, docId);
+                break;
         }
     }
 

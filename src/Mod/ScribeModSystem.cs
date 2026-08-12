@@ -40,6 +40,12 @@ public sealed partial class ScribeModSystem : ModSystem
     /// <c>scribe-client-config.json</c> on disk is simply left unread (harmless).</summary>
     public const string HudConfigFileName = "scribe-hud-config.json";
 
+    /// <summary>DEV-ONLY client-local JSON holding the live gearworks-layout tuning knobs
+    /// (<see cref="ScribeGearTuning"/>), opened via the <c>.geartune</c> command. Separate from the real
+    /// preference file so this throwaway art-tuning aid never touches player settings; delete alongside the
+    /// tool when the layout is finalized.</summary>
+    public const string GearTuningConfigFileName = "scribe-gear-tuning.json";
+
     private ICoreClientAPI? capi;
     private ICoreServerAPI? sapi;
 
@@ -88,6 +94,15 @@ public sealed partial class ScribeModSystem : ModSystem
     /// never server-synced. The Core POCO doubles as the config's serialized shape. Non-null on the
     /// client after <see cref="StartClientSide"/>.</summary>
     private ScribePlayerSettings? mySettings;
+
+    /// <summary>DEV-ONLY live gearworks-layout tuning (<see cref="ScribeGearTuning"/>), persisted to
+    /// <see cref="GearTuningConfigFileName"/> and loaded in <see cref="StartClientSide"/>. Lazily defaulted
+    /// so it is never null (mirrors <see cref="mySettings"/>).</summary>
+    private ScribeGearTuning? gearTuning;
+
+    /// <summary>The single DEV gearworks-tuning window (<c>.geartune</c>), lazily built + reused; disposed
+    /// in <see cref="Dispose"/>. Null until first opened, and on a pure server.</summary>
+    private ScribeGearTuningDialog? gearTuningDialog;
 
     /// <summary>Client-side cache of self-loaded dialog backdrop bitmaps, keyed by asset-location string
     /// (see <see cref="GetBackdropBitmap"/>). Holds a <c>null</c> value for an asset that could not be
@@ -171,6 +186,10 @@ public sealed partial class ScribeModSystem : ModSystem
     /// itself.</summary>
     public void NotifySettingsVisibilityChanged() => SettingsVisibilityChanged?.Invoke();
 
+    /// <summary>DEV: raised whenever a gearworks-tuning knob changes in the <c>.geartune</c> window, so an
+    /// open Clockmaker's Notebook Timer tab rebuilds its gearworks live off the new values.</summary>
+    public event Action? GearTuningChanged;
+
     public override void Start(ICoreAPI api)
     {
         base.Start(api);
@@ -220,6 +239,11 @@ public sealed partial class ScribeModSystem : ModSystem
         // A missing/corrupt file loads as defaults; Normalize() clamps any hand-edited out-of-range value.
         mySettings = (api.LoadModConfig<ScribePlayerSettings>(HudConfigFileName) ?? new ScribePlayerSettings()).Normalized();
 
+        // DEV: live gearworks-layout tuning (a never-touched file loads as the current baked-in defaults).
+        gearTuning = (api.LoadModConfig<ScribeGearTuning>(GearTuningConfigFileName) ?? new ScribeGearTuning()).Normalized();
+        RegisterGearTuneCommand(api);
+        RegisterScribeLightCommand(api);
+
         RegisterCustomIcons(api);
         RegisterCustomFonts(api);
 
@@ -265,6 +289,8 @@ public sealed partial class ScribeModSystem : ModSystem
         }
         settingsDialog?.Dispose();
         settingsDialog = null;
+        gearTuningDialog?.Dispose();
+        gearTuningDialog = null;
         if (backdropCache is not null)
         {
             foreach (var bmp in backdropCache.Values) bmp?.Dispose();
