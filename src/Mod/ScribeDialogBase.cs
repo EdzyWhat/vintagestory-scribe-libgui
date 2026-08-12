@@ -327,6 +327,20 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// <summary>The mod system, cached for per-player pin queries and the pin/complete network sends.</summary>
     protected readonly ScribeModSystem modSystem;
 
+    /// <summary>Samples the light reaching the player each frame and folds it into a quantized (brightness,
+    /// tint) shade the whole dialog is rendered at (respect-local-illumination). Constructed once per dialog;
+    /// read only on the render thread in <see cref="OnRenderGUI"/>. Bound to the live
+    /// <see cref="ScribeModSystem.MySettings"/> so a floor change takes effect on the next sample.</summary>
+    private readonly ScribeAmbientLightSampler lightSampler;
+
+    /// <summary>The current quantized illumination shade, refreshed each frame from <see cref="lightSampler"/>
+    /// and read by <see cref="BuildBodyTree"/> to configure the <see cref="ScribeGlobalTint"/> wrap. Seeded to
+    /// the identity (full brightness, neutral tint) so the very first build — before the first sample — looks
+    /// exactly like the pre-illumination dialog. When the quantized value CHANGES, <see cref="OnRenderGUI"/>
+    /// calls <see cref="RebuildBody"/> so LibGUI re-records the paint cache with the new shade; on a static
+    /// scene it never changes, so the cache stays valid (D3).</summary>
+    private ScribeAmbientLightSampler.Shade currentShade = new(1f, 1f, 1f, 1f, changed: false);
+
     /// <summary>Stable identity of the single persistent-root <see cref="ScribeDialogBody"/> that wraps the
     /// dialog body (reconcile-animating-surfaces §3.1). Allocated ONCE here (never in <see cref="Build"/>,
     /// per the <see cref="GlobalKey"/> contract) so <see cref="RebuildBody"/> can reach the live body State
@@ -350,6 +364,10 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     {
         this.host = host;
         modSystem = capi.ModLoader.GetModSystem<ScribeModSystem>();
+
+        // Light sampler for the ambient-illumination shade (respect-local-illumination). Bound to the live
+        // MySettings so a floor change is picked up on the next frame's sample; only read on the render thread.
+        lightSampler = new ScribeAmbientLightSampler(capi, modSystem.MySettings);
 
         // Install the real-or-silent UI sound player for this player's current mute preference
         // (scribe-mute-ui-sounds); GuiBase's ctor already set a real SoundPlayer, so this only needs to

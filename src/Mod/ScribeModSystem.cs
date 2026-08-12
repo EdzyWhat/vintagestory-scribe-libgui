@@ -242,6 +242,7 @@ public sealed partial class ScribeModSystem : ModSystem
         // DEV: live gearworks-layout tuning (a never-touched file loads as the current baked-in defaults).
         gearTuning = (api.LoadModConfig<ScribeGearTuning>(GearTuningConfigFileName) ?? new ScribeGearTuning()).Normalized();
         RegisterGearTuneCommand(api);
+        RegisterScribeLightCommand(api);
 
         RegisterCustomIcons(api);
         RegisterCustomFonts(api);

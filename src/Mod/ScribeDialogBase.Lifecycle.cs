@@ -35,6 +35,18 @@ public abstract partial class ScribeDialogBase
     {
         base.OnRenderGUI(deltaTime);
 
+        // Sample the light reaching the player and shade the whole dialog to match (respect-local-illumination).
+        // Read here on the render/main thread only (block-accessor reads off the relight thread are unsafe).
+        // The sampler eases the shade toward its new value over ~100ms and quantizes the result to coarse
+        // brightness+hue buckets, reporting whether that bucket CHANGED since last frame; only then do we
+        // reconcile the body so LibGUI re-records its SKPicture with the new ScribeGlobalTint config (D3).
+        // During a light transition the bucket steps for a few frames (each a rebuild) then holds; on a static
+        // scene it's stable → no rebuild, cache intact. RebuildBody marks the body dirty for the NEXT frame's
+        // build (a frame-late tint update is imperceptible) and REUSES every row, so a live light change never
+        // disturbs the caret or scroll.
+        currentShade = lightSampler.Sample(deltaTime);
+        if (currentShade.Changed) RebuildBody();
+
         // Keep the window (hence the OuterArtBox art canvas) sized to the live Pixel Art Size (task 7.1).
         // The base only sets the window Size in CreateWindowConfig, which TryOpen runs ONCE per open — so a
         // live W change re-lays-out the content tree (via ForceRebuild) but leaves the window's _layoutSize

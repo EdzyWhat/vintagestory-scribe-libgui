@@ -2191,6 +2191,40 @@ Do NOT add render-path/GL code to Scribe blindly; verify any fix with the DEBUG 
 Related prior first-open work: `fix-item-dialog-first-open-flicker` (a DIFFERENT bug — dialog flicker-close
 from a DocId guard, not this terrain dropout).
 
+## Sampling the light reaching the player (brightness + color) — the engine uses TWO inputs, not one (2026-08-12)
+
+**Task: shade a GUI (or anything client-side) by the real light around the player — how bright AND what
+color.** The mistake is to reach for a single scalar. The engine's own recipe (`IRenderAPI
+.PreparedStandardShader(posX,posY,posZ)`, which is what standard surfaces are lit by) combines TWO
+sources, so a faithful mod-side approximation must too:
+
+- **`IBlockAccessor.GetLightRGBs(pos)` → `Vec4f`** (also `GetLightRGBs(x,y,z)`). **XYZ = block-light RGB**
+  — a torch/lantern's warm hue is baked in here via each block's `LightHsv`, so this is where torch
+  *warmth* comes from. **W = the sun-brightness SCALAR (0..1)**, NOT a color. So `GetLightRGBs` ALONE makes
+  daylight look colorless (W has no hue) and misses weather. Fed to the shader as `RgbaLightIn`.
+- **`ICoreClientAPI.Ambient` (`IAmbientManager`)** supplies what the block grid lacks: **`BlendedAmbientColor`
+  (`Vec3f`)** = the sky/daylight HUE, and **`BlendedSceneBrightness` (`float`)** = weather/rain darkening.
+  Fed to the shader as `RgbaAmbientIn`. These vary SMOOTHLY frame-to-frame (unlike the grid).
+
+Combine them yourself: brightness ≈ `max(blockLightLuma, sunW * sceneBrightness)`; hue ≈ block-light RGB
+blended toward `BlendedAmbientColor` weighted by which is actually lighting the player. `GetLightLevel(pos,
+EnumLightLevelType.MaxTimeOfDayLight)` is a 0..32 scalar with NO color — not enough on its own.
+
+**Thread safety:** read `GetLightRGBs` on the RENDER/MAIN thread only. Relighting runs on a background
+thread; an off-thread block-accessor read races it. `OnRenderGUI` is a safe point.
+
+**Quantize before it drives a cached paint.** LibGUI caches each dialog's tree in an `SKPicture` and only
+re-records on `MarkNeedsPaint`; a continuously-varying light value would re-record EVERY frame and defeat
+the cache (measurable hitch on the pixel-art parchment backdrops). Snap brightness+hue to coarse buckets and
+only propagate a CHANGED bucket. The grid's own sun-brightness is already a 0..32 lookup, so this loses
+little. (Scribe: `ScribeAmbientLightSampler` + `ScribeGlobalTint`, respect-local-illumination.)
+
+**Flickering / dynamic point lights (Immersive Lanterns etc.) are UNREADABLE via public API.** VS dynamic
+lights are the `IPointLight` system — SHADER-ONLY: `IRenderAPI.AddPointLight/RemovePointLight` have no
+getter, and the active list is `internal List<IPointLight> pointlights` on `ClientMain`. A *steady placed*
+torch/lantern still registers (it's baked into the block-light grid `GetLightRGBs` reads); only the
+per-frame flicker is missed. Reading it would mean reflecting into a private engine field — deferred.
+
 ## Item state-transition (`Harden`/`Dry`) and firepit smelt both DROP stack attributes on transform (2026-08-02)
 
 **Symptom: a tablet/food item that "becomes" another item over time (dries, hardens, fires) loses its

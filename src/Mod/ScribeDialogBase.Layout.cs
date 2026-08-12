@@ -54,9 +54,21 @@ public abstract partial class ScribeDialogBase
         bool pixelArt = modSystem.MySettings.PixelArtDisplay;
         var layout = host.GetLayout(modSystem.MySettings.PixelArtSize);
 
-        return new Theme(
-            ResolveTheme(pixelArt),
-            child: WrapBackdrop(pixelArt, layout, BuildOuterArtBox(layout)));
+        // Shade the ENTIRE composed dialog (backdrop + chrome + text) by the light reaching the player
+        // (respect-local-illumination D2/D4). Wrapping OUTSIDE the Theme means the SaveLayer flattens the
+        // whole tree and the one brightness/tint matrix applies uniformly to every surface, with no per-dialog
+        // wiring. currentShade is refreshed each frame in OnRenderGUI; when it stays in the same quantized
+        // bucket the widget is configured identically, so LibGUI's paint cache is undisturbed (D3). A
+        // full-bright neutral shade (the seed, and full daylight) is the identity — ScribeGlobalTint skips the
+        // layer entirely then, so the fully-lit dialog is pixel-for-pixel the pre-illumination look.
+        return new ScribeGlobalTint(
+            new Theme(
+                ResolveTheme(pixelArt),
+                child: WrapBackdrop(pixelArt, layout, BuildOuterArtBox(layout))),
+            brightness: currentShade.Brightness,
+            tintR: currentShade.TintR,
+            tintG: currentShade.TintG,
+            tintB: currentShade.TintB);
     }
 
     /// <summary>The <see cref="ThemeData"/> this dialog wraps its tree in — <c>protected virtual</c> so a

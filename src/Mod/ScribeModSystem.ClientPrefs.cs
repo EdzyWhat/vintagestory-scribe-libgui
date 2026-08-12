@@ -70,6 +70,19 @@ public sealed partial class ScribeModSystem
             });
     }
 
+    /// <summary>DEV: register the client-side <c>.scribelight</c> command — a one-shot readout of the ambient
+    /// illumination the GUI shade is derived from at the player's current position (raw light in, held light,
+    /// curve output). Used to calibrate <see cref="ScribeBrightnessCurve"/> anchors against real in-game values
+    /// (respect-local-illumination — measure-don't-theorize). Client command, dot-prefix.</summary>
+    private void RegisterScribeLightCommand(ICoreClientAPI api)
+    {
+        api.ChatCommands.Create("scribelight")
+            .WithDescription("[scribe dev] Print the ambient light the Scribe GUI shade is derived from here.")
+            .HandleWith(_ =>
+                Vintagestory.API.Common.TextCommandResult.Success(
+                    ScribeAmbientLightSampler.Describe(api, MySettings)));
+    }
+
     /// <summary>Client-side: whether THIS player has pinned the given task, from the server-pushed
     /// cache. The lectern GUI drives its resting pin tint / pin-glyph accent off this. Returns false
     /// before the first push (a safe default — nothing shows as pinned until the server confirms).</summary>

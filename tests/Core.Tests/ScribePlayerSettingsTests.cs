@@ -254,4 +254,26 @@ public class ScribePlayerSettingsTests
         // X-position switch (only Left anchors add the offset from the left margin).
         Assert.Equal(expected, anchor.IsLeftAnchored());
     }
+
+    // ---- Illumination floor (respect-local-illumination) ----
+
+    [Fact]
+    public void Default_IlluminationFloor_MatchesDrawnCurveFloor()
+    {
+        // The shipped default equals the author-drawn curve's x=0 anchor, so a fresh profile reproduces the
+        // graph exactly. Normalized() leaves an in-range value untouched.
+        Assert.Equal(0.03f, new ScribePlayerSettings().IlluminationFloor, 4);
+        Assert.Equal(0.03f, new ScribePlayerSettings().Normalized().IlluminationFloor, 4);
+    }
+
+    [Theory]
+    [InlineData(-1f, ScribePlayerSettings.MinIlluminationFloor)]   // below range → min (a hair above black)
+    [InlineData(0f, ScribePlayerSettings.MinIlluminationFloor)]    // exactly 0 → clamped up off pure black
+    [InlineData(0.5f, 0.5f)]                                        // in range → unchanged
+    [InlineData(2f, ScribePlayerSettings.MaxIlluminationFloor)]    // above range → 1.0 (always full bright)
+    public void Normalized_IlluminationFloor_ClampsToRange(float stored, float expected)
+    {
+        var s = new ScribePlayerSettings { IlluminationFloor = stored }.Normalized();
+        Assert.Equal(expected, s.IlluminationFloor, 4);
+    }
 }
