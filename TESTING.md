@@ -321,24 +321,31 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > with the shared slide-in; D7 HUD row order now follows the Pin Tab. Build+verify+restage green
 > 2026-08-12. Test the pinned HUD (open a doc, pin tasks); compare against the Pin Tab for ordering.
 
-- [ ] `22251a8d` **HUD undo/fade/collapse parity.** Complete a HUD pin under Unpin and under Delete: the
+- [x] `22251a8d` **HUD undo/fade/collapse parity.** Complete a HUD pin under Unpin and under Delete: the
       row holds LIVE at full height for the same undo window, the text fades as before, the checkbox stays
       clickable, THEN on send it collapses and neighbors slide up. Uncheck within the window → nothing
       sent, text restored, no collapse, no ghost. *(migrate-hud-onto-animated-list 4.3)*
-- [ ] `34908abc` **HUD edge cases.** Sink/UnpinSink still moves the row to the bottom (no departure);
+      - **Confirmed 2026-08-12** via playtest: "It works. All the tests pass."
+- [x] `34908abc` **HUD edge cases.** Sink/UnpinSink still moves the row to the bottom (no departure);
       rapid multi-completion collapses each in its own slot with order preserved; a row sliding under a
       stationary cursor keeps its controls; re-pin while a row is collapsing revives it; the
       `ScribeFadeText` late-undo blank-row fix stays fixed. *(migrate-hud-onto-animated-list 4.4)*
-- [ ] `cf209e8e` **Regression: migrated surfaces.** Editor, Read, and Pin Tab Immediate removals behave
+      - **Confirmed 2026-08-12** via playtest: "It works. All the tests pass."
+- [x] `cf209e8e` **Regression: migrated surfaces.** Editor, Read, and Pin Tab Immediate removals behave
       exactly as before the `Delayed`-member deletion (no behavior change).
       *(migrate-hud-onto-animated-list 4.5)*
-- [ ] `5df44170` **HUD entry slide-in.** Newly pin a task: its HUD row SLIDES in matching editor/Read/Pin
+      - **Confirmed 2026-08-12** via playtest: "It works. All the tests pass."
+- [x] `5df44170` **HUD entry slide-in.** Newly pin a task: its HUD row SLIDES in matching editor/Read/Pin
       Tab (no snap); a row scrolling into the capped window because another collapsed also slides; no
       entry animation on HUD first-open or a ForceRebuild. *(migrate-hud-onto-animated-list 4.6)*
-- [ ] `ac7500de` **HUD ordering agrees with Pin Tab.** Open the Pin Tab and HUD side by side and confirm
+      - **Confirmed 2026-08-12** via playtest: "It works. All the tests pass."
+- [x] `ac7500de` **HUD ordering agrees with Pin Tab.** Open the Pin Tab and HUD side by side and confirm
       they render pins in the SAME order across pin/unpin/complete and under each policy
       (Keep/Unpin/Delete/Sink/UnpinSink); durable-sink bottom-hold and in-window hold behave as before;
       the `40be9d31` cross-surface Sink agreement still holds. *(migrate-hud-onto-animated-list 4.7)*
+      - **Confirmed 2026-08-12** via playtest: "It works. All the tests pass." NOTE this confirms
+        single-document, single-session agreement; a follow-up (`sync-pinned-order-per-player`) addresses
+        cross-document / cross-session order drift, which this item did not exercise.
 
 ## fix-dialog-open-white-flash
 
