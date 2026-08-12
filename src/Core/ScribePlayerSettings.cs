@@ -170,7 +170,7 @@ public sealed class ScribePlayerSettings
 
     /// <summary>Inclusive lower bound clamped on load, so a hand-edited value can't shrink the Lectern
     /// (and its center tasks column) below a usable size.</summary>
-    public const int MinPixelArtSize = 300;
+    public const int MinPixelArtSize = 400;
 
     /// <summary>Inclusive upper bound clamped on load, so a hand-edited value can't blow the Lectern up
     /// past the screen.</summary>

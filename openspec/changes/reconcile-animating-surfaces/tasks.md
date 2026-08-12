@@ -137,7 +137,14 @@
   past one scroll page, scroll to bottom, delete the last row — the close-up should ease, not snap.
   CONFIRMED 2026-08-10 (playtest 2026-08-10T09-02-17): "It's so goooooood." Fix commit `fcf1a5d`.]
 
-- [ ] 3.11 Eliminate the WHITE FLASH on Scribe dialog open (playtest 2026-08-10; author demands a fix,
+- [~] 3.11 SPLIT OUT — does NOT block this change's archive (decided 2026-08-10). The white flash is
+  BISECT-CONFIRMED PRE-EXISTING (reproduces on `5f6022a`, before `ScribeDialogBody`) and orthogonal to
+  the reconcile identity work — the branch diff touches zero render/GL/stage code — so gating archive on
+  it would be wrong. Moved to its own change `fix-dialog-open-white-flash` (proposal + tasks + a
+  mechanism-agnostic `gui-backdrop` delta; `openspec validate` passes), which carries the full diagnosis
+  below forward to a fix. The author's "demand a fix, not a diagnosis" stands — it is honored THERE, on
+  its own timeline, not here. Original characterization retained for the record:
+  Eliminate the WHITE FLASH on Scribe dialog open (playtest 2026-08-10; author demands a fix,
   not just a diagnosis). CHARACTERIZED but NOT yet fixed (2026-08-10). It is a one-frame **opaque
   chunk-terrain pass dropout** (OpenCV frame extract: dialog pixel-identical, sky shows through where
   near geometry should be; entities + OIT-transparent glass panes + selection wireframe all survive).
@@ -203,21 +210,93 @@
 
 ## 5. Read-view external resync (design D4) — after §4
 
-- [ ] 5.1 Choose the tier: spike Tier 1 (`DataIdentity` token into stock `ListView`) timeboxed; fall
+- [x] 5.1 Choose the tier: spike Tier 1 (`DataIdentity` token into stock `ListView`) timeboxed; fall
   back to Tier 2 (Scribe-owned `ScribeListView`, mined from the reference impl) if the non-public cache
-  path isn't cleanly reachable without forking `gui`.
-- [ ] 5.2 Move `RefreshReadView` (and the per-player pin-tint repaint) onto the chosen container so a
-  same-count external change reconciles instead of `ForceRebuild()`.
-- [ ] 5.3 Playtest: a second client toggling a task repaints the read view (external resync) without a
-  full-tree rebuild; scroll offset holds.
+  path isn't cleanly reachable without forking `gui`. [**TIER 2** (decided 2026-08-10 by reading the
+  source, not spiking blind). Tier 1 is UNREACHABLE without forking `gui`: `ListView`'s public ctors
+  hardwire the reconcile-reset token — `ListViewContent.DataIdentity` — to the `ScrollController`
+  (ListView.cs:352), and `DataIdentity` has no public constructor parameter, so there is no seam to feed
+  a document-identity token in. Rather than mint a whole new `ScribeListView` widget, Tier 2 here reuses
+  the EDITOR's already-shipped non-virtualized shape (`Scrollbar > SingleChildScrollView > Column` of ALL
+  rows) — the read view now differs from the editor only in which row widget it builds. No new gui-dep,
+  no fork, and read/editor content heights now match by construction (the Column sums exact per-row
+  heights instead of the old `estimatedItemHeight` guess — subsumes fixes 18cd5c60).]
+- [x] 5.2 Move `RefreshReadView` (and the per-player pin-tint repaint) onto the chosen container so a
+  same-count external change reconciles instead of `ForceRebuild()`. [Done 2026-08-10, AWAITING in-game
+  playtest (§5.3). Changes: (a) `ScribeReadContent` read list → non-virtualized `SingleChildScrollView +
+  Column`, rows re-keyed `ValueKey<int>(Index)` → `ValueKey<Guid>(TaskId)` so surviving rows are REUSED
+  across a resync; (b) `ScribeReadRow` gained an `UpdateWidget` that resyncs its optimistic `done` ONLY
+  when the authoritative `Data.Done` actually flips — a pure chrome reconcile (pin re-tint) must not stomp
+  an in-flight local tick, matching the old remount semantics; (c) `RefreshReadView` read branch,
+  `OnMyPinsChanged` read branch, and `OnSettingsVisibilityChanged` read branch all route through
+  `RebuildBody()` (reconcile, offset preserved inherently) + `hoverRefreshLatch.Arm()` instead of
+  `ForceRebuild()` + `CaptureScrollForRestore()`. Non-Read non-editor views (History/Timer/Visitors) keep
+  `ForceRebuild`. Build 0 err / 4 pre-existing warns; 297 Core tests pass; restaged Debug (93 files).]
+- [~] 5.3 Playtest: a second client toggling a task repaints the read view (external resync) without a
+  full-tree rebuild; scroll offset holds. [Single-player proxies to verify NOW without a 2nd client (the
+  true 2-client case is folded into §3.4's backlogged multiplayer session): (a) open Read, scroll down,
+  complete a task on the HUD under Delete policy — the row vanishes and the scroll offset HOLDS (no snap
+  to top); (b) pin/unpin a task from the Read view — the resting tint repaints, scroll + hover hold;
+  (c) toggle a Read-view checkbox — it sticks and doesn't revert on the next resync.]
+  [PLAYTEST 2026-08-10: (a) scroll HOLDS ✅ but the row vanishes INSTANTLY (no collapse anim → §5.5); (b)
+  CONFIRMED ✅; (c) box sticks but an UNPINNED read completion under Delete does NOT refresh the read view
+  (pinned works via the pin push, unpinned has no push → §5.4). Both gaps are read-view-acts-as-listener,
+  see D9. §5.4 (correctness) + §5.5 (animation) below close them; re-run (a)/(c) after.]
+
+- [x] 5.4 Read completion is optimistic-local + shared Core policy (design D9). (a) Extracted the
+  completion-policy semantics into a new pure Core `Scribe.Core.ScribeCompletion` — split two layers after
+  finding the server's persistence-aware write-through: `Decide(nowDone, policy) → Decision(DocAction,
+  ShouldRemovePin)` (the one policy table both sides dispatch off) + `ApplyLocal(doc, taskId, policy)` (the
+  client's optimistic apply). Added `ScribeCompletionTests` (20 tests: each policy's Decide mapping, un-check
+  inertness, ApplyLocal done-flip/Delete/Sink/already-last-Sink/UnpinSink/Unpin/Keep, unknown TaskId, non-task
+  block). (b) Routed the server's `CompleteTaskForPlayer` + `CompleteUnpinnedTaskAtSource` switches through
+  `Decide` (behavior-preserving — same write-through calls, one decision table). (c) `OnReadViewCompleteTask`
+  now applies `ApplyLocal` to a codec-round-trip copy of `host.Document`, writes it through
+  `host.ApplyLocalOptimisticEdit`, calls `RefreshReadView()`, THEN sends the packet — so an unpinned
+  completion refreshes the read view immediately (closes db3c8ff4). (d) Skips the optimistic mutation when
+  `ReadViewIsReadOnly` (server collapses Delete→Unpin on a hard/fired tablet — don't predict a refused
+  mutation). Build clean (0 new warnings); Core green (317).
+
+- [x] 5.5 Read view animates row departures (design D9 / §6.1 read-view slice). Routed `ScribeReadContent`'s
+  row list through `ScribeAnimatedList` (the same container the editor + pinned surfaces use), reusing the
+  editor/Pin-Tab `ScribeFrozenEditorRow` as the collapsing ghost (built from the read row's data) — so a
+  policy-deleted or externally-removed row collapses out instead of vanishing in one frame (closes e5abb165).
+  `ScribeListRemovalPolicy.Immediate` (read removals are affirmative). Moved the empty-hint check INSIDE the
+  container's `layoutBuilder` (mirroring the Pin Tab) so deleting the LAST row still collapses instead of
+  flashing the hint. Added a dialog-owned `readCollapseRegistry` (disposed with the dialog) and OR-ed it into
+  the two `OnRenderGUI` collapse loops (scroll-pin + hover-refresh). Build clean.
+
+- [ ] 5.6 Re-playtest the read view after §5.4/§5.5: (a) complete an UNPINNED task in Read under Delete —
+  the row collapses out immediately and stays gone (no stale row, no need for a view switch); (b) complete a
+  PINNED task in Read under Delete — same result, no regression; (c) Sink policy in Read moves the row to the
+  bottom smoothly; (d) scroll offset still HOLDS through all of the above; (e) a read-only tablet completion
+  is not double-applied / does not flicker a predicted-then-reverted delete.
 
 ## 6. Later surfaces & wrap-up
 
-- [ ] 6.1 Evaluate the tablet and any other animating surfaces for the same conversion; convert or
-  explicitly descope (record which, and why, in the change).
-- [ ] 6.2 Update `VSAPI-NOTES.md` `## LibGUI` with the reconciling-rebuild discipline (persistent
+- [x] 6.1 Evaluate the tablet and any other animating surfaces for the same conversion; convert or
+  explicitly descope (record which, and why, in the change). [DONE 2026-08-10. RESULT: NO surface remains
+  to convert — the tablet, both notebooks (`GuiDialogScribeTablet`, `GuiDialogScribeNotebook`/
+  `GuiDialogClockmakerNotebook`), and the lectern (`GuiDialogScribeLecternLibGui`) ALL extend
+  `ScribeDialogBase` and share `BuildReadContent()`/`BuildEditorContent()`, so they were converted by
+  inheritance the instant §3/§5 landed. The tablet's only per-material wrinkle (fired/hard = read-only) is
+  already handled by §5.4's `ReadViewIsReadOnly` skip. The HUD + Pin Tab are §4. Remaining `ForceRebuild()`
+  sites (audited: base.cs settings-vis/pin fallbacks, ViewSwitching.cs view switches, ClockmakerNotebook
+  timer view) are EXACTLY the §3.3-reserved genuinely-new-tree cases (view switches, fresh seed, lost-lock,
+  History/Timer/Visitors) — correctly KEPT, not descoped. TWO bugs the §5.6 playtest surfaced are SPLIT OUT
+  as follow-ups (like §3.11's white-flash), NOT archive blockers: (1) HUD blank-checkbox recurrence via a
+  Read-view Sink completion (TESTING.md `f2d0a7e5`) — DEBUG `TraceHudRows` instrumentation landed + restaged,
+  backlogged for next session per author; (2) Sink cross-surface ordering disagreement (TESTING.md
+  `40be9d31`). Both are pre-existing/orthogonal to the reconcile identity work.]
+- [x] 6.2 Update `VSAPI-NOTES.md` `## LibGUI` with the reconciling-rebuild discipline (persistent
   content + `SetState`; `ForceRebuild` reserved for new trees / hot-reload) and point the `ListView`
-  child-cache note at the chosen D4 resolution.
+  child-cache note at the chosen D4 resolution. [DONE 2026-08-10. Added two notes to the LibGUI section:
+  "Reconciling-rebuild discipline" (persistent `ScribeDialogBody` + `SetState`; `ForceRebuild` reserved for
+  view switches / fresh seed / lost-lock / History-Timer-Visitors; stable `ValueKey<Guid>(TaskId)`;
+  reconcile-reused State syncs resources bidirectionally) and a "CORRECTION to the `ListView` child-cache
+  notes" pointing the two now-stale facts (~line 1394/1421) at the D4 Tier-2 resolution — the read view
+  dropped `ListView` for the editor's non-virtualized `SingleChildScrollView + Column`, so the child-cache
+  trap no longer applies to any Scribe surface.]
 - [ ] 6.3 Simplify the hover-refresh latch / scroll capture-restore where reconcile now makes them
   dead code on the converted surfaces (keep them where `ForceRebuild` surfaces still need them).
 - [ ] 6.4 If the whole strategy succeeds, retire `fix-mass-delete-click-target` (its bug is resolved

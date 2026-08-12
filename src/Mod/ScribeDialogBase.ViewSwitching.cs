@@ -351,14 +351,25 @@ public abstract partial class ScribeDialogBase
     {
         if (!isEditorMode)
         {
-            if (IsOpened())
+            if (!IsOpened()) return;
+            // Read view (reconcile-animating-surfaces §5): the read list is now non-virtualized and keyed by
+            // ValueKey<Guid>(TaskId), so an external document change (another client toggled a task, or the
+            // Delete completion policy removed one) reconciles in place — surviving rows are REUSED, the
+            // deleted row's element unmounts, and the shared scroll offset is preserved inherently, so no
+            // capture-restore is needed. A completion under a stationary cursor can slide a different row up;
+            // arm the hover latch so the hover-gated pin control re-homes without a mouse wiggle
+            // (fix-list-collapse-stale-hover), harmless when nothing moved.
+            if (viewMode == ScribeLecternView.Read)
             {
-                // Preserve scroll position across this server-pushed rebuild (e.g. a task deleted by
-                // the Delete completion policy). Without this capture the ForceRebuild re-derives
-                // content height and clamps the offset toward 0, same race as OnMyPinsChanged.
-                if (viewMode != ScribeLecternView.Pinned) CaptureScrollForRestore();
-                ForceRebuild();
+                hoverRefreshLatch.Arm();
+                RebuildBody();
+                return;
             }
+            // Other non-editor views (Pinned/History/Timer/Visitors) still ForceRebuild here. Pinned keeps its
+            // offset via reconcile through OnMyPinsChanged; the rest have no scroll state worth capturing, so
+            // capture-restore is gated to the (now Pinned-excluded) remaining cases as before.
+            if (viewMode != ScribeLecternView.Pinned) CaptureScrollForRestore();
+            ForceRebuild();
             return;
         }
 

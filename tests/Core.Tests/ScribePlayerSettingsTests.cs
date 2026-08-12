@@ -111,9 +111,9 @@ public class ScribePlayerSettingsTests
     [Theory]
     [InlineData(2000, 1000)]  // above max -> clamp to max
     [InlineData(1001, 1000)]
-    [InlineData(100, 300)]    // below min -> clamp to min
-    [InlineData(0, 300)]
-    [InlineData(-50, 300)]
+    [InlineData(100, 400)]    // below min -> clamp to min
+    [InlineData(0, 400)]
+    [InlineData(-50, 400)]
     [InlineData(600, 600)]    // in range, already on grid -> unchanged
     public void Normalized_PixelArtSize_ClampsToRange(int raw, int expected)
     {

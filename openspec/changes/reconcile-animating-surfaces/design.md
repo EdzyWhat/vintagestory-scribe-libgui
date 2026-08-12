@@ -133,6 +133,52 @@ Work lands on `reconcile-animating-surfaces`, converted one surface at a time �
 next**. Playtest is a first-class per-surface gate, the step the prior attempt skipped. Rollback =
 don't merge the branch.
 
+### D9 — Read-view completion is optimistic-local + shared Core policy, not a server round-trip (2026-08-10)
+
+The §5 read-view resync playtest (2026-08-10) surfaced two gaps that D4's *resync* mechanism did not
+cover, both rooted in the read view being a passive listener rather than an actor:
+
+1. **Correctness.** Completing a task in the read view sends `ScribeCompleteTaskMessage` and waits. For
+   a **pinned** task the reply rides the pin push (`PushPinsTo` → `MyPinsChanged` → `OnMyPinsChanged` →
+   `RebuildBody`), so the read view repaints. For an **unpinned** task there is no pin push — the only
+   feedback is the block-entity `MarkDirty` resync, which does not reliably refresh the acting client's
+   open read dialog. Result: completing a plain document task under the `Delete`/`Sink` policy mutates
+   the server but the read view keeps showing the stale row until some *other* trigger (view switch, a
+   pin change) rebuilds it. The read view was silently depending on the pin side-channel.
+
+2. **Responsiveness.** Even when the resync does land it is a round-trip, so it can never match the
+   editor's feel — and the editor is snappy precisely because it does **not** wait: `ToggleEditorTask`
+   applies the policy to its local `scratch` document and rebuilds immediately, then sends to the server
+   for confirmation (the resync/`ApplyLocalOptimisticEdit` supersedes it moments later).
+
+**Decision:** the read view completes the same way the editor does — *apply the policy locally, refresh,
+then send* — and the policy semantics are extracted into one pure Core function so no surface re-derives
+them.
+
+- **`Scribe.Core.ScribeCompletion.ApplyPolicy(doc, taskId, policy)`** (new, API-free, unit-tested)
+  becomes the single definition of what a completion does to a document (`Delete` removes the block,
+  `Sink`/`UnpinSink` move it to the bottom, `Unpin`/`Keep` leave the document unchanged), returning an
+  outcome (did the document change; should the actor's pin be removed). The server
+  (`CompleteTaskForPlayer` / `CompleteUnpinnedTaskAtSource`) and every client view call the SAME
+  function — the server on the authoritative doc, a client view on its local copy — instead of the three
+  divergent hand-written `switch`es that exist today.
+- **Read completion** (`OnReadViewCompleteTask`) applies `ApplyPolicy` to a copy of `host.Document`,
+  writes it through `host.ApplyLocalOptimisticEdit`, calls `RefreshReadView()` (the D4 reconcile path),
+  THEN sends the packet. No view depends on whether the task is pinned. The authoritative resync still
+  arrives and supersedes, exactly as the editor's optimistic edit is superseded.
+- **Read-only-source divergence:** the server collapses every document-mutating policy to `Unpin` on a
+  hard/fired tablet (`CollapsePolicyForReadOnlySource`, §7.5). An optimistic client must not predict a
+  delete the server will refuse. The read completion path therefore skips the optimistic document
+  mutation when the source is read-only (`ReadViewIsReadOnly`) and lets the (pin-push-driven) resync
+  drive the visible change — the one case where read completion stays a listener, by design.
+
+**Durability for future views** (the load-bearing point): a new animating surface inherits both
+behaviors by *composition*, never by re-implementation — it calls `ScribeCompletion.ApplyPolicy` for
+the semantics and routes its rows through `ScribeAnimatedList` (D5/§6.1) for the exit motion. This also
+completes §6.1's read-view animation: the read list is the last surface still on a plain `Column`, so a
+policy-driven removal currently disappears instantly; routing it through `ScribeAnimatedList` gives it
+the same collapse-out the editor and pinned surfaces already have.
+
 ## Risks / Trade-offs
 
 - **Focus/caret survival regression** (the hardest invariant, and the editor gate's core test) → convert

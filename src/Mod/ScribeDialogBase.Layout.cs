@@ -558,6 +558,14 @@ public abstract partial class ScribeDialogBase
                 horizontal: 0.04f * host.GetLayout(modSystem.MySettings.PixelArtSize).W),
             style: RowStyle,
             scrollController: sharedScrollController,
+            // Host-owned collapse registry (reconcile-animating-surfaces §5.5): a task removed by a Delete-policy
+            // completion collapses out via ScribeAnimatedList instead of vanishing. Lives on the dialog so the
+            // motion survives the RefreshReadView reconcile, and so OnRenderGUI reads AnyAnimating to pin the
+            // scroll + refresh hover — mirroring the editor/Pin Tab wiring.
+            collapseRegistry: readCollapseRegistry,
+            // A departing read row finished collapsing → re-clamp the (now shorter) scroll extent, mirroring the
+            // Pin Tab's onDepartureSettled → RequestClampToExtent. The container retires the ghost itself.
+            onDepartureSettled: RequestClampToExtent,
             hintLangKey: EmptyHintLangKey,
             readOnly: ReadViewIsReadOnly,
             completionAndPinLive: ReadViewCompletionAndPinLive,
@@ -675,11 +683,41 @@ public abstract partial class ScribeDialogBase
     /// otherwise it just toggles the shared document's done flag — the same gesture the HUD reuses.</summary>
     private void OnReadViewCompleteTask(Guid taskId)
     {
+        var policy = modSystem.MySettings.CompletionPolicy;
+
+        // Optimistic-then-confirm (reconcile-animating-surfaces D9): apply the completion to a LOCAL copy of
+        // the document and refresh the read view immediately, then send to the server. This is why the
+        // editor feels instant — it never waits for the round-trip — and it fixes the read view's real gap:
+        // an UNPINNED completion had no pin push to ride, so its Delete/Sink result stayed invisible until
+        // some unrelated rebuild. The authoritative resync (BlockEntityScribeLectern.FromTreeAttributes →
+        // RefreshReadView) supersedes this shortly, exactly as it supersedes the editor's optimistic edit.
+        //
+        // EXCEPTION — a permanently read-only source (hard/fired tablet): the SERVER collapses every
+        // document-mutating policy to a plain Unpin there (CollapsePolicyForReadOnlySource, §7.5), so
+        // predicting a delete/sink locally would flash a removal the server refuses. Skip the optimistic
+        // document apply on that surface and let the (pin-push-driven) resync drive the visible change.
+        if (!ReadViewIsReadOnly)
+        {
+            // Un-aliased copy via a codec round-trip (matching FlushIfDirty's optimistic-edit copy), so the
+            // authoritative document is never mutated in place by a client prediction. ApplyLocal toggles the
+            // done flag and applies the shared policy decision; a genuine content change refreshes the read view.
+            var bytes = ScribeDocumentCodec.Serialize(host.Document);
+            if (ScribeDocumentCodec.TryDeserialize(bytes, out var copy) && copy is not null)
+            {
+                var outcome = ScribeCompletion.ApplyLocal(copy, taskId, policy);
+                if (outcome.DocChanged)
+                {
+                    host.ApplyLocalOptimisticEdit(copy);
+                    RefreshReadView();
+                }
+            }
+        }
+
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeCompleteTaskMessage
         {
             DocId = host.Document.DocId.ToByteArray(),
             TaskId = taskId.ToByteArray(),
-            Policy = (byte)modSystem.MySettings.CompletionPolicy,
+            Policy = (byte)policy,
         });
     }
 

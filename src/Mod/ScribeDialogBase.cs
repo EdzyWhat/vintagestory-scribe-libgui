@@ -295,6 +295,14 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// <c>AnyAnimating</c> to pin the scroll + refresh hover while a pin row collapses. Disposed with the dialog.</summary>
     private readonly ScribeAnimationRegistry pinCollapseRegistry = new();
 
+    /// <summary>Host-owned collapse controllers for the read view's departing rows (reconcile-animating-surfaces
+    /// §5.5), passed to <see cref="ScribeReadContent"/>'s <see cref="ScribeAnimatedList"/> so a Delete-policy
+    /// completion collapses the removed row out instead of vanishing it. Owned by the dialog (like
+    /// <see cref="editorCollapseRegistry"/> / <see cref="pinCollapseRegistry"/>) so a collapse RESUMES across the
+    /// RefreshReadView reconcile, and so <see cref="OnRenderGUI"/> can read <c>AnyAnimating</c> to pin the scroll +
+    /// refresh hover while a read row collapses. Disposed with the dialog.</summary>
+    private readonly ScribeAnimationRegistry readCollapseRegistry = new();
+
     /// <summary>The <see cref="ScribeBlock.TaskId"/> of the Pin Tab row currently focused, tracked from the
     /// rows' focus nodes so a rebuild can restore the caret and a focus move can commit the row being left.
     /// Not cleared on blur (its listener fires only on focus GAINED — the editor's pattern), so it still
@@ -551,12 +559,21 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
             return;
         }
 
-        // The read view uses the virtualized ListView; a ForceRebuild re-derives content height and clamps
-        // the shared controller's offset toward 0, losing the player's scroll position. Capture the offset
-        // HERE — right before the rebuild — so the OnRenderGUI restore loop re-applies it once the content
-        // height settles. Capturing in OnReadViewTogglePinned (the pre-network-round-trip site) was too
-        // early: by the time this async callback fires the restore loop had already terminated
-        // (pendingRestoreScrollOffset was null). (Read stays on ForceRebuild until its §5 conversion.)
+        // Read view (reconcile-animating-surfaces §5): the pin set is per-player, NOT part of the document,
+        // so a pin change is a pure chrome repaint — the read row set is structurally identical, so an
+        // in-place RebuildBody reconcile REUSES every row (preserving the shared scroll offset inherently)
+        // and just re-tints the pin indicators. This replaces the old ForceRebuild + capture-restore dance:
+        // the read list is now non-virtualized + TaskId-keyed (see ScribeReadContent), so it reconciles like
+        // the editor and Pin Tab. A completion elsewhere can slide a row under a stationary cursor; arm the
+        // hover latch so the hover-gated pin control re-homes without a mouse wiggle.
+        if (viewMode == ScribeLecternView.Read)
+        {
+            hoverRefreshLatch.Arm();
+            RebuildBody();
+            return;
+        }
+        // Any remaining non-editor view (History/Timer/Visitors) still ForceRebuilds; capture the offset so
+        // the OnRenderGUI restore loop re-applies it once content height settles.
         CaptureScrollForRestore();
         ForceRebuild();
     }
@@ -585,6 +602,14 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
         {
             if (focusedPinTaskId is { } pinId && modSystem.MyPins.Any(p => p.TaskId == pinId))
                 pendingFocusPinTaskId = pinId;
+            RebuildBody();
+            return;
+        }
+        // Read view (§5): the nav column (with the Settings button) lives inside the persistent body, so an
+        // in-place reconcile re-tints the button while REUSING the read rows — no scroll loss, no
+        // capture-restore. Now reachable because the read list is non-virtualized + TaskId-keyed.
+        if (viewMode == ScribeLecternView.Read)
+        {
             RebuildBody();
             return;
         }

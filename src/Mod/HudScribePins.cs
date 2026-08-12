@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;        // Conditional (DEBUG-only HUD row trace)
 using System.Linq;
 using Gui;                       // GuiBase, WindowConfig
 using Gui.Rendering;             // EdgeInsets
@@ -908,6 +909,8 @@ public sealed class HudScribePins : GuiBase
             }
         }
 
+        TraceHudRows(shown);
+
         // Indicative "+N more" only (design "+N more affordance"): pins beyond the visible cap. Departing
         // rows are already-completed removals, so they don't count toward the overflow tally.
         int liveCount = awaitingRemoval.Count == 0
@@ -965,6 +968,54 @@ public sealed class HudScribePins : GuiBase
             timerData: timerSnapshot,
             onClearTimer: SendClearTimer,
             capiForTimer: capi);
+    }
+
+    // ---------------- DEBUG: blank-checkbox diagnostics ----------------
+
+    /// <summary>DEBUG-only HUD row trace for the "blank checkbox / no text" bug
+    /// (<c>hud-fade-text-stale-controller-bug</c>; recurred 2026-08-10 via a Read-view Sink completion —
+    /// TESTING.md <c>f2d0a7e5</c>). Compiled out entirely in Release (<see cref="ConditionalAttribute"/>),
+    /// so the call site in <see cref="BuildHudTree"/> vanishes too. Emits, per rendered row, everything
+    /// needed to tell the two failure modes APART without guessing:
+    /// <list type="bullet">
+    /// <item><b>text=""</b> (empty <c>LastKnownText</c>) → the pin's cached text was genuinely cleared —
+    /// a data/push problem, NOT a fade bug.</item>
+    /// <item><b>text non-empty but the row still renders blank</b> → an OPACITY problem: cross-reference
+    /// the flags — <c>Sunk</c> mutes the whole row to <see cref="SunkOpacity"/>; <c>FadingOut</c>/
+    /// <c>Departing</c> drive the text-only fade (the stale <see cref="ScribeFadeText"/> controller
+    /// signature). The blank row's flags say which mechanism is stuck.</item>
+    /// </list>
+    /// Also dumps the per-identity client state (<see cref="optimisticDone"/>, <see cref="pendingCompletions"/>,
+    /// <see cref="sunkOrder"/>, <see cref="awaitingRemoval"/>, <see cref="departing"/>) so a row that a
+    /// Read-view completion drove into a state the HUD's own toggle path never set up is visible directly.
+    /// Watch with <c>build/scribe-log.sh --client</c>, filter <c>[scribe-hud]</c>. Reproduce: complete a
+    /// PINNED task from the Read view under Sink, then read the last frame's block.</summary>
+    [Conditional("DEBUG")]
+    private void TraceHudRows(List<HudPinRow> shown)
+    {
+        capi.Logger.Notification(
+            "[scribe-hud] --- rebuild: {0} rows, policy={1}, pending={2}, sunkOrder={3}, awaitingRemoval={4}, departing={5} ---",
+            shown.Count, modSystem.MySettings.CompletionPolicy, pendingCompletions.Count,
+            sunkOrder.Count, awaitingRemoval.Count, departing.Count);
+
+        for (int i = 0; i < shown.Count; i++)
+        {
+            var r = shown[i];
+            var key = (r.DocId, r.TaskId);
+            string textShown = r.Text ?? "<null>";
+            bool blank = string.IsNullOrEmpty(r.Text);
+            capi.Logger.Notification(
+                "[scribe-hud]  [{0}] {1}task={2} done={3} sunk={4} fadeOut={5} departing={6} | opt={7} pend={8} inSunk={9} awaitRm={10} | text=\"{11}\"",
+                i,
+                blank ? "BLANK " : "",
+                r.TaskId.ToString("N").Substring(0, 8),
+                r.Done, r.Sunk, r.FadingOut, r.Departing,
+                optimisticDone.TryGetValue(key, out var od) ? od.ToString() : "-",
+                pendingCompletions.TryGetValue(key, out var pc) ? pc.Policy.ToString() : "-",
+                sunkOrder.Contains(key),
+                awaitingRemoval.Contains(key),
+                textShown);
+        }
     }
 
     // ---------------- Lifecycle ----------------

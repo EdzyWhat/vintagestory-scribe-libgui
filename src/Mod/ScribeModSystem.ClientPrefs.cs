@@ -27,6 +27,49 @@ public sealed partial class ScribeModSystem
         else settingsDialog.TryOpen();
     }
 
+    // ── DEV gearworks live-tuning (.geartune) ──────────────────────────────────────────────────────
+
+    /// <summary>DEV: this player's live gearworks-layout tuning knobs (<see cref="ScribeGearTuning"/>).
+    /// Falls back to a fresh default instance if queried before load / on a server, so it is never null —
+    /// mirrors <see cref="MySettings"/>.</summary>
+    public ScribeGearTuning GearTuning => gearTuning ??= new ScribeGearTuning();
+
+    /// <summary>DEV: mutate the gearworks tuning, persist it, and raise <see cref="GearTuningChanged"/> so
+    /// an open Timer tab rebuilds live (mirrors <see cref="UpdateMySettings"/>). Client-only.</summary>
+    public void UpdateGearTuning(Action<ScribeGearTuning> mutate)
+    {
+        if (capi is null) return; // client-only
+        var t = GearTuning;
+        mutate(t);
+        t.Normalized();
+        capi.StoreModConfig(t, GearTuningConfigFileName);
+        GearTuningChanged?.Invoke();
+    }
+
+    /// <summary>DEV: toggle the gearworks-tuning window open/closed (opened by the <c>.geartune</c>
+    /// command). Lazily builds + reuses the dialog, mirroring <see cref="OpenSettings"/>.</summary>
+    public void OpenGearTuning()
+    {
+        if (capi is null) return; // client-only
+        gearTuningDialog ??= new ScribeGearTuningDialog(capi, this);
+        if (gearTuningDialog.IsOpened()) gearTuningDialog.TryClose();
+        else gearTuningDialog.TryOpen();
+    }
+
+    /// <summary>DEV: register the client-side <c>.geartune</c> command that opens the live gearworks-layout
+    /// tuning window. A client command (no privilege needed — it edits only client-local JSON), invoked with
+    /// the client dot-prefix.</summary>
+    private void RegisterGearTuneCommand(ICoreClientAPI api)
+    {
+        api.ChatCommands.Create("geartune")
+            .WithDescription("[scribe dev] Open the Timer-tab gearworks live-tuning window.")
+            .HandleWith(_ =>
+            {
+                OpenGearTuning();
+                return Vintagestory.API.Common.TextCommandResult.Success();
+            });
+    }
+
     /// <summary>Client-side: whether THIS player has pinned the given task, from the server-pushed
     /// cache. The lectern GUI drives its resting pin tint / pin-glyph accent off this. Returns false
     /// before the first push (a safe default — nothing shows as pinned until the server confirms).</summary>
@@ -60,6 +103,43 @@ public sealed partial class ScribeModSystem
 
         var source = GetBackdropSource(spec.Texture);
         SKBitmap? bmp = t is { } tint && source is not null ? BakeTint(source, tint) : source;
+        backdropCache[key] = bmp;
+        return bmp;
+    }
+
+    /// <summary>Client-side: load (once) and return a decoded GUI texture bitmap by asset location, or
+    /// <c>null</c> if the asset is missing/unloadable. Shares the same decode cache, one-warning-per-miss,
+    /// and <see cref="Dispose"/> cleanup as the dialog backdrops (<see cref="GetBackdropSource"/>) — a caller
+    /// must NOT dispose the returned bitmap. Used for in-GUI rasters that are drawn via a
+    /// <c>BoxStyle.Texture</c> Container (e.g. the Timer-tab gearworks), which — like the backdrops — need
+    /// the <c>loadAsset: true</c> self-load path to survive VS's post-startup asset unload. Returns null on a
+    /// pure server.</summary>
+    public SKBitmap? GetGuiTextureBitmap(AssetLocation loc)
+    {
+        if (capi is null) return null; // client-only
+        return GetBackdropSource(loc);
+    }
+
+    /// <summary>Client-side: generate (once) and return the procedural Timer-tab escape wheel bitmap
+    /// (<see cref="ScribeGearTexture.GreatWheel"/>) — a many-toothed "great wheel" in the small cog's blocky,
+    /// uneven, negative-space style. Cached under a synthetic key in the same <c>backdropCache</c> so it is
+    /// built at most once and disposed with everything else in <see cref="Dispose"/>; a caller must NOT
+    /// dispose it. This is a placeholder to be judged/tuned in-game (add-timer-gearworks art follow-up);
+    /// swapping to a real PNG later is a one-line change at the gearworks call site. Returns null on a pure
+    /// server.</summary>
+    public SKBitmap? GetProceduralGreatWheel()
+    {
+        if (capi is null) return null; // client-only
+        backdropCache ??= new Dictionary<string, SKBitmap?>();
+        // DEV .geartune: teeth + tooth-spacing are live-tunable, so key the cache on the (teeth, spacing) combo —
+        // each combo generates + caches once and is reused; changing a knob makes a fresh combo regenerate on the
+        // next rebuild rather than mutating the shared bitmap. Fold back to ScribeGearTexture.Teeth defaults when
+        // the .geartune tool is removed.
+        int teeth   = (int)GearTuning.WheelTeeth;
+        int spacing = (int)GearTuning.WheelToothSpacing;
+        string key = $"__procedural:great-wheel:{teeth}:{spacing}";
+        if (backdropCache.TryGetValue(key, out var cached)) return cached;
+        var bmp = ScribeGearTexture.GreatWheel(teeth: teeth, toothSpacingRef: spacing);
         backdropCache[key] = bmp;
         return bmp;
     }

@@ -47,9 +47,17 @@ internal sealed class ScribeResetPaintColor : SingleChildWidget
     {
         public override void Paint(PaintingContext context)
         {
-            // Reset BEFORE the child (the backdrop) paints, so the backdrop's DrawMaskedBox modulates the
-            // clay bitmap by opaque white rather than a stale color left by the previous frame's last op.
-            context.SharedPaint.Color = SKColors.White;
+            // Reset BEFORE the child paints, so its DrawMaskedBox modulates the bitmap by opaque white rather
+            // than a stale color left by a previous op. Also clear the color/image FILTERS and restore a normal
+            // SrcOver blend: DrawMaskedBox sets only FilterQuality, so a stale ColorFilter (e.g. a gear's cast
+            // shadow / glow tint, or the diagnostic border's fill) or BlendMode would otherwise recolour/dim
+            // the child — the see-through-gears bug (add-timer-gearworks 7.6, D16). Additive for the backdrops
+            // (they never relied on a leftover filter); load-bearing for the opaque gears wrapped in this.
+            var paint = context.SharedPaint;
+            paint.Color = SKColors.White;
+            paint.ColorFilter = null;
+            paint.ImageFilter = null;
+            paint.BlendMode = SKBlendMode.SrcOver;
             base.Paint(context);
         }
     }
