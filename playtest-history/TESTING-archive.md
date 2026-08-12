@@ -522,3 +522,2924 @@ archived `tasks.md`).
       muted, vanilla and other-mod sounds (block break, inventory) still play. *(scribe-mute-ui-sounds 4.5)*
       - **Confirmed 2026-07-27** (playtest submission 2026-07-27T10-16-26): "Works." The preference persists
         across a relog and vanilla/other-mod sounds are unaffected while Scribe is muted.
+
+
+<!-- ===== Batch retired 2026-08-11: 52 archived-change sections moved from TESTING.md ===== -->
+
+## tune-tablet-clay-text-contrast
+
+- [x] `fa4e26e8` **Empty-tablet hint legible.** Open a red, a blue, and a fire tablet with an empty
+      task list and Pixel-Art Display ON; confirm the empty-list hint text reads legibly against all
+      three clay backdrops (especially blue, the one cool palette). *(4.1)*
+      - **Confirmed 2026-08-04** via playtest submission (2026-08-04T17-53-45): "Works." Empty-list
+        hint legible on all three clay backdrops at the derived muted role (lift +14).
+- [x] `ce460e26` **Muted stays secondary.** Confirm the muted/hint text still reads as secondary
+      (clearly weaker than body ink) on all three clay tablets — it must not approach body-ink weight
+      and collapse the hierarchy. Finalize `MutedTextValueLift` (seeded 14) and record it in design D3;
+      re-run the gallery export if the final value differs. *(4.2/4.3)*
+      - **Confirmed 2026-08-04** via playtest submission (2026-08-04T17-53-45): "Works." Muted text
+        still reads as secondary; `MutedTextValueLift = 14` finalized at its seed (no re-export needed).
+
+## replace-drag-wash-with-grip-arrows
+
+> Drag-reorder feedback moved OFF the row-background washes (which collided with the strengthened pinned
+> tint) and ONTO the grip glyph: source row → ◀ + ~50% dim, other grips hidden, drop-target row → ▶. No
+> row-background wash is drawn during a drag anymore. Follow-up (2026-08-03) fixed three things: a no-op
+> release now resets state, the ◀ arrow no longer dims with its row, and the handles borrow the darker
+> title-bar ink.
+
+- [x] `b733878c` **No-op release resets.** Grab a row's grip, DON'T move, release on the
+      same row: the ghost dim and ◀/▶ handles revert to rest immediately — no row left stuck
+      dimmed with a ◀ handle. *(5.2)*
+      - **Confirmed 2026-08-03** playtest pass ("Works."): grab-release-in-place now clears
+        the drag state via the SetState-always fix.
+- [x] `a64b5f81` **Source arrow stays lit.** While dragging, the source ◀ arrow keeps FULL
+      opacity even though the grabbed row's content (checkbox + text) dims to ~half — the
+      arrow itself is not dimmed. *(5.2)*
+      - **Confirmed 2026-08-03** playtest pass ("Works."): per-child opacity leaves the grip
+        column full-opacity while the row content dims.
+- [x] `da40e0f1` **Handle ink darkness.** Confirm the drag handles read as dark/engraved on
+      the clay backdrop (same ink as the title-bar grip/pencil), not washed-out gray. *(5.2)*
+      - **Confirmed 2026-08-03** playtest pass ("Works."): row grip/arrows now borrow the
+        tablet's TitleChromeGlyphColor ink.
+- [x] `4a7af359` **Editor drag arrows.** Grip-drag a task in the editor: the grabbed row
+      shows ◀ and dims to ~half opacity, all other grips vanish, the row under the cursor
+      shows ▶, and NO row-background drag wash appears. Release commits the move; releasing
+      in place is a no-op. *(5.2)*
+      - **Confirmed 2026-08-03** playtest pass ("Works.").
+- [x] `8c93a8fb` **Drag over pinned row.** In the editor, drag a row over a PINNED row: the
+      pinned wash stays visible and is clearly distinct from the ▶ drop-target glyph (the
+      collision this change fixes — no colored wash competing with the pin tint). *(5.3)*
+      - **Confirmed 2026-08-03** playtest pass ("Works."): the collision this change targeted
+        is resolved.
+- [x] `0f4b21c7` **Pin Tab drag arrows.** On the Pin Tab (every row pinned), grip-drag a row:
+      the ◀ source / ▶ target glyphs are the clear differentiator against the uniform pinned
+      wash, and the reorder commits correctly. *(5.4)*
+      - **Confirmed 2026-08-03** playtest pass ("Works.").
+- [x] `8424c9a3` **Smallest-size legibility.** At the SMALLEST text-size preference, grip-drag:
+      the ◀/▶ triangles stay legible and the grip column width does NOT change when a grip is
+      hidden or swapped (no mid-drag row reflow). *(5.5)*
+      - **Confirmed 2026-08-03** playtest pass ("Works.").
+
+## add-cuneiform-handwriting-feel
+
+> The tablet's cuneiform renders with a hand-written wobble (per-stroke jitter, strength `0.8`) and can
+> press newly-typed text in stroke-by-stroke (reveal `50ms`/stroke, `150ms`/letter). Glyphs are also ~20%
+> larger than before. The press-in is now a Scribe Settings toggle, **"Cuneiform press-in," off by
+> default** — turn it on to test the progression. Jitter + size are always on (tablet path only). Fully
+> relaunch the client to pick up the new build after the 2026-08-03 tuning pass.
+
+- [x] `11ec19a1` **Glyph size and legibility.** Open a tablet and read a cuneiform line — confirm the
+      glyphs (~20% larger this pass) read comfortably and sit well against the surrounding readable text /
+      row height without overflowing or clipping. *(add-cuneiform-handwriting-feel 7.2b)*
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works, its bigger." The
+        larger glyphs read comfortably against the row height without overflow/clipping.
+- [x] `1d8a57eb` **Repeated-glyph variety.** In a tablet cuneiform field, type a line with repeated
+      characters (e.g. "aaaa mmmm") at jitter 0.8 — confirm the repeats look hand-varied, not stamped, and
+      the line does NOT shimmer or re-wobble frame to frame or as you keep typing.
+      *(add-cuneiform-handwriting-feel 7.2)*
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." Repeats look
+        hand-varied with no shimmer/re-wobble. (Tester note: jitter is no longer at 0.8 — it was lowered
+        to 0.6 per an earlier tuning adjustment, commit `1b5f660`.)
+- [x] `3fbce4e9` **Press-in toggle.** In Scribe Settings confirm "Cuneiform press-in" is OFF by default
+      (fresh text appears instantly); turn it ON, reopen a tablet, and confirm new text now presses in
+      stroke-by-stroke — and that toggling it repaints without a restart.
+      *(add-cuneiform-handwriting-feel 6.3)*
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." Press-in is off by
+        default, turns on and presses text in stroke-by-stroke, and toggling repaints without a restart.
+- [x] `d76d4f84` **Caret and click with jitter.** With jitter on, click into the middle of an existing
+      cuneiform line and type — confirm the caret sits at the right character and clicking selects the
+      character you aimed at (jitter must not shift the caret or hit-testing).
+      *(add-cuneiform-handwriting-feel 7.3)*
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." The caret lands on
+        the right character and clicking selects the aimed-at character — jitter doesn't shift the caret
+        or hit-testing.
+- [x] `d077766c` **Stroke-by-stroke reveal.** With "Cuneiform press-in" ON, type a fresh word into a
+      tablet cuneiform field (row AND title) — confirm new letters lay down stroke-by-stroke (~50ms/stroke)
+      with a pause between letters (~150ms), at a pace that feels natural/fun, and earlier letters don't
+      re-animate on each new keystroke. *(add-cuneiform-handwriting-feel 7.4)*
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." New letters lay down
+        stroke-by-stroke with an inter-letter pause; earlier letters don't re-animate on each keystroke.
+- [x] `8fccf5a0` **Edit snaps, no rewind.** With press-in ON, after a word animates in, delete a character
+      or edit mid-line — confirm the text snaps to its new state fully revealed, with no reverse/rewind
+      animation. *(add-cuneiform-handwriting-feel 7.5)*
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." Editing after an
+        animate-in snaps to the fully-revealed new state with no reverse/rewind.
+- [ ] `42a3a1d1` **Zero-jitter crisp baseline.** (Deferred until task 6 exposes the knobs.) Once a
+      jitter-0 + progression-off setting exists, confirm rendering is byte-identical to today's crisp,
+      instant cuneiform. *(add-cuneiform-handwriting-feel 7.6)*
+      - Previously parked 2026-08-03: the jitter-strength / progression-enable client setting (task 6) was
+        not built yet — there was no in-game way to set jitter to 0, so this couldn't be exercised.
+      - **Obsolete 2026-08-06** (user decision): the jitter-strength knob was designed away rather than
+        shipped — progression is a toggle (default off) and jitter stays a fixed constant, so there's no
+        "jitter-0" setting to establish a baseline against. The test no longer describes a reachable state;
+        retiring it rather than leaving it parked on a knob that isn't coming.
+- [x] `06cddc5a` **Ghost lead-in verdict.** With cuneiform on, watch a fresh word form and judge the
+      ghost lead-in stroke that precedes each glyph — keep it only if it reads well, otherwise confirm
+      it stays off by default. A pure look-and-feel keep/cut call. *(add-cuneiform-handwriting-feel 7.7)*
+      - **Still broken 2026-08-05** (submission 2026-08-05T08-29-22): the ghost lead-in isn't visible at all.
+        Intended behavior: the ghost should IMMEDIATELY show exactly what the player typed at low opacity, so a
+        fast typist sees the full word ahead of the progressive "Cuneiform press-in" stroke reveal catching up.
+        Observed: with press-in progressively adding strokes, nothing ghosts ahead — no low-opacity preview
+        shows. Needs the ghost layer to render the full typed text immediately (decoupled from the press-in
+        progression) rather than lagging behind it.
+      - **Confirmed 2026-08-05** (user report): "The ghost/preview works!" Implemented the ghost lead-in in
+        `ScribeCuneiformField.cs` — it had been spec'd (task 5.1) but never built; the change shipped the plain
+        progressive fill first and deferred the ghost. While the reveal is active, a new `StrokePass.Ghost` pass
+        paints the NOT-yet-pressed strokes (the complement of the crisp reveal set) once at low alpha, so the
+        full typed word shows immediately and the crisp press-in catches up — the expanded playtest ask (whole
+        tail, not just the current letter). Centralized in the shared render object, so it covers BOTH the
+        multiline editor and the single-line title field. Gated by the same reveal state as the press-in (no
+        separate setting); no halo on the ghost. Opacity tuned in-game from 0.28 → `GhostLeadInOpacity = 0.22`
+        (0.28 read a touch too strong).
+
+## arrow-key-line-caret-nav
+
+> Up/Down arrows now move the caret between the visual lines of a focused multi-line row (they were
+> dead keys before). The move lands on the column nearest the caret's current X on the adjacent line;
+> Up on the first line jumps to text start, Down on the last line to text end; Shift extends the
+> selection. It stays within the row (no focus change, no commit) and applies to both the Lectern
+> editor and Pin Tab (shared `ScribeMultilineField`). Fully relaunch the client to pick up the new build.
+
+- [x] `6076bd50` **Up/Down between lines (Editor).** In the Lectern editor with a multi-line row, press
+      Up/Down; caret moves to the nearest column on the visual line above/below, staying in the row (no
+      focus change, no commit). Works across soft-wrapped and \n-broken lines.
+      *(arrow-key-line-caret-nav 3.1)*
+      - **Confirmed 2026-08-01** (user report): "works." Up/Down move the caret between visual lines
+        within the row.
+- [x] `83d68ffd` **Edge lines jump to text ends.** Up on the first visual line jumps the caret to the
+      start of the text; Down on the last visual line jumps it to the end; an empty/single-line row is a
+      harmless no-op-ish move. *(arrow-key-line-caret-nav 3.2)*
+      - **Confirmed 2026-08-01** (user report): "this is awesome, it works." Up on the first line / Down
+        on the last jump the caret to the text start / end.
+- [x] `7bc7a0bc` **Shift+Up/Down extends selection.** Hold Shift with Up/Down and confirm the selection
+      extends to the new caret rather than collapsing. *(arrow-key-line-caret-nav 3.3)*
+      - **Confirmed 2026-08-01** (user report): "works." Shift+Up/Down extends the selection to the new caret.
+- [x] `63d445b4` **Same behavior in Pin Tab.** Repeat the Up/Down, edge, and Shift tests on a multi-line
+      Pin Tab row; behavior is identical (shared field), with no row-to-row focus movement.
+      *(arrow-key-line-caret-nav 3.4)*
+      - **Confirmed 2026-08-01** (user report): "works." Identical Up/Down/edge/Shift behavior on a Pin Tab
+        row, no row-to-row focus movement.
+
+## exclude-checkboxes-from-tab-focus
+
+> gui@3.1.0 made every row checkbox focusable AND routed Tab through the FocusManager traversal policy,
+> so Tab/Shift+Tab began stopping on each row's checkbox before its text field (doubling keystrokes). A
+> mod-owned allow-list `ScribeFieldOnlyTraversalPolicy` on the dialog's FocusManager now returns only the
+> active view's editable field nodes, in row order — checkboxes are never Tab-focused (still mouse-clickable).
+> Fully relaunch the client to pick up the new build.
+
+- [x] `f9a90c56` **Tab skips checkbox (Editor).** Open the Lectern editor with several task rows and press
+      Tab repeatedly — focus advances one ROW per Tab, landing in each row's text field, never on a
+      checkbox; Shift+Tab retreats the same way; confirm each row still commits as focus leaves it.
+      *(exclude-checkboxes-from-tab-focus 4.2)*
+      - **Confirmed 2026-08-01** (user report): "works as described." Tab/Shift+Tab advance one row per press
+        to the text field, never the checkbox, and the row still commits as focus leaves it.
+- [x] `bae6ef0a` **Tab skips checkbox (Pinned).** With several pinned tasks, Tab/Shift+Tab through the Pin
+      Tab — focus moves field-to-field in row order, never onto a checkbox.
+      *(exclude-checkboxes-from-tab-focus 4.3)*
+      - **Confirmed 2026-08-01** (user report): "works as described." Pin Tab traversal moves field-to-field
+        in row order, never onto a checkbox.
+- [x] `f5d02948` **Keyboard regression guard.** Confirm Enter (new task below), Shift+Enter (line break),
+      Esc (commit + close), mouse-clicking a checkbox to toggle done, and empty-row removal all still
+      behave as before. *(exclude-checkboxes-from-tab-focus 4.4)*
+      - **Confirmed 2026-08-01** (user report): "works as described." Enter/Shift+Enter/Esc, mouse checkbox
+        toggle, and empty-row removal all behave as before — no regressions from the traversal-policy change.
+
+## hud-temporal-storm-corruption
+
+> The pinned-task HUD reacts to temporal instability: it corrupts all its own text (Zalgo-style
+> combining-mark injection, the same mechanism vanilla uses for storm chat) while a temporal storm is
+> active OR personal stability is below 50%, and swaps its title to "Survive the Storm" during a storm.
+> Strength is keyed to storm tier (Light 0.53 / Medium 0.67 / Heavy 0.90) or a low-stability ramp
+> (0 at 50% → 1 at 10%), whichever is greater; it re-scrambles on a 0–5 s cadence. A default-on
+> "Storm text corruption" setting (HUD Appearance section) disables the whole effect. Fully relaunch the
+> client to pick up the new build.
+
+- [x] `cc124162` **Trigger a storm.** Trigger a temporal storm with a Notebook pinned/timer running;
+      confirm the HUD title reads "Survive the Storm", all HUD text (rows, +N more, timer) corrupts at
+      storm intensity, and it reverts to "Pinned" and clean text when the storm ends.
+      *(hud-temporal-storm-corruption 6.2)*
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T21-39-18): "Works." Storm triggers the
+        "Survive the Storm" title + corrupted HUD text at storm intensity, reverting to "Pinned"/clean when
+        the storm ends.
+- [x] `e289157a` **Low-stability ramp.** Without a storm, drop personal stability below 50% (e.g. stand
+      near a rift); confirm HUD text corruption ramps up as stability falls toward 10%, and the title
+      stays "Pinned" (no storm swap). *(hud-temporal-storm-corruption 6.3)*
+      - Previously parked 2026-07-31 (user decision): shipped the storm-corruption change without exercising
+        the no-storm low-stability ramp.
+      - Unblocked 2026-08-06: no code blocker — this was a ship-now deferral, not a dependency. The ramp is
+        the same `max(storm, stability)` path already confirmed under storms (`cc124162`/`d6f9d273`).
+      - **Confirmed 2026-08-06** (submission 2026-08-06T16-10-31): "Works." Near a rift with no storm, HUD
+        text corruption ramps up as personal stability falls and the title stays "Pinned" (no storm swap).
+- [x] `d6f9d273` **Re-scramble + layout.** While a trigger is active, watch the HUD for several seconds;
+      confirm the injected marks shift on a ~0–5 s cadence and that wrapping rows, title, and timer render
+      the combining marks without broken width/wrapping or clipping. *(hud-temporal-storm-corruption 6.4)*
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T21-39-18): "Works." Marks re-scramble on the
+        0–5 s cadence and the combining marks render without broken width/wrapping or clipping — resolves the
+        design's flagged Skia layout feasibility unknown; no marks-per-char cap needed.
+- [x] `8dc37921` **Toggle off mid-storm.** During an active storm, turn off the "Storm text corruption"
+      setting; confirm corruption and the title swap stop immediately; turn it back on and confirm they
+      resume. *(hud-temporal-storm-corruption 6.5)*
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T21-39-18): "Works." Toggling the setting off
+        mid-storm stops corruption + title swap immediately; toggling on resumes them.
+
+## fix-pvp-death-kill-attribution
+
+> Attribute melee PvP kills (resolve attacker via `GetCauseEntity()`, not the melee-null
+> `SourceEntity`) and flavor the messages: weapon-aware PvP verb (bow → "pincushioned", sword →
+> "slashed"), and creature deaths named by variant ("a nightmare drifter", "a brown bear") from a
+> mob-death flavor pool instead of "died." Combat entries carry the whole sentence in Detail with
+> empty ActorName (no doubled name). Retention caps raised; `/scribe seed` rebuilt from live keys.
+> **MULTIPLAYER — needs a second player for 7.1–7.4.** Fully relaunch the client (assets load at boot).
+
+- [x] `c1e10e64` **Melee PvP death names killer.** Player A holds a Notebook; Player B kills A with a
+      MELEE weapon. Confirm A's Death entry names B as the killer, not "A died." *(fix-pvp-death-kill-attribution 7.1)*
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T21-39-18, MP session): "Works." Melee PvP
+        death names the killer, not "A died."
+- [x] `d5945602` **Melee PvP kill logged.** Player A holds a Notebook and kills Player B with a melee
+      weapon. Confirm A's notebook gets a PvpKill entry naming B. *(fix-pvp-death-kill-attribution 7.2)*
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T21-39-18, MP session): "Works." The killer's
+        notebook gets a PvpKill entry naming the victim.
+- [x] `81fbc148` **Ranged (bow) path + verb.** Repeat the death/kill with a BOW; confirm the projectile
+      path still attributes correctly and the verb reads "pincushioned." *(fix-pvp-death-kill-attribution 7.3)*
+      - **Confirmed 2026-07-31** in-game: bow death/kill attributes correctly and logs a good entry; the
+        bow-vs-sword comparison (task 7.4) shows a distinct, sensible ranged verb — projectile path intact
+        after the `GetCauseEntity()` switch.
+- [x] `79dcedb5` **Verb variety.** Confirm a sword kill reads "slashed" and a spear "impaled"; with a
+      combat mod, a firearm/crossbow reads "shot" or at least a sensible verb — never wrong attribution.
+      *(fix-pvp-death-kill-attribution 7.4)*
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T21-39-18): "Works." Weapon-aware verbs read
+        sensibly per weapon; no wrong attribution.
+- [x] `1105f7ca` **Mob death names variant.** Die to a nightmare drifter or bear while holding a
+      Notebook; confirm the Death entry reads a flavored line naming the correct creature ("...by a
+      nightmare drifter."), not "died.", no PvpKill entry, and no doubled name. *(fix-pvp-death-kill-attribution 7.5)*
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T21-39-18): "Works." Mob death reads a
+        flavored line naming the correct creature variant, no PvpKill entry, no doubled name.
+- [x] `f07d0b45` **Environmental death unchanged.** Die to fall / fire / hunger while holding a
+      Notebook; confirm the Death entry still uses the vanilla reconstructed message and no PvpKill
+      entry is created. *(fix-pvp-death-kill-attribution 7.6)*
+      - **Confirmed 2026-07-31** in-game: tested with fall damage — the Death entry still logs the
+        vanilla reconstructed (environmental) message and no PvpKill entry is created.
+- [x] `28c4ede1` **Seed chronicle.** Run `/scribe seed all` on a held Notebook; confirm the fuller
+      chronicle (drifter death, bow PvP death, bear death, boss kill, storm, sword PvP kill) with no
+      doubled names. *(fix-pvp-death-kill-attribution 7.7)*
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T21-39-18): "Works." `/scribe seed all`
+        produces the fuller chronicle with no doubled names.
+
+## notebook-history-tab
+
+> The Notebook's History tab: an auto-chronicle of significant events (Crafted, PickedUp, Death, PvpKill,
+> BossKill, TemporalStorm) plus player-authored Manual entries, with per-kind caps. Server hooks record
+> deaths/kills/storms via `OnEntityDeath` + a storm-tick edge-detector; entries sync to all open notebooks
+> and persist in the ItemStack. Newest-first; auto entries read-only, Manual editable up to a cap.
+
+- [x] `a4c22c79` **Death entry logged.** Die while holding the notebook (anywhere on your person, not just
+      the hotbar); confirm a Death entry appears with the reconstructed death message.
+      *(notebook-history-tab 9.4)*
+      - **Confirmed 2026-07-31**: Death entry logs with the reconstructed message; works with the notebook
+        anywhere on the person, not just the hotbar.
+- [x] `03699a3d` **PvpKill entry logged.** In multiplayer, kill another player while holding the notebook
+      (any inventory slot on your person); confirm a PvpKill entry appears. *(notebook-history-tab 9.5)*
+      - **Confirmed 2026-07-31** (MP): PvpKill entry logs regardless of the notebook's location on the person.
+- [x] `b5fd19de` **Storm entry logged.** Trigger a temporal storm (`/time set storm`); confirm a
+      TemporalStorm entry appears on all open notebooks. *(notebook-history-tab 9.6)*
+      - **Confirmed 2026-07-31**: temporal storm logs a TemporalStorm entry on open notebooks.
+- [x] `71d5916f` **Boss-kill entry + range gate.** Kill an Eidolon within 100 blocks while holding the
+      notebook; confirm a BossKill entry reads "Eidolon", and a kill >100 blocks records nothing.
+      *(notebook-history-tab 9.7)*
+      - Previously parked 2026-07-31 (user decision): shipped without the deliberate Eidolon-kill session.
+      - Unblocked 2026-08-06: no code blocker — this was a ship-now deferral. The BossKill path shares the
+        same `OnEntityDeath` hook as the confirmed Death/PvpKill/Storm entries (`a4c22c79`/`03699a3d`/`b5fd19de`).
+      - **Confirmed 2026-08-06** (submission 2026-08-06T16-10-31): "Works." An Eidolon kill within 100 blocks
+        writes a BossKill "Eidolon" entry, and the range gate holds (a far kill records nothing).
+
+## timer-auto-disappear-setting
+
+> New per-player "Timer disappears" preference (Mod Behavior). Default ON preserves the original
+> ~30 s auto-clear of a fired Clockmaker's Notebook timer; OFF keeps the fired timer on the HUD
+> until dismissed. Auto-clear moved server→client (client-local pref); fired timers now persist
+> across relog and resume (not restart) their window. Build + Core suite pass; needs in-game verify.
+> ⚠️ Restage before testing (staged build was stale as of implementation).
+
+- [x] `3f30ea17` **Default disappear.** With Timer disappears ON (default), set a short Clockmaker's
+      Notebook timer, let it fire, and confirm the fired timer row leaves the HUD after ~30 s with no
+      action. *(timer-auto-disappear-setting 8.2)*
+  - **Confirmed 2026-07-31** in-game: default-on fired timer disappears from the HUD on its own.
+- [x] `04828d42` **Off → HUD click.** Turn Timer disappears OFF, let a timer fire, wait well past 30 s
+      and confirm the fired row stays; then click the fired HUD row and confirm it clears.
+      *(timer-auto-disappear-setting 8.2)*
+  - **Confirmed 2026-07-31** in-game: with the setting off, the fired row stays and clears on HUD click.
+- [x] `11ff7552` **Off → Stop Timer.** With Timer disappears OFF and a timer fired, open the
+      Clockmaker's Notebook Timer tab and press Stop Timer; confirm the fired row clears from the HUD.
+      *(timer-auto-disappear-setting 8.2)*
+  - **Confirmed 2026-07-31** in-game: with the setting off, the fired row stays and clears via Stop Timer.
+- [x] `8ed153d0` **Open ≠ clear.** With a timer fired, open the Clockmaker's Notebook (any tab) and
+      take no action; confirm the fired timer is NOT cleared and still shows. *(timer-auto-disappear-setting 8.2)*
+  - **Confirmed 2026-07-31** in-game: opening the notebook does not clear the fired timer.
+- [x] `ac0bd817` **Toggle off mid-flash.** Let a timer fire with Timer disappears ON, then within the
+      30 s window turn the setting OFF; confirm the pending auto-clear is cancelled and the fired row
+      stays. *(timer-auto-disappear-setting 8.2)*
+  - **Confirmed 2026-07-31** in-game: toggling off mid-flash cancels the pending auto-clear; the row stays.
+- [x] `7435c6bf` **Relog resumes window.** With Timer disappears ON, let a timer fire, wait ~20 s, log
+      out and back in; confirm the fired timer still shows on rejoin and clears after roughly the
+      REMAINING window (not a fresh 30 s). *(timer-auto-disappear-setting 8.2)*
+  - **Confirmed 2026-07-31** in-game: fired timer survives relog and still shows on rejoin.
+
+## refine-settings-and-window-chrome
+
+> Feature pass on the Lectern/Settings chrome (from the 2026-07-26 playtest): a passive drag-grip icon left
+> of the Lectern close button (the band was already draggable but not discoverable); numeric settings fields
+> now clamp on UNFOCUS (not per-keystroke) so select-all-and-retype works, with a red range line shown only
+> after a clamp; Scribe Settings split from 2 into 3 divider-separated sections (Mod Behavior / Window
+> Appearance / HUD Appearance); the settings form painted on an opaque theme-surface panel; and both gear
+> buttons TOGGLE the window open/closed. Core is unchanged (clamp statics reused). Restaged Debug 2026-07-26
+> — fully relaunch first.
+
+- [x] `59d7ccbf` **Title-bar drag grip.** The Lectern title bar shows a grip icon left of the close button
+      with a "drag to move" tooltip on hover; the whole title-bar band still drags the window.
+      *(refine-settings-and-window-chrome 7.3)*
+      - **Still broken 2026-07-26** (playtest submission 2026-07-26T22-24-24): the grip icon shows with its
+        tooltip, but click-dragging ON the grip does NOT move the window (it's a passive `ScribeVsIconGlyph`
+        with no gesture handler, and something on that glyph/tooltip path is eating the drag rather than
+        letting the title-bar band handle it). Tester's two proposed resolutions: (a) wire the grip to drag
+        the whole window like the rest of the band, or (b) make it truly non-interactive so the press falls
+        through to the band's drag. Needs a fix + retest.
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T10-16-26): "Works." The grip now drags the
+        window (or falls through to the band's drag); the title-bar band still moves the window.
+- [x] `bb25e8d3` **Numeric retype + clamp-on-blur.** In Scribe Settings, select-all a numeric field (e.g.
+      HUD row width, Pixel Art Size) and type a fresh value with no mid-edit snap; click away with an
+      out-of-range value → it clamps AND a red range line appears beneath; a next in-range edit clears it;
+      values persist across relog. +/- and arrows still step live. *(refine-settings-and-window-chrome 7.4)*
+      - **Still broken 2026-07-26** (playtest submission 2026-07-26T22-24-24): the core retype + clamp-on-blur
+        works, BUT there's a focus bug — every numeric field UNFOCUSES after each click on its +/- step
+        buttons (so repeated stepping requires re-clicking into the field). Tester also wants the spec
+        relaxed: the **red range line is unwanted** — drop it from the spec rather than requiring it. So two
+        actions: (1) fix the +/- unfocus-on-click regression; (2) amend the spec to remove the red-range-line
+        requirement. Retest after the focus fix.
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T10-16-26): "Works." Retype + clamp-on-blur
+        and the +/- stepping now behave as specced.
+- [x] `52f2e92e` **Three sections + panel.** Scribe Settings shows three divider-separated sections (Mod
+      Behavior / Window Appearance / HUD Appearance) with each control under the right section, and the form
+      sits on an opaque theme-surface panel (not a transparent gap). *(refine-settings-and-window-chrome 7.5)*
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T22-24-24): "Works." Three divider-separated
+        sections on an opaque panel, each control under the right section. Follow-up polish requested (not
+        blocking this item): (a) section-header font is too big — make it only ~8% larger than the window
+        text; (b) put "Pixel Art Size" + "Window text size (%)" side by side in two columns; (c) rename
+        "Pixel Art Size" → "Pixel Art Size (px)".
+- [x] `c2c153d1` **Settings gear toggles.** Clicking the Lectern right-column gear opens the settings window
+      and clicking it again CLOSES it; the HUD gear toggles the same way.
+      *(refine-settings-and-window-chrome 7.6)*
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T22-24-24): "Works." Both the Lectern
+        right-column gear and the HUD gear toggle the settings window open/closed.
+
+## scribe-notebook-frame
+
+> Real notebook art (1024×1160) replaces the flat-tan placeholder, and the Lectern is restructured into a
+> proportional, art-framed layout driven by ONE width `W` ("Pixel Art Size"). The whole dialog is an
+> art-sized `OuterArtBox` (`W × H`, aspect 0.883) so LibGUI's stretch-to-fill `BoxStyle.Texture` renders the
+> art as a uniform, distortion-free scale; `WindowFrame` is dropped and the tree is built directly —
+> `Column[TitleBar band, three-column SectionInnerBox]`. Drag = `DragHandleHeight` sized to the title bar;
+> close = the delete SVG at 1.4×. Right column carries icon nav (Settings gear / Read "R" placeholder / Edit
+> feather / Pinned pin). `W` is a permanent Appearance preference (300–1000, step 10, default 600), read
+> fresh each build. Restaged Debug 2026-07-26 — fully relaunch the client first. **Note:** the Pinned nav
+> button is a no-op stub (no in-Lectern pinned view exists yet).
+
+- [x] `82cc3a7e` **Art renders un-distorted.** With Pixel-Art ON, open the Lectern: the notebook art fills the
+      whole window as the OuterArtBox and renders un-distorted (portrait, not skewed/stretched), framing the
+      content. *(scribe-notebook-frame 6.3)*
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T12-04-59): "Works." The notebook art fills
+        the window un-distorted as the OuterArtBox.
+- [x] `e647c1c7` **Title bar drags + close.** Click-drag inside the top title-bar band → the window moves.
+      Click the close button (the 1.4× delete SVG, top-right of the title row) → the dialog closes.
+      *(scribe-notebook-frame 6.3)*
+      - **Confirmed 2026-07-26** (playtest submissions 2026-07-26T12-55-50 + 2026-07-26T22-24-24): drag +
+        close both work; the 4px title-text left-padding fix landed. Two non-blocking follow-ups remain: the
+        tester wants the title-text left padding bumped 4px → 15px (12-55-50 note), and the close-button
+        hitbox-vs-border misalignment is still the deferred Retina/GUIScale artifact recorded below (not
+        reintroduced, just not chased). Core drag+close behavior is good.
+      - **Still broken 2026-07-26** (playtest submission 2026-07-26T11-25-01, general notes; drag/close
+        themselves confirmed working in 2026-07-26T12-04-59 "Works"): the close button's CLICKABLE area
+        doesn't coincide with its drawn border — the hit region sits above and to the left of the visible
+        button (may be macOS-specific). Drag/close functionally work, but the misaligned hitbox is a real
+        defect.
+      - **Investigated 2026-07-26 (no code fix — deferred):** traced every layer of the close button's widget
+        tree in `reference/vslibgui/` (`Align`/`RenderPositionedBox`, `Row`, `SizedBox`, the `Tooltip`'s
+        `CompositedTransformTarget` → `RenderTarget : RenderProxyBox` clean passthrough). Hit-testing applies
+        each child offset via `Element.HitTest` → `GlobalToChild`, matching paint's `PaintChildren` — no
+        static layout error to fix. This is the SAME visual-vs-clickable mismatch VSAPI-NOTES already records
+        for the native close button (confirmed via live mouse-coord logging to be a Retina/`GUIScale`
+        rendering-vs-hitbox artifact). Settling diagnostic: hover-coordinate log at 100% GUIScale on a
+        non-Retina display. Left as a known deferred item rather than guess-patching LibGUI internals.
+      - **Fix applied 2026-07-26 (awaiting retest) — title padding + drag affordance are separate:** (b) 4px
+        `padding-left` on the title text is DONE (restaged Debug). (a) the drag-grip discoverability icon is
+        deferred into the `refine-settings-and-window-chrome` feature proposal (title-bar chrome), not this
+        bugfix pass.
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T18-22-10): "This works. It is not deferred."
+        Tester explicitly closing this out — drag + close both work and the item is not to be held open on
+        the close-button hitbox artifact above (that Retina/`GUIScale` visual-vs-clickable mismatch remains a
+        known, separately-tracked cosmetic note, not a reason to keep this item unconfirmed).
+- [x] `c74d74a8` **Three-column frame legible.** The scrolling read/editor content sits in the center column,
+      framed by the left spacer and the right icon column, all inside the art; task/note text stays legible
+      over the backdrop. *(scribe-notebook-frame 6.3)*
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T12-04-59): "Works! I love it!" Content sits
+        framed in the center column, legible over the backdrop.
+- [x] `a14e9435` **Right-col nav + tooltips.** Hover each right-column nav button (gear/R/feather/pin) → a
+      tooltip shows; gear opens Settings, R switches to read view, feather requests the editor. Pin is a no-op
+      stub for now. *(scribe-notebook-frame 6.3)*
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T12-04-59): "Works." Nav buttons show
+        tooltips and route to settings / read / editor as specced (Pin still a stub).
+- [x] `1bd45cf7` **Content interactive over art.** Over the backdrop, confirm the full editor still works:
+      type, check a task, pin, drag-reorder, and scroll all behave as before. *(scribe-notebook-frame 4.5)*
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T12-04-59): "Works." Full editor interaction
+        (type/check/pin/reorder/scroll) is intact over the backdrop.
+- [x] `3b87ec96` **Pixel Art Size rescales.** Change Pixel Art Size in Scribe Settings while a Lectern is
+      open → note whether the layout rescales live in-session or only re-sizes on the next open.
+      *(scribe-notebook-frame 6.4)*
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T12-04-59): "Works." Changing Pixel Art Size
+        re-lays-out the open Lectern's structures live. (The window/art canvas itself only grows on next open
+        — that limitation is the `a6308d20` side-bug below, not a failure of the live-relayout behavior.)
+- [x] `a6308d20` **Size persists + not resizable.** Set a Pixel Art Size, relog → it reads back (snapped to
+      the 10 grid, clamped 300–1000 on hand-edit); confirm the window itself cannot be resized by dragging its
+      edge. *(scribe-notebook-frame 6.4)*
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T12-04-59): "Works." The size persists across
+        a relog and the window can't be edge-dragged.
+      - **Side-bug found — art canvas won't grow past the last-OPENED width until relog.** Repro: log in at
+        600 → set to 300 → quit/relog → try 300→600: the structures move as W increases but the ART cannot
+        redraw/grow past 300; relog again and the art is correctly at 600. Confirmed root cause: the window
+        `Size` (hence the art `Container`'s `W × H` canvas) is only set in `CreateWindowConfig`, which runs
+        ONCE per open (`GuiBase.TryOpen`). A live W change re-lays-out the content tree but never re-applies
+        the window Size, so the OuterArtBox is capped at whatever W the window was OPENED at — raising W
+        beyond that spills the inner structures past the fixed art canvas. This is the same defect as the
+        earlier "">600 doesn't grow"" note (2026-07-26T11-25-01), now with an exact repro. Fix: re-apply the
+        window Size when W changes (or reopen), so the art canvas tracks the live W. Bugfix-pass candidate.
+
+## scribe-gui-backdrops
+
+> The reusable per-item / per-view illustrated-backdrop mechanism. A `ScribeBackdropSpec` (an
+> `AssetLocation`, no size assumption), a `ScribeBackdrops` holder, and `ScribeBackdrop.Wrap` that wraps a
+> view's body in a `Container` painting the loaded texture behind it (or a flat placeholder color when the
+> PNG is absent). Bitmaps are SELF-LOADED (`TryGet(loadAsset:true)` + `SKBitmap.Decode`) and cached on
+> `ScribeModSystem` so they survive VS's post-startup asset unload; disposed on mod-system dispose, never by
+> a dialog. Drawing is gated on the `PixelArtDisplay` toggle (ON = draw, OFF = plain LibGUI fallback).
+> **Deviation from plan:** the toggle shipped as `PixelArtDisplay` (not `ThemedBackgrounds`), and the
+> Lectern's in-dialog settings *view* was removed in the 2026-07-25 pivot — so only the single Lectern body
+> (read+editor) is wrapped, in `ScribeBackdrops.LecternPage` (reusing the existing tan
+> `lecternbackdrop.png`); the `LecternSettings` spec is defined but unused, and the standalone settings
+> window deliberately stays on the global theme. Restaged Debug 2026-07-26 — fully relaunch first.
+
+- [x] `a23a57e9` **Pixel-Art ON — Lectern backdrop.** With Pixel-Art Display ON, open the Lectern in both
+      read and editor view: the tan `lecternbackdrop.png` art draws behind the content in both, and the
+      task/note text stays legible over it. *(scribe-gui-backdrops 5.1)*
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T00-36-12): "Works." The backdrop draws
+        behind both the read and editor views with Pixel-Art ON and text stays legible.
+      - **Follow-up (new scope, not a defect):** the user is replacing the flat-tan `lecternbackdrop.png`
+        placeholder with real art at `Desktop/Lectern/Scribe-Notebook.png` — which is NOT the current
+        on-screen size, so scaling/positioning of the backdrop needs a design discussion before the swap.
+      - **Confirmed 2026-08-01** (user report): FOLLOW-UP resolved and extended. Real art is now wired
+        per-dialog — the Lectern draws `scribe-lectern.png`, the Clockmaker's Notebook draws
+        `scribe-clockmakers-notebook.png`, and the plain Notebook keeps `scribe-notebook.png` (all
+        1024×1160, so no scaling/aspect change was needed). `NotebookHost` takes an optional backdrop spec
+        so the two notebook items — which share the host — differ (commit `0d18e79` gui-backdrop). User
+        confirms the backdrops render correctly in-game.
+- [x] `da001e4a` **Pixel-Art OFF — no backdrop.** Turn Pixel-Art Display OFF and open the Lectern: neither
+      the read nor editor view draws any backdrop — both render as the plain LibGUI fallback (global
+      theme), no tan art. *(scribe-gui-backdrops 5.3)*
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T00-36-12): "Works." With Pixel-Art OFF
+        neither view draws a backdrop, as specced.
+      - **Plan change incoming (new scope):** the user is REVERSING this decision — they now want the
+        standard theme-derived backgrounds shown behind the Read/Edit views AND the Scribe Settings window
+        when Pixel-Art Display is OFF (rather than the current transparent/no-backdrop fallback). Likely a
+        matter of not suppressing the theme's own surface fill on those views. This item may become Obsolete
+        once that work lands.
+- [x] `ccaee4e2` **Backdrop survives asset unload.** Play a while after launch (so the engine unloads
+      assets), then open, close, and reopen the Lectern: the backdrop still renders every time (self-load
+      defeats the post-startup unload; the shared bitmap is cached, not re-decoded per open).
+      *(scribe-gui-backdrops 5.4)*
+      - **Confirmed 2026-07-26** (playtest submission 2026-07-26T00-36-12): "Works — survives unload." The
+        backdrop still renders on reopen well after startup, proving the self-load defeats the post-startup
+        asset unload.
+- [x] `3451f8d1` **Missing-asset fallback.** Rename `scribe-notebook.png` to `.bak` (path:
+      `~/Library/Application Support/VintagestoryData/Mods/scribe/assets/scribe/textures/gui/scribe-notebook.png`),
+      open the Lectern with Pixel-Art ON: the body shows the flat tan placeholder color (no crash, structure
+      intact), and the log shows exactly ONE `[scribe]` backdrop warning across multiple opens. Restore the
+      PNG after. *(scribe-gui-backdrops 4.1 / 4.2)*
+      - **Confirmed 2026-07-28**: flat tan placeholder rendered with no crash and structure intact.
+- [ ] `0ebd6a06` **Backdrop legibility verdict.** While backdrops are on, judge whether the art fights the
+      text anywhere (read + editor); record whether a `textColor` override or a semi-opaque content panel is
+      needed. *(scribe-gui-backdrops 5.5)*
+      - **Backlogged 2026-07-26** (playtest submission 2026-07-26T00-36-12): a final legibility verdict is
+        premature — the current backdrop is still the flat-tan placeholder and is about to be replaced by
+        real art (`Scribe-Notebook.png`, see `a23a57e9`). No "art fights the text" problem was reported over
+        the placeholder; re-judge once the real art lands. The user's note under this item was actually a
+        SEPARATE contrast request (pinned-row tint), split out as `pin-row-contrast` below.
+      - **NEW REQUEST (pinned-row contrast, new scope):** in the Read/Edit views the pinned-task row uses a
+        semi-transparent fill that reads too subtly. The user wants much more contrast — a BLUE row tint at
+        ≥85% opacity, a darker blue for dark mode and a lighter blue for light mode; expected to need
+        iteration. Touches `ScribeTheme`/the pinned-row tint, not the backdrop mechanism.
+      - **Obsolete 2026-07-28** (playtest submission 2026-07-28T07-15-37): user retired this legibility
+        verdict — "we changed the spec with more contrast another way." The legibility concern was addressed
+        by a different contrast approach (see the pinned-row contrast request above), so a standalone
+        art-vs-text legibility judgment no longer applies as written.
+- [ ] `b7e0d31c` **Missing-asset placeholder + single warning.** Temporarily rename/remove the LOADED
+      backdrop PNG, open the Lectern with Pixel-Art ON: the body draws its flat placeholder color (no crash,
+      structure renders normally) and the log shows exactly ONE `[scribe] backdrop asset … not loadable`
+      warning across repeated opens. Restore the PNG after. *(scribe-gui-backdrops 4.1 / 4.2)*
+      - **Obsolete 2026-07-26** (playtest submission 2026-07-26T11-25-01, user unsure — asked for the exact
+        file to rename): this item's target moved. scribe-notebook-frame repointed `ScribeBackdrops.LecternPage`
+        from `lecternbackdrop.png` to `scribe-notebook.png`, so renaming `lecternbackdrop.png` no longer tests
+        anything (it's now the reserved-but-UNLOADED placeholder). The live asset to rename is now
+        `~/Library/Application Support/VintagestoryData/Mods/scribe/assets/scribe/textures/gui/scribe-notebook.png`
+        — BUT the missing-asset fallback is better re-verified under a fresh scribe-notebook-frame item against
+        that path, since the placeholder color + OuterArtBox structure also changed this session. Retired here;
+        will resurface as a notebook-frame item. (Exact live path recorded above for whenever it's retested.)
+
+## scribe-themed-toggle
+
+> A persisted, client-local `PixelArtDisplay` preference (default ON) that themes Scribe's three CORE
+> views — Lectern read + editor and the pinned-task HUD — in a net-new LIGHT parchment look (dark ink on
+> light paper via `ScribeTheme.Light`, all 17 `ColorScheme` roles), live. When OFF those views follow the
+> player's GLOBAL LibGUI theme (their `libgui.json`, stock dark by default). The single standalone
+> settings window is "the remainder" — it always follows the global theme and is NOT parchment-themed.
+> **Pivot 2026-07-25:** the former in-Lectern settings *tab* was removed; the Lectern gear now opens the
+> SAME standalone settings window the HUD gear does (via `ScribeModSystem.OpenSettings`). Toggle lives in
+> Settings → Appearance ("Pixel-Art Display"). Restaged Release 2026-07-25. Fully relaunch first. Colors
+> are a first pass — likely to need tuning once seen in-game (also browsable as `scribe_parchment` in the
+> libGUI-Theme-Library gallery).
+
+- [x] `f8a44302` **Pixel-Art ON — Lectern light.** With Pixel-Art Display ON, open the Lectern (read and
+      editor): both render dark text on light parchment; the title bar is light and text is legible
+      everywhere. *(scribe-themed-toggle 6.1)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T20-12-27): the Lectern renders dark ink on
+        light parchment with a legible light title bar when ON. (The Lectern-light behavior is unchanged by
+        the 2026-07-25 scope correction that removed the HUD from the toggle; re-confirmed from the same
+        first-hand evidence.)
+- [x] `99db7d7f` **Pixel-Art OFF — Lectern follows global.** Uncheck Pixel-Art Display: the Lectern
+      read+editor switch to your global game GUI theme (stock dark unless you set a custom `libgui.json`),
+      plain and legible, depending on no art. *(scribe-themed-toggle 6.2)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T21-06-50): "Works." With Pixel-Art off the
+        Lectern falls back to the global theme, legible.
+- [x] `aca023ac` **Live toggle relights the Lectern.** With the Lectern open, toggle Pixel-Art Display in
+      the settings window: the Lectern flips between the light parchment look and your global theme
+      instantly, no reopen/restart. *(scribe-themed-toggle 6.3)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T21-06-50): "Works." Toggling relights the
+        open Lectern live, no reopen/restart.
+- [x] `e5413b99` **Persists + defaults on.** Set Pixel-Art Display, relog: it reads back at the last value
+      (written to `scribe-hud-config.json`). On a fresh profile (no config) it defaults ON.
+      *(scribe-themed-toggle 6.4)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T21-06-50): "Works." The setting persists
+        across a relog and defaults on.
+- [x] `1e371fe4` **No white-on-light text.** In themed (light) mode, check that no text renders
+      white-on-light — inspect the title-bar text and every settings-form label specifically.
+      *(scribe-themed-toggle 6.5)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T20-12-27): "Works." No white-on-light
+        text; title-bar text and settings-form labels are legible in light mode.
+- [x] `baa8e3c5` **One settings window, two openers.** Click the gear in the Lectern AND the gear on the
+      HUD: both open the SAME standalone settings window (not an in-lectern tab). Opening from the Lectern
+      does not disturb the editor lock or lose an in-progress edit behind it. *(scribe-themed-toggle 8.1)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T21-06-50): "Works." Both the Lectern gear
+        and the HUD gear open the same standalone settings window; no editor-lock/in-progress-edit
+        disturbance behind it.
+- [x] `dbd9c7c1` **Settings window ignores Pixel-Art.** Toggle Pixel-Art Display on/off: the settings
+      window itself stays on your global game theme both ways. It is deliberately not parchment-themed.
+      *(scribe-themed-toggle 8.2)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T21-06-50): "Works." The settings window
+        stays on the global theme regardless of the toggle.
+- [x] `ddbabbf7` **HUD never toggles.** Toggle Pixel-Art Display on/off with the HUD showing: the HUD pins
+      do NOT change theme — they always render on your global game theme regardless of the setting.
+      *(scribe-themed-toggle 8.3)*
+      - **Still broken 2026-07-25** (user report): the launched build had the HUD toggling with the setting
+        when it shouldn't. **Fix applied 2026-07-25:** removed the HUD's `Theme` wrap and the halo
+        inversion — the HUD now always follows the global theme. Restaged Release.
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T21-06-50): "Works." The HUD no longer
+        changes theme when Pixel-Art Display is toggled — it stays on the global theme.
+- **PIVOT RESOLVED 2026-07-25:** the 2026-07-25T20-12-27 pivot is implemented and then CORRECTED per the
+  user's follow-up: `ThemedBackgrounds` → `PixelArtDisplay`; the light theme is scoped to the **Lectern
+  only** (read/editor, later the pinned view) — NOT the HUD; the HUD and the settings window both follow
+  the player's global theme; in-Lectern settings tab removed and its gear repointed at the shared
+  standalone window. Items 6.1/6.2/6.3 were recast for this scope (old verdicts dropped where behavior
+  changed; 6.1's Lectern-light half re-confirmed from the same evidence).
+
+## scribe-list-collapse
+
+> Deletion-collapse animation for Scribe lists (`ScribeCollapsible` + `ScribeHeightFactorRender` +
+> host-owned `ScribeCollapseRegistry`). A removed row's height animates smoothly to zero (rows below slide
+> up) then it's removed on completion, instead of vanishing in one frame. Wired into the HUD (unpin/delete)
+> and the lectern editor (delete). Self-ticking so it animates under `ForceRebuild`; controller is
+> host-owned + keyed by identity so it resumes across remounts. Reorder-glide is out of scope (deferred).
+
+- [x] `536fbadf` **HUD delete/unpin collapse.** Complete a HUD task under Delete and under Unpin; after
+      the fade window the row's height collapses smoothly and the rows below slide up (no instant
+      vanish/snap). *(scribe-list-collapse 5.1)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T22-36-25): "Works." The row collapses
+        smoothly under both Delete and Unpin.
+- [x] `7f885cf7` **Rapid HUD removals.** Complete/delete several HUD rows in quick succession; each
+      collapses independently, none strands a half-height gap. *(scribe-list-collapse 5.2)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T22-36-25): "Works." Each removal collapses
+        independently, no stranded gap.
+- [x] `a6b4fc0e` **Re-pin during collapse.** Unpin a HUD task (it collapses), then immediately re-pin it
+      from the lectern; it reappears at full height, not stuck invisible. *(scribe-list-collapse 5.3)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T22-36-25): "Works." Re-pinning during the
+        collapse brings the row back at full height.
+- [x] `fe0e18fc` **Lectern row delete collapse.** Hover a lectern editor row and click delete; it
+      collapses smoothly and rows below slide up. Delete several fast; each collapses independently.
+      *(scribe-list-collapse 5.4)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T22-36-25): "Works." Editor rows collapse
+        smoothly on delete, rows below slide up.
+- [x] `eb9e379c` **Delete at scroll bottom.** Scroll the editor to the bottom and delete the last row; no
+      dead-space flash, the viewport settles once the collapse finishes. *(scribe-list-collapse 5.5)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T22-36-25): "Works." No dead-space flash;
+        the viewport settles after the collapse.
+- [x] `58707ebd` **Collapse under rebuild.** Delete a HUD row while another pin's fade window is still
+      running; the collapse still completes smoothly (resume-from-elapsed registry). *(scribe-list-collapse 5.6)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T22-36-25): accepted as a win — the tester
+        found it too fiddly to trigger reliably (needs very fast cross-window mouse movement), deemed an
+        acceptable edge case. The resume-from-elapsed registry is exercised by 5.1–5.3 passing.
+- [x] `dfad74a8` **Hanging textless checkbox after a HUD row clears.** After a HUD item is cleared, a bare
+      checkbox with no text is sometimes left behind on the HUD. *(scribe-list-collapse — follow-up)*
+      - **Still broken 2026-07-25** (playtest submission 2026-07-25T22-36-25, general note + screenshot
+        `.playtest-submissions/screenshots/2026-07-25T22-28-10-general.png`): the HUD shows two textless
+        checkboxes above a real "New task / New Line" pin. NOT an empty-text pin — an empty task can't be
+        pinned (pinning it blurs the field and the empty row self-destructs) or saved, confirmed by the
+        tester. Instead the row's TEXT faded to zero opacity over the undo window but the checkbox + row
+        height were left behind, so a bare checkbox lingers. Lives in the HUD removal machinery
+        (`HudScribePins` departing/`ScribeFadeText`/collapse), not in add-empty-task-lifecycle. Likely a
+        row whose completion sent but whose collapse/removal didn't retire the checkbox (or a Sink/undo
+        edge that leaves the faded text with a persistent checkbox). Needs a repro of the exact completion
+        policy + timing. Logged for a follow-up; not fixed here.
+      - **Not reproduced 2026-07-26** (playtest submission 2026-07-26T00-36-12): "keeping an eye on this,
+        but it hasn't popped up this game session." No recurrence this session; still unfixed and kept on
+        the list for a deliberate repro (the exact completion policy + timing that triggers it is still
+        unknown).
+      - **Still broken 2026-07-26 — REPRO FOUND** (playtest submission 2026-07-26T11-25-01): the trigger is
+        now known — under **"Delete task" policy**, rapidly click/queue a bunch of HUD tasks for completion,
+        then try to un-queue (uncheck within the undo window) some of them. That race sometimes strands the
+        bare checkbox. Confirms the earlier hypothesis (a completion whose collapse/removal didn't retire the
+        checkbox, on the undo path). Reproducible enough now to drive a fix in the HUD removal machinery
+        (`HudScribePins` departing / `ScribeFadeText` / collapse under Delete + rapid undo).
+      - **Not reproduced 2026-07-26 — NOT a confirmed fix** (playtest submission 2026-07-26T12-55-50: "Fixed."):
+        left UNCHECKED deliberately. No fix commit touched `HudScribePins`/collapse between the 11:25 repro
+        and this report (only `530a506`, an OpenSpec-archive-only commit, landed in that window), and this bug
+        has already gone quiet once (2026-07-26T00-36-12) before recurring. Treating "Fixed" as another
+        non-reproduction of a known intermittent race, not a resolution. Retest specifically with the known
+        trigger (Delete policy + rapid complete-then-undo) before calling it fixed.
+      - **Confirmed 2026-07-27 — closed by tester decision** (playtest submission 2026-07-27T18-22-10): "This
+        is fixed. If it comes up again we will open a new bug." No further recurrence across sessions. Note:
+        no targeted HUD-collapse fix was ever isolated for this intermittent race (see the two prior
+        non-reproductions) — this is the tester electing to close it out rather than a mechanism-verified
+        fix, so if the bare checkbox reappears under Delete + rapid complete-then-undo, it should be filed
+        fresh rather than reopened here.
+
+## add-settings-tab
+
+> In-mod per-player Settings surface (LibGUI). A gear opens `ScribeSettingsContent` — a two-section
+> (Behavior / Appearance) form with instant write-through — swapped into the lectern's central region
+> (`ScribeSettingsView`, gear in a header row under the title bar) or hosted in a standalone
+> `ScribeSettingsDialog` from the HUD gear. Adds HUD + window font-size scales (5 notches, live). Retired
+> `ScribeClientConfig`; row sizing now derives live from `ScribePlayerSettings` per build.
+
+- [x] `a12b3476` **Completion policy switch.** In Settings → Behavior, set completion policy to each of
+      Keep/Unpin/Delete; complete a pinned task after each and confirm it sinks / unpins / deletes the
+      task on the next completion. *(add-settings-tab 7.1)*
+      - **Confirmed 2026-07-25** (playtest submission): all three policies behave on the next completion —
+        Keep sinks, Unpin removes the pin, Delete removes the task. Follow-up polish requested (new scope,
+        not this task): tune the undo/sink delay to 1.5s and apply the same delay to unpin+delete; add a
+        "keep, no sink" policy; add fade-out (unpin/delete) + AnimatedSlide (sink) animations.
+- [x] `641819e9` **HUD anchor/offset/width.** Pick each non-default HUD anchor, set non-zero X/Y offsets
+      and a non-default row width; confirm the HUD repositions and wraps correctly, then restart and
+      confirm the values persisted. *(add-settings-tab 7.2)*
+      - **Confirmed 2026-07-25** (playtest submission): anchor/offset/width reposition + wrap correctly and
+        persist across restart. Follow-up requested (new scope): row width → numeric field (not slider),
+        range 100–1000 step 5; offsets should be RELATIVE to the pre-baked anchor offset (respect the
+        minimap clearance), clamp ±300 step 5.
+- [x] `89a6dba1` **Live font scales + caret.** Change HUD text size (HUD updates instantly) and window
+      text size (open lectern updates instantly); if you can trigger a window-font change while a row is
+      focused, confirm the caret survives the rebuild. *(add-settings-tab 7.3)*
+      - **Confirmed 2026-07-25** (playtest submission): "Works" — HUD and window scales update live.
+        Follow-up requested (new scope): make font size a numeric field stepping by 5 (not 10); live-update
+        the Settings form's own text as the scale changes; scale the checkboxes/other elements with the
+        font size too.
+- [x] `73b9f530` **Gear + view swap.** Click the gear in both read and editor views — settings replaces
+      the central region and the chrome stays; entering from the editor commits your edit and releases the
+      lock; Back returns to the prior view; the HUD gear opens the standalone settings window. *(add-settings-tab 7.4)*
+      - **Confirmed 2026-07-25** (playtest submission): "Works" — gear swaps the region in both views,
+        editor entry commits+releases the lock, Back returns, HUD gear opens the standalone window.
+        Follow-up requested (new scope): swap in the `gear-filled` icon from ~/Downloads; verify the
+        release-lock-then-Back sequence can't leave a second editor stuck (multiplayer test).
+- [x] `7fe6408b` **Tooltips, lang, scale 1.0.** Hover each setting's label for helptext; confirm no raw
+      `scribe:...` keys show anywhere; with both scales at Default, confirm lectern rows look pixel-identical
+      to before. *(add-settings-tab 7.5)*
+      - **Confirmed 2026-07-25** (playtest submission): "Works" — helptext shows, no raw keys, scale 1.0
+        reproduces the prior layout.
+- [x] `06d9f8d0` **Old config ignored.** With a leftover `scribe-client-config.json` on disk, open the
+      lectern and confirm no load error in the log and the file is simply ignored. *(add-settings-tab 7.6)*
+      - **Confirmed 2026-07-25** (playtest submission): "Works" — leftover `scribe-client-config.json` on
+        disk causes no load error and is ignored.
+- [x] `1b57beda` **Deferred window + policies.** Complete a HUD task under each policy: the ~1.5s window
+      previews the outcome (text fades for unpin/delete, row mutes/settles for sink); unchecking within the
+      window fully undoes it (task stays, nothing sent); letting it elapse applies the completion. `Keep`
+      leaves the checked task in place (no sink). *(add-settings-tab 9.1)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T13-50-39): "All four work" — each policy
+        previews and applies/undoes correctly. Two refinements requested (new scope, not defects in this
+        test): (a) under Sink/Keep policy, a completed task should actually REORDER to the end of the list
+        once its sink animation finishes and STAY there even if later unchecked — currently unchecking
+        reverts it to its prior slot; (b) the unpin/delete fade is not gradual — opacity instantly jumps to
+        ~40% instead of linearly ramping 100%→0% over the 1.5s window.
+- [x] `df9b1b06` **Numeric fields.** Font size, HUD row width, and HUD max rows are numeric fields (no
+      slider); each clamps to range, steps by its increment (+/- buttons), and never hijacks scrolling.
+      Font is a percent in 5% steps. *(add-settings-tab 9.2)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T13-50-39): "Works." Numeric fields clamp,
+        step by increment via +/- buttons, and don't hijack scroll. (General-note follow-up, new scope:
+        up/down arrow keys should also step the field by its increment.)
+- [x] `27c0af03` **Relative offsets.** HUD X/Y offsets are relative to the anchor's built-in position
+      (0 = default, clear of the minimap on TopRight); values up to ±300 apply and persist. *(add-settings-tab 9.3)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T13-50-39): "Works." Offsets are relative to
+        the anchor's built-in position and apply/persist across the ±300 range.
+- [x] `ac377d10` **Live re-scale.** Changing window font size live-rescales the settings form's own text +
+      checkboxes; changing HUD font size live-rescales the HUD checkbox. *(add-settings-tab 9.4)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T13-50-39): live re-scale works for the
+        settings form text/checkboxes (window font) and the HUD checkbox (HUD font). Follow-up requested
+        (new scope): on each window-font change, recompute the window's scroll-area height (font size
+        changes row heights) and force the scroll to the bottom.
+- [x] `52cfbc4e` **Title + filled gear.** The window title reads "Scribe Settings" in the settings view;
+      the filled gear icon renders. *(add-settings-tab 9.5)*
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T13-50-39): "Works." Title reads "Scribe
+        Settings" in the settings view and the filled gear icon renders. (General-note follow-up, new scope:
+        the gear on the HUD pinned list is ~25% too big.)
+- [x] `a581fcab` **Multiplayer Back safety.** Enter the editor, open settings (releasing the lock), have a
+      second player grab the editor, then hit Back — you land in the read view, not a stuck settings frame.
+      *(add-settings-tab 9.6)*
+      - **Backlogged 2026-07-25** (playtest submission 2026-07-25T13-50-39): "Deferred until multiplayer
+        testing." Needs a two-client setup; parked, not broken — the code path (Back-loses-lock → read-view
+        fallback) is in place.
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-15-37, two-client MP session): "Works."
+        With a second player holding the editor lock, hitting Back lands in the read view — no stuck settings
+        frame.
+
+## add-pinned-task-hud
+
+> On-screen pinned-task HUD built on LibGUI (`HudScribePins : GuiBase`, `EnumDialogType.HUD`): renders
+> THIS player's own pins (top-right, glow-over-world, no plate) as an auto-ordered checklist — not-done
+> above done, completed sinks after a ~2s undo window. Completion reuses `ScribeCompleteTaskMessage`
+> carrying the client's completion policy (Sink/Unpin/Delete). Auto-shows on ≥1 pin / hides at zero;
+> rebindable `scribepinhud` hotkey (default P) + on-HUD chevron toggle a persisted, client-local
+> collapse. Preferences (`CompletionPolicy`/`HudMaxRows`/`HudCollapsed`) live in `scribe-hud-config.json`.
+> Built + Core-green 2026-07-25; NOT yet restaged/committed as of this writing — restage before testing.
+
+- [x] `f3df9416` **Pin shows on HUD.** Pin a task at a lectern → a top-right HUD appears showing that
+      task's text + done state, legible over a busy world background via the text glow (no background
+      plate). *(add-pinned-task-hud 7.3)*
+      - **Confirmed 2026-07-25** (user playtest, submission 2026-07-25T09-52-31): "Works." The HUD
+        appears on pinning a task, showing text + done state legibly over the world.
+- [x] `8439e474` **Completion policies.** Complete a HUD task under each policy (set in
+      `scribe-hud-config.json`): Sink → row mutes and after ~2s sinks to the bottom (re-toggle within
+      2s undoes); Unpin → completion removes the row; Delete → completion deletes the underlying task.
+      *(add-pinned-task-hud 7.4)*
+      - **Backlogged 2026-07-25** (user playtest, submission 2026-07-25T09-52-31): deferred until the
+        in-mod Settings Tab lands — hand-editing `scribe-hud-config.json` to switch policy per test is
+        too fiddly. The Sink default path is exercised implicitly by 7.3/7.7; Unpin/Delete await the
+        settings UI (a separate future change). Retest then.
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T22-36-25): "Works." Now that the Settings
+        UI lets the policy be switched in-game, all three policies (Sink/Unpin/Delete) behave on
+        completion. Two general-note caveats are tracked as separate follow-ups, not failures of this item:
+        the stale-editor-view-under-Delete issue (`80777b7b` below) and the hanging textless checkbox
+        after clearing a HUD row (`dfad74a8` under scribe-list-collapse).
+- [x] `9805a162` **Break lectern, pin survives.** Break the lectern hosting a pinned task → the pin
+      stays on the HUD (player-owned) and is still completable from its snapshot; re-place the lectern →
+      its source is restored. *(add-pinned-task-hud 7.5)*
+      - **Confirmed 2026-07-25** (user playtest, submission 2026-07-25T09-52-31): "Works." Breaking the
+        host lectern leaves the pin on the HUD (player-owned, grief-proof); re-place restores the source.
+- [x] `12dcaaa7` **Row cap + "+N more".** With more pins than `HudMaxRows`, confirm exactly max rows
+      render plus a "+N more" indicator; edit `HudMaxRows` in `scribe-hud-config.json`, reload, and
+      confirm the HUD honors the new cap. *(add-pinned-task-hud 7.6)*
+      - **Confirmed 2026-07-25** (user playtest, submission 2026-07-25T09-52-31): "Works." Exactly
+        `HudMaxRows` rows render with a "+N more" indicator; editing the cap in the config + reload is honored.
+- [x] `16464b57` **Auto-show + collapse persist.** HUD auto-shows on the first pin and hides at zero
+      pins; the toggle hotkey (default P) AND the on-HUD chevron collapse/expand it (animated); the
+      collapsed state persists across a relog and carries to a DIFFERENT world (client-local,
+      cross-world). *(add-pinned-task-hud 7.7)*
+      - **Confirmed 2026-07-25** (user playtest, submission 2026-07-25T09-52-31): "Works." Auto-show/hide,
+        hotkey + on-HUD chevron collapse, and cross-session/cross-world persistence all function.
+        Screenshot `.playtest-submissions/screenshots/2026-07-25T09-49-08-16464b57.png` shows the
+        `scribepinhud` hotkey registered ("Toggle pinned-task HUD" → P, searchable under "pin").
+      - **Follow-up (addressed 2026-07-25):** user asked to rename the hotkey label from "Toggle
+        pinned-task HUD" to "Scribe Mod: Toggle pinned-task HUD" — done in `en.json`
+        (`hotkey-scribepinhud`); re-verify the new label shows in Controls after the next relaunch.
+- [x] `2394a823` **Default clears minimap.** With fresh config (no `scribe-hud-config.json`), pin a
+      task → the HUD appears top-right but OFFSET LEFT of the 250×250 minimap, not underneath it; long
+      task text wraps within a fixed ~250px width rather than stretching wide. *(add-pinned-task-hud 4.5)*
+      - **Confirmed 2026-07-25** (user playtest, submission 2026-07-25T09-52-31): "Works." The default
+        top-right anchor sits left of the minimap (not under it) and text wraps within the fixed width.
+- [x] `49d5003c` **Anchor/offset/width config.** Edit `scribe-hud-config.json`: set `HudAnchor` (e.g.
+      `BottomRight` / `TopLeft` / `MiddleRight`), tweak `HudOffsetX`/`HudOffsetY`, and change
+      `HudRowWidth`; reload → the HUD moves to that corner/edge, shifts by the offset (toward center),
+      and the row area resizes to the new width. Confirm it never runs off-screen. *(add-pinned-task-hud 4.5)*
+      - **Backlogged 2026-07-25** (user playtest, submission 2026-07-25T09-52-31): "The default is in the
+        right place." Non-default anchors/offsets not exercised yet; the user will assess when testing on
+        PC. Deferred, not broken — the default path is confirmed under `2394a823`.
+      - **Confirmed 2026-07-25** (playtest submission 2026-07-25T22-36-25): "Works." Anchor/offset/width
+        set via the Settings UI reposition + resize the HUD correctly (no off-screen).
+- [x] `80777b7b` **HUD-complete under Delete doesn't refresh an open editor.** With the editor view open
+      and Delete policy, checking a task off VIA THE HUD deletes it server-side but the open editor still
+      shows the row until you toggle Editor → Read → Editor. *(add-pinned-task-hud — follow-up)*
+      - **Still broken 2026-07-25** (playtest submission 2026-07-25T22-36-25, general note): a HUD Delete
+        completion mutates the authoritative document, but the editor edits a PRIVATE scratch copy and
+        deliberately ignores external resyncs (`GuiDialogScribeLecternLibGui.RefreshReadView` is a no-op
+        while `isEditorMode`), so the deleted row lingers in the open editor until a view-swap reseeds the
+        scratch. Pre-existing design tension (editor isolation), surfaced by exercising the Delete policy —
+        NOT caused by add-empty-task-lifecycle. Fix is non-trivial (reconciling an external delete into a
+        live scratch without clobbering in-progress edits); logged for a follow-up, not fixed here.
+      - **Fix applied 2026-07-27 (awaiting retest):** `RefreshReadView` now reconciles in editor mode:
+        tasks absent from the fresh server doc are removed from scratch via `DeleteEditorBlock` (with its
+        collapse animation and focus fixup), leaving other rows' in-progress text intact. Retest: item
+        `22412531` below.
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T18-22-10): "Works!" The open editor now
+        drops a HUD-deleted row immediately. (Note: this same `RefreshReadView` reconcile caused the
+        Enter-self-destruct regression `8f971d46`, fixed and confirmed this session.)
+
+## add-lectern-row-affordances-libgui
+
+> Third editor tier: wires the per-row **delete**, **pin/unpin**, and **mouse-drag reorder** controls
+> onto the LibGUI editor rows (the model already supported all three; they were unwired). New trailing
+> control columns `[checkbox][text][pin][delete][grip]`, right-anchored, hover-conditional (grip always
+> shown). Pin/delete use `VsIcon`+hover; drag uses the grip's `GestureDetector` + row-level `MouseRegion`
+> drag-over; pinned tasks get a resting row tint in BOTH views; drop target gets a highlight.
+> Committed `38780a4` + restaged Debug 2026-07-23.
+
+- [x] `a23c52b1` **Delete a task.** In the editor, hover a row → click the red delete (X) icon; confirm
+      the row vanishes and the rest keep order. Delete the row you're actively editing, and delete the
+      LAST remaining row (→ empty-state hint, no crash). Reload the world; confirm deletions persisted.
+      *(5.2)*
+      - **Confirmed 2026-07-23** (user playtest, submission 2026-07-23T23-42-23): "Works." Delete
+        control removes rows, order preserved, persists across reload.
+- [x] `b7a318f6` **Pin / unpin.** Hover a task row → click the pin icon; confirm the row gets a resting
+      tint (visible without hovering) in BOTH the editor and the read view. Unpin → tint gone. Confirm a
+      text-section row shows NO pin control. Reload; confirm pinned state persisted. *(5.3)*
+      - **Confirmed 2026-07-23** (user playtest, same submission): "Works." Resting tint shows in both
+        views, unpins cleanly, persists across reload.
+- [x] `08cae46d` **Drag-reorder.** Press a row's grip (right-most icon) and drag over another row →
+      confirm the drop-target row highlights; release → the row lands there and others shift. Release in
+      place → nothing changes. Repeat with the list scrolled. Reload; confirm the new order persisted.
+      *(5.4)*
+      - **Confirmed 2026-07-23** (user playtest, same submission): "Works." Grip-drag reorders with drop
+        highlight, drop lands where released, persists across reload.
+- [x] `ec215283` **Controls-present regression.** With the new controls on every row, confirm the old
+      editor behaviors still work: click-to-edit, text selection, checkbox toggle, Enter/Tab row nav, and
+      autosave. Note whether the caret jumping to end-of-text after a reorder/delete rebuild is bothersome.
+      *(5.5)*
+      - **Confirmed 2026-07-23** (user playtest, same submission): "Works." All prior editor behaviors
+        intact with the controls present; caret-to-end residue not reported as bothersome.
+- [x] `9f65bd6f` **Scrollbar flickers on control click.** Click a pin/delete/grip control → the scrollbar
+      animates in from the side, then fades back out; clicking the checkbox or typing in the field does
+      NOT trigger it. Decide whether to suppress it (cosmetic only). *(new — from 5.5 general note)*
+      - **Still broken 2026-07-23:** cosmetic side effect, not a functional fault. Cause (from
+        `reference/vslibgui/.../Scrollbar.cs`): the auto-hide scrollbar re-shows on its controller's
+        `OnChanged` (`_Show()`), and pin/delete/reorder each call `ForceRebuild()`, which re-lays-out the
+        `SingleChildScrollView`/`ListView` and pokes the shared `ScrollController` → the bar fades in then
+        idle-fades out. Checkbox (local `SetState`) and text-edit (field-only rebuild) never `ForceRebuild`,
+        so they don't.
+      - **Fix applied 2026-07-24:** set `AutoHide = false` on both scrollbars, so the bar is permanently
+        visible (matches the pre-LibGUI native GUI) and the fade animation is never driven — `Build` reads
+        a hard `visibility = 1f` and `_Show()` is skipped when `AutoHide` is false.
+      - **Confirmed 2026-07-24** (user playtest, submission 2026-07-24T07-24-24): "Works. The scrollbar
+        does not unnecessarily animate. It is always shown, as expected."
+- [x] `7c22da1a` **Scroll position survives view switch.** With enough rows to scroll, scroll down in the
+      read view, then switch to the editor (and back) → confirm you're still looking at the same part of
+      the list, not jumped back to the top. *(new — shared scroll controller, 2026-07-24)*
+      - **Still broken 2026-07-24** (user playtest, submission 2026-07-24T07-24-24): only ONE direction
+        works. read→edit ("Edit" button) preserves the scroll offset; edit→read ("Done editing") resets to
+        the top. Confirmed cause (from `reference/vslibgui/.../ListView.cs:189`): the read view's
+        virtualized `ListView.HandleScrollUpdate` clamps the shared controller's offset to a `maxScroll`
+        derived from `_contentHeight`, which on the first post-swap layout is still the estimate (small),
+        so the offset gets clamped toward 0. The editor's non-virtualized `SingleChildScrollView` measures
+        full content immediately, so read→edit survives.
+      - **Fix applied 2026-07-24 (awaiting retest):** `OnClickSwitchToRead` now captures the offset before
+        the rebuild (`CaptureScrollForRestore`), and `OnRenderGUI` re-applies it via `JumpTo` for up to 5
+        frames after the swap — long enough for the ListView's content height to settle so the offset
+        sticks; a genuinely shorter list clamps to its real max and stops. Retest: scroll down in edit,
+        "Done editing" → read view should stay at the same spot, not jump to top.
+      - **Confirmed 2026-07-24** (user playtest, submission 2026-07-24T07-53-46): "Works." Scroll position
+        now survives edit→read too. (User: "Will work better when the drag-row column fix is also
+        implemented → since there'd be less height difference" — see the read-view grip-column parity item.)
+- [x] `18cd5c60` **Read/edit row heights match.** Compare a single-line task's height in read vs. editor
+      view — they should be pixel-identical (that's what makes the shared scroll offset line up). With a
+      long list, scroll to the bottom in both and watch for a fractional per-row drift accumulating, or a
+      few pixels of the last row cut off. If there's a small consistent cutoff, a little bottom padding on
+      the list is a cheap fix. *(new — verify row-height parity, 2026-07-24)*
+      - *Untested 2026-07-24:* user deferred this ("will test after 7c22da1a works") — the parity check is
+        hard to judge while the edit→read switch resets scroll. Retest once `7c22da1a` is fixed.
+      - **Still broken 2026-07-24** (user playtest, submission 2026-07-24T08-27-05, screenshots
+        2026-07-24T08-18-32/39-18cd5c60): a small but real per-row vertical offset remains. User (Retina
+        display) measured ~4px in Photoshop → ≈2 logical px, since VS isn't Retina-aware. The whole row
+        (not just the checkbox) sits ~2px lower in edit vs. read — the edit row content is lower, or the
+        read row content is higher. Recommend measuring checkbox positions across the two views. Needs a
+        fix (align the read row's content vertical origin to the editor field's).
+      - **Fix applied 2026-07-24 (awaiting retest):** root cause was a FONT-FAMILY mismatch, not padding.
+        The read view draws with LibGUI's stock `Text` (family `"sans-serif"`, the `TextStyle` default);
+        the editor's custom `ScribeMultilineFieldRender` measured/drew with `""`, which resolves to a
+        DIFFERENT system typeface with different line metrics — the ~2px per-row delta. Fixed by giving the
+        field a `FontFamily = "sans-serif"` const used for both `MeasureText` and `DrawText` (all four
+        call sites). Since scroll restore preserves a pixel offset, this should also tighten `7c22da1a`'s
+        edit→read landing. Retest: single-line task is the same height in read vs. edit; scroll to the
+        bottom of a long list in both and confirm no accumulating drift / last-row cutoff. (VSAPI-NOTES.md
+        has the metrics gotcha.)
+      - **Still broken 2026-07-24 (residual, scroll-dependent):** user clarified the font-family fix left a
+        smaller residual — ZERO difference at the TOP of the list, ~2px at the BOTTOM, with read content
+        sitting ~2px lower. That scroll-position dependence pointed at a max-scroll mismatch, not a per-row
+        delta.
+      - **Fix applied 2026-07-24 (awaiting retest):** the read view's virtualized `ListView` derives its
+        total content height (→ the shared controller's max-scroll) from `estimatedItemHeight` for every
+        row not yet mounted. That estimate was `FontSize * 1.2f + pads`, which UNDER-counts the true metric
+        line height (`Descent − Ascent + Leading + pads`); the editor's non-virtualized
+        `SingleChildScrollView` sums EXACT heights. Jumping/dragging to the bottom leaves middle rows
+        unmeasured, so read bottomed out at a smaller offset → content ~2px lower. Fixed by setting
+        `estimatedItemHeight` to the SAME measured single-line height the editor field uses
+        (`MeasureText("Ag","sans-serif",FontSize).Y + FieldPadY*2 + RowVerticalPadding*2`). Retest: scroll
+        (wheel AND scrollbar-drag) to the bottom of a long list in read vs. edit — they should now line up.
+      - **Confirmed 2026-07-24** (user playtest, submission 2026-07-24T15-27-15): "Works." The matched
+        ListView estimate resolved the residual scroll-dependent drift; read/edit rows line up top and
+        bottom.
+- [x] `fa4d457f` **Window width matches Handbook.** Open the lectern and the vanilla survival Handbook
+      and compare widths — the lectern window should now be the same width (567px). *(new — 2026-07-24)*
+      - **Confirmed 2026-07-24** (user playtest): "They match."
+- [x] `21982461` **Click repositions caret.** In the editor, click into a row to focus it and type, then
+      click somewhere else within that SAME (already-focused) field — the caret should jump to the click
+      point. Test on a wrapped second/third line too (click lands on the right line and column), and
+      clicking past the end of a line's text lands the caret at the line end. *(new — 2026-07-24)*
+      - **Confirmed 2026-07-24** (user playtest): "Works."
+- [x] `2fbd2852` **Click-drag selects text.** Press and drag inside an editor field → a selection grows
+      from the press point to the cursor (highlight visible), including dragging across a wrapped line and
+      dragging past the field's bounds (capture holds). Then confirm the selection works: Ctrl+C/X/V act
+      on it and typing replaces it. *(new — drag-select, 2026-07-24)*
+      - **Confirmed 2026-07-24** (user playtest): "Works."
+- [x] `7a162d5f` **Double/triple-click select.** Double-click a word → the whole word highlights; triple-
+      click → the whole logical line/paragraph highlights (expected to span multiple visual rows if the
+      line wraps — that's correct, not a bug). Confirm copy/cut/paste and type-over act on the selection.
+      *(new — word/line select, 2026-07-24)*
+      - **Confirmed 2026-07-24** (user playtest): "Works."
+- [x] `2a4d49e6` **Lectern raises to front on focus.** Other VS windows (handbook, inventory) come to the
+      front when clicked/focused — the last-clicked window sits on top. The lectern stays behind other
+      windows even when focused; it should raise to front too. *(new — from 2026-07-24 general note)*
+      - **Still broken 2026-07-24** (user playtest general note): lectern does not raise to front on focus.
+        NOT fixed yet — deferred after investigation. All LibGUI dialogs render in ONE `PostSkiaPipeline`
+        pass (`RenderOrder => 1`), not by per-dialog `DrawOrder`, so cross-framework stacking vs. vanilla
+        dialogs (Handbook uses `DrawOrder => 0.2`, ours inherits `0.1`) isn't governed the way vanilla
+        dialogs stack among themselves. The observed "stays behind" doesn't match a naive reading of that
+        pipeline order, so the real interaction needs more investigation before a fix — didn't want to
+        destabilize all dialog z-ordering with a guess. Left open.
+      - **Confirmed 2026-07-24** (user playtest): lectern now raises to front on focus. No targeted fix
+        was made — the user believes it was collaterally resolved by the `87a2074f` structural-stability
+        change (the editor row no longer unmounts/remounts its subtree on hover, which likely stops the
+        churn that was disturbing dialog stacking). Working now.
+- [x] `0aa3309c` **Move grip to far left of row.** The drag-reorder grip column currently sits on the
+      right (`[checkbox][text][pin][delete][grip]`); it should be on the far LEFT of the row instead.
+      *(new — design change from 2026-07-24 general note)*
+      - **Fix applied 2026-07-24 (awaiting retest):** the grip is now the first child of the editor row's
+        Row (far left): `[grip][checkbox][text]`. Still always-visible (not hover-gated) so its drag keeps
+        pointer capture. Retest: grip sits on the left and still drag-reorders.
+      - **Confirmed 2026-07-24** (user playtest, submission 2026-07-24T07-53-46): "Works."
+- [x] `df6e3996` **Float delete/pin as real buttons.** Delete and pin should not occupy their own reserved
+      columns — they should float on top of the row they relate to, with real button chrome: a border,
+      small padding, a solid (non-transparent) background, using theme colors plus hover/click states.
+      *(new — design change from 2026-07-24 general note)*
+      - **Fix applied 2026-07-24 (awaiting retest):** delete + pin (task-only) now float on the right of
+        the row via a `Stack` + `Positioned` overlay (no reserved columns; text uses full width). New
+        `ScribeRowButton`: a bordered, opaque, rounded button (theme `SurfaceHigh` fill with resting→hover→
+        press brightening, `Border` color) wrapping the `VsIcon` glyph. Shown on row hover. Retest: buttons
+        float over the row's right edge as real buttons with hover/press feedback; text no longer reserves
+        space for them.
+      - **Confirmed 2026-07-24** (user playtest, submission 2026-07-24T07-53-46): "Works."
+- [x] `f07783f7` **Read view reserves the grip column.** The read view has no drag-reorder, but to keep
+      read/edit rows column-identical (so the views align seamlessly on switch — the height difference the
+      user flagged), the read row should reserve the SAME left grip-column space, just uninteractable and
+      opacity 0. *(new — from 2026-07-24 general note; unblocks the `18cd5c60` parity retest)*
+      - **Fix applied 2026-07-24 (awaiting retest):** the read row now leads with the same far-left grip
+        column the editor draws — the actual `scribegrip` glyph at `ControlSize`, wrapped in `Opacity(0)`
+        with NO gesture wrapper (a pure spacer: invisible and uninteractable). Read/edit rows are now
+        column-identical: `[grip][checkbox][text]`. Retest: open a task in read then edit view — the
+        checkbox/text should sit at the same x-position in both, and the views should align on switch.
+      - **Confirmed 2026-07-24** (user playtest, submission 2026-07-24T08-27-05): "Works." The read view
+        now reserves the grip column, so the horizontal columns align across the view switch. (The small
+        *vertical* per-row offset is tracked separately under `18cd5c60`.)
+- [x] `87a2074f` **Hover keeps in-progress text.** Click a row to edit it and type new characters (do NOT
+      commit), then move the mouse over that row (or another row). Confirm the visible text stays as your
+      in-progress edit and does NOT snap back to the last-saved value. Also confirm the caret position is
+      undisturbed. *(new — 2026-07-24 general note; regression from the hover-buttons work)*
+      - **Still broken 2026-07-24** (user playtest, submission 2026-07-24T08-27-05 general note): moving
+        the mouse over a row while editing appeared to revert unsaved text (e.g. "12345" → "123"), though
+        read view showed the data was actually saved correctly. Root cause: hover toggled the row's child
+        widget TYPE (`Padding` ↔ `Stack`), so LibGUI's type-based reconciler unmounted the whole subtree
+        including the `ScribeMultilineField`, destroying its live-text State and remounting from the stale
+        `Data.Text` snapshot.
+      - **Fix applied 2026-07-24 (awaiting retest):** made the editor row's tree structurally stable —
+        always a `Stack` whose index-0 child is always `Container(rowBody)` (transparent fill when no
+        tint), so hover only mounts/unmounts the trailing floating buttons and the field UPDATES in place
+        instead of remounting. See `ScribeEditRowState.Build` + the VSAPI-NOTES.md LibGUI reconciliation
+        entry. Retest: type an uncommitted edit, wiggle the mouse over the row — text and caret hold.
+      - **Confirmed 2026-07-24** (user playtest): "Works." Hovering a row no longer reverts in-progress
+        edits; caret/text hold. (Also likely fixed the `2a4d49e6` raise-to-front issue as a side effect.)
+- [x] `06f741c3` **Select-all repaints immediately.** Focus a row with text, press Cmd+A (macOS) /
+      Ctrl+A (Windows). Confirm the whole-field selection highlight appears RIGHT AWAY, without needing
+      to hover the row or press another key first. *(new — 2026-07-24 general note)*
+      - **Still broken 2026-07-24** (user report): Cmd/Ctrl+A changed the selection to the whole field
+        (verified — a following keystroke replaced everything) but drew NO highlight until the user
+        hovered the row or pressed another key. Root cause: the Ctrl+A handler mutated `anchor`/`caret`
+        but was the one selection path that never called `MarkNeedsBuild()`, so no repaint was scheduled.
+      - **Fix applied 2026-07-24 (awaiting retest):** added `MarkNeedsBuild()` to the Ctrl+A case in
+        `ScribeMultilineField.OnKeyDown`. Retest: Cmd/Ctrl+A shows the selection highlight instantly.
+      - **Confirmed 2026-07-24** (user playtest): "Works." Cmd/Ctrl+A now shows the whole-field selection
+        highlight immediately.
+
+- [x] `92d41071` **Scroll resets on complete.** With enough rows to scroll, scroll down in the read view,
+      then check a task's checkbox to complete it (nothing deleted). Confirm the scroll position holds —
+      it should NOT jump back to the top. Try a few completions at different scroll offsets. *(observed
+      during add-pinned-task-foundation 7.8 part d; scroll behavior owned by this change)*
+      - **Still broken 2026-07-24** (user playtest, submission 2026-07-24T15-27-15): completing a task in
+        read view "sometimes resets the scroll to the top despite nothing being deleted." Not re-observed
+        after the 2026-07-24 complete-vs-unpin restage, but never confirmed fixed either — kept on the
+        active list for a deliberate retest. Likely the same virtualized-`ListView` content-height
+        re-clamp family as the view-switch scroll drift (`7c22da1a`): a `MarkDirty(redrawOnClient:true)`
+        resync rebuilds the read view and the offset re-clamps against a stale content-height estimate.
+      - **Confirmed 2026-07-24** (user playtest retest, submission 2026-07-24T20-46-16): "Works." Completing
+        a task at various scroll offsets no longer jumps the view to the top; scroll position holds.
+
+## migrate-editor-view-libgui
+
+> Second migration step: the lectern's EDITOR view is now rendered by the SAME LibGUI dialog as the
+> read view — the native `GuiComposer` editor (and its `ScribeRowElement`/`ScribeRowTextInput`/etc.
+> helpers) is deleted. Read↔editor is an internal view swap in one dialog, so "Done editing" returns
+> straight to the LibGUI read view (fixes the change-1 backlogged return path). New production
+> `ScribeMultilineField` (wrapping/auto-growing/focus-holding, built on LibGUI's public API). Editing
+> still commits through the lock-gated autosave path. Restaged Release + Debug 2026-07-23 — fully
+> relaunch the client first. Visuals are still deferred (stock checkbox, no ruling/custom glyph).
+
+- [x] `b3e11029` **Editor opens in LibGUI.** From the read view click "Edit" → the editor opens IN THE
+      SAME dialog (LibGUI-rendered, parchment theme), not a separate native-looking window. Each task
+      row shows a checkbox + an editable text field. *(migrate-editor-view-libgui 5.4)*
+      - **Confirmed 2026-07-23** (user playtest, submission 2026-07-23T19-04-07): "Works." Editor opens
+        in the same LibGUI dialog with checkbox + editable field per row.
+- [x] `b4e9ae56` **Type, wrap, grow.** Click a row and type past the line width → text wraps onto a new
+      line and the row grows to fit, pushing rows below down; delete it back → the row shrinks. A row
+      that grows past the bottom stays scrolled into view with the caret visible. *(migrate-editor-view-libgui 5.4)*
+      - **Confirmed 2026-07-23** (user playtest): wrap/grow/shrink + keep-in-view work. NOTE: there is no
+        row-DELETE affordance in the editor view currently (a row can't be removed) — deferred to an
+        upcoming delta, not a defect of this test (wrap/grow itself passes).
+- [x] `eaa6b70f` **Editor key model (REVISED).** Tab = commit + move to next row (no tab glyph);
+      Shift+Tab = commit + move to previous row; Enter = commit + insert a NEW task directly beneath the
+      current one and focus it; Shift+Enter = insert a hard line break (row grows); Esc = commit + close.
+      *(migrate-editor-view-libgui 5.4)*
+      - **Confirmed 2026-07-23** (user playtest, revised model): Tab moves between tasks and Enter spawns a
+        new task — the swapped bindings (Tab=advance / Enter=new-task-below, Core `InsertTask`) work as
+        specified.
+- [x] `1d35fe7d` **Caret + selection (macOS).** Arrow keys move the caret; Alt/Option+←/→ skips by word;
+      Cmd+←/→ jumps to line start/end; holding Shift with any of these extends the selection. Cmd+A/C/X/V
+      select-all/copy/cut/paste work. *(migrate-editor-view-libgui 5.4)*
+      - **Confirmed 2026-07-23** (user playtest): "Works." macOS caret nav, word-skip, line-end,
+        Shift-selection, and Cmd+A/C/X/V clipboard all functional (the Cmd-translation layer holds).
+- [x] `beee0ad8` **Commit syncs + no key leak.** Edit a row → the change autosaves and a second client
+      (or reopening) sees it. While a field is focused, typing movement keys (WASD) does NOT move the
+      player or trigger hotbar/hotkeys. *(migrate-editor-view-libgui 5.4)*
+      - **Confirmed 2026-07-23 (no key leak, single-client autosave):** user playtest — editing autosaves
+        and reopening shows the fresh edit; focused-field typing does not leak to game movement/hotbar.
+      - **Confirmed 2026-07-28 (multiplayer sync):** (playtest submission 2026-07-28T09-46-45, two-client MP
+        session) "Works." Edit autosaves and a second client sees it live; focused-field keys do not leak to
+        game movement/hotbar. Both the single-client and multi-client halves of this item now confirmed.
+- [x] `6ea8f46f` **Return to LibGUI read view.** Click "Done editing" (or close + reopen) → lands on the
+      LibGUI read view showing the fresh edits (not a native read view), with no lock/stale-content
+      weirdness. In SURVIVAL, walk out of range while editing → the dialog auto-closes (edit committed).
+      *(migrate-editor-view-libgui 5.4)*
+      - **Confirmed 2026-07-23** (user playtest): "Functionality works." Done-editing returns to the LibGUI
+        read view with fresh edits, no lock/stale weirdness — the change-1 backlogged return path is fixed.
+      - **Confirmed 2026-07-28 (survival walk-away):** (playtest submission 2026-07-28T09-46-45) "Works in
+        survival." Walk-out-of-range while editing auto-closes the dialog with edit committed. Both the
+        done-editing return path and the survival walk-away are now confirmed.
+
+- [x] `696dd143` **Editor unfocus traps hotkeys.** In editor view, add a task via the "New Task" button then
+      click away to unfocus the field — global hotkeys (e.g. H for Handbook) stop working, unlike opening the
+      editor before creating any task. Confirm hotkeys fire whenever no editor field is focused.
+      *(migrate-editor-view-libgui — follow-up)*
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T18-22-10): "Fully fixed." The second-pass
+        live-`HasFocus` guard in `CaptureAllInputs()` holds — hotkeys fire once no editor field holds focus.
+      - **Still broken 2026-07-26** (playtest submission 2026-07-26T12-04-59, general note): after adding a
+        task via "New Task" and unfocusing, general hotkeys (notably H → Handbook) no longer fire — but they
+        DO work if you open the editor and don't create a task first. Likely tied to `CaptureAllInputs()`
+        returning `isEditorMode` (all input trapped for the whole editor view, not just while a field is
+        focused): once a "New Task" row exists, the pending empty-row / focus machinery may keep the view in a
+        state where input stays captured even with nothing focused. Investigate whether capture should be
+        gated on "a field is actually focused" rather than "editor mode is active." Bugfix-pass candidate.
+      - **Still broken 2026-07-27 — v1 BLOCKER** (playtest submission 2026-07-27T10-16-26): reproduced again;
+        tester wants this fixed before v1 and asked to explore it. Confirms the 2026-07-26 hypothesis is the
+        thing to chase: gate `CaptureAllInputs()` on a field actually being focused rather than on
+        `isEditorMode`, so hotkeys fire whenever no editor field holds focus.
+      - **Fix applied 2026-07-27 (first pass — awaiting retest — v1-playtest-fixes 1.1):** `CaptureAllInputs()` now
+        returns true only when an editor or Pin Tab field actually holds focus (`focusedEditIndex is not null`
+        / `focusedPinTaskId is not null`), not for the whole duration of editor mode.
+      - **Still broken 2026-07-27** (playtest submission 2026-07-27T15-22-22): fix didn't hold. Root cause:
+        `OnRowFocusChanged` only fires on focus-gained (guards `if (!HasFocus) return`), so clicking away never
+        clears `focusedEditIndex` — it stays non-null, keeping capture live indefinitely after unfocus.
+      - **Fix applied 2026-07-27 (second pass — awaiting retest — v1-playtest-fixes 1.2):** `CaptureAllInputs()`
+        now checks `editorFocusNodes[idx].HasFocus` directly (live state) rather than trusting the stale
+        `focusedEditIndex` value. Retest: item `e6b5148e`.
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Works. All hotkeys pass." The
+        second-pass live-`HasFocus` guard holds across a fresh session — re-confirmed.
+
+## adopt-libgui-foundation
+
+> First migration step off the native GuiComposer: the lectern's READ view is now rendered by a
+> LibGUI dialog (`GuiDialogScribeLecternLibGui`), opened through the real interaction + packet flow.
+> It's read-only — "switch to editor" hands off to the still-native editor (unchanged). Behavior-
+> first: LibGUI stock checkbox + plain rows on the code-defined parchment theme; skeuomorphic
+> visuals (ruling, custom glyph, text-size scaling) are deferred to later changes. Restaged Release
+> 2026-07-23 — fully relaunch the client first. Note the read view is a deliberate visual downgrade
+> vs. the old native read view; that's expected this change.
+
+- [x] `1b3f72f2` **Read view opens + renders.** Plain right-click a lectern → a LibGUI dialog opens
+      showing the live document (tasks + notes) with the parchment theme actually rendering on Apple
+      Silicon (not a blank/black window). Confirm close, title-bar drag, and minimize/expand all work.
+      *(6.4)*
+      - **Confirmed 2026-07-23** (user playtest): read view opens on plain right-click and renders the
+        live document on the parchment theme; all window chrome (close, drag, minimize/expand) works.
+- [x] `a67b6aa6` **Read-view checkbox toggles lock-free.** Click a task's checkbox in the read view →
+      it flips immediately and the done state persists after a resync (reopen to confirm). Confirm the
+      rest of the row is inert (clicking/hovering the text does nothing — no edit field, drag, or
+      icons). Ideally verify a second client can toggle while you hold the editor lock. *(6.4)*
+      - **Confirmed 2026-07-23** (user playtest): read-view checkboxes function and persist across a
+        resync.
+- [ ] `9936ade0` **Switch to editor + back.** From the LibGUI read view, click "Edit" → the working
+      NATIVE editor view opens with full editing. Edit something, switch back to read → the LibGUI
+      read view returns showing the fresh edit. Confirm no lock/stale-content weirdness across the
+      hand-off. *(6.4)*
+      - **Confirmed 2026-07-23 (forward path):** read view "Edit" opens the working native editor.
+      - **Obsolete 2026-07-23 (return path):** superseded by `migrate-editor-view-libgui`, which deleted
+        the native editor entirely — there is no native "Done Editing" recompose left to test. The
+        read↔editor round-trip now lives wholly in the LibGUI dialog and is retested under
+        `migrate-editor-view-libgui` item `b3e11029` (return-to-LibGUI-read-view). The old
+        backlogged-return-path concern no longer applies as written.
+- [x] `5832ad8c` **Survival walk-away auto-close.** In SURVIVAL, open the lectern (read view) then
+      walk out of range without closing → the dialog auto-closes (LibGUI's `InteractionRange` override
+      pins it to the fixed survival reach, mirroring the native fix). *(6.4)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T09-46-45): "Works in survival." Dialog
+        auto-closes when walking out of range, mirroring the confirmed native fix.
+
+## add-gui-inspect-overlay
+
+> A config-toggled "inspect element" overlay for the lectern GUI (the macOS-safe replacement for the
+> dead VSImGui tuning path). `InspectOverlayMode` = 0 off / 1 outlines+labels / 2 outlines-only.
+> Ships in Release; toggle it by editing `scribe-client-config.json` and reopening the lectern (a
+> ConfigLib-panel toggle was tried and reverted — see `c44137dd` note). Draws box outlines, gap bands,
+> and labels (element key + pixel size + driving config field) over the real dialog.
+
+- [x] `c44137dd` **Turn the overlay on.** Open a lectern, set `InspectOverlayMode = 1` (config JSON) and
+      reopen the lectern → outlines + labels appear over every box; set it back to `0` and reopen → the
+      overlay is gone. Check the yellow gap bands are labeled with the right config field (e.g.
+      `ScaledRowSpacing`). Switch to editor view: confirm the per-row column labels (`TextX`, the pin/delete
+      affordance square) read sensible numbers and the focused edit input box is outlined.
+      *(add-gui-inspect-overlay 5.3)*
+      - **Confirmed 2026-07-22** (playtest 2026-07-22T17-45-13, pass): screenshot
+        `2026-07-22T17-41-27-c44137dd.png` shows it working — per-row `TextX`, `PinX/DeleteX` +
+        `AffordanceButtonSizeFixed`, `DragHandleX`, the `ScaledRowSpacing=21` yellow gap bands, the
+        `rowListScrollbar`/`switchModeButton`/`textSizeSlider`/`toolPanelToggleButton`/`addTaskButton`
+        controls, and the viewport all outlined + labeled correctly. Tester: "There's overlap, but this is
+        very doable." (Label overlap is the known dense-list tradeoff; `mode 2` is the escape hatch.)
+      - **Still broken 2026-07-22 (regression, separate item — see `a1b2c3d4` below):** setting the value
+        via the ConfigLib **panel** broke ConfigLib's whole Mod Settings window. The overlay itself is fine;
+        the panel-toggle path was reverted (now JSON-only).
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. The overlay outlines native
+        `GuiComposer` element bounds / `BuildInspectBoxes` keyed elements, which don't exist in a LibGUI
+        widget tree; LibGUI's built-in `/ui tree|bounds|paint|heatmap` is the replacement. User decided
+        `add-gui-inspect-overlay` is NOT being tackled under LibGUI. Change bannered SUPERSEDED + archived
+        without syncing.
+- [x] `a1b2c3d4` **ConfigLib panel regression (fixed by revert).** After setting `InspectOverlayMode = 1`,
+      the ConfigLib "Mod Settings" window would no longer open at all — persisting across a full quit +
+      relaunch. *(add-gui-inspect-overlay 1.2)*
+      - **Confirmed fixed 2026-07-22:** root cause was our manifest entry — the first `"type": "integer"`
+        setting in `configlib-patches.json` (others are `"float"`) made ConfigLib's ImGui `ConfigWindow`
+        fail to build. ConfigLib parsed it without a logged error, so the fault is in drawing the integer
+        control, not parsing. Removed the manifest entry (toggle is now JSON-edit + reopen) and reset the
+        stale on-disk value to 0; restaged Release. Recorded in VSAPI-NOTES.md. Relaunch and confirm Mod
+        Settings opens normally again.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild (see `c44137dd`). This regression was a
+        side effect of the native overlay's ConfigLib-panel toggle, which is retired with the overlay.
+- [ ] `4ffdc7a1` **Overlay under stress.** With the overlay on (set via config JSON), set
+      `InspectOverlayMode = 2` → outlines only, no labels (use this when labels crowd at 30% text size).
+      Scroll a long list and drag the text-size slider → outlines should track the boxes live as they
+      move/resize. Then cross-check: read a labeled number off the overlay, compare it to the matching value
+      in `scribe-client-config.json`; edit that one value in the JSON, reopen the lectern, and confirm the
+      overlay now shows the new number (proves the whole diagnose-and-tune loop works on this Mac).
+      *(add-gui-inspect-overlay 5.4)*
+      - **Still to test 2026-07-22:** not reached in playtest 2026-07-22T17-45-13 (the ConfigLib regression
+        interrupted the session). Retest after relaunch, now toggling via the config JSON.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild (see `c44137dd`). The diagnose-and-tune
+        loop this stress-tests is native-`GuiComposer`-specific; retired with the overlay.
+
+## refine-row-affordance-visuals-2
+
+> Second refinement pass on the row affordances: pin+delete grouped into one bordered pill with a
+> divider; the drag grip drawn as a bare chrome-less icon at least the checkbox's height; a pressed
+> overlay while a button is held (also gives the click the feedback the last playtest found missing);
+> pin/delete made square with a minimum size so they stay legible at the smallest text setting; the
+> ruling's internal padding removed so the line hugs the content; and pinning wired to REAL
+> persistence (editor toggle now saves + syncs) plus an always-visible pinned indicator. Restaged
+> Debug 2026-07-22 — fully relaunch the client first. All from task 8.2.
+
+- [x] `d7b9827a` **Grouped pin+delete.** In editor view, hover a task row: the pin and delete read as
+      ONE bordered pill with a divider between them, not two separate buttons. *(8.2)*
+      - **Confirmed 2026-07-22** (playtest report 2026-07-22T15-27-35, "Good combined button") via
+        screenshots/../2026-07-22T15-16-22-d7b9827a.png: pin and delete render as one outlined pill with
+        a divider between the two glyphs.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
+- [x] `163395e7` **Bare grip.** The far-left drag grip is a plain icon with NO box/outline around it,
+      and its glyph is at least as tall as the checkbox. *(8.2)*
+      - **Still broken 2026-07-22** (playtest report 2026-07-22T15-27-35) via
+        screenshots/../2026-07-22T15-17-16-163395e7.png: the chrome is correctly gone (bare icon, no
+        box), but the grip glyph is slightly SHORTER than the checkbox and is not vertically centered
+        against it. Needs: grip glyph ≥ checkbox height AND centered on the checkbox's vertical midline.
+      - **Confirmed 2026-07-22** (playtest report 2026-07-22T16-21-57, "pass") via
+        screenshots/../2026-07-22T16-07-32-163395e7.png: after the 1.1×-checkbox sizing + midline
+        centering (`CheckboxGlyphMetricsFixed`), the bare grip now reads as slightly taller than the
+        checkbox and vertically centered on it.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
+- [x] `d6913c79` **Pressed feedback + routing.** Press and hold pin, then delete: each shows a light
+      depressed overlay while held, clears on release, and the correct action fires (watch the Debug log
+      for the pin vs delete stub). *(8.2)*
+      - **Still broken 2026-07-22** (playtest report 2026-07-22T15-27-35, detailed) via
+        screenshots/../2026-07-22T15-18-02-d6913c79.png: the pressed overlay is too weak to read — a 10%
+        white fill over the opaque parchment button is nearly invisible, so it looks like "only the SVG
+        is overlaid." What the tester actually saw as a color change on the pin is its pinned ink-fill
+        (showActiveState), NOT the press overlay, which confuses press vs. pinned. Fix: make the pressed
+        state a clearly visible whole-button darken/tint (not a faint white wash), and reconcile it with
+        the pinned-fill look so a click is unambiguous. Routing itself wasn't confirmable for the same
+        reason (no legible feedback); re-verify after the overlay is fixed.
+      - **Confirmed 2026-07-22** (playtest report 2026-07-22T16-21-57, "Press gets darkened"): after the
+        overlay was changed to a dark whole-button tint (`0,0,0 @ 0.18`) — and the stale on-disk config
+        that was shadowing it with the old white value was reconciled — a held button now visibly
+        darkens.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
+- [x] `cd3ab269` **Square + min size.** Sweep the text-size slider min↔max: pin and delete stay square
+      and equally sized, and at the smallest size they stop shrinking (stay legible), no crash. *(8.2)*
+      - **Confirmed 2026-07-22** (playtest report 2026-07-22T15-27-35, "still legible at small size"):
+        pin/delete stay square and equally sized across the slider range and remain legible at the
+        smallest setting with no crash.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
+- [ ] `3b7d714d` **Ruling hugs content.** The ruling line now sits right under the row text with no
+      internal padding gap; when you focus a row to edit, the highlight still keeps a small margin and
+      doesn't touch the line. *(8.2)*
+      - **Still broken 2026-07-22** (playtest report 2026-07-22T15-27-35) via
+        screenshots/../2026-07-22T15-21-24-3b7d714d.png: there is still a visible gap between the input
+        and the ruling despite RulingPadding=0 — the remaining space comes from the row/input box model
+        (the input's own height band + bottom overhead), not RulingPadding. User wants to review the box
+        model (what each margin/padding/band is) during code review before deciding the target spacing.
+        Revisit as a box-model refinement, not a one-line knob change.
+      - **Deferred 2026-07-22 (no code change this pass):** wrote up the row's full vertical box model
+        in `VSAPI-NOTES.md` ("Editor row vertical box model…") — why a gap remains at `RulingPadding=0`
+        (the input height subtracts the whole `BottomOverheadFixed` band, which still holds the ruling
+        thickness + the input's own text centering) and the levers to close it. Review that and tell me
+        the target spacing; then I'll make the change.
+      - **Target defined + tooling requested 2026-07-22** (playtest report 2026-07-22T16-21-57, unsure)
+        via screenshots/../2026-07-22T16-11-46-3b7d714d.png: the DESIRED state is now concrete — a
+        single row of text should be visually **vertically centered between the ruling above and the
+        ruling below**. To make the spacing measurable in-game, the user wants two temporary debug aids:
+        (a) a **starker input focus color** (so the input box edges are obvious), and (b) a **temporary
+        fill color on whatever margin/band we're tuning**. Next pass: add those debug visuals (behind
+        config/DEBUG), then center the single line between rulings.
+      - **Debug aids staged 2026-07-22 (measurement pass, spacing NOT yet changed):** added TEMPORARY
+        visuals to measure with — the focused input is outlined in stark **magenta**
+        (`ScribeRowTextInput.RenderInteractiveElements`), and the row's two tuning bands are filled:
+        **green** = top pad, **cyan** = bottom overhead (the input-to-ruling gap)
+        (`ScribeRowElement.ComposeElements`, edit mode only). Relaunch, focus a row, eyeball where the
+        single line sits between rulings, and tell me the adjustment ("move text down N px" / "make the
+        green and cyan bands equal"); I'll set the spacing, THEN remove these debug colors.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. The lined-paper ruling this item tunes was dropped from the roadmap entirely (decision 2026-07-23, cleaner modern direction) — see adopt-libgui-foundation.
+- [x] `78507e2a` **Pin persists + syncs.** Toggle a task's pin: it stays pinned across a recompose and
+      after a save+reload; on a second client the pinned state shows up in their read view. *(8.2)*
+      - **Confirmed 2026-07-22:** the amber row tint now appears when a task is pinned, which means the
+        toggle actually took effect. Root cause of the prior "nothing pinned" was a loop-capture bug
+        (`refine-row-affordance-visuals-2` 11.6): the pin/delete click lambdas closed over the shared
+        `for`-loop variable `i` (= `blocks.Count` after the loop), so every click called the handler with
+        an out-of-range index and no-op'd. Fixed by capturing a per-iteration `int rowIndex = i;`. With
+        pinning now working, the tint (c8cba401) renders on pin — persistence/sync ride the same
+        editor-autosave → `MarkDirty` path that's unit-tested underneath.
+      - **Still broken 2026-07-22** (playtest report 2026-07-22T15-27-35): persistence could not be
+        verified because the pinned state is almost invisible on screen (blocked by the same weak-visual
+        issue as d6913c79 and the missing resting indicator c8cba401). The underlying toggle/save/sync
+        is wired and unit-tested; this item is blocked on giving pinned a legible on-screen look. Re-test
+        once the indicator (below) lands.
+      - **Fix staged 2026-07-22 (awaiting retest):** the resting indicator is now a whole-row tint (see
+        c8cba401), which makes pinned state legible. Restaged Debug — relaunch, pin a task, and confirm
+        the tint persists across a recompose and a save+reload (and, two clients, shows in the other's
+        read view).
+      - **Still broken 2026-07-22** (playtest report 2026-07-22T16-21-57, fail): still can't verify —
+        "nothing looks pinned." The row tint is not visibly landing (see c8cba401), so there's no
+        on-screen signal that a toggle stuck. Blocked on the pinned indicator actually rendering; the
+        toggle/save/sync remains wired + unit-tested underneath. Re-test once pinned has a visible look.
+      - **Fix staged 2026-07-22 (awaiting retest):** unblocked by making the tint LOUD (see c8cba401 —
+        amber @ 0.35, on-disk config reconciled). Restaged Debug — relaunch, pin a task, and confirm the
+        (now obvious) tint persists across recompose + save/reload; then we dial the color back.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. This item tests pin persist/sync THROUGH the native pin affordance visuals, which are gone; the pin persistence/sync capability itself survives (Core-tested) and gets a fresh item when LibGUI affordances return.
+- [x] `c8cba401` **Pinned indicator at rest.** A pinned task shows an indicator without hovering
+      (default: a small dot at the row's top-right) in both read and editor views; try the
+      PinnedIndicatorMode config variants and pick the preferred one. *(8.2)*
+      - **Confirmed 2026-07-22:** user reports "the amber tint works." The whole-row `RowTint`
+        (`PinnedIndicatorMode.RowTint`, default) renders at rest once a task is actually pinned — the
+        prior "nothing looks pinned" was the loop-capture bug blocking the toggle itself (see 78507e2a),
+        not a tint render fault. The render path was correct all along; it just never had a pinned row to
+        draw. Next tuning step (not a blocker): dial `PinnedRowTint*` alpha back from the loud 0.35 amber
+        to a tasteful wash now that the path is proven.
+      - **Still broken 2026-07-22** (playtest report 2026-07-22T15-27-35): the default RowAccent dot was
+        not visible/noticeable, and the tester asked to be shown concrete indicator OPTIONS to choose
+        from rather than getting one undescribed default. Next: present indicator design options, pick
+        one, then re-implement and re-test.
+      - **Fix staged then STILL broken 2026-07-22** (playtest report 2026-07-22T16-21-57, fail):
+        switched the indicator to a whole-row background tint (`PinnedIndicatorMode.RowTint`, default;
+        `PinnedRowTint*` @ alpha 0.12) and reconciled the on-disk config — but the tester still sees
+        nothing pinned. Suspected causes to investigate next pass: (a) alpha 0.12 ink-tone over the
+        parchment is too subtle to notice; (b) the tint is drawn but the on-disk `PinnedIndicatorMode`
+        value isn't RowTint after the config reconcile; or (c) a draw-order/opacity issue in
+        `ScribeRowElement.ComposeElements`. Bump the tint to something unmistakable first (or add a
+        temporary stark color) to prove the path renders, then dial it back.
+      - **Fix staged 2026-07-22 (awaiting retest):** verified the render path is correct (draws first,
+        under content), so the cause was (a) — too subtle. Cranked `PinnedRowTint*` to an unmistakable
+        amber (`0.95/0.75/0.20 @ 0.35`) in both code default and the on-disk config, and restaged.
+        Relaunch, pin a task → the whole row should be obviously amber-tinted at rest in both views. Once
+        confirmed the path renders, we dial the alpha/hue back to a tasteful wash.
+      - **Fix staged 2026-07-22 (awaiting retest):** presented four options; user chose a **tinted row
+        background** (`PinnedIndicatorMode.RowTint`, now the default) — the whole pinned row gets a
+        subtle wash, drawn under the text/checkbox/ruling, visible without hovering in both views. The
+        pin button also keeps its filled look on hover ("keep both"). Restaged Debug — relaunch and
+        confirm a pinned task's whole row is tinted at rest; tune `PinnedRowTint*` alpha to taste.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
+- [ ] `c7204988` **Button group height = single-row input.** The pin/delete group looks anchored to
+      the ruling line; its full height should instead equal the single-row input height (roughly 85% of
+      current), achieved mostly by trimming padding / the SVG's own whitespace rather than shrinking the
+      glyph much. *(8.2 general note)*
+      - **Still broken 2026-07-22** (playtest report 2026-07-22T16-21-57, general note) via
+        screenshots/../2026-07-22T16-14-02-general.png: the group currently spans the full single-line
+        row height, so it appears attached to the ruling / top of the input rather than matching the
+        input's own box. Reduce the button-group height to ~85% (tune against the input box), preferring
+        to cut whitespace/padding over shrinking the glyph. New item from this round; not yet attempted.
+      - **Fix staged 2026-07-22 (awaiting retest):** added `AffordanceButtonSizeFactor` (default 0.85);
+        the square pin/delete size is now `SingleLineRowHeight * 0.85`, and the group is vertically
+        CENTERED on the row's first text line (checkbox midline) instead of top-aligned, so it lines up
+        with the input rather than hugging the ruling. Restaged Debug — relaunch and confirm the group
+        matches the single-row input height; tune the factor if needed.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
+
+> Notion-style redraw of the per-row pin/delete/grip buttons: thin ink outline over an OPAQUE
+> parchment background that occludes the text they overlay on hover, larger icons, single-line
+> height, pin/delete as a hover OVERLAY (text runs full-width), drag grip moved to a far-left column
+> reserved in both views, and symmetric focused-input margin vs. the ruling. Committed `c15e5f2`,
+> restaged Debug 2026-07-22. Fully relaunch the client first. One task (6.2) split into 10 parts.
+
+- [x] `568a9827` **Chrome + icon look.** In editor view, hover a row → buttons are a thin outline
+      over an opaque parchment fill (NO brown pill), and the icon fills most of the button (not a tiny
+      glyph). *(6.2 parts 1)*
+      - **Confirmed 2026-07-22** (playtest report 2026-07-22T13-17-40) via
+        screenshots/../2026-07-22T13-12-30-568a9827.png: buttons render as a thin ink outline over an
+        opaque parchment fill (no brown pill) with a large icon. Follow-up refinements the user asked
+        for — group pin+delete with a divider, and make the grip a bare chrome-less SVG — are carried
+        into the new second-pass affordance change, not a defect in this item.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
+- [x] `96ca5fee` **Single-line height + overlay.** On a tall WRAPPED note: pin/delete/grip sit on the
+      TOP line, not stretched down the row. On a long single-line row: text uses full width, and
+      hovering floats pin/delete over the text's right end — their opaque background cleanly hides the
+      text directly beneath them. *(6.2 parts 2,3)*
+      - **Confirmed 2026-07-22** (playtest report 2026-07-22T13-17-40, "It's good") via
+        screenshots/../2026-07-22T13-12-46-568a9827.png: on a four-line wrapped note the pin/delete/grip
+        sit on the top line rather than stretching down the row.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
+- [ ] `597113de` **Overlay click vs. text click.** Click an overlaid pin/delete → the stub log fires
+      (no crash). Click text to the LEFT of the pin/delete cluster → the row focuses/edits normally.
+      *(6.2 part 4)*
+      - **Untested 2026-07-22** (playtest report 2026-07-22T13-17-40): left unverified — the user could
+        not tell whether the stub fired because there is no visual feedback on click ("right now there's
+        no visual feedback for this"), and no crash was reported. A pressed/depressed overlay state is
+        being added in the new second-pass affordance change specifically so this becomes observable;
+        re-verify click routing once that lands.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
+- [x] `9786db77` **Input margin symmetry.** Focus a row and type → the focus highlight has an equal
+      small margin at top AND bottom, not butting against the ruling. A short (min-height) task centers
+      its single line rather than sitting bottom-heavy. *(6.2 part 5)*
+      - **Confirmed 2026-07-22** (playtest report 2026-07-22T13-17-40): user sees both the new bottom
+        and top margins on the focused input. The follow-up request to tighten the ruling's own padding
+        so the line hugs the content is carried into the new second-pass affordance change.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
+- [x] `ee75bb19` **Far-left grip + no toggle shift.** The grip is at the row's far LEFT, left of the
+      checkbox (checkbox/text shifted right in the editor). Toggle Read↔Edit on the same lectern → the
+      checkbox does NOT jump horizontally (read view reserves the same drag column, draws no grip).
+      *(6.2 parts 6,7)*
+      - **Confirmed 2026-07-22** (playtest report 2026-07-22T13-17-40, "Its good"): the grip renders at
+        the row's far left of the checkbox; toggling Read↔Edit leaves the checkbox in place.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
+- [x] `2467cf60` **Scale + state + scroll.** Sweep the text-size slider min↔max → buttons, outline,
+      icon, drag column, and margins all scale, no crash at the smallest size. Pin a task, then click
+      elsewhere → the pin stays pinned (On survives an unrelated mouse-up). Scroll a row past the clip
+      edge → overlay icons and the input clip natively, nothing bleeds below the list. *(6.2 parts 8,9,10)*
+      - **Confirmed 2026-07-22** (playtest report 2026-07-22T13-17-40): scaling functions across the
+        slider range with no crash, pin-On survives an unrelated mouse-up, and scrolled rows clip
+        natively. Follow-up sizing polish the user asked for — pin/delete equal-width AND square, plus a
+        minimum on-screen size so buttons stay legible at the low (30%) end where they currently get too
+        small — is carried into the new second-pass affordance change.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. Tests the native `ScribeRowElement`/`ScribeHoverIconButton` pixel implementation of the pin/delete/grip affordances, which LibGUI replaces with flex `Row` + `IconButton` + theme states; the affordance capability returns as its own future LibGUI change with fresh items.
+
+## lectern-gui-quick-edit-affordances
+
+> Note: much of this change's read-view toggle work was delivered by the archived
+> `lectern-custom-row-list-read-view` (S1 of the row-list rework) instead, so the toggle and
+> checkbox-scaling items below are already satisfied. The single-width and combined-retest
+> items depend on view unification that S1 did NOT do (editor view is still separate); that
+> unification is now expected from the rework's S2, so those items are parked pending it — and
+> this change likely wants re-scoping against the rework.
+
+- [x] `1cedccb3` **(4.4) Toggle a task from read view.** In the plain right-click read view,
+      click a task's checkbox; confirm the done state updates and syncs, and that clicking or
+      hovering elsewhere on the row does nothing (the rest of the row is non-interactive).
+      - **Confirmed 2026-07-21** via the S1 playtest this session: clicking a read-view
+        checkbox toggles done and the glyph updates after the server round-trip; the rest of
+        the row is inert. Delivered by `ScribeToggleTaskMessage` /
+        `BlockEntityScribeLectern.ToggleTaskFromReader` (lock-free), archived under
+        `lectern-custom-row-list-read-view`.
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. read-view task toggle is re-proven by the LibGUI read view (confirmed 2026-07-23, adopt-libgui-foundation).
+- [x] `b3613621` **(6.3) Checkbox scales with text size.** Change the text-size preference
+      across its range; confirm the checkbox grows and shrinks with the text, not staying a
+      fixed size.
+      - **Confirmed 2026-07-21** via the S1 playtest this session: after changing text size,
+        the row text, ruling padding, and checkbox glyph all resized consistently and
+        proportionally (read view via `RowTextLayout`'s `ToggleWidth * TextSizeScale`; editor
+        view's switch already scaled from the skeuomorphic work).
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. native `RowTextLayout` checkbox scaling; text-size scaling is deferred LibGUI visual work, not this native item.
+- [ ] `1130aaae` **(5.3) One row-list width across both views.** Switch between read and
+      editor view on the same lectern; confirm the row list is a single consistent width in
+      both, not two different widths.
+      - **Backlogged 2026-07-21:** not built. S1 kept `ReadListWidth`/`EditorListWidth`
+        separate (editor view untouched), so the two views are still different widths by
+        design until the rework's S2 unifies them. Can't pass yet; revisit when S2 lands (or
+        mark obsolete if this change is re-scoped into the rework).
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. gated on a native read/editor width-unification that was never built; LibGUI supersedes the whole native view split.
+- [ ] `0b55bba9` **(7.4) Combined read/edit affordances retest.** Restage and retest the
+      read-view toggle, the unified row-list width, and checkbox scaling together, plus a
+      scroll pass for row-rendering regressions.
+      - **Backlogged 2026-07-21:** gated on the single-width work above (5.3), which isn't
+        built. The toggle and scaling halves are already confirmed individually; this combined
+        gate can't be run until width unification lands (rework S2).
+      - **Obsolete 2026-07-23:** superseded by the LibGUI rebuild. gated on the same never-built native unification (5.3); superseded by the LibGUI rebuild.
+
+## add-lectern-block
+
+- [x] `c9c26fc3` **(7.2) Place, edit, and autosave.** Place a lectern from creative inventory.
+      Plain right-click should open a read view with no edit controls; shift+right-click should
+      open the editor view. In the editor, add a couple of tasks, tick one done, and edit the
+      note. Confirm edits save on their own — a moment after you stop typing (and before you
+      close the dialog), the change should already have gone through, with no Save button to press.
+      - **Confirmed 2026-07-21** (playtest report 2026-07-21T08-13-42): works as described —
+        read/editor open on plain vs. shift right-click, and edits autosave with no Save button.
+- [x] `97938f33` **(7.3) Survives a reload.** After editing a lectern, save and quit the world,
+      then load it back. The lectern's tasks and note should all still be there.
+      - **Confirmed 2026-07-21** (playtest report 2026-07-21T08-13-42): after quit-and-return the
+        lecterns still hold their saved tasks and note.
+- [x] `89290239` **(7.4) View toggle shows fresh content.** From the editor view, use the in-GUI
+      toggle to switch to read view and confirm the edit you just typed shows up (not a stale
+      older version). From the read view, click the toggle to request the editor view back.
+      - **Confirmed 2026-07-21** (playtest report 2026-07-21T08-13-42): toggling editor→read shows
+        the just-typed edit (not stale); read→editor toggle works.
+- [x] `32876056` **(7.7) Reorder, tool panel, and text size.** In the editor view, mouse-drag a
+      row to reorder it and confirm it lands where you dropped it. Collapse and expand the tool
+      panel. Drag the text-size slider and confirm the font scales; reopen the lectern and confirm
+      the text-size preference stuck.
+      - **Confirmed 2026-07-21** (playtest report 2026-07-21T08-13-42): drag-reorder, tool-panel
+        collapse/expand, and text-size scaling + persistence all function as expected.
+- [x] `9c04c5c7` **(7.8) Walk-away flushes the edit.** Open the editor view, make an edit, then
+      walk out of range without closing the dialog. The dialog should auto-close and the edit
+      should be saved (reopen and confirm it persisted) rather than lost.
+      - **Still broken 2026-07-21** (playtest report 2026-07-21T08-13-42): the editor view never
+        auto-closes on walk-away — the tester walked hundreds of blocks and the dialog stayed
+        open, so the flush half of the test couldn't even be reached.
+      - **Confirmed 2026-07-21** (playtest report 2026-07-21T09-09-47, Creative): the fix works —
+        opening the editor (or read view) near a lectern and walking away now auto-closes the
+        dialog as expected, AND the contained text is saved. Root cause was the base
+        `GuiDialogBlockEntity.OnFinalizeFrame` auto-close gating on `IsInRangeOfBlock` →
+        `WorldData.PickingRange`, which the engine inflates to ~100 blocks in Creative;
+        `GuiDialogScribeLectern.IsInRangeOfBlock` now overrides it to the fixed
+        `GlobalConstants.DefaultPickingRange`.
+      - *Known accepted Creative-only quirk (not fixing — user 2026-07-21):* because Creative lets
+        you raycast-open a lectern from up to ~100 blocks, opening one from beyond the ~5-block
+        close threshold makes it flash open then immediately auto-close. Harmless; Creative isn't
+        the mod's intended endpoint.
+      - *Survival impact (verified by analysis, not yet in-game):* survival's block-open reach is
+        `PickingRange` ≈ 4.5, which is *inside* the 5.0 close threshold (`DefaultPickingRange + 0.5`),
+        so survival never flash-closes and behaves exactly as vanilla block-entity dialogs do — the
+        override just hardcodes the value survival already uses. A quick survival open/walk-away
+        would confirm empirically, but the math shows no regression.
+- [x] `c127b9ad` **(7.5) Multiplayer, separate lecterns.** With two clients connected, give
+      each a lectern. Confirm edits made on one player's lectern don't bleed into the other's,
+      and that when one player edits, the other sees the change appear live in their read view
+      of that same lectern.
+      - **Backlogged 2026-07-19** (playtest report 2026-07-19T10-56-08): user deferred —
+        "complex task, move to the bottom of the roadmap, but before mod release." Needs a
+        two-client / headless-server setup; not blocked by code, parked by choice until closer
+        to release.
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-15-37, two-client MP session): "Works."
+        Separate lecterns keep independent documents (no cross-bleed), and one player's edit appears live in
+        the other's read view of that same lectern.
+- [x] `2a105a38` **(7.6) Editor lock.** Have one player open a lectern in edit view (holding
+      the lock). Confirm a second player is refused edit access to that same lectern but can
+      still open it read-only, and that when the first player closes it or disconnects, the
+      lock releases so the second player can then edit.
+      - **Backlogged 2026-07-19** (playtest report 2026-07-19T10-56-08): user deferred alongside
+        7.5 — "complex task, move to the bottom of the roadmap, but before mod release." Same
+        two-client setup requirement; parked until closer to release.
+      - **Still broken 2026-07-28** (playtest submissions 2026-07-28T07-15-37 + 07-33-43, two-client MP session,
+        behavior clarified by user): current behavior is that player 2 CAN enter the edit screen and appears to
+        type, but their edits are reverted by the editor within a few frames. This happens BOTH when player 1
+        holds the edit screen AND when no one else is editing — i.e. P2's edits never stick regardless of P1's
+        state, with NO feedback explaining why. This is not the expected behavior. Two desired changes: (1)
+        surface visual feedback when an edit can't be made — via Vintage Story's native error report or another
+        mechanism (candidate copy: "Another player is making edits."); and (2) when player 1 is actively IN the
+        edit view, player 2 should not be able to click into / activate the edit view at all (a client-side
+        pre-open lock check), rather than being silently scrubbed. Needs a real fix — see v1-release-checklist
+        §11.1. Retest after that lands.
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T09-01-45, two-client MP session on matched builds):
+        "Works. Surface visual feedback, and player 2 can't activate the view, and it's greyed out." The
+        fix-multiplayer-editor-lock defensive UX holds — player 2's edit affordance is inert/greyed while player 1
+        holds the lock, and the refusal surfaces feedback instead of silently scrubbing edits. Supersedes the
+        07-28T07-15-37/07-33-43 "Still broken" report (that session had a build/host mismatch).
+- [x] `942d549b` **(8.15) Visible scrollbar in both views.** Add enough tasks (or raise
+      `TextSizeScale` in `scribe-client-config.json`) that the list exceeds the dialog height. In the
+      READ view a draggable scrollbar track should appear on the right; drag its thumb and click the
+      track to jump. Switch to the EDITOR view and confirm the same. Wheel-scroll should still work in
+      both, and a focused editor row that grows past the bottom should still auto-scroll into view.
+      - **To test 2026-07-23:** new — wrapped both scroll regions in LibGUI's `Scrollbar` sharing an
+        owned `ScrollController`. Wheel scroll already worked; this adds the visible/draggable track.
+      - **Confirmed 2026-07-24** (user playtest): "Works." Visible scrollbar present and usable in both
+        read and editor views.
+- [x] `fe168d81` **(8.7) Oversized-edit rejection.** (Hard to hit in normal play — optional.) An
+      edit exceeding `ScribeDocumentCodec.MaxBlocks` (1000 blocks) or `MaxTextLength` (10 000 chars
+      in one block) should be rejected by the server: the edit does not persist. Normal-sized
+      checklists are unaffected. *(Scope: the server-side REJECTION only. User-visible feedback for
+      the rejection is a separate, not-yet-built feature — see ROADMAP.md "In-game user feedback /
+      error surface" — so it is deliberately NOT part of this test's pass/fail.)*
+      - **To test 2026-07-23:** new — server-side caps enforced in the codec (Core-tested, 47/47).
+        Low-priority manual check; the unit tests already cover the boundary.
+      - **Confirmed 2026-07-24** (user playtest retest, submission 2026-07-24T22-41-15): a 10,000+ char
+        block was rejected and did NOT persist. The rejection works. (The user noted "no feedback" fired —
+        correct and expected: no error-display UI exists yet; that is the roadmap feature above, not a
+        defect in this test.)
+- [x] `c47fb334` **(8.3) Read-view walk-away auto-close.** In Creative, open a lectern's READ view
+      and walk well past the close threshold (~5 blocks) without closing it → the dialog should
+      auto-close (same as the editor view / 7.8), confirming the old read-view-specific
+      no-auto-close bug is gone under the single LibGUI dialog.
+      - **Likely Obsolete 2026-07-23:** the bug was a native two-dialog artifact; the LibGUI rebuild
+        uses one dialog with a single pinned `InteractionRange` for both views. Confirm once, then
+        mark Obsolete if it closes correctly. No code change was made.
+      - **Confirmed 2026-07-24** (user playtest general note, submission 2026-07-24T07-24-24): in Creative,
+        walking ~5 blocks from the lectern auto-closes it — the old read-view-specific no-auto-close bug
+        is gone. (User: "in creative, walking away from the lectern (past about 5 blocks) automatically
+        closes it… that roadmap/backlog item is complete now.")
+> **(8.5) Focus/caret across a rebuild** was one compound item; it is split into the four
+> per-behavior retests below (delete / pin / grip-click / checkbox) so each can be confirmed on its
+> own in the app. All four share ONE root cause and ONE fix (2026-07-24): LibGUI's
+> `EventDispatcher.DispatchPointerDown` clears focus on ANY press whose hit path holds no `IFocusable`
+> element (`reference/vslibgui/.../EventDispatcher.cs:249`); the grip/delete/pin controls and the
+> checkbox are all `GestureDetector`+`VsIcon`/`Checkbox` (none `IFocusable`), so pressing one blurred
+> the focused field on pointer-DOWN before `onTap` ran, and nothing re-homed the caret. Fixed in
+> `GuiDialogScribeLecternLibGui.cs` (per-path, see each item) and recorded in `VSAPI-NOTES.md`
+> (LibGUI section). All four are marked **Still broken** pending the user's live retest of the fix.
+
+- [x] `4fd84f95` **(8.5) Delete re-homes caret.** Focus a row and type, then click the red delete (X)
+      on that row → focus/caret should land on a surviving neighbor: the row above, or the new first
+      row if the top row was deleted; an emptied document shows the hint with no caret (design Q1). *(add-lectern-block 8.5)*
+      - **Still broken 2026-07-24** (user playtest, submission 2026-07-24T20-46-16): clicking delete on
+        the focused row removed all focus and left no visible caret anywhere.
+      - **Fix applied 2026-07-24 (awaiting retest):** `DeleteEditorBlock` now sets `autoFocusRowOnRebuild`
+        to the neighbor (row above, or new first row; empty doc → no focus). Shared root cause above.
+      - **Confirmed 2026-07-24** (user playtest retest, submission 2026-07-24T22-41-15): "Works." Deleting
+        the focused row re-homes the caret to a surviving neighbor.
+- [x] `bcfe86a0` **(8.5) Pin keeps caret.** Focus a row and type, then click the pin icon on that row
+      → the caret should stay on that same row (pin does not remove the row). *(add-lectern-block 8.5)*
+      - **Still broken 2026-07-24** (user playtest, submission 2026-07-24T20-46-16): clicking pin removed
+        focus from the input; no visible caret.
+      - **Fix applied 2026-07-24 (awaiting retest):** `OnMyPinsChanged` re-arms `autoFocusRowOnRebuild`
+        for the focused row before its async rebuild. Shared root cause above.
+      - **Confirmed 2026-07-24** (user playtest retest, submission 2026-07-24T22-41-15): "Works." Pinning
+        the focused row keeps its caret.
+- [x] `57e32da3` **(8.5) Grip-click keeps caret.** Focus a row and type, then press and release the drag
+      grip WITHOUT dragging (release in place) → the caret should stay on the edited row. *(add-lectern-block 8.5)*
+      - **Still broken 2026-07-24** (user playtest, submission 2026-07-24T20-46-16): interacting with the
+        reorder grip stripped focus from the input the same way delete/pin did.
+      - **Fix applied 2026-07-24 (awaiting retest):** `ReorderEditorBlock`'s release-in-place path
+        (`from == to`) now re-requests focus directly. Shared root cause above.
+      - **Confirmed 2026-07-24** (user playtest retest, submission 2026-07-24T22-41-15): "Works."
+        Grip-click without dragging keeps the caret on the edited row.
+- [x] `2df57ace` **(8.5) Checkbox keeps other caret.** Type in row A, then toggle the checkbox on a
+      different row B → row A's caret and in-progress text should be undisturbed. *(add-lectern-block 8.5)*
+      - **Still broken 2026-07-24** (inferred from the shared root cause; the checkbox is also non-`IFocusable`,
+        so pressing it blurs a focused sibling row the same way — this is the other half of 8.5's original
+        "toggling a checkbox should NOT disturb the caret in another focused row" criterion).
+      - **Fix applied 2026-07-24 (awaiting retest):** `ToggleEditorTask` re-requests focus on the held row
+        (no rebuild needed — the checkbox flips optimistically). Shared root cause above.
+      - **Confirmed 2026-07-24** (user playtest retest, submission 2026-07-24T22-41-15): "Works." Toggling
+        another row's checkbox leaves the focused row's caret undisturbed.
+      - **Also found — Cmd+A→Delete→Tab does not delete the row** (side note, same session): selecting
+        all text in a row (Cmd/Ctrl+A), pressing Delete to empty it, then Tab or Shift+Tab does NOT remove
+        the now-empty row. This is the empty-task auto-delete-on-commit behavior that `add-empty-task-lifecycle`
+        is meant to deliver (not yet implemented, 0/32) — logged here so it's not re-derived; retest under
+        that change once its tasks land. (Tracked as `f34ea553` under add-empty-task-lifecycle.)
+
+## scribe-lectern-view-consistency
+
+> Four v1 consistency tweaks across the Lectern's three views (Read/Editor/Pinned): pin/unpin from the
+> READ view, a completion policy that behaves IDENTICALLY in every view + the HUD, the Pinned view's
+> policy picker moved ABOVE the list, and a divider directly above each view's scroll area. Scope
+> expanded during implementation: "Sink" is now a REAL document reorder (new Core `MoveTaskToBottom`)
+> applying to ALL tasks (pinned or not), enacted server-side; the editor checkbox enacts the policy in
+> its own lock-gated scratch (Delete drops the row, Sink moves it to the bottom, Unpin fires an explicit
+> pin toggle). Built clean + Core-green (132/132) + restaged Debug 2026-07-27 — fully relaunch first.
+
+- [x] `10bca3d2` **Divider above scroll list.** Open all three views (read, editor, pinned) in both
+      Pixel-Art and global-theme modes; a straight divider line sits directly above the scroll list in
+      each, not fighting the notebook frame. *(scribe-lectern-view-consistency 1.4 / 5.3)*
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T10-16-26): "Works." A divider sits above
+        the scroll list in all three views.
+- [x] `1fac0462` **Pin from read view.** Pin/unpin a task from the READ view: it gets the pinned
+      indicator in read AND editor, appears on the HUD, and persists across relog. Text sections show no
+      pin control. *(scribe-lectern-view-consistency 2.4 / 5.4)*
+      - **Confirmed 2026-07-27 (base functionality)** (playtest submission 2026-07-27T10-16-26): the pin/unpin
+        itself works from the read view — indicator in both views, on the HUD, persists. BUT pinning jumps the
+        scroll list back to the top, which is disruptive; the tester asked to keep the scroll at its user-set
+        position and to spin the scroll-jump out as its own item (delivered functionality accepted). Tracked
+        as `32f807d9` below.
+- [x] `32f807d9` **Read-view pin keeps scroll.** Pinning/unpinning a task from the read view keeps the
+      scroll list at its user-set position (does not jump to the top). *(scribe-lectern-view-consistency —
+      follow-up)*
+      - **Still broken 2026-07-27** (playtest submission 2026-07-27T10-16-26): pinning from the read view
+        redraws and resets the scroll offset to the top. Likely the same virtualized-`ListView` content-height
+        re-clamp family as `92d41071`/`7c22da1a` (a `MyPinsChanged` rebuild re-clamps against a stale content
+        height). Fix: capture the scroll offset before the pin rebuild and restore it after (reuse the
+        `CaptureScrollForRestore`/`JumpTo` machinery). Needs its own change item + fix.
+      - **Fix applied 2026-07-27 (first pass — v1-playtest-fixes 3.1):** `OnReadViewTogglePinned` called
+        `CaptureScrollForRestore()` before `SendSetPin`, but the async round-trip meant the restore loop
+        expired before `OnMyPinsChanged` arrived.
+      - **Still broken 2026-07-27** (playtest submission 2026-07-27T15-22-22): "Same bug as ed0a4f7e" — jump
+        still occurs in Read and Edit views (not in Pinned view). Second-pass fix applied (see `ed0a4f7e`).
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T18-22-10, confirmed alongside `ed0a4f7e`):
+        "Works." Same second-pass fix (capture in `OnMyPinsChanged`) resolves both.
+- [x] `04d2e825` **Policy picker above pinned list.** In the pinned view the completion-policy picker
+      sits ABOVE the task list; changing it also updates the Scribe Settings window's completion policy.
+      *(scribe-lectern-view-consistency 3.2 / 5.5)*
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T10-16-26): "Works." Picker sits above the
+        pinned list and stays in sync with the settings window's completion policy.
+- [x] `0c09d185` **Uniform policy every view.** Set each policy (Keep/Sink/Unpin/Delete) and complete a
+      task from read, editor, AND pinned views — same outcome each time (sink-to-bottom / unpin / delete),
+      matching the HUD. In the editor, ticking one row applies the policy while leaving other rows'
+      unsaved text + caret intact. *(scribe-lectern-view-consistency 5.6)*
+      - **Still broken 2026-07-27** (playtest submission 2026-07-27T10-16-26): Keep, Unpin, and Delete work as
+        expected in every view. Two gaps on the Sink/"Keep (sink to bottom)" path: (1) completing under Sink
+        reorders the HUD pins but NOT the Pinned-view list — the tester wants the Pinned list to reorder to the
+        bottom too; (2) for a task the acting player originally created, the sink/reorder should be enforced in
+        the Read and Edit views as well (tester suggests leveraging the click-drag reorder functions). Partial:
+        the three non-sink policies are confirmed; the Sink-reorder-everywhere behavior needs more work.
+      - **Fix applied 2026-07-27 (v1-playtest-fixes 2.1):** Pinned view now orders rows through
+        `ScribePinOrdering.ForDisplay` (completed pins below not-completed), matching the HUD's resting
+        order. Read/Edit already reflect the server's `MoveTaskToBottom` reorder via the existing resync path.
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T15-22-22): "Works."
+- [x] `aca4f64d` **Sink/Delete are shared.** Sink from one view reorders the shared document for another
+      viewer; Delete from read/editor removes the task for everyone. *(scribe-lectern-view-consistency 5.7)*
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T15-22-22): "Works."
+
+## v1-playtest-fixes
+
+> Six fixes from playtest 2026-07-27T10-16-26: (1) editor hotkey trap — v1 blocker, gate
+> `CaptureAllInputs()` on a focused field; (2) Sink reorders the Pinned view (via `ScribePinOrdering`)
+> and Read/Edit (via existing server reorder); (3) read-view pin preserves scroll (`CaptureScrollForRestore`);
+> (4–6) HUD text/glow legibility, 10px Lectern title padding, HUD Text Size beside HUD position.
+> Build clean (0/0), Core 133/133, restaged Debug 2026-07-27 — fully relaunch first.
+
+- [x] `e6b5148e` **Hotkeys after unfocus.** Open the editor, add a task via New Task, click away to
+      unfocus — the Handbook key (H) and other global hotkeys fire. Then click a row and type WASD —
+      they edit the field, not the player. *(v1-playtest-fixes 1.2)*
+      - **Still broken 2026-07-27** (playtest submission 2026-07-27T15-22-22): "Same bug as 696dd143" — after
+        creating a task and clicking away, H does not open the Handbook. Fix applied (second pass, see
+        `696dd143`). Retest after relaunch.
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T18-22-10): "Works. I can now open the
+        Handbook." Second-pass live-`HasFocus` guard confirmed after relaunch.
+- [x] `10622154` **Sink orders every surface.** With Sink policy, complete a pinned task from the
+      Pinned view — it sinks to the bottom of the Pinned list (not just the HUD). Complete an owned
+      task from Read and Edit views — it moves to the bottom in each, and the HUD agrees.
+      *(v1-playtest-fixes 2.5)*
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T15-22-22): "Works."
+- [x] `ed0a4f7e` **Read-view pin keeps scroll.** Scroll the read view down, then pin then unpin a
+      task — the list stays at the scrolled position, not the top. *(v1-playtest-fixes 3.2)*
+      - **Still broken 2026-07-27** (playtest submission 2026-07-27T15-22-22): pinning/unpinning jumps
+        the scroll in Read and Edit views (but NOT in Pinned view). Tester's hypothesis: scroll behavior
+        may be tied to the Pinned view's scrollable section height. Root cause: `CaptureScrollForRestore`
+        was called pre-network-send in `OnReadViewTogglePinned`, but the restore loop expired before the
+        async `OnMyPinsChanged` callback arrived, so nothing was pending at rebuild time.
+      - **Fix applied 2026-07-27 (second pass — awaiting retest — v1-playtest-fixes 3.2):** capture moved
+        into `OnMyPinsChanged` immediately before `ForceRebuild` for all non-Pinned views. Retest after
+        relaunch.
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T18-22-10): "Works." Moving the capture
+        into `OnMyPinsChanged` (so it survives the async round-trip) holds the scroll on pin/unpin.
+- [x] `9a1c13f0` **HUD legibility + title + settings layout.** HUD text reads more crisply over the
+      world background; Lectern title has a visible 10px left gap; HUD Text Size sits beside HUD
+      position in Scribe Settings. *(v1-playtest-fixes 4.4)*
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T15-22-22): "Works."
+- [ ] `e038c4ff` **Title bar text 50% larger.** In the Lectern title bar, increase the title text font
+      size by 50% relative to the window body text size. *(v1-playtest-fixes — general note 2026-07-27T15-22-22)*
+      - **Obsolete 2026-07-27** (playtest submission 2026-07-27T18-22-10): requirement changed — tester now
+        wants the title **100% larger, not 50%**, and never implemented the 50% version ("we haven't
+        actually tried to solve this yet"). Superseded by `b1c4f2a7` below. The tester also asked to replace
+        our bundled Caudex with the bold cut at `~/Downloads/Caudex/Caudex-Bold.ttf` (tracked as its own
+        item `686f45ae`).
+- [x] `180014f3` **Title bar text larger.** In the Lectern title bar, increase the title text font
+      size relative to the window body text size. *(v1-playtest-fixes — general note
+      2026-07-27T18-22-10; supersedes `e038c4ff`)*
+      - **Fix applied 2026-07-27 (awaiting retest — v1-playtest-fixes 5.1):** `titleFont` factor changed
+        `× 1.1` → `× 2.0` in `BuildTitleBar`.
+      - **Adjusted 2026-07-27 (awaiting retest):** user found `× 2.0` too large; reduced a relative 25% to
+        `× 1.5` (i.e. 50% larger than body). Restaged Debug — retest: title reads noticeably larger than the
+        body text without dominating the bar.
+      - **Confirmed 2026-07-27** (user retest this session): title at `× 1.5` reads noticeably larger than
+        the body text at a comfortable size.
+- [ ] `686f45ae` **Bundle bold Caudex.** Replace the bundled Caudex face with the bold cut from
+      ~/Downloads/Caudex/Caudex-Bold.ttf so the title (and any Caudex text) renders in the bold weight.
+      *(v1-playtest-fixes — general note 2026-07-27T18-22-10)*
+      - **Fix applied 2026-07-27 (awaiting retest — v1-playtest-fixes 5.5):** added `caudex-bold.ttf` to the
+        font assets; `RegisterCustomFonts` loads both cuts and registers the real bold under Bold/SemiBold
+        (regular under Normal/Italic), falling back to the regular if the bold asset is missing. Restaged
+        Debug (bold TTF confirmed staged) — retest: the (Bold-weight) Lectern title renders in true Caudex
+        Bold, not synthesized fake-bold.
+      - **Obsolete 2026-07-27** (user decision): the bold cut still rendered as regular in-game even after
+        (a) shipping the real weight-700 Caudex Bold TTF and (b) registering it under ALL four weights (the
+        approach that previously made the regular face "stick"). Diagnostic confirmed both faces load
+        distinctly (weight 400 vs 700), so the mismatch is in the shipped `gui` mod's font resolution, not
+        our assets — chasing it further isn't worth the effort for a title-weight nicety. Current state left
+        as-is (harmless): only `caudex-bold.ttf` ships, registered under every weight; the title renders in
+        Caudex at the intended 1.5× size, just not visibly bolder. Retire the test; if bold weight ever
+        matters, it needs a fix in font resolution (or a fork of `gui`), filed fresh.
+- [x] `6cac9e01` **Completion policy order.** Reorder the completion policy options to: 1. Keep (stay in
+      place), 2. Keep (sink to bottom), 3. Unpin, 4. Delete. *(v1-playtest-fixes — general note 2026-07-27T15-22-22)*
+      - **Still broken 2026-07-27** (playtest submission 2026-07-27T18-22-10): the Scribe Settings picker
+        shows Keep-sink, Keep-stay, Unpin, Delete (alphabetical), not the requested order. Not yet
+        attempted — task 5.2 is still open. Fix: set an explicit display order for the policy picker
+        (Settings + Pinned view) rather than relying on enum/alphabetical order.
+      - **Fix applied 2026-07-27 (awaiting retest — v1-playtest-fixes 5.2):** both pickers
+        (`ScribeSettingsContent` + the Pinned-view picker) now list Keep (stay), Keep (sink), Unpin, Delete
+        in that explicit order. Restaged Debug — retest: both dropdowns show the requested order.
+      - **Confirmed 2026-07-27** (user retest this session): "Policy order is good." Both pickers show the
+        requested Keep (stay), Keep (sink), Unpin, Delete order.
+- [x] `208dc5fb` **HUD text alignment by position.** The HUD header ("Pinned" + gear) and footer ("+N
+      more") should align left when HUD Position is a Left anchor, and right when Right — match the
+      column's `crossAxisAlignment` to the HUD position setting. *(v1-playtest-fixes — general note 2026-07-27T15-22-22)*
+      - **Still broken 2026-07-27** (playtest submission 2026-07-27T18-22-10): not yet attempted — task 5.3
+        is still open. Fix: set the HUD column's `crossAxisAlignment` from the live `HudAnchor` (left for
+        Left anchors, right for Right anchors) in `HudScribePins`.
+      - **Fix applied 2026-07-27 (awaiting retest — v1-playtest-fixes 5.3):** `HudPinsContent` now takes a
+        `leftAligned` flag (from the new Core `ScribeHudAnchor.IsLeftAnchored()` helper) driving the outer
+        Column's `crossAxisAlignment` (Start on Left anchors, End otherwise); the settings-change rebuild
+        re-reads it live. Restaged Debug — retest: header/footer hug left on a Left-anchored HUD, right on a
+        Right-anchored one.
+      - **Confirmed 2026-07-27** (user retest this session): "HUD alignment is good." Header/footer align to
+        the anchored edge.
+- [x] `22412531` **HUD-Delete refreshes open editor.** With the editor open and Delete policy, complete a
+      task via the HUD — the row should disappear from the editor immediately (no view-swap needed), while
+      any in-progress text on other rows is undisturbed. *(add-pinned-task-hud follow-up — fix applied 2026-07-27)*
+      - **Confirmed 2026-07-27** (playtest submission 2026-07-27T18-22-10): "Works." Retest of `80777b7b`'s
+        fix — the open editor drops the HUD-deleted row immediately.
+- [x] `8f971d46` **Enter makes a durable new task.** In the editor, press Enter to create a new task
+      below the current one; the new row persists and stays focused for typing, and does not self-destruct
+      a few frames later. Repeat several times (fast, and with the list scrolled).
+      *(v1-playtest-fixes — RefreshReadView race, surfaced during the scroll-diagnosis session 2026-07-27)*
+      - **Confirmed 2026-07-27** (user retest this session, verified against the live `[scribe-scroll]`
+        trace): the intermittent self-destruct is gone. Root cause was `RefreshReadView` (the async
+        server-push resync from task 6.1) pruning the freshly-inserted row — `EditorInsertTaskBelow`
+        flushes the pre-insert doc and empty tasks are never persisted, so the resync always saw the new
+        task as "server-missing" and deleted it. Fix: `RefreshReadView` never drops the focused row or an
+        empty task. Trace signature `insert-below N → delete N+1` no longer appears.
+- [x] `121a234b` **Un-check holds the viewport.** Under Keep or Sink policy, scroll so the focused edit
+      row is off-screen, then un-check a completed task on a different row; the viewport holds still and
+      does not jump to the focused row.
+      *(v1-playtest-fixes — ToggleEditorTask re-home, surfaced during the scroll-diagnosis session 2026-07-27)*
+      - **Confirmed 2026-07-27** (user retest this session, verified against the live `[scribe-scroll]`
+        trace): the intermittent jump on un-check is gone. Root cause was the same-row caret re-home
+        reusing `FocusEditorRow`, which sets `pendingEnsureVisible` → scrolled the focused row into view
+        even though the click was on another row. Fix: re-grant focus with `FocusNode.RequestFocus()`
+        directly (no scroll) on the Keep/Unpin/un-check path.
+- [x] `923a395a` **Sidebar nav buttons 50% bigger.** The Read/Edit/Pinned/Settings buttons in the Lectern
+      sidebar (SectionRightCol) are 50% larger — both the button box and the inscribed SVG. Check how the
+      enlarged buttons read against the SideColW column bounds (they may overflow). *(v1-playtest-fixes 5.6)*
+      - **Fix applied 2026-07-27 (awaiting retest — v1-playtest-fixes 5.6):** scaled the shared `size` local
+        in `BuildRightColNav` ×1.5 (RowCheckboxSize × 1.2 → × 1.8); `ScribeRowButton` derives both its box
+        and glyph size from that value, so both grow together. Overflow past `SideColW` left intentional to
+        judge in-game. Restaged Debug.
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Works. Looks good." The enlarged
+        (×1.5) nav buttons read well within the sidebar column bounds; no problematic overflow.
+
+## scribe-pin-editor
+
+> The **Pin Tab** is the third Lectern view (the `scribepin` nav button), listing *all* of this player's
+> pins across every document — not just the open Lectern — as editable rows (text field + checkbox +
+> delete + unpin + reorder grip) with a completion-policy picker header. It is fully coded (5 network
+> messages) but had NEVER been playtested; these are its first in-game verifications (v1-release-checklist
+> §1, transcribed from scribe-pin-editor 7.1–7.11). This is the single largest un-verified v1 surface, so
+> run every item before trusting it. Fully relaunch the client first.
+
+- [x] `691ef3c9` **Open the Pin Tab.** Open the Lectern and click the pin nav button; the central region
+      switches to the Pin Tab listing all pins across documents with no row cap. Navigate back and forth to
+      the read and editor views. *(v1-release-checklist 1.3)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Pin view works." The pin nav
+        button switches to the Pin Tab and navigates back to read/editor.
+- [x] `8e914c42` **Rows are editable.** In the Pin Tab, confirm rows are editable by default: text field,
+      checkbox, delete, unpin, and reorder grip are all present and each acts on the correct pin.
+      *(v1-release-checklist 1.4)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Rows are editable in pin view
+        with expected function." Text field, checkbox, delete, unpin, and grip all present and acting on the
+        right pin.
+- [x] `639b2da7` **Complete has no undo delay.** Complete a task from the Pin Tab; it applies immediately
+      with NO undo delay, and the corner HUD updates in lockstep. *(v1-release-checklist 1.5)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Works immediately, confirmed."
+        Completion applies with no undo delay; HUD updates in lockstep.
+- [x] `85592294` **Edit a loaded-source pin.** Edit a pin whose source Lectern IS loaded; the source doc
+      text updates and persists (reopen the Lectern to verify), and the pin snapshot updates.
+      *(v1-release-checklist 1.6)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Works." Editing a loaded-source
+        pin updates + persists the source doc and the pin snapshot.
+- [x] `e152d0e1` **Edit an unloaded-source pin.** Edit or delete a pin whose source Lectern is NOT loaded;
+      the pin snapshot/removal updates with no crash and the source doc is unchanged until loaded.
+      *(v1-release-checklist 1.7)*
+      - **Untested 2026-07-28** (playtest submission 2026-07-28T07-33-43): tester needed clarification on what
+        "unloaded source" means before running it. RESOLVED (user 2026-07-28) — "source not loaded" covers all
+        three real ways a source Lectern goes away in survival, and each should be tested:
+        (a) the source Lectern was **picked up** and not re-placed (block gone, item in inventory);
+        (b) the source Lectern was **fully destroyed** (block gone for good);
+        (c) the source Lectern is **out of chunk-load range** — players travel thousands of blocks, so walk
+        far enough that its chunk unloads on the server, then edit/delete the pin from the Pin Tab.
+        In every case: editing/deleting the pin updates only the client-side pin snapshot with no crash, and
+        the source document is unchanged (reconciling if/when the block is loaded again). Editing from a
+        *different nearby* Lectern while the source is still loaded is the `85592294` case, not this one.
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T09-01-45): all three source-not-loaded scenarios
+        pass — (a) Lectern picked up, (b) Lectern fully destroyed in Creative, (c) source out of chunk-load range.
+        Pins survive and edit/delete cleanly in every case, "even after quitting and rejoining." No crash; the
+        pin snapshot updates client-side and the source doc is untouched until reloaded.
+- [x] `12ca42f8` **Unpin vs. delete.** Confirm unpin removes only the pin (task survives in the source doc)
+      while delete removes the task from the source doc. *(v1-release-checklist 1.8)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Only unpins." Unpin removes just
+        the pin (task survives in the source doc); delete removes the task from the source doc.
+- [x] `85e92e9b` **Reorder persists.** Reorder pins in the Pin Tab; the order persists per-player across
+      relog (under `scribe:pins:v1`) and the corner HUD reflects the new order; document block order is
+      unchanged. *(v1-release-checklist 1.9)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Works." Reordered pin order
+        persists across relog and the HUD reflects the new order.
+- [x] `a1e8e10e` **Blank edit rejected.** Confirm a blank or whitespace-only inline edit is rejected and
+      leaves the task text unchanged. *(v1-release-checklist 1.10)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Works." A blank/whitespace-only
+        inline edit is rejected and the task text is unchanged. Minor UX note (tester deemed acceptable, not a
+        defect): there's no in-place feedback that the edit was rejected until the view is reloaded.
+- [x] `45bb88ed` **Policy picker syncs.** Change the completion policy from the Pin Tab picker; the Settings
+      window reflects the same value, it persists across relog, and completing a task follows the new policy.
+      *(v1-release-checklist 1.11)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Syncs perfectly." The Pin Tab
+        policy picker and the Settings window stay in sync; completions follow the selected policy.
+- [x] `58328d3f` **Pin Tab honors Lectern theme.** Confirm the Pin Tab respects the Lectern-dialog theme/size
+      (`PixelArtDisplay`, `WindowFontScale`, `PixelArtSize`) — not the HUD settings — and that an editing
+      row's focus/caret survives a background pin resync (the `MyPinsChanged` rebuild).
+      *(v1-release-checklist 1.12)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T07-33-43): "Honors theme." The Pin Tab
+        follows the Lectern-dialog theme/size settings (not the HUD-prefixed settings).
+
+## scribe-settings-followups
+
+> Settings UX polish: gradual HUD fade for unpin/delete (ScribeFadeText widget, self-ticking), durable
+> sink-reorder-and-stay (sunkOrder session set), settings form layout (PairedControls rows, HuggingCheckbox),
+> Up/Down arrow stepping in numeric fields (ScribeNumericField), lang renames (Mid-Left/Mid-Right), HUD gear
+> size reduction. Build clean; restaged Debug 2026-07-27 — fully relaunch first.
+
+- [x] `f4825eb0` **HUD gradual fade.** Complete a HUD task under Unpin and under Delete: the task text
+      fades gradually from full to zero opacity across the 1.5s window, not an instant jump; the checkbox
+      stays opaque; uncheck mid-window and the text returns to full opacity and nothing is applied.
+      *(scribe-settings-followups 6.1)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "Works." Text fades gradually
+        under both Unpin and Delete; mid-window uncheck restores full opacity and nothing is applied.
+- [ ] `7a86b890` **Sink stays at end.** Complete a HUD task under Sink: after the window elapses the row
+      moves to the END of the list. Then uncheck it — the row STAYS at the end, not jumping back to its
+      prior slot. Test under Keep policy: same settle-and-stay behavior. *(scribe-settings-followups 6.2)*
+      - **Backlogged 2026-07-28** (playtest submission 2026-07-28T10-38-17): tester says it "doesn't work —
+        but it's kind of a decent/intuitive feeling as it is now." Moving to backlog per tester request.
+- [x] `7361924f` **Settings paired layout.** Open Scribe Settings: max-rows and row-width sit on ONE row;
+      HUD text size and window text size sit on ONE row; the Collapse-HUD checkbox hugs its label and is
+      not stretched full width. *(scribe-settings-followups 6.3)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "Works."
+- [x] `5db8d149` **Numeric arrow stepping.** In Scribe Settings, focus a numeric field and press Up arrow —
+      the value steps up by that field's increment, clamped to range. Press Down — the value steps down.
+      *(scribe-settings-followups 6.4)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "Works."
+- [x] `6b967f10` **Mid-Left Mid-Right labels.** Open the HUD-anchor dropdown — the mid-edge options read
+      "Mid-Left" and "Mid-Right". Also confirm the HUD gear icon is visibly smaller and proportional to the
+      collapse chevron beside it. *(scribe-settings-followups 6.5)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "Works."
+
+## v1-playtest-fixes (round 2)
+
+> Visual polish pass: sidebar nav buttons enlarged ×1.7 + retuned column widths, themed surface fill
+> behind central region and title row when Pixel Art is OFF, theme-derived drag wash (lighter source /
+> darker drop target) with 1px border in Edit and Pinned tabs, stronger pinned-row resting tint
+> (0.22→0.33). Build clean; restaged Debug 2026-07-27 — fully relaunch first.
+
+- [x] `bb4643ce` **Polish round 2.** Open the Lectern: (a) the title bar text is noticeably larger than
+      the row body text; (b) in Settings and the Pinned tab policy picker the order is Keep (stay), Keep
+      (sink), Unpin, Delete; (c) set the HUD anchor to a Left edge — confirm header/footer text aligns
+      LEFT; set it to a Right edge — aligns RIGHT. *(v1-playtest-fixes 5.4)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "a.good, b.good, c.good."
+- [x] `a62162ac` **Visual pass.** Open the Lectern: (a) sidebar nav buttons are larger and sit correctly
+      within the right column; (b) with Pixel Art OFF the central region and title row show a themed surface
+      fill, not a transparent gap; (c) drag-reorder in Edit view and in the Pinned tab shows a lighter wash
+      on the grabbed row and a darker wash on the hover target, each with a 1px border — verify in both the
+      pixel-art light theme and the global dark theme; (d) pinned task rows show a stronger resting tint in
+      read/editor view. *(v1-playtest-fixes 8.6)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "a. works / b. works / c. works
+        / d. works."
+
+## v1-release-checklist (in-game items)
+
+> Handbook and font-selector manual checks from the v1-release-checklist.
+
+- [x] `b7d1e703` **Handbook rotation.** Open the in-game handbook (H key), find the Lectern entry, and
+      confirm the 3D block preview reads correctly — the book face is visible, rotated correctly from the
+      prior orientation. *(v1-release-checklist 10.2)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "Works."
+- [x] `8683093c` **Font fallback.** Temporarily rename a bundled TTF file so it cannot load, then open
+      the Lectern and select that font in the font selector. Confirm: exactly ONE warning is logged, the
+      selector falls back to the default font without crashing, and task text renders normally. Restore the
+      TTF after. *(v1-release-checklist 6.10)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "Works."
+- [ ] `04e53d95` **Save-compat v4->v5.** ⚠️ HARD 1.0 BLOCKER. Load a pre-tablet (v4) world under the
+      v5 build; confirm lectern and notebook documents survive with no data loss. Procedure: (1) run the
+      staged `scribe_0.1.2.zip` (writes codec v4), create a world, place a lectern + a notebook, write a
+      few tasks in each, save & quit. (2) Swap in the v5 dev build, reload the SAME world. (3) Confirm the
+      lectern and notebook open and every task is intact; v4 docs (which had no title) should show the
+      default title, not vanish. *(RELEASE.md V.3)*
+      - **Confirmed 2026-08-06** (manual v4->v5 migration test): created a lectern world under the
+        staged v0.1.2 build (codec v4), reloaded the same world under the v5 dev build — the lectern
+        opened clean and every task survived intact. (v0.1.2 predates notebooks, so lectern docs are the
+        only v4 payload; there is no v4 notebook data to migrate.) Clears the hard 1.0 save-compat gate.
+
+> Post-playtest fix: Pixel Art canvas now tracks the live W value (re-applies WindowSize + SyncLayoutSize
+> in OnRenderGUI when W changes), so raising Pixel Art Size above the opened value grows the art canvas
+> live without a relog. Restaged Debug 2026-07-26 — fully relaunch first.
+
+- [x] `52af67fd` **Pixel Art canvas grows live.** In Scribe Settings, raise Pixel Art Size above the value
+      the Lectern was opened at — the art canvas grows to fill the new size immediately without requiring a
+      relog. Also confirm the title text has its left padding and is not flush left.
+      *(scribe-notebook-frame 7.4)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T10-38-17): "Works." Canvas grows live above
+        the opened value; title text has its left padding.
+
+## v1-playtest-fixes (§9 follow-ups from 2026-07-28)
+
+> Three behavior requests from playtest submission 2026-07-28T10-38-17 general notes: HUD Sink fade
+> animation, a new "Unpin (sink to bottom)" completion policy with the old Unpin renamed to "Unpin
+> (stay in place)", and a minimap-aware HUD offset for Top-Right anchor.
+
+- [x] `e7d98c92` **HUD Sink fade.** Under Keep (sink to bottom) policy, complete a HUD task — the text
+      fades gradually during the undo window and the row moves to the bottom on elapse; mid-window uncheck
+      cancels and restores opacity. *(v1-playtest-fixes 9.4)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T11-06-45): "Works."
+- [x] `cd577b4f` **Unpin (sink to bottom) policy.** New policy appears in both pickers alongside renamed
+      "Unpin (stay in place)"; completing under the new policy both unpins AND moves the task to the bottom
+      of the document. *(v1-playtest-fixes 9.4)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T11-06-45): "Works."
+- [x] `dcf81c60` **Minimap-aware HUD offset.** With HUD Position set to Top-Right and minimap ON, the HUD
+      clears the minimap as before; with minimap OFF, no extra clearance gap — HUD sits at the default
+      anchor position. *(v1-playtest-fixes 9.4)*
+      - **Confirmed 2026-07-28** (playtest submission 2026-07-28T11-06-45): "Works."
+## add-lectern-guestbook
+
+> The Guest Book tab on the Lectern: records each visitor's name and in-game date on open, with an
+> 80-char personal note field per entry. Entries are server-authoritative, persisted in the block
+> entity, and synced to all viewers. Only your own entry has an editable note field.
+
+- [x] `6b1dc808` **First visit recorded.** Open a lectern for the first time; switch to the Guest Book tab — confirm your name and today's in-game date appear as a new entry. *(6.1)*
+      - **Confirmed 2026-07-29** (playtest submission 2026-07-29T23-10-57): "Works."
+- [x] `4b3d537e` **No duplicate on same day.** Close and reopen the same lectern on the same in-game day — confirm no second entry for you is added. *(6.2)*
+      - **Confirmed 2026-07-29** (playtest submission 2026-07-29T23-10-57): "Works."
+- [x] `c39db062` **New entry on new day.** Advance to the next in-game day (sleep or `/time`), reopen — confirm a second entry appears with the new date. *(6.3)*
+      - **Confirmed 2026-07-29** (playtest submission 2026-07-29T23-10-57): "Works."
+- [x] `17923456` **Second player recorded.** Have a second player open the same lectern — confirm both names appear in the Guest Book list. *(6.4)*
+      - **Backlogged 2026-07-29** needs a two-client setup; parked until multiplayer test session.
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T14-19-22, two-client MP session): "Works."
+        Both players' names appear in the shared Guest Book list.
+- [x] `4ffaf625` **Entries survive relog.** Save and reload the world — confirm all guestbook entries are still present. *(6.5)*
+      - **Confirmed 2026-07-29** (playtest submission 2026-07-29T23-10-57): "Works."
+- [x] `c6c680f1` **Note persists.** Type a note on your own entry and close/reopen the lectern — confirm the note saved and is still there. *(6.6)*
+      - **Confirmed 2026-07-29** (playtest submission 2026-07-29T23-10-57): "Works."
+- [x] `aa3b9869` **Other player's note is read-only.** Confirm another player's entry shows their note as plain text — no editable input field for it. *(6.7)*
+      - **Backlogged 2026-07-29** needs a two-client setup; parked until multiplayer test session.
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T14-19-22, two-client MP session): "Works."
+        Another player's entry shows their note as plain text with no editable field.
+- [x] `989c54ac` **Note capped at 80 chars.** In the note field, try to type past 80 characters — confirm input stops at the cap. *(6.8)*
+      - **Confirmed 2026-07-29** (playtest submission 2026-07-29T23-10-57): "Works."
+
+## fix-guestbook-per-day-note-editing
+
+> Fixes the multi-day guestbook note bug: each of your own day-entries now gets its own caret-isolated,
+> independently-saved note field, and a soft per-player cap prunes your oldest note-LESS entries so the
+> list stays readable (entries you annotated are never dropped).
+
+- [x] `5df9e12c` **Per-field caret isolation.** As a player with entries on ≥2 in-game days, click one of your own note fields — confirm only that field shows a caret and typing goes to it (including the newest, not just the oldest). *(4.3)*
+      - **Confirmed 2026-08-01** (playtest submission 2026-08-01T16-54-36): "Works."
+- [x] `9a57fac1` **Per-day note saves independently.** Type a distinct note on each of your day-entries, then close and reopen the lectern — confirm each day kept its own note. *(4.3)*
+      - **Confirmed 2026-08-01** (playtest submission 2026-08-01T16-54-36): "Works."
+- [x] `52fac6d2` **Multiplayer note isolation.** A second player opens the same lectern — confirm they see your notes read-only and can edit each of their own multi-day notes independently on their client. *(4.4)*
+      - **Confirmed 2026-08-01** (playtest submission 2026-08-01T16-54-36): "Works."
+- [x] `30895563` **Note-less entries pruned past the soft cap.** Visit a lectern on more than 10 in-game days without leaving notes — confirm oldest empty entries drop so your list stays around ten, while any entry you left a note on is never dropped. *(1.3)*
+      - **Confirmed 2026-08-01** (playtest submission 2026-08-01T16-54-36): "Works."
+
+## split-large-gui-files
+
+> Refactor-only: the two ~2000-line GUI god-files were split into concern-named partials with no
+> behavior change. Nothing new to see — the smoke test just confirms every dialog still renders and
+> functions exactly as before the split.
+
+- [x] `2aec8921` **Smoke all three dialogs.** Open the Lectern, plain Notebook, and Clockmaker's
+      Notebook; step through Read / Editor / Pinned / Guestbook / Timer views, plus title editing,
+      lock/autosave, and backdrops — everything renders and functions as it did before the file
+      split. *(split-large-gui-files 3.2)*
+      - **Confirmed 2026-08-01** (playtest submission 2026-08-01T17-59-16): "It's a lot of tests, but
+        it works." All three dialogs render and function across every view after the file split — no
+        behavior change, as intended.
+
+## add-title-to-scribe-tooltips
+
+> Shows a Scribe document's title on the Lectern's placed-block tooltip and both Notebook items'
+> inventory tooltips (quoted, with an `(untitled)` placeholder), and removes the irrelevant Burn
+> temperature/duration lines from the Lectern.
+
+- [x] `468d7234` **Titled lectern tooltip.** Place a Lectern, give it a title; look at the placed block — confirm the tooltip shows `Title: "<title>"` and NO Burn temperature/duration lines. *(4.3)*
+      - **Confirmed 2026-08-01** (playtest submission 2026-08-01T16-54-36): "Works."
+- [x] `84eb244b` **Untitled lectern tooltip.** Look at a freshly placed, never-titled Lectern — confirm the tooltip shows `Title: "(untitled)"`. *(4.3)*
+      - **Confirmed 2026-08-01** (playtest submission 2026-08-01T16-54-36): "Works."
+- [x] `c9a643bd` **Titled notebook tooltips.** Hover a titled Notebook and a titled Clockmaker's Notebook in the inventory — confirm each shows `Title: "<title>"`. *(4.4)*
+      - **Confirmed 2026-08-01** (playtest submission 2026-08-01T16-54-36): "Works."
+- [x] `5babbc80` **Never-opened notebook tooltip.** Hover a freshly crafted Notebook that has never been opened — confirm the tooltip shows `Title: "(untitled)"`. *(4.4)*
+      - **Confirmed 2026-08-01** (playtest submission 2026-08-01T16-54-36): "Works."
+- [x] `6ca225ff` **Lectern item tooltip.** Break or pick up a titled Lectern and hover the resulting block item in the inventory — confirm the tooltip shows `Title: "<title>"`, matching the Notebook. *(4.6)*
+      - **Confirmed 2026-08-01** (playtest submission 2026-08-01T17-59-16): "Works." The broken/picked-up
+        Lectern's block item shows `Title: "<title>"` in its inventory tooltip, matching the Notebook.
+
+## scribe-0-2-0-release-content
+
+> 0.2.0 release-prep: the plain Notebook's survival recipe, a `tinkerer`-trait craft gate for the
+> Clockmaker's Notebook (+ worldconfig bypass), in-game handbook coverage for both notebook items,
+> and a creative-only `/scribe seed` demo command that seeds tasks/notes/History/Guestbook through
+> the normal server-authoritative flow. ⚠️ Restage before testing — the 0.2.0 Mod changes are
+> uncommitted/unstaged as of this writing (`build/restage.sh Debug`), so the staged build predates them.
+
+- [x] `38e61888` **Notebook craftable + chain.** In survival, craft a Notebook from the writing set;
+      confirm its handbook shows a grid recipe, it crafts, and the full Notebook → Clockmaker's Notebook
+      chain works. *(scribe-0-2-0-release-content 1.4)*
+      - **Confirmed 2026-07-31** (user report): the plain Notebook is survival-craftable from the writing
+        set, and the full Notebook → Clockmaker's Notebook craft completes (tinkerer consuming Notebook +
+        temporal gear + metal parts). Both legs seen.
+- [x] `80eb64b2` **Trait gate on/off.** With the requirement ON, a tinkerer (Clockmaker) can craft the
+      Clockmaker's Notebook and a non-tinkerer cannot; toggle `scribeClockmakerRequiresTrait` off (new
+      world or `/worldconfig`) and confirm a non-tinkerer can; confirm a classless world is not blocked.
+      *(scribe-0-2-0-release-content 1b.4)*
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T15-05-03, after the `package.sh`/worldconfig
+        fixes + `onCustomizeScreen:false`): "The world config now loads into the world properly. It also acts
+        properly, allowing non-Clockmakers to make the Clockmaker's Notebook when setting the config." Legs (a)
+        (ON: tinkerer can, non-tinkerer can't) and (b) (`/worldconfig … false` lets a non-tinkerer craft)
+        confirmed. Leg (c) — classless / no-character-system world — not separately exercised, but it's the
+        trivial case (no CharacterSystem deny to begin with) and the general mechanism is proven.
+      - **Partly verified 2026-07-31** (user report): with the requirement ON (default), a non-tinkerer
+        CANNOT survival-craft the Clockmaker's Notebook, and a tinkerer/Clockmaker CAN (leg a confirmed via
+        the successful upgrade craft). Two legs remain: (b) toggling `scribeClockmakerRequiresTrait` off
+        (new world or `/worldconfig`) lets a non-tinkerer craft it, (c) a classless / no-character-system
+        world is not blocked. NOTE: `/worldconfig scribeClockmakerRequiresTrait false` reported "No such
+        config found" because `restage.sh` was not staging the mod-root `worldconfig.json` (fixed
+        2026-07-31); re-test leg (b) after a fresh restage + relaunch. Box stays unchecked until both seen.
+      - **Still broken 2026-07-31** (playtest submission 2026-07-31T14-19-22, PC/MP session): `/worldconfig`
+        still returns "No such config found: scribeClockmakerRequiresTrait" — root-caused: `restage.ps1`
+        (Windows) NEVER got the mod-root `worldconfig.json` staging step that `restage.sh` got this session,
+        so the PC-staged mod has a null `WorldConfig`. Fix `restage.ps1` to stage `worldconfig.json`, then
+        re-test legs (b) + (c). SEPARATE follow-up raised by the tester (real, worth its own item): a world
+        that already had Scribe installed before 0.2.0 does not gain the new worldconfig key on upgrade —
+        the engine only seeds worldConfigAttributes into a world at creation, so existing worlds report "No
+        such config found" even with the file staged. Need (1) player-facing mod-page instructions for
+        setting/enabling the config on an existing world, and (2) a decision on migrating the key into
+        already-created worlds. Legs (b)/(c) remain unverified.
+      - **Update 2026-07-31** (engine-source investigation, no migration needed): decompiled `CmdWorldConfig`
+        + `GuiScreenWorldCustomize`. `/worldconfig` discovers keys from the LOADED mod's `WorldConfigAttributes`
+        (`modLoader.Mods`), not from what was seeded into the save; on read it falls back to `TypedDefault`
+        when the save lacks the key, and `SetBool` writes it unconditionally. So NO existing-world backfill
+        code is needed — `/worldconfig scribeClockmakerRequiresTrait false` works on any world AS LONG AS the
+        mod actually ships `worldconfig.json`. The real bug was `build/package.sh` never staging that file into
+        the release zip (fixed 2026-07-31), so the released mod had a null `WorldConfig` and reported "No such
+        config found" everywhere. Also set `onCustomizeScreen: false` (operator command only, no world-creation
+        GUI toggle — user's call) and pointed the handbook craft text at the concrete `/worldconfig …` command.
+        Re-test legs (b)/(c) with the fresh restage; the existing-world migration concern is resolved (non-issue).
+      - **Confirmed 2026-08-01** (playtest submission 2026-08-01T17-59-16): "It has been properly tested." Tester
+        closing this out — all three legs (ON tinkerer-only, `/worldconfig` bypass, classless world) exercised;
+        the earlier worldconfig-staging blockers are fixed. Done.
+- [x] `0213647b` **Handbook sections render.** Open the in-game handbook for both the Notebook and
+      Clockmaker's Notebook and confirm the new extra sections show; the getting-started + editor-reference
+      guide pages read coherently with working cross-links. *(scribe-0-2-0-release-content 2.4)*
+      - **Confirmed 2026-07-31** (user report): the new handbook extra sections render on the notebook items.
+- [x] `b2804892` **Seed command populates + persists.** In a creative world run `/scribe seed` against a
+      held Notebook and a looked-at Lectern; confirm tasks/notes, History (notebook) and Guestbook (lectern)
+      populate, persist across save/reload, and sync to a second client. *(scribe-0-2-0-release-content 3.9)*
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T14-19-22): "Works." Seeded tasks/notes +
+        History (notebook) + Guestbook (lectern) populate, persist, and sync. Behavior note from the tester
+        (not a defect): `/scribe seed` only targets an item/block that has been OPENED at least once — merely
+        looking at a block or holding an item in the active slot isn't enough. Worth a `/scribe seed` help-text
+        clarification or a clearer "open it first" error, but the command works as exercised.
+
+## carry-notebook-doc-through-craft
+
+> Crafting a Notebook into a Clockmaker's Notebook now carries the source Notebook's document (title +
+> tasks + task state, same DocId) AND its History chronicle onto the crafted output, instead of producing
+> a blank one; the new "Crafted" entry appends onto the carried-over history. Also reordered the Timer tab
+> radios so Real Time is first, In-game time second, and noted the carryover in the Notebook's handbook.
+> ⚠️ Restaged Debug 2026-07-31 — fully relaunch the client first.
+
+- [x] `fb219286` **Craft carries document + history.** Craft a Clockmaker's Notebook from a Notebook that
+      has a title, several tasks (some done), and prior History; confirm the crafted Clockmaker's Notebook
+      opens showing the same title/tasks/done-state and the prior History plus a new "Crafted" entry.
+      *(carry-notebook-doc-through-craft 3.3)*
+      - **Confirmed 2026-07-31** (user report): crafting a Notebook into a Clockmaker's Notebook as a
+        tinkerer carries the document over — tasks and History both survive the upgrade.
+- [x] `065b935a` **Fresh craft with no source document.** Obtain a Clockmaker's Notebook whose craft had no
+      source document (creative `giveitem`); confirm it opens with a fresh empty document and a crafted-only
+      or empty history — no crash, no stale data. *(carry-notebook-doc-through-craft 3.4)*
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T14-19-22): "Works." A `giveitem` Clockmaker's
+        Notebook with no source opens with a fresh empty document — no crash, no stale data.
+- [x] `1700a1b5` **Timer radios: Real Time first.** Open the Clockmaker's Notebook Timer tab and confirm the
+      mode radios list Real Time first and In-game time second. *(carry-notebook-doc-through-craft — timer reorder)*
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T14-19-22): "Works." Timer tab lists Real Time
+        first, In-game time second. FOLLOW-UP (general note, new scope): Real Time should also be the DEFAULT
+        selected mode, not just first in the list — currently the order changed but the default did not.
+      - **Confirmed 2026-08-01** (user report): FOLLOW-UP resolved. The Timer tab's "set timer" form now
+        defaults to Real Time on a first-ever open and otherwise restores the player's last-selected mode
+        (client-local `PreferredTimerMode`, commit `3b983ed` fix-clockmaker-timer-mode-default).
+- [x] `586a51c8` **Handbook notes the carryover.** Open the Notebook's handbook entry and confirm the
+      crafting section states that upgrading to the Clockmaker's Notebook keeps your tasks and History.
+      *(carry-notebook-doc-through-craft 2.0)*
+      - **Confirmed 2026-07-31** (playtest submission 2026-07-31T14-19-22): "Works." The Notebook handbook
+        craft section states the upgrade keeps your tasks and History.
+
+## fix-transient-lectern-editor-lock
+
+> The contended editor lock is transient crash-prevention only, not a permanent lockout. Root cause was
+> an in-memory leak: the server's `lockHolderUid` wasn't reliably cleared when the holder left, so a
+> second player was blocked forever even after the first relogged. Fixed by clearing the lock on load,
+> releasing it on EVERY dialog close (not just editor-mode exits), and closing the Read-nav-button gap.
+> A dormant `LecternAccessMode` (Public/Private) was added for a future read-only permission — it
+> round-trips and syncs but has no player control and the entry gate ignores it.
+
+- [x] `c5b23e3f` **P2 blocked while P1 edits.** With P1 actively in the editor, confirm P2's editor
+      affordance is inert and activating it keeps P2 in read view with the native "another player is
+      editing" notice. *(fix-transient-lectern-editor-lock 5.1)*
+      - **Confirmed 2026-07-31** (two-client MP session): P2 stays in read view with the native notice
+        while P1 holds the editor.
+- [x] `c5c2643a` **All exit paths release.** With P1 in the editor, confirm each of Read/Pinned/History
+      tab, ESC, and Lectern close frees the lock immediately so P2 can enter — including the previously-
+      broken Read-nav-button path and the close-not-in-editor path. *(fix-transient-lectern-editor-lock 5.2)*
+      - **Confirmed 2026-07-31** (two-client MP session): every tab switch, ESC, and close releases the
+        lock; the Read-nav-button gap that leaked before now releases as expected.
+- [x] `d10ea03b` **Disconnect releases.** P1 holds the editor lock, then disconnects; confirm P2 can
+      open the editor. *(fix-transient-lectern-editor-lock 5.3)*
+      - **Confirmed 2026-07-31** (two-client MP session): P1 disconnecting frees the lock and P2 enters.
+- [x] `24b56072` **Relog repro fixed.** Reproduce the original bug shape (P1 opens editor → leaves → P2
+      relogs) and confirm P2 can now edit. *(fix-transient-lectern-editor-lock 5.4)*
+      - **Confirmed 2026-07-31** (two-client MP session): the original permanent-lockout no longer
+        reproduces — after P1 leaves and P2 relogs, P2 can enter the editor.
+
+## add-clockmaker-notebook-schematic
+
+- [x] `de045c46` **Schematic item exists.** Open Creative search for "schematic" — confirm the
+      Clockmaker's Notebook Schematic shows up with its name/description and a handbook page, and that
+      when held or ground-stored it renders as the (borrowed) glider-blueprint scroll art.
+      *(add-clockmaker-notebook-schematic 1.4)*
+      - **Confirmed 2026-08-02** via playtest submission (2026-08-02T12-40-23): the schematic item
+        appears in Creative search and reads correctly. No screenshot on file; existence check only.
+- [x] `429072f0` **Craft without the trait.** On a NON-Clockmaker character, put Notebook + temporal
+      gear + metal parts + the schematic in the grid — confirm it yields a Clockmaker's Notebook, the
+      schematic STAYS in the grid (reusable), and the other three are consumed. Craft a second from the
+      retained schematic to confirm reuse. *(add-clockmaker-notebook-schematic 2.3)*
+      - **Still broken 2026-08-04** (submission 2026-08-04T23-16-17): "The schematic is consumed when
+        crafting the Clockmaker's Notebook." Despite `consume: false` on the `S` (schematic) ingredient in
+        `scribeclockmakernotebook-schematic.json`, the schematic is eaten by the craft.
+      - **Cannot reproduce in code 2026-08-04** (decompile + staged-asset + server-log investigation): every
+        code path checks out and the engine SHOULD honor `consume: false` here. Confirmed: (a) the field name/
+        placement is correct and matches vanilla `schematiccopy.json` verbatim; (b) `CraftingRecipeIngredient.Consume`
+        (default true) is honored in `CollectibleObject.OnConsumedByCrafting` — when false the stack is left in
+        place; (c) the consume path maps grid cells to ingredients by POSITION (`GridRecipe.ConsumeInputAt`), so
+        the `S` cell in the `"BGM,S__"` layout maps to the `consume:false` S ingredient and returns early; (d) the
+        co-existing 3×1 `"BGM"` trait recipe CANNOT be misrouted to for an S-bearing layout (the extra S cell fails
+        `MatchesAtPosition`); (e) the staged recipe is present and correct, resolved with NO "cannot be resolved"
+        error; (f) the notebook item (`ItemClockmakerNotebook`) overrides `OnCreatedByCrafting` but only READS
+        input slots (copies doc bytes) — it never consumes them, and it does NOT override `ConsumeCraftingIngredients`.
+        Remaining unverified suspects (need in-game measurement, not code): the notebook that appeared may have been
+        crafted from the 3×1 recipe (no S present) rather than the 3×2 schematic layout; or a stale CLIENT build
+        mispredicted the craft (no server→client mod sync — verify client+server on the same build). NEXT: retest
+        with a server log line on `MatchingRecipe.Name` in the craft to confirm which recipe fired.
+      - **Confirmed 2026-08-05** (submission 2026-08-05T12-01-33): "Confirmed." On a non-Clockmaker the
+        schematic craft yields a Clockmaker's Notebook, the schematic STAYS in the grid (reusable), and a
+        second Notebook crafts from the retained schematic — resolving the earlier "schematic consumed"
+        report (the prior "cannot reproduce in code" analysis held; the consume path was correct all along).
+      - **(prior NEXT note)** confirm the 3×2 recipe is the one that fired.
+- [x] `297731fd` **Trait path unchanged.** Confirm a Clockmaker (Tinkerer trait) still crafts via the
+      original 3-item no-schematic recipe, AND a non-Clockmaker with no schematic still CANNOT craft via
+      that trait recipe. *(add-clockmaker-notebook-schematic 2.4)*
+      - **Still broken 2026-08-02:** the CM Notebook handbook entry (Desktop capture "Screenshot
+        2026-08-02 at 12.45.37 PM", cloud-only — no repo copy staged) shows only ONE recipe
+        (Notebook + temporal gear + metal parts, 3 items) and NO trait asterisk. Expected two recipes —
+        the trait-gated 3-item recipe (which should carry a `* Requires <trait> trait` marker, as the
+        Sling entry does) AND the new 4-item schematic recipe. Neither the second recipe nor the trait
+        marker appears, suggesting the schematic recipe didn't register and/or the trait recipe lost its
+        trait gate. Next: check the recipe JSON registration + the handbook's recipe aggregation for
+        this item.
+      - **Still broken 2026-08-04** (submission 2026-08-04T23-16-17, screenshot 2026-08-04T23-12-17-297731fd.png):
+        HALF-FIXED. The dual-grid fix landed — the handbook now shows TWO separate "Created by" grids (the
+        3-item trait recipe and the schematic recipe side by side, confirming the distinct-`recipegroup`
+        fix). BUT: (1) NEITHER grid shows the `* Requires Tinkerer trait` asterisk, and (2) as a Commoner
+        the user can STILL craft the Notebook via the no-schematic 3-item recipe.
+      - **NOT A BUG — world config 2026-08-04** (decompile + server-log investigation): both 2.4 symptoms
+        have ONE cause, and it is working-as-designed. `requiresTrait`/`consume` field names, casing, and
+        placement are all CORRECT and match vanilla verbatim (`RecipeBase.RequiresTrait`, recipe-level;
+        enforced by `CharacterSystem.Event_MatchesRecipe`; asterisk drawn by `SlideshowGridRecipeTextComponent`
+        from that same field). The server log shows the mod deliberately clearing the gate at load:
+        `[scribe] scribeClockmakerRequiresTrait disabled: cleared the tinkerer trait requirement on 1 …
+        recipe(s).` This world has the operator toggle `scribeClockmakerRequiresTrait` set to FALSE (mod
+        default is TRUE); `ApplyClockmakerTraitGate` (ScribeModSystem.ServerLifecycle.cs) then nulls out
+        `recipe.RequiresTrait`, which removes BOTH the craft gate AND the asterisk in one stroke (the asterisk
+        is driven entirely by `RequiresTrait` being non-null). To actually verify the gate: run
+        `/worldconfig scribeClockmakerRequiresTrait true`, restart the world, re-log as a Commoner — the
+        craft should then be blocked and the asterisk should appear on the trait grid. No code change.
+      - **Confirmed 2026-08-05** (submission 2026-08-05T12-01-33): "Confirmed working." A Clockmaker still
+        crafts via the original 3-item no-schematic recipe, and (with the world config set TRUE, per sibling
+        item `89f55f28`) a non-Clockmaker without the schematic cannot use the trait recipe. The gate behaves
+        as designed.
+- [x] `e093c2ad` **Carryover via schematic.** Craft the Clockmaker's Notebook via the schematic recipe
+      from a Notebook that already has tasks/notes/History — confirm the document and History carry into
+      the result. *(add-clockmaker-notebook-schematic 2.5)*
+      - **Still broken 2026-08-04** via playtest submission (2026-08-04T17-53-45): the schematic recipe
+        isn't discoverable — the Clockmaker's Notebook handbook entry shows ONLY the single 3-ingredient
+        recipe, with no indication it's Tinkerer-gated and no sign the schematic does anything. Player
+        wants the handbook to show TWO visible recipes on the entry (like the Sling page): a schematic
+        recipe, and a no-schematic recipe with an asterisk marking the Tinkerer-trait requirement. Needs
+        a proposal (see the two queued proposals below).
+      - **Confirmed 2026-08-05** (submission 2026-08-05T12-01-33): "The new CM Notebook carries over its
+        contents." With the schematic recipe now discoverable (dual-grid fix), crafting from a Notebook that
+        already has tasks/notes/History produces a Clockmaker's Notebook that retains the document and History.
+- [x] `2a7c88a0` **Patch loads clean.** Check the game log on boot — confirm no "could not find
+      file/path" warning for trader-commodities or trader-treasurehunter tradelists (the ware patch
+      resolved). *(add-clockmaker-notebook-schematic 3.2)*
+      - **Confirmed 2026-08-02** via playtest submission (2026-08-02T12-40-23): no missing-file/path
+        warning for the trader tradelist patches on boot.
+- [x] `0efc1fa5` **Traders sell it.** Spawn fresh Commodities and Treasure Hunter traders (already-
+      spawned ones won't restock immediately) and check stock until the schematic appears — confirm the
+      gear price/stock look right and buying it yields a working schematic. Note it's a probabilistic
+      appearance. *(add-clockmaker-notebook-schematic 3.3)*
+      - **Confirmed 2026-08-04** via playtest submission (2026-08-04T17-53-45): "Works." Schematic
+        appears in Commodities/Treasure Hunter stock and buying it yields a working schematic.
+- [x] `7d43b5d3` **Other traders exclude it.** Check a non-target trader (e.g. Survival Goods or
+      Artisan) and confirm the schematic is NOT in its wares. *(add-clockmaker-notebook-schematic 3.4)*
+      - **Confirmed 2026-08-04** via playtest submission (2026-08-04T17-53-45): "Correct." Non-target
+        traders do not carry the schematic.
+
+## add-tablet-cuneiform-chrome
+
+- [x] `6017abe3` **Type live cuneiform.** Hold a clay/wax tablet and type into a task row — glyphs
+      form as cuneiform strokes with a blinking synthetic caret; arrow-key nav and click-to-place move
+      the caret to the right character boundary. Also confirm no title banner renders and the editor
+      fills the central region. *(add-tablet-cuneiform-chrome 7.2)*
+  - **Still broken 2026-08-02:** playtest (2026-08-02T12-48-22-general.png) — "no room to type,"
+    couldn't reach a task row at all. Blocked by the same balloon bug as `a029001d`: the "Add task"
+    button filled the whole central column, covering the row area. Title editing worked ("WE CAN TYPE
+    IN HERE…" typed into the title bar). Fix applied (see `a029001d`); retest typing into a task row
+    once the button no longer fills the column.
+  - **Still broken 2026-08-02 (retest):** balloon fix confirmed — rows are reachable and glyphs form
+    correctly, arrow-nav (L/R + U/D) works perfectly (2026-08-02T13-01-04-6017abe3.png). But three
+    sub-issues remain, all NEW/pre-existing (not the balloon): (1) the synthetic caret does not BLINK
+    (renders static); (2) Shift+Enter does not insert a line break in a cuneiform row; (3) Shift+arrow
+    "selects" text but there is no visual selection feedback in the cuneiform render. Also a space typed
+    at end-of-line doesn't advance the caret until the next non-space char (see general notes). NOTE on
+    "banner renders": the screenshot shows only the cuneiform TITLE BAR + rows — the retired redundant
+    banner is genuinely gone; the tester read the cuneiform title bar as "the banner." Needs a fix pass
+    on caret-blink + Shift+Enter + selection feedback before this can pass.
+  - **Fix landed 2026-08-02 (awaits retest):** group-8 refinements applied — caret now blinks at the
+    normal field's 500ms cadence (8.1), Shift+Enter inserts a line break in a cuneiform row (8.2), and a
+    trailing space advances the caret immediately (8.3). Selection feedback over cuneiform stays OUT of
+    scope (explore-cuneiform-text-selection). RESTAGE first — the fixes aren't in the staged build. Retest
+    typing: caret blinks, Shift+Enter grows a wrapped line, end-of-line space moves the caret.
+  - **Confirmed 2026-08-02** (retest after restage): tester — "Caret blinks, both in Tablet and in earlier
+    Scribe rows. Shift+Enter works in Tablet. Trailing space advances correctly." All three group-8 typing
+    fixes (8.1 blink, 8.2 Shift+Enter, 8.3 trailing space) verified. Selection feedback remains out of scope
+    (explore-cuneiform-text-selection, now implemented separately).
+- [x] `4c2624f4` **Check focus chrome.** A resting tablet row shows no border/background; clicking/
+      focusing it gives it a border + soft fill; it reverts on blur — and in-progress text/caret
+      survives the appearance change (no revert). *(add-tablet-cuneiform-chrome 5.1)*
+  - **Confirmed 2026-08-02** via 2026-08-02T13-01-04-6017abe3.png (focused 3rd row shows border + soft
+    fill, resting rows are bare) — tester: "the swap is distinct."
+- [x] `77394f15` **Edit title in cuneiform.** Click the pencil and type — the title bar edits live in
+      cuneiform; a long title hard-clips (truncates) in the fixed band instead of growing it taller.
+      *(add-tablet-cuneiform-chrome 7.2)*
+  - **Confirmed 2026-08-02:** tester "Works" — title edits live in cuneiform and truncates in the band
+    (title reads "WE CAN TYPE IN HERE, BUT THERE'S N…" clipped, in 2026-08-02T13-01-04-6017abe3.png).
+- [x] `0cff0bd9` **Wrap long rows.** Type a long task row — it word-wraps and the row auto-grows; the
+      caret still tracks correctly across wrapped lines. *(add-tablet-cuneiform-chrome 7.2)*
+  - **Confirmed 2026-08-02:** tester "Works"; the focused row in 2026-08-02T13-01-04-6017abe3.png shows
+    a wrapped two-line task with the caret tracking on the second line.
+- [x] `a029001d` **Cuneiform button labels.** The footer "Add task" label renders in cuneiform strokes
+      at the same scale as the row glyphs. *(add-tablet-cuneiform-chrome 5.4)*
+  - **Still broken 2026-08-02:** playtest (2026-08-02T12-48-22-general.png) — the "Add task" button
+    ballooned to fill the ENTIRE central column, hiding the task rows ("Add Task takes the entire
+    column… no room to type"). Root cause: `BuildButtonLabel` wrapped the cuneiform label in a
+    `Center`, which is a `RenderPositionedBox` that expands to the parent's finite `MaxHeight`; inside
+    the "Add task" `Expanded` (max height = the whole scroll column) it stretched the button to fill it.
+    The normal `Text` label and the sibling ⓘ/gear glyphs use no such wrapper (the file's own comments
+    warn about exactly this). **Fix applied** (ScribeEditorContent.cs): return `CuneiformText` directly,
+    no `Center`. Builds clean, restaged. Retest that "Add task" hugs its label and rows are visible.
+  - **Confirmed 2026-08-02 (retest)** via 2026-08-02T13-10-26-general.png — balloon fixed, button is
+    normal height, label is cuneiform in an appropriate footprint. Tester notes the cuneiform label is
+    NOT at the same visual scale as the row glyphs (~52px button vs ~62px for the ⓘ/gear siblings) — a
+    global cuneiform-scale + Add-task padding refinement is filed as a follow-up (see general notes),
+    not a blocker for this item.
+  - **Fix landed 2026-08-02 (awaits retest):** the global cuneiform em-scale was bumped to the ~1.4x
+    readable line-height (8.4) and the labelled footer buttons lost ~8px of vertical padding on the
+    cuneiform path, so the "Add task" label should now sit closer to the row/ⓘ glyph scale. RESTAGE first.
+    Retest that the footer label reads at a comparable scale to the row glyphs and the button hugs it.
+- [x] `96661ea2` **Gear opens Settings.** The footer gear (right of the ⓘ) opens Scribe Settings and
+      matches the ⓘ button's styling/size. *(add-tablet-cuneiform-chrome 7.2)*
+  - **Confirmed 2026-08-02:** tester "Works"; the gear sits right of the ⓘ at matching size in
+    2026-08-02T13-10-26-general.png and opens Settings.
+- [x] `78d5448e` **Toggle disable-cuneiform.** Flip "Disable cuneiform font" in Settings both
+      directions — every tablet surface (title, rows, button labels) reverts to the normal editable
+      font together and stays editable, then all return to cuneiform on flip back.
+      *(add-tablet-cuneiform-chrome 6.2)*
+  - **Confirmed 2026-08-02:** tester "Works" — all surfaces flip together in both directions and stay
+    editable. (Separate follow-up: tester wants the setting reframed from "Disable cuneiform" to a
+    positive "Cuneiform Tablets" default-true boolean — see general notes.)
+- [x] `0e313a22` **Settings stays legible.** With cuneiform ON, confirm the Scribe Settings window
+      itself is still normal readable text (never cuneiform), in both toggle states.
+      *(add-tablet-cuneiform-chrome 6.3)*
+  - **Confirmed 2026-08-02:** tester "Works" — Settings stays in the normal readable font regardless of
+    the cuneiform toggle.
+- [x] `d53f6b5b` **Both materials.** Repeat the core cuneiform checks on both a clay and a wax tablet —
+      behavior identical, only backdrop/ink color differ. *(add-tablet-cuneiform-chrome 4.5)*
+  - Previously parked 2026-08-02: tester confirmed reclassify — "Yeah reclassify as backlogged for this."
+    Clay vs wax showed no backdrop/ink-color difference yet because the material backdrops were tracked
+    separately in `add-tablet-clay-type-backdrops` and the ink-contrast decision was deferred (placeholder
+    earthen palette). Not a cuneiform-chrome failure — it was parked on that backdrops work, which is now done.
+  - Unblocked 2026-08-06: the material backdrops this was parked on landed — per-type clay backdrops
+    (`scribe-clay-tablet-{red,blue,fire}-{soft,hard,fired}.png`) and the wax backdrop (`scribe-wax-tablet.png`)
+    all shipped, and per-material palettes resolve from them, so clay vs wax genuinely differ now.
+  - **Confirmed 2026-08-06** (submission 2026-08-06T16-10-31): "This is all solved. Works." Cuneiform
+    behavior is identical across a clay and a wax tablet; only the backdrop/ink color differs, as intended.
+- [x] `999627d6` **Cuneiform em-scale fit.** After the ~1.4× line-height bump (8.4), confirm cuneiform
+      matches the surrounding readable line-height (no longer ~30% short) across the title bar, the task
+      rows, AND the "Add task" / "Done editing" footer labels — and that nothing overflows or re-wraps
+      badly at the larger size. *(add-tablet-cuneiform-chrome 8.6)*
+  - **Confirmed 2026-08-02:** tester — "The text height has adjusted well." The 1.4× bump reads correctly
+    across surfaces with no overflow/bad re-wrap.
+- [x] `17c7898e` **CuneiformTablets toggle + migration.** The Settings checkbox now reads "Cuneiform
+      tablets" (default ON). Flip it both directions and confirm every tablet surface follows together.
+      Then load a profile that previously had cuneiform OFF (old `DisableCuneiformFont = true`) and confirm
+      it stays OFF — the migration must not silently re-enable cuneiform. *(add-tablet-cuneiform-chrome 8.6)*
+  - **Confirmed 2026-08-02:** tester — "It's been adjusted, and works well." Renamed positive-polarity
+    toggle flips all surfaces together; migration preserves a prior OFF preference.
+
+## explore-cuneiform-text-selection
+
+- [x] `beba0994` **Cuneiform selection highlight.** In a tablet row/title, use shift-arrow, drag-select,
+      double-click (word) and triple-click (line) and confirm a highlight box appears behind the cuneiform
+      strokes on both a single-line and a wrapped multi-line row; the title band highlights and clips
+      overflow; Ctrl+C copies the underlying plain text. *(explore-cuneiform-text-selection 3.3)*
+  - **Confirmed 2026-08-02:** tester — "All selection modes work and are visually clear with the new
+    highlight box." Shift-arrow, drag, double-click word, triple-click line all render the highlight over
+    cuneiform on single-line + wrapped rows and the title band; Ctrl+C yields plain text.
+
+## add-info-button-handbook-toggle
+
+- [x] `9f96bb03` **Open closed → opens reference.** In the editor (spot-check the Lectern AND a tablet)
+      with the handbook CLOSED, click the ⓘ button — the survival handbook opens to the Scribe Editor
+      Features page (unchanged from before). *(add-info-button-handbook-toggle 4.2)*
+      - **Confirmed 2026-08-02** via playtest submission 2026-08-02T16-46-27: tester reported "works."
+- [x] `f5ea01dd` **Open-on-our-page → closes.** With the handbook already OPEN on the Scribe Editor
+      Features page, click ⓘ — the handbook closes. *(add-info-button-handbook-toggle 4.3)*
+      - **Confirmed 2026-08-02** via playtest submission 2026-08-02T16-46-27: tester reported "works."
+- [x] `6103f6f8` **Open-elsewhere → navigates then closes.** With the handbook OPEN on a DIFFERENT page,
+      click ⓘ — it navigates to the Scribe Editor Features page (NOT closed); a further click then closes
+      it. Confirm the two-click flow feels right. *(add-info-button-handbook-toggle 4.4)*
+      - **Confirmed 2026-08-02** via playtest submission 2026-08-02T16-46-27: two-click flow "Works."
+- [x] `11c74a8d` **Tooltip + close sound.** Hover ⓘ — the tooltip reads the toggle wording ("Show /
+      hide Editor Features"); confirm the handbook close plays/omits its sound acceptably.
+      *(add-info-button-handbook-toggle 4.5)*
+      - **Confirmed 2026-08-02** via playtest submission 2026-08-02T16-46-27: tooltip + sound "Works".
+
+## fix-settings-numeric-arrow-focus-leak
+
+- [x] `fd0066db` **Arrow-step with editor open.** Focused numeric field, WITH a document editor open:
+      press Up/Down 3+ times in a row — value steps on EVERY press and focus stays on the field (the
+      arrow never jumps to an editor row's caret). *(fix-settings-numeric-arrow-focus-leak 3.1)*
+      - **Confirmed 2026-08-02** via playtest submission 2026-08-02T18-17-16: tester "Works."
+- [x] `52944f44` **Arrow-step, no editor.** No document open, several fields (rows, width, offsets,
+      font scales): press Up/Down repeatedly on each — every press steps that field.
+      *(fix-settings-numeric-arrow-focus-leak 3.2)*
+      - **Confirmed 2026-08-02** via playtest submission 2026-08-02T18-17-16: tester "Works."
+- [x] `eb436828` **Editor caret unregressed.** Genuinely focus a document editor row
+      (Lectern/Notebook/Tablet AND Pin Tab) and press Up/Down — the caret still moves by visual line
+      (arrow-key-line-caret-nav unregressed). *(fix-settings-numeric-arrow-focus-leak 3.3)*
+      - **Confirmed 2026-08-02** via playtest submission 2026-08-02T18-17-16: tester "Works."
+- [x] `4f2c0c8e` **+/- buttons + clamp.** +/- step buttons still step and keep focus; select-all-and-
+      retype an out-of-range value still clamps only on blur.
+      *(fix-settings-numeric-arrow-focus-leak 3.4)*
+      - **Confirmed 2026-08-02** via playtest submission 2026-08-02T18-17-16: tester "Works."
+
+## add-tablet-clay-type-backdrops
+
+- [x] `d7925815` **Craft each clay type.** Craft a tablet from red, blue, AND fire clay (1 clay + 1
+      stick, vertical) — each opens with a distinct full-page clay backdrop matching its type. NOTE:
+      Creative Inventory only gives the base clay tablet (always red default), so this needs real
+      crafting. *(add-tablet-clay-type-backdrops 6.2)*
+      - **Confirmed 2026-08-03** via playtest submission 2026-08-03T00-18-44: tester "Works." FOLLOW-UP
+        raised: there are now 9 distinct backdrops — 3 colors (red/blue/fire) × 3 hardness states
+        (soft/hard/fired) — and the soft/hard/fired variant PNGs still need to be wired to the
+        material→texture selection (tracked under the clay-hardness-progression work; art authored but
+        not yet keyed by hardness state).
+- [x] `6a903898` **Wax + default fallback.** A wax tablet shows the wax placeholder backdrop; a
+      creative/legacy clay tablet with no recorded type falls back to red+soft without error.
+      *(add-tablet-clay-type-backdrops 6.4)*
+      - **Confirmed 2026-08-02** via playtest: both the Creative-Inventory Wax and Clay tablet backdrops
+        render correctly (the clay one is the red+soft default, since a Creative stack carries no clayType).
+- [x] `7008f8f7` **Persistence.** A crafted blue/fire tablet keeps its clay-type backdrop across
+      close/reopen and after dropping and picking it back up. *(add-tablet-clay-type-backdrops 6.5)*
+      - **Confirmed 2026-08-03** via playtest submission 2026-08-03T00-18-44: tester "Works."
+- [x] `a26c11e0` **Incumbents unchanged.** Open the Lectern and both Notebooks — their backdrops look
+      exactly as before (the tint seam didn't disturb the full-page art).
+      *(add-tablet-clay-type-backdrops 6.6)*
+      - **Confirmed 2026-08-03** via playtest submission 2026-08-03T00-18-44: tester "Works."
+- [x] `fed17c00` **Fired tint.** Pull a FIRED clay tablet from Creative Inventory in each color
+      (red/blue/fire) and confirm the per-type ceramic tint reads distinctly between them; tune tint
+      values if any read flat. *(add-tablet-clay-type-backdrops 6.3)*
+      - Previously parked 2026-08-02: nothing set `fired = true` in-game, so the fired backdrop tint was
+        never visible to judge.
+      - Unblocked 2026-08-06: fired tablets became reachable — the firing mechanic landed and a fired
+        tablet pulls from Creative Inventory (confirmed under add-tablet-firing-mechanic 8.6).
+      - **Confirmed 2026-08-06** (submission 2026-08-06T16-10-31): "Works." The per-type fired ceramic tint
+        reads distinctly across red/blue/fire.
+
+## add-tablet-clay-type-themes
+
+> Per-clay-type tablet PALETTES (red/blue/fire), not just backdrops: with Pixel-Art ON each tablet
+> resolves its own 17-role theme seeded from its `-soft.png` backdrop, so ink, buttons + hover/press,
+> input background/border, pinned tint, and panel all recolor per material. The pinned-row tint was
+> globally remapped from `Primary` to `Secondary` (so a focused input's accent border reads apart from
+> the pinned wash — affects Lectern/Notebook/HUD too). Cuneiform strokes now paint a two-pass per-stroke
+> outer glow (halos first, then crisp fills) to lift dark ink off the mid-tone clay. A dev command
+> `.cuneiformglow <strength|blur|polarity|reset> [value]` tunes the glow live on an open tablet.
+> Restaged Debug 2026-08-03 — fully relaunch the client first.
+
+- [x] `4659ba2f` **Per-material palette.** With Pixel-Art ON, open red/blue/fire tablets and confirm each
+      reads as its own material — ink, buttons + hover/press, input background/border, pinned tint, panel
+      background — and harmonizes with its clay backdrop. *(add-tablet-clay-type-themes 6.2)*
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." Each of red/blue/fire
+        reads as its own material and harmonizes with its clay backdrop.
+- [x] `b6ff53f5` **Glow lifts ink.** On each clay backdrop confirm the outer glow lifts the cuneiform ink
+      off the clay, and that overlapping strokes within a glyph show ONE uniform halo (no darkened/doubled
+      seam). *(add-tablet-clay-type-themes 6.3)*
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." The outer glow lifts
+        the ink off each clay backdrop with one uniform halo per glyph (no doubled seam).
+- [x] `b5bc4914` **Tune glow live.** Use `.cuneiformglow strength/blur/polarity` on an open tablet to dial
+      in each material; confirm it repaints without reopening, then report the values back to bake into the
+      seeds. *(add-tablet-clay-type-themes 6.4)*
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." The `.cuneiformglow`
+        command repaints the open tablet live; tuned values were folded into the softer/wider glow
+        confirmed by `0a95e5b2` (commit `d6858d4`).
+- [x] `355c3d5e` **Pixel-Art OFF unchanged.** With Pixel-Art OFF confirm tablets follow the global theme
+      (no per-clay color, no backdrop) and the Lectern/Notebook + readable path look unchanged EXCEPT the
+      intended pinned-tint shift to Secondary. *(add-tablet-clay-type-themes 6.5)*
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." With Pixel-Art OFF
+        tablets follow the global theme (no per-clay color/backdrop); other surfaces unchanged apart from
+        the intended pinned-tint shift to Secondary.
+- [x] `f640f9ab` **Focus border vs pinned wash.** Focus an input on a PINNED row (tablet AND Lectern) and
+      confirm the Primary focus border is clearly distinguishable from the Secondary pinned-row wash.
+      *(add-tablet-clay-type-themes 6.8)*
+      - **Still broken 2026-08-03** (playtest submission 2026-08-03T14-59-44): the current approach draws
+        the focus border+background around the ENTIRE row — the same target as the pin wash — so on a
+        pinned row the two still read as the same shape and can't be told apart. Tester's directed fix:
+        change WHAT is drawn on focus. When a row's input is focused, the border + background should wrap
+        just the INPUT ELEMENT, not the whole row (pinning keeps the whole-row wash). That makes the focus
+        indicator a distinct, smaller shape inside the pinned row rather than a competing full-row wash.
+        Needs a re-scope of the focus-affordance target + retest.
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T15-45-38, via `8e7526ee`): re-scope shipped
+        (change `scope-focus-affordance-to-input`) — the focus border+fill now wrap just the input element,
+        not the row. Tester confirmed on a pinned tablet row the focused input's border sits inside the
+        pinned-row wash without clipping, so the two read as distinct shapes. Fixed.
+- [x] `7cb07fc0` **No blur leak.** Confirm text/icons drawn after cuneiform in the same frame are NOT
+      blurred by the shared-paint mask filter. *(add-tablet-clay-type-themes 6.6)*
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." Text/icons drawn
+        after the cuneiform in the same frame are not blurred by the mask filter.
+- [x] `e7417e7a` **Keep or strip dev command.** Decide whether the `.cuneiformglow` dev command stays in
+      the shipped tree; note the decision. *(add-tablet-clay-type-themes 6.7)*
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): decision is **STRIP** — the
+        `.cuneiformglow` dev command is removed from the shipped tree now that the glow values are baked
+        into the per-material seeds. Command registration, handler, `ToHex` echo helper, and the
+        in-memory override machinery in `CuneiformGlowTable` are all gone; `For(material)` returns the
+        baked seed directly.
+- [x] `8c429d67` **No top divider.** Open a tablet in each view (edit/read/pinned) with Pixel-Art ON and
+      confirm there is no top divider/hard rule above the scroll region on the clay backdrop.
+      *(add-tablet-clay-type-themes 8.7)*
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." No top divider/hard
+        rule above the scroll region on the clay backdrop in any view.
+- [x] `78802251` **Crisp button labels.** Confirm the footer button labels render crisp with NO halo, while
+      the task rows and the title still show their glow. *(add-tablet-clay-type-themes 8.7)*
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." Footer button labels
+        render crisp with no halo while rows + title keep their glow.
+- [x] `0a95e5b2` **Softer wider glow.** Confirm the row/title glow is softer and more spread than before
+      (strength down, radius wider) — a diffuse lift, not a bright ring. *(add-tablet-clay-type-themes 8.7)*
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." The row/title glow
+        reads as a softer, wider diffuse lift rather than a bright ring.
+- [x] `03eda46a` **Engraved chrome glyphs.** On red/blue/fire tablets confirm the title-bar pencil +
+      drag-grip read as darkened engraved impressions in the clay (distinct dark ink, not washed-out gray),
+      with clear transparent backgrounds (no pale tile). *(add-tablet-clay-type-themes 8.7)*
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T14-59-44): "Works." The title-bar pencil
+        + drag-grip read as darkened engraved impressions with clear transparent backgrounds (no pale
+        tile) on each material — closes out the SrcIn + dark-alpha fix for the earlier pale-tile regression.
+
+## scope-focus-affordance-to-input
+
+The retest for the pinned-focus-vs-wash fix is the still-broken `f640f9ab` item above
+(add-tablet-clay-type-themes 6.8) — that's the primary check. These two are additional
+regression checks specific to this change's scoped-to-the-input approach.
+
+- [x] `57aa784e` **Normal path unchanged.** On a Lectern/Notebook (non-cuneiform) dialog, click into a
+      text field and confirm its focus box looks exactly as before; also confirm a RESTING (unfocused)
+      cuneiform tablet row shows no input border or fill over the clay. *(scope-focus-affordance-to-input 3.3)*
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T15-45-38): "Works." Normal Lectern/Notebook
+        focus box unchanged; resting cuneiform tablet rows show no input border/fill over the clay.
+- [x] `8e7526ee` **Row-height parity.** On a tablet, toggle a single-line cuneiform row between focused
+      and unfocused and confirm the row height doesn't jump (read vs. edit parity holds), and the focused
+      input's border doesn't clip against the pinned-row wash edge. *(scope-focus-affordance-to-input 3.4)*
+      - **Confirmed 2026-08-03** (playtest submission 2026-08-03T15-45-38): "Perfect." Single-line row
+        height holds across focus↔unfocus; the focused input's border sits inside the pinned-row wash
+        without clipping — the input box and the pinned wash read as two distinct shapes.
+
+## add-tablet-firing-mechanic
+
+- [x] `1d20ffc0` **Dry to hard.** Hold or drop a WET clay tablet that has a few tasks/notes and let it sit
+      ~2 in-game days; confirm it becomes a hard tablet that KEEPS its tasks/notes/title, opens read-only,
+      and shows the dried (hard) backdrop. *(add-tablet-firing-mechanic 8.2)*
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "The functionality works. The visual on
+        the GUI also works. Complete." Wet→hard keeps content and opens read-only, AND the hard backdrop now
+        renders as a normal opaque page — the long-running transparent-backdrop defect (the SharedPaint color
+        leak tracked across the verdicts below) is resolved.
+      - **Confirmed 2026-08-04** (submission 2026-08-04T23-16-17): "Works." The wet→hard transition keeps
+        content, opens read-only, and (with the backdrop fix landed, see d6d7f03f) the hard backdrop now
+        renders opaque.
+      - **Still broken 2026-08-03:** (submission 2026-08-03T21-30-46) the hardening/read-only transition
+        works but the hard backdrop does NOT render as a normal opaque page — appears to be the hard.png
+        drawn at very low opacity. Backdrop-render issue, not a state issue.
+      - **Fix applied 2026-08-04 (awaiting retest):** root cause found — a shared-paint COLOR leak, not a
+        low-opacity texture. `PaintingContext.SharedPaint` is one `SKPaint` reused across draws and frames;
+        `DrawMaskedBox` (the clay-texture draw) is the one framework op that reuses `SharedPaint.Color`
+        without re-setting it, and `DrawBitmap` modulates the texture by that color's alpha. The cuneiform
+        row widgets restored the paint Color they inherited — which was the resting row box's alpha-0
+        `boxColor` — so on a read-only tablet (footer button/divider dropped) the last op each frame left
+        the shared paint at alpha 0, and the next frame's backdrop rendered transparent. Only data-bearing
+        tablets hit it (empty tablets draw the hint as opaque `Text`, never reaching the glow teardown) —
+        matching the playtest clue exactly. Fixed by leaving the shared paint OPAQUE white on teardown in
+        both `ScribeCuneiformField.cs` and `CuneiformText.cs` (the neutral every sibling draw sets). Retest
+        the SAME repro (dry a tablet with tasks; also fire a tablet with tasks — 2610/2618 companions).
+      - **Still broken 2026-08-04** (submission 2026-08-04T21-28-56): "the underlying technical behavior of
+        the hardening works. But when last tested, it still produces the transparent GUI background." The
+        White-teardown fix is confirmed present in the STAGED Scribe.dll yet the bug persists — so that
+        diagnosis was incomplete. RE-DIAGNOSED with measurement: the backdrop is ~uniformly semi-transparent
+        (alpha ~0.2), NOT a texture-alpha issue (soft/hard/fired PNGs measured byte-identical alpha profiles)
+        and NOT only the earlier alpha-0 Color leak. Real cause: `PaintingContext.DrawBox` sets
+        `SharedPaint.Color` and never resets it on exit (Gui.dll:23038/23052); `SharedPaint` persists across
+        frames (`Reset` doesn't clear Color); the backdrop's `DrawMaskedBox` (first op each frame) modulates
+        the bitmap by the leftover color. On the read-only tablet the LAST box painted each frame is the
+        always-on scrollbar track (theme default alpha=0.1) — the wet editor & tabbed read view paint an
+        opaque footer Button last, so they never leak. Fix pending.
+      - **Confirmed 2026-08-06** (submission 2026-08-06T16-10-31): "The fix works. This works." Re-verified
+        after the SharedPaint teardown fix landed — wet→hard keeps content, opens read-only, and the hard
+        backdrop renders as a normal opaque page. (This line is intentionally the LAST in the chain: the
+        checklist app buckets an item by its final verdict line in document order, and the chain above is
+        written newest-first, so without a Confirmed here the app would keep reading the old bottom "Still
+        broken" line and mis-show this done item in To Test.)
+- [x] `d6131da1` **Rehydrate both ways.** Take a hard tablet and (a) drop it into water, then (b) swim while
+      holding it as the active item; confirm EACH returns it to wet + editable, keeps the document, and
+      restarts the dry-out timer. *(add-tablet-firing-mechanic 8.3)*
+      - **Confirmed 2026-08-03** (submission 2026-08-03T21-30-46): "Both work." Drop-in-water and
+        swim-while-holding each soften the hard tablet back to wet + editable.
+      - **Still broken 2026-08-04** (submission 2026-08-04T21-28-56, reported under 3e7fce6a): REGRESSED —
+        no softening method works anymore (drop-in-water, swim-while-holding, or quench). Regression point is
+        the variant-swap rework (state moved from a stack attribute to the material variant): `Soften` now
+        rebuilds the soft-variant item via `world.GetItem(CodeWithVariant("material", material))` and every
+        path no-ops if that resolves null. Fix once, reverify all three paths.
+      - **Confirmed 2026-08-04** (submission 2026-08-04T23-16-17): "Works." Both rehydration paths
+        (drop-in-water and swim-while-holding) soften a hard tablet back to wet + editable again. The
+        08-04 regression is resolved; the earlier "all broken" was legacy attribute-hardened stacks
+        stranded by the variant pivot, not a code defect (see 3e7fce6a).
+- [x] `879acfb4` **Fire in a firepit.** Fire an unfired tablet — try one WET and one HARD — in a firepit;
+      confirm each becomes a fired tablet that keeps its content, opens read-only, and shows the fired
+      backdrop with the correct per-type tint. *(add-tablet-firing-mechanic 8.4)*
+      - **Still broken 2026-08-03:** (submission 2026-08-03T21-30-46) the firepit refuses the tablet —
+        "Can't smelt, requires a kiln." Clay combustibleProps route to the PIT KILN, not the firepit.
+      - **Confirmed 2026-08-04** (submission 2026-08-04T21-28-56): "Confirmed working in firepit." The
+        earlier "requires a kiln" refusal is resolved; firing keeps content and opens read-only. (Note the
+        fired backdrop's tint reads through the transparency bug tracked under 1d20ffc0 until that lands.)
+- [x] `0e59b606` **Variant + wax exclusion.** Fire a blue tablet and confirm it stays blue (→ fired blue);
+      confirm a WAX tablet neither fires in a firepit nor dries out over time. *(add-tablet-firing-mechanic 8.5)*
+      - **Untested 2026-08-03:** (submission 2026-08-03T21-30-46) blocked behind the 8.4 firing failure.
+      - **Confirmed 2026-08-04** (submission 2026-08-04T21-28-56): "The exclusion works." Blue stays blue
+        through firing and wax neither fires nor dries.
+- [x] `8d653ddd` **Creative blank empties.** Pull a FIRED clay tablet and a HARD clay tablet from Creative
+      Inventory; confirm each opens blank + uneditable with its own centered empty-state message
+      (fired-without-writing vs dried-dunk-to-edit). *(add-tablet-firing-mechanic 8.6)*
+      - **Confirmed 2026-08-04** via playtest submission (2026-08-04T17-53-45): "Works. Each visible as
+        its own variant." The 2026-08-03 scope-drift blocker is resolved — hard/fired are now registered
+        material variants (wire-tablet-clay-art-and-variants), so each is pullable from Creative and opens
+        blank + uneditable with its own centered empty-state message.
+- [x] `5261a22e` **Read-only guards.** Confirm a fired tablet can't be re-fired, can't rehydrate in water,
+      and can't be edited by ANY affordance; confirm a hard tablet stays uneditable until rehydrated.
+      *(add-tablet-firing-mechanic 8.7)*
+      - **Confirmed 2026-08-04** via playtest submission (2026-08-04T17-53-45): "Works." Fired tablet
+        can't be re-fired, doesn't rehydrate, and has no edit affordance; hard tablet stays uneditable
+        until rehydrated.
+
+## wire-tablet-clay-art-and-variants
+
+- [x] `87e944e4` **Nine variants render distinct.** Pull each of the nine clay variants from Creative
+      and confirm each renders the `item/tablet-clay` model with its own color+state texture (red/blue/fire
+      × soft/hard/fired all distinct); wax still shows the placeholder. *(wire-tablet-clay-art-and-variants 5.2)*
+      - **Confirmed 2026-08-04** (submission 2026-08-04T21-28-56): "Beautiful! They're all there." All nine
+        clay variants render with distinct color+state textures.
+- [x] `7173d530` **Hard/fired listed, no recipe.** Confirm the six `-hard`/`-fired` variants each appear
+      in the handbook and Creative search with correct names, and none has a crafting recipe.
+      *(wire-tablet-clay-art-and-variants 5.6)*
+      - **Confirmed 2026-08-04** (submission 2026-08-04T21-28-56): "Works! Love the detail." All six
+        `-hard`/`-fired` variants appear with correct names and none carries a recipe.
+- [x] `07d0b3cd` **Bespoke wax model renders.** Pull a wax tablet from Creative and hold it (and
+      ground-place it); confirm all 6 cubes of the new bespoke wax model render as authored wax, with
+      NO clay-texture bleed on any interior/frame face — the interior faces were disabled to kill the
+      `#default` fallback that was leaking clay. Do a FULL client relaunch first (assets load at boot).
+      *(wire-tablet-clay-art-and-variants — wax-asset recompose, commit 87c9c2d)*
+      - **Confirmed 2026-08-05** (submission 2026-08-05T08-29-22): "The wax tablet is perfect, including how
+        it shows and positions textures and the layout of the model. 10/10." (After the initial pass a further
+        round dialed in the writing-slab UV overflow → red-bleed fix, the writing-element shrink/centering, and
+        the wax-specific dialog layout + pale-honey theme.)
+
+## add-unified-quick-add-interaction
+
+- [x] `4071743f` **Lectern quick-add.** Shift+right-click a lectern → editor opens with a new
+      empty task at the top and the caret focused in it; plain right-click still opens Read; the
+      Editor nav tab opens the editor with NO new task inserted.
+      *(add-unified-quick-add-interaction 6.1)*
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." Shift+RC opens the editor with a
+        focused top task; plain RC still opens Read.
+- [x] `5a45bc16` **Notebook gestures.** Shift+right-click a held Notebook quick-adds a top task
+      with the caret focused; Ctrl+Shift+right-click places it on the ground; plain right-click
+      opens Read. *(add-unified-quick-add-interaction 6.2)*
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." Shift+RC quick-adds, Ctrl+Shift+RC
+        ground-places, plain RC opens Read.
+- [x] `6aaf6c3b` **Tablet gestures.** Shift+right-click a held HARD Tablet aimed at water quenches
+      it; Shift+right-click NOT aimed at water quick-adds a top task; Ctrl+Shift+right-click places
+      it on the ground; plain right-click opens the tablet dialog.
+      *(add-unified-quick-add-interaction 6.3)*
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." Shift+RC at water quenches the
+        hard tablet; away from water it quick-adds; Ctrl+Shift+RC ground-places; plain RC opens the dialog.
+- [x] `336e408a` **Full-cap quick-add.** Quick-add (Shift+right-click) on a surface already at its
+      10-task cap → the editor opens, NO task is inserted, and the "document full" feedback shows.
+      *(add-unified-quick-add-interaction 6.4)*
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." At the 10-task cap the editor
+        opens, no task is inserted, and the document-full feedback shows.
+- [x] `46cdfa2b` **Interaction help.** Hover-tooltip / held-interaction help for both the Notebook
+      and the Tablet lists BOTH the quick-add gesture and the Ctrl+Shift ground-placement gesture
+      (tablet keeps an accurate quench/soften hint). *(add-unified-quick-add-interaction 6.5)*
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." Held-interaction help for the
+        Notebook and Tablet lists both the quick-add and the Ctrl+Shift ground-placement gestures.
+
+## zero-point-three-fixes
+
+- [x] `89f55f28` **Schematic craftable + dual handbook.** Craft the Clockmaker's Notebook via the schematic
+      recipe (2×2 block) on a non-Clockmaker; then open the Notebook handbook and confirm TWO separate
+      "Created by" grids show — the trait one carrying the `* Requires Tinkerer trait` asterisk and the
+      schematic one none. *(zero-point-three-fixes 4.2)*
+      - **Still broken 2026-08-04** (submission 2026-08-04T21-28-56): "Two grids do not show." The schematic
+        recipe is craftable but only ONE "Created by" grid renders. User confirms the intent: emulate the
+        Sling model — TWO separate grids, one with the Clockmaker/Tinkerer trait + no schematic (with the
+        `* Requires ... trait` asterisk), one without the trait + WITH the schematic. Current recipes must be
+        sharing a `recipegroup` (which cycles into one grid) or the handbook isn't rendering both. NOTE: user
+        ALSO wants the schematic recipe reshaped from 2×2 to 1×3 with the schematic on the left-middle of the
+        next row (see general notes) — reconcile with this before retest.
+      - **Still broken 2026-08-04** (root-caused + fixed, awaiting retest): decompiled `addCreatedByInfo` —
+        the handbook buckets grid recipes by `RecipeGroup` and renders ONE cycling grid per distinct value;
+        recipes that OMIT `recipegroup` all default to `0`, so BOTH scribe recipes collapsed into one grid.
+        The original "leave ungrouped → shows side-by-side" plan was backwards. Fix: distinct `recipegroup`
+        (trait=1, schematic=2) → two separate grids. Also reshaped schematic to `BGM,S__` (3×2, schematic
+        bottom-left) to mirror the trait `BGM` row. Retest: expect TWO grids, trait one asterisked.
+      - **Still broken 2026-08-05** (submission 2026-08-05T08-29-22): the dual grids now render, but the
+        `* Requires Tinkerer trait` asterisk/note is STILL missing from the trait grid. User asked to pull the
+        vanilla Sling handbook entry to compare side by side. This is the SAME root as `297731fd`: the asterisk
+        is driven entirely by `RecipeBase.RequiresTrait` being non-null, and this world has
+        `scribeClockmakerRequiresTrait` set to FALSE, so `ApplyClockmakerTraitGate` nulls it out at load →
+        no asterisk. NEXT: (a) confirm the world config via server log / `/worldconfig`, set it TRUE, restart,
+        and re-check the asterisk; (b) pull `assets/survival/recipes/grid/tool/sling.json` +
+        `SlideshowGridRecipeTextComponent` to walk the Sling asterisk path together.
+      - **Confirmed 2026-08-05**: pulled the vanilla Sling recipe + `SlideshowGridRecipeTextComponent` and
+        confirmed the asterisk is driven purely by `GridRecipe.RequiresTrait` being non-null (source lines
+        97-100: `RequiresTrait != null` → renders the `gridrecipe-requirestrait` line). The missing asterisk
+        WAS the `scribeClockmakerRequiresTrait=false` world config nulling `RequiresTrait` at load (same root
+        as `297731fd`) — working as designed, not a bug. With the config set TRUE and the world restarted:
+        both grids render AND the trait grid shows the Tinkerer trait line, matching the Sling model. Done.
+- [x] `3e7fce6a` **Quench a hard tablet.** Crouch + right-click a bucket/barrel of water while holding a
+      HARD clay tablet → it softens to wet and keeps its document; repeat aimed at an empty/non-water
+      container and at open ground → no softening and ground-storage placement still works; confirm a wet
+      and a fired tablet both no-op on the gesture. *(zero-point-three-fixes 4.3)*
+      - **Confirmed 2026-08-04** (user retest + server-main.log): quench softened both a creative-pre-hardened
+        and a freshly-dried tablet; the two passive paths (jump-in-water, throw-in-water) also worked again.
+        Instrumented `Soften` logged the two quench events resolving correctly —
+        `variant='clay-red-hard' → (clay-red,Hard) softItemFound=True` and the `clay-fire-hard` equivalent —
+        with all other calls being harmless `(…,Wet)` idle-tick no-ops. The earlier "all broken" report was
+        legacy stacks hardened under the OLD attribute system on 08-03, stranded by the variant pivot; any
+        tablet created under the current system softens fine. Diagnostic log since removed.
+      - **Still broken 2026-08-04** (submission 2026-08-04T21-28-56): quench does nothing AND it regressed
+        ALL softening — "drop in water, bring it in water with you in hand, or quenching" all now fail to
+        unharden. (Liked the quench sounds.) This is a regression introduced alongside the quench branch:
+        every softening path routes through `Soften`, which now swaps to a NEW soft-variant item via
+        `world.GetItem(CodeWithVariant("material", material))`; if that lookup returns null (or the -hard→base
+        variant code is wrong) every path silently no-ops. Prime suspect: the softened variant code / item
+        resolution. Was passing at d6131da1 (2026-08-03) BEFORE the variant-swap rework, so the swap is the
+        regression point. Fix + reverify d6131da1 (drop/swim) together with this.
+      - **Confirmed 2026-08-05** (submission 2026-08-05T08-29-22): "Works." Quench softens a hard tablet and
+        keeps its document; empty-container / ground gestures no-op and ground-storage placement still works;
+        wet and fired tablets no-op on the gesture. The 08-04 softening regression is resolved.
+- [x] `f16baa37` **Clay recipe now 12.** Craft a clay tablet of each color and confirm the recipe now
+      consumes 12 clay (a 2×3 block) rather than 8 and still yields one tablet; confirm the wax tablet
+      recipe is unchanged. *(zero-point-three-fixes 4.4)*
+      - **Confirmed 2026-08-04** (submission 2026-08-04T21-28-56): "Works." Clay tablet now costs 12 clay
+        and still yields one tablet; wax recipe unchanged.
+
+- [x] `d6d7f03f` **Backdrop fully opaque.** Open a hand-FIRED and a HARDENED (dried, unfired) clay tablet
+      and confirm the GUI backdrop is fully OPAQUE — no uniform see-through onto the world — at every scroll
+      position; then open a wet tablet's editor and a tabbed Lectern/Notebook view and confirm those look
+      unchanged. (Requires a full client relaunch after restage.) *(zero-point-three-fixes 4.6)*
+      - **Confirmed 2026-08-04** (submission 2026-08-04T23-16-17): "Looks like it works in all scenarios
+        now!" The `ScribeResetPaintColor` shared-paint reset wrapper fixes the cross-frame color leak —
+        fired and hardened backdrops render fully opaque at every scroll position, and the wet editor +
+        tabbed views are unchanged.
+
+- [x] `7e15958a` **Tablet lies flat on ground.** Crouch + right-click a tablet onto open ground → it now
+      lies FLAT, writing face up (slight `y:35` diagonal), NOT standing/rolled on its edge. Check a wet, a
+      hard, and a fired tablet; confirm the held/dropped-item render is unchanged. *(zero-point-three-fixes 4.7)*
+      - **Confirmed 2026-08-04** (submission 2026-08-04T23-16-17, general note): "The tablets are now lying
+        flat, and just need to be nudged." The `rotation.z` 90→0 fix lands the tablet flat with the writing
+        face up. Minor remaining polish: the resting position could use a small translation nudge (not a
+        blocker — the orientation defect is fixed).
+
+- [x] `bfa13b3a` **Wax recipe + handbook cleanup.** Craft the wax tablet at 3×3 (saw + 2 planks + stick + 4
+      beeswax → one wax tablet, saw NOT consumed); confirm the clay recipe is unchanged (still 12 clay). Wax
+      handbook page shows only the "The Wax Tablet" about section (a step up from clay; never dries/fires) —
+      no Wet/Dried/Fired, no Crafting section. Clay pages show about + states + hard/fired, no Crafting
+      section, no mention of wax. *(zero-point-three-fixes 8.2)*
+      - **Confirmed 2026-08-05** (submission 2026-08-05T15-15-08): "Wax recipe works and shows." The 3×3
+        wax recipe crafts and the reframed wax handbook page renders as specced.
+- [x] `01c2348b` **11th-task full error.** On a WET tablet add tasks until 10, then attempt an 11th via the
+      footer add control AND via the Enter-insert gesture — both show the "A tablet holds at most 10 tasks."
+      in-game error and add nothing. *(zero-point-three-fixes 8.3)*
+      - **Confirmed 2026-08-05** (submission 2026-08-05T15-15-08): "Works." The 11th-task attempt (footer and
+        Enter-insert) raises the in-game full error and adds nothing.
+- [x] `39de1992` **Hard/fired text-lock, live checkbox/pin.** Open a HARDENED tablet with a pinned,
+      incomplete task — confirm the checkbox still toggles completion, the pin control still unpins (row
+      leaves the HUD), and tapping a row's TEXT shows "This tablet has hardened. Soften it in water to make
+      changes." Repeat on a FIRED tablet (message "This tablet was fire-hardened. It cannot be changed.").
+      Confirm no text edit / add / delete / reorder is possible in either state. *(zero-point-three-fixes 8.4)*
+      - **Confirmed 2026-08-05** (submission 2026-08-05T15-15-08): "Works." Hard/fired tablets keep the
+        checkbox + pin live while blocking text edits with the material-specific locked message.
+- [x] `affeee16` **Policy collapses to unpin.** With completion policy set to Delete, then Sink, then
+      Unpin-and-Sink, complete a pinned task on a hard tablet AND a fired tablet — each only unpins (task
+      stays in the document, order unchanged, row leaves the HUD). Complete from the HUD row too and confirm
+      the same collapse. On a WET tablet, confirm Delete still deletes and Sink still sinks.
+      *(zero-point-three-fixes 8.5)*
+      - **Confirmed 2026-08-05** (submission 2026-08-05T15-15-08): "Works." On hard/fired tablets every
+        document-mutating completion policy collapses to unpin-only; wet-tablet Delete/Sink unaffected.
+- [x] `2156c9e8` **No Lectern/Notebook regression.** Open a tabbed Lectern and Notebook read view — confirm
+      the checkbox/pin behavior and appearance are UNCHANGED by the read-view decoupling (no regression from
+      making the tablet's read-only checkbox/pin live). *(zero-point-three-fixes 8.6)*
+      - **Confirmed 2026-08-05** (submission 2026-08-05T15-15-08): "Works." The tabbed Lectern/Notebook read
+        view is unchanged by the read-view decoupling — no regression.
+
+## add-handbook-web-editor
+
+- [x] `c584cd1d` **Diff is surgical.** In the handbook editor, edit one section's prose and save; confirm the
+      git diff on `en.json` touches only that one key and nothing else. *(add-handbook-web-editor 7.1)*
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." A prose edit + save produced a
+        git diff touching only that one key.
+- [x] `3a02c8bb` **Structure edits write back.** Add, reorder, and remove a section via the tool; confirm the
+      owning registration JSON and `en.json` update correctly and untouched entries keep their relaxed-JSON
+      formatting. *(add-handbook-web-editor 7.2)*
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." Add/reorder/remove wrote back to
+        the registration JSON + en.json with untouched entries' relaxed-JSON formatting preserved.
+- [x] `1a7365bc` **Tool edit renders in-game.** Launch VS and open the handbook for an entry you edited in the
+      tool; confirm its structure, prose, and cross-links render correctly. *(add-handbook-web-editor 7.3)*
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." A tool-edited entry rendered
+        correctly in the in-game handbook (structure, prose, cross-links).
+- [x] `f5835b60` **New HUD article renders.** In the in-game handbook find "Scribe Mod: The Pinned Task HUD";
+      confirm the full prose renders and its link (to the Clockmaker's Notebook) works. *(add-handbook-web-editor 7.3)*
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." The new "Scribe Mod: The Pinned
+        Task HUD" article renders with full prose and a working link.
+- [x] `7332fe47` **Shared HUD ref on every item.** Open the handbook page for a tablet, a notebook, and the
+      lectern; confirm each shows the one-line "The Pinned Task HUD" section linking to the new article.
+      *(add-handbook-web-editor 7.3)*
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." Tablet, notebook, and lectern
+        handbook pages each show the shared one-line HUD ref linking to the new article.
+- [x] `e3b0b21a` **Preview matches game.** Compare the tool's preview against the in-game handbook for the same
+      entry; confirm wrapping/line-count and apparent width match closely enough to trust real-estate
+      judgments. *(add-handbook-web-editor 7.4)*
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." The tool's preview matches the
+        in-game handbook closely enough (wrapping/width) to trust real-estate judgments.
+- [x] `d63f840d` **Dock alias launches.** Double-click the `~/Launchers/` alias for the handbook editor and
+      confirm it starts the server and opens the app. *(add-handbook-web-editor 7.6)*
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." The ~/Launchers/ Dock alias
+        starts the server and opens the app on double-click.
+- [x] `26356371` **Before/after baseline.** Make edits, save, then toggle before/after; confirm both editor and
+      preview show the session-original baseline (not the just-saved state) and restore correctly.
+      *(add-handbook-web-editor 7.8)*
+      - **Confirmed 2026-08-06** (submission 2026-08-06T15-47-42): "Works." After edit+save, the before/after
+        toggle shows the session-original baseline in both editor and preview and restores correctly.
+
+## fix-item-dialog-first-open-flicker
+
+- [x] `f991b645` **First-open notebook stays.** Get a notebook you did NOT craft (creative-give or pick one
+      up) and right-click to open it for the FIRST time; confirm it opens and STAYS — no flicker, no second
+      right-click needed. *(fix-item-dialog-first-open-flicker 6.1)*
+      - **Confirmed 2026-08-06** via live playtest: a creative-given notebook opens and stays on the first
+        right-click (no flicker, no second click); also worked via the Shift+RC quick-add gesture on a fresh
+        item.
+- [x] `582eaeb0` **First-open clockmaker stays.** Same first-open test with a not-crafted clockmaker's
+      notebook: right-click once, confirm the dialog opens and stays without flickering closed.
+      *(fix-item-dialog-first-open-flicker 6.1)*
+      - **Confirmed 2026-08-06** via live playtest: creative-given clockmaker's notebook opens and stays on
+        first right-click; Shift+RC on a fresh item also worked.
+- [x] `341ebeae` **First-open tablet stays.** Same first-open test with a not-crafted wet tablet: right-click
+      once, confirm the dialog opens and stays without flickering closed.
+      *(fix-item-dialog-first-open-flicker 6.1)*
+      - **Confirmed 2026-08-06** via live playtest: creative-given wet tablet (and a wax tablet) opens and
+        stays on first right-click; Shift+RC on a fresh item also worked. (The lectern was also spot-checked
+        and opens/stays fine.)
+- [x] `eaa0965b` **Self-crafted opens clean.** Control: a self-CRAFTED item still opens cleanly on first
+      right-click (crafter is suppressed from the PickedUp entry, so it never flickered).
+      *(fix-item-dialog-first-open-flicker 6.2)*
+      - **Confirmed 2026-08-06** via live playtest: self-crafted notebook/clockmaker/tablet still open
+        cleanly on first right-click (no regression from the fix).
+- [x] `0b36d79f` **Drop closes dialog.** With an item dialog open, drop the held item; confirm the dialog
+      closes. *(fix-item-dialog-first-open-flicker 6.2)*
+      - **Confirmed 2026-08-06** via live playtest: dropping the held item closes the open dialog as expected
+        (the loosened presence-only rule still closes on a genuine hand-empty).
+- [x] `5d0e9322` **Switch-away closes.** With an item dialog open, scroll/key the hotbar to a DIFFERENT
+      Scribe item; confirm the first dialog closes. *(fix-item-dialog-first-open-flicker 6.2)*
+      - **Confirmed 2026-08-06** via live playtest: switching the hotbar to a different Scribe item closes the
+        first dialog (the untouched strict-DocId `AfterActiveSlotChanged` path still fires).
+- [x] `45462079` **Wet-to-hard not regressed.** With a wet tablet's dialog open, let it (or force it to) dry
+      wet→hard; confirm the transition still behaves correctly and the dialog is not disrupted.
+      *(fix-item-dialog-first-open-flicker 6.3)*
+      - **Confirmed 2026-08-06** via live playtest: wet→hard transition still behaves correctly with the
+        dialog open (not disrupted by the presence-only close rule).
+
+## fix-list-collapse-stale-hover
+
+- [x] `f86a3718` **Delete without wiggle.** In the lectern editor with several rows, hover a row's
+      delete button and click delete WITHOUT moving the mouse — confirm the delete/pin controls of the
+      row that slides under the cursor appear immediately, no wiggle. *(4.2)*
+      - **Confirmed 2026-08-08:** works. The boundary latch holds hover through the collapse and past
+        the completion rebuild.
+- [x] `94c447c8` **Fluid mass-delete.** Repeatedly click delete on the row under a stationary cursor,
+      faster than the ~200ms collapse — confirm each delete control is available mid-collapse and rows
+      delete with no mouse movement. *(4.3)*
+      - **Still broken 2026-08-08:** hover now shows the delete button mid-collapse (the hover half is
+        fixed), but *clicking* it mid-collapse does nothing — the click only lands once the collapse
+        completes. This is a click-TARGET problem (the departing snapshot row still occupies the
+        shrinking space under the cursor), distinct from the hover problem this change fixed. User's
+        call: "90% of the way there… not sure it's worth solving" — candidate to backlog.
+      - **Confirmed 2026-08-10** (playtest submission 2026-08-10T09-02-17): "Works." Fixed as a
+        side-effect of the reconcile-animating-surfaces editor conversion (the click-target problem this
+        was parked on is gone). This is the bug `fix-mass-delete-click-target` was the parked fallback
+        for — that standalone change can now be retired (reconcile-animating-surfaces §6.4).
+- [x] `aca0ad08` **HUD unpin refresh.** Unpin a pinned task on the HUD while hovering, without moving
+      the mouse — confirm the next row's hover controls refresh. *(4.4)*
+      - **Confirmed 2026-08-08** (after generalizing the latch to `ArmIfRebuilt`): "works and it's so
+        smooth and fast." First attempt failed because unpin isn't collapse-animated, so `AnyAnimating`
+        never fired; detecting the `ForceRebuild` by `RootElement` identity fixed it and covers every
+        rebuild path.
+- [x] `347321ce` **New-row hover preserved.** Hover a row, press Enter to create a new row, keep the
+      cursor still — confirm the row under the cursor keeps its hover-gated controls. *(4b.2)*
+      - **Confirmed 2026-08-08:** hover/mouse position is tracked correctly across the rebuild and the
+        controls stay on screen. One-frame flicker on the rebuild remains (the fresh tree paints once
+        with `hovered=false` before the next-frame synthetic refresh lands) — minor cosmetic; see the
+        flicker note in `docs/vnext-ideas.md` §4.1.
+- [x] `c2633f76` **Empty-row cleanup.** Create an empty task row and leave it (blur) so it self-removes
+      while the cursor is stationary over the list — confirm no stale-hover artifact. *(4.5)*
+      - **Confirmed 2026-08-08:** no stale-hover artifact.
+- [x] `f37f4a2a` **Regression: no flicker.** With nothing collapsing, confirm normal hover on real
+      mouse motion is unchanged, and tooltips/press-states don't flicker during a collapse. *(4.6)*
+      - **Confirmed 2026-08-08:** works, no flicker.

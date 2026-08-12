@@ -2014,6 +2014,53 @@ an `AnimationController` and can be reconcile-reused must reconcile the controll
 `UpdateWidget` — create/start on the on-transition AND dispose/clear on the off-transition.** Don't rely
 on a remount to reset it; under reconcile there is no remount.
 
+### Reconciling-rebuild discipline: persistent body + `SetState`, `ForceRebuild` reserved for genuinely-new trees (2026-08-10)
+
+The `reconcile-animating-surfaces` change replaced the "every update is a `ForceRebuild()`" habit with a
+disciplined split. The rule for any Scribe dialog surface:
+
+- **In-place update (same tree, changed data) → reconcile via `SetState`.** Each dialog owns ONE
+  persistent-root `ScribeDialogBody` (allocated once via a `GlobalKey`/`bodyKey`, NEVER in `Build()`); every
+  in-place mutation — add/delete/reorder a row, a pin push, a completion toggle, a tick repaint, an external
+  resync of the SAME item-count-or-keyed set — routes through a `RebuildBody()`/`RebuildHudBody()` that does
+  a reconciling `SetState` on that body. Reconcile REUSES each row's live element + State, so caret, unsaved
+  text, scroll offset, hover, and in-flight animations all survive. This is what killed the flicker /
+  lost-hover / dead-mass-delete-first-click / caret-loss class of bugs — they were all symptoms of the tree
+  being torn down and rebuilt under the user.
+- **Genuinely-new tree → keep `ForceRebuild()`.** Reserved for: read⇄editor⇄settings VIEW SWITCHES, a fresh
+  editor seed, lost-lock recovery, and the still-`ForceRebuild` non-reconciled views (History/Timer/Visitors).
+  These legitimately want a from-scratch remount, and they pair with `CaptureScrollForRestore()` because the
+  remount re-derives content height and clamps the offset toward 0.
+- **Row identity is load-bearing.** Rows must be keyed by a STABLE `ValueKey<Guid>(TaskId)`, not
+  `ValueKey<int>(index)` — a positional key makes reconcile mis-associate a surviving row with a departed
+  one's element (wrong caret, wrong animation). A departing/collapsing row is spliced back at its held display
+  index under its OWN TaskId key (wrapped in `ScribeRowSizeAnimation`), so no slot swaps widget TYPE at a key.
+- **A reconcile-reused State must reconcile ALL its self-owned resources in BOTH directions** (see the
+  `AnimationController` note above) — start-only / arm-only logic that relied on a remount to reset is a
+  latent bug once the surface reconciles.
+
+### CORRECTION to the `ListView` child-cache notes above — the read view no longer uses `ListView` (D4, 2026-08-10)
+
+The two facts above (~line 1394 "Scribe's `RefreshReadView` uses `ForceRebuild`"; ~line 1421 "The read view
+keeps `ListView`") were true when written but are now SUPERSEDED by `reconcile-animating-surfaces` §5 (design
+D4, Tier 2). The `ListView` child-cache trap — a same-count parent `SetState` keeps the cached row widget
+because `ListViewContent.DataIdentity` is hardwired to the `ScrollController` and has no public seam to feed a
+document-identity token (Tier 1 is UNREACHABLE without forking `gui`) — was resolved not by fighting the cache
+but by **dropping `ListView` from the read view entirely.** The read view now uses the SAME non-virtualized
+`Scrollbar > SingleChildScrollView > Column` of ALL rows the editor already used, re-keyed
+`ValueKey<Guid>(TaskId)`, and routes `RefreshReadView` through `RebuildBody()` (reconcile) instead of
+`ForceRebuild()`. So a same-count external resync now reconciles and reuses surviving rows; the child-cache
+caveat simply no longer applies to any Scribe surface (a lectern doc is a small checklist, so non-virtualized
+costs nothing, and read/editor content heights now match by construction instead of via `estimatedItemHeight`).
+
+**Fact (add-timer-gearworks, 2026-08-11): rotating a self-loaded raster in the widget tree, three ways to render a "gear," and the ForceRebuild-snap trap.** Building the Timer-tab clockwork established the working pattern for an animated textured widget:
+
+- **Rotate a self-loaded PNG:** decode it once with `capi.Assets.TryGet(loc, loadAsset:true)` → `SKBitmap.Decode` (NOT `Image`/`SkiaAssetLoader`, which silently no-op after startup — see the self-load fact elsewhere in this section), cache the `SKBitmap`, put it in a `Container { BoxStyle.Texture = bmp }`, and wrap that in `AnimatedRotation` (or a raw `Transform.Rotate` about center). `AnimatedRotation` is the crash-safe choice — a raw rotate on a zero-size box produces a NaN Skia matrix / GPU crash, so guard for non-zero size if you use `Transform.Rotate` directly.
+- **`ForceRebuild` SNAPS every stock `Animated*` widget.** This is the single biggest gotcha. An `Animated*` widget only tweens across a *reconcile*; on a fresh **mount** it seeds `Begin == End` and jumps. Any host that calls `ForceRebuild()` on a state change (the Timer tab does, in `RefreshTimerView`) remounts the subtree, so an `AnimatedRotation`/`AnimatedSlide` whose target changed across that rebuild snaps instead of animating (this caused the "wheel disappears then re-slides + half-tick on fire" glitch). **Fix pattern:** derive the animated value from a **monotonic clock / host-stamped timestamp** that survives the remount, not from widget `State`. Rotation angle = `floor(elapsedMs/period) × stepAngle`; a slide's progress = `(nowMs − hostStampedStartMs) / durationMs` eased manually. The widget is still a self-ticking `StatefulWidget` (a game-tick listener calls `SetState`/`MarkNeedsBuild` to repaint), but the *value* is a pure function of the clock, so it's rebuild-stable.
+- **Three ways to draw a "gear," and which we picked:** (1) render the REAL 3D `game:gear-temporal` item via `ItemStackDisplay` + `ItemStackRenderer` (an `IPreSkiaRenderer` in the `gui` dep, composites a real `ItemStack` into the Skia canvas through an offscreen FBO, macOS-safe) — **evaluated and rejected**: it works but the real item is an irregular *lattice* with a continuous spin, so it can neither mesh nor tick per tooth. (2) Raw GL quads rotated with `GlPushMatrix/GlRotate` in `OnRenderGUI` (the Gearlock Firearms technique) — recorded only as a **documented fallback** (the mod otherwise makes zero raw-`capi.Render` calls). (3) **Chosen:** authored/procedural 2D raster in the Skia widget tree per the first bullet. Faked mesh = one monotonic driver × per-gear `(sign, ratio)` constants (`ratio = referenceTeeth/thisGearTeeth`), positions hand-tuned so painted teeth interlock — no physics.
+- **Procedural raster sizing to avoid blur:** generate at a size LARGER than the displayed physical px (we used 512² for a ~212 logical-px wheel) so `DrawMaskedBox`'s bilinear resample only ever *downsamples* (crisp) rather than upscales (blurry). Cache + dispose the bitmap on the same path as loaded PNGs.
+- **`DrawMaskedBox` reuses `SharedPaint.Color` without setting it** (the textured-`Container` path) — so a gear is modulated by whatever the previous draw op left on the one shared `SKPaint`. A single top-level reset can't help when many ops paint between it and each gear; reset opaque-white + clear `ColorFilter`/`ImageFilter` immediately before EACH textured draw. (This is the same `SharedPaint` leak the dialog backdrops hit; see the tablet-backdrop note.)
+
 ## Held-item dialog flickers closed on FIRST open of a not-yet-crafted item (2026-08-06)
 
 **Symptom: the first time a player opens a Scribe item they did NOT craft (notebook, clockmaker's
@@ -2048,7 +2095,7 @@ active hand no longer holds ANY `IScribeDocumentItem` (a presence check, not ide
 frame-count/grace-period hacks — this project has moved away from timing-based GUI workarounds.
 Note the tablet's legit wet→hard/fired transition ALSO rides `SlotModified`, so don't break it.
 
-## "White flash" behind a Scribe dialog is a one-frame WORLD-TERRAIN dropout on EVERY open — NOT a GUI white-clear, NOT a reconcile regression (2026-08-10)
+## "White flash" behind a Scribe dialog is a one-frame WORLD-TERRAIN dropout on EVERY open, CAUSED BY the parchment-backdrop bitmap paint (root cause confirmed 2026-08-11) — NOT a GUI white-clear, NOT a reconcile regression (2026-08-10)
 
 **Symptom: opening a Scribe surface flashes WHITE for one frame before the dialog resolves.**
 Originally reported as first-open-only and suspected as a `reconcile-animating-surfaces` regression.
@@ -2095,15 +2142,18 @@ no `MarkDirty`/chunk touch).
 - `SkiaRenderer.Begin/End` snapshots + restores GL state around its flush; it's shared with the clean
   `.ui showcase` path, so the renderer itself is exonerated.
 
-**OPEN (fix not yet chosen — needs the pixel-art-OFF confirm):** working hypothesis is the backdrop
-bitmap paint. Next decisive test: open a flashing surface with Pixel Art Display toggled OFF (Settings
-→ backdrop becomes a plain `SizedBox`, no texture). Flash gone → backdrop paint confirmed as cause; fix
-= pre-decode/pre-upload the backdrop as a persistent GPU texture at load so no per-open cold upload lands
-on a live frame (and investigate why Skia's texture for it looks evicted between closes → re-uploaded).
-Flash survives → not the backdrop; trace what else `ScribeDialogBase`/`GuiDialogBlockEntityBase` do on
-open that `GuiBase` (Settings) skips. Do NOT add render-path/GL code to Scribe blindly; verify any fix
-with the DEBUG frame-trace method. Related prior first-open work: `fix-item-dialog-first-open-flicker`
-(a DIFFERENT bug — dialog flicker-close from a DocId guard, not this terrain dropout).
+**DISCRIMINATOR RESOLVED (2026-08-11, playtest `f79c21bf`, fix-dialog-open-white-flash §1.1):** opened a
+flashing surface with Pixel Art Display toggled OFF (backdrop → plain `SizedBox`, no texture) and the
+flash was **GONE** ("The flash is gone!"). So **painting the parchment backdrop bitmap on open is the
+confirmed mechanism** — this is the last isolated variable, now nailed down by measurement, not theory.
+The working hypothesis above is confirmed; the fix work moves to §2.
+
+**Fix direction (§2):** pre-decode/pre-upload the backdrop as a persistent GPU texture at mod load so no
+per-open cold upload lands on a live frame, and investigate why Skia's texture for it looks evicted
+between closes → re-uploaded (the per-open re-upload is what stalls the opaque-terrain pass for a frame).
+Do NOT add render-path/GL code to Scribe blindly; verify any fix with the DEBUG frame-trace method.
+Related prior first-open work: `fix-item-dialog-first-open-flicker` (a DIFFERENT bug — dialog flicker-close
+from a DocId guard, not this terrain dropout).
 
 ## Item state-transition (`Harden`/`Dry`) and firepit smelt both DROP stack attributes on transform (2026-08-02)
 
