@@ -84,10 +84,25 @@ internal sealed class ScribeAmbientLightSampler
     /// stays valid at rest.</summary>
     private const float SmoothingTau = 0.2f;
 
-    // Continuous (pre-quantization) smoothed state, eased toward the sampled target each frame.
+    /// <summary>Mod id of Immersive Lanterns (from its <c>modinfo.json</c>). When it is installed it Harmony-
+    /// Postfixes <c>CollectibleObject.GetLightHsv</c> to FLICKER a held torch/lantern/lamp's brightness index V
+    /// (held only — its patch early-returns when <c>pos != null</c>; V-only, never hue). Our <see cref="TryHeldLight"/>
+    /// calls that exact method with <c>pos: null</c>, so we already RECEIVE the flickered value each frame — the only
+    /// thing that would erase it is our own smoothing. So when IL is active we let the HELD brightness term bypass the
+    /// ease (see <see cref="Smooth"/>) and IL's flicker reappears exactly as the player configured it, with no
+    /// dependency, reflection, or flicker-matching code. (unify-held-light-flicker)</summary>
+    private const string FlickerModId = "immersivelanterns";
+
+    // Continuous (pre-quantization) smoothed state, eased toward the sampled target each frame. Only the ENVIRONMENT
+    // brightness + the hue tint are eased; when a flicker mod is active the HELD brightness rides on top UNSMOOTHED.
     private bool hasSmoothed;
     private float smoothedBrightness;
     private float smoothedR = 1f, smoothedG = 1f, smoothedB = 1f;
+
+    // IL-presence gate (unify-held-light-flicker), resolved once and cached — mod enablement can't change mid-session.
+    // Null until first query; when false the sampler takes exactly the pre-existing path (held folded into the one
+    // smoothed brightness), so a non-IL player sees no behavioral change and no extra paint-cache churn.
+    private bool? flickerModActive;
 
     // Last reported quantized value, so Sample() can detect a meaningful change.
     private bool hasLast;
@@ -127,8 +142,9 @@ internal sealed class ScribeAmbientLightSampler
         var entity = world?.Player?.Entity;
         if (world is null || entity is null)
         {
-            // No player/world yet (rare, during load) — render neutral/full so we never blank the dialog.
-            return Smooth(1f, 1f, 1f, 1f, dt);
+            // No player/world yet (rare, during load) — render neutral/full so we never blank the dialog. No held
+            // term here (0), so the reported brightness is the full-bright environment with or without the gate.
+            return Smooth(1f, 0f, 1f, 1f, 1f, dt);
         }
 
         // Player BLOCK position, dimension-aware. Eye vs. feet is immaterial at block granularity, and the
@@ -151,26 +167,33 @@ internal sealed class ScribeAmbientLightSampler
         // player's own held light — it's added dynamically as an entity light (EntityPlayer.LightHsv), so
         // GetLightRGBs at the player's own block misses it. Read the two hand slots exactly as the engine does
         // and fold the held source in by MAX, matching VS's max-based (non-additive) light convention.
-        float blockLuma = 0.2126f * blockR + 0.7152f * blockG + 0.0722f * blockB;
-        if (TryHeldLight(world, entity, out float heldLuma, out float heldR, out float heldG, out float heldB)
-            && heldLuma > blockLuma)
+        float gridLuma = 0.2126f * blockR + 0.7152f * blockG + 0.0722f * blockB;
+        bool held = TryHeldLight(world, entity, out float heldLuma, out float heldR, out float heldG, out float heldB);
+
+        // For the TINT (hue) path only: when the held light out-shines the grid at the player's feet it dominates
+        // the block-light term, carrying its own hue (torch warm, lantern cooler — straight from item data). The
+        // brightness split below folds held via curve + MAX, so its "dominance" is implicit in that MAX and needs
+        // no separate test there.
+        float blockLuma = gridLuma;
+        if (held && heldLuma > gridLuma)
         {
-            // Held light is brighter than the grid at the player's feet → it dominates the block-light term,
-            // carrying both its level and its own hue (torch warm, lantern cooler — straight from item data).
             blockLuma = heldLuma;
             blockR = heldR; blockG = heldG; blockB = heldB;
         }
 
-        // --- Brightness ---
-        // Block-light luma and the sun channel weathered by the scene brightness; the surface is lit by
-        // whichever dominates (a torch in a cave, or the sky outdoors). This is the RAW 0..1 input to the
-        // response curve.
+        // --- Brightness (split: environment vs. held — unify-held-light-flicker D1) ---
+        // ENVIRONMENT = grid light + the sun channel weathered by scene brightness; curve-mapped. This term is
+        // ALWAYS eased (τ=0.2s) so walking sun↔shade glides. HELD = the curve-mapped held-light contribution.
+        // When a flicker mod (IL) is active the held term rides on top of the smoothed environment UNSMOOTHED
+        // (see Smooth) so IL's per-frame V flicker — which TryHeldLight already receives via GetLightHsv —
+        // survives instead of being flattened by the low-pass; when it isn't, the two collapse into one smoothed
+        // value identical to the pre-split behavior (the curve is monotonic, so max(curve a, curve b) == curve max).
+        float floor = ScribePlayerSettings.ClampIlluminationFloor(settings.IlluminationFloor);
         float sunlit = sun * Clamp01(sceneBrightness);
-        float rawBrightness = Clamp01(MathF.Max(blockLuma, sunlit));
-
-        // Author-drawn NON-LINEAR response, with the player's configured floor as the x=0 anchor.
-        float brightness = ScribeBrightnessCurve.Evaluate(
-            rawBrightness, ScribePlayerSettings.ClampIlluminationFloor(settings.IlluminationFloor));
+        float envRaw = Clamp01(MathF.Max(gridLuma, sunlit));
+        float envBrightness = ScribeBrightnessCurve.Evaluate(envRaw, floor);
+        // Held term is 0 (not curve(0)=floor) when no held light, so an absent held light can't floor-lift the MAX.
+        float heldBrightness = held ? ScribeBrightnessCurve.Evaluate(Clamp01(heldLuma), floor) : 0f;
 
         // --- Hue ---
         // The tint the GUI's colors are pushed toward: block/held light carries torch warmth, sky carries
@@ -203,8 +226,14 @@ internal sealed class ScribeAmbientLightSampler
         g = 1f + (g - 1f) * TintStrength;
         b = 1f + (b - 1f) * TintStrength;
 
-        return Smooth(brightness, r, g, b, dt);
+        return Smooth(envBrightness, heldBrightness, r, g, b, dt);
     }
+
+    /// <summary>Whether a held-light flicker mod (Immersive Lanterns) is installed, resolved once and cached — mod
+    /// enablement can't change mid-session. When true the held-brightness term bypasses the ease in
+    /// <see cref="Smooth"/> so IL's flicker (already present in the value <see cref="TryHeldLight"/> samples via
+    /// <c>GetLightHsv</c>) survives; when false the sampler takes exactly the pre-split smoothed path.</summary>
+    private bool FlickerModActive => flickerModActive ??= capi.ModLoader.IsModEnabled(FlickerModId);
 
     /// <summary>Read the light emitted by the item(s) in the player's two hands and convert it to a normalized
     /// (luma, RGB-hue) pair, using the SAME live sources the engine uses. Returns false when no held item emits
@@ -248,27 +277,46 @@ internal sealed class ScribeAmbientLightSampler
     /// <summary>Ease the continuous shade toward the freshly-sampled target (exponential smoothing, time-constant
     /// <see cref="SmoothingTau"/>), then quantize + report. Smoothing runs BEFORE quantization so the reported
     /// bucket steps through intermediate values over ~400ms instead of snapping, giving a soft glide as the
-    /// player moves through changing light.</summary>
-    private Shade Smooth(float brightness, float r, float g, float b, float dt)
+    /// player moves through changing light.
+    ///
+    /// <para><b>Environment vs. held (unify-held-light-flicker D1).</b> Only the ENVIRONMENT brightness
+    /// (<paramref name="envBrightness"/>) and the hue tint are eased. The HELD brightness
+    /// (<paramref name="heldBrightness"/>) is combined by MAX AFTER easing: when <see cref="FlickerModActive"/>
+    /// it is taken UNSMOOTHED (adopt-per-frame) so Immersive Lanterns' V flicker — already present in the value
+    /// <see cref="TryHeldLight"/> samples — passes straight through; otherwise the held term is smoothed with the
+    /// same τ (folded into <c>smoothedBrightness</c>), reproducing the pre-split single-value behavior exactly.</para></summary>
+    private Shade Smooth(float envBrightness, float heldBrightness, float r, float g, float b, float dt)
     {
+        // When no flicker mod is installed there is nothing to protect from the low-pass, so smooth the combined
+        // brightness exactly as before — the held term is folded into the one eased value. This keeps the vanilla
+        // path structurally identical (not a runtime branch that merely happens to match).
+        bool passHeldThrough = FlickerModActive;
+        float smoothTarget = passHeldThrough ? envBrightness : MathF.Max(envBrightness, heldBrightness);
+
         if (!hasSmoothed)
         {
             // First frame — adopt the target directly so the opening dialog isn't seen fading up from black.
             hasSmoothed = true;
-            smoothedBrightness = brightness;
+            smoothedBrightness = smoothTarget;
             smoothedR = r; smoothedG = g; smoothedB = b;
         }
         else
         {
             // alpha = 1 - e^(-dt/τ): frame-rate independent, ~86% of a step in one τ. Guard dt ≤ 0.
             float alpha = dt > 0f ? 1f - MathF.Exp(-dt / SmoothingTau) : 1f;
-            smoothedBrightness += (brightness - smoothedBrightness) * alpha;
+            smoothedBrightness += (smoothTarget - smoothedBrightness) * alpha;
             smoothedR += (r - smoothedR) * alpha;
             smoothedG += (g - smoothedG) * alpha;
             smoothedB += (b - smoothedB) * alpha;
         }
 
-        return Report(smoothedBrightness, smoothedR, smoothedG, smoothedB);
+        // With a flicker mod active, the held brightness rides on top of the smoothed environment UNSMOOTHED, so
+        // IL's per-frame flicker survives; the tint stays smoothed regardless (IL flickers V only, never hue).
+        float reportBrightness = passHeldThrough
+            ? MathF.Max(smoothedBrightness, heldBrightness)
+            : smoothedBrightness;
+
+        return Report(reportBrightness, smoothedR, smoothedG, smoothedB);
     }
 
     /// <summary>Quantize, compare to the previous frame, and remember it. Returns the quantized shade with its

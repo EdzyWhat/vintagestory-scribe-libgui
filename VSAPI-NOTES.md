@@ -2219,11 +2219,27 @@ the cache (measurable hitch on the pixel-art parchment backdrops). Snap brightne
 only propagate a CHANGED bucket. The grid's own sun-brightness is already a 0..32 lookup, so this loses
 little. (Scribe: `ScribeAmbientLightSampler` + `ScribeGlobalTint`, respect-local-illumination.)
 
-**Flickering / dynamic point lights (Immersive Lanterns etc.) are UNREADABLE via public API.** VS dynamic
-lights are the `IPointLight` system — SHADER-ONLY: `IRenderAPI.AddPointLight/RemovePointLight` have no
-getter, and the active list is `internal List<IPointLight> pointlights` on `ClientMain`. A *steady placed*
-torch/lantern still registers (it's baked into the block-light grid `GetLightRGBs` reads); only the
-per-frame flicker is missed. Reading it would mean reflecting into a private engine field — deferred.
+**Flickering / dynamic PLACED point lights are UNREADABLE via public API.** VS dynamic lights are the
+`IPointLight` system — SHADER-ONLY: `IRenderAPI.AddPointLight/RemovePointLight` have no getter, and the
+active list is `internal List<IPointLight> pointlights` on `ClientMain`. A *steady placed* torch/lantern
+still registers (it's baked into the block-light grid `GetLightRGBs` reads); only the per-frame flicker of a
+*placed* source is missed, and reading it would mean reflecting into a private engine field — deferred.
+
+**BUT a HELD light's flicker (Immersive Lanterns) IS readable — for free.** IL (decompiled 0.4.1) is NOT a
+private point-light system: `ModSystemImmersiveLanterns.SetupFlickerPatching()` Harmony-**Postfixes
+`CollectibleObject.GetLightHsv(IBlockAccessor, BlockPos, ItemStack)`** (+ `BlockLantern`'s override). That
+patch (a) **early-returns when `pos != null`** — so it flickers HELD/inventory items only, never placed
+blocks (a placed-grid query passes a real pos); (b) modifies **V (brightness index) ONLY**, never H/S — pure
+brightness flicker, no hue shift; (c) sine-flickers between a min/max factor (torch `0.75..1.0` over
+100–300ms; lantern/candle/lamp `0.75..1.0` over 500–1000ms), all amplitudes/cadences read from VS
+`ClientSettings` `flickeringlights-*` keys, tunable in IL's own config dialog. So if you already sample a
+held item's light via `GetLightHsv(blockAccessor, pos: null, stack)` (as `TryHeldLight` does), **you receive
+IL's flickered V every frame with no dependency, reflection, or flicker-matching code** — the only thing that
+can erase it is your OWN temporal smoothing. Detect IL with `capi.ModLoader.IsModEnabled("immersivelanterns")`
+and, when present, stop low-pass-filtering the held-brightness term so the flicker survives (Scribe:
+unify-held-light-flicker splits the held term out of `ScribeAmbientLightSampler`'s ~400ms ease). Depends only
+on the *observable* result (a flickering `GetLightHsv` for held items) + the stable modid, not IL internals,
+so it degrades gracefully if IL changes its patch shape.
 
 ## Item state-transition (`Harden`/`Dry`) and firepit smelt both DROP stack attributes on transform (2026-08-02)
 
