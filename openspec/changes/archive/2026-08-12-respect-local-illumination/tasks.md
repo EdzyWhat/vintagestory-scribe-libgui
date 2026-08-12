@@ -77,9 +77,10 @@
 - [x] 3.1 Wrap the composed body once in `ScribeDialogBase.BuildBodyTree` — `ScribeGlobalTint` OUTSIDE
       the `Theme`, so backdrop + chrome + text flatten into one layer and the matrix shades them
       together. Driven each frame from the sampler via the dialog's `currentShade`.
-- [ ] 3.2 Confirm in-game that all `ScribeDialogBase` surfaces (lectern, notebook, tablet) receive the
+- [x] 3.2 Confirm in-game that all `ScribeDialogBase` surfaces (lectern, notebook, tablet) receive the
       shade uniformly with no per-dialog wiring. (Structurally guaranteed — single shared wrap point —
       but verify visually in the playtest, §5.4f.)
+      PASS 2026-08-12: all three surfaces shade identically under the same light.
 
 ## 4. Config floor (D5)
 
@@ -101,7 +102,7 @@
       edits — valid).
 - [x] 5.3 `build/verify.sh Debug` green — build 0 warnings/0 errors, 339 Core tests, 25 Atlas
       integration tests, mod restaged into the Mods folder. Relaunch the client to load the build.
-- [ ] 5.4 In-game playtest, record verdicts in `TESTING.md`:
+- [x] 5.4 In-game playtest, record verdicts in `TESTING.md`:
       (a) noon outdoors → GUI at full brightness, visually unchanged from today;
       (b) rain outdoors → GUI dimmer than clear noon;
       (c) dark cave + placed torch → GUI warm/orange and dimmed to the torch level;
@@ -117,10 +118,12 @@
       (i) CONFIRM THE CURVE FEELS RIGHT — the point of the hand-drawn shape: darkness is punishing
           but a torch is "enough," and the mid-range isn't muddy. Tune the control points in
           `ScribeBrightnessCurve` if the in-game feel disagrees with the paper sketch.
-- [ ] 5.5 CALIBRATE the curve anchors against real values: stand next to a placed lantern, run
+      PASS 2026-08-12: all sub-items (a)–(i) confirmed behaving exactly as expected; no hitching, curve feels right, no tune needed.
+- [x] 5.5 CALIBRATE the curve anchors against real values: stand next to a placed lantern, run
       `.scribelight`, read the RAW curve input and confirm the output lands ~85% (V=20 territory).
       Adjust the `ScribeBrightnessCurve` points if the measured value disagrees.
-- [ ] 5.6 Playtest the tuning (§1b), record verdicts in `TESTING.md`:
+      PASS 2026-08-12: calibration confirmed good; anchors left as shipped.
+- [x] 5.6 Playtest the tuning (§1b), record verdicts in `TESTING.md`:
       (a) HELD light in a dark cave — a held offhand lantern lifts the GUI to ~lantern level, a held
           torch proportionally lower, and nothing held stays at the darkness floor;
       (b) per-item COLOR TEMPERATURE — held torch vs. lantern vs. oil lamp read visibly different hues;
@@ -128,3 +131,4 @@
       (d) SMOOTHING — walking between light and shadow glides the brightness over ~400ms rather than
           snapping; the glide stays smooth when you keep moving into greater/lesser light (no kink or
           restart); a newly opened dialog shows the current light immediately (no fade-up).
+      PASS 2026-08-12: (a)–(d) all confirmed; offhand solid, per-item hues distinct, tint gentle, smoothing glides cleanly under continuous movement.
