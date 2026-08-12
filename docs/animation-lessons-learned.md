@@ -467,6 +467,46 @@ already-`Complete` entry controller instead of starting a fresh collapse — ren
 ghost. Same host-owned registry, disjoint key namespaces, so `AnyAnimating` (and thus the host's scroll-pin +
 hover-latch loops) covers entry automatically with no new wiring.
 
+## The HUD migration, and why the "Delayed removal policy" was a misconception (migrate-hud-onto-animated-list, 2026-08-12)
+
+The pinned-task HUD was the **last** of four animating surfaces still hand-wiring its own departure
+choreography (a `departing` map, `BeginDeparting`/`ReconcileDeparting`/`CancelDeparting`/
+`OnDepartingCollapsed`, a `needsCollapseCleanup` deferral, and a per-row `ScribeRowSizeAnimation` wrap in
+`BuildRow`). It now routes through `ScribeAnimatedList(Immediate)` like the editor / Read / Pin Tab, so
+exactly **one animation path** remains across all four surfaces.
+
+**The trap this closes.** The change was originally scoped around wiring the container's stubbed **`Delayed`**
+removal policy — a held, faded *ghost* in front of the collapse — on the belief that the HUD's undo window
+*needs* a container-level hold. That was backwards. Trace the HUD's destructive-completion timeline: on a
+"complete" click the pin **stays live in `MyPins`** at full height, its checkbox clickable, for
+`PinHudWaitMs` (1500ms); undo is **unchecking that live row** (`pendingCompletions.Remove` → nothing was ever
+sent). The pin only leaves the rendered set at *send-time*, when it enters `awaitingRemoval` and is filtered
+out of the item set handed to the container — and *that* departure is exactly what the existing `Immediate`
+policy already collapses. So:
+
+- **The undo window is a deferred-network-send phase on a LIVE row, not an animation hold.** It is domain
+  state (a pending unsent packet + optimistic flag), and it lives *before* the row ever enters the
+  container. A container `Delayed` ghost-hold could not carry it anyway: **a frozen ghost has no live
+  checkbox**, so it can't host the uncheck-to-undo affordance. `ScribeListRemovalPolicy.Delayed` was removed
+  as a misconception, not an unbuilt feature; the enum is single-valued (`Immediate`).
+- **The removal *animation* and the undo *semantics* are separable concerns** that got conflated only
+  because the HUD was the sole surface with both. Keep them apart: the collapse belongs to
+  `ScribeAnimatedList(Immediate)`; the window stays in the HUD.
+- **The frozen ghost must render the ALREADY-FADED row.** During the window the live row's `ScribeFadeText`
+  ramps the text to ~0 opacity as a countdown; the HUD's ghost (`BuildFrozenGhost`) is therefore a disabled
+  checkbox + **zero-opacity text**, so the collapse closes empty space instead of flashing the text back at
+  full opacity for a frame.
+- **`ScribeFadeText` stays** (it is the live-window countdown fade, self-ticking so it survives the host's
+  rebuilds — see the widget's own remarks). An earlier plan to replace it with a host-controller `ScribeFade`
+  primitive was itself part of the misconception; there is no `ScribeFade`, and the row fade was always the
+  live-window countdown, not a departure fade.
+
+Two scope-adds rode along for free once the HUD was on the container: **D6** — HUD rows now ENTER with the
+same `ScribeSlideIn` as every other surface (`animateEntry` on). **D7** — the HUD's base row order is aligned
+with the Pin Tab via `ScribePinOrdering.ForDisplay` under sinking policies, re-applying only the two
+HUD-specific overlays the Pin Tab has no equivalent for (the durable session-sink `sunkOrder` bottom-hold and
+the in-undo-window in-place hold).
+
 ## Pointers
 
 - `src/Mod/GuiDialogScribeLecternLibGui.cs` — the three `OnRenderGUI` settling loops,
@@ -479,7 +519,10 @@ hover-latch loops) covers entry automatically with no new wiring.
   and the uniform `ScribeSlideIn` entry (kept-for-life, `entering` is a plain id set);
   `src/Core/ScribeListDiff.cs` — its pure, game-free identity diff
   (tested in `tests/Core.Tests/ScribeListDiffTests.cs`).
-- `src/Mod/HudScribePins.cs` — `ScribeFadeText` (self-ticking fade) lives at the bottom.
+- `src/Mod/HudScribePins.cs` — the pinned HUD, migrated onto `ScribeAnimatedList(Immediate)`
+  (migrate-hud-onto-animated-list): `BuildFrozenGhost` (zero-opacity-text collapse ghost), the
+  `awaitingRemoval`-triggered departure, and `ScribeFadeText` (self-ticking live-window countdown fade) at
+  the bottom.
 - `VSAPI-NOTES.md` `## LibGUI` section — the `ForceRebuild`-snaps-animations note and the
   stock `ListView` child-cache note.
 - `openspec/changes/refactor-reconciling-gui-rebuild/` (on the

@@ -12,28 +12,28 @@
 
 ## 1. Baseline & reference
 
-- [ ] 1.1 Re-read the HUD's hand-wired departure choreography as the reference: `HudScribePins.cs`
+- [x] 1.1 Re-read the HUD's hand-wired departure choreography as the reference: `HudScribePins.cs`
       `departing` / `DepartingRow` / `BeginDeparting` / `ReconcileDeparting` / `CancelDeparting` /
       `OnDepartingCollapsed`, the `awaitingRemoval` server-confirmation set, `pendingCompletions` /
       `PinHudWaitMs` (the deferred-send undo window), and the LIVE-row `ScribeFadeText` text-fade
       (`IsFadingOut` / `FadeWindowMs`). Record the parity baseline (D5): window 1500ms, `ScribeFadeText`
       linear fade over 1500ms, 200ms collapse.
-- [ ] 1.2 Confirm the container's `Immediate` path (Read/Pin/editor) and the `ScribeSlideIn` entry
+- [x] 1.2 Confirm the container's `Immediate` path (Read/Pin/editor) and the `ScribeSlideIn` entry
       primitive are in place and green before starting (`dotnet build src/Mod/Mod.csproj`,
       `dotnet test tests/Core.Tests`).
 
 ## 2. Remove the misconceived `Delayed` policy from the container
 
-- [ ] 2.1 Delete the `ScribeListRemovalPolicy.Delayed` enum member and the `throw NotSupportedException`
+- [x] 2.1 Delete the `ScribeListRemovalPolicy.Delayed` enum member and the `throw NotSupportedException`
       guard in the `ScribeAnimatedList` ctor. The enum keeps only `Immediate` (leave the enum + `policy`
       param in place so the call sites and the D6/D7 wiring read explicitly; do not collapse the param
       away). Update the enum + policy doc-comments to drop the "delayed / HUD follow-up" language.
-- [ ] 2.2 Confirm `Immediate` behavior is byte-for-byte unchanged (no logic touched — only the dead
+- [x] 2.2 Confirm `Immediate` behavior is byte-for-byte unchanged (no logic touched — only the dead
       branch removed). Build clean.
 
 ## 3. Migrate the HUD onto the container (Immediate)
 
-- [ ] 3.1 In `HudScribePins.BuildHudTree`, route the ordered `HudPinRow`s through
+- [x] 3.1 In `HudScribePins.BuildHudTree`, route the ordered `HudPinRow`s through
       `ScribeAnimatedList(Immediate)`, keyed by the existing `(docId, taskId)` identity → a single `Guid`
       key for the container (the container keys by one `Guid`; derive a stable key — e.g. `TaskId`, which
       is unique per pin). Each `ScribeAnimatedListItem` supplies the live `HudPinRow` widget as `Child`
@@ -42,27 +42,27 @@
       layout (`SizedBox` > `Padding` > `Column`) as the `layoutBuilder`; keep the header, "+N more",
       timer row, and sink overlays as HUD chrome OUTSIDE the animated row set (D-open-question — confirm
       they compose).
-- [ ] 3.2 Keep `awaitingRemoval` in the HUD and keep suppressing in-flight-destructive pins from the
+- [x] 3.2 Keep `awaitingRemoval` in the HUD and keep suppressing in-flight-destructive pins from the
       item set handed to the container (D3) — the pin leaving the set is what triggers the `Immediate`
       collapse. Keep `pendingCompletions` / `PinHudWaitMs` / `OnToggleRow` / `OnTick`'s send-on-expiry
       and the live-row `ScribeFadeText` fade — all unchanged (the undo window is HUD-owned, D2).
-- [ ] 3.3 Delete `departing` / `DepartingRow` / `BeginDeparting` / `ReconcileDeparting` /
+- [x] 3.3 Delete `departing` / `DepartingRow` / `BeginDeparting` / `ReconcileDeparting` /
       `CancelDeparting` / `OnDepartingCollapsed` / `needsCollapseCleanup`, and the `BuildRow`
       `Departing`-branch `ScribeRowSizeAnimation` hand-wiring. Reduce `ReconcileDeparting`'s surviving
       job (drop `awaitingRemoval` ids the server removed or that were re-pinned) into a small
       `awaitingRemoval`-only reconcile still called from `OnMyPinsChanged`. The HUD keeps its own
       `collapseRegistry` (now passed to the container) + `hoverRefreshLatch` + the `OnRenderGUI`
       scroll/hover loops driven off `collapseRegistry.AnyAnimating`.
-- [ ] 3.4 `ScribeFadeText` STAYS (it is the live-window countdown fade, not a departure fade —
+- [x] 3.4 `ScribeFadeText` STAYS (it is the live-window countdown fade, not a departure fade —
       correcting the original design). Confirm it is still referenced only by the HUD's live-row path;
       leave it in `HudScribePins.cs`. `ScribeRowSizeAnimation` is now only used via the container.
 
-- [ ] 3.5 (D6) Leave the container's entry animation ENABLED for the HUD adoption (`animateEntry: true`)
+- [x] 3.5 (D6) Leave the container's entry animation ENABLED for the HUD adoption (`animateEntry: true`)
       so a newly pinned row (or one crossing into the capped window because another collapsed out) SLIDES
       in like the editor/Read/Pin Tab, not a snap. Confirm the `+N more` cap boundary and sink overlay
       don't force a pop, and that first-build/ForceRebuild entry suppression still holds for the HUD.
 
-- [ ] 3.6 (D7) Align the HUD's row ordering with the Pin Tab: replace `BuildOrderedRows()`'s bespoke
+- [x] 3.6 (D7) Align the HUD's row ordering with the Pin Tab: replace `BuildOrderedRows()`'s bespoke
       base order with `ScribePinOrdering.ForDisplay` under the sinking policies / raw pin order otherwise
       (mirror `OrderedPinsForDisplay()`), then re-apply ONLY the two surviving HUD-specific overlays on
       top: the durable session-sink bottom-hold (`sunkOrder`) and the in-undo-window in-place hold. Do
@@ -70,8 +70,8 @@
 
 ## 4. Verify (parity gate — do not skip)
 
-- [ ] 4.1 Build clean (0 errors, no new warnings); Core suite green; restage Debug.
-- [ ] 4.2 Core.Tests: no new Core logic expected (the ordering rule `ScribePinOrdering` is already
+- [x] 4.1 Build clean (0 errors, no new warnings); Core suite green; restage Debug.
+- [x] 4.2 Core.Tests: no new Core logic expected (the ordering rule `ScribePinOrdering` is already
       covered; the window/fade stay in the Mod layer). If any pure ordering-overlay logic is extracted to
       Core, cover it; otherwise note the migration is GUI-layer and relies on the in-game gate.
 - [ ] 4.3 In-game HUD parity (A/B against pre-migration behavior): complete a pin under Unpin / Delete →
@@ -97,16 +97,16 @@
 
 ## 5. Consolidation & docs (`extract-animated-task-list` §6.3)
 
-- [ ] 5.1 Confirm all four interactive surfaces (editor / Read / Pin Tab / HUD) route through
+- [x] 5.1 Confirm all four interactive surfaces (editor / Read / Pin Tab / HUD) route through
       `ScribeAnimatedList`; retire any now-dead duplicated primitives and verify ONE choreography path
       remains. Close `extract-animated-task-list` §6.3.
-- [ ] 5.2 Update `docs/animation-lessons-learned.md` + `VSAPI-NOTES.md` §LibGUI: the HUD is migrated onto
+- [x] 5.2 Update `docs/animation-lessons-learned.md` + `VSAPI-NOTES.md` §LibGUI: the HUD is migrated onto
       `ScribeAnimatedList(Immediate)`, one animation path across all surfaces, and record the `Delayed`
       misconception (undo window = deferred-send phase, not an animation hold — a ghost can't host a live
       undo checkbox) so it isn't re-proposed. Update [[hud-undo-window-is-policy-hiding]] memory to note
       the collapse moved to the container while the undo window stayed a HUD deferred-send phase.
-- [ ] 5.3 `openspec validate migrate-hud-onto-animated-list --strict` passes.
-- [ ] 5.4 Run `build/verify.sh` (Core + Atlas) green and restage.
-- [ ] 5.5 Record playtest verdicts in `TESTING.md` (regenerate via the what-to-test skill). The migration
+- [x] 5.3 `openspec validate migrate-hud-onto-animated-list --strict` passes.
+- [x] 5.4 Run `build/verify.sh` (Core + Atlas) green and restage.
+- [x] 5.5 Record playtest verdicts in `TESTING.md` (regenerate via the what-to-test skill). The migration
       should be user-invisible (timing/feel unchanged); flag for the ModDB changelog only if anything
       shifts.

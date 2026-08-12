@@ -2075,6 +2075,26 @@ one) rather than the earlier height-grow, which changed the row's height every f
 Corollary to the "row identity is load-bearing" bullet above: keying by a stable `Guid` is necessary but not
 sufficient — the *type* at the slot must also stay stable across the frames where you care about identity.
 
+### A "hold the row before collapsing it" undo affordance does NOT belong in the animation container — a frozen ghost can't be interactive (migrate-hud-onto-animated-list, 2026-08-12)
+
+When the pinned HUD was migrated onto `ScribeAnimatedList`, the plan was to give the container a `Delayed`
+removal policy: hold a *faded ghost* of the row at full height for an undo window, then collapse it. That was
+a misconception, and the general rule is worth keeping: **any undo/grace affordance on a departing row has to
+act on the LIVE, still-interactive row — the container's collapse ghost is a frozen snapshot with no gestures,
+focus node, or clickable controls, so it cannot host one.** The HUD's undo is literally "uncheck the row," so
+it *must* stay on the live widget.
+
+The resolution split the two concerns that had been conflated: (1) the **undo window** is a deferred-send
+phase that lives entirely in the host (`HudScribePins`) *before* the row ever leaves the item set — the pin
+stays live in `MyPins`, the `ScribeFadeText` countdown runs on the live row, and undo = removing the unsent
+pending packet; (2) the **collapse** is the container's plain `Immediate` policy, triggered when the host
+drops the id from the item set (adds it to `awaitingRemoval`) at send-time. The container never needed a new
+policy; the stubbed `ScribeListRemovalPolicy.Delayed` member was deleted. The ghost the container renders must
+match the row as the window left it — here a **zero-opacity-text** frozen twin, so the collapse closes empty
+space rather than flashing the faded text back at full opacity for a frame. See
+`docs/animation-lessons-learned.md` "The HUD migration, and why the 'Delayed removal policy' was a
+misconception."
+
 ### CORRECTION to the `ListView` child-cache notes above — the read view no longer uses `ListView` (D4, 2026-08-10)
 
 The two facts above (~line 1394 "Scribe's `RefreshReadView` uses `ForceRebuild`"; ~line 1421 "The read view
