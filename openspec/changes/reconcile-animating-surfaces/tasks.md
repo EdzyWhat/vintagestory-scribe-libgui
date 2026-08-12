@@ -351,3 +351,6 @@
   (§3.4 / TESTING.md `1f95e1ec`), which is BACKLOGGED by author decision pending a multiplayer session —
   it is the sole gap between this and a full green. Merge decision: converted single-player surfaces
   pass; multiplayer stays a tracked backlog item, not a merge blocker (author call).]
+  MERGED 2026-08-12: author approved merge with the multiplayer resync (§3.4) tracked as a standalone
+  backlog item. Re-verified green on branch HEAD (Core 339 + Atlas 25, 0/0) after the illumination
+  changes merged in. Branch merged to main; change archived.
