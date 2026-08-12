@@ -51,25 +51,26 @@ namespace Scribe;
 /// (D2's last-built-row default) — safe only for a genuinely static row.</param>
 internal readonly record struct ScribeAnimatedListItem(Guid Id, Widget Child, Widget? Ghost = null);
 
-/// <summary>When a departed row begins its collapse (animated-task-list D3). The collapse mechanism is
-/// identical either way; only <em>when</em> it starts differs.</summary>
+/// <summary>When a departed row begins its collapse (animated-task-list D3). Every surface collapses a
+/// departed row the frame its identity leaves the item set — including the pinned-task HUD, whose
+/// misclick-rescue undo window is a live-row deferred-send phase (the pin stays IN the set at full height,
+/// its checkbox clickable, until the window elapses), not an animation hold. A held-ghost "delayed removal"
+/// policy was considered for the HUD and removed as a misconception: a frozen ghost cannot host the live
+/// checkbox the undo depends on (see migrate-hud-onto-animated-list). The enum is retained (single-valued)
+/// so call sites and the entry/order wiring read the policy explicitly.</summary>
 internal enum ScribeListRemovalPolicy
 {
-    /// <summary>The ghost begins collapsing the frame it departs (default — Editor/Read/Pinned and all future
-    /// tabs). Their removal is an affirmative choice, so no misclick grace is needed.</summary>
+    /// <summary>The ghost begins collapsing the frame the row's identity departs the item set — every surface
+    /// (Editor/Read/Pinned/HUD). A removal reaching the container is already an affirmative choice (the HUD's
+    /// misclick-grace window lives BEFORE the pin leaves the set, so the container never sees a tentative
+    /// removal).</summary>
     Immediate,
-
-    /// <summary>The ghost holds full height for an undo window (optionally fading) before collapsing — the
-    /// pinned-task HUD's behavior, which hides the Completion Policy so a completion may be a silent
-    /// delete-with-no-undo. NOT WIRED in this change: the HUD's fade/undo-window migration is a follow-up
-    /// (see tasks.md §5.4). Passing this today throws, so it can't be shipped half-built by accident.</summary>
-    Delayed,
 }
 
 /// <summary>
 /// A container that animates row <em>departures</em> by diffing its identity-keyed item set frame-to-frame
-/// (animated-task-list). See the file header for the full rationale. Adopted first on the Pin Tab; the
-/// editor/HUD migration onto it is a deferred follow-up.
+/// (animated-task-list). See the file header for the full rationale. Adopted across all four surfaces —
+/// editor, Read view, Pin Tab, and the pinned-task HUD.
 /// </summary>
 internal sealed class ScribeAnimatedList : StatefulWidget
 {
@@ -83,16 +84,6 @@ internal sealed class ScribeAnimatedList : StatefulWidget
         int durationMs = ScribeRowSizeAnimation.DefaultDurationMs,
         Gui.Widgets.Framework.Key? key = null) : base(key)
     {
-        if (policy == ScribeListRemovalPolicy.Delayed)
-        {
-            // Guard, not silent fallback: the Delayed (undo-window/fade) path is not implemented in this
-            // change (HUD migration is the follow-up). Fail loudly if wired prematurely rather than shipping
-            // an immediate collapse mislabelled as delayed.
-            throw new NotSupportedException(
-                "ScribeListRemovalPolicy.Delayed is not wired yet (HUD fade/undo-window migration is a " +
-                "follow-up — see extract-animated-task-list tasks.md §5.4). Use Immediate.");
-        }
-
         Items = items;
         Registry = registry;
         LayoutBuilder = layoutBuilder;
