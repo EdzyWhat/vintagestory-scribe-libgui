@@ -303,6 +303,15 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// refresh hover while a read row collapses. Disposed with the dialog.</summary>
     private readonly ScribeAnimationRegistry readCollapseRegistry = new();
 
+    /// <summary>True while ANY of the dialog's row-collapse animations (editor, Pin Tab, or read view) is still
+    /// running. Only one of these surfaces is mounted at a time, so at most one registry is ever non-idle — but
+    /// OR-ing all three is safe and lets the two <see cref="OnRenderGUI"/> collapse loops (the scroll-pin and the
+    /// hover-refresh latch) share one gate instead of repeating the three-way check. Folding a future surface's
+    /// registry in here updates both loops at once, so neither can be silently left out of step
+    /// (reconcile-animating-surfaces §6.3).</summary>
+    private bool AnyRowAnimating =>
+        editorCollapseRegistry.AnyAnimating || pinCollapseRegistry.AnyAnimating || readCollapseRegistry.AnyAnimating;
+
     /// <summary>The <see cref="ScribeBlock.TaskId"/> of the Pin Tab row currently focused, tracked from the
     /// rows' focus nodes so a rebuild can restore the caret and a focus move can commit the row being left.
     /// Not cleared on blur (its listener fires only on focus GAINED — the editor's pattern), so it still

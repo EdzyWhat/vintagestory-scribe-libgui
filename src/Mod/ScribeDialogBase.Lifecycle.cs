@@ -77,7 +77,7 @@ public abstract partial class ScribeDialogBase
         // so any of them arms the hover latch. The container owns no dialog-level state (RootElement /
         // RefreshHoverAtCursor are the dialog's), so this loop stays here, reading the same host-owned registries
         // the containers animate against (open-question §2.7 resolution).
-        if (editorCollapseRegistry.AnyAnimating || pinCollapseRegistry.AnyAnimating || readCollapseRegistry.AnyAnimating) hoverRefreshLatch.Arm();
+        if (AnyRowAnimating) hoverRefreshLatch.Arm();
         hoverRefreshLatch.ArmIfRebuilt(RootElement);
         if (hoverRefreshLatch.Tick()) RefreshHoverAtCursor();
 
@@ -100,7 +100,7 @@ public abstract partial class ScribeDialogBase
         // lockstep with the shrinking content instead of snapping. Same registry-AnyAnimating gate, same
         // no-op-when-in-bounds guard — the views never animate at once (only one is mounted), so OR-ing their
         // registries is safe.
-        if (editorCollapseRegistry.AnyAnimating || pinCollapseRegistry.AnyAnimating || readCollapseRegistry.AnyAnimating)
+        if (AnyRowAnimating)
         {
             float collapseMax = sharedScrollController.MaxScrollExtent;
             if (sharedScrollController.Offset > collapseMax)

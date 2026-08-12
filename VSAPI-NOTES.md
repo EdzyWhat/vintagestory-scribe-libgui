@@ -1533,6 +1533,21 @@ NOT clear our `focusedEditIndex` (its listener fires only on focus GAINED), so t
 row to restore. See `DeleteEditorBlock`, `TogglePinnedEditorTask`/`OnMyPinsChanged`, and `ReorderEditorBlock`
 in `GuiDialogScribeLecternLibGui.cs`.
 
+**Symptom (94c447c8, "mass-delete dead first-click"): tapping a delete/pin control on a row that is
+sliding under a stationary cursor mid-collapse does nothing; the click only registers once the animation
+finishes.** A LibGUI tap fires only when the element re-hit-tested at pointer-**up** is the SAME element
+captured at pointer-**down** — `EventDispatcher.DispatchPointerUp` gates `OnPointerClick` on
+`if (hit == target)`. During a collapse the target row moves upward every frame, so between mouse-down and
+mouse-up the control slides out from under the stationary cursor, `hit != target`, and the tap is silently
+discarded; a second click after geometry settles hits the same element down/up and works. This is a
+moving-target hit-test race, NOT the departing ghost-snapshot intercepting the click (the frozen ghost has
+no gestures) — an earlier hypothesis the source disproved. **Resolution:** the
+`reconcile-animating-surfaces` conversion fixed it as a side-effect — reconcile keeps the row list stable
+(no per-frame remount that the old `ForceRebuild` did), so the row under the cursor holds its identity
+across the down→up and `hit == target` holds. Confirmed in-game 2026-08-10 (playtest 2026-08-10T09-02-17).
+The parked narrow fallback change (`fix-mass-delete-click-target`, which would have made the control
+activate on a moving target directly) was retired unused when reconcile shipped.
+
 **Symptom (0.2.0 title-pencil): clicking a button crashes with `NullReferenceException` in
 `ButtonState.PlaySound` (`Button.cs:109`, shipped `gui@3.1.0`), reached from
 `GestureDetector.OnPointerDown` → `SetState` → `PlaySound` → `base.Element.Owner.GetSoundPlayer()`.** The
