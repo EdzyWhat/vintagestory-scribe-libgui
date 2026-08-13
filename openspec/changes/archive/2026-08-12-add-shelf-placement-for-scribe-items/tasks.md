@@ -86,10 +86,11 @@
 
 ## 6. Docs
 
-- [ ] 6.1 Note shelf/bookshelf/cabinet placement on the wiki Items and Tablets pages (and the
-      in-game handbook if it lists placement affordances). Not release-gating.
+- [x] 6.1 ~~Note shelf/bookshelf/cabinet placement on the wiki Items and Tablets pages (and the
+      in-game handbook if it lists placement affordances).~~ **DESCOPED 2026-08-12.**
       - **2026-08-07 decision:** in-game handbook SKIPPED — the tablet/notebook "about" entries
         don't currently list any placement affordance (not even ground storage), so this would
-        be net-new content, not an addition to an existing list. Wiki edit remains a manual
-        step for the author (external, can't be done from here). Left unchecked as the only
-        open task; not release-gating.
+        be net-new content, not an addition to an existing list.
+      - **2026-08-12 decision (author):** wiki note DESCOPED entirely. Putting objects on shelves
+        is a natural, self-discoverable Vintage Story interaction — it doesn't warrant a dedicated
+        wiki callout. Not release-gating; nothing left to do. Change is code-complete + playtested.
