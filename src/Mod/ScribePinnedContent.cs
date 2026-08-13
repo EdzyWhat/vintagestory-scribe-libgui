@@ -376,6 +376,20 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
         done = Widget.Data.Done;
     }
 
+    /// <summary>Resync the optimistic <see cref="done"/> when an external change flips this row's authoritative
+    /// completion. Mirrors <c>ScribeReadRowState.UpdateWidget</c> (reconcile-animating-surfaces §5): since
+    /// <c>6eb59a7</c> the Pin Tab reconciles in place instead of <c>ForceRebuild</c>, so a server re-push
+    /// (e.g. a HUD completion under a Keep/Sink policy, where the pin stays in the set) REUSES this
+    /// TaskId-keyed row rather than remounting it — without this override, <see cref="InitState"/>'s seed goes
+    /// stale and the checkbox never reflects the external toggle. Gate on the authoritative value actually
+    /// CHANGING so a pure chrome reconcile (pin re-tint, reorder) doesn't stomp an in-flight optimistic tick
+    /// the player just made — the same discipline the Read view uses.</summary>
+    public override void UpdateWidget(ScribePinRow oldWidget)
+    {
+        base.UpdateWidget(oldWidget);
+        if (oldWidget.Data.Done != Widget.Data.Done) done = Widget.Data.Done;
+    }
+
     public override Widget Build(BuildContext context)
     {
         var data = Widget.Data;

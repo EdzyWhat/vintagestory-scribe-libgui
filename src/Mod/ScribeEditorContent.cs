@@ -731,7 +731,14 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
     }
 
     /// <summary>Move the focus listener if a rebuild handed this row a different focus node instance (a
-    /// given row index keeps its node across rebuilds, so this is belt-and-suspenders).</summary>
+    /// given row index keeps its node across rebuilds, so this is belt-and-suspenders), and resync the
+    /// optimistic <see cref="done"/> when an external change flips this row's authoritative completion.
+    /// The resync mirrors <c>ScribeReadRowState</c>/<c>ScribePinRowState</c>: the editor reconciles rows in
+    /// place (keyed by TaskId) rather than <c>ForceRebuild</c>, so when an external completion is synced
+    /// into scratch (<see cref="ScribeDialogBase.RefreshReadView"/>, editor-mode branch) this row is REUSED
+    /// and <see cref="InitState"/>'s seed would otherwise stay stale, leaving the checkbox out of date. Gate
+    /// on the authoritative value actually CHANGING so a pure chrome reconcile doesn't stomp an in-flight
+    /// optimistic tick the player just made locally (sync-editor-view-on-external-completion).</summary>
     public override void UpdateWidget(ScribeEditRow oldWidget)
     {
         base.UpdateWidget(oldWidget);
@@ -740,6 +747,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             oldWidget.FocusNode?.RemoveListener(OnFieldFocusChanged);
             Widget.FocusNode?.AddListener(OnFieldFocusChanged);
         }
+        if (oldWidget.Data.Done != Widget.Data.Done) done = Widget.Data.Done;
     }
 
     private void OnFieldFocusChanged() => SetState(() => { });

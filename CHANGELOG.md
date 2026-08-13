@@ -21,6 +21,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   setting). Purely decorative — it never changes timer behavior or intercepts the controls.
 
 ### Fixed
+- **Completing a task on the HUD now updates an open Pinned tab or editor immediately.** When a
+  Notebook or Lectern's **Pinned tab** or **editor** was open and you completed one of those tasks
+  from the HUD under a policy that keeps it in the list (**Keep** or **Sink to bottom**), the open
+  view's checkbox didn't reflect the completion until you reopened it — and in the editor's case the
+  next auto-save could even *undo* the completion, because the editor was still holding the
+  pre-completion copy. Both views now update live (the sunk task moves to the bottom in the editor
+  too, matching the read view), the completion is no longer reverted by a later save, and your caret
+  and in-progress text in another row are left undisturbed. This matches the reverse direction, which
+  already worked. The **Unpin** and **Delete** policies were unaffected, since there the row leaves
+  the list entirely.
 - **HUD pinned tasks no longer lose their text when you cancel a completion at the last moment.**
   Checking a pinned task on the HUD fades its text out over a short undo window; if you *un*-checked
   it right as the text finished fading, the row could come back as a bare checkbox with no text until

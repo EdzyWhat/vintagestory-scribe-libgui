@@ -342,10 +342,21 @@ public abstract partial class ScribeDialogBase
     /// Called by <see cref="BlockEntityScribeLectern.FromTreeAttributes"/> whenever the authoritative
     /// document changes (e.g. another viewer toggled a task, or a HUD-Delete removed one). In read mode,
     /// rebuilds from the current document. In editor mode, the scratch is the source of truth for content
-    /// being edited — a full resync must NOT overwrite in-progress text. However, if the fresh authoritative
-    /// document is missing a task that still lives in the scratch (e.g. this player completed it via the
-    /// HUD under Delete policy), that task no longer exists server-side and its row should disappear from
-    /// the editor without disturbing other rows' edits (add-pinned-task-hud follow-up — <c>80777b7b</c>).
+    /// being edited — a full resync must NOT overwrite in-progress text. However, three narrower external
+    /// effects ARE propagated into scratch, because they are orthogonal to the text being edited:
+    /// <list type="bullet">
+    /// <item>a task the fresh authoritative document no longer contains (e.g. this player completed it via
+    /// the HUD under a destructive policy) is dropped from the editor, without disturbing other rows' edits
+    /// (add-pinned-task-hud follow-up — <c>80777b7b</c>);</item>
+    /// <item>a task whose authoritative <see cref="ScribeBlock.Done"/> flipped externally (e.g. a HUD
+    /// completion under Keep/Sink, where the task stays in the document) has its scratch done-state synced,
+    /// so the open editor's checkbox reflects it live;</item>
+    /// <item>a just-completed task the server sank to the bottom (Sink/UnpinSink) is moved to the bottom of
+    /// the editor too, matching the Read/Pinned views.</item>
+    /// </list>
+    /// Syncing done-state + order (never text) also makes scratch consistent with the live document, so the
+    /// next autosave <c>ApplyEdit</c> flush no longer reverts the external completion — closing the
+    /// last-write-wins data-loss window for the completion case (sync-editor-view-on-external-completion).
     /// </summary>
     public void RefreshReadView()
     {
@@ -373,13 +384,13 @@ public abstract partial class ScribeDialogBase
             return;
         }
 
-        // Editor mode: don't resync content, but silently drop any tasks the server no longer knows about.
+        // Editor mode: don't resync in-progress TEXT, but reconcile the orthogonal external effects below.
         if (scratch is null || !IsOpened()) return;
-        var serverTaskIds = host.Document.Blocks
-            .Where(b => b.IsTask)
-            .Select(b => b.TaskId)
-            .ToHashSet();
-        bool any = false;
+        var serverTasks = host.Document.Blocks.Where(b => b.IsTask).ToList();
+        var serverTaskIds = serverTasks.Select(b => b.TaskId).ToHashSet();
+
+        // (1) Drop tasks the server no longer knows about.
+        bool structural = false;
         for (int i = scratch.Blocks.Count - 1; i >= 0; i--)
         {
             var b = scratch.Blocks[i];
@@ -397,10 +408,44 @@ public abstract partial class ScribeDialogBase
             // the server is always expected, never a server-side deletion).
             if (focusedEditIndex == i || string.IsNullOrWhiteSpace(b.Text)) continue;
             DeleteEditorBlock(i);
-            any = true;
+            structural = true;
         }
-        // DeleteEditorBlock schedules its own ForceRebuild; only rebuild if nothing was deleted
-        // (otherwise we're already rebuilding via the collapse/cleanup path).
-        if (!any) return;
+
+        // (2) Sync external completion (done-state only, NOT text) into surviving scratch tasks, and note a
+        // just-completed task the server sank to the bottom so we can mirror the move. Uses the server's
+        // authoritative done-state directly, so the merge follows any external completion path (HUD, another
+        // reader) without inferring which policy produced it. ToggleTask flips to match because it is called
+        // ONLY on a mismatch (post-toggle the block's Done equals the server's).
+        var serverDone = serverTasks.ToDictionary(b => b.TaskId, b => b.Done);
+        Guid? serverLastTaskId = serverTasks.Count > 0 ? serverTasks[^1].TaskId : null;
+        bool doneChanged = false;
+        int sinkFrom = -1;
+        for (int i = 0; i < scratch.Blocks.Count; i++)
+        {
+            var b = scratch.Blocks[i];
+            if (!b.IsTask || !serverDone.TryGetValue(b.TaskId, out bool serverBlockDone)) continue;
+            if (b.Done == serverBlockDone) continue;
+            scratch.ToggleTask(i);
+            isDirty = true; // carry the synced done-state into the next flush so it isn't reverted (D4)
+            doneChanged = true;
+            // A task that just completed AND is now last server-side was sunk by a Sink/UnpinSink policy;
+            // mirror the move to the bottom of scratch. Only the just-completed row is moved, so a local
+            // drag-reorder of a different (not-just-completed) row is never disturbed by this merge.
+            if (serverBlockDone && serverLastTaskId == b.TaskId && i != scratch.Blocks.Count - 1)
+                sinkFrom = i;
+        }
+
+        // (3) Mirror the sink move via the reconcile path, preserving the edited row's focus/caret rather
+        // than grabbing focus onto the sunk row (external, not player-initiated). It owns its own rebuild.
+        if (sinkFrom >= 0)
+        {
+            ReorderEditorBlock(sinkFrom, scratch.Blocks.Count - 1, anchorViewport: true, preserveFocusedRow: true);
+            return;
+        }
+
+        // A deletion already scheduled its own rebuild (collapse/cleanup path); a done-only change still
+        // needs one to repaint the reused row's checkbox. If neither happened, nothing to do.
+        if (structural) return;
+        if (doneChanged) RebuildBody();
     }
 }

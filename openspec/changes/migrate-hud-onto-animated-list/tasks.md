@@ -74,23 +74,23 @@
 - [x] 4.2 Core.Tests: no new Core logic expected (the ordering rule `ScribePinOrdering` is already
       covered; the window/fade stay in the Mod layer). If any pure ordering-overlay logic is extracted to
       Core, cover it; otherwise note the migration is GUI-layer and relies on the in-game gate.
-- [ ] 4.3 In-game HUD parity (A/B against pre-migration behavior): complete a pin under Unpin / Delete →
+- [x] 4.3 In-game HUD parity (A/B against pre-migration behavior): complete a pin under Unpin / Delete →
       row holds LIVE at full height for the SAME undo window, text fades as before, checkbox stays
       clickable, THEN (on send) collapses and neighbors slide up. Undo within the window (uncheck) →
       nothing sent, text restored, no collapse, no ghost.
-- [ ] 4.4 In-game HUD edge cases: Sink / UnpinSink still moves the row to the bottom (no departure);
+- [x] 4.4 In-game HUD edge cases: Sink / UnpinSink still moves the row to the bottom (no departure);
       rapid multi-completion (each collapses in its own slot after its own window, order preserved); a
       row sliding under a stationary cursor keeps its controls; re-pin while a row is collapsing revives
       it (container `diff.Revived`); the `ScribeFadeText` undo-fade regression from
       `extract-animated-task-list` §4.5 stays fixed.
-- [ ] 4.5 Regression-check the three already-migrated surfaces (editor / Read / Pin Tab) are untouched by
+- [x] 4.5 Regression-check the three already-migrated surfaces (editor / Read / Pin Tab) are untouched by
       the `Delayed`-removal deletion — their `Immediate` removals behave exactly as before.
 
-- [ ] 4.6 (D6) In-game HUD entry: newly pin a task → its HUD row SLIDES in (matching the
+- [x] 4.6 (D6) In-game HUD entry: newly pin a task → its HUD row SLIDES in (matching the
       editor/Read/Pin Tab), does not snap; a row scrolling into the capped window because another
       collapsed also slides; no entry animation on HUD first-open or a ForceRebuild.
 
-- [ ] 4.7 (D7) In-game HUD ordering: open the Pin Tab and the HUD side by side (or toggle) and confirm
+- [x] 4.7 (D7) In-game HUD ordering: open the Pin Tab and the HUD side by side (or toggle) and confirm
       they render pins in the SAME order across pin/unpin/complete and under each completion policy
       (Keep / Unpin / Delete / Sink / UnpinSink); the durable-sink bottom-hold and in-window hold still
       behave as before; the `40be9d31` cross-surface Sink agreement still holds.

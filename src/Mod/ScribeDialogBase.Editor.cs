@@ -401,11 +401,21 @@ public abstract partial class ScribeDialogBase
     /// where the row sinks to (Phase 2 trace: Sink was scrolling to the end). We capture the offset before
     /// the rebuild and let the <see cref="OnRenderGUI"/> restore loop re-apply it — the same "hold still"
     /// mechanism Pin uses via <see cref="OnMyPinsChanged"/>. Note a <c>ForceRebuild</c> resets the editor's
-    /// <c>SingleChildScrollView</c> offset to 0, so the capture+restore is required, not optional.</para></summary>
-    private void ReorderEditorBlock(int from, int to, bool anchorViewport = false)
+    /// <c>SingleChildScrollView</c> offset to 0, so the capture+restore is required, not optional.</para>
+    ///
+    /// <para><paramref name="preserveFocusedRow"/> chooses what happens to keyboard focus. A LOCAL move
+    /// (false) grabs focus onto the moved row, because the player just acted on that row (dragged it, or
+    /// completed it under Sink). An EXTERNAL move (true) — a HUD Sink completion arriving via
+    /// <see cref="RefreshReadView"/> while the player is editing a DIFFERENT row — must instead keep focus
+    /// on whatever row is being edited, recomputing that row's index across the shift, so the external
+    /// completion of one task doesn't yank the caret out of the task the player is typing in
+    /// (sync-editor-view-on-external-completion). A row above the moved one is unshifted and stays reused
+    /// with its caret intact; a row below inherits the same accepted positional caret caveat as any
+    /// reorder (its slot shifts by one, so it remounts with text preserved).</para></summary>
+    private void ReorderEditorBlock(int from, int to, bool anchorViewport = false, bool preserveFocusedRow = false)
     {
         if (scratch is null) return;
-        TraceScroll($"reorder {from}->{to} anchor={anchorViewport}");
+        TraceScroll($"reorder {from}->{to} anchor={anchorViewport} preserveFocus={preserveFocusedRow}");
         if (from == to)
         {
             // Released in place (or a grip click that never dragged): no edit — but the grip press already
@@ -418,14 +428,36 @@ public abstract partial class ScribeDialogBase
         if (!scratch.MoveBlock(from, to)) return;
 
         isDirty = true;
-        focusedEditIndex = to;
+        // Where the moved slot's neighbors land: MoveBlock removes at `from` and inserts at `to`, so an
+        // index strictly between them shifts one step toward `from` (up by one when sinking down, down by
+        // one when rising up); `from` itself becomes `to`; anything outside the span is unmoved.
+        int ShiftIndex(int x) =>
+            x == from ? to
+            : from < to ? (x > from && x <= to ? x - 1 : x)
+            : (x >= to && x < from ? x + 1 : x);
+
+        int? previousFocus = focusedEditIndex;
+        int focusTarget = preserveFocusedRow
+            // External move: keep focus on the edited row (index recomputed across the shift), NOT the moved row.
+            ? (previousFocus is { } pf ? ShiftIndex(pf) : -1)
+            // Local move: focus follows the moved row itself.
+            : to;
+        focusedEditIndex = focusTarget >= 0 ? focusTarget : (int?)null;
         SyncFocusNodesToScratch();
-        // Re-home focus onto the moved row through the persistent node (§3.1). A reorder shifts every slot
-        // between from and to, so the moved row remounts at its new slot under the positional reconciler —
-        // but we drive focus via pendingFocusRow (the deferred RequestFocus) rather than the field's
-        // mount-only autoFocus, per the finalized reconcile decision: it's robust whether the row is reused
-        // or remounted and keeps delete/reorder on one focus path.
-        pendingFocusRow = to;
+        // Re-home focus through the persistent node (§3.1). A reorder shifts every slot between from and to,
+        // so a remounted row loses its granted focus under the positional reconciler — drive focus via
+        // pendingFocusRow (the deferred RequestFocus) rather than the field's mount-only autoFocus, per the
+        // finalized reconcile decision: robust whether the row is reused or remounted, one focus path for
+        // delete/reorder. Skip the re-grant on an external move whose edited row did NOT change slot: that
+        // row is reused and still focused, so re-requesting would needlessly reset its caret to the end.
+        if (preserveFocusedRow)
+        {
+            if (focusedEditIndex is { } nt && nt != previousFocus) pendingFocusRow = nt;
+        }
+        else
+        {
+            pendingFocusRow = to;
+        }
         if (anchorViewport)
         {
             // Sink: reconcile preserves the shared controller's scroll offset in place (no ForceRebuild

@@ -581,3 +581,32 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Confirmed 2026-08-13** via playtest: an over-limit note reloads clipped to the cap with the
         rest of the document intact (no whole-doc drop).
 
+## sync-editor-view-on-external-completion
+
+> Completing a task from the HUD while a Notebook/Lectern **editor** is open now updates the open editor
+> live (and no longer lets a later autosave silently revert the completion). RefreshReadView's editor
+> branch syncs external done-state + the Sink move-to-bottom into scratch (never text); a
+> `preserveFocusedRow` param keeps the caret on the row you're editing. Fully relaunch after restage.
+
+- [x] `51b59c9d` **Keep updates editor live.** Keep policy — editor open, complete one of its tasks from
+      the HUD: the editor's checkbox for that task checks live without reopening, and another row's
+      caret/in-progress text is undisturbed. *(sync-editor-view-on-external-completion 4.2)*
+      - **Confirmed 2026-08-13** via playtest: "Everything works as expected." Editor checkbox updates
+        live under Keep; other rows' caret/text undisturbed.
+- [x] `4a7bf44c` **Sink reorders editor live.** Sink / UnpinSink — complete a task from the HUD while the
+      editor is open: the row marks done AND moves to the bottom live, matching Read/Pinned; if the sunk
+      row is the one being edited, its caret/text survive and focus is not lost.
+      *(sync-editor-view-on-external-completion 4.3)*
+      - **Confirmed 2026-08-13** via playtest: sunk row moves to the bottom live in the editor matching
+        the other views; edited row's focus/caret preserved.
+- [x] `de82d135` **No save-revert.** Lost-update — complete from the HUD (Keep or Sink), then make an
+      unrelated editor edit to trigger an autosave: the completion (and sink order) is NOT reverted by the
+      flush. *(sync-editor-view-on-external-completion 4.4)*
+      - **Confirmed 2026-08-13** via playtest: completion survives a subsequent editor autosave (no
+        silent revert).
+- [x] `03c6be1e` **No double-tick.** No double-application — complete a task from the editor itself and
+      let the server resync echo back: no visible re-tick or jump.
+      *(sync-editor-view-on-external-completion 4.5)*
+      - **Confirmed 2026-08-13** via playtest: editor-originated completion round-trips with no visible
+        re-tick or jump.
+
