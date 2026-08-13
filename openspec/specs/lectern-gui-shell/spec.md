@@ -396,18 +396,46 @@ containing (for a task) a checkbox and an editable multi-line text field. The fi
 onto multiple lines at the row's text width rather than scrolling a single line horizontally, and the
 focused row's height SHALL grow or shrink dynamically as wrapped-line count changes so the row behaves
 like a static wrapped row; rows below SHALL shift and the scroll region SHALL update accordingly. Exactly
-one field SHALL be actively editing at a time; the focused row SHALL remain scrolled into view as it grows,
-preserving caret position and focus across the height change. The row list SHALL scroll continuously within
-the dialog's scroll viewport with no row painting outside it and no page-turn navigation.
+one field SHALL be actively editing at a time. The dialog SHALL keep the editing **caret** scrolled into
+view — following the caret rather than the whole row: when an edit or a caret move would place the caret
+outside the scroll viewport, the list SHALL scroll the minimum needed to bring the caret back into view
+(top-aligning the caret if it is above the viewport, bottom-aligning it if below), and a caret already
+inside the viewport SHALL NOT cause any scroll. This SHALL hold even when the focused row is taller than
+the viewport, with no per-keystroke oscillation of the scroll position. Caret position and focus SHALL be
+preserved across the height change. The row list SHALL scroll continuously within the dialog's scroll
+viewport with no row painting outside it and no page-turn navigation.
 
 #### Scenario: Typing past the line width wraps and grows the row
 - **WHEN** the player types in a focused editor row until the text overflows the row's text width
 - **THEN** the text wraps onto a new line within the field, the focused row's height increases to fit, the
   rows below shift down, and the scroll region updates — and deleting the text back reverses this
 
-#### Scenario: A growing focused row stays in view
-- **WHEN** typing grows the focused row so it would extend past the bottom edge of the scroll region
-- **THEN** the list scrolls so the focused row and the caret remain visible
+#### Scenario: A growing focused row keeps the caret in view
+- **WHEN** typing grows the focused row so the caret would extend past the bottom edge of the scroll region
+- **THEN** the list scrolls just enough that the caret (and the line it sits on) remains visible, and no
+  more
+
+#### Scenario: A row taller than the viewport does not bounce
+- **WHEN** the focused row is taller than the scroll viewport and the player types additional characters
+- **THEN** the scroll position follows the caret and stays stable — it does NOT alternate between the top
+  and bottom of the row on successive keystrokes
+
+#### Scenario: Caret already visible does not scroll
+- **WHEN** the player types or moves the caret while the caret is already within the visible viewport
+- **THEN** the scroll position does not change
+
+#### Scenario: Keyboard navigation follows the caret
+- **WHEN** the player moves the caret with the arrow keys, Tab / Shift+Tab, or Enter (advancing or
+  retreating between rows) such that the caret would land outside the viewport
+- **THEN** the list scrolls the minimum needed to bring the caret back into view
+
+#### Scenario: Document-nav shortcut jumps to the first/last row
+- **WHEN** the player presses the document-top shortcut (Cmd+Up on macOS, or Ctrl+Up / Ctrl+Home on
+  Windows) or the document-bottom shortcut (Cmd+Down, or Ctrl+Down / Ctrl+End) in a focused editor row
+- **THEN** focus moves to the first (or last) row of the document with the caret at that row's start
+  (or end), the row being left is committed, and the list scrolls so the newly focused caret is in view
+  — while plain Up/Down (no modifier) still moves the caret one visual line within the row, Home/End
+  still move to the current line's start/end, and Alt/Option+Up/Down is a plain one-line move
 
 #### Scenario: Only one row edits at a time
 - **WHEN** the player moves focus from one editor row to another
@@ -682,15 +710,23 @@ previously shown read or editor content.
 - **THEN** the dialog returns to the read or editor view that was shown before
 
 ### Requirement: New tasks are created empty
-When the player adds a task in the editor view — via the "Add task" control or by committing a row
-with Enter (insert-below) — the new task SHALL be created with empty text rather than seeded with a
-placeholder literal (e.g. "New task"). The new row SHALL be focused so the player can type into the
-empty field immediately, with no boilerplate text to select and delete first.
+When the player adds a block in the editor view — via the footer add control (the kind
+picker) or by committing a row with Enter (insert-below) — the new block SHALL be created
+with empty text rather than seeded with a placeholder literal (e.g. "New task"). This applies
+to both kinds the picker creates: a Standard Task and a Note are each created empty. The new
+row SHALL be focused so the player can type into the empty field immediately, with no
+boilerplate text to select and delete first. Enter (insert-below) SHALL continue to insert a
+task, matching the surrounding task-editing flow.
 
 #### Scenario: Add task creates an empty focused row
-- **WHEN** the player activates the "Add task" control
+- **WHEN** the player uses the add control to add a Standard Task
 - **THEN** a new task row is added with empty text and receives focus, and its text field contains
   no pre-filled placeholder characters
+
+#### Scenario: Add note creates an empty focused row
+- **WHEN** the player uses the add control to add a Note
+- **THEN** a new text-section row (no checkbox) is added with empty text and receives focus, and its
+  text field contains no pre-filled placeholder characters
 
 #### Scenario: Enter inserts an empty task below
 - **WHEN** the player presses Enter (without Shift) while editing a non-empty task row
@@ -698,20 +734,25 @@ empty field immediately, with no boilerplate text to select and delete first.
   focused, containing no pre-filled placeholder characters
 
 ### Requirement: An empty task row is removed when it loses focus
-While in the editor view, when a task row whose text is empty or whitespace-only loses focus (by
+While in the editor view, when a row whose text is empty or whitespace-only loses focus (by
 clicking away, moving to another row, switching to the read view, or closing the dialog), the
-editor SHALL remove that task from the document rather than persisting it, and SHALL move focus to
-the row immediately above the removed row when one exists. This applies to any empty task row —
-whether just created and abandoned without typing, or an existing task whose text the player
-cleared (e.g. with select-all then Delete) — so that abandoned empty tasks never grow the list and
-a cleared row can be removed from the keyboard alone. This SHALL apply only to task rows; a
-freeform text section MAY be empty and SHALL NOT be auto-removed. Removal SHALL be applied through
-the existing lock-gated server edit path and SHALL NOT leave an empty task visible in the read
-view or persisted across reload.
+editor SHALL remove that block from the document rather than persisting it, and SHALL move focus to
+the row immediately above the removed row when one exists. This applies to any empty editor row —
+a task **or** a note — whether just created and abandoned without typing, or an existing block whose
+text the player cleared (e.g. with select-all then Delete) — so that abandoned empty rows never grow
+the list and a cleared row can be removed from the keyboard alone. Removal SHALL be applied through
+the existing lock-gated server edit path and SHALL NOT leave an empty task or note visible in the read
+view or persisted across reload. (The Core document model still stores text verbatim for both kinds;
+this removal is an editing-layer behavior, not a model invariant.)
 
 #### Scenario: Abandoned empty new task is removed on blur
 - **WHEN** the player adds a task, types nothing, and moves focus away from that empty row
 - **THEN** the empty task is removed from the document and does not appear in the read view or
+  after reload, and the list is not grown by the abandoned add
+
+#### Scenario: Abandoned empty new note is removed on blur
+- **WHEN** the player adds a note, types nothing, and moves focus away from that empty row
+- **THEN** the empty note is removed from the document and does not appear in the read view or
   after reload, and the list is not grown by the abandoned add
 
 #### Scenario: Clearing a task's text then blurring removes the row
@@ -719,18 +760,64 @@ view or persisted across reload.
   away from the now-empty row
 - **THEN** the task is removed from the document and focus moves to the row directly above it
 
+#### Scenario: Clearing a note's text then blurring removes the row
+- **WHEN** the player selects all of an existing note row's text, deletes it, and then moves focus
+  away from the now-empty row
+- **THEN** the note is removed from the document and focus moves to the row directly above it
+
 #### Scenario: Focus moves to the row above
-- **WHEN** an empty task row that is not the first row is removed on losing focus
+- **WHEN** an empty row that is not the first row is removed on losing focus
 - **THEN** focus moves to the task/note row that was directly above the removed row
 
-#### Scenario: Empty text section is not removed
-- **WHEN** a freeform text section is empty and loses focus
-- **THEN** the text section is retained (it is not a task and is not auto-removed)
+#### Scenario: Switching to read or closing does not persist an empty row
+- **WHEN** a task or note row is empty and the player switches to the read view or closes the dialog
+- **THEN** the empty row is removed rather than saved, and the read view / reloaded document shows
+  no empty row
 
-#### Scenario: Switching to read or closing does not persist an empty task
-- **WHEN** a task row is empty and the player switches to the read view or closes the dialog
-- **THEN** the empty task is removed rather than saved, and the read view / reloaded document shows
-  no empty task
+### Requirement: Editor rows enforce a per-kind character limit with player feedback
+
+Each editor row's text SHALL be bounded by a character limit that depends on its kind: a
+Standard Task to the task limit (1,000 characters) and a Note to the larger note limit (10,000
+characters). The limit SHALL be enforced live in the editor field — once a row is at its
+limit, further typed input is ignored and an over-long paste is truncated to fit — so the text
+committed to the document never exceeds the cap. The document codec SHALL apply the same limit
+as a server-authoritative backstop by **clipping** an over-long row's text to its kind's limit
+on read, for BOTH kinds; it SHALL NOT reject or drop the whole document because one row is
+over-long.
+
+When the player's input is blocked or truncated because a row is at its limit, the editor
+SHALL surface a transient in-game error that names the kind and its limit (e.g. "Tasks are
+limited to 1,000 characters." / "Notes are limited to 10,000 characters."), via the same
+in-game error channel used for other editor refusals (tablet-full, editor lock). The character
+count shown in the message SHALL be derived from the enforced limit constant rather than being
+written literally into the message text, so the message and the enforced cap cannot drift
+apart.
+
+#### Scenario: Typing at a task's limit is prevented with feedback
+
+- **WHEN** a task row already contains its maximum characters and the player types another
+  character
+- **THEN** the extra input is ignored (the stored text is unchanged) and a transient in-game
+  error stating the task character limit is shown
+
+#### Scenario: Typing at a note's limit is prevented with feedback
+
+- **WHEN** a note row already contains its maximum characters and the player types another
+  character
+- **THEN** the extra input is ignored and a transient in-game error stating the note character
+  limit is shown
+
+#### Scenario: An over-long paste is truncated to the limit
+
+- **WHEN** the player pastes text that would push a row past its kind's limit
+- **THEN** only the portion that fits up to the limit is inserted, and the limit-feedback
+  message is shown
+
+#### Scenario: The codec clips an over-limit note instead of dropping the document
+
+- **WHEN** a document is read whose note row exceeds the note limit
+- **THEN** that note's text is clipped to the note limit and the rest of the document loads
+  normally, rather than the whole document being rejected
 
 ### Requirement: The lectern lays its content out proportionally from one driving width
 The lectern dialog's layout SHALL be derived from a single driving width `W` (the "Pixel Art Size"): every
