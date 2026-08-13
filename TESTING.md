@@ -505,3 +505,40 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         scale 1, wax lift y:0.12 scale 1.15, shared rotation {x:-90,z:90} for the narrow-edge-forward
         (spine-out) look the user wanted, matching books/notebooks. Restaged and approved in-game.
 
+## sync-pinned-order-per-player
+
+- [x] `61b1eb7f` **Cross-surface parity.** Pin tasks from several documents; open the HUD and Pin Tab
+      side by side and confirm they render pins in the SAME order. Drag-reorder on the Pin Tab — the
+      HUD reflects the new order. Relog — the order persists and both surfaces still agree.
+      *(sync-pinned-order-per-player 4.1)*
+      - **Confirmed 2026-08-12** via playtest submission: HUD and Pin Tab render one shared order across
+        documents, drag-reorder propagates, and the order persists across relog. Both agree.
+- [x] `e6e04b88` **In-window hold.** Under Sink policy, check a HUD pin — it stays in place during the
+      undo window (does NOT jump to the bottom), its checkbox stays operable, then on window expiry it
+      settles to the bottom, exactly as before. *(sync-pinned-order-per-player 4.2)*
+      - **Confirmed 2026-08-12** via playtest submission: the D3 in-window hold survives the overlay
+        removal — pin stays put during the window, then settles to the bottom on expiry.
+- [x] `0cd73394` **Un-complete returns to prior slot.** Under Sink, complete a pinned task so it sinks
+      to the bottom (window elapsed), then un-complete it — it returns to its prior position among the
+      not-completed pins on BOTH the HUD and the Pin Tab, not held at the bottom. This is the intended
+      behavior change (reverses "sunk stays sunk in-session"). *(sync-pinned-order-per-player 4.3)*
+      - **Confirmed 2026-08-12** via playtest submission: un-completing a sunk pin returns it to its
+        prior slot on both surfaces — the intended reversal of the session-durable sink behavior.
+- [x] `c7885d09` **Sink agreement not regressed.** Under Sink, complete a PINNED task, then pin/unpin
+      others — Read view, HUD, and Pin Tab all agree where the completed task sits and re-agree after
+      pin/unpin. (Headline invariant `40be9d31`; removing the overlay should strengthen it.)
+      *(sync-pinned-order-per-player 4.4)*
+      - **Confirmed 2026-08-12** via playtest submission: the `40be9d31` cross-surface Sink agreement
+        holds — Read/HUD/Pin Tab agree and re-agree after pin/unpin. Overlay removal did not regress it.
+- [x] `82cdbd08` **Rapid multi-complete + edges.** Complete several pinned tasks in quick succession
+      under Sink — resting order is the stable partition (done at bottom in pin-list order), no jumps or
+      overlaps; unpin/delete still collapse-and-leave; a row sliding under a still cursor keeps its
+      controls; re-pin mid-collapse revives the row. *(sync-pinned-order-per-player 4.5)*
+      - **Confirmed 2026-08-12** via playtest submission: rapid Sink completions rest in the stable
+        partition with no jumps/overlaps; collapse, cursor-hold, and re-pin edges all behave.
+- [x] `ed2c6364` **Unrelated ordering paths.** New pins still append to the bottom; the Sink DOCUMENT
+      block-order reorder (Read/Editor drop-to-bottom) is unchanged; the Pin Tab drag-reorder still
+      persists and re-syncs. *(sync-pinned-order-per-player 4.6)*
+      - **Confirmed 2026-08-12** via playtest submission: new-pin append, document block-order reorder,
+        and Pin Tab drag-reorder persistence/re-sync all unchanged.
+

@@ -127,8 +127,9 @@ public abstract partial class ScribeDialogBase
     /// (which orders the Tab-traversal nodes to match), so the two can't drift.
     ///
     /// <para>Sink ordering is applied only when the policy actually sinks done pins; under Keep, done pins
-    /// hold their position (matching the HUD's <c>SunkForOrder</c>), and Unpin/Delete remove the pin
-    /// entirely so ordering is moot and raw order is fine.</para></summary>
+    /// hold their position, and Unpin/Delete remove the pin entirely so ordering is moot and raw order is
+    /// fine. The HUD's <c>BuildOrderedRows</c> applies this identical rule with no overlay, so the two
+    /// surfaces render one and the same order (sync-pinned-order-per-player D1).</para></summary>
     private IReadOnlyList<ScribePinnedRef> OrderedPinsForDisplay()
     {
         var policy = modSystem.MySettings.CompletionPolicy;

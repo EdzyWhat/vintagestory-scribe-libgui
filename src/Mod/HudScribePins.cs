@@ -100,13 +100,6 @@ public sealed class HudScribePins : GuiBase
     /// at click time and the clock value at which the deferred send fires.</summary>
     private readonly record struct PendingCompletion(ScribeCompletionPolicy Policy, double ExpiryMs);
 
-    /// <summary>Pins that completed-and-settled under the Sink policy this session, by identity
-    /// (scribe-settings-followups 2.1). Once a Sink window expires, the pin lands here and STAYS ordered at
-    /// the bottom for the rest of the session — even if the player later unchecks it — so a completed task
-    /// keeps its resting place instead of jumping back to its old slot on an uncheck. Client-local,
-    /// session-only (not persisted, not synced — design D3): a relog re-derives order from done-state.</summary>
-    private readonly HashSet<(Guid, Guid)> sunkOrder = new();
-
     /// <summary>Pins whose destructive completion (Unpin/Delete/UnpinSink) has been SENT and that are now
     /// waiting for the server's removal push (scribe-settings-followups 1.1 flicker fix). Between the window
     /// expiring (send) and the server re-pushing the pin set, the pin is still in
@@ -565,9 +558,9 @@ public sealed class HudScribePins : GuiBase
             if (elapsedMs >= pending.ExpiryMs)
             {
                 pendingCompletions.Remove(key);
-                // A Sink completion settles to the bottom now and holds that place for the session
-                // (scribe-settings-followups 2.1): record it so a later uncheck can't pull it back up.
-                if (pending.Policy == ScribeCompletionPolicy.Sink) sunkOrder.Add(key);
+                // A Sink completion needs no client-side bookkeeping on expiry: the deferred send fires below,
+                // the server flips LastKnownDone and re-pushes, and the shared ForDisplay partition sinks the
+                // now-done pin — the HUD and Pin Tab agree by construction (sync-pinned-order-per-player D1/D3).
                 // A destructive completion (Unpin/Delete/UnpinSink) removes the pin server-side. Add it to
                 // awaitingRemoval so it is filtered OUT of the item set handed to ScribeAnimatedList: the
                 // pin's identity leaving the container's set is exactly what triggers the container's
@@ -598,34 +591,19 @@ public sealed class HudScribePins : GuiBase
     private PendingCompletion? PendingFor(ScribePinnedRef pin)
         => pendingCompletions.TryGetValue((pin.OwnerDocId, pin.TaskId), out var p) ? p : null;
 
-    /// <summary>Whether a pin sinks to the bottom for ORDERING (HUD's undo-aware overlay on the Core
-    /// <see cref="ScribePinOrdering"/> sink rule). True if the pin already settled under Sink this session
-    /// (in <see cref="sunkOrder"/>) — which holds the bottom for the session even after an uncheck
-    /// (scribe-settings-followups 2.2) — OR it is currently done under the Sink policy past its window.
-    /// Under <see cref="ScribeCompletionPolicy.Keep"/> a done pin never sinks (it holds its place);
-    /// Unpin/Delete pins are removed after the window so ordering is moot for them. During the window the
-    /// pin is held in place (not sunk) so the sink animates as it settles on expiry.</summary>
-    private bool SunkForOrder(ScribePinnedRef pin)
-    {
-        // A task that already settled under Sink this session keeps its bottom position for the session,
-        // regardless of its current done-state (an uncheck must NOT pull it back up — 2.2).
-        if (sunkOrder.Contains((pin.OwnerDocId, pin.TaskId))) return true;
-        if (!DisplayedDone(pin)) return false;
-        // Within its pin window a done pin is always held in place (not sunk), so the sink can animate as
-        // it settles when the window expires — regardless of the pending policy.
-        if (PendingFor(pin) is not null) return false;
-        // Sent + confirmed done: it only remains visible under a non-removing policy (Sink/Keep — Unpin/
-        // Delete/UnpinSink removed it). Sink de-prioritizes it; Keep holds its place. We don't persist
-        // which policy completed it, so the player's current policy is the proxy.
-        return modSystem.MySettings.CompletionPolicy is ScribeCompletionPolicy.Sink
-                                                      or ScribeCompletionPolicy.UnpinSink;
-    }
-
-    /// <summary>Whether a row should render MUTED (the completed, resting-at-bottom look). Tied to actually
-    /// being done — a sunk row that the player later unchecks holds its bottom position (via
-    /// <see cref="SunkForOrder"/>) but reads as an active row again, not a muted-done one
-    /// (scribe-settings-followups 2.2).</summary>
-    private bool SunkVisual(ScribePinnedRef pin) => DisplayedDone(pin) && SunkForOrder(pin);
+    /// <summary>Whether a row should render MUTED (the completed, resting-at-bottom look): displayed-done,
+    /// past its undo window (no pending send), under a sinking policy — exactly the pins the shared
+    /// <see cref="ScribePinOrdering.ForDisplay"/> partition has sunk to the bottom. Un-completing a sunk pin
+    /// flips <see cref="DisplayedDone"/> false, so it reads as an active row again and returns to its prior
+    /// position via that same partition (sync-pinned-order-per-player D2) — there is no session overlay
+    /// holding it at the bottom. Within its window a done pin is held in place (not muted) so the sink can
+    /// animate as it settles on expiry; under <see cref="ScribeCompletionPolicy.Keep"/> a done pin holds its
+    /// place and is not muted; Unpin/Delete pins are removed after the window.</summary>
+    private bool SunkVisual(ScribePinnedRef pin)
+        => DisplayedDone(pin)
+           && PendingFor(pin) is null
+           && modSystem.MySettings.CompletionPolicy is ScribeCompletionPolicy.Sink
+                                                     or ScribeCompletionPolicy.UnpinSink;
 
     /// <summary>Whether a pin is inside a pending window whose text should fade out as a countdown
     /// preview: Unpin/Delete (destructive — row leaves the item set after the window and the container
@@ -795,9 +773,10 @@ public sealed class HudScribePins : GuiBase
 
     /// <summary>The live, ordered, capped rows to display — the authoritative pin set minus any rows whose
     /// destructive completion was sent and are now collapsing out (in <see cref="awaitingRemoval"/>), ordered
-    /// to match the Pin Tab (D7) plus the HUD's two undo-window-specific overlays, then capped. The collapsing
-    /// rows themselves are the <see cref="ScribeAnimatedList"/>'s job (it splices a frozen ghost at the slot a
-    /// departed id left), so this returns ONLY the live rows the container diffs against.</summary>
+    /// by the SAME shared rule the Pin Tab uses (<see cref="ScribePinOrdering.ForDisplay"/> under a sinking
+    /// policy, else raw pin order) with no HUD-only overlay, then capped (sync-pinned-order-per-player D1). The
+    /// collapsing rows themselves are the <see cref="ScribeAnimatedList"/>'s job (it splices a frozen ghost at
+    /// the slot a departed id left), so this returns ONLY the live rows the container diffs against.</summary>
     private List<HudPinRow> BuildOrderedRows()
     {
         // Filter out rows whose destructive completion was sent and are now collapsing out. Their identity
@@ -807,29 +786,15 @@ public sealed class HudScribePins : GuiBase
             ? modSystem.MyPins
             : modSystem.MyPins.Where(p => !awaitingRemoval.Contains((p.OwnerDocId, p.TaskId))).ToList();
 
-        // Drop any settled-sink identities the server has since removed, so the session set can't grow
-        // unbounded or resurrect a stale ordering (scribe-settings-followups 2.3).
-        if (sunkOrder.Count > 0)
-        {
-            var live = modSystem.MyPins.Select(p => (p.OwnerDocId, p.TaskId)).ToHashSet();
-            sunkOrder.RemoveWhere(k => !live.Contains(k));
-        }
-
-        // Base order matches the Pin Tab (D7): mirror OrderedPinsForDisplay — under a sinking policy done
-        // pins sink below not-done via the shared Core rule (ScribePinOrdering.ForDisplay); otherwise raw pin
-        // order. Reusing the Core rule keeps the two surfaces from drifting.
+        // Order matches the Pin Tab exactly (sync-pinned-order-per-player D1): mirror OrderedPinsForDisplay —
+        // under a sinking policy done pins sink below not-done via the shared Core rule
+        // (ScribePinOrdering.ForDisplay); otherwise raw pin order. There is NO HUD-only ordering overlay: the
+        // two surfaces render one and the same per-player order, agreeing by construction. The in-window
+        // "hold in place" falls out for free (D3) — the HUD defers its send, so the server's LastKnownDone
+        // stays false during the window and ForDisplay keeps the just-checked pin in the not-done group.
         bool sinkOrder = modSystem.MySettings.CompletionPolicy
             is ScribeCompletionPolicy.Sink or ScribeCompletionPolicy.UnpinSink;
-        IReadOnlyList<ScribePinnedRef> baseOrder = sinkOrder ? ScribePinOrdering.ForDisplay(pins) : pins;
-
-        // Re-apply the two HUD-only overlays on top of the shared base order — both are consequences of the
-        // undo window the Pin Tab has no equivalent for (D7). A single partition by SunkForOrder does both:
-        // a settled-sink pin holds the bottom for the session even once unchecked (scribe-settings-followups
-        // 2.2), and an in-window completed pin is ordered as if not-done (SunkForOrder returns false during
-        // its window) so it stays put until the window settles.
-        var ordered = baseOrder.Where(p => !SunkForOrder(p))
-            .Concat(baseOrder.Where(SunkForOrder))
-            .ToList();
+        IReadOnlyList<ScribePinnedRef> ordered = sinkOrder ? ScribePinOrdering.ForDisplay(pins) : pins;
 
         int max = Math.Min(modSystem.MySettings.HudMaxRows, MaxRenderedRows);
         return ordered.Take(max)
@@ -934,7 +899,7 @@ public sealed class HudScribePins : GuiBase
     /// <c>awaitingRemoval</c> and the container renders its collapsing ghost.)</item>
     /// </list>
     /// Also dumps the per-identity client state (<see cref="optimisticDone"/>, <see cref="pendingCompletions"/>,
-    /// <see cref="sunkOrder"/>, <see cref="awaitingRemoval"/>) so a row that a Read-view completion drove into
+    /// <see cref="awaitingRemoval"/>) so a row that a Read-view completion drove into
     /// a state the HUD's own toggle path never set up is visible directly. A row collapsing out is no longer
     /// in this set (it left via <c>awaitingRemoval</c> and the container renders its ghost), so its identity
     /// shows up under <c>awaitingRemoval</c> rather than as a traced row. Watch with
@@ -944,9 +909,9 @@ public sealed class HudScribePins : GuiBase
     private void TraceHudRows(List<HudPinRow> shown)
     {
         capi.Logger.Notification(
-            "[scribe-hud] --- rebuild: {0} rows, policy={1}, pending={2}, sunkOrder={3}, awaitingRemoval={4} ---",
+            "[scribe-hud] --- rebuild: {0} rows, policy={1}, pending={2}, awaitingRemoval={3} ---",
             shown.Count, modSystem.MySettings.CompletionPolicy, pendingCompletions.Count,
-            sunkOrder.Count, awaitingRemoval.Count);
+            awaitingRemoval.Count);
 
         for (int i = 0; i < shown.Count; i++)
         {
@@ -955,14 +920,13 @@ public sealed class HudScribePins : GuiBase
             string textShown = r.Text ?? "<null>";
             bool blank = string.IsNullOrEmpty(r.Text);
             capi.Logger.Notification(
-                "[scribe-hud]  [{0}] {1}task={2} done={3} sunk={4} fadeOut={5} | opt={6} pend={7} inSunk={8} awaitRm={9} | text=\"{10}\"",
+                "[scribe-hud]  [{0}] {1}task={2} done={3} sunk={4} fadeOut={5} | opt={6} pend={7} awaitRm={8} | text=\"{9}\"",
                 i,
                 blank ? "BLANK " : "",
                 r.TaskId.ToString("N").Substring(0, 8),
                 r.Done, r.Sunk, r.FadingOut,
                 optimisticDone.TryGetValue(key, out var od) ? od.ToString() : "-",
                 pendingCompletions.TryGetValue(key, out var pc) ? pc.Policy.ToString() : "-",
-                sunkOrder.Contains(key),
                 awaitingRemoval.Contains(key),
                 textShown);
         }

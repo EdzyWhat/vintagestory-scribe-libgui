@@ -378,7 +378,29 @@ a submission is a claim to be reviewed, not an authoritative result.
 Playtest reports submitted from the app land as JSON in `.playtest-submissions/` (next to
 `TESTING.md`). The app shows the user a **"N submissions awaiting review"** banner that
 counts these loose files — it's the user's backstop against a report you forgot to
-process. When you review submissions:
+process.
+
+**Sweep the WHOLE loose queue, not just the report you came for.** The recurring failure is
+processing only the submission tied to the change you just tested and leaving older loose files
+behind, so the banner never reaches zero and stale reports pile up (this has happened repeatedly).
+So the FIRST thing to do whenever you touch submissions — including right after recording verdicts
+for a change you just implemented — is enumerate every loose `.json` at the top level of
+`.playtest-submissions/` (NOT `reviewed/`) and account for each one before you finish the turn:
+
+```bash
+ls .playtest-submissions/*.json 2>/dev/null   # every file here keeps the banner lit
+```
+
+- The report(s) for the change you just tested → record fresh verdicts from the evidence (below),
+  then move to `reviewed/`.
+- Older reports whose items **already carry verdicts** in `TESTING.md` (or the user says are already
+  assessed) → they need no new verdict; just move them to `reviewed/` so the banner clears. Don't
+  re-litigate a result that's already on file.
+- Any older report with an **unresolved** touched item → resolve it per the rules below (or say why
+  you're leaving it), same as a fresh one.
+
+The turn isn't done until `ls .playtest-submissions/*.json` is empty (every loose report moved) or
+you've explicitly told the user which ones you're leaving and why. When you review submissions:
 
 1. Read each report (and any screenshots it references under
    `.playtest-submissions/screenshots/`) and, **for every item the report touched**,
