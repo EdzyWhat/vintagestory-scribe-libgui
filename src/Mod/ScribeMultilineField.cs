@@ -258,6 +258,24 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
         return (last, visualLines.Count > 0 ? visualLines[last].Text.Length : 0);
     }
 
+    /// <summary>Caret vertical extent in LOCAL space (top + line height), matching the bar
+    /// <see cref="PaintInternal"/> draws (<c>PadY + line * lineHeight</c>). Returns false before layout has
+    /// produced a line height. scroll-follow-caret-in-editor.</summary>
+    public bool TryGetCaretRect(out float localTop, out float height)
+    {
+        if (lineHeight <= 0f)
+        {
+            localTop = 0f;
+            height = 0f;
+            return false;
+        }
+
+        (int line, _) = CaretToLineCol(caret);
+        localTop = PadY + line * lineHeight;
+        height = lineHeight;
+        return true;
+    }
+
     /// <summary>Inverse of the caret paint math: map a click point in the render object's LOCAL space
     /// (post-<c>GlobalToLocal</c>) onto the nearest flat caret offset in the source text. Picks the
     /// visual line by Y (clamped to the first/last line), then within that line walks characters and
@@ -430,6 +448,11 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         Action? onCommitAndRetreat = null,
         Action? onInsertTaskBelow = null,
         Action? onBlur = null,
+        Action? onMaxLengthReached = null,
+        Action? onCaretMoved = null,
+        Action? onPointerFocus = null,
+        Action? onJumpToFirstRow = null,
+        Action? onJumpToLastRow = null,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
@@ -454,6 +477,11 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         OnCommitAndRetreat = onCommitAndRetreat;
         OnInsertTaskBelow = onInsertTaskBelow;
         OnBlur = onBlur;
+        OnMaxLengthReached = onMaxLengthReached;
+        OnCaretMoved = onCaretMoved;
+        OnPointerFocus = onPointerFocus;
+        OnJumpToFirstRow = onJumpToFirstRow;
+        OnJumpToLastRow = onJumpToLastRow;
     }
 
     public string InitialText { get; }
@@ -476,10 +504,10 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
     /// focused (e.g. after Add Task or entering editor mode) sets this to focus itself on mount.</summary>
     public bool AutoFocus { get; }
     /// <summary>Optional maximum character count. When set, typing and paste are clamped so the field's
-    /// text never exceeds it (a maxlength affordance) — used for Task rows, held to
-    /// <c>ScribeDocumentCodec.MaxTaskTextLength</c>; null (Text sections) leaves the field uncapped and
-    /// relies on the codec's larger hard bound. The codec also clips on read as the authoritative
-    /// backstop, so this is purely the in-editor UX half.</summary>
+    /// text never exceeds it (a maxlength affordance) — Task rows use <c>MaxTaskTextLength</c> (1,000) and
+    /// Note rows use the larger <c>MaxTextLength</c> (10,000). null leaves the field uncapped. The codec also
+    /// clips on read as the authoritative backstop, so this is the in-editor UX half; hitting it also fires
+    /// <see cref="OnMaxLengthReached"/> so the editor can explain the cap.</summary>
     public int? MaxLength { get; }
     /// <summary>When true (tablet only), the field paints its buffer as live cuneiform strokes with a
     /// synthetic caret instead of the normal TTF text — the same State drives a cuneiform render object.
@@ -516,6 +544,32 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
     public Action? OnInsertTaskBelow { get; }
     /// <summary>Focus lost without an Enter/Shift+Tab (e.g. click-away): commit the row's edit.</summary>
     public Action? OnBlur { get; }
+    /// <summary>Fired when an insert is clamped by <see cref="MaxLength"/> — a paste truncated to fit, or a
+    /// keystroke that was a no-op because the field is already at the cap. The editor uses this to surface a
+    /// transient "row is limited to N characters" notice; null (no cap, or callers that don't care) is inert.</summary>
+    public Action? OnMaxLengthReached { get; }
+    /// <summary>Fired when the caret MOVES by keyboard navigation (arrows / Home / End / word-jump) without
+    /// changing the text — the one caret change that does NOT go through <see cref="OnChanged"/>. The editor
+    /// uses it to follow an off-screen caret with the scroll view (scroll-follow-caret-in-editor issue #1:
+    /// arrow keys weren't scrolling because <c>MoveCaret</c> never notified the dialog). NOT fired on a mouse
+    /// click (that lands on a visible pixel and is handled by <see cref="OnPointerFocus"/> instead).</summary>
+    public Action? OnCaretMoved { get; }
+    /// <summary>Fired when this field is focused by a POINTER PRESS (a click into the row), after the caret is
+    /// placed at the click point. The editor uses it to SUPPRESS the scroll-into-view on click: a click always
+    /// lands on a visible pixel, so the caret is already visible and auto-scrolling to the row top is unwanted
+    /// (scroll-follow-caret-in-editor issue #3). Distinct from programmatic focus (Tab/Enter via
+    /// <c>FocusEditorRow</c>), which SHOULD scroll — hence the field, not the shared focus listener, is the seam.</summary>
+    public Action? OnPointerFocus { get; }
+    /// <summary>Jump focus to the FIRST row of the note, caret at its start — document-top navigation.
+    /// Fired instead of the one-line <c>CaretVertical(-1)</c> move when Ctrl is held with Up (or with
+    /// Home): on Windows that's the native Ctrl+Up / Ctrl+Home, and on macOS the dialog remaps Cmd+Up
+    /// to Ctrl+Up first. The dialog commits this row, focuses row 0, and places its caret at the
+    /// document start (scroll-follow-caret-in-editor row-nav). null on surfaces with a single field
+    /// (e.g. the title input).</summary>
+    public Action? OnJumpToFirstRow { get; }
+    /// <summary>Mirror of <see cref="OnJumpToFirstRow"/> — jump focus to the LAST row of the note, caret
+    /// at its end (document-bottom navigation: Ctrl+Down / Ctrl+End, or Cmd+Down on macOS).</summary>
+    public Action? OnJumpToLastRow { get; }
 
     public override State CreateState() => new ScribeMultilineFieldState();
 }
@@ -798,22 +852,59 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 break;
 
             case (int)GlKeys.Up:
-                if (CaretVertical(-1) is { } up) MoveCaret(up, e.Shift);
+                // Ctrl+Up jumps to the FIRST row of the note (document-top navigation). On Windows
+                // that's the native Ctrl+Up; on macOS ScribeDialogBase.OnKeyDown remaps Cmd+Up (the
+                // Cocoa document-top gesture, which LibGUI would otherwise drop) to Ctrl+Up before we
+                // see it. Gated on Ctrl ALONE — Alt/Option+Up stays a plain one-line caret move, unlike
+                // the Left/Right word-jump which also honors Alt.
+                if (e.Ctrl)
+                {
+                    Widget.OnJumpToFirstRow?.Invoke();
+                }
+                else if (CaretVertical(-1) is { } up)
+                {
+                    MoveCaret(up, e.Shift);
+                }
                 Handled(e);
                 break;
 
             case (int)GlKeys.Down:
-                if (CaretVertical(+1) is { } down) MoveCaret(down, e.Shift);
+                // Ctrl+Down jumps to the LAST row of the note (see Up); Cmd+Down is remapped to it on macOS.
+                if (e.Ctrl)
+                {
+                    Widget.OnJumpToLastRow?.Invoke();
+                }
+                else if (CaretVertical(+1) is { } down)
+                {
+                    MoveCaret(down, e.Shift);
+                }
                 Handled(e);
                 break;
 
             case (int)GlKeys.Home:
-                MoveCaret(LineStart(caret), e.Shift);
+                // Ctrl+Home = document top (the universal Windows document-nav convention); plain Home
+                // = line start. Cmd+Left is remapped to a plain Home by the dialog, so it stays line-start.
+                if (e.Ctrl)
+                {
+                    Widget.OnJumpToFirstRow?.Invoke();
+                }
+                else
+                {
+                    MoveCaret(LineStart(caret), e.Shift);
+                }
                 Handled(e);
                 break;
 
             case (int)GlKeys.End:
-                MoveCaret(LineEnd(caret), e.Shift);
+                // Ctrl+End = document bottom; plain End = line end (see Home).
+                if (e.Ctrl)
+                {
+                    Widget.OnJumpToLastRow?.Invoke();
+                }
+                else
+                {
+                    MoveCaret(LineEnd(caret), e.Shift);
+                }
                 Handled(e);
                 break;
 
@@ -835,6 +926,25 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
         }
         RestartCaretBlink(); // a moving caret shows solid, then resumes blinking (pauses if now selecting)
         MarkNeedsBuild();
+        // Keyboard caret moves don't touch the text, so they never fire OnChanged — the editor's only
+        // scroll-follow trigger before this. Notify explicitly so an arrow/Home/End/word-jump that carries
+        // the caret off-screen scrolls it back into view (scroll-follow-caret-in-editor issue #1). Click-to-
+        // place goes through OnFieldPress, not MoveCaret, so this stays keyboard-only.
+        Widget.OnCaretMoved?.Invoke();
+    }
+
+    /// <summary>Programmatically snap the caret to the very start (<paramref name="atStart"/>) or end of the
+    /// buffer, collapsing any selection. The dialog calls this on the row it focuses for a Cmd/Ctrl+Up/Down
+    /// first-/last-row jump, so the caret lands at the document edge rather than wherever this field last left
+    /// it. Mirrors <see cref="MoveCaret"/>'s blink reset, repaint, and scroll-follow notify (so the newly
+    /// focused row's caret is scrolled into view).</summary>
+    public void PlaceCaretAtEdge(bool atStart)
+    {
+        caret = atStart ? 0 : text.Length;
+        anchor = caret;
+        RestartCaretBlink();
+        MarkNeedsBuild();
+        Widget.OnCaretMoved?.Invoke();
     }
 
     private void Insert(string s)
@@ -850,7 +960,14 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
         if (Widget.MaxLength is { } max)
         {
             int room = Math.Max(0, max - text.Length);
-            if (s.Length > room) s = s.Substring(0, room);
+            // Notify when the cap actually bites — either the run was truncated to fit, or there's no room at
+            // all (a no-op keystroke while already full). The editor turns this into a transient "limited to N
+            // characters" notice.
+            if (s.Length > room)
+            {
+                s = s.Substring(0, room);
+                Widget.OnMaxLengthReached?.Invoke();
+            }
             if (s.Length == 0) return;
         }
         text = text.Insert(caret, s);
@@ -1090,6 +1207,11 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
 
         RestartCaretBlink(); // a fresh click resets the caret solid (or stops the blink if it selected a range)
         MarkNeedsBuild();
+        // A click focuses this row AND places the caret at a visible pixel — so the editor must NOT auto-scroll
+        // it into view (that yanked the tall row to its top even though the caret was already visible where the
+        // player clicked; scroll-follow-caret-in-editor issue #3). Programmatic focus (Tab/Enter) still scrolls
+        // because it goes through FocusEditorRow, not this press path.
+        Widget.OnPointerFocus?.Invoke();
     }
 
     /// <summary>Word boundaries (start, end) around <paramref name="pos"/>, matching LibGUI's

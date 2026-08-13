@@ -54,9 +54,11 @@ public static class ScribeDocumentCodec
     /// </summary>
     public const int MaxBlocks = 1000;
 
-    /// <summary>Hard upper bound on a single block's text length, in characters. See <see cref="MaxBlocks"/>.
-    /// Applies to freeform Text/note sections; Task blocks are held to the tighter
-    /// <see cref="MaxTaskTextLength"/> and CLIPPED (not rejected) on read.</summary>
+    /// <summary>Upper bound on a freeform Text/note block's text length, in characters. See
+    /// <see cref="MaxBlocks"/>. An over-long note is CLIPPED to this length on read (the same backstop Task
+    /// blocks get via <see cref="MaxTaskTextLength"/>); the editor field also enforces it live as a
+    /// maxlength, so the clip is rarely reached. Larger than the Task cap because notes hold freeform prose,
+    /// not one-liners.</summary>
     public const int MaxTextLength = 10_000;
 
     /// <summary>Soft length limit for a checkbox Task's text, in characters. Unlike <see cref="MaxTextLength"/>
@@ -141,16 +143,19 @@ public static class ScribeDocumentCodec
                 bool hasAssignedToUid = r.ReadBoolean();
                 string? assignedToUid = hasAssignedToUid ? r.ReadString() : null;
                 string text = r.ReadString();
-                // Freeform Text/note sections: reject the whole payload past the hard cap (an
-                // allocation/abuse guard). Task blocks: CLIP to the soft task cap instead of rejecting,
-                // so an over-long task can never drop the entire document silently.
+                // Length backstop: CLIP an over-long row to its kind's cap rather than rejecting, so a
+                // single over-long row can never silently drop the entire document. Tasks clip to the soft
+                // task cap; freeform Text/note sections clip to the larger note cap. (The editor field also
+                // enforces these live as a maxlength, so this server-side clip is rarely reached.) This
+                // replaced an earlier reject-whole-document guard on the Text path, which became a
+                // data-loss trap once notes were user-creatable via the kind picker.
                 if (kind == ScribeBlockKind.Task)
                 {
                     if (text.Length > MaxTaskTextLength) text = text.Substring(0, MaxTaskTextLength);
                 }
                 else if (text.Length > MaxTextLength)
                 {
-                    return false;
+                    text = text.Substring(0, MaxTextLength);
                 }
 
                 blocks.Add(new ScribeBlock(kind, text, done, depth, assignedToUid, taskId));

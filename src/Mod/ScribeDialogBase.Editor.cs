@@ -38,6 +38,42 @@ public abstract partial class ScribeDialogBase
         scratch.SetBlockText(index, text);
         isDirty = true;
         pendingEnsureVisible = true;
+        TraceScroll($"text-changed {index}");
+    }
+
+    /// <summary>A focused row's caret moved by KEYBOARD navigation (arrows / Home / End / word-jump) with no
+    /// text change (scroll-follow-caret-in-editor issue #1). Text edits already arm the scroll-follow via
+    /// <see cref="NotifyTextChanged"/>, but a bare caret move does not go through <c>OnChanged</c> — so without
+    /// this an arrow key that carries the caret off-screen never scrolled it back. Arms the same
+    /// <see cref="pendingEnsureVisible"/> flag the render loop services with <see cref="EnsureCaretVisible"/>.
+    /// (No scratch write — the text is unchanged.)</summary>
+    private void NotifyCaretMoved(int index)
+    {
+        if (scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
+        pendingEnsureVisible = true;
+        TraceScroll($"caret-moved {index}");
+    }
+
+    /// <summary>A row was focused by a MOUSE CLICK (scroll-follow-caret-in-editor issue #3). A click always
+    /// lands on a visible pixel, so the caret is already in view where the player clicked — the view must not
+    /// move at all. Two things could move it: (a) our own scroll-follow, which we cancel by clearing
+    /// <see cref="pendingEnsureVisible"/>; and (b) the shipped gui's <c>FocusManager.RequestFocus</c>, which
+    /// unconditionally calls <c>Scrollable.EnsureVisible(focusedElement)</c> and bounces a taller-than-viewport
+    /// row to its top/bottom (confirmed via stack trace: JumpTo ← Scrollable.EnsureVisible ← FocusManager.RequestFocus).
+    /// That focus-scroll already ran synchronously inside the field's <c>focusNode.RequestFocus()</c> before this
+    /// callback fires, so we undo it by jumping straight back to the pre-click offset (<see cref="lastStableScrollOffset"/>).
+    /// Both happen in the same input-phase call, before the next render, so the bounce is never painted.
+    /// Programmatic focus (Tab / Enter via <see cref="FocusEditorRow"/>) SHOULD scroll and does not route here —
+    /// the field fires this only from its pointer-press path, so the two focus sources stay distinguishable.</summary>
+    private void NotifyPointerFocus(int index)
+    {
+        if (scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
+        pendingEnsureVisible = false;
+        // Undo the shipped FocusManager's focus-scroll: restore the view to where it was pre-click. No-op when
+        // focus didn't actually change (clicking the already-focused row → RequestFocus early-returns, offset
+        // unchanged → JumpTo to the same value is filtered by the controller's epsilon guard).
+        sharedScrollController.JumpTo(lastStableScrollOffset);
+        TraceScroll($"pointer-focus {index}");
     }
 
     /// <summary>Enter: commit the focused row and advance focus to the next.</summary>
@@ -135,10 +171,12 @@ public abstract partial class ScribeDialogBase
         }
     }
 
-    /// <summary>A row's editable field lost focus (add-empty-task-lifecycle D3). If the block at
-    /// <paramref name="index"/> is a TASK whose text is empty/whitespace-only, schedule its removal —
-    /// this is the self-destruct that turns "clear the text and click away" (or Tab off an untyped new
-    /// row) into a keyboard-only delete. A text section may be empty and is never auto-removed.
+    /// <summary>A row's editable field lost focus (add-empty-task-lifecycle D3; generalized to notes by
+    /// add-note-kind-picker D3). If the block at <paramref name="index"/> — a task OR note — is
+    /// empty/whitespace-only, schedule its removal: the self-destruct that turns "clear the text and click
+    /// away" (or Tab off an untyped new row) into a keyboard-only delete. (This reverses the earlier
+    /// "empty text section is never removed" behavior; empty notes were only creatable via dev tools, so no
+    /// shipped player flow relied on a lingering blank note.)
     ///
     /// <para>The actual delete is DEFERRED to <see cref="OnRenderGUI"/> (<see cref="pendingEmptyRowRemoval"/>)
     /// rather than run here: blur fires from inside the field's focus-notification, and on a row→row move
@@ -150,9 +188,26 @@ public abstract partial class ScribeDialogBase
     private void OnRowBlurred(int index)
     {
         if (!isEditorMode || scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
-        var block = scratch.Blocks[index];
-        if (!block.IsTask || !string.IsNullOrWhiteSpace(block.Text)) return;
+        // add-note-kind-picker D3: an abandoned empty row of EITHER kind self-destructs (previously task-only).
+        if (!string.IsNullOrWhiteSpace(scratch.Blocks[index].Text)) return;
         pendingEmptyRowRemoval = index;
+    }
+
+    /// <summary>A row's editor field hit its per-kind character cap (add-note-kind-picker §8) — the field
+    /// already clamped the input; here we just explain it. Surfaces the same transient in-game error path the
+    /// tablet-full / lock notices use, with a per-kind message whose character count is pulled from the limit
+    /// constant (so the message and the enforced cap can't drift). Tasks cap at
+    /// <see cref="ScribeDocumentCodec.MaxTaskTextLength"/>, notes at the larger
+    /// <see cref="ScribeDocumentCodec.MaxTextLength"/>.</summary>
+    private void OnRowMaxLengthReached(int index)
+    {
+        if (scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
+        bool isTask = scratch.Blocks[index].Kind == ScribeBlockKind.Task;
+        int limit = isTask ? ScribeDocumentCodec.MaxTaskTextLength : ScribeDocumentCodec.MaxTextLength;
+        capi.TriggerIngameError(
+            this,
+            isTask ? "scribe-task-limit" : "scribe-note-limit",
+            Lang.Get(isTask ? "scribe:task-limit" : "scribe:note-limit", limit.ToString("N0")));
     }
 
     /// <summary>Editor checkbox toggle — completes a task under the player's completion policy so the
@@ -385,19 +440,24 @@ public abstract partial class ScribeDialogBase
         RebuildBody();
     }
 
-    /// <summary>"Add task" button: append an EMPTY task, grow the focus-node list, and rebuild with the
-    /// new row auto-focused so the player types straight into it (no boilerplate to clear —
-    /// add-empty-task-lifecycle). The field renders a dimmed "New task…" ghost hint while empty; if the
-    /// row is abandoned without typing, its blur removes it (see <see cref="OnRowBlurred"/>).</summary>
-    private void OnClickAddTask()
+    /// <summary>Footer add-picker action (add-note-kind-picker D2): append an EMPTY block of the chosen
+    /// <paramref name="kind"/> (Task or Note), grow the focus-node list, and rebuild with the new row
+    /// auto-focused so the player types straight into it (no boilerplate to clear —
+    /// add-empty-task-lifecycle). A task field renders a dimmed "New task…" ghost hint while empty, a note
+    /// "New note…"; either row, if abandoned without typing, is removed on blur (see <see cref="OnRowBlurred"/>).
+    /// The picker's primary button passes its current kind (defaults to Task, so one click still adds a task);
+    /// picking from the inline kind list passes that kind. Kinds and their add delegates come from
+    /// <see cref="ScribeAddKinds"/> — adding a future kind touches the registry, not this method.</summary>
+    private void OnClickAdd(ScribeAddKind kind)
     {
         if (scratch is null) return;
-        // Tier cap (scribe-document-policy): the tablet tier stops at 10 task blocks. Uncapped tiers
-        // (Lectern, Notebook) never trip this. The footer "Add task" button is also disabled at the cap,
-        // so this is a defensive backstop for any other add path.
-        if (!CanAddTaskUnderPolicy()) { NotifyTabletFull(); return; }
+        // Tier cap (scribe-document-policy): the tablet tier stops at 10 TASK blocks. Only task kinds are
+        // gated (CountsAgainstTaskCap) — notes are uncapped (design D4), since the cap is task-scoped. Uncapped
+        // tiers (Lectern, Notebook) never trip this. The footer's primary button is also disabled at the cap
+        // when its kind is a task, so this is a defensive backstop for any other add path.
+        if (kind.CountsAgainstTaskCap && !CanAddTaskUnderPolicy()) { NotifyTabletFull(); return; }
         if (focusedEditIndex is { } leaving) NormalizeRowOnCommit(leaving);
-        scratch.AddTask("");
+        if (!kind.Add(scratch)) return;
         isDirty = true;
         SyncFocusNodesToScratch();
         // Appended row MOUNTS at the new last slot, so its field's mount-only autoFocus fires; every
@@ -416,6 +476,45 @@ public abstract partial class ScribeDialogBase
         editorFocusNodes[index].RequestFocus();
         focusedEditIndex = index;
         pendingEnsureVisible = true;
+    }
+
+    /// <summary>Cmd/Ctrl+Up: commit the current row and jump focus to the FIRST row, caret at its start
+    /// (macOS document-top navigation — scroll-follow-caret-in-editor Cmd/Ctrl row-nav). The scroll-follow
+    /// then carries the top of the document into view (caret at offset 0 → scrolls to the very top).</summary>
+    private void EditorJumpToFirstRow(int index) => JumpToEditorEdge(index, toFirst: true);
+
+    /// <summary>Cmd/Ctrl+Down: mirror of <see cref="EditorJumpToFirstRow"/> — jump to the LAST row, caret
+    /// at its end (document-bottom navigation).</summary>
+    private void EditorJumpToLastRow(int index) => JumpToEditorEdge(index, toFirst: false);
+
+    /// <summary>Shared first-/last-row jump. Commits the row being left (like advance/retreat), focuses the
+    /// edge row, and snaps that row's caret to the document edge — start for the first row, end for the last —
+    /// so the caret lands where a document-top/bottom nav is expected rather than wherever that field last
+    /// left it. A single-row note is a safe no-op beyond re-homing the caret. The caret placement fires the
+    /// field's scroll-follow, and <see cref="FocusEditorRow"/> arms <see cref="pendingEnsureVisible"/>, so the
+    /// edge is scrolled fully into view.</summary>
+    private void JumpToEditorEdge(int index, bool toFirst)
+    {
+        if (scratch is null || scratch.Blocks.Count == 0) return;
+        NormalizeRowOnCommit(index);
+        FlushIfDirty();
+        int target = toFirst ? 0 : scratch.Blocks.Count - 1;
+        FocusEditorRow(target);
+        // Place the caret at the document edge in the row we just focused. The field's caret otherwise
+        // persists wherever it last sat (it defaults to end-of-text on mount and focus-gain never resets it),
+        // so without this Cmd/Ctrl+Up would land mid-row on a previously-visited first row.
+        ResolveEditorFieldState(target)?.PlaceCaretAtEdge(atStart: toFirst);
+    }
+
+    /// <summary>Resolve the live <see cref="ScribeMultilineFieldState"/> backing editor row
+    /// <paramref name="index"/> via its focus node's owning element (the field sets
+    /// <c>focusNode.Owner = Element</c> in its <c>InitState</c>). Returns null if the row isn't mounted or
+    /// isn't a plain/cuneiform multiline field. Used to drive an imperative caret placement that has no
+    /// declarative prop (the row jump), the way the dialog already reaches the body State via its GlobalKey.</summary>
+    private ScribeMultilineFieldState? ResolveEditorFieldState(int index)
+    {
+        if (index < 0 || index >= editorFocusNodes.Count) return null;
+        return (editorFocusNodes[index].Owner as StatefulElement)?.State as ScribeMultilineFieldState;
     }
 
     /// <summary>
@@ -438,28 +537,28 @@ public abstract partial class ScribeDialogBase
         }
     }
 
-    /// <summary>True when the currently-focused editor row is a task whose text is empty/whitespace-only —
-    /// a transiently-empty row the player is (or just was) editing (add-empty-task-lifecycle). The autosave
-    /// tick uses this to avoid serializing that transient empty task; leaving the row / closing removes it.</summary>
-    private bool FocusedRowIsEmptyTask()
+    /// <summary>True when the currently-focused editor row is a task OR note whose text is
+    /// empty/whitespace-only — a transiently-empty row the player is (or just was) editing
+    /// (add-empty-task-lifecycle; generalized to notes by add-note-kind-picker D3). The autosave tick uses
+    /// this to avoid serializing that transient empty row; leaving the row / closing removes it.</summary>
+    private bool FocusedRowIsEmptyBlock()
     {
         if (scratch is null || focusedEditIndex is not { } idx || idx < 0 || idx >= scratch.Blocks.Count) return false;
-        var block = scratch.Blocks[idx];
-        return block.IsTask && string.IsNullOrWhiteSpace(block.Text);
+        return string.IsNullOrWhiteSpace(scratch.Blocks[idx].Text);
     }
 
-    /// <summary>Removes every empty/whitespace-only TASK block from the scratch document, marking dirty if
-    /// any were removed (add-empty-task-lifecycle D5). Text sections are left untouched — an empty note is
-    /// valid. Called at the terminal commit paths (switch-to-read, close) so an abandoned empty task the
-    /// blur-removal hadn't yet swept is never flushed or shown in the read view. No rebuild/collapse — the
-    /// caller tears the editor down or rebuilds into the read view immediately after.</summary>
-    private void PurgeEmptyTasksFromScratch()
+    /// <summary>Removes every empty/whitespace-only block (task OR note) from the scratch document, marking
+    /// dirty if any were removed (add-empty-task-lifecycle D5; generalized to notes by add-note-kind-picker
+    /// D3 — an abandoned empty note self-destructs just like an empty task). Called at the terminal commit
+    /// paths (switch-to-read, close) so an abandoned empty row the blur-removal hadn't yet swept is never
+    /// flushed or shown in the read view. No rebuild/collapse — the caller tears the editor down or rebuilds
+    /// into the read view immediately after.</summary>
+    private void PurgeEmptyRowsFromScratch()
     {
         if (scratch is null) return;
         for (int i = scratch.Blocks.Count - 1; i >= 0; i--)
         {
-            var block = scratch.Blocks[i];
-            if (block.IsTask && string.IsNullOrWhiteSpace(block.Text) && scratch.DeleteBlock(i))
+            if (string.IsNullOrWhiteSpace(scratch.Blocks[i].Text) && scratch.DeleteBlock(i))
             {
                 isDirty = true;
             }
@@ -482,13 +581,14 @@ public abstract partial class ScribeDialogBase
         }
     }
 
-    /// <summary>Autosave tick. Skips a flush while the focused row is a transiently-empty task
-    /// (add-empty-task-lifecycle): the player is mid-typing an empty new row, and serializing it would
-    /// round-trip an empty task into the shared document a beat before its blur removes it. Any OTHER
-    /// dirty edit still flushes on the next tick once the focused row has content or focus has moved.</summary>
+    /// <summary>Autosave tick. Skips a flush while the focused row is a transiently-empty task OR note
+    /// (add-empty-task-lifecycle; add-note-kind-picker D3): the player is mid-typing an empty new row, and
+    /// serializing it would round-trip an empty block into the shared document a beat before its blur removes
+    /// it. Any OTHER dirty edit still flushes on the next tick once the focused row has content or focus has
+    /// moved.</summary>
     private void OnAutosaveTick(float deltaTime)
     {
-        if (FocusedRowIsEmptyTask()) return;
+        if (FocusedRowIsEmptyBlock()) return;
         FlushIfDirty();
     }
 

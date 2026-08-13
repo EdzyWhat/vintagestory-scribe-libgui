@@ -1,3 +1,50 @@
+## ADDED Requirements
+
+### Requirement: Editor rows enforce a per-kind character limit with player feedback
+
+Each editor row's text SHALL be bounded by a character limit that depends on its kind: a
+Standard Task to the task limit (1,000 characters) and a Note to the larger note limit (10,000
+characters). The limit SHALL be enforced live in the editor field — once a row is at its
+limit, further typed input is ignored and an over-long paste is truncated to fit — so the text
+committed to the document never exceeds the cap. The document codec SHALL apply the same limit
+as a server-authoritative backstop by **clipping** an over-long row's text to its kind's limit
+on read, for BOTH kinds; it SHALL NOT reject or drop the whole document because one row is
+over-long.
+
+When the player's input is blocked or truncated because a row is at its limit, the editor
+SHALL surface a transient in-game error that names the kind and its limit (e.g. "Tasks are
+limited to 1,000 characters." / "Notes are limited to 10,000 characters."), via the same
+in-game error channel used for other editor refusals (tablet-full, editor lock). The character
+count shown in the message SHALL be derived from the enforced limit constant rather than being
+written literally into the message text, so the message and the enforced cap cannot drift
+apart.
+
+#### Scenario: Typing at a task's limit is prevented with feedback
+
+- **WHEN** a task row already contains its maximum characters and the player types another
+  character
+- **THEN** the extra input is ignored (the stored text is unchanged) and a transient in-game
+  error stating the task character limit is shown
+
+#### Scenario: Typing at a note's limit is prevented with feedback
+
+- **WHEN** a note row already contains its maximum characters and the player types another
+  character
+- **THEN** the extra input is ignored and a transient in-game error stating the note character
+  limit is shown
+
+#### Scenario: An over-long paste is truncated to the limit
+
+- **WHEN** the player pastes text that would push a row past its kind's limit
+- **THEN** only the portion that fits up to the limit is inserted, and the limit-feedback
+  message is shown
+
+#### Scenario: The codec clips an over-limit note instead of dropping the document
+
+- **WHEN** a document is read whose note row exceeds the note limit
+- **THEN** that note's text is clipped to the note limit and the rest of the document loads
+  normally, rather than the whole document being rejected
+
 ## MODIFIED Requirements
 
 ### Requirement: New tasks are created empty

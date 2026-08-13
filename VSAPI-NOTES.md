@@ -1422,7 +1422,9 @@ lectern doc is a small checklist, so non-virtualized costs nothing. The read vie
 
 **Fact (migrate-editor-view-libgui): LibGUI's `KeyboardEvent` drops the Command (⌘) modifier — only
 Shift/Ctrl/Alt survive.** `GuiBase.OnKeyDown/OnKeyPress` build the LibGUI `KeyboardEvent` from VS's
-`KeyEvent` passing only `shift/ctrl/alt` (`reference/vslibgui/.../GuiBase.cs` ~959-1032); VS's own
+`KeyEvent` passing only `shift/ctrl/alt` (decompile `src/Mod/lib/Gui.dll` → `Gui.GuiBase.OnKeyDown`
+with `ilspycmd -t Gui.GuiBase src/Mod/lib/Gui.dll`: `_inputRouter.KeyDown(args.KeyCode,
+args.ShiftPressed, args.CtrlPressed, args.AltPressed)` — `CommandPressed` never passed); VS's own
 `KeyEvent.CommandPressed` is never propagated. So a LibGUI widget cannot see Cmd, and the macOS caret
 idioms (Cmd+←/→ = line ends, Cmd+A/C/X/V) can't be handled inside the field. **Fix:** translate Cmd
 one layer up, in the dialog's `public override void OnKeyDown(KeyEvent args)` — the VS `KeyEvent` is
@@ -1430,6 +1432,17 @@ one layer up, in the dialog's `public override void OnKeyDown(KeyEvent args)` �
 Home/End and Cmd+{A,C,X,V} → Ctrl+{A,C,X,V}, clear `CommandPressed`, THEN call `base.OnKeyDown(args)`
 (which does the mapping). Alt/Option *is* delivered as `Alt`, so Alt+Arrow word-skip works in the
 field directly. (Mirrors the native `ScribeRowTextInput.TranslateMacCaretModifiers`, moved up a level.)
+
+**Extension (scroll-follow-caret-in-editor §7, 2026-08-13): the same seam gives macOS Cmd+Up/Down =
+document top/bottom.** `ScribeDialogBase.OnKeyDown` now also rewrites **Cmd+Up/Down → Ctrl+Up/Down**
+(keeping the Up/Down key code, setting `CtrlPressed`, clearing `CommandPressed`). The field's Up/Down
+(and Home/End) handler gates the first/last-row jump on **`e.Ctrl` alone** — NOT the `Ctrl || Alt`
+word-jump gate that Left/Right use — so Alt/Option+Up/Down stays a plain one-line move (macOS
+paragraph-nav is a line move here), while Windows Ctrl+Up/Down / Ctrl+Home/End and macOS
+Cmd-remapped-to-Ctrl all jump. Confirms the general rule: **any Cmd-based gesture is reachable at the
+dialog's raw-`KeyEvent` layer even though the field can't see Cmd — no `gui` fork needed.** (Note the
+old `reference/vslibgui/` clone was deleted 2026-08-12; decompile the vendored `src/Mod/lib/Gui.dll`
+for ground truth, not that path — several older citations in this file still name it.)
 
 **Fact (migrate-editor-view-libgui): no focus-traversal API — a parent coordinates focus manually.**
 `FocusManager` tracks a single `PrimaryFocus` and offers only `RequestFocus(node)` / `RequestFocus(null)`;

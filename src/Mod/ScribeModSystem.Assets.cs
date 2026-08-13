@@ -45,6 +45,11 @@ public sealed partial class ScribeModSystem
         // becomes ◀ and the prospective drop row's grip becomes ▶, replacing the old row-background washes.
         RegisterSvgIcon(api, "scribetriangleleft",  new AssetLocation("scribe", "textures/icons/triangle-left.svg"));
         RegisterSvgIcon(api, "scribetriangleright", new AssetLocation("scribe", "textures/icons/triangle-right.svg"));
+        // Add-kind picker caret (add-note-kind-picker D1): the footer's segmented add button carries a caret
+        // that opens/closes a floating drop-up menu of kinds. It points ▲ when closed (the menu expands
+        // UPWARD, over the scroll body) and flips ▼ when open (tap again to collapse).
+        RegisterSvgIcon(api, "scribetriangleup",   new AssetLocation("scribe", "textures/icons/triangle-up.svg"));
+        RegisterSvgIcon(api, "scribetriangledown", new AssetLocation("scribe", "textures/icons/triangle-down.svg"));
     }
 
     /// <summary>

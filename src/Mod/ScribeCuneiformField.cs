@@ -42,6 +42,14 @@ internal interface IScribeEditableTextRender
     /// <summary>Move a caret offset one visual line up (<paramref name="direction"/> = -1) or down (+1),
     /// landing on the column nearest the caret's current X.</summary>
     int CaretOffsetVertical(int fromCaret, int direction);
+
+    /// <summary>The caret's vertical extent in LOCAL space for the current caret offset —
+    /// <paramref name="localTop"/> is the top edge and <paramref name="height"/> the line height, matching
+    /// the bar the field paints. Returns <c>false</c> before a layout pass has produced line metrics (so
+    /// the caller skips scrolling that frame). Used by the editor to scroll so the CARET stays visible
+    /// (following the caret, not the whole row — a row taller than the viewport must not bounce the scroll).
+    /// scroll-follow-caret-in-editor.</summary>
+    bool TryGetCaretRect(out float localTop, out float height);
 }
 
 /// <summary>
@@ -443,6 +451,28 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
         double caretXGrid = lines[line].CaretXAt(localIndex);
         int targetLocal = lines[targetLine].NearestBoundary(caretXGrid);
         return Math.Clamp(lines[targetLine].SourceStart + targetLocal, 0, text.Length);
+    }
+
+    /// <summary>Caret vertical extent in LOCAL space (top + line height), matching the bar
+    /// <see cref="PaintInternal"/> draws (<c>padY + lineIndex * lineHeightPx</c>). Returns false before
+    /// layout has produced a line height. scroll-follow-caret-in-editor.</summary>
+    public bool TryGetCaretRect(out float localTop, out float height)
+    {
+        if (lineHeightPx <= 0f)
+        {
+            localTop = 0f;
+            height = 0f;
+            return false;
+        }
+
+        int lineIndex = 0;
+        if (lines.Count > 0)
+        {
+            (lineIndex, _) = CaretToLineLocal(caret);
+        }
+        localTop = padY + lineIndex * lineHeightPx;
+        height = lineHeightPx;
+        return true;
     }
 }
 

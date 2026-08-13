@@ -254,16 +254,23 @@ public class ScribeDocumentCodecTests
     }
 
     [Fact]
-    public void TryDeserialize_OverTextLengthCap_FailsSafely()
+    public void TryDeserialize_OverTextLengthCap_IsClippedNotRejected()
     {
+        // add-note-kind-picker §8.2: an over-long freeform note used to reject the WHOLE document (a
+        // data-loss trap once notes became user-creatable). It now CLIPS to MaxTextLength — matching the
+        // Task clip backstop — and any following blocks survive.
         var original = new ScribeDocument();
-        original.AddTextSection(new string('a', ScribeDocumentCodec.MaxTextLength + 1));
+        original.AddTextSection(new string('a', ScribeDocumentCodec.MaxTextLength + 500));
+        original.AddTask("survivor");
 
         byte[] bytes = ScribeDocumentCodec.Serialize(original);
         bool ok = ScribeDocumentCodec.TryDeserialize(bytes, out ScribeDocument? restored);
 
-        Assert.False(ok);
-        Assert.Null(restored);
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        Assert.Equal(2, restored!.Blocks.Count);
+        Assert.Equal(ScribeDocumentCodec.MaxTextLength, restored.Blocks[0].Text.Length);
+        Assert.Equal("survivor", restored.Blocks[1].Text);
     }
 
     [Fact]

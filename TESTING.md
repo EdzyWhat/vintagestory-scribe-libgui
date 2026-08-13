@@ -542,3 +542,42 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Confirmed 2026-08-12** via playtest submission: new-pin append, document block-order reorder,
         and Pin Tab drag-reorder persistence/re-sync all unchanged.
 
+## add-note-kind-picker
+
+> Segmented kind picker in the editor footer: a primary "Add Task" button plus a caret that opens a
+> floating drop-up to add freeform **Notes** (no checkbox) alongside Tasks. Notes get their own live
+> 10,000-char cap (Tasks stay 1,000); both surface a standard in-game error at the cap, and the codec
+> now CLIPS an over-long note instead of dropping the whole document. Test in the Lectern editor (and
+> the other footer surfaces for §6.5). Fully relaunch after restage.
+
+- [x] `42957239` **Add Note via picker.** Add a Note via the footer picker -- it appears with NO
+      checkbox, focuses empty, and accepts typed text. *(add-note-kind-picker 6.1)*
+      - **Confirmed 2026-08-13** via playtest: Note adds with no checkbox, focuses empty, accepts text.
+- [x] `2e3df36c` **One-click adds Task.** A single click on the primary button still adds a Task (the
+      default kind), unchanged from before. *(add-note-kind-picker 6.2)*
+      - **Confirmed 2026-08-13** via playtest: one click still adds a Task, unchanged.
+- [x] `b478f609` **Empty note self-destructs.** Add a Note, type nothing, click away -- it
+      self-destructs (no blank row); repeat with switch-to-read and close-dialog; add a note with text,
+      clear it, blur -- row removed, focus moves to the row above. *(add-note-kind-picker 6.3)*
+      - **Confirmed 2026-08-13** via playtest: empty note self-destructs on blur / switch-read /
+        close; cleared note removes and focus moves up. "Works as expected."
+- [x] `20a5e7f1` **Note round-trips.** Add a note with text, switch to read (renders as text, no
+      checkbox), close and reopen -- the note persists with its text and kind.
+      *(add-note-kind-picker 6.4)*
+      - **Confirmed 2026-08-13** via playtest: notes persist across open/close, read/edit/read, and a
+        full game restart; render as text with no checkbox in read view.
+- [x] `d11c7953` **Note bypasses task cap on all surfaces.** At the tablet 10-task cap adding a Task is
+      refused + surfaced but adding a Note succeeds; confirm the picker appears and works on Lectern,
+      Notebook, Clockmaker's Notebook, and the always-edit tablet. *(add-note-kind-picker 6.5)*
+      - **Confirmed 2026-08-13** via playtest: at the cap Task is refused and surfaced, Note still adds;
+        picker appears on all editor surfaces. Notes appear on all surfaces.
+- [x] `2d794bf7` **Per-kind cap error.** Type/paste past a task's 1,000 and a note's 10,000 characters
+      -- input stops at the cap and the matching "limited to N characters" error appears.
+      *(add-note-kind-picker 8.7)*
+      - **Confirmed 2026-08-13** via playtest: input clamps at each cap and the standard in-game error
+        ("Tasks are limited to 1,000 characters." / "Notes are limited to 10,000 characters.") fires.
+- [x] `c848893a` **Over-limit note reloads clipped.** An over-limit note loads clipped (not a blanked
+      document) after a reload. *(add-note-kind-picker 8.7)*
+      - **Confirmed 2026-08-13** via playtest: an over-limit note reloads clipped to the cap with the
+        rest of the document intact (no whole-doc drop).
+

@@ -59,11 +59,11 @@ public abstract partial class ScribeDialogBase
         // re-entry round-trips to the server (EnterEditorMode(message.DocumentBytes)), so a purge-flush and
         // the re-access request can cross on the wire and the grant carries the PRE-purge doc. Reconcile made
         // this visible — the reappearing empties were the symptom behind reconcile-animating-surfaces §3.9 —
-        // but the race is host/path-independent, so heal it here for every seed. PurgeEmptyTasksFromScratch
+        // but the race is host/path-independent, so heal it here for every seed. PurgeEmptyRowsFromScratch
         // sets isDirty=true iff it removed anything, so a stale seed is re-flushed clean (self-healing) and a
         // clean seed stays isDirty=false. Runs BEFORE SyncFocusNodesToScratch so the node count matches the
         // trued-up block list, and touches only empty TASK blocks (empty text sections are valid, untouched).
-        PurgeEmptyTasksFromScratch();
+        PurgeEmptyRowsFromScratch();
         isEditorMode = true;
         focusedEditIndex = null;
         autoFocusRowOnRebuild = null;
@@ -93,7 +93,7 @@ public abstract partial class ScribeDialogBase
             // exact asymmetry reported (fix-transient-lectern-editor-lock). LeaveEditorMode itself does
             // NOT release, by contract.
             if (focusedEditIndex is { } idx) NormalizeRowOnCommit(idx);
-            PurgeEmptyTasksFromScratch();
+            PurgeEmptyRowsFromScratch();
             pendingEmptyRowRemoval = null;
             FlushIfDirty();
             SendReleaseLockPacket();
@@ -118,7 +118,7 @@ public abstract partial class ScribeDialogBase
         if (isEditorMode)
         {
             if (focusedEditIndex is { } idx) NormalizeRowOnCommit(idx);
-            PurgeEmptyTasksFromScratch();
+            PurgeEmptyRowsFromScratch();
             pendingEmptyRowRemoval = null;
             FlushIfDirty();
             SendReleaseLockPacket();
@@ -140,7 +140,7 @@ public abstract partial class ScribeDialogBase
         if (isEditorMode)
         {
             if (focusedEditIndex is { } idx) NormalizeRowOnCommit(idx);
-            PurgeEmptyTasksFromScratch();
+            PurgeEmptyRowsFromScratch();
             pendingEmptyRowRemoval = null;
             FlushIfDirty();
             SendReleaseLockPacket();
@@ -165,7 +165,7 @@ public abstract partial class ScribeDialogBase
         if (isEditorMode)
         {
             if (focusedEditIndex is { } idx) NormalizeRowOnCommit(idx);
-            PurgeEmptyTasksFromScratch();
+            PurgeEmptyRowsFromScratch();
             pendingEmptyRowRemoval = null;
             FlushIfDirty();
             SendReleaseLockPacket();
@@ -203,7 +203,7 @@ public abstract partial class ScribeDialogBase
         if (isEditorMode)
         {
             if (focusedEditIndex is { } idx) NormalizeRowOnCommit(idx);
-            PurgeEmptyTasksFromScratch();
+            PurgeEmptyRowsFromScratch();
             pendingEmptyRowRemoval = null;
             FlushIfDirty();
             SendReleaseLockPacket();
@@ -242,7 +242,7 @@ public abstract partial class ScribeDialogBase
         if (focusedEditIndex is { } idx) NormalizeRowOnCommit(idx);
         // Drop any abandoned empty task before flushing so the read view / persisted doc never shows one
         // (add-empty-task-lifecycle D5) — the focused row may be an untyped new task the blur hasn't swept.
-        PurgeEmptyTasksFromScratch();
+        PurgeEmptyRowsFromScratch();
         pendingEmptyRowRemoval = null; // superseded by the purge; don't act on it after the editor tears down
         FlushIfDirty();
         SendReleaseLockPacket();
@@ -393,7 +393,7 @@ public abstract partial class ScribeDialogBase
             // destructs a few frames later" race (trace signature: insert-below N → delete N+1 with no
             // sweep guard tripping, because the delete comes from HERE, not the empty-row sweep). Tell the
             // two apart: never drop the row currently being edited, and never drop an empty task (empty
-            // tasks are never persisted by design — see PurgeEmptyTasksFromScratch — so their absence from
+            // tasks are never persisted by design — see PurgeEmptyRowsFromScratch — so their absence from
             // the server is always expected, never a server-side deletion).
             if (focusedEditIndex == i || string.IsNullOrWhiteSpace(b.Text)) continue;
             DeleteEditorBlock(i);

@@ -7,6 +7,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Jump to the first or last row of a note.** In any Scribe editor, **Cmd+Up/Down** on macOS or
+  **Ctrl+Up/Down** on Windows now moves straight to the first row (caret at its start) or the last row
+  (caret at its end), instead of nudging the caret one line. **Ctrl+Home / Ctrl+End** do the same, for
+  the standard Windows document-navigation muscle memory. Plain Up/Down still moves one visual line,
+  and Home/End still jump to the start/end of the current line.
 - **A clockwork gear-train now turns on the Clockmaker's Notebook Timer tab.** The Timer page shows
   an ambient mechanism — a central teal temporal gear driving two steel cogs and a large escape
   wheel — that ticks one tooth per real second with a spring-wound snap. It runs whenever the tab is

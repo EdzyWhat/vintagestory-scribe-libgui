@@ -53,30 +53,68 @@ Constraints that shape the design:
 
 ## Decisions
 
-### D1 — Control shape: a split "add" affordance (primary action + kind menu), not a stock `Dropdown<T>`
+### D1 — Control shape: a segmented "add" button group (primary action + caret) with a floating drop-**up** kind menu, not a stock `Dropdown<T>`
 The stock `Gui.Widgets.Input.Dropdown<T>` is a **selection** widget: it displays the current
 value and fires `onChanged` when the selection *changes*. That models a persistent setting
 (like the font selector), not a repeatable *action* ("add one of kind X now"). Re-selecting
 the already-selected kind wouldn't fire `onChanged`, so a stock dropdown can't drive "add
 another task" on a repeat pick.
 
-Chosen shape: keep a **primary Add button** (label reflects the last-picked kind, defaults to
-Task) that performs the add on click, plus a small adjacent **kind toggle** (caret/▾) that
-opens a menu of kinds; picking a kind from the menu both sets the primary button's kind
-*and* performs that add immediately. This preserves the one-click task add (D2 spec
-requirement "the default add is a task") while adding note capability in one extra click, and
-fits the width budget (one button + a narrow caret vs. two full buttons).
+Chosen shape (two parts):
+
+**(a) The affordance is a segmented button group** — a **primary Add button** (label reflects
+the last-picked kind, defaults to Task) that performs the add on click, joined flush to a
+small **caret toggle** (▾) that opens/closes the kind list. The two read as **one control**
+separated only by a thin divider line (no inter-button gap), not two padded buttons. This
+preserves the one-click task add (spec requirement "the default add is a task") while adding
+note capability in one extra click, and fits the <500px footer width (one grouped control +
+narrow caret vs. two full buttons).
+
+*How the segmented look is built (LibGUI has no native segmented/button-group widget, and
+`Button` hardcodes a **uniform** corner radius + a **single all-four-sides** border, so a
+"one pill, one interior divider" cannot come from `Button` config alone):* wrap a zero-gap
+`Row(spacing: 0)` — `[ primary Button (square corners) ][ 1px divider Container (theme Border
+color) ][ caret Button (square corners) ]` — inside an outer `Container` with `CornerRadius`
+= the footer's standard radius (4) and a rounded-rect **clip**, so only the group's *outer*
+corners round while the interior seam stays a straight divider. This reuses stock `Button`'s
+hover/press/click-sound for free. *Verify in-game:* that the rounded clip masks the square
+child corners crisply at pixel-art scale. Fallbacks if the clip reads soft: (i) square outer
+corners too (two flush rects + divider — simplest, but inconsistent with the rounded footer
+buttons), or (ii) custom `Container`+`GestureDetector` halves with per-corner `Vector4` radii
+(`BoxStyle.CornerRadius` supports per-corner) — the "proper" pill, at the cost of
+reimplementing `Button`'s hover/press/sound.
+
+**(b) The kind list is a *floating drop-up* menu that grows upward, *over* the scroll body.**
+Because the control lives in the **footer**, a downward menu would clip off the dialog's
+bottom edge, so the menu opens *upward*. It is a **floating overlay**, not an inline layout
+element: the caret opens a menu anchored above the button that **paints over the scroll body**,
+so the scroll area keeps its **exact height** and nothing reflows when the menu opens or closes
+(product correction 2026-08-12 — an earlier inline-reveal draft that shrank the scroll body was
+rejected; see alternatives). Mechanically this is exactly LibGUI's own `Dropdown` pattern: a
+`LayerLink` ties the segmented group (wrapped in a `CompositedTransformTarget`) to a
+`CompositedTransformFollower` inserted into the `Overlay`, with **`showAbove: true`** pinning
+the follower's *bottom* edge to the button's *top* edge; a full-screen barrier `OverlayEntry`
+closes the menu on any outside tap. Picking a kind both sets the primary button's kind *and*
+performs that add immediately, then closes the menu. Re-tapping the caret (or activating the
+primary button) closes it. The menu grows in via a small scale+fade anchored at `BottomCenter`
+(a drop-up twin of `Dropdown`'s downward `DropdownMenu`).
 
 *Alternatives considered:* (a) stock `Dropdown<T>` as the whole control — rejected: action-vs-
-selection mismatch above, and it reads as "which kind is selected" not "add one". (b) Two
-side-by-side buttons "Add task" / "Add note" — rejected: doesn't scale to 4 kinds within the
-<500px footer, which is the exact constraint the resolved picker design cites for choosing a
-dropdown. (c) A right-click / long-press menu on the Add button — rejected on
-discoverability (same reason the resolved design rejected right-click-a-row for item pick).
-
-We MAY still reuse the stock dropdown's floating-menu building blocks
-(`DropdownMenu`/overlay) for the kind menu's visuals; the decision is only that the *control's
-semantics* are action-menu, not value-selection.
+selection mismatch above, and it reads as "which kind is selected" not "add one". (b) An
+**inline, upward-expanding reveal** (an `AnimatedSize`-wrapped `Column` inserted between the
+scroll body and the footer, growing the footer and shrinking the scroll body) — initially
+drafted, then **rejected 2026-08-12**: it changes the scroll area's height as it opens, which
+the product owner explicitly did not want ("I want the scroll area to remain the same height…
+the list to expand from the button over the scroll area"). The floating drop-up above delivers
+the same upward reveal without disturbing the scroll body. *(Note: an earlier draft claimed
+`CompositedTransformFollower.ShowAbove` had "zero call sites" and was an in-game risk — that
+was wrong. `Dropdown` constructs `CompositedTransformFollower`, and `Dropdown` is already used
+in the Scribe dialog tree, e.g. the Settings font/policy/anchor selectors — so this path is
+well-exercised.)* (c) Two side-by-side buttons "Add task" / "Add note" — rejected: doesn't
+scale to 4 kinds within the <500px footer. (d) A **cycling toggle** (caret cycles Task→Note,
+no list) — rejected on discoverability and poor scaling to 4 kinds. (e) A right-click /
+long-press menu on the Add button — rejected on discoverability (same reason the resolved
+design rejected right-click-a-row for item pick).
 
 ### D2 — An extensible kind registry drives the menu and the add behavior
 Define a small kind descriptor (identifier, display-label lang key, and an `Action`/delegate

@@ -606,13 +606,18 @@ public abstract partial class ScribeDialogBase
             onCommitAndRetreat: EditorRetreatFrom,
             onInsertTaskBelow: EditorInsertTaskBelow,
             onRowBlurred: OnRowBlurred,
+            onMaxLengthReached: OnRowMaxLengthReached,
+            onCaretMoved: NotifyCaretMoved,
+            onPointerFocus: NotifyPointerFocus,
+            onJumpToFirstRow: EditorJumpToFirstRow,
+            onJumpToLastRow: EditorJumpToLastRow,
             onToggleTask: ToggleEditorTask,
             onDeleteBlock: DeleteEditorBlock,
             onTogglePinned: TogglePinnedEditorTask,
             // Drag-reorder follows the moved row into view (anchorViewport defaults false); only a Sink
             // completion passes anchorViewport: true to hold the viewport still.
             onReorderBlock: (from, to) => ReorderEditorBlock(from, to),
-            onAddTask: OnClickAddTask,
+            onAdd: OnClickAdd,
             onSwitchToRead: OnClickSwitchToRead,
             onOpenEditorReference: ToggleEditorReferenceHandbook,
             // Footer gear (tablet only). The base returns null so the Lectern/Notebook footer omits it —
@@ -629,6 +634,9 @@ public abstract partial class ScribeDialogBase
             // Pin Tab / Read view (RequestClampToExtent). The container retires the ghost itself; the dialog
             // no longer owns departing-row bookkeeping (D0 — replaces OnEditorRowCollapsed).
             onDepartureSettled: RequestClampToExtent,
+            // Current illumination shade: threaded so the footer add-kind picker can tint its floating drop-up
+            // menu to match the window (the menu paints in the Overlay, outside this body's ScribeGlobalTint).
+            currentShade: currentShade,
             hintLangKey: EmptyHintLangKey,
             // Tier cap (scribe-document-policy): dim + disable "Add task" at the tablet's 10-task cap.
             // Uncapped tiers (Lectern, Notebook) always pass true, so their footer is unchanged.

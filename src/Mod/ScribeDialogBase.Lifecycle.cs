@@ -15,7 +15,9 @@ using Gui.Widgets.Overlay;       // Tooltip
 using Gui.Widgets.Painting;      // BoxStyle
 using Gui.Widgets.Scroll;        // ListView, SingleChildScrollView, Scrollable, Scrollbar
 using Gui.Widgets.Spans;         // TextSpan
+using Gui.Core.Framework;        // RenderObject (caret-follow content-Y walk)
 using Gui.Core.Layout;           // MainAxisSize
+using Gui.Core.Scroll;           // RenderViewport (caret-follow content-Y walk)
 using OpenTK.Mathematics;        // Vector2
 using Scribe.Core;
 using Vintagestory.API.Client;
@@ -29,8 +31,8 @@ public abstract partial class ScribeDialogBase
     // ---------------- Lifecycle ----------------
 
     /// <summary>After layout, honor a pending scroll-into-view for the focused editor row (a focus
-    /// move or a row that grew while typing). Deferred to here because
-    /// <see cref="Scrollable.EnsureVisible"/> reads the target's live post-layout geometry.</summary>
+    /// move or a row that grew while typing). Deferred to here because <see cref="EnsureCaretVisible"/>
+    /// reads the target field's live post-layout geometry.</summary>
     public override void OnRenderGUI(float deltaTime)
     {
         base.OnRenderGUI(deltaTime);
@@ -115,11 +117,12 @@ public abstract partial class ScribeDialogBase
             }
         }
 
-        // A task row lost focus while empty (add-empty-task-lifecycle): remove it now, deferred out of the
-        // blur notification so we don't dispose focus nodes mid focus-transition. Re-read from live scratch
-        // and re-check emptiness so a stale index or a row that gained text in the meantime is a safe no-op
-        // (idempotent with the OnRowFocusChanged commit that also fires on a row→row move). DeleteEditorBlock
-        // handles the focus-to-above fixup (Q1) and the collapse animation.
+        // A row (task OR note) lost focus while empty (add-empty-task-lifecycle; generalized to notes by
+        // add-note-kind-picker D3): remove it now, deferred out of the blur notification so we don't dispose
+        // focus nodes mid focus-transition. Re-read from live scratch and re-check emptiness so a stale index
+        // or a row that gained text in the meantime is a safe no-op (idempotent with the OnRowFocusChanged
+        // commit that also fires on a row→row move). DeleteEditorBlock handles the focus-to-above fixup (Q1)
+        // and the collapse animation.
         if (pendingEmptyRowRemoval is { } emptyIdx)
         {
             pendingEmptyRowRemoval = null;
@@ -127,17 +130,17 @@ public abstract partial class ScribeDialogBase
             {
                 var block = scratch.Blocks[emptyIdx];
                 // Never sweep a row that CURRENTLY holds keyboard focus, or is the row we still intend to
-                // focus. The empty-task self-destruct is for rows the user genuinely LEFT — but a
-                // freshly-inserted empty row (Enter / New Task) catches a TRANSIENT blur when the
+                // focus. The empty-row self-destruct is for rows the user genuinely LEFT — but a
+                // freshly-inserted empty row (Enter / add-picker) catches a TRANSIENT blur when the
                 // ensure-visible SetState churns the subtree and its field remounts (the one-shot auto-focus
                 // is already consumed), so OnRowBlurred scheduled it here even though the user never left it.
                 // The trace signature was: insert-below N -> focus=N+1 -> delete N+1, the new row vanishing
                 // "a few frames" after Enter. Guard on live focus so only a real leave removes the row; the
-                // terminal PurgeEmptyTasksFromScratch on switch/close still guarantees no empty task persists.
+                // terminal PurgeEmptyRowsFromScratch on switch/close still guarantees no empty row persists.
                 bool stillFocused =
                     (focusedEditIndex == emptyIdx)
                     || (emptyIdx < editorFocusNodes.Count && editorFocusNodes[emptyIdx].HasFocus);
-                if (block.IsTask && string.IsNullOrWhiteSpace(block.Text) && !stillFocused)
+                if (string.IsNullOrWhiteSpace(block.Text) && !stillFocused)
                 {
                     DeleteEditorBlock(emptyIdx);
                 }
@@ -209,7 +212,7 @@ public abstract partial class ScribeDialogBase
             && idx < editorFocusNodes.Count && editorFocusNodes[idx].Owner is { } element)
         {
             TraceScroll("ensure-visible");
-            Scrollable.EnsureVisible(element);
+            EnsureCaretVisible(element);
             pendingEnsureVisible = false;
         }
 
@@ -259,6 +262,74 @@ public abstract partial class ScribeDialogBase
             if (sharedScrollController.Offset > max) sharedScrollController.JumpTo(max);
             if (++clampToExtentFrames >= 5) pendingClampToExtent = false;
         }
+
+        // Snapshot the settled scroll offset for NotifyPointerFocus to restore after a click's focus-scroll
+        // (see lastStableScrollOffset). Taken last, after all the pending servicing above, so it reflects the
+        // offset that will be painted next frame — the view a click landing before that frame should preserve.
+        lastStableScrollOffset = sharedScrollController.Offset;
+    }
+
+    /// <summary>Scroll the editor so the focused field's CARET stays visible — following the caret, not
+    /// the whole row. The old path (<c>Scrollable.EnsureVisible(rowElement)</c>) targeted the full row, so
+    /// a row taller than the viewport satisfied both of EnsureVisible's guards and ping-ponged the offset
+    /// between the row's top and bottom on every keystroke. Here we scroll to the caret's one-line rect
+    /// instead, with a single winning outcome (bottom-align if below the view, top-align if above, else no
+    /// move), so a tall row can't oscillate. scroll-follow-caret-in-editor.</summary>
+    /// <param name="fieldElement">The focused editor field element (an <c>editorFocusNodes[idx].Owner</c>).</param>
+    private void EnsureCaretVisible(Element fieldElement)
+    {
+        var proxyRo = fieldElement.RenderObject;
+        if (proxyRo is null) return;
+
+        // Resolve the text render object (the GestureDetector proxy's child[0]), mirroring the field's own
+        // ResolveTextRender — works for the plain and cuneiform fields alike via IScribeEditableTextRender.
+        var textRender = proxyRo as IScribeEditableTextRender
+            ?? (proxyRo.Children.Count > 0 ? proxyRo.Children[0] as IScribeEditableTextRender : null);
+        if (textRender is null || textRender is not RenderObject textRo) return;
+
+        if (!textRender.TryGetCaretRect(out float caretLocalTop, out float caretHeight)) return;
+
+        // Content-space Y of the text render object: sum Y offsets from it up to (not including) the
+        // RenderViewport — the exact walk Scrollable.EnsureVisible does (Scrollable.ComputeContentSpaceY).
+        float contentY = 0f;
+        RenderObject? ro = textRo;
+        while (ro is not null && ro is not RenderViewport)
+        {
+            contentY += ro.Y;
+            ro = ro.Parent;
+        }
+        if (ro is not RenderViewport) return;   // no scrollable ancestor found — nothing to do
+
+        float caretTop = contentY + caretLocalTop;
+        float caretBottom = caretTop + caretHeight;
+
+        float offset = sharedScrollController.Offset;
+        float viewportHeight = sharedScrollController.ViewportSize;
+        if (viewportHeight <= 0f) return;
+        float max = sharedScrollController.MaxScrollExtent;
+
+        // Keep the caret this far from the viewport edge rather than butting it exactly against the top/bottom
+        // (scroll-follow-caret-in-editor issue #2). On the first/last row the extra gap reveals the input's
+        // border instead of clipping it flush to the edge. The final Clamp to [0, max] absorbs the margin at
+        // the ends — a top-row caret clamps back to offset 0 (row top + border visible), a bottom-row caret to
+        // max — so the margin never scrolls PAST the content bounds.
+        const float caretEdgeMargin = 8f;
+
+        // Single winning outcome — never both guards (that is what oscillated for a tall row).
+        float newOffset = offset;
+        if (caretBottom + caretEdgeMargin > offset + viewportHeight)
+        {
+            newOffset = caretBottom + caretEdgeMargin - viewportHeight;   // caret below the view → bottom-align (+ margin)
+        }
+        else if (caretTop - caretEdgeMargin < offset)
+        {
+            newOffset = caretTop - caretEdgeMargin;                       // caret above the view → top-align (+ margin)
+        }
+        // else: caret already within the viewport (with margin) → no scroll.
+
+        newOffset = Math.Clamp(newOffset, 0f, max);
+        if (Math.Abs(newOffset - offset) < 0.5f) return;   // matches Scrollable's no-op guard
+        sharedScrollController.JumpTo(newOffset);
     }
 
     /// <summary>Ask <see cref="OnRenderGUI"/> to clamp the shared scroll offset down to the new
@@ -287,7 +358,7 @@ public abstract partial class ScribeDialogBase
             if (focusedEditIndex is { } closeIdx) NormalizeRowOnCommit(closeIdx);
             // Same empty-task cleanup as switch-to-read: closing with an abandoned empty task must not
             // persist it (add-empty-task-lifecycle D5).
-            PurgeEmptyTasksFromScratch();
+            PurgeEmptyRowsFromScratch();
             pendingEmptyRowRemoval = null;
             FlushIfDirty();
             StopAutosaveTick();

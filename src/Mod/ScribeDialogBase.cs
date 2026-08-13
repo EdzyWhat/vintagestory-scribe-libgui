@@ -153,6 +153,14 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// <summary>Set when a focus move or a row growth needs the focused row scrolled into view; acted
     /// on in <see cref="OnRenderGUI"/> AFTER layout has run (EnsureVisible reads live geometry).</summary>
     private bool pendingEnsureVisible;
+    /// <summary>The shared scroll offset as of the end of the last rendered frame — i.e. the view the player
+    /// is currently looking at. Snapshotted every <see cref="OnRenderGUI"/> so a mouse click can restore it:
+    /// the shipped gui's <c>FocusManager.RequestFocus</c> calls <c>Scrollable.EnsureVisible(focusedElement)</c>
+    /// on focus, which bounces a taller-than-viewport row to its top/bottom. A click already landed on a
+    /// visible pixel, so <see cref="NotifyPointerFocus"/> jumps back to this pre-click offset in the same
+    /// input-phase call (before the next render), so the focus-scroll is never seen (scroll-follow-caret-in-editor
+    /// issue #3).</summary>
+    private float lastStableScrollOffset;
 
     // ---- Document title editing ----
     /// <summary>True while the title row is in inline-input mode (pencil was clicked, input is active).</summary>
@@ -700,9 +708,10 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// LibGUI's <see cref="Gui.Widgets.Events.KeyboardEvent"/> carries only Shift/Ctrl/Alt — it drops
     /// VS's Command modifier — so the macOS caret idioms can't be handled inside the editor field.
     /// Translate them here, before <c>base.OnKeyDown</c> maps the (mutable) VS <see cref="KeyEvent"/>
-    /// into the Cmd-less LibGUI event: Cmd+Left/Right → Home/End (line start/end), Cmd+A/C/X/V →
-    /// Ctrl+A/C/X/V (select-all / clipboard). Alt/Option is already delivered as Alt, so Alt+Arrow
-    /// word-skip works in the field without translation. Mirrors the native
+    /// into the Cmd-less LibGUI event: Cmd+Left/Right → Home/End (line start/end), Cmd+Up/Down →
+    /// Ctrl+Up/Down (document top/bottom = first/last row), Cmd+A/C/X/V → Ctrl+A/C/X/V (select-all /
+    /// clipboard). Alt/Option is already delivered as Alt, so Alt+Arrow word-skip works in the field
+    /// without translation. Mirrors the native
     /// <c>ScribeRowTextInput.TranslateMacCaretModifiers</c>, one layer up.
     /// </summary>
     public override void OnKeyDown(KeyEvent args)
@@ -717,6 +726,15 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
                     break;
                 case (int)GlKeys.Right:
                     args.KeyCode = (int)GlKeys.End;
+                    args.CommandPressed = false;
+                    break;
+                case (int)GlKeys.Up:
+                case (int)GlKeys.Down:
+                    // Cmd+Up/Down = document top/bottom on macOS (Cocoa). Re-flag as Ctrl (keeping the
+                    // Up/Down key code) so the field reads it as the first/last-row jump — the exact
+                    // gesture Windows players get from Ctrl+Up/Down. Alt/Option+Up/Down is left alone,
+                    // so it stays a plain one-line caret move as macOS expects.
+                    args.CtrlPressed = true;
                     args.CommandPressed = false;
                     break;
                 case (int)GlKeys.A:

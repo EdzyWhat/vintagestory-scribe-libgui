@@ -115,11 +115,16 @@ internal sealed class ScribeEditorContent : StatefulWidget
         Action<int> onCommitAndRetreat,
         Action<int> onInsertTaskBelow,
         Action<int> onRowBlurred,
+        Action<int> onMaxLengthReached,
+        Action<int> onCaretMoved,
+        Action<int> onPointerFocus,
+        Action<int> onJumpToFirstRow,
+        Action<int> onJumpToLastRow,
         Action<int> onToggleTask,
         Action<int> onDeleteBlock,
         Action<int> onTogglePinned,
         Action<int, int> onReorderBlock,
-        Action onAddTask,
+        Action<ScribeAddKind> onAdd,
         Action onSwitchToRead,
         Action onOpenEditorReference,
         Action? onOpenSettings,
@@ -128,6 +133,7 @@ internal sealed class ScribeEditorContent : StatefulWidget
         ScrollController scrollController,
         ScribeAnimationRegistry collapseRegistry,
         Action onDepartureSettled,
+        ScribeAmbientLightSampler.Shade currentShade,
         string hintLangKey = "scribe:scribe-gui-edit-hint",
         bool addTaskEnabled = true,
         bool showSwitchToRead = true)
@@ -140,11 +146,16 @@ internal sealed class ScribeEditorContent : StatefulWidget
         OnCommitAndRetreat = onCommitAndRetreat;
         OnInsertTaskBelow = onInsertTaskBelow;
         OnRowBlurred = onRowBlurred;
+        OnMaxLengthReached = onMaxLengthReached;
+        OnCaretMoved = onCaretMoved;
+        OnPointerFocus = onPointerFocus;
+        OnJumpToFirstRow = onJumpToFirstRow;
+        OnJumpToLastRow = onJumpToLastRow;
         OnToggleTask = onToggleTask;
         OnDeleteBlock = onDeleteBlock;
         OnTogglePinned = onTogglePinned;
         OnReorderBlock = onReorderBlock;
-        OnAddTask = onAddTask;
+        OnAdd = onAdd;
         OnSwitchToRead = onSwitchToRead;
         OnOpenEditorReference = onOpenEditorReference;
         OnOpenSettings = onOpenSettings;
@@ -153,6 +164,7 @@ internal sealed class ScribeEditorContent : StatefulWidget
         ScrollController = scrollController;
         CollapseRegistry = collapseRegistry;
         OnDepartureSettled = onDepartureSettled;
+        CurrentShade = currentShade;
         HintLangKey = hintLangKey;
         AddTaskEnabled = addTaskEnabled;
         ShowSwitchToRead = showSwitchToRead;
@@ -168,17 +180,37 @@ internal sealed class ScribeEditorContent : StatefulWidget
     /// <summary>A row's field genuinely lost focus (add-empty-task-lifecycle): the dialog removes the row
     /// if it is an empty task. See <see cref="ScribeDialogBase.OnRowBlurred"/>.</summary>
     public Action<int> OnRowBlurred { get; }
+    /// <summary>A row hit its per-kind character cap while typing/pasting (add-note-kind-picker §8): the
+    /// dialog surfaces a transient "limited to N characters" notice. See
+    /// <see cref="ScribeDialogBase.OnRowMaxLengthReached"/>.</summary>
+    public Action<int> OnMaxLengthReached { get; }
+    /// <summary>A row's caret moved by keyboard nav (no text change) — the dialog follows it into view
+    /// (scroll-follow-caret-in-editor issue #1). See <see cref="ScribeDialogBase.NotifyCaretMoved"/>.</summary>
+    public Action<int> OnCaretMoved { get; }
+    /// <summary>A row was focused by a mouse click — the dialog suppresses scroll-into-view for it
+    /// (scroll-follow-caret-in-editor issue #3). See <see cref="ScribeDialogBase.NotifyPointerFocus"/>.</summary>
+    public Action<int> OnPointerFocus { get; }
+    /// <summary>Cmd/Ctrl+Up in a row — the dialog jumps focus to the first row, caret at its start
+    /// (scroll-follow-caret-in-editor Cmd/Ctrl row-nav). See <see cref="ScribeDialogBase.EditorJumpToFirstRow"/>.</summary>
+    public Action<int> OnJumpToFirstRow { get; }
+    /// <summary>Cmd/Ctrl+Down in a row — the dialog jumps focus to the last row, caret at its end. See
+    /// <see cref="ScribeDialogBase.EditorJumpToLastRow"/>.</summary>
+    public Action<int> OnJumpToLastRow { get; }
     public Action<int> OnToggleTask { get; }
     public Action<int> OnDeleteBlock { get; }
     public Action<int> OnTogglePinned { get; }
     /// <summary>Reorder a block from one index to another (drag drop). See
     /// <see cref="ScribeEditorContentState"/> for the drag mechanics.</summary>
     public Action<int, int> OnReorderBlock { get; }
-    public Action OnAddTask { get; }
-    /// <summary>Whether the footer "Add task" button is enabled. Default true (uncapped tiers — Lectern,
+    /// <summary>Add a block of the chosen kind (add-note-kind-picker D2). The footer's segmented picker calls
+    /// this with its current primary kind (defaults to Task) on a primary click, or with the picked kind from
+    /// the inline list. See <see cref="ScribeDialogBase.OnClickAdd"/>.</summary>
+    public Action<ScribeAddKind> OnAdd { get; }
+    /// <summary>Whether the footer's add control may add a TASK. Default true (uncapped tiers — Lectern,
     /// Notebook — always). The tablet tier passes false once its document holds the max task blocks
-    /// (scribe-document-policy), which dims the button and makes its tap a no-op so the 10-task cap is a
-    /// visible affordance, not just a silent backstop.</summary>
+    /// (scribe-document-policy), which dims the primary button (when its kind is a task) and makes a task add a
+    /// no-op so the 10-task cap is a visible affordance. Notes are uncapped, so the Note entry stays enabled
+    /// regardless (design D4).</summary>
     public bool AddTaskEnabled { get; }
     public Action OnSwitchToRead { get; }
     /// <summary>Whether the footer shows the "Done editing" (switch-to-read) button. Default true for the
@@ -186,6 +218,14 @@ internal sealed class ScribeEditorContent : StatefulWidget
     /// (add-tablet-dialog) passes false: it has no Read view, so leaving editor mode would null the scratch
     /// and there would be nowhere to land — the button is simply omitted there.</summary>
     public bool ShowSwitchToRead { get; }
+    /// <summary>The dialog's current illumination shade (add-note-kind-picker + respect-local-illumination):
+    /// threaded so the footer's add-kind picker can tint its FLOATING drop-up menu to match the window. The
+    /// menu paints in the Overlay layer, which sits OUTSIDE the dialog body's <see cref="ScribeGlobalTint"/>
+    /// wrap, so it would otherwise render at full brightness while the rest of the dialog is shaded (the bug
+    /// the user reported). The picker re-wraps its menu content in its own <see cref="ScribeGlobalTint"/>
+    /// using this value. Refreshed on every <c>RebuildBody()</c>, so a newly-opened menu uses the current
+    /// shade.</summary>
+    public ScribeAmbientLightSampler.Shade CurrentShade { get; }
     /// <summary>Open the "Scribe Editor Features" handbook page (v1-release-checklist 9.5). Wired from the
     /// dialog (which holds the client API); this widget stays free of the VS API. See
     /// <see cref="ScribeDialogBase.OpenEditorReferenceHandbook"/>.</summary>
@@ -227,6 +267,10 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
     // is the row the cursor is currently over (the prospective drop). Both null when no drag active.
     private int? dragFromIndex;
     private int? dragOverIndex;
+
+    // The add-kind picker (selected kind + open/closed) is a self-contained widget in the footer
+    // (ScribeAddKindPicker), which owns that state so its floating drop-up menu can manage its own overlay
+    // entries; see BuildFooterButtons.
 
     /// <summary>Grip pressed: begin a drag from this row. The event dispatcher auto-captures the grip's
     /// element on press, so the subsequent moves/release keep arriving here even as the cursor crosses
@@ -307,6 +351,11 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                     onCommitAndRetreat: Widget.OnCommitAndRetreat,
                     onInsertTaskBelow: Widget.OnInsertTaskBelow,
                     onRowBlurred: Widget.OnRowBlurred,
+                    onMaxLengthReached: Widget.OnMaxLengthReached,
+                    onCaretMoved: Widget.OnCaretMoved,
+                    onPointerFocus: Widget.OnPointerFocus,
+                    onJumpToFirstRow: Widget.OnJumpToFirstRow,
+                    onJumpToLastRow: Widget.OnJumpToLastRow,
                     onToggleTask: Widget.OnToggleTask,
                     onDelete: Widget.OnDeleteBlock,
                     onTogglePinned: Widget.OnTogglePinned,
@@ -382,6 +431,9 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                     // Dropped on the cuneiform tablet path (add-tablet-clay-type-themes 8.1) — the hard
                     // rule reads wrong against the clay backdrop; the readable path keeps it.
                     Widget.Style.UseCuneiform ? new SizedBox() : new Divider(),
+                    // The scroll body keeps its exact height regardless of the add-kind picker: the picker's
+                    // kind menu is a FLOATING drop-up that grows OVER this scroll body (see
+                    // ScribeAddKindPicker), so nothing here reflows when it opens.
                     new Expanded(child: scrollBody),
                     new Padding(Widget.FooterButtonPadding, child: new Row(
                         spacing: 8,
@@ -472,16 +524,19 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
 
         var buttons = new List<Widget>
         {
-            // "Add task": dimmed + inert once the tier cap is reached (tablet at 10 tasks);
-            // uncapped tiers always pass AddTaskEnabled=true, so this renders exactly as before.
-            new Expanded(child: new Button(
-                child: BuildButtonLabel(
-                    Lang.Get("scribe:scribe-gui-addtask"),
-                    Widget.AddTaskEnabled
-                        ? buttonTextStyle
-                        : buttonTextStyle with { Color = colors.OnPrimary with { W = 0.4f } }),
-                style: labelButtonStyle,
-                onTap: Widget.AddTaskEnabled ? _ => Widget.OnAddTask() : null)),
+            // The add control (add-note-kind-picker D1): a segmented button — a primary "Add <kind>" button
+            // (defaults to Task, so one click still adds a task) plus a caret that opens a floating drop-up
+            // of the kinds (Task / Note). Self-contained (ScribeAddKindPicker owns its selected-kind + open
+            // state and its overlay), so it builds its own cuneiform-aware labels + segment styles from
+            // Widget.Style. AddTaskEnabled flows through so the primary button + Task entry dim + inert at
+            // the tablet's task cap (Notes stay enabled — uncapped, design D4).
+            new Expanded(child: new ScribeAddKindPicker(
+                onAdd: Widget.OnAdd,
+                addTaskEnabled: Widget.AddTaskEnabled,
+                style: Widget.Style,
+                // The drop-up menu paints in the Overlay, outside the dialog's ScribeGlobalTint wrap, so the
+                // picker re-tints it to match the window (add-note-kind-picker tint fix).
+                currentShade: Widget.CurrentShade)),
         };
 
         if (Widget.ShowSwitchToRead)
@@ -568,6 +623,11 @@ internal sealed class ScribeEditRow : StatefulWidget
         Action<int> onCommitAndRetreat,
         Action<int> onInsertTaskBelow,
         Action<int> onRowBlurred,
+        Action<int> onMaxLengthReached,
+        Action<int> onCaretMoved,
+        Action<int> onPointerFocus,
+        Action<int> onJumpToFirstRow,
+        Action<int> onJumpToLastRow,
         Action<int> onToggleTask,
         Action<int> onDelete,
         Action<int> onTogglePinned,
@@ -589,6 +649,11 @@ internal sealed class ScribeEditRow : StatefulWidget
         OnCommitAndRetreat = onCommitAndRetreat;
         OnInsertTaskBelow = onInsertTaskBelow;
         OnRowBlurred = onRowBlurred;
+        OnMaxLengthReached = onMaxLengthReached;
+        OnCaretMoved = onCaretMoved;
+        OnPointerFocus = onPointerFocus;
+        OnJumpToFirstRow = onJumpToFirstRow;
+        OnJumpToLastRow = onJumpToLastRow;
         OnToggleTask = onToggleTask;
         OnDelete = onDelete;
         OnTogglePinned = onTogglePinned;
@@ -617,6 +682,19 @@ internal sealed class ScribeEditRow : StatefulWidget
     public Action<int> OnCommitAndRetreat { get; }
     public Action<int> OnInsertTaskBelow { get; }
     public Action<int> OnRowBlurred { get; }
+    public Action<int> OnMaxLengthReached { get; }
+    /// <summary>Keyboard caret move (arrows/Home/End) that didn't change text — the editor follows the caret
+    /// into view. See <see cref="ScribeMultilineField.OnCaretMoved"/>.</summary>
+    public Action<int> OnCaretMoved { get; }
+    /// <summary>Row focused by a mouse click — the editor suppresses scroll-into-view (the click point is
+    /// already visible). See <see cref="ScribeMultilineField.OnPointerFocus"/>.</summary>
+    public Action<int> OnPointerFocus { get; }
+    /// <summary>Cmd/Ctrl+Up on this row — jump focus to the first row. See
+    /// <see cref="ScribeMultilineField.OnJumpToFirstRow"/>.</summary>
+    public Action<int> OnJumpToFirstRow { get; }
+    /// <summary>Cmd/Ctrl+Down on this row — jump focus to the last row. See
+    /// <see cref="ScribeMultilineField.OnJumpToLastRow"/>.</summary>
+    public Action<int> OnJumpToLastRow { get; }
     public Action<int> OnToggleTask { get; }
     public Action<int> OnDelete { get; }
     public Action<int> OnTogglePinned { get; }
@@ -761,15 +839,21 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             cuneiformJitterSeed: Widget.Data.TaskId.GetHashCode(),
             cuneiformProgression: style.UseCuneiform && style.CuneiformProgression,
             cuneiformGlow: style.UseCuneiform ? style.CuneiformGlow : default,
-            // Task rows are held to the soft task cap as a maxlength affordance; freeform Text sections
-            // stay uncapped in-editor (bounded only by the codec's larger hard limit). The codec clips
-            // Task text on read regardless, so this is the UX half of the same limit (RELEASE.md A1).
-            maxLength: Widget.Data.IsTask ? ScribeDocumentCodec.MaxTaskTextLength : (int?)null,
+            // Each kind is held to its own maxlength as a live affordance: Task rows to the soft task cap,
+            // Note rows to the larger freeform cap. The codec clips both on read regardless, so this is the
+            // UX half of the same limit (RELEASE.md A1). Hitting the cap fires OnMaxLengthReached below so the
+            // dialog can explain it.
+            maxLength: Widget.Data.IsTask ? ScribeDocumentCodec.MaxTaskTextLength : ScribeDocumentCodec.MaxTextLength,
             onChanged: text => Widget.OnTextChanged(index, text),
             onCommitAndAdvance: () => Widget.OnCommitAndAdvance(index),
             onCommitAndRetreat: () => Widget.OnCommitAndRetreat(index),
             onInsertTaskBelow: () => Widget.OnInsertTaskBelow(index),
-            onBlur: () => Widget.OnRowBlurred(index)))));
+            onBlur: () => Widget.OnRowBlurred(index),
+            onMaxLengthReached: () => Widget.OnMaxLengthReached(index),
+            onCaretMoved: () => Widget.OnCaretMoved(index),
+            onPointerFocus: () => Widget.OnPointerFocus(index),
+            onJumpToFirstRow: () => Widget.OnJumpToFirstRow(index),
+            onJumpToLastRow: () => Widget.OnJumpToLastRow(index)))));
 
         // Row body: [grip][checkbox][text]. Delete/pin no longer reserve columns here — they float on
         // top of the row (see below), so the text can use the full width.
