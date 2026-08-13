@@ -76,7 +76,8 @@
 ## 5. Wrap-up
 
 - [x] 5.1 `openspec validate extract-animated-task-list --strict` passes.
-- [ ] 5.2 Record playtest verdicts (regenerate TESTING.md via the what-to-test skill).
+- [x] 5.2 Record playtest verdicts (regenerate TESTING.md via the what-to-test skill).
+      DONE 2026-08-12 — §4.3/4.4/4.5 all CONFIRMED 2026-08-10; TESTING.md regenerated.
 - [x] 5.3 Update `VSAPI-NOTES.md`/`docs/animation-lessons-learned.md` with the diffing-container
       pattern and the scroll-pin-autonomy resolution, so the follow-up (editor/HUD migration) has the
       seam documented.
@@ -102,6 +103,10 @@ either under this change.
       delayed removal (see [[hud-undo-window-is-policy-hiding]] — the undo window exists only because
       the HUD hides the Completion Policy). Delete `departing`/`BeginDeparting`/`ReconcileDeparting`/
       `OnDepartingCollapsed`.
-- [ ] 6.3 Once all three interactive surfaces (editor/Pinned/HUD) route through the container, retire
+- [x] 6.3 Once all three interactive surfaces (editor/Pinned/HUD) route through the container, retire
       any now-dead duplicated primitives and confirm one choreography path remains. (Final
       consolidation — happens after `migrate-hud-onto-animated-list`.)
+      DONE 2026-08-12 (`migrate-hud-onto-animated-list` §5.1) — all FOUR interactive surfaces
+      (editor / Read / Pin Tab / HUD) now construct `new ScribeAnimatedList(...)`; the HUD's
+      hand-wired `departing`/`BeginDeparting`/`ReconcileDeparting`/`OnDepartingCollapsed` +
+      `ScribeRowSizeAnimation` wrap were deleted, leaving ONE choreography path (the container).
