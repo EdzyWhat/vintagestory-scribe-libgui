@@ -66,4 +66,5 @@ Source and issue tracker: github.com/EdzyWhat/vintagestory-scribe-libgui
 	•	Atlas by Pixnop — a headless VS server test harness that made integration testing actually possible.
 	•	Artekuno — suggested the Scapholène font (now the default recommendation) and the option to mute Scribe's audio.
 	•	JeanPierre (Wanderer's Sketchbook) — inspiration for the task-pinning concept.
+	•	Arquimago — Brazilian Portuguese (pt-br) translation.
 Bundled fonts: Caudex (SIL OFL), Scapholène (Scapholène Font License v1.0), La Belle Aurore (SIL OFL), Noto Sans (SIL OFL), Noto Serif (SIL OFL). All shipped unmodified. Playfair Display and Cormorant Unicase provided by LibGUI.
