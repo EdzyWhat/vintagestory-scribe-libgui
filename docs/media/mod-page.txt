@@ -41,7 +41,8 @@ Note-taking tools grow with your tech tree — scratchy clay in the stone age, c
 	•	✅ v0.1 — Lectern + Pinned HUD (released)
 	•	✅ v0.2 — Notebook & Clockmaker's Notebook — a carried item for personal notes with a passive History chronicle; the Clockmaker's variant adds timers and reminders (released)
 	•	✅ v1.0 — Clay & Wax Tablets — the early-game handheld tier, with the dry/harden/re-wet/fire life-cycle and a cuneiform script; Scribe's first "complete" cut (released)
-	•	⬜ v1.1 — Writing Desk — a private block with richer organization and copy/paste export between the Lectern, Notebook, and Desk
+	•	✅ v1.1 — Interim polish — light-aware pages, plain notes alongside tasks, shelf storage for Notebooks and Tablets, typed arrows, smooth list animations, and a batch of editor and HUD fixes (released)
+	•	⬜ v1.2 — Writing Desk — a private block with richer organization and copy/paste export between the Lectern, Notebook, and Desk
 	•	⬜ Later — Bulletin Board — a shared, public board for multiplayer
 
 📚 You might also like

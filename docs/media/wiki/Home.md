@@ -30,7 +30,10 @@ A carried Notebook item that brings your tasks with you and keeps a passive **Hi
 **v1.0 — Clay & Wax Tablets** *(released)*
 The earliest writing tier: simple handheld [Tablets](Clay-and-Wax-Tablets) grounded in the archaeology of writing. Scratch a short list into wet clay, let it dry hard, then re-wet it to revise or fire it in a fire pit to keep it forever. Written in a carved-wedge cuneiform script. This is Scribe's first "complete" cut.
 
-**v1.1 — Writing Desk** *(planned)*
+**v1.1 — Interim polish** *(released)*
+An open Scribe page now dims and warms to the real light around you; you can add plain **notes** alongside tasks, store Notebooks and Tablets on shelves and in cabinets, type `->`/`<-` into `→`/`←`, and watch task and pin lists animate as rows come and go — plus a batch of editor and HUD fixes.
+
+**v1.2 — Writing Desk** *(planned)*
 A private desk block that expands on the Lectern with copy/paste export between the Lectern, Notebook, and Desk.
 
 The goal is a natural progression of capability through Vintage Story's tiers.

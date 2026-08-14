@@ -17,6 +17,29 @@ included — no fast-follow split. Deps unchanged: `game 1.22.x`, hard `gui 3.1.
 
 **Status legend:** `[ ]` not started · `[~]` in progress · `[x]` done.
 
+---
+
+## v1.1.0 — Interim polish release (2026-08-14)
+
+A smaller, additive follow-up cut; the tracks below document the v1.0.0 process and stand as the
+reusable template. The v1.1.0 cut:
+
+- [x] **Scope** — all 14 changes archived since the `v1.0.1` tag (illumination, note-kind picker,
+      shelf placement, typed arrows + cuneiform glyphs, row-insertion/animated-list/HUD-migration,
+      per-player pinned order, held-light flicker, caret-follow scroll, external-completion sync, and
+      the list-collapse hover fix). Writing Desk slips to **v1.2**.
+- [x] **CHANGELOG** — `[1.1.0]` section finalized from a full per-change audit (player-facing bullets
+      only; pure-infra changes like `reconcile-animating-surfaces` fold into their visible payoffs).
+- [x] **Save-compat** — **no-op.** Codec is unchanged since v1.0.1 (`Version=5`/`PriorVersion=4`); the
+      only read-path change (over-long freeform notes now clip instead of rejecting the whole document)
+      is strictly more lenient. v1.0.x worlds open unchanged.
+- [x] **Version consistency** — `modinfo.json` → `1.1.0`; README status line, CHANGELOG, mod-page
+      (`.txt`/`.html`/inline), and wiki `Home.md` all agree on `1.1.0`; deps unchanged (`game 1.22.0`,
+      hard `gui 3.1.0`).
+- [x] **In-game smoke** — author confirmed all in-game smoke tests pass.
+- [ ] **Ship** — build zip → tag `v1.1.0` → GitHub Release. Mod-DB upload + channel announcements are
+      done manually by the author afterward.
+
 ## Track V — Verification (the real gate)
 
 - [x] **V.1. In-game playtest sweep** — every in-game-testable item across all in-flight changes has a

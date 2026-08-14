@@ -4,9 +4,35 @@ All notable changes to Scribe are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.0] - 2026-08-14
+
+An interim polish release. The headline is that an open Scribe page now responds to the real
+light around you instead of glowing in the dark; alongside it are plain notes (not just tasks),
+shelf placement for Notebooks and Tablets, typed arrows, smooth list animations, and a batch of
+editor and HUD fixes. Fully save-compatible with 1.0.x — existing Lecterns, Notebooks, and
+Tablets open unchanged.
 
 ### Added
+- **Scribe pages now dim and warm to the light around you.** Instead of glowing at full brightness
+  in a pitch-black cave, an open Lectern, Notebook, or Tablet is now shaded by the actual light
+  reaching you — bright and neutral in daylight, warm and dim under a torch, and nearly unreadable
+  in true darkness — so carrying a light source finally matters when you want to read your notes. A
+  held torch, lantern, or oil lamp lights the page in its own colour, and the shading eases smoothly
+  as you move between light and shadow rather than snapping. A **minimum-brightness** floor in
+  Scribe's client config sets how dark the page can get in total darkness; raise it all the way to
+  `1.0` to keep the old always-bright look. Because Scribe reads the game's real light every frame,
+  lighting mods such as WarmerLighting and Immersive Light are respected automatically.
+- **Add plain notes, not just tasks.** The editor's **Add task** button is now an add menu — click
+  the caret beside it to choose between a **Standard Task** (a checkbox item, as before) and a
+  **Note**: freeform text with no checkbox and no completion state, for jotting things that aren't
+  to-dos. An abandoned empty note tidies itself away just like an empty task. Notes hold up to
+  10,000 characters (tasks stay at 1,000), and if you reach either limit the editor now tells you so
+  instead of silently dropping the extra text.
+- **Store Notebooks and Tablets on shelves, bookshelves, and cabinets.** Notebooks, Clockmaker's
+  Notebooks, and every clay and wax Tablet can now be placed on the same furniture that holds
+  vanilla books — general shelves, bookshelves, and display cabinets — instead of only dropping into
+  ground-storage piles. A shelved document keeps everything written in it, so putting it away and
+  taking it back down reopens your notes intact.
 - **Typed arrows.** In any Scribe editor (Lectern, Notebook, Clockmaker's Notebook, and a wet Tablet),
   typing `->` now becomes `→` and `<-` becomes `←` as you type — in both task and note text. The real
   Unicode arrow is stored, so it copies, searches, and reopens as an arrow. Substitution fires only as
@@ -16,11 +42,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Cuneiform now writes arrows and comparison signs.** Tablet (cuneiform) text can now render `←`, `→`,
   `<`, and `>` as authored glyphs, so the typed arrows above — and comparisons like `2 < 3` — render on
   a tablet instead of falling back to a blank gap.
-- **Jump to the first or last row of a note.** In any Scribe editor, **Cmd+Up/Down** on macOS or
-  **Ctrl+Up/Down** on Windows now moves straight to the first row (caret at its start) or the last row
-  (caret at its end), instead of nudging the caret one line. **Ctrl+Home / Ctrl+End** do the same, for
-  the standard Windows document-navigation muscle memory. Plain Up/Down still moves one visual line,
-  and Home/End still jump to the start/end of the current line.
 - **A clockwork gear-train now turns on the Clockmaker's Notebook Timer tab.** The Timer page shows
   an ambient mechanism — a central teal temporal gear driving two steel cogs and a large escape
   wheel — that ticks one tooth per real second with a spring-wound snap. It runs whenever the tab is
@@ -28,6 +49,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   when the timer fires the mechanism shudders and locks, and the wheel retracts. A faint tick-tock
   plays on the Effect volume channel while the tab is open (silenced by the "Mute Scribe UI sounds"
   setting). Purely decorative — it never changes timer behavior or intercepts the controls.
+- **Task and pin lists now animate smoothly as rows come and go.** Adding a task or note, or pinning
+  one, animates the new row sliding into place and nudging its neighbours aside to make room — across
+  the Lectern, Notebook, and Tablet editors, the Pinned tab, and the pinned-task HUD alike. Removing
+  a row collapses it and slides the rest up (the Pinned tab, which used to snap, now does this too). A
+  row you create and immediately start typing into fades in at full size so your caret never jumps.
+- **Held-light flicker now carries onto the page (with Immersive Lanterns).** If you run the
+  Immersive Lanterns mod, the flicker it gives a held torch, lantern, or candle now shows on the
+  Scribe page as well, so the page flickers in time with the light in your hand instead of holding a
+  dead-steady glow. Without Immersive Lanterns installed, nothing changes. Builds on the light-aware
+  shading above.
+- **Jump to the first or last row of a note.** In any Scribe editor, **Cmd+Up/Down** on macOS or
+  **Ctrl+Up/Down** on Windows now moves straight to the first row (caret at its start) or the last row
+  (caret at its end), instead of nudging the caret one line. **Ctrl+Home / Ctrl+End** do the same, for
+  the standard Windows document-navigation muscle memory. Plain Up/Down still moves one visual line,
+  and Home/End still jump to the start/end of the current line.
 
 ### Fixed
 - **Completing a task on the HUD now updates an open Pinned tab or editor immediately.** When a
@@ -46,6 +82,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the HUD next rebuilt. The task itself was never lost — only its on-screen label — but it looked
   alarming. The fade now clears cleanly on undo, so the text always reappears. (This was a rare,
   long-standing glitch that became easy to trigger after recent HUD-rendering work; both are fixed.)
+- **The pinned-task HUD and the Pinned tab now show your pins in the same order.** The two views
+  could drift apart — pin across several documents, or play across sessions, and a pin might sit in a
+  different spot on the HUD than in the Pinned tab. They now render one shared, per-player order, so
+  they always agree. As part of this, un-completing a task you'd sunk to the bottom now returns it to
+  its previous position instead of leaving it stranded at the end of the list.
+- **Editing a long task or note no longer makes the view jump around.** When a row grew taller than
+  the editor's visible area, every keystroke used to bounce the scroll between the top and bottom of
+  that row, making it almost impossible to edit. The editor now follows your caret — scrolling only
+  when the caret would leave the view, and then only far enough to bring it back — so long rows edit
+  smoothly. Arrow keys and Tab navigation follow the caret the same way.
+- **Deleting several rows in a row no longer needs a mouse wiggle between each.** Removing a task,
+  note, or pin slides the row below up to fill the gap — but that row's delete and pin buttons (which
+  only appear on hover) used to stay hidden until you physically nudged the mouse, so clearing a list
+  meant delete, wiggle, delete, wiggle. The row that slides under your cursor now shows its buttons
+  immediately, so you can delete straight down a list.
 
 ## [1.0.1] - 2026-08-07
 
@@ -223,6 +274,7 @@ First public release.
 - `game` 1.22.0
 - `gui` 2.0.0 (LibGUI)
 
+[1.1.0]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v0.1.2...v0.2.0
