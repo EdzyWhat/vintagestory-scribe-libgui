@@ -83,6 +83,7 @@ public class ItemScribeNotebook : Item, IScribeDocumentItem
     {
         base.OnCreatedByCrafting(allInputSlots, outputSlot, byRecipe);
         if (api.Side != EnumAppSide.Server) return;
+        if (outputSlot.Itemstack is null) return; // always set for a crafting output; guard is defensive
 
         // Resolve the crafting player from the inventory's opener set.
         var playerUid = outputSlot.Inventory.openedByPlayerGUIds.FirstOrDefault();

@@ -351,7 +351,7 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
 
     /// <summary>Only rebuild when the timer status changes — not on every 1-second server push.
     /// The countdown text is a self-ticking StatefulWidget, so mid-run pushes don't need a rebuild.</summary>
-    protected internal new void RefreshTimerView()
+    internal new void RefreshTimerView()
     {
         var newStatus = modSystem.MyTimer?.Status ?? TimerStatus.Idle;
         if (newStatus == _lastKnownStatus) return;

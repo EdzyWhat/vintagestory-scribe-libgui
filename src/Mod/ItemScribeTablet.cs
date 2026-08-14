@@ -130,6 +130,7 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
     {
         base.OnCreatedByCrafting(allInputSlots, outputSlot, byRecipe);
         if (api.Side != EnumAppSide.Server) return;
+        if (outputSlot.Itemstack is null) return; // always set for a crafting output; guard is defensive
 
         // Resolve the crafting player from the inventory's opener set.
         var playerUid = outputSlot.Inventory.openedByPlayerGUIds.FirstOrDefault();
@@ -202,7 +203,7 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
     /// We let base build the output, then copy the input's document/history bytes onto it. No attribute stamp:
     /// the <c>-hard</c> variant is the hard state (wire-tablet-clay-art-and-variants). Only acts on
     /// <see cref="EnumTransitionType.Harden"/>; any other transition passes straight through.</summary>
-    public override ItemStack OnTransitionNow(ItemSlot slot, TransitionableProperties props)
+    public override ItemStack? OnTransitionNow(ItemSlot slot, TransitionableProperties props)
     {
         var output = base.OnTransitionNow(slot, props);
         if (props.Type != EnumTransitionType.Harden || output is null) return output;
