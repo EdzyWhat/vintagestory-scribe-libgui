@@ -1,6 +1,6 @@
 {
   "generatedFrom": "glyphs/glyph-*.json",
-  "characterCount": 54,
+  "characterCount": 58,
   "characters": {
     "A": {
       "character": "A",
@@ -2474,6 +2474,160 @@
             "y": 76.88999938964844
           },
           "weight": 5.5
+        }
+      ]
+    },
+    "\u2190": {
+      "character": "\u2190",
+      "formatVersion": 1,
+      "gridSize": 100,
+      "leftWidth": 23,
+      "rightWidth": 23.5,
+      "leftPadding": 6,
+      "rightPadding": 6,
+      "strokes": [
+        {
+          "start": {
+            "x": 27.6,
+            "y": 49.815625000000004
+          },
+          "end": {
+            "x": 73.4,
+            "y": 49.815625000000004
+          },
+          "weight": 6
+        },
+        {
+          "start": {
+            "x": 28,
+            "y": 49.615625
+          },
+          "end": {
+            "x": 50,
+            "y": 37.215625
+          },
+          "weight": 6
+        },
+        {
+          "start": {
+            "x": 28.200000000000003,
+            "y": 47.815625000000004
+          },
+          "end": {
+            "x": 51.6,
+            "y": 64.815625
+          },
+          "weight": 6
+        }
+      ]
+    },
+    "\u2192": {
+      "character": "\u2192",
+      "formatVersion": 1,
+      "gridSize": 100,
+      "leftWidth": 23.5,
+      "rightWidth": 22.5,
+      "leftPadding": 6,
+      "rightPadding": 6,
+      "strokes": [
+        {
+          "start": {
+            "x": 26.400000000000002,
+            "y": 52.215625
+          },
+          "end": {
+            "x": 71.8,
+            "y": 52.815625000000004
+          },
+          "weight": 6
+        },
+        {
+          "start": {
+            "x": 71.2,
+            "y": 54.215625
+          },
+          "end": {
+            "x": 50.6,
+            "y": 39.215625
+          },
+          "weight": 6
+        },
+        {
+          "start": {
+            "x": 70.8,
+            "y": 52.015625
+          },
+          "end": {
+            "x": 50.2,
+            "y": 66.215625
+          },
+          "weight": 6
+        }
+      ]
+    },
+    "<": {
+      "character": "<",
+      "formatVersion": 1,
+      "gridSize": 100,
+      "leftWidth": 20.5,
+      "rightWidth": 19,
+      "leftPadding": 6,
+      "rightPadding": 6,
+      "strokes": [
+        {
+          "start": {
+            "x": 67.2,
+            "y": 36.415625
+          },
+          "end": {
+            "x": 32.2,
+            "y": 53.615625
+          },
+          "weight": 6
+        },
+        {
+          "start": {
+            "x": 31.200000000000003,
+            "y": 52.415625000000006
+          },
+          "end": {
+            "x": 66.8,
+            "y": 67.015625
+          },
+          "weight": 6
+        }
+      ]
+    },
+    ">": {
+      "character": ">",
+      "formatVersion": 1,
+      "gridSize": 100,
+      "leftWidth": 18,
+      "rightWidth": 21,
+      "leftPadding": 6,
+      "rightPadding": 6,
+      "strokes": [
+        {
+          "start": {
+            "x": 33.800000000000004,
+            "y": 37.615625
+          },
+          "end": {
+            "x": 70.2,
+            "y": 53.415625000000006
+          },
+          "weight": 6
+        },
+        {
+          "start": {
+            "x": 69.60000000000001,
+            "y": 51.415625000000006
+          },
+          "end": {
+            "x": 34.2,
+            "y": 67.015625
+          },
+          "weight": 6
         }
       ]
     }

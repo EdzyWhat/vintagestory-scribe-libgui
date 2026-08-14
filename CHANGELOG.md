@@ -7,6 +7,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Typed arrows.** In any Scribe editor (Lectern, Notebook, Clockmaker's Notebook, and a wet Tablet),
+  typing `->` now becomes `→` and `<-` becomes `←` as you type — in both task and note text. The real
+  Unicode arrow is stored, so it copies, searches, and reopens as an arrow. Substitution fires only as
+  you complete the digraph on the keyboard; pasting `->` leaves it literal. If your chosen task font
+  has no arrow glyph, the editor now falls back to a bundled font that does, so the arrow always shows
+  instead of a missing-glyph box.
+- **Cuneiform now writes arrows and comparison signs.** Tablet (cuneiform) text can now render `←`, `→`,
+  `<`, and `>` as authored glyphs, so the typed arrows above — and comparisons like `2 < 3` — render on
+  a tablet instead of falling back to a blank gap.
 - **Jump to the first or last row of a note.** In any Scribe editor, **Cmd+Up/Down** on macOS or
   **Ctrl+Up/Down** on Windows now moves straight to the first row (caret at its start) or the last row
   (caret at its end), instead of nudging the caret one line. **Ctrl+Home / Ctrl+End** do the same, for

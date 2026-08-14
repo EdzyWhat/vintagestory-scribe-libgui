@@ -93,7 +93,7 @@ A long pen-like **stylus** modelled attached to the side of each Tablet, reinfor
 - *Note:* the v3 spec explicitly shipped "no offhand stylus" as a mechanic — this is a purely
   cosmetic model element, not a held offhand item, so it doesn't reopen that decision.
 
-### 1.6 Add `<` and `>` glyphs to the cuneiform font — 🆕 new (proposed for v1.1, art-gated)
+### 1.6 Add `<` and `>` glyphs to the cuneiform font — ✅ DELIVERED (v1.1, `add-arrow-substitution-and-cuneiform-glyphs`)
 Author two new cuneiform glyphs for the **less-than / greater-than** characters so tablet text can
 render them. Author wants this in **v1.1**.
 - **This is NEW ART, not a Core alias.** The shipped bundle
@@ -116,7 +116,7 @@ render them. Author wants this in **v1.1**.
   is trivial and proven; the gate is drawing two legible glyphs that read as `<`/`>` in the cuneiform
   style. Cross-reference [[cuneiform-character-coverage-plan]] for the prior coverage pass.
 
-### 1.7 Add arrow glyphs (`←`/`→`) to the cuneiform font — 🆕 new (proposed for v1.1, art-gated)
+### 1.7 Add arrow glyphs (`←`/`→`) to the cuneiform font — ✅ DELIVERED (v1.1, `add-arrow-substitution-and-cuneiform-glyphs`)
 Author cuneiform glyphs for the **left/right arrow** characters so tablet text can render the arrows
 that the plaintext auto-substitution (see **4.5**) produces. Sibling to **1.6** — same NEW-ART path,
 not a Core alias (no existing glyph resembles an arrow to alias to, the way `& → +` aliases work).
@@ -416,7 +416,7 @@ fixed↔movable toggle that frees a grab handle. Author wants this in **v1.1** a
   approximate), **S effort** — no new primitive, no new persisted state, reuses the existing
   offset fields + persist path. A clean, self-contained v1.1 inclusion.
 
-### 4.5 Auto-substitute typed arrows (`->`/`<-` → `→`/`←`) — 🆕 new (proposed for v1.1)
+### 4.5 Auto-substitute typed arrows (`->`/`<-` → `→`/`←`) — ✅ DELIVERED (v1.1, `add-arrow-substitution-and-cuneiform-glyphs`)
 As the player types, turn the ASCII digraphs `->` and `<-` into the Unicode arrows `→`/`←`
 automatically in their task/note text — the small "smart replacement" nicety every editor has, so a
 player can jot "mine -> smith" and get "mine → smith".

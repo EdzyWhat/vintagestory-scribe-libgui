@@ -153,13 +153,15 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
         // overpaint it, and gated on empty text so it never sits behind typed characters.
         if (text.Length == 0 && placeholder.Length > 0)
         {
-            context.DrawText(placeholder, new Vector2(PadX, PadY + ascent), fontSize, placeholderColor, FontFamily, FontWeight.Normal);
+            ScribeGlyphFallback.DrawLine(context, placeholder, new Vector2(PadX, PadY + ascent), fontSize, placeholderColor, FontFamily, FontWeight.Normal);
         }
 
         for (int i = 0; i < visualLines.Count; i++)
         {
             float y = PadY + i * lineHeight + ascent;
-            context.DrawText(visualLines[i].Text, new Vector2(PadX, y), fontSize, textColor, FontFamily, FontWeight.Normal);
+            // DrawLine (not context.DrawText) so a stored ←/→ that the active font lacks renders in the
+            // fallback family instead of tofu; a no-arrow line takes DrawLine's single-draw fast path.
+            ScribeGlyphFallback.DrawLine(context, visualLines[i].Text, new Vector2(PadX, y), fontSize, textColor, FontFamily, FontWeight.Normal);
         }
 
         // Caret: map the flat caret offset onto (line, column) of the wrapped text, then draw a bar.
@@ -173,8 +175,12 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
         }
     }
 
+    // Route through the same arrow-fallback split DrawLine uses, so a redirected ←/→ is measured in the
+    // font it is actually drawn in — otherwise caret/selection x would drift by the arrow's advance delta
+    // between the active font's (absent) arrow and the fallback font's. No-arrow strings hit the fast path
+    // and measure identically to TextLayoutHelper.MeasureText.
     private float MeasureWidth(string s) =>
-        s.Length == 0 ? 0f : TextLayoutHelper.MeasureText(s, FontFamily, fontSize, FontWeight.Normal).X;
+        s.Length == 0 ? 0f : ScribeGlyphFallback.MeasureWidth(s, fontSize, FontFamily, FontWeight.Normal);
 
     // Greedy word-wrap to a pixel width, honoring explicit '\n', recording each visual line's source
     // offset so the caret/selection can map flat offsets onto (line, column). Public API only
@@ -741,6 +747,22 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
             return;
         }
         e.Handled = true;
+
+        // Typed-arrow substitution (add-arrow-substitution-and-cuneiform-glyphs): if this keystroke
+        // completes an ASCII arrow digraph (`->`/`<-`) with the character just before the caret, replace
+        // the two-char run with the single Unicode arrow (`→`/`←`) instead of inserting. Only on typing,
+        // never on paste; skipped while a selection is active (the "char before the caret" is ambiguous
+        // when typing over a selection). Length-neutral, so it bypasses the max-length clamp Insert applies.
+        if (!HasSelection
+            && Scribe.Core.ScribeArrowDigraph.TryApply(text, caret, e.KeyChar, out string substituted, out int newCaret))
+        {
+            text = substituted;
+            caret = newCaret;
+            anchor = caret;
+            Commit();
+            return;
+        }
+
         Insert(e.KeyChar.ToString());
     }
 
