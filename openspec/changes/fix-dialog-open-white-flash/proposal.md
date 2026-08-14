@@ -9,16 +9,21 @@ is split out here rather than blocking the reconcile branch's archive.
 
 ## What Changes
 
-- Run the one decisive discriminator still outstanding — open a flashing surface with **Pixel Art
-  Display OFF** (the parchment backdrop becomes a plain `SizedBox` with no texture) — to confirm or
-  refute that painting the 1024×1160 backdrop bitmap on open is the mechanism.
-- If confirmed: pre-decode/upload the backdrop as a persistent GPU texture at mod load (or otherwise
-  keep it resident between opens) so no cold per-open texture upload lands on a live frame; and find
-  why the Skia-backed texture appears evicted between closes.
-- If refuted: trace what else `ScribeDialogBase` / `GuiDialogBlockEntityBase` do on open that the
-  clean `GuiBase`-derived Settings window (which does NOT flash) skips, and fix that.
-- Verify any fix with the DEBUG frame-trace / OpenCV frame-extract method — do NOT add render/GL
-  code to Scribe blindly.
+- **Confirmed (§1.1, 2026-08-11):** painting the pixel-art backdrop bitmap on open is the mechanism
+  (Pixel Art OFF → no flash). **Root-caused (§2.1, 2026-08-13, DLL + LibGUI-source research):** the
+  flash is the one **cold GPU texture upload** for that backdrop landing on a live gameplay frame —
+  synchronous `GL.TexImage2D` on the single shared GL context stalls the frame and drops the opaque
+  terrain pass. Size-independent (128 KB flashes as hard as 4.75 MB). VS never hitches because it
+  warms all its textures behind the loading screen; LibGUI uploads asset bitmaps lazily on first draw.
+- **Fix (Route 1, see design.md):** mirror LibGUI's own `VsIconTextureCache` idiom — upload each
+  backdrop to a GL texture at mod load (behind the loading screen, off the live frame), then draw it
+  as a GPU-resident `SKImage` via `SKImage.FromTexture(GrContext,…)`, which references the resident
+  texture without re-uploading. Eliminates the in-frame upload entirely, including the first open.
+- Complementary (kept, not the fix): `SetImmutable`, the 128×145 native re-export, and
+  nearest-neighbour crispness — these cut every-open → first-open and make warming all specs at load
+  cheap, but do not reach zero on their own (`SKImage.FromBitmap` still lazy-uploads).
+- Verify any fix with the DEBUG frame-trace / OpenCV frame-extract method **and** a visual check
+  (origin/format correctness of the wrapped texture) — do NOT add speculative GL code.
 
 ## Capabilities
 

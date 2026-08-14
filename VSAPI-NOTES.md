@@ -2164,7 +2164,14 @@ active hand no longer holds ANY `IScribeDocumentItem` (a presence check, not ide
 frame-count/grace-period hacks — this project has moved away from timing-based GUI workarounds.
 Note the tablet's legit wet→hard/fired transition ALSO rides `SlotModified`, so don't break it.
 
-## "White flash" behind a Scribe dialog is a one-frame WORLD-TERRAIN dropout on EVERY open, CAUSED BY the parchment-backdrop bitmap paint (root cause confirmed 2026-08-11) — NOT a GUI white-clear, NOT a reconcile regression (2026-08-10)
+## "White flash" behind a Scribe dialog is a one-frame WORLD-TERRAIN dropout bound to dialog OPEN — INTERMITTENT, root cause STILL UNKNOWN as of 2026-08-13 (the "backdrop paint confirmed 2026-08-11" conclusion has since been downgraded; see the 2026-08-13 UPDATE at the end of this section). NOT a GUI white-clear, NOT a reconcile regression (2026-08-10)
+
+> **READ THE 2026-08-13 UPDATE AT THE END OF THIS SECTION FIRST.** The header line and the "DISCRIMINATOR
+> RESOLVED (2026-08-11)" + "Fix direction (§2)" blocks below record conclusions that were later revised:
+> the flash is intermittent (NOT "every open"), the Pixel-Art-OFF discriminator is now doubted as ordering
+> luck, the Route-1 pre-upload fix was tried and REVERTED as a regression, and the root cause is not
+> confirmed. The measured facts (frames show an opaque-terrain dropout; bisect-pre-existing; localized to
+> the backdropped surfaces) still stand — the interpretation of the *cause* is what changed.
 
 **Symptom: opening a Scribe surface flashes WHITE for one frame before the dialog resolves.**
 Originally reported as first-open-only and suspected as a `reconcile-animating-surfaces` regression.
@@ -2223,6 +2230,62 @@ between closes → re-uploaded (the per-open re-upload is what stalls the opaque
 Do NOT add render-path/GL code to Scribe blindly; verify any fix with the DEBUG frame-trace method.
 Related prior first-open work: `fix-item-dialog-first-open-flicker` (a DIFFERENT bug — dialog flicker-close
 from a DocId guard, not this terrain dropout).
+
+---
+
+### 2026-08-13 UPDATE — the "backdrop paint / cold upload" root cause is FALSIFIED; still no confirmed cause. Change PARKED.
+
+Everything above the divider is the 2026-08-10→11 investigation. This session tried the §2 fix and it
+failed, and new tests revised the diagnosis. **Net: the flash is INTERMITTENT, bound to the dialog OPEN
+transition, and we have no reliable repro and no confirmed root cause. Do not treat any theory below the
+"measured facts" list as settled.**
+
+**What was tried and FALSIFIED (don't re-run these as fixes):**
+1. **Cold GPU texture UPLOAD** (the §2 "Route 1" fix: pre-upload every backdrop to a resident
+   `LoadedTexture` at `BlockTexturesLoaded`, draw it GPU-resident via `SKImage.FromTexture`). Implemented
+   fully. The flash **still occurred on first open**. A channel-swap bug rendered the backdrops blue,
+   which usefully *proved* the `FromTexture` path was live (not the fallback) — so the upload really was
+   pre-warmed, and pre-warming did nothing. Combined with the already-measured **size-independence** (a
+   72 KB backdrop flashed as hard as a 4.75 MB one — far too small an upload to stall a frame), the
+   cold-upload theory is dead.
+2. **Cost of the first backdrop DRAW.** Falsified in-game: toggling Pixel Art **ON while a dialog is
+   already open** — i.e. the session's *first* backdrop image draw — does **NOT** flash. Only *opening* a
+   dialog flashes. So the cost is in the OPEN transition, not in drawing/uploading the backdrop bitmap.
+3. **GPU driver shader-cache warmup across process launches** (my hypothesis after a 3-relaunch test where
+   launch 1 flashed and launches 2–3 were clean). **Rejected by the tester**, who has repeatedly seen the
+   flash reproduce across a full open→flash→**quit**→relaunch→flash-again cycle — which a persisted
+   driver cache would prevent. Unsupported; do not assert it.
+
+**The Route-1 warm was a REGRESSION — reverted.** Holding 13 resident GL textures made the flash appear on
+the **Pixel-Art-OFF** path (which §1.1 had shown was flash-free) and made it fire on *every* open per
+art-config, not just the first — almost certainly by perturbing the shared `GrContext` state each open.
+Reverted §2.3–2.6; **kept §2.2** (the harmless polish: `ScribePixelArtBackdrop` drawing via
+`SKImage.FromBitmap` with NEAREST sampling for crisp pixel-art upscale, `SetImmutable()` on decoded/
+tinted/procedural backdrop bitmaps for upload caching, and the native 128×145 notebook re-export).
+**Guardrail learned: do NOT re-introduce resident-texture pre-warming for this bug.**
+
+**§1.1's "Pixel Art OFF removes the flash" is now DOUBTED** — likely ordering luck (the cold open-cost was
+already paid on an earlier art-ON open, so the art-OFF *reopen* was warm), not a genuine causal
+discriminator. It was a single observation; the intermittency + fact #2 above undercut it.
+
+**Measured facts that STILL hold (safe to rely on):** (a) the flash frame is a one-frame **opaque-terrain
+pass dropout**, GUI pixel-identical (OpenCV); (b) **bisect-pre-existing** on `5f6022a`, orthogonal to all
+Scribe render code; (c) localized to the three backdropped surfaces (Lectern/Notebook/Tablet), never the
+`.ui` showcase or the Settings window; (d) bound to dialog **OPEN**, not to in-dialog art toggling; (e)
+**intermittent** — appears and vanishes across sessions with no code change.
+
+**RESUME PLAN (when it next reproduces):** do these IN ORDER, and do NOT write a fix before step 2.
+1. **Pin a reliable repro.** Record the exact sequence: cold boot vs. warm? which surface opened first?
+   Pixel Art on or off? single-player vs. multiplayer? does a full quit→relaunch reflash? — the thing we
+   have never had is a deterministic trigger.
+2. **Frame-trace the offending OPEN frame** (DEBUG frame-trace method,
+   [[libgui-settling-loops-and-race-diagnosis]]) to see WHAT on the main render thread stalls long enough
+   to drop the opaque-terrain pass. Still-open candidate mechanisms: a Skia GL program/pipeline compile on
+   first draw of a given config; LibGUI surface (re)alloc + `GrContext.ResetContext` on open; something in
+   VS's world renderer reacting to a new dialog registering. Measure — we have falsified 3+ theories by
+   guessing.
+Full narrative + code state: memory [[white-flash-is-world-render-stall]] and
+`openspec/changes/fix-dialog-open-white-flash/tasks.md` §4.1.
 
 ## Sampling the light reaching the player (brightness + color) — the engine uses TWO inputs, not one (2026-08-12)
 

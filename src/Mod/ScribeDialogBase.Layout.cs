@@ -104,14 +104,18 @@ public abstract partial class ScribeDialogBase
             return new SizedBox(width: layout.W, height: layout.H, child: tree);
         }
         var bmp = modSystem.GetBackdropBitmap(host.BackdropSpec);
-        var style = bmp is not null
-            ? new BoxStyle { Texture = bmp, Width = layout.W, Height = layout.H }
-            : new BoxStyle { Color = new Vector4(0.85f, 0.78f, 0.62f, 1.0f), Width = layout.W, Height = layout.H };
-        // Force the LibGUI shared paint opaque immediately before the backdrop draws. A textured BoxStyle
-        // paints via DrawMaskedBox, the one draw op that reuses SharedPaint.Color without setting it, so it
-        // would otherwise modulate the clay art by whatever color the previous frame's last op left — the
-        // read-only tablet's transparent-backdrop bug (see ScribeResetPaintColor). The flat-color fallback
-        // sets its own Color, so it needs no reset, but wrapping unconditionally keeps one code path.
+        if (bmp is not null)
+        {
+            // Draw the backdrop ourselves with NEAREST sampling so the small native-resolution pixel-art
+            // source scales up crisp (see ScribePixelArtBackdrop). SizedBox pins the box to the dialog size
+            // so the proxy — and thus the backdrop rect — is exactly layout.W×H behind the content tree.
+            // The custom widget sets SharedPaint.Color opaque itself, so it needs no ScribeResetPaintColor.
+            return new ScribePixelArtBackdrop(bmp,
+                new SizedBox(width: layout.W, height: layout.H, child: tree));
+        }
+        // No bitmap (asset missing): flat parchment-colour fallback. A plain BoxStyle Color sets its own
+        // SharedPaint.Color, but wrap in ScribeResetPaintColor to keep the paint-hygiene guarantee uniform.
+        var style = new BoxStyle { Color = new Vector4(0.85f, 0.78f, 0.62f, 1.0f), Width = layout.W, Height = layout.H };
         return new ScribeResetPaintColor(new Container(style: style, child: tree));
     }
 

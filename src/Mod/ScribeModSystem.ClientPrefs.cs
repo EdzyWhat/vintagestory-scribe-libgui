@@ -107,18 +107,21 @@ public sealed partial class ScribeModSystem
         if (capi is null) return null; // client-only
         backdropCache ??= new Dictionary<string, SKBitmap?>();
 
-        // Key on both the asset AND the tint so a plain and a tinted use of the same PNG cache distinctly.
-        var t = spec.Tint;
-        string key = t is { } v
-            ? $"{spec.Texture}|tint={v.X:F3},{v.Y:F3},{v.Z:F3},{v.W:F3}"
-            : spec.Texture.ToString();
+        string key = BackdropCacheKey(spec);
         if (backdropCache.TryGetValue(key, out var cached)) return cached;
 
         var source = GetBackdropSource(spec.Texture);
-        SKBitmap? bmp = t is { } tint && source is not null ? BakeTint(source, tint) : source;
+        SKBitmap? bmp = spec.Tint is { } tint && source is not null ? BakeTint(source, tint) : source;
         backdropCache[key] = bmp;
         return bmp;
     }
+
+    /// <summary>The cache key for a spec's decoded bitmap (<see cref="GetBackdropBitmap"/>). Keys on both the
+    /// asset AND the tint so a plain and a tinted use of the same PNG stay distinct in the cache.</summary>
+    private static string BackdropCacheKey(ScribeBackdropSpec spec)
+        => spec.Tint is { } v
+            ? $"{spec.Texture}|tint={v.X:F3},{v.Y:F3},{v.Z:F3},{v.W:F3}"
+            : spec.Texture.ToString();
 
     /// <summary>Client-side: load (once) and return a decoded GUI texture bitmap by asset location, or
     /// <c>null</c> if the asset is missing/unloadable. Shares the same decode cache, one-warning-per-miss,
@@ -153,6 +156,9 @@ public sealed partial class ScribeModSystem
         string key = $"__procedural:great-wheel:{teeth}:{spacing}";
         if (backdropCache.TryGetValue(key, out var cached)) return cached;
         var bmp = ScribeGearTexture.GreatWheel(teeth: teeth, toothSpacingRef: spacing);
+        // Immutable so Skia caches its GPU upload (same rationale as GetBackdropSource) — the wheel is drawn
+        // via a BoxStyle.Texture too, and each (teeth,spacing) combo is generated fresh, never mutated in place.
+        bmp?.SetImmutable();
         backdropCache[key] = bmp;
         return bmp;
     }
@@ -173,6 +179,16 @@ public sealed partial class ScribeModSystem
             capi.Logger.Warning("[scribe] backdrop asset {0} not loadable ({1}); using placeholder color",
                 loc, asset is null ? "not found" : "Data null or undecodable");
         }
+        // Mark immutable so Skia can CACHE this bitmap's GPU texture upload and reuse it across draws/opens.
+        // ScribePixelArtBackdrop wraps it once as an SKImage and DrawImages it; on a GPU canvas Skia only
+        // caches the upload for an IMMUTABLE image source — a mutable one (SKBitmap.Decode returns mutable) is
+        // re-uploaded on every draw because the pixels could change. These backdrop bitmaps are cached and
+        // never mutated after decode, so immutability is semantically correct and lets repeat opens reuse the
+        // resident texture. NOTE: this is a caching win, NOT the "white flash" fix — the flash was proven
+        // (fix-dialog-open-white-flash §4.1, 2026-08-13) to be bound to the dialog OPEN transition, not to the
+        // backdrop upload/draw (turning art on in an already-open dialog — the first draw of the session —
+        // does not flash). See VSAPI-NOTES "White flash". No GL code added.
+        bmp?.SetImmutable();
         backdropCache[key] = bmp;
         return bmp;
     }
@@ -192,6 +208,9 @@ public sealed partial class ScribeModSystem
                 SKBlendMode.Modulate),
         };
         canvas.DrawBitmap(source, 0, 0, paint);
+        // Immutable for the same reason as the decoded source (see GetBackdropSource): lets Skia cache this
+        // baked bitmap's GPU upload so the tinted-tablet backdrops don't cold-re-upload on every open.
+        tinted.SetImmutable();
         return tinted;
     }
 
