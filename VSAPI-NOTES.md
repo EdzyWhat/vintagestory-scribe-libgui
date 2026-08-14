@@ -1304,6 +1304,24 @@ disagree on one Scribe-critical point — `ListView` variable-height rows).
 When we resolve a complex LibGUI layout bug or correct a LibGUI misconception, append a note here
 (same symptom-indexed style as the rest of this file), so it isn't re-derived. Known facts so far:
 
+**Fact: `PaintingContext.DrawText` does NO font fallback; the `CanvasDrawExtensions.DrawText`
+extension does.** A glyph the chosen font lacks (e.g. `←`/`→` in the subsetted Noto Sans/Serif/La
+Belle Aurore we bundle) renders as tofu (□) when drawn through the *instance* method
+`PaintingContext.DrawText` — decompiled (`Gui.dll`), it resolves one `SKFont` via
+`TextLayoutHelper.GetFont` and calls the raw `Canvas.DrawText(text, x, y, font, paint)` overload,
+which has no shaping/fallback. The *extension* `context.Canvas.DrawText(...)` (`Gui.Rendering.CanvasDrawExtensions`,
+the overload taking `sharedPaint`+`blurFilterCache`) instead goes through `TextShaper.Shape` →
+`FontRunSplitter.Split`, which per-code-point falls back via `primary.GetGlyph(cp)==0 ?
+SKFontManager.Default.MatchCharacter(...)`. `TextLayoutHelper.MeasureText` also shapes (so *measures*
+already reflect fallback even where the *draw* shows tofu — a draw/measure mismatch). The stock
+`Text`/`RenderText` read view uses the extension, so it falls back automatically; our custom
+`ScribeMultilineFieldRender` used the instance method, so it didn't. **Fix pattern:** for a
+mod-controlled draw path that needs a specific/deterministic fallback (not whatever `MatchCharacter`
+picks from the OS), split the string into runs and draw the missing-glyph run in an explicitly chosen
+family — LibGUI bundles **Cormorant Unicase** (has both arrows), always present via the `gui` dep. See
+`src/Mod/ScribeGlyphFallback.cs` (redirects only an unrenderable `←`/`→` to Cormorant, measures each
+run in its draw family so the caret stays aligned, single-draw fast path when no redirect is needed).
+
 **Fact: `ListView` supports variable-height rows despite the wiki saying otherwise.** The wiki's
 *Scrolling* page shows only uniform `itemHeight` ("all items must have the same height"). The source
 (`reference/vslibgui/Gui/Gui/Widgets/Scroll/ListView.cs:44` and `:88`) has `estimatedItemHeight` +
