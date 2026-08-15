@@ -4,6 +4,20 @@ All notable changes to Scribe are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Scriptorium block (foundation).** A new craftable, placeable **Scriptorium** — a dedicated
+  shared writing station alongside the Lectern. It hosts a full Scribe document with the same Read /
+  Task Editor / Pinned / Guest Book / Settings views, a one-editor-at-a-time lock, server-authoritative
+  persistence and sync, floor placement that faces the player, and document carry-over when broken and
+  re-placed. Crafted plank-heavy (planks + feather + nails, ink-filled). This lands the v1.2 organization
+  tier's block foundation; the richer collaborative features (Tracker/Link task types, copy/paste,
+  import/export, and the v1.3 assignment system) follow as separate changes.
+  - *Provisional art:* the Scriptorium currently reuses the Lectern's model, textures, and page
+    backdrop as a stand-in — a placed Scriptorium looks like a Lectern for now. The dedicated model
+    and backdrop are a tracked follow-up and will swap in without a save-format change.
+
 ## [1.1.1] - 2026-08-14
 
 ### Added

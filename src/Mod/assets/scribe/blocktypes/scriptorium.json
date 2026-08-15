@@ -1,0 +1,57 @@
+{
+	code: "scriptorium",
+	class: "BlockScriptorium",
+	entityclass: "Scriptorium",
+
+	// STAND-IN ART (add-scriptorium-block design, Decision 2): the Scriptorium reuses the Lectern
+	// shape/textures as a placeholder so the block, block entity, and dialog code path are fully
+	// testable in-game before the dedicated model lands. The final swap is JSON-only — repoint this
+	// `shape.base` (and add a dedicated `scribe:block/scriptorium/*` shape + textures) with no code
+	// change. Until then a placed Scriptorium looks like a Lectern but is a distinct block/entity.
+	shape: { base: "scribe:block/lectern/lectern" },
+
+	creativeinventory: { "general": ["*"], "decorative": ["*"] },
+
+	blockmaterial: "Wood",
+	lightAbsorption: 0,
+	sidesolid: { all: false },
+	sideopaque: { all: false },
+	faceCullMode: "NeverCull",
+	replaceable: 500,
+	resistance: 2,
+
+	collisionbox: { x1: 0.1817, y1: 0, z1: 0.1875, x2: 0.8188, y2: 1.2563, z2: 0.8125 },
+	selectionbox: { x1: 0.1817, y1: 0, z1: 0.1875, x2: 0.8188, y2: 1.2563, z2: 0.8125 },
+
+	sounds: {
+		place: "block/planks",
+		hit: "block/planks",
+		break: "block/planks",
+		walk: "walk/wood"
+	},
+
+	guiTransform: {
+		rotation: { x: -22.6, y: 142 },
+		origin: { x: 0.5, y: 0.6, z: 0.5 },
+		scale: 1
+	},
+
+	attributes: {
+		handbook: {
+			extraSections: [
+				{
+					title: "scribe:handbook-scriptorium-about-title",
+					text: "scribe:handbook-scriptorium-about-text"
+				},
+				{
+					title: "scribe:handbook-scriptorium-views-title",
+					text: "scribe:handbook-scriptorium-views-text"
+				},
+				{
+					title: "scribe:handbook-scribe-hud-ref-title",
+					text: "scribe:handbook-scribe-hud-ref-text"
+				}
+			]
+		}
+	}
+}

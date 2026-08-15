@@ -196,6 +196,8 @@ public sealed partial class ScribeModSystem : ModSystem
 
         api.RegisterBlockClass("BlockScribeLectern", typeof(BlockScribeLectern));
         api.RegisterBlockEntityClass("ScribeLectern", typeof(BlockEntityScribeLectern));
+        api.RegisterBlockClass("BlockScriptorium", typeof(BlockScriptorium));
+        api.RegisterBlockEntityClass("Scriptorium", typeof(BlockEntityScriptorium));
         api.RegisterItemClass("ItemScribeNotebook", typeof(ItemScribeNotebook));
         api.RegisterItemClass("ItemClockmakerNotebook", typeof(ItemClockmakerNotebook));
         api.RegisterItemClass("ItemScribeTablet", typeof(ItemScribeTablet));

@@ -19,7 +19,7 @@ age (the saw); anything past that is cosmetic.
 | Scratch | Clay & wax tablet (handheld) | up to 10 tasks, 1 pin; clay dries hard → re-wet in water or fire to make permanent; wax always rewritable | **shipped v1.0** |
 | ~~Scratch+~~ | ~~Reed/cattail paper~~ | ~~a few more lines~~ | **cut** — the clay→wax step already covers the low tier; a paper micro-tier added no capability |
 | Collection | Leather-bound notebook | infinite pages | **shipped v0.2** |
-| Organization | Writing desk (private block) | consolidates notes; copy/paste export between Lectern/Notebook/Desk | planned **v1.2+** (after the v1.1 polish release) |
+| Organization | Scriptorium (shared block) | dedicated shared writing station; copy/paste + import/export; foundation for Tracker/Link tasks & the v1.3 assignment system | **block foundation landed** (provisional art), v1.2 → `docs/specs/v7-scriptorium-and-task-types.md` |
 | Portability | Pinned-task HUD | pins from any source shown on an always-on HUD; quick-add gesture | **HUD shipped** (v0.1); backpack container **cut** |
 | Social | Bulletin board (public) + chalkboard | shared board; chalkboard is drawable | planned (Board) |
 
@@ -58,13 +58,15 @@ age (the saw); anything past that is cosmetic.
   - **Added beyond the spec:** tablet text renders in a bespoke **cuneiform script** by default
     (toggleable in Settings), and the unified **Shift+right-click quick-add** gesture (see v5) — a
     BREAKING change to the lectern/held-item interaction map — landed alongside this tier.
-- **v4 — Writing desk (organization)** *(planned, v1.2+ — after the v1.1 polish release)* → `docs/specs/v4-writing-desk.md`. Private owner-gated
-  block; consolidates notes + categories; **kanban tabs** (Active / Backlog / Completed) as
-  the fuller home for the completed-task funnel. Also the home for **within-document search**
-  (a text box filtering the desk's rows by typed query — reuses the kanban filtered-row-list
-  mechanism, no Core/server change; global cross-document search is a later, separate change)
-  and the **faction/shared task-assignment** idea — VS ships a first-party player-group system,
-  so this may need no external dependency (see open decision below).
+- **v4 → v7 — Organization tier (now the Scriptorium)** *(v1.2, in progress)* → `docs/specs/v7-scriptorium-and-task-types.md`
+  **re-scopes the old `v4-writing-desk.md`**: the organization tier is a **shared** writing station (the
+  **Scriptorium**), **not** the private owner-gated desk with kanban tabs originally sketched. The
+  **block foundation shipped via `add-scriptorium-block`** (block + block entity + recipe + handbook,
+  reusing the shared writing-station base and the existing Scribe dialog; provisional Lectern-derived
+  art pending the dedicated model). Remaining v1.2 scope — Tracker/Link task types, copy/paste, and
+  JSON/CSV import/export — and the v1.3 assignment system (Assign & History / Inbox views, place-bound
+  assignment) land as their own follow-up changes. VS's first-party player-group system may cover the
+  assignment side with no external dependency (see open decision below).
 - **v5 — Portability** → `docs/specs/v5-backpack-hud.md`. **The HUD half shipped early (v0.1.0):**
   the always-on **pinned-task HUD** (native `HudElement`, not ImGui) now aggregates pins from every
   source — lectern, notebook, and tablet — not just a held document. **Quick-add shipped in v1.0** but

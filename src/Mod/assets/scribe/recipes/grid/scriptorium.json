@@ -1,0 +1,21 @@
+[
+	{
+		ingredientPattern: "PFP,PNP,PPP",
+		ingredients: {
+			"P": { type: "item", code: "game:plank-*" },
+			"F": { type: "item", code: "game:feather" },
+			"N": { type: "item", code: "game:metalnailsandstrips-*" }
+		},
+		width: 3,
+		height: 3,
+		attributes: {
+			liquidContainerProps: {
+				requiresContent: { type: "item", code: "game:dye-black" },
+				requiresLitres: 1,
+				consumeContainer: true
+			}
+		},
+		name: "scribe:scriptorium",
+		output: { type: "block", code: "scribe:scriptorium", quantity: 1 }
+	}
+]

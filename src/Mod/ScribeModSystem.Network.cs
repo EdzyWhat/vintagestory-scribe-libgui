@@ -17,20 +17,20 @@ public sealed partial class ScribeModSystem
     private void OnClientReceivedEditReply(ScribeEditDocumentMessage message)
     {
         if (capi is null) return;
-        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeLectern lectern)
+        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeWritingStation station)
         {
-            lectern.HandleServerReply(message);
+            station.HandleServerReply(message);
         }
     }
 
     private void OnServerReceivedEdit(IServerPlayer fromPlayer, ScribeEditDocumentMessage message)
     {
         if (sapi is null) return;
-        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeLectern lectern)
+        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeWritingStation station)
         {
-            if (!lectern.ApplyEdit(fromPlayer, message.DocumentBytes))
+            if (!station.ApplyEdit(fromPlayer, message.DocumentBytes))
             {
-                lectern.SendSaveFailedAck(sapi, fromPlayer);
+                station.SendSaveFailedAck(sapi, fromPlayer);
             }
         }
     }
@@ -38,18 +38,18 @@ public sealed partial class ScribeModSystem
     private void OnServerReceivedReleaseLock(IServerPlayer fromPlayer, ScribeReleaseLockMessage message)
     {
         if (sapi is null) return;
-        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeLectern lectern)
+        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeWritingStation station)
         {
-            lectern.ReleaseLock(fromPlayer.PlayerUID);
+            station.ReleaseLock(fromPlayer.PlayerUID);
         }
     }
 
     private void OnServerReceivedRequestAccess(IServerPlayer fromPlayer, ScribeRequestAccessMessage message)
     {
         if (sapi is null) return;
-        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeLectern lectern)
+        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeWritingStation station)
         {
-            lectern.OnRequestAccess(fromPlayer, message.WantEditor, message.QuickAdd);
+            station.OnRequestAccess(fromPlayer, message.WantEditor, message.QuickAdd);
         }
     }
 
@@ -137,22 +137,22 @@ public sealed partial class ScribeModSystem
     private void OnServerReceivedRecordVisitor(IServerPlayer fromPlayer, ScribeRecordVisitorMessage message)
     {
         if (sapi is null) return;
-        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeLectern lectern)
-            lectern.RecordVisitor(sapi, fromPlayer);
+        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeWritingStation station)
+            station.RecordVisitor(sapi, fromPlayer);
     }
 
     private void OnServerReceivedEditGuestbookNote(IServerPlayer fromPlayer, ScribeEditGuestbookNoteMessage message)
     {
         if (sapi is null) return;
-        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeLectern lectern)
-            lectern.UpdateGuestbookNote(sapi, fromPlayer, message.InGameDate ?? "", message.Note ?? "");
+        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeWritingStation station)
+            station.UpdateGuestbookNote(sapi, fromPlayer, message.InGameDate ?? "", message.Note ?? "");
     }
 
     private void OnClientReceivedGuestbookSync(ScribeGuestbookSyncMessage message)
     {
         if (capi is null) return;
-        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeLectern lectern)
-            lectern.ApplyGuestbookSync(message.GuestbookBytes);
+        if (TryResolveHost(message.DocIdBytes) is BlockEntityScribeWritingStation station)
+            station.ApplyGuestbookSync(message.GuestbookBytes);
     }
 
     private void OnServerReceivedNotebookSave(IServerPlayer fromPlayer, ScribeNotebookSaveMessage message)

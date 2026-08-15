@@ -21,96 +21,39 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
-## add-timer-gearworks
+## add-scriptorium-block
 
-> Ambient clockwork gear-train on the Clockmaker's Notebook Timer tab. Code/art complete and baked;
-> these are the in-game verifications still owed (tasks 2.7 / 3.4 / 6.8 / 7.9), plus the still-wanted
-> translucent glass overlay (3.1). Open the Clockmaker's Notebook → Timer tab to test.
+> New v1.2 Scriptorium block (block + block entity + recipe + handbook), hosting the existing Scribe
+> dialog off the shared writing-station base. **Provisional art:** it currently reuses the Lectern's
+> model/textures/backdrop as a stand-in, so a placed Scriptorium *looks* like a Lectern — these items
+> confirm it's a distinct, working block underneath, not that it looks different yet. Fully quit and
+> relaunch the client first to load the new assets.
 
-- [x] `c61c1776` **Gears run, decoupled.** Open the Timer tab with no timer set — the train animates;
-      it keeps ticking across Idle→Running→Fired; switch to another tab and confirm the gears are gone
-      there; over several seconds the gears mesh + counter-rotate with no teeth drift, snapping and
-      settling (not a constant glide); the label/steppers/Start/Stop stay fully usable. *(2.7)*
-      - **Confirmed 2026-08-11** via playtest: "Works."
-- [x] `a788ec71` **Teal-only, no glow.** Confirm only the central temporal gear is teal; the two
-      flanking smalls and the escape wheel are steel; no gear shows a glow halo. *(2.7)*
-      - **Confirmed 2026-08-11** via playtest: "Works."
-- [x] `8026a2f6` **Shudder-and-lock on fire.** Let a running timer hit zero: the mechanism shudders
-      then locks at its current angle (does NOT rewind toward a start position); the blinking `00:00`
-      is unaffected; clear the fired timer and confirm ticking resumes. *(3.4)*
-      - **Confirmed 2026-08-11** via playtest: "Works."
-- [x] `a60e6537` **Depth + tooth stroke.** Confirm each gear casts a sharp offset silhouette shadow
-      that never spills outside the clip box; the great-wheel teeth are short with a stroke only on the
-      circular parts (not the teeth/spokes). *(6.8)*
-      - **Confirmed 2026-08-11** via playtest: "Works."
-- [x] `10d4b71f` **Slide-in / retract + symmetry.** Press Start: the escape wheel slides into place
-      (no teleport). On fire it slides back out. Confirm the symmetric two-small layout with the teal
-      gear sitting lower and overlapping the wheel as it slides in. *(6.8)*
-      - **Confirmed 2026-08-11** via playtest: "Works."
-- [x] `ff234ef1` **Sized, sharp, opaque.** Confirm gears mesh credibly at the baked size in the same
-      box; shadows are sharp and the steel-gear shadows are lighter than the teal gear's; every gear is
-      fully opaque — the escape wheel is NOT visible through the teal gear during the slide. *(7.9)*
-      - **Confirmed 2026-08-11** via playtest: "Works."
-- [x] `47b99a48` **Tick-tock sound.** With "Mute Scribe UI sounds" off and a non-zero Effect volume,
-      confirm a faint tick-tock once per second alternating two tones; enable the mute toggle and
-      confirm silence; leave the Timer tab and confirm it stops. *(7.9)*
-      - **Confirmed 2026-08-11** via playtest: "Works."
-- [x] `daeb6761` **Glass overlay.** Confirm the very-nearly-transparent glass pane over the gears reads
-      as looking through glass (a faint cool-gray tint + a soft diagonal sheen streak, no dark border),
-      the gears/backdrop are still clearly visible through it, and it never intercepts a click/keystroke
-      meant for a timer control. *(3.1)*
-      - **Confirmed 2026-08-11** via playtest: glass pane reads on top of the gears with two 45° glare
-        streaks at ~28% peak alpha; gears clearly visible through the ~4% flat film. (Earlier the sheen
-        was too faint over the bright/dark gears and read as sitting behind them — fixed by bolder glare.)
-
-## extract-animated-task-list
-
-> §4.3-4.5 proof gate for the `ScribeAnimatedList` diffing container, adopted FIRST on the Notebook
-> Pin Tab (Immediate removal policy — no undo window; the HUD's fade/undo is the deliberate exception,
-> deferred). The Pin Tab had no removal animation before, so every row-departure motion here is new.
-> Pass gates the follow-up (§6) that migrates the editor + HUD onto the same container.
-
-- [x] `4be1f4c9` **Pin collapse.** In the Notebook Pin Tab, complete / unpin / delete a pinned task —
-      the row collapses and neighbors slide up smoothly (no snap), immediately, with no undo window.
-      *(4.3)*
-      - **Confirmed 2026-08-10** via playtest (this session): row collapses, neighbors slide up, no snap,
-        immediate, no undo window.
-- [x] `8462e77a` **First-click delete.** Confirm the pin delete/unpin lands on the first click (no dead
-      first click), with no flicker and no lost hover, and that your caret/text is undisturbed if you
-      were editing a different row. *(4.3)*
-      - **Confirmed 2026-08-10** via playtest (this session): first click lands, no flicker/lost-hover,
-        caret undisturbed.
-- [x] `a4a1054b` **Bottom-row scroll ease.** Scroll the Pin Tab to the bottom, then remove the bottom
-      pinned row — the viewport eases upward as the row collapses instead of snapping. *(4.4)*
-      - **Confirmed 2026-08-10** via playtest (this session): viewport eases upward, no snap.
-- [x] `23699080` **Rapid multi-removal.** Remove several pinned rows in quick succession — each
-      collapses in its own slot and the surviving order is preserved (no rows jumping or overlapping).
-      *(4.4)*
-      - **Confirmed 2026-08-10** via playtest (this session): each collapses in its own slot, order preserved.
-- [x] `665a87b7` **Re-pin mid-collapse.** Unpin a task and, while its row is still collapsing, re-pin
-      the same task — the departure cancels and it renders as one live row again with no leftover ghost
-      or duplicate. *(4.4)*
-      - **Confirmed 2026-08-10** via playtest (this session): departure cancels, one live row, no ghost.
-- [x] `3b63d51e` **Slide under still cursor.** Complete a pinned row so another row slides up under a
-      stationary mouse cursor — the newly-hovered row's controls appear without moving the mouse.
-      *(4.4)*
-      - **Confirmed 2026-08-10** via playtest (this session): newly-hovered row's controls appear under a
-        stationary cursor.
-- [x] `d978dce8` **Regression: untouched surfaces.** Confirm editor delete, Tablet delete, and the HUD
-      (fade + undo window + sink) all still behave exactly as before this change. *(4.5)*
-      - **Still broken 2026-08-10** (playtest, this session): editor + Tablet delete unaffected, but the HUD
-        surfaced a real regression — under **Unpin** policy (likely any fading policy), check a HUD task,
-        then **cancel the check LATE** (text already faded to ~0). The row reverts to a checkbox with NO
-        text — a permanent invisible row. Root cause: `ScribeFadeText` only ever STARTED its fade controller,
-        never cleared it; the reconcile HUD conversion (`reconcile-animating-surfaces` §4.1/§4.2, commit
-        `ec4864a`) REUSES the row element on undo instead of remounting, so the completed fade controller
-        (`Value ≈ 1` → opacity ≈ 0) survived — hence "more reproducible than the old intermittent version"
-        the tester recalled (old `ForceRebuild` path remounted to a fresh visible state). FIX applied +
-        staged this session: `SyncFadeController` now DISPOSES the controller when `Fading` goes false, in
-        both `InitState`/`UpdateWidget`.
-      - **Confirmed 2026-08-10** (playtest, this session): retested after the fix — check a HUD task under
-        Unpin, uncheck late → the text reappears and the row persists intact. This was a genuine
-        long-standing intermittent bug (never root-caused before); flag for the ModDB changelog.
+- [x] `72c034fa` **Craft, place, break.** Craft the Scriptorium (7 planks + feather + metal nails,
+      ink-filled at the grid), place it on the floor, then break it — confirm it drops and returns to
+      inventory cleanly. *(add-scriptorium-block 4.1)*
+      - **Confirmed 2026-08-14** via playtest: user reported all Scriptorium in-game checks pass.
+- [x] `bf0066d0` **Open Read vs quick-add.** Right-click a placed Scriptorium → opens in Read view;
+      Shift+right-click → opens the editor with a fresh, focused, empty task at the top. *(add-scriptorium-block 4.2)*
+      - **Confirmed 2026-08-14** via playtest: user reported all Scriptorium in-game checks pass.
+- [x] `f26437ea` **Edits persist.** In the editor add / edit / complete / delete / reorder rows, close
+      the dialog, then save-and-reload the world — confirm every change persisted. *(add-scriptorium-block 4.3)*
+      - **Confirmed 2026-08-14** via playtest: user reported all Scriptorium in-game checks pass.
+- [x] `4693cc59` **Floor-only + facing.** Aim at a wall/ceiling → placement rejected with the "requires
+      solid ground" message; place on floor → the block faces you; reload → the facing survives. *(add-scriptorium-block 4.4)*
+      - **Confirmed 2026-08-14** via playtest: user reported all Scriptorium in-game checks pass.
+- [x] `08e6de52` **Doc survives break.** Write some content and pin a task, break the Scriptorium, then
+      re-place the dropped item — confirm the text, task ids, and the pinned task all survive. *(add-scriptorium-block 4.5)*
+      - **Confirmed 2026-08-14** via playtest: user reported all Scriptorium in-game checks pass.
+- [x] `a5a56f00` **Tooltip, no burn line.** Check the title line on both the inventory item tooltip and
+      the placed-block info; confirm NO burn/combustion/temperature line appears. *(add-scriptorium-block 4.6)*
+      - **Confirmed 2026-08-14** via playtest: user reported all Scriptorium in-game checks pass.
+- [x] `0cdc6233` **Distinct from Lectern.** Place a Lectern and a Scriptorium side by side — confirm they
+      hold independent documents and each keeps its own mesh/facing (no mesh-cache collision). *(add-scriptorium-block 4.7)*
+      - **Confirmed 2026-08-14** via playtest: user reported all Scriptorium in-game checks pass.
+- [x] `b985b404` **MP lock + sync.** With two clients on one Scriptorium, confirm the one-editor-at-a-time
+      lock holds and that edits made by the editor sync live to the other client. *(add-scriptorium-block 4.8)*
+      - **Confirmed 2026-08-14** via playtest: user reported all Scriptorium in-game checks pass.
 
 ## reconcile-animating-surfaces
 
@@ -259,94 +202,6 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         it recurs." Not reproducing on the current build; parked as a watch item (blank-checkbox bug class has
         recurred before via new triggers, so kept on record rather than closed).
 
-## animate-row-insertion
-
-> Row ENTRY animation + the editor→container migration (D0). The editor now renders through the same
-> `ScribeAnimatedList` as the Pin Tab / Read view (3 of 4 surfaces share one motion path; only the HUD
-> stays bespoke). Two gates: §0.5 is the collapse-PARITY gate (the migration must not change the
-> existing delete behavior) — verify it FIRST; the §5.5 items are the new entry motion. EVERY appearance
-> uses ONE uniform slide-in: the row's content translates down into place from above and fades, at full
-> height in its slot (the translate is paint-only, so the caret/hit-tests/scroll are exact from frame 1 —
-> even the auto-focused row). No fade-vs-grow split. Test in the LECTERN editor (hardest focus case)
-> unless a Pin Tab / Read view is named. Build+restage green 2026-08-12.
-
-- [x] `fbf11c49` **Editor collapse parity.** Delete a mid-list editor row (neighbors slide up, no snap),
-      delete while scrolled, rapid multi-delete (slot order preserved), delete a row mid-drag, and confirm
-      a caret in another row is undisturbed — the editor collapse must behave exactly as before the
-      container migration. *(0.5)*
-      - **Confirmed 2026-08-12** via playtest (2026-08-12T08-31-32): "Editor collapse all work as expected."
-        The editor→container migration is behavior-parity on the collapse path.
-- [ ] `d87250f4` **Focused add fades in.** Add a task in the editor — the new auto-focused row FADES in at
-      full height (does not grow), its caret is visible and usable from the first frame, and a click inside
-      it lands correctly throughout the fade. *(5.5)*
-      - **Obsolete 2026-08-12:** the full-height opacity-only fade was abandoned. Playtest
-        (2026-08-12T08-31-32) reported "the row appears instantly" — a fixed-position fade over 200ms is too
-        subtle to read as motion. The design pivoted to a uniform SLIDE (content translates in + fades) for
-        every appearance; this fade-only test no longer describes the shipped behavior. Superseded by
-        `bea8765f`.
-- [x] `bea8765f` **Focused add slides in.** Add a task in the editor — the new auto-focused row slides in
-      (content translates down from above and fades) at full height in its slot; the caret is visible and
-      usable from the first frame, and a click inside it lands correctly throughout the slide. *(5.5)*
-      - **Confirmed 2026-08-12** via playtest (2026-08-12T09-29-40): "All work." The focused editor row
-        slides in and stays usable throughout.
-- [x] `7e636d62` **Peer appearance slides.** Trigger a non-focused appearance (quick-add, or a row that
-      isn't the auto-focused one) — it slides in the same way and the rows below hold position (no height
-      pop, since the translate is paint-only). *(5.5)*
-      - **Confirmed 2026-08-12** via playtest (2026-08-12T09-29-40): "It works!" Peer appearances slide;
-        no height pop below.
-- [x] `03f024c4` **Entry survives reconcile.** Start an entry animation, then trigger a
-      ForceRebuild/reconcile mid-entry (e.g. toggle a pin) — the entry continues smoothly, does not restart
-      or snap. *(5.5)*
-      - **Confirmed 2026-08-12** via playtest (2026-08-12T09-29-40): "Works." Slide continues across a
-        mid-entry reconcile.
-- [x] `4994f711` **No scroll jump on add.** Add a row at the bottom, and add past a full page — confirm the
-      viewport does not jump. *(5.5)*
-      - **Confirmed 2026-08-12** via playtest (2026-08-12T09-29-40): "Works." No viewport jump on add.
-- [x] `ab292707` **Add-then-delete clean.** Add a row and immediately delete the same row — the transition
-      is clean, no residual or double animation. *(5.5)*
-      - **Confirmed 2026-08-12** via playtest (2026-08-12T09-29-40): "Works." Clean add-then-delete, no
-        residual/double animation.
-- [x] `c16a1b26` **Pin Tab + Read slide.** Pin Tab and Read view appearances slide in without disturbing
-      existing rows' focus, scroll, or hover. *(5.5)*
-      - **Confirmed 2026-08-12** via playtest (2026-08-12T09-29-40): "Works." Pin Tab and Read view
-        appearances slide without disturbing existing rows.
-
-## migrate-hud-onto-animated-list
-
-> §4 parity gate for routing the pinned-task HUD — the LAST bespoke animating surface — through
-> `ScribeAnimatedList(Immediate)`, the same container the editor / Read / Pin Tab use (one motion path
-> across all four). The HUD's undo window is a HUD-owned deferred-network-send phase on a LIVE row (NOT
-> a container ghost-hold — the misconceived `Delayed` policy was removed); the container only does the
-> post-send collapse. KEEP the fade/undo feel identical to pre-migration. Adds: D6 HUD rows now ENTER
-> with the shared slide-in; D7 HUD row order now follows the Pin Tab. Build+verify+restage green
-> 2026-08-12. Test the pinned HUD (open a doc, pin tasks); compare against the Pin Tab for ordering.
-
-- [x] `22251a8d` **HUD undo/fade/collapse parity.** Complete a HUD pin under Unpin and under Delete: the
-      row holds LIVE at full height for the same undo window, the text fades as before, the checkbox stays
-      clickable, THEN on send it collapses and neighbors slide up. Uncheck within the window → nothing
-      sent, text restored, no collapse, no ghost. *(migrate-hud-onto-animated-list 4.3)*
-      - **Confirmed 2026-08-12** via playtest: "It works. All the tests pass."
-- [x] `34908abc` **HUD edge cases.** Sink/UnpinSink still moves the row to the bottom (no departure);
-      rapid multi-completion collapses each in its own slot with order preserved; a row sliding under a
-      stationary cursor keeps its controls; re-pin while a row is collapsing revives it; the
-      `ScribeFadeText` late-undo blank-row fix stays fixed. *(migrate-hud-onto-animated-list 4.4)*
-      - **Confirmed 2026-08-12** via playtest: "It works. All the tests pass."
-- [x] `cf209e8e` **Regression: migrated surfaces.** Editor, Read, and Pin Tab Immediate removals behave
-      exactly as before the `Delayed`-member deletion (no behavior change).
-      *(migrate-hud-onto-animated-list 4.5)*
-      - **Confirmed 2026-08-12** via playtest: "It works. All the tests pass."
-- [x] `5df44170` **HUD entry slide-in.** Newly pin a task: its HUD row SLIDES in matching editor/Read/Pin
-      Tab (no snap); a row scrolling into the capped window because another collapsed also slides; no
-      entry animation on HUD first-open or a ForceRebuild. *(migrate-hud-onto-animated-list 4.6)*
-      - **Confirmed 2026-08-12** via playtest: "It works. All the tests pass."
-- [x] `ac7500de` **HUD ordering agrees with Pin Tab.** Open the Pin Tab and HUD side by side and confirm
-      they render pins in the SAME order across pin/unpin/complete and under each policy
-      (Keep/Unpin/Delete/Sink/UnpinSink); durable-sink bottom-hold and in-window hold behave as before;
-      the `40be9d31` cross-surface Sink agreement still holds. *(migrate-hud-onto-animated-list 4.7)*
-      - **Confirmed 2026-08-12** via playtest: "It works. All the tests pass." NOTE this confirms
-        single-document, single-session agreement; a follow-up (`sync-pinned-order-per-player`) addresses
-        cross-document / cross-session order drift, which this item did not exercise.
-
 ## fix-dialog-open-white-flash
 
 > The one-frame white flash on opening a backdropped Scribe surface, split out of reconcile §3.11
@@ -461,152 +316,3 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         bumped past 0.2.0, so a pre-fix PC 0.2.0 joined cleanly and ran the old code. After a `git pull` +
         rebuild/restage on the PC, all three orphaned-sibling paths (tap `15dd621`/`93c3b64`, blur `15dd621`,
         deferred-focus `63f2ebe`) hold. Closed.
-
-## add-shelf-placement-for-scribe-items
-
-- [x] `dd400c94` **Notebook on shelf.** Place a Notebook on a general shelf; confirm it accepts,
-      renders, and can be retrieved. *(add-shelf-placement-for-scribe-items 3.1)*
-      - **Confirmed 2026-08-07** via live playtest: Notebook places on a general shelf, renders
-        spine-out, and retrieves cleanly (after lowering displayable.shelf height 6→5 to fit the slot).
-- [x] `82eb23da` **Notebook on bookshelf.** Place a Notebook on a bookshelf; confirm accepts,
-      renders, retrieves. *(add-shelf-placement-for-scribe-items 3.2)*
-      - **Confirmed 2026-08-07** via live playtest: placement, render, and retrieval all work on the
-        bookshelf (shares onshelfTransform with the general shelf).
-- [x] `61eba6fe` **Notebook in cabinet.** Place a Notebook in a cabinet; confirm no too-large error,
-      renders, retrieves. *(add-shelf-placement-for-scribe-items 3.3)*
-      - **Confirmed 2026-08-07** via live playtest: accepts into the cabinet with no too-large error;
-        randYRotAngle:0 locks the placement angle (no longer varies with player look direction).
-- [x] `3c3d5cab` **Clockmaker's Notebook, all surfaces.** Place the Clockmaker's Notebook on shelf,
-      bookshelf, and cabinet; confirm each accepts/renders/retrieves.
-      *(add-shelf-placement-for-scribe-items 3.4)*
-      - **Confirmed 2026-08-07** via live playtest ("It works!"): CM Notebook places on a shelf after
-        matching its displayable.shelf height to the plain Notebook's (6→5); it was the only one still
-        too tall. Same mesh/transform as the Notebook, so bookshelf + cabinet follow.
-- [x] `52710113` **All tablet variants shelvable.** Place a wet clay, hardened, fired, and wax Tablet
-      on shelf, bookshelf, and cabinet; confirm every attributesByType branch is shelvable.
-      *(add-shelf-placement-for-scribe-items 3.5)*
-      - **Confirmed 2026-08-07** via live playtest: all tablet variants place on all three surfaces.
-        Wax keeps its own transform block (its mesh is smaller than the clay mesh); clay wet/hard/fired
-        share the base block via the attributesByType deep-merge.
-- [x] `3a8ee259` **Notebook data survives shelving.** Shelve a Notebook holding tasks + notes,
-      retrieve it, reopen; confirm the same tasks and notes are present.
-      *(add-shelf-placement-for-scribe-items 4.1)*
-      - **Confirmed 2026-08-07** via live playtest: documents keep all their data across
-        shelve → retrieve → reopen (docId preserved through the shelf inventory).
-- [x] `fbde6a78` **Hardened tablet keeps state.** Shelve a hardened clay Tablet, retrieve it; confirm
-      it is still hardened and its edit-lock behaves as before shelving.
-      *(add-shelf-placement-for-scribe-items 4.2)*
-      - **Confirmed 2026-08-07** via live playtest: hardened tablets retain their state and edit-lock
-        across shelving (part of the "keep all their data" confirmation).
-- [x] `774d52a0` **Transforms sit right on all surfaces.** Confirm each item's model sits within slot
-      bounds on shelf, bookshelf, and cabinet without clipping/floating; wax mesh reads right with its
-      own transform. *(add-shelf-placement-for-scribe-items 5.1)*
-      - **Confirmed 2026-08-07** via iterative screenshot tuning: final values — clay lift y:0.12
-        scale 1, wax lift y:0.12 scale 1.15, shared rotation {x:-90,z:90} for the narrow-edge-forward
-        (spine-out) look the user wanted, matching books/notebooks. Restaged and approved in-game.
-
-## sync-pinned-order-per-player
-
-- [x] `61b1eb7f` **Cross-surface parity.** Pin tasks from several documents; open the HUD and Pin Tab
-      side by side and confirm they render pins in the SAME order. Drag-reorder on the Pin Tab — the
-      HUD reflects the new order. Relog — the order persists and both surfaces still agree.
-      *(sync-pinned-order-per-player 4.1)*
-      - **Confirmed 2026-08-12** via playtest submission: HUD and Pin Tab render one shared order across
-        documents, drag-reorder propagates, and the order persists across relog. Both agree.
-- [x] `e6e04b88` **In-window hold.** Under Sink policy, check a HUD pin — it stays in place during the
-      undo window (does NOT jump to the bottom), its checkbox stays operable, then on window expiry it
-      settles to the bottom, exactly as before. *(sync-pinned-order-per-player 4.2)*
-      - **Confirmed 2026-08-12** via playtest submission: the D3 in-window hold survives the overlay
-        removal — pin stays put during the window, then settles to the bottom on expiry.
-- [x] `0cd73394` **Un-complete returns to prior slot.** Under Sink, complete a pinned task so it sinks
-      to the bottom (window elapsed), then un-complete it — it returns to its prior position among the
-      not-completed pins on BOTH the HUD and the Pin Tab, not held at the bottom. This is the intended
-      behavior change (reverses "sunk stays sunk in-session"). *(sync-pinned-order-per-player 4.3)*
-      - **Confirmed 2026-08-12** via playtest submission: un-completing a sunk pin returns it to its
-        prior slot on both surfaces — the intended reversal of the session-durable sink behavior.
-- [x] `c7885d09` **Sink agreement not regressed.** Under Sink, complete a PINNED task, then pin/unpin
-      others — Read view, HUD, and Pin Tab all agree where the completed task sits and re-agree after
-      pin/unpin. (Headline invariant `40be9d31`; removing the overlay should strengthen it.)
-      *(sync-pinned-order-per-player 4.4)*
-      - **Confirmed 2026-08-12** via playtest submission: the `40be9d31` cross-surface Sink agreement
-        holds — Read/HUD/Pin Tab agree and re-agree after pin/unpin. Overlay removal did not regress it.
-- [x] `82cdbd08` **Rapid multi-complete + edges.** Complete several pinned tasks in quick succession
-      under Sink — resting order is the stable partition (done at bottom in pin-list order), no jumps or
-      overlaps; unpin/delete still collapse-and-leave; a row sliding under a still cursor keeps its
-      controls; re-pin mid-collapse revives the row. *(sync-pinned-order-per-player 4.5)*
-      - **Confirmed 2026-08-12** via playtest submission: rapid Sink completions rest in the stable
-        partition with no jumps/overlaps; collapse, cursor-hold, and re-pin edges all behave.
-- [x] `ed2c6364` **Unrelated ordering paths.** New pins still append to the bottom; the Sink DOCUMENT
-      block-order reorder (Read/Editor drop-to-bottom) is unchanged; the Pin Tab drag-reorder still
-      persists and re-syncs. *(sync-pinned-order-per-player 4.6)*
-      - **Confirmed 2026-08-12** via playtest submission: new-pin append, document block-order reorder,
-        and Pin Tab drag-reorder persistence/re-sync all unchanged.
-
-## add-note-kind-picker
-
-> Segmented kind picker in the editor footer: a primary "Add Task" button plus a caret that opens a
-> floating drop-up to add freeform **Notes** (no checkbox) alongside Tasks. Notes get their own live
-> 10,000-char cap (Tasks stay 1,000); both surface a standard in-game error at the cap, and the codec
-> now CLIPS an over-long note instead of dropping the whole document. Test in the Lectern editor (and
-> the other footer surfaces for §6.5). Fully relaunch after restage.
-
-- [x] `42957239` **Add Note via picker.** Add a Note via the footer picker -- it appears with NO
-      checkbox, focuses empty, and accepts typed text. *(add-note-kind-picker 6.1)*
-      - **Confirmed 2026-08-13** via playtest: Note adds with no checkbox, focuses empty, accepts text.
-- [x] `2e3df36c` **One-click adds Task.** A single click on the primary button still adds a Task (the
-      default kind), unchanged from before. *(add-note-kind-picker 6.2)*
-      - **Confirmed 2026-08-13** via playtest: one click still adds a Task, unchanged.
-- [x] `b478f609` **Empty note self-destructs.** Add a Note, type nothing, click away -- it
-      self-destructs (no blank row); repeat with switch-to-read and close-dialog; add a note with text,
-      clear it, blur -- row removed, focus moves to the row above. *(add-note-kind-picker 6.3)*
-      - **Confirmed 2026-08-13** via playtest: empty note self-destructs on blur / switch-read /
-        close; cleared note removes and focus moves up. "Works as expected."
-- [x] `20a5e7f1` **Note round-trips.** Add a note with text, switch to read (renders as text, no
-      checkbox), close and reopen -- the note persists with its text and kind.
-      *(add-note-kind-picker 6.4)*
-      - **Confirmed 2026-08-13** via playtest: notes persist across open/close, read/edit/read, and a
-        full game restart; render as text with no checkbox in read view.
-- [x] `d11c7953` **Note bypasses task cap on all surfaces.** At the tablet 10-task cap adding a Task is
-      refused + surfaced but adding a Note succeeds; confirm the picker appears and works on Lectern,
-      Notebook, Clockmaker's Notebook, and the always-edit tablet. *(add-note-kind-picker 6.5)*
-      - **Confirmed 2026-08-13** via playtest: at the cap Task is refused and surfaced, Note still adds;
-        picker appears on all editor surfaces. Notes appear on all surfaces.
-- [x] `2d794bf7` **Per-kind cap error.** Type/paste past a task's 1,000 and a note's 10,000 characters
-      -- input stops at the cap and the matching "limited to N characters" error appears.
-      *(add-note-kind-picker 8.7)*
-      - **Confirmed 2026-08-13** via playtest: input clamps at each cap and the standard in-game error
-        ("Tasks are limited to 1,000 characters." / "Notes are limited to 10,000 characters.") fires.
-- [x] `c848893a` **Over-limit note reloads clipped.** An over-limit note loads clipped (not a blanked
-      document) after a reload. *(add-note-kind-picker 8.7)*
-      - **Confirmed 2026-08-13** via playtest: an over-limit note reloads clipped to the cap with the
-        rest of the document intact (no whole-doc drop).
-
-## sync-editor-view-on-external-completion
-
-> Completing a task from the HUD while a Notebook/Lectern **editor** is open now updates the open editor
-> live (and no longer lets a later autosave silently revert the completion). RefreshReadView's editor
-> branch syncs external done-state + the Sink move-to-bottom into scratch (never text); a
-> `preserveFocusedRow` param keeps the caret on the row you're editing. Fully relaunch after restage.
-
-- [x] `51b59c9d` **Keep updates editor live.** Keep policy — editor open, complete one of its tasks from
-      the HUD: the editor's checkbox for that task checks live without reopening, and another row's
-      caret/in-progress text is undisturbed. *(sync-editor-view-on-external-completion 4.2)*
-      - **Confirmed 2026-08-13** via playtest: "Everything works as expected." Editor checkbox updates
-        live under Keep; other rows' caret/text undisturbed.
-- [x] `4a7bf44c` **Sink reorders editor live.** Sink / UnpinSink — complete a task from the HUD while the
-      editor is open: the row marks done AND moves to the bottom live, matching Read/Pinned; if the sunk
-      row is the one being edited, its caret/text survive and focus is not lost.
-      *(sync-editor-view-on-external-completion 4.3)*
-      - **Confirmed 2026-08-13** via playtest: sunk row moves to the bottom live in the editor matching
-        the other views; edited row's focus/caret preserved.
-- [x] `de82d135` **No save-revert.** Lost-update — complete from the HUD (Keep or Sink), then make an
-      unrelated editor edit to trigger an autosave: the completion (and sink order) is NOT reverted by the
-      flush. *(sync-editor-view-on-external-completion 4.4)*
-      - **Confirmed 2026-08-13** via playtest: completion survives a subsequent editor autosave (no
-        silent revert).
-- [x] `03c6be1e` **No double-tick.** No double-application — complete a task from the editor itself and
-      let the server resync echo back: no visible re-tick or jump.
-      *(sync-editor-view-on-external-completion 4.5)*
-      - **Confirmed 2026-08-13** via playtest: editor-originated completion round-trips with no visible
-        re-tick or jump.
-
