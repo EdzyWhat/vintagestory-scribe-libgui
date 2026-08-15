@@ -78,38 +78,58 @@ public sealed partial class ScribeModSystem
             return;
         }
 
-        // Tier 2: no dialog open — open a carried Scribe item and add to it. OpenScribeDialog returns the
-        // dialog it opened; item surfaces grant editor access synchronously, so TryAddFromHandbook appends
-        // immediately (a read-only tablet would no-op, but ResolveCarriedScribeItemSlot can't tell wet from
-        // fired without extra state, so an occasional no-op on a fired tablet is acceptable — the player
-        // simply sees nothing added and can pick an editable book).
-        if (ResolveCarriedScribeItemSlot() is { Itemstack.Collectible: IScribeDocumentItem item } slot)
+        // Tier 2: no dialog open — open a carried WRITEABLE Scribe item and add to it. OpenScribeDialog
+        // returns the dialog it opened; item surfaces grant editor access synchronously, so
+        // TryAddFromHandbook appends immediately. ResolveWriteableCarriedSlot skips read-only tablets
+        // (hardened/fired) so the append never silently no-ops against one — it lands on the next editable
+        // book instead (add-tracker-link-tasks feedback 6.2).
+        var writeable = ResolveWriteableCarriedSlot(out bool anyScribeItem);
+        if (writeable is { Itemstack.Collectible: IScribeDocumentItem item })
         {
-            var opened = item.OpenScribeDialog(slot, capi);
+            var opened = item.OpenScribeDialog(writeable, capi);
             opened?.TryAddFromHandbook(kind, itemCode);
             return;
         }
 
-        // Tier 3: the player has no Scribe item — guide them to get one.
+        // The player carries Scribe items but every one is read-only (hardened or fired tablets): a single
+        // clear error rather than one per item, per feedback 6.2.
+        if (anyScribeItem)
+        {
+            capi.TriggerIngameError(this, "scribe-item-locked", Lang.Get("scribe:scribe-gui-all-locked"));
+            return;
+        }
+
+        // Tier 3: the player has no Scribe item at all — guide them to get one.
         capi.TriggerIngameError(this, "scribe-no-scribe-item", Lang.Get("scribe:scribe-gui-no-scribe-item"));
     }
 
-    /// <summary>Find a carried Scribe item to receive a Handbook add, preferring the one whose document is the
-    /// <see cref="lastOpenedScribeItemDocId"/> (the book the player was just using), else the first carried
-    /// Scribe item. Scans only the player's own hotbar + backpack (not ground/creative). Returns null when the
-    /// player carries no Scribe item. Reading each candidate's DocId deserializes its stored document, which is
-    /// fine for this rare, one-shot click over a handful of slots.</summary>
-    private ItemSlot? ResolveCarriedScribeItemSlot()
+    /// <summary>Find a carried WRITEABLE Scribe item to receive a Handbook add, preferring the one whose
+    /// document is the <see cref="lastOpenedScribeItemDocId"/> (the book the player was just using) IF it is
+    /// writeable, else the first writeable carried Scribe item. A read-only item (a hardened/fired tablet —
+    /// <see cref="IScribeDocumentItem.IsSlotWriteable"/> false) is skipped so the append never lands on a
+    /// surface that would silently drop it (add-tracker-link-tasks feedback 6.2). Scans only the player's own
+    /// hotbar + backpack (not ground/creative). <paramref name="anyScribeItem"/> reports whether ANY Scribe
+    /// item was carried at all (writeable or not), so the caller can tell "no Scribe item" (guide the player)
+    /// apart from "only read-only Scribe items" (a distinct locked error). Returns null when no writeable
+    /// item is found. Reading each candidate's DocId deserializes its stored document, which is fine for this
+    /// rare, one-shot click over a handful of slots.</summary>
+    private ItemSlot? ResolveWriteableCarriedSlot(out bool anyScribeItem)
     {
+        anyScribeItem = false;
         if (capi?.World.Player is not { } player) return null;
 
-        ItemSlot? firstMatch = null;
+        ItemSlot? firstWriteable = null;
         foreach (var slot in EnumerateCarriedSlots(player))
         {
-            if (slot.Itemstack?.Collectible is not IScribeDocumentItem) continue;
-            firstMatch ??= slot;
+            if (slot.Itemstack?.Collectible is not IScribeDocumentItem item) continue;
+            anyScribeItem = true;
 
-            // Exact last-opened match wins immediately — no need to scan the rest.
+            // Skip a read-only item (hardened/fired tablet); it can't take the append.
+            if (!item.IsSlotWriteable(slot)) continue;
+            firstWriteable ??= slot;
+
+            // The last-opened book wins immediately — but only when it's the writeable candidate we just
+            // vetted (a hardened last-opened tablet falls through to the next writeable item above).
             if (lastOpenedScribeItemDocId is { } wanted
                 && ScribeDocumentAttributes.TryReadFrom(slot.Itemstack, out var doc)
                 && doc is not null
@@ -118,7 +138,7 @@ public sealed partial class ScribeModSystem
                 return slot;
             }
         }
-        return firstMatch;
+        return firstWriteable;
     }
 
     /// <summary>Enumerate the player's own hotbar and backpack slots that hold a stack (the inventories a

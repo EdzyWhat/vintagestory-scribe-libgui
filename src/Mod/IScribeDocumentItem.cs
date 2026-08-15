@@ -26,4 +26,12 @@ public interface IScribeDocumentItem
     /// item. Returns the opened <see cref="ScribeDialogBase"/>, or <c>null</c> if it can't be opened on this
     /// side/state.</summary>
     ScribeDialogBase? OpenScribeDialog(ItemSlot slot, ICoreClientAPI capi);
+
+    /// <summary>Whether this carried item can currently RECEIVE a Handbook-originated append — i.e. its
+    /// stored document is editable right now. Notebooks are always writeable (the default); a Tablet is
+    /// writeable only while wet — a hardened or fired tablet is read-only. The Handbook "Add to Scribe"
+    /// resolver (<c>ScribeModSystem.AddFromHandbook</c>) skips non-writeable carried items and moves on to
+    /// the next one, so a Tracker/Link never lands on (and silently no-ops against) a read-only tablet
+    /// (add-tracker-link-tasks feedback 6.2). Default <c>true</c> for the always-writeable items.</summary>
+    bool IsSlotWriteable(ItemSlot slot) => true;
 }

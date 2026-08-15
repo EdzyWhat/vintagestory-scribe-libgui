@@ -113,3 +113,30 @@
       cleanly with the new fields defaulted.
 - [x] 6.7 Update `CHANGELOG.md` (Unreleased → Added: Tracker & Link task types, Handbook entry) and
       `ROADMAP.md` (mark the v1.2 task-types cluster progress).
+
+## 7. Playtest refinements (2026-08-15 feedback)
+
+- [x] 7.1 (feedback 6.3) Editor Tracker row layout: move the inline target stepper to the LEFT of the
+      icon/name (it sat under the hover delete/pin buttons on the right, unreachable — which also made
+      the pin untappable, feedback 6.9), and shrink its width from ~6 characters to ~3.
+- [x] 7.2 (feedback 6.2) Handbook add tier-2: skip read-only carried items (hardened/fired tablets) and
+      land the task on the next WRITEABLE Scribe item; add an `IScribeDocumentItem.IsSlotWriteable` seam
+      (Notebook always true, Tablet ⇔ wet). If carried Scribe items exist but none are writeable, show a
+      single generic error (`scribe-gui-all-locked`); the "no Scribe item at all" error is unchanged.
+- [x] 7.4 (feedback 6.5) A Tracker row's name becomes a hyperlink that opens its target item's Handbook
+      page (like a Link), in the read view; extend the `onOpenLink` handler to resolve a Tracker's
+      `TargetItemCode`. (Future Crafting tasks inherit this.)
+- [x] 7.5 (feedback 6.4) Focus the caret into the numeric stepper when a Tracker is freshly created from
+      the Handbook, so the player can type the target immediately (reuse `ScribeNumericField.autoFocus`).
+- [ ] 7.6 (feedback 6.8) Inject "Add Link" on non-item Handbook Guide/explainer entries (today the
+      Harmony postfix hooks only the collectible builder, so links appear on item pages only). Requires
+      VS-internals research into how non-item Handbook pages are built + whether an injection seam exists;
+      teach the Link model + `OpenHandbookPage` to store/open a raw page code, not just an item code.
+      Tracker does NOT apply to guide pages (nothing to count) — Add Link only. **Deferred: research-gated.**
+- [ ] 7.7 Manually re-test in-game after 7.1/7.2/7.4/7.5: (a) Tracker stepper sits left of the icon, ~3
+      chars wide, and the hover pin/delete are now reachable on a Tracker row; (b) "Add to Scribe" while
+      carrying only a fired/hardened tablet shifts to a writeable notebook, or shows the single locked
+      error when none is writeable; (c) tapping a Tracker's name opens the item's Handbook page and leaves
+      completion unchanged; (d) creating a Tracker from the Handbook drops the caret in the stepper.
+- [ ] 7.8 (feedback 6.9, now unblocked by 7.1) Manually test the HUD: pin a Tracker and a Link, confirm
+      both appear on the pinned-task HUD and behave (Link click opens its page; Tracker shows progress).

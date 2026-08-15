@@ -354,8 +354,13 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         else // Tracker: name + a live "have / need" counter that reads satisfied when the target is met.
         {
             bool satisfied = Widget.Data.CurrentQuantity >= Widget.Data.TargetQuantity;
-            rowChildren.Add(new Expanded(child: new Text(
-                Widget.Data.Label, new TextStyle { Color = colors.OnSurface, SoftWrap = true })));
+            // Like a Link, the Tracker's name is a hyperlink that opens the item's Handbook page and never
+            // touches completion (feedback 6.5 — "the tracker should also open the notebook entry"; future
+            // Crafting tasks inherit this). Primary-colored to read as tappable. The have/need counter to its
+            // right is plain text.
+            rowChildren.Add(new Expanded(child: new GestureDetector(
+                onPress: e => { e.Handled = true; Widget.OnOpenLink(Widget.Data.TaskId); },
+                child: new Text(Widget.Data.Label, new TextStyle { Color = colors.Primary, SoftWrap = true }))));
             rowChildren.Add(new Text(
                 $"{Widget.Data.CurrentQuantity} / {Widget.Data.TargetQuantity}",
                 new TextStyle

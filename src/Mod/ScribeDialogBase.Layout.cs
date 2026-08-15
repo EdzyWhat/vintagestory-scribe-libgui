@@ -593,11 +593,14 @@ public abstract partial class ScribeDialogBase
             onToggleTask: OnReadViewCompleteTask,
             onTogglePinned: OnReadViewTogglePinned,
             // A Link row's item name is a hyperlink: tapping it opens the referenced Handbook page and never
-            // touches completion (add-tracker-link-tasks 5.3). Resolve the tapped block's LinkTarget → page.
+            // touches completion (add-tracker-link-tasks 5.3). A Tracker's name opens its TARGET item's page
+            // the same way (feedback 6.5 — the count target IS a real item with a Handbook entry). Resolve the
+            // tapped block by TaskId, then open the page keyed off whichever code the kind carries.
             onOpenLink: taskId =>
             {
                 var block = host.Document.FindByTaskId(taskId);
                 if (block?.IsLink == true) ScribeItemRef.OpenHandbookPage(capi, block.LinkTarget);
+                else if (block?.IsTracker == true) ScribeItemRef.OpenHandbookPage(capi, block.TargetItemCode);
             },
             onSwitchToEditor: TryEnterEditor,
             // Symmetric 0.04·W horizontal inset on the footer button, from the same ScribeLayout width.

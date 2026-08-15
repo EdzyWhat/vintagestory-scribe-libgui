@@ -75,6 +75,10 @@ public abstract partial class ScribeDialogBase
         if (!kind.Add(scratch, itemCode)) return;
         isDirty = true;
         SyncFocusNodesToScratch();
+        // Land the caret in the new row so the player can type right away (feedback 6.4). The block is
+        // appended last, so target that index; the row MOUNTS on the rebuild below, firing its mount-only
+        // autoFocus. Only a Tracker has a focusable stepper — a Link is just an icon + name, nothing to type.
+        if (kind == ScribeAddKinds.Tracker) autoFocusRowOnRebuild = scratch.Blocks.Count - 1;
         // Persist immediately (Case A appends + flushes at once); the autosave tick would otherwise carry it
         // within ~1s, but the player clicked in the Handbook and expects the task to exist right away.
         FlushIfDirty();

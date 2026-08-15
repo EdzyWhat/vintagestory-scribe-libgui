@@ -806,25 +806,32 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
     private Widget BuildItemEditorContent(ColorScheme colors, ScribeRowStyle style, int index)
     {
         float iconSize = style.ControlSize * 1.4f;
-        var rowChildren = new List<Widget>
-        {
-            new ItemStackDisplay(Widget.Data.DisplayStack, width: iconSize, height: iconSize, renderSize: 48),
-            new Expanded(child: new Text(
-                Widget.Data.Label, new TextStyle { Color = colors.OnSurface, SoftWrap = true })),
-        };
+        var rowChildren = new List<Widget>();
 
         if (Widget.Data.IsTracker)
         {
-            // Inline target-quantity stepper. clamp keeps the target a whole number ≥ 1 (matching the Core
-            // setter, which also clamps); onChanged writes the rounded int through to scratch via the dialog.
+            // Inline target-quantity stepper, placed at the LEFT of the row (feedback 6.3): the row's
+            // hover-revealed delete/pin buttons float over the RIGHT edge, so a right-hand stepper sat
+            // UNDER them and was unreachable (which also made the pin untappable — feedback 6.9). Sized to
+            // ~3 digits (feedback 6.3: the old 84px fit ~6), font-relative off iconSize so it scales with
+            // the row height rather than a fixed literal; the +/- button column is fieldHeight/2 wide, so
+            // the text region lands near three characters. clamp keeps the target a whole number ≥ 1
+            // (matching the Core setter); onChanged writes the rounded int through to scratch via the dialog.
+            // autoFocus lands the caret in the stepper when the Tracker is freshly created from the Handbook
+            // (feedback 6.4) — the row MOUNTS on that append, so its mount-only autoFocus fires once.
             rowChildren.Add(new ScribeNumericField(
                 initialValue: Widget.Data.TargetQuantity,
                 step: 1,
                 clamp: v => v < 1 ? 1 : (float)Math.Round(v),
                 onChanged: v => Widget.OnTrackerQuantityChanged(index, (int)Math.Round(v)),
-                style: new BoxStyle { Width = 84, Height = iconSize },
+                autoFocus: Widget.AutoFocus,
+                style: new BoxStyle { Width = iconSize * 1.6f, Height = iconSize },
                 textStyle: new TextStyle { Color = colors.OnSurface }));
         }
+
+        rowChildren.Add(new ItemStackDisplay(Widget.Data.DisplayStack, width: iconSize, height: iconSize, renderSize: 48));
+        rowChildren.Add(new Expanded(child: new Text(
+            Widget.Data.Label, new TextStyle { Color = colors.OnSurface, SoftWrap = true })));
 
         // Inset by the editor field's internal padding, matching the read view's item row and the Task/Text
         // field, so icon rows line up with text rows across a view switch. Center the icon/stepper against the

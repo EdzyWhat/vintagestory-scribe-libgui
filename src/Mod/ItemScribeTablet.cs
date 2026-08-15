@@ -369,6 +369,12 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
     public ScribeDialogBase? OpenScribeDialog(ItemSlot slot, ICoreClientAPI capi)
         => OpenTabletDialog(slot, capi);
 
+    /// <summary>A tablet can receive a Handbook append only while WET; a hardened or fired tablet is
+    /// read-only, so the "Add to Scribe" resolver skips it and tries the next carried Scribe item
+    /// (add-tracker-link-tasks feedback 6.2). Reuses the single <see cref="IsEditable"/> resolve point the
+    /// dialog and document policy key off, so this can't drift from the actual editability.</summary>
+    public bool IsSlotWriteable(ItemSlot slot) => IsEditable(slot.Itemstack);
+
     private ScribeDialogBase OpenTabletDialog(ItemSlot slot, ICoreClientAPI capi, bool quickAdd = false)
     {
         // The backdrop/theme/glow key off the tablet's BASE clay color (clay-red/blue/fire/wax) and its

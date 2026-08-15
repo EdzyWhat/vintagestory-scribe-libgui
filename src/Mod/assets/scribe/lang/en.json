@@ -20,6 +20,7 @@
 	"scribe-gui-additem-heading": "Add to Scribe",
 	"scribe-gui-additem-guide": "Scroll to the bottom of an item's handbook page and click \"Add Tracker\" or \"Add Link\".",
 	"scribe-gui-no-scribe-item": "You need a Scribe item to add a tracker or link.",
+	"scribe-gui-all-locked": "Your Scribe items can't be written on. Soften a hardened tablet in water, or use a notebook.",
 	"scribe-gui-delete": "Delete",
 	"scribe-gui-pin": "Pin to HUD",
 	"scribe-gui-unpin": "Unpin from HUD",
