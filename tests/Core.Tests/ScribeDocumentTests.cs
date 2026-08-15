@@ -525,4 +525,117 @@ public class ScribeDocumentTests
         Assert.False(doc.MoveBlock(0, badIndex));
         Assert.Empty(doc.Blocks);
     }
+
+    // --- Tracker & Link kinds ---
+
+    [Fact]
+    public void AddTracker_AddsATrackerBlockWithItemAndTarget()
+    {
+        var doc = new ScribeDocument();
+
+        bool ok = doc.AddTracker("game:ingot-copper", 8);
+
+        Assert.True(ok);
+        var block = Assert.Single(doc.Blocks);
+        Assert.Equal(ScribeBlockKind.Tracker, block.Kind);
+        Assert.True(block.IsTracker);
+        Assert.Equal("game:ingot-copper", block.TargetItemCode);
+        Assert.Equal(8, block.TargetQuantity);
+        Assert.Equal(0, block.CurrentQuantity);
+        Assert.False(block.Done);
+    }
+
+    [Fact]
+    public void AddLink_AddsALinkBlockWithTarget()
+    {
+        var doc = new ScribeDocument();
+
+        bool ok = doc.AddLink("game:ingot-copper");
+
+        Assert.True(ok);
+        var block = Assert.Single(doc.Blocks);
+        Assert.Equal(ScribeBlockKind.Link, block.Kind);
+        Assert.True(block.IsLink);
+        Assert.Equal("game:ingot-copper", block.LinkTarget);
+        Assert.False(block.Done);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-5)]
+    public void AddTracker_ClampsTargetQuantityToAtLeastOne(int badTarget)
+    {
+        var doc = new ScribeDocument();
+
+        doc.AddTracker("game:stick", badTarget);
+
+        Assert.Equal(1, doc.Blocks[0].TargetQuantity);
+    }
+
+    [Fact]
+    public void Tracker_CurrentQuantity_ClampsIntoRange()
+    {
+        var block = new ScribeBlock(ScribeBlockKind.Tracker, "", targetItemCode: "game:stick", targetQuantity: 5);
+
+        block.CurrentQuantity = -3;
+        Assert.Equal(0, block.CurrentQuantity);
+
+        block.CurrentQuantity = 99;
+        Assert.Equal(5, block.CurrentQuantity); // clamped up to the target ceiling
+
+        block.CurrentQuantity = 3;
+        Assert.Equal(3, block.CurrentQuantity);
+    }
+
+    [Fact]
+    public void Tracker_LoweringTarget_ReclampsCurrentDown()
+    {
+        var block = new ScribeBlock(ScribeBlockKind.Tracker, "", targetItemCode: "game:stick", targetQuantity: 10);
+        block.CurrentQuantity = 8;
+
+        block.TargetQuantity = 4; // ceiling drops below current
+
+        Assert.Equal(4, block.TargetQuantity);
+        Assert.Equal(4, block.CurrentQuantity);
+    }
+
+    [Fact]
+    public void SetTrackerCurrentQuantity_ByTaskId_UpdatesAndClamps()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTracker("game:ingot-copper", 8);
+        var id = doc.Blocks[0].TaskId;
+
+        Assert.True(doc.SetTrackerCurrentQuantity(id, 3));
+        Assert.Equal(3, doc.Blocks[0].CurrentQuantity);
+
+        Assert.True(doc.SetTrackerCurrentQuantity(id, 100)); // clamped to target
+        Assert.Equal(8, doc.Blocks[0].CurrentQuantity);
+    }
+
+    [Fact]
+    public void SetTrackerCurrentQuantity_OnNonTrackerOrMissingId_FailsSafely()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("Not a tracker");
+        var taskId = doc.Blocks[0].TaskId;
+
+        Assert.False(doc.SetTrackerCurrentQuantity(taskId, 5));   // id belongs to a Task
+        Assert.False(doc.SetTrackerCurrentQuantity(Guid.NewGuid(), 5)); // no such id
+    }
+
+    [Fact]
+    public void TrackerAndLink_GetDistinctTaskIds_AndPreserveOrder()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("plain");
+        doc.AddTracker("game:ingot-copper", 8);
+        doc.AddLink("game:ingot-tin");
+
+        Assert.Equal(
+            new[] { ScribeBlockKind.Task, ScribeBlockKind.Tracker, ScribeBlockKind.Link },
+            doc.Blocks.Select(b => b.Kind));
+        var ids = doc.Blocks.Select(b => b.TaskId).ToList();
+        Assert.Equal(3, ids.Distinct().Count());
+    }
 }

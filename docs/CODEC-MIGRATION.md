@@ -70,6 +70,55 @@ private static void ApplyV4ToV5Migrations(byte version, ref string title)
 }
 ```
 
+### Worked example: v5 → v6 (`ScribeDocumentCodec`)
+
+v6 appended **four per-block fields** after each block's `text`, for the Tracker and Link task
+kinds: `TargetItemCode` (string?), `TargetQuantity` (int), `CurrentQuantity` (int), and
+`LinkTarget` (string?). v5 blocks have none of these.
+
+**What changed in the serialization format:**
+```
+// v5 per-block: TaskId | kind | done | depth | hasAssignedToUid | [assignedToUid] | text
+// v6 per-block: ...v5... | hasTargetItemCode | [targetItemCode] | targetQuantity
+//               | currentQuantity | hasLinkTarget | [linkTarget]
+```
+(The document `title` still follows the block list, unchanged — both v5 and v6 have it, so it is
+now read unconditionally for any accepted version.)
+
+**How the migration works** — because the new fields are per-block, the named step supplies their
+defaults via `out` params inside the block-read loop rather than a single `ref`:
+
+```csharp
+// In TryDeserialize's per-block loop, after reading text:
+string? targetItemCode; int targetQuantity; int currentQuantity; string? linkTarget;
+if (version == Version)   // v6: read the appended fields from the stream
+{
+    bool hasTargetItemCode = r.ReadBoolean();
+    targetItemCode = hasTargetItemCode ? r.ReadString() : null;
+    targetQuantity = r.ReadInt32();
+    currentQuantity = r.ReadInt32();
+    bool hasLinkTarget = r.ReadBoolean();
+    linkTarget = hasLinkTarget ? r.ReadString() : null;
+}
+else                      // v5: no such fields — default them
+{
+    ApplyV5ToV6Migrations(out targetItemCode, out targetQuantity, out currentQuantity, out linkTarget);
+}
+
+// The named migration method:
+private static void ApplyV5ToV6Migrations(out string? targetItemCode, out int targetQuantity,
+    out int currentQuantity, out string? linkTarget)
+{
+    targetItemCode = null;
+    targetQuantity = 1;   // satisfies the ScribeBlock TargetQuantity ≥ 1 invariant
+    currentQuantity = 0;
+    linkTarget = null;
+}
+```
+
+Note v4 drops out of the accepted window on this bump (window is now `{v6, v5}`); a well-formed v4
+payload is rejected, covered by `TryDeserialize_V4Bytes_FailsSafely`.
+
 ## How to add a new version (step-by-step)
 
 1. **Add your new field(s) to `Serialize`**, appending them after all existing fields.
@@ -102,5 +151,5 @@ private static void ApplyV4ToV5Migrations(byte version, ref string title)
 
 | Codec | Current | Prior | Migration method |
 |---|---|---|---|
-| `ScribeDocumentCodec` | v5 | v4 | `ApplyV4ToV5Migrations` — supplies `DefaultTitle` |
+| `ScribeDocumentCodec` | v6 | v5 | `ApplyV5ToV6Migrations` — defaults Tracker/Link per-block fields |
 | `ScribePinCodec` | v1 | v1 (no change yet) | `ApplyPinMigrations` — no-op stub |

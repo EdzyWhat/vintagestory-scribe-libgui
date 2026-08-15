@@ -11,16 +11,34 @@ public enum ScribeBlockKind : byte
 
     /// <summary>A freeform text section with no checkbox.</summary>
     Text = 1,
+
+    /// <summary>A "gather N of item X" task with a live have/need counter driven by carried
+    /// inventory. Uses <see cref="ScribeBlock.TargetItemCode"/>, <see cref="ScribeBlock.TargetQuantity"/>,
+    /// and <see cref="ScribeBlock.CurrentQuantity"/>. Still a checkbox task (has a Done flag).</summary>
+    Tracker = 2,
+
+    /// <summary>A reference task pointing at an item's Handbook page via
+    /// <see cref="ScribeBlock.LinkTarget"/>. Behaves as a hyperlink from every surface and still
+    /// has an independent Done flag (opening the page never toggles completion).</summary>
+    Link = 3,
 }
 
 /// <summary>
 /// One element of a <see cref="ScribeDocument"/>. A document is an ordered sequence of
 /// these, so tasks and free-text sections can be interspersed and reordered freely.
 ///
-/// A block is either a Task (checkbox + text) or a Text section (text only). <see cref="Done"/>
-/// is only meaningful for Task blocks. <see cref="Depth"/> is reserved for a future
-/// sub-item hierarchy (0 = top level today); it is carried through persistence now so
-/// enabling nesting later needs no format change.
+/// A block is one of four kinds (see <see cref="ScribeBlockKind"/>): a Task (checkbox + text),
+/// a Text section (text only), a Tracker (a "gather N of item X" task), or a Link (a reference to
+/// an item's Handbook page). <see cref="Done"/> is meaningful for Task, Tracker, and Link (all
+/// completable); it is unused for Text. <see cref="Depth"/> is reserved for a future sub-item
+/// hierarchy (0 = top level today); it is carried through persistence now so enabling nesting
+/// later needs no format change.
+///
+/// The Tracker/Link item references are stored as PLAIN STRINGS (<see cref="TargetItemCode"/> /
+/// <see cref="LinkTarget"/>), never parsed <c>AssetLocation</c>/<c>ItemStack</c> — that keeps this
+/// type free of any Vintage Story API reference; the Mod layer parses them when it needs the game.
+/// <see cref="TargetQuantity"/> and <see cref="CurrentQuantity"/> clamp themselves (target ≥ 1;
+/// current into [0, target]) so the invariant holds regardless of caller — see their setters.
 ///
 /// <see cref="TaskId"/> is a stable per-block identifier assigned at creation and preserved
 /// across every mutation and through serialization. Nothing in the document references a block
@@ -49,7 +67,42 @@ public sealed class ScribeBlock
     /// default; no mutation method exists yet and nothing in this codebase reads it.</summary>
     public string? AssignedToUid { get; set; }
 
-    public ScribeBlock(ScribeBlockKind kind, string text, bool done = false, int depth = 0, string? assignedToUid = null, Guid? taskId = null)
+    /// <summary>For a <see cref="ScribeBlockKind.Tracker"/>: the item to count, as a plain code
+    /// string (e.g. <c>"game:ingot-copper"</c>). Null for other kinds. Stored as a string, never a
+    /// parsed AssetLocation, to keep Core API-free (see the class remarks).</summary>
+    public string? TargetItemCode { get; set; }
+
+    /// <summary>For a Tracker: how many of <see cref="TargetItemCode"/> to gather. Clamped to ≥ 1
+    /// on set (a target of 0 or negative is meaningless). Lowering the target also re-clamps
+    /// <see cref="CurrentQuantity"/> down to the new ceiling. Defaults to 1; meaningless for other
+    /// kinds (kept at 1).</summary>
+    public int TargetQuantity
+    {
+        get => _targetQuantity;
+        set
+        {
+            _targetQuantity = value < 1 ? 1 : value;
+            if (_currentQuantity > _targetQuantity) _currentQuantity = _targetQuantity;
+        }
+    }
+    private int _targetQuantity = 1;
+
+    /// <summary>For a Tracker: how many are currently carried (the live have/need count). Clamped
+    /// into <c>[0, <see cref="TargetQuantity"/>]</c> on set. Defaults to 0.</summary>
+    public int CurrentQuantity
+    {
+        get => _currentQuantity;
+        set => _currentQuantity = value < 0 ? 0 : (value > _targetQuantity ? _targetQuantity : value);
+    }
+    private int _currentQuantity;
+
+    /// <summary>For a <see cref="ScribeBlockKind.Link"/>: the Handbook target this task references,
+    /// as a plain code string. Null for other kinds. Stored as a string, never a parsed
+    /// AssetLocation, to keep Core API-free (see the class remarks).</summary>
+    public string? LinkTarget { get; set; }
+
+    public ScribeBlock(ScribeBlockKind kind, string text, bool done = false, int depth = 0, string? assignedToUid = null, Guid? taskId = null,
+        string? targetItemCode = null, int targetQuantity = 1, int currentQuantity = 0, string? linkTarget = null)
     {
         Kind = kind;
         Text = text;
@@ -57,7 +110,18 @@ public sealed class ScribeBlock
         Depth = depth;
         AssignedToUid = assignedToUid;
         TaskId = taskId ?? Guid.NewGuid();
+        TargetItemCode = targetItemCode;
+        // Set target BEFORE current so CurrentQuantity clamps against the intended ceiling.
+        TargetQuantity = targetQuantity;
+        CurrentQuantity = currentQuantity;
+        LinkTarget = linkTarget;
     }
 
     public bool IsTask => Kind == ScribeBlockKind.Task;
+
+    /// <summary>True for a <see cref="ScribeBlockKind.Tracker"/> block.</summary>
+    public bool IsTracker => Kind == ScribeBlockKind.Tracker;
+
+    /// <summary>True for a <see cref="ScribeBlockKind.Link"/> block.</summary>
+    public bool IsLink => Kind == ScribeBlockKind.Link;
 }

@@ -2,7 +2,8 @@ namespace Scribe.Core;
 
 /// <summary>
 /// The game-agnostic model of a Scribe document: an ordered sequence of <see cref="ScribeBlock"/>s.
-/// Each block is either a checkbox task or a freeform text section, so tasks and text can be
+/// Each block is one of four kinds — a checkbox task, a freeform text section, a Tracker
+/// ("gather N of item X"), or a Link (a reference to an item's Handbook page) — so they can be
 /// interspersed and reordered freely. All mutation methods return <c>true</c> on success and
 /// <c>false</c> for invalid input (out-of-range index), never throwing to the caller. Task text
 /// is stored verbatim, including empty/whitespace-only text — the model enforces no non-blank
@@ -66,6 +67,26 @@ public sealed class ScribeDocument
     public bool AddTextSection(string? text)
     {
         _blocks.Add(new ScribeBlock(ScribeBlockKind.Text, text ?? ""));
+        return true;
+    }
+
+    /// <summary>Adds a Tracker task ("gather N of item X") to the end and gives it a fresh stable
+    /// <see cref="ScribeBlock.TaskId"/>. <paramref name="itemCode"/> is the plain item code to count
+    /// (may be null and set later); <paramref name="targetQuantity"/> is clamped to ≥ 1 by the block.
+    /// The row's display label is derived by the Mod layer from the code, so Text starts empty.</summary>
+    public bool AddTracker(string? itemCode, int targetQuantity)
+    {
+        _blocks.Add(new ScribeBlock(ScribeBlockKind.Tracker, "", targetItemCode: itemCode, targetQuantity: targetQuantity));
+        return true;
+    }
+
+    /// <summary>Adds a Link task (a reference to an item's Handbook page) to the end and gives it a
+    /// fresh stable <see cref="ScribeBlock.TaskId"/>. <paramref name="target"/> is the plain Handbook
+    /// target code (may be null). The row's display label is derived by the Mod layer, so Text starts
+    /// empty.</summary>
+    public bool AddLink(string? target)
+    {
+        _blocks.Add(new ScribeBlock(ScribeBlockKind.Link, "", linkTarget: target));
         return true;
     }
 
@@ -134,6 +155,26 @@ public sealed class ScribeDocument
             if (_blocks[i].TaskId == taskId && _blocks[i].IsTask)
             {
                 _blocks[i].Text = text;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Sets the live carried count (<see cref="ScribeBlock.CurrentQuantity"/>) of the Tracker with the
+    /// given stable <see cref="ScribeBlock.TaskId"/> — the identity-addressed op the count engine uses
+    /// to push an updated have-count without knowing the block's index. The value is clamped into
+    /// <c>[0, TargetQuantity]</c> by the block's setter. Returns false (document unchanged) when no block
+    /// has that id or the id belongs to a non-Tracker block. Pure data; no VS API.
+    /// </summary>
+    public bool SetTrackerCurrentQuantity(Guid taskId, int currentQuantity)
+    {
+        for (int i = 0; i < _blocks.Count; i++)
+        {
+            if (_blocks[i].TaskId == taskId && _blocks[i].IsTracker)
+            {
+                _blocks[i].CurrentQuantity = currentQuantity; // clamped in the setter
                 return true;
             }
         }

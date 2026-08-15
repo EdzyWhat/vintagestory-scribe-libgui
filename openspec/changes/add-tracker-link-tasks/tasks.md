@@ -1,31 +1,31 @@
 ## 1. Core model: Tracker & Link kinds (no VS API)
 
-- [ ] 1.1 Append `Tracker = 2` and `Link = 3` to `ScribeBlockKind` (never renumber `Task`/`Text`).
-- [ ] 1.2 Add `TargetItemCode` (string?), `TargetQuantity` (int), `CurrentQuantity` (int), and
+- [x] 1.1 Append `Tracker = 2` and `Link = 3` to `ScribeBlockKind` (never renumber `Task`/`Text`).
+- [x] 1.2 Add `TargetItemCode` (string?), `TargetQuantity` (int), `CurrentQuantity` (int), and
       `LinkTarget` (string?) to `ScribeBlock`; extend the constructor with defaulted params so
       existing callers compile unchanged.
-- [ ] 1.3 Implement clamping in Core: `TargetQuantity` clamped to ≥ 1 on set/create;
+- [x] 1.3 Implement clamping in Core: `TargetQuantity` clamped to ≥ 1 on set/create;
       `CurrentQuantity` clamped into `[0, TargetQuantity]` whenever set.
-- [ ] 1.4 Add `ScribeDocument.AddTracker(itemCode, targetQuantity)` and `AddLink(target)` ops
+- [x] 1.4 Add `ScribeDocument.AddTracker(itemCode, targetQuantity)` and `AddLink(target)` ops
       (append a block, assign a distinct `TaskId`, mirror the existing add-op return contract).
-- [ ] 1.5 Add a `ScribeDocument` op to set a tracker's `CurrentQuantity` by `TaskId` (clamped,
+- [x] 1.5 Add a `ScribeDocument` op to set a tracker's `CurrentQuantity` by `TaskId` (clamped,
       no-op/failure for non-tracker or missing id).
-- [ ] 1.6 Core.Tests: add-tracker/add-link create the right kind + fields; target-quantity and
+- [x] 1.6 Core.Tests: add-tracker/add-link create the right kind + fields; target-quantity and
       current-quantity clamping; ordering + distinct `TaskId` for the new kinds.
 
 ## 2. Core codec: v5 → v6 with named migration step
 
-- [ ] 2.1 Bump `ScribeDocumentCodec.Version` to 6 and `PriorVersion` to 5; append the four new
+- [x] 2.1 Bump `ScribeDocumentCodec.Version` to 6 and `PriorVersion` to 5; append the four new
       fields to the per-block serialize/deserialize layout in field order.
-- [ ] 2.2 Add `ApplyV5ToV6Migrations` that defaults the new fields for v5 blobs
+- [x] 2.2 Add `ApplyV5ToV6Migrations` that defaults the new fields for v5 blobs
       (`TargetItemCode`/`LinkTarget` = null, `TargetQuantity` = 1, `CurrentQuantity` = 0); wire it
       into the read path at the version branch. Ensure v4 (two versions back) fails safely.
-- [ ] 2.3 Update the `ScribeDocumentCodec` class doc-comment version table (current v6, prior v5,
+- [x] 2.3 Update the `ScribeDocumentCodec` class doc-comment version table (current v6, prior v5,
       fields added in the v5→v6 transition).
-- [ ] 2.4 Core.Tests: current-version round-trip preserves tracker/link fields; replace the v4
+- [x] 2.4 Core.Tests: current-version round-trip preserves tracker/link fields; replace the v4
       older-blob test with a v5 older-blob test asserting the new fields default; assert v4/older
       bytes fail to deserialize.
-- [ ] 2.5 Update `docs/CODEC-MIGRATION.md` with the v5→v6 transition as the newest worked example.
+- [x] 2.5 Update `docs/CODEC-MIGRATION.md` with the v5→v6 transition as the newest worked example.
 
 ## 3. Mod: Handbook "Add to Scribe" entry point (Harmony)
 
