@@ -20,6 +20,12 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     {
     }
 
+    /// <summary>The Scriptorium is a shared placed block (like the Lectern): editor access requires a
+    /// server lock round-trip, so the grant lands asynchronously in
+    /// <see cref="ScribeDialogBase.EnterEditorMode"/>. A Handbook "Add to Scribe" click stashes its append
+    /// and waits for that grant (add-tracker-link-tasks 3.4).</summary>
+    protected override bool EditorAccessIsAsync => true;
+
     protected override IEnumerable<Widget> GetExtraNavButtons()
     {
         var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;

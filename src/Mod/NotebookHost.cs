@@ -98,7 +98,7 @@ public class NotebookHost : IScribeDocumentHost
     public void SetTaskDoneFromReader(Guid taskId, bool done)
     {
         var block = _document.FindByTaskId(taskId);
-        if (block is null || !block.IsTask || block.Done == done) return;
+        if (block is null || !block.IsCompletable || block.Done == done) return;
         block.Done = done;
         Flush();
     }
@@ -107,7 +107,7 @@ public class NotebookHost : IScribeDocumentHost
     {
         for (int i = 0; i < _document.Blocks.Count; i++)
         {
-            if (_document.Blocks[i].TaskId == taskId && _document.Blocks[i].IsTask)
+            if (_document.Blocks[i].TaskId == taskId && _document.Blocks[i].IsCompletable)
             {
                 _document.DeleteBlock(i);
                 Flush();
@@ -128,6 +128,20 @@ public class NotebookHost : IScribeDocumentHost
     {
         if (string.IsNullOrWhiteSpace(text)) return false;
         if (!_document.SetTaskText(taskId, text)) return false;
+        Flush();
+        return true;
+    }
+
+    /// <summary>Set a Tracker's live <see cref="ScribeBlock.CurrentQuantity"/> by stable TaskId — the
+    /// item-surface write-through for the client count engine (add-tracker-link-tasks D5), mirroring
+    /// <see cref="SetTaskTextFromReader"/>. Routes through the Core clamp and only persists on a real
+    /// change; a no-op / unknown id / non-Tracker returns false without flushing.</summary>
+    public bool SetTrackerCurrentQuantityFromReader(Guid taskId, int qty)
+    {
+        var block = _document.FindByTaskId(taskId);
+        if (block is null || !block.IsTracker) return false;
+        if (block.CurrentQuantity == Math.Clamp(qty, 0, block.TargetQuantity)) return false;
+        if (!_document.SetTrackerCurrentQuantity(taskId, qty)) return false;
         Flush();
         return true;
     }

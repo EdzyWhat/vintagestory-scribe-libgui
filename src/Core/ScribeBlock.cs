@@ -119,6 +119,13 @@ public sealed class ScribeBlock
 
     public bool IsTask => Kind == ScribeBlockKind.Task;
 
+    /// <summary>True for any block that carries a meaningful <see cref="Done"/> flag — Task, Tracker,
+    /// and Link (everything except a free-text section). This is the single predicate every
+    /// completion, pin, sink, and delete-from-reader path gates on, so a Tracker or Link completes and
+    /// pins exactly like a plain Task. Text-EDITING paths still gate on <see cref="IsTask"/> instead
+    /// (a Tracker/Link has no player-editable text — its label comes from the referenced item).</summary>
+    public bool IsCompletable => Kind != ScribeBlockKind.Text;
+
     /// <summary>True for a <see cref="ScribeBlockKind.Tracker"/> block.</summary>
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
 

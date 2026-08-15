@@ -91,7 +91,8 @@ public sealed class ScribePinStore
     /// Captures the supplied last-known snapshot and pinned-time. Enforces
     /// <see cref="ScribePinCodec.MaxPinsPerPlayer"/> so a runaway/hostile caller can't grow the set
     /// without limit. Returns true if the set changed.</summary>
-    public bool SetPin(string playerUid, Guid docId, Guid taskId, double pinnedAtTotalHours, string lastKnownText, bool lastKnownDone)
+    public bool SetPin(string playerUid, Guid docId, Guid taskId, double pinnedAtTotalHours, string lastKnownText, bool lastKnownDone,
+        ScribeBlockKind kind = ScribeBlockKind.Task, string? linkTarget = null)
     {
         var list = _pins.TryGetValue(playerUid, out var existing) ? existing : _pins[playerUid] = new List<ScribePinnedRef>();
         if (list.Any(p => p.OwnerDocId == docId && p.TaskId == taskId)) return false; // idempotent
@@ -105,6 +106,10 @@ public sealed class ScribePinStore
             Orphaned = false,
             LastKnownText = lastKnownText,
             LastKnownDone = lastKnownDone,
+            // Snapshot the kind (and a Link's target) so the HUD can render/act on the pin by kind even
+            // when the source is unloaded — most importantly opening a pinned Link's Handbook page (5.5).
+            Kind = kind,
+            LinkTarget = linkTarget,
         });
         return true;
     }
@@ -226,10 +231,15 @@ public sealed class ScribePinStore
             if (pin.OwnerDocId != docId) continue;
             var block = document.FindByTaskId(pin.TaskId);
             if (block is null) continue; // just removed above; defensive
-            if (pin.LastKnownText != block.Text || pin.LastKnownDone != block.Done)
+            // Refresh the snapshot fields the HUD renders from — text/done, plus the Kind + LinkTarget the
+            // Link hyperlink needs (a Link's target can be edited, so keep it in sync — add-tracker-link-tasks 5.5).
+            if (pin.LastKnownText != block.Text || pin.LastKnownDone != block.Done
+                || pin.Kind != block.Kind || pin.LinkTarget != block.LinkTarget)
             {
                 pin.LastKnownText = block.Text;
                 pin.LastKnownDone = block.Done;
+                pin.Kind = block.Kind;
+                pin.LinkTarget = block.LinkTarget;
                 changed = true;
             }
         }

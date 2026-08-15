@@ -17,10 +17,13 @@ namespace Integration.Tests;
 /// straight from that pre-seeded save and only asserts -- there is no seeding scenario here
 /// to race against, so RestartWorld genuinely proves persistence rather than relying on order.
 ///
-/// NOTE: the fixture must be REGENERATED for add-pinned-task-foundation — the pre-change save
-/// stored the retired per-block `pinned` flag (v3 codec) and no pin store; the rebuilt fixture is
-/// a v4 world whose document carries stable ids and whose pin lives in the per-player store. Run
-/// the `atlas fixture` command in the README against the updated FixtureBuilders before this runs.
+/// NOTE: the fixture must be REGENERATED whenever the document codec version bumps — its stored
+/// document is written by whatever `ScribeDocumentCodec.Version` was current when `atlas fixture`
+/// last ran, and once that version drops out of the accepted window the save loads as an empty
+/// document (0 blocks) and this scenario fails. It was last regenerated for add-tracker-link-tasks
+/// (codec v6, adding the Tracker/Link per-block fields); its document carries stable ids and its
+/// per-player pin lives in the pin store. Run the `atlas fixture` command in the README against the
+/// updated FixtureBuilders before this runs.
 /// </summary>
 [AtlasWorld(SaveFile = "fixtures/lectern.vcdbs")]
 public class PersistenceScenarios : AtlasScenarioBase

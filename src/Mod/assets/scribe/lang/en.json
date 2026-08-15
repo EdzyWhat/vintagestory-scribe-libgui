@@ -15,6 +15,11 @@
 	"scribe-gui-title-edit-tooltip": "Edit title",
 	"scribe-gui-addtask": "Add Task",
 	"scribe-gui-addtext": "Add Note",
+	"scribe-gui-addtracker": "Add Tracker",
+	"scribe-gui-addlink": "Add Link",
+	"scribe-gui-additem-heading": "Add to Scribe",
+	"scribe-gui-additem-guide": "Scroll to the bottom of an item's handbook page and click \"Add Tracker\" or \"Add Link\".",
+	"scribe-gui-no-scribe-item": "You need a Scribe item to add a tracker or link.",
 	"scribe-gui-delete": "Delete",
 	"scribe-gui-pin": "Pin to HUD",
 	"scribe-gui-unpin": "Unpin from HUD",
@@ -149,6 +154,11 @@
 
 	"settings-completionpolicy": "On newly completing a task",
 	"settings-completionpolicy-help": "Choose what happens to a pinned task when you check it off.",
+	"settings-trackercompletion": "When a tracker fills up",
+	"settings-trackercompletion-help": "Choose what happens to a tracker task the moment your carried items first reach its target count.",
+	"scribe-trackercompletion-complete": "Complete it",
+	"scribe-trackercompletion-delete": "Delete it",
+	"scribe-trackercompletion-nothing": "Leave it be",
 	"settings-hudcollapsed": "Collapse the HUD",
 	"settings-hudcollapsed-help": "Minimize the pinned-task HUD to just its header.",
 
@@ -228,6 +238,9 @@
 
    "craftinginfo-scribe-editor-reference-title": "Scribe Mod: Editor Reference",
    "craftinginfo-scribe-editor-reference-text": "<strong>Editor Features</strong><br>The following functionality is available anywhere you can edit tasks in Scribe items. Note that all typing is autosaved, don't worry about hitting <hotkey>escapemenudialog</hotkey>.<br><br>Many of the following keys are hardcoded and cannot be modified or remapped. <br><br><strong>Row navigation</strong><br><strong>Tab</strong> — move to the next row.<br><strong>Shift+Tab</strong> — move to the previous row.<br><strong>Cmd+Up (macOS) or Ctrl+Up / Ctrl+Home (Windows)</strong> — jump to the first row.<br><strong>Cmd+Down or Ctrl+Down / Ctrl+End</strong> — jump to the last row.<br><strong>Enter</strong> — insert a new empty task.<br><strong>Shift+Enter</strong> — insert a hard line break within the current row.<br><strong>Esc</strong> — commit and close the Lectern.<br><br><strong>Caret movement</strong><br><strong>Arrow keys</strong> — move one character or line.<br><strong>Alt/Option+Left/Right</strong> — skip by whole word.<br><strong>Cmd+Left/Right (macOS) or Home/End</strong> — jump to line start or end.<br><strong>Ctrl+Left/Right (Windows)</strong> — skip by whole word.<br>Hold <strong>Shift</strong> with any movement key to extend the selection.<br><br><strong>Selection and clipboard</strong><br><strong>Ctrl/Cmd+A</strong> — select all text in the focused field.<br><strong>Ctrl/Cmd+C — copy. Ctrl/Cmd+X</strong> — cut. Ctrl/Cmd+V — paste.<br>Typing while text is selected replaces the selection.<br><br><strong>Adding tasks</strong><br><strong>Add Task</strong> button — at the bottom of the Editor.<br><strong>Enter</strong> — inserts a task directly below the current row. Both create an empty row ready to type into immediately.<br><strong>Quick-add</strong> (<hotkey>Shift</hotkey>+<hotkey>secondarymouse</hotkey> a Lectern, Notebook, or wet Tablet) — opens the editor with a fresh empty task at the TOP of the list, caret ready.<br><br><strong>Empty task behaviour</strong><br>When you move focus away from a task row (Tab, Shift+Tab, Enter, Esc, or clicking elsewhere), that row is Saved. However, empty rows are deleted. An empty row that still has focus is not deleted.<br><br>On commit, trailing blank lines and trailing whitespace are trimmed from a non-empty row. Interior line breaks (from Shift+Enter) are preserved.<br><br>",
+
+   "craftinginfo-scribe-task-types-title": "Scribe Mod: Trackers &amp; Links",
+   "craftinginfo-scribe-task-types-text": "Besides plain <strong>Tasks</strong> and <strong>Notes</strong>, Scribe has two task types that are tied to a specific item. Both are created the same way: open that item's <strong>handbook page</strong>, scroll to the bottom, and click <strong>Add Tracker</strong> or <strong>Add Link</strong> under the \"Add to Scribe\" heading. They can't be added from the editor's Add button, because they need to know which item you mean.<br><br><strong>Tracker</strong><br>A Tracker is a task bound to an item that shows a live <strong>have / need</strong> count, following the items you're carrying. For example, a tracker for 20 iron ingots reads 12&#47;20 while you carry twelve and completes on its own once you have all twenty. Set the target amount with the row's up/down stepper. Trackers count as tasks, so they share the tablet's task limit.<br><br><strong>Link</strong><br>A Link is a row whose label opens the linked item's handbook page when you click it — a quick cross-reference to keep next to a task (\"see: <em>forge</em>\"). Links aren't tasks: they have no checkbox and don't count against the task limit.<br><br><strong>Where it lands</strong><br>Clicking Add Tracker/Add Link adds the row to whichever Scribe surface you have open. If none is open, it's added to the Scribe item you most recently used (or the first one you're carrying). If you have no Scribe item at all, you'll be told you need one first.",
 
    "item-scribenotebook": "Notebook",
    "item-scribenotebook-desc": "A personal notebook. Write tasks and notes anywhere.",

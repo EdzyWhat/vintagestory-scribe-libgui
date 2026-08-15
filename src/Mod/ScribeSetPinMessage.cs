@@ -39,4 +39,16 @@ public sealed class ScribeSetPinMessage
     /// <summary>Client-supplied done snapshot, parallel to <see cref="SnapshotText"/>.</summary>
     [ProtoMember(5)]
     public bool SnapshotDone { get; set; }
+
+    /// <summary>Client-supplied task-kind snapshot (the <see cref="Scribe.Core.ScribeBlockKind"/> byte),
+    /// parallel to <see cref="SnapshotText"/> — used when the server can't resolve the task from a
+    /// registered host, so a pinned Link still reaches the HUD as a Link (add-tracker-link-tasks 5.5).
+    /// Defaults to 0 (<c>Task</c>) for an old client that never sets it.</summary>
+    [ProtoMember(6)]
+    public byte SnapshotKind { get; set; }
+
+    /// <summary>Client-supplied link-target snapshot for a Link task (null otherwise), parallel to
+    /// <see cref="SnapshotText"/> — the collectible code the pinned Link's Handbook hyperlink opens.</summary>
+    [ProtoMember(7)]
+    public string? SnapshotLinkTarget { get; set; }
 }

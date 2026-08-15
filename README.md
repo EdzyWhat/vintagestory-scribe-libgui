@@ -131,15 +131,17 @@ a pass/fail test. Two prebuilt world saves live under `tests/Integration.Tests/f
 isolation genuinely restarts the server before a scenario, so cross-scenario seeding would
 depend on xUnit's unguaranteed execution order:
 
-- `lectern.vcdbs` — a current (v4) world with a lectern document, a per-player pin, and a
-  non-default per-player setting. Booted by `PersistenceScenarios` (restart-persistence).
+- `lectern.vcdbs` — a current (v6 codec) world with a lectern document and a per-player pin.
+  Booted by `PersistenceScenarios` (restart-persistence). Regenerate it whenever the document
+  codec version bumps, or the stored document drops out of the accepted window and loads empty.
 - `lectern-v3.vcdbs` — a pre-change (v3 codec) world with a lectern whose document used the
   retired shared per-block `pinned` flag. Booted by `MigrationScenarios` to prove the v3→v4
   forward migration (legacy-pin drain + v4 re-save). **Irreplaceable: the codec only writes
   v4 now, so this v3 save can never be regenerated — do not delete or overwrite it.**
 
-If `FixtureBuilders` changes (the v4 fixture needs rebuilding), regenerate the v4 save with
-`--force` (the v3 save is not regenerable and must be left alone):
+If `FixtureBuilders` changes, or the document codec version bumps (the current `lectern.vcdbs`
+falls out of the accepted window and loads empty), regenerate it with `--force` (the v3 save is
+not regenerable and must be left alone):
 
 ```sh
 dotnet build tests/Integration.Tests

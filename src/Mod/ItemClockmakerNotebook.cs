@@ -122,7 +122,13 @@ public class ItemClockmakerNotebook : Item, IScribeDocumentItem
         outputSlot.Itemstack.Attributes.SetBytes("scribeHistory", history.Serialize());
     }
 
-    private void OpenNotebookDialog(ItemSlot slot, ICoreClientAPI capi, bool quickAdd = false)
+    /// <summary>Open this carried Clockmaker's Notebook's Scribe dialog for the Handbook "Add to Scribe"
+    /// fallback (add-tracker-link-tasks 3.3). Delegates to the same <see cref="OpenNotebookDialog"/> the
+    /// right-click path uses.</summary>
+    public ScribeDialogBase? OpenScribeDialog(ItemSlot slot, ICoreClientAPI capi)
+        => OpenNotebookDialog(slot, capi);
+
+    private ScribeDialogBase OpenNotebookDialog(ItemSlot slot, ICoreClientAPI capi, bool quickAdd = false)
     {
         var host = new NotebookHost(slot, ScribeBackdrops.ClockmakerPage);
         var modSystem = capi.ModLoader.GetModSystem<ScribeModSystem>();
@@ -130,6 +136,8 @@ public class ItemClockmakerNotebook : Item, IScribeDocumentItem
         // Tell the server we opened this notebook so it can record the one-time PickedUp entry
         // (opening the dialog is client-only; the server never sees it otherwise).
         modSystem.NotifyServerNotebookOpened(host.Document.DocId);
+        // Remember this as the last-opened Scribe item (add-tracker-link-tasks 3.2).
+        modSystem.NoteScribeItemDialogOpened(host.Document.DocId);
 
         var dialog = new GuiDialogClockmakerNotebook(host, capi);
         dialog.OnClosed += () => modSystem.UnregisterHost(host.Document.DocId);
@@ -141,5 +149,6 @@ public class ItemClockmakerNotebook : Item, IScribeDocumentItem
             dialog.EnterEditorMode(ScribeDocumentCodec.Serialize(host.Document));
             dialog.QuickAddTopTask();
         }
+        return dialog;
     }
 }

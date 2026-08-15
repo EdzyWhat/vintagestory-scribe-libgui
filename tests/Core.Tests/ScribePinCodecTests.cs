@@ -7,7 +7,8 @@ namespace Scribe.Core.Tests;
 // fail safely (return false) rather than throw or over-allocate.
 public class ScribePinCodecTests
 {
-    private static ScribePinnedRef Pin(string text = "Find copper", bool done = false, bool orphaned = false) => new()
+    private static ScribePinnedRef Pin(string text = "Find copper", bool done = false, bool orphaned = false,
+        ScribeBlockKind kind = ScribeBlockKind.Task, string? linkTarget = null) => new()
     {
         OwnerDocId = Guid.NewGuid(),
         TaskId = Guid.NewGuid(),
@@ -15,6 +16,8 @@ public class ScribePinCodecTests
         Orphaned = orphaned,
         LastKnownText = text,
         LastKnownDone = done,
+        Kind = kind,
+        LinkTarget = linkTarget,
     };
 
     private static void AssertPinEqual(ScribePinnedRef expected, ScribePinnedRef actual)
@@ -25,6 +28,8 @@ public class ScribePinCodecTests
         Assert.Equal(expected.Orphaned, actual.Orphaned);
         Assert.Equal(expected.LastKnownText, actual.LastKnownText);
         Assert.Equal(expected.LastKnownDone, actual.LastKnownDone);
+        Assert.Equal(expected.Kind, actual.Kind);
+        Assert.Equal(expected.LinkTarget, actual.LinkTarget);
     }
 
     // ---- SPIN: list round-trip ----
@@ -42,6 +47,65 @@ public class ScribePinCodecTests
         Assert.Equal(2, restored!.Count);
         AssertPinEqual(pins[0], restored[0]);
         AssertPinEqual(pins[1], restored[1]);
+    }
+
+    // ---- v2: Kind + LinkTarget (add-tracker-link-tasks 5.5) ----
+
+    [Fact]
+    public void List_RoundTrip_PreservesKindAndLinkTarget()
+    {
+        // A Link pin carries its target; a Tracker pin carries its kind but no link target; a plain Task
+        // pin round-trips with the defaults — all three must survive the v2 layout exactly.
+        var pins = new List<ScribePinnedRef>
+        {
+            Pin("See copper", kind: ScribeBlockKind.Link, linkTarget: "game:ingot-copper"),
+            Pin("Gather flax", kind: ScribeBlockKind.Tracker),
+            Pin("Plain task"),
+        };
+
+        byte[] bytes = ScribePinCodec.SerializeList(pins);
+        bool ok = ScribePinCodec.TryDeserializeList(bytes, out var restored);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        Assert.Equal(3, restored!.Count);
+        AssertPinEqual(pins[0], restored[0]);
+        AssertPinEqual(pins[1], restored[1]);
+        AssertPinEqual(pins[2], restored[2]);
+    }
+
+    [Fact]
+    public void TryDeserialize_V1Bytes_KindAndLinkTarget_AreUpgraded()
+    {
+        // Hand-build a v1 SPIN blob (no Kind/LinkTarget fields) exactly as the pre-5.5 codec wrote it, and
+        // assert the migration defaults them (Kind→Task, LinkTarget→null) rather than merely deserializing.
+        var docId = Guid.NewGuid();
+        var taskId = Guid.NewGuid();
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write("SPIN"u8.ToArray());
+            w.Write((byte)1);          // v1
+            w.Write(1);                // one pin
+            w.Write(docId.ToByteArray());
+            w.Write(taskId.ToByteArray());
+            w.Write(999.0);            // PinnedAtTotalHours
+            w.Write(false);            // Orphaned
+            w.Write(true);             // LastKnownDone
+            w.Write("Old pin");        // LastKnownText — v1 ends here, no Kind/LinkTarget
+        }
+
+        bool ok = ScribePinCodec.TryDeserializeList(ms.ToArray(), out var restored);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        var pin = Assert.Single(restored!);
+        Assert.Equal(docId, pin.OwnerDocId);
+        Assert.Equal(taskId, pin.TaskId);
+        Assert.Equal("Old pin", pin.LastKnownText);
+        Assert.True(pin.LastKnownDone);
+        Assert.Equal(ScribeBlockKind.Task, pin.Kind);   // defaulted by ApplyV1ToV2Migrations
+        Assert.Null(pin.LinkTarget);                    // defaulted by ApplyV1ToV2Migrations
     }
 
     [Fact]

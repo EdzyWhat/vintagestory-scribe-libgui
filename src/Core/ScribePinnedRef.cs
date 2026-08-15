@@ -34,4 +34,16 @@ public sealed class ScribePinnedRef
 
     /// <summary>Last-known completed state of the task, refreshed alongside <see cref="LastKnownText"/>.</summary>
     public bool LastKnownDone { get; set; }
+
+    /// <summary>The pinned task's kind, snapshotted so a client can render/act on the pin by kind even
+    /// when the owning block is unloaded — most importantly so the HUD can treat a pinned Link's label as
+    /// a Handbook hyperlink (add-tracker-link-tasks 5.5). Defaults to <see cref="ScribeBlockKind.Task"/>
+    /// (the value pre-v2 pin blobs migrate to), so an ordinary pinned task is unaffected.</summary>
+    public ScribeBlockKind Kind { get; set; } = ScribeBlockKind.Task;
+
+    /// <summary>For a <see cref="ScribeBlockKind.Link"/> pin, the last-known link target (the collectible
+    /// code its Handbook hyperlink opens); null for every other kind. Snapshotted alongside
+    /// <see cref="Kind"/> so the HUD can open the page without resolving the (possibly unloaded) source
+    /// document (add-tracker-link-tasks 5.5).</summary>
+    public string? LinkTarget { get; set; }
 }

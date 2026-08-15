@@ -117,6 +117,23 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         },
                         onChanged: v => onMutate(s => s.CompletionPolicy = v))),
 
+                // What happens to a Tracker task the moment its carried-item count first reaches its
+                // target (add-tracker-link-tasks 5.4/D6). Distinct axis from the completion policy above:
+                // that one governs a PIN when you check it off; this one governs a TRACKER's auto-action.
+                // Explicit display order Complete → Delete → Nothing (the useful-to-least-active order),
+                // not the enum/alphabetical order the dropdown would otherwise pick.
+                LabeledControl(
+                    "settings-trackercompletion", colors, scale,
+                    new Dropdown<ScribeTrackerCompletion>(
+                        value: settings.TrackerCompletion,
+                        items: new List<DropdownItem<ScribeTrackerCompletion>>
+                        {
+                            new() { Value = ScribeTrackerCompletion.Complete, Label = Lang.Get("scribe:scribe-trackercompletion-complete") },
+                            new() { Value = ScribeTrackerCompletion.Delete,   Label = Lang.Get("scribe:scribe-trackercompletion-delete") },
+                            new() { Value = ScribeTrackerCompletion.Nothing,  Label = Lang.Get("scribe:scribe-trackercompletion-nothing") },
+                        },
+                        onChanged: v => onMutate(s => s.TrackerCompletion = v))),
+
                 // "Collapse the HUD" + "Mute Scribe UI sounds" share one row as two columns
                 // (scribe-mute-ui-sounds 3.2). Each hugs its own label at the start of its column
                 // (scribe-settings-followups 3.3); PairedControls splits the width evenly between them.

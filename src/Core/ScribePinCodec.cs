@@ -19,21 +19,33 @@ namespace Scribe.Core;
 /// Guids are written as 16 raw bytes (protobuf-agnostic and compact). Caps bound every read so a
 /// malformed or hostile payload can't allocate without limit.
 /// See <see href="../docs/CODEC-MIGRATION.md">docs/CODEC-MIGRATION.md</see> for the migration-step pattern and how to add a new version.
+///
+/// Accepted-version window:
+///   Current : v2 — appended per-pin <see cref="ScribePinnedRef.Kind"/> (1 byte) and
+///                  <see cref="ScribePinnedRef.LinkTarget"/> (bool + optional string), so the HUD can
+///                  treat a pinned Link as a Handbook hyperlink (add-tracker-link-tasks 5.5).
+///   Prior   : v1 — migrated by <see cref="ApplyV1ToV2Migrations"/> (Kind→Task, LinkTarget→null).
+///   Older   : rejected.
+///
+/// Per-pin field history (in serialized order): OwnerDocId, TaskId, PinnedAtTotalHours, Orphaned,
+/// LastKnownDone, LastKnownText (v1); Kind, LinkTarget (added v2).
 /// </summary>
 public static class ScribePinCodec
 {
     private static readonly byte[] ListMagic = "SPIN"u8.ToArray();
     private static readonly byte[] StoreMagic = "SPST"u8.ToArray();
 
-    /// <summary>Version of the pin-list blobs (SPIN/SPST). Unchanged — pins didn't change shape.</summary>
-    private const byte PinVersion = 1;
+    /// <summary>Version of the pin-list blobs (SPIN/SPST). Bumped to 2 for the appended per-pin
+    /// <see cref="ScribePinnedRef.Kind"/> + <see cref="ScribePinnedRef.LinkTarget"/> fields
+    /// (add-tracker-link-tasks 5.5).</summary>
+    private const byte PinVersion = 2;
 
     /// <summary>
-    /// The immediately prior pin-list version. Equal to <see cref="PinVersion"/> until a pin-format
-    /// change occurs — at that point bump <see cref="PinVersion"/>, set this to the old value, and
-    /// add upgrade logic to <see cref="ApplyPinMigrations"/>. See docs/CODEC-MIGRATION.md.
+    /// The immediately prior pin-list version the reader still accepts (and migrates). Bumped alongside
+    /// <see cref="PinVersion"/> to 1 → 2; v1 blobs are upgraded by <see cref="ApplyV1ToV2Migrations"/>.
+    /// See docs/CODEC-MIGRATION.md.
     /// </summary>
-    private const byte PriorPinVersion = PinVersion;
+    private const byte PriorPinVersion = 1;
 
     /// <summary>Hard upper bound on the number of pins a single player may hold, enforced on every
     /// list/store read so a malformed or hostile payload cannot grow a persisted/synced set without
@@ -72,8 +84,7 @@ public static class ScribePinCodec
             // See docs/CODEC-MIGRATION.md for the migration-step pattern.
             int version = ReadHeader(r, ListMagic);
             if (version != PinVersion && version != PriorPinVersion) return false;
-            if (!TryReadPinList(r, bytes.Length, out var list)) return false;
-            ApplyPinMigrations((byte)version, ref list);
+            if (!TryReadPinList(r, bytes.Length, (byte)version, out var list)) return false;
             pins = list;
             return true;
         }
@@ -123,8 +134,7 @@ public static class ScribePinCodec
             {
                 string uid = r.ReadString();
                 if (uid.Length > MaxUidLength) return false;
-                if (!TryReadPinList(r, bytes.Length, out var list)) return false;
-                ApplyPinMigrations((byte)version, ref list);
+                if (!TryReadPinList(r, bytes.Length, (byte)version, out var list)) return false;
                 result[uid] = list;
             }
             store = result;
@@ -159,10 +169,16 @@ public static class ScribePinCodec
             w.Write(pin.Orphaned);
             w.Write(pin.LastKnownDone);
             w.Write(pin.LastKnownText);
+            // v2 appended fields (add-tracker-link-tasks 5.5): the pin's kind, and — only for a Link — its
+            // link target (a nullable string, written as a presence bool + the value when present).
+            w.Write((byte)pin.Kind);
+            bool hasLinkTarget = pin.LinkTarget != null;
+            w.Write(hasLinkTarget);
+            if (hasLinkTarget) w.Write(pin.LinkTarget!);
         }
     }
 
-    private static bool TryReadPinList(BinaryReader r, int totalBytes, out List<ScribePinnedRef> pins)
+    private static bool TryReadPinList(BinaryReader r, int totalBytes, byte version, out List<ScribePinnedRef> pins)
     {
         pins = new List<ScribePinnedRef>();
         int count = r.ReadInt32();
@@ -184,6 +200,27 @@ public static class ScribePinCodec
             string text = r.ReadString();
             if (text.Length > ScribeDocumentCodec.MaxTextLength) return false;
             pin.LastKnownText = text;
+
+            // v2 appended per-pin Kind + LinkTarget (add-tracker-link-tasks 5.5); v1 blobs have neither, so
+            // the named migration defaults them (Kind→Task, LinkTarget→null). See docs/CODEC-MIGRATION.md.
+            if (version == PinVersion)
+            {
+                pin.Kind = (ScribeBlockKind)r.ReadByte();
+                bool hasLinkTarget = r.ReadBoolean();
+                if (hasLinkTarget)
+                {
+                    string linkTarget = r.ReadString();
+                    if (linkTarget.Length > ScribeDocumentCodec.MaxTextLength) return false;
+                    pin.LinkTarget = linkTarget;
+                }
+            }
+            else
+            {
+                ApplyV1ToV2Migrations(out var kind, out var linkTarget);
+                pin.Kind = kind;
+                pin.LinkTarget = linkTarget;
+            }
+
             list.Add(pin);
         }
         pins = list;
@@ -191,15 +228,16 @@ public static class ScribePinCodec
     }
 
     /// <summary>
-    /// Migration steps for pin-list bytes written in the immediately prior version. Currently a
-    /// no-op because <see cref="PriorPinVersion"/> equals <see cref="PinVersion"/> — no pin-format
-    /// fields have changed yet. When the first pin-format change arrives: bump
-    /// <see cref="PinVersion"/>, set <see cref="PriorPinVersion"/> to the old value, and add the
-    /// upgrade logic here. See docs/CODEC-MIGRATION.md for the pattern.
+    /// Migration step for pin-list bytes written in v1 (the prior version): v1 has no per-pin
+    /// <see cref="ScribePinnedRef.Kind"/> or <see cref="ScribePinnedRef.LinkTarget"/>, so a v1 pin is
+    /// upgraded by defaulting them — every pre-v2 pin reads as an ordinary <see cref="ScribeBlockKind.Task"/>
+    /// with no link target, which is exactly correct (Tracker/Link pins only exist from v2 on). See
+    /// docs/CODEC-MIGRATION.md for the pattern.
     /// </summary>
-    private static void ApplyPinMigrations(byte version, ref List<ScribePinnedRef> pins)
+    private static void ApplyV1ToV2Migrations(out ScribeBlockKind kind, out string? linkTarget)
     {
-        // No migration needed while PriorPinVersion == PinVersion.
+        kind = ScribeBlockKind.Task;
+        linkTarget = null;
     }
 
     /// <summary>Reads exactly <paramref name="count"/> bytes or throws <see cref="EndOfStreamException"/>

@@ -135,6 +135,7 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     bool IScribeDocumentHost.DeleteTaskFromReader(Guid taskId) => DeleteTaskFromReader(taskId);
     bool IScribeDocumentHost.MoveTaskToBottomFromReader(Guid taskId) => MoveTaskToBottomFromReader(taskId);
     bool IScribeDocumentHost.SetTaskTextFromReader(Guid taskId, string text) => SetTaskTextFromReader(taskId, text);
+    bool IScribeDocumentHost.SetTrackerCurrentQuantityFromReader(Guid taskId, int qty) => SetTrackerCurrentQuantityFromReader(taskId, qty);
 
     /// <summary>Client-side: the single LibGUI dialog serving BOTH views (migrate-editor-view-libgui).
     /// Read and editor are internal view states of this one dialog, so switching between them is a
@@ -416,7 +417,7 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
         if (Api is not ICoreServerAPI) return;
 
         var block = Document.FindByTaskId(taskId);
-        if (block is null || !block.IsTask) return;
+        if (block is null || !block.IsCompletable) return;
         if (block.Done == done) return;
 
         block.Done = done;
@@ -452,6 +453,28 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     }
 
     /// <summary>
+    /// Server-side: set a Tracker's live <see cref="ScribeBlock.CurrentQuantity"/> on the authoritative
+    /// document by its stable <see cref="ScribeBlock.TaskId"/> — the write-through for the client count
+    /// engine (add-tracker-link-tasks D5). Lock-free like <see cref="SetTaskDoneFromReader"/> (updating a
+    /// derived carried-inventory count is an always-allowed viewer action, not an editor edit). Routes
+    /// through the Core <see cref="ScribeDocument.SetTrackerCurrentQuantity"/> op so the
+    /// <c>[0, TargetQuantity]</c> clamp holds, and returns whether the value actually changed. A no-op,
+    /// an unknown TaskId, or a non-Tracker block is left unwritten. Does NOT touch pins.
+    /// </summary>
+    public bool SetTrackerCurrentQuantityFromReader(Guid taskId, int qty)
+    {
+        if (Api is not ICoreServerAPI) return false;
+
+        var block = Document.FindByTaskId(taskId);
+        if (block is null || !block.IsTracker) return false;
+        if (block.CurrentQuantity == Math.Clamp(qty, 0, block.TargetQuantity)) return false;
+
+        if (!Document.SetTrackerCurrentQuantity(taskId, qty)) return false;
+        MarkDirty(redrawOnClient: true);
+        return true;
+    }
+
+    /// <summary>
     /// Server-side: delete a task from the authoritative document by its stable
     /// <see cref="ScribeBlock.TaskId"/> — the write-through for the <c>Delete</c> completion policy.
     /// Lock-free like <see cref="SetTaskDoneFromReader"/>. Returns whether a task was removed. Does NOT
@@ -463,7 +486,7 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
 
         for (int i = 0; i < Document.Blocks.Count; i++)
         {
-            if (Document.Blocks[i].TaskId == taskId && Document.Blocks[i].IsTask)
+            if (Document.Blocks[i].TaskId == taskId && Document.Blocks[i].IsCompletable)
             {
                 Document.DeleteBlock(i);
                 MarkDirty(redrawOnClient: true);

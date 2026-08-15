@@ -35,6 +35,14 @@
       <HintPath>$(VintageStoryPath)/Lib/protobuf-net.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- 0Harmony: the runtime-patching library the base game bundles in Lib/ (NOT a mod dependency —
+         see the "Harmony ships with the base game" project note). Referenced for the client-side
+         Handbook postfix (ScribeHandbookPatch) that appends the "Add to Scribe" links to an item's
+         handbook page. Private=false: the game provides it at runtime, same as the game DLLs above. -->
+    <Reference Include="0Harmony">
+      <HintPath>$(VintageStoryPath)/Lib/0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="Newtonsoft.Json">
       <HintPath>$(VintageStoryPath)/Lib/Newtonsoft.Json.dll</HintPath>
       <Private>false</Private>

@@ -76,6 +76,13 @@ public abstract partial class ScribeDialogBase
         {
             ForceRebuild();
         }
+
+        // add-tracker-link-tasks 3.4 (Case B): a Handbook "Add to Scribe" click that arrived while this
+        // dialog was NOT editing stashed its append and requested editor access; now that access has landed
+        // (synchronous for items, or the async server grant for blocks), apply the deferred append and flush.
+        // The recovery branch above returns early, so this fires only on a genuine editor entry — never on a
+        // lost-lock re-acquire (which must preserve the player's own in-flight scratch untouched).
+        FlushPendingHandbookAppend();
     }
 
     /// <summary>Enter (or stay in) the read view. Called on a read-access grant and from the Read nav
@@ -386,7 +393,7 @@ public abstract partial class ScribeDialogBase
 
         // Editor mode: don't resync in-progress TEXT, but reconcile the orthogonal external effects below.
         if (scratch is null || !IsOpened()) return;
-        var serverTasks = host.Document.Blocks.Where(b => b.IsTask).ToList();
+        var serverTasks = host.Document.Blocks.Where(b => b.IsCompletable).ToList();
         var serverTaskIds = serverTasks.Select(b => b.TaskId).ToHashSet();
 
         // (1) Drop tasks the server no longer knows about.
@@ -394,7 +401,7 @@ public abstract partial class ScribeDialogBase
         for (int i = scratch.Blocks.Count - 1; i >= 0; i--)
         {
             var b = scratch.Blocks[i];
-            if (!b.IsTask || serverTaskIds.Contains(b.TaskId)) continue;
+            if (!b.IsCompletable || serverTaskIds.Contains(b.TaskId)) continue;
             // A task in scratch but absent from the server is EITHER a real task the server dropped
             // (completed via the HUD / Delete policy elsewhere) — which should disappear here too — OR a
             // task this editor JUST created that hasn't reached the server yet: EditorInsertTaskBelow
@@ -405,8 +412,11 @@ public abstract partial class ScribeDialogBase
             // sweep guard tripping, because the delete comes from HERE, not the empty-row sweep). Tell the
             // two apart: never drop the row currently being edited, and never drop an empty task (empty
             // tasks are never persisted by design — see PurgeEmptyRowsFromScratch — so their absence from
-            // the server is always expected, never a server-side deletion).
-            if (focusedEditIndex == i || string.IsNullOrWhiteSpace(b.Text)) continue;
+            // the server is always expected, never a server-side deletion). The empty-text protection is
+            // scoped to real Tasks: a Tracker/Link carries empty Text by design (its label comes from the
+            // referenced item, not typed text) yet IS persisted, so a server-side deletion of one is real
+            // and must drop here — otherwise the next flush would resurrect it from stale scratch.
+            if (focusedEditIndex == i || (b.IsTask && string.IsNullOrWhiteSpace(b.Text))) continue;
             DeleteEditorBlock(i);
             structural = true;
         }
@@ -423,7 +433,7 @@ public abstract partial class ScribeDialogBase
         for (int i = 0; i < scratch.Blocks.Count; i++)
         {
             var b = scratch.Blocks[i];
-            if (!b.IsTask || !serverDone.TryGetValue(b.TaskId, out bool serverBlockDone)) continue;
+            if (!b.IsCompletable || !serverDone.TryGetValue(b.TaskId, out bool serverBlockDone)) continue;
             if (b.Done == serverBlockDone) continue;
             scratch.ToggleTask(i);
             isDirty = true; // carry the synced done-state into the next flush so it isn't reverted (D4)

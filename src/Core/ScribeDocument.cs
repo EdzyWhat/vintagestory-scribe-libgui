@@ -107,12 +107,13 @@ public sealed class ScribeDocument
         return true;
     }
 
-    /// <summary>Flips the completed flag of a Task block. Fails on a Text section or bad index.</summary>
+    /// <summary>Flips the completed flag of a completable block (Task, Tracker, or Link). Fails on a
+    /// Text section (which has no Done flag) or a bad index.</summary>
     public bool ToggleTask(int index)
     {
         if (!IsValidIndex(index)) return false;
         var block = _blocks[index];
-        if (!block.IsTask) return false;
+        if (!block.IsCompletable) return false;
         block.Done = !block.Done;
         return true;
     }
@@ -196,14 +197,14 @@ public sealed class ScribeDocument
     /// Moves the task with the given stable <see cref="ScribeBlock.TaskId"/> to the END of the block
     /// list, preserving the relative order of every other block — the identity-addressed "sink to the
     /// bottom" a completion under the Sink policy performs (scribe-lectern-view-consistency). Returns
-    /// false (document unchanged) when no block has that id, the id belongs to a non-task block, or the
-    /// task is already last. Pure data; no VS API.
+    /// false (document unchanged) when no block has that id, the id belongs to a non-completable (Text)
+    /// block, or the task is already last. Pure data; no VS API.
     /// </summary>
     public bool MoveTaskToBottom(Guid taskId)
     {
         for (int i = 0; i < _blocks.Count; i++)
         {
-            if (_blocks[i].TaskId == taskId && _blocks[i].IsTask)
+            if (_blocks[i].TaskId == taskId && _blocks[i].IsCompletable)
             {
                 if (i == _blocks.Count - 1) return false; // already last — nothing to do
                 var block = _blocks[i];

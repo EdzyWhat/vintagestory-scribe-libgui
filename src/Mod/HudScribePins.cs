@@ -676,6 +676,13 @@ public sealed class HudScribePins : GuiBase
     public void ToggleCollapsed()
         => modSystem.UpdateMySettings(s => s.HudCollapsed = !s.HudCollapsed);
 
+    /// <summary>Open a pinned Link's referenced Handbook page (add-tracker-link-tasks 5.5): parse the
+    /// snapshotted <see cref="ScribePinnedRef.LinkTarget"/> and hand it to the same handbook-open helper the
+    /// Read/editor Link rows use. This is the row-click plumbing gated on kind == Link (design D3c); it is
+    /// entirely separate from the row's completion checkbox, so opening the page never toggles done-state. A
+    /// no-op when the code doesn't resolve or the survival mod (handbook protocol) isn't loaded.</summary>
+    private void OpenPinnedLink(string? linkTarget) => ScribeItemRef.OpenHandbookPage(capi, linkTarget);
+
     private void SendClearTimer()
     {
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeClearTimerMessage());
@@ -800,7 +807,7 @@ public sealed class HudScribePins : GuiBase
         return ordered.Take(max)
             .Select(p => new HudPinRow(
                 p.OwnerDocId, p.TaskId, p.LastKnownText, DisplayedDone(p), SunkVisual(p),
-                FadingOut: IsFadingOut(p)))
+                FadingOut: IsFadingOut(p), Kind: p.Kind, LinkTarget: p.LinkTarget))
             .ToList();
     }
 
@@ -875,6 +882,7 @@ public sealed class HudScribePins : GuiBase
             checkboxSize: ScribeRowConstants.BaseHudCheckboxSize
                 * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.HudFontScale),
             onToggleRow: OnToggleRow,
+            onOpenLink: OpenPinnedLink,
             onToggleCollapsed: ToggleCollapsed,
             onOpenSettings: modSystem.OpenSettings,
             timerData: timerSnapshot,
@@ -962,7 +970,8 @@ public sealed class HudScribePins : GuiBase
 /// collapses it from a frozen ghost it captured — the HUD row itself is simply gone from this set
 /// (migrate-hud-onto-animated-list).</summary>
 internal readonly record struct HudPinRow(
-    Guid DocId, Guid TaskId, string Text, bool Done, bool Sunk, bool FadingOut);
+    Guid DocId, Guid TaskId, string Text, bool Done, bool Sunk, bool FadingOut,
+    ScribeBlockKind Kind = ScribeBlockKind.Task, string? LinkTarget = null);
 
 /// <summary>
 /// The HUD's widget tree: a collapse-header chevron over a column of pin rows (or, when collapsed,
@@ -998,6 +1007,9 @@ internal sealed class HudPinsContent : StatelessWidget
     private readonly float rowFontSize;
     private readonly float checkboxSize;
     private readonly Action<Guid, Guid, bool> onToggleRow;
+    /// <summary>Open a pinned Link's Handbook page by its snapshotted link-target (add-tracker-link-tasks
+    /// 5.5). Wired only for a Link row's label; null-safe target.</summary>
+    private readonly Action<string?> onOpenLink;
     private readonly Action onToggleCollapsed;
     private readonly Action onOpenSettings;
     private readonly Scribe.Core.TimerStore? timerData;
@@ -1018,6 +1030,7 @@ internal sealed class HudPinsContent : StatelessWidget
         float rowFontSize,
         float checkboxSize,
         Action<Guid, Guid, bool> onToggleRow,
+        Action<string?> onOpenLink,
         Action onToggleCollapsed,
         Action onOpenSettings,
         Scribe.Core.TimerStore? timerData = null,
@@ -1037,6 +1050,7 @@ internal sealed class HudPinsContent : StatelessWidget
         this.rowFontSize = rowFontSize;
         this.checkboxSize = checkboxSize;
         this.onToggleRow = onToggleRow;
+        this.onOpenLink = onOpenLink;
         this.onToggleCollapsed = onToggleCollapsed;
         this.onOpenSettings = onOpenSettings;
         this.timerData = timerData;
@@ -1240,6 +1254,18 @@ internal sealed class HudPinsContent : StatelessWidget
             durationMs: FadeWindowMs,
             text: rowText,
             style: textStyle);
+
+        // A pinned Link's label is a Handbook hyperlink (add-tracker-link-tasks 5.5): tapping it opens the
+        // referenced page and NEVER toggles the row's checkbox (opening the page is separate from
+        // completion — design D3c). Reuses the same handbook-open path as the Read/editor Link rows, gated
+        // here on the snapshotted kind == Link. Other kinds render the plain (non-tappable) label.
+        if (row.Kind == ScribeBlockKind.Link)
+        {
+            var target = row.LinkTarget;
+            text = new GestureDetector(
+                onPress: e => { e.Handled = true; onOpenLink(target); },
+                child: text);
+        }
 
         Widget rowBody = new Row(
             spacing: 6,

@@ -29,60 +29,71 @@
 
 ## 3. Mod: Handbook "Add to Scribe" entry point (Harmony)
 
-- [ ] 3.1 Add a Harmony patch class with a postfix on
+- [x] 3.1 Add a Harmony patch class with a postfix on
       `CollectibleBehaviorHandbookTextAndExtraInfo.GetHandbookInfo` that appends "Add to Scribe"
       `LinkTextComponent`(s) (Tracker and Link paths) carrying the page's collectible code. Register/
       unregister the Harmony patch in the client mod-system lifecycle.
-- [ ] 3.2 Track the last-opened Scribe item: set a client-side field wherever an item-hosted Scribe
+- [x] 3.2 Track the last-opened Scribe item: set a client-side field wherever an item-hosted Scribe
       dialog opens (Notebook/Tablet).
-- [ ] 3.3 Implement three-tier target resolution on click: (1) open `ScribeDialogBase` via
+- [x] 3.3 Implement three-tier target resolution on click (`ScribeModSystem.AddFromHandbook`):
+      (1) open `ScribeDialogBase` via
       `capi.Gui.OpenedGuis.OfType<ScribeDialogBase>().FirstOrDefault(d => d.IsOpened())`; (2) else
-      open the last-opened carried Scribe item (fallback: first carried Scribe item); (3) else
+      open the last-opened carried Scribe item (fallback: first carried Scribe item) via the new
+      `IScribeDocumentItem.OpenScribeDialog` seam; (3) else
       `TriggerIngameError("You need a Scribe item to do that.")` and create nothing.
-- [ ] 3.4 Add a `ScribeCreateTaskFromHandbookMessage { DocIdBytes, ItemCode, Kind, TargetQuantity }`
-      packet; client sends it for the resolved surface's `DocId`.
-- [ ] 3.5 Server handler appends the Tracker/Link block via the normal server-authoritative edit
-      path and syncs the document back to viewers.
-- [ ] 3.6 Register a new Handbook explainer entry (registration JSON + lang copy) describing the
+- [x] 3.4 **(REVISED — no new packet).** REUSE the existing per-dialog save path instead of a new
+      `ScribeCreateTaskFromHandbookMessage`: `ScribeDialogBase.TryAddFromHandbook(kind, itemCode)`
+      appends to the resolved live dialog's `scratch` document and flushes via its existing
+      (possibly-overridden) `SendFlushPacket`. Case A (already editing) appends + flushes at once;
+      Case B (not editing) stashes a `pendingHandbookAppend` and calls `TryEnterEditor()` — a
+      deferred-append hook at the end of `EnterEditorMode` applies it once editor access lands
+      (synchronous for items, async grant for blocks). Backwards compatible: `ScribeAddKind` is never
+      serialized, and the only persistence change is the v6 document bytes already shipped in Group 2.
+- [x] 3.5 **(REVISED — no new server handler).** The reused `SendFlushPacket` path already routes
+      through the server-authoritative `ScribeEditDocumentMessage`/`ScribeNotebookSaveMessage` edit +
+      re-sync; no dedicated handbook server handler is added. Locked-by-other blocks surface the
+      generic `scribe:scribe-gui-locked` error (reused, no new key) via `TryEnterEditor`; a
+      read-only/refused surface clears the stale `pendingHandbookAppend`.
+- [x] 3.6 Register a new Handbook explainer entry (registration JSON + lang copy) describing the
       Tracker and Link task types and pointing at the per-item "Add to Scribe" link.
-- [ ] 3.7 Add Tracker and Link entries to `ScribeAddKinds.Live`; extend `ScribeAddKind` /
+- [x] 3.7 Add Tracker and Link entries to `ScribeAddKinds.Live`; extend `ScribeAddKind` /
       `OnClickAdd` so these dispatch a non-mutating guide action: Handbook closed → open the
       explainer entry; Handbook open → `TriggerIngameError` telling the player to scroll to the
       current entry's bottom and click the "Add to Scribe" link.
-- [ ] 3.8 Add lang keys for the button label(s), the footer guide entries + their error text, the
+- [x] 3.8 Add lang keys for the button label(s), the footer guide entries + their error text, the
       "no Scribe item" error, and task-type labels.
-- [ ] 3.9 Add a `VSAPI-NOTES.md` entry recording the exact `GetHandbookInfo` type/signature, the
+- [x] 3.9 Add a `VSAPI-NOTES.md` entry recording the exact `GetHandbookInfo` type/signature, the
       append-only postfix approach, and the handbook open API used to jump to an entry.
 
 ## 4. Mod: Tracker count engine (carried-only)
 
-- [ ] 4.1 Build a carried-inventory matcher: construct a `CraftingRecipeIngredient` from
+- [x] 4.1 Build a carried-inventory matcher: construct a `CraftingRecipeIngredient` from
       `TargetItemCode` and sum matching stack sizes across hotbar + backpack via
       `SatisfiesAsIngredient(stack, checkStackSize:false)`.
-- [ ] 4.2 Recompute on `IInventory.SlotModified` (debounced) + a ~1s edge-case poll, active only
+- [x] 4.2 Recompute on `IInventory.SlotModified` (debounced) + a ~1s edge-case poll, active only
       while the open document contains at least one Tracker; recompute on dialog open.
-- [ ] 4.3 Route `CurrentQuantity` updates through the server edit path (synced like `Done`);
+- [x] 4.3 Route `CurrentQuantity` updates through the server edit path (synced like `Done`);
       server persists, viewers converge.
-- [ ] 4.4 On target-met, apply the per-player completion setting (completes / deletes / nothing) by
+- [x] 4.4 On target-met, apply the per-player completion setting (completes / deletes / nothing) by
       issuing the matching edit; guard against resurrecting a deleted task on later shortfall.
 
 ## 5. Mod: row rendering & completion setting
 
-- [ ] 5.1 Render a Tracker row: target item icon + name + `have/need` counter, with a progress
+- [x] 5.1 Render a Tracker row: target item icon + name + `have/need` counter, with a progress
       state (none / partial / satisfied); shortfall reads unsatisfied, met reads like a completed row.
-- [ ] 5.2 Wire the inline arrow-stepper numeric control to edit a Tracker's `TargetQuantity` on the
+- [x] 5.2 Wire the inline arrow-stepper numeric control to edit a Tracker's `TargetQuantity` on the
       row (reuse the Settings numeric / `typed-arrow-substitution` control); re-clamp on change.
-- [ ] 5.3 Render a Link row: item icon + name; clicking the label opens the referenced Handbook page
+- [x] 5.3 Render a Link row: item icon + name; clicking the label opens the referenced Handbook page
       (parse `LinkTarget` → `AssetLocation` → handbook open API) and does NOT change completion,
       distinct from the row's completion control.
-- [ ] 5.5 Wire Link-task hyperlink activation on the pinned-task HUD: a pinned Link's click opens
+- [x] 5.5 Wire Link-task hyperlink activation on the pinned-task HUD: a pinned Link's click opens
       its Handbook page (reuse the existing HUD row-click plumbing, gated on kind == Link).
-- [ ] 5.4 Add the completes/deletes/nothing completion setting to `ScribeClientConfig` +
+- [x] 5.4 Add the completes/deletes/nothing completion setting to `ScribeClientConfig` +
       `ScribeSettingsContent`/`ScribeSettingsDialog` (default: completes) with a lang label.
 
 ## 6. Verification & docs
 
-- [ ] 6.1 `build/verify.sh` green (Core suite incl. new tests + Atlas suite).
+- [x] 6.1 `build/verify.sh` green (Core suite incl. new tests + Atlas suite).
 - [ ] 6.2 Manually test in-game — three-tier resolution: "Add to Scribe" appears on an item page;
       (1) with a Scribe surface open (test a block AND an item surface) it creates the task there;
       (2) with none open but a Scribe item carried, it opens that item's UI and creates the task;
@@ -100,5 +111,5 @@
       leaves its completion state unchanged.
 - [ ] 6.6 Manually test in-game: load a pre-v6 (v5) world/save and confirm existing documents open
       cleanly with the new fields defaulted.
-- [ ] 6.7 Update `CHANGELOG.md` (Unreleased → Added: Tracker & Link task types, Handbook entry) and
+- [x] 6.7 Update `CHANGELOG.md` (Unreleased → Added: Tracker & Link task types, Handbook entry) and
       `ROADMAP.md` (mark the v1.2 task-types cluster progress).

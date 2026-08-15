@@ -392,6 +392,9 @@ public abstract partial class ScribeDialogBase
         pinCollapseRegistry.Dispose();
         // Read view collapse controllers (reconcile-animating-surfaces §5.5) — same ownership as the Pin Tab's.
         readCollapseRegistry.Dispose();
+        // Tracker count engine (add-tracker-link-tasks Group 4): unregister its poll/callback and unsubscribe
+        // the carried-inventory events so a closed dialog stops counting.
+        TeardownTrackerEngine();
         base.OnGuiClosed();
     }
 

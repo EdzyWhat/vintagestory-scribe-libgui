@@ -74,7 +74,7 @@ public static class ScribeCompletion
     }
 
     /// <summary>The result of a client-side <see cref="ApplyLocal"/>. <see cref="Toggled"/> is false when
-    /// the id was unknown or named a non-task block (the document is then unchanged). <see cref="NowDone"/>
+    /// the id was unknown or named a non-completable (Text) block (the document is then unchanged). <see cref="NowDone"/>
     /// is the done state after the toggle. <see cref="DocChanged"/> is true when the document content
     /// changed in any way (the flip itself, or a policy delete/sink) — a view uses it to decide whether to
     /// refresh. <see cref="ShouldRemovePin"/> is the decided pin action, for the caller to apply against
@@ -85,14 +85,14 @@ public static class ScribeCompletion
     /// document copy, then apply <see cref="Decide"/>'s document action directly (there is no persistence
     /// layer to honor client-side — the authoritative resync supersedes this shortly). Produces the same
     /// document the server produces through its write-through, so an optimistic local apply and the later
-    /// resync agree. On an unknown or non-task id the document is unchanged and
+    /// resync agree. On an unknown or non-completable (Text) id the document is unchanged and
     /// <see cref="LocalOutcome.Toggled"/> is false.</summary>
     public static LocalOutcome ApplyLocal(ScribeDocument doc, Guid taskId, ScribeCompletionPolicy policy)
     {
         if (doc is null) throw new ArgumentNullException(nameof(doc));
 
         var block = doc.FindByTaskId(taskId);
-        if (block is null || !block.IsTask)
+        if (block is null || !block.IsCompletable)
             return new LocalOutcome(Toggled: false, NowDone: false, DocChanged: false, ShouldRemovePin: false);
 
         bool nowDone = !block.Done;
@@ -122,7 +122,7 @@ public static class ScribeCompletion
     {
         for (int i = 0; i < doc.Blocks.Count; i++)
         {
-            if (doc.Blocks[i].TaskId == taskId && doc.Blocks[i].IsTask)
+            if (doc.Blocks[i].TaskId == taskId && doc.Blocks[i].IsCompletable)
                 return doc.DeleteBlock(i);
         }
         return false;

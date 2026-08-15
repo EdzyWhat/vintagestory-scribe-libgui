@@ -2651,6 +2651,33 @@ handbook page" — the only seam is a Harmony patch. Confirmed by decompiling **
   craftable" for a smelted ingot or knapped tool head. Same limit bounds any recursive
   ingredient-graph walk.
 
+**Confirmed SHIPPED 2026-08-15 (add-tracker-link-tasks, `ScribeHandbookPatch`).** The above was
+exercised for real by the Tracker/Link "Add to Scribe" links, and everything held:
+- **Exact signature (this game version):**
+  `public virtual RichTextComponentBase[] GetHandbookInfo(ItemSlot inSlot, ICoreClientAPI capi, ItemStack[] allStacks, ActionConsumable<string> openDetailPageFor)`.
+  The method body ends `return list.ToArray()`, so the postfix param `ref RichTextComponentBase[] __result`
+  is the full page. Attribute-match on the name alone works (only one overload):
+  `[HarmonyPatch(typeof(CollectibleBehaviorHandbookTextAndExtraInfo), nameof(...GetHandbookInfo))]`.
+- **Append-only, allocate a fresh array:** copy `__result` into a new `RichTextComponentBase[old + n]`,
+  place the appended components after, reassign `__result`. Never mutate existing entries — a page with
+  no Scribe content stays byte-identical to vanilla.
+- **Clickable-link ctor confirmed present in `VintagestoryAPI.dll`:**
+  `LinkTextComponent(ICoreClientAPI api, string displayText, CairoFont font, Action<LinkTextComponent> onLinkClicked)`
+  (alongside the `LinkTextComponent(string href)` nav ctor). The `onLinkClicked` delegate captures the
+  page's `inSlot.Itemstack.Collectible.Code.ToString()` (the exact "domain:path" target) and dispatches
+  to the mod system — no stack clone needed when you only want the code string.
+- **Lifecycle:** `new Harmony(id).PatchAll(typeof(ScribeModSystem).Assembly)` in `StartClientSide`
+  (client-only — the Handbook is a client GUI), `harmony.UnpatchAll(id)` in `Dispose`.
+- **Opening a specific entry programmatically (used by the footer "guide" action, not the patch):**
+  the registered link protocol does it without reflection —
+  `capi.LinkProtocols.TryGetValue("handbook", out var open); open(new LinkTextComponent("handbook://<pageCode>"))`.
+  Detect whether the Handbook is already open via
+  `capi.Gui.OpenedGuis.FirstOrDefault(d => d.ToggleKeyCombinationCode == "handbook")`.
+- **Custom explainer pages need NO code.** A JSON file under `assets/<domain>/config/handbook/*.json`
+  of shape `{ pageCode, title, text }` (title/text are lang keys) is auto-discovered and registered as a
+  standalone handbook entry — link to it with `handbook://<pageCode>`. See
+  `src/Mod/assets/scribe/config/handbook/03-task-types.json`.
+
 ## Entry template
 
 ```

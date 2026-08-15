@@ -19,7 +19,7 @@ age (the saw); anything past that is cosmetic.
 | Scratch | Clay & wax tablet (handheld) | up to 10 tasks, 1 pin; clay dries hard → re-wet in water or fire to make permanent; wax always rewritable | **shipped v1.0** |
 | ~~Scratch+~~ | ~~Reed/cattail paper~~ | ~~a few more lines~~ | **cut** — the clay→wax step already covers the low tier; a paper micro-tier added no capability |
 | Collection | Leather-bound notebook | infinite pages | **shipped v0.2** |
-| Organization | Scriptorium (shared block) | dedicated shared writing station; copy/paste + import/export; foundation for Tracker/Link tasks & the v1.3 assignment system | **block foundation landed** (provisional art), v1.2 → `docs/specs/v7-scriptorium-and-task-types.md` |
+| Organization | Scriptorium (shared block) | dedicated shared writing station; copy/paste + import/export; foundation for Tracker/Link tasks & the v1.3 assignment system | **block foundation + Tracker/Link task types landed** (provisional art); copy/paste + import/export remain, v1.2 → `docs/specs/v7-scriptorium-and-task-types.md` |
 | Portability | Pinned-task HUD | pins from any source shown on an always-on HUD; quick-add gesture | **HUD shipped** (v0.1); backpack container **cut** |
 | Social | Bulletin board (public) + chalkboard | shared board; chalkboard is drawable | planned (Board) |
 
@@ -63,9 +63,11 @@ age (the saw); anything past that is cosmetic.
   **Scriptorium**), **not** the private owner-gated desk with kanban tabs originally sketched. The
   **block foundation shipped via `add-scriptorium-block`** (block + block entity + recipe + handbook,
   reusing the shared writing-station base and the existing Scribe dialog; provisional Lectern-derived
-  art pending the dedicated model). Remaining v1.2 scope — Tracker/Link task types, copy/paste, and
-  JSON/CSV import/export — and the v1.3 assignment system (Assign & History / Inbox views, place-bound
-  assignment) land as their own follow-up changes. VS's first-party player-group system may cover the
+  art pending the dedicated model). **The Tracker/Link task types shipped via `add-tracker-link-tasks`**
+  (carried-inventory count Trackers with a per-player on-target completion setting, Handbook-linking
+  Link tasks, and an "Add to Scribe" entry point on every item's Handbook page). Remaining v1.2 scope —
+  copy/paste and JSON/CSV import/export — and the v1.3 assignment system (Assign & History / Inbox
+  views, place-bound assignment) land as their own follow-up changes. VS's first-party player-group system may cover the
   assignment side with no external dependency (see open decision below).
 - **v5 — Portability** → `docs/specs/v5-backpack-hud.md`. **The HUD half shipped early (v0.1.0):**
   the always-on **pinned-task HUD** (native `HudElement`, not ImGui) now aggregates pins from every

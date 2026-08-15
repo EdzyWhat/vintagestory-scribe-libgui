@@ -69,7 +69,8 @@ public sealed partial class ScribeModSystem
             return;
         }
         Trace("set-pin received from {0}: pinned={1} doc={2} task={3}", fromPlayer.PlayerName, message.Pinned, docId, taskId);
-        SetPinForPlayer(fromPlayer, docId, taskId, message.Pinned, message.SnapshotText, message.SnapshotDone);
+        SetPinForPlayer(fromPlayer, docId, taskId, message.Pinned, message.SnapshotText, message.SnapshotDone,
+            (Scribe.Core.ScribeBlockKind)message.SnapshotKind, message.SnapshotLinkTarget);
     }
 
     private void OnServerReceivedCompleteTask(IServerPlayer fromPlayer, ScribeCompleteTaskMessage message)
@@ -106,6 +107,16 @@ public sealed partial class ScribeModSystem
         }
         Trace("delete-task received from {0}: doc={1} task={2}", fromPlayer.PlayerName, docId, taskId);
         DeleteTaskForPlayer(fromPlayer, docId, taskId);
+    }
+
+    private void OnServerReceivedSetTrackerQuantity(IServerPlayer fromPlayer, ScribeSetTrackerQuantityMessage message)
+    {
+        if (!TryReadGuid(message.DocId, out var docId) || !TryReadGuid(message.TaskId, out var taskId))
+        {
+            Trace("set-tracker-qty from {0}: MALFORMED packet (docId/taskId not 16 bytes) — ignored", fromPlayer.PlayerName);
+            return;
+        }
+        SetTrackerQuantityForPlayer(fromPlayer, docId, taskId, message.Quantity);
     }
 
     private void OnServerReceivedReorderPins(IServerPlayer fromPlayer, ScribeReorderPinsMessage message)

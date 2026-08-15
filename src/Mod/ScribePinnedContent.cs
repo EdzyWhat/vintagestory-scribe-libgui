@@ -177,7 +177,11 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                     // across a reorder/resync rebuild rather than by list position.
                     key: new ValueKey<Guid>(r.TaskId)),
                 Ghost: new ScribeFrozenEditorRow(
-                    new ScribeEditRowData(Index: i, IsTask: true, Done: r.Done, Pinned: false, TaskId: r.TaskId, Text: r.Text),
+                    // The Pin Tab renders every row task-shaped (ScribePinRowData carries no Kind), so the
+                    // collapse ghost is a Task-kind snapshot — full Tracker/Link Pin-Tab rendering is out of
+                    // Group 5's scope (add-tracker-link-tasks). Kind: Task keeps the ghost Completable so its
+                    // checkbox mirrors the live row as it collapses.
+                    new ScribeEditRowData(Index: i, Kind: ScribeBlockKind.Task, Done: r.Done, Pinned: false, TaskId: r.TaskId, Text: r.Text),
                     Widget.Style)))
             .ToList();
 

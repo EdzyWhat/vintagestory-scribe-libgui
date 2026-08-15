@@ -41,6 +41,22 @@ public abstract partial class ScribeDialogBase
         TraceScroll($"text-changed {index}");
     }
 
+    /// <summary>A Tracker row's inline +/- stepper changed its target quantity (add-tracker-link-tasks 5.2).
+    /// Mirrors <see cref="NotifyTextChanged"/>: write straight through to the scratch block and mark dirty so
+    /// the normal editor flush persists it — the codec already serializes <see cref="ScribeBlock.TargetQuantity"/>,
+    /// so no dedicated packet is needed. The Core setter clamps the value to ≥ 1 (and re-clamps CurrentQuantity
+    /// down if the new target is lower). Deliberately does NOT rebuild: the stepper is an uncontrolled field
+    /// that already reflects its own value, and a rebuild would drop its focus mid-step; the target's only
+    /// editor-side mutation is this stepper, so scratch stays consistent without one.</summary>
+    private void SetEditorTrackerTargetQuantity(int index, int qty)
+    {
+        if (scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
+        var block = scratch.Blocks[index];
+        if (!block.IsTracker) return;
+        block.TargetQuantity = qty; // clamps ≥ 1 in the Core setter
+        isDirty = true;
+    }
+
     /// <summary>A focused row's caret moved by KEYBOARD navigation (arrows / Home / End / word-jump) with no
     /// text change (scroll-follow-caret-in-editor issue #1). Text edits already arm the scroll-follow via
     /// <see cref="NotifyTextChanged"/>, but a bare caret move does not go through <c>OnChanged</c> — so without
@@ -189,7 +205,9 @@ public abstract partial class ScribeDialogBase
     {
         if (!isEditorMode || scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
         // add-note-kind-picker D3: an abandoned empty row of EITHER kind self-destructs (previously task-only).
-        if (!string.IsNullOrWhiteSpace(scratch.Blocks[index].Text)) return;
+        // add-tracker-link-tasks: Tracker/Link rows are excluded (they carry empty Text by design) — see
+        // IsAbandonableEmptyBlock.
+        if (!IsAbandonableEmptyBlock(scratch.Blocks[index])) return;
         pendingEmptyRowRemoval = index;
     }
 
@@ -239,7 +257,7 @@ public abstract partial class ScribeDialogBase
     {
         if (scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
         var block = scratch.Blocks[index];
-        if (!block.IsTask) return;
+        if (!block.IsCompletable) return;
 
         bool nowDone = !block.Done;
         Guid taskId = block.TaskId;
@@ -364,7 +382,7 @@ public abstract partial class ScribeDialogBase
     {
         if (scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
         var block = scratch.Blocks[index];
-        if (!block.IsTask) return; // no pin control on a text section
+        if (!block.IsCompletable) return; // no pin control on a text section (Task/Tracker/Link are all pinnable)
         // Tier cap (scribe-document-policy): the tablet tier allows only 1 pin. Unpinning is always
         // allowed; pinning a new task at the cap seamlessly SWAPS — the older pin is released so the
         // new one fits. Uncapped tiers (Lectern/Notebook) just pin.
@@ -383,9 +401,12 @@ public abstract partial class ScribeDialogBase
             TaskId = taskId.ToByteArray(),
             Pinned = pinned,
             // Supply a client-side snapshot so the server can record it even when the host is not
-            // registered server-side (e.g. Notebook items — only the client holds the document).
+            // registered server-side (e.g. Notebook items — only the client holds the document). Includes
+            // the kind + a Link's target so a pinned Link reaches the HUD as a hyperlink (5.5).
             SnapshotText = block?.Text ?? "",
             SnapshotDone = block?.Done ?? false,
+            SnapshotKind = (byte)(block?.Kind ?? Scribe.Core.ScribeBlockKind.Task),
+            SnapshotLinkTarget = block?.LinkTarget,
         });
     }
 
@@ -487,9 +508,16 @@ public abstract partial class ScribeDialogBase
         // gated (CountsAgainstTaskCap) — notes are uncapped (design D4), since the cap is task-scoped. Uncapped
         // tiers (Lectern, Notebook) never trip this. The footer's primary button is also disabled at the cap
         // when its kind is a task, so this is a defensive backstop for any other add path.
+        // add-tracker-link-tasks 3.7: Tracker/Link can't be created from a bare footer click — they need a
+        // target item code, which only a Handbook page's "Add to Scribe" link supplies. A footer click on one
+        // of these is a GUIDE gesture, not an add: open the explainer entry (Handbook closed) or point the
+        // player at the per-item link (Handbook open). Nothing is mutated. See DispatchItemKindGuide.
+        if (kind.RequiresItemContext) { DispatchItemKindGuide(kind); return; }
         if (kind.CountsAgainstTaskCap && !CanAddTaskUnderPolicy()) { NotifyTabletFull(); return; }
         if (focusedEditIndex is { } leaving) NormalizeRowOnCommit(leaving);
-        if (!kind.Add(scratch)) return;
+        // The second arg is the item code for item-bound kinds; Task/Note ignore it, so a footer add always
+        // passes null (the item-bound kinds never reach here — they return above).
+        if (!kind.Add(scratch, null)) return;
         isDirty = true;
         SyncFocusNodesToScratch();
         // Appended row MOUNTS at the new last slot, so its field's mount-only autoFocus fires; every
@@ -576,8 +604,18 @@ public abstract partial class ScribeDialogBase
     private bool FocusedRowIsEmptyBlock()
     {
         if (scratch is null || focusedEditIndex is not { } idx || idx < 0 || idx >= scratch.Blocks.Count) return false;
-        return string.IsNullOrWhiteSpace(scratch.Blocks[idx].Text);
+        return IsAbandonableEmptyBlock(scratch.Blocks[idx]);
     }
+
+    /// <summary>True for a row the editor may silently self-destruct when abandoned empty: a Task or a Note
+    /// (<see cref="ScribeBlockKind.Text"/>) whose text is blank/whitespace-only. Tracker and Link rows are
+    /// EXCLUDED — they legitimately carry empty <see cref="ScribeBlock.Text"/> (their content is the bound
+    /// item plus a counter/link, not typed text), so the abandoned-empty-row sweep must never purge a
+    /// freshly-added Tracker/Link the moment it loses focus (add-tracker-link-tasks). Centralizes the
+    /// predicate shared by <see cref="OnRowBlurred"/>, <see cref="FocusedRowIsEmptyBlock"/>, and
+    /// <see cref="PurgeEmptyRowsFromScratch"/>.</summary>
+    private static bool IsAbandonableEmptyBlock(ScribeBlock b) =>
+        (b.IsTask || b.Kind == ScribeBlockKind.Text) && string.IsNullOrWhiteSpace(b.Text);
 
     /// <summary>Removes every empty/whitespace-only block (task OR note) from the scratch document, marking
     /// dirty if any were removed (add-empty-task-lifecycle D5; generalized to notes by add-note-kind-picker
@@ -590,7 +628,7 @@ public abstract partial class ScribeDialogBase
         if (scratch is null) return;
         for (int i = scratch.Blocks.Count - 1; i >= 0; i--)
         {
-            if (string.IsNullOrWhiteSpace(scratch.Blocks[i].Text) && scratch.DeleteBlock(i))
+            if (IsAbandonableEmptyBlock(scratch.Blocks[i]) && scratch.DeleteBlock(i))
             {
                 isDirty = true;
             }

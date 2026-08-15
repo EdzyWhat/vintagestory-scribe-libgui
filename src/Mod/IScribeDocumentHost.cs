@@ -120,4 +120,12 @@ public interface IScribeDocumentHost
     /// <summary>Server-side: set a task's text by stable TaskId. Returns true if changed.
     /// Rejects blank/whitespace. For block hosts: marks dirty and resyncs. For item hosts: writes to the ItemStack.</summary>
     bool SetTaskTextFromReader(Guid taskId, string text);
+
+    /// <summary>Server-side: set a Tracker's live <c>CurrentQuantity</c> by stable TaskId (clamped into
+    /// <c>[0, TargetQuantity]</c> by the Core model). Returns true if it changed. The client-side count
+    /// engine drives this from the viewing player's carried inventory (add-tracker-link-tasks D5/4.3), so
+    /// the count is server-persisted and multiplayer viewers converge — exactly like the Done flag.
+    /// No-op for a non-Tracker or unknown TaskId. For block hosts: marks dirty and resyncs. For item hosts:
+    /// writes to the ItemStack.</summary>
+    bool SetTrackerCurrentQuantityFromReader(Guid taskId, int currentQuantity);
 }

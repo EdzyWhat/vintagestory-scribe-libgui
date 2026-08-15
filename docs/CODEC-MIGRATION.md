@@ -119,6 +119,48 @@ private static void ApplyV5ToV6Migrations(out string? targetItemCode, out int ta
 Note v4 drops out of the accepted window on this bump (window is now `{v6, v5}`); a well-formed v4
 payload is rejected, covered by `TryDeserialize_V4Bytes_FailsSafely`.
 
+### Worked example: v1 → v2 (`ScribePinCodec`)
+
+v2 appended **two per-pin fields** after each pin's `LastKnownText`, so the HUD can treat a pinned
+Link as a Handbook hyperlink even when the source document is unloaded (add-tracker-link-tasks 5.5):
+`Kind` (the `ScribeBlockKind` byte) and `LinkTarget` (a nullable string). v1 pins have neither.
+
+**What changed in the serialization format:**
+```
+// v1 per-pin: OwnerDocId | TaskId | PinnedAtTotalHours | Orphaned | LastKnownDone | LastKnownText
+// v2 per-pin: ...v1... | kind | hasLinkTarget | [linkTarget]
+```
+
+**How the migration works** — because the version isn't known inside the shared `TryReadPinList` loop,
+the reader is passed the parsed `version` and reads the appended fields only for current-version bytes,
+else calls the named step to default them:
+
+```csharp
+// In TryReadPinList's per-pin loop, after reading LastKnownText:
+if (version == PinVersion)   // v2: read the appended fields
+{
+    pin.Kind = (ScribeBlockKind)r.ReadByte();
+    bool hasLinkTarget = r.ReadBoolean();
+    if (hasLinkTarget) pin.LinkTarget = r.ReadString();
+}
+else                         // v1: no such fields — default them
+{
+    ApplyV1ToV2Migrations(out var kind, out var linkTarget);
+    pin.Kind = kind;
+    pin.LinkTarget = linkTarget;
+}
+
+// The named migration method:
+private static void ApplyV1ToV2Migrations(out ScribeBlockKind kind, out string? linkTarget)
+{
+    kind = ScribeBlockKind.Task;   // every pre-v2 pin reads as an ordinary Task…
+    linkTarget = null;             // …with no link target (Tracker/Link pins only exist from v2 on)
+}
+```
+
+Covered by `TryDeserialize_V1Bytes_KindAndLinkTarget_AreUpgraded` (hand-built v1 bytes → asserts the
+defaults) and `List_RoundTrip_PreservesKindAndLinkTarget` (v2 round-trip of Link/Tracker/Task pins).
+
 ## How to add a new version (step-by-step)
 
 1. **Add your new field(s) to `Serialize`**, appending them after all existing fields.
@@ -152,4 +194,4 @@ payload is rejected, covered by `TryDeserialize_V4Bytes_FailsSafely`.
 | Codec | Current | Prior | Migration method |
 |---|---|---|---|
 | `ScribeDocumentCodec` | v6 | v5 | `ApplyV5ToV6Migrations` — defaults Tracker/Link per-block fields |
-| `ScribePinCodec` | v1 | v1 (no change yet) | `ApplyPinMigrations` — no-op stub |
+| `ScribePinCodec` | v2 | v1 | `ApplyV1ToV2Migrations` — defaults per-pin Kind (→Task) + LinkTarget (→null) |
