@@ -239,6 +239,58 @@ rows reachable (7.1 regression closed).
       Appearance section in `ScribeSettingsContent` + `settings-hudshowicons`(-help) lang keys. Notebook/Pin-Tab
       icons are unaffected (HUD-only, as requested). Restaged; needs a quick in-game toggle check.
 
+## 7c. Playtest refinements — round 3 (2026-08-15 feedback)
+
+Confirmed PASS this round (no action): the 7.11c `handbooksearch://` footer shortcut opens the Handbook
+overview focused on search; the new open-Handbook "scroll down + Add to Scribe" error reads well;
+hyperlinks (item/guide Links) never change completion; HUD pins render properly; v5 saves load clean.
+
+- [x] 7.13 (feedback: open-surface fail states) When a Handbook "Add to Scribe" click targets the OPEN
+      dialog, cover the remaining fail states instead of silently dropping the append. DONE: added
+      `ScribeDialogBase.CanEditFromHandbook` (virtual, default true) + `NotifyHandbookAppendReadOnly`
+      (virtual). `TryHandbookAppend` now, when not already editing and `!CanEditFromHandbook`, fires the
+      read-only notice and returns rather than stashing an append that can never apply — this is the fix for
+      "when a locked item is OPEN we gave no feedback" (a fired/hardened tablet's `RequestEditorAccess`
+      no-ops, so the old stash-clear path dropped it silently). The tablet overrides `CanEditFromHandbook =>
+      IsEditable` and reuses its fired/hardened `tablet-fired-locked`/`tablet-hard-locked` wording (extracted
+      to a shared `ReadOnlyLockedLangKey`). VERIFIED FOR FREE (as the user suspected): a BLOCK open on read
+      view with the lock AVAILABLE moves to the editor via the existing async grant → `EnterEditorMode` →
+      `FlushPendingHandbookAppend` (Handbook stays open); a block LOCKED BY ANOTHER player already surfaces
+      the generic lock error via `TryEnterEditor` (grantPending false → stash cleared, error already shown);
+      a wet-but-full tablet still hits `NotifyTabletFull` inside `ApplyHandbookAppend`. Needs a quick in-game
+      check on a fired/hardened tablet.
+      FOLLOW-UP (feedback): the Lectern DID create the task but it was invisible until a manual view swap.
+      The correct end state is the EDITOR view (the player must be able to set the new Tracker's count / a
+      future Crafting task's inputs), NOT the read view — an earlier "return to read view after applying"
+      attempt was wrong on both counts (wrong target view AND it didn't fix the invisibility). REAL ROOT
+      CAUSE (ordering bug, verified by reading LibGUI `Gui.dll`): `EnterEditorMode` called `ForceRebuild()`
+      and only THEN `FlushPendingHandbookAppend()`, so the fresh editor tree was built from the PRE-append
+      scratch; the append's own `RebuildBody()` in-place reconcile no-ops right after Mount (the body's
+      `GlobalKey` state isn't resolvable in the same synchronous call), so the new row only appeared on the
+      next full rebuild — i.e. a manual view swap. (Ruled out the focus/active-window theory: LibGUI's
+      `FramePipeline.Run` lays out + paints every open dialog whenever `NeedsLayout` is set, NOT gated on
+      `Focused`/`IsActiveWindow`.) FIX (no new packet, no `IsSinglePlayer` gate — works in MP too): apply the
+      deferred append BEFORE the `ForceRebuild` in `EnterEditorMode`, so the rebuild renders the mutated
+      scratch and the new row is present immediately, landing the player in a live editor view. Applies
+      uniformly to the async block grant (Lectern/Scriptorium) and the synchronous item entry (Notebook/wet
+      Tablet). Verify: the Lectern shows the new Tracker LIVE in the editor view (no view swap needed) AND
+      the Notebook still adds correctly.
+- [x] 7.14 (feedback: overflow count) Show the true carried count when it exceeds the target ("100 / 8", not
+      "8 / 8"). DONE: removed the upper clamp on `ScribeBlock.CurrentQuantity` (now floored at ≥ 0 only) and
+      the target-lowering re-clamp on `TargetQuantity` (lowering the target no longer touches the live count);
+      propagated to the count engine (`ScribeDialogBase.TrackerCount` uses `Math.Max(0, counted)`), both reader
+      hosts (`BlockEntityScribeWritingStation`/`NotebookHost` compare against `Math.Max(0, qty)`), and the doc
+      comments (`ScribeDocument.SetTrackerCurrentQuantity`, `IScribeDocumentHost`, `ScribeDialogBase.Editor`).
+      `satisfied = CurrentQuantity >= TargetQuantity` stays correct everywhere; the shared counter renders
+      `$"{current} / {target}"` with no clamp, so overflow shows naturally (no progress bar exists). Updated
+      the three Core tests that asserted the old upper clamp (`Tracker_CurrentQuantity_ClampsToNonNegative_
+      ButAllowsOverflow`, `Tracker_LoweringTarget_LeavesCurrentUntouched`, `SetTrackerCurrentQuantity_ByTaskId_
+      UpdatesWithoutUpperClamp`).
+- [x] 7.15 (feedback: settings labels) Renamed three lang strings: `settings-completionpolicy` "On newly
+      completing a task" → "Task Completion Behavior"; `settings-trackercompletion` "When a tracker fills up"
+      → "Tracker Task Completion Behavior"; `scribe-trackercompletion-complete` "Complete it" → "Complete it
+      (and follow task completion behavior)".
+
 - [ ] 7.10 Follow-up (deferred): make the HUD Tracker counter fully LIVE (recompute have/need from the
       viewer's carried inventory continuously) rather than the persisted snapshot refreshed on edit. The
       count engine is dialog-bound today (freezes when no Scribe dialog is open); a live HUD counter needs

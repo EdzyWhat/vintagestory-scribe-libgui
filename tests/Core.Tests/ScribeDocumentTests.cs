@@ -573,34 +573,34 @@ public class ScribeDocumentTests
     }
 
     [Fact]
-    public void Tracker_CurrentQuantity_ClampsIntoRange()
+    public void Tracker_CurrentQuantity_ClampsToNonNegative_ButAllowsOverflow()
     {
         var block = new ScribeBlock(ScribeBlockKind.Tracker, "", targetItemCode: "game:stick", targetQuantity: 5);
 
         block.CurrentQuantity = -3;
-        Assert.Equal(0, block.CurrentQuantity);
+        Assert.Equal(0, block.CurrentQuantity); // still floored at 0
 
         block.CurrentQuantity = 99;
-        Assert.Equal(5, block.CurrentQuantity); // clamped up to the target ceiling
+        Assert.Equal(99, block.CurrentQuantity); // NOT capped at the target — overflow is meaningful (7.14)
 
         block.CurrentQuantity = 3;
         Assert.Equal(3, block.CurrentQuantity);
     }
 
     [Fact]
-    public void Tracker_LoweringTarget_ReclampsCurrentDown()
+    public void Tracker_LoweringTarget_LeavesCurrentUntouched()
     {
         var block = new ScribeBlock(ScribeBlockKind.Tracker, "", targetItemCode: "game:stick", targetQuantity: 10);
         block.CurrentQuantity = 8;
 
-        block.TargetQuantity = 4; // ceiling drops below current
+        block.TargetQuantity = 4; // target drops below current
 
         Assert.Equal(4, block.TargetQuantity);
-        Assert.Equal(4, block.CurrentQuantity);
+        Assert.Equal(8, block.CurrentQuantity); // current is the raw carried count; lowering the target no longer re-clamps it (7.14)
     }
 
     [Fact]
-    public void SetTrackerCurrentQuantity_ByTaskId_UpdatesAndClamps()
+    public void SetTrackerCurrentQuantity_ByTaskId_UpdatesWithoutUpperClamp()
     {
         var doc = new ScribeDocument();
         doc.AddTracker("game:ingot-copper", 8);
@@ -609,8 +609,8 @@ public class ScribeDocumentTests
         Assert.True(doc.SetTrackerCurrentQuantity(id, 3));
         Assert.Equal(3, doc.Blocks[0].CurrentQuantity);
 
-        Assert.True(doc.SetTrackerCurrentQuantity(id, 100)); // clamped to target
-        Assert.Equal(8, doc.Blocks[0].CurrentQuantity);
+        Assert.True(doc.SetTrackerCurrentQuantity(id, 100)); // overflow preserved, not capped at the target (7.14)
+        Assert.Equal(100, doc.Blocks[0].CurrentQuantity);
     }
 
     [Fact]

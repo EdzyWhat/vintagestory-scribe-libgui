@@ -33,6 +33,21 @@ public abstract partial class ScribeDialogBase
     /// grant or discarded because access was refused outright.</summary>
     protected virtual bool EditorAccessIsAsync => false;
 
+    /// <summary>Whether a Handbook-originated append can ever drive THIS open surface to an editable state.
+    /// True for every normally-editable surface (wet tablet, notebook, lectern, scriptorium — a block that's
+    /// merely locked by another player still counts, because it becomes editable once the lock frees). False
+    /// ONLY for a permanently read-only surface (a fired/hardened tablet), where <see cref="TryHandbookAppend"/>
+    /// surfaces <see cref="NotifyHandbookAppendReadOnly"/> instead of stashing an append that could never apply
+    /// — the fix for the silent no-feedback drop when a read-only item is open (feedback 7.13).</summary>
+    protected virtual bool CanEditFromHandbook => true;
+
+    /// <summary>Surface the "this document can't be written in" notice when a Handbook append targets a
+    /// permanently read-only OPEN surface (<see cref="CanEditFromHandbook"/> is false). The base uses the
+    /// generic locked-Scribe-items message; the tablet overrides it with its material-specific fired/hardened
+    /// wording, reusing the same keys as its row-text-edit refusal (feedback 7.13).</summary>
+    protected virtual void NotifyHandbookAppendReadOnly()
+        => capi.TriggerIngameError(this, "scribe-gui-all-locked", Lang.Get("scribe:scribe-gui-all-locked"));
+
     /// <summary>Create a Tracker/Link task on THIS dialog from a Handbook "Add to Scribe" click, reusing the
     /// dialog's own save path (add-tracker-link-tasks 3.4). Two cases:
     /// <list type="bullet">
@@ -40,9 +55,11 @@ public abstract partial class ScribeDialogBase
     /// (<see cref="ApplyHandbookAppend"/>).</item>
     /// <item><b>Not editing</b> — stash the append and request editor access via <see cref="TryEnterEditor"/>.
     /// Item surfaces enter synchronously (the stash is consumed before this returns); block surfaces get an
-    /// async grant, so the stash is kept for <see cref="EnterEditorMode"/> to consume. If access is refused
-    /// (locked by another player, or the surface can't edit) the stale stash is cleared so a later editor
-    /// entry doesn't silently apply it.</item>
+    /// async grant, so the stash is kept for <see cref="EnterEditorMode"/> to consume — landing the player in a
+    /// live editor view so they can immediately set the new Tracker's count. A permanently read-only surface
+    /// reports instead of stashing (<see cref="CanEditFromHandbook"/>); a surface locked by another player
+    /// surfaces the generic lock error and the stale stash is cleared so a later editor entry doesn't silently
+    /// apply it.</item>
     /// </list>
     /// The kind is one of the item-bound kinds (<see cref="ScribeAddKinds.Tracker"/> /
     /// <see cref="ScribeAddKinds.Link"/>); <paramref name="itemCode"/> is the collectible code the Handbook
@@ -73,6 +90,15 @@ public abstract partial class ScribeDialogBase
             return;
         }
 
+        // The open surface is permanently read-only (a fired/hardened tablet, or any future "uneditable"
+        // document): it can never reach editor mode, so surface the surface-specific read-only notice rather
+        // than silently dropping the append — the bug where an open locked item gave NO feedback (feedback 7.13).
+        if (!CanEditFromHandbook)
+        {
+            NotifyHandbookAppendReadOnly();
+            return;
+        }
+
         pendingHandbookAppend = apply;
 
         // A block surface will get its grant asynchronously (server lock round-trip) UNLESS the lock is held
@@ -81,7 +107,7 @@ public abstract partial class ScribeDialogBase
         TryEnterEditor();
 
         // If we didn't synchronously enter editor mode AND no async grant is coming, the request was refused
-        // (locked-by-other, or a read-only/non-editable surface): drop the stash so it can't be applied later.
+        // (locked-by-other): drop the stash so it can't be applied later.
         if (!isEditorMode && !grantPending) pendingHandbookAppend = null;
     }
 
@@ -105,9 +131,11 @@ public abstract partial class ScribeDialogBase
         // Persist immediately (Case A appends + flushes at once); the autosave tick would otherwise carry it
         // within ~1s, but the player clicked in the Handbook and expects the task to exist right away.
         FlushIfDirty();
-        // Reconcile the editor list so the new row appears. A no-op if the body hasn't mounted yet (the
-        // deferred-append path runs right after EnterEditorMode's ForceRebuild, which rebuilds from the now
-        // mutated scratch on its own next frame regardless).
+        // Reconcile the editor list so the new row appears. This is the live path when the append arrives
+        // while ALREADY editing (Case A): the body is mounted, so the in-place reconcile shows the new row at
+        // once. In the deferred Case B (append stashed, then applied from EnterEditorMode) this is a harmless
+        // no-op — that path applies the append BEFORE its ForceRebuild, which then builds the whole tree from
+        // the now-mutated scratch, so the row is present regardless of whether this reconcile resolved.
         RebuildBody();
     }
 

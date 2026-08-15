@@ -458,8 +458,9 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     /// engine (add-tracker-link-tasks D5). Lock-free like <see cref="SetTaskDoneFromReader"/> (updating a
     /// derived carried-inventory count is an always-allowed viewer action, not an editor edit). Routes
     /// through the Core <see cref="ScribeDocument.SetTrackerCurrentQuantity"/> op so the
-    /// <c>[0, TargetQuantity]</c> clamp holds, and returns whether the value actually changed. A no-op,
-    /// an unknown TaskId, or a non-Tracker block is left unwritten. Does NOT touch pins.
+    /// ≥ 0 clamp holds (overflow above the target is preserved, 7.14), and returns whether the value
+    /// actually changed. A no-op, an unknown TaskId, or a non-Tracker block is left unwritten. Does NOT
+    /// touch pins.
     /// </summary>
     public bool SetTrackerCurrentQuantityFromReader(Guid taskId, int qty)
     {
@@ -467,7 +468,7 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
 
         var block = Document.FindByTaskId(taskId);
         if (block is null || !block.IsTracker) return false;
-        if (block.CurrentQuantity == Math.Clamp(qty, 0, block.TargetQuantity)) return false;
+        if (block.CurrentQuantity == Math.Max(0, qty)) return false;
 
         if (!Document.SetTrackerCurrentQuantity(taskId, qty)) return false;
         MarkDirty(redrawOnClient: true);

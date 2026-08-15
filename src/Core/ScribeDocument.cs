@@ -176,8 +176,9 @@ public sealed class ScribeDocument
     /// <summary>
     /// Sets the live carried count (<see cref="ScribeBlock.CurrentQuantity"/>) of the Tracker with the
     /// given stable <see cref="ScribeBlock.TaskId"/> — the identity-addressed op the count engine uses
-    /// to push an updated have-count without knowing the block's index. The value is clamped into
-    /// <c>[0, TargetQuantity]</c> by the block's setter. Returns false (document unchanged) when no block
+    /// to push an updated have-count without knowing the block's index. The value is clamped only to
+    /// ≥ 0 by the block's setter (NOT capped at <c>TargetQuantity</c> — overflow is meaningful, 7.14).
+    /// Returns false (document unchanged) when no block
     /// has that id or the id belongs to a non-Tracker block. Pure data; no VS API.
     /// </summary>
     public bool SetTrackerCurrentQuantity(Guid taskId, int currentQuantity)
@@ -186,7 +187,7 @@ public sealed class ScribeDocument
         {
             if (_blocks[i].TaskId == taskId && _blocks[i].IsTracker)
             {
-                _blocks[i].CurrentQuantity = currentQuantity; // clamped in the setter
+                _blocks[i].CurrentQuantity = currentQuantity; // clamped to ≥ 0 in the setter (may exceed target, 7.14)
                 return true;
             }
         }

@@ -2170,6 +2170,26 @@ Two LibGUI facts from tuning the Tracker/Link row icons + counter:
   their max. There is **no `OverflowBox`/`UnconstrainedBox`** in this LibGUI build — this Stack trick is the way.
   Caveat: the overflow paints into neighbors' space, so keep the excess modest and vertically centered.
 
+**Fact: `GuiBase` layout+paint is NOT gated on `Focused`/`IsActiveWindow` — every OPEN dialog re-lays-out
+and repaints each frame.** Decompiling `Gui.dll` (`GuiBase.OnRenderGUI` + `FramePipeline.Run`): render is
+gated only on `IsOpened() && RootElement != null`; `FramePipeline.Run` performs layout whenever
+`renderObject.NeedsLayout || renderObject.ChildNeedsLayout` and paints unconditionally. `IsActiveWindow` is
+passed through but used ONLY for debug painting. So a `ForceRebuild()`/`SetState` on an UNFOCUSED Scribe
+dialog (e.g. while the vanilla Handbook is the focused/topmost dialog) DOES visually update on the next
+frame — "it's not repainting because another window has focus" is a false lead. (This killed a focus-gating
+theory for the "Handbook add doesn't show live" bug; the real cause was a rebuild-ordering bug — see below.)
+
+**Fact: `GlobalKey.CurrentState<T>()` is NOT resolvable in the same synchronous call right after
+`ForceRebuild()` mounts the tree — so a `SetState`-style in-place reconcile that runs immediately after a
+rebuild silently no-ops.** Scribe's `RebuildBody()` is `bodyKey.CurrentState<BodyState>()?.Rebuild()`; the
+`?.` swallows a null state. When code did `ForceRebuild(); ...mutate scratch...; RebuildBody();` in one call
+stack (the Handbook deferred-append path in `EnterEditorMode`), the `ForceRebuild` built the tree from the
+PRE-mutation state and the follow-up `RebuildBody` found `CurrentState == null` (the freshly-mounted body's
+GlobalKey isn't registered/resolvable yet within that synchronous frame), so the mutation only appeared on
+the NEXT full rebuild — symptom: "new row invisible until a manual view swap." **Fix pattern: mutate state
+BEFORE the `ForceRebuild`, so the single rebuild renders the final state** — don't rely on a reconcile
+chained after a rebuild in the same call. (add-tracker-link-tasks 7.13; `ScribeDialogBase.EnterEditorMode`.)
+
 ## Held-item dialog flickers closed on FIRST open of a not-yet-crafted item (2026-08-06)
 
 **Symptom: the first time a player opens a Scribe item they did NOT craft (notebook, clockmaker's

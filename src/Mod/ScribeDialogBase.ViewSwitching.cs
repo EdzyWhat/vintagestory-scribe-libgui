@@ -72,17 +72,25 @@ public abstract partial class ScribeDialogBase
         SyncFocusNodesToScratch();
         StartAutosaveTick();
 
-        if (IsOpened())
-        {
-            ForceRebuild();
-        }
-
         // add-tracker-link-tasks 3.4 (Case B): a Handbook "Add to Scribe" click that arrived while this
         // dialog was NOT editing stashed its append and requested editor access; now that access has landed
         // (synchronous for items, or the async server grant for blocks), apply the deferred append and flush.
         // The recovery branch above returns early, so this fires only on a genuine editor entry — never on a
         // lost-lock re-acquire (which must preserve the player's own in-flight scratch untouched).
+        //
+        // Apply the append BEFORE the ForceRebuild below, so the fresh editor tree is built from the
+        // already-mutated scratch and the new Tracker/Link row is visible immediately — landing the player in
+        // a live editor view where they can set the count. Applying it AFTER the rebuild (as this once did)
+        // left the row out of the just-built tree, and ApplyHandbookAppend's in-place RebuildBody can't recover
+        // it: the body's GlobalKey state isn't resolvable in the same synchronous call right after Mount, so
+        // RebuildBody no-ops and the row only appeared on the NEXT full rebuild — i.e. a manual view swap. That
+        // was the Lectern "task created but invisible until a view swap" bug (feedback 7.13).
         FlushPendingHandbookAppend();
+
+        if (IsOpened())
+        {
+            ForceRebuild();
+        }
     }
 
     /// <summary>Enter (or stay in) the read view. Called on a read-access grant and from the Read nav

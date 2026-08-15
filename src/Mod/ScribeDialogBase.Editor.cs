@@ -44,8 +44,8 @@ public abstract partial class ScribeDialogBase
     /// <summary>A Tracker row's inline +/- stepper changed its target quantity (add-tracker-link-tasks 5.2).
     /// Mirrors <see cref="NotifyTextChanged"/>: write straight through to the scratch block and mark dirty so
     /// the normal editor flush persists it — the codec already serializes <see cref="ScribeBlock.TargetQuantity"/>,
-    /// so no dedicated packet is needed. The Core setter clamps the value to ≥ 1 (and re-clamps CurrentQuantity
-    /// down if the new target is lower). Deliberately does NOT rebuild: the stepper is an uncontrolled field
+    /// so no dedicated packet is needed. The Core setter clamps the value to ≥ 1 (lowering the target no longer
+    /// touches CurrentQuantity — the live carried count may exceed it, 7.14). Deliberately does NOT rebuild: the stepper is an uncontrolled field
     /// that already reflects its own value, and a rebuild would drop its focus mid-step; the target's only
     /// editor-side mutation is this stepper, so scratch stays consistent without one.</summary>
     private void SetEditorTrackerTargetQuantity(int index, int qty)

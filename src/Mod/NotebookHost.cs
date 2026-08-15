@@ -140,7 +140,7 @@ public class NotebookHost : IScribeDocumentHost
     {
         var block = _document.FindByTaskId(taskId);
         if (block is null || !block.IsTracker) return false;
-        if (block.CurrentQuantity == Math.Clamp(qty, 0, block.TargetQuantity)) return false;
+        if (block.CurrentQuantity == Math.Max(0, qty)) return false;
         if (!_document.SetTrackerCurrentQuantity(taskId, qty)) return false;
         Flush();
         return true;

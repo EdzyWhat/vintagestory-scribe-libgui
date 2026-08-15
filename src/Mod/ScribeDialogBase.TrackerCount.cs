@@ -127,21 +127,20 @@ public abstract partial class ScribeDialogBase
             }
 
             int counted = ingredient is null ? 0 : ScribeTrackerCounter.CountCarried(player, ingredient);
-            int clamped = Math.Clamp(counted, 0, block.TargetQuantity);
+            int have = Math.Max(0, counted); // raw carried count; NOT capped at the target (overflow shows, 7.14)
             int oldCurrent = block.CurrentQuantity;
-            if (clamped == oldCurrent) continue; // unchanged — nothing to send, and no rising edge to act on
+            if (have == oldCurrent) continue; // unchanged — nothing to send, and no rising edge to act on
 
             bool wasMet = oldCurrent >= block.TargetQuantity;
-            bool nowMet = clamped >= block.TargetQuantity;
+            bool nowMet = have >= block.TargetQuantity;
 
             // Optimistic local update so the read-view counter reflects the new count immediately; the
-            // server echo (MarkDirty → FromTreeAttributes → RefreshReadView) supersedes it shortly. The
-            // Core setter re-clamps, so this can never exceed the target.
-            block.CurrentQuantity = clamped;
+            // server echo (MarkDirty → FromTreeAttributes → RefreshReadView) supersedes it shortly.
+            block.CurrentQuantity = have;
             anyChange = true;
 
             // Persist + converge through the server-authoritative path (like Done, D5/4.3).
-            SendTrackerQuantity(block.TaskId, clamped);
+            SendTrackerQuantity(block.TaskId, have);
 
             // Rising edge only (unmet → met): apply the completion setting exactly once (4.4). Because we
             // skip unchanged counts above and only fire on the rising edge, a later shortfall can neither

@@ -73,26 +73,25 @@ public sealed class ScribeBlock
     public string? TargetItemCode { get; set; }
 
     /// <summary>For a Tracker: how many of <see cref="TargetItemCode"/> to gather. Clamped to ≥ 1
-    /// on set (a target of 0 or negative is meaningless). Lowering the target also re-clamps
-    /// <see cref="CurrentQuantity"/> down to the new ceiling. Defaults to 1; meaningless for other
-    /// kinds (kept at 1).</summary>
+    /// on set (a target of 0 or negative is meaningless). Defaults to 1; meaningless for other
+    /// kinds (kept at 1). Does NOT re-clamp <see cref="CurrentQuantity"/>: the current count is the
+    /// live raw carried amount and may legitimately exceed the target (see that property).</summary>
     public int TargetQuantity
     {
         get => _targetQuantity;
-        set
-        {
-            _targetQuantity = value < 1 ? 1 : value;
-            if (_currentQuantity > _targetQuantity) _currentQuantity = _targetQuantity;
-        }
+        set => _targetQuantity = value < 1 ? 1 : value;
     }
     private int _targetQuantity = 1;
 
-    /// <summary>For a Tracker: how many are currently carried (the live have/need count). Clamped
-    /// into <c>[0, <see cref="TargetQuantity"/>]</c> on set. Defaults to 0.</summary>
+    /// <summary>For a Tracker: how many of <see cref="TargetItemCode"/> are currently carried (the live
+    /// have-count). Clamped only to ≥ 0 on set — it is NOT capped at <see cref="TargetQuantity"/>, so a
+    /// player carrying more than the target reads the true overflow (e.g. <c>100 / 8</c>), not a clamped
+    /// <c>8 / 8</c> (feedback 7.14). "Satisfied" is therefore <c>CurrentQuantity &gt;= TargetQuantity</c>
+    /// everywhere it's tested. Defaults to 0.</summary>
     public int CurrentQuantity
     {
         get => _currentQuantity;
-        set => _currentQuantity = value < 0 ? 0 : (value > _targetQuantity ? _targetQuantity : value);
+        set => _currentQuantity = value < 0 ? 0 : value;
     }
     private int _currentQuantity;
 
@@ -123,9 +122,8 @@ public sealed class ScribeBlock
         AssignedToUid = assignedToUid;
         TaskId = taskId ?? Guid.NewGuid();
         TargetItemCode = targetItemCode;
-        // Set target BEFORE current so CurrentQuantity clamps against the intended ceiling.
         TargetQuantity = targetQuantity;
-        CurrentQuantity = currentQuantity;
+        CurrentQuantity = currentQuantity; // ≥0 only; may exceed the target (raw carried count, 7.14)
         LinkTarget = linkTarget;
         LinkLabel = linkLabel;
     }
