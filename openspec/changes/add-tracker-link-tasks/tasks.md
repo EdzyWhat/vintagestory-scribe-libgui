@@ -182,7 +182,7 @@ rows reachable (7.1 regression closed).
       path. `OnMyPinsChanged` now drops overlay entries the authoritative pushed set already agrees with
       (no-op until the queued packet is processed on Handbook close, then the server cache resumes driving);
       `OnGuiClosed` clears the overlay so a close-before-catch-up can't leak a stale entry into the reopen.
-- [ ] 7.11c (feedback: Handbook nav friction) The editor Add → Tracker/Link footer action (Handbook-
+- [x] 7.11c (feedback: Handbook nav friction) The editor Add → Tracker/Link footer action (Handbook-
       CLOSED path) currently opens our explainer entry, which dead-ends: to actually add a Tracker/Link
       the player must return to search, type the item, open its page, scroll, and click. Confirmed a
       search bar canNOT coexist with an entry page (two separate composers — `overviewGui` has the
@@ -193,6 +193,10 @@ rows reachable (7.1 regression closed).
       explainer open). Discoverability handled elsewhere: cross-link the task-types explainer entry from
       the other top-level Scribe guides (Getting Started / Editor Reference / Pinned HUD) so the teaching
       page is still reachable — just not on the critical add path.
+      DONE: `DispatchItemKindGuide` (Handbook-closed path) opens `handbooksearch://` (focused overview
+      search) instead of the explainer entry; the Handbook-open path keeps the scroll-and-click error. The
+      task-types explainer stays discoverable via cross-links from Getting Started, Editor Reference, and
+      (added this round) the Pinned HUD guide.
 - [x] 7.11d (feedback: book/guide glyph color) The `scribebook` guide-page-Link glyph renders too harsh
       (near-black `OnSurface`) inside the Notebook. Render it `Primary` on the in-Notebook surfaces
       (read/editor/Pin Tab); confirm the HUD tint still reads. DONE: read/editor/Pin-Tab call sites now pass
