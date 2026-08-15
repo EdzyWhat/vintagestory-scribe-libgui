@@ -812,24 +812,26 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         {
             // Inline target-quantity stepper, placed at the LEFT of the row (feedback 6.3): the row's
             // hover-revealed delete/pin buttons float over the RIGHT edge, so a right-hand stepper sat
-            // UNDER them and was unreachable (which also made the pin untappable — feedback 6.9). Sized to
-            // ~3 digits (feedback 6.3: the old 84px fit ~6), font-relative off iconSize so it scales with
-            // the row height rather than a fixed literal; the +/- button column is fieldHeight/2 wide, so
-            // the text region lands near three characters. clamp keeps the target a whole number ≥ 1
-            // (matching the Core setter); onChanged writes the rounded int through to scratch via the dialog.
-            // autoFocus lands the caret in the stepper when the Tracker is freshly created from the Handbook
-            // (feedback 6.4) — the row MOUNTS on that append, so its mount-only autoFocus fires once.
+            // UNDER them and was unreachable (which also made the pin untappable — feedback 6.9). Font-relative
+            // off iconSize so it scales with the row height rather than a fixed literal. The +/- button column
+            // is a fixed fieldHeight/2, so widening the total flows entirely into the text region: at
+            // 2.26·iconSize the input reads ~three digits comfortably — 60% wider than the first pass's
+            // 1.6·iconSize (whose ~1.1·iconSize input the +/- buttons were crowding, feedback 6.3 round 2).
+            // clamp keeps the target a whole number ≥ 1 (matching the Core setter); onChanged writes the
+            // rounded int through to scratch via the dialog.
             rowChildren.Add(new ScribeNumericField(
                 initialValue: Widget.Data.TargetQuantity,
                 step: 1,
                 clamp: v => v < 1 ? 1 : (float)Math.Round(v),
                 onChanged: v => Widget.OnTrackerQuantityChanged(index, (int)Math.Round(v)),
-                autoFocus: Widget.AutoFocus,
-                style: new BoxStyle { Width = iconSize * 1.6f, Height = iconSize },
+                style: new BoxStyle { Width = iconSize * 2.26f, Height = iconSize },
                 textStyle: new TextStyle { Color = colors.OnSurface }));
         }
 
-        rowChildren.Add(new ItemStackDisplay(Widget.Data.DisplayStack, width: iconSize, height: iconSize, renderSize: 48));
+        // Guide-page book glyph tinted Primary (feedback 7.11d) and row-height-neutral (7.11e/7.11f); the item
+        // icon ignores the color. The Tracker's stepper still drives this editor row's height by design.
+        float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
+        rowChildren.Add(ScribeLinkIcon.Build(Widget.Data.DisplayStack, Widget.Data.LinkTarget, iconSize, colors.Primary, lineHeight));
         rowChildren.Add(new Expanded(child: new Text(
             Widget.Data.Label, new TextStyle { Color = colors.OnSurface, SoftWrap = true })));
 

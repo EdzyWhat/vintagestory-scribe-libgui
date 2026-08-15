@@ -9,6 +9,7 @@ using Gui.Widgets.Basic;         // Text, WindowFrame, VsIcon, Container, Button
 using Gui.Widgets.Events;        // PointerEvent
 using Gui.Widgets.Framework;     // Widget, StatefulWidget, State, Theme, ValueKey, Key
 using Gui.Widgets.Input;         // Checkbox, FocusNode, GestureDetector, MouseRegion, Dropdown, DropdownItem
+using Gui.Widgets.Inventory;     // ItemStackDisplay (Tracker/Link item icon)
 using Gui.Widgets.Gestures;      // ScrollController
 using Gui.Widgets.Layout;        // Column, Row, Expanded, Padding, SizedBox, Center, Align, Alignment, CrossAxisAlignment, MainAxisAlignment
 using Gui.Widgets.Overlay;       // Tooltip
@@ -18,12 +19,33 @@ using Gui.Core.Layout;           // MainAxisSize
 using OpenTK.Mathematics;        // Vector2
 using Scribe.Core;
 using Vintagestory.API.Client;
+using Vintagestory.API.Common;   // ItemStack (Tracker/Link display item)
 using Vintagestory.API.Config;   // Lang, GlobalConstants
 using Vintagestory.API.MathTools;  // BlockPos
 
 namespace Scribe;
 
-internal readonly record struct ScribePinRowData(Guid DocId, Guid TaskId, bool Done, string Text);
+/// <summary>A value snapshot of one Pin Tab row. <see cref="Kind"/> distinguishes Task / Tracker / Link
+/// (a pinned Text section can't exist — only completable blocks pin). A Tracker/Link's icon + name are
+/// resolved by the dialog (where <c>capi</c> lives) and passed in as <see cref="DisplayStack"/> /
+/// <see cref="DisplayName"/>, so the pure LibGUI row widget stays API-free — mirroring
+/// <see cref="ScribeReadRowData"/> (add-tracker-link-tasks 7.8).</summary>
+internal readonly record struct ScribePinRowData(
+    Guid DocId, Guid TaskId, bool Done, string Text,
+    ScribeBlockKind Kind = ScribeBlockKind.Task,
+    ItemStack? DisplayStack = null, string? DisplayName = null,
+    int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null)
+{
+    public bool IsTracker => Kind == ScribeBlockKind.Tracker;
+    public bool IsLink => Kind == ScribeBlockKind.Link;
+    /// <summary>A Tracker/Link renders an item icon + name instead of an editable text field; a plain Task
+    /// keeps the directly-editable field.</summary>
+    public bool IsItemKind => IsTracker || IsLink;
+    /// <summary>The row's display label: a Tracker/Link shows its resolved item name (its own Text is
+    /// empty), a Task shows its authored text. Also used by the collapsing ghost so a removed Tracker/Link
+    /// doesn't collapse as a blank row.</summary>
+    public string Label => IsItemKind ? (DisplayName ?? Text) : Text;
+}
 
 /// <summary>
 /// The Pin Tab's content tree: the player's pins as an editable, reorderable list, plus the
@@ -44,6 +66,7 @@ internal sealed class ScribePinnedContent : StatefulWidget
         Action<Guid, Guid> onToggleComplete,
         Action<Guid, Guid> onDelete,
         Action<Guid, Guid> onUnpin,
+        Action<Guid> onOpenLink,
         Action<int, int> onReorder,
         ScribeCompletionPolicy completionPolicy,
         Action<ScribeCompletionPolicy> onCompletionPolicyChanged,
@@ -61,6 +84,7 @@ internal sealed class ScribePinnedContent : StatefulWidget
         OnToggleComplete = onToggleComplete;
         OnDelete = onDelete;
         OnUnpin = onUnpin;
+        OnOpenLink = onOpenLink;
         OnReorder = onReorder;
         CompletionPolicy = completionPolicy;
         OnCompletionPolicyChanged = onCompletionPolicyChanged;
@@ -79,6 +103,9 @@ internal sealed class ScribePinnedContent : StatefulWidget
     public Action<Guid, Guid> OnToggleComplete { get; }
     public Action<Guid, Guid> OnDelete { get; }
     public Action<Guid, Guid> OnUnpin { get; }
+    /// <summary>Open a pinned Tracker/Link's target Handbook page (its name is a hyperlink), addressed by
+    /// TaskId. Never touches completion — distinct from the row's checkbox (add-tracker-link-tasks 7.8).</summary>
+    public Action<Guid> OnOpenLink { get; }
     public Action<int, int> OnReorder { get; }
     public ScribeCompletionPolicy CompletionPolicy { get; }
     public Action<ScribeCompletionPolicy> OnCompletionPolicyChanged { get; }
@@ -169,6 +196,7 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                     onToggleComplete: Widget.OnToggleComplete,
                     onDelete: Widget.OnDelete,
                     onUnpin: Widget.OnUnpin,
+                    onOpenLink: Widget.OnOpenLink,
                     onDragStart: OnRowDragStart,
                     onDragOver: OnRowDragOver,
                     onDragEnd: OnRowDragEnd,
@@ -177,11 +205,13 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                     // across a reorder/resync rebuild rather than by list position.
                     key: new ValueKey<Guid>(r.TaskId)),
                 Ghost: new ScribeFrozenEditorRow(
-                    // The Pin Tab renders every row task-shaped (ScribePinRowData carries no Kind), so the
-                    // collapse ghost is a Task-kind snapshot — full Tracker/Link Pin-Tab rendering is out of
-                    // Group 5's scope (add-tracker-link-tasks). Kind: Task keeps the ghost Completable so its
-                    // checkbox mirrors the live row as it collapses.
-                    new ScribeEditRowData(Index: i, Kind: ScribeBlockKind.Task, Done: r.Done, Pinned: false, TaskId: r.TaskId, Text: r.Text),
+                    // The collapse ghost snapshots the row's real Kind + resolved item fields (7.8) so a
+                    // removed Tracker/Link collapses showing its icon + name (+ counter) rather than a blank
+                    // task row. Every pinnable kind is Completable, so the ghost keeps its checkbox mirroring
+                    // the live row as it collapses.
+                    new ScribeEditRowData(Index: i, Kind: r.Kind, Done: r.Done, Pinned: false, TaskId: r.TaskId,
+                        Text: r.Text, DisplayStack: r.DisplayStack, DisplayName: r.DisplayName,
+                        TargetQuantity: r.TargetQuantity, CurrentQuantity: r.CurrentQuantity, LinkTarget: r.LinkTarget),
                     Widget.Style)))
             .ToList();
 
@@ -312,6 +342,7 @@ internal sealed class ScribePinRow : StatefulWidget
         Action<Guid, Guid> onToggleComplete,
         Action<Guid, Guid> onDelete,
         Action<Guid, Guid> onUnpin,
+        Action<Guid> onOpenLink,
         Action<int> onDragStart,
         Action<int> onDragOver,
         Action onDragEnd,
@@ -331,6 +362,7 @@ internal sealed class ScribePinRow : StatefulWidget
         OnToggleComplete = onToggleComplete;
         OnDelete = onDelete;
         OnUnpin = onUnpin;
+        OnOpenLink = onOpenLink;
         OnDragStart = onDragStart;
         OnDragOver = onDragOver;
         OnDragEnd = onDragEnd;
@@ -358,6 +390,7 @@ internal sealed class ScribePinRow : StatefulWidget
     public Action<Guid, Guid> OnToggleComplete { get; }
     public Action<Guid, Guid> OnDelete { get; }
     public Action<Guid, Guid> OnUnpin { get; }
+    public Action<Guid> OnOpenLink { get; }
     public Action<int> OnDragStart { get; }
     public Action<int> OnDragOver { get; }
     public Action OnDragEnd { get; }
@@ -392,6 +425,51 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
     {
         base.UpdateWidget(oldWidget);
         if (oldWidget.Data.Done != Widget.Data.Done) done = Widget.Data.Done;
+    }
+
+    /// <summary>The content of a Tracker/Link pin row: the referenced item's icon + name, plus a have/need
+    /// counter on the LEFT for a Tracker (add-tracker-link-tasks 7.8). The name is a hyperlink — tapping it
+    /// opens the item's Handbook page via <see cref="ScribePinRow.OnOpenLink"/> and never touches the row's
+    /// checkbox. Mirrors <c>ScribeReadRowState.BuildItemContent</c> exactly so the Pin Tab, read, and editor
+    /// views render Tracker/Link rows identically (counter-left; future Crafting tasks inherit it).</summary>
+    private Widget BuildItemContent(ColorScheme colors, ScribeRowStyle style)
+    {
+        var data = Widget.Data;
+        float iconSize = style.ControlSize * 1.4f;
+        float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
+        // Guide-page book glyph Primary (7.11d), item icon grown + row-height-neutral (7.11e/7.11f).
+        Widget icon = ScribeLinkIcon.Build(data.DisplayStack, data.LinkTarget, iconSize, colors.Primary, lineHeight);
+
+        Widget nameLink = new Expanded(child: new GestureDetector(
+            onPress: e => { e.Handled = true; Widget.OnOpenLink(data.TaskId); },
+            child: new Text(data.Label, new TextStyle { Color = colors.Primary, SoftWrap = true })));
+
+        var rowChildren = new List<Widget>();
+        if (data.IsLink)
+        {
+            rowChildren.Add(icon);
+            rowChildren.Add(nameLink);
+        }
+        else // Tracker: a "have / need" counter on the LEFT, then the item icon + name.
+        {
+            bool satisfied = data.CurrentQuantity >= data.TargetQuantity;
+            // Inverted emphasis + satisfied strikethrough, shared with the read/HUD counters (7.11g/7.11h).
+            rowChildren.Add(ScribeTrackerCounterText.Build(
+                data.CurrentQuantity, data.TargetQuantity, satisfied,
+                strongColor: colors.Primary, mutedColor: colors.OnSurfaceVariant, lineHeight: lineHeight));
+            rowChildren.Add(icon);
+            rowChildren.Add(nameLink);
+        }
+
+        // Inset by the editor field's internal padding, matching the Task row, so icon rows line up with text
+        // rows. Center the icon against the (taller-than-a-line) content.
+        return new Padding(
+            EdgeInsets.Symmetric(vertical: style.FieldPadY, horizontal: style.FieldPadX),
+            child: new Row(
+                spacing: style.CheckboxTextGap,
+                crossAxisAlignment: CrossAxisAlignment.Center,
+                mainAxisSize: MainAxisSize.Max,
+                children: rowChildren));
     }
 
     public override Widget Build(BuildContext context)
@@ -447,23 +525,33 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
                 },
                 size: style.CheckboxSize))));
 
-        // Directly-editable text field (editable by default — no separate edit mode). Held to the same
-        // task-text cap as the editor. Writes through on every keystroke (OnTextChanged buffers it);
-        // commits on Enter/blur (OnCommitText). Enter commits in place (no insert-below on the Pin Tab).
-        children.Add(new Expanded(child: new Opacity(contentOpacity, child: new ScribeMultilineField(
-            initialText: data.Text,
-            focusNode: Widget.FocusNode,
-            fontSize: style.FontSize,
-            fontFamily: ScribeTaskFont.Resolve(style.TaskFontFamily),
-            padX: style.FieldPadX,
-            padY: style.FieldPadY,
-            autoFocus: Widget.AutoFocus,
-            maxLength: ScribeDocumentCodec.MaxTaskTextLength,
-            onChanged: text => Widget.OnTextChanged(data.TaskId, text),
-            onCommitAndAdvance: () => Widget.OnCommitText(data.TaskId),
-            onCommitAndRetreat: () => Widget.OnCommitText(data.TaskId),
-            onInsertTaskBelow: () => Widget.OnCommitText(data.TaskId),
-            onBlur: () => Widget.OnCommitText(data.TaskId)))));
+        // A Tracker/Link pin renders a non-editable item icon + name (+ a have/need counter for a Tracker),
+        // NOT the editable text field — its own Text is empty, its content is the referenced item, exactly
+        // like the read/editor views (add-tracker-link-tasks 7.8). Otherwise the directly-editable text field
+        // (editable by default — no separate edit mode). Held to the same task-text cap as the editor. Writes
+        // through on every keystroke (OnTextChanged buffers it); commits on Enter/blur (OnCommitText). Enter
+        // commits in place (no insert-below on the Pin Tab).
+        if (data.IsItemKind)
+        {
+            children.Add(new Expanded(child: new Opacity(contentOpacity, child: BuildItemContent(colors, style))));
+        }
+        else
+        {
+            children.Add(new Expanded(child: new Opacity(contentOpacity, child: new ScribeMultilineField(
+                initialText: data.Text,
+                focusNode: Widget.FocusNode,
+                fontSize: style.FontSize,
+                fontFamily: ScribeTaskFont.Resolve(style.TaskFontFamily),
+                padX: style.FieldPadX,
+                padY: style.FieldPadY,
+                autoFocus: Widget.AutoFocus,
+                maxLength: ScribeDocumentCodec.MaxTaskTextLength,
+                onChanged: text => Widget.OnTextChanged(data.TaskId, text),
+                onCommitAndAdvance: () => Widget.OnCommitText(data.TaskId),
+                onCommitAndRetreat: () => Widget.OnCommitText(data.TaskId),
+                onInsertTaskBelow: () => Widget.OnCommitText(data.TaskId),
+                onBlur: () => Widget.OnCommitText(data.TaskId)))));
+        }
 
         Widget rowBody = new Padding(
             EdgeInsets.Symmetric(vertical: style.RowVerticalPadding, horizontal: style.RowHorizontalPadding),

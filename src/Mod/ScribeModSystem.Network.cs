@@ -70,7 +70,9 @@ public sealed partial class ScribeModSystem
         }
         Trace("set-pin received from {0}: pinned={1} doc={2} task={3}", fromPlayer.PlayerName, message.Pinned, docId, taskId);
         SetPinForPlayer(fromPlayer, docId, taskId, message.Pinned, message.SnapshotText, message.SnapshotDone,
-            (Scribe.Core.ScribeBlockKind)message.SnapshotKind, message.SnapshotLinkTarget);
+            (Scribe.Core.ScribeBlockKind)message.SnapshotKind, message.SnapshotLinkTarget,
+            message.SnapshotTargetItemCode, message.SnapshotTargetQuantity, message.SnapshotCurrentQuantity,
+            message.SnapshotLinkLabel);
     }
 
     private void OnServerReceivedCompleteTask(IServerPlayer fromPlayer, ScribeCompleteTaskMessage message)

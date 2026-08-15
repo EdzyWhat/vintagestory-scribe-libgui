@@ -51,6 +51,7 @@ public class ScribeDocumentCodecTests
         original.AddTracker("game:ingot-copper", 8);
         original.SetTrackerCurrentQuantity(original.Blocks[0].TaskId, 3);
         original.AddLink("game:ingot-tin");
+        original.AddGuideLink("craftinginfo-knapping", "Knapping"); // v7: guide-page link with a label
         original.AddTask("a plain task"); // its tracker/link fields default and must round-trip too
 
         byte[] bytes = ScribeDocumentCodec.Serialize(original);
@@ -65,18 +66,27 @@ public class ScribeDocumentCodecTests
         Assert.Equal(8, tracker.TargetQuantity);
         Assert.Equal(3, tracker.CurrentQuantity);
         Assert.Null(tracker.LinkTarget);
+        Assert.Null(tracker.LinkLabel);
 
         var link = restored.Blocks[1];
         Assert.Equal(ScribeBlockKind.Link, link.Kind);
         Assert.Equal("game:ingot-tin", link.LinkTarget);
         Assert.Null(link.TargetItemCode);
+        Assert.Null(link.LinkLabel); // an item Link resolves its name live — no stored label
 
-        var task = restored.Blocks[2];
+        var guideLink = restored.Blocks[2];
+        Assert.Equal(ScribeBlockKind.Link, guideLink.Kind);
+        Assert.Equal("page:craftinginfo-knapping", guideLink.LinkTarget);
+        Assert.Equal("Knapping", guideLink.LinkLabel); // v7: guide-page label persists
+        Assert.Null(guideLink.TargetItemCode);
+
+        var task = restored.Blocks[3];
         Assert.Equal(ScribeBlockKind.Task, task.Kind);
         Assert.Null(task.TargetItemCode);
         Assert.Equal(1, task.TargetQuantity); // default
         Assert.Equal(0, task.CurrentQuantity);
         Assert.Null(task.LinkTarget);
+        Assert.Null(task.LinkLabel);
     }
 
     [Fact]
@@ -134,7 +144,7 @@ public class ScribeDocumentCodecTests
     [Fact]
     public void TryDeserialize_V3Bytes_FailsSafely()
     {
-        // v3 is no longer accepted (PriorVersion = 4 since v5 was introduced). Hand-build a valid
+        // v3 is older than MinVersion (5), so it is not accepted. Hand-build a valid
         // v3 payload and confirm it is rejected rather than misread.
         using var ms = new MemoryStream();
         using (var w = new BinaryWriter(ms))
@@ -159,9 +169,10 @@ public class ScribeDocumentCodecTests
     [Fact]
     public void TryDeserialize_V5Bytes_Succeeds_AndDefaultsTrackerLinkFields()
     {
-        // v5 is now the immediately prior format (PriorVersion). It has a title but no per-block
-        // Tracker/Link fields, so those must default (ApplyV5ToV6Migrations). The legacy pinned-task
-        // migration list is always empty (a v3→v4 concern).
+        // v5 is the OLDEST accepted version (MinVersion) — it is the last SHIPPED layout and must stay
+        // readable via progressive reads. It has a title but no per-block Tracker/Link fields, so those
+        // must default (ApplyPreV6Defaults). The legacy pinned-task migration list is always empty (a
+        // v3→v4 concern).
         using var ms = new MemoryStream();
         using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
         {
@@ -191,14 +202,56 @@ public class ScribeDocumentCodecTests
         Assert.Equal(1, block.TargetQuantity); // defaulted (≥1 invariant)
         Assert.Equal(0, block.CurrentQuantity);
         Assert.Null(block.LinkTarget);
+        Assert.Null(block.LinkLabel); // v7 field — defaulted for a v5 blob
         Assert.Empty(legacyPinned);
+    }
+
+    [Fact]
+    public void TryDeserialize_V6Bytes_Succeeds_AndDefaultsLinkLabel()
+    {
+        // v6 carried the Tracker/Link item fields but NOT the v7 LinkLabel. A hand-built v6 blob must
+        // read via progressive reads: its Tracker/Link fields round-trip, and LinkLabel defaults null.
+        var docId = Guid.NewGuid();
+        var taskId = Guid.NewGuid();
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write(new byte[] { (byte)'S', (byte)'C', (byte)'R', (byte)'B' });
+            w.Write((byte)6);
+            w.Write(docId.ToByteArray());
+            w.Write(1); // blockCount
+            w.Write(taskId.ToByteArray());
+            w.Write((byte)ScribeBlockKind.Link);
+            w.Write(false); // done
+            w.Write(0);     // depth
+            w.Write(false); // hasAssignedToUid
+            w.Write("");    // text (Link carries empty text)
+            // v6 Tracker/Link fields:
+            w.Write(false); // hasTargetItemCode
+            w.Write(1);     // targetQuantity
+            w.Write(0);     // currentQuantity
+            w.Write(true);  // hasLinkTarget
+            w.Write("game:ingot-tin"); // linkTarget
+            // v6 has NO LinkLabel field here — that's the point.
+            w.Write("V6 Notes"); // title
+        }
+
+        bool ok = ScribeDocumentCodec.TryDeserialize(ms.ToArray(), out ScribeDocument? restored);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        Assert.Equal("V6 Notes", restored!.Title);
+        var link = restored.Blocks[0];
+        Assert.Equal(ScribeBlockKind.Link, link.Kind);
+        Assert.Equal("game:ingot-tin", link.LinkTarget);
+        Assert.Null(link.LinkLabel); // v7 field — defaulted for a v6 blob
     }
 
     [Fact]
     public void TryDeserialize_V4Bytes_FailsSafely()
     {
-        // v4 has dropped out of the accepted two-version window (now {v6, v5}). A well-formed v4
-        // payload must be rejected outright rather than misread.
+        // v4 is older than MinVersion (5), so it stays out of the accepted window [v5, v7]. A
+        // well-formed v4 payload must be rejected outright rather than misread.
         using var ms = new MemoryStream();
         using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
         {
@@ -246,9 +299,9 @@ public class ScribeDocumentCodecTests
     [Fact]
     public void TryDeserialize_UnsupportedOlderVersionBytes_FailsSafely()
     {
-        // The reader accepts only the current version (6) and the immediately prior one (5).
+        // The reader accepts any version in [MinVersion=5, Version=7] (progressive reads).
         // A v2-shaped payload is older than that and must be rejected outright, not misread by
-        // reading v5/v6 fields (ids, title, tracker/link) that aren't present.
+        // reading v5+ fields (ids, title, tracker/link/label) that aren't present.
         using var ms = new MemoryStream();
         using (var w = new BinaryWriter(ms))
         {

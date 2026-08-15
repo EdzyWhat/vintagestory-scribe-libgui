@@ -558,8 +558,7 @@ public abstract partial class ScribeDialogBase
     {
         if (!b.IsTracker && !b.IsLink) return (null, null);
         string? code = b.IsTracker ? b.TargetItemCode : b.LinkTarget;
-        var stack = ScribeItemRef.ResolveStack(capi.World, code);
-        return (stack, ScribeItemRef.DisplayName(stack, code));
+        return ScribeItemRef.ResolveDisplay(capi.World, code, b.LinkLabel);
     }
 
     /// <summary>Build the read view. Promoted from <c>private</c> so the always-edit tablet can render it

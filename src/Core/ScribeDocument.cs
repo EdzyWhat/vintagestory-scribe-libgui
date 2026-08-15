@@ -80,13 +80,24 @@ public sealed class ScribeDocument
         return true;
     }
 
-    /// <summary>Adds a Link task (a reference to an item's Handbook page) to the end and gives it a
-    /// fresh stable <see cref="ScribeBlock.TaskId"/>. <paramref name="target"/> is the plain Handbook
-    /// target code (may be null). The row's display label is derived by the Mod layer, so Text starts
-    /// empty.</summary>
+    /// <summary>Adds an <b>item</b> Link task (a reference to an item's Handbook page) to the end and gives
+    /// it a fresh stable <see cref="ScribeBlock.TaskId"/>. <paramref name="target"/> is the plain collectible
+    /// code (may be null). The row's display label is derived live by the Mod layer from the item, so Text
+    /// and <see cref="ScribeBlock.LinkLabel"/> start empty.</summary>
     public bool AddLink(string? target)
     {
         _blocks.Add(new ScribeBlock(ScribeBlockKind.Link, "", linkTarget: target));
+        return true;
+    }
+
+    /// <summary>Adds a <b>guide-page</b> Link task (a reference to a non-item Handbook guide/explainer page)
+    /// to the end. <paramref name="pageCode"/> is the bare Handbook page code (stored <c>"page:"</c>-prefixed
+    /// via <see cref="ScribeLinkTarget.ForPage"/>); <paramref name="label"/> is the guide's title, captured at
+    /// creation because a guide page has no item to resolve a name from later (add-tracker-link-tasks 7.6).</summary>
+    public bool AddGuideLink(string pageCode, string? label)
+    {
+        _blocks.Add(new ScribeBlock(ScribeBlockKind.Link, "",
+            linkTarget: ScribeLinkTarget.ForPage(pageCode), linkLabel: label));
         return true;
     }
 

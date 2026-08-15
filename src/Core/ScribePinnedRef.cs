@@ -46,4 +46,31 @@ public sealed class ScribePinnedRef
     /// <see cref="Kind"/> so the HUD can open the page without resolving the (possibly unloaded) source
     /// document (add-tracker-link-tasks 5.5).</summary>
     public string? LinkTarget { get; set; }
+
+    /// <summary>For a <see cref="ScribeBlockKind.Tracker"/> pin, the last-known target item code (the
+    /// collectible the tracker counts and whose icon/name the pin renders); null for every other kind.
+    /// Snapshotted alongside <see cref="Kind"/> so the HUD and Pin Tab can render a pinned Tracker's
+    /// icon + name + counter without resolving the (possibly unloaded) source document
+    /// (add-tracker-link-tasks 7.8). Distinct from <see cref="LinkTarget"/> so a future kind that carries
+    /// both a link and a counted item stays unambiguous.</summary>
+    public string? TargetItemCode { get; set; }
+
+    /// <summary>For a <see cref="ScribeBlockKind.Tracker"/> pin, the last-known target quantity (the
+    /// "need" side of the have/need counter). Defaults to 1; snapshotted alongside
+    /// <see cref="TargetItemCode"/> and refreshed on edit so the pin's counter stays current
+    /// (add-tracker-link-tasks 7.8).</summary>
+    public int TargetQuantity { get; set; } = 1;
+
+    /// <summary>For a <see cref="ScribeBlockKind.Tracker"/> pin, the last-known current quantity (the
+    /// "have" side of the have/need counter). Defaults to 0; refreshed from the authoritative document on
+    /// edit — the count itself is only recomputed while a Scribe dialog is open, so a pinned Tracker's
+    /// counter reflects the last value the document held (add-tracker-link-tasks 7.8).</summary>
+    public int CurrentQuantity { get; set; }
+
+    /// <summary>For a guide-page <see cref="ScribeBlockKind.Link"/> pin (a <c>"page:"</c>-prefixed
+    /// <see cref="LinkTarget"/>), the last-known display title of the guide — snapshotted because a guide
+    /// page has no item to resolve a name from, so without it the HUD/Pin Tab could only show a bare book
+    /// icon. Null for an item Link (whose name resolves live from the item) and for every other kind
+    /// (add-tracker-link-tasks 7.6).</summary>
+    public string? LinkLabel { get; set; }
 }

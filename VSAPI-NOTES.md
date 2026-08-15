@@ -2148,6 +2148,28 @@ costs nothing, and read/editor content heights now match by construction instead
 - **Procedural raster sizing to avoid blur:** generate at a size LARGER than the displayed physical px (we used 512² for a ~212 logical-px wheel) so `DrawMaskedBox`'s bilinear resample only ever *downsamples* (crisp) rather than upscales (blurry). Cache + dispose the bitmap on the same path as loaded PNGs.
 - **`DrawMaskedBox` reuses `SharedPaint.Color` without setting it** (the textured-`Container` path) — so a gear is modulated by whatever the previous draw op left on the one shared `SKPaint`. A single top-level reset can't help when many ops paint between it and each gear; reset opaque-white + clear `ColorFilter`/`ImageFilter` immediately before EACH textured draw. (This is the same `SharedPaint` leak the dialog backdrops hit; see the tablet-backdrop note.)
 
+### Row-height-neutral oversized child, and NO strikethrough in `TextStyle` (add-tracker-link-tasks 7.11, 2026-08-15)
+
+Two LibGUI facts from tuning the Tracker/Link row icons + counter:
+
+- **`TextStyle.Decoration` (`TextDecoration`) has only `None` and `Underline` — there is NO strikethrough.**
+  To strike text, overlay a thin line yourself. Pattern used for the satisfied Tracker counter
+  (`ScribeTrackerCounterText`): wrap the counter `Text` in a `Stack` and add a `Positioned(left:0, right:0,
+  top: lineHeight/2 − t/2, height: t)` child holding a `Container { BoxStyle.Color = faint }`. `left`+`right`
+  both set → the line spans the Stack's width, which is the (non-positioned) `Text`'s width — so it strikes
+  ONLY that text, not its Row siblings. Center it on the text's single line via a measured line height
+  (`ScribeRowControlNudge.TextLineHeight`).
+- **A child can render LARGER than its layout footprint via `Stack` + `Positioned`, because `RenderStack.Paint`
+  does NOT clip.** To make an oversized icon contribute only ONE text-line of row height (so a Tracker/Link row
+  equals a single-line Task row while the item icon still reads ~10% bigger): `Stack` children = `[ SizedBox(w:
+  visual, h: lineHeight)  // non-positioned → sizes the stack, Positioned(left:0, top:(lineHeight−visual)/2,
+  width:visual, height:visual, child: icon) ]`. Key mechanic (confirmed by decompiling `RenderStack`): a
+  `Positioned` with BOTH `Width` and `Height` set gets `min == max` for that axis, so the child is forced to
+  exactly `visual×visual` regardless of the (smaller) stack size; the negative `top` centers it so it overflows
+  equally above/below. Non-positioned children lay out under `LayoutConstraints.Loose`, and the stack sizes to
+  their max. There is **no `OverflowBox`/`UnconstrainedBox`** in this LibGUI build — this Stack trick is the way.
+  Caveat: the overflow paints into neighbors' space, so keep the excess modest and vertically centered.
+
 ## Held-item dialog flickers closed on FIRST open of a not-yet-crafted item (2026-08-06)
 
 **Symptom: the first time a player opens a Scribe item they did NOT craft (notebook, clockmaker's
@@ -2677,6 +2699,18 @@ exercised for real by the Tracker/Link "Add to Scribe" links, and everything hel
   of shape `{ pageCode, title, text }` (title/text are lang keys) is auto-discovered and registered as a
   standalone handbook entry — link to it with `handbook://<pageCode>`. See
   `src/Mod/assets/scribe/config/handbook/03-task-types.json`.
+- **Jump the player straight to a FOCUSED search box** with the sibling protocol
+  `capi.LinkProtocols.TryGetValue("handbooksearch", out var s); s(new LinkTextComponent("handbooksearch://<text>"))`.
+  It opens the Handbook OVERVIEW composer (the one that owns the `"searchField"` text input, focused on
+  build) and runs `Search(text)` — empty text = "open the Handbook ready to type." This matters because the
+  Handbook has **two separate composers**: `overviewGui` (has the search field) and `detailViewGui` (an item/
+  entry page, NO search field). You cannot show a search box *on* an entry page — they never coexist. So the
+  fastest "let the player find an item to track/link" path is `handbooksearch://` (add-tracker-link-tasks
+  7.11c: chosen over opening the explainer entry, which dead-ended the player away from search).
+- **VTML does NOT decode HTML entities.** Handbook/tooltip copy is VTML, not HTML: `&amp;` renders as the
+  literal text `&amp;` and `&#47;` as `&#47;` — use a literal `&` and `/` in the lang string. Valid VTML
+  tags (`<strong>`, `<em>`, `<br>`, `<a href="...">`, `<hotkey>`) DO render. Bit us in the task-types article
+  (`&amp;`, `12&#47;20` showed raw); other strings that already used literal `&`/`/` rendered fine.
 
 ## Entry template
 

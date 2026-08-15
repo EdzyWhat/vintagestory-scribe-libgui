@@ -1,3 +1,4 @@
+using System;                    // Action
 using System.Linq;
 using Gui;                       // GuiDialog
 using Scribe.Core;
@@ -15,11 +16,14 @@ namespace Scribe;
 public abstract partial class ScribeDialogBase
 {
     /// <summary>A Handbook-originated append waiting for this dialog to reach editor mode (Case B). Stashed
-    /// when a "Add to Scribe" click lands while the dialog is NOT editing, then consumed by
-    /// <see cref="FlushPendingHandbookAppend"/> at the end of <see cref="EnterEditorMode"/> once editor
-    /// access is granted (immediately for item surfaces, or on the async server grant for block surfaces).
-    /// Null when nothing is pending.</summary>
-    private (ScribeAddKind Kind, string ItemCode)? pendingHandbookAppend;
+    /// as the deferred apply action when a "Add to Scribe"/"Add Link" click lands while the dialog is NOT
+    /// editing, then invoked by <see cref="FlushPendingHandbookAppend"/> at the end of
+    /// <see cref="EnterEditorMode"/> once editor access is granted (immediately for item surfaces, or on the
+    /// async server grant for block surfaces). An <c>Action</c> (rather than a specific tuple) so both the
+    /// item-page path (<see cref="TryAddFromHandbook"/>) and the guide-page path
+    /// (<see cref="TryAddGuideLinkFromHandbook"/>) share one deferral mechanism. Null when nothing is
+    /// pending.</summary>
+    private Action? pendingHandbookAppend;
 
     /// <summary>True when this surface's editor access requires a server round-trip (a block surface —
     /// Lectern/Scriptorium — whose <see cref="RequestEditorAccess"/> sends a lock request and lands the grant
@@ -44,14 +48,32 @@ public abstract partial class ScribeDialogBase
     /// <see cref="ScribeAddKinds.Link"/>); <paramref name="itemCode"/> is the collectible code the Handbook
     /// link supplied.</summary>
     internal void TryAddFromHandbook(ScribeAddKind kind, string itemCode)
+        => TryHandbookAppend(() => ApplyHandbookAppend(kind, itemCode));
+
+    /// <summary>Create a guide-page <b>Link</b> task on THIS dialog from a Handbook guide/explainer page's
+    /// injected "Add Link" click (add-tracker-link-tasks 7.6). Same two-case deferral as
+    /// <see cref="TryAddFromHandbook"/>, but the target is a <c>"page:"</c>-prefixed guide code rather than an
+    /// item — so it carries the guide's <paramref name="pageCode"/> and its display <paramref name="title"/>
+    /// (captured at click time because a guide page has no item to resolve a name from). Tracker does not
+    /// apply to guide pages (nothing to count).</summary>
+    internal void TryAddGuideLinkFromHandbook(string pageCode, string title)
+        => TryHandbookAppend(() => ApplyGuideLinkAppend(pageCode, title));
+
+    /// <summary>Shared deferral for a Handbook-originated append (item or guide-page). If already editing, run
+    /// <paramref name="apply"/> now; otherwise stash it and request editor access. Item surfaces enter
+    /// synchronously (the stash is consumed before this returns); block surfaces get an async grant, so the
+    /// stash is kept for <see cref="EnterEditorMode"/> to consume. If access is refused (locked by another
+    /// player, or the surface can't edit) the stale stash is cleared so a later editor entry doesn't silently
+    /// apply it.</summary>
+    private void TryHandbookAppend(Action apply)
     {
         if (isEditorMode)
         {
-            ApplyHandbookAppend(kind, itemCode);
+            apply();
             return;
         }
 
-        pendingHandbookAppend = (kind, itemCode);
+        pendingHandbookAppend = apply;
 
         // A block surface will get its grant asynchronously (server lock round-trip) UNLESS the lock is held
         // by someone else — in which case TryEnterEditor surfaces the generic lock error and never requests.
@@ -75,10 +97,11 @@ public abstract partial class ScribeDialogBase
         if (!kind.Add(scratch, itemCode)) return;
         isDirty = true;
         SyncFocusNodesToScratch();
-        // Land the caret in the new row so the player can type right away (feedback 6.4). The block is
-        // appended last, so target that index; the row MOUNTS on the rebuild below, firing its mount-only
-        // autoFocus. Only a Tracker has a focusable stepper — a Link is just an icon + name, nothing to type.
-        if (kind == ScribeAddKinds.Tracker) autoFocusRowOnRebuild = scratch.Blocks.Count - 1;
+        // NOTE (feedback 6.4, round 2): we do NOT auto-focus the new Tracker's stepper. The add originates
+        // from a click inside the Handbook window, and VS keeps real keyboard focus on the window last
+        // clicked — so arming the stepper's caret only PAINTED a caret here while typing still went to the
+        // Handbook, misleading the player. Cross-window focus hand-off isn't worth forcing; the player taps
+        // the stepper themselves. (The ScribeNumericField autoFocus seam remains for in-dialog use.)
         // Persist immediately (Case A appends + flushes at once); the autosave tick would otherwise carry it
         // within ~1s, but the player clicked in the Handbook and expects the task to exist right away.
         FlushIfDirty();
@@ -88,29 +111,49 @@ public abstract partial class ScribeDialogBase
         RebuildBody();
     }
 
+    /// <summary>Append a guide-page Link block to the live scratch document and flush it through the dialog's
+    /// existing save path (add-tracker-link-tasks 7.6) — the guide-page sibling of
+    /// <see cref="ApplyHandbookAppend"/>. A Link never counts against the task cap
+    /// (<see cref="ScribeAddKind.CountsAgainstTaskCap"/> is false for <see cref="ScribeAddKinds.Link"/>), so
+    /// unlike the item path there is no cap gate here. No-op unless the editor is live.</summary>
+    private void ApplyGuideLinkAppend(string pageCode, string title)
+    {
+        if (scratch is null || !isEditorMode) return;
+        if (!scratch.AddGuideLink(pageCode, title)) return;
+        isDirty = true;
+        SyncFocusNodesToScratch();
+        // Persist immediately (the player clicked in the Handbook and expects the task to exist right away);
+        // the autosave tick would otherwise carry it within ~1s.
+        FlushIfDirty();
+        RebuildBody();
+    }
+
     /// <summary>Consume a stashed Handbook append once editor access has landed (called at the end of
-    /// <see cref="EnterEditorMode"/>'s normal path). One-shot: the stash is cleared before applying so a
+    /// <see cref="EnterEditorMode"/>'s normal path). One-shot: the stash is cleared before invoking so a
     /// failed append can't re-fire.</summary>
     private void FlushPendingHandbookAppend()
     {
         if (pendingHandbookAppend is not { } pending) return;
         pendingHandbookAppend = null;
-        ApplyHandbookAppend(pending.Kind, pending.ItemCode);
+        pending();
     }
 
     /// <summary>The footer add-picker guide action for an item-bound kind (add-tracker-link-tasks 3.7). A
     /// Tracker/Link can't be created from a bare footer click — it needs a target item code that only a
     /// Handbook page's "Add to Scribe" link supplies — so instead of adding a row we GUIDE the player there:
     /// <list type="bullet">
-    /// <item>Handbook <b>closed</b> → open the task-types explainer entry, which describes Tracker/Link and
-    /// points at the per-item link.</item>
+    /// <item>Handbook <b>closed</b> → open the Handbook overview with the search box already focused (via the
+    /// survival mod's <c>"handbooksearch"</c> link protocol), so the player can immediately type the item
+    /// they want to track/link. Speed-to-entry is the priority (2026-08-15 feedback): opening our explainer
+    /// entry instead dead-ended the player, who then had to navigate back to search anyway. The explainer
+    /// stays discoverable via cross-links from the other top-level Scribe guides, not on this add path.</item>
     /// <item>Handbook <b>open</b> (already on some item's page) → a transient error telling them to scroll to
     /// the bottom of the current entry and click "Add to Scribe".</item>
     /// </list>
     /// Reuses the reflection-free handbook discovery/open pattern from
     /// <see cref="ToggleEditorReferenceHandbook"/> (scan <c>OpenedGuis</c> by <c>ToggleKeyCombinationCode</c>,
-    /// open via the registered <c>"handbook"</c> link protocol); both paths degrade to a safe no-op when the
-    /// survival mod's handbook isn't loaded.</summary>
+    /// open via a registered link protocol); both paths degrade to a safe no-op when the survival mod's
+    /// handbook isn't loaded.</summary>
     private void DispatchItemKindGuide(ScribeAddKind kind)
     {
         GuiDialog? openHandbook = capi.Gui.OpenedGuis
@@ -122,7 +165,9 @@ public abstract partial class ScribeDialogBase
             return;
         }
 
-        if (capi.LinkProtocols.TryGetValue("handbook", out var open))
-            open(new LinkTextComponent("handbook://craftinginfo-scribe-task-types"));
+        // "handbooksearch://<text>" opens the overview and focuses the search field (empty text = ready to
+        // type). initOverviewGui focuses "searchField" on build, so the caret lands in the box on open.
+        if (capi.LinkProtocols.TryGetValue("handbooksearch", out var search))
+            search(new LinkTextComponent("handbooksearch://"));
     }
 }

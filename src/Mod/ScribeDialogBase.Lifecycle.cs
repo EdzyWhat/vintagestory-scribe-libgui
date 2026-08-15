@@ -372,6 +372,10 @@ public abstract partial class ScribeDialogBase
         SendReleaseLockPacket();
         modSystem.MyPinsChanged -= OnMyPinsChanged;
         modSystem.SettingsVisibilityChanged -= OnSettingsVisibilityChanged;
+        // Drop any un-reconciled optimistic pin state (7.11b) so a next open starts from the authoritative
+        // set — the reconcile-drop only runs while open, so a close before the server caught up would
+        // otherwise leave a stale entry to mislead the reopened rows.
+        optimisticPin.Clear();
         DisposePinState();
 #if DEBUG
         sharedScrollController.OnChanged -= OnScrollControllerChanged;

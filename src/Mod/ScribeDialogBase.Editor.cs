@@ -407,6 +407,14 @@ public abstract partial class ScribeDialogBase
             SnapshotDone = block?.Done ?? false,
             SnapshotKind = (byte)(block?.Kind ?? Scribe.Core.ScribeBlockKind.Task),
             SnapshotLinkTarget = block?.LinkTarget,
+            // A Tracker's target item + have/need counts, so a pinned Tracker renders its icon + name +
+            // counter on the HUD/Pin Tab even for an item host the server can't resolve (7.8).
+            SnapshotTargetItemCode = block?.TargetItemCode,
+            SnapshotTargetQuantity = block?.TargetQuantity ?? 1,
+            SnapshotCurrentQuantity = block?.CurrentQuantity ?? 0,
+            // A guide-page Link's display title, so a pinned guide-page Link renders its name on the
+            // HUD/Pin Tab (a "page:" target has no item to resolve a name from) (7.6).
+            SnapshotLinkLabel = block?.LinkLabel,
         });
     }
 

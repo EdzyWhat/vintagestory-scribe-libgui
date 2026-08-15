@@ -53,18 +53,34 @@ public sealed partial class ScribeModSystem
         handbookHarmony = null;
     }
 
-    /// <summary>Create a Tracker/Link on a Scribe surface from a Handbook "Add to Scribe" click
-    /// (add-tracker-link-tasks 3.3). Resolves the target surface in three tiers and hands off to
-    /// <see cref="ScribeDialogBase.TryAddFromHandbook"/> (which reuses the dialog's existing save path):
-    /// <list type="number">
-    /// <item>An <b>already-open</b> Scribe dialog (the player is looking at a book/lectern) — add to it.</item>
-    /// <item>Else <b>open a carried Scribe item</b> (the last-opened one, or the first in inventory) and add
-    /// to the freshly-opened dialog.</item>
-    /// <item>Else <b>no Scribe item at all</b> — a transient error telling the player they need one.</item>
-    /// </list>
-    /// Client-only (the Handbook is a client GUI). <paramref name="itemCode"/> is the collectible code the
-    /// injected link carried (e.g. <c>"game:ingot-copper"</c>).</summary>
+    /// <summary>Create a Tracker/Link on a Scribe surface from an <b>item</b> Handbook page's "Add to Scribe"
+    /// click (add-tracker-link-tasks 3.3). Resolves the target surface via <see cref="AddFromHandbookCore"/>
+    /// and hands the chosen dialog to <see cref="ScribeDialogBase.TryAddFromHandbook"/>. <paramref name="itemCode"/>
+    /// is the collectible code the injected link carried (e.g. <c>"game:ingot-copper"</c>).</summary>
     internal void AddFromHandbook(ScribeAddKind kind, string itemCode)
+        => AddFromHandbookCore(dialog => dialog.TryAddFromHandbook(kind, itemCode));
+
+    /// <summary>Create a guide-page <b>Link</b> on a Scribe surface from a Handbook guide/explainer page's
+    /// injected "Add Link" click (add-tracker-link-tasks 7.6). Same three-tier surface resolution as
+    /// <see cref="AddFromHandbook"/>, but hands off to <see cref="ScribeDialogBase.TryAddGuideLinkFromHandbook"/>
+    /// with the guide's <paramref name="pageCode"/> and display <paramref name="title"/> (a guide page has no
+    /// item to resolve a name from, so the title is captured here at click time).</summary>
+    internal void AddGuideLinkFromHandbook(string pageCode, string title)
+        => AddFromHandbookCore(dialog => dialog.TryAddGuideLinkFromHandbook(pageCode, title));
+
+    /// <summary>Resolve which Scribe surface receives a Handbook-originated add and run <paramref name="apply"/>
+    /// against it (add-tracker-link-tasks 3.3 / 7.6). Both the item path (<see cref="AddFromHandbook"/>) and the
+    /// guide-page path (<see cref="AddGuideLinkFromHandbook"/>) share this three-tier resolution, differing only
+    /// in what they do with the chosen dialog:
+    /// <list type="number">
+    /// <item>An <b>already-open</b> Scribe dialog (the player is looking at a book/lectern) — apply to it.</item>
+    /// <item>Else <b>open a carried WRITEABLE Scribe item</b> (the last-opened one, or the first in inventory)
+    /// and apply to the freshly-opened dialog. Read-only tablets (hardened/fired) are skipped so the append
+    /// never silently no-ops against one (feedback 6.2).</item>
+    /// <item>Else a transient error: "only read-only Scribe items" and "no Scribe item at all" are distinct.</item>
+    /// </list>
+    /// Client-only (the Handbook is a client GUI).</summary>
+    private void AddFromHandbookCore(Action<ScribeDialogBase> apply)
     {
         if (capi is null) return;
 
@@ -74,20 +90,19 @@ public sealed partial class ScribeModSystem
             .FirstOrDefault(d => d.IsOpened());
         if (openDialog is not null)
         {
-            openDialog.TryAddFromHandbook(kind, itemCode);
+            apply(openDialog);
             return;
         }
 
         // Tier 2: no dialog open — open a carried WRITEABLE Scribe item and add to it. OpenScribeDialog
-        // returns the dialog it opened; item surfaces grant editor access synchronously, so
-        // TryAddFromHandbook appends immediately. ResolveWriteableCarriedSlot skips read-only tablets
-        // (hardened/fired) so the append never silently no-ops against one — it lands on the next editable
-        // book instead (add-tracker-link-tasks feedback 6.2).
+        // returns the dialog it opened; item surfaces grant editor access synchronously, so the deferred
+        // append runs immediately. ResolveWriteableCarriedSlot skips read-only tablets (hardened/fired) so the
+        // append never silently no-ops against one — it lands on the next editable book instead (feedback 6.2).
         var writeable = ResolveWriteableCarriedSlot(out bool anyScribeItem);
         if (writeable is { Itemstack.Collectible: IScribeDocumentItem item })
         {
             var opened = item.OpenScribeDialog(writeable, capi);
-            opened?.TryAddFromHandbook(kind, itemCode);
+            if (opened is not null) apply(opened);
             return;
         }
 

@@ -38,6 +38,13 @@ public sealed class ScribePlayerSettings
     /// show/hide hotkey.</summary>
     public bool HudCollapsed { get; set; }
 
+    /// <summary>Whether the pinned-task HUD renders each Tracker/Link row's icon (the item's 3D icon or a
+    /// guide-page's book glyph). Default <c>true</c> (icons shown, the original behavior). When
+    /// <c>false</c>, those rows drop the icon and show only their text/counter — for players who prefer a
+    /// leaner, text-only HUD. A per-player, client-local display preference: never server-synced, and a
+    /// plain bool so <see cref="Normalized"/> leaves it untouched.</summary>
+    public bool HudShowIcons { get; set; } = true;
+
     /// <summary>Whether to silence Scribe's OWN LibGUI UI click sounds (the interaction sounds LibGUI's
     /// <c>Button</c> plays on tap — the Lectern action buttons and numeric +/- steppers). Default
     /// <c>false</c> (sounds on). When on, the Mod layer swaps a no-op sound player onto each Scribe

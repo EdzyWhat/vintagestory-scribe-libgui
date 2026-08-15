@@ -25,7 +25,9 @@ public sealed partial class ScribeModSystem
     /// </summary>
     public void SetPinForPlayer(IServerPlayer player, Guid docId, Guid taskId, bool pinned,
         string? fallbackText = null, bool fallbackDone = false,
-        ScribeBlockKind fallbackKind = ScribeBlockKind.Task, string? fallbackLinkTarget = null)
+        ScribeBlockKind fallbackKind = ScribeBlockKind.Task, string? fallbackLinkTarget = null,
+        string? fallbackTargetItemCode = null, int fallbackTargetQuantity = 1, int fallbackCurrentQuantity = 0,
+        string? fallbackLinkLabel = null)
     {
         if (sapi is null || pinStore is null) return;
 
@@ -36,6 +38,10 @@ public sealed partial class ScribeModSystem
             bool done = fallbackDone;
             ScribeBlockKind kind = fallbackKind;
             string? linkTarget = fallbackLinkTarget;
+            string? targetItemCode = fallbackTargetItemCode;
+            int targetQuantity = fallbackTargetQuantity;
+            int currentQuantity = fallbackCurrentQuantity;
+            string? linkLabel = fallbackLinkLabel;
             // Prefer the server's own authoritative document when available; fall back to the
             // client-supplied snapshot for items whose host is not registered server-side (e.g. Notebooks).
             if (_hostRegistry.TryGetValue(docId, out var host)
@@ -45,8 +51,13 @@ public sealed partial class ScribeModSystem
                 done = block.Done;
                 kind = block.Kind;
                 linkTarget = block.LinkTarget;
+                targetItemCode = block.TargetItemCode;
+                targetQuantity = block.TargetQuantity;
+                currentQuantity = block.CurrentQuantity;
+                linkLabel = block.LinkLabel;
             }
-            changed = pinStore.SetPin(player.PlayerUID, docId, taskId, sapi.World.Calendar.TotalHours, text, done, kind, linkTarget);
+            changed = pinStore.SetPin(player.PlayerUID, docId, taskId, sapi.World.Calendar.TotalHours, text, done, kind, linkTarget,
+                targetItemCode, targetQuantity, currentQuantity, linkLabel);
         }
         else
         {

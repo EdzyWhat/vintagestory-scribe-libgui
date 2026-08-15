@@ -128,11 +128,20 @@
       `TargetItemCode`. (Future Crafting tasks inherit this.)
 - [x] 7.5 (feedback 6.4) Focus the caret into the numeric stepper when a Tracker is freshly created from
       the Handbook, so the player can type the target immediately (reuse `ScribeNumericField.autoFocus`).
-- [ ] 7.6 (feedback 6.8) Inject "Add Link" on non-item Handbook Guide/explainer entries (today the
+- [x] 7.6 (feedback 6.8) Inject "Add Link" on non-item Handbook Guide/explainer entries (today the
       Harmony postfix hooks only the collectible builder, so links appear on item pages only). Requires
       VS-internals research into how non-item Handbook pages are built + whether an injection seam exists;
       teach the Link model + `OpenHandbookPage` to store/open a raw page code, not just an item code.
-      Tracker does NOT apply to guide pages (nothing to count) — Add Link only. **Deferred: research-gated.**
+      Tracker does NOT apply to guide pages (nothing to count) — Add Link only.
+      DONE: second Harmony postfix `ScribeGuidePageHandbookPatch` on `GuiHandbookTextPage.Init` (public
+      method; `comps` reached by field-ref) appends one "Add Link" on `CategoryCode=="guide"` pages →
+      `ScribeModSystem.AddGuideLinkFromHandbook(pageCode, title)` → shared `AddFromHandbookCore` 3-tier
+      resolution → `ScribeDialogBase.TryAddGuideLinkFromHandbook` → `scratch.AddGuideLink`. Model:
+      `ScribeLinkTarget` (`page:` prefix) + dedicated `LinkLabel` field (guide title has no item to
+      resolve from) → doc codec v6→v7 + pin codec v3→v4, both switched to progressive reads so shipped
+      v5 docs / v1 pins are never dropped. `OpenHandbookPage` opens a `page:`-prefixed code directly.
+      Display: new `scribebook` open-book glyph + `LinkLabel` name via shared `ScribeLinkIcon` /
+      `ScribeItemRef.ResolveDisplay` across read/editor/Pin-Tab/HUD. Core 375 green; needs in-game playtest.
 - [ ] 7.7 Manually re-test in-game after 7.1/7.2/7.4/7.5: (a) Tracker stepper sits left of the icon, ~3
       chars wide, and the hover pin/delete are now reachable on a Tracker row; (b) "Add to Scribe" while
       carrying only a fired/hardened tablet shifts to a writeable notebook, or shows the single locked
@@ -140,3 +149,94 @@
       completion unchanged; (d) creating a Tracker from the Handbook drops the caret in the stepper.
 - [ ] 7.8 (feedback 6.9, now unblocked by 7.1) Manually test the HUD: pin a Tracker and a Link, confirm
       both appear on the pinned-task HUD and behave (Link click opens its page; Tracker shows progress).
+- [x] 7.9 (feedback 6.9 root cause) Render pinned Tracker/Link rows item-shaped on the HUD **and** the Pin
+      Tab (they had shown blank — the pin row data was Task-shaped, but Tracker/Link carry empty text and
+      resolve their label from the item). "Full treatment": bump the pin-store codec v2→v3 (named
+      progressive-read migration — accept v1/v2/v3, read each version's trailing fields by threshold, so
+      shipped v1 pins are never dropped) to snapshot the Tracker's `TargetItemCode` + target/current
+      quantities in the pin; plumb the snapshot through `ScribeSetPinMessage`/`SetPinForPlayer`/
+      `ScribePinStore.SetPin` and refresh it in `ReconcileSnapshotsForActor`; render icon + name on both
+      surfaces, with the have/need counter on the **LEFT** for a Tracker (matching the read view; future
+      Crafting tasks inherit it). Name is a Handbook hyperlink on both surfaces; never touches completion.
+## 7b. Playtest refinements — round 2 (2026-08-15 feedback)
+
+Confirmed PASS this round (no action): guide-page "Add Link" appears + works; guide Link opens the
+page; old (v5/v1) saves load clean; HUD pins Tracker + Link (from an already-open surface); Tracker
+rows reachable (7.1 regression closed).
+
+- [x] 7.11a (feedback: article formatting) VTML does NOT decode HTML entities — the task-types article
+      rendered literal `&amp;` and `12&#47;20`. Replaced with literal `&` and `/` in the two
+      `craftinginfo-scribe-task-types-*` keys. Rule (add to VSAPI-NOTES): use literal `&`/`/` in VTML
+      copy; other article strings already do (lines 217/223) and render fine. DONE.
+- [x] 7.11b (feedback: pin-from-handbook) When a task is created from a Handbook link and the player
+      tries to PIN it while the Handbook is still open, the pin request only QUEUES (single-player server
+      time is paused while the Handbook is open) and gives no feedback until the Handbook closes. Editing/
+      completing/adjusting the tracker number all work because they apply optimistically; pinning does
+      not. Fix: apply the pin OPTIMISTICALLY on the local row (color it the pinned color immediately) and
+      reconcile when the server + HUD + Pin Tab catch up — mirror the existing optimistic-edit path
+      (`ApplyLocalOptimisticEdit` / `RefreshReadView`), don't rely on the server round-trip for feedback.
+      DONE: added a dialog-scoped `optimisticPin` overlay (`Dictionary<Guid,bool>` keyed by TaskId). The
+      dialog's `IsPinnedForMe` wrapper consults it first (so the read/editor row's pin tint flips at once);
+      `TogglePinWithPolicy` (and the tablet swap-out in `ReleasePinsToFitPolicy`) record the intended state
+      and call `RepaintPinsOptimistically` → the existing per-view `OnMyPinsChanged` reconcile+focus-rehome
+      path. `OnMyPinsChanged` now drops overlay entries the authoritative pushed set already agrees with
+      (no-op until the queued packet is processed on Handbook close, then the server cache resumes driving);
+      `OnGuiClosed` clears the overlay so a close-before-catch-up can't leak a stale entry into the reopen.
+- [ ] 7.11c (feedback: Handbook nav friction) The editor Add → Tracker/Link footer action (Handbook-
+      CLOSED path) currently opens our explainer entry, which dead-ends: to actually add a Tracker/Link
+      the player must return to search, type the item, open its page, scroll, and click. Confirmed a
+      search bar canNOT coexist with an entry page (two separate composers — `overviewGui` has the
+      "searchField", `detailViewGui` does not). Shortcut available: the `handbooksearch://<text>` link
+      protocol opens the Handbook overview with the search box already focused. DECISION (2026-08-15):
+      **open focused search** — speed-to-entry wins over the explainer dead-end. So the Add → Tracker/Link
+      footer action (Handbook-closed) opens the Handbook overview with the search box focused (drop the
+      explainer open). Discoverability handled elsewhere: cross-link the task-types explainer entry from
+      the other top-level Scribe guides (Getting Started / Editor Reference / Pinned HUD) so the teaching
+      page is still reachable — just not on the critical add path.
+- [x] 7.11d (feedback: book/guide glyph color) The `scribebook` guide-page-Link glyph renders too harsh
+      (near-black `OnSurface`) inside the Notebook. Render it `Primary` on the in-Notebook surfaces
+      (read/editor/Pin Tab); confirm the HUD tint still reads. DONE: read/editor/Pin-Tab call sites now pass
+      `colors.Primary` as the book tint; the HUD keeps `textStyle.Color` (near-white). The item icon ignores
+      the color, so only the guide-page glyph changes.
+- [x] 7.11e (feedback: glyph size) Shrink the `scribebook` guide-page-Link glyph ~20% in the Notebook
+      AND the HUD. DONE: `ScribeLinkIcon.BookGlyphScale = 0.8f` applied inside the shared builder, so every
+      surface (incl. HUD) shrinks the glyph uniformly.
+- [x] 7.11f (feedback: item-icon size + row height) Grow the Tracker/Link item icon (`ItemStackDisplay`)
+      ~10%, but make it row-height-NEUTRAL: perceived layout height 0, vertically centered, so a
+      Tracker/Link row is the same height as a single-line Task/Text/Note row (today icon rows are
+      taller). Applies to read/editor/Pin Tab/HUD. DONE: `ItemIconScale = 1.1f`; `ScribeLinkIcon.Build`
+      wraps the (larger) icon in a `Stack` sized by a single-text-line `SizedBox` spacer with the icon a
+      `Positioned` child forced to full size and offset up to center — RenderStack doesn't clip, so it paints
+      larger while contributing only one line of height. Line height via new
+      `ScribeRowControlNudge.TextLineHeight`. (The editor Tracker row is still stepper-tall by design.)
+- [x] 7.11g (feedback: tracker emphasis swap) Invert the Tracker counter emphasis: an IN-PROGRESS
+      (unsatisfied) Tracker should read STRONG (Primary / bold — the thing you're still working on), and a
+      SATISFIED (met) Tracker should read FADED (muted). Today it's backwards. Apply on read view + HUD +
+      Pin Tab counters. DONE via shared `ScribeTrackerCounterText.Build`: unsatisfied → strong (Primary/bold,
+      or HUD near-white/bold), satisfied → muted (OnSurfaceVariant, or HUD grey).
+- [x] 7.11h (feedback: tracker strikethrough) When a Tracker is satisfied, draw a VERY FAINT strikethrough
+      over ONLY the "N / N" counter section (e.g. "1/1 Notebook" → the "1/1" struck through, the name not).
+      LibGUI `TextDecoration` has no strikethrough (only None/Underline) → implement a small custom
+      thin-line overlay widget centered over the counter Text. DONE: `ScribeTrackerCounterText` wraps the
+      satisfied counter Text in a `Stack` with a `Positioned` thin `Container` line (left:0/right:0 spans the
+      counter width, centered on its line, ~0.6·muted alpha) — sizes to the counter, so it never strikes the
+      name.
+- [x] 7.11i (playtest) Re-test in-game after 7.11b–7.11h: pin-from-Handbook gives immediate feedback;
+      the Add-Tracker/Link nav shortcut; article renders `&`/`/` correctly; book glyph is Primary + smaller;
+      item icons larger but rows single-line height; in-progress Trackers strong / satisfied faded + struck.
+      DONE: 2026-08-15 playtest — 7.11d/e/f/g/h all confirmed good; 7.11b pin-from-Handbook gives immediate
+      feedback as designed; article `&`/`/` render correctly. All round-2 tests PASS.
+- [x] 7.11j (feedback: optional HUD icons) Make the HUD's Tracker/Link icon display (item icon OR guide-page
+      book glyph) optional via a client-local boolean Scribe Setting, default ON (icons shown = original
+      behavior). DONE: added `ScribePlayerSettings.HudShowIcons` (plain bool, default true, no Normalized
+      change); threaded through `HudPinsContent` as a `showIcons` ctor param (resolved from
+      `modSystem.MySettings.HudShowIcons` at the build site), so `BuildHudItemContent` omits the icon Widget
+      when off (counter + name still render). Added a "Show HUD icons" hugging checkbox at the top of the HUD
+      Appearance section in `ScribeSettingsContent` + `settings-hudshowicons`(-help) lang keys. Notebook/Pin-Tab
+      icons are unaffected (HUD-only, as requested). Restaged; needs a quick in-game toggle check.
+
+- [ ] 7.10 Follow-up (deferred): make the HUD Tracker counter fully LIVE (recompute have/need from the
+      viewer's carried inventory continuously) rather than the persisted snapshot refreshed on edit. The
+      count engine is dialog-bound today (freezes when no Scribe dialog is open); a live HUD counter needs
+      the HUD to subscribe to inventory changes + handle the completion trigger itself. Out of the 7.9
+      snapshot scope; the snapshot already keeps the HUD/Pin-Tab counters correct across edits.

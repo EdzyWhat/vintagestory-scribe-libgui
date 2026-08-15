@@ -98,11 +98,23 @@ public sealed class ScribeBlock
 
     /// <summary>For a <see cref="ScribeBlockKind.Link"/>: the Handbook target this task references,
     /// as a plain code string. Null for other kinds. Stored as a string, never a parsed
-    /// AssetLocation, to keep Core API-free (see the class remarks).</summary>
+    /// AssetLocation, to keep Core API-free (see the class remarks).
+    ///
+    /// <para>Two flavors, distinguished by <see cref="ScribeLinkTarget"/>: an <b>item</b> Link stores a
+    /// bare collectible code (e.g. <c>"game:ingot-copper"</c>) and derives its icon+name live from the
+    /// resolved item; a <b>guide-page</b> Link stores a <c>"page:"</c>-prefixed Handbook page code (e.g.
+    /// <c>"page:craftinginfo-knapping"</c>) — it has no item, so its display name lives in
+    /// <see cref="LinkLabel"/> and its icon is a generic book (add-tracker-link-tasks 7.6).</para></summary>
     public string? LinkTarget { get; set; }
 
+    /// <summary>For a guide-page <see cref="ScribeBlockKind.Link"/> (a <c>"page:"</c>-prefixed
+    /// <see cref="LinkTarget"/>): the guide's display title, captured from the Handbook page at creation
+    /// time (a guide page has no <c>ItemStack</c> to resolve a name from). Null for an item Link (whose
+    /// name resolves live from the item) and for non-Link kinds (add-tracker-link-tasks 7.6).</summary>
+    public string? LinkLabel { get; set; }
+
     public ScribeBlock(ScribeBlockKind kind, string text, bool done = false, int depth = 0, string? assignedToUid = null, Guid? taskId = null,
-        string? targetItemCode = null, int targetQuantity = 1, int currentQuantity = 0, string? linkTarget = null)
+        string? targetItemCode = null, int targetQuantity = 1, int currentQuantity = 0, string? linkTarget = null, string? linkLabel = null)
     {
         Kind = kind;
         Text = text;
@@ -115,6 +127,7 @@ public sealed class ScribeBlock
         TargetQuantity = targetQuantity;
         CurrentQuantity = currentQuantity;
         LinkTarget = linkTarget;
+        LinkLabel = linkLabel;
     }
 
     public bool IsTask => Kind == ScribeBlockKind.Task;

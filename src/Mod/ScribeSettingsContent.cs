@@ -254,6 +254,14 @@ internal sealed class ScribeSettingsContent : StatelessWidget
             mainAxisSize: MainAxisSize.Min,
             children: new Widget[]
             {
+                // Show icons on the HUD (add-tracker-link-tasks 7.11j): when on (the default), Tracker/Link
+                // rows render their item icon / guide-page book glyph; off gives a leaner text-only HUD.
+                // Hugs its label like PixelArtDisplay in the Window Appearance section.
+                HuggingCheckbox(
+                    "settings-hudshowicons", colors, scale,
+                    value: settings.HudShowIcons,
+                    onChanged: v => onMutate(s => s.HudShowIcons = v)),
+
                 LabeledControl(
                     "settings-hudanchor", colors, scale,
                     new Dropdown<ScribeHudAnchor>(

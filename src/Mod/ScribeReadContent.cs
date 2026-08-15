@@ -340,34 +340,37 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
     private Widget BuildItemContent(ColorScheme colors, ScribeRowStyle style)
     {
         float iconSize = style.ControlSize * 1.4f;
-        Widget icon = new ItemStackDisplay(Widget.Data.DisplayStack, width: iconSize, height: iconSize, renderSize: 48);
+        float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
+        // The guide-page book glyph renders Primary (not the near-black OnSurface) so it reads against the
+        // notebook parchment (feedback 7.11d); the item icon ignores the color.
+        Widget icon = ScribeLinkIcon.Build(Widget.Data.DisplayStack, Widget.Data.LinkTarget, iconSize, colors.Primary, lineHeight);
 
-        var rowChildren = new List<Widget> { icon };
+        // The name is a hyperlink that opens the referenced item's Handbook page and never touches completion
+        // (feedback 6.5 — the Tracker, like a Link, "should also open the notebook entry"). Primary-colored to
+        // read as tappable. Shared by both kinds so future Crafting tasks inherit the same affordance.
+        Widget nameLink = new Expanded(child: new GestureDetector(
+            onPress: e => { e.Handled = true; Widget.OnOpenLink(Widget.Data.TaskId); },
+            child: new Text(Widget.Data.Label, new TextStyle { Color = colors.Primary, SoftWrap = true })));
+
+        var rowChildren = new List<Widget>();
 
         if (Widget.Data.IsLink)
         {
-            // Hyperlink name — Primary-colored to read as tappable. Opening the page never toggles completion.
-            rowChildren.Add(new Expanded(child: new GestureDetector(
-                onPress: e => { e.Handled = true; Widget.OnOpenLink(Widget.Data.TaskId); },
-                child: new Text(Widget.Data.Label, new TextStyle { Color = colors.Primary, SoftWrap = true }))));
+            rowChildren.Add(icon);
+            rowChildren.Add(nameLink);
         }
-        else // Tracker: name + a live "have / need" counter that reads satisfied when the target is met.
+        else // Tracker: a live "have / need" counter on the LEFT, then the item icon + name.
         {
             bool satisfied = Widget.Data.CurrentQuantity >= Widget.Data.TargetQuantity;
-            // Like a Link, the Tracker's name is a hyperlink that opens the item's Handbook page and never
-            // touches completion (feedback 6.5 — "the tracker should also open the notebook entry"; future
-            // Crafting tasks inherit this). Primary-colored to read as tappable. The have/need counter to its
-            // right is plain text.
-            rowChildren.Add(new Expanded(child: new GestureDetector(
-                onPress: e => { e.Handled = true; Widget.OnOpenLink(Widget.Data.TaskId); },
-                child: new Text(Widget.Data.Label, new TextStyle { Color = colors.Primary, SoftWrap = true }))));
-            rowChildren.Add(new Text(
-                $"{Widget.Data.CurrentQuantity} / {Widget.Data.TargetQuantity}",
-                new TextStyle
-                {
-                    Color = satisfied ? colors.Primary : colors.OnSurfaceVariant,
-                    Weight = satisfied ? FontWeight.Bold : FontWeight.Normal,
-                }));
+            // Counter on the LEFT (feedback: "the tracked number on the left of the Tracker task"; future
+            // Crafting tasks inherit this). Emphasis is INVERTED (feedback 7.11g): an in-progress count reads
+            // STRONG (Primary/bold — the thing you're still collecting), a satisfied count reads FADED
+            // (muted) with a faint strikethrough over the number (7.11h). Shared helper so read/Pin/HUD match.
+            rowChildren.Add(ScribeTrackerCounterText.Build(
+                Widget.Data.CurrentQuantity, Widget.Data.TargetQuantity, satisfied,
+                strongColor: colors.Primary, mutedColor: colors.OnSurfaceVariant, lineHeight: lineHeight));
+            rowChildren.Add(icon);
+            rowChildren.Add(nameLink);
         }
 
         // Inset by the editor field's internal padding, matching the Task/Text row, so icon rows line up with
