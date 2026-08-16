@@ -93,9 +93,12 @@
       slot; break the block, confirm the item drops with its document intact. (Relog retention confirmed —
       a stored Scriptorium reloaded `filled=2/2`. Break-drop confirmed by playtester 2026-08-16: breaking a
       Scriptorium with held items drops them as expected.)
-- [ ] 4.5 Manually test open/close the tab repeatedly and re-open the dialog — confirm no leak /
+- [x] 4.5 Manually test open/close the tab repeatedly and re-open the dialog — confirm no leak /
       stale contents (WatchInventory rebuild works) and contents match across a second client viewing
       the same block.
+      — Playtest PASS 2026-08-16 (TESTING.md cf5d9d8b, a8990a8f): repeated open/close + re-open shows no
+      leak/stale contents; a just-stored item now renders in the slot immediately in dim light (fix =
+      subscribe `RebuildBody` to the `SlotController` in `EnsureSlotController`).
 - [x] 4.6 Confirm the tab appears ONLY on the Scriptorium (not Lectern/Notebook/Tablet). (Confirmed by
       playtester 2026-08-16: no regression — the Item Storage nav button shows only on the Scriptorium.
       Editor lock also confirmed unaffected.)

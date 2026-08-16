@@ -463,28 +463,31 @@ public abstract partial class ScribeDialogBase
     /// out against the light bubble; resolving through <see cref="ScribeTheme.For"/> keeps it correct in
     /// both modes (dark ink on light paper when pixel-art is on, light text on the dark global theme when
     /// off).</summary>
-    private Widget WithTooltip(string key, Widget child) =>
-        new Tooltip(
+    private Widget WithTooltip(string key, Widget child)
+    {
+        var theme = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay);
+        // Shade the whole tooltip — bubble AND content — by the live illumination shade at reduced hover
+        // strength (refine-scribe-hover-tooltips D2 + bug-1). Tooltips render in the global Overlay layer —
+        // OUTSIDE the body's own ScribeGlobalTint wrap (BuildBodyTree) — so without ShadedTooltip the bubble
+        // (and, before bug-1, its text) stays full-brightness while the body is dimmed by low light and
+        // visibly "sticks out." ShadedTooltip shades the bubble Background/Border via a Theme sandwich and the
+        // content via ForHover; see its remarks. NOTE: this is the shared entry point for every
+        // nav-button/title-bar tooltip, so Scribe Settings is excluded BY CONSTRUCTION — its dialog
+        // (ScribeSettingsDialog) builds a bare WindowFrame with no ScribeGlobalTint and its help tooltips don't
+        // route through here; don't "unify" the two without preserving that.
+        return ScribeGlobalTint.ShadedTooltip(
             child: child,
-            // Shade the tooltip content by the live illumination shade at reduced hover strength
-            // (refine-scribe-hover-tooltips D2). Tooltips render in the global Overlay layer — OUTSIDE the
-            // body's own ScribeGlobalTint wrap (BuildBodyTree) — so without this the bubble stays
-            // full-brightness while the body is dimmed by low light and visibly "sticks out." Mirrors the
-            // ScribeAddKindPicker drop-up-menu overlay, which re-wraps for the same reason. NOTE: this is the
-            // shared entry point for every nav-button/title-bar tooltip, so Scribe Settings is excluded BY
-            // CONSTRUCTION — its dialog (ScribeSettingsDialog) builds a bare WindowFrame with no ScribeGlobalTint
-            // and its help tooltips don't route through here; don't "unify" the two without preserving that.
-            content: ScribeGlobalTint.ForHover(
-                new Padding(
-                    EdgeInsets.All(6),
-                    child: new Text(Lang.Get("scribe:" + key), new TextStyle
-                    {
-                        FontSize = 13,
-                        SoftWrap = true,
-                        Color = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme.OnBackground,
-                    })),
-                currentShade),
-            useGlobalOverlay: true);
+            content: new Padding(
+                EdgeInsets.All(6),
+                child: new Text(Lang.Get("scribe:" + key), new TextStyle
+                {
+                    FontSize = 13,
+                    SoftWrap = true,
+                    Color = theme.ColorScheme.OnBackground,
+                })),
+            baseTheme: theme,
+            shade: currentShade);
+    }
 
     /// <summary>The tasks column's content builder — <c>protected virtual</c> so a subclass may supply
     /// its own single-view center instead of the <see cref="viewMode"/>-switched view (the tablet returns

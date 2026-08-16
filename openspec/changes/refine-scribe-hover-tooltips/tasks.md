@@ -54,13 +54,20 @@
 
 - [x] 4.1 `dotnet build` clean; `dotnet test` (Core) green — Core is untouched, regression guard only.
       — Build clean (0 warn/0 err); Core 375/375 pass.
-- [ ] 4.2 Restage, then manually test the item hover in the Scriptorium inventory: confirm the card is
+- [x] 4.2 Restage, then manually test the item hover in the Scriptorium inventory: confirm the card is
       compact (well under the old 350px panel), shows item name + title + per-type counts, and shows the
       "never opened" state for a freshly crafted (never-opened) Scribe item.
-- [ ] 4.3 Manually test item interaction through the custom slot: left-click grab/place, right-click
+      — Playtest PASS 2026-08-16 (TESTING.md 191d7fc3, "Good."). Follow-up from general notes: the
+      never-opened line now reads "No contents" (an opened-but-unedited item is indistinguishable from a
+      never-opened one, so the honest label covers both).
+- [x] 4.3 Manually test item interaction through the custom slot: left-click grab/place, right-click
       place-one/split, and wheel transfer all still work (click-to-grab / click-to-place model), and a
       non-Scribe item is still rejected (accept filter intact).
-- [ ] 4.4 Manually test hover shading in low/medium light: nav-button, title-bar, editor, pinned, and
+      — Playtest PASS 2026-08-16 (TESTING.md b367ae6e, "Works.").
+- [x] 4.4 Manually test hover shading in low/medium light: nav-button, title-bar, editor, pinned, and
       item-card hovers are all dimmed to match the body but slightly brighter (reduced hover strength);
       in full daylight hovers show no tint (identity).
-- [ ] 4.5 Confirm Scribe Settings hovers remain canonical (un-shaded) in low light.
+      — Playtest PASS 2026-08-16 (TESTING.md 1561eb80, "Works.") after the `ScribeGlobalTint.ShadedTooltip`
+      Theme-sandwich fix: card bubble + text now dim together to match the body; daylight shows no tint.
+- [x] 4.5 Confirm Scribe Settings hovers remain canonical (un-shaded) in low light.
+      — Playtest PASS 2026-08-16 (TESTING.md 4c02c4d9, "Works."): Settings help tooltips stay full-brightness.

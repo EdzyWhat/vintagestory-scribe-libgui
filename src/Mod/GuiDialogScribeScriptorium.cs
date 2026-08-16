@@ -26,11 +26,14 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     private readonly BlockEntityScriptorium scriptorium;
 
     /// <summary>Bridges the LibGUI slot widgets to the block-entity inventory: it turns pointer gestures on
-    /// a <see cref="FlatItemSlot"/> into the server-bound slot-activation packets and bumps its
-    /// <c>ChangeNotifier</c> on every <c>SlotModified</c> so the slot widgets repaint. Created lazily on the
-    /// first inventory-tab build and disposed in <see cref="OnGuiClosed"/> — NOT re-created per rebuild
-    /// (the reconcile architecture re-runs <see cref="BuildInventoryContent"/> every frame the tab is open,
-    /// so a per-build controller would leak a <c>SlotModified</c> subscription each time).</summary>
+    /// a slot into the server-bound slot-activation packets and fires its <c>ChangeNotifier</c> on every
+    /// <c>SlotModified</c>. We subscribe <see cref="ScribeDialogBase.RebuildBody"/> to that notifier (in
+    /// <see cref="EnsureSlotController"/>) so a slot change actually re-renders — our custom
+    /// <see cref="ScribeDocumentSlot"/> is stateless and, unlike the stock <see cref="FlatItemSlot"/>, does
+    /// not self-subscribe. Created lazily on the first inventory-tab build and disposed in
+    /// <see cref="OnGuiClosed"/> — NOT re-created per rebuild (the reconcile architecture re-runs
+    /// <see cref="BuildInventoryContent"/> every frame the tab is open, so a per-build controller would leak
+    /// a <c>SlotModified</c> subscription each time).</summary>
     private SlotController? slotController;
 
     public GuiDialogScribeScriptorium(BlockPos pos, IScribeDocumentHost host, ICoreClientAPI capi)
@@ -153,13 +156,27 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     }
 
     /// <summary>Lazily create the slot controller and start watching the inventory. Idempotent — safe to call
-    /// on every rebuild; only the first call allocates and subscribes.</summary>
+    /// on every rebuild; only the first call allocates and subscribes.
+    ///
+    /// <para><b>Rebuild the body on every slot change.</b> The stock <c>FlatItemSlot</c> gets its
+    /// "repaint when the stack changes" for free because its <c>ItemSlotGestureLayer</c> is a
+    /// <c>StatefulWidget</c> that subscribes to the controller (a <c>ChangeNotifier</c>) and calls
+    /// <c>SetState</c> on notify. Our <see cref="ScribeDocumentSlot"/> is a plain <c>StatelessWidget</c>
+    /// (it drops that gesture layer to swap the tooltip), so nothing rebuilds it when a slot's contents
+    /// change — a just-placed item stayed invisible until some UNRELATED rebuild (e.g. an illumination
+    /// shade change) happened to re-run the tree, which is exactly why it only appeared when the local
+    /// light shifted. Subscribing <see cref="ScribeDialogBase.RebuildBody"/> to the controller closes the
+    /// gap: any <c>SlotModified</c> now marks the body for reconcile via <c>SetState</c> (deferred, so it's
+    /// safe even when a click fires <c>SlotModified</c> mid-pointer-dispatch), and the reconcile reuses the
+    /// rest of the tree. The listener lives on the controller and is cleared when we dispose it in
+    /// <see cref="OnGuiClosed"/> (<c>ChangeNotifier.Dispose</c> clears its listeners).</para></summary>
     private SlotController EnsureSlotController()
     {
         if (slotController == null)
         {
             slotController = new SlotController(capi);
             slotController.WatchInventory(scriptorium.Inventory);
+            slotController.AddListener(RebuildBody);
         }
         return slotController;
     }

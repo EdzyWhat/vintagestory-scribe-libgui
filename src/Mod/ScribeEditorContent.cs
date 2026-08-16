@@ -589,7 +589,7 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                             // hover tooltip labels it (v1-release-checklist 9.5 — discoverability of Tab/Shift+Tab
                             // row nav). Inline tooltip (not the private WithTooltip helper in ScribeDialogBase),
                             // matching ScribePinnedContent's inline tooltip using the tab theme's OnBackground.
-                            new Tooltip(
+                            ScribeGlobalTint.ShadedTooltip(
                                 child: new Button(
                                     // 17f glyph, centered in a height-locked square box on the cuneiform path
                                     // (see IconButtonChild / iconButtonStyle above) so this matches the taller
@@ -598,17 +598,19 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                                     child: IconButtonChild("scribeinfo"),
                                     style: iconButtonStyle,
                                     onTap: _ => Widget.OnOpenEditorReference()),
-                                // Shade the tooltip to match the body in low light (refine-scribe-hover-tooltips D2) —
-                                // same reduced hover strength as the shared WithTooltip helper.
-                                content: ScribeGlobalTint.ForHover(new Padding(
+                                // Shade the whole tooltip — bubble + text — to match the body in low light
+                                // (refine-scribe-hover-tooltips D2 + bug-1); same reduced hover strength as the
+                                // shared WithTooltip helper.
+                                content: new Padding(
                                     EdgeInsets.All(6),
                                     child: new Text(Lang.Get("scribe:scribe-gui-editor-reference-tooltip"), new TextStyle
                                     {
                                         FontSize = 13,
                                         SoftWrap = true,
                                         Color = colors.OnBackground,
-                                    })), Widget.CurrentShade),
-                                useGlobalOverlay: true));
+                                    })),
+                                baseTheme: Theme.Of(context),
+                                shade: Widget.CurrentShade));
 
         // Settings gear — tablet only (add-tablet-cuneiform-chrome). The always-edit tablet has no nav
         // column to reach Settings through, so a gear sits just right of the ⓘ info button, styled
@@ -616,20 +618,21 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
         // when OnOpenSettings is null (the tabbed dialogs, which reach Settings via their nav column).
         if (Widget.OnOpenSettings is { } openSettings)
         {
-            buttons.Add(new Tooltip(
+            buttons.Add(ScribeGlobalTint.ShadedTooltip(
                 child: new Button(
                     child: IconButtonChild("scribegear"),
                     style: iconButtonStyle,
                     onTap: _ => openSettings()),
-                content: ScribeGlobalTint.ForHover(new Padding(
+                content: new Padding(
                     EdgeInsets.All(6),
                     child: new Text(Lang.Get("scribe:scribe-gui-nav-settings"), new TextStyle
                     {
                         FontSize = 13,
                         SoftWrap = true,
                         Color = colors.OnBackground,
-                    })), Widget.CurrentShade),
-                useGlobalOverlay: true));
+                    })),
+                baseTheme: Theme.Of(context),
+                shade: Widget.CurrentShade));
         }
 
         return buttons.ToArray();

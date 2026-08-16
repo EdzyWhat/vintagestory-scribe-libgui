@@ -131,6 +131,72 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       lock holds and that edits made by the editor sync live to the other client. *(add-scriptorium-block 4.8)*
       - **Confirmed 2026-08-14** via playtest: user reported all Scriptorium in-game checks pass.
 
+## refine-scribe-hover-tooltips
+
+> v1.2 hover-tooltip refinements: Scribe-owned tooltips (nav / title-bar / editor / pinned) now inherit
+> the illumination shade at a reduced 90% strength (10% less darkening) so transient hovers track the
+> body's light without going as dark; plus a compact custom item-summary card + `ScribeDocumentSlot` on
+> the Scriptorium inventory. Fully relaunch the client first.
+
+- [x] `191d7fc3` **Item hover card is compact.** In the Scriptorium inventory tab, hover a stored Scribe
+      item — confirm the summary card is compact (well under the old 350px panel), shows item name + title +
+      per-type counts, and reads "never opened" for a freshly crafted, never-opened Scribe item.
+      *(refine-scribe-hover-tooltips 4.2)*
+      - **Confirmed 2026-08-16** (playtest report, "Good."): compact card with name/title/per-type counts
+        and the no-contents state all render as specified.
+      - _Follow-up applied 2026-08-16:_ a wording nit from the report's general notes — an item that HAS
+        been opened but has no tasks showed "Not yet opened", which is misleading. A document is only
+        persisted on first edit, so opened-but-unedited and never-opened are indistinguishable; the
+        `hover-card-never-opened` string now reads "No contents" (honest for both). Not a failure of 4.2.
+- [x] `b367ae6e` **Custom slot interaction.** Through the Scriptorium inventory slot: left-click grab/place,
+      right-click place-one/split, and wheel transfer all still work (click-to-grab / click-to-place model),
+      and a non-Scribe item (e.g. a plank) is still rejected. *(refine-scribe-hover-tooltips 4.3)*
+      - **Confirmed 2026-08-16** (playtest report, "Works."): grab/place, place-one/split, and wheel
+        transfer all function through the custom slot; non-Scribe items rejected.
+- [x] `1561eb80` **Hover shading in low light.** In dim/medium light, confirm nav-button, title-bar, editor,
+      pinned, AND item-card hovers are all dimmed to match the body (just slightly brighter — the reduced hover
+      strength); in full daylight hovers show no tint. *(refine-scribe-hover-tooltips 4.4)*
+      - **Confirmed 2026-08-16** (playtest report, "Works."): after the `ScribeGlobalTint.ShadedTooltip` fix,
+        the item-card bubble AND its text now dim together to match the body in low light; full daylight shows
+        no tint. Fix = a Theme "sandwich" — wrap the whole Tooltip in a Theme whose scheme has Background+Border
+        pushed through `ShadeColor` (same per-channel brightness×tint as `ForHover`), and re-wrap the trigger
+        child in the UNSHADED base theme so it doesn't darken twice; applied at all 5 tooltip sites.
+      - _History 2026-08-16 (was broken):_ the body dimmed but the hover CARD stayed full-brightness, because
+        the card's tan bubble BACKGROUND is drawn by the `Tooltip` widget itself (`TooltipState._buildOverlay`
+        reads `Background`/`Border` from the `Theme` above it in the MAIN tree), OUTSIDE the
+        `ScribeGlobalTint.ForHover` content wrap — so only the inner text received the shade. Not a regression
+        from the fix-2 `MarkNeedsPaint` change (that is purely additive).
+- [x] `4c02c4d9` **Settings hovers stay canonical.** In low light, open Scribe Settings and hover its help
+      tooltips — confirm they are NOT shaded (stay full-brightness), unlike the body/nav hovers.
+      *(refine-scribe-hover-tooltips 4.5)*
+      - **Confirmed 2026-08-16** (playtest report, "Works."): Settings help tooltips stay full-brightness in
+        low light — the ShadedTooltip change is scoped to the body/nav surfaces and correctly excludes the
+        bare-WindowFrame Settings dialog by construction.
+
+## add-scriptorium-inventory
+
+> v1.2 Scriptorium inventory tab: a 2-slot, server-authoritative `InventoryGeneric` accepting ONLY Scribe
+> items (Notebook / Tablet / Clockmaker + picked-up writing stations), for the copy/paste gesture. Fully
+> relaunch the client first.
+
+- [x] `cf5d9d8b` **Tab open/close is clean.** Open/close the Scriptorium inventory tab repeatedly and re-open
+      the dialog — confirm no leak / stale contents (the WatchInventory rebuild works), and the contents match
+      across a second client viewing the same block. *(add-scriptorium-inventory 4.5)*
+      - **Confirmed 2026-08-16** (playtest report, "Works."): repeated open/close + re-open shows no leak or
+        stale contents; the WatchInventory rebuild holds.
+- [x] `a8990a8f` **Stored item shows immediately in dim light.** Standing in dim light, place a Scribe item
+      into a Scriptorium inventory slot — confirm the stored item renders in the slot IMMEDIATELY, not only
+      after the ambient light happens to change. *(add-scriptorium-inventory 4.5)*
+      - **Confirmed 2026-08-16** (playtest report, "Looks good!"): a just-placed item now renders immediately
+        in dim light. Fix = subscribe `RebuildBody` to the `SlotController` in `EnsureSlotController`
+        (`slotController.AddListener(RebuildBody)`), so any `SlotModified` marks the body for reconcile
+        (deferred SetState — safe mid-pointer-dispatch); listener torn down on `OnGuiClosed`.
+      - _History 2026-08-16 (was broken):_ a just-stored item was invisible until the local light changed. The
+        confirmed cause (via decompiling stock `ItemSlotGestureLayer`, a StatefulWidget that subscribes to the
+        controller and `SetState`s, vs. our plain-StatelessWidget `ScribeDocumentSlot`): nothing rebuilt our
+        slot on a stack change, so it only appeared when an unrelated rebuild (a shade change) re-ran the tree.
+        An earlier SaveLayer-paint-cache hypothesis was wrong in mechanism.
+
 ## reconcile-animating-surfaces
 
 > §3.7 editor proof gate (design D2) for the ForceRebuild→in-place-reconcile conversion. All must hold,
@@ -219,7 +285,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       *(reconcile-animating-surfaces 5.3)*
       - **Confirmed 2026-08-10** (playtest submission 2026-08-10T21-36-38): "Works." Pin tint repaints
         in place; scroll + hover hold.
-- [ ] `db3c8ff4` **Read checkbox sticks.** Toggle a Read-view checkbox — it sticks and does NOT revert
+- [x] `db3c8ff4` **Read checkbox sticks.** Toggle a Read-view checkbox — it sticks and does NOT revert
       on the next external resync (optimistic `done` survives a chrome-only reconcile).
       *(reconcile-animating-surfaces 5.3)*
       - **Still broken 2026-08-10** (playtest re-confirmed 2026-08-10, verbal — root cause narrowed):
@@ -291,6 +357,15 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Confirmed 2026-08-11** via playtest: "The flash is gone!" With Pixel Art Display OFF the flash does
         NOT occur → per the discriminator this ROOT-CAUSES the white flash to backdrop-bitmap paint. Advances
         the change to §2 (the fix now targets the backdrop-bitmap paint path).
+- [ ] `44e70c5f` **Frame-trace the open flash.** When the flash reproduces, DEBUG frame-trace the first open
+      (fresh session) of each backdropped surface (Lectern/Notebook/Clockmaker/Tablet/wax) — confirm no
+      one-frame opaque-terrain dropout; Settings + `.ui` showcase unregressed. *(fix-dialog-open-white-flash 4.1)*
+      - **Backlogged 2026-08-16** (memory white-flash-is-world-render-stall): the change is PARKED — the flash
+        is INTERMITTENT with no reliable repro and the root cause is still unknown. Three theories (cold upload,
+        first-draw cost, driver shader-cache warmup) were falsified by measurement; the Route-1 pre-upload fix
+        was a net regression and was reverted. RESUME only once a reliable repro exists, THEN frame-trace the
+        open frame — do not write another speculative fix first. (Tasks 4.2/4.3 test the reverted `FromTexture`
+        path + are bookkeeping, so they're not listed here.)
 
 ## lectern-task-text-clip (RELEASE.md A1)
 

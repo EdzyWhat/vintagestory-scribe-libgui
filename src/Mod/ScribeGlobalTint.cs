@@ -1,7 +1,10 @@
+using System;                     // TimeSpan
 using System.Collections.Generic;
 using Gui.Core.Framework;         // RenderProxyBox, RenderObject
 using Gui.Rendering;              // PaintingContext
-using Gui.Widgets.Framework;      // SingleChildWidget, Widget, Key
+using Gui.Widgets.Framework;      // SingleChildWidget, Widget, Key, Theme, ThemeData, ColorScheme
+using Gui.Widgets.Overlay;        // Tooltip
+using OpenTK.Mathematics;         // Vector4
 using SkiaSharp;                  // SKPaint, SKColorFilter, SKColors
 
 namespace Scribe;
@@ -81,6 +84,68 @@ internal sealed class ScribeGlobalTint : SingleChildWidget
     /// <c>keep = 1</c> → unchanged, <c>keep = 0</c> → identity. So a dark <c>0.5</c> at <c>keep = 0.9</c>
     /// becomes <c>0.55</c> (less darkening), and an identity <c>1.0</c> stays <c>1.0</c>.</summary>
     private static float TowardIdentity(float v, float keep) => 1f + (v - 1f) * keep;
+
+    /// <summary>Shade one solid RGB color (a tooltip bubble's <c>Background</c>/<c>Border</c>) by the
+    /// illumination shade at <see cref="HoverStrength"/> — the same per-channel brightness×tint that
+    /// <see cref="ForHover"/>'s color matrix applies to overlay CONTENT (see <see cref="FilterFor"/>). Alpha
+    /// is preserved so a translucent border stays translucent.</summary>
+    public static Vector4 ShadeColor(Vector4 color, ScribeAmbientLightSampler.Shade shade)
+    {
+        float b = TowardIdentity(shade.Brightness, HoverStrength);
+        return new Vector4(
+            color.X * b * TowardIdentity(shade.TintR, HoverStrength),
+            color.Y * b * TowardIdentity(shade.TintG, HoverStrength),
+            color.Z * b * TowardIdentity(shade.TintB, HoverStrength),
+            color.W);
+    }
+
+    /// <summary>Build a <see cref="Tooltip"/> whose BUBBLE (not just its text) tracks the illumination shade.
+    /// The stock <see cref="Tooltip"/> draws its own bubble <c>Container</c>, reading <c>Background</c> and
+    /// <c>Border</c> from the nearest <see cref="Theme"/> ABOVE the tooltip in the MAIN tree — colors that sit
+    /// outside the body's <see cref="ScribeGlobalTint"/> layer AND outside <see cref="ForHover"/> (which shades
+    /// only the content). So before this, in low light the bubble text dimmed while the parchment bubble behind
+    /// it stayed full-brightness and visibly "stuck out" (refine-scribe-hover-tooltips bug-1).
+    ///
+    /// <para>The fix is a Theme "sandwich": wrap the whole Tooltip in a Theme whose scheme is
+    /// <paramref name="baseTheme"/> with <c>Background</c>+<c>Border</c> pushed through <see cref="ShadeColor"/>,
+    /// so the bubble reads the shaded colors. The trigger <paramref name="child"/> is a main-tree descendant of
+    /// that wrapper and would otherwise inherit the shaded scheme and darken TWICE (once here, once again in the
+    /// body's own tint layer), so it is re-wrapped in the unshaded <paramref name="baseTheme"/>. The overlay
+    /// content mounts in the global overlay root (<c>GuiGlobalOverlay</c>), so it never sees this wrapper — we
+    /// shade it directly via <see cref="ForHover"/> here, and callers pass RAW content.</para>
+    ///
+    /// <para>At full daylight the hover shade is the identity, so both the content <see cref="ForHover"/> and the
+    /// bubble colors are unchanged — we skip the sandwich entirely and return a plain Tooltip, matching the
+    /// pre-illumination look with zero extra widgets.</para></summary>
+    public static Widget ShadedTooltip(Widget child, Widget content, ThemeData baseTheme,
+        ScribeAmbientLightSampler.Shade shade, TimeSpan? waitDuration = null)
+    {
+        Widget shadedContent = ForHover(content, shade);
+
+        // Identity hover shade → bubble colors unchanged → the extra Theme sandwich is a no-op. Return the plain
+        // Tooltip (the child already sits under the body's own baseTheme, so its colors are correct as-is).
+        if (IsIdentity(
+                TowardIdentity(shade.Brightness, HoverStrength),
+                TowardIdentity(shade.TintR, HoverStrength),
+                TowardIdentity(shade.TintG, HoverStrength),
+                TowardIdentity(shade.TintB, HoverStrength)))
+            return new Tooltip(child: child, content: shadedContent,
+                waitDuration: waitDuration, useGlobalOverlay: true);
+
+        ColorScheme shadedScheme = baseTheme.ColorScheme with
+        {
+            Background = ShadeColor(baseTheme.ColorScheme.Background, shade),
+            Border = ShadeColor(baseTheme.ColorScheme.Border, shade),
+        };
+        // Only Background+Border of this scheme are ever read (by the bubble Container); the constructor
+        // re-derives the other styles but nothing in the tooltip path consumes them.
+        return new Theme(new ThemeData(colorScheme: shadedScheme),
+            child: new Tooltip(
+                child: new Theme(baseTheme, child: child),  // restore unshaded theme for the trigger
+                content: shadedContent,
+                waitDuration: waitDuration,
+                useGlobalOverlay: true));
+    }
 
     /// <summary>Cached brightness+tint color-matrix filters keyed by the packed quantized shade. Never
     /// disposed (see class remarks — only a handful of distinct buckets ever exist).</summary>

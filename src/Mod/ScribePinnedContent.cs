@@ -261,19 +261,19 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
         // size is a deliberate delta and stays explicit.
         Widget policyCaption = new Text(Lang.Get("scribe:settings-completionpolicy"),
             new TextStyle { FontSize = 13 * scale, Color = colors.OnSurfaceVariant });
-        policyCaption = new Tooltip(
+        policyCaption = ScribeGlobalTint.ShadedTooltip(
             child: policyCaption,
-            // Shade the tooltip to match the body in low light (refine-scribe-hover-tooltips D2), same reduced
-            // hover strength as the shared WithTooltip helper.
-            content: ScribeGlobalTint.ForHover(new Padding(
+            // Shade the whole tooltip — bubble + text — to match the body in low light
+            // (refine-scribe-hover-tooltips D2 + bug-1), same reduced hover strength as the shared WithTooltip
+            // helper. This tooltip renders OUTSIDE the tab subtree (task 3.1), so the DefaultTextStyle ancestor
+            // does NOT reach it — it must keep an explicit task font.
+            content: new Padding(
                 EdgeInsets.All(6),
-                // useGlobalOverlay: this tooltip renders OUTSIDE the tab subtree (task 3.1), so the
-                // DefaultTextStyle ancestor does NOT reach it — it must keep an explicit task font.
                 child: new Text(
                     Lang.Get("scribe:settings-completionpolicy-help"),
                     new TextStyle { FontSize = 13 * scale, Color = colors.OnSurface, SoftWrap = true, FontFamily = taskFont })),
-                Widget.CurrentShade),
-            useGlobalOverlay: true);
+            baseTheme: Theme.Of(context),
+            shade: Widget.CurrentShade);
 
         // Start from the theme's dropdown style and swap in the task font on its shared TextStyle (used
         // for both the trigger button label and the menu items). Kept explicit (not inherited): the

@@ -23,7 +23,7 @@ namespace Scribe;
 /// inventory (refine-scribe-hover-tooltips D3). It renders the same slot box + item stack, but swaps the
 /// stock item tooltip — a fixed 350px panel of name/description/durability/quantity, baked un-injectably into
 /// <c>ItemSlotGestureLayer</c> — for a small Scribe <b>document summary card</b> (name, title, per-kind
-/// counts, or a "never opened" state; see <see cref="BuildSummaryCard"/>).
+/// counts, or a "No contents" state; see <see cref="BuildSummaryCard"/>).
 ///
 /// <para><b>Why a bespoke slot.</b> The stock tooltip is not reachable while using <see cref="FlatItemSlot"/>
 /// (its content and 350px width are hard-coded), so the only way to control both the hover content and its
@@ -99,15 +99,18 @@ internal sealed class ScribeDocumentSlot : StatelessWidget
         // wait so no bubble ever appears (the stock slot uses the same trick).
         ItemStack? stack = slot?.Itemstack;
         bool hasItem = stack?.Collectible != null;
-        Widget content = hasItem
-            ? ScribeGlobalTint.ForHover(BuildSummaryCard(stack!, colors), shade)
-            : new SizedBox();
+        Widget content = hasItem ? BuildSummaryCard(stack!, colors) : new SizedBox();
 
-        return new Tooltip(
+        // ShadedTooltip shades the summary-card bubble (Background/Border) AND its content by the live
+        // illumination shade, so the card tracks the body in low light instead of the bubble "sticking out"
+        // full-bright (refine-scribe-hover-tooltips bug-1). It wraps content in ForHover internally, so we pass
+        // the raw card. Empty slots get a 1h wait so no bubble ever appears (the stock slot uses the same trick).
+        return ScribeGlobalTint.ShadedTooltip(
             child: gesture,
             content: content,
-            waitDuration: hasItem ? CardDelay : TimeSpan.FromHours(1),
-            useGlobalOverlay: true);
+            baseTheme: Theme.Of(context),
+            shade: shade,
+            waitDuration: hasItem ? CardDelay : TimeSpan.FromHours(1));
     }
 
     private void OnEnter(PointerEvent e)
@@ -141,8 +144,11 @@ internal sealed class ScribeDocumentSlot : StatelessWidget
     /// A pure read of the stack's stored document, so the copy/paste change can reuse it as the
     /// import/export preview rather than re-deriving counts:
     /// <list type="bullet">
-    /// <item><b>No document</b> (freshly crafted, never opened): item name + an explicit "never opened" line —
-    /// NOT a title placeholder + all-zero counts, which would imply an opened-but-empty document.</item>
+    /// <item><b>No document</b> (freshly crafted, or opened but never edited): item name + a plain "No contents"
+    /// line. We deliberately do NOT say "not yet opened" — a document is only persisted on first edit, so an
+    /// opened-but-untouched item carries no bytes and is indistinguishable from a never-opened one; "No contents"
+    /// is the honest label for both. Also NOT a title placeholder + all-zero counts, which would imply an
+    /// opened-but-empty document.</item>
     /// <item><b>Has a document</b>: item name, the document title (untitled placeholder when it is the model
     /// default), and one line per present block kind with its count.</item>
     /// </list></summary>
