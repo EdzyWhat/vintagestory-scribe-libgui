@@ -333,10 +333,6 @@ public class GuiDialogScribeTablet : ScribeDialogBase
     /// writes directly into the held ItemStack, exactly like the Notebook.</summary>
     protected override void SendFlushPacket(byte[] documentBytes)
     {
-        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeNotebookSaveMessage
-        {
-            DocIdBytes = host.Document.DocId.ToByteArray(),
-            DocumentBytes = documentBytes,
-        });
+        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(BuildItemSavePacket(documentBytes));
     }
 }

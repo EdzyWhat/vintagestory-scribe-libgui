@@ -721,6 +721,27 @@ public abstract partial class ScribeDialogBase
         }
     }
 
+    /// <summary>Build the item-surface save packet (<see cref="ScribeNotebookSaveMessage"/>) shared by the
+    /// Notebook and Tablet dialogs. Stamps the host's bound slot identity (inventory id + slot index) onto
+    /// the packet WHEN the host exposes one, so the server writes the document back to the exact slot the
+    /// dialog is editing rather than re-deriving it from the player's active hand — the misroute that let a
+    /// Handbook add land on a different in-hand item (add-tracker-link-tasks 7.16). A host with no resolvable
+    /// slot identity sends none, and the server falls back to the active-hand slot (legacy behavior).</summary>
+    protected ScribeNotebookSaveMessage BuildItemSavePacket(byte[] documentBytes)
+    {
+        var msg = new ScribeNotebookSaveMessage
+        {
+            DocIdBytes = host.Document.DocId.ToByteArray(),
+            DocumentBytes = documentBytes,
+        };
+        if (host is NotebookHost nb && nb.SlotInventoryId is { } invId && nb.SlotId >= 0)
+        {
+            msg.TargetInventoryId = invId;
+            msg.TargetSlotId = nb.SlotId;
+        }
+        return msg;
+    }
+
     /// <summary>Sends the serialized document bytes to the server for authoritative storage.
     /// Override in subclasses to use a different packet type (e.g. <see cref="ScribeNotebookSaveMessage"/>
     /// for the Notebook vs. <see cref="ScribeEditDocumentMessage"/> for the Lectern).</summary>

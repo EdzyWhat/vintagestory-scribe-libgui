@@ -263,18 +263,30 @@ hyperlinks (item/guide Links) never change completion; HUD pins render properly;
       The correct end state is the EDITOR view (the player must be able to set the new Tracker's count / a
       future Crafting task's inputs), NOT the read view — an earlier "return to read view after applying"
       attempt was wrong on both counts (wrong target view AND it didn't fix the invisibility). REAL ROOT
-      CAUSE (ordering bug, verified by reading LibGUI `Gui.dll`): `EnterEditorMode` called `ForceRebuild()`
+      CAUSE — TWO stacked bugs:
+      (1) An ordering bug (verified by reading LibGUI `Gui.dll`): `EnterEditorMode` called `ForceRebuild()`
       and only THEN `FlushPendingHandbookAppend()`, so the fresh editor tree was built from the PRE-append
       scratch; the append's own `RebuildBody()` in-place reconcile no-ops right after Mount (the body's
       `GlobalKey` state isn't resolvable in the same synchronous call), so the new row only appeared on the
-      next full rebuild — i.e. a manual view swap. (Ruled out the focus/active-window theory: LibGUI's
-      `FramePipeline.Run` lays out + paints every open dialog whenever `NeedsLayout` is set, NOT gated on
-      `Focused`/`IsActiveWindow`.) FIX (no new packet, no `IsSinglePlayer` gate — works in MP too): apply the
-      deferred append BEFORE the `ForceRebuild` in `EnterEditorMode`, so the rebuild renders the mutated
-      scratch and the new row is present immediately, landing the player in a live editor view. Applies
-      uniformly to the async block grant (Lectern/Scriptorium) and the synchronous item entry (Notebook/wet
-      Tablet). Verify: the Lectern shows the new Tracker LIVE in the editor view (no view swap needed) AND
-      the Notebook still adds correctly.
+      next full rebuild — i.e. a manual view swap. FIX: apply the deferred append BEFORE the `ForceRebuild` in
+      `EnterEditorMode`, so the rebuild renders the mutated scratch. (Ruled out the focus/active-window theory:
+      LibGUI's `FramePipeline.Run` lays out + paints every open dialog whenever `NeedsLayout` is set, NOT gated
+      on `Focused`/`IsActiveWindow`.)
+      (2) After (1), a BLOCK surface (Lectern/Scriptorium) STILL only updated when the Handbook was closed —
+      root cause (player-diagnosed): in PURE singleplayer, opening the vanilla Handbook PAUSES the integrated
+      server, so a block's editor-lock round-trip (request → grant → `EnterEditorMode`) can't complete until
+      unpause (Handbook close). Item surfaces (Notebook/wet Tablet) enter the editor synchronously with no
+      round-trip, so they were never affected. FIX (no new packet): a Handbook append on a block in pure
+      singleplayer (`capi.IsSinglePlayer && !capi.OpenedToLan`, lock free) now enters the editor LOCALLY at
+      once — safe because no other client can contend the lock in SP — and still sends the lock request +
+      flush so the server records it authoritatively on unpause. The delayed grant reply (carrying the
+      pre-flush doc) is reconciled by `optimisticEditorEntry`: `EnterEditorMode` keeps the optimistic scratch
+      and re-flushes it instead of reseeding (reuses the lost-lock recovery branch). Multiplayer is excluded
+      (server not paused; lock can be genuinely refused → keep the authoritative async grant).
+      VERIFIED IN-GAME 2026-08-15: the Lectern shows the new Tracker/Link LIVE in the editor view the instant
+      it's added from the Handbook (no Handbook close / view swap needed); multiplayer confirmed unaffected by
+      the SP-only optimistic branch. (An earlier "return to read view" attempt was wrong on both the target
+      view and the fix.)
 - [x] 7.14 (feedback: overflow count) Show the true carried count when it exceeds the target ("100 / 8", not
       "8 / 8"). DONE: removed the upper clamp on `ScribeBlock.CurrentQuantity` (now floored at ≥ 0 only) and
       the target-lowering re-clamp on `TargetQuantity` (lowering the target no longer touches the live count);
@@ -291,8 +303,34 @@ hyperlinks (item/guide Links) never change completion; HUD pins render properly;
       → "Tracker Task Completion Behavior"; `scribe-trackercompletion-complete` "Complete it" → "Complete it
       (and follow task completion behavior)".
 
-- [ ] 7.10 Follow-up (deferred): make the HUD Tracker counter fully LIVE (recompute have/need from the
-      viewer's carried inventory continuously) rather than the persisted snapshot refreshed on edit. The
-      count engine is dialog-bound today (freezes when no Scribe dialog is open); a live HUD counter needs
-      the HUD to subscribe to inventory changes + handle the completion trigger itself. Out of the 7.9
-      snapshot scope; the snapshot already keeps the HUD/Pin-Tab counters correct across edits.
+- [x] 7.10 Follow-up: make the HUD Tracker counter fully LIVE (recompute have/need from the viewer's carried
+      inventory continuously) rather than the persisted snapshot refreshed on edit. IMPLEMENTED: the HUD now
+      runs its own count engine off its existing 250ms `OnTick` (no separate `SlotModified` subscription — it
+      folds into the tick the HUD already runs for pin windows). `HudScribePins.RecomputeHudTrackers` recounts
+      each pinned Tracker via the shared `ScribeTrackerCounter` (item/block resolve cached in
+      `hudTrackerIngredientCache`, carried-stack sum), stores the value in `liveTrackerCounts` (keyed by pin
+      identity, pruned to the live pin set), overrides the snapshot for display (`HudTrackerHave`), sends the
+      server-authoritative `ScribeSetTrackerQuantityMessage`, and fires the rising-edge tracker-completion
+      setting (`ApplyHudTrackerCompletion`, guarded by `DisplayedDone` so a drop-then-refill can't un-complete).
+      DE-DUP: a doc open in ANY Scribe dialog (`ScribeDialogBase.OpenDocumentId`) is display-only on the HUD —
+      the read view's own engine drives it (no double-send/double-fire), and the editor view must not be fought
+      (external count write vs. scratch autosave). The `liveTrackerCounts` override doubles as the display cache
+      so the counter never waits on the server round-trip / snapshot convergence.
+- [x] 7.16 (feedback: Handbook add misrouted onto in-hand read-only tablet) BUG: a Handbook "Add to Scribe"
+      add that opened a carried WRITEABLE book while a doc-less read-only (e.g. fired) tablet sat in the active
+      hand wrote the new task's document onto the FIRED TABLET server-side (corrupting it) and dropped the task
+      from the book the client had optimistically shown it on. ROOT CAUSE: the write target was decided TWICE —
+      the client tier-2 resolver (`AddFromHandbookCore` → `ResolveWriteableCarriedSlot`, correct: skips read-only)
+      chose the book, but the server (`OnServerReceivedNotebookSave`) IGNORED that and re-derived the target as
+      `fromPlayer.Entity.ActiveHandItemSlot`, whose DocId guard passes for a doc-less tablet. FIX: make the
+      client's decision authoritative on the wire. Added `TargetInventoryId`/`TargetSlotId` to
+      `ScribeNotebookSaveMessage` (+ the same to `ScribeNotebookOpenedMessage` for the sibling history-mislabel);
+      the item dialogs stamp their bound slot via the shared `ScribeDialogBase.BuildItemSavePacket`
+      (`NotebookHost.SlotInventoryId`/`SlotId`); the server resolves that EXACT slot through one shared
+      `ResolveItemPacketSlot` helper (identity-first, active-hand only as a legacy fallback), used by both the
+      save and opened handlers so "which slot does this item packet target" is answered in ONE place. Added a
+      hard `IsSlotWriteable` guard in the save handler so a document can never land on a read-only tablet no
+      matter how the slot resolved (closes the corruption class even on the legacy path). Backwards-compatible
+      (new ProtoMembers; null identity → old behavior). CONFIRMED 2026-08-15 in-game: with a fired tablet in
+      hand and a carried writeable notebook, a Handbook add now lands on and persists to the notebook; nothing
+      is written to the fired tablet.

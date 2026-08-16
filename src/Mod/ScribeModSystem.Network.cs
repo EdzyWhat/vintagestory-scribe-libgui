@@ -168,15 +168,46 @@ public sealed partial class ScribeModSystem
             station.ApplyGuestbookSync(message.GuestbookBytes);
     }
 
+    /// <summary>Resolve the exact <see cref="ItemSlot"/> an item-hosted Scribe packet targets, decided ONCE
+    /// on the client and merely honored here. Prefers the slot identity the client stamped on the packet
+    /// (inventory id + slot index — the surface the dialog was actually editing, which the Handbook add flow
+    /// may have chosen over the active-hand item), and falls back to the active hand only for legacy packets
+    /// that carry no identity. This is the single place the server answers "which slot does this item packet
+    /// address"; before, <see cref="OnServerReceivedNotebookSave"/> re-derived it as the active hand and so
+    /// misrouted a Handbook add onto a different in-hand item (add-tracker-link-tasks 7.16). Returns null
+    /// unless the resolved slot holds an <see cref="IScribeDocumentItem"/>. Does NOT check writeability — the
+    /// open/history path targets read-only tablets too; callers that mutate the document add that guard.</summary>
+    private static ItemSlot? ResolveItemPacketSlot(IServerPlayer fromPlayer, string? inventoryId, int slotId)
+    {
+        ItemSlot? slot = null;
+        if (inventoryId is not null)
+        {
+            var inv = fromPlayer.InventoryManager?.GetInventory(inventoryId);
+            if (inv is not null && slotId >= 0 && slotId < inv.Count)
+                slot = inv[slotId];
+        }
+        slot ??= fromPlayer.Entity?.ActiveHandItemSlot;
+        return slot?.Itemstack?.Collectible is IScribeDocumentItem ? slot : null;
+    }
+
     private void OnServerReceivedNotebookSave(IServerPlayer fromPlayer, ScribeNotebookSaveMessage message)
     {
         if (sapi is null || !TryReadGuid(message.DocIdBytes, out var docId)) return;
-        // The dialog closes (and flushes) the moment the notebook leaves the active hand slot,
-        // so by the time this packet arrives the item should still be there. Both notebook item
-        // classes flush through this handler, so accept the Clockmaker's Notebook too — otherwise
-        // its task/note edits are silently dropped server-side.
-        var slot = fromPlayer.Entity?.ActiveHandItemSlot;
-        if (slot?.Itemstack?.Collectible is not IScribeDocumentItem) return;
+        // Write to the EXACT slot the client dialog was editing (its stamped identity), not the active hand:
+        // a Handbook "Add to Scribe" add can open a carried book that is not in hand, and resolving by active
+        // hand then wrote the document onto whatever the player happened to be holding — e.g. a read-only
+        // tablet — corrupting it and dropping the task from the real target (add-tracker-link-tasks 7.16).
+        // Both notebook item classes flush through this handler, so the Clockmaker's Notebook is accepted too.
+        var slot = ResolveItemPacketSlot(fromPlayer, message.TargetInventoryId, message.TargetSlotId);
+        if (slot?.Itemstack?.Collectible is not IScribeDocumentItem item) return;
+        // A document must never land on a read-only (hardened/fired) tablet, no matter how the slot was
+        // resolved — belt-and-suspenders that closes the corruption class even on the legacy active-hand path.
+        if (!item.IsSlotWriteable(slot))
+        {
+            Trace("notebook-save from {0}: target slot holds a read-only Scribe item ({1}) — refusing write",
+                fromPlayer.PlayerName, slot.Itemstack!.Collectible.Code);
+            return;
+        }
         // Verify the packet's DocId matches the document already in the stack (if any).
         // A fresh stack with no prior save has no stored DocId yet — allow that write.
         if (ScribeDocumentAttributes.TryReadFrom(slot.Itemstack, out var existing)
@@ -206,16 +237,18 @@ public sealed partial class ScribeModSystem
     /// client-only action the server never sees, so without this signal no PickedUp entry is recorded
     /// (the historical gap: the recorder only ever ran on a task pin/complete round-trip or a death).
     ///
-    /// Resolves the notebook by the ACTIVE-HAND slot (the slot the player right-clicked to open), NOT by
-    /// DocId: a freshly picked-up notebook has never synced a document, so the server stack carries no
-    /// DocId to match against — the message's DocId is only a loose hint here. Recording is history-only
-    /// (<see cref="NotebookHost.TryRecordPickedUpOnSlot"/>) so we never stamp a server-random document
-    /// that <see cref="OnServerReceivedNotebookSave"/> would later reject the owner's edits against.</summary>
+    /// Resolves the opened book by the slot identity the client stamped on the packet (the exact surface it
+    /// opened — the Handbook flow can open a carried book that is not in hand), falling back to the active
+    /// hand for legacy packets. Deliberately NOT by DocId: a freshly picked-up notebook has never synced a
+    /// document, so the server stack carries no DocId to match against — the message's DocId is only a loose
+    /// hint here. Recording is history-only (<see cref="NotebookHost.TryRecordPickedUpOnSlot"/>) so we never
+    /// stamp a server-random document that <see cref="OnServerReceivedNotebookSave"/> would later reject the
+    /// owner's edits against.</summary>
     private void OnServerReceivedNotebookOpened(IServerPlayer fromPlayer, ScribeNotebookOpenedMessage message)
     {
         if (sapi is null) return;
-        var slot = fromPlayer.Entity?.ActiveHandItemSlot;
-        if (slot?.Itemstack?.Collectible is not IScribeDocumentItem) return;
+        var slot = ResolveItemPacketSlot(fromPlayer, message.TargetInventoryId, message.TargetSlotId);
+        if (slot is null) return;
 
         var historyBytes = NotebookHost.TryRecordPickedUpOnSlot(sapi, slot, fromPlayer);
         if (historyBytes is null) return; // crafter, or this player already has a PickedUp entry

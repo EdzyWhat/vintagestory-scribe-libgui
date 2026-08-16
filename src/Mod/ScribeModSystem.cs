@@ -139,13 +139,16 @@ public sealed partial class ScribeModSystem : ModSystem
 
     /// <summary>Client → server: notify that the player just opened the notebook with this DocId, so
     /// the server can record their one-time PickedUp history entry (see
-    /// <see cref="OnServerReceivedNotebookOpened"/>). No-op off the client. Called by both notebook
-    /// items' open paths.</summary>
-    public void NotifyServerNotebookOpened(Guid docId)
+    /// <see cref="OnServerReceivedNotebookOpened"/>). Carries the opened item's slot identity so the
+    /// server records the entry on the exact opened book, not the active-hand item (add-tracker-link-tasks
+    /// 7.16). No-op off the client. Called by every Scribe item's open path.</summary>
+    public void NotifyServerNotebookOpened(Guid docId, ItemSlot slot)
     {
         capi?.Network.GetChannel(NetworkChannelName).SendPacket(new ScribeNotebookOpenedMessage
         {
             DocIdBytes = docId.ToByteArray(),
+            TargetInventoryId = slot.Inventory?.InventoryID,
+            TargetSlotId = slot.Inventory?.GetSlotId(slot) ?? -1,
         });
     }
 

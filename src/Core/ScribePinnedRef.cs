@@ -63,8 +63,11 @@ public sealed class ScribePinnedRef
 
     /// <summary>For a <see cref="ScribeBlockKind.Tracker"/> pin, the last-known current quantity (the
     /// "have" side of the have/need counter). Defaults to 0; refreshed from the authoritative document on
-    /// edit — the count itself is only recomputed while a Scribe dialog is open, so a pinned Tracker's
-    /// counter reflects the last value the document held (add-tracker-link-tasks 7.8).</summary>
+    /// edit — this snapshot is the persisted fallback. The live counter is recomputed continuously by
+    /// whichever client-side engine is watching the viewer's carried inventory: a Scribe dialog's read view
+    /// when one is open (add-tracker-link-tasks 7.8), or the HUD's own count engine when a pinned Tracker is
+    /// shown with no dialog open (7.10). This field reflects the last value the document held between those
+    /// live updates.</summary>
     public int CurrentQuantity { get; set; }
 
     /// <summary>For a guide-page <see cref="ScribeBlockKind.Link"/> pin (a <c>"page:"</c>-prefixed

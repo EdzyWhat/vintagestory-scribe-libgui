@@ -135,7 +135,7 @@ public class ItemClockmakerNotebook : Item, IScribeDocumentItem
         modSystem.RegisterHost(host);
         // Tell the server we opened this notebook so it can record the one-time PickedUp entry
         // (opening the dialog is client-only; the server never sees it otherwise).
-        modSystem.NotifyServerNotebookOpened(host.Document.DocId);
+        modSystem.NotifyServerNotebookOpened(host.Document.DocId, slot);
         // Remember this as the last-opened Scribe item (add-tracker-link-tasks 3.2).
         modSystem.NoteScribeItemDialogOpened(host.Document.DocId);
 

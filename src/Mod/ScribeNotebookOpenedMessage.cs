@@ -13,4 +13,15 @@ public sealed class ScribeNotebookOpenedMessage
     /// <summary>The opened notebook document's <c>DocId</c> as 16 raw bytes.</summary>
     [ProtoMember(1)]
     public byte[]? DocIdBytes { get; set; }
+
+    /// <summary>The <c>InventoryID</c> of the slot the opened item lives in, so the server records the
+    /// PickedUp entry on the EXACT opened book rather than the player's active-hand item — the Handbook
+    /// flow can open a carried book that is not in hand (add-tracker-link-tasks 7.16). Null on legacy
+    /// clients, where the server falls back to the active-hand slot.</summary>
+    [ProtoMember(2)]
+    public string? TargetInventoryId { get; set; }
+
+    /// <summary>The slot index within <see cref="TargetInventoryId"/>. Ignored when that id is null.</summary>
+    [ProtoMember(3)]
+    public int TargetSlotId { get; set; }
 }

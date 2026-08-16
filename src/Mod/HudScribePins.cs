@@ -115,6 +115,23 @@ public sealed class HudScribePins : GuiBase
     /// revives a re-pinned row mid-collapse).</summary>
     private readonly HashSet<(Guid, Guid)> awaitingRemoval = new();
 
+    /// <summary>Per-pinned-Tracker LIVE "have" count, recomputed from the viewer's carried inventory on the
+    /// HUD's own 250ms tick (add-tracker-link-tasks 7.10), so a pinned Tracker's counter is live even with no
+    /// Scribe dialog open — the dialog-bound count engine (<see cref="ScribeDialogBase"/>'s
+    /// <c>RecomputeTrackers</c>) only runs while a surface is in its read view, so before this the HUD counter
+    /// froze at the last snapshot. Keyed by pin identity <c>(OwnerDocId, TaskId)</c>. Overrides the pin
+    /// snapshot's <see cref="ScribePinnedRef.CurrentQuantity"/> for display (<see cref="HudTrackerHave"/>) and
+    /// is the rising-edge baseline for the HUD-driven auto-completion. Pruned to the current pinned-Tracker
+    /// set each recompute so it can't leak entries for unpinned/removed tasks.</summary>
+    private readonly Dictionary<(Guid, Guid), int> liveTrackerCounts = new();
+
+    /// <summary>Resolved <see cref="CraftingRecipeIngredient"/> per Tracker target code, cached because
+    /// resolving touches the item/block registries; the frequent recompute then re-runs only the cheap
+    /// carried-stack sum. A null value caches "this code doesn't resolve → counts as 0". Mirrors the dialog
+    /// engine's own <c>trackerIngredientCache</c>; an item code's resolution is stable for the session, so it
+    /// is never invalidated.</summary>
+    private readonly Dictionary<string, CraftingRecipeIngredient?> hudTrackerIngredientCache = new();
+
     /// <summary>Host-owned collapse (and entry) controllers, keyed by row identity, passed into
     /// <see cref="ScribeAnimatedList"/> so a motion RESUMES (not restarts) across the HUD's tree rebuilds
     /// (gui-row-animation-harness). The container drives it now; the HUD only reads <c>AnyAnimating</c> (to
@@ -446,6 +463,11 @@ public sealed class HudScribePins : GuiBase
         {
             RebuildHudBody();
         }
+
+        // Refresh the live Tracker counts against the new pin set and rebuild once more if a displayed count
+        // moved, so a newly-pushed (or newly-opened) Tracker pin shows its live carried count at once rather
+        // than waiting for the next 250ms tick (add-tracker-link-tasks 7.10). No-op unless the HUD is open.
+        if (IsOpened() && RecomputeHudTrackers()) RebuildHudBody();
     }
 
     private void OnMyTimerChanged()
@@ -551,6 +573,16 @@ public sealed class HudScribePins : GuiBase
             // in the exact same dispatch rather than up to 250ms apart.
         }
 
+        // Live Tracker counts (add-tracker-link-tasks 7.10): recompute every pinned Tracker's carried-inventory
+        // "have" on this tick so the HUD counter is live with no Scribe dialog open. Rebuild if a displayed
+        // count actually moved (and the corruption tick didn't already rebuild this frame).
+        bool trackersRebuilt = false;
+        if (RecomputeHudTrackers() && !corruptionRebuilt && IsOpened())
+        {
+            RebuildHudBody();
+            trackersRebuilt = true;
+        }
+
         if (pendingCompletions.Count == 0) return;
 
         bool anyExpired = false;
@@ -578,8 +610,157 @@ public sealed class HudScribePins : GuiBase
             }
         }
 
-        // TickCorruption may already have rebuilt this tick; don't rebuild twice.
-        if (anyExpired && !corruptionRebuilt && IsOpened()) RebuildHudBody();
+        // TickCorruption / the tracker recompute may already have rebuilt this tick; don't rebuild twice.
+        if (anyExpired && !corruptionRebuilt && !trackersRebuilt && IsOpened()) RebuildHudBody();
+    }
+
+    // ---------------- Live Tracker count engine (add-tracker-link-tasks 7.10) ----------------
+
+    /// <summary>Recompute every pinned Tracker's live "have" count from the viewer's carried inventory and
+    /// reconcile — the HUD's own count engine, so a pinned Tracker's counter is LIVE with no Scribe dialog
+    /// open. Mirrors <see cref="ScribeDialogBase"/>'s <c>RecomputeTrackers</c> but scoped to the pin set and
+    /// running off the HUD's existing 250ms <see cref="OnTick"/> (rather than a separate <c>SlotModified</c>
+    /// subscription): folding it into the tick the HUD already runs for its pin windows costs nothing and
+    /// avoids the subscribe/unsubscribe lifecycle the dialog engine needs. 250ms latency is imperceptible for
+    /// a HUD counter.
+    ///
+    /// <para><b>Defer to an open dialog.</b> A pinned Tracker whose owning document is open in ANY Scribe
+    /// dialog (<see cref="ScribeDialogBase.OpenDocumentId"/>) is DISPLAY-ONLY here — the HUD does not send its
+    /// count or fire the rising-edge completion for it. That covers both hazards the dialog engine already
+    /// reasons about: in the read view the dialog itself owns the send + completion (double-driving would
+    /// double-send a quantity and double-fire the completion), and in the editor view an external count write
+    /// would fight the editor's scratch autosave flush. The live override is still computed while deferring so
+    /// the baseline stays current for the moment the dialog closes and the HUD becomes the sole driver.</para>
+    ///
+    /// <para>Returns true when a DISPLAYED count changed, so <see cref="OnTick"/> rebuilds. No-op (returns
+    /// false) when the HUD is closed, the player is unavailable, or no pinned task is a Tracker.</para></summary>
+    private bool RecomputeHudTrackers()
+    {
+        if (!IsOpened()) return false;
+        if (capi.World.Player is not { } player) return false;
+
+        var trackerPins = modSystem.MyPins.Where(p => p.Kind == ScribeBlockKind.Tracker).ToList();
+
+        // Prune live-count entries for pins that are gone (unpinned/removed) so the map can't leak. Done even
+        // when there are no Tracker pins left (clears the last one out).
+        if (liveTrackerCounts.Count > 0)
+        {
+            var liveKeys = trackerPins.Select(p => (p.OwnerDocId, p.TaskId)).ToHashSet();
+            foreach (var key in liveTrackerCounts.Keys.ToList())
+                if (!liveKeys.Contains(key)) liveTrackerCounts.Remove(key);
+        }
+        if (trackerPins.Count == 0) return false;
+
+        var dialogHeld = DialogHeldTrackerDocs();
+        bool anyDisplayChange = false;
+
+        foreach (var pin in trackerPins)
+        {
+            var key = (pin.OwnerDocId, pin.TaskId);
+
+            string codeKey = pin.TargetItemCode ?? "";
+            if (!hudTrackerIngredientCache.TryGetValue(codeKey, out var ingredient))
+            {
+                ScribeTrackerCounter.TryResolveIngredient(capi.World, pin.TargetItemCode, out ingredient);
+                hudTrackerIngredientCache[codeKey] = ingredient; // may cache null ("unresolvable → 0")
+            }
+
+            int counted = ingredient is null ? 0 : ScribeTrackerCounter.CountCarried(player, ingredient);
+            int have = Math.Max(0, counted); // raw carried count; NOT capped at the target (overflow shows, 7.14)
+
+            // Baseline for the rising edge AND the display diff: the last live value we computed for this pin,
+            // else the pin snapshot (first sight this tick / this session).
+            int baseline = liveTrackerCounts.TryGetValue(key, out var prev) ? prev : pin.CurrentQuantity;
+            bool changed = have != baseline;
+            liveTrackerCounts[key] = have; // always record so the display override is used consistently
+            if (changed) anyDisplayChange = true;
+
+            // A dialog has this doc open → defer entirely (read view drives it; editor must not be fought).
+            // Display-only here; the baseline above is kept current for when the dialog closes.
+            if (dialogHeld.Contains(pin.OwnerDocId)) continue;
+            if (!changed) continue; // nothing moved → no send, no edge
+
+            // Persist + converge through the server-authoritative path (the same op the dialog engine uses).
+            SendTrackerQuantity(pin.OwnerDocId, pin.TaskId, have);
+
+            // Rising edge only (unmet → met): apply the tracker-completion setting exactly once. Because we
+            // skip unchanged counts and only fire on the rising edge — and Complete is guarded by !done below —
+            // a later shortfall neither re-fires nor un-completes, mirroring the dialog engine (D6/4.4).
+            bool wasMet = baseline >= pin.TargetQuantity;
+            bool nowMet = have >= pin.TargetQuantity;
+            if (nowMet && !wasMet) ApplyHudTrackerCompletion(pin);
+        }
+
+        return anyDisplayChange;
+    }
+
+    /// <summary>The set of DocIds a Scribe dialog currently has open (in any view). The HUD skips the server
+    /// send + rising-edge completion for pinned Trackers in these docs so it never double-drives a doc a
+    /// dialog's read view owns, nor writes an external count into a doc being edited (see
+    /// <see cref="RecomputeHudTrackers"/> and <see cref="ScribeDialogBase.OpenDocumentId"/>).</summary>
+    private HashSet<Guid> DialogHeldTrackerDocs()
+    {
+        var set = new HashSet<Guid>();
+        foreach (var dialog in capi.Gui.OpenedGuis.OfType<ScribeDialogBase>())
+            if (dialog.OpenDocumentId is { } docId) set.Add(docId);
+        return set;
+    }
+
+    /// <summary>The "have" count to DISPLAY for a pinned Tracker: the HUD's live carried-inventory count if it
+    /// has one, else the pin snapshot's last-known value (add-tracker-link-tasks 7.10).</summary>
+    private int HudTrackerHave(ScribePinnedRef pin)
+        => liveTrackerCounts.TryGetValue((pin.OwnerDocId, pin.TaskId), out var have)
+            ? have
+            : pin.CurrentQuantity;
+
+    /// <summary>Apply the player's tracker-completion setting when a pinned Tracker fills up with NO dialog
+    /// open (add-tracker-link-tasks 7.10) — the HUD-driven sibling of <see cref="ScribeDialogBase"/>'s
+    /// <c>ApplyTrackerCompletion</c>:
+    /// <list type="bullet">
+    /// <item><b>Complete</b> — mark the task done through the same identity-addressed op a checkbox uses,
+    /// honoring the player's completion policy (<see cref="SendCompletion"/>). Guarded by
+    /// <see cref="DisplayedDone"/> so re-collecting after a drop can't un-complete an already-done Tracker; the
+    /// optimistic flag flips the check mark at once. Sent immediately (not via the undo window) exactly like
+    /// the dialog's auto-complete.</item>
+    /// <item><b>Delete</b> — remove the task via the standalone <see cref="ScribeDeleteTaskMessage"/>.</item>
+    /// <item><b>Nothing</b> — leave it satisfied.</item>
+    /// </list></summary>
+    private void ApplyHudTrackerCompletion(ScribePinnedRef pin)
+    {
+        switch (modSystem.MySettings.TrackerCompletion)
+        {
+            case ScribeTrackerCompletion.Complete:
+                if (!DisplayedDone(pin))
+                {
+                    optimisticDone[(pin.OwnerDocId, pin.TaskId)] = true;
+                    SendCompletion(pin.OwnerDocId, pin.TaskId, modSystem.MySettings.CompletionPolicy);
+                }
+                break;
+            case ScribeTrackerCompletion.Delete:
+                capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeDeleteTaskMessage
+                {
+                    DocId = pin.OwnerDocId.ToByteArray(),
+                    TaskId = pin.TaskId.ToByteArray(),
+                });
+                break;
+            case ScribeTrackerCompletion.Nothing:
+                break;
+        }
+    }
+
+    /// <summary>Send a pinned Tracker's freshly-counted quantity to the server (add-tracker-link-tasks 7.10).
+    /// The server resolves the owning document (registry for a Lectern, or by scanning the acting player's
+    /// inventory for a Notebook/Tablet — the HUD viewer is that player), writes the clamped count lock-free,
+    /// and resyncs. Independent of any open dialog. The HUD's own <see cref="liveTrackerCounts"/> override
+    /// drives the display, so the counter is correct immediately without waiting for this round-trip.</summary>
+    private void SendTrackerQuantity(Guid docId, Guid taskId, int quantity)
+    {
+        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeSetTrackerQuantityMessage
+        {
+            DocId = docId.ToByteArray(),
+            TaskId = taskId.ToByteArray(),
+            Quantity = quantity,
+        });
     }
 
     // ---------------- Row state helpers ----------------
@@ -818,7 +999,8 @@ public sealed class HudScribePins : GuiBase
                     p.OwnerDocId, p.TaskId, p.LastKnownText, DisplayedDone(p), SunkVisual(p),
                     FadingOut: IsFadingOut(p), Kind: p.Kind, LinkTarget: p.LinkTarget,
                     DisplayStack: stack, DisplayName: name,
-                    TargetQuantity: p.TargetQuantity, CurrentQuantity: p.CurrentQuantity);
+                    // Live carried count if the HUD's own engine has one, else the snapshot (7.10).
+                    TargetQuantity: p.TargetQuantity, CurrentQuantity: HudTrackerHave(p));
             })
             .ToList();
     }

@@ -79,6 +79,22 @@ public abstract partial class ScribeDialogBase
         trackerIngredientCache.Clear();
     }
 
+    /// <summary>The DocId of the document this dialog currently has open (any view), or <c>null</c> when the
+    /// dialog is closed. The HUD's own live Tracker count engine reads this across every open Scribe dialog so
+    /// it can DEFER for a doc a dialog holds — it treats such a doc as display-only and does NOT send a count
+    /// or fire the rising-edge completion for its pinned Trackers (add-tracker-link-tasks 7.10). Deferring for
+    /// the WHOLE time the dialog is open (not just its read view) is deliberate and covers two hazards at once:
+    /// <list type="bullet">
+    /// <item><b>Read view</b> — the dialog's own <see cref="RecomputeTrackers"/> is already driving the send +
+    /// completion, so the HUD must not double-send a quantity or double-fire the completion (a double-toggle).</item>
+    /// <item><b>Editor view</b> — <see cref="RecomputeTrackers"/> is intentionally inert there because the
+    /// editor renders off <c>scratch</c>; a HUD-driven external count write would fight the editor's autosave
+    /// flush (the scratch-vs-external-edit hazard). Deferring keeps the HUD out of that document while it's
+    /// being edited.</item>
+    /// </list>
+    /// A pinned Tracker whose document is NOT open in any dialog is the HUD's to drive.</summary>
+    internal Guid? OpenDocumentId => IsOpened() ? host.Document.DocId : (Guid?)null;
+
     /// <summary>The carried inventories a Tracker counts across: the player's own hotbar + backpack (D5).
     /// Matches <see cref="ScribeModSystem.EnumerateCarriedSlots"/>'s scope so watch-set and count-set agree.</summary>
     private IEnumerable<IInventory> EnumerateTrackerWatchInventories()

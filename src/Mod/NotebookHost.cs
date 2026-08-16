@@ -57,6 +57,18 @@ public class NotebookHost : IScribeDocumentHost
 
     public ScribeDocument Document => _document;
 
+    /// <summary>The <c>InventoryID</c> of the slot this host is bound to, so a client save packet can name
+    /// the EXACT slot it edited and the server writes back there rather than re-guessing by active hand
+    /// (add-tracker-link-tasks 7.16). Null when the slot isn't in a resolvable inventory (defensive — a
+    /// held/carried item always is); the packet then omits identity and the server falls back to active
+    /// hand. Client-side only in practice (a server-constructed host never sends a save packet).</summary>
+    public string? SlotInventoryId => _slot.Inventory?.InventoryID;
+
+    /// <summary>The slot index of <see cref="_slot"/> within <see cref="SlotInventoryId"/>, or -1 when the
+    /// slot has no resolvable inventory. Pairs with <see cref="SlotInventoryId"/> to address the exact
+    /// save target (add-tracker-link-tasks 7.16).</summary>
+    public int SlotId => _slot.Inventory?.GetSlotId(_slot) ?? -1;
+
     /// <summary>The notebook's history chronicle. Persisted in <c>ItemStack.Attributes["scribeHistory"]</c>
     /// and flushed alongside the document in <see cref="Flush"/>.</summary>
     public HistoryStore History => _history;

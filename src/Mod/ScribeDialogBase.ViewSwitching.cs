@@ -34,12 +34,21 @@ public abstract partial class ScribeDialogBase
     /// into the editor tree (or lets <c>TryOpen</c> build it if the dialog isn't open yet).</summary>
     public void EnterEditorMode(byte[]? documentBytes)
     {
-        if (recoveringLostLock && scratch is not null)
+        if ((recoveringLostLock || optimisticEditorEntry) && scratch is not null)
         {
-            // This grant is the recovery re-acquire after a lost-lock save failure (task 8.6): the
-            // lock is ours again, so keep the player's unsaved scratch and re-flush it rather than
-            // reseeding from the authoritative document (which would silently discard their edits).
+            // We already hold a live scratch that the authoritative document must NOT overwrite, and this grant
+            // just confirms the lock is ours — so keep the scratch and re-flush it rather than reseeding. Two
+            // callers land here:
+            //   • the lost-lock recovery re-acquire after a save failure (task 8.6), which must preserve the
+            //     player's unsaved edits;
+            //   • a singleplayer-optimistic Handbook append (feedback 7.13 follow-up): we entered the editor
+            //     locally and applied the append while the server was paused, and THIS is the delayed grant
+            //     reply (carrying the pre-flush document) arriving on unpause — reseeding would drop the
+            //     optimistic append, so keep our scratch and re-flush it to persist it authoritatively.
+            // NOTE: the INITIAL optimistic entry reaches EnterEditorMode with scratch still null (not editing
+            // yet), so it correctly falls through to the full seed path below and applies the pending append.
             recoveringLostLock = false;
+            optimisticEditorEntry = false;
             saveFailureRetries = 0;
             isEditorMode = true;
             StartAutosaveTick();
@@ -288,6 +297,7 @@ public abstract partial class ScribeDialogBase
         autoFocusRowOnRebuild = null;
         saveFailureRetries = 0;
         recoveringLostLock = false;
+        optimisticEditorEntry = false;
         DisposeFocusNodes();
     }
 

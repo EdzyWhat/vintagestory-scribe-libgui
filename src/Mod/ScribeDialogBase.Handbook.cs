@@ -25,6 +25,19 @@ public abstract partial class ScribeDialogBase
     /// pending.</summary>
     private Action? pendingHandbookAppend;
 
+    /// <summary>True between a singleplayer-optimistic editor entry (a Handbook append on a BLOCK surface while
+    /// the pure-singleplayer game is paused by the open Handbook) and the eventual server lock grant that
+    /// arrives on unpause. In pure singleplayer, opening the vanilla Handbook pauses the integrated server, so
+    /// a block's normal editor-lock round-trip can't complete until the Handbook closes — leaving the appended
+    /// task invisible until then. Instead we enter the editor LOCALLY at once (no other client can contend the
+    /// lock in singleplayer) and still send the lock request + flush so the server records it authoritatively
+    /// when it resumes. This flag tells <see cref="EnterEditorMode"/> that the delayed grant reply — which
+    /// carries the PRE-flush document — must KEEP our optimistic scratch and re-flush it, exactly like the
+    /// lost-lock recovery branch, rather than reseeding scratch and dropping the append. Gated to
+    /// pure-singleplayer (not LAN/dedicated) so multiplayer keeps the authoritative async grant, where the
+    /// server isn't paused and the lock can genuinely be refused (feedback 7.13 follow-up).</summary>
+    private bool optimisticEditorEntry;
+
     /// <summary>True when this surface's editor access requires a server round-trip (a block surface —
     /// Lectern/Scriptorium — whose <see cref="RequestEditorAccess"/> sends a lock request and lands the grant
     /// asynchronously in <see cref="EnterEditorMode"/>). Item surfaces (Notebook/Clockmaker/Tablet) override
@@ -101,6 +114,22 @@ public abstract partial class ScribeDialogBase
 
         pendingHandbookAppend = apply;
 
+        // Pure-singleplayer BLOCK surface: opening the Handbook paused the integrated server, so the normal
+        // editor-lock round-trip below can't complete until the Handbook closes — the append would sit
+        // invisible until unpause. Enter the editor LOCALLY now (no other client can hold the lock in
+        // singleplayer) so the new row shows immediately in a live editor view. We STILL send the lock request
+        // (queued first) and then flush the append (queued after), so on unpause the server grants the lock and
+        // accepts the flush in order; the delayed grant reply is reconciled via optimisticEditorEntry (it keeps
+        // this scratch instead of reseeding). Multiplayer is deliberately excluded — the server isn't paused
+        // there and the lock can be genuinely refused, so the authoritative async grant must stay in charge.
+        if (EditorAccessIsAsync && IsPureSingleplayer && !host.IsLockedByOther(capi.World.Player.PlayerUID))
+        {
+            optimisticEditorEntry = true;
+            RequestEditorAccess();                                              // lock request — queued first
+            EnterEditorMode(ScribeDocumentCodec.Serialize(host.Document));      // local entry: seed + apply + flush
+            return;
+        }
+
         // A block surface will get its grant asynchronously (server lock round-trip) UNLESS the lock is held
         // by someone else — in which case TryEnterEditor surfaces the generic lock error and never requests.
         bool grantPending = EditorAccessIsAsync && !host.IsLockedByOther(capi.World.Player.PlayerUID);
@@ -110,6 +139,13 @@ public abstract partial class ScribeDialogBase
         // (locked-by-other): drop the stash so it can't be applied later.
         if (!isEditorMode && !grantPending) pendingHandbookAppend = null;
     }
+
+    /// <summary>True in a pure-singleplayer session (not a LAN-hosted or dedicated-server game). Only here does
+    /// opening the vanilla Handbook pause the integrated server, stalling a block surface's editor-lock
+    /// round-trip; and only here is optimistic local editor entry safe, because no other client can contend
+    /// the lock. <see cref="ICoreClientAPI.OpenedToLan"/> distinguishes a LAN-hosted world (server keeps
+    /// ticking, other players may join) from a truly local one.</summary>
+    private bool IsPureSingleplayer => capi.IsSinglePlayer && !capi.OpenedToLan;
 
     /// <summary>Append the Handbook-originated Tracker/Link block to the live scratch document and flush it
     /// through the dialog's existing save path (add-tracker-link-tasks 3.4/3.5). Enforces the task-cap gate

@@ -66,6 +66,29 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [ ] `a17e5912` **Tracker counts carried only.** Create a Tracker, set N via the stepper, then collect
       and drop matching items — the have/need counter tracks carried inventory only and ignores items
       stored in a nearby chest. *(add-tracker-link-tasks 6.3)*
+- [ ] `0af5f704` **Live HUD counter (no dialog).** With NO Scribe dialog open, pin a Tracker and
+      collect/drop matching items — the HUD have/need counter updates within ~250ms. When it fills with no
+      dialog open, your tracker-completion setting fires (complete/delete/nothing). Then open a dialog on
+      the SAME doc's read view and collect → count updates once, no double-toggle; open that doc in the
+      EDITOR and collect → the HUD shows the live count but the document isn't written under the editor.
+      *(add-tracker-link-tasks 7.10)*
+- [ ] `d1db6354` **Tracker completion modes.** Set the tracker-completion behavior to each of Complete /
+      Delete / Nothing, then fill a Tracker to its target — confirm it respectively completes (following
+      your task-completion policy), deletes the task, or leaves it standing as satisfied.
+      *(add-tracker-link-tasks 6.4)*
+- [ ] `d63178cd` **Link opens item page.** Create a Link to an item, then tap its label in the read view
+      and again in the editor — each opens that item's Handbook page and leaves the task's completion state
+      unchanged. (The HUD / Pin-Tab Link click is already confirmed under 7.8.)
+      *(add-tracker-link-tasks 6.5)*
+- [ ] `d612cf4c` **Footer Tracker/Link guide.** With the Handbook CLOSED, click the footer Tracker/Link add
+      entry → the Handbook opens with the search box focused (ready to type an item). With the Handbook
+      OPEN, click it → a transient "scroll to the bottom and click Add to Scribe" error fires. Neither path
+      creates a task directly. *(add-tracker-link-tasks 6.8)*
+- [x] `1a3e35c2` **Handbook add misroute.** Hold a FIRED tablet plus a carried writeable notebook, open an
+      item Handbook page and Add as Tracker/Link — confirm the task lands on and persists to the notebook, and
+      nothing is written to the fired tablet. *(add-tracker-link-tasks 7.16)*
+      - **Confirmed 2026-08-15** via in-game retest: the Handbook add lands on and persists to the notebook;
+        the fired tablet receives nothing.
 
 ## add-scriptorium-block
 
