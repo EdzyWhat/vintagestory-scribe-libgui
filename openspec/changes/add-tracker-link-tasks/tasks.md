@@ -94,23 +94,31 @@
 ## 6. Verification & docs
 
 - [x] 6.1 `build/verify.sh` green (Core suite incl. new tests + Atlas suite).
-- [ ] 6.2 Manually test in-game — three-tier resolution: "Add to Scribe" appears on an item page;
+- [x] 6.2 Manually test in-game — three-tier resolution: "Add to Scribe" appears on an item page;
       (1) with a Scribe surface open (test a block AND an item surface) it creates the task there;
       (2) with none open but a Scribe item carried, it opens that item's UI and creates the task;
       (3) with no Scribe item at all, it shows "You need a Scribe item to do that."
-- [ ] 6.8 Manually test in-game — footer guide: click the footer Tracker/Link entry with the
+      CONFIRMED 2026-08-15 (playtest submission): all three tiers work.
+- [x] 6.8 Manually test in-game — footer guide: click the footer Tracker/Link entry with the
       Handbook closed → the explainer entry opens; click it with the Handbook open → the
       scroll-and-click instruction error fires; neither creates a block.
-- [ ] 6.9 Manually test in-game — Link hyperlink: click a Link task in a Scribe UI and again as a
+      CONFIRMED 2026-08-15 (playtest submission): both paths behave; neither creates a task directly.
+- [x] 6.9 Manually test in-game — Link hyperlink: click a Link task in a Scribe UI and again as a
       pinned task on the HUD; both open the linked Handbook page and leave completion unchanged.
-- [ ] 6.3 Manually test in-game: create a Tracker, set N via the arrow-stepper, collect/drop matching
+      CONFIRMED 2026-08-15: Scribe-UI click confirmed this round (6.5); HUD/Pin-Tab pin click confirmed
+      round 2 ("HUD pins Tracker + Link ... Link click opens its page").
+- [x] 6.3 Manually test in-game: create a Tracker, set N via the arrow-stepper, collect/drop matching
       items and confirm the `have/need` counter tracks carried inventory only (chest items ignored).
-- [ ] 6.4 Manually test in-game: verify each completion-setting mode (completes / deletes / nothing)
+      CONFIRMED 2026-08-15 (playtest submission): counter tracks carried inventory only; chest ignored.
+- [x] 6.4 Manually test in-game: verify each completion-setting mode (completes / deletes / nothing)
       behaves correctly when a Tracker reaches its target.
-- [ ] 6.5 Manually test in-game: create a Link, confirm tapping it opens the item's Handbook page and
+      CONFIRMED 2026-08-15 (playtest submission): Complete / Delete / Nothing all behave.
+- [x] 6.5 Manually test in-game: create a Link, confirm tapping it opens the item's Handbook page and
       leaves its completion state unchanged.
-- [ ] 6.6 Manually test in-game: load a pre-v6 (v5) world/save and confirm existing documents open
+      CONFIRMED 2026-08-15 (playtest submission): read + editor taps open the page, completion unchanged.
+- [x] 6.6 Manually test in-game: load a pre-v6 (v5) world/save and confirm existing documents open
       cleanly with the new fields defaulted.
+      CONFIRMED 2026-08-15 (round 2): "old (v5/v1) saves load clean."
 - [x] 6.7 Update `CHANGELOG.md` (Unreleased → Added: Tracker & Link task types, Handbook entry) and
       `ROADMAP.md` (mark the v1.2 task-types cluster progress).
 
@@ -142,13 +150,16 @@
       v5 docs / v1 pins are never dropped. `OpenHandbookPage` opens a `page:`-prefixed code directly.
       Display: new `scribebook` open-book glyph + `LinkLabel` name via shared `ScribeLinkIcon` /
       `ScribeItemRef.ResolveDisplay` across read/editor/Pin-Tab/HUD. Core 375 green; needs in-game playtest.
-- [ ] 7.7 Manually re-test in-game after 7.1/7.2/7.4/7.5: (a) Tracker stepper sits left of the icon, ~3
+- [x] 7.7 Manually re-test in-game after 7.1/7.2/7.4/7.5: (a) Tracker stepper sits left of the icon, ~3
       chars wide, and the hover pin/delete are now reachable on a Tracker row; (b) "Add to Scribe" while
       carrying only a fired/hardened tablet shifts to a writeable notebook, or shows the single locked
       error when none is writeable; (c) tapping a Tracker's name opens the item's Handbook page and leaves
       completion unchanged; (d) creating a Tracker from the Handbook drops the caret in the stepper.
-- [ ] 7.8 (feedback 6.9, now unblocked by 7.1) Manually test the HUD: pin a Tracker and a Link, confirm
+      CONFIRMED 2026-08-15 (playtest submission — writeable-item fallback "all work"; earlier rounds
+      confirmed the stepper layout, name hyperlink, and stepper autofocus).
+- [x] 7.8 (feedback 6.9, now unblocked by 7.1) Manually test the HUD: pin a Tracker and a Link, confirm
       both appear on the pinned-task HUD and behave (Link click opens its page; Tracker shows progress).
+      CONFIRMED 2026-08-15 (round 2): "HUD pins Tracker + Link (from an already-open surface)."
 - [x] 7.9 (feedback 6.9 root cause) Render pinned Tracker/Link rows item-shaped on the HUD **and** the Pin
       Tab (they had shown blank — the pin row data was Task-shaped, but Tracker/Link carry empty text and
       resolve their label from the item). "Full treatment": bump the pin-store codec v2→v3 (named
