@@ -372,6 +372,10 @@ public abstract partial class ScribeDialogBase
         SendReleaseLockPacket();
         modSystem.MyPinsChanged -= OnMyPinsChanged;
         modSystem.SettingsVisibilityChanged -= OnSettingsVisibilityChanged;
+        // Drop any un-reconciled optimistic pin state (7.11b) so a next open starts from the authoritative
+        // set — the reconcile-drop only runs while open, so a close before the server caught up would
+        // otherwise leave a stale entry to mislead the reopened rows.
+        optimisticPin.Clear();
         DisposePinState();
 #if DEBUG
         sharedScrollController.OnChanged -= OnScrollControllerChanged;
@@ -392,6 +396,9 @@ public abstract partial class ScribeDialogBase
         pinCollapseRegistry.Dispose();
         // Read view collapse controllers (reconcile-animating-surfaces §5.5) — same ownership as the Pin Tab's.
         readCollapseRegistry.Dispose();
+        // Tracker count engine (add-tracker-link-tasks Group 4): unregister its poll/callback and unsubscribe
+        // the carried-inventory events so a closed dialog stops counting.
+        TeardownTrackerEngine();
         base.OnGuiClosed();
     }
 

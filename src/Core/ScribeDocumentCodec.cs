@@ -7,40 +7,54 @@ namespace Scribe.Core;
 /// used for both world persistence and network sync, so the round-trip is exact and any
 /// malformed input fails safely (returns false) rather than throwing.
 ///
-/// Current format (v5, little-endian via <see cref="BinaryWriter"/>):
+/// Current format (v7, little-endian via <see cref="BinaryWriter"/>):
 ///   [4 bytes magic "SCRB"][1 byte version][16 bytes DocId][int blockCount]
 ///   [per block: 16 bytes TaskId, byte kind, bool done, int depth, bool hasAssignedToUid,
-///    string assignedToUid (only if hasAssignedToUid), string text]
+///    string assignedToUid (only if hasAssignedToUid), string text,
+///    bool hasTargetItemCode, string targetItemCode (only if hasTargetItemCode),
+///    int targetQuantity, int currentQuantity,
+///    bool hasLinkTarget, string linkTarget (only if hasLinkTarget),
+///    bool hasLinkLabel, string linkLabel (only if hasLinkLabel)]
 ///   [string title]
 ///
-/// Accepted-version window:
-///   Current : v5 — reads title string after block list
-///   Prior   : v4 — no title field; migrated to DefaultTitle by <see cref="ApplyV4ToV5Migrations"/>
-///   Older   : rejected (fail-safe return false)
-/// See <see href="../docs/CODEC-MIGRATION.md">docs/CODEC-MIGRATION.md</see> for the migration-step pattern and how to add a new version.
+/// Accepted-version window (PROGRESSIVE append-only reads, NOT a two-version window):
+///   Reads any version in [<see cref="MinVersion"/>=5, <see cref="Version"/>=7]; older/newer → fail-safe false.
+///   Each version-group's trailing fields are read only behind a <c>version &gt;=</c> threshold, so an
+///   older blob simply stops reading before the fields it never wrote. Missing fields default via
+///   <see cref="ApplyPreV6Defaults"/>. This departs from the strict two-version window because v5 docs
+///   are SHIPPED and live in real saves (v1.1.1), while v6 lived only on the WIP branch — a naive
+///   {v7, v6} window would silently drop every shipped v5 document. Same rationale as ScribePinCodec's
+///   v2→v3 switch; see <see href="../docs/CODEC-MIGRATION.md">docs/CODEC-MIGRATION.md</see>.
 ///
 /// APPEND-ONLY VERSION DISCIPLINE: <see cref="Version"/> is a single global counter and new
-/// fields append in version order (never interleave; never two "v5"s). See
-/// docs/specs/README.md convention #1. When adding v6, append its fields after v5's layout and
-/// extend the reader with a new branch — do not reorder existing fields.
+/// fields append in version order (never interleave; never two "v7"s). See
+/// docs/specs/README.md convention #1. When adding v8, append its fields after v7's layout behind a
+/// new <c>version &gt;= 8</c> read gate — do not reorder existing fields.
 ///
 /// Field history:
 ///   v4 — added a 16-byte document id (after the version byte) and a 16-byte per-block id
 ///        (first field of each block); dropped the v3 per-block `pinned` bool (pinning moved
 ///        to a per-player store).
-///   v5 — appended a document title string after the block list. The reader still accepts v4
-///        (title supplied via <see cref="ApplyV4ToV5Migrations"/> for documents without one).
+///   v5 — appended a document title string after the block list.
+///   v6 — appended four per-block fields after text (TargetItemCode?, TargetQuantity,
+///        CurrentQuantity, LinkTarget?) for the Tracker and Link task kinds.
+///   v7 — appended one per-block field after LinkTarget (LinkLabel?), the display title of a
+///        guide-page Link (a "page:"-prefixed LinkTarget has no item to resolve a name from).
+///        Switched to progressive reads so shipped v5 docs stay readable (see the window note above).
 ///
 /// A hand-rolled format keeps Core free of any external dependency. The version byte lets
-/// us evolve the format while still reading the immediately prior save layout.
+/// us evolve the format while still reading every prior save layout back to <see cref="MinVersion"/>.
 /// </summary>
 public static class ScribeDocumentCodec
 {
     private static readonly byte[] Magic = "SCRB"u8.ToArray();
-    private const byte Version = 5; // see the "Field history" above; v5 adds document Title.
+    private const byte Version = 7; // see the "Field history" above; v7 adds the per-block LinkLabel field.
 
-    /// <summary>The immediately prior format version the reader still accepts.</summary>
-    private const byte PriorVersion = 4;
+    /// <summary>Oldest format version the reader still accepts. Progressive append-only reads accept
+    /// any version in [<see cref="MinVersion"/>, <see cref="Version"/>]; v5 is the oldest because it is
+    /// the last SHIPPED layout (v1.1.1) still live in player saves. Replaces the former two-version
+    /// <c>PriorVersion</c> gate — see the class doc-comment's window note.</summary>
+    private const byte MinVersion = 5;
 
     /// <summary>
     /// Hard upper bound on the number of blocks a single document may hold. A document is edited by
@@ -88,15 +102,25 @@ public static class ScribeDocumentCodec
                 w.Write(block.AssignedToUid is not null);
                 if (block.AssignedToUid is not null) w.Write(block.AssignedToUid);
                 w.Write(block.Text);
+                // v6: Tracker/Link fields, appended after text (see the format table above).
+                w.Write(block.TargetItemCode is not null);
+                if (block.TargetItemCode is not null) w.Write(block.TargetItemCode);
+                w.Write(block.TargetQuantity);
+                w.Write(block.CurrentQuantity);
+                w.Write(block.LinkTarget is not null);
+                if (block.LinkTarget is not null) w.Write(block.LinkTarget);
+                // v7: LinkLabel, appended after LinkTarget — the display title of a guide-page Link.
+                w.Write(block.LinkLabel is not null);
+                if (block.LinkLabel is not null) w.Write(block.LinkLabel);
             }
-            w.Write(doc.Title); // v5: document title appended after block list
+            w.Write(doc.Title); // v5+: document title appended after block list
         }
         return ms.ToArray();
     }
 
     /// <summary>
-    /// Deserializes a document. Accepts v5 (current) and v4 (prior); any other version fails safely.
-    /// Signature-stable for callers that don't need the legacy-pin out-param — routes through the
+    /// Deserializes a document. Accepts any version in [MinVersion=5, Version=7] via progressive reads;
+    /// any other version fails safely. Signature-stable for callers that don't need the legacy-pin out-param — routes through the
     /// three-arg overload and discards it.
     /// </summary>
     public static bool TryDeserialize(byte[]? bytes, out ScribeDocument? document)
@@ -120,9 +144,11 @@ public static class ScribeDocumentCodec
             var magic = r.ReadBytes(Magic.Length);
             if (!magic.AsSpan().SequenceEqual(Magic)) return false;
 
-            // See accepted-version table in the class doc-comment and docs/CODEC-MIGRATION.md.
+            // Progressive append-only reads: accept any version in [MinVersion, Version]; each
+            // version-group's trailing fields are read behind a `version >=` gate below. See the
+            // class doc-comment's window note and docs/CODEC-MIGRATION.md.
             byte version = r.ReadByte();
-            if (version != Version && version != PriorVersion) return false;
+            if (version < MinVersion || version > Version) return false;
 
             Guid docId = new Guid(ReadExactly(r, 16));
 
@@ -158,12 +184,34 @@ public static class ScribeDocumentCodec
                     text = text.Substring(0, MaxTextLength);
                 }
 
-                blocks.Add(new ScribeBlock(kind, text, done, depth, assignedToUid, taskId));
+                // Tracker/Link fields were added across v6 (item/quantity/linkTarget) and v7 (linkLabel).
+                // Seed all of them to defaults, then read each version-group behind a `version >=` gate,
+                // so an older blob simply stops reading before the fields it never wrote (progressive
+                // append-only reads — see the class doc-comment's window note).
+                ApplyPreV6Defaults(out string? targetItemCode, out int targetQuantity,
+                    out int currentQuantity, out string? linkTarget, out string? linkLabel);
+                if (version >= 6)
+                {
+                    bool hasTargetItemCode = r.ReadBoolean();
+                    targetItemCode = hasTargetItemCode ? r.ReadString() : null;
+                    targetQuantity = r.ReadInt32();
+                    currentQuantity = r.ReadInt32();
+                    bool hasLinkTarget = r.ReadBoolean();
+                    linkTarget = hasLinkTarget ? r.ReadString() : null;
+                }
+                if (version >= 7)
+                {
+                    bool hasLinkLabel = r.ReadBoolean();
+                    linkLabel = hasLinkLabel ? r.ReadString() : null;
+                }
+
+                // The block's setters clamp TargetQuantity (≥ 1) and CurrentQuantity ([0, target]).
+                blocks.Add(new ScribeBlock(kind, text, done, depth, assignedToUid, taskId,
+                    targetItemCode, targetQuantity, currentQuantity, linkTarget, linkLabel));
             }
 
-            // v5 appends a document title after the block list; v4 has none — migration supplies it.
-            string title = version == Version ? r.ReadString() : ScribeDocument.DefaultTitle;
-            ApplyV4ToV5Migrations(version, ref title);
+            // Both accepted versions (v6 and v5) append a document title after the block list.
+            string title = r.ReadString();
             if (string.IsNullOrWhiteSpace(title)) title = ScribeDocument.DefaultTitle;
             if (title.Length > ScribeDocument.MaxTitleLength) title = title[..ScribeDocument.MaxTitleLength];
 
@@ -184,10 +232,11 @@ public static class ScribeDocumentCodec
     }
 
     /// <summary>
-    /// True when <paramref name="bytes"/> are a readable document written in the immediately prior
-    /// format version (v4). Such a document deserializes fine but lacks the title field added in v5,
-    /// so the block entity can choose to re-save it immediately. Returns false for current-version
-    /// bytes, and for null/malformed/unsupported bytes (nothing to upgrade).
+    /// True when <paramref name="bytes"/> are a readable document written in an OLDER-than-current but
+    /// still-accepted format version (any version in [<see cref="MinVersion"/>, <see cref="Version"/>)).
+    /// Such a document deserializes fine but lacks fields the current layout carries, so the block
+    /// entity can choose to re-save it immediately to upgrade it forward. Returns false for
+    /// current-version bytes (nothing to upgrade), and for null/malformed/unsupported bytes.
     /// </summary>
     public static bool IsPriorVersion(byte[]? bytes)
     {
@@ -196,22 +245,28 @@ public static class ScribeDocumentCodec
         {
             if (bytes[i] != Magic[i]) return false;
         }
-        return bytes[Magic.Length] == PriorVersion;
+        byte version = bytes[Magic.Length];
+        return version >= MinVersion && version < Version;
     }
 
     /// <summary>
-    /// Migration step for bytes written in v4 (the immediately prior version). v4 has no document
-    /// title field, so this step supplies <see cref="ScribeDocument.DefaultTitle"/>. Called after
-    /// the v4 title placeholder is set; a no-op for current-version (v5) bytes because the title
-    /// is already read from the stream. When adding v6, add an <c>ApplyV5ToV6Migrations</c> method
-    /// following the same pattern — see docs/CODEC-MIGRATION.md.
+    /// Seeds the per-block Tracker/Link fields to their defaults before the version-gated progressive
+    /// reads overwrite whatever a given blob actually carried: no target/link code
+    /// (<paramref name="targetItemCode"/> / <paramref name="linkTarget"/> / <paramref name="linkLabel"/> = null),
+    /// <paramref name="targetQuantity"/> = 1 (satisfies the <see cref="ScribeBlock"/> ≥ 1 invariant),
+    /// and <paramref name="currentQuantity"/> = 0. These are the values a pre-v6 block (always Task or
+    /// Text, for which they're meaningless) reads with, and also the baseline a v6 block gets for the
+    /// v7-only LinkLabel. This is the single documented home for the "fields a pre-current block lacks"
+    /// defaulting; the naming mirrors ScribePinCodec's <c>ApplyPreV2Defaults</c>. See docs/CODEC-MIGRATION.md.
     /// </summary>
-    private static void ApplyV4ToV5Migrations(byte version, ref string title)
+    private static void ApplyPreV6Defaults(out string? targetItemCode, out int targetQuantity,
+        out int currentQuantity, out string? linkTarget, out string? linkLabel)
     {
-        if (version != PriorVersion) return;
-        // v4 has no title field; the caller already set title = DefaultTitle. This method is the
-        // single documented home for v4→v5 upgrade logic so future readers can find it easily.
-        if (string.IsNullOrWhiteSpace(title)) title = ScribeDocument.DefaultTitle;
+        targetItemCode = null;
+        targetQuantity = 1;
+        currentQuantity = 0;
+        linkTarget = null;
+        linkLabel = null;
     }
 
     /// <summary>Reads exactly <paramref name="count"/> bytes or throws <see cref="EndOfStreamException"/>

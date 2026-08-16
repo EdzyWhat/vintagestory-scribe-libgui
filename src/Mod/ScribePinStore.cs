@@ -91,7 +91,9 @@ public sealed class ScribePinStore
     /// Captures the supplied last-known snapshot and pinned-time. Enforces
     /// <see cref="ScribePinCodec.MaxPinsPerPlayer"/> so a runaway/hostile caller can't grow the set
     /// without limit. Returns true if the set changed.</summary>
-    public bool SetPin(string playerUid, Guid docId, Guid taskId, double pinnedAtTotalHours, string lastKnownText, bool lastKnownDone)
+    public bool SetPin(string playerUid, Guid docId, Guid taskId, double pinnedAtTotalHours, string lastKnownText, bool lastKnownDone,
+        ScribeBlockKind kind = ScribeBlockKind.Task, string? linkTarget = null,
+        string? targetItemCode = null, int targetQuantity = 1, int currentQuantity = 0, string? linkLabel = null)
     {
         var list = _pins.TryGetValue(playerUid, out var existing) ? existing : _pins[playerUid] = new List<ScribePinnedRef>();
         if (list.Any(p => p.OwnerDocId == docId && p.TaskId == taskId)) return false; // idempotent
@@ -105,6 +107,18 @@ public sealed class ScribePinStore
             Orphaned = false,
             LastKnownText = lastKnownText,
             LastKnownDone = lastKnownDone,
+            // Snapshot the kind (and a Link's target) so the HUD can render/act on the pin by kind even
+            // when the source is unloaded — most importantly opening a pinned Link's Handbook page (5.5).
+            Kind = kind,
+            LinkTarget = linkTarget,
+            // Snapshot the Tracker's target item + have/need counts so a pinned Tracker renders its
+            // icon + name + counter with the source document unloaded (add-tracker-link-tasks 7.8).
+            TargetItemCode = targetItemCode,
+            TargetQuantity = targetQuantity,
+            CurrentQuantity = currentQuantity,
+            // Snapshot a guide-page Link's display title so a pinned guide-page Link renders its name
+            // with no item to resolve it from (add-tracker-link-tasks 7.6).
+            LinkLabel = linkLabel,
         });
         return true;
     }
@@ -226,10 +240,23 @@ public sealed class ScribePinStore
             if (pin.OwnerDocId != docId) continue;
             var block = document.FindByTaskId(pin.TaskId);
             if (block is null) continue; // just removed above; defensive
-            if (pin.LastKnownText != block.Text || pin.LastKnownDone != block.Done)
+            // Refresh the snapshot fields the HUD/Pin Tab render from — text/done, the Kind + LinkTarget the
+            // Link hyperlink needs (a Link's target can be edited, so keep it in sync — add-tracker-link-tasks 5.5),
+            // and the Tracker's target item + have/need counts, which change as the player edits the target
+            // quantity or collects/drops items while a dialog is open (add-tracker-link-tasks 7.8).
+            if (pin.LastKnownText != block.Text || pin.LastKnownDone != block.Done
+                || pin.Kind != block.Kind || pin.LinkTarget != block.LinkTarget
+                || pin.TargetItemCode != block.TargetItemCode || pin.TargetQuantity != block.TargetQuantity
+                || pin.CurrentQuantity != block.CurrentQuantity || pin.LinkLabel != block.LinkLabel)
             {
                 pin.LastKnownText = block.Text;
                 pin.LastKnownDone = block.Done;
+                pin.Kind = block.Kind;
+                pin.LinkTarget = block.LinkTarget;
+                pin.TargetItemCode = block.TargetItemCode;
+                pin.TargetQuantity = block.TargetQuantity;
+                pin.CurrentQuantity = block.CurrentQuantity;
+                pin.LinkLabel = block.LinkLabel;
                 changed = true;
             }
         }

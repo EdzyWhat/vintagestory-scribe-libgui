@@ -10,12 +10,14 @@ using Gui.Widgets.Basic;         // Text, Container, VsIcon
 using Gui.Widgets.Events;        // PointerEvent
 using Gui.Widgets.Framework;     // Widget, StatelessWidget, BuildContext, Theme, ValueKey, Key
 using Gui.Widgets.Input;         // Checkbox, GestureDetector
+using Gui.Widgets.Inventory;     // ItemStackDisplay (Tracker/Link item icon)
 using Gui.Widgets.Layout;        // Column, Row, Expanded, Padding, CrossAxisAlignment, MainAxisAlignment
 using Gui.Widgets.Painting;      // BoxStyle
 using Gui.Core.Layout;           // MainAxisSize
 using OpenTK.Mathematics;        // Vector2, Vector4
 using Scribe.Core;
 using Vintagestory.API.Client;
+using Vintagestory.API.Common;   // ItemStack (Tracker/Link display item)
 using Vintagestory.API.Config;   // Lang, RuntimeEnv
 using Vintagestory.GameContent;  // SystemTemporalStability, EnumTempStormStrength
 
@@ -112,6 +114,23 @@ public sealed class HudScribePins : GuiBase
     /// server removed OR that the player re-pinned is dropped (the container's own reappear-cancels-departure
     /// revives a re-pinned row mid-collapse).</summary>
     private readonly HashSet<(Guid, Guid)> awaitingRemoval = new();
+
+    /// <summary>Per-pinned-Tracker LIVE "have" count, recomputed from the viewer's carried inventory on the
+    /// HUD's own 250ms tick (add-tracker-link-tasks 7.10), so a pinned Tracker's counter is live even with no
+    /// Scribe dialog open — the dialog-bound count engine (<see cref="ScribeDialogBase"/>'s
+    /// <c>RecomputeTrackers</c>) only runs while a surface is in its read view, so before this the HUD counter
+    /// froze at the last snapshot. Keyed by pin identity <c>(OwnerDocId, TaskId)</c>. Overrides the pin
+    /// snapshot's <see cref="ScribePinnedRef.CurrentQuantity"/> for display (<see cref="HudTrackerHave"/>) and
+    /// is the rising-edge baseline for the HUD-driven auto-completion. Pruned to the current pinned-Tracker
+    /// set each recompute so it can't leak entries for unpinned/removed tasks.</summary>
+    private readonly Dictionary<(Guid, Guid), int> liveTrackerCounts = new();
+
+    /// <summary>Resolved <see cref="CraftingRecipeIngredient"/> per Tracker target code, cached because
+    /// resolving touches the item/block registries; the frequent recompute then re-runs only the cheap
+    /// carried-stack sum. A null value caches "this code doesn't resolve → counts as 0". Mirrors the dialog
+    /// engine's own <c>trackerIngredientCache</c>; an item code's resolution is stable for the session, so it
+    /// is never invalidated.</summary>
+    private readonly Dictionary<string, CraftingRecipeIngredient?> hudTrackerIngredientCache = new();
 
     /// <summary>Host-owned collapse (and entry) controllers, keyed by row identity, passed into
     /// <see cref="ScribeAnimatedList"/> so a motion RESUMES (not restarts) across the HUD's tree rebuilds
@@ -444,6 +463,11 @@ public sealed class HudScribePins : GuiBase
         {
             RebuildHudBody();
         }
+
+        // Refresh the live Tracker counts against the new pin set and rebuild once more if a displayed count
+        // moved, so a newly-pushed (or newly-opened) Tracker pin shows its live carried count at once rather
+        // than waiting for the next 250ms tick (add-tracker-link-tasks 7.10). No-op unless the HUD is open.
+        if (IsOpened() && RecomputeHudTrackers()) RebuildHudBody();
     }
 
     private void OnMyTimerChanged()
@@ -549,6 +573,16 @@ public sealed class HudScribePins : GuiBase
             // in the exact same dispatch rather than up to 250ms apart.
         }
 
+        // Live Tracker counts (add-tracker-link-tasks 7.10): recompute every pinned Tracker's carried-inventory
+        // "have" on this tick so the HUD counter is live with no Scribe dialog open. Rebuild if a displayed
+        // count actually moved (and the corruption tick didn't already rebuild this frame).
+        bool trackersRebuilt = false;
+        if (RecomputeHudTrackers() && !corruptionRebuilt && IsOpened())
+        {
+            RebuildHudBody();
+            trackersRebuilt = true;
+        }
+
         if (pendingCompletions.Count == 0) return;
 
         bool anyExpired = false;
@@ -576,8 +610,157 @@ public sealed class HudScribePins : GuiBase
             }
         }
 
-        // TickCorruption may already have rebuilt this tick; don't rebuild twice.
-        if (anyExpired && !corruptionRebuilt && IsOpened()) RebuildHudBody();
+        // TickCorruption / the tracker recompute may already have rebuilt this tick; don't rebuild twice.
+        if (anyExpired && !corruptionRebuilt && !trackersRebuilt && IsOpened()) RebuildHudBody();
+    }
+
+    // ---------------- Live Tracker count engine (add-tracker-link-tasks 7.10) ----------------
+
+    /// <summary>Recompute every pinned Tracker's live "have" count from the viewer's carried inventory and
+    /// reconcile — the HUD's own count engine, so a pinned Tracker's counter is LIVE with no Scribe dialog
+    /// open. Mirrors <see cref="ScribeDialogBase"/>'s <c>RecomputeTrackers</c> but scoped to the pin set and
+    /// running off the HUD's existing 250ms <see cref="OnTick"/> (rather than a separate <c>SlotModified</c>
+    /// subscription): folding it into the tick the HUD already runs for its pin windows costs nothing and
+    /// avoids the subscribe/unsubscribe lifecycle the dialog engine needs. 250ms latency is imperceptible for
+    /// a HUD counter.
+    ///
+    /// <para><b>Defer to an open dialog.</b> A pinned Tracker whose owning document is open in ANY Scribe
+    /// dialog (<see cref="ScribeDialogBase.OpenDocumentId"/>) is DISPLAY-ONLY here — the HUD does not send its
+    /// count or fire the rising-edge completion for it. That covers both hazards the dialog engine already
+    /// reasons about: in the read view the dialog itself owns the send + completion (double-driving would
+    /// double-send a quantity and double-fire the completion), and in the editor view an external count write
+    /// would fight the editor's scratch autosave flush. The live override is still computed while deferring so
+    /// the baseline stays current for the moment the dialog closes and the HUD becomes the sole driver.</para>
+    ///
+    /// <para>Returns true when a DISPLAYED count changed, so <see cref="OnTick"/> rebuilds. No-op (returns
+    /// false) when the HUD is closed, the player is unavailable, or no pinned task is a Tracker.</para></summary>
+    private bool RecomputeHudTrackers()
+    {
+        if (!IsOpened()) return false;
+        if (capi.World.Player is not { } player) return false;
+
+        var trackerPins = modSystem.MyPins.Where(p => p.Kind == ScribeBlockKind.Tracker).ToList();
+
+        // Prune live-count entries for pins that are gone (unpinned/removed) so the map can't leak. Done even
+        // when there are no Tracker pins left (clears the last one out).
+        if (liveTrackerCounts.Count > 0)
+        {
+            var liveKeys = trackerPins.Select(p => (p.OwnerDocId, p.TaskId)).ToHashSet();
+            foreach (var key in liveTrackerCounts.Keys.ToList())
+                if (!liveKeys.Contains(key)) liveTrackerCounts.Remove(key);
+        }
+        if (trackerPins.Count == 0) return false;
+
+        var dialogHeld = DialogHeldTrackerDocs();
+        bool anyDisplayChange = false;
+
+        foreach (var pin in trackerPins)
+        {
+            var key = (pin.OwnerDocId, pin.TaskId);
+
+            string codeKey = pin.TargetItemCode ?? "";
+            if (!hudTrackerIngredientCache.TryGetValue(codeKey, out var ingredient))
+            {
+                ScribeTrackerCounter.TryResolveIngredient(capi.World, pin.TargetItemCode, out ingredient);
+                hudTrackerIngredientCache[codeKey] = ingredient; // may cache null ("unresolvable → 0")
+            }
+
+            int counted = ingredient is null ? 0 : ScribeTrackerCounter.CountCarried(player, ingredient);
+            int have = Math.Max(0, counted); // raw carried count; NOT capped at the target (overflow shows, 7.14)
+
+            // Baseline for the rising edge AND the display diff: the last live value we computed for this pin,
+            // else the pin snapshot (first sight this tick / this session).
+            int baseline = liveTrackerCounts.TryGetValue(key, out var prev) ? prev : pin.CurrentQuantity;
+            bool changed = have != baseline;
+            liveTrackerCounts[key] = have; // always record so the display override is used consistently
+            if (changed) anyDisplayChange = true;
+
+            // A dialog has this doc open → defer entirely (read view drives it; editor must not be fought).
+            // Display-only here; the baseline above is kept current for when the dialog closes.
+            if (dialogHeld.Contains(pin.OwnerDocId)) continue;
+            if (!changed) continue; // nothing moved → no send, no edge
+
+            // Persist + converge through the server-authoritative path (the same op the dialog engine uses).
+            SendTrackerQuantity(pin.OwnerDocId, pin.TaskId, have);
+
+            // Rising edge only (unmet → met): apply the tracker-completion setting exactly once. Because we
+            // skip unchanged counts and only fire on the rising edge — and Complete is guarded by !done below —
+            // a later shortfall neither re-fires nor un-completes, mirroring the dialog engine (D6/4.4).
+            bool wasMet = baseline >= pin.TargetQuantity;
+            bool nowMet = have >= pin.TargetQuantity;
+            if (nowMet && !wasMet) ApplyHudTrackerCompletion(pin);
+        }
+
+        return anyDisplayChange;
+    }
+
+    /// <summary>The set of DocIds a Scribe dialog currently has open (in any view). The HUD skips the server
+    /// send + rising-edge completion for pinned Trackers in these docs so it never double-drives a doc a
+    /// dialog's read view owns, nor writes an external count into a doc being edited (see
+    /// <see cref="RecomputeHudTrackers"/> and <see cref="ScribeDialogBase.OpenDocumentId"/>).</summary>
+    private HashSet<Guid> DialogHeldTrackerDocs()
+    {
+        var set = new HashSet<Guid>();
+        foreach (var dialog in capi.Gui.OpenedGuis.OfType<ScribeDialogBase>())
+            if (dialog.OpenDocumentId is { } docId) set.Add(docId);
+        return set;
+    }
+
+    /// <summary>The "have" count to DISPLAY for a pinned Tracker: the HUD's live carried-inventory count if it
+    /// has one, else the pin snapshot's last-known value (add-tracker-link-tasks 7.10).</summary>
+    private int HudTrackerHave(ScribePinnedRef pin)
+        => liveTrackerCounts.TryGetValue((pin.OwnerDocId, pin.TaskId), out var have)
+            ? have
+            : pin.CurrentQuantity;
+
+    /// <summary>Apply the player's tracker-completion setting when a pinned Tracker fills up with NO dialog
+    /// open (add-tracker-link-tasks 7.10) — the HUD-driven sibling of <see cref="ScribeDialogBase"/>'s
+    /// <c>ApplyTrackerCompletion</c>:
+    /// <list type="bullet">
+    /// <item><b>Complete</b> — mark the task done through the same identity-addressed op a checkbox uses,
+    /// honoring the player's completion policy (<see cref="SendCompletion"/>). Guarded by
+    /// <see cref="DisplayedDone"/> so re-collecting after a drop can't un-complete an already-done Tracker; the
+    /// optimistic flag flips the check mark at once. Sent immediately (not via the undo window) exactly like
+    /// the dialog's auto-complete.</item>
+    /// <item><b>Delete</b> — remove the task via the standalone <see cref="ScribeDeleteTaskMessage"/>.</item>
+    /// <item><b>Nothing</b> — leave it satisfied.</item>
+    /// </list></summary>
+    private void ApplyHudTrackerCompletion(ScribePinnedRef pin)
+    {
+        switch (modSystem.MySettings.TrackerCompletion)
+        {
+            case ScribeTrackerCompletion.Complete:
+                if (!DisplayedDone(pin))
+                {
+                    optimisticDone[(pin.OwnerDocId, pin.TaskId)] = true;
+                    SendCompletion(pin.OwnerDocId, pin.TaskId, modSystem.MySettings.CompletionPolicy);
+                }
+                break;
+            case ScribeTrackerCompletion.Delete:
+                capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeDeleteTaskMessage
+                {
+                    DocId = pin.OwnerDocId.ToByteArray(),
+                    TaskId = pin.TaskId.ToByteArray(),
+                });
+                break;
+            case ScribeTrackerCompletion.Nothing:
+                break;
+        }
+    }
+
+    /// <summary>Send a pinned Tracker's freshly-counted quantity to the server (add-tracker-link-tasks 7.10).
+    /// The server resolves the owning document (registry for a Lectern, or by scanning the acting player's
+    /// inventory for a Notebook/Tablet — the HUD viewer is that player), writes the clamped count lock-free,
+    /// and resyncs. Independent of any open dialog. The HUD's own <see cref="liveTrackerCounts"/> override
+    /// drives the display, so the counter is correct immediately without waiting for this round-trip.</summary>
+    private void SendTrackerQuantity(Guid docId, Guid taskId, int quantity)
+    {
+        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeSetTrackerQuantityMessage
+        {
+            DocId = docId.ToByteArray(),
+            TaskId = taskId.ToByteArray(),
+            Quantity = quantity,
+        });
     }
 
     // ---------------- Row state helpers ----------------
@@ -675,6 +858,13 @@ public sealed class HudScribePins : GuiBase
     /// so the HUD rebuilds into the collapsed/expanded form with no network round-trip (design D6).</summary>
     public void ToggleCollapsed()
         => modSystem.UpdateMySettings(s => s.HudCollapsed = !s.HudCollapsed);
+
+    /// <summary>Open a pinned Link's referenced Handbook page (add-tracker-link-tasks 5.5): parse the
+    /// snapshotted <see cref="ScribePinnedRef.LinkTarget"/> and hand it to the same handbook-open helper the
+    /// Read/editor Link rows use. This is the row-click plumbing gated on kind == Link (design D3c); it is
+    /// entirely separate from the row's completion checkbox, so opening the page never toggles done-state. A
+    /// no-op when the code doesn't resolve or the survival mod (handbook protocol) isn't loaded.</summary>
+    private void OpenPinnedLink(string? linkTarget) => ScribeItemRef.OpenHandbookPage(capi, linkTarget);
 
     private void SendClearTimer()
     {
@@ -798,10 +988,37 @@ public sealed class HudScribePins : GuiBase
 
         int max = Math.Min(modSystem.MySettings.HudMaxRows, MaxRenderedRows);
         return ordered.Take(max)
-            .Select(p => new HudPinRow(
-                p.OwnerDocId, p.TaskId, p.LastKnownText, DisplayedDone(p), SunkVisual(p),
-                FadingOut: IsFadingOut(p)))
+            .Select(p =>
+            {
+                // A pinned Tracker/Link carries its item code in the snapshot (Tracker→TargetItemCode,
+                // Link→LinkTarget); resolve the icon + name here (where capi lives) so the row renders
+                // item-shaped, mirroring the Pin Tab / read view (add-tracker-link-tasks 7.8). A plain
+                // Task resolves to (null, null) and keeps its text.
+                var (stack, name) = ResolveHudPinItem(p);
+                return new HudPinRow(
+                    p.OwnerDocId, p.TaskId, p.LastKnownText, DisplayedDone(p), SunkVisual(p),
+                    FadingOut: IsFadingOut(p), Kind: p.Kind, LinkTarget: p.LinkTarget,
+                    DisplayStack: stack, DisplayName: name,
+                    // Live carried count if the HUD's own engine has one, else the snapshot (7.10).
+                    TargetQuantity: p.TargetQuantity, CurrentQuantity: HudTrackerHave(p));
+            })
             .ToList();
+    }
+
+    /// <summary>Resolve a pinned Tracker/Link's item icon + display name from its snapshot code, or
+    /// <c>(null, null)</c> for a plain Task. Mirrors <c>ScribeDialogBase.ResolvePinItem</c> but reads the
+    /// pin's own snapshot so a pinned item row renders even when its source document is unloaded
+    /// (add-tracker-link-tasks 7.8).</summary>
+    private (ItemStack? Stack, string? Name) ResolveHudPinItem(ScribePinnedRef p)
+    {
+        string? code = p.Kind switch
+        {
+            ScribeBlockKind.Tracker => p.TargetItemCode,
+            ScribeBlockKind.Link => p.LinkTarget,
+            _ => null,
+        };
+        if (code is null || capi is null) return (null, null);
+        return ScribeItemRef.ResolveDisplay(capi.World, code, p.LinkLabel);
     }
 
     /// <inheritdoc />
@@ -874,7 +1091,9 @@ public sealed class HudScribePins : GuiBase
                 * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.HudFontScale),
             checkboxSize: ScribeRowConstants.BaseHudCheckboxSize
                 * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.HudFontScale),
+            showIcons: modSystem.MySettings.HudShowIcons,
             onToggleRow: OnToggleRow,
+            onOpenLink: OpenPinnedLink,
             onToggleCollapsed: ToggleCollapsed,
             onOpenSettings: modSystem.OpenSettings,
             timerData: timerSnapshot,
@@ -962,7 +1181,21 @@ public sealed class HudScribePins : GuiBase
 /// collapses it from a frozen ghost it captured — the HUD row itself is simply gone from this set
 /// (migrate-hud-onto-animated-list).</summary>
 internal readonly record struct HudPinRow(
-    Guid DocId, Guid TaskId, string Text, bool Done, bool Sunk, bool FadingOut);
+    Guid DocId, Guid TaskId, string Text, bool Done, bool Sunk, bool FadingOut,
+    ScribeBlockKind Kind = ScribeBlockKind.Task, string? LinkTarget = null,
+    // A pinned Tracker/Link carries its item's resolved icon + display name (snapshotted server-side and
+    // resolved client-side in BuildOrderedRows), plus a Tracker's have/need counts, so the HUD row can
+    // render the item icon + name instead of the (empty) task text (add-tracker-link-tasks 7.8).
+    ItemStack? DisplayStack = null, string? DisplayName = null,
+    int TargetQuantity = 1, int CurrentQuantity = 0)
+{
+    public bool IsTracker => Kind == ScribeBlockKind.Tracker;
+    public bool IsLink => Kind == ScribeBlockKind.Link;
+    /// <summary>A Tracker/Link renders as an item row (icon + name), not the editable-text shape.</summary>
+    public bool IsItemKind => IsTracker || IsLink;
+    /// <summary>The label to show: the resolved item name for a Tracker/Link, else the task text.</summary>
+    public string Label => IsItemKind ? (DisplayName ?? Text) : Text;
+}
 
 /// <summary>
 /// The HUD's widget tree: a collapse-header chevron over a column of pin rows (or, when collapsed,
@@ -997,7 +1230,13 @@ internal sealed class HudPinsContent : StatelessWidget
     private readonly float rowWidth;
     private readonly float rowFontSize;
     private readonly float checkboxSize;
+    /// <summary>Whether Tracker/Link rows render their item icon / guide-page book glyph on the HUD
+    /// (<see cref="ScribePlayerSettings.HudShowIcons"/>); off gives a text-only HUD.</summary>
+    private readonly bool showIcons;
     private readonly Action<Guid, Guid, bool> onToggleRow;
+    /// <summary>Open a pinned Link's Handbook page by its snapshotted link-target (add-tracker-link-tasks
+    /// 5.5). Wired only for a Link row's label; null-safe target.</summary>
+    private readonly Action<string?> onOpenLink;
     private readonly Action onToggleCollapsed;
     private readonly Action onOpenSettings;
     private readonly Scribe.Core.TimerStore? timerData;
@@ -1017,7 +1256,9 @@ internal sealed class HudPinsContent : StatelessWidget
         float rowWidth,
         float rowFontSize,
         float checkboxSize,
+        bool showIcons,
         Action<Guid, Guid, bool> onToggleRow,
+        Action<string?> onOpenLink,
         Action onToggleCollapsed,
         Action onOpenSettings,
         Scribe.Core.TimerStore? timerData = null,
@@ -1036,7 +1277,9 @@ internal sealed class HudPinsContent : StatelessWidget
         this.rowWidth = rowWidth;
         this.rowFontSize = rowFontSize;
         this.checkboxSize = checkboxSize;
+        this.showIcons = showIcons;
         this.onToggleRow = onToggleRow;
+        this.onOpenLink = onOpenLink;
         this.onToggleCollapsed = onToggleCollapsed;
         this.onOpenSettings = onOpenSettings;
         this.timerData = timerData;
@@ -1225,51 +1468,77 @@ internal sealed class HudPinsContent : StatelessWidget
             SoftWrap = true,
         };
 
-        // The text fades LINEARLY toward full transparency over the window for a destructive-pending row (a
-        // countdown preview of removal — scribe-settings-followups 1.1). ScribeFadeText owns its own ticker
-        // (see its remarks): a stock implicitly-animated widget would snap to its target across the HUD's
-        // rebuilds, so this self-ticks instead. A non-fading row is fully opaque. Only the text fades — the
-        // checkbox stays clickable for undo.
         // Corrupt the row text (hud-temporal-storm-corruption 3.4). A per-row seed offset (derived from the
         // task identity) keeps two rows from injecting the identical mark pattern, while the whole HUD still
-        // re-scrambles together on the host's cadence. No-op when no trigger is active (strength 0).
+        // re-scrambles together on the host's cadence. No-op when no trigger is active (strength 0). Unused
+        // by the item-kind branch (it corrupts the resolved name in BuildHudItemContent instead).
         string rowText = Corrupt(row.Text, seedOffset: row.TaskId.GetHashCode());
 
-        Widget text = new ScribeFadeText(
-            fading: row.FadingOut,
-            durationMs: FadeWindowMs,
-            text: rowText,
-            style: textStyle);
-
-        Widget rowBody = new Row(
-            spacing: 6,
-            // Fill the fixed-width column (task 4.5) so the Expanded text wraps within HudRowWidth minus
-            // the checkbox, rather than the row sizing to its (unwrapped) content and overflowing.
-            mainAxisSize: MainAxisSize.Max,
-            crossAxisAlignment: CrossAxisAlignment.Start,
-            children: new Widget[]
+        var checkbox = new Checkbox(
+            value: row.Done,
+            onChanged: _ => onToggleRow(row.DocId, row.TaskId, row.Done),
+            size: checkboxSize,
+            // Grayscale, not the theme default (v1-release-checklist 11.2). The stock CheckboxStyle
+            // maps CheckColor←Primary, which is the parchment theme's brown ochre — out of place on
+            // the HUD, which deliberately renders theme-independent near-white text over the world
+            // glow (see textStyle above). Override to a light-grey box + near-white check so the
+            // checkbox reads as part of the same grayscale HUD as its text.
+            style: new CheckboxStyle
             {
-                new Checkbox(
-                    value: row.Done,
-                    onChanged: _ => onToggleRow(row.DocId, row.TaskId, row.Done),
-                    size: checkboxSize,
-                    // Grayscale, not the theme default (v1-release-checklist 11.2). The stock CheckboxStyle
-                    // maps CheckColor←Primary, which is the parchment theme's brown ochre — out of place on
-                    // the HUD, which deliberately renders theme-independent near-white text over the world
-                    // glow (see textStyle above). Override to a light-grey box + near-white check so the
-                    // checkbox reads as part of the same grayscale HUD as its text.
-                    style: new CheckboxStyle
-                    {
-                        CheckColor = new Vector4(0.867f, 0.867f, 0.867f, 1f),   // #dddddd — softer than white, less blinding
-                        BackgroundColor = new Vector4(0.28f, 0.28f, 0.28f, 0.75f), // neutral dark-grey box at 75% opacity
-                        BorderColor = new Vector4(0.8f, 0.8f, 0.8f, 0.75f),  // #cccccc at 75% opacity — dimmer light-grey outline
-                        BorderThickness = 1.5f,
-                        CornerRadius = 2f,
-                        LabelStyle = textStyle,   // unused (no label) but required by the struct
-                    }),
-                // Expanded so the (SoftWrap) text wraps within the remaining fixed width.
-                new Expanded(child: text),
+                CheckColor = new Vector4(0.867f, 0.867f, 0.867f, 1f),   // #dddddd — softer than white, less blinding
+                BackgroundColor = new Vector4(0.28f, 0.28f, 0.28f, 0.75f), // neutral dark-grey box at 75% opacity
+                BorderColor = new Vector4(0.8f, 0.8f, 0.8f, 0.75f),  // #cccccc at 75% opacity — dimmer light-grey outline
+                BorderThickness = 1.5f,
+                CornerRadius = 2f,
+                LabelStyle = textStyle,   // unused (no label) but required by the struct
             });
+
+        Widget rowBody;
+        if (row.IsItemKind)
+        {
+            // A pinned Tracker/Link renders the referenced item's icon + name (+ a have/need counter on the
+            // LEFT for a Tracker) instead of the editable-text shape, mirroring the Pin Tab / read view
+            // (add-tracker-link-tasks 7.8). The name is a Handbook hyperlink; the counter is not.
+            rowBody = new Row(
+                spacing: 6,
+                mainAxisSize: MainAxisSize.Max,
+                crossAxisAlignment: CrossAxisAlignment.Center,
+                children: new Widget[]
+                {
+                    checkbox,
+                    new Expanded(child: BuildHudItemContent(row, textStyle, interactive: true)),
+                });
+        }
+        else
+        {
+            // A plain Task's text fades LINEARLY toward full transparency over the window for a
+            // destructive-pending row (a countdown preview of removal — scribe-settings-followups 1.1).
+            // ScribeFadeText owns its own ticker (see its remarks): a stock implicitly-animated widget would
+            // snap to its target across the HUD's rebuilds, so this self-ticks instead. A non-fading row is
+            // fully opaque. Only the text fades — the checkbox stays clickable for undo.
+            Widget text = new ScribeFadeText(
+                fading: row.FadingOut,
+                durationMs: FadeWindowMs,
+                text: rowText,
+                style: textStyle);
+
+            // A pinned Link's label is a Handbook hyperlink (add-tracker-link-tasks 5.5): tapping it opens
+            // the referenced page and NEVER toggles the row's checkbox (opening the page is separate from
+            // completion — design D3c). (Handled here for the item-kind branch above; a plain Task's text is
+            // never a hyperlink.)
+            rowBody = new Row(
+                spacing: 6,
+                // Fill the fixed-width column (task 4.5) so the Expanded text wraps within HudRowWidth minus
+                // the checkbox, rather than the row sizing to its (unwrapped) content and overflowing.
+                mainAxisSize: MainAxisSize.Max,
+                crossAxisAlignment: CrossAxisAlignment.Start,
+                children: new Widget[]
+                {
+                    checkbox,
+                    // Expanded so the (SoftWrap) text wraps within the remaining fixed width.
+                    new Expanded(child: text),
+                });
+        }
 
         // A sunk row mutes the WHOLE row (checkbox + text) to SunkOpacity, faded rather than snapped so a
         // completing task reads as a gentle settle. The ValueKey stabilizes row identity across rebuilds
@@ -1281,6 +1550,64 @@ internal sealed class HudPinsContent : StatelessWidget
             curve: Curves.EaseOut,
             child: rowBody,
             key: new ValueKey<Guid>(row.TaskId));
+    }
+
+    /// <summary>The content of a pinned Tracker/Link HUD row: the referenced item's icon + name, with a
+    /// have/need counter on the LEFT for a Tracker (add-tracker-link-tasks 7.8). Mirrors the Pin Tab / read
+    /// view (<c>ScribePinRowState.BuildItemContent</c>) so all surfaces render item rows identically —
+    /// counter-left, name as a Handbook hyperlink — but in the HUD's theme-independent near-white/glow ink
+    /// (the passed <paramref name="textStyle"/>) rather than the parchment <c>ColorScheme</c>, matching the
+    /// rest of the HUD. A non-interactive ghost passes <paramref name="interactive"/> false (no hyperlink).</summary>
+    private Widget BuildHudItemContent(HudPinRow row, TextStyle textStyle, bool interactive)
+    {
+        // The item's 3D icon — theme-independent, so it renders identically here and on every other surface.
+        // The book glyph keeps the HUD's near-white ink (not the parchment Primary the notebook uses — 7.11d);
+        // both the item icon (grown) and the book glyph (shrunk) render row-height-neutral (7.11e/7.11f).
+        // Icons are optional on the HUD (client-local preference): when HudShowIcons is off, Tracker/Link
+        // rows drop the item icon / book glyph and read as text-only, for a leaner HUD.
+        float iconSize = rowFontSize * 1.4f;
+        float lineHeight = ScribeRowControlNudge.TextLineHeight(rowFontSize);
+        Widget? icon = showIcons
+            ? ScribeLinkIcon.Build(row.DisplayStack, row.LinkTarget, iconSize, textStyle.Color, lineHeight)
+            : (Widget?)null;
+
+        // Name (corrupted like every HUD string). A Handbook hyperlink when interactive: tapping opens the
+        // item's page and NEVER toggles the checkbox (design D3c) — same open path as the live Link row. The
+        // Tracker's code isn't carried on the row, so derive it from the resolved stack (a Link uses its
+        // snapshotted LinkTarget directly); either resolves the same page the Pin Tab / read view open.
+        string nameText = Corrupt(row.Label, seedOffset: row.TaskId.GetHashCode());
+        Widget name = new Text(nameText, textStyle);
+        if (interactive)
+        {
+            string? code = row.IsLink ? row.LinkTarget : row.DisplayStack?.Collectible?.Code?.ToString();
+            name = new GestureDetector(
+                onPress: e => { e.Handled = true; onOpenLink(code); },
+                child: name);
+        }
+
+        var children = new List<Widget>();
+        if (row.IsTracker)
+        {
+            // A "have / need" counter on the LEFT (future Crafting tasks inherit this). Emphasis INVERTED
+            // (7.11g): an in-progress count reads STRONG (the row's bright near-white, bold — still collecting);
+            // a satisfied count reads FADED (muted grey) with a faint strikethrough over the number (7.11h).
+            // Shared helper so the HUD matches the read/Pin counters (in the HUD's near-white ink, and corrupted).
+            bool satisfied = row.CurrentQuantity >= row.TargetQuantity;
+            children.Add(ScribeTrackerCounterText.Build(
+                row.CurrentQuantity, row.TargetQuantity, satisfied,
+                strongColor: textStyle.Color, mutedColor: new Vector4(0.70f, 0.70f, 0.70f, 1f),
+                lineHeight: lineHeight, baseStyle: textStyle,
+                corrupt: s => Corrupt(s, seedOffset: 404)));
+        }
+        if (icon != null) children.Add(icon);
+        // Expanded so the (SoftWrap) name wraps within the remaining fixed width, matching the Task row.
+        children.Add(new Expanded(child: name));
+
+        return new Row(
+            spacing: 6,
+            mainAxisSize: MainAxisSize.Max,
+            crossAxisAlignment: CrossAxisAlignment.Center,
+            children: children);
     }
 
     /// <summary>A static, non-interactive snapshot of a HUD row for <see cref="ScribeAnimatedList"/> to
@@ -1330,7 +1657,12 @@ internal sealed class HudPinsContent : StatelessWidget
                         CornerRadius = 2f,
                         LabelStyle = textStyle,
                     }),
-                new Expanded(child: new Opacity(0f, new Text(rowText, textStyle))),
+                // For an item-kind row, freeze the SAME item content (icon + name + Tracker counter) at zero
+                // opacity so the collapsing ghost matches the live row's metrics exactly; else the plain text.
+                // Non-interactive (no hyperlink) — the ghost is inert while it collapses.
+                row.IsItemKind
+                    ? new Expanded(child: new Opacity(0f, BuildHudItemContent(row, textStyle, interactive: false)))
+                    : new Expanded(child: new Opacity(0f, new Text(rowText, textStyle))),
             });
     }
 

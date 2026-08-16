@@ -7,6 +7,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Two new task types: Trackers and Links.** Alongside standard tasks and plain notes, the add
+  menu can now create a **Tracker** — a task tied to an item that counts how many of that item you
+  are carrying toward a target you set (e.g. "gather 32 flax"), showing the item's icon and a live
+  `have/need` counter that updates as you pick things up or drop them. Only what you are *carrying*
+  counts (hotbar + backpacks); items sitting in a chest do not. Set the target with the inline
+  up/down stepper on the row. A **Link** is a task that points at a Handbook page: clicking it —
+  in a Scribe surface or as a pinned task on the HUD — jumps straight to that item's Handbook entry,
+  without ever changing the task's completion.
+- **"Add to Scribe" from the Handbook.** Every item's Handbook page now carries an **Add to Scribe**
+  link at the bottom that creates a Tracker or a Link for that item in one click — into whichever
+  Scribe surface you have open, or the Scribe item you are carrying if none is open. There is also a
+  new Handbook entry explaining the Tracker and Link task types.
+- **Tracker completion setting.** A new per-player setting controls what happens when a Tracker
+  reaches its target — **complete** it (the default), **delete** it, or **do nothing** — so a met
+  gathering goal can tick itself off, tidy itself away, or simply sit satisfied, to taste.
 - **Scriptorium block (foundation).** A new craftable, placeable **Scriptorium** — a dedicated
   shared writing station alongside the Lectern. It hosts a full Scribe document with the same Read /
   Task Editor / Pinned / Guest Book / Settings views, a one-editor-at-a-time lock, server-authoritative

@@ -57,6 +57,18 @@ public class NotebookHost : IScribeDocumentHost
 
     public ScribeDocument Document => _document;
 
+    /// <summary>The <c>InventoryID</c> of the slot this host is bound to, so a client save packet can name
+    /// the EXACT slot it edited and the server writes back there rather than re-guessing by active hand
+    /// (add-tracker-link-tasks 7.16). Null when the slot isn't in a resolvable inventory (defensive — a
+    /// held/carried item always is); the packet then omits identity and the server falls back to active
+    /// hand. Client-side only in practice (a server-constructed host never sends a save packet).</summary>
+    public string? SlotInventoryId => _slot.Inventory?.InventoryID;
+
+    /// <summary>The slot index of <see cref="_slot"/> within <see cref="SlotInventoryId"/>, or -1 when the
+    /// slot has no resolvable inventory. Pairs with <see cref="SlotInventoryId"/> to address the exact
+    /// save target (add-tracker-link-tasks 7.16).</summary>
+    public int SlotId => _slot.Inventory?.GetSlotId(_slot) ?? -1;
+
     /// <summary>The notebook's history chronicle. Persisted in <c>ItemStack.Attributes["scribeHistory"]</c>
     /// and flushed alongside the document in <see cref="Flush"/>.</summary>
     public HistoryStore History => _history;
@@ -98,7 +110,7 @@ public class NotebookHost : IScribeDocumentHost
     public void SetTaskDoneFromReader(Guid taskId, bool done)
     {
         var block = _document.FindByTaskId(taskId);
-        if (block is null || !block.IsTask || block.Done == done) return;
+        if (block is null || !block.IsCompletable || block.Done == done) return;
         block.Done = done;
         Flush();
     }
@@ -107,7 +119,7 @@ public class NotebookHost : IScribeDocumentHost
     {
         for (int i = 0; i < _document.Blocks.Count; i++)
         {
-            if (_document.Blocks[i].TaskId == taskId && _document.Blocks[i].IsTask)
+            if (_document.Blocks[i].TaskId == taskId && _document.Blocks[i].IsCompletable)
             {
                 _document.DeleteBlock(i);
                 Flush();
@@ -128,6 +140,20 @@ public class NotebookHost : IScribeDocumentHost
     {
         if (string.IsNullOrWhiteSpace(text)) return false;
         if (!_document.SetTaskText(taskId, text)) return false;
+        Flush();
+        return true;
+    }
+
+    /// <summary>Set a Tracker's live <see cref="ScribeBlock.CurrentQuantity"/> by stable TaskId — the
+    /// item-surface write-through for the client count engine (add-tracker-link-tasks D5), mirroring
+    /// <see cref="SetTaskTextFromReader"/>. Routes through the Core clamp and only persists on a real
+    /// change; a no-op / unknown id / non-Tracker returns false without flushing.</summary>
+    public bool SetTrackerCurrentQuantityFromReader(Guid taskId, int qty)
+    {
+        var block = _document.FindByTaskId(taskId);
+        if (block is null || !block.IsTracker) return false;
+        if (block.CurrentQuantity == Math.Max(0, qty)) return false;
+        if (!_document.SetTrackerCurrentQuantity(taskId, qty)) return false;
         Flush();
         return true;
     }

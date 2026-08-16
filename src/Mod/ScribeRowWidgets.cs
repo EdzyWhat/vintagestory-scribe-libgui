@@ -9,6 +9,7 @@ using Gui.Widgets.Basic;         // Text, WindowFrame, VsIcon, Container, Button
 using Gui.Widgets.Events;        // PointerEvent
 using Gui.Widgets.Framework;     // Widget, StatefulWidget, State, Theme, ValueKey, Key
 using Gui.Widgets.Input;         // Checkbox, FocusNode, GestureDetector, MouseRegion, Dropdown, DropdownItem
+using Gui.Widgets.Inventory;     // ItemStackDisplay (Tracker/Link item icon)
 using Gui.Widgets.Gestures;      // ScrollController
 using Gui.Widgets.Layout;        // Column, Row, Expanded, Padding, SizedBox, Center, Align, Alignment, CrossAxisAlignment, MainAxisAlignment
 using Gui.Widgets.Overlay;       // Tooltip
@@ -18,6 +19,7 @@ using Gui.Core.Layout;           // MainAxisSize
 using OpenTK.Mathematics;        // Vector2
 using Scribe.Core;
 using Vintagestory.API.Client;
+using Vintagestory.API.Common;   // ItemStack (Tracker/Link display item)
 using Vintagestory.API.Config;   // Lang, GlobalConstants
 using Vintagestory.API.MathTools;  // BlockPos
 
@@ -43,10 +45,17 @@ internal static class ScribeRowControlNudge
     /// <c>ScribeMultilineFieldRender.PerformLayout</c>'s <c>lineCount * lineHeight + PadY*2</c> for one
     /// line.</summary>
     private static float SingleLineInputHeight(ScribeRowStyle style)
+        => TextLineHeight(style.FontSize) + style.FieldPadY * 2f;
+
+    /// <summary>The bare "Ag" line height for the row text family at <paramref name="fontSize"/> — one line of
+    /// wrapped row text with NO field padding. Used to cap a Tracker/Link icon's LAYOUT height to a single
+    /// text line so an oversized (row-height-neutral) icon paints larger without growing the row
+    /// (add-tracker-link-tasks 7.11f — see <see cref="ScribeLinkIcon"/>). Same family/fallback the field and
+    /// read text use, so the measured line matches the Task/Text row it must equal.</summary>
+    public static float TextLineHeight(float fontSize)
     {
-        float lineHeight = TextLayoutHelper.MeasureText("Ag", FontFamily, style.FontSize, FontWeight.Normal).Y;
-        if (lineHeight <= 0) lineHeight = style.FontSize * 1.2f; // same fallback as the field
-        return lineHeight + style.FieldPadY * 2f;
+        float lineHeight = TextLayoutHelper.MeasureText("Ag", FontFamily, fontSize, FontWeight.Normal).Y;
+        return lineHeight > 0 ? lineHeight : fontSize * 1.2f; // same fallback as the field
     }
 
     /// <summary>Down-nudge for the drag grip and the task checkbox (both <see cref="ScribeRowStyle.CheckboxSize"/>
@@ -106,6 +115,96 @@ internal sealed class ScribeVsIconGlyph : StatelessWidget
     }
 
     public override Widget Build(BuildContext context) => new VsIcon(iconName, size, color);
+}
+
+/// <summary>Builds the leading icon for a Tracker/Link row. Normally an <see cref="ItemStackDisplay"/> of the
+/// referenced item; but a guide-page Link (a <c>"page:"</c>-prefixed <see cref="ScribeLinkTarget"/>) has no
+/// item to draw, so it renders the generic <c>scribebook</c> glyph tinted <paramref name="bookColor"/>
+/// instead (add-tracker-link-tasks 7.6). Shared by the read view, editor, Pin Tab, and HUD so a guide-page
+/// Link looks identical everywhere. A Tracker or item Link (<paramref name="linkTarget"/> null or a bare
+/// collectible code) always takes the item path.
+///
+/// <para>Two size tweaks from 2026-08-15 playtest feedback, both relative to the caller's nominal
+/// <c>iconSize</c>: the item icon grows <see cref="ItemIconScale"/> (7.11f) and the <c>scribebook</c> glyph
+/// shrinks to <see cref="BookGlyphScale"/> (7.11e). Crucially the result is rendered ROW-HEIGHT-NEUTRAL —
+/// its layout box is capped to a single text line (<paramref name="lineHeight"/>) and the larger art paints
+/// centered over it, overflowing above/below without growing the row, so a Tracker/Link row matches a
+/// single-line Task/Text row (7.11f — icon rows were previously taller).</para></summary>
+internal static class ScribeLinkIcon
+{
+    /// <summary>Item-icon growth (7.11f): the referenced item reads a touch larger than the nominal row
+    /// control size.</summary>
+    private const float ItemIconScale = 1.1f;
+
+    /// <summary>Guide-page book-glyph shrink (7.11e): the <c>scribebook</c> glyph was visually heavy at the
+    /// full control size, so it renders smaller than the item icon.</summary>
+    private const float BookGlyphScale = 0.8f;
+
+    public static Widget Build(ItemStack? stack, string? linkTarget, float iconSize, Vector4 bookColor,
+        float lineHeight)
+    {
+        bool guidePage = ScribeLinkTarget.IsGuidePage(linkTarget);
+        float visual = guidePage ? iconSize * BookGlyphScale : iconSize * ItemIconScale;
+        Widget art = guidePage
+            ? new ScribeVsIconGlyph("scribebook", visual, bookColor)
+            : new ItemStackDisplay(stack, width: visual, height: visual, renderSize: 48);
+        return HeightNeutral(art, visual, lineHeight);
+    }
+
+    /// <summary>Wrap a <paramref name="visual"/>-px-square icon so it occupies only <paramref name="lineHeight"/>
+    /// of vertical LAYOUT space while painting at full size, centered on that line (add-tracker-link-tasks
+    /// 7.11f). A single-child <see cref="Stack"/> is sized by a <see cref="SizedBox"/> spacer to
+    /// <c>visual × lineHeight</c>; the icon is a <see cref="Positioned"/> child with both <c>Width</c> and
+    /// <c>Height</c> set — which <c>RenderStack</c> forces to exactly that size (min = max) — offset up by half
+    /// the overflow so it centers. <c>RenderStack.Paint</c> does not clip, so the top/bottom overflow shows.
+    /// If the icon already fits a line (never, at current scales) it is returned unwrapped.</summary>
+    private static Widget HeightNeutral(Widget art, float visual, float lineHeight)
+    {
+        if (visual <= lineHeight) return art;
+        float top = (lineHeight - visual) / 2f; // negative — the icon extends above and below the text line
+        return new Stack(children: new Widget[]
+        {
+            new SizedBox(width: visual, height: lineHeight),
+            new Positioned(left: 0f, top: top, width: visual, height: visual, child: art),
+        });
+    }
+}
+
+/// <summary>The Tracker "N / N" have/need counter, shared by the read view, Pin Tab, and HUD so all three
+/// render it identically (add-tracker-link-tasks 7.11g/7.11h). Emphasis is INVERTED from the naive reading:
+/// an in-progress (unsatisfied) count is the thing you're still working on, so it reads STRONG
+/// (<paramref name="strongColor"/> + bold); a satisfied count reads FADED (<paramref name="mutedColor"/>,
+/// normal weight) with a faint strikethrough drawn over just the number, marking it done. The strikethrough
+/// is a custom thin-line overlay (a <see cref="Positioned"/> <see cref="Container"/> spanning the counter's
+/// width, centered on its text line) because LibGUI's <c>TextDecoration</c> has no strikethrough — only
+/// <c>None</c>/<c>Underline</c>. The line strikes ONLY the counter: it lives inside this widget, which sizes
+/// to the "N / N" text, not the row.</summary>
+internal static class ScribeTrackerCounterText
+{
+    public static Widget Build(int current, int target, bool satisfied, Vector4 strongColor,
+        Vector4 mutedColor, float lineHeight, TextStyle? baseStyle = null, System.Func<string, string>? corrupt = null)
+    {
+        string label = $"{current} / {target}";
+        if (corrupt != null) label = corrupt(label);
+
+        TextStyle style = (baseStyle ?? new TextStyle()) with
+        {
+            Color = satisfied ? mutedColor : strongColor,
+            Weight = satisfied ? FontWeight.Normal : FontWeight.Bold,
+        };
+        Widget text = new Text(label, style);
+        if (!satisfied) return text; // in-progress: strong, no strike.
+
+        // Satisfied: faint thin line centered on the single text line, spanning the counter's full width.
+        float thickness = MathF.Max(1f, lineHeight * 0.06f);
+        Vector4 strike = mutedColor with { W = mutedColor.W * 0.6f };
+        return new Stack(children: new Widget[]
+        {
+            text,
+            new Positioned(left: 0f, right: 0f, top: lineHeight / 2f - thickness / 2f, height: thickness,
+                child: new Container(style: new BoxStyle { Color = strike })),
+        });
+    }
 }
 
 /// <summary>A floating per-row action button (delete / pin) with real button chrome: a bordered,

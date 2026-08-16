@@ -2148,6 +2148,48 @@ costs nothing, and read/editor content heights now match by construction instead
 - **Procedural raster sizing to avoid blur:** generate at a size LARGER than the displayed physical px (we used 512² for a ~212 logical-px wheel) so `DrawMaskedBox`'s bilinear resample only ever *downsamples* (crisp) rather than upscales (blurry). Cache + dispose the bitmap on the same path as loaded PNGs.
 - **`DrawMaskedBox` reuses `SharedPaint.Color` without setting it** (the textured-`Container` path) — so a gear is modulated by whatever the previous draw op left on the one shared `SKPaint`. A single top-level reset can't help when many ops paint between it and each gear; reset opaque-white + clear `ColorFilter`/`ImageFilter` immediately before EACH textured draw. (This is the same `SharedPaint` leak the dialog backdrops hit; see the tablet-backdrop note.)
 
+### Row-height-neutral oversized child, and NO strikethrough in `TextStyle` (add-tracker-link-tasks 7.11, 2026-08-15)
+
+Two LibGUI facts from tuning the Tracker/Link row icons + counter:
+
+- **`TextStyle.Decoration` (`TextDecoration`) has only `None` and `Underline` — there is NO strikethrough.**
+  To strike text, overlay a thin line yourself. Pattern used for the satisfied Tracker counter
+  (`ScribeTrackerCounterText`): wrap the counter `Text` in a `Stack` and add a `Positioned(left:0, right:0,
+  top: lineHeight/2 − t/2, height: t)` child holding a `Container { BoxStyle.Color = faint }`. `left`+`right`
+  both set → the line spans the Stack's width, which is the (non-positioned) `Text`'s width — so it strikes
+  ONLY that text, not its Row siblings. Center it on the text's single line via a measured line height
+  (`ScribeRowControlNudge.TextLineHeight`).
+- **A child can render LARGER than its layout footprint via `Stack` + `Positioned`, because `RenderStack.Paint`
+  does NOT clip.** To make an oversized icon contribute only ONE text-line of row height (so a Tracker/Link row
+  equals a single-line Task row while the item icon still reads ~10% bigger): `Stack` children = `[ SizedBox(w:
+  visual, h: lineHeight)  // non-positioned → sizes the stack, Positioned(left:0, top:(lineHeight−visual)/2,
+  width:visual, height:visual, child: icon) ]`. Key mechanic (confirmed by decompiling `RenderStack`): a
+  `Positioned` with BOTH `Width` and `Height` set gets `min == max` for that axis, so the child is forced to
+  exactly `visual×visual` regardless of the (smaller) stack size; the negative `top` centers it so it overflows
+  equally above/below. Non-positioned children lay out under `LayoutConstraints.Loose`, and the stack sizes to
+  their max. There is **no `OverflowBox`/`UnconstrainedBox`** in this LibGUI build — this Stack trick is the way.
+  Caveat: the overflow paints into neighbors' space, so keep the excess modest and vertically centered.
+
+**Fact: `GuiBase` layout+paint is NOT gated on `Focused`/`IsActiveWindow` — every OPEN dialog re-lays-out
+and repaints each frame.** Decompiling `Gui.dll` (`GuiBase.OnRenderGUI` + `FramePipeline.Run`): render is
+gated only on `IsOpened() && RootElement != null`; `FramePipeline.Run` performs layout whenever
+`renderObject.NeedsLayout || renderObject.ChildNeedsLayout` and paints unconditionally. `IsActiveWindow` is
+passed through but used ONLY for debug painting. So a `ForceRebuild()`/`SetState` on an UNFOCUSED Scribe
+dialog (e.g. while the vanilla Handbook is the focused/topmost dialog) DOES visually update on the next
+frame — "it's not repainting because another window has focus" is a false lead. (This killed a focus-gating
+theory for the "Handbook add doesn't show live" bug; the real cause was a rebuild-ordering bug — see below.)
+
+**Fact: `GlobalKey.CurrentState<T>()` is NOT resolvable in the same synchronous call right after
+`ForceRebuild()` mounts the tree — so a `SetState`-style in-place reconcile that runs immediately after a
+rebuild silently no-ops.** Scribe's `RebuildBody()` is `bodyKey.CurrentState<BodyState>()?.Rebuild()`; the
+`?.` swallows a null state. When code did `ForceRebuild(); ...mutate scratch...; RebuildBody();` in one call
+stack (the Handbook deferred-append path in `EnterEditorMode`), the `ForceRebuild` built the tree from the
+PRE-mutation state and the follow-up `RebuildBody` found `CurrentState == null` (the freshly-mounted body's
+GlobalKey isn't registered/resolvable yet within that synchronous frame), so the mutation only appeared on
+the NEXT full rebuild — symptom: "new row invisible until a manual view swap." **Fix pattern: mutate state
+BEFORE the `ForceRebuild`, so the single rebuild renders the final state** — don't rely on a reconcile
+chained after a rebuild in the same call. (add-tracker-link-tasks 7.13; `ScribeDialogBase.EnterEditorMode`.)
+
 ## Held-item dialog flickers closed on FIRST open of a not-yet-crafted item (2026-08-06)
 
 **Symptom: the first time a player opens a Scribe item they did NOT craft (notebook, clockmaker's
@@ -2650,6 +2692,45 @@ handbook page" — the only seam is a Harmony patch. Confirmed by decompiling **
   `capi.World.*Recipes`-style registry). A gate built on `GridRecipes` alone will report "not
   craftable" for a smelted ingot or knapped tool head. Same limit bounds any recursive
   ingredient-graph walk.
+
+**Confirmed SHIPPED 2026-08-15 (add-tracker-link-tasks, `ScribeHandbookPatch`).** The above was
+exercised for real by the Tracker/Link "Add to Scribe" links, and everything held:
+- **Exact signature (this game version):**
+  `public virtual RichTextComponentBase[] GetHandbookInfo(ItemSlot inSlot, ICoreClientAPI capi, ItemStack[] allStacks, ActionConsumable<string> openDetailPageFor)`.
+  The method body ends `return list.ToArray()`, so the postfix param `ref RichTextComponentBase[] __result`
+  is the full page. Attribute-match on the name alone works (only one overload):
+  `[HarmonyPatch(typeof(CollectibleBehaviorHandbookTextAndExtraInfo), nameof(...GetHandbookInfo))]`.
+- **Append-only, allocate a fresh array:** copy `__result` into a new `RichTextComponentBase[old + n]`,
+  place the appended components after, reassign `__result`. Never mutate existing entries — a page with
+  no Scribe content stays byte-identical to vanilla.
+- **Clickable-link ctor confirmed present in `VintagestoryAPI.dll`:**
+  `LinkTextComponent(ICoreClientAPI api, string displayText, CairoFont font, Action<LinkTextComponent> onLinkClicked)`
+  (alongside the `LinkTextComponent(string href)` nav ctor). The `onLinkClicked` delegate captures the
+  page's `inSlot.Itemstack.Collectible.Code.ToString()` (the exact "domain:path" target) and dispatches
+  to the mod system — no stack clone needed when you only want the code string.
+- **Lifecycle:** `new Harmony(id).PatchAll(typeof(ScribeModSystem).Assembly)` in `StartClientSide`
+  (client-only — the Handbook is a client GUI), `harmony.UnpatchAll(id)` in `Dispose`.
+- **Opening a specific entry programmatically (used by the footer "guide" action, not the patch):**
+  the registered link protocol does it without reflection —
+  `capi.LinkProtocols.TryGetValue("handbook", out var open); open(new LinkTextComponent("handbook://<pageCode>"))`.
+  Detect whether the Handbook is already open via
+  `capi.Gui.OpenedGuis.FirstOrDefault(d => d.ToggleKeyCombinationCode == "handbook")`.
+- **Custom explainer pages need NO code.** A JSON file under `assets/<domain>/config/handbook/*.json`
+  of shape `{ pageCode, title, text }` (title/text are lang keys) is auto-discovered and registered as a
+  standalone handbook entry — link to it with `handbook://<pageCode>`. See
+  `src/Mod/assets/scribe/config/handbook/03-task-types.json`.
+- **Jump the player straight to a FOCUSED search box** with the sibling protocol
+  `capi.LinkProtocols.TryGetValue("handbooksearch", out var s); s(new LinkTextComponent("handbooksearch://<text>"))`.
+  It opens the Handbook OVERVIEW composer (the one that owns the `"searchField"` text input, focused on
+  build) and runs `Search(text)` — empty text = "open the Handbook ready to type." This matters because the
+  Handbook has **two separate composers**: `overviewGui` (has the search field) and `detailViewGui` (an item/
+  entry page, NO search field). You cannot show a search box *on* an entry page — they never coexist. So the
+  fastest "let the player find an item to track/link" path is `handbooksearch://` (add-tracker-link-tasks
+  7.11c: chosen over opening the explainer entry, which dead-ended the player away from search).
+- **VTML does NOT decode HTML entities.** Handbook/tooltip copy is VTML, not HTML: `&amp;` renders as the
+  literal text `&amp;` and `&#47;` as `&#47;` — use a literal `&` and `/` in the lang string. Valid VTML
+  tags (`<strong>`, `<em>`, `<br>`, `<a href="...">`, `<hotkey>`) DO render. Bit us in the task-types article
+  (`&amp;`, `12&#47;20` showed raw); other strings that already used literal `&`/`/` rendered fine.
 
 ## Entry template
 

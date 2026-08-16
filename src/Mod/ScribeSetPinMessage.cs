@@ -39,4 +39,39 @@ public sealed class ScribeSetPinMessage
     /// <summary>Client-supplied done snapshot, parallel to <see cref="SnapshotText"/>.</summary>
     [ProtoMember(5)]
     public bool SnapshotDone { get; set; }
+
+    /// <summary>Client-supplied task-kind snapshot (the <see cref="Scribe.Core.ScribeBlockKind"/> byte),
+    /// parallel to <see cref="SnapshotText"/> — used when the server can't resolve the task from a
+    /// registered host, so a pinned Link still reaches the HUD as a Link (add-tracker-link-tasks 5.5).
+    /// Defaults to 0 (<c>Task</c>) for an old client that never sets it.</summary>
+    [ProtoMember(6)]
+    public byte SnapshotKind { get; set; }
+
+    /// <summary>Client-supplied link-target snapshot for a Link task (null otherwise), parallel to
+    /// <see cref="SnapshotText"/> — the collectible code the pinned Link's Handbook hyperlink opens.</summary>
+    [ProtoMember(7)]
+    public string? SnapshotLinkTarget { get; set; }
+
+    /// <summary>Client-supplied target-item-code snapshot for a Tracker task (null otherwise), parallel to
+    /// <see cref="SnapshotText"/> — the collectible the pinned Tracker counts and whose icon/name the HUD
+    /// and Pin Tab render (add-tracker-link-tasks 7.8).</summary>
+    [ProtoMember(8)]
+    public string? SnapshotTargetItemCode { get; set; }
+
+    /// <summary>Client-supplied target-quantity snapshot for a Tracker task (the "need" side of the
+    /// have/need counter), parallel to <see cref="SnapshotText"/>. Defaults to 0 for an old client; the
+    /// server clamps a Tracker's stored target to ≥ 1, so a defaulted 0 is harmless.</summary>
+    [ProtoMember(9)]
+    public int SnapshotTargetQuantity { get; set; }
+
+    /// <summary>Client-supplied current-quantity snapshot for a Tracker task (the "have" side of the
+    /// have/need counter), parallel to <see cref="SnapshotText"/> (add-tracker-link-tasks 7.8).</summary>
+    [ProtoMember(10)]
+    public int SnapshotCurrentQuantity { get; set; }
+
+    /// <summary>Client-supplied link-label snapshot for a guide-page Link task (null otherwise), parallel
+    /// to <see cref="SnapshotText"/> — the guide's display title, which the HUD and Pin Tab render because
+    /// a guide page has no item to resolve a name from (add-tracker-link-tasks 7.6).</summary>
+    [ProtoMember(11)]
+    public string? SnapshotLinkLabel { get; set; }
 }

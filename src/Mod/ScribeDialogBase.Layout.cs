@@ -19,6 +19,7 @@ using Gui.Core.Layout;           // MainAxisSize
 using OpenTK.Mathematics;        // Vector2
 using Scribe.Core;
 using Vintagestory.API.Client;
+using Vintagestory.API.Common;   // ItemStack (Tracker/Link display item)
 using Vintagestory.API.Config;   // Lang, GlobalConstants
 using Vintagestory.API.MathTools;  // BlockPos
 
@@ -548,6 +549,18 @@ public abstract partial class ScribeDialogBase
     /// §7.4). Null on the Lectern/Notebook and on a wet tablet, where a text tap is not a blocked edit.</summary>
     private protected virtual Action<Guid>? ReadViewTextEditRefused => null;
 
+    /// <summary>Resolve a block's Tracker/Link item icon + display name for a row snapshot, or
+    /// <c>(null, null)</c> for a Task/Text block (which render their authored text instead). A Tracker uses
+    /// its <see cref="ScribeBlock.TargetItemCode"/>, a Link its <see cref="ScribeBlock.LinkTarget"/>; both are
+    /// plain code strings that Core stores API-free, so the parse against the live registries happens here in
+    /// the Mod layer (add-tracker-link-tasks Group 5). Kept off the row widgets so they stay <c>capi</c>-free.</summary>
+    private (ItemStack? Stack, string? Name) ResolveRowItem(ScribeBlock b)
+    {
+        if (!b.IsTracker && !b.IsLink) return (null, null);
+        string? code = b.IsTracker ? b.TargetItemCode : b.LinkTarget;
+        return ScribeItemRef.ResolveDisplay(capi.World, code, b.LinkLabel);
+    }
+
     /// <summary>Build the read view. Promoted from <c>private</c> so the always-edit tablet can render it
     /// directly for a non-editable (hard/fired) stack — it has no <see cref="viewMode"/> switching, so it
     /// can't reach the read view through the default <see cref="BuildCentralRegion"/> routing.</summary>
@@ -563,11 +576,31 @@ public abstract partial class ScribeDialogBase
             // clear), never render it as a blank checkbox row. Task-only: an empty note is valid. The
             // read-view toggle addresses tasks by TaskId, so dropping rows here doesn't misalign anything.
             blocks: host.Document.Blocks
-                .Select((b, i) => new ScribeReadRowData(i, b.IsTask, b.Done, IsPinnedForMe(b.TaskId), b.TaskId, b.Text))
+                .Select((b, i) =>
+                {
+                    var (stack, name) = ResolveRowItem(b);
+                    return new ScribeReadRowData(
+                        Index: i, Kind: b.Kind, Done: b.Done, Pinned: IsPinnedForMe(b.TaskId), TaskId: b.TaskId,
+                        Text: b.Text, DisplayStack: stack, DisplayName: name,
+                        TargetQuantity: b.TargetQuantity, CurrentQuantity: b.CurrentQuantity, LinkTarget: b.LinkTarget);
+                })
+                // Drop only an empty-text Task (a stray blank checkbox — belt-and-suspenders, see below).
+                // A Text note may be legitimately empty, and a Tracker/Link has no text of its own (it renders
+                // an item icon + name), so both pass through — all are non-IsTask, so `!r.IsTask` keeps them.
                 .Where(r => !r.IsTask || !string.IsNullOrWhiteSpace(r.Text))
                 .ToList(),
             onToggleTask: OnReadViewCompleteTask,
             onTogglePinned: OnReadViewTogglePinned,
+            // A Link row's item name is a hyperlink: tapping it opens the referenced Handbook page and never
+            // touches completion (add-tracker-link-tasks 5.3). A Tracker's name opens its TARGET item's page
+            // the same way (feedback 6.5 — the count target IS a real item with a Handbook entry). Resolve the
+            // tapped block by TaskId, then open the page keyed off whichever code the kind carries.
+            onOpenLink: taskId =>
+            {
+                var block = host.Document.FindByTaskId(taskId);
+                if (block?.IsLink == true) ScribeItemRef.OpenHandbookPage(capi, block.LinkTarget);
+                else if (block?.IsTracker == true) ScribeItemRef.OpenHandbookPage(capi, block.TargetItemCode);
+            },
             onSwitchToEditor: TryEnterEditor,
             // Symmetric 0.04·W horizontal inset on the footer button, from the same ScribeLayout width.
             footerButtonPadding: EdgeInsets.Symmetric(
@@ -595,7 +628,14 @@ public abstract partial class ScribeDialogBase
     protected Widget BuildEditorContent()
     {
         var blocks = scratch!.Blocks
-            .Select((b, i) => new ScribeEditRowData(i, b.IsTask, b.Done, IsPinnedForMe(b.TaskId), b.TaskId, b.Text))
+            .Select((b, i) =>
+            {
+                var (stack, name) = ResolveRowItem(b);
+                return new ScribeEditRowData(
+                    Index: i, Kind: b.Kind, Done: b.Done, Pinned: IsPinnedForMe(b.TaskId), TaskId: b.TaskId,
+                    Text: b.Text, DisplayStack: stack, DisplayName: name,
+                    TargetQuantity: b.TargetQuantity, CurrentQuantity: b.CurrentQuantity, LinkTarget: b.LinkTarget);
+            })
             .ToList();
 
         int? autoFocus = autoFocusRowOnRebuild;
@@ -618,6 +658,9 @@ public abstract partial class ScribeDialogBase
             onToggleTask: ToggleEditorTask,
             onDeleteBlock: DeleteEditorBlock,
             onTogglePinned: TogglePinnedEditorTask,
+            // A Tracker row's inline stepper edits its target quantity in scratch; the normal editor flush
+            // persists it (the codec serializes TargetQuantity, so no dedicated packet — add-tracker-link-tasks 5.2).
+            onTrackerQuantityChanged: SetEditorTrackerTargetQuantity,
             // Drag-reorder follows the moved row into view (anchorViewport defaults false); only a Sink
             // completion passes anchorViewport: true to hold the viewport still.
             onReorderBlock: (from, to) => ReorderEditorBlock(from, to),

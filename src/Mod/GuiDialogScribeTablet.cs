@@ -110,9 +110,23 @@ public class GuiDialogScribeTablet : ScribeDialogBase
     /// can be softened; fired tablets are permanent. Null on a wet tablet (text is edited normally there).</summary>
     private protected override Action<Guid>? ReadViewTextEditRefused => IsEditable
         ? null
-        : _ => capi.TriggerIngameError(this, "scribe-tablet-locked", Lang.Get(_state == TabletState.Fired
-            ? "scribe:tablet-fired-locked"
-            : "scribe:tablet-hard-locked"));
+        : _ => capi.TriggerIngameError(this, "scribe-tablet-locked", Lang.Get(ReadOnlyLockedLangKey));
+
+    /// <summary>The material-specific "this tablet is locked" lang key for the current read-only state — fired
+    /// tablets are permanent, hardened tablets can be softened. Shared by the read-view row-text-edit refusal
+    /// and the Handbook read-only append notice so both surfaces the same wording (feedback 7.13).</summary>
+    private string ReadOnlyLockedLangKey => _state == TabletState.Fired
+        ? "scribe:tablet-fired-locked"
+        : "scribe:tablet-hard-locked";
+
+    /// <summary>A fired/hardened tablet is permanently read-only, so a Handbook "Add to Scribe" click on an open
+    /// set tablet can never reach the editor — report it rather than dropping silently (feedback 7.13).</summary>
+    protected override bool CanEditFromHandbook => IsEditable;
+
+    /// <summary>Material-specific read-only notice for a Handbook append onto a set tablet, reusing the same
+    /// fired/hardened wording as the row-text-edit refusal (feedback 7.13).</summary>
+    protected override void NotifyHandbookAppendReadOnly()
+        => capi.TriggerIngameError(this, "scribe-tablet-locked", Lang.Get(ReadOnlyLockedLangKey));
 
     /// <summary>A WET tablet grants editor access immediately without a server round-trip (item-hosted, no
     /// lock contention), seeding the scratch from the host's current document. A HARD or FIRED tablet is
@@ -319,10 +333,6 @@ public class GuiDialogScribeTablet : ScribeDialogBase
     /// writes directly into the held ItemStack, exactly like the Notebook.</summary>
     protected override void SendFlushPacket(byte[] documentBytes)
     {
-        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeNotebookSaveMessage
-        {
-            DocIdBytes = host.Document.DocId.ToByteArray(),
-            DocumentBytes = documentBytes,
-        });
+        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(BuildItemSavePacket(documentBytes));
     }
 }

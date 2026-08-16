@@ -24,10 +24,26 @@ public sealed class ScribePlayerSettings
     /// removal). Replaces the earlier boolean <c>CompleteUnpins</c>.</summary>
     public ScribeCompletionPolicy CompletionPolicy { get; set; } = ScribeCompletionPolicy.Sink;
 
+    /// <summary>What a Tracker task does when its carried-inventory count reaches its target
+    /// (add-tracker-link-tasks D6): <see cref="ScribeTrackerCompletion.Complete"/> (default — mark it
+    /// done, the same edit as ticking its checkbox), <see cref="ScribeTrackerCompletion.Delete"/>
+    /// (remove it from the document), or <see cref="ScribeTrackerCompletion.Nothing"/> (leave it, the
+    /// row just reads as satisfied). Read by the client-side count engine when a Tracker crosses its
+    /// target; the resulting edit flows through the normal server-authoritative path. Distinct from
+    /// <see cref="CompletionPolicy"/>, which is about pins.</summary>
+    public ScribeTrackerCompletion TrackerCompletion { get; set; } = ScribeTrackerCompletion.Complete;
+
     /// <summary>The pinned-task HUD: whether the player has collapsed or hidden it. Persisted and
     /// synced so the collapsed state is restored across sessions; toggled by the HUD's rebindable
     /// show/hide hotkey.</summary>
     public bool HudCollapsed { get; set; }
+
+    /// <summary>Whether the pinned-task HUD renders each Tracker/Link row's icon (the item's 3D icon or a
+    /// guide-page's book glyph). Default <c>true</c> (icons shown, the original behavior). When
+    /// <c>false</c>, those rows drop the icon and show only their text/counter — for players who prefer a
+    /// leaner, text-only HUD. A per-player, client-local display preference: never server-synced, and a
+    /// plain bool so <see cref="Normalized"/> leaves it untouched.</summary>
+    public bool HudShowIcons { get; set; } = true;
 
     /// <summary>Whether to silence Scribe's OWN LibGUI UI click sounds (the interaction sounds LibGUI's
     /// <c>Button</c> plays on tap — the Lectern action buttons and numeric +/- steppers). Default
@@ -314,6 +330,12 @@ public sealed class ScribePlayerSettings
     public static ScribeCompletionPolicy NormalizePolicy(ScribeCompletionPolicy value) =>
         Enum.IsDefined(typeof(ScribeCompletionPolicy), value) ? value : ScribeCompletionPolicy.Sink;
 
+    /// <summary>Maps a loaded tracker-completion value to a defined <see cref="ScribeTrackerCompletion"/>,
+    /// falling back to the default (<see cref="ScribeTrackerCompletion.Complete"/>) for any unrecognized
+    /// value so a hand-edited or corrupted config can't select an undefined behavior.</summary>
+    public static ScribeTrackerCompletion NormalizeTrackerCompletion(ScribeTrackerCompletion value) =>
+        Enum.IsDefined(typeof(ScribeTrackerCompletion), value) ? value : ScribeTrackerCompletion.Complete;
+
     /// <summary>Maps a loaded timer-mode value to a defined <see cref="TimerMode"/>, falling back to the
     /// default (<see cref="TimerMode.RealTime"/>) for any unrecognized value so a hand-edited or corrupted
     /// config can't select an undefined timer type.</summary>
@@ -350,6 +372,7 @@ public sealed class ScribePlayerSettings
         MigrateLegacyKeys();
         HudMaxRows = ClampHudMaxRows(HudMaxRows);
         CompletionPolicy = NormalizePolicy(CompletionPolicy);
+        TrackerCompletion = NormalizeTrackerCompletion(TrackerCompletion);
         PreferredTimerMode = NormalizeTimerMode(PreferredTimerMode);
         HudAnchor = NormalizeAnchor(HudAnchor);
         HudRowWidth = ClampHudRowWidth(HudRowWidth);

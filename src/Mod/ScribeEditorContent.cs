@@ -9,6 +9,7 @@ using Gui.Widgets.Basic;         // Text, WindowFrame, VsIcon, Container, Button
 using Gui.Widgets.Events;        // PointerEvent
 using Gui.Widgets.Framework;     // Widget, StatefulWidget, State, Theme, ValueKey, Key
 using Gui.Widgets.Input;         // Checkbox, FocusNode, GestureDetector, MouseRegion, Dropdown, DropdownItem
+using Gui.Widgets.Inventory;     // ItemStackDisplay (Tracker/Link item icon)
 using Gui.Widgets.Gestures;      // ScrollController
 using Gui.Widgets.Layout;        // Column, Row, Expanded, Padding, SizedBox, Center, Align, Alignment, CrossAxisAlignment, MainAxisAlignment
 using Gui.Widgets.Overlay;       // Tooltip
@@ -18,12 +19,33 @@ using Gui.Core.Layout;           // MainAxisSize
 using OpenTK.Mathematics;        // Vector2
 using Scribe.Core;
 using Vintagestory.API.Client;
+using Vintagestory.API.Common;   // ItemStack (Tracker/Link display item)
 using Vintagestory.API.Config;   // Lang, GlobalConstants
 using Vintagestory.API.MathTools;  // BlockPos
 
 namespace Scribe;
 
-internal readonly record struct ScribeEditRowData(int Index, bool IsTask, bool Done, bool Pinned, Guid TaskId, string Text);
+/// <summary>A value snapshot of one editable block plus its index. The live text lives in the dialog's
+/// scratch document (the field writes through on every keystroke); this is only the seed for building the
+/// row. <see cref="Kind"/> distinguishes Task / Text / Tracker / Link (add-tracker-link-tasks Group 5): a
+/// Tracker row swaps its text field for an item icon + name + <see cref="TargetQuantity"/> stepper, and a
+/// Link row shows the icon + name of its <see cref="LinkTarget"/>. The icon/name are resolved by the dialog
+/// and passed in as <see cref="DisplayStack"/>/<see cref="DisplayName"/> so this row widget stays API-free.</summary>
+internal readonly record struct ScribeEditRowData(
+    int Index, ScribeBlockKind Kind, bool Done, bool Pinned, Guid TaskId, string Text,
+    ItemStack? DisplayStack = null, string? DisplayName = null,
+    int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null)
+{
+    public bool IsTask => Kind == ScribeBlockKind.Task;
+    public bool IsTracker => Kind == ScribeBlockKind.Tracker;
+    public bool IsLink => Kind == ScribeBlockKind.Link;
+    /// <summary>Task, Tracker, and Link all carry a Done flag, so all three get a completion checkbox + pin;
+    /// only a freeform Text section doesn't.</summary>
+    public bool Completable => Kind != ScribeBlockKind.Text;
+    /// <summary>The row's display label: a Tracker/Link shows its resolved item name (its own Text is empty),
+    /// a Task/Text shows its authored text.</summary>
+    public string Label => (IsTracker || IsLink) ? (DisplayName ?? Text) : Text;
+}
 
 /// <summary>
 /// A static, non-interactive snapshot of a deleted editor row, shown while it collapses out of the list
@@ -62,20 +84,21 @@ internal sealed class ScribeFrozenEditorRow : StatelessWidget
                     child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant))),
         };
 
-        if (data.IsTask)
+        if (data.Completable)
         {
             // A frozen (disabled) checkbox reflecting the row's last done-state — no onChanged, so it can't
-            // be toggled while it collapses.
+            // be toggled while it collapses. Task, Tracker, and Link all carry a Done flag (Completable).
             children.Add(new Padding(
                 EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
                 child: new Checkbox(value: data.Done, onChanged: null, size: style.CheckboxSize)));
         }
 
-        // Inset the text by the editor field's internal padding so the frozen row's text sits exactly where
-        // the live field's text did (matches ScribeReadRow), avoiding a horizontal jump as it collapses.
+        // Inset the label by the editor field's internal padding so the frozen row's text sits exactly where
+        // the live field's text did (matches ScribeReadRow), avoiding a horizontal jump as it collapses. A
+        // Tracker/Link collapses showing its resolved item name (its own Text is empty) rather than blank.
         children.Add(new Expanded(child: new Padding(
             EdgeInsets.Symmetric(vertical: style.FieldPadY, horizontal: style.FieldPadX),
-            child: new Text(data.Text, textStyle))));
+            child: new Text(data.Label, textStyle))));
 
         Widget rowBody = new Padding(
             EdgeInsets.Symmetric(vertical: style.RowVerticalPadding, horizontal: style.RowHorizontalPadding),
@@ -85,7 +108,7 @@ internal sealed class ScribeFrozenEditorRow : StatelessWidget
                 mainAxisSize: MainAxisSize.Max,
                 children: children));
 
-        if (data.IsTask && data.Pinned)
+        if (data.Completable && data.Pinned)
         {
             rowBody = new Container(
                 style: new BoxStyle { Color = ScribeRowConstants.PinnedTint(colors) },
@@ -124,6 +147,7 @@ internal sealed class ScribeEditorContent : StatefulWidget
         Action<int> onDeleteBlock,
         Action<int> onTogglePinned,
         Action<int, int> onReorderBlock,
+        Action<int, int> onTrackerQuantityChanged,
         Action<ScribeAddKind> onAdd,
         Action onSwitchToRead,
         Action onOpenEditorReference,
@@ -155,6 +179,7 @@ internal sealed class ScribeEditorContent : StatefulWidget
         OnDeleteBlock = onDeleteBlock;
         OnTogglePinned = onTogglePinned;
         OnReorderBlock = onReorderBlock;
+        OnTrackerQuantityChanged = onTrackerQuantityChanged;
         OnAdd = onAdd;
         OnSwitchToRead = onSwitchToRead;
         OnOpenEditorReference = onOpenEditorReference;
@@ -202,6 +227,11 @@ internal sealed class ScribeEditorContent : StatefulWidget
     /// <summary>Reorder a block from one index to another (drag drop). See
     /// <see cref="ScribeEditorContentState"/> for the drag mechanics.</summary>
     public Action<int, int> OnReorderBlock { get; }
+    /// <summary>A Tracker row's inline +/- stepper changed its target quantity: (blockIndex, newTarget)
+    /// (add-tracker-link-tasks 5.2). The dialog writes it into the scratch document; the normal editor flush
+    /// persists it (the codec already serializes TargetQuantity, so no dedicated packet). See
+    /// <see cref="ScribeDialogBase.SetEditorTrackerTargetQuantity"/>.</summary>
+    public Action<int, int> OnTrackerQuantityChanged { get; }
     /// <summary>Add a block of the chosen kind (add-note-kind-picker D2). The footer's segmented picker calls
     /// this with its current primary kind (defaults to Task) on a primary click, or with the picked kind from
     /// the inline list. See <see cref="ScribeDialogBase.OnClickAdd"/>.</summary>
@@ -359,6 +389,7 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                     onToggleTask: Widget.OnToggleTask,
                     onDelete: Widget.OnDeleteBlock,
                     onTogglePinned: Widget.OnTogglePinned,
+                    onTrackerQuantityChanged: Widget.OnTrackerQuantityChanged,
                     onDragStart: OnRowDragStart,
                     onDragOver: OnRowDragOver,
                     onDragEnd: OnRowDragEnd,
@@ -631,6 +662,7 @@ internal sealed class ScribeEditRow : StatefulWidget
         Action<int> onToggleTask,
         Action<int> onDelete,
         Action<int> onTogglePinned,
+        Action<int, int> onTrackerQuantityChanged,
         Action<int> onDragStart,
         Action<int> onDragOver,
         Action onDragEnd,
@@ -657,6 +689,7 @@ internal sealed class ScribeEditRow : StatefulWidget
         OnToggleTask = onToggleTask;
         OnDelete = onDelete;
         OnTogglePinned = onTogglePinned;
+        OnTrackerQuantityChanged = onTrackerQuantityChanged;
         OnDragStart = onDragStart;
         OnDragOver = onDragOver;
         OnDragEnd = onDragEnd;
@@ -698,6 +731,9 @@ internal sealed class ScribeEditRow : StatefulWidget
     public Action<int> OnToggleTask { get; }
     public Action<int> OnDelete { get; }
     public Action<int> OnTogglePinned { get; }
+    /// <summary>A Tracker row's inline +/- stepper changed its target quantity: (blockIndex, newTarget)
+    /// (add-tracker-link-tasks 5.2).</summary>
+    public Action<int, int> OnTrackerQuantityChanged { get; }
     public Action<int> OnDragStart { get; }
     public Action<int> OnDragOver { get; }
     public Action OnDragEnd { get; }
@@ -758,6 +794,59 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         base.Dispose();
     }
 
+    /// <summary>The editor content of a Tracker/Link row: the referenced item's icon + name in place of the
+    /// text field (the block's own Text is empty by design), and — for a Tracker — an inline +/- stepper that
+    /// edits its <see cref="ScribeBlock.TargetQuantity"/> (add-tracker-link-tasks 5.2). The stepper is an
+    /// uncontrolled <see cref="ScribeNumericField"/> seeded from the current target: the editor reconciles rows
+    /// in place (UpdateWidget, not remount) and the target's ONLY editor-side mutation IS this stepper, so it
+    /// stays consistent without a ValueKey remount (which would drop focus on every step). The count engine
+    /// changes a Tracker's CurrentQuantity in the READ view, never its target here. A Link edits nothing inline
+    /// — it's just the icon + name; its target page is opened from the read view (5.3). The icon/name are the
+    /// dialog-resolved snapshot on the row data, so this stays capi-free.</summary>
+    private Widget BuildItemEditorContent(ColorScheme colors, ScribeRowStyle style, int index)
+    {
+        float iconSize = style.ControlSize * 1.4f;
+        var rowChildren = new List<Widget>();
+
+        if (Widget.Data.IsTracker)
+        {
+            // Inline target-quantity stepper, placed at the LEFT of the row (feedback 6.3): the row's
+            // hover-revealed delete/pin buttons float over the RIGHT edge, so a right-hand stepper sat
+            // UNDER them and was unreachable (which also made the pin untappable — feedback 6.9). Font-relative
+            // off iconSize so it scales with the row height rather than a fixed literal. The +/- button column
+            // is a fixed fieldHeight/2, so widening the total flows entirely into the text region: at
+            // 2.26·iconSize the input reads ~three digits comfortably — 60% wider than the first pass's
+            // 1.6·iconSize (whose ~1.1·iconSize input the +/- buttons were crowding, feedback 6.3 round 2).
+            // clamp keeps the target a whole number ≥ 1 (matching the Core setter); onChanged writes the
+            // rounded int through to scratch via the dialog.
+            rowChildren.Add(new ScribeNumericField(
+                initialValue: Widget.Data.TargetQuantity,
+                step: 1,
+                clamp: v => v < 1 ? 1 : (float)Math.Round(v),
+                onChanged: v => Widget.OnTrackerQuantityChanged(index, (int)Math.Round(v)),
+                style: new BoxStyle { Width = iconSize * 2.26f, Height = iconSize },
+                textStyle: new TextStyle { Color = colors.OnSurface }));
+        }
+
+        // Guide-page book glyph tinted Primary (feedback 7.11d) and row-height-neutral (7.11e/7.11f); the item
+        // icon ignores the color. The Tracker's stepper still drives this editor row's height by design.
+        float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
+        rowChildren.Add(ScribeLinkIcon.Build(Widget.Data.DisplayStack, Widget.Data.LinkTarget, iconSize, colors.Primary, lineHeight));
+        rowChildren.Add(new Expanded(child: new Text(
+            Widget.Data.Label, new TextStyle { Color = colors.OnSurface, SoftWrap = true })));
+
+        // Inset by the editor field's internal padding, matching the read view's item row and the Task/Text
+        // field, so icon rows line up with text rows across a view switch. Center the icon/stepper against the
+        // (taller-than-a-line) content.
+        return new Padding(
+            EdgeInsets.Symmetric(vertical: style.FieldPadY, horizontal: style.FieldPadX),
+            child: new Row(
+                spacing: style.CheckboxTextGap,
+                crossAxisAlignment: CrossAxisAlignment.Center,
+                mainAxisSize: MainAxisSize.Max,
+                children: rowChildren));
+    }
+
     public override Widget Build(BuildContext context)
     {
         int index = Widget.Data.Index;
@@ -805,7 +894,9 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         // Opacity is paint-only and ALWAYS present (value flips 1.0↔0.5) so no widget-type swap mid-drag.
         float contentOpacity = Widget.IsDragSource ? 0.5f : 1f;
 
-        if (Widget.Data.IsTask)
+        // Task, Tracker, and Link all carry a Done flag (Completable), so all three show a completion
+        // checkbox; only a freeform Text section doesn't (add-tracker-link-tasks Group 5).
+        if (Widget.Data.Completable)
         {
             children.Add(new Opacity(contentOpacity, child: new Padding(
                 EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
@@ -818,6 +909,19 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                     },
                     size: style.CheckboxSize))));
         }
+
+        // A Tracker/Link row has no editable text field — its content is the referenced item's icon + name,
+        // and a Tracker additionally carries an inline +/- stepper for its target quantity
+        // (add-tracker-link-tasks 5.2/5.3). The block's own Text is empty by design; the item is resolved by
+        // the dialog and passed in on the row data, so this stays capi-free. Dimmed with the same
+        // contentOpacity as a text row so a drag reads identically.
+        if (Widget.Data.IsTracker || Widget.Data.IsLink)
+        {
+            children.Add(new Expanded(child: new Opacity(contentOpacity,
+                child: BuildItemEditorContent(colors, style, index))));
+        }
+        else
+        {
 
         // Ghost hint only on TASK rows (add-empty-task-lifecycle D6b) — a text section is legitimately
         // empty and needs no "New task…" prompt. Painted dimmed while the field is empty; not committed.
@@ -862,6 +966,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             onPointerFocus: () => Widget.OnPointerFocus(index),
             onJumpToFirstRow: () => Widget.OnJumpToFirstRow(index),
             onJumpToLastRow: () => Widget.OnJumpToLastRow(index)))));
+        }
 
         // Row body: [grip][checkbox][text]. Delete/pin no longer reserve columns here — they float on
         // top of the row (see below), so the text can use the full width.
@@ -891,7 +996,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         // is still ALWAYS present with transparent defaults so the widget type never swaps and the field's
         // live caret/text survive the repaint.
         Vector4 rowFill =
-            Widget.Data.IsTask && Widget.Data.Pinned ? ScribeRowConstants.PinnedTint(colors) : Vector4.Zero;
+            Widget.Data.Completable && Widget.Data.Pinned ? ScribeRowConstants.PinnedTint(colors) : Vector4.Zero;
 
         rowBody = new Container(
             style: new BoxStyle
@@ -938,7 +1043,8 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                     iconColor: colors.Error,
                     size: btn,
                     onTap: () => Widget.OnDelete(index))));
-            if (Widget.Data.IsTask)
+            // Task, Tracker, and Link are all pinnable (Completable); only a Text section isn't.
+            if (Widget.Data.Completable)
             {
                 stackChildren.Add(new Positioned(
                     right: btnRight + boxW + gap, top: btnTop,

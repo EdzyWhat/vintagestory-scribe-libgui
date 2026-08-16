@@ -183,13 +183,10 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
     }
 
     /// <summary>Notebook saves use <see cref="ScribeNotebookSaveMessage"/> so the server can write
-    /// directly into the player's held ItemStack rather than routing through a block entity.</summary>
+    /// directly into the player's chosen ItemStack (addressed by slot identity, see
+    /// <see cref="ScribeDialogBase.BuildItemSavePacket"/>) rather than routing through a block entity.</summary>
     protected override void SendFlushPacket(byte[] documentBytes)
     {
-        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeNotebookSaveMessage
-        {
-            DocIdBytes = host.Document.DocId.ToByteArray(),
-            DocumentBytes = documentBytes,
-        });
+        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(BuildItemSavePacket(documentBytes));
     }
 }

@@ -139,13 +139,16 @@ public sealed partial class ScribeModSystem : ModSystem
 
     /// <summary>Client → server: notify that the player just opened the notebook with this DocId, so
     /// the server can record their one-time PickedUp history entry (see
-    /// <see cref="OnServerReceivedNotebookOpened"/>). No-op off the client. Called by both notebook
-    /// items' open paths.</summary>
-    public void NotifyServerNotebookOpened(Guid docId)
+    /// <see cref="OnServerReceivedNotebookOpened"/>). Carries the opened item's slot identity so the
+    /// server records the entry on the exact opened book, not the active-hand item (add-tracker-link-tasks
+    /// 7.16). No-op off the client. Called by every Scribe item's open path.</summary>
+    public void NotifyServerNotebookOpened(Guid docId, ItemSlot slot)
     {
         capi?.Network.GetChannel(NetworkChannelName).SendPacket(new ScribeNotebookOpenedMessage
         {
             DocIdBytes = docId.ToByteArray(),
+            TargetInventoryId = slot.Inventory?.InventoryID,
+            TargetSlotId = slot.Inventory?.GetSlotId(slot) ?? -1,
         });
     }
 
@@ -225,7 +228,8 @@ public sealed partial class ScribeModSystem : ModSystem
             .RegisterMessageType<ScribeNotebookOpenedMessage>()
             .RegisterMessageType<ScribeSetTimerMessage>()
             .RegisterMessageType<ScribeClearTimerMessage>()
-            .RegisterMessageType<ScribeTimerStateMessage>();
+            .RegisterMessageType<ScribeTimerStateMessage>()
+            .RegisterMessageType<ScribeSetTrackerQuantityMessage>();
     }
 
     /// <summary>Server-side accessor for the pin store, so the block entity can register/orphan its
@@ -248,6 +252,10 @@ public sealed partial class ScribeModSystem : ModSystem
 
         RegisterCustomIcons(api);
         RegisterCustomFonts(api);
+
+        // Client-side Handbook postfix: injects the "Add to Scribe" links onto each item's Handbook page
+        // (add-tracker-link-tasks 3.1). Client-only — the Handbook is a client GUI — and unpatched in Dispose.
+        StartHandbookPatch();
 
         api.Network.GetChannel(NetworkChannelName)
             .SetMessageHandler<ScribeEditDocumentMessage>(OnClientReceivedEditReply)
@@ -282,6 +290,7 @@ public sealed partial class ScribeModSystem : ModSystem
     /// disposed — never a dialog). The server side holds no unmanaged/disposable state of its own here.</summary>
     public override void Dispose()
     {
+        DisposeHandbookPatch();
         pinHud?.Dispose();
         pinHud = null;
         if (timerDisplayTickId != 0 && capi is not null)
@@ -323,6 +332,7 @@ public sealed partial class ScribeModSystem : ModSystem
         channel.SetMessageHandler<ScribeNotebookOpenedMessage>(OnServerReceivedNotebookOpened);
         channel.SetMessageHandler<ScribeSetTimerMessage>(OnServerReceivedSetTimer);
         channel.SetMessageHandler<ScribeClearTimerMessage>(OnServerReceivedClearTimer);
+        channel.SetMessageHandler<ScribeSetTrackerQuantityMessage>(OnServerReceivedSetTrackerQuantity);
 
         // Persist/load the pin + settings stores with the save game (the WaypointMapLayer pattern).
         api.Event.SaveGameLoaded += OnSaveGameLoaded;

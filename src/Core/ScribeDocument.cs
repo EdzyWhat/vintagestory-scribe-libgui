@@ -2,7 +2,8 @@ namespace Scribe.Core;
 
 /// <summary>
 /// The game-agnostic model of a Scribe document: an ordered sequence of <see cref="ScribeBlock"/>s.
-/// Each block is either a checkbox task or a freeform text section, so tasks and text can be
+/// Each block is one of four kinds — a checkbox task, a freeform text section, a Tracker
+/// ("gather N of item X"), or a Link (a reference to an item's Handbook page) — so they can be
 /// interspersed and reordered freely. All mutation methods return <c>true</c> on success and
 /// <c>false</c> for invalid input (out-of-range index), never throwing to the caller. Task text
 /// is stored verbatim, including empty/whitespace-only text — the model enforces no non-blank
@@ -69,6 +70,37 @@ public sealed class ScribeDocument
         return true;
     }
 
+    /// <summary>Adds a Tracker task ("gather N of item X") to the end and gives it a fresh stable
+    /// <see cref="ScribeBlock.TaskId"/>. <paramref name="itemCode"/> is the plain item code to count
+    /// (may be null and set later); <paramref name="targetQuantity"/> is clamped to ≥ 1 by the block.
+    /// The row's display label is derived by the Mod layer from the code, so Text starts empty.</summary>
+    public bool AddTracker(string? itemCode, int targetQuantity)
+    {
+        _blocks.Add(new ScribeBlock(ScribeBlockKind.Tracker, "", targetItemCode: itemCode, targetQuantity: targetQuantity));
+        return true;
+    }
+
+    /// <summary>Adds an <b>item</b> Link task (a reference to an item's Handbook page) to the end and gives
+    /// it a fresh stable <see cref="ScribeBlock.TaskId"/>. <paramref name="target"/> is the plain collectible
+    /// code (may be null). The row's display label is derived live by the Mod layer from the item, so Text
+    /// and <see cref="ScribeBlock.LinkLabel"/> start empty.</summary>
+    public bool AddLink(string? target)
+    {
+        _blocks.Add(new ScribeBlock(ScribeBlockKind.Link, "", linkTarget: target));
+        return true;
+    }
+
+    /// <summary>Adds a <b>guide-page</b> Link task (a reference to a non-item Handbook guide/explainer page)
+    /// to the end. <paramref name="pageCode"/> is the bare Handbook page code (stored <c>"page:"</c>-prefixed
+    /// via <see cref="ScribeLinkTarget.ForPage"/>); <paramref name="label"/> is the guide's title, captured at
+    /// creation because a guide page has no item to resolve a name from later (add-tracker-link-tasks 7.6).</summary>
+    public bool AddGuideLink(string pageCode, string? label)
+    {
+        _blocks.Add(new ScribeBlock(ScribeBlockKind.Link, "",
+            linkTarget: ScribeLinkTarget.ForPage(pageCode), linkLabel: label));
+        return true;
+    }
+
     /// <summary>
     /// Changes a block's text. Both Task and Text blocks may be set to any value, including
     /// empty/whitespace-only — the text is stored verbatim and the model does NOT trim surrounding
@@ -86,12 +118,13 @@ public sealed class ScribeDocument
         return true;
     }
 
-    /// <summary>Flips the completed flag of a Task block. Fails on a Text section or bad index.</summary>
+    /// <summary>Flips the completed flag of a completable block (Task, Tracker, or Link). Fails on a
+    /// Text section (which has no Done flag) or a bad index.</summary>
     public bool ToggleTask(int index)
     {
         if (!IsValidIndex(index)) return false;
         var block = _blocks[index];
-        if (!block.IsTask) return false;
+        if (!block.IsCompletable) return false;
         block.Done = !block.Done;
         return true;
     }
@@ -140,6 +173,27 @@ public sealed class ScribeDocument
         return false;
     }
 
+    /// <summary>
+    /// Sets the live carried count (<see cref="ScribeBlock.CurrentQuantity"/>) of the Tracker with the
+    /// given stable <see cref="ScribeBlock.TaskId"/> — the identity-addressed op the count engine uses
+    /// to push an updated have-count without knowing the block's index. The value is clamped only to
+    /// ≥ 0 by the block's setter (NOT capped at <c>TargetQuantity</c> — overflow is meaningful, 7.14).
+    /// Returns false (document unchanged) when no block
+    /// has that id or the id belongs to a non-Tracker block. Pure data; no VS API.
+    /// </summary>
+    public bool SetTrackerCurrentQuantity(Guid taskId, int currentQuantity)
+    {
+        for (int i = 0; i < _blocks.Count; i++)
+        {
+            if (_blocks[i].TaskId == taskId && _blocks[i].IsTracker)
+            {
+                _blocks[i].CurrentQuantity = currentQuantity; // clamped to ≥ 0 in the setter (may exceed target, 7.14)
+                return true;
+            }
+        }
+        return false;
+    }
+
     /// <summary>Returns the block with the given <see cref="ScribeBlock.TaskId"/>, or null if no
     /// block in this document has that id.</summary>
     public ScribeBlock? FindByTaskId(Guid taskId)
@@ -155,14 +209,14 @@ public sealed class ScribeDocument
     /// Moves the task with the given stable <see cref="ScribeBlock.TaskId"/> to the END of the block
     /// list, preserving the relative order of every other block — the identity-addressed "sink to the
     /// bottom" a completion under the Sink policy performs (scribe-lectern-view-consistency). Returns
-    /// false (document unchanged) when no block has that id, the id belongs to a non-task block, or the
-    /// task is already last. Pure data; no VS API.
+    /// false (document unchanged) when no block has that id, the id belongs to a non-completable (Text)
+    /// block, or the task is already last. Pure data; no VS API.
     /// </summary>
     public bool MoveTaskToBottom(Guid taskId)
     {
         for (int i = 0; i < _blocks.Count; i++)
         {
-            if (_blocks[i].TaskId == taskId && _blocks[i].IsTask)
+            if (_blocks[i].TaskId == taskId && _blocks[i].IsCompletable)
             {
                 if (i == _blocks.Count - 1) return false; // already last — nothing to do
                 var block = _blocks[i];

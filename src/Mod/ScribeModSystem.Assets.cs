@@ -41,6 +41,9 @@ public sealed partial class ScribeModSystem
         RegisterSvgIcon(api, "scribehistory", new AssetLocation("scribe", "textures/icons/guestbook.svg"));
         RegisterSvgIcon(api, "scribetimer",   new AssetLocation("scribe", "textures/icons/timer.svg"));
         RegisterSvgIcon(api, "scribeinfo",    new AssetLocation("scribe", "textures/icons/info.svg"));
+        // Guide-page Link icon (add-tracker-link-tasks 7.6): a guide/explainer page has no item to draw, so
+        // its Link row shows this generic open-book glyph instead of an ItemStackDisplay.
+        RegisterSvgIcon(api, "scribebook",    new AssetLocation("scribe", "textures/icons/book.svg"));
         // Drag-reorder feedback glyphs (replace-drag-wash-with-grip-arrows): the grabbed row's grip
         // becomes ◀ and the prospective drop row's grip becomes ▶, replacing the old row-background washes.
         RegisterSvgIcon(api, "scribetriangleleft",  new AssetLocation("scribe", "textures/icons/triangle-left.svg"));

@@ -34,4 +34,46 @@ public sealed class ScribePinnedRef
 
     /// <summary>Last-known completed state of the task, refreshed alongside <see cref="LastKnownText"/>.</summary>
     public bool LastKnownDone { get; set; }
+
+    /// <summary>The pinned task's kind, snapshotted so a client can render/act on the pin by kind even
+    /// when the owning block is unloaded — most importantly so the HUD can treat a pinned Link's label as
+    /// a Handbook hyperlink (add-tracker-link-tasks 5.5). Defaults to <see cref="ScribeBlockKind.Task"/>
+    /// (the value pre-v2 pin blobs migrate to), so an ordinary pinned task is unaffected.</summary>
+    public ScribeBlockKind Kind { get; set; } = ScribeBlockKind.Task;
+
+    /// <summary>For a <see cref="ScribeBlockKind.Link"/> pin, the last-known link target (the collectible
+    /// code its Handbook hyperlink opens); null for every other kind. Snapshotted alongside
+    /// <see cref="Kind"/> so the HUD can open the page without resolving the (possibly unloaded) source
+    /// document (add-tracker-link-tasks 5.5).</summary>
+    public string? LinkTarget { get; set; }
+
+    /// <summary>For a <see cref="ScribeBlockKind.Tracker"/> pin, the last-known target item code (the
+    /// collectible the tracker counts and whose icon/name the pin renders); null for every other kind.
+    /// Snapshotted alongside <see cref="Kind"/> so the HUD and Pin Tab can render a pinned Tracker's
+    /// icon + name + counter without resolving the (possibly unloaded) source document
+    /// (add-tracker-link-tasks 7.8). Distinct from <see cref="LinkTarget"/> so a future kind that carries
+    /// both a link and a counted item stays unambiguous.</summary>
+    public string? TargetItemCode { get; set; }
+
+    /// <summary>For a <see cref="ScribeBlockKind.Tracker"/> pin, the last-known target quantity (the
+    /// "need" side of the have/need counter). Defaults to 1; snapshotted alongside
+    /// <see cref="TargetItemCode"/> and refreshed on edit so the pin's counter stays current
+    /// (add-tracker-link-tasks 7.8).</summary>
+    public int TargetQuantity { get; set; } = 1;
+
+    /// <summary>For a <see cref="ScribeBlockKind.Tracker"/> pin, the last-known current quantity (the
+    /// "have" side of the have/need counter). Defaults to 0; refreshed from the authoritative document on
+    /// edit — this snapshot is the persisted fallback. The live counter is recomputed continuously by
+    /// whichever client-side engine is watching the viewer's carried inventory: a Scribe dialog's read view
+    /// when one is open (add-tracker-link-tasks 7.8), or the HUD's own count engine when a pinned Tracker is
+    /// shown with no dialog open (7.10). This field reflects the last value the document held between those
+    /// live updates.</summary>
+    public int CurrentQuantity { get; set; }
+
+    /// <summary>For a guide-page <see cref="ScribeBlockKind.Link"/> pin (a <c>"page:"</c>-prefixed
+    /// <see cref="LinkTarget"/>), the last-known display title of the guide — snapshotted because a guide
+    /// page has no item to resolve a name from, so without it the HUD/Pin Tab could only show a bare book
+    /// icon. Null for an item Link (whose name resolves live from the item) and for every other kind
+    /// (add-tracker-link-tasks 7.6).</summary>
+    public string? LinkLabel { get; set; }
 }

@@ -3,25 +3,6 @@
 ## Purpose
 TBD - created by archiving change codec-migration-scaffold. Update Purpose after archive.
 ## Requirements
-### Requirement: Document codec accepts prior version via a named migration step
-`ScribeDocumentCodec` SHALL accept byte arrays written in the immediately prior format version
-(currently v4) by running them through a named private migration method before constructing
-the final `ScribeDocument`. The migration method SHALL be named to reflect which version
-transition it handles (e.g. `ApplyV4ToV5Migrations`) and SHALL be the sole place where
-version-specific defaulting or field-inference for that step lives. Ad-hoc inline branching
-on a `bool isCurrent` flag SHALL NOT be used; the `isCurrent` pattern is replaced by this
-named-step pattern.
-
-#### Scenario: v4 bytes are migrated to current schema via a named step
-- **WHEN** bytes written in v4 format are deserialized
-- **THEN** deserialization succeeds, the document's `Title` field is set to
-  `ScribeDocument.DefaultTitle` (because v4 has no title field), and no other fields differ
-  from a v5 document with the same blocks
-
-#### Scenario: Current-version bytes bypass migration steps
-- **WHEN** bytes written in the current version (v5) are deserialized
-- **THEN** no migration methods are called and the title is read directly from the byte stream
-
 ### Requirement: Document codec accepted-version window is documented in one place
 `ScribeDocumentCodec`'s class-level XML doc-comment SHALL contain an accepted-version table
 that lists: the current version number, each accepted prior version number, and the fields
@@ -55,15 +36,53 @@ worked example using the v4→v5 title addition as the reference case.
 - **THEN** `docs/CODEC-MIGRATION.md` exists, is non-empty, and contains the four elements
   described above (verifiable by inspection / code review)
 
-### Requirement: Each supported prior version has a dedicated older-blob unit test
+### Requirement: Document codec reads an accepted window of prior versions via progressive reads
+`ScribeDocumentCodec` SHALL read any format version within an accepted window
+`[MinVersion, Version]` (currently `[5, 7]`) using **progressive append-only reads**: each
+version's trailing fields are read only behind a `version >=` threshold, and fields absent from
+an older-but-accepted blob are set to their documented defaults by a single named defaulting
+method (`ApplyPreV6Defaults`), which SHALL be the sole place per-version defaulting lives.
+Ad-hoc inline branching on a `bool isCurrent` flag SHALL NOT be used. A version below
+`MinVersion` or above `Version` SHALL fail-safe (`TryDeserialize` returns `false`) rather than
+partially reading. `MinVersion` advances only when the oldest shipped layout is deliberately
+dropped; shipped v5 documents (v1.1.1) live in real saves, so the window must not narrow below
+them silently. (Mirrors `ScribePinCodec`'s v2→v3 accepted window.)
+
+#### Scenario: Accepted older versions are read via progressive gates and defaulted
+- **WHEN** bytes written in an accepted older version (v5 or v6) are deserialized
+- **THEN** deserialization succeeds, fields that version does not carry (tracker/link fields for
+  v5; the per-block link label for v6) are set to their documented defaults via
+  `ApplyPreV6Defaults`, and no other field differs from a current-version document with the same
+  blocks
+
+#### Scenario: Current-version bytes bypass migration steps
+- **WHEN** bytes written in the current version (v7) are deserialized
+- **THEN** no defaulting method is invoked and every field is read directly from the byte stream
+
+#### Scenario: A version outside the accepted window fails to deserialize
+- **WHEN** bytes written below `MinVersion` (e.g. v3 or v4) or above `Version` are deserialized
+- **THEN** `TryDeserialize` returns `false` (fail-safe) rather than partially reading
+
+### Requirement: Each accepted prior version has a dedicated older-blob unit test
 For every prior-version format that `ScribeDocumentCodec` accepts, `ScribeDocumentCodecTests`
 SHALL contain a test that hand-builds a byte array in exactly that prior format and asserts
 specific field values on the deserialized document — not merely that deserialization returns
-`true`. The test name SHALL follow the pattern
-`TryDeserialize_V<N>Bytes_<FieldName>_IsUpgraded` or similar to make the migration step
-being verified obvious.
+`true`. The test name SHALL make the version and the defaulting being verified obvious (e.g.
+`TryDeserialize_V5Bytes_Succeeds_AndDefaultsTrackerLinkFields`,
+`TryDeserialize_V6Bytes_Succeeds_AndDefaultsLinkLabel`). A version outside the accepted window
+SHALL likewise have a fail-safe test (e.g. `TryDeserialize_V4Bytes_FailsSafely`).
 
-#### Scenario: v4 older-blob test asserts title is set to default
-- **WHEN** a hand-built v4 byte array (with no title field) is deserialized
-- **THEN** the test asserts `restored.Title == ScribeDocument.DefaultTitle` (not merely `ok == true`)
+#### Scenario: v5 older-blob test asserts tracker/link fields default
+- **WHEN** a hand-built v5 byte array (with no tracker/link fields) is deserialized
+- **THEN** the test asserts the specific defaulted values of the tracker/link fields on the
+  restored blocks (not merely `ok == true`)
+
+#### Scenario: v6 older-blob test asserts link label defaults
+- **WHEN** a hand-built v6 byte array (with no per-block link label) is deserialized
+- **THEN** the test asserts the defaulted link-label value on the restored blocks (not merely
+  `ok == true`)
+
+#### Scenario: Below-floor version test asserts fail-safe
+- **WHEN** a hand-built v4 byte array (below `MinVersion`) is deserialized
+- **THEN** the test asserts `TryDeserialize` returns `false` (not a partial read)
 

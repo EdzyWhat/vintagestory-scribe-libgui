@@ -34,12 +34,21 @@ public abstract partial class ScribeDialogBase
     /// into the editor tree (or lets <c>TryOpen</c> build it if the dialog isn't open yet).</summary>
     public void EnterEditorMode(byte[]? documentBytes)
     {
-        if (recoveringLostLock && scratch is not null)
+        if ((recoveringLostLock || optimisticEditorEntry) && scratch is not null)
         {
-            // This grant is the recovery re-acquire after a lost-lock save failure (task 8.6): the
-            // lock is ours again, so keep the player's unsaved scratch and re-flush it rather than
-            // reseeding from the authoritative document (which would silently discard their edits).
+            // We already hold a live scratch that the authoritative document must NOT overwrite, and this grant
+            // just confirms the lock is ours — so keep the scratch and re-flush it rather than reseeding. Two
+            // callers land here:
+            //   • the lost-lock recovery re-acquire after a save failure (task 8.6), which must preserve the
+            //     player's unsaved edits;
+            //   • a singleplayer-optimistic Handbook append (feedback 7.13 follow-up): we entered the editor
+            //     locally and applied the append while the server was paused, and THIS is the delayed grant
+            //     reply (carrying the pre-flush document) arriving on unpause — reseeding would drop the
+            //     optimistic append, so keep our scratch and re-flush it to persist it authoritatively.
+            // NOTE: the INITIAL optimistic entry reaches EnterEditorMode with scratch still null (not editing
+            // yet), so it correctly falls through to the full seed path below and applies the pending append.
             recoveringLostLock = false;
+            optimisticEditorEntry = false;
             saveFailureRetries = 0;
             isEditorMode = true;
             StartAutosaveTick();
@@ -71,6 +80,21 @@ public abstract partial class ScribeDialogBase
         recoveringLostLock = false;
         SyncFocusNodesToScratch();
         StartAutosaveTick();
+
+        // add-tracker-link-tasks 3.4 (Case B): a Handbook "Add to Scribe" click that arrived while this
+        // dialog was NOT editing stashed its append and requested editor access; now that access has landed
+        // (synchronous for items, or the async server grant for blocks), apply the deferred append and flush.
+        // The recovery branch above returns early, so this fires only on a genuine editor entry — never on a
+        // lost-lock re-acquire (which must preserve the player's own in-flight scratch untouched).
+        //
+        // Apply the append BEFORE the ForceRebuild below, so the fresh editor tree is built from the
+        // already-mutated scratch and the new Tracker/Link row is visible immediately — landing the player in
+        // a live editor view where they can set the count. Applying it AFTER the rebuild (as this once did)
+        // left the row out of the just-built tree, and ApplyHandbookAppend's in-place RebuildBody can't recover
+        // it: the body's GlobalKey state isn't resolvable in the same synchronous call right after Mount, so
+        // RebuildBody no-ops and the row only appeared on the NEXT full rebuild — i.e. a manual view swap. That
+        // was the Lectern "task created but invisible until a view swap" bug (feedback 7.13).
+        FlushPendingHandbookAppend();
 
         if (IsOpened())
         {
@@ -273,6 +297,7 @@ public abstract partial class ScribeDialogBase
         autoFocusRowOnRebuild = null;
         saveFailureRetries = 0;
         recoveringLostLock = false;
+        optimisticEditorEntry = false;
         DisposeFocusNodes();
     }
 
@@ -386,7 +411,7 @@ public abstract partial class ScribeDialogBase
 
         // Editor mode: don't resync in-progress TEXT, but reconcile the orthogonal external effects below.
         if (scratch is null || !IsOpened()) return;
-        var serverTasks = host.Document.Blocks.Where(b => b.IsTask).ToList();
+        var serverTasks = host.Document.Blocks.Where(b => b.IsCompletable).ToList();
         var serverTaskIds = serverTasks.Select(b => b.TaskId).ToHashSet();
 
         // (1) Drop tasks the server no longer knows about.
@@ -394,7 +419,7 @@ public abstract partial class ScribeDialogBase
         for (int i = scratch.Blocks.Count - 1; i >= 0; i--)
         {
             var b = scratch.Blocks[i];
-            if (!b.IsTask || serverTaskIds.Contains(b.TaskId)) continue;
+            if (!b.IsCompletable || serverTaskIds.Contains(b.TaskId)) continue;
             // A task in scratch but absent from the server is EITHER a real task the server dropped
             // (completed via the HUD / Delete policy elsewhere) — which should disappear here too — OR a
             // task this editor JUST created that hasn't reached the server yet: EditorInsertTaskBelow
@@ -405,8 +430,11 @@ public abstract partial class ScribeDialogBase
             // sweep guard tripping, because the delete comes from HERE, not the empty-row sweep). Tell the
             // two apart: never drop the row currently being edited, and never drop an empty task (empty
             // tasks are never persisted by design — see PurgeEmptyRowsFromScratch — so their absence from
-            // the server is always expected, never a server-side deletion).
-            if (focusedEditIndex == i || string.IsNullOrWhiteSpace(b.Text)) continue;
+            // the server is always expected, never a server-side deletion). The empty-text protection is
+            // scoped to real Tasks: a Tracker/Link carries empty Text by design (its label comes from the
+            // referenced item, not typed text) yet IS persisted, so a server-side deletion of one is real
+            // and must drop here — otherwise the next flush would resurrect it from stale scratch.
+            if (focusedEditIndex == i || (b.IsTask && string.IsNullOrWhiteSpace(b.Text))) continue;
             DeleteEditorBlock(i);
             structural = true;
         }
@@ -423,7 +451,7 @@ public abstract partial class ScribeDialogBase
         for (int i = 0; i < scratch.Blocks.Count; i++)
         {
             var b = scratch.Blocks[i];
-            if (!b.IsTask || !serverDone.TryGetValue(b.TaskId, out bool serverBlockDone)) continue;
+            if (!b.IsCompletable || !serverDone.TryGetValue(b.TaskId, out bool serverBlockDone)) continue;
             if (b.Done == serverBlockDone) continue;
             scratch.ToggleTask(i);
             isDirty = true; // carry the synced done-state into the next flush so it isn't reverted (D4)

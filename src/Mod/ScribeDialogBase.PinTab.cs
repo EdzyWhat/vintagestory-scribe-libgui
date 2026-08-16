@@ -19,6 +19,7 @@ using Gui.Core.Layout;           // MainAxisSize
 using OpenTK.Mathematics;        // Vector2
 using Scribe.Core;
 using Vintagestory.API.Client;
+using Vintagestory.API.Common;   // ItemStack (Tracker/Link display item)
 using Vintagestory.API.Config;   // Lang, GlobalConstants
 using Vintagestory.API.MathTools;  // BlockPos
 
@@ -49,9 +50,19 @@ public abstract partial class ScribeDialogBase
         // else the authoritative server snapshot — the Pin Tab's equivalent of the editor re-seeding from
         // its scratch doc across a ForceRebuild (which fully unmounts + remounts the field).
         var rows = orderedPins
-            .Select(p => new ScribePinRowData(
-                p.OwnerDocId, p.TaskId, p.LastKnownDone,
-                pinEditBuffer.TryGetValue(p.TaskId, out var buffered) ? buffered : p.LastKnownText))
+            .Select(p =>
+            {
+                // A pinned Tracker/Link carries its item code in the snapshot (TargetItemCode / LinkTarget),
+                // so resolve the icon + name here (where capi lives) and render item-shaped — mirroring the
+                // read/editor views (add-tracker-link-tasks 7.8). A plain Task resolves to (null, null) and
+                // keeps its editable text field.
+                var (stack, name) = ResolvePinItem(p);
+                return new ScribePinRowData(
+                    p.OwnerDocId, p.TaskId, p.LastKnownDone,
+                    pinEditBuffer.TryGetValue(p.TaskId, out var buffered) ? buffered : p.LastKnownText,
+                    Kind: p.Kind, DisplayStack: stack, DisplayName: name,
+                    TargetQuantity: p.TargetQuantity, CurrentQuantity: p.CurrentQuantity, LinkTarget: p.LinkTarget);
+            })
             .ToList();
 
         return new ScribePinnedContent(
@@ -63,6 +74,10 @@ public abstract partial class ScribeDialogBase
             onToggleComplete: OnPinCompleteTask,
             onDelete: OnPinDeleteTask,
             onUnpin: OnPinUnpinTask,
+            // A pinned Tracker/Link's name is a hyperlink: open its target's Handbook page, keyed off the
+            // snapshot code the pin carries (Link→LinkTarget, Tracker→TargetItemCode), so it works even when
+            // the source document is unloaded. Never touches completion (add-tracker-link-tasks 7.8).
+            onOpenLink: OnPinOpenLink,
             onReorder: OnPinReorder,
             completionPolicy: modSystem.MySettings.CompletionPolicy,
             onCompletionPolicyChanged: p => modSystem.UpdateMySettings(s => s.CompletionPolicy = p),
@@ -78,6 +93,40 @@ public abstract partial class ScribeDialogBase
             // A departing row finished collapsing → re-clamp the (now shorter) scroll extent, mirroring the
             // editor's OnEditorRowCollapsed → RequestClampToExtent. The container retires the ghost itself.
             onDepartureSettled: RequestClampToExtent);
+    }
+
+    /// <summary>Resolve a pinned Tracker/Link's item icon + display name from its snapshot code, or
+    /// <c>(null, null)</c> for a plain Task pin (which keeps its editable text field). Mirrors
+    /// <see cref="ResolveRowItem"/> but reads the pin's own snapshot (a Tracker's
+    /// <see cref="ScribePinnedRef.TargetItemCode"/> / a Link's <see cref="ScribePinnedRef.LinkTarget"/>)
+    /// rather than a live document block, so a pinned item row renders even when its source is unloaded
+    /// (add-tracker-link-tasks 7.8).</summary>
+    private (ItemStack? Stack, string? Name) ResolvePinItem(ScribePinnedRef p)
+    {
+        string? code = p.Kind switch
+        {
+            ScribeBlockKind.Tracker => p.TargetItemCode,
+            ScribeBlockKind.Link => p.LinkTarget,
+            _ => null,
+        };
+        if (code is null) return (null, null);
+        return ScribeItemRef.ResolveDisplay(capi.World, code, p.LinkLabel);
+    }
+
+    /// <summary>Pin Tab hyperlink: open a pinned Tracker/Link's target Handbook page, keyed off the code the
+    /// pin snapshot carries so it resolves without the source document loaded. Never touches completion —
+    /// the row's checkbox is a separate control (add-tracker-link-tasks 7.8).</summary>
+    private void OnPinOpenLink(Guid taskId)
+    {
+        var pin = modSystem.MyPins.FirstOrDefault(p => p.TaskId == taskId);
+        if (pin is null) return;
+        string? code = pin.Kind switch
+        {
+            ScribeBlockKind.Tracker => pin.TargetItemCode,
+            ScribeBlockKind.Link => pin.LinkTarget,
+            _ => null,
+        };
+        if (code is not null) ScribeItemRef.OpenHandbookPage(capi, code);
     }
 
     /// <summary>Keep <see cref="pinFocusNodes"/> in sync with the current pin set: add a node for each new

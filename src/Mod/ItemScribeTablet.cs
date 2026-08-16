@@ -362,7 +362,20 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
             to.Attributes.SetBytes("scribeHistory", historyBytes);
     }
 
-    private void OpenTabletDialog(ItemSlot slot, ICoreClientAPI capi, bool quickAdd = false)
+    /// <summary>Open this carried Tablet's Scribe dialog for the Handbook "Add to Scribe" fallback
+    /// (add-tracker-link-tasks 3.3). Delegates to the same <see cref="OpenTabletDialog"/> the right-click
+    /// path uses. A hard/fired (read-only) tablet still opens, but its editor-access request will no-op, so
+    /// a Handbook append against it is a safe no-op — the resolver prefers an editable surface first.</summary>
+    public ScribeDialogBase? OpenScribeDialog(ItemSlot slot, ICoreClientAPI capi)
+        => OpenTabletDialog(slot, capi);
+
+    /// <summary>A tablet can receive a Handbook append only while WET; a hardened or fired tablet is
+    /// read-only, so the "Add to Scribe" resolver skips it and tries the next carried Scribe item
+    /// (add-tracker-link-tasks feedback 6.2). Reuses the single <see cref="IsEditable"/> resolve point the
+    /// dialog and document policy key off, so this can't drift from the actual editability.</summary>
+    public bool IsSlotWriteable(ItemSlot slot) => IsEditable(slot.Itemstack);
+
+    private ScribeDialogBase OpenTabletDialog(ItemSlot slot, ICoreClientAPI capi, bool quickAdd = false)
     {
         // The backdrop/theme/glow key off the tablet's BASE clay color (clay-red/blue/fire/wax) and its
         // life-cycle state (wet/hard/fired) — BOTH now carried by the material variant, so a single parse
@@ -378,7 +391,9 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
         modSystem.RegisterHost(host);
         // Tell the server we opened this tablet so it can record the one-time PickedUp entry
         // (opening the dialog is client-only; the server never sees it otherwise).
-        modSystem.NotifyServerNotebookOpened(host.Document.DocId);
+        modSystem.NotifyServerNotebookOpened(host.Document.DocId, slot);
+        // Remember this as the last-opened Scribe item (add-tracker-link-tasks 3.2).
+        modSystem.NoteScribeItemDialogOpened(host.Document.DocId);
 
         // The bespoke tablet dialog (Proposal C): earthen theme, no tabs, cuneiform title banner over the
         // task list. The state (wet/hard/fired) drives both editability (only a WET tablet edits) and the
@@ -391,5 +406,6 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
         // focused (add-unified-quick-add-interaction). On a HARD/FIRED (read-only) tablet the seam no-ops
         // (never in editor mode), so a stray Shift+right-click merely opens the read-only dialog.
         if (quickAdd) dialog.QuickAddTopTask();
+        return dialog;
     }
 }

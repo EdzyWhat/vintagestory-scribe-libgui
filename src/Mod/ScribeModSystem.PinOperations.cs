@@ -24,7 +24,10 @@ public sealed partial class ScribeModSystem
     /// layer and the integration suite drive the exact production path, not a copy of it.
     /// </summary>
     public void SetPinForPlayer(IServerPlayer player, Guid docId, Guid taskId, bool pinned,
-        string? fallbackText = null, bool fallbackDone = false)
+        string? fallbackText = null, bool fallbackDone = false,
+        ScribeBlockKind fallbackKind = ScribeBlockKind.Task, string? fallbackLinkTarget = null,
+        string? fallbackTargetItemCode = null, int fallbackTargetQuantity = 1, int fallbackCurrentQuantity = 0,
+        string? fallbackLinkLabel = null)
     {
         if (sapi is null || pinStore is null) return;
 
@@ -33,6 +36,12 @@ public sealed partial class ScribeModSystem
         {
             string text = fallbackText ?? "";
             bool done = fallbackDone;
+            ScribeBlockKind kind = fallbackKind;
+            string? linkTarget = fallbackLinkTarget;
+            string? targetItemCode = fallbackTargetItemCode;
+            int targetQuantity = fallbackTargetQuantity;
+            int currentQuantity = fallbackCurrentQuantity;
+            string? linkLabel = fallbackLinkLabel;
             // Prefer the server's own authoritative document when available; fall back to the
             // client-supplied snapshot for items whose host is not registered server-side (e.g. Notebooks).
             if (_hostRegistry.TryGetValue(docId, out var host)
@@ -40,8 +49,15 @@ public sealed partial class ScribeModSystem
             {
                 text = block.Text;
                 done = block.Done;
+                kind = block.Kind;
+                linkTarget = block.LinkTarget;
+                targetItemCode = block.TargetItemCode;
+                targetQuantity = block.TargetQuantity;
+                currentQuantity = block.CurrentQuantity;
+                linkLabel = block.LinkLabel;
             }
-            changed = pinStore.SetPin(player.PlayerUID, docId, taskId, sapi.World.Calendar.TotalHours, text, done);
+            changed = pinStore.SetPin(player.PlayerUID, docId, taskId, sapi.World.Calendar.TotalHours, text, done, kind, linkTarget,
+                targetItemCode, targetQuantity, currentQuantity, linkLabel);
         }
         else
         {
@@ -199,6 +215,22 @@ public sealed partial class ScribeModSystem
         if (pinStore.ReorderPins(player.PlayerUID, order)) PushPinsTo(player);
     }
 
+    /// <summary>
+    /// Server-side write-through of a Tracker's live <c>CurrentQuantity</c> by identity, driven by a client
+    /// count engine's <see cref="ScribeSetTrackerQuantityMessage"/> (add-tracker-link-tasks D5/4.3). Resolves
+    /// the owning document (registry, or by scanning the acting player's inventory for an item host) and
+    /// writes the clamped count lock-free via <see cref="IScribeDocumentHost.SetTrackerCurrentQuantityFromReader"/>,
+    /// which marks the source dirty and resyncs every viewer. A best-effort no-op when the source is
+    /// unresolvable, the task is gone, or it isn't a Tracker. No pin involvement — the count is not a pin
+    /// action. Public so the integration suite can drive the exact production path.
+    /// </summary>
+    public void SetTrackerQuantityForPlayer(IServerPlayer player, Guid docId, Guid taskId, int quantity)
+    {
+        if (sapi is null) return;
+        if (TryResolveDocHost(docId, out var docHost, player))
+            docHost!.SetTrackerCurrentQuantityFromReader(taskId, quantity);
+    }
+
     /// <summary>Collapses a completion policy to <see cref="ScribeCompletionPolicy.Unpin"/> when the target
     /// document is a read-only (hard/fired) tablet (zero-point-three-fixes §7.5 / D8). A read-only source can
     /// neither be reordered (<c>Sink</c>/<c>UnpinSink</c>) nor have tasks removed (<c>Delete</c>), and firing
@@ -266,7 +298,7 @@ public sealed partial class ScribeModSystem
             return;
         }
         var block = docHost!.Document.FindByTaskId(taskId);
-        if (block is null || !block.IsTask)
+        if (block is null || !block.IsCompletable)
         {
             Trace("  complete(unpinned): task {0} not found in doc {1}", taskId, docId);
             return;

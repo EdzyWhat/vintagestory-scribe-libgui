@@ -70,6 +70,254 @@ private static void ApplyV4ToV5Migrations(byte version, ref string title)
 }
 ```
 
+### Worked example: v5 → v6 (`ScribeDocumentCodec`)
+
+v6 appended **four per-block fields** after each block's `text`, for the Tracker and Link task
+kinds: `TargetItemCode` (string?), `TargetQuantity` (int), `CurrentQuantity` (int), and
+`LinkTarget` (string?). v5 blocks have none of these.
+
+**What changed in the serialization format:**
+```
+// v5 per-block: TaskId | kind | done | depth | hasAssignedToUid | [assignedToUid] | text
+// v6 per-block: ...v5... | hasTargetItemCode | [targetItemCode] | targetQuantity
+//               | currentQuantity | hasLinkTarget | [linkTarget]
+```
+(The document `title` still follows the block list, unchanged — both v5 and v6 have it, so it is
+now read unconditionally for any accepted version.)
+
+**How the migration works** — because the new fields are per-block, the named step supplies their
+defaults via `out` params inside the block-read loop rather than a single `ref`:
+
+```csharp
+// In TryDeserialize's per-block loop, after reading text:
+string? targetItemCode; int targetQuantity; int currentQuantity; string? linkTarget;
+if (version == Version)   // v6: read the appended fields from the stream
+{
+    bool hasTargetItemCode = r.ReadBoolean();
+    targetItemCode = hasTargetItemCode ? r.ReadString() : null;
+    targetQuantity = r.ReadInt32();
+    currentQuantity = r.ReadInt32();
+    bool hasLinkTarget = r.ReadBoolean();
+    linkTarget = hasLinkTarget ? r.ReadString() : null;
+}
+else                      // v5: no such fields — default them
+{
+    ApplyV5ToV6Migrations(out targetItemCode, out targetQuantity, out currentQuantity, out linkTarget);
+}
+
+// The named migration method:
+private static void ApplyV5ToV6Migrations(out string? targetItemCode, out int targetQuantity,
+    out int currentQuantity, out string? linkTarget)
+{
+    targetItemCode = null;
+    targetQuantity = 1;   // satisfies the ScribeBlock TargetQuantity ≥ 1 invariant
+    currentQuantity = 0;
+    linkTarget = null;
+}
+```
+
+Note v4 drops out of the accepted window on this bump (window is now `{v6, v5}`); a well-formed v4
+payload is rejected, covered by `TryDeserialize_V4Bytes_FailsSafely`.
+
+### Worked example: v6 → v7 (`ScribeDocumentCodec`) — the progressive-read departure
+
+v7 appended **one per-block field** after each block's `LinkTarget`: `LinkLabel` (string?), the captured
+display title for a **guide-page Link** (a `page:`-prefixed target that has no item to resolve a name from —
+add-tracker-link-tasks 7.6). v6 blocks have no such field.
+
+**Why this bump abandons the strict two-version window** — the same reasoning as the pin codec's v2→v3
+switch below. v6 shipped **only on the WIP branch**, but **v5 is shipped and live in real player saves**
+(v1.1.1). A naive `{v7, v6}` two-version window would have *rejected every shipped v5 document* — silent
+data loss on upgrade. So `ScribeDocumentCodec` switched to **progressive append-only reads**: it accepts any
+version in `[MinVersion, Version]` (`[5, 7]`) and reads each later version's trailing fields only behind a
+`version >=` threshold.
+
+**What changed in the serialization format:**
+```
+// v5 per-block: TaskId | kind | done | depth | hasAssignedToUid | [assignedToUid] | text
+// v6 per-block: ...v5... | hasTargetItemCode | [targetItemCode] | targetQuantity
+//               | currentQuantity | hasLinkTarget | [linkTarget]
+// v7 per-block: ...v6... | hasLinkLabel | [linkLabel]
+```
+
+**How the migration works** — the version gate is a *range*, and each version-group's fields are read behind
+a `>=` threshold, so a v5 blob stops before the v6 fields and a v6 blob stops before the v7 field. Pre-v6
+defaults (now including `linkLabel`) are seeded once up front:
+
+```csharp
+private const byte MinVersion = 5;   // oldest accepted (shipped) — replaces PriorVersion
+// private const byte Version = 7;   // current
+
+// Version gate:
+if (version < MinVersion || version > Version) return false;
+
+// In TryDeserialize's per-block loop, after reading text:
+ApplyPreV6Defaults(out string? targetItemCode, out int targetQuantity,
+    out int currentQuantity, out string? linkTarget, out string? linkLabel);
+if (version >= 6)
+{
+    bool hasTargetItemCode = r.ReadBoolean();
+    targetItemCode = hasTargetItemCode ? r.ReadString() : null;
+    targetQuantity = r.ReadInt32();
+    currentQuantity = r.ReadInt32();
+    bool hasLinkTarget = r.ReadBoolean();
+    linkTarget = hasLinkTarget ? r.ReadString() : null;
+}
+if (version >= 7)
+{
+    bool hasLinkLabel = r.ReadBoolean();
+    linkLabel = hasLinkLabel ? r.ReadString() : null;
+}
+```
+
+`ApplyV5ToV6Migrations` was renamed **`ApplyPreV6Defaults`** to reflect that it seeds defaults for *every*
+field a pre-current block may lack (now the v6 tracker/link group **and** the v7 `linkLabel`), running
+unconditionally before the version-gated reads overwrite whatever the blob carried.
+
+Covered by `RoundTrip_PreservesTrackerAndLinkFields` (v7 round-trip of a guide-page Link asserting `LinkLabel`
+survives, and an item Link asserting it stays null) and `TryDeserialize_V6Bytes_Succeeds_AndDefaultsLinkLabel`
+(hand-built v6 blob → asserts `LinkLabel` defaults to null while the tracker/link fields still round-trip).
+The existing v5 test still passes (progressive reads keep v5 accepted).
+
+### Worked example: v1 → v2 (`ScribePinCodec`)
+
+v2 appended **two per-pin fields** after each pin's `LastKnownText`, so the HUD can treat a pinned
+Link as a Handbook hyperlink even when the source document is unloaded (add-tracker-link-tasks 5.5):
+`Kind` (the `ScribeBlockKind` byte) and `LinkTarget` (a nullable string). v1 pins have neither.
+
+**What changed in the serialization format:**
+```
+// v1 per-pin: OwnerDocId | TaskId | PinnedAtTotalHours | Orphaned | LastKnownDone | LastKnownText
+// v2 per-pin: ...v1... | kind | hasLinkTarget | [linkTarget]
+```
+
+**How the migration works** — because the version isn't known inside the shared `TryReadPinList` loop,
+the reader is passed the parsed `version` and reads the appended fields only for current-version bytes,
+else calls the named step to default them:
+
+```csharp
+// In TryReadPinList's per-pin loop, after reading LastKnownText:
+if (version == PinVersion)   // v2: read the appended fields
+{
+    pin.Kind = (ScribeBlockKind)r.ReadByte();
+    bool hasLinkTarget = r.ReadBoolean();
+    if (hasLinkTarget) pin.LinkTarget = r.ReadString();
+}
+else                         // v1: no such fields — default them
+{
+    ApplyV1ToV2Migrations(out var kind, out var linkTarget);
+    pin.Kind = kind;
+    pin.LinkTarget = linkTarget;
+}
+
+// The named migration method:
+private static void ApplyV1ToV2Migrations(out ScribeBlockKind kind, out string? linkTarget)
+{
+    kind = ScribeBlockKind.Task;   // every pre-v2 pin reads as an ordinary Task…
+    linkTarget = null;             // …with no link target (Tracker/Link pins only exist from v2 on)
+}
+```
+
+Covered by `TryDeserialize_V1Bytes_KindAndLinkTarget_AreUpgraded` (hand-built v1 bytes → asserts the
+defaults) and `List_RoundTrip_PreservesKindAndLinkTarget` (v2 round-trip of Link/Tracker/Task pins).
+
+### Worked example: v2 → v3 (`ScribePinCodec`) — the progressive-read departure
+
+v3 appended **three per-pin fields** after each pin's `LinkTarget`, so the HUD and Pin Tab can render a
+pinned **Tracker** item-shaped (icon + name + a have/need counter) even when its source document is
+unloaded (add-tracker-link-tasks 7.9): `TargetItemCode` (string?), `TargetQuantity` (int), and
+`CurrentQuantity` (int).
+
+**Why this bump abandons the strict two-version window.** The `PriorPinVersion` rule above accepts exactly
+*current + one prior* and rejects anything older. That was safe for v1→v2 because **no v2 pin had ever
+shipped** (v2 lived only on the WIP branch). But **v1 pins are shipped and live in real player saves.** A
+naive v3 bump with a `{v3, v2}` window would have *rejected every shipped v1 pin* — silent data loss the
+moment a player upgraded. So `ScribePinCodec` switched from a two-version window to **progressive
+append-only reads**: it accepts *any* version in `[MinPinVersion, PinVersion]` (`[1, 3]`) and reads each
+later version's trailing fields only when `version >=` that field-group's threshold.
+
+**What changed in the serialization format:**
+```
+// v1 per-pin: OwnerDocId | TaskId | PinnedAtTotalHours | Orphaned | LastKnownDone | LastKnownText
+// v2 per-pin: ...v1... | kind | hasLinkTarget | [linkTarget]
+// v3 per-pin: ...v2... | hasTargetItemCode | [targetItemCode] | targetQuantity | currentQuantity
+```
+
+**How the migration works** — the version gate is a *range*, not an equality pair, and each version's
+fields are read behind a `>=` threshold so a v1 or v2 blob simply stops reading before the fields it never
+wrote. Pre-v2 defaults are seeded once up front:
+
+```csharp
+private const byte MinPinVersion = 1;   // oldest accepted (shipped) — replaces PriorPinVersion
+// public const byte PinVersion = 3;    // current
+
+// Version gate (both TryDeserializeList and TryDeserializeStore):
+if (version < MinPinVersion || version > PinVersion) return false;
+
+// In TryReadPinList's per-pin loop, after reading LastKnownText:
+ApplyPreV2Defaults(pin);              // Kind→Task, LinkTarget→null, TargetItemCode→null, qty defaults
+if (version >= 2)
+{
+    pin.Kind = (ScribeBlockKind)r.ReadByte();
+    if (r.ReadBoolean()) pin.LinkTarget = r.ReadString();
+}
+if (version >= 3)
+{
+    if (r.ReadBoolean()) pin.TargetItemCode = r.ReadString();
+    pin.TargetQuantity = r.ReadInt32();
+    pin.CurrentQuantity = r.ReadInt32();
+}
+```
+
+`ApplyV1ToV2Migrations` was renamed **`ApplyPreV2Defaults`** to reflect that it now seeds defaults for
+*every* field a pre-current pin may lack (not just the v2 pair), and it runs unconditionally before the
+version-gated reads overwrite whatever the blob actually carried.
+
+Covered by `List_RoundTrip_PreservesTrackerFields` (v3 round-trip) and
+`TryDeserialize_V2Bytes_TrackerFields_AreDefaulted` (hand-built v2 blob → asserts Kind/LinkTarget round-trip
+**and** the three tracker fields default). The existing v1 test still passes (progressive reads keep v1
+accepted), now also asserting the tracker fields default.
+
+**When to prefer progressive reads over the two-version window:** whenever an *older-than-prior* version is
+still live in shipped saves. The two-version window is fine only when you can prove every intermediate
+version was never released (as with the WIP-only v2). When in doubt, progressive reads are strictly safer —
+they never drop a payload the code can still parse.
+
+### Worked example: v3 → v4 (`ScribePinCodec`)
+
+v4 appended **one per-pin field** after each pin's `CurrentQuantity`: `LinkLabel` (string?), so a pinned
+**guide-page Link** renders its captured title even when the source document is unloaded and there is no item
+to resolve a name from (add-tracker-link-tasks 7.6). This is the pin-side mirror of the doc codec's v6→v7
+`LinkLabel`. The codec already uses progressive reads, so this bump just extends the range to `[1, 4]` and
+adds one more `version >=` group.
+
+**What changed in the serialization format:**
+```
+// v3 per-pin: ...v2... | hasTargetItemCode | [targetItemCode] | targetQuantity | currentQuantity
+// v4 per-pin: ...v3... | hasLinkLabel | [linkLabel]
+```
+
+**How the migration works** — one more threshold-gated read; `ApplyPreV2Defaults` also seeds `LinkLabel`:
+
+```csharp
+// private const byte PinVersion = 4;    // current  (MinPinVersion stays 1)
+
+// In TryReadPinList's per-pin loop, after the v3 tracker group:
+if (version >= 4)
+{
+    if (r.ReadBoolean())
+    {
+        string linkLabel = r.ReadString();
+        if (linkLabel.Length > ScribeDocumentCodec.MaxTextLength) return false; // bound a hostile blob
+        pin.LinkLabel = linkLabel;
+    }
+}
+```
+
+Covered by `List_RoundTrip_PreservesLinkLabel` (v4 round-trip) and
+`TryDeserialize_V3Bytes_LinkLabel_IsDefaulted` (hand-built v3 blob → asserts `LinkLabel` defaults to null).
+The existing v1/v2 tests still pass.
+
 ## How to add a new version (step-by-step)
 
 1. **Add your new field(s) to `Serialize`**, appending them after all existing fields.
@@ -100,7 +348,7 @@ private static void ApplyV4ToV5Migrations(byte version, ref string title)
 
 ## Current state
 
-| Codec | Current | Prior | Migration method |
+| Codec | Current | Accepted | Migration method |
 |---|---|---|---|
-| `ScribeDocumentCodec` | v5 | v4 | `ApplyV4ToV5Migrations` — supplies `DefaultTitle` |
-| `ScribePinCodec` | v1 | v1 (no change yet) | `ApplyPinMigrations` — no-op stub |
+| `ScribeDocumentCodec` | v7 | v5–v7 (progressive reads) | `ApplyPreV6Defaults` — defaults Tracker/Link per-block fields (v6) + guide-page `LinkLabel` (v7); v6/v7 fields then read behind `version >=` thresholds |
+| `ScribePinCodec` | v4 | v1–v4 (progressive reads) | `ApplyPreV2Defaults` — seeds Kind (→Task), LinkTarget (→null), TargetItemCode (→null), quantities, LinkLabel (→null); v2/v3/v4 fields then read behind `version >=` thresholds |

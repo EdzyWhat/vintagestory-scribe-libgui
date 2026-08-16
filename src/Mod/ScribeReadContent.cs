@@ -9,6 +9,7 @@ using Gui.Widgets.Basic;         // Text, WindowFrame, VsIcon, Container, Button
 using Gui.Widgets.Events;        // PointerEvent
 using Gui.Widgets.Framework;     // Widget, StatefulWidget, State, Theme, ValueKey, Key
 using Gui.Widgets.Input;         // Checkbox, FocusNode, GestureDetector, MouseRegion, Dropdown, DropdownItem
+using Gui.Widgets.Inventory;     // ItemStackDisplay (Tracker/Link item icon)
 using Gui.Widgets.Gestures;      // ScrollController
 using Gui.Widgets.Layout;        // Column, Row, Expanded, Padding, SizedBox, Center, Align, Alignment, CrossAxisAlignment, MainAxisAlignment
 using Gui.Widgets.Overlay;       // Tooltip
@@ -18,12 +19,33 @@ using Gui.Core.Layout;           // MainAxisSize
 using OpenTK.Mathematics;        // Vector2
 using Scribe.Core;
 using Vintagestory.API.Client;
+using Vintagestory.API.Common;   // ItemStack (Tracker/Link display item)
 using Vintagestory.API.Config;   // Lang, GlobalConstants
 using Vintagestory.API.MathTools;  // BlockPos
 
 namespace Scribe;
 
-internal readonly record struct ScribeReadRowData(int Index, bool IsTask, bool Done, bool Pinned, Guid TaskId, string Text);
+/// <summary>A value snapshot of one read-view row. <see cref="Kind"/> distinguishes Task / Text / Tracker /
+/// Link (add-tracker-link-tasks Group 5); the Tracker/Link icon + name are resolved by the dialog (where
+/// <c>capi</c> lives) and passed in as <see cref="DisplayStack"/> / <see cref="DisplayName"/> so the pure
+/// LibGUI row widget stays API-free. Tracker rows carry the live <see cref="CurrentQuantity"/>/
+/// <see cref="TargetQuantity"/> counter; Link rows carry the <see cref="LinkTarget"/> code to open.</summary>
+internal readonly record struct ScribeReadRowData(
+    int Index, ScribeBlockKind Kind, bool Done, bool Pinned, Guid TaskId, string Text,
+    ItemStack? DisplayStack = null, string? DisplayName = null,
+    int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null)
+{
+    public bool IsTask => Kind == ScribeBlockKind.Task;
+    public bool IsTracker => Kind == ScribeBlockKind.Tracker;
+    public bool IsLink => Kind == ScribeBlockKind.Link;
+    /// <summary>Task, Tracker, and Link all carry a Done flag, so all three get a completion checkbox; only a
+    /// freeform Text section doesn't (add-tracker-link-tasks — see <see cref="ScribeBlock.Done"/>).</summary>
+    public bool Completable => Kind != ScribeBlockKind.Text;
+    /// <summary>The row's display label: a Tracker/Link shows its resolved item name (its own Text is empty),
+    /// while a Task/Text shows its authored text. Used by the collapsing ghost so a removed Tracker/Link
+    /// doesn't collapse as a blank row.</summary>
+    public string Label => (IsTracker || IsLink) ? (DisplayName ?? Text) : Text;
+}
 
 /// <summary>
 /// The read view's content tree: the document rendered as a NON-virtualized scrollable
@@ -38,6 +60,7 @@ internal sealed class ScribeReadContent : StatefulWidget
         IReadOnlyList<ScribeReadRowData> blocks,
         Action<Guid> onToggleTask,
         Action<Guid> onTogglePinned,
+        Action<Guid> onOpenLink,
         Action onSwitchToEditor,
         EdgeInsets footerButtonPadding,
         ScribeRowStyle style,
@@ -52,6 +75,7 @@ internal sealed class ScribeReadContent : StatefulWidget
         Blocks = blocks;
         OnToggleTask = onToggleTask;
         OnTogglePinned = onTogglePinned;
+        OnOpenLink = onOpenLink;
         OnSwitchToEditor = onSwitchToEditor;
         FooterButtonPadding = footerButtonPadding;
         Style = style;
@@ -69,6 +93,9 @@ internal sealed class ScribeReadContent : StatefulWidget
     public Action<Guid> OnToggleTask { get; }
     /// <summary>Pin/unpin a task by its stable id (scribe-lectern-view-consistency §2).</summary>
     public Action<Guid> OnTogglePinned { get; }
+    /// <summary>Open a Link row's referenced Handbook page by the row's stable id (add-tracker-link-tasks 5.3).
+    /// Never changes completion — it is a hyperlink, distinct from the row's checkbox.</summary>
+    public Action<Guid> OnOpenLink { get; }
     public Action OnSwitchToEditor { get; }
     /// <summary>Horizontal breathing room applied around the footer button (Edit), 0.04·W each side, so it
     /// doesn't run to the content edges. Passed from the dialog, which owns the <c>ScribeLayout</c> width.</summary>
@@ -161,9 +188,12 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
         var items = Widget.Blocks
             .Select(b => new ScribeAnimatedListItem(
                 Id: b.TaskId,
-                Child: new ScribeReadRow(b, Widget.OnToggleTask, Widget.OnTogglePinned, style, Widget.ReadOnly, Widget.CompletionAndPinLive, Widget.OnTextEditRefused, new ValueKey<Guid>(b.TaskId)),
+                Child: new ScribeReadRow(b, Widget.OnToggleTask, Widget.OnTogglePinned, Widget.OnOpenLink, style, Widget.ReadOnly, Widget.CompletionAndPinLive, Widget.OnTextEditRefused, new ValueKey<Guid>(b.TaskId)),
                 Ghost: new ScribeFrozenEditorRow(
-                    new ScribeEditRowData(Index: b.Index, IsTask: b.IsTask, Done: b.Done, Pinned: b.Pinned, TaskId: b.TaskId, Text: b.Text),
+                    new ScribeEditRowData(
+                        Index: b.Index, Kind: b.Kind, Done: b.Done, Pinned: b.Pinned, TaskId: b.TaskId, Text: b.Text,
+                        DisplayStack: b.DisplayStack, DisplayName: b.DisplayName,
+                        TargetQuantity: b.TargetQuantity, CurrentQuantity: b.CurrentQuantity, LinkTarget: b.LinkTarget),
                     style)))
             .ToList();
 
@@ -236,12 +266,13 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
 /// </summary>
 internal sealed class ScribeReadRow : StatefulWidget
 {
-    public ScribeReadRow(ScribeReadRowData data, Action<Guid> onToggleTask, Action<Guid> onTogglePinned, ScribeRowStyle style, bool readOnly = false, bool completionAndPinLive = false, Action<Guid>? onTextEditRefused = null, Gui.Widgets.Framework.Key? key = null)
+    public ScribeReadRow(ScribeReadRowData data, Action<Guid> onToggleTask, Action<Guid> onTogglePinned, Action<Guid> onOpenLink, ScribeRowStyle style, bool readOnly = false, bool completionAndPinLive = false, Action<Guid>? onTextEditRefused = null, Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
         Data = data;
         OnToggleTask = onToggleTask;
         OnTogglePinned = onTogglePinned;
+        OnOpenLink = onOpenLink;
         Style = style;
         ReadOnly = readOnly;
         CompletionAndPinLive = completionAndPinLive;
@@ -251,6 +282,8 @@ internal sealed class ScribeReadRow : StatefulWidget
     public ScribeReadRowData Data { get; }
     public Action<Guid> OnToggleTask { get; }
     public Action<Guid> OnTogglePinned { get; }
+    /// <summary>Open this row's Link target (Link rows only); never toggles completion.</summary>
+    public Action<Guid> OnOpenLink { get; }
     public ScribeRowStyle Style { get; }
     /// <summary>Permanently-read-only surface (hard/fired tablet — tablet-firing): the "switch to editor"
     /// footer is dropped and text stays locked. Whether the checkbox/pin stay live is governed separately by
@@ -299,6 +332,58 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         if (oldWidget.Data.Done != Widget.Data.Done) done = Widget.Data.Done;
     }
 
+    /// <summary>The content of a Tracker/Link read row: the referenced item's icon + name, plus a live
+    /// have/need counter for a Tracker (add-tracker-link-tasks 5.1/5.3). A Link's name is a hyperlink —
+    /// tapping it opens the item's Handbook page via <see cref="ScribeReadRow.OnOpenLink"/> and never touches
+    /// the row's checkbox (distinct from the completion control). The icon/name are the dialog-resolved
+    /// snapshot carried on the row data, so this stays <c>capi</c>-free.</summary>
+    private Widget BuildItemContent(ColorScheme colors, ScribeRowStyle style)
+    {
+        float iconSize = style.ControlSize * 1.4f;
+        float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
+        // The guide-page book glyph renders Primary (not the near-black OnSurface) so it reads against the
+        // notebook parchment (feedback 7.11d); the item icon ignores the color.
+        Widget icon = ScribeLinkIcon.Build(Widget.Data.DisplayStack, Widget.Data.LinkTarget, iconSize, colors.Primary, lineHeight);
+
+        // The name is a hyperlink that opens the referenced item's Handbook page and never touches completion
+        // (feedback 6.5 — the Tracker, like a Link, "should also open the notebook entry"). Primary-colored to
+        // read as tappable. Shared by both kinds so future Crafting tasks inherit the same affordance.
+        Widget nameLink = new Expanded(child: new GestureDetector(
+            onPress: e => { e.Handled = true; Widget.OnOpenLink(Widget.Data.TaskId); },
+            child: new Text(Widget.Data.Label, new TextStyle { Color = colors.Primary, SoftWrap = true })));
+
+        var rowChildren = new List<Widget>();
+
+        if (Widget.Data.IsLink)
+        {
+            rowChildren.Add(icon);
+            rowChildren.Add(nameLink);
+        }
+        else // Tracker: a live "have / need" counter on the LEFT, then the item icon + name.
+        {
+            bool satisfied = Widget.Data.CurrentQuantity >= Widget.Data.TargetQuantity;
+            // Counter on the LEFT (feedback: "the tracked number on the left of the Tracker task"; future
+            // Crafting tasks inherit this). Emphasis is INVERTED (feedback 7.11g): an in-progress count reads
+            // STRONG (Primary/bold — the thing you're still collecting), a satisfied count reads FADED
+            // (muted) with a faint strikethrough over the number (7.11h). Shared helper so read/Pin/HUD match.
+            rowChildren.Add(ScribeTrackerCounterText.Build(
+                Widget.Data.CurrentQuantity, Widget.Data.TargetQuantity, satisfied,
+                strongColor: colors.Primary, mutedColor: colors.OnSurfaceVariant, lineHeight: lineHeight));
+            rowChildren.Add(icon);
+            rowChildren.Add(nameLink);
+        }
+
+        // Inset by the editor field's internal padding, matching the Task/Text row, so icon rows line up with
+        // text rows across a view switch. Center the icon against the (taller-than-a-line) content.
+        return new Padding(
+            EdgeInsets.Symmetric(vertical: style.FieldPadY, horizontal: style.FieldPadX),
+            child: new Row(
+                spacing: style.CheckboxTextGap,
+                crossAxisAlignment: CrossAxisAlignment.Center,
+                mainAxisSize: MainAxisSize.Max,
+                children: rowChildren));
+    }
+
     public override Widget Build(BuildContext context)
     {
         var colors = Theme.Of(context).ColorScheme;
@@ -322,7 +407,11 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                 opacity: 0f,
                 child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant))));
 
-        if (Widget.Data.IsTask)
+        // Task, Tracker, AND Link all carry a Done flag, so all three show a completion checkbox (only a
+        // freeform Text section doesn't — Completable). A Tracker's checkbox also flips automatically when its
+        // count fills up under the Complete policy (the count engine issues the same toggle); a Link's is an
+        // independent manual completion (opening the page never touches it, 5.3).
+        if (Widget.Data.Completable)
         {
             children.Add(new Padding(
                 EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
@@ -348,7 +437,11 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         // cuneiform path (Lectern/Notebook, or cuneiform disabled) it stays the normal wrapped Text, inset by
         // the editor field's internal padding so a single-line read row matches the editor field height and
         // its text's left edge aligns across a view switch.
-        Widget textChild = style.UseCuneiform
+        // A Tracker/Link row swaps its text for an item icon + name (+ a have/need counter for Trackers):
+        // the block's own Text is empty, its content is the referenced item (add-tracker-link-tasks 5.1/5.3).
+        Widget textChild = (Widget.Data.IsTracker || Widget.Data.IsLink)
+            ? BuildItemContent(colors, style)
+            : style.UseCuneiform
             ? new ScribeCuneiformFieldRenderWidget(
                 text: Widget.Data.Text,
                 caret: 0,
@@ -407,7 +500,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         rowBody = new Container(
             style: new BoxStyle
             {
-                Color = Widget.Data.IsTask && Widget.Data.Pinned ? ScribeRowConstants.PinnedTint(colors) : Vector4.Zero,
+                Color = Widget.Data.Completable && Widget.Data.Pinned ? ScribeRowConstants.PinnedTint(colors) : Vector4.Zero,
             },
             child: rowBody);
 
@@ -418,7 +511,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         // AND on a hard/fired tablet (zero-point-three-fixes §7.3 — pin/unpin stays reachable so a fired
         // tablet's pin is never stranded on the HUD). Only a non-live surface would hide it.
         var stackChildren = new List<Widget> { rowBody };
-        if (hovered && Widget.Data.IsTask && Widget.TogglesLive)
+        if (hovered && Widget.Data.Completable && Widget.TogglesLive)
         {
             stackChildren.Add(new Positioned(
                 right: 5f, top: ScribeRowControlNudge.FloatingButtonTop(style),
