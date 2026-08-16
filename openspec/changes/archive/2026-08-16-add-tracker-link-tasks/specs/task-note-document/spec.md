@@ -26,18 +26,31 @@ Story API.
 - **WHEN** a task, a tracker, a link, and a text section are added in that order
 - **THEN** the document lists all four in that order, each reporting its own kind
 
+## REMOVED Requirements
+
 ### Requirement: Serialization round-trip includes assignment field and stable identifiers
-The system's document serialization SHALL preserve the document's `DocId`, each block's
-`TaskId`, each block's assignment field, and each block's kind-specific fields (the tracker
+**Reason**: This requirement folded two concerns together — round-trip field fidelity *and* the
+format-version acceptance model — and its version language encoded the now-superseded strict
+single-transition model ("accept only the immediately prior version; older fails"). The
+version-window model is authoritatively owned by the `codec-migration` capability (see "Document
+codec reads an accepted window of prior versions via progressive reads"), which this change
+corrects to the shipped progressive `[MinVersion, Version]` window. Keeping a parallel,
+now-contradictory copy here would let the two capabilities disagree. Replaced by "Serialization
+round-trip preserves identifiers, assignment, and kind-specific fields" below, scoped to field
+fidelity only.
+**Migration**: No data migration — on-disk byte formats are unchanged and append-only. Version
+acceptance behavior is unchanged in code; only its spec home moves to `codec-migration`.
+
+## ADDED Requirements
+
+### Requirement: Serialization round-trip preserves identifiers, assignment, and kind-specific fields
+The system's document serialization SHALL preserve the document's `DocId`, each block's `TaskId`,
+each block's assignment field, and each block's kind-specific fields (the tracker
 `TargetItemCode`/`TargetQuantity`/`CurrentQuantity` and the link `LinkTarget`), in addition to the
-fields already preserved (kind, text, completed flag, depth). Serialization SHALL write the current
-format version, and deserialization SHALL accept both the current version and the immediately prior
-version via a **named migration step** (not ad-hoc inline branching); a prior version that lacks a
-field SHALL supply that field's documented default when deserializing (e.g. a title of
-`ScribeDocument.DefaultTitle`, and tracker/link fields defaulted for versions that predate them).
-Bytes from any version older than the immediately prior one SHALL fail to deserialize rather than
-silently defaulting or misreading fields. Each accepted prior-version format SHALL have a dedicated
-unit test that hand-builds bytes in that format and asserts specific migrated field values.
+fields already preserved (kind, text, completed flag, depth). The accepted format-version window
+and how prior versions are read (progressively, supplying documented defaults for absent fields)
+is specified by the `codec-migration` capability; this requirement covers only which fields
+survive a current-format round-trip.
 
 #### Scenario: Round-trip preserves identifiers, assignment, and kind-specific fields
 - **WHEN** a document containing tasks, a tracker, and a link is serialized in the current format
@@ -45,30 +58,6 @@ unit test that hand-builds bytes in that format and asserts specific migrated fi
 - **THEN** the resulting document has the same `DocId`, each block has the same `TaskId` and
   assignment field, and each tracker/link block has the same kind-specific fields
   (`TargetItemCode`, `TargetQuantity`, `CurrentQuantity`, `LinkTarget`) as the original
-
-#### Scenario: Prior version deserializes with generated identifiers
-- **WHEN** bytes produced by the immediately prior format version are deserialized
-- **THEN** deserialization succeeds, the document is assigned a fresh `DocId`, and each block is
-  assigned a fresh `TaskId`
-
-#### Scenario: An unsupported older version fails to deserialize
-- **WHEN** bytes produced by a format version older than the immediately prior one are
-  deserialized
-- **THEN** deserialization reports failure rather than producing a document with incorrect or
-  default values
-
-#### Scenario: Prior-version bytes are upgraded via a named migration step
-- **WHEN** bytes in the immediately prior format version are deserialized
-- **THEN** a named migration method (not an inline `isCurrent` flag) supplies the fields missing
-  from that version with their documented defaults, and the rest of the document is read normally
-
-#### Scenario: Prior-version older-blob test asserts migrated field values
-- **WHEN** a hand-built prior-version byte array is passed to `TryDeserialize`
-- **THEN** a dedicated unit test asserts the specific value of each migrated field (e.g. that
-  tracker fields deserialize to their defaults for a version that predates them), not merely that
-  the call returns `true`
-
-## ADDED Requirements
 
 ### Requirement: Add a tracker task
 The system SHALL allow adding a tracker block for a given target item code and target quantity to

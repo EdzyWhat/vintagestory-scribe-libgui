@@ -1,40 +1,26 @@
-# codec-migration Specification
+## REMOVED Requirements
 
-## Purpose
-TBD - created by archiving change codec-migration-scaffold. Update Purpose after archive.
-## Requirements
-### Requirement: Document codec accepted-version window is documented in one place
-`ScribeDocumentCodec`'s class-level XML doc-comment SHALL contain an accepted-version table
-that lists: the current version number, each accepted prior version number, and the fields
-added in each version transition. This table SHALL be the single authoritative reference for
-what the reader accepts. No other file SHALL maintain a parallel version registry.
+### Requirement: Document codec accepts prior version via a named migration step
+**Reason**: The strict single-transition model this requirement encoded ("accept only the
+immediately-prior version; older versions fail") no longer matches the shipped codec. Adding the
+Tracker/Link fields (v6) and per-block link label (v7) on top of the already-shipped title
+version (v5) means multiple prior layouts now live in real saves at once, so the reader accepts a
+*window* of versions read progressively rather than a single migration step. Replaced by
+"Document codec reads an accepted window of prior versions via progressive reads" below.
+**Migration**: No data migration — the on-disk byte formats are unchanged and append-only. The
+old per-step `ApplyV{N}To{N+1}Migrations` naming is superseded by a single `ApplyPreV6Defaults`
+defaulting method invoked behind `version >=` gates.
 
-#### Scenario: Accepted-version table is present and current in the doc-comment
-- **WHEN** the `ScribeDocumentCodec.cs` source is read
-- **THEN** the class doc-comment contains an explicit table with current version, accepted
-  prior versions, and per-transition field history (verifiable by code review / inspection)
+### Requirement: Each supported prior version has a dedicated older-blob unit test
+**Reason**: Header retitled and its scenario set replaced to describe the progressive window
+(v5 and v6 accepted-older tests plus a below-floor fail-safe test) instead of the single
+v4→title-default test. Replaced by "Each accepted prior version has a dedicated older-blob unit
+test" below.
+**Migration**: None — test-only requirement; the corresponding tests already exist
+(`TryDeserialize_V5Bytes_Succeeds_AndDefaultsTrackerLinkFields`,
+`TryDeserialize_V6Bytes_Succeeds_AndDefaultsLinkLabel`, `TryDeserialize_V4Bytes_FailsSafely`).
 
-### Requirement: Pin codec migration scaffold is in place
-`ScribePinCodec` SHALL declare a `PriorPinVersion` constant (currently equal to `PinVersion`
-because no pin-format change has occurred yet) and a private `ApplyPinMigrations` helper
-method stub, so the next pin-format version bump has a clear, documented home. The stub is
-a no-op when `PriorPinVersion == PinVersion` (no migration needed yet) and is invoked from
-the read path at the version branch.
-
-#### Scenario: Pin codec compiles and its round-trip tests pass after scaffold is added
-- **WHEN** the pin codec scaffold is added (constants + stub migration method)
-- **THEN** all existing `ScribePinCodecTests` pass without modification
-
-### Requirement: Codec migration how-to documentation exists
-A `docs/CODEC-MIGRATION.md` file SHALL exist and SHALL cover: the append-only version
-discipline (never reorder, never two versions with the same number), how to update the
-accepted-version window when bumping the version, the named-migration-step pattern, and a
-worked example using the v4→v5 title addition as the reference case.
-
-#### Scenario: CODEC-MIGRATION.md is present in the repo
-- **WHEN** the repo is inspected after this change lands
-- **THEN** `docs/CODEC-MIGRATION.md` exists, is non-empty, and contains the four elements
-  described above (verifiable by inspection / code review)
+## ADDED Requirements
 
 ### Requirement: Document codec reads an accepted window of prior versions via progressive reads
 `ScribeDocumentCodec` SHALL read any format version within an accepted window
@@ -85,4 +71,3 @@ SHALL likewise have a fail-safe test (e.g. `TryDeserialize_V4Bytes_FailsSafely`)
 #### Scenario: Below-floor version test asserts fail-safe
 - **WHEN** a hand-built v4 byte array (below `MinVersion`) is deserialized
 - **THEN** the test asserts `TryDeserialize` returns `false` (not a partial read)
-
