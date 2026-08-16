@@ -2190,6 +2190,41 @@ the NEXT full rebuild — symptom: "new row invisible until a manual view swap."
 BEFORE the `ForceRebuild`, so the single rebuild renders the final state** — don't rely on a reconcile
 chained after a rebuild in the same call. (add-tracker-link-tasks 7.13; `ScribeDialogBase.EnterEditorMode`.)
 
+### LibGUI CAN host real VS item-slot drag/drop — it reimplements the vanilla slot protocol in `Gui.Widgets.Inventory` (2026-08-16)
+
+**Question:** can a LibGUI dialog host real `ItemSlot` drag/drop (the vanilla cursor-stack
+pickup/place), or does LibGUI bypass it? **Answer: YES it can.** LibGUI does NOT reuse vanilla's
+Cairo `GuiElementItemSlotGrid` (incompatible with its Skia widget tree); instead the
+`Gui.Widgets.Inventory` namespace faithfully **reimplements the identical vanilla slot protocol**, so
+from the server's/inventory's point of view it is indistinguishable from a native slot grid.
+
+- **Vanilla mechanism** (`GuiElementItemSlotGridBase.SlotClick`, VintagestoryAPI.dll): reads the
+  cursor stack from `IPlayerInventoryManager.MouseItemSlot`, builds an `ItemStackMoveOperation`, calls
+  `inventory.ActivateSlot(slotId, slot, ref op)` (returns a packet), sends via
+  `api.Network.SendPacketClient(packet)` — over the **block-entity packet channel**, not a custom one.
+- **LibGUI equivalent:** `Gui.Widgets.Inventory.SlotController` (`ClickSlot`, `BeginDrag`/`EndDrag`,
+  `WheelSlot`, `WatchInventory` → subscribes `IInventory.SlotModified` to rebuild the widget),
+  `SlotGrid`, `FlatItemSlot`, `ItemSlotGestureLayer`. `ItemSlotOverlay → ItemStackDisplay` renders the
+  3D stack into the Skia canvas (no custom `IPreSkiaRenderer` needed for slots). Working example:
+  LibGUI's `Gui.Example.Pages/InventoryPage.cs`.
+- **`ScribeDialogBase` already extends LibGUI's `GuiDialogBlockEntityBase`** — today via the
+  inventory-less `(pos, capi)` ctor. Switch to the inventory-carrying ctor and pass the BE's
+  `InventoryBase` to get `OpenInventory`/`CloseInventoryAndSync` (packets `1000`/`1001`) for free.
+- **Block-entity wiring** (mirror `BlockEntityOpenableContainer`): `InventoryGeneric(n, id, api)`;
+  in `Initialize` call `Inventory.LateInitialize(id, api)` + set `Inventory.Pos` (**mandatory** — this
+  binds `InvNetworkUtil`; without it `SlotController.CanActivate` silently drops every click, logging
+  `[gui] Skipped slot activation … not network-ready` — the #1 failure mode). Server round-trip:
+  override `OnReceivedClientPacket`, forward `packetid < 1000` to
+  `Inventory.InvNetworkUtil.HandleClientPacket(player, packetid, data)`. Persist via
+  `Inventory.ToTreeAttributes`/`FromTreeAttributes`; drop-on-break via
+  `Inventory.DropAll(Pos.ToVec3d().Add(0.5,0.5,0.5))` guarded by `Api is ICoreServerAPI`.
+- **Slot accept filter** = a custom `ItemSlot` subclass overriding `CanHold`/`CanTakeFrom` (server-
+  authoritative gate against hostile/automation/shift-click moves), NOT dialog-side validation.
+- **Always** `UnwatchInventory` + `SlotController.Dispose()` in the view's `Dispose`, or the
+  `SlotModified` handler leaks. Let the base handle open/close (duplicate-open guard); don't manually
+  `OpenInventory`. (Research for add-scriptorium-inventory; no game-code change yet.)
+- **Doc staleness found:** the `./reference/vslibgui/` clone this section points to is absent locally.
+
 ## Held-item dialog flickers closed on FIRST open of a not-yet-crafted item (2026-08-06)
 
 **Symptom: the first time a player opens a Scribe item they did NOT craft (notebook, clockmaker's
