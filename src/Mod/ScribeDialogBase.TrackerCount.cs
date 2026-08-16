@@ -49,6 +49,21 @@ public abstract partial class ScribeDialogBase
     {
         base.OnGuiOpened();
 
+        // Register the block inventory as OPEN *server-side* (add-scriptorium-inventory). LibGUI's
+        // GuiDialogBlockEntityBase.OnGuiOpened opens the inventory only CLIENT-side (so move prediction
+        // works) and never tells the server; its OnGuiClosed does send the paired 1001 close. Vanilla
+        // containers open with a matching 1000 packet (BlockEntityOpenableContainer.toggleInventoryDialogClient)
+        // — without it the server's HandleActivateInventorySlot resolves the target inventory id ONLY from the
+        // player's OPENED inventories, finds nothing ("no such inventory currently opened?"), and silently
+        // drops every slot move. The item then lives only in the client's optimism: it's absent server-side, so
+        // it's gone on relog and isn't there for DropAll to spill on break. BlockEntityScriptorium handles
+        // 1000 → OpenInventory. Guarded by Inventory != null so the document-only surfaces (Lectern / Notebook /
+        // Tablet, which pass no inventory) are byte-for-byte unaffected.
+        if (Inventory != null)
+        {
+            SendBlockEntityPacket(1000);
+        }
+
         trackerPollListenerId ??= capi.Event.RegisterGameTickListener(_ => RecomputeTrackers(), 1000);
         foreach (var inv in EnumerateTrackerWatchInventories())
         {

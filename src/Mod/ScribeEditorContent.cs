@@ -598,14 +598,16 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                                     child: IconButtonChild("scribeinfo"),
                                     style: iconButtonStyle,
                                     onTap: _ => Widget.OnOpenEditorReference()),
-                                content: new Padding(
+                                // Shade the tooltip to match the body in low light (refine-scribe-hover-tooltips D2) —
+                                // same reduced hover strength as the shared WithTooltip helper.
+                                content: ScribeGlobalTint.ForHover(new Padding(
                                     EdgeInsets.All(6),
                                     child: new Text(Lang.Get("scribe:scribe-gui-editor-reference-tooltip"), new TextStyle
                                     {
                                         FontSize = 13,
                                         SoftWrap = true,
                                         Color = colors.OnBackground,
-                                    })),
+                                    })), Widget.CurrentShade),
                                 useGlobalOverlay: true));
 
         // Settings gear — tablet only (add-tablet-cuneiform-chrome). The always-edit tablet has no nav
@@ -619,14 +621,14 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                     child: IconButtonChild("scribegear"),
                     style: iconButtonStyle,
                     onTap: _ => openSettings()),
-                content: new Padding(
+                content: ScribeGlobalTint.ForHover(new Padding(
                     EdgeInsets.All(6),
                     child: new Text(Lang.Get("scribe:scribe-gui-nav-settings"), new TextStyle
                     {
                         FontSize = 13,
                         SoftWrap = true,
                         Color = colors.OnBackground,
-                    })),
+                    })), Widget.CurrentShade),
                 useGlobalOverlay: true));
         }
 

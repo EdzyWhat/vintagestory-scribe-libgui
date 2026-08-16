@@ -12,7 +12,7 @@
 		]
 	},
 	"textures": {
-		"scribe-wax-32": "scribe-wax-32"
+		"scribe-wax-32": "items/scribe-wax-32"
 	},
 	"elements": [
 		{

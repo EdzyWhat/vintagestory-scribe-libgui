@@ -39,6 +39,15 @@ public sealed class ScribeDocument
     /// reassign a document's identity.</summary>
     internal void SetDocId(Guid docId) => DocId = docId;
 
+    /// <summary>Assigns this document a brand-new identity (a fresh <see cref="Guid"/>). Used ONLY for
+    /// the creative "clone a placed block" case: a middle-click pick carries the source block's
+    /// serialized DocId onto the copy, but the copy must not share identity with the still-live original —
+    /// the DocId keys the mod's host and pin registries, so two live blocks under one id collide (the
+    /// copy's dialog/lock/pin traffic resolves to the original). This is deliberately distinct from the
+    /// load-path <see cref="SetDocId"/>, which RESTORES a persisted id; here we intentionally break the
+    /// carried-over identity to forge a unique one.</summary>
+    public void ReassignNewDocId() => DocId = Guid.NewGuid();
+
     /// <summary>Adds a checkbox task to the end. Any text is accepted and stored verbatim,
     /// including empty/whitespace-only text (a new task starts empty and the player types into it).
     /// Whitespace normalization (trimming) and removal of an abandoned empty task are the editing

@@ -8,6 +8,7 @@ using SkiaSharp;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
+using Vintagestory.API.MathTools;   // BlockPos
 using Vintagestory.API.Server;
 
 namespace Scribe;
@@ -136,6 +137,18 @@ public sealed partial class ScribeModSystem : ModSystem
     /// <summary>Unregisters a host by DocId. Called by
     /// <see cref="BlockEntityScribeLectern.OnBlockRemoved"/> and <see cref="NotebookHost"/> on dialog close.</summary>
     public void UnregisterHost(Guid docId) => _hostRegistry.Remove(docId);
+
+    /// <summary>True when a DIFFERENT live placed block is already registered under <paramref name="docId"/>.
+    /// This is the creative-clone signature: a middle-click pick carries the source block's serialized DocId
+    /// onto the copy, so when the copy is placed the source is still alive and registered under that id — a
+    /// collision, since the DocId keys this registry (and the pin store). A break→re-place is NOT a collision:
+    /// <see cref="BlockEntityScribeWritingStation.OnBlockRemoved"/> unregistered the source first, so the id is
+    /// free. <see cref="BlockEntityScribeWritingStation.OnBlockPlaced"/> uses this to decide whether to mint a
+    /// fresh identity for the copy.</summary>
+    public bool IsDocIdRegisteredToOtherBlock(Guid docId, BlockPos self) =>
+        _hostRegistry.TryGetValue(docId, out var host)
+        && host is BlockEntityScribeWritingStation be
+        && be.Pos != self;
 
     /// <summary>Client → server: notify that the player just opened the notebook with this DocId, so
     /// the server can record their one-time PickedUp history entry (see

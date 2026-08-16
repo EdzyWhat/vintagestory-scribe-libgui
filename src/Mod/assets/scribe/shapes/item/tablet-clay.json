@@ -16,8 +16,8 @@
   ]
  },
  "textures": {
-  "ff": "ff",
-  "writing": "writing"
+  "ff": "items/ff",
+  "writing": "items/writing"
  },
  "elements": [
   {

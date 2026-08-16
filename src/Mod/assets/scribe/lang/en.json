@@ -11,6 +11,13 @@
 	"tooltip-title-untitled": "(untitled)",
 	"tooltip-tablet-hard-rehydrate": "Drop into water to make changes.",
 
+	"hover-card-never-opened": "Not yet opened",
+	"hover-card-empty": "Empty",
+	"hover-card-tasks": "Tasks",
+	"hover-card-notes": "Notes",
+	"hover-card-trackers": "Trackers",
+	"hover-card-links": "Links",
+
 	"scribe-gui-title": "Lectern",
 	"scribe-gui-title-edit-tooltip": "Edit title",
 	"scribe-gui-addtask": "Add Task",
@@ -51,6 +58,7 @@
 	"scribe-gui-nav-edit": "Edit view",
 	"scribe-gui-nav-pinned": "Pinned tasks",
 	"scribe-tab-guestbook": "Guest Book",
+	"scribe-tab-inventory": "Item storage",
 	"scribe-gui-nav-history": "History",
 	"scribe-gui-history-empty": "No history yet. Events will be recorded as you play.",
 	"scribe-gui-history-add": "Add entry",
@@ -225,7 +233,7 @@
    "handbook-scriptorium-about-text": "The Scriptorium is Scribe's dedicated <strong>shared, placed</strong> writing station — like the <a href=\"handbook://block-scribe:scribelectern\">Lectern</a>, it is a fixed block anyone can walk up to and use, but built as the collaborative hub of a settlement. <hotkey>rightmouse</hotkey> to open it in Read view; <hotkey>Shift</hotkey>+<hotkey>secondarymouse</hotkey> quick-adds a fresh & editable task at the top. It stays put, is readable by everyone, guards editing with a one-at-a-time editor lock, and keeps a public <strong>Guest Book</strong> of its visitors.<br><br>For keyboard shortcuts and text-editing mechanics see <a href=\"handbook://craftinginfo-scribe-editor-reference\">Scribe Mod: Editor Reference</a>, and for an overview of the whole mod see <a href=\"handbook://craftinginfo-scribe-getting-started\">Scribe Mod: Getting Started</a>.",
 
    "handbook-scriptorium-views-title": "Using the Scriptorium",
-   "handbook-scriptorium-views-text": "The Scriptorium has five tabs, switched via the icon buttons in the right-hand sidebar.<br><br><strong>Read</strong> — see all tasks and notes as a scrollable list. Any player can read, pin, and check off tasks.<br><strong>Task Editor</strong> — full document editing. Add tasks, edit text, pin rows, reorder by drag, and delete rows. Changes autosave as you type. Only one player may edit at a time.<br><strong>Pinned</strong> — all of your pinned tasks across every Scribe item, fully editable in place.<br><strong>Guest Book</strong> — a shared log of who has visited this Scriptorium, each recorded with the date of their visit and an optional short message.<br><strong>Settings</strong> — Opens the Scribe Settings panel (same as the gear icon on the Pinned Task HUD).",
+   "handbook-scriptorium-views-text": "The Scriptorium has six tabs, switched via the icon buttons in the right-hand sidebar.<br><br><strong>Read</strong> — see all tasks and notes as a scrollable list. Any player can read, pin, and check off tasks.<br><strong>Task Editor</strong> — full document editing. Add tasks, edit text, pin rows, reorder by drag, and delete rows. Changes autosave as you type. Only one player may edit at a time.<br><strong>Pinned</strong> — all of your pinned tasks across every Scribe item, fully editable in place.<br><strong>Guest Book</strong> — a shared log of who has visited this Scriptorium, each recorded with the date of their visit and an optional short message.<br><strong>Item Storage</strong> — a pair of slots that hold Scribe items: Notebooks, Tablets, and picked-up Lecterns or Scriptoriums. Stored items stay with the Scriptorium and drop when it is broken. Other items are refused.<br><strong>Settings</strong> — Opens the Scribe Settings panel (same as the gear icon on the Pinned Task HUD).",
 
 
    "handbook-scribe-hud-ref-title": "The Pinned Task HUD",
@@ -315,6 +323,7 @@
 
    "scribe-gui-nav-timer": "Timer",
    "scribe-gui-timer-empty": "No timer set.",
+   "scribe-gui-inventory-empty": "This storage holds Scribe items — Notebooks, Tablets, and picked-up Lecterns or Scriptoriums.",
    "scribe-gui-timer-label": "Label (optional)",
    "scribe-gui-timer-mode-ingame": "In-game time",
    "scribe-gui-timer-mode-realtime": "Real time",

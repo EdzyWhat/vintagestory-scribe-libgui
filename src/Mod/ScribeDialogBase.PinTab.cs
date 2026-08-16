@@ -92,7 +92,9 @@ public abstract partial class ScribeDialogBase
             collapseRegistry: pinCollapseRegistry,
             // A departing row finished collapsing → re-clamp the (now shorter) scroll extent, mirroring the
             // editor's OnEditorRowCollapsed → RequestClampToExtent. The container retires the ghost itself.
-            onDepartureSettled: RequestClampToExtent);
+            onDepartureSettled: RequestClampToExtent,
+            // Live shade so the policy-caption hover tooltip dims with the body in low light (D2).
+            currentShade: currentShade);
     }
 
     /// <summary>Resolve a pinned Tracker/Link's item icon + display name from its snapshot code, or

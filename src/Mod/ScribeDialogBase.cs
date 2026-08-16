@@ -19,6 +19,7 @@ using Gui.Core.Layout;           // MainAxisSize
 using OpenTK.Mathematics;        // Vector2
 using Scribe.Core;
 using Vintagestory.API.Client;
+using Vintagestory.API.Common;   // InventoryBase (inventory-carrying base ctor)
 using Vintagestory.API.Config;   // Lang, GlobalConstants
 using Vintagestory.API.MathTools;  // BlockPos
 
@@ -84,7 +85,7 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// <summary>The Lectern dialog's central-region view. Read and Editor are the original two views;
     /// Pinned is the Pin Tab (scribe-pin-editor) — a peer view listing the player's pins, selected from the
     /// <c>scribepin</c> nav button. <see cref="BuildCentralRegion"/> chooses the body from this.</summary>
-    private enum ScribeLecternView { Read, Editor, Pinned, Visitors, History, Timer }
+    private enum ScribeLecternView { Read, Editor, Pinned, Visitors, History, Timer, Inventory }
 
     private ScribeLecternView viewMode = ScribeLecternView.Read;
 
@@ -99,6 +100,11 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// <summary>True when the Timer tab is the active view. Exposed so subclasses can apply the
     /// active color to their Timer nav button in <see cref="GetExtraNavButtons"/>.</summary>
     protected bool IsTimerView => viewMode == ScribeLecternView.Timer;
+
+    /// <summary>True when the Inventory tab is the active view (the Scriptorium's Scribe-items-only
+    /// storage — add-scriptorium-inventory). Exposed so the Scriptorium subclass can apply the active
+    /// color to its Inventory nav button in <see cref="GetExtraNavButtons"/>.</summary>
+    protected bool IsInventoryView => viewMode == ScribeLecternView.Inventory;
 
     /// <summary>The pixel size used for sidebar nav buttons — subclasses call this when building
     /// their own nav buttons via <see cref="GetExtraNavButtons"/> so the size matches.</summary>
@@ -342,12 +348,20 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     private readonly ScribeAmbientLightSampler lightSampler;
 
     /// <summary>The current quantized illumination shade, refreshed each frame from <see cref="lightSampler"/>
-    /// and read by <see cref="BuildBodyTree"/> to configure the <see cref="ScribeGlobalTint"/> wrap. Seeded to
-    /// the identity (full brightness, neutral tint) so the very first build — before the first sample — looks
-    /// exactly like the pre-illumination dialog. When the quantized value CHANGES, <see cref="OnRenderGUI"/>
-    /// calls <see cref="RebuildBody"/> so LibGUI re-records the paint cache with the new shade; on a static
-    /// scene it never changes, so the cache stays valid (D3).</summary>
+    /// and read by <see cref="BuildBodyTree"/> to configure the <see cref="ScribeGlobalTint"/> wrap. The identity
+    /// (full brightness, neutral tint) is only a defensive field default: the constructor immediately re-primes
+    /// it with a real <see cref="ScribeAmbientLightSampler.Sample"/> BEFORE the tree is built, so the very first
+    /// frame already paints at the correct local brightness (no open-in-darkness bright-flash). When the quantized
+    /// value later CHANGES, <see cref="OnRenderGUI"/> calls <see cref="RebuildBody"/> so LibGUI re-records the
+    /// paint cache with the new shade; on a static scene it never changes, so the cache stays valid (D3).</summary>
     private ScribeAmbientLightSampler.Shade currentShade = new(1f, 1f, 1f, 1f, changed: false);
+
+    /// <summary>The live illumination shade, exposed to subclasses that build their own Overlay-layer hover
+    /// surfaces (e.g. the Scriptorium's <see cref="ScribeDocumentSlot"/> card) so they can shade them at the
+    /// reduced hover strength like the shared tooltip path (refine-scribe-hover-tooltips D2/D3).</summary>
+    // private protected: the Shade type is internal, so this can't be a public-surface `protected` member;
+    // subclasses live in this assembly, so derived-and-same-assembly access is all we need.
+    private protected ScribeAmbientLightSampler.Shade CurrentShade => currentShade;
 
     /// <summary>Stable identity of the single persistent-root <see cref="ScribeDialogBody"/> that wraps the
     /// dialog body (reconcile-animating-surfaces §3.1). Allocated ONCE here (never in <see cref="Build"/>,
@@ -367,8 +381,13 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// seed, lost-lock recovery — §3.3). A no-op before the body has mounted (defensive).</summary>
     private protected void RebuildBody() => bodyKey.CurrentState<ScribeDialogBody.BodyState>()?.Rebuild();
 
-    protected ScribeDialogBase(BlockPos pos, IScribeDocumentHost host, ICoreClientAPI capi)
-        : base(pos, capi)
+    /// <param name="inventory">The block-entity inventory to bind this dialog to, or <c>null</c> for the
+    /// document-only surfaces (Lectern/Notebook/Tablet). When non-null, the base
+    /// <see cref="Gui.GuiDialogBlockEntityBase"/> ctor auto-fires <c>OpenInventory</c> on open and
+    /// <c>CloseInventoryAndSync</c> on close, so a slot tab (Scriptorium) can host live LibGUI slot widgets.
+    /// The null path is byte-identical to the old inventory-less ctor (same by-pos duplicate-open guard).</param>
+    protected ScribeDialogBase(BlockPos pos, IScribeDocumentHost host, ICoreClientAPI capi, InventoryBase? inventory = null)
+        : base(pos, inventory, capi)
     {
         this.host = host;
         modSystem = capi.ModLoader.GetModSystem<ScribeModSystem>();
@@ -376,6 +395,17 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
         // Light sampler for the ambient-illumination shade (respect-local-illumination). Bound to the live
         // MySettings so a floor change is picked up on the next frame's sample; only read on the render thread.
         lightSampler = new ScribeAmbientLightSampler(capi, modSystem.MySettings);
+
+        // Prime the shade from the light at the player RIGHT NOW, before TryOpen inflates the widget tree
+        // (GuiBase.TryOpen calls Build() before OnGuiOpened runs — see GuiDialogScribeTablet's scratch seed).
+        // Without this the first build uses the identity seed above, so a dialog opened in local darkness paints
+        // ONE bright frame before OnRenderGUI's first Sample darkens it — the "flash of bright then adjust to
+        // dark" that was reported. The sampler's first Sample snaps straight to the target (it does NOT ease up
+        // from identity — see its hasSmoothed branch), so this is the correct resting shade, not a transition
+        // start; the first OnRenderGUI sample then reports Changed=false and skips the redundant rebuild. A fresh
+        // dialog is built per open (BlockEntity.OpenDialog / the item open paths both `new` one every time), so
+        // this runs on every open. dt=0 is fine — the first-frame branch ignores it.
+        currentShade = lightSampler.Sample(0f);
 
         // Install the real-or-silent UI sound player for this player's current mute preference
         // (scribe-mute-ui-sounds); GuiBase's ctor already set a real SoundPlayer, so this only needs to

@@ -2225,6 +2225,33 @@ from the server's/inventory's point of view it is indistinguishable from a nativ
   `OpenInventory`. (Research for add-scriptorium-inventory; no game-code change yet.)
 - **Doc staleness found:** the `./reference/vslibgui/` clone this section points to is absent locally.
 
+### `UpdateRenderObject`/`Configure` does NOT auto-invalidate paint — a `RenderProxyBox` must call `MarkNeedsPaint()` itself when a visual field changes (2026-08-16)
+
+**Symptom: the Hardened (read-only) clay tablet never darkened under the illumination shade — but the
+wet/editable tablet and the Lectern/Notebook did. Most visible on a tablet pulled empty from Creative
+(no rows at all).** Root-caused from the decompiled `Gui.dll`, not guessed:
+
+- LibGUI's `RenderObjectElement.Update(newWidget)` (in `Gui.Widgets.Framework`) calls `base.Update` then
+  `UpdateRenderObject()` → `Widget.UpdateRenderObject(_renderObject)` — which for our wrappers lands in a
+  `Configure(...)` that assigns fields. **That path does NOT mark the render object needing paint.** The
+  SKPicture cache re-records ONLY when `NeedsPaint || ChildNeedsPaint` (both public on `RenderObject`, as
+  is `MarkNeedsPaint()`).
+- So a render object that changes its *visual output* purely from reconciled field values (here
+  `ScribeGlobalTint.GlobalTintRender` — brightness/tint color-matrix) will keep painting the OLD cached
+  picture until *something else* dirties it. Surfaces with live animation (a wet tablet's cuneiform
+  caret, the Lectern's row slide-ins) mark needs-paint every frame and pick up the new value "for free"
+  — which is exactly why they darkened and a **static** read-only surface did not.
+- **Fix:** make `Configure` compare against the stored values and call `MarkNeedsPaint()` when any
+  actually changed (the equality guard preserves paint-cache stability — unrelated `RebuildBody`s re-run
+  `Configure` with the same shade and must NOT force a re-record). Same class of bug lurks in
+  `ScribeGearEffect.Configure` (also no `MarkNeedsPaint`) but is masked there by the gears' per-frame
+  `AnimatedRotation`; left as-is (not reported broken, and animation re-records it every frame anyway).
+- **General rule:** any `RenderProxyBox`/`RenderObject` subclass whose paint depends on
+  reconcile-supplied fields must self-invalidate in its update/Configure method; don't assume the
+  framework does it. (Paired with the ctor-prime fix for the one-frame open FLASH: priming
+  `currentShade = lightSampler.Sample(0f)` in the dialog ctor makes the FIRST recorded picture already
+  dark; this note is the separate reason a static surface never re-recorded AFTER that.)
+
 ## Held-item dialog flickers closed on FIRST open of a not-yet-crafted item (2026-08-06)
 
 **Symptom: the first time a player opens a Scribe item they did NOT craft (notebook, clockmaker's
@@ -2531,7 +2558,7 @@ before assuming it's the engine bug:
 
 | Message | Trigger | Cause | Fix |
 |---|---|---|---|
-| `...: Bad IL range` | Closing a LibGUI dialog (Esc / title-bar close) | VS engine bug under Rosetta (see below) | None from mod code |
+| `...: Bad IL range` | Closing a LibGUI dialog (Esc / title-bar close) — but ALSO seen on `OnBlockBroken` / `OnBlockPlaced` and any other first-time lazy-JIT of a VS method | VS engine bug under Rosetta (see below) | None from mod code |
 | `An attempt was made to load a program with an incorrect format. (0x8007000B)` | Any lazy-JIT of a mod method (e.g. `CollectibleObject.OnHeldUseStart` on right-click) | **Restage-while-running** — `restage.sh` overwrote the memory-mapped `Scribe.dll` under the live process, so the CLR JIT read a torn/inconsistent assembly | **Fully quit + relaunch the client.** Self-inflicted by the dev loop, not a code bug |
 
 **The `0x8007000B` one is the common false alarm.** It looks alarming and shares the exception type
@@ -2576,6 +2603,18 @@ deep-research (2026-07-27):
 
 5. **No confirmed workaround.** `DOTNET_TieredCompilation=0` did NOT survive adversarial
    verification (0-3 refuted). The only fix is a native ARM64 VS binary.
+
+**Not always dialog-close.** Observed 2026-08-16 firing on `BlockEntityScriptorium.OnBlockBroken`
+(server: `[Error] Exception: Bad IL range`) and, on the client, `Block.OnBlockPlaced → ClassRegistry.
+CreateBlockEntity` throwing `MissingMethodException: No parameterless constructor defined for type
+'<garbled-lambda-closure-name>'`. The garbled type is a compiler-generated closure (`b__NNN_0`), NOT a
+real BE class — the class token resolved to garbage, the same PE-loader metadata corruption as the
+dialog-close case, just on a different first-JIT frame. Any not-yet-JIT'd VS method can trip it; break /
+place are just methods that hadn't compiled yet in a long, heavily-modded session. **A restage-while-
+running tear (the `0x8007000B` row above) presents almost identically** — if the staged `Scribe.dll`
+mtime falls INSIDE the live session's runtime (game launched, then `restage.sh` ran under it), suspect
+the torn-assembly variant first; the fix is the same (fully quit + relaunch), but that one is
+self-inflicted, not the Rosetta bug.
 
 **Fix pattern:** none actionable from mod code. Don't re-investigate if this crash resurfaces —
 check whether a post-1.22.3 VS release ships a native ARM64 build. Mention this in any LibGUI

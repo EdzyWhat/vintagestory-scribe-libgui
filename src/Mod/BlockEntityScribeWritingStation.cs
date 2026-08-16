@@ -267,6 +267,11 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
         // from the now-current Document; it is a no-op while the dialog is in editor mode (the editor
         // edits a private scratch copy that an external resync must not clobber).
         dialog?.RefreshReadView();
+
+        // Likewise repaint an open inventory tab (Scriptorium only) after a synced slot change, so a second
+        // client viewing the same block sees the moved item. A no-op for the non-inventory views and for the
+        // Lectern/Notebook/Tablet dialogs, which never enter the inventory view (add-scriptorium-inventory).
+        dialog?.RefreshInventoryView();
     }
 
     /// <summary>Restores a document carried on a placed item stack (break→re-place), so the same
@@ -280,8 +285,24 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
         if (byItemStack is not null && ScribeDocumentAttributes.TryReadFrom(byItemStack, out var doc) && doc is not null)
         {
             Document = doc;
+
+            // Creative middle-click CLONE: the pick stamps the SOURCE block's DocId onto the copy's stack
+            // (BlockScribeWritingStation.OnPickBlock), just like a break→re-place. The two cases are otherwise
+            // identical here, and are distinguished only by whether the source is still alive: on a clone the
+            // original is still placed and registered under this DocId, so keeping it would put TWO live blocks
+            // under one id — and the DocId keys both the host registry and the pin store, so the copy's open /
+            // editor-lock / pin traffic would resolve to the original and interaction breaks on both (the exact
+            // "can't open the block after copying it" symptom). A break→re-place is NOT a collision: OnBlockRemoved
+            // unregistered the source first. So mint a fresh identity for the copy only when the id is still
+            // taken by a different live block. (The copy keeps the source's title/task CONTENT — a real duplicate
+            // — but gets its own identity, so it starts with no pins of its own.)
+            if (ModSystem?.IsDocIdRegisteredToOtherBlock(Document.DocId, Pos) == true)
+            {
+                Document.ReassignNewDocId();
+            }
+
             RegisterDocInStore();
-            ModSystem?.RegisterHost(this); // re-register under the restored DocId
+            ModSystem?.RegisterHost(this); // re-register under the restored (or freshly-minted) DocId
             MarkDirty();
         }
     }

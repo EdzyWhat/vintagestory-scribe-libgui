@@ -256,6 +256,46 @@ public abstract partial class ScribeDialogBase
             new Center(child: new Text(Lang.Get("scribe:scribe-gui-timer-empty"), bodyStyle)));
     }
 
+    /// <summary>Switches to the Inventory tab (the Scriptorium's Scribe-items-only storage —
+    /// add-scriptorium-inventory), tearing down the editor first if active. Called from the Inventory nav
+    /// button in the Scriptorium subclass that exposes the tab. Mirrors the Guestbook/History/Timer
+    /// teardown template exactly.</summary>
+    protected void OnClickSwitchToInventory()
+    {
+        CommitTitleIfEditing();
+        if (isEditorMode)
+        {
+            if (focusedEditIndex is { } idx) NormalizeRowOnCommit(idx);
+            PurgeEmptyRowsFromScratch();
+            pendingEmptyRowRemoval = null;
+            FlushIfDirty();
+            SendReleaseLockPacket();
+            LeaveEditorMode();
+        }
+        viewMode = ScribeLecternView.Inventory;
+        if (IsOpened()) ForceRebuild();
+    }
+
+    /// <summary>Rebuilds the Inventory view if it is currently active. Called after an inventory resync
+    /// (a slot changed server-side) so a second client viewing the same block repaints its slots.</summary>
+    protected internal void RefreshInventoryView()
+    {
+        if (viewMode == ScribeLecternView.Inventory && IsOpened()) ForceRebuild();
+    }
+
+    /// <summary>Builds the Inventory tab content. Only the Scriptorium exposes this tab, so the base
+    /// returns an empty placeholder; <see cref="GuiDialogScribeScriptorium"/> overrides it to place the
+    /// Scribe-item slots. Mirrors <see cref="BuildHistoryContent"/> / <see cref="BuildTimerContent"/>.</summary>
+    protected virtual Widget BuildInventoryContent()
+    {
+        var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
+        float bodySize = ScribeRowConstants.BaseWindowFontSize
+            * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale);
+        var bodyStyle = new TextStyle { FontSize = bodySize, Color = colors.OnSurface };
+        return ScribeTextDefaults.Wrap(modSystem.MySettings.TaskFontFamily, bodySize,
+            new Center(child: new Text(Lang.Get("scribe:scribe-gui-inventory-empty"), bodyStyle)));
+    }
+
     /// <summary>"Done editing" button: flush the pending edit, release the lock, and swap to the read
     /// view — all locally (read is lock-free and reads the block entity's now-optimistically-updated
     /// document). Flush BEFORE releasing the lock: the server processes packets in send order, so

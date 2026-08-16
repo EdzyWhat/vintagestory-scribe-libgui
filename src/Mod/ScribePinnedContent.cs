@@ -74,7 +74,8 @@ internal sealed class ScribePinnedContent : StatefulWidget
         ScribeRowStyle style,
         ScrollController scrollController,
         ScribeAnimationRegistry collapseRegistry,
-        Action onDepartureSettled)
+        Action onDepartureSettled,
+        ScribeAmbientLightSampler.Shade currentShade)
     {
         Rows = rows;
         FocusNodes = focusNodes;
@@ -93,6 +94,7 @@ internal sealed class ScribePinnedContent : StatefulWidget
         ScrollController = scrollController;
         CollapseRegistry = collapseRegistry;
         OnDepartureSettled = onDepartureSettled;
+        CurrentShade = currentShade;
     }
 
     public IReadOnlyList<ScribePinRowData> Rows { get; }
@@ -124,6 +126,10 @@ internal sealed class ScribePinnedContent : StatefulWidget
     /// <summary>Fired (deferred) when a departing pin row's collapse completes and the list has shrunk, so the
     /// dialog can re-clamp the shared scroll extent — see <see cref="ScribeAnimatedList.OnDepartureSettled"/>.</summary>
     public Action OnDepartureSettled { get; }
+    /// <summary>Live illumination shade (respect-local-illumination), threaded in so the policy-caption hover
+    /// tooltip — which renders in the global Overlay layer, outside the dialog body's own ScribeGlobalTint
+    /// wrap — can be shaded to match the body in low light (refine-scribe-hover-tooltips D2).</summary>
+    public ScribeAmbientLightSampler.Shade CurrentShade { get; }
 
     public override State CreateState() => new ScribePinnedContentState();
 }
@@ -257,13 +263,16 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
             new TextStyle { FontSize = 13 * scale, Color = colors.OnSurfaceVariant });
         policyCaption = new Tooltip(
             child: policyCaption,
-            content: new Padding(
+            // Shade the tooltip to match the body in low light (refine-scribe-hover-tooltips D2), same reduced
+            // hover strength as the shared WithTooltip helper.
+            content: ScribeGlobalTint.ForHover(new Padding(
                 EdgeInsets.All(6),
                 // useGlobalOverlay: this tooltip renders OUTSIDE the tab subtree (task 3.1), so the
                 // DefaultTextStyle ancestor does NOT reach it — it must keep an explicit task font.
                 child: new Text(
                     Lang.Get("scribe:settings-completionpolicy-help"),
                     new TextStyle { FontSize = 13 * scale, Color = colors.OnSurface, SoftWrap = true, FontFamily = taskFont })),
+                Widget.CurrentShade),
             useGlobalOverlay: true);
 
         // Start from the theme's dropdown style and swap in the task font on its shared TextStyle (used

@@ -55,6 +55,33 @@ internal sealed class ScribeGlobalTint : SingleChildWidget
     public override void UpdateRenderObject(RenderObject renderObject)
         => ((GlobalTintRender)renderObject).Configure(brightness, tintR, tintG, tintB);
 
+    /// <summary>Fraction of the illumination shade applied to Scribe hover/overlay surfaces (tooltips,
+    /// drop-up-style menus), versus the dialog body's full <c>1.0</c>. <c>0.9</c> = keep 90% of the shade
+    /// delta, i.e. 10% less darkening — a deliberate legibility bump for transient text floating above the
+    /// body (user decision, refine-scribe-hover-tooltips D1). This is the single tunable knob; every hover
+    /// wrap goes through <see cref="ForHover"/> so they all share it.</summary>
+    public const float HoverStrength = 0.9f;
+
+    /// <summary>Wrap <paramref name="child"/> in the illumination shade at reduced <see cref="HoverStrength"/>.
+    /// Hover surfaces render in LibGUI's Overlay layer — outside the dialog body's own <see cref="ScribeGlobalTint"/>
+    /// wrap — so without this they'd stay full-brightness while the body is dimmed. The live shade is blended
+    /// a fraction of the way back toward identity (no tint) so hovers track the same light but darken slightly
+    /// less than the body. Identity in → identity out, so at full daylight the <see cref="IsIdentity"/>
+    /// fast-path still elides the SaveLayer entirely.</summary>
+    public static ScribeGlobalTint ForHover(Widget child, ScribeAmbientLightSampler.Shade shade,
+        Gui.Widgets.Framework.Key? key = null)
+        => new(child,
+            brightness: TowardIdentity(shade.Brightness, HoverStrength),
+            tintR: TowardIdentity(shade.TintR, HoverStrength),
+            tintG: TowardIdentity(shade.TintG, HoverStrength),
+            tintB: TowardIdentity(shade.TintB, HoverStrength),
+            key);
+
+    /// <summary>Blend one shade channel toward identity (1.0) keeping <paramref name="keep"/> of its delta:
+    /// <c>keep = 1</c> → unchanged, <c>keep = 0</c> → identity. So a dark <c>0.5</c> at <c>keep = 0.9</c>
+    /// becomes <c>0.55</c> (less darkening), and an identity <c>1.0</c> stays <c>1.0</c>.</summary>
+    private static float TowardIdentity(float v, float keep) => 1f + (v - 1f) * keep;
+
     /// <summary>Cached brightness+tint color-matrix filters keyed by the packed quantized shade. Never
     /// disposed (see class remarks — only a handful of distinct buckets ever exist).</summary>
     private static readonly Dictionary<int, SKColorFilter> FilterCache = new();
@@ -106,8 +133,21 @@ internal sealed class ScribeGlobalTint : SingleChildWidget
 
         public void Configure(float brightness, float r, float g, float b)
         {
+            // Repaint only when a channel ACTUALLY changed — and, crucially, mark ourselves needing paint when
+            // one does. LibGUI's RenderObjectElement.Update calls UpdateRenderObject (→ here) on EVERY reconcile
+            // (any RebuildBody, for any reason) but does NOT itself invalidate the render object; a render object
+            // must mark its own cached SKPicture dirty when a VISUAL field changes. Without the MarkNeedsPaint
+            // below, a shade change on a dialog whose child tree is otherwise unchanged silently kept the OLD
+            // tint: the picture never re-recorded. Animated surfaces (a wet tablet's live cuneiform/caret, the
+            // Lectern's row animations) mark needs-paint every frame anyway, so they picked up the new tint for
+            // free — which is exactly why the "never darkens" bug showed ONLY on a STATIC read-only (hard/fired)
+            // tablet, most visibly one pulled empty from Creative: nothing else marked it dirty, so it stayed at
+            // the bright shade it first recorded. The equality guard keeps unrelated rebuilds (which re-run this
+            // with the same shade) from forcing needless re-records, preserving the paint-cache discipline (D3).
+            if (brightness == this.brightness && r == tintR && g == tintG && b == tintB) return;
             this.brightness = brightness;
             tintR = r; tintG = g; tintB = b;
+            MarkNeedsPaint();
         }
 
         public override void Paint(PaintingContext context)
