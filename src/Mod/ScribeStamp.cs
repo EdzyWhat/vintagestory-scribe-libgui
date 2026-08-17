@@ -46,6 +46,7 @@ internal sealed class ScribeStamp : StatefulWidget
         SKBitmap? stampBitmap,
         string copyLabel,
         Vector4 imprintColor,
+        Vector4 glowColor,
         float slotSize,
         float artWidth,
         Action? onEnd = null,
@@ -57,6 +58,7 @@ internal sealed class ScribeStamp : StatefulWidget
         StampBitmap = stampBitmap;
         CopyLabel = copyLabel;
         ImprintColor = imprintColor;
+        GlowColor = glowColor;
         SlotSize = slotSize;
         ArtWidth = artWidth;
         OnEnd = onEnd;
@@ -68,6 +70,10 @@ internal sealed class ScribeStamp : StatefulWidget
     public SKBitmap? StampBitmap { get; }
     public string CopyLabel { get; }
     public Vector4 ImprintColor { get; }
+    /// <summary>The parchment page-background colour used for the "COPIED" imprint's outer glow (refinement
+    /// 2026-08-17). Passed in from the active theme's <c>Surface</c> so the glow tracks the palette; the
+    /// transparent-filled imprint box lets this blurred parchment blob back the letters AND halo outward.</summary>
+    public Vector4 GlowColor { get; }
     /// <summary>The slot's edge length — the fixed, layout-affecting FOOTPRINT of this overlay, so the
     /// flourish never resizes the slot regardless of how big the visuals are.</summary>
     public float SlotSize { get; }
@@ -160,13 +166,15 @@ internal sealed class ScribeStampState : State<ScribeStamp>
         // entering translation — i.e. the descend completes at t = DescendEnd — as if pressed onto the page in
         // one contact. It then HOLDS and fades out at the very end (feedback 2026-08-16). No pop-scale either;
         // it just snaps to full opacity on contact. The fade-OUT window is unchanged from before. ----
-        const float ImprintFadeStart = 0.8536f;
+        // Fade-OUT window halved (0.8536 → 0.9268; refinement 2026-08-17): the imprint fades out over HALF the
+        // time it used to — same end point (t = 1), but twice as fast, so it lingers longer at full then snaps away.
+        const float ImprintFadeStart = 0.9268f;
         const float ImprintEnd = 1f;
         float imprintOut = Seg(t, ImprintFadeStart, ImprintEnd);
         float imprintScale = 1f; // no pop — appears at rest size
         float imprintOpacity = t >= DescendEnd ? Clamp01(1f - imprintOut) : 0f;
         const float ImprintTilt = -0.06f; // subtle lean, ~ -3.4° (feedback 2026-08-16)
-        const float ImprintSizeScale = 0.8f; // "20% smaller" — scales the imprint box + text (feedback 2026-08-16)
+        const float ImprintSizeScale = 0.92f; // scales the imprint box + text; bumped 0.8 → 0.92 (15% larger, refinement 2026-08-17)
 
         var children = new System.Collections.Generic.List<Widget>();
 
@@ -188,6 +196,20 @@ internal sealed class ScribeStampState : State<ScribeStamp>
                     BorderThickness = 2f,
                     BorderColor = Widget.ImprintColor,
                     Padding = Gui.Rendering.EdgeInsets.Symmetric(horizontal: 6f, vertical: 3f),
+                    // OUTER GLOW in the parchment page colour (refinement 2026-08-17): a zero-offset, blurred,
+                    // slightly-spread rounded-rect behind the mark. Because the box fill is transparent, this
+                    // parchment blob shows THROUGH the interior too — backing the dark-red letters so they read
+                    // over whatever content sits under the slot — and haloes outward past the border to lift the
+                    // whole mark off the page. Blur/spread scale with the Pixel Art Size so it reads the same at
+                    // any setting. Tunable (blur 0.03, spread 0.04, colour = theme Surface @ 0.6 alpha).
+                    BoxShadows = new[]
+                    {
+                        new BoxShadow(
+                            Color: Widget.GlowColor,
+                            Offset: Vector2.Zero,
+                            BlurRadius: art * 0.03f,
+                            SpreadRadius: art * 0.04f),
+                    },
                 },
                 child: new Text(Widget.CopyLabel,
                     new TextStyle
@@ -210,6 +232,37 @@ internal sealed class ScribeStampState : State<ScribeStamp>
                         child: imprint,
                         matrix: SKMatrix.CreateRotation(ImprintTilt).PreConcat(SKMatrix.CreateScale(imprintScale, imprintScale)),
                         alignment: Alignment.Center)))));
+        }
+
+        // ---- Landing shadow: a static, soft, dark rounded-rect "contact shadow" marking WHERE the stamp will
+        // land (refinement 2026-08-17). It NEVER moves or scales — it only FADES IN over the stamp's entering
+        // translation (the descend, [0, DescendEnd]) and FADES OUT over the leaving translation (the lift,
+        // [LiftStart, LiftEnd]), holding at full through the press in between. Added to the Stack AFTER the
+        // imprint but BEFORE the wooden stamp, so it paints ABOVE the "COPIED" ink and BELOW the descending
+        // stamp. Sized to the stamp's flat base (≈ the "COPIED" box width) and centred on the slot. ----
+        float shadowVisibility = Clamp01(Math.Min(Seg(t, 0f, DescendEnd), 1f - Seg(t, LiftStart, LiftEnd)));
+        if (shadowVisibility > 0.001f)
+        {
+            const float ShadowPeakAlpha = 0.7f;      // darkness of the contact shadow at full press (tunable)
+            float shadowW = art * 0.55f;             // ≈ the stamp's flat base / "COPIED" box width (tunable)
+            float shadowH = art * 0.25f;             // short, like a shadow cast flat on the page (tunable)
+            var shadow = new Container(style: new BoxStyle
+            {
+                Color = new Vector4(0f, 0f, 0f, 0f),          // no fill — only the blurred shadow shows
+                Width = shadowW,
+                Height = shadowH,
+                CornerRadius = new Vector4(shadowH * 0.5f),   // pill-ish rounded rectangle
+                BoxShadows = new[]
+                {
+                    new BoxShadow(
+                        Color: new Vector4(0f, 0f, 0f, ShadowPeakAlpha),
+                        Offset: Vector2.Zero,
+                        BlurRadius: art * 0.1f),               // soft edge, scales with Pixel Art Size (tunable)
+                },
+            });
+            children.Add(new Positioned(
+                left: (slot - art) / 2f, top: (slot - art) / 2f, width: art, height: art,
+                child: new Center(child: new Opacity(shadowVisibility, shadow))));
         }
 
         // Wooden stamp image, painted ON TOP of the imprint (skipped if the asset failed to load — the imprint

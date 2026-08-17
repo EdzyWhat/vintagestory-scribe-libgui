@@ -264,3 +264,20 @@
 - [x] 13.2 `dotnet build` clean (0 warnings); restaged Debug (client not running).
 - [x] 13.3 Manually verify in-game: the "COPIED" imprint renders on a SINGLE line (all six letters), centred
       on the Duplicate slot, still leaning ~-3.4° with the hugging outline.
+
+- [x] 13.4 "COPIED" imprint enlarged 15% (`ImprintSizeScale` 0.8 → 0.92) and its fade-OUT window halved
+      (`ImprintFadeStart` 0.8536 → 0.9268; same end point, twice as fast). (`ScribeStamp`.)
+- [x] 13.5 "COPIED" imprint OUTER GLOW: a zero-offset, blurred (`art × 0.03`), slightly-spread (`art × 0.04`)
+      rounded-rect `BoxShadow` in the theme's parchment `Surface` colour (`0.6` alpha) behind the mark. The
+      transparent box fill lets the parchment blob back the letters AND halo outward, lifting the mark off busy
+      content. New `glowColor` param threaded from `GuiDialogScribeScriptorium.BuildStampOverlay`. (`ScribeStamp`.)
+- [x] 13.6 Stamp LANDING SHADOW: a static, soft, dark rounded-rect contact shadow (`BoxShadow`, black @`0.7`
+      alpha, blur `art × 0.1`), sized to the stamp base (`art × 0.55` wide, `art × 0.25` tall), centred on the
+      slot. Fades in over the descend `[0, DescendEnd]`, holds through the press, fades out over the FULL lift
+      `[LiftStart, LiftEnd]` (starts the instant the up-translation begins); never moves. Drawn ABOVE the imprint,
+      BELOW the wooden stamp. (`ScribeStamp`.)
+- [x] 13.7 `dotnet build` clean (0 warnings); restaged Debug (client not running).
+- [ ] 13.8 Manually verify in-game (refine-together pass): (a) "COPIED" is 15% larger, reads clearly over the
+      slot content thanks to the parchment glow, and its fade-out is snappier; (b) a soft dark shadow fades in
+      under the descending stamp showing where it lands, holds during the press, and fades out as the stamp
+      lifts — static throughout, sitting above the ink but below the stamp.

@@ -307,12 +307,17 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
         // Peg the stamp + imprint width to the player's Pixel Art Size setting (× 0.2, so the 600 default →
         // 120px) — larger than the 48px slot, spilling over its sides (refinement #2).
         float artWidth = ScribePlayerSettings.ClampPixelArtSize(modSystem.MySettings.PixelArtSize) * 0.2f;
+        // Page-background colour for the imprint's outer glow: the theme's parchment Surface at 0.6 alpha
+        // (refinement 2026-08-17), so the dark-red "COPIED" reads over whatever sits under the slot without the
+        // glow reading as a solid plate (and so the dark landing shadow above it still contrasts).
+        var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
         return new ScribeStamp(
             id: id,
             registry: stampRegistry,
             stampBitmap: modSystem.GetGuiTextureBitmap(StampAsset),
             copyLabel: Lang.Get("scribe:scribe-transcribe-stamp-imprint"),
             imprintColor: ImprintInk,
+            glowColor: colors.Surface with { W = 0.6f },
             slotSize: SlotSize,
             artWidth: artWidth,
             onEnd: () => OnStampEnded(id),
