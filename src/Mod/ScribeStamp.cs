@@ -198,10 +198,13 @@ internal sealed class ScribeStampState : State<ScribeStamp>
                         Color = Widget.ImprintColor,
                     }));
 
-            // Centre the content-sized mark in the slot (the full-slot Positioned + Center do the centring; the
-            // imprint no longer forces its own box size).
+            // Centre the content-sized mark on the slot, but give it an ART-WIDE (not slot-wide) box to lay out
+            // in — the same footprint the wooden stamp uses. A slot-wide (~48px) box capped the text's max width
+            // and wrapped the bold "COPIED" after ~2 chars; `art` (~120px) leaves room for the whole word on one
+            // line. The box is larger than the slot on purpose, centred on it, and spills over the sides
+            // (unclipped, paint-only) exactly like the stamp above.
             children.Add(new Positioned(
-                left: 0f, top: 0f, width: slot, height: slot,
+                left: (slot - art) / 2f, top: (slot - art) / 2f, width: art, height: art,
                 child: new Center(child: new Opacity(imprintOpacity,
                     new Transform(
                         child: imprint,

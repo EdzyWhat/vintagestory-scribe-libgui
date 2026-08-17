@@ -71,10 +71,12 @@
       CONFIRMED in-game 2026-08-16.
 - [x] 6.6 Manually verify the import/export placeholder: section is visible, its slot is an inert greyed
       placeholder, and Export JSON/CSV and Import are disabled and do nothing. CONFIRMED in-game 2026-08-16.
-- [ ] 6.7 Manually confirm NO save-migration is needed: a Scriptorium placed before this change opens
+- [x] 6.7 Manually confirm NO save-migration is needed: a Scriptorium placed before this change opens
       cleanly on the Transcribe tab with its two slots and contents intact (no resize occurred).
 - [ ] 6.8 Multiplayer: two clients on one Scriptorium — a copy performed by one is reflected for the other;
       no dupe/desync.
+      - **Backlogged 2026-08-17** — deferred to a dedicated multiplayer pass (single-client verification of
+        the rest of the change is complete). Needs two clients on one world.
 
 ## 7. Post-playtest refinements (2026-08-16)
 
@@ -99,7 +101,7 @@
 - [x] 7.9 Empty-slot hover fix: an empty `ScribeDocumentSlot` returns the bare gesture with NO `Tooltip` wrapper,
       so grabbing an item out of a slot immediately drops its (now-empty, tiny) hover card instead of leaving a ghost.
 - [x] 7.10 `dotnet build` clean (0 warnings); `dotnet test` (Core) green (387 — added `TaskCount` + `CanHold` coverage).
-- [ ] 7.11 Manually verify the refinements in-game: button below slots + hugging its text + Caudex; arrow between
+- [x] 7.11 Manually verify the refinements in-game: button below slots + hugging its text + Caudex; arrow between
       slots; stamp/imprint enlarged & spilling and tracking the Pixel Art Size setting; "Copied" imprint; 50/50
       vertical split with centred zones; copy blocked (with the right tooltip) onto a hardened/fired or full target;
       empty-slot hover card vanishes the instant you grab the item out.
@@ -124,7 +126,7 @@
 - [x] 8.7 Imprint text ALL CAPS ("Copied" → "COPIED") and made to linger ~3× longer — it pops in as the stamp
       lifts, HOLDS fully visible for ~1s, and only begins fading after ≈1960ms, then a ~440ms fade-out.
 - [x] 8.8 `dotnet build` clean (0 warnings); `dotnet test` (Core) green (387).
-- [ ] 8.9 Manually verify round-2 in-game: Transcribe tab reads golden-orange when active; caption centred & line-broken;
+- [x] 8.9 Manually verify round-2 in-game: Transcribe tab reads golden-orange when active; caption centred & line-broken;
       import/export buttons ~30% narrower with centred labels; "Copy from"/"Paste into" captions; stamp reads as a
       wooden stamp from above (no red underside), less squished, slower, travels further with a slight squash at the
       bottom; "COPIED" imprint lingers ~1s before fading.
@@ -181,7 +183,7 @@
 - [x] 10.5 Info button offset nudged back down-and-right by 2% of the Pixel Art Size: `cornerInset` factor
       `4f + PixelArtSize×0.03` → `4f + PixelArtSize×0.01` (net inset now ~1% off the corner).
 - [x] 10.6 `dotnet build` clean (0 warnings); `dotnet test` (Core) green (387). Restaged Debug (110 files).
-- [ ] 10.7 Manually verify round-4 in-game: overwrite prompt reads "Click again to overwrite all tasks" (no
+- [x] 10.7 Manually verify round-4 in-game: overwrite prompt reads "Click again to overwrite all tasks" (no
       number); the stamp is 25% slower, presses straight down with NO tilt, and after the squish it BOTH fades
       AND lifts back up the same distance it came down (symmetric fade in/out); the stamp's bottom is a flat
       rectangle whose width matches the "COPIED" box; the "COPIED" outline is visibly thicker; the ⓘ button sits
@@ -211,7 +213,7 @@
       0.05 → 0.03, squashY 0.08 → 0.048). (`ScribeStamp`.)
 - [x] 11.4 Tablet Tracker/Link name + counter render in cuneiform (see 10.8 — implemented this round).
 - [x] 11.5 `dotnet build` clean (0 warnings); `dotnet test` (Core) green (387). Restaged Debug (110 files).
-- [ ] 11.6 Manually verify round-5 in-game: the "COPIED" imprint leans again with the thinner outline at full
+- [x] 11.6 Manually verify round-5 in-game: the "COPIED" imprint leans again with the thinner outline at full
       width; the new hand-painted stamp art shows; the squish presses straight down into the page (bottom
       planted), is subtler (~40% less), and is a touch quicker; a tablet's Tracker/Link row shows its item name
       AND the "N / N" counter in cuneiform strokes (digits + slash), in both read and editor views, and HUD/Pin
@@ -231,7 +233,7 @@
 - [x] 11.11 "COPIED" imprint made 20% SMALLER (`ImprintSizeScale = 0.8` on the box width/height + text font size)
       and its on-screen LIFESPAN trimmed 20% (`ImprintLifeScale = 0.8`, applied by pulling its appearance later —
       start `0.29 → 0.432` — while keeping the fade finishing at t=1 so there's no dead tail). (`ScribeStamp`.)
-- [ ] 11.12 Manually verify the retimed flourish in-game: the stamp accelerates down into the page and eases
+- [x] 11.12 Manually verify the retimed flourish in-game: the stamp accelerates down into the page and eases
       smoothly back up from ~30% FARTHER away; it fades in over the first half of the descent and out over the
       second half of the lift; the "COPIED" imprint leans a touch less, sits BEHIND the wooden stamp, is ~20%
       smaller, and lingers ~20% less before fading out with the flourish.
@@ -245,9 +247,20 @@
 - [x] 12.3 Wooden stamp shifted 1% of the pixel-art width farther DOWN the page at every phase
       (`offsetY += art × 0.01`), so the imprint lands slightly lower. (`ScribeStamp`.)
 - [x] 12.4 `dotnet build` clean (0 warnings). Restage Debug PENDING (client was running at build time).
-- [ ] 12.5 Manually verify round-6 in-game: the "COPIED" imprint pops on instantly the instant the stamp touches
+- [x] 12.5 Manually verify round-6 in-game: the "COPIED" imprint pops on instantly the instant the stamp touches
       down (no fade-in), leans just a touch (~-3.4°), and the whole stamp sits a hair lower on the page.
 - [x] 12.6 "COPIED" imprint label now renders in **Caudex** (`ScribeTaskFont.ButtonFamily`, the mod's title face),
       and its bordered box HUGS the text: the `Container` dropped its fixed width/height so it shrink-wraps to the
       Caudex label + padding (centred in the slot via a full-slot `Center`), keeping the outline correctly framed
       under the new font metrics. Padding bumped 4/2 → 6/3. (`ScribeStamp`.)
+
+## 13. Post-playtest refinements — round 7 (2026-08-17)
+
+- [x] 13.1 Fix "COPIED" imprint wrapping to ~2 chars per line: task 12.6's shrink-wrap + full-slot `Center`
+      capped the text's max width at the slot (~48px), forcing the bold Caudex label to wrap. Widened the
+      imprint's `Positioned` box from `slot` to `art` (~120px, the same footprint the wooden stamp uses),
+      centred on the slot and spilling over its sides (unclipped, paint-only), so "COPIED" lays out on one
+      line. (`ScribeStamp`.)
+- [x] 13.2 `dotnet build` clean (0 warnings); restaged Debug (client not running).
+- [x] 13.3 Manually verify in-game: the "COPIED" imprint renders on a SINGLE line (all six letters), centred
+      on the Duplicate slot, still leaning ~-3.4° with the hugging outline.
