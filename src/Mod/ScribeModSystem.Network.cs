@@ -147,6 +147,77 @@ public sealed partial class ScribeModSystem
         ReorderPinsForPlayer(fromPlayer, order);
     }
 
+    /// <summary>Client → server: perform the Transcribe copy on a Scriptorium's inventory (D2). The copy is
+    /// server-authoritative — the client only requests it. We resolve the Scriptorium at the packet's block
+    /// position, read the Original (source) slot's document, clone it with a FRESH identity (§1.1) so the two
+    /// items never collide on pins/block-doc resolution, and write it onto the Duplicate (target) item, letting
+    /// the standard inventory sync propagate. Guards: valid slot indices, both slots hold a Scribe document, and
+    /// — the defensive overwrite gate — if the target already has completable contents and
+    /// <see cref="ScribeTranscribeCopyMessage.AllowOverwrite"/> is false, no copy is performed (the two-press
+    /// confirm is a client UX; the server is the real gate).</summary>
+    private void OnServerReceivedTranscribeCopy(IServerPlayer fromPlayer, ScribeTranscribeCopyMessage message)
+    {
+        if (sapi is null) return;
+
+        var pos = new Vintagestory.API.MathTools.BlockPos(message.X, message.Y, message.Z);
+        if (sapi.World.BlockAccessor.GetBlockEntity(pos) is not BlockEntityScriptorium scriptorium)
+        {
+            Trace("transcribe-copy from {0}: no Scriptorium at {1} — ignored", fromPlayer.PlayerName, pos);
+            return;
+        }
+
+        var inv = scriptorium.Inventory;
+        if (message.SourceSlot < 0 || message.SourceSlot >= inv.Count
+            || message.TargetSlot < 0 || message.TargetSlot >= inv.Count
+            || message.SourceSlot == message.TargetSlot)
+        {
+            Trace("transcribe-copy from {0}: bad slot indices {1}->{2} (count {3}) — ignored",
+                fromPlayer.PlayerName, message.SourceSlot, message.TargetSlot, inv.Count);
+            return;
+        }
+
+        var sourceSlot = inv[message.SourceSlot];
+        var targetSlot = inv[message.TargetSlot];
+
+        // Both slots must hold a Scribe item carrying a document to read/write.
+        if (sourceSlot.Itemstack is null || targetSlot.Itemstack is null) return;
+        if (!ScribeDocumentAttributes.TryReadFrom(sourceSlot.Itemstack, out var sourceDoc) || sourceDoc is null)
+            return;
+
+        // Defensive overwrite gate: if the target already has tasks and this isn't the confirming press,
+        // do nothing (independent of the client's two-press UX).
+        if (!message.AllowOverwrite
+            && ScribeDocumentAttributes.TryReadFrom(targetSlot.Itemstack, out var targetDoc)
+            && targetDoc is not null && targetDoc.CompletableCount > 0)
+        {
+            Trace("transcribe-copy from {0}: target has {1} tasks and overwrite not allowed — no-op",
+                fromPlayer.PlayerName, targetDoc.CompletableCount);
+            return;
+        }
+
+        // Target must be a VALID destination (add-transcribe-copy-paste refinement): writeable (not a
+        // hardened/fired tablet) AND able to hold the source's task blocks (a wet tablet caps at 10).
+        // DocumentPolicy.CanHold encodes both — a read-only tablet's policy is ReadOnly, so CanHold denies
+        // regardless of count. Non-Scribe items can't reach these Scribe-only slots, so a missing
+        // IScribeDocumentItem is treated as uncapped/writeable. Server-authoritative: mirrors the client's
+        // BuildSealButton gate but does not trust it.
+        if (targetSlot.Itemstack.Collectible is IScribeDocumentItem targetItem
+            && !targetItem.DocumentPolicy(targetSlot).CanHold(sourceDoc.TaskCount))
+        {
+            Trace("transcribe-copy from {0}: target rejects {1} tasks (read-only or over its cap) — no-op",
+                fromPlayer.PlayerName, sourceDoc.TaskCount);
+            return;
+        }
+
+        // Clone with a fresh DocId + fresh TaskId per block so the copy is fully independent (D1).
+        var copy = sourceDoc.CloneWithNewIdentity();
+        ScribeDocumentAttributes.WriteTo(targetSlot.Itemstack, copy);
+        targetSlot.MarkDirty();
+        scriptorium.MarkDirty(true);
+        Trace("transcribe-copy from {0}: copied doc onto slot {1} ({2} tasks)",
+            fromPlayer.PlayerName, message.TargetSlot, copy.CompletableCount);
+    }
+
     private void OnServerReceivedRecordVisitor(IServerPlayer fromPlayer, ScribeRecordVisitorMessage message)
     {
         if (sapi is null) return;

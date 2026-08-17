@@ -64,14 +64,26 @@ state to `Idle`. Empty target skips the state entirely (single press copies).
 
 ### D4. Stamp animation = reusable paint-only widget on the existing harness
 
-Build a reusable `ScribeStamp`-style widget: on trigger it runs a `Transform` (scale down + slight tilt)
-+ `Opacity` tween over a single 2D wax-seal image, using the self-ticking animation harness that
-`ScribeSlideIn` already uses (`gui-row-animation-harness`). It leaves a brief imprint on the Duplicate
-slot, then the copied `ScribeDocumentSlot` summary card renders. No FBO, no 3D, macOS-safe.
+**Metaphor revised (playtest of the concept, 2026-08-16):** the wax-*seal* idea (press a matrix *into*
+wax) was conflated with copying; the clearer, more legible read is a classic **wooden ink rubber stamp**
+that presses a **"COPY" imprint** onto the Duplicate. The copy *button* itself stays a plain thematic
+LibGUI button (no art on it); the flourish is the stamp descending onto the Duplicate slot.
+
+`ScribeStamp` is a self-ticking paint-only `StatefulWidget` on the `gui-row-animation-harness` registry
+(same survival discipline as `ScribeSlideIn` — the controller is host-owned and resumes across the
+per-frame body reconcile; a generation-keyed `ValueKey`+id remounts it to replay on a re-copy). Timeline:
+the wooden stamp **fades in + descends**, a brief **squash/tilt press**, then **lifts + fades out**,
+leaving a **tilted "COPY" block-text imprint** that pops, holds, then fades — revealing the copied
+`ScribeDocumentSlot` summary underneath. Composed of nested `Transform` (scale/rotate about centre) +
+`Opacity`; the wooden PNG is drawn nearest-neighbour via `ScribePixelArtBackdrop`. No FBO, no 3D,
+macOS-safe.
 
 - The copy result is applied by the server sync regardless of the animation; the animation only *reveals*
   it. If the widget is absent, the card still updates — the flourish is not load-bearing (spec requirement).
-- One new AI-generated seal PNG asset, styled to the mod's parchment/earthen palette.
+  A missing PNG asset drops only the wooden image; the procedural "COPY" imprint still plays.
+- One new pixel-art wooden-stamp PNG at `assets/scribe/textures/gui/scribe-copy-stamp.png`, baked by a
+  re-runnable, swappable generator (`build/gen-copy-stamp.py`, "I bake it, you refine"). The "COPY" imprint
+  needs no asset — it is rendered from text + a bordered box in the earthen/ink palette.
 
 ### D5. Layout: reflow `BuildInventoryContent` into a titled two-section Column
 
@@ -122,6 +134,7 @@ JSON/CSV logic (that change grows the inventory and handles its own migration).
 
 ## Open Questions
 
-- Exact seal visual (wax stamp vs. ink stamp vs. embossed press) — art direction, resolved during asset gen.
+- Exact stamp visual — RESOLVED 2026-08-16: a wooden **ink** rubber stamp leaving a "COPY" imprint (not a
+  wax seal). First-pass pixel-art PNG baked by `build/gen-copy-stamp.py`; swappable/refine later.
 - Whether the seal button sits *between* the two slots or *below* the pair (layout polish; decide in-game).
 - Final disabled-control affordance for import/export (greyed buttons vs. a "(soon)" chip) — cosmetic.

@@ -46,9 +46,10 @@ namespace Scribe;
 /// </summary>
 internal sealed class ScribeDocumentSlot : StatelessWidget
 {
-    /// <summary>How long the pointer must rest on the slot before the summary card appears — matches the
-    /// stock item tooltip's 350ms so the hover feel is unchanged.</summary>
-    private static readonly TimeSpan CardDelay = TimeSpan.FromMilliseconds(350);
+    /// <summary>How long the pointer must rest on the slot before the summary card appears. Halved from the
+    /// stock item tooltip's 350ms to 175ms (refinement) so the Scriptorium's document cards pop up in half the
+    /// time — the slot summary is the whole point of these slots, so a snappier reveal is wanted here.</summary>
+    private static readonly TimeSpan CardDelay = TimeSpan.FromMilliseconds(175);
 
     private readonly ItemSlot? slot;
     private readonly SlotController controller;
@@ -95,22 +96,27 @@ internal sealed class ScribeDocumentSlot : StatelessWidget
             onPress: OnPress,
             onWheel: OnWheel);
 
-        // Only show a card for a filled slot; an empty slot gets an inert placeholder + effectively-infinite
-        // wait so no bubble ever appears (the stock slot uses the same trick).
+        // Only a FILLED slot gets a hover card. An empty slot returns the bare gesture with NO Tooltip wrapper
+        // at all (refine-scribe-hover-tooltips / transcribe refinement #9). The earlier "empty content + 1h
+        // wait" trick still MOUNTED a Tooltip, so grabbing the item out of a slot left a stale, empty, tiny
+        // bubble hanging (the dialog rebuilds on the slot change, but the mounted-but-idle Tooltip's already-
+        // shown bubble persisted until the pointer left). A Tooltip that never exists can't leave that ghost:
+        // when the slot empties, the widget at this position changes type (ShadedTooltip → GestureDetector), so
+        // the reconciler unmounts the tooltip subtree and its overlay entry goes with it.
         ItemStack? stack = slot?.Itemstack;
         bool hasItem = stack?.Collectible != null;
-        Widget content = hasItem ? BuildSummaryCard(stack!, colors) : new SizedBox();
+        if (!hasItem) return gesture;
 
         // ShadedTooltip shades the summary-card bubble (Background/Border) AND its content by the live
         // illumination shade, so the card tracks the body in low light instead of the bubble "sticking out"
         // full-bright (refine-scribe-hover-tooltips bug-1). It wraps content in ForHover internally, so we pass
-        // the raw card. Empty slots get a 1h wait so no bubble ever appears (the stock slot uses the same trick).
+        // the raw card.
         return ScribeGlobalTint.ShadedTooltip(
             child: gesture,
-            content: content,
+            content: BuildSummaryCard(stack!, colors),
             baseTheme: Theme.Of(context),
             shade: shade,
-            waitDuration: hasItem ? CardDelay : TimeSpan.FromHours(1));
+            waitDuration: CardDelay);
     }
 
     private void OnEnter(PointerEvent e)

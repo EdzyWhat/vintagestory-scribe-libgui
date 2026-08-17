@@ -57,8 +57,9 @@ these first, in order:
   `Gui/GuiDialogBlockEntityText.cs`, `Gui/GuiDialogTrader.cs` (`AddCellList`/`IGuiElementCell`
   usage — note cell lists are mouse-only and can't host a live `GuiElementTextInput`).
 - **LibGUI** (only if we adopt it — assessed in `openspec/changes/explore-libgui-adoption/`,
-  summarized in `docs/libgui-reference.md`): local gitignored clones live at `./.wiki/` (wiki) and
-  `./reference/vslibgui/` (source). Search all `.md` under `./.wiki/` with `ripgrep`, and prefer
-  the source over the wiki when they disagree, before assuming a top-level summary is complete.
-  When you resolve a complex LibGUI layout bug or correct a LibGUI misconception, append a note to
-  the `## LibGUI` section of `VSAPI-NOTES.md`.
+  summarized in `docs/libgui-reference.md`): a local gitignored wiki clone lives at `./.wiki/`.
+  Search all `.md` under `./.wiki/` with `ripgrep`. There is NO on-disk LibGUI source checkout —
+  when the wiki is thin or you need ground truth, decompile the shipped `Gui.dll` with `ilspycmd`
+  (same as the base-game DLLs above), which beats the wiki when they disagree. When you resolve a
+  complex LibGUI layout bug or correct a LibGUI misconception, append a note to the `## LibGUI`
+  section of `VSAPI-NOTES.md`.

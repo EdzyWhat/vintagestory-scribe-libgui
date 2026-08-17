@@ -350,7 +350,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         // read as tappable. Shared by both kinds so future Crafting tasks inherit the same affordance.
         Widget nameLink = new Expanded(child: new GestureDetector(
             onPress: e => { e.Handled = true; Widget.OnOpenLink(Widget.Data.TaskId); },
-            child: new Text(Widget.Data.Label, new TextStyle { Color = colors.Primary, SoftWrap = true })));
+            child: ScribeItemLabel.Build(Widget.Data.Label, colors.Primary, style)));
 
         var rowChildren = new List<Widget>();
 
@@ -368,7 +368,8 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
             // (muted) with a faint strikethrough over the number (7.11h). Shared helper so read/Pin/HUD match.
             rowChildren.Add(ScribeTrackerCounterText.Build(
                 Widget.Data.CurrentQuantity, Widget.Data.TargetQuantity, satisfied,
-                strongColor: colors.Primary, mutedColor: colors.OnSurfaceVariant, lineHeight: lineHeight));
+                strongColor: colors.Primary, mutedColor: colors.OnSurfaceVariant, lineHeight: lineHeight,
+                cuneiform: style));
             rowChildren.Add(icon);
             rowChildren.Add(nameLink);
         }

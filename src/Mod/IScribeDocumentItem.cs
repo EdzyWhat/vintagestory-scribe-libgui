@@ -34,4 +34,14 @@ public interface IScribeDocumentItem
     /// the next one, so a Tracker/Link never lands on (and silently no-ops against) a read-only tablet
     /// (add-tracker-link-tasks feedback 6.2). Default <c>true</c> for the always-writeable items.</summary>
     bool IsSlotWriteable(ItemSlot slot) => true;
+
+    /// <summary>The document-capacity/editability policy for the item currently in <paramref name="slot"/>
+    /// — the item-level counterpart of <see cref="IScribeDocumentHost.Policy"/>. The Transcribe copy uses
+    /// it to validate a target: a copy is refused unless <c>DocumentPolicy(target).CanHold(sourceTaskCount)</c>,
+    /// which in one check rejects both a read-only target (a hardened/fired tablet — <c>ReadOnly</c>) and one
+    /// too small to hold the source's tasks (a wet tablet at its cap). Defaults to
+    /// <see cref="Scribe.Core.ScribeDocumentPolicy.Unlimited"/> — the always-writeable, uncapped tiers
+    /// (Notebook, Clockmaker's, picked-up Lectern/Scriptorium) need no override; only <see cref="ItemScribeTablet"/>
+    /// reports a finite/read-only policy from its live clay state.</summary>
+    Scribe.Core.ScribeDocumentPolicy DocumentPolicy(ItemSlot slot) => Scribe.Core.ScribeDocumentPolicy.Unlimited;
 }

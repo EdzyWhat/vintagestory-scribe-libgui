@@ -56,6 +56,23 @@ public readonly record struct ScribeDocumentPolicy
         return Math.Max(0, currentTaskCount) < max;
     }
 
+    /// <summary>Whether a whole document of <paramref name="taskCount"/> TASK blocks may be HELD by this
+    /// tier at once — the Transcribe copy-paste target check. A copy REPLACES the target document, so the
+    /// result's task count equals the source's; the target is a valid destination only if it can hold that
+    /// many. Always <c>false</c> when <see cref="ReadOnly"/> (a hard/fired tablet can't be written at all,
+    /// so it fails this too), always <c>true</c> when <see cref="MaxBlocks"/> is <c>null</c> (uncapped);
+    /// otherwise <c>true</c> only when the count fits at-or-under the cap (<c>&lt;=</c>, not <c>&lt;</c>:
+    /// exactly filling the tier is a legal destination). A negative count is treated as 0.
+    ///
+    /// <para>Distinct from <see cref="CanAdd"/> (which asks "is there room for ONE MORE beyond the current
+    /// count?", a strict <c>&lt;</c>): <see cref="CanHold"/> asks "does this whole count fit?".</para></summary>
+    public bool CanHold(int taskCount)
+    {
+        if (ReadOnly) return false;
+        if (MaxBlocks is not int max) return true;
+        return Math.Max(0, taskCount) <= max;
+    }
+
     /// <summary>Whether one more pin may be added given the player's <paramref name="currentPinCount"/> for
     /// this document. Always <c>false</c> when <see cref="ReadOnly"/> (a hard/fired tablet — tablet-firing),
     /// always <c>true</c> when <see cref="MaxPins"/> is <c>null</c> (uncapped); otherwise <c>true</c> only

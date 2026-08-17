@@ -36,6 +36,9 @@ public sealed partial class ScribeModSystem
         RegisterSvgIcon(api, "scribeclose", new AssetLocation("scribe", "textures/icons/close.svg"));
         RegisterSvgIcon(api, "scribeedit", new AssetLocation("scribe", "textures/icons/edit.svg"));
         RegisterSvgIcon(api, "scribegear", new AssetLocation("scribe", "textures/icons/gear.svg"));
+        // Pinned-HUD-only gear-ring variant (feedback 2026-08-16): the dialog Settings tabs keep the solid
+        // "scribegear" above; only ScribeHudGearButton uses this hollow-ring gear.
+        RegisterSvgIcon(api, "scribegearhud", new AssetLocation("scribe", "textures/icons/gear-hud.svg"));
         RegisterSvgIcon(api, "scribecheck", new AssetLocation("scribe", "textures/icons/check.svg"));
         RegisterSvgIcon(api, "scribeguest",   new AssetLocation("scribe", "textures/icons/guestbook.svg"));
         RegisterSvgIcon(api, "scribehistory", new AssetLocation("scribe", "textures/icons/guestbook.svg"));

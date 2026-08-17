@@ -375,6 +375,17 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
     /// dialog and document policy key off, so this can't drift from the actual editability.</summary>
     public bool IsSlotWriteable(ItemSlot slot) => IsEditable(slot.Itemstack);
 
+    /// <summary>The tablet's document policy, mirroring <see cref="TabletHost.Policy"/> at the item level:
+    /// a WET tablet is the capped-but-editable scratch tier (<see cref="Scribe.Core.ScribeDocumentPolicy.Tablet"/>,
+    /// at most 10 task blocks); a hardened or fired tablet is read-only
+    /// (<see cref="Scribe.Core.ScribeDocumentPolicy.UneditableTablet"/>). Keyed off the same
+    /// <see cref="IsEditable"/> resolve point as <see cref="IsSlotWriteable"/> so the two can't drift. The
+    /// Transcribe copy consults this to reject a target that's read-only or too small for the source's tasks.</summary>
+    public Scribe.Core.ScribeDocumentPolicy DocumentPolicy(ItemSlot slot) =>
+        IsEditable(slot.Itemstack)
+            ? Scribe.Core.ScribeDocumentPolicy.Tablet
+            : Scribe.Core.ScribeDocumentPolicy.UneditableTablet;
+
     private ScribeDialogBase OpenTabletDialog(ItemSlot slot, ICoreClientAPI capi, bool quickAdd = false)
     {
         // The backdrop/theme/glow key off the tablet's BASE clay color (clay-red/blue/fire/wax) and its

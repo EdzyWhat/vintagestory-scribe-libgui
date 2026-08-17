@@ -638,4 +638,137 @@ public class ScribeDocumentTests
         var ids = doc.Blocks.Select(b => b.TaskId).ToList();
         Assert.Equal(3, ids.Distinct().Count());
     }
+
+    // --- CompletableCount (Transcribe overwrite "N tasks" prompt) ---
+
+    [Fact]
+    public void CompletableCount_CountsTaskTrackerLink_NotText()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("a");
+        doc.AddTextSection("just a note");
+        doc.AddTracker("game:ingot-copper", 8);
+        doc.AddLink("game:ingot-tin");
+        doc.AddTextSection("another note");
+
+        Assert.Equal(3, doc.CompletableCount); // Task + Tracker + Link; the two Text sections don't count
+    }
+
+    [Fact]
+    public void CompletableCount_IsZero_ForEmptyOrTextOnlyDocument()
+    {
+        var empty = new ScribeDocument();
+        Assert.Equal(0, empty.CompletableCount);
+
+        var textOnly = new ScribeDocument();
+        textOnly.AddTextSection("prose");
+        Assert.Equal(0, textOnly.CompletableCount);
+    }
+
+    // --- TaskCount (Transcribe copy capacity check: matches the editor cap and MaxBlocks) ---
+    // Distinct from CompletableCount: TaskCount counts ONLY Task-kind blocks, since the wet-tablet
+    // cap (ScribeDocumentPolicy.MaxBlocks) and the editor's add-limit both count tasks, not trackers
+    // or links. The copy target check gates on CanHold(source.TaskCount).
+
+    [Fact]
+    public void TaskCount_CountsTaskKindOnly_NotTrackerLinkOrText()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("a");
+        doc.AddTask("b");
+        doc.AddTextSection("just a note");
+        doc.AddTracker("game:ingot-copper", 8);
+        doc.AddLink("game:ingot-tin");
+
+        Assert.Equal(2, doc.TaskCount); // only the two Task blocks; tracker/link/text excluded
+    }
+
+    [Fact]
+    public void TaskCount_IsZero_ForEmptyOrTaskFreeDocument()
+    {
+        var empty = new ScribeDocument();
+        Assert.Equal(0, empty.TaskCount);
+
+        var noTasks = new ScribeDocument();
+        noTasks.AddTextSection("prose");
+        noTasks.AddTracker("game:stick", 4);
+        noTasks.AddLink("game:ingot-tin");
+        Assert.Equal(0, noTasks.TaskCount);
+    }
+
+    // --- CloneWithNewIdentity (Transcribe copy primitive) ---
+
+    [Fact]
+    public void CloneWithNewIdentity_CopiesContentVerbatim()
+    {
+        var source = new ScribeDocument { Title = "Shopping list" };
+        source.AddTask("Find copper");
+        source.ToggleTask(0); // done = true
+        source.AddTextSection("Remember the flux");
+        source.AddTracker("game:ingot-copper", 8);
+        source.SetTrackerCurrentQuantity(source.Blocks[2].TaskId, 3);
+        source.AddLink("game:ingot-tin");
+        source.AddGuideLink("craftinginfo-knapping", "Knapping");
+
+        var copy = source.CloneWithNewIdentity();
+
+        Assert.Equal(source.Title, copy.Title);
+        Assert.Equal(source.Blocks.Count, copy.Blocks.Count);
+        for (int i = 0; i < source.Blocks.Count; i++)
+        {
+            var a = source.Blocks[i];
+            var b = copy.Blocks[i];
+            Assert.Equal(a.Kind, b.Kind);
+            Assert.Equal(a.Text, b.Text);
+            Assert.Equal(a.Done, b.Done);
+            Assert.Equal(a.Depth, b.Depth);
+            Assert.Equal(a.AssignedToUid, b.AssignedToUid);
+            Assert.Equal(a.TargetItemCode, b.TargetItemCode);
+            Assert.Equal(a.TargetQuantity, b.TargetQuantity);
+            Assert.Equal(a.CurrentQuantity, b.CurrentQuantity);
+            Assert.Equal(a.LinkTarget, b.LinkTarget);
+            Assert.Equal(a.LinkLabel, b.LinkLabel);
+        }
+    }
+
+    [Fact]
+    public void CloneWithNewIdentity_MintsAllNewGuids()
+    {
+        var source = new ScribeDocument();
+        source.AddTask("one");
+        source.AddTracker("game:ingot-copper", 8);
+        source.AddLink("game:ingot-tin");
+
+        var copy = source.CloneWithNewIdentity();
+
+        // Fresh DocId...
+        Assert.NotEqual(source.DocId, copy.DocId);
+        // ...and a fresh TaskId for every block (none shared with the source).
+        var sourceIds = source.Blocks.Select(b => b.TaskId).ToHashSet();
+        foreach (var block in copy.Blocks)
+            Assert.DoesNotContain(block.TaskId, sourceIds);
+        // The copy's own ids are all distinct too.
+        Assert.Equal(copy.Blocks.Count, copy.Blocks.Select(b => b.TaskId).Distinct().Count());
+    }
+
+    [Fact]
+    public void CloneWithNewIdentity_LeavesSourceUnchanged()
+    {
+        var source = new ScribeDocument { Title = "Original" };
+        source.AddTask("keep me");
+        var originalDocId = source.DocId;
+        var originalTaskId = source.Blocks[0].TaskId;
+
+        var copy = source.CloneWithNewIdentity();
+
+        // Editing the copy must not touch the source (fully independent).
+        copy.SetBlockText(0, "changed on the copy");
+        copy.AddTask("only on the copy");
+
+        Assert.Equal(originalDocId, source.DocId);
+        Assert.Equal("Original", source.Title);
+        var block = Assert.Single(source.Blocks);
+        Assert.Equal("keep me", block.Text);
+        Assert.Equal(originalTaskId, block.TaskId);
+    }
 }

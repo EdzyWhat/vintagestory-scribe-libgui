@@ -837,8 +837,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         // icon ignores the color. The Tracker's stepper still drives this editor row's height by design.
         float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
         rowChildren.Add(ScribeLinkIcon.Build(Widget.Data.DisplayStack, Widget.Data.LinkTarget, iconSize, colors.Primary, lineHeight));
-        rowChildren.Add(new Expanded(child: new Text(
-            Widget.Data.Label, new TextStyle { Color = colors.OnSurface, SoftWrap = true })));
+        rowChildren.Add(new Expanded(child: ScribeItemLabel.Build(Widget.Data.Label, colors.OnSurface, style)));
 
         // Inset by the editor field's internal padding, matching the read view's item row and the Task/Text
         // field, so icon rows line up with text rows across a view switch. Center the icon/stepper against the

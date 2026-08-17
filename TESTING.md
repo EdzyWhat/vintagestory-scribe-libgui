@@ -344,6 +344,133 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         it recurs." Not reproducing on the current build; parked as a watch item (blank-checkbox bug class has
         recurred before via new triggers, so kept on record rather than closed).
 
+## add-transcribe-copy-paste
+
+> v1.2 Transcribe tab on the Scriptorium: a two-slot, server-authoritative document COPY (Copy from →
+> Paste into) with an overwrite confirm and a wooden-stamp "COPIED" flourish, plus a disabled
+> import/export placeholder section. This session carries two rounds of post-playtest refinements
+> (button placement/Caudex/arrow/50-50 split; then golden-orange tab, reworded captions, narrower
+> centred buttons, and a redrawn from-above stamp with retimed motion + a lingering COPIED imprint).
+> **Fully quit and relaunch the client first** so the new lang/assets load.
+
+- [x] `f9551592` **Golden-orange tab.** Open a Scriptorium and click the Transcribe nav button — its
+      active fill is golden-orange (not the old purple), while Guest Book's active fill is still plum.
+      *(add-transcribe-copy-paste 8.1)*
+      - **Confirmed 2026-08-16** via visual review of the running Transcribe tab; superseded by the brighter
+        gold `#cf9d2e` (see `6a68ab79`), which the user approved.
+- [x] `869adb9b` **Copy pair layout.** On the Transcribe tab: two slots with a → arrow between them,
+      captioned "Copy from" (left) and "Paste into" (right); the Copy button sits BELOW the pair, hugging
+      its text in the Caudex font; the tab is split 50/50 with each half vertically centred; and grabbing
+      an item out of a slot drops its hover card instantly (no lingering ghost).
+      *(add-transcribe-copy-paste 8.4 / 7.6 / 7.11)*
+      - **Confirmed 2026-08-16** via visual review: layout reads as specced (slots + arrow + captions +
+        button-below + 50/50 split). The hover-card-vanish micro-behavior was not separately re-poked.
+- [x] `a5d3bf9d` **Import/export section.** In the lower half the slot caption reads "Export from," /
+      "or import into" on two centred lines; the three Export JSON / Export CSV / Import buttons are ~30%
+      narrower with centred labels and all disabled with a "coming soon" tooltip.
+      *(add-transcribe-copy-paste 8.2 / 8.3)*
+      - **Confirmed 2026-08-16** via visual review of the running tab; the ballooning is fixed and the
+        section reads as specced. (Disabled "coming soon" tooltip not separately hovered.)
+- [ ] `a535f0a1` **Stamp reads from above.** Put Scribe items in both slots and press Copy — the wooden
+      stamp reads as a stamp seen from ABOVE (knob + round base, no red underside), not squished; it is
+      larger than the slot and its size tracks the Pixel Art Size setting.
+      *(add-transcribe-copy-paste 8.5)*
+      - **Obsolete 2026-08-16** — the flourish plays ("Copy does the full pass") but round-4 replaced the
+        ROUND base with a flat-bottomed RECTANGLE; the round-base specifics no longer apply. Superseded by
+        `add-transcribe-copy-paste 10.7` (rectangular bottom matching the "COPIED" box width).
+- [ ] `c4447e9f` **Stamp motion.** During the flourish the stamp is noticeably slower (~2×), travels
+      further down and back up, and gives a slight squash as it hits the bottom of its travel.
+      *(add-transcribe-copy-paste 8.6)*
+      - **Obsolete 2026-08-16** — round-4 retimed the stamp again (3000ms), REMOVED the tilt, made the lift
+        travel the full descend distance, and equalized fade-in/out. The "~2×" motion spec no longer applies.
+        Superseded by `add-transcribe-copy-paste 10.7`.
+- [x] `8f2be4fe` **COPIED imprint lingers.** After the stamp lifts, the "COPIED" imprint (all caps) pops
+      in, holds fully visible for about a second, then fades out. *(add-transcribe-copy-paste 8.7)*
+      - **Confirmed 2026-08-16** — user: "Copy does the full pass." The pop/hold/fade linger is unchanged by
+        round-4 (only the outline thickness, lean, and width were retuned — retest those under 10.7).
+- [x] `c809ed93` **Overwrite confirm + cancel.** Copy onto a NON-empty Paste-into slot: first press flips
+      the button to a red "overwrite N tasks", second press overwrites. Re-arm it, then pull or swap a
+      slot item between the two presses — the confirm cancels and the button reverts to Copy.
+      *(add-transcribe-copy-paste 6.3)*
+      - **Confirmed 2026-08-16** — user: "Overwrite is confirmed." The two-press flow works. NOTE the
+        wording changed in round-4 to "Click again to overwrite all tasks" (no count), and there is
+        deliberately NO cancel gesture — user: "There is no cancel — I also don't want there to be." The
+        slot-change re-arm still exists as a safety (re-validates against changed contents), not a user cancel.
+- [x] `2194235a` **Copy blocked when illegal.** Try to Copy onto a fired/hardened tablet (read-only) and
+      onto a near-full tablet — the Copy button stays disabled with the matching tooltip (read-only vs.
+      too many tasks). *(add-transcribe-copy-paste 7.1)*
+      - **Confirmed 2026-08-16** — user: "Illegal targets are appropriately errored out."
+- [x] `7032e329` **Old Scriptorium migrates.** Open a Scriptorium that was placed before this change — it
+      opens on the Transcribe tab with both copy slots and their contents intact, no resize or wipe.
+      *(add-transcribe-copy-paste 6.7)*
+      - **Confirmed 2026-08-16** — user: "The migration works."
+- [ ] `33783622` **Multiplayer copy sync.** With two clients on one Scriptorium, a copy performed by one
+      client shows for the other with the correct contents — no duplicate, no desync.
+      *(add-transcribe-copy-paste 6.8)*
+      - **Backlogged 2026-08-16** — user: "We need to backlog the multiplayer testing." Deferred to a
+        two-client session; the single-client copy path is confirmed.
+- [x] `7a1a5633` **IO buttons sized right.** Open the Transcribe tab; confirm the Export JSON/CSV/Import
+      buttons sit at a tidy fixed width with centred labels — none balloons to fill the lower half of the
+      page. *(add-transcribe-copy-paste 9.6)*
+      - **Confirmed 2026-08-16** via visual review of the running tab — the giant Export JSON button is
+        gone; the three buttons sit at their fixed width with centred labels.
+- [x] `6a68ab79` **Gold Transcribe tab.** With the Transcribe tab active, confirm its nav button reads as a
+      distinct bright gold — clearly different from the Primary brown and the History amber tabs.
+      *(add-transcribe-copy-paste 9.6)*
+      - **Confirmed 2026-08-16** via visual review; the brighter gold `#cf9d2e` reads distinctly. User: "the
+        rest of this looks great."
+- [x] `2a69db02` **Divider under title.** Confirm a horizontal divider sits directly under the dialog title
+      bar on the Transcribe tab, separating the title from the copy and import/export sections.
+      *(add-transcribe-copy-paste 9.6)*
+      - **Confirmed 2026-08-16** via visual review of the running tab.
+- [x] `97946c3e` **Transcribe features button.** Click the bottom-right ⓘ button (now nudged up-and-left off
+      the corner by 3% of Pixel Art Size); confirm it opens a "The Transcribe Tab" handbook page (and a
+      second click closes it), and its hover tooltip reads "Show / hide Transcribe features".
+      *(add-transcribe-copy-paste 9.6 / 9.7)*
+      - **Confirmed 2026-08-16** — user: "The information button on Transcribe tab opens and closes. It works."
+- [x] `3bd3c832` **Faster slot hover.** Hover a filled Scriptorium copy slot; confirm its summary card pops
+      up noticeably faster than a normal item tooltip (delay halved 350 → 175ms).
+      *(add-transcribe-copy-paste 9.8)*
+      - **Confirmed 2026-08-16** — user: "the hover is faster" / "the faster inventory slot hover is good."
+- [ ] `b369cca8` **COPIED imprint reverted.** Press Copy and watch the "COPIED" imprint — it LEANS again (not
+      square), its outline is the THINNER weight, and it spans the full art width. *(add-transcribe-copy-paste 11.6)*
+- [ ] `2e2e7f77` **New stamp art.** Press Copy — the descending wooden stamp is the new hand-painted art (not
+      the old baked PNG). *(add-transcribe-copy-paste 11.6)*
+- [ ] `1d779db3` **Downward squish.** Press Copy — as the stamp hits the page it presses straight DOWN (its
+      bottom edge stays planted, only the top compresses), the squash is subtler (~40% less), and the press is a
+      touch quicker. *(add-transcribe-copy-paste 11.6)*
+- [ ] `9f18d798` **Cuneiform Tracker/Link.** On a TABLET, add a Tracker and a Link task — confirm the item NAME
+      and the Tracker's "N / N" counter render in cuneiform strokes (digits + slash) in both read and editor
+      views. Confirm a Lectern/Notebook (or cuneiform-off) shows them in the normal font, and HUD/Pin counters
+      are unchanged. *(add-transcribe-copy-paste 10.8)*
+- [ ] `271de55e` **Full stamp flourish.** Press Copy and check the whole flourish: the stamp enters from and
+      retreats to ~30% FARTHER above the slot; it accelerates DOWN into the page (easeInSine) and eases smoothly
+      back UP (easeInOutSine); it fades IN over the first half of the descent and OUT over the second half of the
+      lift (no fading in place); and the "COPIED" imprint leans a touch, sits BEHIND the stamp (stamp passes over
+      it), is ~20% SMALLER, and lingers ~20% LESS before fading out with the flourish.
+      *(add-transcribe-copy-paste 11.12)*
+
+- [ ] `060d99e3` **Stamp imprint pop + lean.** Press Copy and watch the "COPIED" imprint: it should POP ON
+      INSTANTLY the instant the stamp touches down (no fade-in), render in **Caudex** with the border **hugging
+      the text** (no oversized/undersized box), lean just a touch (~-3.4°), and the whole stamp should sit a hair
+      (1% of art width) lower on the page. *(add-transcribe-copy-paste 12.5 / 12.6)*
+
+## hud-settings-button-tweaks
+
+> Standalone playtest tweaks to the Pinned HUD header (2026-08-16): a new gear-ring settings icon, a
+> tighter/fainter icon halo, and pure-white (opaque) title + gear coloring. Not tied to an active OpenSpec
+> change — small visual refinements. **Fully quit and relaunch the client** so the new gear asset loads.
+
+- [ ] `93ce41ef` **HUD-only gear icon.** The Pinned HUD header's settings gear is the new gear-RING (hollow
+      centre); confirm the Settings-tab gear in the Notebook/Lectern dialogs is STILL the old solid gear
+      (unchanged). Tweak the HUD SVG if the ring reads too thin/faint at its small size. *(hud-settings-button-tweaks)*
+- [ ] `710049a8` **HUD gear nudge.** Confirm the HUD gear sits 2px lower and 1px left of where it was before.
+      *(hud-settings-button-tweaks)*
+- [ ] `088e6748` **Trimmed gear halo.** Confirm the gear's dark glow/halo is tighter and fainter than before
+      (25% less blur spread, 25% less opacity). *(hud-settings-button-tweaks)*
+- [ ] `e22d1347` **White HUD title + gear.** Confirm the "Pinned" title text AND the settings gear are pure
+      opaque white (not the old off-white/muted grey), and neither looks translucent. *(hud-settings-button-tweaks)*
+
 ## fix-dialog-open-white-flash
 
 > The one-frame white flash on opening a backdropped Scribe surface, split out of reconcile §3.11

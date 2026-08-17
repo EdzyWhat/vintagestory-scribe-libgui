@@ -515,8 +515,7 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     private bool CanAddTaskUnderPolicy()
     {
         var doc = scratch ?? host.Document;
-        int taskCount = doc.Blocks.Count(b => b.IsTask);
-        return host.Policy.CanAdd(taskCount);
+        return host.Policy.CanAdd(doc.TaskCount);
     }
 
     /// <summary>Surface the "tablet is full" in-game error when an add is refused by a FINITE task cap

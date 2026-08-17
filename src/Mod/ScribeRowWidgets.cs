@@ -170,6 +170,33 @@ internal static class ScribeLinkIcon
     }
 }
 
+/// <summary>A single-line item NAME label for Tracker/Link rows, shared by the read and editor views so the
+/// referenced item's name renders the same way in both. On the tablet cuneiform path
+/// (<see cref="ScribeRowStyle.UseCuneiform"/> + a loaded <see cref="ScribeRowStyle.CuneiformBundle"/>) it draws
+/// the name as cuneiform strokes — matching how Task/Text rows route through the cuneiform renderer — so a
+/// tablet's Tracker/Link names aren't the lone plain-font holdout (add-transcribe-copy-paste 10.8). Off that
+/// path (Lectern/Notebook, or cuneiform disabled/asset-missing) it falls back to a wrapping <see cref="Text"/>,
+/// so a name is never blank. The em size and ink track the readable label, and the per-material glow is passed
+/// through so the strokes lift off the clay backdrop like the row text does.</summary>
+internal static class ScribeItemLabel
+{
+    public static Widget Build(string label, Vector4 color, ScribeRowStyle style)
+    {
+        if (style.UseCuneiform && style.CuneiformBundle is { } bundle)
+        {
+            return new CuneiformText(
+                text: label,
+                fontSizeEm: style.FontSize,
+                inkColor: color,
+                bundle: bundle,
+                jitterStrength: style.CuneiformJitter,
+                rotationDegrees: style.CuneiformRotation,
+                glow: style.CuneiformGlow);
+        }
+        return new Text(label, new TextStyle { Color = color, SoftWrap = true });
+    }
+}
+
 /// <summary>The Tracker "N / N" have/need counter, shared by the read view, Pin Tab, and HUD so all three
 /// render it identically (add-tracker-link-tasks 7.11g/7.11h). Emphasis is INVERTED from the naive reading:
 /// an in-progress (unsatisfied) count is the thing you're still working on, so it reads STRONG
@@ -182,17 +209,40 @@ internal static class ScribeLinkIcon
 internal static class ScribeTrackerCounterText
 {
     public static Widget Build(int current, int target, bool satisfied, Vector4 strongColor,
-        Vector4 mutedColor, float lineHeight, TextStyle? baseStyle = null, System.Func<string, string>? corrupt = null)
+        Vector4 mutedColor, float lineHeight, TextStyle? baseStyle = null, System.Func<string, string>? corrupt = null,
+        ScribeRowStyle? cuneiform = null)
     {
         string label = $"{current} / {target}";
         if (corrupt != null) label = corrupt(label);
 
-        TextStyle style = (baseStyle ?? new TextStyle()) with
+        Vector4 inkColor = satisfied ? mutedColor : strongColor;
+
+        // On the tablet cuneiform path the counter's digits + slash render as cuneiform strokes to match the
+        // rest of the tablet (add-transcribe-copy-paste 10.8). Cuneiform is stroke-based, so it carries no
+        // bold weight — the strong/muted color distinction (and the satisfied strikethrough below) is what
+        // conveys emphasis. Off the path (or bundle not loaded) it stays the readable Text with the inverted
+        // strong/bold vs. muted treatment.
+        Widget text;
+        if (cuneiform is { UseCuneiform: true, CuneiformBundle: { } bundle } cs)
         {
-            Color = satisfied ? mutedColor : strongColor,
-            Weight = satisfied ? FontWeight.Normal : FontWeight.Bold,
-        };
-        Widget text = new Text(label, style);
+            text = new CuneiformText(
+                text: label,
+                fontSizeEm: cs.FontSize,
+                inkColor: inkColor,
+                bundle: bundle,
+                jitterStrength: cs.CuneiformJitter,
+                rotationDegrees: cs.CuneiformRotation,
+                glow: cs.CuneiformGlow);
+        }
+        else
+        {
+            TextStyle style = (baseStyle ?? new TextStyle()) with
+            {
+                Color = inkColor,
+                Weight = satisfied ? FontWeight.Normal : FontWeight.Bold,
+            };
+            text = new Text(label, style);
+        }
         if (!satisfied) return text; // in-progress: strong, no strike.
 
         // Satisfied: faint thin line centered on the single text line, spanning the counter's full width.

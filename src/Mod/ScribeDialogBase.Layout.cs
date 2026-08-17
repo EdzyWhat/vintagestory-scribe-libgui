@@ -463,7 +463,7 @@ public abstract partial class ScribeDialogBase
     /// out against the light bubble; resolving through <see cref="ScribeTheme.For"/> keeps it correct in
     /// both modes (dark ink on light paper when pixel-art is on, light text on the dark global theme when
     /// off).</summary>
-    private Widget WithTooltip(string key, Widget child)
+    protected Widget WithTooltip(string key, Widget child, params object[] args)
     {
         var theme = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay);
         // Shade the whole tooltip — bubble AND content — by the live illumination shade at reduced hover
@@ -479,7 +479,7 @@ public abstract partial class ScribeDialogBase
             child: child,
             content: new Padding(
                 EdgeInsets.All(6),
-                child: new Text(Lang.Get("scribe:" + key), new TextStyle
+                child: new Text(Lang.Get("scribe:" + key, args), new TextStyle
                 {
                     FontSize = 13,
                     SoftWrap = true,
@@ -733,7 +733,13 @@ public abstract partial class ScribeDialogBase
     /// (and thus its handbook dialog + link protocol) isn't loaded, the <c>OpenedGuis</c> scan finds
     /// nothing and <c>LinkProtocols</c> has no <c>"handbook"</c> entry, so both paths are safe no-ops
     /// instead of a crash.</para></summary>
-    private void ToggleEditorReferenceHandbook()
+    private void ToggleEditorReferenceHandbook() => ToggleHandbookPage("craftinginfo-scribe-editor-reference");
+
+    /// <summary>The general "focus, don't hide" handbook toggle behind <see cref="ToggleEditorReferenceHandbook"/>
+    /// and the Scriptorium's Transcribe-features button: open the given guide <paramref name="pageCode"/> if no
+    /// handbook is open, or close whatever handbook IS open. Decoupled + graceful exactly as documented on
+    /// <see cref="ToggleEditorReferenceHandbook"/> — no survival-mod reference, safe no-op if it isn't loaded.</summary>
+    protected void ToggleHandbookPage(string pageCode)
     {
         // Discover any open handbook by its stable PUBLIC identity (its toggle-hotkey code), not by its
         // concrete type — this is the reflection-free, decoupled equivalent of OfType<GuiDialogHandbook>().
@@ -748,10 +754,10 @@ public abstract partial class ScribeDialogBase
             return;
         }
 
-        // Closed ⇒ open to our reference page via the registered link protocol (unchanged from the
+        // Closed ⇒ open to the requested page via the registered link protocol (unchanged from the
         // open-only original). Absent survival mod ⇒ no "handbook" protocol ⇒ graceful no-op.
         if (capi.LinkProtocols.TryGetValue("handbook", out var open))
-            open(new LinkTextComponent("handbook://craftinginfo-scribe-editor-reference"));
+            open(new LinkTextComponent("handbook://" + pageCode));
     }
 
     /// <summary>Read-view task checkbox click: complete the task by its stable identity via the

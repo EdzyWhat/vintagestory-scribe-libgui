@@ -1397,7 +1397,7 @@ internal sealed class HudPinsContent : StatelessWidget
         var titleStyle = new TextStyle
         {
             FontSize = 14,
-            Color = new Vector4(0.80f, 0.80f, 0.80f, 1f), // near-white header (v1-playtest-fixes)
+            Color = new Vector4(1f, 1f, 1f, 1f), // pure opaque white header (feedback 2026-08-16, was off-white 0.80)
             GlowWidth = GlowWidth,
             GlowColor = glow,
         };
@@ -1422,12 +1422,13 @@ internal sealed class HudPinsContent : StatelessWidget
                 }));
 
         // Gear sized to sit proportionally with the chevron/title beside it (scribe-settings-followups 4.2):
-        // 12px reads right against the 14px title, where the prior 16px looked oversized. Its base color is
-        // desaturated 66% to match the "+N more" footer (both share OnSurfaceVariant); ScribeHudGearButton
-        // owns the hover-brighten (+10 V) and the up-3/left-5 nudge + tap. It is self-stateful so the hover
-        // survives the HUD's ForceRebuild (mirroring ScribeFadeText).
+        // 12px reads right against the 14px title, where the prior 16px looked oversized. Its base color is now
+        // pure opaque white to match the header title (feedback 2026-08-16, previously a 66%-desaturated muted
+        // grey off OnSurfaceVariant); ScribeHudGearButton owns the up-3/left-5 nudge + tap (the +10 V hover
+        // brighten is a no-op at full white, which is fine — white is the intended resting look). It is
+        // self-stateful so its state survives the HUD's ForceRebuild (mirroring ScribeFadeText).
         var gear = new ScribeHudGearButton(
-            baseColor: ScribeRowConstants.ShiftBrightness(colors.OnSurfaceVariant, 0f, saturationScale: 0.34f),
+            baseColor: new Vector4(1f, 1f, 1f, 1f),
             onTap: onOpenSettings);
 
         return new Row(
@@ -1879,12 +1880,14 @@ internal sealed class ScribeHudGearButtonState : State<ScribeHudGearButton>
                 BoxShadows = new[]
                 {
                     new BoxShadow(
-                        Color: new Vector4(0f, 0f, 0f, 0.4f),   // softened black halo (full opacity read too harsh)
+                        // Black halo, trimmed 25% in both spread and opacity (feedback 2026-08-16): blur
+                        // 3 → 2.25, alpha 0.4 → 0.3 — a tighter, fainter glow so the whiter gear reads cleaner.
+                        Color: new Vector4(0f, 0f, 0f, 0.3f),
                         Offset: new Vector2(0f, 0f),
-                        BlurRadius: 3f),
+                        BlurRadius: 2.25f),
                 },
             },
-            new VsIcon("scribegear", 12f, color));
+            new VsIcon("scribegearhud", 12f, color));   // HUD-only gear-ring (dialogs keep the solid "scribegear")
 
         return Transform.Translate(
             new MouseRegion(
@@ -1895,6 +1898,8 @@ internal sealed class ScribeHudGearButtonState : State<ScribeHudGearButton>
                     child: new Padding(
                         EdgeInsets.Only(left: 1),
                         child: haloed))),
-            new Vector2(0f, -3f));
+            // Nudged down 2 / left 1 from the prior (0, -3) resting nudge (feedback 2026-08-16): -3 + 2 = -1 y,
+            // 0 - 1 = -1 x.
+            new Vector2(-1f, -1f));
     }
 }

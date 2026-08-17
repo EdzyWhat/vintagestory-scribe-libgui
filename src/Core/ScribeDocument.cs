@@ -27,6 +27,36 @@ public sealed class ScribeDocument
     /// <summary>The blocks, in order. Read-only to callers; mutate via the methods below.</summary>
     public IReadOnlyList<ScribeBlock> Blocks => _blocks;
 
+    /// <summary>The number of completable blocks — Task, Tracker, and Link (everything except a
+    /// free-text section, matching <see cref="ScribeBlock.IsCompletable"/>). This is the "N tasks"
+    /// the Transcribe overwrite confirm reports before replacing a target document. Pure data.</summary>
+    public int CompletableCount
+    {
+        get
+        {
+            int count = 0;
+            foreach (var block in _blocks)
+                if (block.IsCompletable) count++;
+            return count;
+        }
+    }
+
+    /// <summary>The number of TASK-kind blocks only (excluding Trackers, Links, and free-text sections).
+    /// This is the measure the tier cap counts (<see cref="ScribeDocumentPolicy.MaxBlocks"/> and the
+    /// editor's add-task gate), so the Transcribe copy's capacity check agrees with what the editor would
+    /// let a player add by hand. Distinct from <see cref="CompletableCount"/>, which also counts
+    /// Trackers/Links for the overwrite-confirm prompt. Pure data.</summary>
+    public int TaskCount
+    {
+        get
+        {
+            int count = 0;
+            foreach (var block in _blocks)
+                if (block.IsTask) count++;
+            return count;
+        }
+    }
+
     /// <summary>Stable identifier for this document. Assigned once when the document is created
     /// (a fresh <see cref="Guid"/>) and preserved through serialization, so a reference to a task
     /// in this document — a per-player pin — keeps resolving even after the document's owning
@@ -47,6 +77,41 @@ public sealed class ScribeDocument
     /// load-path <see cref="SetDocId"/>, which RESTORES a persisted id; here we intentionally break the
     /// carried-over identity to forge a unique one.</summary>
     public void ReassignNewDocId() => DocId = Guid.NewGuid();
+
+    /// <summary>
+    /// Produces a deep, independent copy of this document with a brand-new identity: a fresh
+    /// <see cref="DocId"/> and a fresh <see cref="ScribeBlock.TaskId"/> for every block. Every other
+    /// field — title, and each block's kind, text, done flag, depth, assignment, and Tracker/Link
+    /// references — is copied verbatim. The source document is NOT modified.
+    ///
+    /// <para>This is the Transcribe copy primitive. A verbatim byte-copy of a serialized document would
+    /// duplicate its identity, so two live items would collide on the mod's per-player pin store and
+    /// block-doc resolution (which key off <see cref="DocId"/> + <see cref="ScribeBlock.TaskId"/> — see
+    /// <see cref="ReassignNewDocId"/>). Regenerating all ids here keeps the copy fully independent: pins,
+    /// completion, and later edits on one item never touch the other. Pure data; no VS API.</para>
+    /// </summary>
+    public ScribeDocument CloneWithNewIdentity()
+    {
+        var copy = new ScribeDocument { Title = Title };
+        var clonedBlocks = new List<ScribeBlock>(_blocks.Count);
+        foreach (var block in _blocks)
+        {
+            // Omit taskId so the constructor mints a fresh one — the whole point of the clone.
+            clonedBlocks.Add(new ScribeBlock(
+                block.Kind,
+                block.Text,
+                done: block.Done,
+                depth: block.Depth,
+                assignedToUid: block.AssignedToUid,
+                targetItemCode: block.TargetItemCode,
+                targetQuantity: block.TargetQuantity,
+                currentQuantity: block.CurrentQuantity,
+                linkTarget: block.LinkTarget,
+                linkLabel: block.LinkLabel));
+        }
+        copy.SetBlocks(clonedBlocks);
+        return copy;
+    }
 
     /// <summary>Adds a checkbox task to the end. Any text is accepted and stored verbatim,
     /// including empty/whitespace-only text (a new task starts empty and the player types into it).

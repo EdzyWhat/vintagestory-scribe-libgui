@@ -138,6 +138,13 @@ internal static class ScribeRowConstants
     /// <summary>Thematic "active tab" fill color for the Timer nav button — muted teal <c>#63929c</c>.</summary>
     public static readonly Vector4 NavActiveTimer = new(0.3882f, 0.5725f, 0.6118f, 1f);
 
+    /// <summary>Thematic "active tab" fill color for the Transcribe nav button — a bright warm gold <c>#cf9d2e</c>
+    /// (add-transcribe-copy-paste). Shifted yellower (hue ~41°) and brighter than the first golden-orange pick
+    /// (<c>#bb7c31</c>), which read too close to the theme Primary brown and to <see cref="NavActiveHistory"/>'s
+    /// amber (refinement round 3: "closer to gold, keep some orange, needs distinction"). Still warm enough to
+    /// keep an orange cast, but clearly a distinct gold.</summary>
+    public static readonly Vector4 NavActiveTranscribe = new(0.8118f, 0.6157f, 0.1804f, 1f);
+
     /// <summary>Cream glyph color <c>#eae6dd</c> used for a nav button's icon while that button is the
     /// active tab, for contrast against the thematic fill (add-active-tab-nav-colors).</summary>
     public static readonly Vector4 NavActiveGlyph = new(0.9176f, 0.9020f, 0.8667f, 1f);

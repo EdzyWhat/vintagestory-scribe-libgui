@@ -110,6 +110,55 @@ public class ScribeDocumentPolicyTests
         Assert.True(ScribeDocumentPolicy.UneditableTablet.ReadOnly);
     }
 
+    // --- CanHold: the copy/paste capacity check (fits N incoming tasks, not "room for one more") ---
+    // Unlike CanAdd (strict <, "is there room for ONE more beyond the N present"), CanHold asks
+    // "can this document hold a total of N tasks" — an inclusive <= against the cap. It also denies
+    // when read-only. Used by the Transcribe copy target check (add-transcribe-copy-paste refinement #1).
+
+    [Fact]
+    public void Unlimited_CanHoldAnyTaskCount()
+    {
+        var policy = ScribeDocumentPolicy.Unlimited;
+
+        Assert.True(policy.CanHold(0));
+        Assert.True(policy.CanHold(10));
+        Assert.True(policy.CanHold(1000));
+    }
+
+    [Fact]
+    public void Tablet_CanHoldUpToAndIncludingTheCap()
+    {
+        var policy = ScribeDocumentPolicy.Tablet;
+
+        Assert.True(policy.CanHold(0));
+        Assert.True(policy.CanHold(9));
+        Assert.True(policy.CanHold(10));  // exactly the cap fits (inclusive, unlike CanAdd)
+        Assert.False(policy.CanHold(11)); // one over the cap does not
+    }
+
+    [Fact]
+    public void UneditableTablet_CanHoldNothing()
+    {
+        var policy = ScribeDocumentPolicy.UneditableTablet;
+
+        Assert.False(policy.CanHold(0));
+        Assert.False(policy.CanHold(5));
+    }
+
+    [Fact]
+    public void ReadOnly_CanHoldNothingEvenWhenUncapped()
+    {
+        var policy = new ScribeDocumentPolicy { ReadOnly = true };
+
+        Assert.False(policy.CanHold(0));
+    }
+
+    [Fact]
+    public void CanHold_TreatsNegativeCountAsZero()
+    {
+        Assert.True(ScribeDocumentPolicy.Tablet.CanHold(-5));
+    }
+
     // --- The cap lives at the boundary, NOT in ScribeDocument ---
 
     [Fact]

@@ -1,11 +1,17 @@
 using System.Collections.Generic;
 using Gui.Core.Layout;          // MainAxisSize
+using Gui.Rendering;            // EdgeInsets
+using Gui.Rendering.Text;       // TextStyle, FontWeight
+using Gui.Widgets.Basic;        // Text, Container, Divider, Button, ButtonVariant, VsIcon
 using Gui.Widgets.Framework;
 using Gui.Widgets.Inventory;    // SlotController, FlatItemSlot, ItemSlotStyle
-using Gui.Widgets.Layout;       // Center, Row, Stack, Positioned, MainAxisAlignment, CrossAxisAlignment
+using Gui.Widgets.Layout;       // Center, Row, Column, Stack, Positioned, Padding, SizedBox, Expanded, MainAxisAlignment, CrossAxisAlignment
+using Gui.Widgets.Painting;     // BoxStyle
 using OpenTK.Mathematics;       // Vector4 (watermark tint)
+using Scribe.Core;              // ScribeArrowDigraph, ScribePlayerSettings, ScribeDocumentPolicy
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;  // ItemSlot
+using Vintagestory.API.Config;  // Lang
 using Vintagestory.API.MathTools;
 
 namespace Scribe;
@@ -36,6 +42,36 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     /// a <c>SlotModified</c> subscription each time).</summary>
     private SlotController? slotController;
 
+    /// <summary>The two copy slots' inventory indices. Slot 0 is the Original (source), slot 1 the
+    /// Duplicate (target). These are the only two real slots on <see cref="BlockEntityScriptorium"/>; the
+    /// import/export slot rendered below them is an inert placeholder (add-transcribe-copy-paste D6).</summary>
+    private const int SourceSlotIndex = 0;
+    private const int TargetSlotIndex = 1;
+
+    /// <summary>The seal button's two-press overwrite-confirm state (add-transcribe-copy-paste D3). Held on
+    /// the dialog (client-only UX); the server re-checks the overwrite gate regardless. Reset to
+    /// <see cref="TranscribeConfirm.Idle"/> whenever a slot's contents change (see
+    /// <see cref="EnsureSlotController"/>).</summary>
+    private enum TranscribeConfirm { Idle, ConfirmOverwrite }
+    private TranscribeConfirm confirmState = TranscribeConfirm.Idle;
+
+    /// <summary>The wooden rubber-stamp copy flourish (add-transcribe-copy-paste D4). Non-load-bearing: the
+    /// copy is already done (server-authoritative) by the time this plays. <see cref="stampRegistry"/> owns
+    /// the animation controller so the motion survives the per-frame body reconcile; <see cref="stampGeneration"/>
+    /// bumps on each copy so a re-copy remounts a fresh <see cref="ScribeStamp"/> (new key + id) and replays
+    /// rather than reusing the completed controller. <see cref="stampPlaying"/> gates whether the overlay is in
+    /// the tree at all.</summary>
+    private readonly ScribeAnimationRegistry stampRegistry = new();
+    private int stampGeneration;
+    private bool stampPlaying;
+
+    /// <summary>The pixel-art wooden stamp PNG (baked by <c>build/gen-copy-stamp.py</c>), scaled up
+    /// nearest-neighbour by <see cref="ScribeStamp"/>. Swappable art — same path, no code change to repaint.</summary>
+    private static readonly AssetLocation StampAsset = new("scribe", "textures/gui/scribe-copy-stamp.png");
+
+    /// <summary>Ink-red for the "COPY" imprint, matched to the rubber face in the stamp PNG.</summary>
+    private static readonly Vector4 ImprintInk = new(0.66f, 0.18f, 0.16f, 1f);
+
     public GuiDialogScribeScriptorium(BlockPos pos, IScribeDocumentHost host, ICoreClientAPI capi)
         // Pass the BE's inventory to the inventory-carrying GuiDialogBlockEntityBase ctor so OpenInventory /
         // CloseInventoryAndSync fire automatically on open/close. The Lectern/Notebook/Tablet dialogs keep
@@ -63,15 +99,15 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
             boxShadows: NavButtonShadow,
             activeColor: IsVisitorsView ? ScribeRowConstants.NavActiveGuestbook : null);
 
-        // Scriptorium-only Scribe-items-only storage tab (add-scriptorium-inventory).
+        // Scriptorium-only Transcribe tab: the two-slot document-copy surface (add-transcribe-copy-paste).
         yield return TitleButton(
             "scribeinventory",
-            "scribe-tab-inventory",
+            "scribe-tab-transcribe",
             colors.OnSurfaceVariant,
             NavButtonSize,
             OnClickSwitchToInventory,
             boxShadows: NavButtonShadow,
-            activeColor: IsInventoryView ? ScribeRowConstants.NavActiveGuestbook : null);
+            activeColor: IsInventoryView ? ScribeRowConstants.NavActiveTranscribe : null);
     }
 
     /// <summary>Slot edge length in pixels — matches LibGUI's <c>SlotGrid</c>/<c>ItemSlotStyle.Default</c> so
@@ -80,6 +116,20 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
 
     /// <summary>Gap between the two slots, matching <c>SlotGrid</c>'s default spacing.</summary>
     private const float SlotSpacing = 4f;
+
+    /// <summary>Fixed width of the "→" glyph cell between the copy slots. Bounded (not Center-auto-sized) so the
+    /// arrow can't balloon to the full page width — see <see cref="BuildCopySection"/>.</summary>
+    private const float ArrowCellWidth = 34f;
+
+    /// <summary>Fixed width of the stacked import/export controls column. Bounded so the buttons size to a tidy
+    /// column instead of a <see cref="CrossAxisAlignment.Stretch"/> Column ballooning to the full page width.
+    /// Narrowed 200 → 140 (70%, refinement) after the buttons read as too wide for their short labels; their
+    /// text is centred within the stretched button (see <see cref="LabelButton"/>'s <c>center</c> option).</summary>
+    private const float IoControlsWidth = 140f;
+
+    /// <summary>Width the import/export slot caption wraps within (under its placeholder slot), so the long
+    /// "Note to export from…" text stacks into a few short lines instead of stretching the section wide.</summary>
+    private const float IoCaptionWidth = 96f;
 
     /// <summary>The book watermark's edge length as a fraction of the slot — centered within the slot.</summary>
     private const float WatermarkScale = 0.66f;
@@ -102,19 +152,440 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
         var bookColor = colors.Primary;
         var veilColor = colors.Surface with { W = 0.66f };
 
-        var inv = scriptorium.Inventory;
-        var slotWidgets = new List<Widget>(inv.Count);
-        for (int i = 0; i < inv.Count; i++)
+        // All heading + button + caption + arrow text on this tab renders in Caudex (refinement #7), the same
+        // bundled face as the dialog title and the editor's text buttons (ScribeTaskFont.ButtonFamily).
+        var headingStyle = new TextStyle
         {
-            slotWidgets.Add(BuildWatermarkedSlot(inv[i], controller, colors, CurrentShade, bookColor, veilColor));
+            FontSize = 16, Weight = FontWeight.Bold, Color = colors.OnSurface, FontFamily = ScribeTaskFont.ButtonFamily,
+        };
+
+        // Vertical 50/50 split (refinement #6): the top half is the copy mechanic, the bottom half the
+        // (unwired) import/export placeholder, each vertically CENTRED within its zone. Two Expanded halves
+        // divide the fixed central region (given height InnerH by the SectionInnerBox's stretched Row), so the
+        // split is exact and needs no scroll — this fixed layout supersedes task 3.4's scroll mitigation now
+        // that the button sits below the slots and the content fits the region at every supported size.
+        var topZone = new Center(child: new Column(
+            spacing: 10,
+            crossAxisAlignment: CrossAxisAlignment.Center,
+            mainAxisSize: MainAxisSize.Min,
+            children: new Widget[]
+            {
+                new Text(Lang.Get("scribe:scribe-transcribe-heading"), headingStyle),
+                BuildCopySection(controller, colors, bookColor, veilColor),
+                BuildSealButton(colors),   // the Copy button sits BELOW the slot pair (refinement #4)
+            }));
+
+        var bottomZone = new Center(child: new Column(
+            spacing: 10,
+            crossAxisAlignment: CrossAxisAlignment.Center,
+            mainAxisSize: MainAxisSize.Min,
+            children: new Widget[]
+            {
+                new Text(Lang.Get("scribe:scribe-transcribe-io-heading"), headingStyle),
+                BuildImportExportSection(colors, bookColor, veilColor),
+            }));
+
+        // A theme-border Divider as the FIRST element, right under the dialog title bar — the same
+        // separator the read view puts atop its scrolling section (ScribeReadContent), so the Transcribe
+        // tab's title reads as distinct from its two content sections (refinement round 3). A second Divider
+        // still splits the copy zone from the import/export zone below.
+        var content = new Padding(EdgeInsets.All(10f), new Column(
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Max,
+            children: new Widget[]
+            {
+                new Divider(),
+                new Expanded(child: topZone),
+                new Divider(),
+                new Expanded(child: bottomZone),
+            }));
+
+        // A bottom-right "Show / hide Transcribe features" info button, overlaid on the tab (refinement round
+        // 3) — the peer of the editor's "Show / hide Editor Features" button, toggling this tab's own handbook
+        // guide page. Stacked so it pins to the corner without disturbing the 50/50 split above it. Nudged up
+        // and left off the corner by 3% of the Pixel Art Size (on top of the 4px base inset) so it clears the
+        // page edge at every art size (refinement round 3).
+        float cornerInset = 4f + ScribePlayerSettings.ClampPixelArtSize(modSystem.MySettings.PixelArtSize) * 0.01f;
+        return new Stack(children: new Widget[]
+        {
+            content,
+            new Positioned(right: cornerInset, bottom: cornerInset, child: BuildFeaturesHelpButton(colors)),
+        });
+    }
+
+    /// <summary>The bottom-right "Show / hide Transcribe features" info button (refinement round 3): the
+    /// Transcribe-tab peer of the editor footer's "Show / hide Editor Features" button. Same LibGUI
+    /// <see cref="Button"/> on the theme's <c>ButtonStyle</c> (tight <c>All(7)</c> padding so it's a small
+    /// square, matching the editor's icon button) with the same scaled ⓘ glyph in the button foreground, and
+    /// the same toggle behaviour — <see cref="ScribeDialogBase.ToggleHandbookPage"/> opens (or, if already
+    /// open, closes) the tab's own handbook guide page. An explainer tooltip labels it.
+    ///
+    /// <para>The <c>ButtonStyle</c> comes from <see cref="ScribeTheme.For"/> rather than
+    /// <c>Theme.Of(context)</c> because these content builders don't receive a <see cref="BuildContext"/>;
+    /// the resolved style is the same one the ambient <c>Theme</c> would hand a null-styled button.</para></summary>
+    private Widget BuildFeaturesHelpButton(ColorScheme colors)
+    {
+        var buttonStyle = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ButtonStyle with
+        {
+            Padding = EdgeInsets.All(7),
+        };
+        return WithTooltip(
+            "scribe-transcribe-features-tooltip",
+            new Button(
+                child: new ScribeVsIconGlyph("scribeinfo", 17f, colors.OnPrimary),
+                style: buttonStyle,
+                onTap: _ => ToggleHandbookPage("craftinginfo-scribe-transcribe")));
+    }
+
+    /// <summary>The copy pair: the Original slot, a Caudex "→" arrow, and the Duplicate slot, in a centered
+    /// row (the Copy button now sits BELOW this row — refinement #4). Each slot carries a caption underneath.
+    /// The arrow uses the same U+2192 glyph the editors substitute for a typed <c>-&gt;</c>
+    /// (<see cref="ScribeArrowDigraph.RightArrow"/>) so the "Original → Duplicate" direction reads at a glance
+    /// (refinement #8); it is boxed to the slot height and centred so it lines up with the slots, not their
+    /// captions.</summary>
+    private Widget BuildCopySection(SlotController controller, ColorScheme colors, Vector4 bookColor, Vector4 veilColor)
+    {
+        var inv = scriptorium.Inventory;
+        // The arrow is boxed to a FIXED width as well as the slot height: a Center (RenderPositionedBox) only
+        // shrink-wraps when its incoming width is unbounded — given a finite max (which the copy Row passes it),
+        // it grows to that max. An unbounded-width Center here ballooned to the full page, shoving the Original
+        // slot off the left edge and the Duplicate off the right (the "stretched to full width" bug). Bounding
+        // both axes pins it to a small glyph cell that the Row can hug.
+        Widget arrow = new SizedBox(width: ArrowCellWidth, height: SlotSize, child: new Center(child: new Text(
+            ScribeArrowDigraph.RightArrow.ToString(),
+            new TextStyle { FontSize = 28f, Color = colors.OnSurfaceVariant, FontFamily = ScribeTaskFont.ButtonFamily })));
+        return new Row(
+            spacing: 14f,
+            mainAxisAlignment: MainAxisAlignment.Center,
+            crossAxisAlignment: CrossAxisAlignment.Start,
+            mainAxisSize: MainAxisSize.Min,
+            children: new Widget[]
+            {
+                LabeledSlot(inv[SourceSlotIndex], "scribe-transcribe-copyfrom", controller, colors, bookColor, veilColor),
+                arrow,
+                LabeledSlot(inv[TargetSlotIndex], "scribe-transcribe-pasteinto", controller, colors, bookColor, veilColor,
+                    overlay: BuildStampOverlay()),
+            });
+    }
+
+    /// <summary>One captioned copy slot: the watermarked <see cref="ScribeDocumentSlot"/> above its role label.
+    /// When <paramref name="overlay"/> is supplied (the Duplicate slot's copy flourish) it is stacked ON TOP of
+    /// the slot, sharing the slot's footprint but free to overflow (paint-only) as the stamp descends.</summary>
+    private Widget LabeledSlot(ItemSlot slot, string labelKey, SlotController controller, ColorScheme colors,
+        Vector4 bookColor, Vector4 veilColor, Widget? overlay = null)
+    {
+        Widget slotWidget = BuildWatermarkedSlot(slot, controller, colors, CurrentShade, bookColor, veilColor);
+        if (overlay != null)
+        {
+            slotWidget = new Stack(children: new Widget[]
+            {
+                slotWidget,
+                new Positioned(left: 0f, top: 0f, width: SlotSize, height: SlotSize, child: overlay),
+            });
+        }
+        return new Column(
+            spacing: 4f,
+            crossAxisAlignment: CrossAxisAlignment.Center,
+            mainAxisSize: MainAxisSize.Min,
+            children: new Widget[]
+            {
+                slotWidget,
+                new Text(Lang.Get("scribe:" + labelKey),
+                    new TextStyle { FontSize = 12, Color = colors.OnSurfaceVariant }),
+            });
+    }
+
+    /// <summary>The copy flourish overlaid on the Duplicate slot, or <c>null</c> when nothing is playing (D4).
+    /// A fresh <see cref="ScribeStamp"/> is created each rebuild while <see cref="stampPlaying"/> is set; its
+    /// <c>ValueKey</c> + id carry the current <see cref="stampGeneration"/> so a re-copy remounts and replays.
+    /// The wooden-stamp bitmap is loaded once and cached by the mod system (null-safe: a missing asset just
+    /// drops the wooden image, keeping the "COPY" imprint).</summary>
+    private Widget? BuildStampOverlay()
+    {
+        if (!stampPlaying) return null;
+        string id = StampId(stampGeneration);
+        // Peg the stamp + imprint width to the player's Pixel Art Size setting (× 0.2, so the 600 default →
+        // 120px) — larger than the 48px slot, spilling over its sides (refinement #2).
+        float artWidth = ScribePlayerSettings.ClampPixelArtSize(modSystem.MySettings.PixelArtSize) * 0.2f;
+        return new ScribeStamp(
+            id: id,
+            registry: stampRegistry,
+            stampBitmap: modSystem.GetGuiTextureBitmap(StampAsset),
+            copyLabel: Lang.Get("scribe:scribe-transcribe-stamp-imprint"),
+            imprintColor: ImprintInk,
+            slotSize: SlotSize,
+            artWidth: artWidth,
+            onEnd: () => OnStampEnded(id),
+            key: new ValueKey<string>(id));
+    }
+
+    /// <summary>The Copy button (D3/D4), sitting below the slot pair (refinement #4). Disabled (greyed, with an
+    /// explainer tooltip) until both copy slots hold a Scribe item AND the Duplicate is a valid target —
+    /// writeable and with room for the source's tasks (refinement #1). When the target already has tasks, the
+    /// first press flips the button to a red "overwrite N tasks" confirm; the second press sends the copy. An
+    /// empty target copies on a single press. Label/variant derive from the live slot contents +
+    /// <see cref="confirmState"/>; styled like the editor's "Done editing" button (thematic Button, Caudex
+    /// label) but sized to its text.</summary>
+    private Widget BuildSealButton(ColorScheme colors)
+    {
+        var inv = scriptorium.Inventory;
+        bool bothFilled = inv[SourceSlotIndex].Itemstack != null && inv[TargetSlotIndex].Itemstack != null;
+
+        // The can't-copy affordance: a REAL disabled Button (enabled:false) wrapped in an explainer tooltip —
+        // NOT a hand-rolled Container. A disabled Button renders in the exact theme as the editor's "Done
+        // editing" button (default ButtonStyle, Caudex label) at 0.45 opacity, so it reads as a proper greyed
+        // button instead of an off-theme box; enabled:false skips ButtonState's press-sound path entirely, so
+        // the earlier "avoid a live Button here" caution doesn't apply. It hugs its label like the live button
+        // (refinement #5).
+        Widget Disabled(string tooltipKey, params object[] tooltipArgs) => WithTooltip(
+            tooltipKey,
+            LabelButton(Lang.Get("scribe:scribe-transcribe-stamp"), colors, enabled: false, ButtonVariant.Primary),
+            tooltipArgs);
+
+        if (!bothFilled)
+        {
+            confirmState = TranscribeConfirm.Idle; // can't be mid-confirm without both slots filled
+            return Disabled("scribe-transcribe-stamp-disabled");
         }
 
-        return new Center(child: new Row(
-            spacing: SlotSpacing,
+        // Valid-target gate (refinement #1): the Duplicate must be WRITEABLE (not hardened/fired) AND have
+        // ROOM for the source's tasks. Both facts come from the target item's document policy — a read-only
+        // tablet reports ReadOnly; a wet tablet caps at 10 task blocks. The server re-checks the same policy
+        // in OnServerReceivedTranscribeCopy, so this gate is UX, not the authority.
+        var targetPolicy = TargetPolicy();
+        if (targetPolicy.ReadOnly)
+        {
+            confirmState = TranscribeConfirm.Idle;
+            return Disabled("scribe-transcribe-stamp-readonly");
+        }
+        if (!targetPolicy.CanHold(SourceTaskCount()))
+        {
+            confirmState = TranscribeConfirm.Idle;
+            // A finite cap is implied here: a non-read-only policy fails CanHold only when MaxBlocks is set.
+            return Disabled("scribe-transcribe-stamp-toobig", targetPolicy.MaxBlocks ?? 0);
+        }
+
+        int targetTasks = TargetTaskCount();
+        bool confirming = confirmState == TranscribeConfirm.ConfirmOverwrite && targetTasks > 0;
+
+        string label = confirming
+            ? Lang.Get("scribe:scribe-transcribe-stamp-confirm")
+            : Lang.Get("scribe:scribe-transcribe-stamp");
+
+        // Same styling as the editor's "Done editing" button — a plain thematic LibGUI Button on the default
+        // theme ButtonStyle (no explicit style), its label in Caudex (#7) — but NOT wrapped in Expanded, so it
+        // hugs its text (#5). Being a live Button it inherits the standard hover-grow / press-shrink feedback
+        // the rest of the Scribe UI has. The confirming state flips to Danger to signal the destructive overwrite.
+        return LabelButton(label, colors, enabled: true, confirming ? ButtonVariant.Danger : ButtonVariant.Primary,
+            onTap: OnSealPressed);
+    }
+
+    /// <summary>A thematic label Button matching the editor's "Done editing"/"Add task" footer buttons: the
+    /// default theme <c>ButtonStyle</c> (no explicit style override) with a Caudex label in the variant's
+    /// foreground colour, so it inherits the identical background, border, padding, and hover-grow/press-shrink
+    /// feedback. Non-<c>Expanded</c>, so it hugs its label (refinement #5). A disabled button (<paramref
+    /// name="enabled"/> false) renders the same shape at 0.45 opacity and never fires its tap/press-sound path.
+    ///
+    /// <para>When <paramref name="center"/> is set the label is centred within a button whose WIDTH is fixed by
+    /// an outer stretch (the import/export column's <see cref="CrossAxisAlignment.Stretch"/>). Centring uses a
+    /// full-width <see cref="Row"/> (<see cref="MainAxisSize.Max"/> + <see cref="MainAxisAlignment.Center"/>),
+    /// NOT a <see cref="Gui.Widgets.Layout.Center"/>: a <c>Center</c> (RenderPositionedBox) grows to fill BOTH
+    /// finite axes it's given, so wrapping the label in one ballooned the button to the full height of its
+    /// <see cref="Expanded"/> zone (the "IO button fills 100% of the container" bug). A Row only fills its main
+    /// (horizontal) axis to the bounded button width and hugs its children vertically, so the label centres
+    /// without the button growing tall. Left off for the hugging Copy button, whose child already fills its own
+    /// width.</para></summary>
+    private static Widget LabelButton(string label, ColorScheme colors, bool enabled, ButtonVariant variant,
+        System.Action? onTap = null, bool center = false)
+    {
+        Vector4 fg = variant == ButtonVariant.Danger ? colors.OnError : colors.OnPrimary;
+        Widget child = new Text(label, new TextStyle { FontSize = 14, Color = fg, FontFamily = ScribeTaskFont.ButtonFamily });
+        if (center)
+            child = new Row(
+                mainAxisAlignment: MainAxisAlignment.Center,
+                mainAxisSize: MainAxisSize.Max,
+                children: new Widget[] { child });
+        return new Button(
+            child: child,
+            variant: variant,
+            enabled: enabled,
+            onTap: onTap == null ? null : _ => onTap());
+    }
+
+    /// <summary>The number of TASK blocks on the Original (source) item — what a copy would place onto the
+    /// Duplicate (a copy REPLACES the target document, so the result's task count equals the source's). 0 when
+    /// the source is empty or carries no document, so an empty source always fits any writeable target (the
+    /// source may be any Scribe object, even an empty one — refinement #1).</summary>
+    private int SourceTaskCount()
+    {
+        var stack = scriptorium.Inventory[SourceSlotIndex].Itemstack;
+        if (stack != null && ScribeDocumentAttributes.TryReadFrom(stack, out var doc) && doc is not null)
+            return doc.TaskCount;
+        return 0;
+    }
+
+    /// <summary>The Duplicate (target) item's document policy — capacity + editability. Uncapped and writeable
+    /// when the target is empty or isn't an <see cref="IScribeDocumentItem"/>; a Tablet reports its live
+    /// wet/hard/fired policy. Drives the client-side valid-target gate; the server re-checks the same policy.</summary>
+    private ScribeDocumentPolicy TargetPolicy()
+    {
+        var slot = scriptorium.Inventory[TargetSlotIndex];
+        if (slot.Itemstack?.Collectible is IScribeDocumentItem item)
+            return item.DocumentPolicy(slot);
+        return ScribeDocumentPolicy.Unlimited;
+    }
+
+    /// <summary>Number of completable tasks on the Duplicate (target) item, read from its synced document
+    /// (Core's <see cref="Scribe.Core.ScribeDocument.CompletableCount"/>). 0 when the target is empty or has
+    /// no document — the "empty target" case that copies without a confirm.</summary>
+    private int TargetTaskCount()
+    {
+        var stack = scriptorium.Inventory[TargetSlotIndex].Itemstack;
+        if (stack != null && ScribeDocumentAttributes.TryReadFrom(stack, out var doc) && doc is not null)
+            return doc.CompletableCount;
+        return 0;
+    }
+
+    /// <summary>Handle a press of the (enabled) seal button. Empty target → copy immediately. Non-empty
+    /// target → first press arms the confirm, second press commits with overwrite. Mirrors D3.</summary>
+    private void OnSealPressed()
+    {
+        if (TargetTaskCount() == 0)
+        {
+            SendTranscribeCopy(allowOverwrite: false);
+            confirmState = TranscribeConfirm.Idle;
+            PlayStamp();
+        }
+        else if (confirmState == TranscribeConfirm.Idle)
+        {
+            confirmState = TranscribeConfirm.ConfirmOverwrite;
+            RebuildBody();
+        }
+        else
+        {
+            SendTranscribeCopy(allowOverwrite: true);
+            confirmState = TranscribeConfirm.Idle;
+            PlayStamp();
+        }
+    }
+
+    /// <summary>Start (or restart) the wooden-stamp copy flourish over the Duplicate slot. Called only on a
+    /// send that will succeed (empty target, or the confirming press) — the two client gates never send a
+    /// press the server would reject, so a played stamp always corresponds to a real copy. Bumping the
+    /// generation gives the next <see cref="ScribeStamp"/> a fresh key+id so the reconciler replays it from the
+    /// start instead of reusing the just-completed controller (D4).</summary>
+    private void PlayStamp()
+    {
+        stampGeneration++;
+        stampPlaying = true;
+        RebuildBody();
+    }
+
+    /// <summary>Fired once when a stamp play completes: release its controller and drop the overlay so the
+    /// copied summary is shown unobstructed. Releases by the exact id the finished stamp used, so a copy that
+    /// re-armed a newer generation mid-flight isn't torn down by an older stamp's end.</summary>
+    private void OnStampEnded(string id)
+    {
+        stampRegistry.Release(id);
+        // Only clear the flag if this was the CURRENT generation's stamp; a newer copy may already be playing.
+        if (id == StampId(stampGeneration))
+        {
+            stampPlaying = false;
+            RebuildBody();
+        }
+    }
+
+    private static string StampId(int generation) => $"transcribe-stamp:{generation}";
+
+    /// <summary>Send the server-authoritative copy request for this Scriptorium's copy pair (D2). The server
+    /// clones the source document with a fresh identity and writes it onto the target, syncing the result
+    /// back through the inventory channel.</summary>
+    private void SendTranscribeCopy(bool allowOverwrite)
+    {
+        var pos = scriptorium.Pos;
+        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeTranscribeCopyMessage
+        {
+            X = pos.X,
+            Y = pos.Y,
+            Z = pos.Z,
+            SourceSlot = SourceSlotIndex,
+            TargetSlot = TargetSlotIndex,
+            AllowOverwrite = allowOverwrite,
+        });
+    }
+
+    /// <summary>The import/export section (D6): a greyed placeholder slot beside disabled Export JSON /
+    /// Export CSV / Import controls. Entirely inert this change — no <see cref="SlotController"/> binding, no
+    /// backing <see cref="ItemSlot"/>, no click handlers — it reserves the final layout while carrying a
+    /// "coming in a later update" tooltip. The block-entity inventory stays at its two real copy slots.</summary>
+    private Widget BuildImportExportSection(ColorScheme colors, Vector4 bookColor, Vector4 veilColor)
+    {
+        // The Export/Import controls are disabled REAL Buttons (same theme as the copy button, greyed at 0.45
+        // opacity) wrapped in a "coming soon" tooltip — not hand-rolled boxes. Stacked in a Stretch Column of a
+        // FIXED width (IoControlsWidth): a Stretch Column left unbounded inherits the full page width and
+        // balloons the whole section edge-to-edge (the bottom half of the "stretched to full width" bug), so
+        // the bound is what keeps the three buttons a tidy equal-width column instead.
+        Widget DisabledControl(string labelKey) => WithTooltip(
+            "scribe-transcribe-io-soon",
+            LabelButton(Lang.Get("scribe:" + labelKey), colors, enabled: false, ButtonVariant.Primary, center: true));
+
+        var controls = new SizedBox(width: IoControlsWidth, child: new Column(
+            spacing: 6f,
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Min,
+            children: new Widget[]
+            {
+                DisabledControl("scribe-transcribe-export-json"),
+                DisabledControl("scribe-transcribe-export-csv"),
+                DisabledControl("scribe-transcribe-import"),
+            }));
+
+        return new Row(
+            spacing: 14f,
             mainAxisAlignment: MainAxisAlignment.Center,
             crossAxisAlignment: CrossAxisAlignment.Center,
             mainAxisSize: MainAxisSize.Min,
-            children: slotWidgets));
+            children: new Widget[]
+            {
+                new Column(
+                    spacing: 4f,
+                    crossAxisAlignment: CrossAxisAlignment.Center,
+                    mainAxisSize: MainAxisSize.Min,
+                    children: new Widget[]
+                    {
+                        BuildPlaceholderSlot(colors, bookColor, veilColor),
+                        // The caption is bounded so its long text wraps into a few short lines under the slot
+                        // rather than stretching the Row wide.
+                        new SizedBox(width: IoCaptionWidth, child: new Text(Lang.Get("scribe:scribe-transcribe-io-slot"),
+                            new TextStyle { FontSize = 11, Color = colors.OnSurfaceVariant, SoftWrap = true, Align = TextAlignment.Center })),
+                    }),
+                controls,
+            });
+    }
+
+    /// <summary>An inert placeholder slot for the (unwired) import/export section: the same watermarked slot
+    /// LOOK as a real copy slot, but drawn as a plain <see cref="Container"/> with no <c>ScribeDocumentSlot</c>
+    /// and no controller — it accepts no item and fires no gesture. Greyed a touch (lower book opacity) so it
+    /// reads as "a slot will go here" rather than an active drop target (D6).</summary>
+    private Widget BuildPlaceholderSlot(ColorScheme colors, Vector4 bookColor, Vector4 veilColor)
+    {
+        float glyph = SlotSize * WatermarkScale;
+        float inset = (SlotSize - glyph) / 2f;
+        return new Stack(children: new Widget[]
+        {
+            new Positioned(
+                left: inset, top: inset, width: glyph, height: glyph,
+                child: new ScribeVsIconGlyph("scribebook", glyph, bookColor with { W = 0.4f })),
+            new Container(style: new BoxStyle
+            {
+                Color = veilColor,
+                Width = SlotSize,
+                Height = SlotSize,
+                CornerRadius = new Vector4(2f),
+                BorderThickness = 1f,
+                BorderColor = colors.Border with { W = colors.Border.W * 0.6f },
+            }),
+        });
     }
 
     /// <summary>One inventory slot: an always-present, fully-opaque <c>scribebook</c> watermark UNDERNEATH the
@@ -176,9 +647,20 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
         {
             slotController = new SlotController(capi);
             slotController.WatchInventory(scriptorium.Inventory);
-            slotController.AddListener(RebuildBody);
+            // Any slot-content change resets the overwrite confirm to Idle (D3: "confirmation resets if the
+            // slots change") and then re-renders — a copy landing on the target, or a player pulling/swapping
+            // an item mid-confirm, must not leave a stale "overwrite N tasks" armed against different contents.
+            slotController.AddListener(OnSlotsChanged);
         }
         return slotController;
+    }
+
+    /// <summary>Slot-change hook: cancel any armed overwrite confirm, then rebuild the body. See the listener
+    /// registration in <see cref="EnsureSlotController"/> for why the reset lives here (D3).</summary>
+    private void OnSlotsChanged()
+    {
+        confirmState = TranscribeConfirm.Idle;
+        RebuildBody();
     }
 
     /// <summary>Tear down the slot controller when the dialog closes so its <c>SlotModified</c> subscription
@@ -194,5 +676,8 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
             slotController.Dispose();
             slotController = null;
         }
+        // Dispose any in-flight stamp controllers so their tickers don't outlive the dialog.
+        stampRegistry.Dispose();
+        stampPlaying = false;
     }
 }
