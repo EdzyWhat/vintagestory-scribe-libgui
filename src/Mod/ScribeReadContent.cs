@@ -33,18 +33,26 @@ namespace Scribe;
 internal readonly record struct ScribeReadRowData(
     int Index, ScribeBlockKind Kind, bool Done, bool Pinned, Guid TaskId, string Text,
     ItemStack? DisplayStack = null, string? DisplayName = null,
-    int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null)
+    int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null, int Depth = 0)
 {
     public bool IsTask => Kind == ScribeBlockKind.Task;
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
     public bool IsLink => Kind == ScribeBlockKind.Link;
+    public bool IsCraft => Kind == ScribeBlockKind.Craft;
+    /// <summary>Kinds rendered as an item icon + name (their own Text is empty): Tracker, Link, and the Craft
+    /// parent (which shows its recipe output — add-crafting-tasks 9.1).</summary>
+    public bool IsItemKind => IsTracker || IsLink || IsCraft;
+    /// <summary>Kinds whose row carries a live have/need counter: Tracker and the Craft parent (both count the
+    /// viewer's carried inventory — add-crafting-tasks 9.2). Mirrors <see cref="ScribeBlock.IsCarriedCountTracked"/>.</summary>
+    public bool IsCarriedCountTracked => IsTracker || IsCraft;
     /// <summary>Task, Tracker, and Link all carry a Done flag, so all three get a completion checkbox; only a
     /// freeform Text section doesn't (add-tracker-link-tasks — see <see cref="ScribeBlock.Done"/>).</summary>
     public bool Completable => Kind != ScribeBlockKind.Text;
-    /// <summary>The row's display label: a Tracker/Link shows its resolved item name (its own Text is empty),
-    /// while a Task/Text shows its authored text. Used by the collapsing ghost so a removed Tracker/Link
-    /// doesn't collapse as a blank row.</summary>
-    public string Label => (IsTracker || IsLink) ? (DisplayName ?? Text) : Text;
+    /// <summary>The row's display label: a Craft parent frames its output name ("Craft Iron Ingot"), a
+    /// Tracker/Link shows its resolved item name (its own Text is empty), while a Task/Text shows its authored
+    /// text. Used by the collapsing ghost so a removed item row doesn't collapse as a blank row.</summary>
+    public string Label => IsCraft ? Lang.Get("scribe:scribe-gui-craft-row-label", DisplayName ?? Text)
+        : IsItemKind ? (DisplayName ?? Text) : Text;
 }
 
 /// <summary>
@@ -359,7 +367,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
             rowChildren.Add(icon);
             rowChildren.Add(nameLink);
         }
-        else // Tracker: a live "have / need" counter on the LEFT, then the item icon + name.
+        else // Tracker or Craft parent: a live "have / need" counter on the LEFT, then the item icon + name.
         {
             bool satisfied = Widget.Data.CurrentQuantity >= Widget.Data.TargetQuantity;
             // Counter on the LEFT (feedback: "the tracked number on the left of the Tracker task"; future
@@ -438,9 +446,10 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         // cuneiform path (Lectern/Notebook, or cuneiform disabled) it stays the normal wrapped Text, inset by
         // the editor field's internal padding so a single-line read row matches the editor field height and
         // its text's left edge aligns across a view switch.
-        // A Tracker/Link row swaps its text for an item icon + name (+ a have/need counter for Trackers):
-        // the block's own Text is empty, its content is the referenced item (add-tracker-link-tasks 5.1/5.3).
-        Widget textChild = (Widget.Data.IsTracker || Widget.Data.IsLink)
+        // A Tracker/Link/Craft row swaps its text for an item icon + name (+ a have/need counter for the
+        // count-tracked kinds): the block's own Text is empty, its content is the referenced item
+        // (add-tracker-link-tasks 5.1/5.3; add-crafting-tasks 9.1 — a Craft parent shows its recipe output).
+        Widget textChild = Widget.Data.IsItemKind
             ? BuildItemContent(colors, style)
             : style.UseCuneiform
             ? new ScribeCuneiformFieldRenderWidget(
@@ -484,8 +493,15 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
 
         children.Add(new Expanded(child: textChild));
 
+        // A Depth-1 subtask adds a left inset so it reads as nested under its parent, matching the editor row
+        // so the indent is identical across a view switch (task-subtasks 5.1); depth-0 rows are unchanged.
+        float subtaskIndent = Widget.Data.Depth > 0 ? style.SubtaskIndent : 0f;
         Widget rowBody = new Padding(
-            EdgeInsets.Symmetric(vertical: style.RowVerticalPadding, horizontal: style.RowHorizontalPadding),
+            EdgeInsets.Only(
+                left: style.RowHorizontalPadding + subtaskIndent,
+                right: style.RowHorizontalPadding,
+                top: style.RowVerticalPadding,
+                bottom: style.RowVerticalPadding),
             child: new Row(
                 spacing: style.CheckboxTextGap,
                 crossAxisAlignment: CrossAxisAlignment.Start,

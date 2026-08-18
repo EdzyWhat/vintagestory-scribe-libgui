@@ -13,15 +13,15 @@ namespace Scribe.Core;
 /// <c>x,y,z,icon,color</c> is the worked example), never in new columns — so the table stays narrow and
 /// stable and old/new exports stay mutually loadable. Columns:</para>
 /// <list type="bullet">
-/// <item><b>Type</b> — the kind token (<c>title</c>/<c>note</c>/<c>task</c>/<c>tracker</c>/<c>link</c>; see
-/// <see cref="ScribeBlockKindToken"/>). <c>title</c> is a reserved ROW type, not a block: it carries the
+/// <item><b>Type</b> — the kind token (<c>title</c>/<c>note</c>/<c>task</c>/<c>tracker</c>/<c>link</c>/<c>craft</c>;
+/// see <see cref="ScribeBlockKindToken"/>). <c>title</c> is a reserved ROW type, not a block: it carries the
 /// document title (in Text) as a leading row and produces no block.</item>
 /// <item><b>Done</b> — <c>x</c> / blank. Ignored for note/title.</item>
 /// <item><b>Text</b> — the row's human-readable label: the task text, a guide-link's title, or the document
 /// title on a title row.</item>
 /// <item><b>Special</b> — the machine reference: a tracker's item code, a link's target; a per-kind
-/// comma-separated payload for multi-field kinds.</item>
-/// <item><b>Count</b> — the numeric modifier: a tracker's target quantity.</item>
+/// comma-separated payload for multi-field kinds (a <c>craft</c> packs <c>outputCode[,recipeSignature]</c>).</item>
+/// <item><b>Count</b> — the numeric modifier: a tracker's or craft's target quantity.</item>
 /// <item><b>Depth</b> — integer nesting, loose visual grouping only (no parent links).</item>
 /// </list>
 ///
@@ -64,9 +64,13 @@ public static class ScribeDocumentTsvCodec
             {
                 ScribeBlockKind.Tracker => block.TargetItemCode ?? "",
                 ScribeBlockKind.Link => block.LinkTarget ?? "",
+                // A Craft packs its per-kind payload into the Special cell (comma-separated, per this
+                // codec's "richness lives in Special, never new columns" rule): the output item code
+                // and, when present, the grid-recipe signature. Both are comma-free by construction.
+                ScribeBlockKind.Craft => CraftSpecial(block),
                 _ => "",
             };
-            string count = block.Kind == ScribeBlockKind.Tracker
+            string count = block.Kind is ScribeBlockKind.Tracker or ScribeBlockKind.Craft
                 ? block.TargetQuantity.ToString(System.Globalization.CultureInfo.InvariantCulture)
                 : "";
             string depth = block.Depth.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -169,9 +173,41 @@ public static class ScribeDocumentTsvCodec
                 return new ScribeBlock(kind, text, done: done, depth: depth,
                     linkTarget: target, linkLabel: label);
 
+            case ScribeBlockKind.Craft:
+                // Special = "outputCode" or "outputCode,recipeSignature" (see CraftSpecial). Split on the
+                // FIRST comma: everything before is the output item code, everything after is the signature.
+                SplitCraftSpecial(special, out string? craftCode, out string craftSignature);
+                return new ScribeBlock(kind, text, done: done, depth: depth,
+                    targetItemCode: craftCode, targetQuantity: count, recipeSignature: craftSignature);
+
             default: // Task, Text, and any future/unknown kind degraded to Task
                 return new ScribeBlock(kind, text, done: done, depth: depth);
         }
+    }
+
+    /// <summary>The Special-cell payload for a Craft block: its output item code, optionally followed by
+    /// <c>","</c> and its grid-recipe signature. Both are comma-free by construction, so the leading comma
+    /// unambiguously separates them (see <see cref="SplitCraftSpecial"/>). A Craft with no resolved recipe
+    /// signature exports just the code, exactly like a Tracker's Special.</summary>
+    private static string CraftSpecial(ScribeBlock block)
+    {
+        string code = block.TargetItemCode ?? "";
+        return string.IsNullOrEmpty(block.RecipeSignature) ? code : code + "," + block.RecipeSignature;
+    }
+
+    /// <summary>Inverse of <see cref="CraftSpecial"/>: split a Craft Special cell on its FIRST comma into the
+    /// output item code (null when blank) and the recipe signature (empty when absent).</summary>
+    private static void SplitCraftSpecial(string special, out string? code, out string signature)
+    {
+        int comma = special.IndexOf(',');
+        if (comma < 0)
+        {
+            code = NullIfBlank(special);
+            signature = "";
+            return;
+        }
+        code = NullIfBlank(special.Substring(0, comma));
+        signature = special.Substring(comma + 1);
     }
 
     // ---- header + cell helpers ----

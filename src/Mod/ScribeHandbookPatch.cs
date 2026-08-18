@@ -60,6 +60,18 @@ internal static class ScribeHandbookPatch
                 _ => modSystem.AddFromHandbook(ScribeAddKinds.Link, itemCode)),
         };
 
+        // One "Add Crafting Task" link per grid recipe that produces this item (add-crafting-tasks 8.2). Probed
+        // from the live recipe registry: an item with no grid recipe adds none (only Tracker/Link show), a lone
+        // recipe adds a single plain-labeled link, and a multi-recipe item adds one distinguished link each. The
+        // signature the link carries lets the generator/self-heal re-resolve the exact variant later (D3). Each
+        // variant's Label is already localized by the probe.
+        foreach (var variant in ScribeCraftRecipeProbe.ProbeVariants(capi, itemCode))
+        {
+            string signature = variant.Signature;
+            appended.Add(new LinkTextComponent(capi, variant.Label + "\n", linkFont,
+                _ => modSystem.AddCraftFromHandbook(itemCode, signature)));
+        }
+
         var combined = new RichTextComponentBase[__result.Length + appended.Count];
         __result.CopyTo(combined, 0);
         for (int i = 0; i < appended.Count; i++) combined[__result.Length + i] = appended[i];

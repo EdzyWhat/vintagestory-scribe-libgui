@@ -10,7 +10,7 @@ public class ScribePinCodecTests
     private static ScribePinnedRef Pin(string text = "Find copper", bool done = false, bool orphaned = false,
         ScribeBlockKind kind = ScribeBlockKind.Task, string? linkTarget = null,
         string? targetItemCode = null, int targetQuantity = 1, int currentQuantity = 0,
-        string? linkLabel = null) => new()
+        string? linkLabel = null, int depth = 0) => new()
     {
         OwnerDocId = Guid.NewGuid(),
         TaskId = Guid.NewGuid(),
@@ -24,6 +24,7 @@ public class ScribePinCodecTests
         TargetQuantity = targetQuantity,
         CurrentQuantity = currentQuantity,
         LinkLabel = linkLabel,
+        Depth = depth,
     };
 
     private static void AssertPinEqual(ScribePinnedRef expected, ScribePinnedRef actual)
@@ -40,6 +41,7 @@ public class ScribePinCodecTests
         Assert.Equal(expected.TargetQuantity, actual.TargetQuantity);
         Assert.Equal(expected.CurrentQuantity, actual.CurrentQuantity);
         Assert.Equal(expected.LinkLabel, actual.LinkLabel);
+        Assert.Equal(expected.Depth, actual.Depth);
     }
 
     // ---- SPIN: list round-trip ----
@@ -252,6 +254,107 @@ public class ScribePinCodecTests
         Assert.Equal(10, pin.TargetQuantity);
         Assert.Equal(3, pin.CurrentQuantity);
         Assert.Null(pin.LinkLabel);   // defaulted by the progressive read
+        Assert.Equal(0, pin.Depth);   // v3 blob has no v5 Depth → defaulted to 0
+    }
+
+    // ---- v5: subtask depth snapshot (add-crafting-tasks / task-subtasks 5.1) ----
+
+    [Fact]
+    public void List_RoundTrip_PreservesDepth()
+    {
+        // A pinned subtask (a Craft ingredient child) carries Depth 1; a top-level pin carries 0. Both must
+        // survive the v5 layout exactly.
+        var pins = new List<ScribePinnedRef>
+        {
+            Pin("Craft axe", kind: ScribeBlockKind.Craft, targetItemCode: "game:axe-copper",
+                targetQuantity: 1, depth: 0),
+            Pin("game:stick", kind: ScribeBlockKind.Tracker, targetItemCode: "game:stick",
+                targetQuantity: 2, depth: 1),
+        };
+
+        byte[] bytes = ScribePinCodec.SerializeList(pins);
+        bool ok = ScribePinCodec.TryDeserializeList(bytes, out var restored);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        Assert.Equal(2, restored!.Count);
+        AssertPinEqual(pins[0], restored[0]);
+        AssertPinEqual(pins[1], restored[1]);
+        Assert.Equal(0, restored[0].Depth);
+        Assert.Equal(1, restored[1].Depth);
+    }
+
+    [Fact]
+    public void TryDeserialize_V4Bytes_Depth_IsDefaulted()
+    {
+        // Hand-build a v4 SPIN blob (LinkLabel present, but no v5 Depth) as the pre-subtasks codec wrote it,
+        // and assert the progressive read stops after LinkLabel and defaults Depth→0 rather than mis-reading.
+        var docId = Guid.NewGuid();
+        var taskId = Guid.NewGuid();
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write("SPIN"u8.ToArray());
+            w.Write((byte)4);          // v4
+            w.Write(1);                // one pin
+            w.Write(docId.ToByteArray());
+            w.Write(taskId.ToByteArray());
+            w.Write(555.0);            // PinnedAtTotalHours
+            w.Write(false);            // Orphaned
+            w.Write(false);            // LastKnownDone
+            w.Write("Copper");         // LastKnownText
+            w.Write((byte)ScribeBlockKind.Tracker); // Kind
+            w.Write(false);            // hasLinkTarget
+            w.Write(true);             // hasTargetItemCode
+            w.Write("game:ingot-copper"); // TargetItemCode
+            w.Write(10);               // TargetQuantity
+            w.Write(3);                // CurrentQuantity
+            w.Write(false);            // hasLinkLabel — v4 ends here, no Depth
+        }
+
+        bool ok = ScribePinCodec.TryDeserializeList(ms.ToArray(), out var restored);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        var pin = Assert.Single(restored!);
+        Assert.Equal(ScribeBlockKind.Tracker, pin.Kind);
+        Assert.Equal(3, pin.CurrentQuantity);
+        Assert.Equal(0, pin.Depth);   // defaulted by the progressive read
+    }
+
+    [Fact]
+    public void TryDeserialize_V5Bytes_ClampsDepthToOneLevel()
+    {
+        // A hostile/malformed v5 blob claiming Depth 5 must clamp to the one-level subtask contract [0,1]
+        // on read, so a depth-2+ pin can never enter the live set.
+        var docId = Guid.NewGuid();
+        var taskId = Guid.NewGuid();
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write("SPIN"u8.ToArray());
+            w.Write((byte)5);          // v5
+            w.Write(1);                // one pin
+            w.Write(docId.ToByteArray());
+            w.Write(taskId.ToByteArray());
+            w.Write(555.0);            // PinnedAtTotalHours
+            w.Write(false);            // Orphaned
+            w.Write(false);            // LastKnownDone
+            w.Write("Copper");         // LastKnownText
+            w.Write((byte)ScribeBlockKind.Task); // Kind
+            w.Write(false);            // hasLinkTarget
+            w.Write(false);            // hasTargetItemCode
+            w.Write(1);                // TargetQuantity
+            w.Write(0);                // CurrentQuantity
+            w.Write(false);            // hasLinkLabel
+            w.Write(5);                // Depth — out of range, must clamp to 1
+        }
+
+        bool ok = ScribePinCodec.TryDeserializeList(ms.ToArray(), out var restored);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        Assert.Equal(1, Assert.Single(restored!).Depth);
     }
 
     [Fact]

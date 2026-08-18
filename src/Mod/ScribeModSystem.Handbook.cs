@@ -60,6 +60,15 @@ public sealed partial class ScribeModSystem
     internal void AddFromHandbook(ScribeAddKind kind, string itemCode)
         => AddFromHandbookCore(dialog => dialog.TryAddFromHandbook(kind, itemCode));
 
+    /// <summary>Create a <b>Crafting Task</b> on a Scribe surface from an item Handbook page's "Add Crafting
+    /// Task" click (add-crafting-tasks D5). Same three-tier surface resolution as <see cref="AddFromHandbook"/>,
+    /// but hands off to <see cref="ScribeDialogBase.TryAddCraftFromHandbook"/> with the output
+    /// <paramref name="itemCode"/> and the chosen grid recipe's stable <paramref name="recipeSignature"/>
+    /// (from <see cref="ScribeCraftRecipeProbe"/>), which creates the Craft parent and generates its ingredient
+    /// subtasks.</summary>
+    internal void AddCraftFromHandbook(string itemCode, string recipeSignature)
+        => AddFromHandbookCore(dialog => dialog.TryAddCraftFromHandbook(itemCode, recipeSignature));
+
     /// <summary>Create a guide-page <b>Link</b> on a Scribe surface from a Handbook guide/explainer page's
     /// injected "Add Link" click (add-tracker-link-tasks 7.6). Same three-tier surface resolution as
     /// <see cref="AddFromHandbook"/>, but hands off to <see cref="ScribeDialogBase.TryAddGuideLinkFromHandbook"/>

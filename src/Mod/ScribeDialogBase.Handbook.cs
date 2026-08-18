@@ -89,6 +89,72 @@ public abstract partial class ScribeDialogBase
     internal void TryAddGuideLinkFromHandbook(string pageCode, string title)
         => TryHandbookAppend(() => ApplyGuideLinkAppend(pageCode, title));
 
+    /// <summary>Create a <b>Crafting Task</b> on THIS dialog from a Handbook item page's "Add Crafting Task"
+    /// click (add-crafting-tasks D5). Same two-case deferral as <see cref="TryAddFromHandbook"/>. The click
+    /// carries the output <paramref name="itemCode"/> and the chosen grid recipe's stable
+    /// <paramref name="signature"/> (<see cref="ScribeCraftRecipeProbe"/>); the applied action creates the
+    /// <see cref="ScribeBlockKind.Craft"/> parent and generates its ingredient subtasks.</summary>
+    internal void TryAddCraftFromHandbook(string itemCode, string signature)
+        => TryHandbookAppend(() => ApplyCraftHandbookAppend(itemCode, signature));
+
+    /// <summary>Append a Crafting Task (a <see cref="ScribeBlockKind.Craft"/> parent + generated ingredient
+    /// <see cref="ScribeBlockKind.Tracker"/> children at depth 1) to the live scratch and flush it through the
+    /// dialog's existing save path — the Craft sibling of <see cref="ApplyHandbookAppend"/>. A Craft counts
+    /// against the task cap (like a Tracker), so a full tablet refuses with the same notice. The parent starts
+    /// at target 1; <see cref="ReconcileCraftFromSignature"/> expands the bound recipe into children at the
+    /// batch quantity. No-op unless the editor is live.</summary>
+    private void ApplyCraftHandbookAppend(string itemCode, string signature)
+    {
+        if (scratch is null || !isEditorMode) return;
+        if (!CanAddTaskUnderPolicy()) { NotifyTabletFull(); return; } // Craft counts against the cap
+        var craftId = scratch.AddCraft(itemCode, 1, signature);
+        var craftBlock = scratch.FindByTaskId(craftId);
+        if (craftBlock is not null) ReconcileCraftFromSignature(scratch, craftBlock);
+        isDirty = true;
+        SyncFocusNodesToScratch();
+        // Persist immediately (the player clicked in the Handbook and expects the task to exist right away).
+        FlushIfDirty();
+        RebuildBody();
+    }
+
+    /// <summary>Re-resolve a Craft parent's bound recipe (by its persisted signature) against the live recipe
+    /// registry and reconcile its depth-1 ingredient run to the current batch size (add-crafting-tasks 6.3/6.4).
+    /// Shared by the create path (<see cref="ApplyCraftHandbookAppend"/>), the target-change path
+    /// (<see cref="SetEditorTrackerTargetQuantity"/>), and the on-open self-heal (<see cref="SelfHealCraftTasks"/>).
+    /// Batch math (ceil target ÷ output-per-craft) and the loose, never-delete reconciliation both live in Core
+    /// (<see cref="ScribeCraftMath"/> / <see cref="ScribeDocument.ReconcileCraftIngredients"/>); this only
+    /// supplies the VS recipe data. An unresolvable signature degrades gracefully — the parent stays a plain
+    /// output tracker and its existing children are left untouched (D3 risk mitigation). Returns whether the
+    /// block list changed size (a child was created), so callers can decide whether to re-flush.</summary>
+    private bool ReconcileCraftFromSignature(ScribeDocument doc, ScribeBlock craftBlock)
+    {
+        if (!craftBlock.IsCraft) return false;
+        var probe = ScribeCraftRecipeProbe.ResolveBySignature(capi, craftBlock.RecipeSignature);
+        if (probe is not { } p) return false; // unresolved signature: leave parent + children as-is
+
+        int before = doc.Blocks.Count;
+        int craftsNeeded = ScribeCraftMath.CraftsNeeded(craftBlock.TargetQuantity, p.OutputPerCraft);
+        doc.ReconcileCraftIngredients(craftBlock.TaskId, p.Ingredients, p.Notes, craftsNeeded);
+        return doc.Blocks.Count != before;
+    }
+
+    /// <summary>On editor entry, re-heal every Craft parent in the freshly seeded scratch (add-crafting-tasks
+    /// 6.4 "on document open"): re-resolve each bound recipe and reconcile its ingredient run, so a recipe that
+    /// changed since last save (or a child deleted in a prior session and now re-editable) is brought current
+    /// without the player touching the target. Never deletes (Core reconcile contract). Sets
+    /// <see cref="isDirty"/> only when a child was actually created, so a clean open stays clean (no spurious
+    /// flush). Called from <see cref="EnterEditorMode"/> after the scratch seed + empty-purge and BEFORE
+    /// <see cref="SyncFocusNodesToScratch"/> so the focus-node count matches the healed block list.</summary>
+    private void SelfHealCraftTasks()
+    {
+        if (scratch is null) return;
+        bool changed = false;
+        // Snapshot: reconcile mutates scratch.Blocks, so iterate a stable copy of the current Craft parents.
+        foreach (var craft in scratch.Blocks.Where(b => b.IsCraft).ToList())
+            changed |= ReconcileCraftFromSignature(scratch, craft);
+        if (changed) isDirty = true;
+    }
+
     /// <summary>Shared deferral for a Handbook-originated append (item or guide-page). If already editing, run
     /// <paramref name="apply"/> now; otherwise stash it and request editor access. Item surfaces enter
     /// synchronously (the stash is consumed before this returns); block surfaces get an async grant, so the

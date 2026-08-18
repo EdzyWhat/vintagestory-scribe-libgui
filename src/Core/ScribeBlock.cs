@@ -21,18 +21,28 @@ public enum ScribeBlockKind : byte
     /// <see cref="ScribeBlock.LinkTarget"/>. Behaves as a hyperlink from every surface and still
     /// has an independent Done flag (opening the page never toggles completion).</summary>
     Link = 3,
+
+    /// <summary>A "craft N of item X" task: a recipe-bound composite generator. Like a
+    /// <see cref="Tracker"/>, it counts the carried output via <see cref="ScribeBlock.TargetItemCode"/>,
+    /// <see cref="ScribeBlock.TargetQuantity"/>, and <see cref="ScribeBlock.CurrentQuantity"/>; in
+    /// addition it remembers which grid recipe variant it generates from
+    /// (<see cref="ScribeBlock.RecipeSignature"/>) and auto-generates/maintains one ingredient Tracker
+    /// subtask (at <see cref="ScribeBlock.Depth"/> 1) per recipe ingredient. Still a checkbox task
+    /// (has a Done flag).</summary>
+    Craft = 4,
 }
 
 /// <summary>
 /// One element of a <see cref="ScribeDocument"/>. A document is an ordered sequence of
 /// these, so tasks and free-text sections can be interspersed and reordered freely.
 ///
-/// A block is one of four kinds (see <see cref="ScribeBlockKind"/>): a Task (checkbox + text),
-/// a Text section (text only), a Tracker (a "gather N of item X" task), or a Link (a reference to
-/// an item's Handbook page). <see cref="Done"/> is meaningful for Task, Tracker, and Link (all
-/// completable); it is unused for Text. <see cref="Depth"/> is reserved for a future sub-item
-/// hierarchy (0 = top level today); it is carried through persistence now so enabling nesting
-/// later needs no format change.
+/// A block is one of five kinds (see <see cref="ScribeBlockKind"/>): a Task (checkbox + text),
+/// a Text section (text only), a Tracker (a "gather N of item X" task), a Link (a reference to
+/// an item's Handbook page), or a Craft (a recipe-bound "craft N of item X" task). <see cref="Done"/>
+/// is meaningful for Task, Tracker, Link, and Craft (all completable); it is unused for Text.
+/// <see cref="Depth"/> is the row's indentation level, clamped to one level: 0 = top-level row,
+/// 1 = subtask (an indented child, e.g. a Craft task's generated ingredient rows). It is carried
+/// through persistence in every codec.
 ///
 /// The Tracker/Link item references are stored as PLAIN STRINGS (<see cref="TargetItemCode"/> /
 /// <see cref="LinkTarget"/>), never parsed <c>AssetLocation</c>/<c>ItemStack</c> — that keeps this
@@ -54,8 +64,17 @@ public sealed class ScribeBlock
     /// <summary>Completed flag. Only meaningful when <see cref="Kind"/> is Task.</summary>
     public bool Done { get; set; }
 
-    /// <summary>Indent/nesting level. Reserved for future hierarchy; always 0 for now.</summary>
-    public int Depth { get; set; }
+    /// <summary>Row indentation level, clamped to one level on set: 0 = top-level row, 1 = subtask
+    /// (an indented child rendered beneath the row above it). Any value outside <c>[0, 1]</c> is
+    /// clamped — the system supports exactly one level of nesting (no depth-2). Kind-agnostic: any
+    /// block kind may be a subtask (task-subtasks capability). A Craft task's generated ingredient
+    /// rows live at depth 1.</summary>
+    public int Depth
+    {
+        get => _depth;
+        set => _depth = value < 0 ? 0 : value > 1 ? 1 : value;
+    }
+    private int _depth;
 
     /// <summary>Stable identifier for this block. Assigned once at construction (a fresh
     /// <see cref="Guid"/> when not supplied) and never changed by any mutation, so an external
@@ -112,8 +131,17 @@ public sealed class ScribeBlock
     /// name resolves live from the item) and for non-Link kinds (add-tracker-link-tasks 7.6).</summary>
     public string? LinkLabel { get; set; }
 
+    /// <summary>For a <see cref="ScribeBlockKind.Craft"/>: a stable string identifying which grid recipe
+    /// variant this task generates its ingredient subtasks from (the working composition is
+    /// <c>outputCode|pattern|WxH</c>). The Mod layer re-resolves the live recipe from this signature to
+    /// (re)generate/reconcile the ingredient rows, so documents stay small and survive recipe-data
+    /// updates. Empty string for non-Craft kinds (and for a Craft whose recipe could not be resolved,
+    /// which then degrades to a plain output tracker). Stored as a plain string to keep Core API-free.</summary>
+    public string RecipeSignature { get; set; } = "";
+
     public ScribeBlock(ScribeBlockKind kind, string text, bool done = false, int depth = 0, string? assignedToUid = null, Guid? taskId = null,
-        string? targetItemCode = null, int targetQuantity = 1, int currentQuantity = 0, string? linkTarget = null, string? linkLabel = null)
+        string? targetItemCode = null, int targetQuantity = 1, int currentQuantity = 0, string? linkTarget = null, string? linkLabel = null,
+        string? recipeSignature = null)
     {
         Kind = kind;
         Text = text;
@@ -126,6 +154,7 @@ public sealed class ScribeBlock
         CurrentQuantity = currentQuantity; // ≥0 only; may exceed the target (raw carried count, 7.14)
         LinkTarget = linkTarget;
         LinkLabel = linkLabel;
+        RecipeSignature = recipeSignature ?? "";
     }
 
     public bool IsTask => Kind == ScribeBlockKind.Task;
@@ -142,4 +171,14 @@ public sealed class ScribeBlock
 
     /// <summary>True for a <see cref="ScribeBlockKind.Link"/> block.</summary>
     public bool IsLink => Kind == ScribeBlockKind.Link;
+
+    /// <summary>True for a <see cref="ScribeBlockKind.Craft"/> block.</summary>
+    public bool IsCraft => Kind == ScribeBlockKind.Craft;
+
+    /// <summary>True for any block whose <see cref="CurrentQuantity"/> is driven by the viewer's carried
+    /// inventory — a <see cref="ScribeBlockKind.Tracker"/> (gather-count) or a
+    /// <see cref="ScribeBlockKind.Craft"/> (output-count). This is the broader predicate the
+    /// carried-inventory scan gates on, so a Craft parent updates alongside its ingredient Tracker
+    /// children. (<see cref="IsTracker"/> remains the narrow "is exactly a Tracker" check.)</summary>
+    public bool IsCarriedCountTracked => Kind is ScribeBlockKind.Tracker or ScribeBlockKind.Craft;
 }

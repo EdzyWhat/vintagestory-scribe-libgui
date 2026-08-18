@@ -7,18 +7,19 @@ namespace Scribe.Core;
 /// used for both world persistence and network sync, so the round-trip is exact and any
 /// malformed input fails safely (returns false) rather than throwing.
 ///
-/// Current format (v7, little-endian via <see cref="BinaryWriter"/>):
+/// Current format (v8, little-endian via <see cref="BinaryWriter"/>):
 ///   [4 bytes magic "SCRB"][1 byte version][16 bytes DocId][int blockCount]
 ///   [per block: 16 bytes TaskId, byte kind, bool done, int depth, bool hasAssignedToUid,
 ///    string assignedToUid (only if hasAssignedToUid), string text,
 ///    bool hasTargetItemCode, string targetItemCode (only if hasTargetItemCode),
 ///    int targetQuantity, int currentQuantity,
 ///    bool hasLinkTarget, string linkTarget (only if hasLinkTarget),
-///    bool hasLinkLabel, string linkLabel (only if hasLinkLabel)]
+///    bool hasLinkLabel, string linkLabel (only if hasLinkLabel),
+///    string recipeSignature (v8+; empty string when none)]
 ///   [string title]
 ///
 /// Accepted-version window (PROGRESSIVE append-only reads, NOT a two-version window):
-///   Reads any version in [<see cref="MinVersion"/>=5, <see cref="Version"/>=7]; older/newer → fail-safe false.
+///   Reads any version in [<see cref="MinVersion"/>=5, <see cref="Version"/>=8]; older/newer → fail-safe false.
 ///   Each version-group's trailing fields are read only behind a <c>version &gt;=</c> threshold, so an
 ///   older blob simply stops reading before the fields it never wrote. Missing fields default via
 ///   <see cref="ApplyPreV6Defaults"/>. This departs from the strict two-version window because v5 docs
@@ -41,6 +42,9 @@ namespace Scribe.Core;
 ///   v7 — appended one per-block field after LinkTarget (LinkLabel?), the display title of a
 ///        guide-page Link (a "page:"-prefixed LinkTarget has no item to resolve a name from).
 ///        Switched to progressive reads so shipped v5 docs stay readable (see the window note above).
+///   v8 — appended one per-block field after LinkLabel (RecipeSignature, a plain string; empty when
+///        none), the grid-recipe binding of a Craft task (kind 4). Written for every block (empty for
+///        non-Craft); a pre-v8 blob simply stops before it and defaults to empty.
 ///
 /// A hand-rolled format keeps Core free of any external dependency. The version byte lets
 /// us evolve the format while still reading every prior save layout back to <see cref="MinVersion"/>.
@@ -48,7 +52,7 @@ namespace Scribe.Core;
 public static class ScribeDocumentCodec
 {
     private static readonly byte[] Magic = "SCRB"u8.ToArray();
-    private const byte Version = 7; // see the "Field history" above; v7 adds the per-block LinkLabel field.
+    private const byte Version = 8; // see the "Field history" above; v8 adds the per-block RecipeSignature field.
 
     /// <summary>Oldest format version the reader still accepts. Progressive append-only reads accept
     /// any version in [<see cref="MinVersion"/>, <see cref="Version"/>]; v5 is the oldest because it is
@@ -112,6 +116,10 @@ public static class ScribeDocumentCodec
                 // v7: LinkLabel, appended after LinkTarget — the display title of a guide-page Link.
                 w.Write(block.LinkLabel is not null);
                 if (block.LinkLabel is not null) w.Write(block.LinkLabel);
+                // v8: RecipeSignature, appended after LinkLabel — the grid-recipe binding of a Craft
+                // task. Always written (empty string for non-Craft blocks), so it is a plain string,
+                // not a has/value pair.
+                w.Write(block.RecipeSignature);
             }
             w.Write(doc.Title); // v5+: document title appended after block list
         }
@@ -189,7 +197,8 @@ public static class ScribeDocumentCodec
                 // so an older blob simply stops reading before the fields it never wrote (progressive
                 // append-only reads — see the class doc-comment's window note).
                 ApplyPreV6Defaults(out string? targetItemCode, out int targetQuantity,
-                    out int currentQuantity, out string? linkTarget, out string? linkLabel);
+                    out int currentQuantity, out string? linkTarget, out string? linkLabel,
+                    out string recipeSignature);
                 if (version >= 6)
                 {
                     bool hasTargetItemCode = r.ReadBoolean();
@@ -204,10 +213,15 @@ public static class ScribeDocumentCodec
                     bool hasLinkLabel = r.ReadBoolean();
                     linkLabel = hasLinkLabel ? r.ReadString() : null;
                 }
+                if (version >= 8)
+                {
+                    recipeSignature = r.ReadString(); // always written from v8; empty when none
+                }
 
-                // The block's setters clamp TargetQuantity (≥ 1) and CurrentQuantity ([0, target]).
+                // The block's setters clamp TargetQuantity (≥ 1), CurrentQuantity ([0, target]),
+                // and Depth ([0, 1]).
                 blocks.Add(new ScribeBlock(kind, text, done, depth, assignedToUid, taskId,
-                    targetItemCode, targetQuantity, currentQuantity, linkTarget, linkLabel));
+                    targetItemCode, targetQuantity, currentQuantity, linkTarget, linkLabel, recipeSignature));
             }
 
             // Both accepted versions (v6 and v5) append a document title after the block list.
@@ -254,19 +268,21 @@ public static class ScribeDocumentCodec
     /// reads overwrite whatever a given blob actually carried: no target/link code
     /// (<paramref name="targetItemCode"/> / <paramref name="linkTarget"/> / <paramref name="linkLabel"/> = null),
     /// <paramref name="targetQuantity"/> = 1 (satisfies the <see cref="ScribeBlock"/> ≥ 1 invariant),
-    /// and <paramref name="currentQuantity"/> = 0. These are the values a pre-v6 block (always Task or
-    /// Text, for which they're meaningless) reads with, and also the baseline a v6 block gets for the
-    /// v7-only LinkLabel. This is the single documented home for the "fields a pre-current block lacks"
+    /// <paramref name="currentQuantity"/> = 0, and <paramref name="recipeSignature"/> = "" (empty; the
+    /// v8-only Craft recipe binding). These are the values a pre-v6 block (always Task or Text, for which
+    /// they're meaningless) reads with, and also the baseline a v6/v7 block gets for the later
+    /// LinkLabel/RecipeSignature fields. This is the single documented home for the "fields a pre-current block lacks"
     /// defaulting; the naming mirrors ScribePinCodec's <c>ApplyPreV2Defaults</c>. See docs/CODEC-MIGRATION.md.
     /// </summary>
     private static void ApplyPreV6Defaults(out string? targetItemCode, out int targetQuantity,
-        out int currentQuantity, out string? linkTarget, out string? linkLabel)
+        out int currentQuantity, out string? linkTarget, out string? linkLabel, out string recipeSignature)
     {
         targetItemCode = null;
         targetQuantity = 1;
         currentQuantity = 0;
         linkTarget = null;
         linkLabel = null;
+        recipeSignature = ""; // v8+ field; a pre-v8 block (never a Craft) reads with no recipe binding
     }
 
     /// <summary>Reads exactly <paramref name="count"/> bytes or throws <see cref="EndOfStreamException"/>

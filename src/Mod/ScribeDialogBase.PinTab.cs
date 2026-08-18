@@ -61,7 +61,8 @@ public abstract partial class ScribeDialogBase
                     p.OwnerDocId, p.TaskId, p.LastKnownDone,
                     pinEditBuffer.TryGetValue(p.TaskId, out var buffered) ? buffered : p.LastKnownText,
                     Kind: p.Kind, DisplayStack: stack, DisplayName: name,
-                    TargetQuantity: p.TargetQuantity, CurrentQuantity: p.CurrentQuantity, LinkTarget: p.LinkTarget);
+                    TargetQuantity: p.TargetQuantity, CurrentQuantity: p.CurrentQuantity, LinkTarget: p.LinkTarget,
+                    Depth: p.Depth);
             })
             .ToList();
 
@@ -107,7 +108,9 @@ public abstract partial class ScribeDialogBase
     {
         string? code = p.Kind switch
         {
-            ScribeBlockKind.Tracker => p.TargetItemCode,
+            // A Craft parent renders its recipe OUTPUT item, carried in the same TargetItemCode slot a
+            // Tracker uses (add-crafting-tasks 9.1), so both resolve identically here.
+            ScribeBlockKind.Tracker or ScribeBlockKind.Craft => p.TargetItemCode,
             ScribeBlockKind.Link => p.LinkTarget,
             _ => null,
         };
@@ -124,7 +127,7 @@ public abstract partial class ScribeDialogBase
         if (pin is null) return;
         string? code = pin.Kind switch
         {
-            ScribeBlockKind.Tracker => pin.TargetItemCode,
+            ScribeBlockKind.Tracker or ScribeBlockKind.Craft => pin.TargetItemCode,
             ScribeBlockKind.Link => pin.LinkTarget,
             _ => null,
         };

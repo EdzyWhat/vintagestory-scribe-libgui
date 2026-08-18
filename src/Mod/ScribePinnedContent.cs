@@ -34,17 +34,22 @@ internal readonly record struct ScribePinRowData(
     Guid DocId, Guid TaskId, bool Done, string Text,
     ScribeBlockKind Kind = ScribeBlockKind.Task,
     ItemStack? DisplayStack = null, string? DisplayName = null,
-    int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null)
+    int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null, int Depth = 0)
 {
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
     public bool IsLink => Kind == ScribeBlockKind.Link;
-    /// <summary>A Tracker/Link renders an item icon + name instead of an editable text field; a plain Task
-    /// keeps the directly-editable field.</summary>
-    public bool IsItemKind => IsTracker || IsLink;
-    /// <summary>The row's display label: a Tracker/Link shows its resolved item name (its own Text is
-    /// empty), a Task shows its authored text. Also used by the collapsing ghost so a removed Tracker/Link
-    /// doesn't collapse as a blank row.</summary>
-    public string Label => IsItemKind ? (DisplayName ?? Text) : Text;
+    public bool IsCraft => Kind == ScribeBlockKind.Craft;
+    /// <summary>A Tracker/Link/Craft renders an item icon + name instead of an editable text field; a plain
+    /// Task keeps the directly-editable field. A Craft parent shows its recipe output (add-crafting-tasks 9.1).</summary>
+    public bool IsItemKind => IsTracker || IsLink || IsCraft;
+    /// <summary>Kinds whose row carries a live have/need counter: Tracker and the Craft parent (both count the
+    /// viewer's carried inventory). Mirrors <see cref="ScribeBlock.IsCarriedCountTracked"/>.</summary>
+    public bool IsCarriedCountTracked => IsTracker || IsCraft;
+    /// <summary>The row's display label: a Craft parent frames its output name ("Craft Iron Ingot"), a
+    /// Tracker/Link shows its resolved item name (its own Text is empty), a Task shows its authored text.
+    /// Also used by the collapsing ghost so a removed item row doesn't collapse as a blank row.</summary>
+    public string Label => IsCraft ? Lang.Get("scribe:scribe-gui-craft-row-label", DisplayName ?? Text)
+        : IsItemKind ? (DisplayName ?? Text) : Text;
 }
 
 /// <summary>
@@ -217,7 +222,8 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                     // the live row as it collapses.
                     new ScribeEditRowData(Index: i, Kind: r.Kind, Done: r.Done, Pinned: false, TaskId: r.TaskId,
                         Text: r.Text, DisplayStack: r.DisplayStack, DisplayName: r.DisplayName,
-                        TargetQuantity: r.TargetQuantity, CurrentQuantity: r.CurrentQuantity, LinkTarget: r.LinkTarget),
+                        TargetQuantity: r.TargetQuantity, CurrentQuantity: r.CurrentQuantity, LinkTarget: r.LinkTarget,
+                        Depth: r.Depth),
                     Widget.Style)))
             .ToList();
 
@@ -459,7 +465,7 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
             rowChildren.Add(icon);
             rowChildren.Add(nameLink);
         }
-        else // Tracker: a "have / need" counter on the LEFT, then the item icon + name.
+        else // Tracker or Craft parent: a "have / need" counter on the LEFT, then the item icon + name.
         {
             bool satisfied = data.CurrentQuantity >= data.TargetQuantity;
             // Inverted emphasis + satisfied strikethrough, shared with the read/HUD counters (7.11g/7.11h).
@@ -562,8 +568,15 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
                 onBlur: () => Widget.OnCommitText(data.TaskId)))));
         }
 
+        // A Depth-1 subtask adds a left inset so a pinned subtask reads as nested, matching the editor/read
+        // rows so the indent is identical across surfaces (task-subtasks 5.1); depth-0 rows are unchanged.
+        float subtaskIndent = data.Depth > 0 ? style.SubtaskIndent : 0f;
         Widget rowBody = new Padding(
-            EdgeInsets.Symmetric(vertical: style.RowVerticalPadding, horizontal: style.RowHorizontalPadding),
+            EdgeInsets.Only(
+                left: style.RowHorizontalPadding + subtaskIndent,
+                right: style.RowHorizontalPadding,
+                top: style.RowVerticalPadding,
+                bottom: style.RowVerticalPadding),
             child: new Row(
                 spacing: style.CheckboxTextGap,
                 crossAxisAlignment: CrossAxisAlignment.Start,

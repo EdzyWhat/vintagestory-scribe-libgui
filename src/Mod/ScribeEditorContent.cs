@@ -34,17 +34,27 @@ namespace Scribe;
 internal readonly record struct ScribeEditRowData(
     int Index, ScribeBlockKind Kind, bool Done, bool Pinned, Guid TaskId, string Text,
     ItemStack? DisplayStack = null, string? DisplayName = null,
-    int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null)
+    int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null, int Depth = 0)
 {
     public bool IsTask => Kind == ScribeBlockKind.Task;
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
     public bool IsLink => Kind == ScribeBlockKind.Link;
+    public bool IsCraft => Kind == ScribeBlockKind.Craft;
+    /// <summary>Kinds that render as an item icon + name (their own Text is empty): Tracker, Link, and the
+    /// Craft parent (which shows its recipe output — add-crafting-tasks 9.1).</summary>
+    public bool IsItemKind => IsTracker || IsLink || IsCraft;
+    /// <summary>Kinds whose row carries a live have/need counter + inline target stepper: Tracker and the
+    /// Craft parent (both count the viewer's carried inventory — add-crafting-tasks 9.2). Mirrors
+    /// <see cref="ScribeBlock.IsCarriedCountTracked"/>.</summary>
+    public bool IsCarriedCountTracked => IsTracker || IsCraft;
     /// <summary>Task, Tracker, and Link all carry a Done flag, so all three get a completion checkbox + pin;
     /// only a freeform Text section doesn't.</summary>
     public bool Completable => Kind != ScribeBlockKind.Text;
-    /// <summary>The row's display label: a Tracker/Link shows its resolved item name (its own Text is empty),
-    /// a Task/Text shows its authored text.</summary>
-    public string Label => (IsTracker || IsLink) ? (DisplayName ?? Text) : Text;
+    /// <summary>The row's display label: a Craft parent frames its output name ("Craft Iron Ingot"), a
+    /// Tracker/Link shows its resolved item name (its own Text is empty), a Task/Text shows its authored
+    /// text.</summary>
+    public string Label => IsCraft ? Lang.Get("scribe:scribe-gui-craft-row-label", DisplayName ?? Text)
+        : IsItemKind ? (DisplayName ?? Text) : Text;
 }
 
 /// <summary>
@@ -146,6 +156,7 @@ internal sealed class ScribeEditorContent : StatefulWidget
         Action<int> onToggleTask,
         Action<int> onDeleteBlock,
         Action<int> onTogglePinned,
+        Action<int> onGripTap,
         Action<int, int> onReorderBlock,
         Action<int, int> onTrackerQuantityChanged,
         Action<ScribeAddKind> onAdd,
@@ -178,6 +189,7 @@ internal sealed class ScribeEditorContent : StatefulWidget
         OnToggleTask = onToggleTask;
         OnDeleteBlock = onDeleteBlock;
         OnTogglePinned = onTogglePinned;
+        OnGripTap = onGripTap;
         OnReorderBlock = onReorderBlock;
         OnTrackerQuantityChanged = onTrackerQuantityChanged;
         OnAdd = onAdd;
@@ -224,6 +236,11 @@ internal sealed class ScribeEditorContent : StatefulWidget
     public Action<int> OnToggleTask { get; }
     public Action<int> OnDeleteBlock { get; }
     public Action<int> OnTogglePinned { get; }
+    /// <summary>A single tap (not a press-hold-drag) on a row's grip toggles its subtask depth 0↔1
+    /// (task-subtasks 5.3). The grip's <see cref="GestureDetector"/> fires this only on a genuine click —
+    /// the dispatcher suppresses the tap during a drag — so reordering is unaffected. See
+    /// <see cref="ScribeDialogBase.OnGripTap"/>.</summary>
+    public Action<int> OnGripTap { get; }
     /// <summary>Reorder a block from one index to another (drag drop). See
     /// <see cref="ScribeEditorContentState"/> for the drag mechanics.</summary>
     public Action<int, int> OnReorderBlock { get; }
@@ -393,6 +410,7 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                     onDragStart: OnRowDragStart,
                     onDragOver: OnRowDragOver,
                     onDragEnd: OnRowDragEnd,
+                    onGripTap: Widget.OnGripTap,
                     style: Widget.Style,
                     // Stable per-row identity (reconcile-animating-surfaces §3.2): keyed by the block's
                     // TaskId, NOT its list index. Under the in-place reconcile a RebuildBody() drives
@@ -671,6 +689,7 @@ internal sealed class ScribeEditRow : StatefulWidget
         Action<int> onDragStart,
         Action<int> onDragOver,
         Action onDragEnd,
+        Action<int> onGripTap,
         ScribeRowStyle style,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
@@ -698,6 +717,7 @@ internal sealed class ScribeEditRow : StatefulWidget
         OnDragStart = onDragStart;
         OnDragOver = onDragOver;
         OnDragEnd = onDragEnd;
+        OnGripTap = onGripTap;
         Style = style;
     }
 
@@ -742,6 +762,7 @@ internal sealed class ScribeEditRow : StatefulWidget
     public Action<int> OnDragStart { get; }
     public Action<int> OnDragOver { get; }
     public Action OnDragEnd { get; }
+    public Action<int> OnGripTap { get; }
     public ScribeRowStyle Style { get; }
 
     public override State CreateState() => new ScribeEditRowState();
@@ -813,7 +834,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         float iconSize = style.ControlSize * 1.4f;
         var rowChildren = new List<Widget>();
 
-        if (Widget.Data.IsTracker)
+        if (Widget.Data.IsCarriedCountTracked)
         {
             // Inline target-quantity stepper, placed at the LEFT of the row (feedback 6.3): the row's
             // hover-revealed delete/pin buttons float over the RIGHT edge, so a right-hand stepper sat
@@ -889,6 +910,10 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             child: new GestureDetector(
                 onPress: _ => Widget.OnDragStart(index),
                 onRelease: _ => Widget.OnDragEnd(),
+                // A single tap on the grip (no drag) toggles this row's subtask depth 0↔1 (task-subtasks 5.3).
+                // The dispatcher fires OnPointerClick only for a genuine tap, so a press-hold-drag reorder never
+                // triggers this; a tap's OnDragStart→OnDragEnd pair is a from==to no-op reorder (harmless).
+                onTap: _ => Widget.OnGripTap(index),
                 child: gripGlyph)));
 
         // Source-row "lifted / in-hand" dim (replace-drag-wash-with-grip-arrows): while THIS row is the one
@@ -919,7 +944,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         // (add-tracker-link-tasks 5.2/5.3). The block's own Text is empty by design; the item is resolved by
         // the dialog and passed in on the row data, so this stays capi-free. Dimmed with the same
         // contentOpacity as a text row so a drag reads identically.
-        if (Widget.Data.IsTracker || Widget.Data.IsLink)
+        if (Widget.Data.IsItemKind)
         {
             children.Add(new Expanded(child: new Opacity(contentOpacity,
                 child: BuildItemEditorContent(colors, style, index))));
@@ -973,9 +998,15 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         }
 
         // Row body: [grip][checkbox][text]. Delete/pin no longer reserve columns here — they float on
-        // top of the row (see below), so the text can use the full width.
+        // top of the row (see below), so the text can use the full width. A Depth-1 subtask adds a left
+        // inset so it reads as nested under its parent (task-subtasks 5.1); depth-0 rows are unchanged.
+        float subtaskIndent = Widget.Data.Depth > 0 ? style.SubtaskIndent : 0f;
         Widget rowBody = new Padding(
-            EdgeInsets.Symmetric(vertical: style.RowVerticalPadding, horizontal: style.RowHorizontalPadding),
+            EdgeInsets.Only(
+                left: style.RowHorizontalPadding + subtaskIndent,
+                right: style.RowHorizontalPadding,
+                top: style.RowVerticalPadding,
+                bottom: style.RowVerticalPadding),
             child: new Row(
                 spacing: style.CheckboxTextGap,
                 crossAxisAlignment: CrossAxisAlignment.Start,

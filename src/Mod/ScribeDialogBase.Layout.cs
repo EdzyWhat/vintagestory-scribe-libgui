@@ -511,7 +511,11 @@ public abstract partial class ScribeDialogBase
     /// open dialog on the next rebuild. Passes through <see cref="DecorateRowStyle"/> so a subclass may
     /// layer tier-specific row behavior (the tablet flips on the cuneiform row path) without duplicating
     /// the settings-derivation.</summary>
-    private ScribeRowStyle RowStyle => DecorateRowStyle(ScribeRowStyle.FromSettings(modSystem.MySettings));
+    private ScribeRowStyle RowStyle => DecorateRowStyle(ScribeRowStyle.FromSettings(modSystem.MySettings)
+        // Subtask indent depends on the window width (not a settings-only size), so it's layered on here from
+        // the live layout rather than in FromSettings: 10px + 3%·W, mirroring the 0.04·W footer inset idiom
+        // (task-subtasks 5.1). Applied before DecorateRowStyle so a subclass's `with` tweaks still compose.
+        with { SubtaskIndent = 10f + 0.03f * host.GetLayout(modSystem.MySettings.PixelArtSize).W });
 
     /// <summary>Hook to adjust the settings-derived <see cref="ScribeRowStyle"/> for this dialog tier. The
     /// default returns it unchanged (Lectern/Notebook). The tablet overrides it to set
@@ -570,8 +574,11 @@ public abstract partial class ScribeDialogBase
     /// the Mod layer (add-tracker-link-tasks Group 5). Kept off the row widgets so they stay <c>capi</c>-free.</summary>
     private (ItemStack? Stack, string? Name) ResolveRowItem(ScribeBlock b)
     {
-        if (!b.IsTracker && !b.IsLink) return (null, null);
-        string? code = b.IsTracker ? b.TargetItemCode : b.LinkTarget;
+        if (!b.IsTracker && !b.IsLink && !b.IsCraft) return (null, null);
+        // A Link resolves its LinkTarget; a Tracker AND a Craft parent both resolve the item they count —
+        // the Craft parent's TargetItemCode is its recipe OUTPUT (add-crafting-tasks 9.1), so it shows the
+        // output item's icon + name exactly like a Tracker, differing only in the "Craft …" label framing.
+        string? code = b.IsLink ? b.LinkTarget : b.TargetItemCode;
         return ScribeItemRef.ResolveDisplay(capi.World, code, b.LinkLabel);
     }
 
@@ -596,7 +603,8 @@ public abstract partial class ScribeDialogBase
                     return new ScribeReadRowData(
                         Index: i, Kind: b.Kind, Done: b.Done, Pinned: IsPinnedForMe(b.TaskId), TaskId: b.TaskId,
                         Text: b.Text, DisplayStack: stack, DisplayName: name,
-                        TargetQuantity: b.TargetQuantity, CurrentQuantity: b.CurrentQuantity, LinkTarget: b.LinkTarget);
+                        TargetQuantity: b.TargetQuantity, CurrentQuantity: b.CurrentQuantity, LinkTarget: b.LinkTarget,
+                        Depth: b.Depth);
                 })
                 // Drop only an empty-text Task (a stray blank checkbox — belt-and-suspenders, see below).
                 // A Text note may be legitimately empty, and a Tracker/Link has no text of its own (it renders
@@ -648,7 +656,8 @@ public abstract partial class ScribeDialogBase
                 return new ScribeEditRowData(
                     Index: i, Kind: b.Kind, Done: b.Done, Pinned: IsPinnedForMe(b.TaskId), TaskId: b.TaskId,
                     Text: b.Text, DisplayStack: stack, DisplayName: name,
-                    TargetQuantity: b.TargetQuantity, CurrentQuantity: b.CurrentQuantity, LinkTarget: b.LinkTarget);
+                    TargetQuantity: b.TargetQuantity, CurrentQuantity: b.CurrentQuantity, LinkTarget: b.LinkTarget,
+                    Depth: b.Depth);
             })
             .ToList();
 
@@ -675,6 +684,9 @@ public abstract partial class ScribeDialogBase
             // A Tracker row's inline stepper edits its target quantity in scratch; the normal editor flush
             // persists it (the codec serializes TargetQuantity, so no dedicated packet — add-tracker-link-tasks 5.2).
             onTrackerQuantityChanged: SetEditorTrackerTargetQuantity,
+            // A single grip tap toggles the row's subtask depth 0↔1 (task-subtasks 5.3); press-hold-drag
+            // still reorders (the dispatcher fires the tap only on a genuine click).
+            onGripTap: OnGripTap,
             // Drag-reorder follows the moved row into view (anchorViewport defaults false); only a Sink
             // completion passes anchorViewport: true to hold the viewport still.
             onReorderBlock: (from, to) => ReorderEditorBlock(from, to),

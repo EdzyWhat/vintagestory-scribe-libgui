@@ -1,3 +1,4 @@
+using System;
 using System.Text;
 
 namespace Scribe.Core;
@@ -26,7 +27,10 @@ namespace Scribe.Core;
 /// the blob's version is at least that high. This lets shipped v1 pins keep loading unchanged when v2
 /// (WIP-only, never released) and v3 add fields — a naive "current + immediately-prior" window would
 /// have dropped v1 pins (data loss) once v3 landed.
-///   Current : v4 — appended per-pin <see cref="ScribePinnedRef.LinkLabel"/> (bool + optional string), the
+///   Current : v5 — appended per-pin <see cref="ScribePinnedRef.Depth"/> (int), the pinned task's subtask
+///                  depth, so the HUD and Pin Tab indent a pinned subtask like the other surfaces
+///                  (add-crafting-tasks / task-subtasks 5.1).
+///   v4 — appended per-pin <see cref="ScribePinnedRef.LinkLabel"/> (bool + optional string), the
 ///                  display title of a guide-page Link, so the HUD and Pin Tab can render a pinned
 ///                  guide-page Link (a "page:"-prefixed LinkTarget has no item to resolve a name from)
 ///                  (add-tracker-link-tasks 7.6).
@@ -43,17 +47,17 @@ namespace Scribe.Core;
 ///
 /// Per-pin field history (in serialized order): OwnerDocId, TaskId, PinnedAtTotalHours, Orphaned,
 /// LastKnownDone, LastKnownText (v1); Kind, LinkTarget (added v2); TargetItemCode, TargetQuantity,
-/// CurrentQuantity (added v3); LinkLabel (added v4).
+/// CurrentQuantity (added v3); LinkLabel (added v4); Depth (added v5).
 /// </summary>
 public static class ScribePinCodec
 {
     private static readonly byte[] ListMagic = "SPIN"u8.ToArray();
     private static readonly byte[] StoreMagic = "SPST"u8.ToArray();
 
-    /// <summary>Version of the pin-list blobs (SPIN/SPST). Bumped to 4 for the appended per-pin
-    /// <see cref="ScribePinnedRef.LinkLabel"/> guide-page Link title (add-tracker-link-tasks 7.6);
-    /// v3 added the <see cref="ScribePinnedRef.TargetItemCode"/> + target/current-quantity Tracker fields.</summary>
-    private const byte PinVersion = 4;
+    /// <summary>Version of the pin-list blobs (SPIN/SPST). Bumped to 5 for the appended per-pin
+    /// <see cref="ScribePinnedRef.Depth"/> subtask depth (add-crafting-tasks / task-subtasks 5.1);
+    /// v4 added the <see cref="ScribePinnedRef.LinkLabel"/> guide-page Link title.</summary>
+    private const byte PinVersion = 5;
 
     /// <summary>
     /// The OLDEST pin-list version the reader still accepts. Reads are progressive (append-only): any
@@ -204,6 +208,9 @@ public static class ScribePinCodec
             bool hasLinkLabel = pin.LinkLabel != null;
             w.Write(hasLinkLabel);
             if (hasLinkLabel) w.Write(pin.LinkLabel!);
+            // v5 appended field (add-crafting-tasks / task-subtasks 5.1): the pinned task's subtask depth,
+            // so a pinned subtask indents on the HUD/Pin Tab like the other surfaces.
+            w.Write(pin.Depth);
         }
     }
 
@@ -269,6 +276,12 @@ public static class ScribePinCodec
                     pin.LinkLabel = linkLabel;
                 }
             }
+            if (version >= 5)
+            {
+                // Clamp on read to the one-level subtask contract, matching ScribeBlock.Depth, so a
+                // malformed/hostile blob can't smuggle a depth-2+ pin past the reader.
+                pin.Depth = Math.Clamp(r.ReadInt32(), 0, 1);
+            }
 
             list.Add(pin);
         }
@@ -293,6 +306,7 @@ public static class ScribePinCodec
         pin.TargetQuantity = 1;
         pin.CurrentQuantity = 0;
         pin.LinkLabel = null;
+        pin.Depth = 0;
     }
 
     /// <summary>Reads exactly <paramref name="count"/> bytes or throws <see cref="EndOfStreamException"/>

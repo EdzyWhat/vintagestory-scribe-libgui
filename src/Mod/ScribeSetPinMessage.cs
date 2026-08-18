@@ -74,4 +74,11 @@ public sealed class ScribeSetPinMessage
     /// a guide page has no item to resolve a name from (add-tracker-link-tasks 7.6).</summary>
     [ProtoMember(11)]
     public string? SnapshotLinkLabel { get; set; }
+
+    /// <summary>Client-supplied subtask-depth snapshot (0 = top-level, 1 = subtask), parallel to
+    /// <see cref="SnapshotText"/> — so a pinned subtask reaches the HUD/Pin Tab at the right indent even
+    /// for a host the server can't resolve. Defaults to 0 for an old client that never sets it
+    /// (add-crafting-tasks / task-subtasks 5.1).</summary>
+    [ProtoMember(12)]
+    public int SnapshotDepth { get; set; }
 }

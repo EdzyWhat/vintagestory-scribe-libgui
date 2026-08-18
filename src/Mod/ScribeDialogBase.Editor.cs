@@ -52,9 +52,37 @@ public abstract partial class ScribeDialogBase
     {
         if (scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
         var block = scratch.Blocks[index];
-        if (!block.IsTracker) return;
+        if (!block.IsCarriedCountTracked) return; // Tracker OR Craft parent (both carry a target stepper)
         block.TargetQuantity = qty; // clamps ≥ 1 in the Core setter
         isDirty = true;
+
+        // A Craft parent owns generated ingredient subtasks whose targets scale with its own (add-crafting-tasks
+        // 6.4): re-heal the depth-1 run so the children rescale in place (and any deleted child is recreated),
+        // then rebuild so the changed child rows are visible. Unlike a plain Tracker's stepper (which
+        // deliberately avoids a rebuild to keep its caret), a Craft target change is an intentional, infrequent
+        // action whose whole point is the visible rescaling of the ingredient list, so the rebuild is warranted.
+        if (block.IsCraft)
+        {
+            ReconcileCraftFromSignature(scratch, block);
+            RebuildBody();
+        }
+    }
+
+    /// <summary>A single tap on a row's grip toggles its subtask depth between 0 and 1 (task-subtasks 5.3),
+    /// the one-level nesting the whole change is bounded to (<see cref="ScribeBlock.Depth"/> clamps to
+    /// <c>[0, 1]</c>). Kind-agnostic — any row (Task/Note/Tracker/Link/Craft) can be indented or promoted.
+    /// Mirrors the other editor mutations (mutate scratch → mark dirty → rebuild); the codec already
+    /// round-trips <see cref="ScribeBlock.Depth"/>, so the normal editor flush persists it with no dedicated
+    /// packet. A press-hold-drag reorder never routes here — the grip's <see cref="GestureDetector"/> fires
+    /// its tap only on a genuine click (the dispatcher suppresses it during a drag). No focus change: the
+    /// grip is not a text field, so there is no caret to re-home.</summary>
+    private void OnGripTap(int index)
+    {
+        if (scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
+        var block = scratch.Blocks[index];
+        block.Depth = block.Depth == 0 ? 1 : 0; // Core clamps to [0, 1]; no depth-2 is reachable
+        isDirty = true;
+        RebuildBody();
     }
 
     /// <summary>A focused row's caret moved by KEYBOARD navigation (arrows / Home / End / word-jump) with no
@@ -415,6 +443,9 @@ public abstract partial class ScribeDialogBase
             // A guide-page Link's display title, so a pinned guide-page Link renders its name on the
             // HUD/Pin Tab (a "page:" target has no item to resolve a name from) (7.6).
             SnapshotLinkLabel = block?.LinkLabel,
+            // The subtask depth, so a pinned subtask indents on the HUD/Pin Tab like the other surfaces
+            // (add-crafting-tasks / task-subtasks 5.1).
+            SnapshotDepth = block?.Depth ?? 0,
         });
     }
 

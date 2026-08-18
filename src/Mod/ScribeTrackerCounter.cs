@@ -22,7 +22,17 @@ internal static class ScribeTrackerCounter
     /// ingredient <see cref="EnumItemClass"/> before <see cref="CraftingRecipeIngredient.Resolve"/> (which
     /// needs the class to pick the right registry). Returns false for a null/empty/malformed code or one
     /// that resolves to neither an item nor a block — the caller then treats the Tracker's count as 0.
-    /// Wildcard codes (deferred per the change's open question) fail this concrete probe and count as 0.</summary>
+    ///
+    /// <para>A <b>wildcard/family</b> code (one containing <c>*</c>, e.g. <c>"game:plank-*"</c> or
+    /// <c>"game:bowl-*-fired"</c>) — produced by Crafting Tasks whose recipe ingredient is a genuine family
+    /// rather than a concrete <c>{var}</c>-bound item (add-crafting-tasks D6) — is resolved on a separate,
+    /// additive branch: it counts the WHOLE family. <see cref="CraftingRecipeIngredient.SatisfiesAsIngredient"/>
+    /// matches a wildcard ingredient via <c>WildcardUtil.Match</c> and never touches
+    /// <see cref="CraftingRecipeIngredient.ResolvedItemStack"/>, so a wildcard ingredient needs only its
+    /// <see cref="EnumItemClass"/> + <see cref="EnumRecipeMatchType"/> set and must NOT be <c>Resolve</c>d
+    /// (Resolve requires a concrete registry hit that a wildcard has no single answer for). The class is
+    /// probed with the wildcard-aware <see cref="IWorldAccessor.SearchBlocks"/>/<see cref="IWorldAccessor.SearchItems"/>.
+    /// The concrete-code path below is left byte-identical so existing plain-Tracker counts never regress.</para></summary>
     public static bool TryResolveIngredient(IWorldAccessor world, string? targetItemCode, out CraftingRecipeIngredient? ingredient)
     {
         ingredient = null;
@@ -31,6 +41,25 @@ internal static class ScribeTrackerCounter
         AssetLocation loc;
         try { loc = new AssetLocation(targetItemCode); }
         catch { return false; }
+
+        // Wildcard/family branch (additive — the concrete path below is unchanged). A '*' anywhere in the
+        // code marks a family ingredient; count every member of the family.
+        if (targetItemCode.Contains('*'))
+        {
+            var wildClass = world.SearchBlocks(loc).Length > 0 ? EnumItemClass.Block
+                : world.SearchItems(loc).Length > 0 ? EnumItemClass.Item
+                : (EnumItemClass?)null;
+            if (wildClass is null) return false;
+
+            ingredient = new CraftingRecipeIngredient
+            {
+                Type = wildClass.Value,
+                Code = loc,
+                Quantity = 1,
+                MatchingType = EnumRecipeMatchType.Wildcard, // routes SatisfiesAsIngredient through WildcardUtil.Match
+            };
+            return true; // NO Resolve: the wildcard match path does not use ResolvedItemStack
+        }
 
         var itemClass = world.GetItem(loc) != null ? EnumItemClass.Item
             : world.GetBlock(loc) != null ? EnumItemClass.Block

@@ -25,6 +25,7 @@ public static class ScribeBlockKindToken
         ScribeBlockKind.Text => "note",
         ScribeBlockKind.Tracker => "tracker",
         ScribeBlockKind.Link => "link",
+        ScribeBlockKind.Craft => "craft",
         _ => "task", // future kinds without a token here export as the safe baseline
     };
 
@@ -44,6 +45,7 @@ public static class ScribeBlockKindToken
             case "note": kind = ScribeBlockKind.Text; return true;
             case "tracker": kind = ScribeBlockKind.Tracker; return true;
             case "link": kind = ScribeBlockKind.Link; return true;
+            case "craft": kind = ScribeBlockKind.Craft; return true;
             default: return false;
         }
     }

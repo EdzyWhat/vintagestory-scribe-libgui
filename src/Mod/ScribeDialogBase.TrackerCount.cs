@@ -144,7 +144,11 @@ public abstract partial class ScribeDialogBase
         if (isEditorMode || viewMode != ScribeLecternView.Read || !IsOpened()) return;
         if (capi.World.Player is not { } player) return;
 
-        var trackers = host.Document.Blocks.Where(b => b.IsTracker).ToList();
+        // Both plain Trackers and Craft parents count the viewer's carried inventory against their target
+        // (add-crafting-tasks 9.2 — a Craft parent counts its recipe OUTPUT), so recount every count-tracked
+        // block. Craft ingredient CHILDREN are themselves plain Trackers (depth 1), so they're already
+        // included; the Craft parent is the only kind this predicate widens over IsTracker.
+        var trackers = host.Document.Blocks.Where(b => b.IsCarriedCountTracked).ToList();
         if (trackers.Count == 0) return;
 
         bool anyChange = false;

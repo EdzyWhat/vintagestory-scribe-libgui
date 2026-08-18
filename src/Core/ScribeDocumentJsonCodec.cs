@@ -73,10 +73,12 @@ public static class ScribeDocumentJsonCodec
                 Done = block.Done,
                 Depth = block.Depth,
                 TargetItemCode = block.TargetItemCode,
-                // Only a Tracker carries a meaningful quantity; omit it elsewhere to keep the JSON legible.
-                TargetQuantity = block.Kind == ScribeBlockKind.Tracker ? block.TargetQuantity : null,
+                // A Tracker and a Craft both carry a meaningful target quantity; omit it elsewhere to keep the JSON legible.
+                TargetQuantity = block.Kind is ScribeBlockKind.Tracker or ScribeBlockKind.Craft ? block.TargetQuantity : null,
                 LinkTarget = block.LinkTarget,
                 LinkLabel = block.LinkLabel,
+                // Only a Craft carries a recipe binding; omit the empty string elsewhere.
+                RecipeSignature = string.IsNullOrEmpty(block.RecipeSignature) ? null : block.RecipeSignature,
             });
         }
         return JsonSerializer.Serialize(dto, WriteOptions);
@@ -133,7 +135,8 @@ public static class ScribeDocumentJsonCodec
                     targetQuantity: targetQuantity,
                     currentQuantity: 0,           // live/derived — recomputed from carried inventory
                     linkTarget: b.LinkTarget,
-                    linkLabel: b.LinkLabel));
+                    linkLabel: b.LinkLabel,
+                    recipeSignature: b.RecipeSignature)); // empty for non-Craft; Craft re-generates ingredients from it
             }
         }
 
@@ -173,5 +176,6 @@ public static class ScribeDocumentJsonCodec
         public int? TargetQuantity { get; set; }
         public string? LinkTarget { get; set; }
         public string? LinkLabel { get; set; }
+        public string? RecipeSignature { get; set; }
     }
 }

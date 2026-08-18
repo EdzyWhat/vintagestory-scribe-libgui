@@ -2,8 +2,9 @@ namespace Scribe.Core;
 
 /// <summary>
 /// The game-agnostic model of a Scribe document: an ordered sequence of <see cref="ScribeBlock"/>s.
-/// Each block is one of four kinds — a checkbox task, a freeform text section, a Tracker
-/// ("gather N of item X"), or a Link (a reference to an item's Handbook page) — so they can be
+/// Each block is one of five kinds — a checkbox task, a freeform text section, a Tracker
+/// ("gather N of item X"), a Link (a reference to an item's Handbook page), or a Craft (a
+/// recipe-bound "craft N of item X" task that generates ingredient subtasks) — so they can be
 /// interspersed and reordered freely. All mutation methods return <c>true</c> on success and
 /// <c>false</c> for invalid input (out-of-range index), never throwing to the caller. Task text
 /// is stored verbatim, including empty/whitespace-only text — the model enforces no non-blank
@@ -129,7 +130,8 @@ public sealed class ScribeDocument
         targetQuantity: block.TargetQuantity,
         currentQuantity: block.CurrentQuantity,
         linkTarget: block.LinkTarget,
-        linkLabel: block.LinkLabel);
+        linkLabel: block.LinkLabel,
+        recipeSignature: block.RecipeSignature);
 
     /// <summary>Adds a checkbox task to the end. Any text is accepted and stored verbatim,
     /// including empty/whitespace-only text (a new task starts empty and the player types into it).
@@ -172,6 +174,21 @@ public sealed class ScribeDocument
         return true;
     }
 
+    /// <summary>Adds a Craft task ("craft N of item X") to the end and gives it a fresh stable
+    /// <see cref="ScribeBlock.TaskId"/>, returning that id so the caller can immediately reconcile its
+    /// ingredient subtasks (see <see cref="ReconcileCraftIngredients"/>). <paramref name="outputItemCode"/>
+    /// is the recipe's output item code (the count target, like a Tracker's); <paramref name="targetQuantity"/>
+    /// is clamped to ≥ 1 by the block; <paramref name="recipeSignature"/> binds the grid recipe variant the
+    /// ingredients are generated from (empty when unresolved). The row's display label is derived by the Mod
+    /// layer from the code, so Text starts empty.</summary>
+    public Guid AddCraft(string? outputItemCode, int targetQuantity, string recipeSignature)
+    {
+        var block = new ScribeBlock(ScribeBlockKind.Craft, "",
+            targetItemCode: outputItemCode, targetQuantity: targetQuantity, recipeSignature: recipeSignature);
+        _blocks.Add(block);
+        return block.TaskId;
+    }
+
     /// <summary>Adds an <b>item</b> Link task (a reference to an item's Handbook page) to the end and gives
     /// it a fresh stable <see cref="ScribeBlock.TaskId"/>. <paramref name="target"/> is the plain collectible
     /// code (may be null). The row's display label is derived live by the Mod layer from the item, so Text
@@ -190,6 +207,99 @@ public sealed class ScribeDocument
     {
         _blocks.Add(new ScribeBlock(ScribeBlockKind.Link, "",
             linkTarget: ScribeLinkTarget.ForPage(pageCode), linkLabel: label));
+        return true;
+    }
+
+    /// <summary>
+    /// Loosely self-heals the ingredient subtasks of the Craft task identified by <paramref name="craftTaskId"/>
+    /// (craft-task capability). Reconciles ONLY the contiguous run of <see cref="ScribeBlock.Depth"/>-1 rows
+    /// directly below the parent — the rows it owns — against the freshly derived ingredient list:
+    /// <list type="bullet">
+    /// <item>For each counting <paramref name="ingredients"/> entry, sets the matched child Tracker's
+    /// <see cref="ScribeBlock.TargetQuantity"/> to <c>PerCraftQuantity × craftsNeeded</c> (matching by item
+    /// code, preserving the child's id and live progress), or creates a Tracker child at depth 1 when none
+    /// matches.</item>
+    /// <item>For each non-counting <paramref name="notes"/> entry (e.g. a liquid ingredient in v1), ensures a
+    /// depth-1 Text note with that exact text exists, creating it when missing.</item>
+    /// </list>
+    /// It NEVER deletes a row (a player who removed or edited a subtask keeps their choice) and NEVER touches
+    /// anything below depth 1 (one level only). New children append to the END of the owned run, keeping the
+    /// group contiguous. Returns false (document unchanged) when no Craft block has that id.
+    ///
+    /// <para>Expects DISTINCT item codes across <paramref name="ingredients"/> (the Mod layer merges a recipe's
+    /// duplicate ingredients before calling); a repeated code would resolve to the first unclaimed match.
+    /// <paramref name="craftsNeeded"/> is the batch multiplier from <see cref="ScribeCraftMath.CraftsNeeded"/>
+    /// (clamped to ≥ 1 here). Pure data; no VS API.</para>
+    /// </summary>
+    public bool ReconcileCraftIngredients(Guid craftTaskId,
+        IReadOnlyList<ScribeCraftIngredient> ingredients, IReadOnlyList<string> notes, int craftsNeeded)
+    {
+        int parentIndex = -1;
+        for (int i = 0; i < _blocks.Count; i++)
+        {
+            if (_blocks[i].TaskId == craftTaskId && _blocks[i].IsCraft) { parentIndex = i; break; }
+        }
+        if (parentIndex < 0) return false;
+        if (craftsNeeded < 1) craftsNeeded = 1;
+
+        // The owned run: the contiguous depth-1 rows immediately below the parent. runEnd is exclusive and
+        // grows as we append new children so they stay inside (and at the end of) the run.
+        int runStart = parentIndex + 1;
+        int runEnd = runStart;
+        while (runEnd < _blocks.Count && _blocks[runEnd].Depth == 1) runEnd++;
+
+        var claimed = new HashSet<int>(); // rows already matched this pass, so duplicate codes don't double-claim
+
+        foreach (var ing in ingredients)
+        {
+            int perCraft = ing.PerCraftQuantity < 1 ? 1 : ing.PerCraftQuantity;
+            int target = perCraft * craftsNeeded;
+
+            int matchIdx = -1;
+            for (int i = runStart; i < runEnd; i++)
+            {
+                if (claimed.Contains(i)) continue;
+                if (_blocks[i].IsTracker
+                    && string.Equals(_blocks[i].TargetItemCode, ing.ItemCode, StringComparison.Ordinal))
+                {
+                    matchIdx = i;
+                    break;
+                }
+            }
+
+            if (matchIdx >= 0)
+            {
+                claimed.Add(matchIdx);
+                _blocks[matchIdx].TargetQuantity = target; // rescale in place; keep id + CurrentQuantity
+            }
+            else
+            {
+                _blocks.Insert(runEnd, new ScribeBlock(ScribeBlockKind.Tracker, "",
+                    depth: 1, targetItemCode: ing.ItemCode, targetQuantity: target));
+                runEnd++;
+            }
+        }
+
+        foreach (var note in notes)
+        {
+            if (string.IsNullOrEmpty(note)) continue;
+            bool exists = false;
+            for (int i = runStart; i < runEnd; i++)
+            {
+                if (_blocks[i].Kind == ScribeBlockKind.Text
+                    && string.Equals(_blocks[i].Text, note, StringComparison.Ordinal))
+                {
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists)
+            {
+                _blocks.Insert(runEnd, new ScribeBlock(ScribeBlockKind.Text, note, depth: 1));
+                runEnd++;
+            }
+        }
+
         return true;
     }
 
@@ -266,18 +376,19 @@ public sealed class ScribeDocument
     }
 
     /// <summary>
-    /// Sets the live carried count (<see cref="ScribeBlock.CurrentQuantity"/>) of the Tracker with the
-    /// given stable <see cref="ScribeBlock.TaskId"/> — the identity-addressed op the count engine uses
-    /// to push an updated have-count without knowing the block's index. The value is clamped only to
-    /// ≥ 0 by the block's setter (NOT capped at <c>TargetQuantity</c> — overflow is meaningful, 7.14).
-    /// Returns false (document unchanged) when no block
-    /// has that id or the id belongs to a non-Tracker block. Pure data; no VS API.
+    /// Sets the live carried count (<see cref="ScribeBlock.CurrentQuantity"/>) of the carried-count-tracked
+    /// block (a Tracker or a Craft parent) with the given stable <see cref="ScribeBlock.TaskId"/> — the
+    /// identity-addressed op the count engine uses to push an updated have-count without knowing the block's
+    /// index. The value is clamped only to ≥ 0 by the block's setter (NOT capped at <c>TargetQuantity</c> —
+    /// overflow is meaningful, 7.14). Returns false (document unchanged) when no block has that id or the id
+    /// belongs to a block whose count is not carried-driven (see <see cref="ScribeBlock.IsCarriedCountTracked"/>).
+    /// Pure data; no VS API.
     /// </summary>
     public bool SetTrackerCurrentQuantity(Guid taskId, int currentQuantity)
     {
         for (int i = 0; i < _blocks.Count; i++)
         {
-            if (_blocks[i].TaskId == taskId && _blocks[i].IsTracker)
+            if (_blocks[i].TaskId == taskId && _blocks[i].IsCarriedCountTracked)
             {
                 _blocks[i].CurrentQuantity = currentQuantity; // clamped to ≥ 0 in the setter (may exceed target, 7.14)
                 return true;

@@ -57,6 +57,13 @@ internal readonly record struct ScribeRowStyle(
     /// Ignored when <see cref="UseCuneiform"/> is false.</summary>
     public CuneiformGlow CuneiformGlow { get; init; }
 
+    /// <summary>Left inset (already-scaled px) added to a <see cref="ScribeBlock.Depth"/> 1 subtask row so it
+    /// reads as nested under its parent (task-subtasks 5.1). Zero for a depth-0 row. Set by the dialog's
+    /// <c>RowStyle</c> from the live layout width (10px + 3%·W), since it depends on the window width rather
+    /// than the settings-only sizes <see cref="FromSettings"/> knows; an <c>init</c>-only add-on so
+    /// <see cref="FromSettings"/> and existing positional constructions stay valid (defaults to 0).</summary>
+    public float SubtaskIndent { get; init; }
+
     /// <summary>Optional override for the per-row grip glyph's ink color (the drag handle, and its ◀/▶
     /// drag-state arrows). Null → the row uses the theme's <c>OnSurfaceVariant</c> mid-gray as before. The
     /// tablet sets this to the same darker material ink the title-bar grip/pencil use

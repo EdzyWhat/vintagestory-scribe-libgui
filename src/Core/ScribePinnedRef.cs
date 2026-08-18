@@ -76,4 +76,10 @@ public sealed class ScribePinnedRef
     /// icon. Null for an item Link (whose name resolves live from the item) and for every other kind
     /// (add-tracker-link-tasks 7.6).</summary>
     public string? LinkLabel { get; set; }
+
+    /// <summary>The pinned task's last-known subtask depth (0 = top-level, 1 = a one-level subtask;
+    /// clamped to <c>[0, 1]</c> like <see cref="ScribeBlock.Depth"/>). Snapshotted so the HUD and Pin Tab
+    /// indent a pinned subtask identically to the editor/read surfaces (add-crafting-tasks / task-subtasks
+    /// 5.1). Defaults to 0, so a pin from an old blob (or a top-level task) is unaffected.</summary>
+    public int Depth { get; set; }
 }

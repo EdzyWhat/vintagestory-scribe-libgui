@@ -639,7 +639,12 @@ public sealed class HudScribePins : GuiBase
         if (!IsOpened()) return false;
         if (capi.World.Player is not { } player) return false;
 
-        var trackerPins = modSystem.MyPins.Where(p => p.Kind == ScribeBlockKind.Tracker).ToList();
+        // Both plain Trackers and Craft parents count the viewer's carried inventory against a target (a
+        // Craft parent counts its recipe OUTPUT), so drive both here — mirrors the dialog engine's
+        // IsCarriedCountTracked gate (add-crafting-tasks 9.2). Craft ingredient CHILDREN are themselves
+        // plain Trackers, so they're already included by Kind == Tracker.
+        var trackerPins = modSystem.MyPins
+            .Where(p => p.Kind is ScribeBlockKind.Tracker or ScribeBlockKind.Craft).ToList();
 
         // Prune live-count entries for pins that are gone (unpinned/removed) so the map can't leak. Done even
         // when there are no Tracker pins left (clears the last one out).
@@ -1001,7 +1006,9 @@ public sealed class HudScribePins : GuiBase
                     FadingOut: IsFadingOut(p), Kind: p.Kind, LinkTarget: p.LinkTarget,
                     DisplayStack: stack, DisplayName: name,
                     // Live carried count if the HUD's own engine has one, else the snapshot (7.10).
-                    TargetQuantity: p.TargetQuantity, CurrentQuantity: HudTrackerHave(p));
+                    TargetQuantity: p.TargetQuantity, CurrentQuantity: HudTrackerHave(p),
+                    // Subtask depth, so a pinned subtask indents like the other surfaces (task-subtasks 5.1).
+                    Depth: p.Depth);
             })
             .ToList();
     }
@@ -1014,7 +1021,8 @@ public sealed class HudScribePins : GuiBase
     {
         string? code = p.Kind switch
         {
-            ScribeBlockKind.Tracker => p.TargetItemCode,
+            // A Craft parent shows its recipe OUTPUT, carried in the same TargetItemCode slot (9.1).
+            ScribeBlockKind.Tracker or ScribeBlockKind.Craft => p.TargetItemCode,
             ScribeBlockKind.Link => p.LinkTarget,
             _ => null,
         };
@@ -1188,14 +1196,20 @@ internal readonly record struct HudPinRow(
     // resolved client-side in BuildOrderedRows), plus a Tracker's have/need counts, so the HUD row can
     // render the item icon + name instead of the (empty) task text (add-tracker-link-tasks 7.8).
     ItemStack? DisplayStack = null, string? DisplayName = null,
-    int TargetQuantity = 1, int CurrentQuantity = 0)
+    int TargetQuantity = 1, int CurrentQuantity = 0, int Depth = 0)
 {
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
     public bool IsLink => Kind == ScribeBlockKind.Link;
-    /// <summary>A Tracker/Link renders as an item row (icon + name), not the editable-text shape.</summary>
-    public bool IsItemKind => IsTracker || IsLink;
-    /// <summary>The label to show: the resolved item name for a Tracker/Link, else the task text.</summary>
-    public string Label => IsItemKind ? (DisplayName ?? Text) : Text;
+    public bool IsCraft => Kind == ScribeBlockKind.Craft;
+    /// <summary>A Tracker/Link/Craft renders as an item row (icon + name), not the editable-text shape.
+    /// A Craft parent renders exactly like a Tracker — its recipe output icon + a have/need counter —
+    /// differing only in the "Craft {0}" label framing below (add-crafting-tasks 9.1).</summary>
+    public bool IsItemKind => IsTracker || IsLink || IsCraft;
+    /// <summary>The label to show: the "Craft {0}" framing for a Craft parent, the plain resolved item
+    /// name for a Tracker/Link, else the task text.</summary>
+    public string Label => IsCraft
+        ? Lang.Get("scribe:scribe-gui-craft-row-label", DisplayName ?? Text)
+        : IsItemKind ? (DisplayName ?? Text) : Text;
 }
 
 /// <summary>
@@ -1542,6 +1556,16 @@ internal sealed class HudPinsContent : StatelessWidget
                 });
         }
 
+        // A Depth-1 subtask adds a left inset so a pinned subtask reads as nested — the HUD analog of the
+        // dialog surfaces' indent (task-subtasks 5.1), using the same 10px + 3%×width formula against the
+        // HUD's own row width. Depth-0 rows are unchanged.
+        if (row.Depth > 0)
+        {
+            rowBody = new Padding(
+                EdgeInsets.Only(left: 10f + 0.03f * rowWidth),
+                child: rowBody);
+        }
+
         // A sunk row mutes the WHOLE row (checkbox + text) to SunkOpacity, faded rather than snapped so a
         // completing task reads as a gentle settle. The ValueKey stabilizes row identity across rebuilds
         // for the animation. The container wraps this in its own entry/collapse animation (keyed by the same
@@ -1638,7 +1662,7 @@ internal sealed class HudPinsContent : StatelessWidget
         // metrics exactly as it collapses.
         string rowText = Corrupt(row.Text, seedOffset: row.TaskId.GetHashCode());
 
-        return new Row(
+        Widget ghost = new Row(
             spacing: 6,
             mainAxisSize: MainAxisSize.Max,
             crossAxisAlignment: CrossAxisAlignment.Start,
@@ -1666,6 +1690,12 @@ internal sealed class HudPinsContent : StatelessWidget
                     ? new Expanded(child: new Opacity(0f, BuildHudItemContent(row, textStyle, interactive: false)))
                     : new Expanded(child: new Opacity(0f, new Text(rowText, textStyle))),
             });
+
+        // Match the live row's Depth-1 indent so the collapsing ghost keeps identical metrics (task-subtasks 5.1).
+        if (row.Depth > 0)
+            ghost = new Padding(EdgeInsets.Only(left: 10f + 0.03f * rowWidth), child: ghost);
+
+        return ghost;
     }
 
     private Widget BuildTimerRow(Scribe.Core.TimerStore timer, ColorScheme colors, Vector4 glow, ICoreClientAPI? capi)

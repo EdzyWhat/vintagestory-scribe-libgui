@@ -72,7 +72,7 @@ public sealed partial class ScribeModSystem
         SetPinForPlayer(fromPlayer, docId, taskId, message.Pinned, message.SnapshotText, message.SnapshotDone,
             (Scribe.Core.ScribeBlockKind)message.SnapshotKind, message.SnapshotLinkTarget,
             message.SnapshotTargetItemCode, message.SnapshotTargetQuantity, message.SnapshotCurrentQuantity,
-            message.SnapshotLinkLabel);
+            message.SnapshotLinkLabel, message.SnapshotDepth);
     }
 
     private void OnServerReceivedCompleteTask(IServerPlayer fromPlayer, ScribeCompleteTaskMessage message)

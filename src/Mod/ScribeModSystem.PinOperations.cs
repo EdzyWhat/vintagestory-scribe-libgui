@@ -27,7 +27,7 @@ public sealed partial class ScribeModSystem
         string? fallbackText = null, bool fallbackDone = false,
         ScribeBlockKind fallbackKind = ScribeBlockKind.Task, string? fallbackLinkTarget = null,
         string? fallbackTargetItemCode = null, int fallbackTargetQuantity = 1, int fallbackCurrentQuantity = 0,
-        string? fallbackLinkLabel = null)
+        string? fallbackLinkLabel = null, int fallbackDepth = 0)
     {
         if (sapi is null || pinStore is null) return;
 
@@ -42,6 +42,7 @@ public sealed partial class ScribeModSystem
             int targetQuantity = fallbackTargetQuantity;
             int currentQuantity = fallbackCurrentQuantity;
             string? linkLabel = fallbackLinkLabel;
+            int depth = fallbackDepth;
             // Prefer the server's own authoritative document when available; fall back to the
             // client-supplied snapshot for items whose host is not registered server-side (e.g. Notebooks).
             if (_hostRegistry.TryGetValue(docId, out var host)
@@ -55,9 +56,10 @@ public sealed partial class ScribeModSystem
                 targetQuantity = block.TargetQuantity;
                 currentQuantity = block.CurrentQuantity;
                 linkLabel = block.LinkLabel;
+                depth = block.Depth;
             }
             changed = pinStore.SetPin(player.PlayerUID, docId, taskId, sapi.World.Calendar.TotalHours, text, done, kind, linkTarget,
-                targetItemCode, targetQuantity, currentQuantity, linkLabel);
+                targetItemCode, targetQuantity, currentQuantity, linkLabel, depth);
         }
         else
         {
