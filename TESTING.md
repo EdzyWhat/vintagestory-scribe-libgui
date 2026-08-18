@@ -455,6 +455,51 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       the text** (no oversized/undersized box), lean just a touch (~-3.4°), and the whole stamp should sit a hair
       (1% of art width) lower on the page. *(add-transcribe-copy-paste 12.5 / 12.6)*
 
+## add-scriptorium-import-export
+
+> v1.2 real Import/Export on the Scriptorium Transcribe tab, replacing the inert placeholder: two
+> clipboard lanes — **Copy as JSON** (lossless) and **Copy as TSV** (spreadsheet-native, fixed
+> Type/Done/Text/Special/Count/Depth columns) — plus **Import** (auto-detects JSON vs TSV, Overwrite/Append
+> with the same two-press confirm as Copy, IMPORTED/EXPORTED stamps). Unknown item/link refs degrade to
+> plain tasks; imports mint fresh ids so they are never pinned. All single-client checks below were
+> playtested PASS 2026-08-17. **This change was archived after verification — this section is the durable
+> record; the one open item (multiplayer) lives here, not in OpenSpec.**
+
+- [x] `df5b5118` **JSON round-trip.** Export a doc as JSON, paste into a text editor (readable + complete),
+      Import into an empty item (Overwrite) — confirm it reconstructs and is unpinned.
+      *(add-scriptorium-import-export 7.1)*
+      - **Confirmed 2026-08-17** — user: "WORKS!"
+- [x] `773c557a` **TSV spreadsheet edit.** Export TSV, paste into Excel/Sheets, edit a task's text and a
+      tracker's count, copy the range back, Import (Append) — confirm edits land and nothing is deleted.
+      *(add-scriptorium-import-export 7.2)*
+      - **Confirmed 2026-08-17** — user: "WORKS!"
+- [x] `ddb077b0` **Unknown-item degrade.** Import a TSV with a bogus tracker item code — confirm it becomes a
+      plain task and the result toast reports the degradation count.
+      *(add-scriptorium-import-export 7.3)*
+      - **Confirmed 2026-08-17** — user: "WORKS!"
+- [x] `91f85442` **Junk clipboard rejected.** Import junk clipboard text — confirm the "not a valid Scribe
+      import" toast and no change to the item.
+      *(add-scriptorium-import-export 7.4)*
+      - **Confirmed 2026-08-17** — user confirmed correct after the toast wording was fixed from "export" to
+        "import" (this session).
+- [x] `d4dd0197` **Formula-injection safe.** A task whose text is `=1+1`; export TSV, open in a spreadsheet —
+      confirm it shows as text (not evaluated); re-import — confirm the text is `=1+1` again.
+      *(add-scriptorium-import-export 7.5)*
+      - **Confirmed 2026-08-17** — user: "WORKS! WOW!"
+- [x] `4f89d25c` **Overwrite/Append + stamp.** Both import modes behave as on the copy path; the stamp reads
+      IMPORTED / EXPORTED over the right slot.
+      *(add-scriptorium-import-export 7.6)*
+      - **Confirmed 2026-08-17** — user: "WORKS!"
+- [x] `afbbd0af` **Import pin safety.** Pin a task, export+import into the same world — confirm no imported
+      task is pinned and the original pin is untouched.
+      *(add-scriptorium-import-export 7.7)*
+      - **Confirmed 2026-08-17** — user: "WORKS!"
+- [ ] `7e0031eb` **Multiplayer import sync.** With two clients on one Scriptorium, an import by one client
+      shows for the other with the correct contents — no duplicate, no desync.
+      *(add-scriptorium-import-export 7.8)*
+      - **Backlogged 2026-08-17** — deferred to a two-client session, same as the copy path's multiplayer
+        item (`33783622`). All single-client import paths are confirmed.
+
 ## hud-settings-button-tweaks
 
 > Standalone playtest tweaks to the Pinned HUD header (2026-08-16): a new gear-ring settings icon, a
