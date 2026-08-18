@@ -600,6 +600,24 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Confirmed 2026-07-26** (playtest submission 2026-07-26T22-24-24): "Works." Wall/ceiling placement
         rejected; floor placement works.
 
+## add-clockmaker-alarm-sound
+
+- [x] `e43edb3` **Alarm plays on timer fire.** Fire the Clockmaker Notebook timer — the alarm bell starts,
+      ramps up over ~0.5s, and breathes gently. *(add-clockmaker-alarm-sound 6.5)*
+      - **Confirmed 2026-08-18** — alarm sounds on fire, ramp and breathing audible.
+- [x] `e43edb3` **Dismiss from HUD fades out.** With the alarm playing, click the fired-timer row in the HUD
+      pinned list — the alarm fades out smoothly and stops. *(add-clockmaker-alarm-sound 6.5)*
+      - **Confirmed 2026-08-18** — HUD click triggers fade-out.
+- [x] `e43edb3` **Dismiss from Stop Timer button fades out.** With the alarm playing, open the Clockmaker
+      Notebook and press Stop Timer — same smooth fade. *(add-clockmaker-alarm-sound 6.5)*
+      - **Confirmed 2026-08-18** — Stop Timer button triggers fade-out.
+- [x] `e43edb3` **Alarm Volume setting responds live.** Open Scribe Settings → Timer section → Alarm Volume;
+      fire the timer and adjust the slider while the alarm plays — volume changes immediately. *(add-clockmaker-alarm-sound 6.5)*
+      - **Confirmed 2026-08-18** — live volume response confirmed.
+- [x] `e43edb3` **Alarm pauses on game pause.** With the alarm playing, press ESC (or open the Handbook) in
+      single-player — the alarm pauses; on resume it continues. *(add-clockmaker-alarm-sound 6.5)*
+      - **Confirmed 2026-08-18** — user: "alarm sound pauses on pause via ESC and handbook in Singleplayer."
+
 ## title-pencil-crash-fix
 
 > In-game testing (2026-07-31) surfaced a hard crash: clicking the Edit-tab title pencil NPE'd inside
