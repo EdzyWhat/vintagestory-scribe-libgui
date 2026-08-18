@@ -4,7 +4,14 @@ All notable changes to Scribe are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.0] - 2026-08-17
+
+The organization release. Scribe grows from a personal notebook into a shared planning station:
+a new craftable **Scriptorium** block, two new task types — **Trackers** that count items you are
+carrying and **Links** that jump to a Handbook page — and a **Transcribe** desk that copies
+documents between items and round-trips them in and out of the game as JSON or a
+spreadsheet-friendly table. Fully save-compatible with 1.0.x and 1.1.x — existing Lecterns,
+Notebooks, and Tablets open unchanged.
 
 ### Added
 - **Two new task types: Trackers and Links.** Alongside standard tasks and plain notes, the add
@@ -22,16 +29,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Tracker completion setting.** A new per-player setting controls what happens when a Tracker
   reaches its target — **complete** it (the default), **delete** it, or **do nothing** — so a met
   gathering goal can tick itself off, tidy itself away, or simply sit satisfied, to taste.
-- **Scriptorium block (foundation).** A new craftable, placeable **Scriptorium** — a dedicated
-  shared writing station alongside the Lectern. It hosts a full Scribe document with the same Read /
-  Task Editor / Pinned / Guest Book / Settings views, a one-editor-at-a-time lock, server-authoritative
-  persistence and sync, floor placement that faces the player, and document carry-over when broken and
-  re-placed. Crafted plank-heavy (planks + feather + nails, ink-filled). This lands the v1.2 organization
-  tier's block foundation; the richer collaborative features (Tracker/Link task types, copy/paste,
-  import/export, and the v1.3 assignment system) follow as separate changes.
-  - *Provisional art:* the Scriptorium currently reuses the Lectern's model, textures, and page
-    backdrop as a stand-in — a placed Scriptorium looks like a Lectern for now. The dedicated model
-    and backdrop are a tracked follow-up and will swap in without a save-format change.
+- **Scriptorium block.** A new craftable, placeable **Scriptorium** — a dedicated shared writing
+  station alongside the Lectern, with its own desk model (a long desk with an open reading board, a
+  book stack, and an ink & quill). It hosts a full Scribe document with the same Read / Task Editor /
+  Pinned / Guest Book / Settings views, plus a **Transcribe** desk (below), a one-editor-at-a-time
+  lock, server-authoritative persistence and sync, floor placement that faces the player, and document
+  carry-over when broken and re-placed. Crafted like a more-expensive Lectern — the same feather,
+  parchment, leather, and ink-filled bowl, with double the planks.
+  - *Note:* the open dialog's page backdrop still borrows the Lectern's for now; a dedicated one is a
+    tracked follow-up that will swap in without a save-format change.
+- **Transcribe desk — copy, import, and export documents.** The Scriptorium's **Transcribe** tab
+  moves whole documents around. Drop a Scribe item in and copy its tasks onto another item —
+  **overwrite** the target or **append** onto it — with the result stamped like sealed paper. The same
+  tab round-trips a document in and out of the game as text over the clipboard: **Copy as JSON** for a
+  complete, human-readable snapshot, or **Copy as TSV** for a spreadsheet-friendly table
+  (`Type · Done · Text · Special · Count · Depth`) you can bulk-edit in Excel or Google Sheets and
+  paste back. **Import** auto-detects JSON or TSV from the clipboard and writes it onto the slotted
+  item. Unknown item or link references land as plain tasks rather than failing the whole import, and
+  imported tasks are never pinned — an import brings the words, not anyone's HUD state. On a shared
+  Scriptorium, the "stamped" flourish now also plays for anyone else watching the same block, not just
+  the player who pressed the button.
 
 ## [1.1.1] - 2026-08-14
 
@@ -308,6 +325,8 @@ First public release.
 - `game` 1.22.0
 - `gui` 2.0.0 (LibGUI)
 
+[1.2.0]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v1.1.1...v1.2.0
+[1.1.1]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v0.2.0...v1.0.0

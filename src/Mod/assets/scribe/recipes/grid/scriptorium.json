@@ -1,9 +1,19 @@
 [
 	{
-		ingredientPattern: "PFP,PNP,PPP",
+		// A more-expensive Lectern: the same ingredient set as scribelectern.json (feather, parchment,
+		// leather, ink-filled fired bowl, planks, nails) but in a different 3x3 pattern with DOUBLE the
+		// planks — 8 planks (4 cells x qty 2) vs. the Lectern's 4 — and the same single nail. The ink
+		// bowl still requires 1 L of black dye (container consumed).
+		//   FRL   feather   parchment  leather
+		//   BPP   ink bowl  2 planks   2 planks
+		//   NPP   1 nails   2 planks   2 planks
+		ingredientPattern: "FRL,BPP,NPP",
 		ingredients: {
-			"P": { type: "item", code: "game:plank-*" },
 			"F": { type: "item", code: "game:feather" },
+			"R": { type: "item", code: "game:paper-parchment" },
+			"L": { type: "item", code: "game:leather-normal-plain" },
+			"B": { type: "block", code: "game:bowl-*-fired" },
+			"P": { type: "item", code: "game:plank-*", quantity: 2 },
 			"N": { type: "item", code: "game:metalnailsandstrips-*" }
 		},
 		width: 3,

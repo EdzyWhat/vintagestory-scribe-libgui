@@ -130,6 +130,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [x] `b985b404` **MP lock + sync.** With two clients on one Scriptorium, confirm the one-editor-at-a-time
       lock holds and that edits made by the editor sync live to the other client. *(add-scriptorium-block 4.8)*
       - **Confirmed 2026-08-14** via playtest: user reported all Scriptorium in-game checks pass.
+      - **Re-confirmed 2026-08-17** via a dedicated 2-client session: lock + live edit sync hold.
 
 ## refine-scribe-hover-tooltips
 
@@ -224,11 +225,13 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       collapsing; no dead first-click that you have to repeat. *(reconcile-animating-surfaces 3.7)*
       - **Confirmed 2026-08-09** via playtest submission (2026-08-09T11-13-15): "Works." First click lands
         mid-collapse — the original mass-delete bug this whole change targets is resolved.
-- [ ] `1f95e1ec` **Resync keeps local row.** While editing (a focused row, and separately a brand-new
+- [x] `1f95e1ec` **Resync keeps local row.** While editing (a focused row, and separately a brand-new
       empty row), have a second client change the doc so a resync lands mid-edit — confirm your in-flight
       row is NOT yanked out from under you. *(reconcile-animating-surfaces 3.7)*
       - **Backlogged 2026-08-09** (playtest submission 2026-08-09T11-13-15): "Wait for multiplayer test."
         Needs a second client; retest when a multiplayer session is available (§3.4 guard verifies here).
+      - **Confirmed 2026-08-17** via 2-client session: a resync landing mid-edit (focused row and brand-new
+        empty row) does not yank the in-flight row out from under the editor.
 - [x] `1d685c84` **Judge caret-position caveat.** Specifically delete a row ABOVE the one you're editing,
       and separately reorder the edited row — the caret POSITION is expected to reset (text is preserved).
       Judge whether that residual reset is acceptable to ship or trips the §3.8 bail-out.
@@ -404,11 +407,25 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       opens on the Transcribe tab with both copy slots and their contents intact, no resize or wipe.
       *(add-transcribe-copy-paste 6.7)*
       - **Confirmed 2026-08-16** — user: "The migration works."
-- [ ] `33783622` **Multiplayer copy sync.** With two clients on one Scriptorium, a copy performed by one
+- [x] `33783622` **Multiplayer copy sync.** With two clients on one Scriptorium, a copy performed by one
       client shows for the other with the correct contents — no duplicate, no desync.
       *(add-transcribe-copy-paste 6.8)*
       - **Backlogged 2026-08-16** — user: "We need to backlog the multiplayer testing." Deferred to a
         two-client session; the single-client copy path is confirmed.
+      - **Confirmed 2026-08-17** via 2-client session: copy propagates to the watching client with correct
+        contents, no duplicate/desync. Caveat (enhancement, not a defect): the IMPRINT stamp animation only
+        plays for the acting client — the watcher sees the new content appear without the stamp flourish.
+        Tracked as a possible cheap follow-up (hook the watcher's sync-triggered redraw).
+      - **Follow-up implemented 2026-08-17** (watcher-stamp-sync): the server now broadcasts a
+        `ScribeTranscribeStampMessage` to all-except-actor after a committed copy/import, and each OTHER open
+        Scriptorium dialog on that block replays the COPIED/IMPORTED flourish. Its own 2-client re-test is
+        backlogged as `fe69e4b0` below (the singleplayer stamp is confirmed working).
+- [ ] `fe69e4b0` **Multiplayer watcher stamp.** With two clients on one Scriptorium, one client copies (and
+      separately, imports) while the other has the dialog open on the same block — confirm the watcher now
+      sees the COPIED/IMPORTED flourish *play*, not just the new content appear. *(add-transcribe-copy-paste 6.8)*
+      - **Backlogged 2026-08-17** — user: the singleplayer stamp works; the multiplayer watcher-visibility
+        path (watcher-stamp-sync, server broadcast → other clients replay the flourish) is deferred to a
+        two-client session. Low-risk, additive; shipped in 1.2 unverified in MP.
 - [x] `7a1a5633` **IO buttons sized right.** Open the Transcribe tab; confirm the Export JSON/CSV/Import
       buttons sit at a tidy fixed width with centred labels — none balloons to fill the lower half of the
       page. *(add-transcribe-copy-paste 9.6)*
@@ -494,11 +511,15 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       task is pinned and the original pin is untouched.
       *(add-scriptorium-import-export 7.7)*
       - **Confirmed 2026-08-17** — user: "WORKS!"
-- [ ] `7e0031eb` **Multiplayer import sync.** With two clients on one Scriptorium, an import by one client
+- [x] `7e0031eb` **Multiplayer import sync.** With two clients on one Scriptorium, an import by one client
       shows for the other with the correct contents — no duplicate, no desync.
       *(add-scriptorium-import-export 7.8)*
       - **Backlogged 2026-08-17** — deferred to a two-client session, same as the copy path's multiplayer
         item (`33783622`). All single-client import paths are confirmed.
+      - **Confirmed 2026-08-17** via 2-client session: import (JSON and TSV) propagates to the watching
+        client with correct contents, no duplicate/desync. Same watcher-stamp caveat as `33783622`.
+      - **Follow-up implemented 2026-08-17** (watcher-stamp-sync): the import path also broadcasts the
+        IMPORTED flourish to watching clients now. Its 2-client re-test is backlogged as `fe69e4b0` below.
 
 ## hud-settings-button-tweaks
 
