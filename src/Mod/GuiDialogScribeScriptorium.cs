@@ -608,6 +608,19 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     /// underlying document write differs.</summary>
     private void StampCopy() => PlayStamp(TargetSlotIndex, Lang.Get("scribe:scribe-transcribe-stamp-imprint"));
 
+    /// <summary>This Scriptorium's block position — the coordinates the watcher-stamp broadcast is keyed by, so
+    /// the network layer can match a stamp cue to the right open dialog when several are open at once.</summary>
+    public BlockPos BlockPosition => scriptorium.Pos;
+
+    /// <summary>Watcher-stamp-sync: replay the Transcribe flourish for a copy/import performed by ANOTHER player
+    /// on this shared block (driven by the server → client <see cref="ScribeTranscribeStampMessage"/>). Same
+    /// visual as the local <see cref="PlayStamp"/>, keyed to the same slot + word so the watcher sees exactly
+    /// what the actor saw. <paramref name="imported"/> selects COPIED vs IMPORTED.</summary>
+    public void PlayWatcherStamp(int slot, bool imported) =>
+        PlayStamp(slot, Lang.Get(imported
+            ? "scribe:scribe-transcribe-stamp-imprint-imported"
+            : "scribe:scribe-transcribe-stamp-imprint"));
+
     /// <summary>Start (or restart) the wooden-stamp flourish over <paramref name="targetSlot"/>, stamping
     /// <paramref name="label"/>. Called only on an action that will succeed (a copy's empty target / confirming
     /// press today) — the client gates never fire a play the server would reject, so a played stamp always

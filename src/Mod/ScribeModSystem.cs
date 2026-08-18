@@ -244,7 +244,8 @@ public sealed partial class ScribeModSystem : ModSystem
             .RegisterMessageType<ScribeTimerStateMessage>()
             .RegisterMessageType<ScribeSetTrackerQuantityMessage>()
             .RegisterMessageType<ScribeTranscribeCopyMessage>()
-            .RegisterMessageType<ScribeTranscribeImportMessage>();
+            .RegisterMessageType<ScribeTranscribeImportMessage>()
+            .RegisterMessageType<ScribeTranscribeStampMessage>();
     }
 
     /// <summary>Server-side accessor for the pin store, so the block entity can register/orphan its
@@ -277,7 +278,8 @@ public sealed partial class ScribeModSystem : ModSystem
             .SetMessageHandler<ScribePinnedSetMessage>(OnClientReceivedPinnedSet)
             .SetMessageHandler<ScribeGuestbookSyncMessage>(OnClientReceivedGuestbookSync)
             .SetMessageHandler<ScribeNotebookSaveMessage>(OnClientReceivedNotebookSave)
-            .SetMessageHandler<ScribeTimerStateMessage>(OnClientReceivedTimerState);
+            .SetMessageHandler<ScribeTimerStateMessage>(OnClientReceivedTimerState)
+            .SetMessageHandler<ScribeTranscribeStampMessage>(OnClientReceivedTranscribeStamp);
 
         // The pinned-task HUD self-shows once the player's pin set arrives (it subscribes to
         // MyPinsChanged in its ctor), so it can be constructed here regardless of current pin count —

@@ -236,6 +236,10 @@ public sealed partial class ScribeModSystem
         ScribeDocumentAttributes.WriteTo(targetSlot.Itemstack, result);
         targetSlot.MarkDirty();
         scriptorium.MarkDirty(true);
+        // Watcher-stamp-sync: the acting client already stamped locally; tell every OTHER open dialog on this
+        // shared block to play the same COPIED flourish. Broadcast-except-sender keeps the actor's stamp the
+        // snappy local one (no double play) and reaches only players who are actually watching.
+        BroadcastTranscribeStamp(pos, message.TargetSlot, imported: false, exceptPlayer: fromPlayer);
         Trace("transcribe-copy from {0}: {1} doc onto slot {2} ({3} tasks total)",
             fromPlayer.PlayerName, message.Append ? "appended" : "copied", message.TargetSlot, result.CompletableCount);
     }
@@ -329,8 +333,25 @@ public sealed partial class ScribeModSystem
         ScribeDocumentAttributes.WriteTo(targetSlot.Itemstack, result);
         targetSlot.MarkDirty();
         scriptorium.MarkDirty(true);
+        // Watcher-stamp-sync: mirror the copy path — replay the IMPORTED flourish on every OTHER open dialog.
+        BroadcastTranscribeStamp(pos, message.TargetSlot, imported: true, exceptPlayer: fromPlayer);
         Trace("transcribe-import from {0}: {1} document onto slot {2} ({3} tasks total)",
             fromPlayer.PlayerName, message.Append ? "appended" : "imported", message.TargetSlot, result.CompletableCount);
+    }
+
+    /// <summary>Broadcast a watcher-stamp cue to every online player EXCEPT the actor (whose client already
+    /// stamped locally). Called only after a copy/import has committed its write + <c>MarkDirty</c>, so a sent
+    /// stamp always corresponds to a real change (matching the client-side <c>PlayStamp</c> contract).</summary>
+    private void BroadcastTranscribeStamp(Vintagestory.API.MathTools.BlockPos pos, int slot, bool imported, IServerPlayer exceptPlayer)
+    {
+        sapi?.Network.GetChannel(NetworkChannelName).BroadcastPacket(new ScribeTranscribeStampMessage
+        {
+            X = pos.X,
+            Y = pos.Y,
+            Z = pos.Z,
+            Slot = slot,
+            Imported = imported,
+        }, exceptPlayer);
     }
 
     private void OnServerReceivedRecordVisitor(IServerPlayer fromPlayer, ScribeRecordVisitorMessage message)
@@ -465,6 +486,23 @@ public sealed partial class ScribeModSystem
                     dialog.RefreshHistoryView();
             }
         }
+    }
+
+    /// <summary>Server → client (watcher-stamp-sync): a copy or import wrote to a Scriptorium that another
+    /// player is also viewing. Find our OWN open dialog on that exact block and replay the IMPRINT flourish so
+    /// the watching player sees what the acting player saw. A no-op if we have no Scriptorium dialog open on
+    /// that position — the common case, since most players aren't watching. The slot item is updated separately
+    /// by the standard inventory resync (the same <c>MarkDirty</c> that triggered this); the stamp is purely
+    /// the visual cue over whatever the slot then shows.</summary>
+    private void OnClientReceivedTranscribeStamp(ScribeTranscribeStampMessage message)
+    {
+        if (capi is null) return;
+        if (capi.Gui.OpenedGuis.OfType<GuiDialogScribeScriptorium>()
+                .FirstOrDefault(d => d.IsOpened()
+                    && d.BlockPosition.X == message.X
+                    && d.BlockPosition.Y == message.Y
+                    && d.BlockPosition.Z == message.Z) is { } dialog)
+            dialog.PlayWatcherStamp(message.Slot, message.Imported);
     }
 
 }
