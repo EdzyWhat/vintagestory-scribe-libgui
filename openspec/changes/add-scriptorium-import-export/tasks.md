@@ -91,18 +91,18 @@ Clipboard-based JSON + TSV import/export on the Scriptorium Transcribe tab. Core
 
 ## 7. In-game verification
 
-- [ ] 7.1 Export a document as JSON; paste into a text editor — confirm it is readable and complete; import
+- [x] 7.1 Export a document as JSON; paste into a text editor — confirm it is readable and complete; import
       it into an empty item (Overwrite) and confirm the document reconstructs, unpinned.
-- [ ] 7.2 Export as TSV; paste into Excel/Google Sheets — confirm columns lay out; edit a task's text and a
+- [x] 7.2 Export as TSV; paste into Excel/Google Sheets — confirm columns lay out; edit a task's text and a
       tracker's count; copy the range back; Import (Append) and confirm the edits land and nothing is deleted.
-- [ ] 7.3 Import a TSV with an unknown tracker item code — confirm it degrades to a plain task and the result
+- [x] 7.3 Import a TSV with an unknown tracker item code — confirm it degrades to a plain task and the result
       toast reports the degradation.
-- [ ] 7.4 Import junk clipboard text — confirm the "not a valid Scribe export" toast and no change.
-- [ ] 7.5 Formula-injection check: a task whose text is `=1+1`; export TSV, open in a spreadsheet — confirm
+- [x] 7.4 Import junk clipboard text — confirm the "not a valid Scribe import" toast and no change.
+- [x] 7.5 Formula-injection check: a task whose text is `=1+1`; export TSV, open in a spreadsheet — confirm
       it shows as text (not evaluated); re-import — confirm the text is `=1+1` again.
-- [ ] 7.6 Overwrite vs Append parity with copy: both modes behave as on the copy path; the stamp reads
+- [x] 7.6 Overwrite vs Append parity with copy: both modes behave as on the copy path; the stamp reads
       IMPORTED / EXPORTED over the right slot.
-- [ ] 7.7 Pin safety: pin a task, export+import into the same world — confirm no imported task is pinned and
+- [x] 7.7 Pin safety: pin a task, export+import into the same world — confirm no imported task is pinned and
       the original pin is untouched.
 - [ ] 7.8 Multiplayer (backlog-eligible): two clients on one Scriptorium — an import by one re-syncs to the
       other with no dupe/desync.
