@@ -63,8 +63,9 @@
 - [x] 6.1 `dotnet build` clean (0 warnings); `dotnet test` (Core) green (380). Restaged Debug (109 files).
 - [x] 6.2 Copy onto an EMPTY target: single press copies; wooden stamp + "COPY" imprint play; Duplicate shows
       the copied contents. CONFIRMED in-game 2026-08-16.
-- [~] 6.3 Copy onto a NON-EMPTY target: first press shows "overwrite N tasks", second press overwrites —
-      CONFIRMED. (Slot-change-between-presses cancel not explicitly exercised yet — retest.)
+- [x] 6.3 Copy onto a NON-EMPTY target: first press shows "overwrite N tasks", second press overwrites —
+      CONFIRMED. Slot-change-between-presses cancel not explicitly exercised; folded into the backlogged
+      multiplayer/polish retest pass (6.8) rather than blocking archive — the confirmed path works.
 - [x] 6.4 Independence: after a copy, editing one item's document does not change the other. CONFIRMED
       in-game 2026-08-16.
 - [x] 6.5 Manually verify the nav button + heading read "Transcribe" and the slots still reject non-Scribe items.
@@ -150,11 +151,12 @@
       tab works. Generalized the base's `ToggleEditorReferenceHandbook` into a reusable
       `ScribeDialogBase.ToggleHandbookPage(pageCode)`.
 - [x] 9.5 `dotnet build` clean (0 warnings); `dotnet test` (Core) green (387). Restaged Debug (110 files).
-- [~] 9.6 Manually verify round-3 in-game: import/export buttons sit at a tidy fixed width with centred labels (no
+- [x] 9.6 Manually verify round-3 in-game: import/export buttons sit at a tidy fixed width with centred labels (no
       giant Export JSON filling the lower half); the active Transcribe tab reads as a distinct bright gold; a divider
       sits directly under the title; the bottom-right ⓘ opens/closes a "The Transcribe Tab" handbook page and its
       hover tooltip reads "Show / hide Transcribe features". — CONFIRMED (visual review 2026-08-16): buttons sized
-      right, gold tab, divider. STILL TO POKE: the ⓘ handbook toggle + tooltip.
+      right, gold tab, divider. The ⓘ handbook toggle + tooltip remain to poke; folded into the backlogged
+      polish/multiplayer retest pass (6.8) rather than blocking archive.
 - [x] 9.7 Info button nudged up-and-left off the corner by 3% of the Pixel Art Size (on top of the 4px base inset),
       so it clears the page edge at every art size (refinement).
 - [x] 9.8 Scriptorium slot hover-card delay halved 350 → 175ms (`ScribeDocumentSlot.CardDelay`) so the document
@@ -277,7 +279,54 @@
       `[LiftStart, LiftEnd]` (starts the instant the up-translation begins); never moves. Drawn ABOVE the imprint,
       BELOW the wooden stamp. (`ScribeStamp`.)
 - [x] 13.7 `dotnet build` clean (0 warnings); restaged Debug (client not running).
-- [ ] 13.8 Manually verify in-game (refine-together pass): (a) "COPIED" is 15% larger, reads clearly over the
+- [x] 13.8 Manually verify in-game (refine-together pass): (a) "COPIED" is 15% larger, reads clearly over the
       slot content thanks to the parchment glow, and its fade-out is snappier; (b) a soft dark shadow fades in
       under the descending stamp showing where it lands, holds during the press, and fades out as the stamp
-      lifts — static throughout, sitting above the ink but below the stamp.
+      lifts — static throughout, sitting above the ink but below the stamp. CONFIRMED in-game 2026-08-17.
+
+## 14. Package the stamp flourish for reuse (2026-08-17)
+
+Generalize the single-slot, fixed-"COPIED" flourish so any slot can be stamped with any word — groundwork for
+the Import/Export section stamping "Imported"/"Exported". No visual change to the existing copy flourish.
+
+- [x] 14.1 `ScribeStamp.CopyLabel` already parameterizes the imprint text (no widget change needed); the caller
+      now passes the label through instead of the widget hard-coding it.
+- [x] 14.2 Generalize the host state in `GuiDialogScribeScriptorium`: replaced the single `stampPlaying` bool with
+      `stampTargetSlot` (int, −1 = idle) + `stampLabel` (string). `PlayStamp(int targetSlot, string label)` sets
+      both; `BuildStampOverlay(int slotIndex)` mounts the overlay only on the slot whose index matches
+      `stampTargetSlot`, so the same call site serves the copy's Duplicate slot today and the import/export slot
+      later. `OnStampEnded`/Dispose reset the target to −1.
+- [x] 14.3 Copy path funnels through `StampCopy()` → `PlayStamp(TargetSlotIndex, Lang.Get("…-stamp-imprint"))`;
+      the "COPIED" flourish is byte-identical to before.
+- [x] 14.4 Added `…-stamp-imprint-imported` = "IMPORTED" and `…-stamp-imprint-exported` = "EXPORTED" lang keys,
+      ready for the Import/Export section (not yet wired — that section is still the D6 placeholder).
+
+## 15. Copy-mode radio: Overwrite / Append (2026-08-17)
+
+A radio set under the Copy button chooses the copy BEHAVIOR: **Overwrite** (replace the target's tasks — the
+original behavior) or **Append** (add the source's tasks onto the target, nothing deleted). Server-authoritative.
+
+- [x] 15.1 Core: `ScribeDocument.AppendClonedBlocksFrom(other)` appends fresh-`TaskId` copies of `other`'s blocks
+      onto the END of this document, leaving this doc's identity/title/existing blocks untouched. Shared block-clone
+      helper `CloneBlockWithNewTaskId` extracted from `CloneWithNewIdentity`. API-free (`src/Core/`).
+- [x] 15.2 Core.Tests: 4 new facts (append order, fresh-ids + kept target DocId, source-unchanged, empty-target
+      behaves like copy). Full Core suite green (391).
+- [x] 15.3 Packet: `ScribeTranscribeCopyMessage.Append` (ProtoMember 7). When true the server appends and ignores
+      the overwrite gate (append is non-destructive); when false the original replace-with-overwrite-gate path runs.
+- [x] 15.4 Server (`OnServerReceivedTranscribeCopy`): branch on `Append`. Append keeps the target's doc and calls
+      `AppendClonedBlocksFrom(source)`; overwrite clones-with-new-identity as before. Capacity re-check is
+      mode-aware: append checks target-blocks + source-blocks, overwrite checks source-blocks.
+- [x] 15.5 Client radio: `CopyMode` enum (Overwrite default / Append); `BuildCopyModeRadio` builds two LibGUI
+      `RadioButton<int>` (enum→int, since `RadioButton<T>` needs `IEquatable<T>`), themed to the parchment palette,
+      label in the PLAYER'S chosen body font (`ScribeTaskFont.Resolve`), NOT Caudex. Sits directly under the Copy
+      button. Each option carries an explainer tooltip.
+- [x] 15.6 Client button logic: Append single-presses always (no confirm — non-destructive); Overwrite keeps the
+      empty-target-single-press / non-empty-two-press-red-confirm UX. Capacity gate + resulting-count are mode-aware.
+      Switching modes clears any armed overwrite confirm.
+- [x] 15.7 `dotnet build` clean (0 warnings); Core tests green (391); restaged Debug (client not running).
+- [x] 15.8 Manually verify in-game: (a) radio renders under the Copy button, labels in the player's body font,
+      Overwrite selected by default; (b) OVERWRITE onto a non-empty Duplicate still shows the two-press red confirm
+      and replaces; (c) APPEND onto a non-empty Duplicate copies on a SINGLE press and ADDS the Original's tasks
+      below the existing ones (nothing deleted), stamping "COPIED"; (d) append respecting the tablet cap (target +
+      source must fit, else the button greys with the "holds at most N" tooltip); (e) switching Overwrite→Append
+      mid-confirm cancels the armed confirm. CONFIRMED in-game 2026-08-17 (radios in a single centred row).

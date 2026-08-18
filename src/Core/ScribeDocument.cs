@@ -95,23 +95,41 @@ public sealed class ScribeDocument
         var copy = new ScribeDocument { Title = Title };
         var clonedBlocks = new List<ScribeBlock>(_blocks.Count);
         foreach (var block in _blocks)
-        {
-            // Omit taskId so the constructor mints a fresh one — the whole point of the clone.
-            clonedBlocks.Add(new ScribeBlock(
-                block.Kind,
-                block.Text,
-                done: block.Done,
-                depth: block.Depth,
-                assignedToUid: block.AssignedToUid,
-                targetItemCode: block.TargetItemCode,
-                targetQuantity: block.TargetQuantity,
-                currentQuantity: block.CurrentQuantity,
-                linkTarget: block.LinkTarget,
-                linkLabel: block.LinkLabel));
-        }
+            clonedBlocks.Add(CloneBlockWithNewTaskId(block));
         copy.SetBlocks(clonedBlocks);
         return copy;
     }
+
+    /// <summary>
+    /// Appends fresh-identity copies of every block in <paramref name="other"/> onto the END of this
+    /// document, leaving this document's existing blocks (and its <see cref="DocId"/>/title) untouched — the
+    /// Transcribe "append" copy mode (add-transcribe-copy-paste). Each appended block gets a NEW
+    /// <see cref="ScribeBlock.TaskId"/> (via <see cref="CloneBlockWithNewTaskId"/>), exactly like
+    /// <see cref="CloneWithNewIdentity"/>, so the appended tasks never collide with either the source's or
+    /// this document's existing ids on pins/completion. Pure data; no VS API. The caller is responsible for
+    /// any capacity check (this method does not enforce a block cap).
+    /// </summary>
+    public void AppendClonedBlocksFrom(ScribeDocument other)
+    {
+        if (other is null) return;
+        foreach (var block in other._blocks)
+            _blocks.Add(CloneBlockWithNewTaskId(block));
+    }
+
+    /// <summary>Deep-copy one block, minting a FRESH <see cref="ScribeBlock.TaskId"/> (the ctor's default when
+    /// no taskId is supplied) so the copy is independent of the original on pins/completion resolution. Shared
+    /// by <see cref="CloneWithNewIdentity"/> and <see cref="AppendClonedBlocksFrom"/>.</summary>
+    private static ScribeBlock CloneBlockWithNewTaskId(ScribeBlock block) => new(
+        block.Kind,
+        block.Text,
+        done: block.Done,
+        depth: block.Depth,
+        assignedToUid: block.AssignedToUid,
+        targetItemCode: block.TargetItemCode,
+        targetQuantity: block.TargetQuantity,
+        currentQuantity: block.CurrentQuantity,
+        linkTarget: block.LinkTarget,
+        linkLabel: block.LinkLabel);
 
     /// <summary>Adds a checkbox task to the end. Any text is accepted and stored verbatim,
     /// including empty/whitespace-only text (a new task starts empty and the player types into it).

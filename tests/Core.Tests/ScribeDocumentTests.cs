@@ -771,4 +771,89 @@ public class ScribeDocumentTests
         Assert.Equal("keep me", block.Text);
         Assert.Equal(originalTaskId, block.TaskId);
     }
+
+    // --- AppendClonedBlocksFrom (Transcribe "append" copy mode) ---
+
+    [Fact]
+    public void AppendClonedBlocksFrom_AddsSourceBlocksToEnd_KeepingTargetsOwn()
+    {
+        var target = new ScribeDocument { Title = "My list" };
+        target.AddTask("existing A");
+        target.AddTask("existing B");
+
+        var source = new ScribeDocument { Title = "Other list" };
+        source.AddTask("incoming C");
+        source.AddTextSection("incoming note");
+
+        target.AppendClonedBlocksFrom(source);
+
+        // Target keeps its title and its own two blocks, with the source's two appended AFTER them, in order.
+        Assert.Equal("My list", target.Title);
+        Assert.Equal(
+            new[] { "existing A", "existing B", "incoming C", "incoming note" },
+            target.Blocks.Select(b => b.Text));
+        Assert.Equal(ScribeBlockKind.Text, target.Blocks[3].Kind);
+    }
+
+    [Fact]
+    public void AppendClonedBlocksFrom_MintsNewTaskIds_AndKeepsTargetDocId()
+    {
+        var target = new ScribeDocument();
+        target.AddTask("existing");
+        var targetDocId = target.DocId;
+        var existingId = target.Blocks[0].TaskId;
+
+        var source = new ScribeDocument();
+        source.AddTask("incoming one");
+        source.AddTracker("game:ingot-copper", 8);
+
+        target.AppendClonedBlocksFrom(source);
+
+        // Append never changes the target's identity or its existing block's id (unlike an overwrite clone).
+        Assert.Equal(targetDocId, target.DocId);
+        Assert.Equal(existingId, target.Blocks[0].TaskId);
+        // The appended blocks carry FRESH ids — none shared with the source or with the pre-existing block.
+        var sourceIds = source.Blocks.Select(b => b.TaskId).ToHashSet();
+        foreach (var appended in target.Blocks.Skip(1))
+        {
+            Assert.DoesNotContain(appended.TaskId, sourceIds);
+            Assert.NotEqual(existingId, appended.TaskId);
+        }
+        // Every id in the resulting document is distinct.
+        Assert.Equal(target.Blocks.Count, target.Blocks.Select(b => b.TaskId).Distinct().Count());
+    }
+
+    [Fact]
+    public void AppendClonedBlocksFrom_LeavesSourceUnchanged()
+    {
+        var source = new ScribeDocument { Title = "Source" };
+        source.AddTask("keep me");
+        var sourceDocId = source.DocId;
+        var sourceTaskId = source.Blocks[0].TaskId;
+
+        var target = new ScribeDocument();
+        target.AppendClonedBlocksFrom(source);
+
+        // Editing the appended copy in the target must not reach back into the source.
+        target.SetBlockText(0, "changed on the target");
+
+        Assert.Equal(sourceDocId, source.DocId);
+        var block = Assert.Single(source.Blocks);
+        Assert.Equal("keep me", block.Text);
+        Assert.Equal(sourceTaskId, block.TaskId);
+    }
+
+    [Fact]
+    public void AppendClonedBlocksFrom_OntoEmptyTarget_CopiesContentWithFreshIds()
+    {
+        var target = new ScribeDocument();
+        var source = new ScribeDocument();
+        source.AddTask("only task");
+
+        target.AppendClonedBlocksFrom(source);
+
+        var block = Assert.Single(target.Blocks);
+        Assert.Equal("only task", block.Text);
+        Assert.NotEqual(source.Blocks[0].TaskId, block.TaskId);
+    }
 }

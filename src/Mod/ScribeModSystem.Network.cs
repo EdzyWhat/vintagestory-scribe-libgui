@@ -184,10 +184,15 @@ public sealed partial class ScribeModSystem
         if (!ScribeDocumentAttributes.TryReadFrom(sourceSlot.Itemstack, out var sourceDoc) || sourceDoc is null)
             return;
 
-        // Defensive overwrite gate: if the target already has tasks and this isn't the confirming press,
-        // do nothing (independent of the client's two-press UX).
-        if (!message.AllowOverwrite
-            && ScribeDocumentAttributes.TryReadFrom(targetSlot.Itemstack, out var targetDoc)
+        // The target's current document (may be null/empty). Needed both for the overwrite gate (overwrite mode)
+        // and for the append apply + append capacity (append mode).
+        ScribeDocumentAttributes.TryReadFrom(targetSlot.Itemstack, out var targetDoc);
+
+        // Defensive overwrite gate — OVERWRITE MODE ONLY: if the target already has tasks and this isn't the
+        // confirming press, do nothing (independent of the client's two-press UX). Append is non-destructive, so
+        // it has nothing to gate.
+        if (!message.Append
+            && !message.AllowOverwrite
             && targetDoc is not null && targetDoc.CompletableCount > 0)
         {
             Trace("transcribe-copy from {0}: target has {1} tasks and overwrite not allowed — no-op",
@@ -196,26 +201,43 @@ public sealed partial class ScribeModSystem
         }
 
         // Target must be a VALID destination (add-transcribe-copy-paste refinement): writeable (not a
-        // hardened/fired tablet) AND able to hold the source's task blocks (a wet tablet caps at 10).
-        // DocumentPolicy.CanHold encodes both — a read-only tablet's policy is ReadOnly, so CanHold denies
-        // regardless of count. Non-Scribe items can't reach these Scribe-only slots, so a missing
-        // IScribeDocumentItem is treated as uncapped/writeable. Server-authoritative: mirrors the client's
-        // BuildSealButton gate but does not trust it.
+        // hardened/fired tablet) AND able to hold the RESULTING task blocks (a wet tablet caps at 10).
+        // Overwrite mode replaces, so the result is the source's block count; append mode adds, so the result is
+        // the target's existing block count PLUS the source's. DocumentPolicy.CanHold encodes writeability too —
+        // a read-only tablet's policy is ReadOnly, so CanHold denies regardless of count. Non-Scribe items can't
+        // reach these Scribe-only slots, so a missing IScribeDocumentItem is treated as uncapped/writeable.
+        // Server-authoritative: mirrors the client's BuildSealButton gate but does not trust it.
+        int resultingBlocks = message.Append
+            ? (targetDoc?.TaskCount ?? 0) + sourceDoc.TaskCount
+            : sourceDoc.TaskCount;
         if (targetSlot.Itemstack.Collectible is IScribeDocumentItem targetItem
-            && !targetItem.DocumentPolicy(targetSlot).CanHold(sourceDoc.TaskCount))
+            && !targetItem.DocumentPolicy(targetSlot).CanHold(resultingBlocks))
         {
-            Trace("transcribe-copy from {0}: target rejects {1} tasks (read-only or over its cap) — no-op",
-                fromPlayer.PlayerName, sourceDoc.TaskCount);
+            Trace("transcribe-copy from {0}: target rejects {1} resulting tasks (read-only or over its cap) — no-op",
+                fromPlayer.PlayerName, resultingBlocks);
             return;
         }
 
-        // Clone with a fresh DocId + fresh TaskId per block so the copy is fully independent (D1).
-        var copy = sourceDoc.CloneWithNewIdentity();
-        ScribeDocumentAttributes.WriteTo(targetSlot.Itemstack, copy);
+        ScribeDocument result;
+        if (message.Append)
+        {
+            // Append mode: keep the target's own document (identity + title + existing tasks) and add
+            // fresh-identity copies of the source's tasks onto the end. When the target has no document yet,
+            // start from an empty one so append behaves like a plain copy.
+            result = targetDoc ?? new ScribeDocument();
+            result.AppendClonedBlocksFrom(sourceDoc);
+        }
+        else
+        {
+            // Overwrite mode: REPLACE the target document with a clone of the source that has a fresh DocId +
+            // fresh TaskId per block, so the copy is fully independent (D1).
+            result = sourceDoc.CloneWithNewIdentity();
+        }
+        ScribeDocumentAttributes.WriteTo(targetSlot.Itemstack, result);
         targetSlot.MarkDirty();
         scriptorium.MarkDirty(true);
-        Trace("transcribe-copy from {0}: copied doc onto slot {1} ({2} tasks)",
-            fromPlayer.PlayerName, message.TargetSlot, copy.CompletableCount);
+        Trace("transcribe-copy from {0}: {1} doc onto slot {2} ({3} tasks total)",
+            fromPlayer.PlayerName, message.Append ? "appended" : "copied", message.TargetSlot, result.CompletableCount);
     }
 
     private void OnServerReceivedRecordVisitor(IServerPlayer fromPlayer, ScribeRecordVisitorMessage message)

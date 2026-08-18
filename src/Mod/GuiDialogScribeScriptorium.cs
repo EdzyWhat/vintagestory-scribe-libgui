@@ -4,6 +4,7 @@ using Gui.Rendering;            // EdgeInsets
 using Gui.Rendering.Text;       // TextStyle, FontWeight
 using Gui.Widgets.Basic;        // Text, Container, Divider, Button, ButtonVariant, VsIcon
 using Gui.Widgets.Framework;
+using Gui.Widgets.Input;        // RadioButton
 using Gui.Widgets.Inventory;    // SlotController, FlatItemSlot, ItemSlotStyle
 using Gui.Widgets.Layout;       // Center, Row, Column, Stack, Positioned, Padding, SizedBox, Expanded, MainAxisAlignment, CrossAxisAlignment
 using Gui.Widgets.Painting;     // BoxStyle
@@ -55,15 +56,33 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     private enum TranscribeConfirm { Idle, ConfirmOverwrite }
     private TranscribeConfirm confirmState = TranscribeConfirm.Idle;
 
-    /// <summary>The wooden rubber-stamp copy flourish (add-transcribe-copy-paste D4). Non-load-bearing: the
-    /// copy is already done (server-authoritative) by the time this plays. <see cref="stampRegistry"/> owns
-    /// the animation controller so the motion survives the per-frame body reconcile; <see cref="stampGeneration"/>
-    /// bumps on each copy so a re-copy remounts a fresh <see cref="ScribeStamp"/> (new key + id) and replays
-    /// rather than reusing the completed controller. <see cref="stampPlaying"/> gates whether the overlay is in
-    /// the tree at all.</summary>
+    /// <summary>The copy BEHAVIOR selected by the radio under the Copy button (2026-08-17).
+    /// <see cref="CopyMode.Overwrite"/> (default) REPLACES the target document — the original behavior, with the
+    /// two-press <see cref="confirmState"/> guard when the target is non-empty. <see cref="CopyMode.Append"/> adds
+    /// the source's tasks onto the target's existing document without deleting anything, so it needs no confirm
+    /// and copies on a single press. Client-only UX; the server re-checks capacity and applies the chosen mode
+    /// (<see cref="ScribeTranscribeCopyMessage.Append"/>).</summary>
+    private enum CopyMode { Overwrite, Append }
+    private CopyMode copyMode = CopyMode.Overwrite;
+
+    /// <summary>The wooden rubber-stamp flourish (add-transcribe-copy-paste D4). Non-load-bearing: whatever it
+    /// marks (a copy today; an import/export in the next section) is already done — server-authoritative — by the
+    /// time this plays. <see cref="stampRegistry"/> owns the animation controller so the motion survives the
+    /// per-frame body reconcile; <see cref="stampGeneration"/> bumps on each play so a re-play remounts a fresh
+    /// <see cref="ScribeStamp"/> (new key + id) and replays rather than reusing the completed controller.
+    ///
+    /// <para><b>Generalized (2026-08-17):</b> the flourish is no longer wired to a single hard-coded slot + fixed
+    /// "COPIED" text. <see cref="stampTargetSlot"/> names the inventory slot the overlay sits on (−1 = nothing
+    /// playing), and <see cref="stampLabel"/> is the imprint text. <see cref="PlayStamp"/> takes both, so any
+    /// slot can be stamped with any word ("COPIED", "Imported", "Exported") — see <see cref="BuildStampOverlay"/>,
+    /// which mounts the overlay only on the slot whose index matches <see cref="stampTargetSlot"/>.</para></summary>
     private readonly ScribeAnimationRegistry stampRegistry = new();
     private int stampGeneration;
-    private bool stampPlaying;
+    /// <summary>Inventory slot index the flourish is currently playing over, or −1 when nothing is playing.</summary>
+    private int stampTargetSlot = -1;
+    /// <summary>The imprint text the current flourish stamps (e.g. "COPIED"); only meaningful while
+    /// <see cref="stampTargetSlot"/> is not −1.</summary>
+    private string stampLabel = "";
 
     /// <summary>The pixel-art wooden stamp PNG (baked by <c>build/gen-copy-stamp.py</c>), scaled up
     /// nearest-neighbour by <see cref="ScribeStamp"/>. Swappable art — same path, no code change to repaint.</summary>
@@ -173,6 +192,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
                 new Text(Lang.Get("scribe:scribe-transcribe-heading"), headingStyle),
                 BuildCopySection(controller, colors, bookColor, veilColor),
                 BuildSealButton(colors),   // the Copy button sits BELOW the slot pair (refinement #4)
+                BuildCopyModeRadio(colors),// Overwrite / Append behavior radio, directly under the Copy button
             }));
 
         var bottomZone = new Center(child: new Column(
@@ -264,7 +284,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
                 LabeledSlot(inv[SourceSlotIndex], "scribe-transcribe-copyfrom", controller, colors, bookColor, veilColor),
                 arrow,
                 LabeledSlot(inv[TargetSlotIndex], "scribe-transcribe-pasteinto", controller, colors, bookColor, veilColor,
-                    overlay: BuildStampOverlay()),
+                    overlay: BuildStampOverlay(TargetSlotIndex)),
             });
     }
 
@@ -295,14 +315,16 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
             });
     }
 
-    /// <summary>The copy flourish overlaid on the Duplicate slot, or <c>null</c> when nothing is playing (D4).
-    /// A fresh <see cref="ScribeStamp"/> is created each rebuild while <see cref="stampPlaying"/> is set; its
-    /// <c>ValueKey</c> + id carry the current <see cref="stampGeneration"/> so a re-copy remounts and replays.
-    /// The wooden-stamp bitmap is loaded once and cached by the mod system (null-safe: a missing asset just
-    /// drops the wooden image, keeping the "COPY" imprint).</summary>
-    private Widget? BuildStampOverlay()
+    /// <summary>The stamp flourish overlaid on <paramref name="slotIndex"/>, or <c>null</c> when nothing is
+    /// playing over THAT slot (D4). The dialog asks each captioned slot for its overlay; only the slot whose index
+    /// matches the active <see cref="stampTargetSlot"/> gets one, so the same call site serves the copy's Duplicate
+    /// slot today and the import/export slot in the next section. A fresh <see cref="ScribeStamp"/> is created each
+    /// rebuild while a play is active; its <c>ValueKey</c> + id carry the current <see cref="stampGeneration"/> so
+    /// a re-play remounts and replays. The wooden-stamp bitmap is loaded once and cached by the mod system
+    /// (null-safe: a missing asset just drops the wooden image, keeping the imprint).</summary>
+    private Widget? BuildStampOverlay(int slotIndex)
     {
-        if (!stampPlaying) return null;
+        if (slotIndex != stampTargetSlot) return null;
         string id = StampId(stampGeneration);
         // Peg the stamp + imprint width to the player's Pixel Art Size setting (× 0.2, so the 600 default →
         // 120px) — larger than the 48px slot, spilling over its sides (refinement #2).
@@ -315,7 +337,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
             id: id,
             registry: stampRegistry,
             stampBitmap: modSystem.GetGuiTextureBitmap(StampAsset),
-            copyLabel: Lang.Get("scribe:scribe-transcribe-stamp-imprint"),
+            copyLabel: stampLabel,
             imprintColor: ImprintInk,
             glowColor: colors.Surface with { W = 0.6f },
             slotSize: SlotSize,
@@ -363,15 +385,24 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
             confirmState = TranscribeConfirm.Idle;
             return Disabled("scribe-transcribe-stamp-readonly");
         }
-        if (!targetPolicy.CanHold(SourceTaskCount()))
+        // Resulting block count depends on the mode: Overwrite REPLACES (result = source's blocks), Append ADDS
+        // onto the target's existing blocks (result = target's + source's). The server re-checks this same sum.
+        int resultingBlocks = copyMode == CopyMode.Append
+            ? TargetTaskBlockCount() + SourceTaskCount()
+            : SourceTaskCount();
+        if (!targetPolicy.CanHold(resultingBlocks))
         {
             confirmState = TranscribeConfirm.Idle;
             // A finite cap is implied here: a non-read-only policy fails CanHold only when MaxBlocks is set.
             return Disabled("scribe-transcribe-stamp-toobig", targetPolicy.MaxBlocks ?? 0);
         }
 
+        // Append is non-destructive, so it never arms the overwrite confirm — a single press always sends. Only
+        // Overwrite mode confirms, and only when the target already has completable tasks to clobber.
         int targetTasks = TargetTaskCount();
-        bool confirming = confirmState == TranscribeConfirm.ConfirmOverwrite && targetTasks > 0;
+        bool confirming = copyMode == CopyMode.Overwrite
+            && confirmState == TranscribeConfirm.ConfirmOverwrite && targetTasks > 0;
+        if (copyMode == CopyMode.Append) confirmState = TranscribeConfirm.Idle;
 
         string label = confirming
             ? Lang.Get("scribe:scribe-transcribe-stamp-confirm")
@@ -383,6 +414,69 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
         // the rest of the Scribe UI has. The confirming state flips to Danger to signal the destructive overwrite.
         return LabelButton(label, colors, enabled: true, confirming ? ButtonVariant.Danger : ButtonVariant.Primary,
             onTap: OnSealPressed);
+    }
+
+    /// <summary>The copy-behavior radio set, sitting directly under the Copy button (2026-08-17): a
+    /// <see cref="CopyMode.Overwrite"/> / <see cref="CopyMode.Append"/> choice built from LibGUI's
+    /// <see cref="RadioButton{T}"/>. <c>RadioButton</c> is constrained to <c>IEquatable&lt;T&gt;</c>, which a bare
+    /// enum does not satisfy, so the group value is the enum cast to <c>int</c> (mirroring the framework's own
+    /// examples). The label uses the PLAYER'S chosen body font (<see cref="ScribeTaskFont.Resolve"/> of the
+    /// task-font setting), NOT Caudex — on this tab only the buttons are Caudex; everything else follows the
+    /// player's text preference. Circle/dot/border colours come from the active theme so the set matches the
+    /// dialog's parchment palette. Switching modes clears any armed overwrite confirm.
+    ///
+    /// <para>The two options sit side-by-side in one Row, but each is wrapped in a fixed-width <see cref="SizedBox"/>:
+    /// a <c>RadioButton</c> lays its indicator+label out in an internal <see cref="MainAxisSize.Max"/> Row, so given
+    /// unbounded width it balloons to fill the page — placed raw side-by-side, the first filled the width and pushed
+    /// "Append" off the right edge (the observed bug). Bounding each to a width that hugs its own label keeps both on
+    /// one line, and the Row centres as a unit under the Copy button. The per-option widths are sized to their
+    /// labels (Overwrite is the longer word); if a font makes a label clip, widen its box here.</para></summary>
+    private Widget BuildCopyModeRadio(ColorScheme colors)
+    {
+        var labelStyle = new TextStyle
+        {
+            FontSize = 14,
+            Color = colors.OnSurface,
+            FontFamily = ScribeTaskFont.Resolve(modSystem.MySettings.TaskFontFamily),
+        };
+        var style = new RadioButtonStyle
+        {
+            DotColor = colors.Primary,
+            BackgroundColor = colors.SurfaceHigh,
+            BorderColor = colors.Border,
+            BorderThickness = 1.5f,
+            LabelStyle = labelStyle,
+        };
+
+        int selected = (int)copyMode;
+        void Choose(int v)
+        {
+            var mode = (CopyMode)v;
+            if (mode == copyMode) return;
+            copyMode = mode;
+            confirmState = TranscribeConfirm.Idle; // a mode switch cancels any armed overwrite confirm
+            RebuildBody();
+        }
+
+        Widget Radio(CopyMode mode, string labelKey, float width) => new SizedBox(
+            width: width,
+            child: new RadioButton<int>(
+                value: (int)mode,
+                groupValue: selected,
+                onChanged: Choose,
+                label: Lang.Get("scribe:" + labelKey),
+                size: 18f,
+                style: style));
+
+        return new Row(
+            spacing: 10f,
+            mainAxisAlignment: MainAxisAlignment.Center,
+            mainAxisSize: MainAxisSize.Min,
+            children: new Widget[]
+            {
+                Radio(CopyMode.Overwrite, "scribe-transcribe-mode-overwrite", 120f),
+                Radio(CopyMode.Append, "scribe-transcribe-mode-append", 95f),
+            });
     }
 
     /// <summary>A thematic label Button matching the editor's "Done editing"/"Add task" footer buttons: the
@@ -451,15 +545,34 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
         return 0;
     }
 
-    /// <summary>Handle a press of the (enabled) seal button. Empty target → copy immediately. Non-empty
-    /// target → first press arms the confirm, second press commits with overwrite. Mirrors D3.</summary>
+    /// <summary>Number of TASK BLOCKS already on the Duplicate (target) — the capacity measure the policy cap
+    /// counts (<see cref="Scribe.Core.ScribeDocument.TaskCount"/>), distinct from <see cref="TargetTaskCount"/>'s
+    /// completable count. Used only for the Append-mode capacity gate (existing blocks + source's blocks must
+    /// fit). 0 when the target is empty or carries no document.</summary>
+    private int TargetTaskBlockCount()
+    {
+        var stack = scriptorium.Inventory[TargetSlotIndex].Itemstack;
+        if (stack != null && ScribeDocumentAttributes.TryReadFrom(stack, out var doc) && doc is not null)
+            return doc.TaskCount;
+        return 0;
+    }
+
+    /// <summary>Handle a press of the (enabled) seal button. In <see cref="CopyMode.Append"/> a single press
+    /// always sends (non-destructive, no confirm). In <see cref="CopyMode.Overwrite"/> an empty target copies
+    /// immediately; a non-empty target arms the red confirm on the first press and commits on the second (D3).</summary>
     private void OnSealPressed()
     {
-        if (TargetTaskCount() == 0)
+        if (copyMode == CopyMode.Append)
         {
-            SendTranscribeCopy(allowOverwrite: false);
+            SendTranscribeCopy(append: true, allowOverwrite: false);
             confirmState = TranscribeConfirm.Idle;
-            PlayStamp();
+            StampCopy();
+        }
+        else if (TargetTaskCount() == 0)
+        {
+            SendTranscribeCopy(append: false, allowOverwrite: false);
+            confirmState = TranscribeConfirm.Idle;
+            StampCopy();
         }
         else if (confirmState == TranscribeConfirm.Idle)
         {
@@ -468,34 +581,40 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
         }
         else
         {
-            SendTranscribeCopy(allowOverwrite: true);
+            SendTranscribeCopy(append: false, allowOverwrite: true);
             confirmState = TranscribeConfirm.Idle;
-            PlayStamp();
+            StampCopy();
         }
     }
 
-    /// <summary>Start (or restart) the wooden-stamp copy flourish over the Duplicate slot. Called only on a
-    /// send that will succeed (empty target, or the confirming press) — the two client gates never send a
-    /// press the server would reject, so a played stamp always corresponds to a real copy. Bumping the
-    /// generation gives the next <see cref="ScribeStamp"/> a fresh key+id so the reconciler replays it from the
-    /// start instead of reusing the just-completed controller (D4).</summary>
-    private void PlayStamp()
+    /// <summary>Play the "COPIED" flourish over the Duplicate slot — the copy path's use of the now-generalized
+    /// <see cref="PlayStamp"/>. Both copy modes stamp the same word onto the same (target) slot; only the
+    /// underlying document write differs.</summary>
+    private void StampCopy() => PlayStamp(TargetSlotIndex, Lang.Get("scribe:scribe-transcribe-stamp-imprint"));
+
+    /// <summary>Start (or restart) the wooden-stamp flourish over <paramref name="targetSlot"/>, stamping
+    /// <paramref name="label"/>. Called only on an action that will succeed (a copy's empty target / confirming
+    /// press today) — the client gates never fire a play the server would reject, so a played stamp always
+    /// corresponds to a real change. Bumping the generation gives the next <see cref="ScribeStamp"/> a fresh
+    /// key+id so the reconciler replays it from the start instead of reusing the just-completed controller (D4).</summary>
+    private void PlayStamp(int targetSlot, string label)
     {
         stampGeneration++;
-        stampPlaying = true;
+        stampTargetSlot = targetSlot;
+        stampLabel = label;
         RebuildBody();
     }
 
     /// <summary>Fired once when a stamp play completes: release its controller and drop the overlay so the
-    /// copied summary is shown unobstructed. Releases by the exact id the finished stamp used, so a copy that
+    /// stamped item is shown unobstructed. Releases by the exact id the finished stamp used, so a play that
     /// re-armed a newer generation mid-flight isn't torn down by an older stamp's end.</summary>
     private void OnStampEnded(string id)
     {
         stampRegistry.Release(id);
-        // Only clear the flag if this was the CURRENT generation's stamp; a newer copy may already be playing.
+        // Only clear the target if this was the CURRENT generation's stamp; a newer play may already be running.
         if (id == StampId(stampGeneration))
         {
-            stampPlaying = false;
+            stampTargetSlot = -1;
             RebuildBody();
         }
     }
@@ -505,7 +624,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     /// <summary>Send the server-authoritative copy request for this Scriptorium's copy pair (D2). The server
     /// clones the source document with a fresh identity and writes it onto the target, syncing the result
     /// back through the inventory channel.</summary>
-    private void SendTranscribeCopy(bool allowOverwrite)
+    private void SendTranscribeCopy(bool append, bool allowOverwrite)
     {
         var pos = scriptorium.Pos;
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeTranscribeCopyMessage
@@ -515,6 +634,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
             Z = pos.Z,
             SourceSlot = SourceSlotIndex,
             TargetSlot = TargetSlotIndex,
+            Append = append,
             AllowOverwrite = allowOverwrite,
         });
     }
@@ -683,6 +803,6 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
         }
         // Dispose any in-flight stamp controllers so their tickers don't outlive the dialog.
         stampRegistry.Dispose();
-        stampPlaying = false;
+        stampTargetSlot = -1;
     }
 }

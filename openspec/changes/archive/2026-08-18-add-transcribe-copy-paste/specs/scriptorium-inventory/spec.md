@@ -8,7 +8,7 @@ away from and back to the tab SHALL show the current stored contents. This tab S
 Scriptorium dialog, not on any other Scribe surface. The "Transcribe" name reflects that the view exists
 for copying documents (and, later, import/export), not general storage.
 
-#### Scenario: The Transcribe tab is reachable
+#### Scenario: The inventory tab is reachable
 - **WHEN** the player opens a Scriptorium and selects the Transcribe tab from the nav rail
 - **THEN** the two slots are shown with their current contents
 - **AND** the nav-button tooltip and the view heading both read "Transcribe"

@@ -36,6 +36,13 @@ public sealed class ScribeTranscribeCopyMessage
     [ProtoMember(5)] public int TargetSlot { get; set; }
 
     /// <summary>True only on the confirming press: permits overwriting a target that already has
-    /// contents. When false, a non-empty target is left untouched (server-side defensive gate).</summary>
+    /// contents. When false, a non-empty target is left untouched (server-side defensive gate). Ignored when
+    /// <see cref="Append"/> is set — appending is non-destructive, so there is nothing to overwrite-gate.</summary>
     [ProtoMember(6)] public bool AllowOverwrite { get; set; }
+
+    /// <summary>Copy MODE (add-transcribe-copy-paste, 2026-08-17). When false (default) the copy REPLACES the
+    /// target document (guarded by <see cref="AllowOverwrite"/>). When true the source's tasks are APPENDED onto
+    /// the target's existing document instead — non-destructive, so it needs no overwrite confirm. The server
+    /// re-checks the target's capacity against target-count + source-count either way.</summary>
+    [ProtoMember(7)] public bool Append { get; set; }
 }
