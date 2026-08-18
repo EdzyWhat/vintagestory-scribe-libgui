@@ -346,9 +346,63 @@ The existing v1/v2 tests still pass.
 
    Test name pattern: `TryDeserialize_V<N>Bytes_<FieldName>_IsUpgraded`
 
+## The text-interchange codecs (JSON + TSV)
+
+`ScribeDocumentJsonCodec` and `ScribeDocumentTsvCodec` are a **separate family** from the two binary
+codecs above. They are NOT world-persistence or network-sync formats — they are the clipboard
+export/import lanes for the Scriptorium's Import/Export section (add-scriptorium-import-export), so a
+player can copy a document out to text, edit it anywhere, and paste it back. They never touch a save
+file or a packet payload directly; the Mod re-serializes an imported document through the *binary*
+`ScribeDocumentCodec` before it is stored. Both live in Core and use only BCL string/`System.Text.Json`
+APIs (no VS API, no new NuGet dep).
+
+Two properties make them safe to evolve, and both differ from the binary codecs' append-only-bytes rule:
+
+### JSON: a version window, extra fields ignored
+
+- `ScribeDocumentJsonCodec.Version` (currently **1**) is a single `"v"` counter, and `MinVersion`
+  (currently **1**) is the oldest `v` still accepted. `TryDeserialize` rejects any payload with
+  `v < MinVersion` — **and a payload with no `v` at all parses as `v = 0` and is rejected**, so a
+  foreign JSON object (or hand-typed junk that happens to be valid JSON) can't slip in as an empty
+  document.
+- Forward tolerance is free: a newer producer's extra keys are simply ignored by the read DTO
+  (`PropertyNameCaseInsensitive`, unknown members dropped). So a `v`-2 export opened by a `v`-1 build
+  loses only the fields `v`-1 doesn't know — it does not fail.
+- **To add a field:** append it to the DTO, bump `Version`, and only raise `MinVersion` if the new
+  field's *absence* would make an old payload unreadable (it usually won't — default it instead). This
+  mirrors the binary codec's "append, never reshuffle" spirit without the byte-offset bookkeeping.
+- Omitted-by-design fields (never serialized): `TaskId`/`DocId` (import mints fresh identity, so an
+  import can never carry a pin), `assignedToUid` (assignment is place-bound), and `currentQuantity`
+  (live/derived, recomputed after import).
+
+### TSV: fixed columns forever, richness in `Special`
+
+The TSV lane has **no version field at all** — its stability contract is the *fixed column set*
+instead:
+
+```
+Type · Done · Text · Special · Count · Depth
+```
+
+- **The six columns are frozen.** New per-kind richness goes INSIDE the `Special` cell as a
+  comma-separated payload the kind parses itself (a future map block's `x,y,z,icon,color` is the worked
+  example) — **never a new column.** This keeps the table narrow and keeps old and new exports mutually
+  loadable in a spreadsheet.
+- The header is matched **by name, case-insensitive**, so column *order* is cosmetic and **unknown
+  trailing columns are ignored** while **missing columns default**. That is the TSV analogue of the JSON
+  "extra keys ignored" tolerance.
+- **Row position is the sequence** (no order column). A leading `title`-type row carries the document
+  title and produces no block; its absence just leaves the title unchanged.
+- **Import is loose — degrade, never reject:** an unknown `Type` token becomes a plain Task, a malformed
+  row is skipped, caps are enforced, and nothing throws. (Game-resolution of item/link references is the
+  Mod layer's job — `ScribeImportValidator` — not this codec's; the codec only carries the reference
+  strings.) Every block gets a fresh `TaskId`, so a TSV import can never carry a pin either.
+
 ## Current state
 
-| Codec | Current | Accepted | Migration method |
-|---|---|---|---|
-| `ScribeDocumentCodec` | v7 | v5–v7 (progressive reads) | `ApplyPreV6Defaults` — defaults Tracker/Link per-block fields (v6) + guide-page `LinkLabel` (v7); v6/v7 fields then read behind `version >=` thresholds |
-| `ScribePinCodec` | v4 | v1–v4 (progressive reads) | `ApplyPreV2Defaults` — seeds Kind (→Task), LinkTarget (→null), TargetItemCode (→null), quantities, LinkLabel (→null); v2/v3/v4 fields then read behind `version >=` thresholds |
+| Codec | Kind | Current | Accepted | Migration method / stability rule |
+|---|---|---|---|---|
+| `ScribeDocumentCodec` | binary (save/sync) | v7 | v5–v7 (progressive reads) | `ApplyPreV6Defaults` — defaults Tracker/Link per-block fields (v6) + guide-page `LinkLabel` (v7); v6/v7 fields then read behind `version >=` thresholds |
+| `ScribePinCodec` | binary (save/sync) | v4 | v1–v4 (progressive reads) | `ApplyPreV2Defaults` — seeds Kind (→Task), LinkTarget (→null), TargetItemCode (→null), quantities, LinkLabel (→null); v2/v3/v4 fields then read behind `version >=` thresholds |
+| `ScribeDocumentJsonCodec` | text (clipboard) | v1 | v1+ (`v >= MinVersion`; missing `v` → rejected) | Version window; unknown keys ignored on read. Add a field → append to DTO + bump `Version`; raise `MinVersion` only if an old payload becomes unreadable |
+| `ScribeDocumentTsvCodec` | text (clipboard) | — (no version) | any header with the known columns (by name) | Fixed 6 columns forever (`Type · Done · Text · Special · Count · Depth`); new richness goes in the comma-packed `Special` cell, never a new column; unknown columns ignored, missing columns defaulted |

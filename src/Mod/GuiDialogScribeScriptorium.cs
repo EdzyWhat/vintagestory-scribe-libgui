@@ -43,11 +43,13 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     /// a <c>SlotModified</c> subscription each time).</summary>
     private SlotController? slotController;
 
-    /// <summary>The two copy slots' inventory indices. Slot 0 is the Original (source), slot 1 the
-    /// Duplicate (target). These are the only two real slots on <see cref="BlockEntityScriptorium"/>; the
-    /// import/export slot rendered below them is an inert placeholder (add-transcribe-copy-paste D6).</summary>
+    /// <summary>The Scriptorium inventory slot indices. Slot 0 is the copy Original (source), slot 1 the copy
+    /// Duplicate (target), and slot 2 the Import/Export source-and-target — the item a JSON/TSV export reads
+    /// from and an import writes onto (add-scriptorium-import-export). All three are real
+    /// <see cref="BlockEntityScriptorium"/> slots watched by the same <see cref="slotController"/>.</summary>
     private const int SourceSlotIndex = 0;
     private const int TargetSlotIndex = 1;
+    private const int ImportExportSlotIndex = 2;
 
     /// <summary>The seal button's two-press overwrite-confirm state (add-transcribe-copy-paste D3). Held on
     /// the dialog (client-only UX); the server re-checks the overwrite gate regardless. Reset to
@@ -55,6 +57,13 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     /// <see cref="EnsureSlotController"/>).</summary>
     private enum TranscribeConfirm { Idle, ConfirmOverwrite }
     private TranscribeConfirm confirmState = TranscribeConfirm.Idle;
+
+    /// <summary>The Import button's own two-press overwrite-confirm state — the peer of <see cref="confirmState"/>
+    /// for the Import/Export slot (add-scriptorium-import-export). Kept separate from the copy confirm because the
+    /// two buttons target different slots; both reset to Idle whenever any slot's contents change (see
+    /// <see cref="OnSlotsChanged"/>). Only meaningful in <see cref="CopyMode.Overwrite"/> against a non-empty
+    /// target; Append and an empty target import on a single press.</summary>
+    private TranscribeConfirm importConfirmState = TranscribeConfirm.Idle;
 
     /// <summary>The copy BEHAVIOR selected by the radio under the Copy button (2026-08-17).
     /// <see cref="CopyMode.Overwrite"/> (default) REPLACES the target document — the original behavior, with the
@@ -202,7 +211,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
             children: new Widget[]
             {
                 new Text(Lang.Get("scribe:scribe-transcribe-io-heading"), headingStyle),
-                BuildImportExportSection(colors, bookColor, veilColor),
+                BuildImportExportSection(controller, colors, bookColor, veilColor),
             }));
 
         // A theme-border Divider as the FIRST element, right under the dialog title bar — the same
@@ -292,7 +301,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     /// When <paramref name="overlay"/> is supplied (the Duplicate slot's copy flourish) it is stacked ON TOP of
     /// the slot, sharing the slot's footprint but free to overflow (paint-only) as the stamp descends.</summary>
     private Widget LabeledSlot(ItemSlot slot, string labelKey, SlotController controller, ColorScheme colors,
-        Vector4 bookColor, Vector4 veilColor, Widget? overlay = null)
+        Vector4 bookColor, Vector4 veilColor, Widget? overlay = null, float? captionWidth = null)
     {
         Widget slotWidget = BuildWatermarkedSlot(slot, controller, colors, CurrentShade, bookColor, veilColor);
         if (overlay != null)
@@ -303,6 +312,13 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
                 new Positioned(left: 0f, top: 0f, width: SlotSize, height: SlotSize, child: overlay),
             });
         }
+        // A short role label sits on one line; a longer caption (the Import/Export slot's) is bounded to
+        // captionWidth so it wraps into a few centred lines under the slot instead of stretching the Row wide.
+        Widget caption = captionWidth is float w
+            ? new SizedBox(width: w, child: new Text(Lang.Get("scribe:" + labelKey),
+                new TextStyle { FontSize = 11, Color = colors.OnSurfaceVariant, SoftWrap = true, Align = TextAlignment.Center }))
+            : new Text(Lang.Get("scribe:" + labelKey),
+                new TextStyle { FontSize = 12, Color = colors.OnSurfaceVariant });
         return new Column(
             spacing: 4f,
             crossAxisAlignment: CrossAxisAlignment.Center,
@@ -310,8 +326,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
             children: new Widget[]
             {
                 slotWidget,
-                new Text(Lang.Get("scribe:" + labelKey),
-                    new TextStyle { FontSize = 12, Color = colors.OnSurfaceVariant }),
+                caption,
             });
     }
 
@@ -454,7 +469,8 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
             var mode = (CopyMode)v;
             if (mode == copyMode) return;
             copyMode = mode;
-            confirmState = TranscribeConfirm.Idle; // a mode switch cancels any armed overwrite confirm
+            confirmState = TranscribeConfirm.Idle;       // a mode switch cancels any armed copy overwrite confirm
+            importConfirmState = TranscribeConfirm.Idle;  // …and the import one
             RebuildBody();
         }
 
@@ -639,20 +655,29 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
         });
     }
 
-    /// <summary>The import/export section (D6): a greyed placeholder slot beside disabled Export JSON /
-    /// Export CSV / Import controls. Entirely inert this change — no <see cref="SlotController"/> binding, no
-    /// backing <see cref="ItemSlot"/>, no click handlers — it reserves the final layout while carrying a
-    /// "coming in a later update" tooltip. The block-entity inventory stays at its two real copy slots.</summary>
-    private Widget BuildImportExportSection(ColorScheme colors, Vector4 bookColor, Vector4 veilColor)
+    /// <summary>The Import/Export section, now live (add-scriptorium-import-export D7): a real watermarked slot
+    /// (index <see cref="ImportExportSlotIndex"/>, bound to the shared <paramref name="controller"/> like the copy
+    /// slots and carrying the IMPORTED/EXPORTED stamp overlay) beside a fixed-width column of three Caudex
+    /// buttons — <b>Copy as JSON</b>, <b>Copy as TSV</b>, and <b>Import</b>. Exports read the slotted item's
+    /// document, serialize it to the clipboard, and stamp EXPORTED; Import reads the clipboard, auto-detects the
+    /// format, validates against the game, and sends a server-authoritative import (stamping IMPORTED on success).
+    /// The buttons enable/disable from the live slot contents (there is nothing to export from an empty slot, and
+    /// nothing to import onto a read-only/empty one); the fixed <see cref="IoControlsWidth"/> keeps the column
+    /// from ballooning to the page width (the same Stretch-Column bound the copy section uses).</summary>
+    private Widget BuildImportExportSection(SlotController controller, ColorScheme colors, Vector4 bookColor, Vector4 veilColor)
     {
-        // The Export/Import controls are disabled REAL Buttons (same theme as the copy button, greyed at 0.45
-        // opacity) wrapped in a "coming soon" tooltip — not hand-rolled boxes. Stacked in a Stretch Column of a
-        // FIXED width (IoControlsWidth): a Stretch Column left unbounded inherits the full page width and
-        // balloons the whole section edge-to-edge (the bottom half of the "stretched to full width" bug), so
-        // the bound is what keeps the three buttons a tidy equal-width column instead.
-        Widget DisabledControl(string labelKey) => WithTooltip(
-            "scribe-transcribe-io-soon",
-            LabelButton(Lang.Get("scribe:" + labelKey), colors, enabled: false, ButtonVariant.Primary, center: true));
+        var slotStack = scriptorium.Inventory[ImportExportSlotIndex].Itemstack;
+        bool hasDoc = slotStack != null
+            && ScribeDocumentAttributes.TryReadFrom(slotStack, out var doc) && doc is not null;
+        bool hasItem = slotStack != null;
+        bool writeable = ImportExportSlotWriteable();
+
+        // A live export button, enabled only when the slot holds a readable document. Disabled → an explainer
+        // tooltip, exactly like the copy button's disabled affordance.
+        Widget ExportButton(string labelKey, System.Action onTap) => hasDoc
+            ? LabelButton(Lang.Get("scribe:" + labelKey), colors, enabled: true, ButtonVariant.Primary, onTap, center: true)
+            : WithTooltip("scribe-transcribe-export-empty",
+                LabelButton(Lang.Get("scribe:" + labelKey), colors, enabled: false, ButtonVariant.Primary, center: true));
 
         var controls = new SizedBox(width: IoControlsWidth, child: new Column(
             spacing: 6f,
@@ -660,9 +685,9 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
             mainAxisSize: MainAxisSize.Min,
             children: new Widget[]
             {
-                DisabledControl("scribe-transcribe-export-json"),
-                DisabledControl("scribe-transcribe-export-csv"),
-                DisabledControl("scribe-transcribe-import"),
+                ExportButton("scribe-transcribe-export-json", OnClickExportJson),
+                ExportButton("scribe-transcribe-export-tsv", OnClickExportTsv),
+                BuildImportButton(colors, hasItem, writeable),
             }));
 
         return new Row(
@@ -672,44 +697,166 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
             mainAxisSize: MainAxisSize.Min,
             children: new Widget[]
             {
-                new Column(
-                    spacing: 4f,
-                    crossAxisAlignment: CrossAxisAlignment.Center,
-                    mainAxisSize: MainAxisSize.Min,
-                    children: new Widget[]
-                    {
-                        BuildPlaceholderSlot(colors, bookColor, veilColor),
-                        // The caption is bounded so its long text wraps into a few short lines under the slot
-                        // rather than stretching the Row wide.
-                        new SizedBox(width: IoCaptionWidth, child: new Text(Lang.Get("scribe:scribe-transcribe-io-slot"),
-                            new TextStyle { FontSize = 11, Color = colors.OnSurfaceVariant, SoftWrap = true, Align = TextAlignment.Center })),
-                    }),
+                LabeledSlot(scriptorium.Inventory[ImportExportSlotIndex], "scribe-transcribe-io-slot",
+                    controller, colors, bookColor, veilColor, overlay: BuildStampOverlay(ImportExportSlotIndex),
+                    captionWidth: IoCaptionWidth),
                 controls,
             });
     }
 
-    /// <summary>An inert placeholder slot for the (unwired) import/export section: the same watermarked slot
-    /// LOOK as a real copy slot, but drawn as a plain <see cref="Container"/> with no <c>ScribeDocumentSlot</c>
-    /// and no controller — it accepts no item and fires no gesture. Greyed a touch (lower book opacity) so it
-    /// reads as "a slot will go here" rather than an active drop target (D6).</summary>
-    private Widget BuildPlaceholderSlot(ColorScheme colors, Vector4 bookColor, Vector4 veilColor)
+    /// <summary>The Import button (D6): a single press imports in Append mode or onto an empty target; in
+    /// Overwrite mode against a non-empty target it arms the same red two-press confirm the Copy button uses
+    /// (<see cref="importConfirmState"/>). Disabled — with an explainer tooltip — when the slot is empty
+    /// (nothing to import onto) or holds a read-only (hardened/fired) item. The confirming label mirrors the copy
+    /// confirm wording. Whether the incoming clipboard actually fits is re-checked server-side (the client can't
+    /// know the payload's task count until the button is pressed and the clipboard is read).</summary>
+    private Widget BuildImportButton(ColorScheme colors, bool hasItem, bool writeable)
     {
-        float glyph = SlotSize * WatermarkScale;
-        float inset = (SlotSize - glyph) / 2f;
-        return new Stack(children: new Widget[]
+        if (!hasItem)
         {
-            new Positioned(
-                left: inset, top: inset, width: glyph, height: glyph,
-                child: new ScribeVsIconGlyph("scribebook", glyph, bookColor with { W = 0.4f })),
-            new Container(style: new BoxStyle
-            {
-                Color = veilColor,
-                Width = SlotSize,
-                Height = SlotSize,
-                CornerRadius = new Vector4(2f),
-                BorderThickness = 1f,
-                BorderColor = colors.Border with { W = colors.Border.W * 0.6f },
-            }),
+            importConfirmState = TranscribeConfirm.Idle;
+            return WithTooltip("scribe-transcribe-import-empty",
+                LabelButton(Lang.Get("scribe:scribe-transcribe-import"), colors, enabled: false, ButtonVariant.Primary, center: true));
+        }
+        if (!writeable)
+        {
+            importConfirmState = TranscribeConfirm.Idle;
+            return WithTooltip("scribe-transcribe-import-readonly",
+                LabelButton(Lang.Get("scribe:scribe-transcribe-import"), colors, enabled: false, ButtonVariant.Primary, center: true));
+        }
+
+        // Append never arms the confirm; only Overwrite against a target that already has tasks does.
+        bool confirming = copyMode == CopyMode.Overwrite
+            && importConfirmState == TranscribeConfirm.ConfirmOverwrite
+            && ImportExportSlotTaskCount() > 0;
+        if (copyMode == CopyMode.Append) importConfirmState = TranscribeConfirm.Idle;
+
+        string label = confirming
+            ? Lang.Get("scribe:scribe-transcribe-import-confirm")
+            : Lang.Get("scribe:scribe-transcribe-import");
+        return LabelButton(label, colors, enabled: true, confirming ? ButtonVariant.Danger : ButtonVariant.Primary,
+            OnImportPressed, center: true);
+    }
+
+    /// <summary>Whether the Import/Export slot's item can be written (imported onto). Empty or a non-Scribe item
+    /// (which can't reach this Scribe-only slot anyway) counts as writeable; a Tablet reports its live
+    /// wet/hard/fired policy, so a hardened/fired one is read-only. Mirrors the copy path's target-writeability
+    /// check.</summary>
+    private bool ImportExportSlotWriteable()
+    {
+        var slot = scriptorium.Inventory[ImportExportSlotIndex];
+        if (slot.Itemstack?.Collectible is IScribeDocumentItem item)
+            return !item.DocumentPolicy(slot).ReadOnly;
+        return true;
+    }
+
+    /// <summary>Completable-task count on the Import/Export slot's document — the "empty vs non-empty target"
+    /// measure the overwrite confirm gates on (0 when the slot is empty or holds no document).</summary>
+    private int ImportExportSlotTaskCount()
+    {
+        var stack = scriptorium.Inventory[ImportExportSlotIndex].Itemstack;
+        if (stack != null && ScribeDocumentAttributes.TryReadFrom(stack, out var doc) && doc is not null)
+            return doc.CompletableCount;
+        return 0;
+    }
+
+    /// <summary>The document currently on the Import/Export slot's item, or null when the slot is empty or its
+    /// item carries no Scribe document. Read fresh from the synced item stack each call (exports are a pure
+    /// client-side read of already-synced state — no packet).</summary>
+    private ScribeDocument? ImportExportSlotDoc()
+    {
+        var stack = scriptorium.Inventory[ImportExportSlotIndex].Itemstack;
+        if (stack != null && ScribeDocumentAttributes.TryReadFrom(stack, out var doc) && doc is not null)
+            return doc;
+        return null;
+    }
+
+    /// <summary>Copy the slotted document to the clipboard as lossless JSON and stamp EXPORTED.</summary>
+    private void OnClickExportJson()
+    {
+        if (ImportExportSlotDoc() is not { } doc) return; // button is disabled without a doc; belt-and-suspenders
+        BuildOwner.GetClipboard()?.SetText(ScribeDocumentJsonCodec.Serialize(doc));
+        PlayStamp(ImportExportSlotIndex, Lang.Get("scribe:scribe-transcribe-stamp-imprint-exported"));
+        capi.TriggerIngameDiscovery(this, "scribe-transcribe-export", Lang.Get("scribe:scribe-transcribe-export-done", "JSON"));
+    }
+
+    /// <summary>Copy the slotted document to the clipboard as a spreadsheet-friendly TSV table and stamp EXPORTED.</summary>
+    private void OnClickExportTsv()
+    {
+        if (ImportExportSlotDoc() is not { } doc) return;
+        BuildOwner.GetClipboard()?.SetText(ScribeDocumentTsvCodec.Serialize(doc));
+        PlayStamp(ImportExportSlotIndex, Lang.Get("scribe:scribe-transcribe-stamp-imprint-exported"));
+        capi.TriggerIngameDiscovery(this, "scribe-transcribe-export", Lang.Get("scribe:scribe-transcribe-export-done", "TSV"));
+    }
+
+    /// <summary>Handle a press of the (enabled) Import button (D4/D6). Reads the clipboard, auto-detects JSON vs
+    /// TSV (a trimmed payload starting with <c>{</c> is JSON, otherwise TSV), parses it with the Core codec, and
+    /// validates item references against the game (<see cref="ScribeImportValidator"/>). A payload that parses as
+    /// neither surfaces the "not a valid Scribe export" error and does nothing. In Append mode, or Overwrite onto
+    /// an empty target, a single press sends. In Overwrite onto a non-empty target the first press arms the red
+    /// confirm and the second sends (mirroring the Copy button). The clipboard is re-read on the confirming press,
+    /// so a payload that changed between presses imports its current content.</summary>
+    private void OnImportPressed()
+    {
+        string? clip = BuildOwner.GetClipboard()?.GetText();
+        if (string.IsNullOrWhiteSpace(clip))
+        {
+            capi.TriggerIngameError(this, "scribe-transcribe-import", Lang.Get("scribe:scribe-transcribe-import-invalid"));
+            return;
+        }
+
+        // Auto-detect the format and parse via the API-free Core codec.
+        bool isJson = clip.TrimStart().StartsWith('{');
+        bool parsed = isJson
+            ? ScribeDocumentJsonCodec.TryDeserialize(clip, out var doc)
+            : ScribeDocumentTsvCodec.TryDeserialize(clip, out doc);
+        if (!parsed || doc is null)
+        {
+            capi.TriggerIngameError(this, "scribe-transcribe-import", Lang.Get("scribe:scribe-transcribe-import-invalid"));
+            return;
+        }
+
+        // Best-effort reconstruction: unresolved item/link references degrade to plain tasks (D5).
+        var result = ScribeImportValidator.Validate(capi.World, doc);
+
+        // Overwrite onto a non-empty target arms the two-press confirm; Append and empty targets send at once.
+        if (copyMode == CopyMode.Overwrite && ImportExportSlotTaskCount() > 0
+            && importConfirmState == TranscribeConfirm.Idle)
+        {
+            importConfirmState = TranscribeConfirm.ConfirmOverwrite;
+            RebuildBody();
+            return;
+        }
+
+        bool append = copyMode == CopyMode.Append;
+        SendTranscribeImport(result.Document, append: append, allowOverwrite: !append);
+        importConfirmState = TranscribeConfirm.Idle;
+        PlayStamp(ImportExportSlotIndex, Lang.Get("scribe:scribe-transcribe-stamp-imprint-imported"));
+
+        // Report the outcome — task count, and any degraded references — as a positive discovery toast.
+        int tasks = result.Document.CompletableCount;
+        string message = result.Degraded > 0
+            ? Lang.Get("scribe:scribe-transcribe-import-result-degraded", tasks, result.Degraded)
+            : Lang.Get("scribe:scribe-transcribe-import-result", tasks);
+        capi.TriggerIngameDiscovery(this, "scribe-transcribe-import", message);
+    }
+
+    /// <summary>Send the server-authoritative import request for the Import/Export slot (D6). The validated
+    /// document is serialized to JSON (the one wire format the server parses); the server re-deserializes it
+    /// (minting fresh ids), re-checks capacity, and writes onto the slot's item, syncing the result back through
+    /// the inventory channel.</summary>
+    private void SendTranscribeImport(ScribeDocument document, bool append, bool allowOverwrite)
+    {
+        var pos = scriptorium.Pos;
+        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeTranscribeImportMessage
+        {
+            X = pos.X,
+            Y = pos.Y,
+            Z = pos.Z,
+            TargetSlot = ImportExportSlotIndex,
+            DocumentJson = ScribeDocumentJsonCodec.Serialize(document),
+            Append = append,
+            AllowOverwrite = allowOverwrite,
         });
     }
 
@@ -785,6 +932,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     private void OnSlotsChanged()
     {
         confirmState = TranscribeConfirm.Idle;
+        importConfirmState = TranscribeConfirm.Idle; // the import overwrite-confirm resets on any slot change too
         RebuildBody();
     }
 

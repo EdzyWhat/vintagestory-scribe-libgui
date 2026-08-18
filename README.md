@@ -51,6 +51,23 @@ A placeable, multiplayer-safe note board. Anyone in reach can read it and check 
 one player edits at a time (server-authoritative, with a single-editor lock). It logs its
 visitors on a **Guest Book** tab — handy for a base or trader stall.
 
+### 📜 Scriptorium — the copy desk
+
+A placeable workbench for moving documents around. Drop a Scribe item in and **transcribe** it
+onto another — duplicate a checklist, or **append** one document's tasks onto another — with the
+result stamped like sealed paper.
+
+- **Import / Export** — two clipboard lanes for getting a document in and out of the game as text:
+  - **Copy as JSON** — a complete, human-readable snapshot (every task, note, tracker, and link),
+    ideal for backing up or sharing a list verbatim.
+  - **Copy as TSV** — a fixed six-column table (`Type · Done · Text · Special · Count · Depth`) that
+    pastes straight into Excel or Google Sheets, so you can bulk-edit tasks in a spreadsheet and
+    paste the range back. The column set never changes, so old and new exports stay interchangeable.
+  - **Import** auto-detects JSON vs. TSV from the clipboard and writes onto the slotted item
+    (overwrite or append, same as transcribe). Unknown item/link references land as plain tasks
+    rather than failing the whole paste, and **imported tasks are never pinned** — an import brings
+    the words, not anyone's HUD state.
+
 ### 📌 Pinned Task HUD
 
 Pin a task from any Scribe item and it appears on an always-on overlay over the game world —

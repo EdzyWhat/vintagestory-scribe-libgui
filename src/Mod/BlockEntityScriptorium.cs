@@ -40,8 +40,13 @@ public sealed class BlockEntityScriptorium : BlockEntityScribeWritingStation
     // InventoryGeneric bound to the block-entity packet channel — even though this BE keeps its
     // BlockEntityScribeWritingStation base rather than reparenting to BlockEntityOpenableContainer.
 
-    /// <summary>Number of Scribe-item storage slots on the Scriptorium.</summary>
-    private const int SlotCount = 2;
+    /// <summary>Number of Scribe-item storage slots on the Scriptorium: slot 0 = copy Original (source),
+    /// slot 1 = copy Duplicate (target), slot 2 = the Import/Export source-and-target
+    /// (add-scriptorium-import-export). Growing 2 → 3 is additive for persistence — a Scriptorium saved with
+    /// two slots simply has no stored stack for index 2, so
+    /// <see cref="Vintagestory.API.Common.InventoryBase.SlotsFromTreeAttributes"/> leaves it empty (it reads
+    /// this constant's slot count, not the tree's).</summary>
+    private const int SlotCount = 3;
 
     /// <summary>Tree sub-key under which the inventory persists, kept separate from the document keys so
     /// persistence is additive: a Scriptorium saved before this change simply lacks this sub-tree and

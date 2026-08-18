@@ -96,9 +96,11 @@ Rules (documented in the codec and a lang/handbook blurb):
 - **Structural escaping.** A field containing a tab, CR, LF, or a leading/trailing space is wrapped in
   double quotes with internal quotes doubled (RFC-4180 style, which Excel/Sheets honor even for TSV).
   Newlines inside a quoted field survive the round-trip; unquoted fields never contain a tab/newline.
-- **Formula-injection neutralization (export).** Any field whose first character is `= + - @`, tab, or CR
-  is prefixed with a single `'` (apostrophe) — the standard spreadsheet defang — so a pasted cell can never
-  execute as a formula. On import the leading defang apostrophe is stripped so the text round-trips.
+- **Formula-injection neutralization (export).** Any field whose first character is a formula lead (`=`, `+`,
+  `-`, `@`) is prefixed with a single `'` (apostrophe) — the standard spreadsheet defang — so a pasted cell
+  can never execute as a formula. (Leading tab/CR are not formula vectors; structural quoting already
+  neutralizes them.) A field that already begins with `'` is also prefixed, so the import-side single-`'`
+  strip is an exact inverse; on import the one leading defang apostrophe is stripped and the text round-trips.
 - **In-game literal.** Imported `Text` is stored verbatim and rendered through the same task-text path as
   typed text (which does not interpret VS rich-text `<...>` tags), so imported content cannot inject markup,
   hotkeys, or handbook links. The codec still hard-caps text length to the existing document-codec clip.

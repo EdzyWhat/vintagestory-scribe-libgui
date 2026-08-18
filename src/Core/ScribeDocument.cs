@@ -340,5 +340,13 @@ public sealed class ScribeDocument
         _blocks.AddRange(blocks);
     }
 
+    /// <summary>Replaces this document's blocks wholesale with <paramref name="blocks"/> (order preserved),
+    /// leaving <see cref="Title"/> and <see cref="DocId"/> untouched. This is the import validator's degrade
+    /// primitive (add-scriptorium-import-export D5): after deserialization the client rewrites any block whose
+    /// Tracker/Link reference doesn't resolve to a real item in THIS game as a plain Task, then installs the
+    /// reconciled sequence here. Exposed publicly (unlike the codec-only internal <see cref="SetBlocks"/>)
+    /// because that validator lives in the mod assembly, across the Core boundary. Pure data; no VS API.</summary>
+    public void ReplaceBlocks(IEnumerable<ScribeBlock> blocks) => SetBlocks(blocks);
+
     private bool IsValidIndex(int index) => index >= 0 && index < _blocks.Count;
 }

@@ -101,7 +101,7 @@ the player.
 ### Requirement: Export and import are safe against injection
 TSV export SHALL escape any field containing a tab, carriage return, line feed, or leading/trailing space so
 the table structure round-trips, and SHALL neutralize spreadsheet formula injection by defanging any field
-whose first character is `=`, `+`, `-`, `@`, tab, or CR. Import SHALL treat all imported text as literal
+whose first character is a formula lead (`=`, `+`, `-`, `@`). Import SHALL treat all imported text as literal
 content — never interpreted as Vintage Story rich-text markup, hotkeys, or handbook links — and SHALL strip
 the export defang so text round-trips unchanged. Both codecs SHALL enforce the existing document length and
 count caps.

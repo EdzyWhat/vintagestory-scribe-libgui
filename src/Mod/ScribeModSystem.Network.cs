@@ -240,6 +240,99 @@ public sealed partial class ScribeModSystem
             fromPlayer.PlayerName, message.Append ? "appended" : "copied", message.TargetSlot, result.CompletableCount);
     }
 
+    /// <summary>Client → server: import a document (parsed + game-validated on the client, carried as a JSON
+    /// payload) onto the Scriptorium's Import/Export slot (D6). The sibling of
+    /// <see cref="OnServerReceivedTranscribeCopy"/> — same block-position addressing, same Overwrite/Append +
+    /// overwrite-gate semantics — but the source is a JSON string rather than another slot.
+    ///
+    /// <para><b>Never pins.</b> The document is rebuilt from JSON by
+    /// <see cref="Scribe.Core.ScribeDocumentJsonCodec.TryDeserialize"/>, which mints a FRESH
+    /// <see cref="Scribe.Core.ScribeBlock.TaskId"/> for every block (the ctor default), and an overwrite gets a
+    /// fresh <c>DocId</c> too (<see cref="Scribe.Core.ScribeDocument.CloneWithNewIdentity"/> is unnecessary — a
+    /// freshly deserialized document already has a new DocId, and append keeps the target's own). Because pins
+    /// are a separate per-player <c>(DocId, TaskId)</c> store and these ids never existed before, no pin can be
+    /// created or resurrected by an import — and this handler makes no pin-store write at all.</para></summary>
+    private void OnServerReceivedTranscribeImport(IServerPlayer fromPlayer, ScribeTranscribeImportMessage message)
+    {
+        if (sapi is null) return;
+
+        var pos = new Vintagestory.API.MathTools.BlockPos(message.X, message.Y, message.Z);
+        if (sapi.World.BlockAccessor.GetBlockEntity(pos) is not BlockEntityScriptorium scriptorium)
+        {
+            Trace("transcribe-import from {0}: no Scriptorium at {1} — ignored", fromPlayer.PlayerName, pos);
+            return;
+        }
+
+        var inv = scriptorium.Inventory;
+        if (message.TargetSlot < 0 || message.TargetSlot >= inv.Count)
+        {
+            Trace("transcribe-import from {0}: bad target slot {1} (count {2}) — ignored",
+                fromPlayer.PlayerName, message.TargetSlot, inv.Count);
+            return;
+        }
+
+        var targetSlot = inv[message.TargetSlot];
+        if (targetSlot.Itemstack is null) return; // no item to write onto
+
+        // Rebuild the incoming document from the JSON payload. The codec is the real guard: it enforces the
+        // block/text caps, degrades unknown kinds, and mints fresh ids — a malformed/hostile payload simply
+        // fails to parse and the import is a no-op.
+        if (!ScribeDocumentJsonCodec.TryDeserialize(message.DocumentJson, out var incoming) || incoming is null)
+        {
+            Trace("transcribe-import from {0}: payload did not parse as a Scribe document — ignored", fromPlayer.PlayerName);
+            return;
+        }
+
+        // The target's current document (may be null/empty) — needed for the overwrite gate (overwrite mode)
+        // and for the append apply + append capacity (append mode).
+        ScribeDocumentAttributes.TryReadFrom(targetSlot.Itemstack, out var targetDoc);
+
+        // Defensive overwrite gate — OVERWRITE MODE ONLY: mirrors the copy path. If the target already has tasks
+        // and this isn't the confirming press, do nothing. Append is non-destructive, so it has nothing to gate.
+        if (!message.Append
+            && !message.AllowOverwrite
+            && targetDoc is not null && targetDoc.CompletableCount > 0)
+        {
+            Trace("transcribe-import from {0}: target has {1} tasks and overwrite not allowed — no-op",
+                fromPlayer.PlayerName, targetDoc.CompletableCount);
+            return;
+        }
+
+        // Valid-destination check, same as the copy path: writeable (not a hardened/fired tablet) AND able to
+        // hold the RESULTING block count (overwrite → incoming's blocks; append → target's + incoming's).
+        int resultingBlocks = message.Append
+            ? (targetDoc?.TaskCount ?? 0) + incoming.TaskCount
+            : incoming.TaskCount;
+        if (targetSlot.Itemstack.Collectible is IScribeDocumentItem targetItem
+            && !targetItem.DocumentPolicy(targetSlot).CanHold(resultingBlocks))
+        {
+            Trace("transcribe-import from {0}: target rejects {1} resulting tasks (read-only or over its cap) — no-op",
+                fromPlayer.PlayerName, resultingBlocks);
+            return;
+        }
+
+        ScribeDocument result;
+        if (message.Append)
+        {
+            // Append mode: keep the target's own document (identity + title + existing tasks) and add the
+            // imported tasks onto the end. AppendClonedBlocksFrom mints fresh TaskIds for the added blocks; the
+            // incoming blocks already carry fresh ids, so either way nothing pins. Empty target → plain import.
+            result = targetDoc ?? new ScribeDocument();
+            result.AppendClonedBlocksFrom(incoming);
+        }
+        else
+        {
+            // Overwrite mode: REPLACE the target with the imported document. It already has a fresh DocId + fresh
+            // per-block TaskIds from deserialization, so the result is fully independent and unpinned.
+            result = incoming;
+        }
+        ScribeDocumentAttributes.WriteTo(targetSlot.Itemstack, result);
+        targetSlot.MarkDirty();
+        scriptorium.MarkDirty(true);
+        Trace("transcribe-import from {0}: {1} document onto slot {2} ({3} tasks total)",
+            fromPlayer.PlayerName, message.Append ? "appended" : "imported", message.TargetSlot, result.CompletableCount);
+    }
+
     private void OnServerReceivedRecordVisitor(IServerPlayer fromPlayer, ScribeRecordVisitorMessage message)
     {
         if (sapi is null) return;
