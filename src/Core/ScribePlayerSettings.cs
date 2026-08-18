@@ -61,6 +61,25 @@ public sealed class ScribePlayerSettings
     /// (timer-auto-disappear-setting).</summary>
     public bool TimerAutoDisappear { get; set; } = true;
 
+    /// <summary>Volume of the Clockmaker's Notebook alarm sound, expressed as an integer 0–100.
+    /// Passed to the sound engine as <c>TimerAlarmVolume / 100f</c>. Default 65 (a moderate level,
+    /// calibrated to sit roughly at the level of an in-game bear growl heard from ~10 blocks).
+    /// Clamped to <see cref="MinTimerAlarmVolume"/>..<see cref="MaxTimerAlarmVolume"/> on load.</summary>
+    public int TimerAlarmVolume { get; set; } = DefaultTimerAlarmVolume;
+
+    /// <summary>Default alarm volume for a player who has never changed it.</summary>
+    public const int DefaultTimerAlarmVolume = 65;
+
+    /// <summary>Inclusive lower bound: 0 = silent.</summary>
+    public const int MinTimerAlarmVolume = 0;
+
+    /// <summary>Inclusive upper bound: 100. The breathing envelope peaks at volume × 1.1, so values
+    /// above ~91 may clip to the engine's 1.0 ceiling (clamped silently).</summary>
+    public const int MaxTimerAlarmVolume = 100;
+
+    /// <summary>Clamps a loaded alarm volume to 0..100.</summary>
+    public static int ClampTimerAlarmVolume(int v) => Math.Clamp(v, MinTimerAlarmVolume, MaxTimerAlarmVolume);
+
     /// <summary>Whether the Lectern dialog's views (read, editor, and later the pinned view) render in the
     /// mod's net-new "pixel-art" look — the light parchment theme (dark ink on light paper) plus, in a
     /// later phase, illustrated backgrounds. Default <c>true</c> (on). When off, those views fall back to
@@ -236,7 +255,7 @@ public sealed class ScribePlayerSettings
     /// default reproduces that curve exactly. Near-black (the "really struggle to read in total darkness"
     /// end the feature was asked for), still a hair above the <see cref="MinIlluminationFloor"/> so it never
     /// renders a fully-black/blank-looking dialog.</summary>
-    public const float DefaultIlluminationFloor = 0.03f;
+    public const float DefaultIlluminationFloor = 0.05f;
 
     /// <summary>Inclusive lower bound clamped on load: the "effectively unreadable" end. Not exactly 0 so a
     /// hand-edited config can't render the GUI perfectly black (which would read as a broken/blank dialog);
@@ -383,6 +402,7 @@ public sealed class ScribePlayerSettings
         WindowFontScale = ClampFontScale(WindowFontScale);
         TaskFontFamily = NormalizeTaskFontFamily(TaskFontFamily);
         IlluminationFloor = ClampIlluminationFloor(IlluminationFloor);
+        TimerAlarmVolume  = ClampTimerAlarmVolume(TimerAlarmVolume);
         return this;
     }
 }

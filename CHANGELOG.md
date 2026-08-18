@@ -4,6 +4,29 @@ All notable changes to Scribe are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-08-18
+
+### Added
+- **Clockmaker Notebook alarm sound.** When the timer fires, a gentle mechanical alarm bell
+  (CC BY 4.0, credited in CREDITS.txt) now plays. The sound ramps up over half a second
+  (easeInCubic), breathes softly at ±10% volume on a 3-second cycle, then fades out with a
+  smooth easeInOutSine when you dismiss. Pauses automatically if you pause the game. A new
+  **Alarm Volume** setting (0–100, default 65) in the **Timer** section of Scribe Settings lets
+  you tune it live — changes take effect immediately while the alarm is playing.
+
+### Changed
+- **Item Tracker** — the task type previously called "Tracker" is now labelled "Item Tracker"
+  everywhere it appears in the UI and Handbook, to make its purpose clearer at a glance.
+- **Illumination curve tuned.** The lighting response curve used to shade the Scribe GUI has
+  been adjusted: the floor (darkness minimum) is 5% instead of 3%, the mid point shifts
+  slightly brighter (45% input → 53% output), and full brightness is reached at 90% of the
+  light range rather than the very top, giving a more comfortable read in most interiors.
+- **Timer** section in Scribe Settings now groups **Alarm Volume** and **Timer Disappears**
+  together; both were previously scattered or absent.
+
+### Fixed
+- Alarm sound now pauses correctly when the game is paused in single-player (ESC or Handbook).
+
 ## [1.2.0] - 2026-08-17
 
 The organization release. Scribe grows from a personal notebook into a shared planning station:

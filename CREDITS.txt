@@ -1,0 +1,9 @@
+CREDITS
+=======
+
+Alarm sound
+-----------
+"alarm_clock_ringing_01.wav" (Freesound ID: 78562)
+Author: joedeshon
+License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+Source: https://freesound.org/s/78562/

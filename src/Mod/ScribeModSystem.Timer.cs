@@ -55,6 +55,8 @@ public sealed partial class ScribeModSystem
 
     private void OnClientReceivedTimerState(ScribeTimerStateMessage message)
     {
+        var previousStatus = MyTimer?.Status;
+
         MyTimer = new TimerStore
         {
             Status              = message.Status,
@@ -64,12 +66,33 @@ public sealed partial class ScribeModSystem
             FiredElapsedSeconds = message.FiredElapsedSeconds,
         };
         MyTimerChanged?.Invoke();
+
+        // Start the alarm sound when the timer first transitions to Fired, but only if
+        // the clip would still be in its natural playing window (i.e. a relog with a near-
+        // expired fire should not restart the alarm from the beginning).
+        if (capi is not null
+            && message.Status == TimerStatus.Fired
+            && previousStatus != TimerStatus.Fired
+            && message.FiredElapsedSeconds < 26.0
+            && (_activeAlarm is null || _activeAlarm.IsDone))
+        {
+            _activeAlarm?.Dispose();
+            _activeAlarm = new ScribeAlarmSound(capi, () => MySettings.TimerAlarmVolume / 100f);
+        }
+
         // Refresh the Timer tab in any open Clockmaker's Notebook dialog.
         if (capi is not null)
         {
             foreach (var dialog in capi.Gui.OpenedGuis.OfType<GuiDialogClockmakerNotebook>())
                 if (dialog.IsOpened()) dialog.RefreshTimerView();
         }
+    }
+
+    /// <summary>Called by both dismiss paths (HUD fired-row click and Stop Timer button) to begin the
+    /// alarm sound's 500 ms easeInOutSine fade-out. Safe to call when no alarm is playing.</summary>
+    public void DismissAlarm()
+    {
+        _activeAlarm?.Dismiss();
     }
 
     /// <summary>1-second server tick: decrement running timers and fire at zero. A timer's

@@ -145,6 +145,7 @@ public sealed class ScribeGearTuningDialog : GuiBase
                     value: t.TrimBoxY, step: 2f, id: "trimy",
                     onChanged: v => modSystem.UpdateGearTuning(g => g.TrimBoxY = v),
                     clamp: ScribeGearTuning.ClampOffset),
+
             });
 
         return new WindowFrame(

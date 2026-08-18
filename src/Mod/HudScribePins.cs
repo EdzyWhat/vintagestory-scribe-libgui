@@ -868,6 +868,7 @@ public sealed class HudScribePins : GuiBase
 
     private void SendClearTimer()
     {
+        modSystem.DismissAlarm();
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeClearTimerMessage());
     }
 

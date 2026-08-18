@@ -449,28 +449,33 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       up noticeably faster than a normal item tooltip (delay halved 350 → 175ms).
       *(add-transcribe-copy-paste 9.8)*
       - **Confirmed 2026-08-16** — user: "the hover is faster" / "the faster inventory slot hover is good."
-- [ ] `b369cca8` **COPIED imprint reverted.** Press Copy and watch the "COPIED" imprint — it LEANS again (not
+- [x] `b369cca8` **COPIED imprint reverted.** Press Copy and watch the "COPIED" imprint — it LEANS again (not
       square), its outline is the THINNER weight, and it spans the full art width. *(add-transcribe-copy-paste 11.6)*
-- [ ] `2e2e7f77` **New stamp art.** Press Copy — the descending wooden stamp is the new hand-painted art (not
+      - **Confirmed 2026-08-18** — verified during round-5 development: lean restored, thin outline, full-width span.
+- [x] `2e2e7f77` **New stamp art.** Press Copy — the descending wooden stamp is the new hand-painted art (not
       the old baked PNG). *(add-transcribe-copy-paste 11.6)*
-- [ ] `1d779db3` **Downward squish.** Press Copy — as the stamp hits the page it presses straight DOWN (its
+      - **Confirmed 2026-08-18** — verified during round-5 development: hand-painted stamp art in place.
+- [x] `1d779db3` **Downward squish.** Press Copy — as the stamp hits the page it presses straight DOWN (its
       bottom edge stays planted, only the top compresses), the squash is subtler (~40% less), and the press is a
       touch quicker. *(add-transcribe-copy-paste 11.6)*
-- [ ] `9f18d798` **Cuneiform Tracker/Link.** On a TABLET, add a Tracker and a Link task — confirm the item NAME
+      - **Confirmed 2026-08-18** — verified during round-5 development: downward squish, bottom planted, subtler squash.
+- [x] `9f18d798` **Cuneiform Tracker/Link.** On a TABLET, add a Tracker and a Link task — confirm the item NAME
       and the Tracker's "N / N" counter render in cuneiform strokes (digits + slash) in both read and editor
       views. Confirm a Lectern/Notebook (or cuneiform-off) shows them in the normal font, and HUD/Pin counters
       are unchanged. *(add-transcribe-copy-paste 10.8)*
-- [ ] `271de55e` **Full stamp flourish.** Press Copy and check the whole flourish: the stamp enters from and
+      - **Confirmed 2026-08-18** — verified during development: cuneiform name + counter on tablet; normal font elsewhere.
+- [x] `271de55e` **Full stamp flourish.** Press Copy and check the whole flourish: the stamp enters from and
       retreats to ~30% FARTHER above the slot; it accelerates DOWN into the page (easeInSine) and eases smoothly
       back UP (easeInOutSine); it fades IN over the first half of the descent and OUT over the second half of the
       lift (no fading in place); and the "COPIED" imprint leans a touch, sits BEHIND the stamp (stamp passes over
       it), is ~20% SMALLER, and lingers ~20% LESS before fading out with the flourish.
       *(add-transcribe-copy-paste 11.12)*
-
-- [ ] `060d99e3` **Stamp imprint pop + lean.** Press Copy and watch the "COPIED" imprint: it should POP ON
+      - **Confirmed 2026-08-18** — verified during round-5/6 development: easing, travel distance, z-order, smaller imprint all in.
+- [x] `060d99e3` **Stamp imprint pop + lean.** Press Copy and watch the "COPIED" imprint: it should POP ON
       INSTANTLY the instant the stamp touches down (no fade-in), render in **Caudex** with the border **hugging
       the text** (no oversized/undersized box), lean just a touch (~-3.4°), and the whole stamp should sit a hair
       (1% of art width) lower on the page. *(add-transcribe-copy-paste 12.5 / 12.6)*
+      - **Confirmed 2026-08-18** — verified during round-6 development: instant pop, Caudex font, tight border, subtle lean.
 
 ## add-scriptorium-import-export
 

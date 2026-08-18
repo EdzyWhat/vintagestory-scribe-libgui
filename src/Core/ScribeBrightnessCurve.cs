@@ -11,24 +11,15 @@ namespace Scribe.Core;
 /// and unit-test.
 ///
 /// <para><b>The shipped curve</b> (input local brightness → output GUI brightness): <c>0.00 → floor</c>,
-/// <c>0.45 → 0.50</c>, <c>0.814 → 0.85</c>, <c>1.00 → 1.00</c>. Its character: near-black in true darkness, a
-/// brisk ramp so even a little light already reads comfortably, then a gentle high shoulder that reaches full
-/// brightness only at the very top of the light range. So for a given amount of local light the GUI is a touch
-/// BRIGHTER than a straight linear mapping would give (output slightly exceeds input in the mid-range) —
-/// deliberately gentler-than-punishing once any light is present, but genuinely dark with none: "you need a
-/// torch, but a torch is enough." (On the author's hand-drawn axes — GUI output horizontal, local input
-/// vertical — this is the pencil curve sitting just below-right of the red identity line the whole way, never
-/// crossing above it.)</para>
+/// <c>0.45 → 0.53</c>, <c>0.90 → 1.00</c>, <c>1.00 → 1.00</c>. Its character: dim but faintly visible in
+/// total darkness, a brisk mid ramp, full brightness reached at a bright-but-not-noon source (~large lantern
+/// nearby), flat tail above that.</para>
 ///
-/// <para><b>Why the high anchors are at 0.814 and 1.0.</b> Vintage Story maps a light-level index V (0..31) to a
-/// normalized brightness through its <c>blockLightLevels</c> table (general.json), NOT V/31. The author chose
-/// the shoulder against real light sources on that table: a placed/held LARGE lantern is V=20 → table value
-/// <c>0.814</c>, pinned here to <c>0.85</c> output; the table reaches <c>1.0</c> at V=26, so an input of
-/// <c>1.0</c> (V≥26, i.e. near a very bright source or open noon) yields full GUI brightness. Because torch/
-/// lantern/oil-lamp light is nearly white (saturation ≤4/7), the sampler's computed luma ≈ the table value, so
-/// these V-anchors land on the x-axis directly. A HELD light is fed through the same table
-/// (<c>IWorldAccessor.BlockLightLevels[V]</c>) so a lantern in hand and a lantern on the wall hit the identical
-/// curve point.</para>
+/// <para><b>Light-level mapping.</b> Vintage Story maps light-level index V (0..31) to normalized brightness
+/// via its <c>blockLightLevels</c> table (general.json), NOT V/31. The table reaches <c>1.0</c> at V=26 (open
+/// noon / very bright source); V=20 (large lantern) ≈ 0.814; V=15 (torch nearby) ≈ 0.60. The 0.90 knee
+/// therefore sits between a large lantern and a very bright source, i.e. full GUI brightness is reached before
+/// noon. A held light is fed through the same table so hand and wall sources hit identical curve points.</para>
 ///
 /// <para><b>The floor</b> is the y-value of the leftmost (x=0) control point — the GUI brightness at zero
 /// light — supplied per-player from <see cref="ScribePlayerSettings.IlluminationFloor"/> (default
@@ -46,9 +37,9 @@ public static class ScribeBrightnessCurve
     /// so with any floor in [0,1] the assembled curve is monotonic (see <see cref="Evaluate"/>).</summary>
     private static readonly (float X, float Y)[] Points =
     {
-        (0.45f, 0.50f),
-        (0.814f, 0.85f),   // V=20 (large lantern) on VS's blockLightLevels table → 85% output
-        (1.00f, 1.00f),    // V≥26 (table saturates at 1.0) → full brightness
+        (0.45f, 0.53f),
+        (0.90f, 1.00f),    // bright torch/lantern nearby → full GUI brightness
+        (1.00f, 1.00f),    // V≥26 (table saturates at 1.0) → full brightness (flat tail)
     };
 
     /// <summary>Evaluate the response curve at <paramref name="localBrightness"/> (clamped to 0..1) with the

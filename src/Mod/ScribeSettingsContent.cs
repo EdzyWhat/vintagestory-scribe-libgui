@@ -58,8 +58,8 @@ internal sealed class ScribeSettingsContent : StatelessWidget
         // the whole form re-renders at the new size on the write-through rebuild UpdateMySettings fires.
         float scale = ScribePlayerSettings.ClampFontScale(settings.WindowFontScale);
 
-        // Three sections separated by a horizontal Divider (refine-settings-and-window-chrome D4): Mod
-        // Behavior, Window Appearance, HUD Appearance. Each control is sorted into the section it governs.
+        // Four sections separated by horizontal Dividers: Mod Behavior, Timer, Window Appearance, HUD
+        // Appearance. Timer groups the two Clockmaker's Notebook timer preferences.
         var body = new Column(
             spacing: 14 * scale,
             crossAxisAlignment: CrossAxisAlignment.Stretch,
@@ -68,6 +68,9 @@ internal sealed class ScribeSettingsContent : StatelessWidget
             {
                 SectionTitle(Lang.Get("scribe:settings-section-modbehavior"), colors, scale),
                 BuildModBehaviorSection(colors, scale),
+                new Divider(),
+                SectionTitle(Lang.Get("scribe:settings-section-timer"), colors, scale),
+                BuildTimerSection(colors, scale),
                 new Divider(),
                 SectionTitle(Lang.Get("scribe:settings-section-windowappearance"), colors, scale),
                 BuildWindowAppearanceSection(colors, scale),
@@ -147,21 +150,14 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         value: settings.MuteUiSounds,
                         onChanged: v => onMutate(s => s.MuteUiSounds = v))),
 
-                // "Timer disappears" (timer-auto-disappear-setting) + "Storm text corruption"
-                // (hud-temporal-storm-corruption) share one paired row. Timer disappears: when on, a fired
-                // Clockmaker's Notebook timer auto-clears from the HUD after ~30 s; when off it stays until
-                // dismissed. Storm text corruption: when on, the HUD scrambles its text and swaps its title
-                // during a temporal storm / low stability. Both are behavior switches (not appearance), so
-                // they sit here rather than in HUD Appearance; each hugs its own label.
-                PairedControls(colors, scale,
-                    HuggingCheckbox(
-                        "settings-timerdisappear", colors, scale,
-                        value: settings.TimerAutoDisappear,
-                        onChanged: v => onMutate(s => s.TimerAutoDisappear = v)),
-                    HuggingCheckbox(
-                        "settings-stormcorruption", colors, scale,
-                        value: settings.StormCorruption,
-                        onChanged: v => onMutate(s => s.StormCorruption = v))),
+                // Storm text corruption (hud-temporal-storm-corruption): when on, the HUD scrambles its
+                // text and swaps its title during a temporal storm / low stability. Behavior switch (not
+                // appearance), so it sits here. Timer-related settings (Timer disappears + Alarm Volume)
+                // are in the dedicated Timer section below.
+                HuggingCheckbox(
+                    "settings-stormcorruption", colors, scale,
+                    value: settings.StormCorruption,
+                    onChanged: v => onMutate(s => s.StormCorruption = v)),
 
                 // Cuneiform toggles share one paired row. "Cuneiform tablets" (add-cuneiform-glyph-font;
                 // positive polarity per D8): when on (the default), the tablet tier writes in the
@@ -180,6 +176,22 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         value: settings.CuneiformProgression,
                         onChanged: v => onMutate(s => s.CuneiformProgression = v))),
             });
+    }
+
+    /// <summary>Timer: Clockmaker's Notebook timer preferences — "Timer disappears" auto-clear toggle
+    /// and "Alarm Volume" numeric (0–100). Side by side in one paired row.</summary>
+    private Widget BuildTimerSection(ColorScheme colors, float scale)
+    {
+        return PairedControls(colors, scale,
+            HuggingCheckbox(
+                "settings-timerdisappear", colors, scale,
+                value: settings.TimerAutoDisappear,
+                onChanged: v => onMutate(s => s.TimerAutoDisappear = v)),
+            LabeledControl(
+                "settings-timeralarmvolume", colors, scale,
+                IntField("timeralarmvolume", settings.TimerAlarmVolume, step: 5,
+                    onChanged: v => onMutate(s => s.TimerAlarmVolume = v),
+                    clamp: ScribePlayerSettings.ClampTimerAlarmVolume)));
     }
 
     /// <summary>Window Appearance: how Scribe's block windows (the Lectern) look — the pixel-art theme

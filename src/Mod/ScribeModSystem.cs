@@ -105,6 +105,11 @@ public sealed partial class ScribeModSystem : ModSystem
     /// in <see cref="Dispose"/>. Null until first opened, and on a pure server.</summary>
     private ScribeGearTuningDialog? gearTuningDialog;
 
+    /// <summary>The currently playing Clockmaker Notebook alarm sound, if any. Created when the timer
+    /// transitions to Fired; kept alive until it self-reports <see cref="ScribeAlarmSound.IsDone"/> (the
+    /// object manages its own fade lifecycle). Disposed and nulled in <see cref="Dispose"/>.</summary>
+    private ScribeAlarmSound? _activeAlarm;
+
     /// <summary>Client-side cache of self-loaded dialog backdrop bitmaps, keyed by asset-location string
     /// (see <see cref="GetBackdropBitmap"/>). Holds a <c>null</c> value for an asset that could not be
     /// loaded so the failing load is attempted — and warned about — exactly once, not per open or per
@@ -315,6 +320,8 @@ public sealed partial class ScribeModSystem : ModSystem
             capi.World.UnregisterGameTickListener(timerDisplayTickId);
             timerDisplayTickId = 0;
         }
+        _activeAlarm?.Dispose();
+        _activeAlarm = null;
         settingsDialog?.Dispose();
         settingsDialog = null;
         gearTuningDialog?.Dispose();

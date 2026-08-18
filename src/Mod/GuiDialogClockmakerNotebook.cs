@@ -344,6 +344,7 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
 
     private void SendClearTimer()
     {
+        modSystem.DismissAlarm();
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeClearTimerMessage());
     }
 
