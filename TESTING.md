@@ -50,15 +50,11 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > both the note (multiline) and numeric fields now share the same theme caret + focused-border color.
 > **Fully quit and relaunch the client first** so the new build + lang string load.
 
-- [ ] `2a03c5d1` **Chalkboard 10-task cap.** Add 10 tasks to a chalkboard; the Add Task button
+- [x] `2a03c5d1` **Chalkboard 10-task cap.** Add 10 tasks to a chalkboard; the Add Task button
       disables and a further add shows "A chalkboard holds at most 10 tasks." (NOT "tablet").
       Confirm notes/text still add past 10, and pinning is not capped. Tablet's own cap notice
       unchanged. *(refine-chalkboard 6.3)*
-      - **Still broken 2026-08-19** (playtest submission 2026-08-19T15-56-42): "I have a Chalkboard
-        with 50 tasks. This isn't working." The cap is NOT enforced — and notably there's also no
-        limit on plain tasks created without opening the Handbook at all. Investigate whether the
-        `HostPolicy`/`CanAdd` cap is wired for the chalkboard's normal add path (not just the
-        Handbook-add path), and whether the optimistic single-player add (server paused) bypasses it.
+      - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): the 10-task cap now enforces (previously reported unenforced on 2026-08-19T15-56-42). Enhancement requested: clicking Add while capped should surface the descriptive "chalkboard holds at most 10 tasks" notice, not merely disable the button.
 - [ ] `dff63237` **Chalkboard checkbox reads.** On a chalkboard (Pixel-Art Display ON) confirm the
       task-row checkbox tick is a brighter, legible green against the slate; confirm tablet/lectern
       accents are unchanged. *(refine-chalkboard 6.4)*
@@ -82,9 +78,10 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       chalk-white and both carets read chalk-white ink (not accent-green). Confirm the +/- stepper and
       other stock controls no longer show a gold focus ring. *(refine-chalkboard 9.4)*
       - **Confirmed 2026-08-19** (playtest submission 2026-08-19T15-56-42): "Works."
-- [ ] `3e0b8328` **Lectern field parity.** On the Lectern/Notebook (Light theme), confirm the focused
+- [x] `3e0b8328` **Lectern field parity.** On the Lectern/Notebook (Light theme), confirm the focused
       numeric field's border now matches the multiline field's (both the parchment accent) rather than
       the old stock gold, and nothing else regressed. *(refine-chalkboard 9.5)*
+      - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): "Works." Lectern/Notebook focused numeric border matches the multiline field (parchment accent).
 
 ## add-chalkboard-block
 
@@ -121,28 +118,34 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > Tracker → Add Crafting Task → Add Link → Add Note). **Fully quit and relaunch the client first** so
 > the new build + assets load.
 
-- [ ] `71b0b58e` **Handbook craft links.** Open an item Handbook page with one grid recipe → one "Add
+- [x] `71b0b58e` **Handbook craft links.** Open an item Handbook page with one grid recipe → one "Add
       Crafting Task" link; an item with several variants → one labeled link each; an item with no grid
       recipe → no link. *(add-crafting-tasks 10.4)*
-- [ ] `1c901206` **Craft creates subtasks.** Click a crafting link → a Craft parent plus indented
+      - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): "Works." single-recipe / multi-variant / no-recipe link cases all correct.
+- [x] `1c901206` **Craft creates subtasks.** Click a crafting link → a Craft parent plus indented
       ingredient subtasks appear on the resolved surface at correct batch quantities; verify ceil math
       with an output-per-craft > 1. *(add-crafting-tasks 10.5)*
+      - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): craft link creates a parent + indented ingredient subtasks at batch quantities.
 - [ ] `56389c71` **Self-heal rescale.** Raise the parent target → ingredient subtasks rescale in place
       (progress preserved); delete one child then re-edit the target → it's recreated, others untouched,
       nothing auto-deleted. *(add-crafting-tasks 10.6)*
+      - **Still broken 2026-08-19** (submission 2026-08-19T21-22-38): parent-target rescale does NOT live-redraw the subtask counts while the editor is open — new counts only appear after a view swap / redraw. Needs the in-edit-view live-row-update mechanism used elsewhere (search VSAPI-NOTES + prior fixes for how another row is refreshed in place).
 - [ ] `7b5bc94f` **Craft carried counts.** Carry ingredients → children count families (wildcard) and
       concrete `{var}` codes correctly; the parent counts the output; completion follows the Tracker
       Completion setting. *(add-crafting-tasks 10.7)*
-- [ ] `31f630d6` **Grip-tap subtask toggle.** Tap a grip → the row indents/promotes (any kind);
+- [x] `31f630d6` **Grip-tap subtask toggle.** Tap a grip → the row indents/promotes (any kind);
       press-hold-drag still reorders; no depth-2 reachable. Verify on Lectern, Notebook, Tablet,
       Scriptorium, and the Pinned HUD. *(add-crafting-tasks 10.8)*
+      - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): "Works." grip-tap indent/promote across Lectern/Notebook/Tablet/Scriptorium/HUD.
 - [ ] `4bdff687` **Liquid ingredient note.** Verify a liquid-ingredient recipe (e.g. poultice) surfaces
       the liquid as a non-counting note (or omits it), not a broken counting row.
       *(add-crafting-tasks 10.9)*
-- [ ] `64d254c3` **Craft picker entry.** Open the editor add-kind picker → order reads Add Task, Add
+      - **Still broken 2026-08-19** (submission 2026-08-19T21-22-38): the only true GRID recipe with a liquid-ish ingredient (ink & quill) surfaces NO non-counting note, and its bowl ingredient stores as the raw family code "game:bowl-*-fired" rather than a clean note. (Most "liquid" recipes are cooking/mixing, not grid — limited test surface.)
+- [x] `64d254c3` **Craft picker entry.** Open the editor add-kind picker → order reads Add Task, Add
       Item Tracker, Add Crafting Task, Add Link, Add Note. Clicking "Add Crafting Task" with no Handbook
       open opens the Handbook search; with a page open it surfaces the guide naming the "Add Crafting
       Task" button. Primary add still defaults to Add Task. *(add-crafting-tasks 11.5)*
+      - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): "Works." picker order + open-Handbook / page-open entry behavior correct.
 
 ## add-tracker-link-tasks
 
@@ -655,15 +658,19 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > tighter/fainter icon halo, and pure-white (opaque) title + gear coloring. Not tied to an active OpenSpec
 > change — small visual refinements. **Fully quit and relaunch the client** so the new gear asset loads.
 
-- [ ] `93ce41ef` **HUD-only gear icon.** The Pinned HUD header's settings gear is the new gear-RING (hollow
+- [x] `93ce41ef` **HUD-only gear icon.** The Pinned HUD header's settings gear is the new gear-RING (hollow
       centre); confirm the Settings-tab gear in the Notebook/Lectern dialogs is STILL the old solid gear
       (unchanged). Tweak the HUD SVG if the ring reads too thin/faint at its small size. *(hud-settings-button-tweaks)*
-- [ ] `710049a8` **HUD gear nudge.** Confirm the HUD gear sits 2px lower and 1px left of where it was before.
+      - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): "Perfect." HUD gear is the ring; dialog gear unchanged.
+- [x] `710049a8` **HUD gear nudge.** Confirm the HUD gear sits 2px lower and 1px left of where it was before.
       *(hud-settings-button-tweaks)*
-- [ ] `088e6748` **Trimmed gear halo.** Confirm the gear's dark glow/halo is tighter and fainter than before
+      - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): "Perfect." gear nudged 2px down / 1px left.
+- [x] `088e6748` **Trimmed gear halo.** Confirm the gear's dark glow/halo is tighter and fainter than before
       (25% less blur spread, 25% less opacity). *(hud-settings-button-tweaks)*
-- [ ] `e22d1347` **White HUD title + gear.** Confirm the "Pinned" title text AND the settings gear are pure
+      - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): "Perfect." halo tighter + fainter.
+- [x] `e22d1347` **White HUD title + gear.** Confirm the "Pinned" title text AND the settings gear are pure
       opaque white (not the old off-white/muted grey), and neither looks translucent. *(hud-settings-button-tweaks)*
+      - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): "Perfect." title + gear pure opaque white.
 
 ## fix-dialog-open-white-flash
 
@@ -725,19 +732,19 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 
 ## add-clockmaker-alarm-sound
 
-- [x] `e43edb3` **Alarm plays on timer fire.** Fire the Clockmaker Notebook timer — the alarm bell starts,
+- [x] `6c88706e` **Alarm plays on timer fire.** Fire the Clockmaker Notebook timer — the alarm bell starts,
       ramps up over ~0.5s, and breathes gently. *(add-clockmaker-alarm-sound 6.5)*
       - **Confirmed 2026-08-18** — alarm sounds on fire, ramp and breathing audible.
-- [x] `e43edb3` **Dismiss from HUD fades out.** With the alarm playing, click the fired-timer row in the HUD
+- [x] `83db7890` **Dismiss from HUD fades out.** With the alarm playing, click the fired-timer row in the HUD
       pinned list — the alarm fades out smoothly and stops. *(add-clockmaker-alarm-sound 6.5)*
       - **Confirmed 2026-08-18** — HUD click triggers fade-out.
-- [x] `e43edb3` **Dismiss from Stop Timer button fades out.** With the alarm playing, open the Clockmaker
+- [x] `14837348` **Dismiss from Stop Timer button fades out.** With the alarm playing, open the Clockmaker
       Notebook and press Stop Timer — same smooth fade. *(add-clockmaker-alarm-sound 6.5)*
       - **Confirmed 2026-08-18** — Stop Timer button triggers fade-out.
-- [x] `e43edb3` **Alarm Volume setting responds live.** Open Scribe Settings → Timer section → Alarm Volume;
+- [x] `f848250d` **Alarm Volume setting responds live.** Open Scribe Settings → Timer section → Alarm Volume;
       fire the timer and adjust the slider while the alarm plays — volume changes immediately. *(add-clockmaker-alarm-sound 6.5)*
       - **Confirmed 2026-08-18** — live volume response confirmed.
-- [x] `e43edb3` **Alarm pauses on game pause.** With the alarm playing, press ESC (or open the Handbook) in
+- [x] `daea6704` **Alarm pauses on game pause.** With the alarm playing, press ESC (or open the Handbook) in
       single-player — the alarm pauses; on resume it continues. *(add-clockmaker-alarm-sound 6.5)*
       - **Confirmed 2026-08-18** — user: "alarm sound pauses on pause via ESC and handbook in Singleplayer."
 
@@ -814,13 +821,17 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > stays its own hit region. Also fixes the read-view Craft-name no-op. **Relaunch the client first.**
 
 
-- [ ] `64a7b99f` **Tablet name opens page.** On a WET tablet, click a Link task's *name* -> its Handbook page opens and the Link is NOT completed. Click a Tracker's and a Craft's *name* -> the item's Handbook page opens. *(enable-tablet-row-links 4.3)*
+- [x] `64a7b99f` **Tablet name opens page.** On a WET tablet, click a Link task's *name* -> its Handbook page opens and the Link is NOT completed. Click a Tracker's and a Craft's *name* -> the item's Handbook page opens. *(enable-tablet-row-links 4.3)*
+      - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): wet tablet name-click opens the Handbook without completing the Link; also works on hardened and fired tablets.
 
-- [ ] `f5bcdf00` **Tablet number still edits.** On the same tablet, click the *number* on a Tracker/Craft row -> the numeric field edits the target and NO page opens. Click a plain Task/Note row -> it still edits text (no link hijack). *(enable-tablet-row-links 4.3)*
+- [x] `f5bcdf00` **Tablet number still edits.** On the same tablet, click the *number* on a Tracker/Craft row -> the numeric field edits the target and NO page opens. Click a plain Task/Note row -> it still edits text (no link hijack). *(enable-tablet-row-links 4.3)*
+      - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): the number edits the target (no page opens); plain Task/Note rows still edit text.
 
-- [ ] `05381201` **Cuneiform tablet links.** Repeat the name-click and number-edit checks with cuneiform ON -> the name is still clickable to the Handbook and the number still edits. *(enable-tablet-row-links 4.4)*
+- [x] `05381201` **Cuneiform tablet links.** Repeat the name-click and number-edit checks with cuneiform ON -> the name is still clickable to the Handbook and the number still edits. *(enable-tablet-row-links 4.4)*
+      - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): with cuneiform ON the name is still clickable and the number still edits.
 
-- [ ] `348ea7f8` **Editors stay non-clickable.** On a Lectern/Notebook EDITOR view, item-row names are NOT clickable (unchanged); their READ view still opens links, and a Craft parent's name in the read view now opens its OUTPUT item's page (was a no-op before). *(enable-tablet-row-links 4.5)*
+- [x] `348ea7f8` **Editors stay non-clickable.** On a Lectern/Notebook EDITOR view, item-row names are NOT clickable (unchanged); their READ view still opens links, and a Craft parent's name in the read view now opens its OUTPUT item's page (was a no-op before). *(enable-tablet-row-links 4.5)*
+      - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): Lectern/Notebook editor names stay non-clickable; their read view still opens links (incl. the Craft-output fix).
 
 
 ## wrap-tablet-item-titles
@@ -829,9 +840,11 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > `ScribeCuneiformFieldRenderWidget`); title band / counter / picker stay single-line. **Relaunch first.**
 
 
-- [ ] `3d83b0c0` **Long name wraps.** On a Tablet, add a Tracker/Link/Craft for a long-named item (e.g. a wildcard cloth/shirt) -> the cuneiform name WRAPS within the row instead of clipping mid-word, in both the wet (editor) and read views. *(wrap-tablet-item-titles 2.4)*
+- [x] `3d83b0c0` **Long name wraps.** On a Tablet, add a Tracker/Link/Craft for a long-named item (e.g. a wildcard cloth/shirt) -> the cuneiform name WRAPS within the row instead of clipping mid-word, in both the wet (editor) and read views. *(wrap-tablet-item-titles 2.4)*
+      - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): screenshot 2026-08-19T21-21-37 shows "Beige Nadiyan sleeveless peasant shirt" wrapping to two lines in the tablet row.
 
-- [ ] `f56cf446` **Subtask name wraps.** Add a Craft with a long-named ingredient subtask -> the indented subtask's name wraps within its narrower bounds and indentation still reads correctly under the wrapped name. *(wrap-tablet-item-titles 2.5)*
+- [x] `f56cf446` **Subtask name wraps.** Add a Craft with a long-named ingredient subtask -> the indented subtask's name wraps within its narrower bounds and indentation still reads correctly under the wrapped name. *(wrap-tablet-item-titles 2.5)*
+      - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): long-named ingredient subtask wraps within its indented bounds.
 
 - [ ] `412d7bf0` **Title band unchanged.** Confirm the Tablet dialog TITLE band is still single-line, and Lectern/Notebook/Scriptorium/HUD item titles are visually unchanged. *(wrap-tablet-item-titles 2.6)*
 
@@ -843,18 +856,24 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 
 
 - [ ] `87074827` **Lantern craft link + subtasks.** Open a lantern's Handbook page -> an "Add Crafting Task" link is present (was absent). Click it -> a Craft parent + ingredient subtasks appear. WATCH: for same-shape metal variants the generated subtasks may bind the wrong metal (signature-collision risk flagged by the implementer) - verify the subtask metal matches the lantern you opened. *(support-attribute-encoded-items 6.1)*
+      - **Still broken 2026-08-19** (submission 2026-08-19T21-22-38): metal variants resolve to the WRONG ingredients — a Gold Lantern craft yields a copper-plate recipe. Across lanterns glass/quartz collapses to quartz, the first metal plate resolves to copper, nails to copper, and the extra gold plate to silver. Confirms the flagged recipe-SignatureOf collision (bare output code + shape).
 
-- [ ] `6a582d51` **Variant name + icon.** Create a Link and a Tracker from the "Copper Lantern" Handbook page -> both rows read "Copper Lantern" (not `Game:Block-Lantern-Small-up`) and show the correct icon. *(support-attribute-encoded-items 6.2)*
+- [x] `6a582d51` **Variant name + icon.** Create a Link and a Tracker from the "Copper Lantern" Handbook page -> both rows read "Copper Lantern" (not `Game:Block-Lantern-Small-up`) and show the correct icon. *(support-attribute-encoded-items 6.2)*
+      - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): Copper Lantern output name and icon both correct.
 
-- [ ] `31d001cd` **Label opens variant page.** Click the Link's/Tracker's label -> the Handbook opens on the copper-lantern variant page (not a generic/empty page). Check the HUD Tracker tap too (it was re-encoded to keep attributes). *(support-attribute-encoded-items 6.3)*
+- [x] `31d001cd` **Label opens variant page.** Click the Link's/Tracker's label -> the Handbook opens on the copper-lantern variant page (not a generic/empty page). Check the HUD Tracker tap too (it was re-encoded to keep attributes). *(support-attribute-encoded-items 6.3)*
+      - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): label opens the copper-lantern variant page (HUD tap included).
 
 - [ ] `23a3dce2` **Meal page resolves.** Create tasks for a meal (an `IHandBookPageCodeProvider` item) -> the name resolves and the label opens the correct meal page. *(support-attribute-encoded-items 6.4)*
+      - **Still broken 2026-08-19** (submission 2026-08-19T21-22-38): meal target (IHandBookPageCodeProvider) reported "Broken." — meal name/page resolution not working.
 
 - [ ] `3be87971` **Copper counts, iron doesn't.** With a copper-lantern Tracker, carry both copper and iron lanterns -> only the copper lanterns count toward progress. *(support-attribute-encoded-items 6.5)*
 
-- [ ] `2820f50a` **Old-doc backward-compat.** Open a document saved BEFORE this change whose Tracker/Link targets are bare codes -> every target still resolves, renders, and opens its page (no migration). *(support-attribute-encoded-items 6.6)*
+- [x] `2820f50a` **Old-doc backward-compat.** Open a document saved BEFORE this change whose Tracker/Link targets are bare codes -> every target still resolves, renders, and opens its page (no migration). *(support-attribute-encoded-items 6.6)*
+      - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): pre-change bare-code targets still resolve, render, and open (no migration).
 
-- [ ] `a50fdf2b` **Plain code unchanged.** Create a Tracker/Link for a plain code item (e.g. `game:ingot-copper`) -> behavior and stored target are unchanged (bare code, not `stack@`). *(support-attribute-encoded-items 6.7)*
+- [x] `a50fdf2b` **Plain code unchanged.** Create a Tracker/Link for a plain code item (e.g. `game:ingot-copper`) -> behavior and stored target are unchanged (bare code, not `stack@`). *(support-attribute-encoded-items 6.7)*
+      - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): plain code item stays a bare code (not stack@); behavior unchanged.
 
 
 ## restructure-handbook-entries
@@ -863,9 +882,12 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > of restating the tab tour. No `*ByType` edits. **Relaunch first (assets load at boot).**
 
 
-- [ ] `50e20e27` **Tabs & Views article.** Open the Handbook -> the new "Scribe Mod: Tabs & Views" article is present, describes the shared tabs once, and has a working link to the editor-reference article. *(restructure-handbook-entries 4.2)*
+- [x] `50e20e27` **Tabs & Views article.** Open the Handbook -> the new "Scribe Mod: Tabs & Views" article is present, describes the shared tabs once, and has a working link to the editor-reference article. *(restructure-handbook-entries 4.2)*
+      - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): "Scribe Mod: Tabs & Views" article present with a working editor-reference link.
 
-- [ ] `7de7d597` **Entries shorter, link out.** Open the Lectern, Scriptorium, and Notebook entries -> each is noticeably shorter, reads uniqueness-first, and links to the Tabs & Views article instead of restating the tour. No section is duplicated (no `*ByType` doubling). *(restructure-handbook-entries 4.3)*
+- [x] `7de7d597` **Entries shorter, link out.** Open the Lectern, Scriptorium, and Notebook entries -> each is noticeably shorter, reads uniqueness-first, and links to the Tabs & Views article instead of restating the tour. No section is duplicated (no `*ByType` doubling). *(restructure-handbook-entries 4.3)*
+      - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): Lectern/Scriptorium/Notebook entries shorter and link out; no section duplicated.
 
-- [ ] `6f869220` **Unique content + links.** Confirm object-unique content still reads correctly - Scriptorium Transcribe, Guest Book, Notebook History, Clockmaker timer, Tablet material states - and every cross-link in the touched entries resolves. *(restructure-handbook-entries 4.4)*
+- [x] `6f869220` **Unique content + links.** Confirm object-unique content still reads correctly - Scriptorium Transcribe, Guest Book, Notebook History, Clockmaker timer, Tablet material states - and every cross-link in the touched entries resolves. *(restructure-handbook-entries 4.4)*
+      - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): object-unique content reads correctly and every cross-link resolves.
 
