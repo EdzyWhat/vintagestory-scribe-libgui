@@ -239,20 +239,36 @@ items are re-derived fresh from `tasks.md`.
       session-independent and visible live in read view. *(7.5)*
 ```
 
-Each item's leading code (`` `7d808ca9` ``) is a short fingerprint: `sha256(task-id +
-" " + normalized task text)[:8]`, computed the same way each regeneration. It's not
-meant to be human-meaningful — it exists purely so regeneration can detect whether a
-`tasks.md` item changed underneath a `TESTING.md` entry.
+Each item carries a leading code (`` `7d808ca9` ``) that must be exactly 8 lowercase hex
+chars (`^[0-9a-f]{8}$`). It is not meant to be human-meaningful — it exists only so the app
+can key items uniquely and so a submission can reference one across machines.
 
-**The fingerprint MUST be exactly 8 lowercase hex chars (`^[0-9a-f]{8}$`) — always the
-computed `sha256(...)[:8]`, NEVER a hand-authored mnemonic/readable code** (e.g. don't
-write `` `a05caret1` `` because it "means task 8.5 caret"). This is not stylistic: the
-playtest app parses items with a strict regex (`- \[[ x]\] `[0-9a-f]{8}` …`), so a code
-that isn't 8 hex chars **fails to parse as an item** — the app silently treats that whole
-line as body text of the *previous* valid item and vacuums its `- **verdict**` sub-bullets
-into that neighbor's timeline. The malformed item vanishes from every tab and the innocent
-neighbor above it gets mis-bucketed by the absorbed verdicts. Compute the hash; never
-improvise the code.
+**Generate a NEW item's code with the counter tool — do NOT hash, and never improvise a
+readable/mnemonic code:**
+
+```bash
+python3 .claude/skills/what-to-test/next-id.py 3   # prints the next 3 codes, advances the counter
+python3 .claude/skills/what-to-test/next-id.py --peek   # next code without advancing
+```
+
+The tool hands out a persistent incrementing counter formatted as 8 hex digits
+(`00000001`, `00000002`, … `0000000a`, …) and skips any code already in `TESTING.md`. Call
+it once per regeneration for however many *new* items you're adding, in list order.
+
+Why a counter instead of the old `sha256(task-id + text)[:8]`: the hash was slow to
+reproduce by hand and impossible to verify without re-deriving the exact task-id + text
+normalization (which drifts), so it was a recurring time-sink. Sequential codes satisfy the
+same regex, are trivially unique, and never need reproducing. **Existing sha256 codes
+already in `TESTING.md` stay as-is** — both forms match the parser; only new items use the
+counter. A retained item keeps its old code forever (its verdict is carried verbatim); you
+only mint a new code for a genuinely new item.
+
+The 8-hex-char rule is not stylistic: the playtest app parses items with a strict regex
+(`- \[[ x]\] `[0-9a-f]{8}` …`), so a code that isn't 8 hex chars **fails to parse as an
+item** — the app silently treats that whole line as body text of the *previous* valid item
+and vacuums its `- **verdict**` sub-bullets into that neighbor's timeline. The malformed
+item vanishes from every tab and the innocent neighbor above it gets mis-bucketed. Always
+take the code from the tool.
 
 **One `tasks.md` task may map to SEVERAL `TESTING.md` items.** A compound task (e.g. one
 line covering delete + pin + reorder + checkbox) can be split into several granular retest
@@ -287,26 +303,26 @@ checked off or removed from `tasks.md` — retention is by "has a verdict on fil
 2b. **Validate + repair item codes before merging.** For every item read from the existing
    file, check its code matches `^[0-9a-f]{8}$`. If one doesn't (a hand-authored mnemonic,
    a wrong length, uppercase, etc.), it's malformed — the app silently drops it and misfiles
-   its neighbor (see the fingerprint rule above). Repair it: recompute the correct
-   `sha256(task-id + " " + normalized item text)[:8]` from the item's CURRENT text and
-   replace the code, carrying the item's verdict lines forward verbatim (the text is
-   unchanged, so its verdict still applies — this is a pure code-format repair, distinct
-   from the step-3 "fingerprint changed because the *text* changed → drop the verdict" rule).
-   Flag each repair to the user in the write-back summary.
-3. Merge by fingerprint:
-   - A fingerprint in **both** retained and fresh active → keep the retained version
-     (its verdict wins; don't overwrite a recorded result with a blank fresh item).
-   - A fingerprint **only in retained** → keep it as-is (this is the completed/backlog/
-     obsolete/broken history that must survive).
-   - A fingerprint **only in fresh active** → write it fresh: unchecked, no annotation.
-   - **Fingerprint changed** (a retained item's task text was edited, so `tasks.md` now
-     produces a *new* fingerprint for the same task): treat the new fingerprint as a
-     fresh active item (unchecked, no annotation — the old verdict was for different
-     text), and **do not** carry the stale-fingerprint verdict forward. The old entry is
-     dropped, since its annotation no longer describes the current task. Never copy an
-     annotation across differing fingerprints.
-   - Never invent or infer an annotation; if there isn't one on file for a fingerprint,
-     that item is unconfirmed.
+   its neighbor (see the code rule above). Repair it: mint a fresh code with
+   `python3 .claude/skills/what-to-test/next-id.py` and replace the malformed one, carrying
+   the item's verdict lines forward verbatim (a code is just an identity, so re-coding a
+   retained item never invalidates its verdict). Flag each repair in the write-back summary.
+3. Merge. Codes are stable identities now (a counter value assigned once), NOT derived from
+   text — so match a retained item to a fresh active item by the **task-id tag + item text**
+   they describe, and keep the retained item's existing code. Then:
+   - An item present in **both** retained and fresh active → keep the retained version (its
+     code + verdict win; don't overwrite a recorded result with a blank fresh item).
+   - An item **only in retained** → keep it as-is (completed/backlog/obsolete/broken history
+     that must survive), code unchanged.
+   - An item **only in fresh active** (genuinely new) → mint a new code with `next-id.py` and
+     write it unchecked, no annotation.
+   - A retained item whose **task text was edited** → keep its existing code and verdict only
+     if the change is cosmetic and the test still means the same thing; if the edit changes
+     what's being tested, treat it as a new item (new code, no annotation) and let the old
+     one age out. Use judgment — the code no longer tells you automatically, since it's not
+     text-derived.
+   - Never invent or infer an annotation; if there isn't one on file for an item, it's
+     unconfirmed.
 4. Write the full file back (grouped by change, same order/priority as the in-chat list;
    retained items that no longer map to a current change keep their last group heading).
    Mention to the user that `TESTING.md` was written/updated, and if any items were

@@ -152,6 +152,10 @@
       depth-2 reachable. Verify on Lectern, Notebook, Tablet, Scriptorium, and the Pinned HUD.
 - [ ] 10.9 In-game: verify a liquid-ingredient recipe (e.g. poultice) surfaces the liquid as a
       non-counting note (or omits it), not a broken counting row.
+      — Root-caused + fixed in sibling `fix-recipe-variant-identity` §4.3 (2026-08-20): the liquid is
+      declared on `recipe.Attributes.liquidContainerProps`, not on a grid cell, so the per-cell
+      `MatterState==Liquid` check never fired. New `ScribeCraftRecipeProbe.TryAddLiquidNote` now names the
+      liquid as a note (see TESTING.md `4bdff687`). This box remains the in-game retest gate.
 
 ## 11. Add the "Add Crafting Task" entry to the editor add-kind picker
 

@@ -21,6 +21,129 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## fix-recipe-variant-identity
+
+> Metal-variant Crafting Tasks now key recipe identity on the Handbook **page code** (via
+> `PageCodeForStack`) instead of the bare output code + grid shape, so each metal/variant resolves to
+> its OWN ingredients. **This is the fix for the `87074827` copper-collision bug** in
+> `support-attribute-encoded-items` below (all metals were collapsing to copper). A new
+> `.scribeprobe [code]` dev command dumps the derived variants/signatures for the held item (or a
+> given code). **Fully quit and relaunch the client first** so the new build loads.
+
+- [x] `d0e52c01` **Probe metal variants.** With `.scribeprobe` and a copper vs. a gold metal lantern
+      held (or `.scribeprobe game:block-lantern-...`), compare the two dumps — confirm their output
+      **page codes differ by material** and each matched recipe's ingredients read for that metal.
+      Record both dumps as ground truth. *(fix-recipe-variant-identity 1.2)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T01-34-39): "The dumps worked." `.scribeprobe`
+        dumps the derived variants/signatures per metal as intended.
+- [x] `f2c9351c` **Craft distinct metals.** Add a Crafting Task from several metal lanterns
+      (copper, gold, iron) — each task's ingredient subtasks must list THAT metal's plate/nails, no two
+      identical. *(Retest of the `87074827` copper-collision bug — now fixed here.)*
+      *(fix-recipe-variant-identity 7.1)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T01-34-39): "Works. Also works for other
+        components of the recipe as well." Closes the `87074827` copper-collision bug.
+- [x] `b2e7495a` **Lined vs unlined.** Compare a lined and an unlined lantern's Crafting Task — the
+      lining subtask appears only for the lined variant. *(fix-recipe-variant-identity 7.2)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T01-34-39): "Works!"
+- [x] `bc8fb6c7` **Common-item regression.** Add a Crafting Task for an attribute-less common item
+      (e.g. planks) — confirm the same ingredients/labels as before, no regression.
+      *(fix-recipe-variant-identity 7.3)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T01-34-39): "Works." No regression on
+        attribute-less common items.
+- [x] `1c33a856` **Wildcard + liquid note.** Confirm a wildcard-ingredient recipe shows a readable
+      family name on its subtask (e.g. "… (any variant)"), and a liquid-consuming recipe shows the
+      liquid as a non-counting note. *(fix-recipe-variant-identity 7.4)*
+      - **Still broken 2026-08-20** (submission 2026-08-20T01-34-39): the "(any variant)" family name
+        works, but the **liquid note does not appear** — "We have no note for liquid. Probably the issue
+        is that liquids are always IN a container (bucket, bowl) so the game doesn't resolve them the
+        same way. Look at how Tallybook solves for this." Same root cause as `4bdff687` (add-crafting-tasks
+        10.9). The `MatterState==Liquid` check never fires because the resolved ingredient stack is the
+        *container* (bowl/bucket), not the liquid.
+      - **Fix applied 2026-08-20 (retest needed):** the liquid is declared on the RECIPE
+        (`attributes.liquidContainerProps.requiresContent`), not on a grid cell — so a new recipe-level
+        check (`ScribeCraftRecipeProbe.TryAddLiquidNote`, mirroring vanilla
+        `BlockLiquidContainerBase.OnHandbookRecipeRender`) now names the liquid as a note; the container
+        bowl stays counted as a normal ingredient. Verified on ink-and-quill/poultice/bandage/oillamp/beenade
+        data. Restage + retest: a liquid-consuming recipe should now show "Also needs <liquid>" as a note.
+      - **Confirmed 2026-08-20** (submission 2026-08-20T09-47-32): "Works, we now have the note for liquid."
+        Retest of the recipe-level `TryAddLiquidNote` fix — the liquid note now surfaces. (Follow-up in
+        general notes: user wants to replace the note with a real liquid **tracker** task; tracked separately.)
+
+## wrap-tablet-title-band
+
+> A long Tablet title now WRAPS to at most two cuneiform lines (was single-line, hard-clipped), growing
+> DOWN into the title band's existing slack — gated on cuneiform being active, so the readable fallback
+> and every other surface (Lectern/Notebook/Scriptorium) stay single-line. The exact two-line band height
+> is an in-game calibration (§4.1). **Fully quit and relaunch the client first** so the new build loads.
+
+- [x] `43acae13` **Long title wraps.** On a wet tablet, set a very long title (paste a long item name) →
+      the resting title wraps to two lines within the band, is fully readable, and the drag/pencil/close
+      chrome stays clear. Calibrate the two-line height here (measure, don't theorize).
+      *(wrap-tablet-title-band 4.1)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T09-47-32): "Works." Long title wraps to two lines
+        in the band. User note: editing gets "a bit janky when it's super long," judged acceptable. Two
+        follow-ups in general notes (apply wrapping to all Scribe titles; refine the tablet title-width var).
+- [x] `23c345b7` **Editing title wraps.** Click the pencil and type a long title past one line → the
+      editing field wraps to a second line (not clipped off the right); press Enter → it commits and shows
+      the same two-line resting title. *(wrap-tablet-title-band 4.2)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T09-47-32): "Works." Editing field wraps to a second
+        line and commits to the same two-line resting title.
+- [x] `82bf3122` **Short title unchanged.** Confirm a SHORT tablet title still looks single-line with no
+      band growth, and Lectern/Notebook/Scriptorium titles are visually unchanged. *(wrap-tablet-title-band 4.3)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T09-47-32): "Works." Short titles stay single-line,
+        no band growth; other surfaces unchanged.
+- [x] `1b7d4541` **Cuneiform-off fallback.** Disable cuneiform → the tablet title renders a readable
+      single-line title (base path), with no crash when the glyph bundle is absent. *(wrap-tablet-title-band 4.4)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T09-47-32): "Works." Cuneiform-off renders a readable
+        single-line title, no crash. ("But see the extra note" = the wrap-everywhere follow-up in general notes.)
+
+## wrap-titles-all-surfaces
+
+> Two-line title wrapping, previously tablet-cuneiform-only, is now the shared default for EVERY Scribe
+> surface (Lectern/Notebook/Scriptorium/Chalkboard + cuneiform-OFF tablet) via `TitleMaxLines => 2` in the
+> base + `maxLines: TitleMaxLines` on the readable RichText. Tablet wrap width widened per-material
+> (clay `0.86f`, wax `0.82f`). **Fully quit and relaunch the client first** so the new build loads.
+
+- [ ] `00000004` **Standard surfaces wrap.** On Lectern, Notebook, and Scriptorium, set a very long title →
+      the resting title wraps to two lines within the band, is fully readable (line 1 not clipped at the top),
+      the drag/pencil/close chrome stays clear, and a title longer than two lines ends with an ellipsis on
+      line 2. *(wrap-titles-all-surfaces 6.1/6.2/6.3, 4.1)*
+- [ ] `00000005` **Chalkboard wraps.** Long title on the Chalkboard → wraps to two lines within its taller
+      band, chrome stays clear, no line-1 clipping. *(wrap-titles-all-surfaces 6.4)*
+- [ ] `00000006` **Tablet cuneiform-OFF wraps.** Disable cuneiform, set a long tablet title on BOTH clay and
+      wax → the readable title now wraps to two lines (was single-line ellipsized before). *(wrap-titles-all-surfaces 6.6)*
+- [ ] `00000007` **Tablet cuneiform-ON regression.** With cuneiform on, the proven tablet two-line cuneiform
+      wrap is unchanged — wraps, clips at line 2 (no ellipsis glyph), no visual shift. *(wrap-titles-all-surfaces 6.5)*
+- [ ] `00000008` **Editing stays single-line.** On Lectern/Notebook/Scriptorium, click the pencil and type a
+      long title → the editing field stays single-line (readable path), Enter commits with no newline, and the
+      resting title re-wraps to two lines on commit. *(wrap-titles-all-surfaces 6.7)*
+- [ ] `00000009` **Short-title regression.** On every surface, a title that fits on one line renders exactly
+      as before — no band-height change, no layout shift. *(wrap-titles-all-surfaces 6.8)*
+- [ ] `0000000a` **Tablet width tuning.** Confirm the tablet title wraps LATER than the old default and clay
+      (`0.86f`) wraps a touch later than wax (`0.82f`); other surfaces' wrap points are unaffected. *(wrap-titles-all-surfaces 6.9)*
+
+## add-meal-page-scribe-link
+
+> Cooked meals and pies render through a different Handbook page class (`GuiHandbookMealRecipePage`)
+> that previously had no "Add to Scribe" section at all; a new Harmony postfix appends a single
+> **Add Link** to those pages (a meal has nothing countable, so Link only). Related to the
+> `23a3dce2` meal-resolution bug in `support-attribute-encoded-items` below. **Relaunch first.**
+
+- [x] `7ca11da9` **Meal Add Link + title.** Open a cooked meal's Handbook page (e.g. Vegetable Stew) —
+      an "Add to Scribe" section with a single **Add Link** (no Tracker/Craft) appears. Click it with a
+      Scribe surface open → a Link row is added showing the meal's title (e.g. "Vegetable Stew"), NOT a
+      raw `mealrecipe-name-…` key or bare page code. *(add-meal-page-scribe-link 3.1 / 3.2)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T01-34-39): "We have a link row!" The meal page's
+        Add Link creates a Link row carrying the resolved meal title.
+- [x] `7ab79374` **Meal link opens; pie too.** Open that meal Link (read view / Pinned / HUD) → it
+      navigates back to the meal recipe Handbook page. Confirm a **pie** page (same page class) also
+      gets the Add Link and its title/label resolve correctly. *(add-meal-page-scribe-link 3.3 / 3.4)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T01-34-39): "The links do open!"
+- [x] `afb84145` **Item/guide pages unchanged.** Confirm ordinary item pages and guide/article pages
+      still render their existing Add Tracker/Link/Craft sections exactly as before — no duplication,
+      no loss. *(add-meal-page-scribe-link 3.5)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T01-34-39): "Works." Item + guide pages unchanged.
+
 ## refine-nav-button-placement
 
 > Right nav-button horizontal placement is now a group-scoped seam: the **Pages group** (Lectern,
@@ -126,21 +249,43 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       ingredient subtasks appear on the resolved surface at correct batch quantities; verify ceil math
       with an output-per-craft > 1. *(add-crafting-tasks 10.5)*
       - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): craft link creates a parent + indented ingredient subtasks at batch quantities.
-- [ ] `56389c71` **Self-heal rescale.** Raise the parent target → ingredient subtasks rescale in place
+- [x] `56389c71` **Self-heal rescale.** Raise the parent target → ingredient subtasks rescale in place
       (progress preserved); delete one child then re-edit the target → it's recreated, others untouched,
       nothing auto-deleted. *(add-crafting-tasks 10.6)*
       - **Still broken 2026-08-19** (submission 2026-08-19T21-22-38): parent-target rescale does NOT live-redraw the subtask counts while the editor is open — new counts only appear after a view swap / redraw. Needs the in-edit-view live-row-update mechanism used elsewhere (search VSAPI-NOTES + prior fixes for how another row is refreshed in place).
-- [ ] `7b5bc94f` **Craft carried counts.** Carry ingredients → children count families (wildcard) and
+      - **Confirmed 2026-08-20** (submission 2026-08-20T01-34-39): "It works now!" The
+        `fix-craft-subtask-live-rescale` change now live-redraws the subtask counts in place on a
+        parent-target change; the prior in-editor stale-count bug is closed.
+- [x] `7b5bc94f` **Craft carried counts.** Carry ingredients → children count families (wildcard) and
       concrete `{var}` codes correctly; the parent counts the output; completion follows the Tracker
       Completion setting. *(add-crafting-tasks 10.7)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T01-34-39): "Works." Wildcard family + concrete
+        `{var}` children and the output parent all count correctly.
 - [x] `31f630d6` **Grip-tap subtask toggle.** Tap a grip → the row indents/promotes (any kind);
       press-hold-drag still reorders; no depth-2 reachable. Verify on Lectern, Notebook, Tablet,
       Scriptorium, and the Pinned HUD. *(add-crafting-tasks 10.8)*
       - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): "Works." grip-tap indent/promote across Lectern/Notebook/Tablet/Scriptorium/HUD.
-- [ ] `4bdff687` **Liquid ingredient note.** Verify a liquid-ingredient recipe (e.g. poultice) surfaces
+- [x] `4bdff687` **Liquid ingredient note.** Verify a liquid-ingredient recipe (e.g. poultice) surfaces
       the liquid as a non-counting note (or omits it), not a broken counting row.
       *(add-crafting-tasks 10.9)*
       - **Still broken 2026-08-19** (submission 2026-08-19T21-22-38): the only true GRID recipe with a liquid-ish ingredient (ink & quill) surfaces NO non-counting note, and its bowl ingredient stores as the raw family code "game:bowl-*-fired" rather than a clean note. (Most "liquid" recipes are cooking/mixing, not grid — limited test surface.)
+      - **Still broken 2026-08-20** (submission 2026-08-20T01-34-39): re-confirmed FAIL after the
+        fix-recipe-variant-identity work — no liquid note surfaces. Root cause (per user, matches
+        `1c33a856`): the liquid is always held in a *container* (bowl/bucket), so the resolved ingredient
+        stack is the container item, whose `MatterState` is Solid — the `MatterState==Liquid` check never
+        fires. Fix must detect the containerized-liquid ingredient (a `WaterTightContainable` / liquid-slot
+        content, or the recipe ingredient's declared liquid portion) rather than the resolved stack's own
+        matter state. User pointer: look at how Tallybook surfaces liquid ingredients.
+      - **Fix applied 2026-08-20 (retest needed):** decompiled ground-truth — the liquid is declared on the
+        RECIPE (`attributes.liquidContainerProps.requiresContent`), NOT on a grid cell (the cell is the solid
+        bowl), which is why the `MatterState==Liquid` check never fired. Tallybook has the SAME blind spot
+        (it never reads `liquidContainerProps`); the real reference is vanilla
+        `BlockLiquidContainerBase.OnHandbookRecipeRender`. New recipe-level `ScribeCraftRecipeProbe.TryAddLiquidNote`
+        now names the liquid as a note (ink-and-quill → "Also needs Black Dye"); the bowl stays a counted
+        ingredient. Fixed in the sibling `fix-recipe-variant-identity` (§4.3). Restage + retest.
+      - **Confirmed 2026-08-20** (submission 2026-08-20T09-47-32): "Works!" Liquid-ingredient recipe now
+        surfaces the liquid as a non-counting note. (Follow-up in general notes: convert the note to a real
+        liquid tracker task, rounding litres up; tracked separately.)
 - [x] `64d254c3` **Craft picker entry.** Open the editor add-kind picker → order reads Add Task, Add
       Item Tracker, Add Crafting Task, Add Link, Add Note. Clicking "Add Crafting Task" with no Handbook
       open opens the Handbook search; with a page open it surfaces the guide naming the "Add Crafting
@@ -652,6 +797,26 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Follow-up implemented 2026-08-17** (watcher-stamp-sync): the import path also broadcasts the
         IMPORTED flourish to watching clients now. Its 2-client re-test is backlogged as `fe69e4b0` below.
 
+## add-transcribe-stamp-sound
+
+> A one-shot sound at the Transcribe/import/export stamp's contact frame (`DescendEnd`), fired from
+> `ScribeStamp` so only clients who actually see the flourish hear it. Volume is now BAKED into
+> `stamp.ogg` (re-baked 2026-08-20 to the "alarm-140-equivalent" level, +16.9 dB / 7× the source) with
+> the runtime `Volume` fixed at `1f` and **unmapped from the Timer alarm slider**; it still routes
+> through the base-game "Sound Effects" slider. **Fully quit and relaunch the client** so `stamp.ogg`
+> loads.
+
+- [ ] `00000001` **Stamp sound fires once.** In single-player, perform a Transcribe copy — the stamp
+      sound plays exactly once, on the beat the wooden stamp lands (contact/press), not on fade-in or
+      lift. Repeat for import and export — each plays its own single stamp sound. *(add-transcribe-stamp-sound 5.1)*
+- [ ] `00000002` **Volume baked + unmapped.** Confirm the stamp plays at the confirmed "alarm-140"
+      level and that the **Timer alarm slider no longer affects it** (move it 0↔100 — the stamp volume
+      is unchanged). The base-game "Sound Effects" slider **still** scales it (0 there silences the
+      stamp). *(add-transcribe-stamp-sound 5.2)*
+- [ ] `00000003` **Watcher hears it only if visible.** Two clients on one shared Scriptorium: a watcher on
+      the same Transcribe/import-export view hears the stamp at the contact frame; a watcher on a different
+      tab (or with the dialog closed) hears nothing. *(add-transcribe-stamp-sound 5.3)*
+
 ## hud-settings-button-tweaks
 
 > Standalone playtest tweaks to the Pinned HUD header (2026-08-16): a new gear-ring settings icon, a
@@ -847,6 +1012,12 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): long-named ingredient subtask wraps within its indented bounds.
 
 - [ ] `412d7bf0` **Title band unchanged.** Confirm the Tablet dialog TITLE band is still single-line, and Lectern/Notebook/Scriptorium/HUD item titles are visually unchanged. *(wrap-tablet-item-titles 2.6)*
+      - **Obsolete 2026-08-20** (submission 2026-08-20T01-34-39): the test premise has FLIPPED. The band
+        is indeed still single-line, but the user now WANTS it to wrap to 2 lines — "That's what I'm trying
+        to fix! I may have missed the boat here." References a ModDB comment request
+        (https://mods.vintagestory.at/scribe#tab-description). The "keep the title band single-line" check
+        no longer reflects the goal; superseded by new work to make the Tablet title band wrap to 2 lines
+        (tracked in the new `wrap-tablet-title-band` proposal).
 
 
 ## support-attribute-encoded-items
@@ -855,8 +1026,11 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > so metal-variant items track exactly (copper counts, iron doesn't). **Relaunch first.**
 
 
-- [ ] `87074827` **Lantern craft link + subtasks.** Open a lantern's Handbook page -> an "Add Crafting Task" link is present (was absent). Click it -> a Craft parent + ingredient subtasks appear. WATCH: for same-shape metal variants the generated subtasks may bind the wrong metal (signature-collision risk flagged by the implementer) - verify the subtask metal matches the lantern you opened. *(support-attribute-encoded-items 6.1)*
+- [x] `87074827` **Lantern craft link + subtasks.** Open a lantern's Handbook page -> an "Add Crafting Task" link is present (was absent). Click it -> a Craft parent + ingredient subtasks appear. WATCH: for same-shape metal variants the generated subtasks may bind the wrong metal (signature-collision risk flagged by the implementer) - verify the subtask metal matches the lantern you opened. *(support-attribute-encoded-items 6.1)*
       - **Still broken 2026-08-19** (submission 2026-08-19T21-22-38): metal variants resolve to the WRONG ingredients — a Gold Lantern craft yields a copper-plate recipe. Across lanterns glass/quartz collapses to quartz, the first metal plate resolves to copper, nails to copper, and the extra gold plate to silver. Confirms the flagged recipe-SignatureOf collision (bare output code + shape).
+      - **Confirmed 2026-08-20** (submission 2026-08-20T01-34-39): "It now works!" The
+        `fix-recipe-variant-identity` change (re-key recipe identity onto the Handbook page code) closes
+        the SignatureOf collision — each metal variant resolves to its own ingredients.
 
 - [x] `6a582d51` **Variant name + icon.** Create a Link and a Tracker from the "Copper Lantern" Handbook page -> both rows read "Copper Lantern" (not `Game:Block-Lantern-Small-up`) and show the correct icon. *(support-attribute-encoded-items 6.2)*
       - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): Copper Lantern output name and icon both correct.
@@ -864,10 +1038,14 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [x] `31d001cd` **Label opens variant page.** Click the Link's/Tracker's label -> the Handbook opens on the copper-lantern variant page (not a generic/empty page). Check the HUD Tracker tap too (it was re-encoded to keep attributes). *(support-attribute-encoded-items 6.3)*
       - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): label opens the copper-lantern variant page (HUD tap included).
 
-- [ ] `23a3dce2` **Meal page resolves.** Create tasks for a meal (an `IHandBookPageCodeProvider` item) -> the name resolves and the label opens the correct meal page. *(support-attribute-encoded-items 6.4)*
+- [x] `23a3dce2` **Meal page resolves.** Create tasks for a meal (an `IHandBookPageCodeProvider` item) -> the name resolves and the label opens the correct meal page. *(support-attribute-encoded-items 6.4)*
       - **Still broken 2026-08-19** (submission 2026-08-19T21-22-38): meal target (IHandBookPageCodeProvider) reported "Broken." — meal name/page resolution not working.
+      - **Confirmed 2026-08-20** (submission 2026-08-20T01-34-39): "It works!" The
+        `add-meal-page-scribe-link` postfix now surfaces the meal Link and its name/page resolve.
 
-- [ ] `3be87971` **Copper counts, iron doesn't.** With a copper-lantern Tracker, carry both copper and iron lanterns -> only the copper lanterns count toward progress. *(support-attribute-encoded-items 6.5)*
+- [x] `3be87971` **Copper counts, iron doesn't.** With a copper-lantern Tracker, carry both copper and iron lanterns -> only the copper lanterns count toward progress. *(support-attribute-encoded-items 6.5)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T01-34-39): "Works!" A copper-lantern Tracker
+        counts only copper lanterns, not iron (attribute-qualified matching holds).
 
 - [x] `2820f50a` **Old-doc backward-compat.** Open a document saved BEFORE this change whose Tracker/Link targets are bare codes -> every target still resolves, renders, and opens its page (no migration). *(support-attribute-encoded-items 6.6)*
       - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): pre-change bare-code targets still resolve, render, and open (no migration).
@@ -890,4 +1068,17 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 
 - [x] `6f869220` **Unique content + links.** Confirm object-unique content still reads correctly - Scriptorium Transcribe, Guest Book, Notebook History, Clockmaker timer, Tablet material states - and every cross-link in the touched entries resolves. *(restructure-handbook-entries 4.4)*
       - **Confirmed 2026-08-19** (submission 2026-08-19T21-22-38): object-unique content reads correctly and every cross-link resolves.
+
+
+## add-liquid-ingredient-tracker
+
+> Liquid recipe ingredients (ink-and-quill's dye, a poultice's water) become counting **litre Trackers**
+> instead of plain notes; counted from carried buckets/bowls. **Relaunch first** to load the new build.
+
+- [ ] `0000000b` **Liquid becomes a Tracker.** Open an ink-and-quill (or similar liquid recipe) Handbook page and Add Crafting Task -> the liquid appears as a **Tracker child with a have/need counter**, not a Text note. Confirm its target = the recipe's litres for the chosen batch via `.scribeprobe`. *(add-liquid-ingredient-tracker 6.1)*
+- [ ] `0000000c` **Empty -> carried litres.** With an empty inventory the liquid Tracker reads `0 / N`. Pick up a bucket/bowl holding the liquid -> the count rises to the container's litres within ~1s. *(add-liquid-ingredient-tracker 6.2)*
+- [ ] `0000000d` **Litres sum; wrong liquid = 0.** Carry multiple containers of the same liquid -> litres sum. A container of a different liquid contributes `0`. *(add-liquid-ingredient-tracker 6.3)*
+- [ ] `0000000e` **Fill applies completion setting.** Carrying >= the target litres marks the Tracker satisfied and applies your tracker-completion setting (complete / delete / nothing); dropping below afterward does not re-fire. *(add-liquid-ingredient-tracker 6.4)*
+- [ ] `0000000f` **HUD pin counts too.** Pin the liquid Tracker to the HUD -> it updates from carried containers exactly like in the dialog (same count path). *(add-liquid-ingredient-tracker 6.5)*
+- [ ] `00000010` **Probe-sweep edge cases.** `.scribeprobe` a few real liquid recipes -> a block-`type` liquid and a sub-1-litre requirement round up as expected, and any wildcard/unresolvable liquid still degrades to a note. *(add-liquid-ingredient-tracker 6.6)*
 

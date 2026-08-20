@@ -68,10 +68,18 @@
 - [x] 4.3 Verify/tighten the liquid path (D4): a `MatterState == Liquid` resolved ingredient stays a
       note; confirm the captured 10.9 container case (§1.3) is either counted correctly as a discrete
       item or noted — whichever the repro shows is correct. No litre math.
-      — DONE (code): the D7 liquid path is unchanged and correct — a `MatterState == Liquid` resolved
-      ingredient becomes a `scribe-gui-craft-liquid-note`, never counted; a structural container
-      ingredient (a non-liquid bowl/bucket) falls through to the normal counting path as a discrete item.
-      Final call on the specific 10.9 container repro is the in-game §7.4 gate (needs the live case).
+      — DONE (code, corrected 2026-08-20 after playtest FAIL): the original claim ("D7 liquid path is
+      unchanged and correct") was WRONG for the real recipes. Playtest (1c33a856 / 4bdff687) showed NO
+      liquid note ever surfaced. Decompiled ground-truth: for ink-and-quill/poultice/bandage/oillamp/beenade
+      the liquid is NOT a grid cell — it is declared on the RECIPE as
+      `attributes.liquidContainerProps.requiresContent` (the grid cell is the solid `bowl-*-fired`), so the
+      per-cell `MatterState == Liquid` check can never fire. FIX: added recipe-level
+      `ScribeCraftRecipeProbe.TryAddLiquidNote` (recipe `Attributes.liquidContainerProps` → per-cell
+      `RecipeAttributes` fallback), mirroring the authoritative vanilla
+      `BlockLiquidContainerBase.OnHandbookRecipeRender`. It names the LIQUID as a
+      `scribe-gui-craft-liquid-note` (no litre math, per D7); the container bowl stays a counted ingredient
+      (genuinely required). The old per-cell `MatterState == Liquid` check is kept (harmless; covers a
+      hypothetical future raw-liquid cell). Build 0/0. In-game §7.4 remains the retest gate.
 
 ## 5. Tests + build
 
