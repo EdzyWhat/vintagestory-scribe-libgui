@@ -2320,6 +2320,32 @@ wet/editable tablet and the Lectern/Notebook did. Most visible on a tablet pulle
   `currentShade = lightSampler.Sample(0f)` in the dialog ctor makes the FIRST recorded picture already
   dark; this note is the separate reason a static surface never re-recorded AFTER that.)
 
+### An UNCONTROLLED StatefulWidget seeded only in `InitState` will NOT reflect a bound-value change delivered by an in-place reconcile — it needs a focus-gated re-seed in `UpdateWidget` (fix-craft-subtask-live-rescale, 2026-08-19)
+
+**Symptom: a Craft parent's target stepper rescaled its ingredient subtask counts correctly IN THE DATA,
+but the ingredient ROWS kept painting their OLD counts in the editor — the new numbers only appeared
+after a view swap (edit↔read) or other forced redraw.** Root-caused by reading our own widget, not guessed:
+
+- LibGUI reconcile reuses an Element+State when the widget's `(type, key)` matches at its tree position;
+  reuse calls `State.UpdateWidget(oldWidget)`, NOT `InitState`. Only a genuinely-new element (new key, or
+  a `ValueKey` remount) runs `InitState`.
+- The editor keys its rows by `TaskId` (`new ValueKey<Guid>(b.TaskId)`), so a parent target step REUSES
+  every ingredient row and its inner `ScribeNumericField`. `ScribeNumericField` is **uncontrolled**: it
+  seeds `_currentValue` + its controller text from `Widget.Value` in `InitState` ONLY, on the documented
+  assumption "the caller remounts it via a `ValueKey` when the value changes." The rescale path does a
+  `RebuildBody()` reconcile (no remount) → the reused field never re-reads the new `Widget.Value` → stale
+  count until a `ForceRebuild` (view swap) finally remounts it.
+- **Fix:** give the uncontrolled state an `UpdateWidget` that re-seeds from `Widget.Value` when it changed
+  from `oldWidget.Value` AND `!focusNode.HasFocus`. The `!HasFocus` gate is load-bearing: it live-updates
+  the OTHER (unfocused) rows while never stomping the one field the player is actively editing (the focused
+  parent stepper — which `RequestFocus`'d itself in `Adjust` before triggering the rebuild). This is the
+  same shape as `ScribeEditRowState.UpdateWidget`'s optimistic-`done` resync (reuse → re-seed from the
+  authoritative value, gated on it actually changing).
+- **General rule:** "how do I live-update ANOTHER row in the editor while the user is there?" → resync that
+  row's state from the reconcile-supplied widget value in `UpdateWidget`, gated on `!HasFocus` (or the
+  relevant "not being edited" signal). Don't `ValueKey`-remount a field that might be focused (drops caret),
+  and don't assume an uncontrolled `InitState`-seeded widget picks up a reconcile value on its own.
+
 ## Held-item dialog flickers closed on FIRST open of a not-yet-crafted item (2026-08-06)
 
 **Symptom: the first time a player opens a Scribe item they did NOT craft (notebook, clockmaker's
