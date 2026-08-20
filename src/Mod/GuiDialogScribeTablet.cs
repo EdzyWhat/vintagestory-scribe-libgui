@@ -99,6 +99,11 @@ public class GuiDialogScribeTablet : ScribeDialogBase
     /// checkbox/pin inert — see <see cref="ReadViewCompletionAndPinLive"/> (zero-point-three-fixes §7.3).</summary>
     private protected override bool ReadViewIsReadOnly => !IsEditable;
 
+    // TitleMaxLines is no longer overridden here: two-line title wrapping is now the shared base default
+    // (wrap-titles-all-surfaces), so BOTH the cuneiform title (BuildTitleDisplay/BuildTitleField, unchanged)
+    // and the cuneiform-OFF readable RichText fallback wrap to two lines. Previously this override forced the
+    // cuneiform-off path back to a single line; that gating is intentionally dropped.
+
     /// <summary>Keep the checkbox and pin interactive on a read-only (hard/fired) tablet
     /// (zero-point-three-fixes §7.3): completing and unpinning stay reachable, so firing a tablet with a
     /// pinned task never strands that pin on the HUD. Only text editing is blocked. A wet tablet is fully
@@ -231,12 +236,34 @@ public class GuiDialogScribeTablet : ScribeDialogBase
         }
 
         var colors = ResolveTheme(modSystem.MySettings.PixelArtDisplay).ColorScheme;
+        // Wrap the resting title to at most two lines (wrap-tablet-title-band): swap the single-line
+        // CuneiformText for the display-only WRAPPING cuneiform renderer (mirrors ScribeReadContent's
+        // resting cuneiform usage). The enclosing Clip is sized by the title slot, which BuildTitleBar
+        // grows to two line-heights when TitleMaxLines == 2, so a title longer than two lines clips at the
+        // end of line 2 (cuneiform has no '…' glyph). All look-preserving params (jitter/rotation/glow and
+        // the text-derived seed) match the CuneiformText this replaces, so a one-line title is unchanged.
         return new Gui.Widgets.Painting.Clip(
-            child: new CuneiformText(
+            child: new ScribeCuneiformFieldRenderWidget(
                 text: displayTitle,
+                caret: 0,
+                selectionAnchor: 0,
+                hasFocus: false,
                 fontSizeEm: titleStyle.FontSize,
                 inkColor: colors.OnSurface,
+                caretColor: Vector4.Zero,
+                selectionColor: Vector4.Zero,
                 bundle: bundle,
+                padX: 0f,   // the title band supplies its own inset; keep the glyphs flush (as CuneiformText was)
+                padY: 0f,
+                boxColor: Vector4.Zero,
+                borderColor: Vector4.Zero,
+                borderThickness: 0f,
+                cornerRadii: Vector4.Zero,
+                singleLine: false,   // WRAP (was single-line, hard-clipped)
+                caretVisible: false,
+                jitterStrength: CuneiformMetrics.DefaultJitterStrength,
+                jitterSeed: CuneiformMetrics.SeedFromString(displayTitle),
+                rotationDegrees: CuneiformMetrics.DefaultRotationDegrees,
                 // Per-material glow so the resting title lifts off the clay backdrop like the rows do.
                 glow: CuneiformGlowTable.For(_material)));
     }
@@ -269,7 +296,10 @@ public class GuiDialogScribeTablet : ScribeDialogBase
             // Stroke-by-stroke title reveal, gated by the same player setting as the rows (defaults off).
             progression: modSystem.MySettings.CuneiformProgression,
             // Per-material glow so the editing title lifts off the clay backdrop like the rows/resting title.
-            glow: CuneiformGlowTable.For(_material));
+            glow: CuneiformGlowTable.For(_material),
+            // Wrap the editing title to two lines too (wrap-tablet-title-band), so typing past one line drops to
+            // a second line instead of clipping off the right; Enter still commits via OnTitleFieldKeyDown.
+            singleLine: false);
     }
 
     /// <summary>Fixed base seed for the title band's cuneiform jitter — arbitrary constant, distinct from

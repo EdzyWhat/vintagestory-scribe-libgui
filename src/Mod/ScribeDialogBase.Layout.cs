@@ -222,6 +222,21 @@ public abstract partial class ScribeDialogBase
         // semi-transparent dark material ink so the strokes read as engraved (add-tablet-clay-type-themes 8.5).
         Vector4 chromeColor = TitleChromeGlyphColor(colors);
 
+        // Title band height: grown to TitleMaxLines lines on every surface (wrap-titles-all-surfaces; two by
+        // default). The extra line(s) grow UPWARD into the band's existing slack — the band (TitleBarH) is taller
+        // than the bottom-anchored content row (TitleBtnsH) — capped at the band so a two-line title never overruns
+        // the top. A title that fits on one line leaves every value below unchanged, so single-line titles are
+        // byte-identical to the old layout.
+        int titleMaxLines = TitleMaxLines;
+        float titleLineH = titleFont * CuneiformMetrics.LineHeightRatio;
+        float contentBoxH = titleMaxLines <= 1
+            ? layout.TitleBtnsH
+            : System.Math.Min(layout.TitleBarH, layout.TitleBtnsH + (titleMaxLines - 1) * titleLineH);
+        // Bottom-anchor the title + chrome in the (possibly taller) box so the grip/close/pencil stay at the
+        // band bottom where they are today and only the wrapped title's first line grows upward; single-line
+        // keeps the original centered layout exactly.
+        CrossAxisAlignment titleCrossAlign = titleMaxLines <= 1 ? CrossAxisAlignment.Center : CrossAxisAlignment.End;
+
         const float titleBtnSpacing = 6f;
         Widget titleSlot = new Expanded(_isTitleEditing
             ? BuildTitleField(titleStyle)
@@ -252,7 +267,7 @@ public abstract partial class ScribeDialogBase
 
         Widget titleRow = new Row(
             mainAxisAlignment: MainAxisAlignment.SpaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.Center,
+            crossAxisAlignment: titleCrossAlign,
             mainAxisSize: MainAxisSize.Max,
             children: new Widget[]
             {
@@ -307,7 +322,7 @@ public abstract partial class ScribeDialogBase
                 Alignment.BottomCenter,
                 child: new SizedBox(
                     width: layout.TitleBtnsW,
-                    height: layout.TitleBtnsH,
+                    height: contentBoxH,
                     // Panel behind the title row when Pixel-Art is OFF (no art backdrop) so it isn't
                     // transparent onto the world; unchanged when ON (the art is the background). The row's
                     // content is inset symmetrically by 0.04·W on each side (plus the original 10px of
@@ -317,14 +332,23 @@ public abstract partial class ScribeDialogBase
                         child: titleRow)))));
     }
 
-    /// <summary>The resting (non-editing) title widget, sized to fill the title slot's Expanded. Default is
-    /// today's single-line <see cref="RichText"/> with ellipsis overflow (Lectern/Notebook, unchanged). The
-    /// tablet overrides this to render the title as display-only cuneiform truncated to the band width
-    /// (add-tablet-cuneiform-chrome D2). <paramref name="displayTitle"/> is the already-resolved title text
-    /// (host default substituted for the codec's "Untitled"); <paramref name="titleStyle"/> carries the
-    /// resolved size/family/weight/color so an override can match the band metrics.</summary>
+    /// <summary>The resting (non-editing) title widget, sized to fill the title slot's Expanded. Default is a
+    /// <see cref="RichText"/> that wraps to <see cref="TitleMaxLines"/> lines (two by default; wrap-titles-all-surfaces),
+    /// with ellipsis overflow past the last line. The tablet overrides this to render the title as display-only
+    /// cuneiform (add-tablet-cuneiform-chrome D2), but its cuneiform-OFF path returns to this base wrapping.
+    /// <paramref name="displayTitle"/> is the already-resolved title text (host default substituted for the codec's
+    /// "Untitled"); <paramref name="titleStyle"/> carries the resolved size/family/weight/color so an override can
+    /// match the band metrics.</summary>
     private protected virtual Widget BuildTitleDisplay(string displayTitle, TextStyle titleStyle) =>
-        new RichText(new TextSpan(displayTitle), titleStyle, maxLines: 1, overflow: TextOverflow.Ellipsis);
+        new RichText(new TextSpan(displayTitle), titleStyle, maxLines: TitleMaxLines, overflow: TextOverflow.Ellipsis);
+
+    /// <summary>Maximum number of lines the title band shows before clipping. Default 2 (wrap-titles-all-surfaces):
+    /// a long title on every surface (Lectern/Notebook/Scriptorium/Chalkboard, and the cuneiform-OFF tablet) wraps
+    /// into the band's existing vertical slack instead of clipping off the right. <see cref="BuildTitleBar"/> reads
+    /// this to grow the title slot to that many line-heights; a title that fits on one line is byte-identical to the
+    /// old single-line layout. Previously defaulted to 1 (tablet-only override); generalized to the shared default
+    /// once the tablet's two-line wrap was proven in-game.</summary>
+    private protected virtual int TitleMaxLines => 2;
 
     /// <summary>The active (editing) title widget — a live text input bound to <see cref="_titleController"/>
     /// and <see cref="_titleFocusNode"/>. Default is the stock LibGUI single-line <see cref="TextField"/>

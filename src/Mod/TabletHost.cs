@@ -79,18 +79,24 @@ public sealed class TabletHost : NotebookHost
     /// buffer by eye even though the fractions differ.</para></summary>
     public override ScribeLayout GetLayout(float pixelArtSize)
     {
+        // TitleBtnsWFrac is the tablet title-band WIDTH knob (wrap-titles-all-surfaces): the fraction of window
+        // width used by the title+buttons row, which sets where a long title wraps to a second line. Higher =
+        // wider row = wraps later. Both materials override the shared 0.80f default to wrap later (values chosen
+        // in-game 2026-08-20): clay 0.86f, wax 0.82f (wax's art frames a narrower panel, so it wraps a touch sooner).
         var props = _material == "wax"
             ? ScribeLayoutProportions.Default with
               {
-                  TitleBarFrac = 0.15f,
-                  InnerHFrac   = 0.775f,
-                  SideColFrac  = 0.08f,
+                  TitleBarFrac   = 0.15f,
+                  InnerHFrac     = 0.775f,
+                  SideColFrac    = 0.08f,
+                  TitleBtnsWFrac = 0.82f,
               }
             : ScribeLayoutProportions.Default with
               {
-                  TitleBarFrac = 0.11f,
-                  InnerHFrac   = 0.83f,
-                  SideColFrac  = 0.06f,
+                  TitleBarFrac   = 0.11f,
+                  InnerHFrac     = 0.83f,
+                  SideColFrac    = 0.06f,
+                  TitleBtnsWFrac = 0.86f,
               };
         return new ScribeLayout(pixelArtSize, 1160f / 1024f, props);
     }

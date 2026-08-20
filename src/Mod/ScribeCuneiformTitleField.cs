@@ -6,8 +6,9 @@
 // deferred _pendingTitleEditRebuild/_pendingTitleFocus) all key off that controller/focus node, so they keep
 // working unchanged — only the rendered widget differs.
 //
-// It renders through ScribeCuneiformFieldRender in single-line mode (no wrap; a long title is hard-clipped by
-// an enclosing Clip at the band width, since cuneiform has no '…' glyph). Keyboard handling mirrors LibGUI's
+// It renders through ScribeCuneiformFieldRender in single-line mode by default (a long title is hard-clipped
+// by an enclosing Clip at the band width, since cuneiform has no '…' glyph); with SingleLine=false it WRAPS
+// to the band width and the title slot caps it at two lines (wrap-tablet-title-band). Keyboard handling mirrors LibGUI's
 // TextField (typing, Backspace/Delete, Left/Right/Home/End, clipboard) minus selection — caret-only for v1,
 // matching the row field's accepted scope-cut (selection over cuneiform is the deferred explore stub).
 
@@ -43,6 +44,7 @@ public sealed class ScribeCuneiformTitleField : StatefulWidget, IFocusable
         float rotationDegrees = 0f,
         bool progression = false,
         CuneiformGlow glow = default,
+        bool singleLine = true,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
@@ -56,6 +58,7 @@ public sealed class ScribeCuneiformTitleField : StatefulWidget, IFocusable
         RotationDegrees = rotationDegrees;
         Progression = progression;
         Glow = glow;
+        SingleLine = singleLine;
     }
 
     public TextEditingController Controller { get; }
@@ -76,6 +79,10 @@ public sealed class ScribeCuneiformTitleField : StatefulWidget, IFocusable
     /// <summary>Per-material outer glow behind the title strokes (add-tablet-clay-type-themes); default
     /// disabled. Lifts the editing title off the clay backdrop the same way the resting title and rows do.</summary>
     public CuneiformGlow Glow { get; }
+    /// <summary>When true (default) the title is one hard-clipped line; when false it WRAPS to the band width
+    /// (wrap-tablet-title-band) — the enclosing title slot caps the visible height at two lines. Caret nav is
+    /// by character index either way, so wrapping is purely a render/layout property of the same text buffer.</summary>
+    public bool SingleLine { get; }
     /// <summary>Parent key hook, invoked BEFORE this field acts on a key (mirrors LibGUI's TextField). The
     /// tablet points this at the base's shared title key handler for the maxlength gate + Enter/Escape
     /// commit, so a cuneiform title honors the identical limit and commit rules as the normal title field.</summary>
@@ -344,7 +351,7 @@ internal sealed class ScribeCuneiformTitleFieldState : State<ScribeCuneiformTitl
                 borderColor: Vector4.Zero,
                 borderThickness: 0f,
                 cornerRadii: Vector4.Zero,
-                singleLine: true,
+                singleLine: Widget.SingleLine,
                 jitterStrength: Widget.JitterStrength,
                 jitterSeed: Widget.JitterSeed,
                 rotationDegrees: Widget.RotationDegrees,
