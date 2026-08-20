@@ -1600,12 +1600,16 @@ internal sealed class HudPinsContent : StatelessWidget
         // Name (corrupted like every HUD string). A Handbook hyperlink when interactive: tapping opens the
         // item's page and NEVER toggles the checkbox (design D3c) — same open path as the live Link row. The
         // Tracker's code isn't carried on the row, so derive it from the resolved stack (a Link uses its
-        // snapshotted LinkTarget directly); either resolves the same page the Pin Tab / read view open.
+        // snapshotted LinkTarget directly); either resolves the same page the Pin Tab / read view open. The
+        // resolved stack keeps any attribute-encoded variant (a copper lantern), so re-encode it rather than
+        // reduce to the bare collectible code — otherwise the tap would open the generic page, not the variant
+        // page (support-attribute-encoded-items).
         string nameText = Corrupt(row.Label, seedOffset: row.TaskId.GetHashCode());
         Widget name = new Text(nameText, textStyle);
         if (interactive)
         {
-            string? code = row.IsLink ? row.LinkTarget : row.DisplayStack?.Collectible?.Code?.ToString();
+            string? code = row.IsLink ? row.LinkTarget
+                : row.DisplayStack is { } ds ? ScribeItemRef.Encode(ds) : null;
             name = new GestureDetector(
                 onPress: e => { e.Handled = true; onOpenLink(code); },
                 child: name);

@@ -38,6 +38,30 @@ internal static class ScribeTrackerCounter
         ingredient = null;
         if (string.IsNullOrEmpty(targetItemCode)) return false;
 
+        // Attribute-encoded target (support-attribute-encoded-items): the target carries a specific variant's
+        // meaningful attributes (a copper lantern's material/glass/lining), so count only carried stacks of
+        // that EXACT variant. ScribeItemRef.ResolveStack rebuilds the attributed stack; we hand it to the
+        // ingredient as the (Exact) ResolvedItemStack, so SatisfiesAsIngredient reduces to
+        // targetStack.Satisfies(carried) — i.e. the carried stack must carry every stored attribute at the
+        // stored value (an iron lantern fails because material=copper isn't present). No Resolve() call: the
+        // resolved stack is supplied directly, and a fresh ingredient's deduplicationIndex is -1 so the
+        // ResolvedItemStack setter stores it locally.
+        if (ScribeItemRef.IsAttributeEncoded(targetItemCode))
+        {
+            var targetStack = ScribeItemRef.ResolveStack(world, targetItemCode);
+            if (targetStack is null) return false;
+
+            ingredient = new CraftingRecipeIngredient
+            {
+                Type = targetStack.Class,
+                Code = targetStack.Collectible.Code,
+                Quantity = 1,
+                MatchingType = EnumRecipeMatchType.Exact, // routes SatisfiesAsIngredient through ResolvedItemStack.Satisfies
+                ResolvedItemStack = targetStack,
+            };
+            return true;
+        }
+
         AssetLocation loc;
         try { loc = new AssetLocation(targetItemCode); }
         catch { return false; }
