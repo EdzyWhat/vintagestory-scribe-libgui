@@ -640,6 +640,13 @@ public abstract partial class ScribeDialogBase
     /// §7.4). Null on the Lectern/Notebook and on a wet tablet, where a text tap is not a blocked edit.</summary>
     private protected virtual Action<Guid>? ReadViewTextEditRefused => null;
 
+    /// <summary>Whether this surface's EDITOR rows opt into the read view's click-to-open-Handbook affordance
+    /// on their Link/Tracker/Craft name label (enable-tablet-row-links). Default false: every surface with a
+    /// distinct read view (Lectern/Notebook/Scriptorium) activates links there, so its editor names stay plain
+    /// editable regions. Only the tablet — which has no read/edit split, so a wet tablet always renders the
+    /// editor path — overrides it true, wiring link activation directly onto the always-edit rows.</summary>
+    protected virtual bool EditorRowsOpenLinks => false;
+
     /// <summary>Resolve a block's Tracker/Link item icon + display name for a row snapshot, or
     /// <c>(null, null)</c> for a Task/Text block (which render their authored text instead). A Tracker uses
     /// its <see cref="ScribeBlock.TargetItemCode"/>, a Link its <see cref="ScribeBlock.LinkTarget"/>; both are
@@ -653,6 +660,21 @@ public abstract partial class ScribeDialogBase
         // output item's icon + name exactly like a Tracker, differing only in the "Craft …" label framing.
         string? code = b.IsLink ? b.LinkTarget : b.TargetItemCode;
         return ScribeItemRef.ResolveDisplay(capi.World, code, b.LinkLabel);
+    }
+
+    /// <summary>Resolve a tapped item row to its Handbook page and open it — the ONE dispatch shared by the read
+    /// view and (where <see cref="EditorRowsOpenLinks"/> is on) the editor view, so Link/Tracker/Craft resolve
+    /// identically on every path. A Link opens its <see cref="ScribeBlock.LinkTarget"/>; a Tracker AND a Craft
+    /// parent open their <see cref="ScribeBlock.TargetItemCode"/> (the Craft parent's is its recipe OUTPUT — see
+    /// <see cref="ResolveRowItem"/>). Keyed by TaskId off the live document, so it works regardless of which view
+    /// dispatched it and mirrors the Pin-tab dispatch (<see cref="OnPinOpenLink"/>). A plain Task/Note has no
+    /// item code, so it no-ops here (and its editor label is never wrapped in the gesture — see BuildItemEditorContent).</summary>
+    private void OpenRowLink(Guid taskId)
+    {
+        var block = host.Document.FindByTaskId(taskId);
+        if (block?.IsLink == true) ScribeItemRef.OpenHandbookPage(capi, block.LinkTarget);
+        else if (block?.IsTracker == true || block?.IsCraft == true)
+            ScribeItemRef.OpenHandbookPage(capi, block.TargetItemCode);
     }
 
     /// <summary>Build the read view. Promoted from <c>private</c> so the always-edit tablet can render it
@@ -687,15 +709,10 @@ public abstract partial class ScribeDialogBase
             onToggleTask: OnReadViewCompleteTask,
             onTogglePinned: OnReadViewTogglePinned,
             // A Link row's item name is a hyperlink: tapping it opens the referenced Handbook page and never
-            // touches completion (add-tracker-link-tasks 5.3). A Tracker's name opens its TARGET item's page
-            // the same way (feedback 6.5 — the count target IS a real item with a Handbook entry). Resolve the
-            // tapped block by TaskId, then open the page keyed off whichever code the kind carries.
-            onOpenLink: taskId =>
-            {
-                var block = host.Document.FindByTaskId(taskId);
-                if (block?.IsLink == true) ScribeItemRef.OpenHandbookPage(capi, block.LinkTarget);
-                else if (block?.IsTracker == true) ScribeItemRef.OpenHandbookPage(capi, block.TargetItemCode);
-            },
+            // touches completion (add-tracker-link-tasks 5.3). A Tracker's name opens its TARGET item's page and
+            // a Craft parent its OUTPUT item's page the same way (feedback 6.5 — the count target IS a real item
+            // with a Handbook entry). Shared with the editor path via OpenRowLink so all three resolve identically.
+            onOpenLink: OpenRowLink,
             onSwitchToEditor: TryEnterEditor,
             // Symmetric 0.04·W horizontal inset on the footer button, from the same ScribeLayout width.
             footerButtonPadding: EdgeInsets.Symmetric(
@@ -790,7 +807,11 @@ public abstract partial class ScribeDialogBase
             // Whether the "Done editing" (switch-to-read) footer button renders. True for the tabbed
             // dialogs; the always-edit tablet overrides ShowEditorSwitchToRead to false since it has no
             // Read view (add-tablet-dialog D4).
-            showSwitchToRead: ShowEditorSwitchToRead);
+            showSwitchToRead: ShowEditorSwitchToRead,
+            // Click-to-open-Handbook on an item row's name label — the SAME dispatch the read view uses, but
+            // only where EditorRowsOpenLinks is on (the tablet, which has no read view). Every other surface
+            // passes null, so its editor names stay plain editable regions and render byte-identical to before.
+            onOpenLink: EditorRowsOpenLinks ? OpenRowLink : null);
     }
 
     /// <summary>Whether the editor footer shows the "Done editing" (switch-to-read) button. True for the

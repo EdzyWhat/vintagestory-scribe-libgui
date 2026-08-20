@@ -172,7 +172,8 @@ internal sealed class ScribeEditorContent : StatefulWidget
         ScribeAmbientLightSampler.Shade currentShade,
         string hintLangKey = "scribe:scribe-gui-edit-hint",
         bool addTaskEnabled = true,
-        bool showSwitchToRead = true)
+        bool showSwitchToRead = true,
+        System.Action<Guid>? onOpenLink = null)
     {
         Blocks = blocks;
         FocusNodes = focusNodes;
@@ -206,6 +207,7 @@ internal sealed class ScribeEditorContent : StatefulWidget
         HintLangKey = hintLangKey;
         AddTaskEnabled = addTaskEnabled;
         ShowSwitchToRead = showSwitchToRead;
+        OnOpenLink = onOpenLink;
     }
 
     public IReadOnlyList<ScribeEditRowData> Blocks { get; }
@@ -303,6 +305,11 @@ internal sealed class ScribeEditorContent : StatefulWidget
     /// dialog no longer owns departing-row bookkeeping.</summary>
     public Action OnDepartureSettled { get; }
     public string HintLangKey { get; }
+    /// <summary>Optional click-to-open-Handbook dispatch for an item row's (Link/Tracker/Craft) name label,
+    /// keyed by TaskId (enable-tablet-row-links). Non-null ONLY on a surface that opts its editor rows into
+    /// link activation (the tablet, which has no read view — see <see cref="ScribeDialogBase.EditorRowsOpenLinks"/>).
+    /// Null on every other surface, so their editor names stay plain editable regions and render byte-identical.</summary>
+    public System.Action<Guid>? OnOpenLink { get; }
 
     public override State CreateState() => new ScribeEditorContentState();
 }
@@ -412,6 +419,8 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                     onDragOver: OnRowDragOver,
                     onDragEnd: OnRowDragEnd,
                     onGripTap: Widget.OnGripTap,
+                    // Non-null only on the tablet: its item-row names open the Handbook (enable-tablet-row-links).
+                    onOpenLink: Widget.OnOpenLink,
                     style: Widget.Style,
                     // Stable per-row identity (reconcile-animating-surfaces §3.2): keyed by the block's
                     // TaskId, NOT its list index. Under the in-place reconcile a RebuildBody() drives
@@ -692,6 +701,7 @@ internal sealed class ScribeEditRow : StatefulWidget
         Action onDragEnd,
         Action<int> onGripTap,
         ScribeRowStyle style,
+        System.Action<Guid>? onOpenLink = null,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
@@ -719,6 +729,7 @@ internal sealed class ScribeEditRow : StatefulWidget
         OnDragOver = onDragOver;
         OnDragEnd = onDragEnd;
         OnGripTap = onGripTap;
+        OnOpenLink = onOpenLink;
         Style = style;
     }
 
@@ -764,6 +775,10 @@ internal sealed class ScribeEditRow : StatefulWidget
     public Action<int> OnDragOver { get; }
     public Action OnDragEnd { get; }
     public Action<int> OnGripTap { get; }
+    /// <summary>Non-null only on the tablet (enable-tablet-row-links): clicking a Link/Tracker/Craft row's
+    /// name label opens the item's Handbook page, keyed by TaskId. Null elsewhere, so the label stays a plain
+    /// (non-clickable) region and non-tablet editor rows render exactly as before.</summary>
+    public System.Action<Guid>? OnOpenLink { get; }
     public ScribeRowStyle Style { get; }
 
     public override State CreateState() => new ScribeEditRowState();
@@ -861,7 +876,21 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         // Tracker's stepper still drives this editor row's height by design.
         float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
         rowChildren.Add(ScribeLinkIcon.Build(Widget.Data.DisplayStack, Widget.Data.LinkTarget, iconSize, style.LinkColor ?? colors.Primary, lineHeight));
-        rowChildren.Add(new Expanded(child: ScribeItemLabel.Build(Widget.Data.Label, colors.OnSurface, style)));
+
+        // The item name is a hyperlink ONLY where the surface opts its editor rows into link activation (the
+        // tablet — enable-tablet-row-links, which has no read view). Wrap it in the same GestureDetector shape the
+        // read row uses (ScribeReadContent.cs:362) and render it in the link accent so it reads as tappable, matching
+        // the read view. The sibling ScribeNumericField (the Tracker/Craft +/- stepper added above) is a separate
+        // widget, so the number stays an INDEPENDENT hit region that keeps editing the target quantity — clicking the
+        // number reaches the field, clicking the name reaches this gesture. When OnOpenLink is null (every non-tablet
+        // editor), the label is a plain OnSurface region and this row renders byte-identical to before. Only item-kind
+        // rows (Link/Tracker/Craft) reach this method, so a plain Task/Note's editable text is never wrapped.
+        Widget nameLabel = Widget.OnOpenLink is { } openLink
+            ? new GestureDetector(
+                onPress: e => { e.Handled = true; openLink(Widget.Data.TaskId); },
+                child: ScribeItemLabel.Build(Widget.Data.Label, style.LinkColor ?? colors.Primary, style))
+            : ScribeItemLabel.Build(Widget.Data.Label, colors.OnSurface, style);
+        rowChildren.Add(new Expanded(child: nameLabel));
 
         // Inset by the editor field's internal padding, matching the read view's item row and the Task/Text
         // field, so icon rows line up with text rows across a view switch. Center the icon/stepper against the

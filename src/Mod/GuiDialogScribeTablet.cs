@@ -147,6 +147,12 @@ public class GuiDialogScribeTablet : ScribeDialogBase
     /// (add-tablet-dialog D4).</summary>
     protected override bool ShowEditorSwitchToRead => false;
 
+    /// <summary>The tablet has no read/edit split — a wet tablet always renders the EDITOR rows — so link
+    /// activation must live directly on those rows. Opt the editor path into the read view's
+    /// click-to-open-Handbook affordance on Link/Tracker/Craft name labels (enable-tablet-row-links). Every other
+    /// surface leaves this false and activates links in its distinct read view instead.</summary>
+    protected override bool EditorRowsOpenLinks => true;
+
     /// <summary>The tablet uses its own per-clay-type palette rather than the parchment one, keyed to the
     /// item's <see cref="_material"/> variant (add-tablet-clay-type-themes) — red/blue/fire tablets each
     /// resolve their own colors, and the resolved theme agrees with the resolved backdrop (both key off the

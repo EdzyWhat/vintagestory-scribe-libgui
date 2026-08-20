@@ -188,26 +188,49 @@ internal static class ScribeLinkIcon
     }
 }
 
-/// <summary>A single-line item NAME label for Tracker/Link rows, shared by the read and editor views so the
+/// <summary>An item NAME label for Tracker/Link/Craft rows, shared by the read and editor views so the
 /// referenced item's name renders the same way in both. On the tablet cuneiform path
 /// (<see cref="ScribeRowStyle.UseCuneiform"/> + a loaded <see cref="ScribeRowStyle.CuneiformBundle"/>) it draws
 /// the name as cuneiform strokes — matching how Task/Text rows route through the cuneiform renderer — so a
-/// tablet's Tracker/Link names aren't the lone plain-font holdout (add-transcribe-copy-paste 10.8). Off that
-/// path (Lectern/Notebook, or cuneiform disabled/asset-missing) it falls back to a wrapping <see cref="Text"/>,
-/// so a name is never blank. The em size and ink track the readable label, and the per-material glow is passed
-/// through so the strokes lift off the clay backdrop like the row text does.</summary>
+/// tablet's Tracker/Link names aren't the lone plain-font holdout (add-transcribe-copy-paste 10.8). The
+/// cuneiform strokes now WRAP to width via the shared <see cref="ScribeCuneiformFieldRenderWidget"/> (display-
+/// only, SingleLine off — wrap-tablet-item-titles); the old single-line CuneiformText clipped a long name
+/// mid-word. Off that path (Lectern/Notebook, or cuneiform disabled/asset-missing) it falls back to a wrapping
+/// <see cref="Text"/>, so a name is never blank. The em size and ink track the readable label, and the
+/// per-material glow is passed through so the strokes lift off the clay backdrop like the row text does.</summary>
 internal static class ScribeItemLabel
 {
     public static Widget Build(string label, Vector4 color, ScribeRowStyle style)
     {
         if (style.UseCuneiform && style.CuneiformBundle is { } bundle)
         {
-            return new CuneiformText(
+            // Display-only wrapping cuneiform renderer (wrap-tablet-item-titles), mirroring the read-view note
+            // usage (ScribeReadContent.cs:458-479). The old CuneiformText is single-line and ignores MaxWidth, so
+            // a long item name clipped mid-word on the tablet; ScribeCuneiformFieldRenderWidget with SingleLine
+            // left at its default (false) wraps to width like the non-cuneiform Text branch below. No caret/
+            // selection (this is a label, not a field): caret/selection are zeroed and hidden. Jitter is seeded
+            // from the label so the strokes are deterministic frame-to-frame (no TaskId is available here — the
+            // seed only needs to be stable, not unique). PadX/PadY match the read-view note so the wrapped name's
+            // left edge and vertical rhythm line up with the row's other content.
+            return new ScribeCuneiformFieldRenderWidget(
                 text: label,
+                caret: 0,
+                selectionAnchor: 0,
+                hasFocus: false,
                 fontSizeEm: style.FontSize,
                 inkColor: color,
+                caretColor: Vector4.Zero,
+                selectionColor: Vector4.Zero,
                 bundle: bundle,
+                padX: style.FieldPadX,
+                padY: style.FieldPadY,
+                boxColor: Vector4.Zero,
+                borderColor: Vector4.Zero,
+                borderThickness: 1f,
+                cornerRadii: Vector4.One * 4f,
+                caretVisible: false,
                 jitterStrength: style.CuneiformJitter,
+                jitterSeed: label.GetHashCode(),
                 rotationDegrees: style.CuneiformRotation,
                 glow: style.CuneiformGlow);
         }
