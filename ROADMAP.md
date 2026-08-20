@@ -69,6 +69,12 @@ age (the saw); anything past that is cosmetic.
   copy/paste and JSON/CSV import/export — and the v1.3 assignment system (Assign & History / Inbox
   views, place-bound assignment) land as their own follow-up changes. VS's first-party player-group system may cover the
   assignment side with no external dependency (see open decision below).
+  - **Link tasks for cookable foods (v1.3).** *(Requested 2026-08-18.)* We can't *track* or *craft*
+    cooked meals yet (no carried-count / recipe-batch model for them), but a **Link** task is just a
+    Handbook-page pointer — kind-independent of tracking — so it should work for meals too. The item is
+    to verify/enable the "Add Link" affordance on cookable-food Handbook pages (meal/liquid items can
+    render their Handbook page differently), NOT to build new tracking machinery. Small; promote to an
+    OpenSpec change when picked up.
 - **v5 — Portability** → `docs/specs/v5-backpack-hud.md`. **The HUD half shipped early (v0.1.0):**
   the always-on **pinned-task HUD** (native `HudElement`, not ImGui) now aggregates pins from every
   source — lectern, notebook, and tablet — not just a held document. **Quick-add shipped in v1.0** but

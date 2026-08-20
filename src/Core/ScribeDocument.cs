@@ -28,6 +28,12 @@ public sealed class ScribeDocument
     /// <summary>The blocks, in order. Read-only to callers; mutate via the methods below.</summary>
     public IReadOnlyList<ScribeBlock> Blocks => _blocks;
 
+    /// <summary>The total number of blocks of ANY kind — tasks, notes, trackers, links, and craft parents
+    /// all count equally. This is the measure the tier cap counts (<see cref="ScribeDocumentPolicy.MaxBlocks"/>,
+    /// the editor's add gate, and the Transcribe capacity check): a capped surface holds "N of anything", so
+    /// adding any kind advances this count and is refused once it reaches the cap. Pure data.</summary>
+    public int BlockCount => _blocks.Count;
+
     /// <summary>The number of completable blocks — Task, Tracker, and Link (everything except a
     /// free-text section, matching <see cref="ScribeBlock.IsCompletable"/>). This is the "N tasks"
     /// the Transcribe overwrite confirm reports before replacing a target document. Pure data.</summary>
@@ -43,10 +49,10 @@ public sealed class ScribeDocument
     }
 
     /// <summary>The number of TASK-kind blocks only (excluding Trackers, Links, and free-text sections).
-    /// This is the measure the tier cap counts (<see cref="ScribeDocumentPolicy.MaxBlocks"/> and the
-    /// editor's add-task gate), so the Transcribe copy's capacity check agrees with what the editor would
-    /// let a player add by hand. Distinct from <see cref="CompletableCount"/>, which also counts
-    /// Trackers/Links for the overwrite-confirm prompt. Pure data.</summary>
+    /// NOTE: this is NOT the tier-cap measure — the cap counts blocks of ANY kind via
+    /// <see cref="BlockCount"/> (refine-chalkboard §12, "N of anything"). This property remains for
+    /// diagnostics/tests that want the task-only tally; it is distinct from <see cref="CompletableCount"/>
+    /// (which also counts Trackers/Links) and from <see cref="BlockCount"/> (the total). Pure data.</summary>
     public int TaskCount
     {
         get

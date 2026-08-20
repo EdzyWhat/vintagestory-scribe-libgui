@@ -403,8 +403,8 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
         // Resulting block count depends on the mode: Overwrite REPLACES (result = source's blocks), Append ADDS
         // onto the target's existing blocks (result = target's + source's). The server re-checks this same sum.
         int resultingBlocks = copyMode == CopyMode.Append
-            ? TargetTaskBlockCount() + SourceTaskCount()
-            : SourceTaskCount();
+            ? TargetBlockCount() + SourceBlockCount()
+            : SourceBlockCount();
         if (!targetPolicy.CanHold(resultingBlocks))
         {
             confirmState = TranscribeConfirm.Idle;
@@ -527,15 +527,17 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
             onTap: onTap == null ? null : _ => onTap());
     }
 
-    /// <summary>The number of TASK blocks on the Original (source) item — what a copy would place onto the
-    /// Duplicate (a copy REPLACES the target document, so the result's task count equals the source's). 0 when
-    /// the source is empty or carries no document, so an empty source always fits any writeable target (the
-    /// source may be any Scribe object, even an empty one — refinement #1).</summary>
-    private int SourceTaskCount()
+    /// <summary>The total number of blocks (of any kind) on the Original (source) item — what a copy would place
+    /// onto the Duplicate (a copy REPLACES the target document, so the result's block count equals the source's).
+    /// This is the capacity measure the tier cap counts (<see cref="Scribe.Core.ScribeDocument.BlockCount"/>);
+    /// the cap is "N of anything", so every block counts, not just tasks. 0 when the source is empty or carries
+    /// no document, so an empty source always fits any writeable target (the source may be any Scribe object,
+    /// even an empty one — refinement #1).</summary>
+    private int SourceBlockCount()
     {
         var stack = scriptorium.Inventory[SourceSlotIndex].Itemstack;
         if (stack != null && ScribeDocumentAttributes.TryReadFrom(stack, out var doc) && doc is not null)
-            return doc.TaskCount;
+            return doc.BlockCount;
         return 0;
     }
 
@@ -561,15 +563,15 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
         return 0;
     }
 
-    /// <summary>Number of TASK BLOCKS already on the Duplicate (target) — the capacity measure the policy cap
-    /// counts (<see cref="Scribe.Core.ScribeDocument.TaskCount"/>), distinct from <see cref="TargetTaskCount"/>'s
-    /// completable count. Used only for the Append-mode capacity gate (existing blocks + source's blocks must
-    /// fit). 0 when the target is empty or carries no document.</summary>
-    private int TargetTaskBlockCount()
+    /// <summary>Total number of blocks (of any kind) already on the Duplicate (target) — the capacity measure the
+    /// policy cap counts (<see cref="Scribe.Core.ScribeDocument.BlockCount"/>), distinct from
+    /// <see cref="TargetTaskCount"/>'s completable count. Used only for the Append-mode capacity gate (existing
+    /// blocks + source's blocks must fit). 0 when the target is empty or carries no document.</summary>
+    private int TargetBlockCount()
     {
         var stack = scriptorium.Inventory[TargetSlotIndex].Itemstack;
         if (stack != null && ScribeDocumentAttributes.TryReadFrom(stack, out var doc) && doc is not null)
-            return doc.TaskCount;
+            return doc.BlockCount;
         return 0;
     }
 

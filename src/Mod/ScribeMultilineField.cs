@@ -440,6 +440,7 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         string fontFamily = "sans-serif",
         float padX = 8f,
         float padY = 6f,
+        Vector4? focusBorderColor = null,
         bool autoFocus = false,
         int? maxLength = null,
         bool useCuneiform = false,
@@ -469,6 +470,7 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         FontFamily = fontFamily;
         PadX = padX;
         PadY = padY;
+        FocusBorderColor = focusBorderColor;
         AutoFocus = autoFocus;
         MaxLength = maxLength;
         UseCuneiform = useCuneiform;
@@ -505,6 +507,12 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
     /// <summary>Internal vertical padding for the field's text box (pixels). Fed from
     /// <see cref="ScribeRowStyle.FieldPadY"/> so single-line row heights match across views.</summary>
     public float PadY { get; }
+    /// <summary>Optional override for this field's FOCUSED border color. Null → the field lights its focus
+    /// border with the theme's <c>Primary</c> accent (the default on every light surface). The Chalkboard
+    /// passes a chalk-white here (via <see cref="ScribeRowStyle.InputFocusBorderColor"/> / the dialog's
+    /// <c>InputFocusBorderColor</c> seam) so its focused inputs don't outline in the forest-green <c>Primary</c>.
+    /// At rest the border is unchanged (<c>Border</c>); only the focused color is overridden.</summary>
+    public Vector4? FocusBorderColor { get; }
     /// <summary>Request focus as soon as this field mounts. LibGUI has no focus-traversal API, so the
     /// editor content coordinates focus among rows manually; a freshly built row that should be
     /// focused (e.g. after Add Task or entering editor mode) sets this to focus itself on mount.</summary>
@@ -1291,7 +1299,11 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 hasFocus: focusNode.HasFocus,
                 fontSizeEm: Widget.FontSize,
                 inkColor: colors.OnSurface,
-                caretColor: colors.Primary,
+                // Caret = the field's text color (OnSurface), the conventional "caret is ink" behavior and
+                // consistent with the stock numeric field, whose caret LibGUI hardwires to the light content
+                // tone — matching here removes the old accent-colored caret that read as a mismatched green on
+                // the chalkboard (refine-chalkboard field-consistency). Selection stays the accent wash.
+                caretColor: colors.OnSurface,
                 selectionColor: colors.Primary with { W = 0.35f },
                 bundle: Widget.CuneiformBundle,
                 padX: Widget.PadX,
@@ -1304,7 +1316,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 // Container no longer draws focus chrome, so a focused input on a PINNED row now reads as a
                 // small bordered input inside the row's pinned wash — two distinct shapes.
                 boxColor: focusNode.HasFocus ? colors.SurfaceHigh : Vector4.Zero,
-                borderColor: focusNode.HasFocus ? colors.Primary : Vector4.Zero,
+                borderColor: focusNode.HasFocus ? (Widget.FocusBorderColor ?? colors.Primary) : Vector4.Zero,
                 borderThickness: 1f,
                 cornerRadii: Vector4.One * 4f,
                 caretVisible: caretVisible,
@@ -1328,10 +1340,12 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 padY: Widget.PadY,
                 textColor: colors.OnSurface,
                 placeholderColor: colors.OnSurfaceVariant with { W = 0.55f },
-                caretColor: colors.Primary,
+                // Caret = the field's text color (OnSurface) — see the cuneiform path above: matches the stock
+                // numeric field's caret and drops the mismatched accent-green caret on the chalkboard.
+                caretColor: colors.OnSurface,
                 selectionColor: colors.Primary with { W = 0.35f },
                 boxColor: colors.SurfaceHigh,
-                borderColor: focusNode.HasFocus ? colors.Primary : colors.Border,
+                borderColor: focusNode.HasFocus ? (Widget.FocusBorderColor ?? colors.Primary) : colors.Border,
                 borderThickness: 1f,
                 cornerRadii: Vector4.One * 4f,
                 fontFamily: Widget.FontFamily,

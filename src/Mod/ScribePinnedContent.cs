@@ -80,7 +80,8 @@ internal sealed class ScribePinnedContent : StatefulWidget
         ScrollController scrollController,
         ScribeAnimationRegistry collapseRegistry,
         Action onDepartureSettled,
-        ScribeAmbientLightSampler.Shade currentShade)
+        ScribeAmbientLightSampler.Shade currentShade,
+        System.Func<DropdownStyle, DropdownStyle>? decoratePolicyDropdownStyle = null)
     {
         Rows = rows;
         FocusNodes = focusNodes;
@@ -100,6 +101,7 @@ internal sealed class ScribePinnedContent : StatefulWidget
         CollapseRegistry = collapseRegistry;
         OnDepartureSettled = onDepartureSettled;
         CurrentShade = currentShade;
+        DecoratePolicyDropdownStyle = decoratePolicyDropdownStyle;
     }
 
     public IReadOnlyList<ScribePinRowData> Rows { get; }
@@ -135,6 +137,11 @@ internal sealed class ScribePinnedContent : StatefulWidget
     /// tooltip — which renders in the global Overlay layer, outside the dialog body's own ScribeGlobalTint
     /// wrap — can be shaded to match the body in low light (refine-scribe-hover-tooltips D2).</summary>
     public ScribeAmbientLightSampler.Shade CurrentShade { get; }
+    /// <summary>Optional per-surface restyle of the completion-policy Dropdown, threaded from the dialog's
+    /// <c>DecoratePolicyDropdownStyle</c> seam. <c>null</c> = the theme's default style is used verbatim. The
+    /// chalkboard supplies one to make its open menu's SELECTED row legible (fully-opaque accent fill +
+    /// <c>OnPrimary</c> label) — see the seam's doc-comment (refine-chalkboard).</summary>
+    public System.Func<DropdownStyle, DropdownStyle>? DecoratePolicyDropdownStyle { get; }
 
     public override State CreateState() => new ScribePinnedContentState();
 }
@@ -287,6 +294,10 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
         // ancestor covers (task 3.1) — and Dropdown takes a DropdownStyle, not a plain Text anyway.
         var dropdownStyle = Theme.Of(context).DropdownStyle;
         dropdownStyle = dropdownStyle with { TextStyle = dropdownStyle.TextStyle with { FontFamily = taskFont } };
+        // Let the owning dialog restyle the picker per its theme (refine-chalkboard): the chalkboard fixes its
+        // unreadable selected-row colors here. Applied AFTER the font tweak so the surface override composes on
+        // top; null (every other surface) leaves the theme default untouched.
+        if (Widget.DecoratePolicyDropdownStyle is { } decorate) dropdownStyle = decorate(dropdownStyle);
 
         var policyPicker = new Column(
             spacing: 4,
@@ -452,12 +463,15 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
         var data = Widget.Data;
         float iconSize = style.ControlSize * 1.4f;
         float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
-        // Guide-page book glyph Primary (7.11d), item icon grown + row-height-neutral (7.11e/7.11f).
-        Widget icon = ScribeLinkIcon.Build(data.DisplayStack, data.LinkTarget, iconSize, colors.Primary, lineHeight);
+        // Link accent: Primary on light surfaces, or the row's override where Primary is illegible as text on
+        // a dark surface (the Chalkboard slate — ScribeRowStyle.LinkColor). Guide-page book glyph (7.11d),
+        // item icon grown + row-height-neutral (7.11e/7.11f).
+        Vector4 linkColor = style.LinkColor ?? colors.Primary;
+        Widget icon = ScribeLinkIcon.Build(data.DisplayStack, data.LinkTarget, iconSize, linkColor, lineHeight);
 
         Widget nameLink = new Expanded(child: new GestureDetector(
             onPress: e => { e.Handled = true; Widget.OnOpenLink(data.TaskId); },
-            child: new Text(data.Label, new TextStyle { Color = colors.Primary, SoftWrap = true })));
+            child: new Text(data.Label, new TextStyle { Color = linkColor, SoftWrap = true })));
 
         var rowChildren = new List<Widget>();
         if (data.IsLink)
@@ -471,7 +485,7 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
             // Inverted emphasis + satisfied strikethrough, shared with the read/HUD counters (7.11g/7.11h).
             rowChildren.Add(ScribeTrackerCounterText.Build(
                 data.CurrentQuantity, data.TargetQuantity, satisfied,
-                strongColor: colors.Primary, mutedColor: colors.OnSurfaceVariant, lineHeight: lineHeight));
+                strongColor: linkColor, mutedColor: colors.OnSurfaceVariant, lineHeight: lineHeight));
             rowChildren.Add(icon);
             rowChildren.Add(nameLink);
         }
@@ -531,14 +545,13 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
         // OnPinCompleteTask). Flips optimistically in its own State; the server re-push reconciles it.
         children.Add(new Opacity(contentOpacity, child: new Padding(
             EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
-            child: new Checkbox(
-                value: done,
-                onChanged: _ =>
+            child: ScribeRowControlNudge.BuildTaskCheckbox(
+                context, style, done,
+                _ =>
                 {
                     SetState(() => done = !done);
                     Widget.OnToggleComplete(data.DocId, data.TaskId);
-                },
-                size: style.CheckboxSize))));
+                }))));
 
         // A Tracker/Link pin renders a non-editable item icon + name (+ a have/need counter for a Tracker),
         // NOT the editable text field — its own Text is empty, its content is the referenced item, exactly
@@ -561,6 +574,11 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
                 padY: style.FieldPadY,
                 autoFocus: Widget.AutoFocus,
                 maxLength: ScribeDocumentCodec.MaxTaskTextLength,
+                // Read the seeded focus-border seam like the Edit view / guestbook do (§10) so a focused
+                // Pinned-tab row lights the SAME border as an Edit-view row — chalk-white on the chalkboard,
+                // Primary elsewhere. Without this the field fell back to Primary and diverged only where the
+                // seam ≠ Primary (the chalkboard: green instead of chalk-white).
+                focusBorderColor: style.InputFocusBorderColor,
                 onChanged: text => Widget.OnTextChanged(data.TaskId, text),
                 onCommitAndAdvance: () => Widget.OnCommitText(data.TaskId),
                 onCommitAndRetreat: () => Widget.OnCommitText(data.TaskId),

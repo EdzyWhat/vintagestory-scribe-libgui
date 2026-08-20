@@ -208,12 +208,12 @@ public sealed partial class ScribeModSystem
         // reach these Scribe-only slots, so a missing IScribeDocumentItem is treated as uncapped/writeable.
         // Server-authoritative: mirrors the client's BuildSealButton gate but does not trust it.
         int resultingBlocks = message.Append
-            ? (targetDoc?.TaskCount ?? 0) + sourceDoc.TaskCount
-            : sourceDoc.TaskCount;
+            ? (targetDoc?.BlockCount ?? 0) + sourceDoc.BlockCount
+            : sourceDoc.BlockCount;
         if (targetSlot.Itemstack.Collectible is IScribeDocumentItem targetItem
             && !targetItem.DocumentPolicy(targetSlot).CanHold(resultingBlocks))
         {
-            Trace("transcribe-copy from {0}: target rejects {1} resulting tasks (read-only or over its cap) — no-op",
+            Trace("transcribe-copy from {0}: target rejects {1} resulting blocks (read-only or over its cap) — no-op",
                 fromPlayer.PlayerName, resultingBlocks);
             return;
         }
@@ -305,12 +305,12 @@ public sealed partial class ScribeModSystem
         // Valid-destination check, same as the copy path: writeable (not a hardened/fired tablet) AND able to
         // hold the RESULTING block count (overwrite → incoming's blocks; append → target's + incoming's).
         int resultingBlocks = message.Append
-            ? (targetDoc?.TaskCount ?? 0) + incoming.TaskCount
-            : incoming.TaskCount;
+            ? (targetDoc?.BlockCount ?? 0) + incoming.BlockCount
+            : incoming.BlockCount;
         if (targetSlot.Itemstack.Collectible is IScribeDocumentItem targetItem
             && !targetItem.DocumentPolicy(targetSlot).CanHold(resultingBlocks))
         {
-            Trace("transcribe-import from {0}: target rejects {1} resulting tasks (read-only or over its cap) — no-op",
+            Trace("transcribe-import from {0}: target rejects {1} resulting blocks (read-only or over its cap) — no-op",
                 fromPlayer.PlayerName, resultingBlocks);
             return;
         }

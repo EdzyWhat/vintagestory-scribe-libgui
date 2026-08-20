@@ -301,10 +301,14 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
 
         // The clamp still fires on blur (in OnFocusChanged); the visible valid-range feedback line was
         // dropped as unwanted (§8.2), so the field is just the input + its +/- step column.
-        // Use caller-supplied fill color if the BoxStyle has one, otherwise fall back to theme.
+        // Use caller-supplied fill color if the BoxStyle has one, otherwise fall back to the theme's raised
+        // input tone. SurfaceHigh (not Background) is the "writing" surface the multiline TEXT field paints
+        // its box with (ScribeMultilineField boxColor), so an unstyled numeric field — e.g. the Tracker's
+        // target-quantity stepper — now matches a text input's background on every theme instead of reading
+        // a shade darker (the chalkboard divergence the user flagged).
         var fillColor = Widget.Style.Color.W > 0
             ? Widget.Style.Color
-            : new Vector4(colors.Background.X, colors.Background.Y, colors.Background.Z, 0.9f);
+            : colors.SurfaceHigh;
         var borderColor = Widget.Style.BorderColor.W > 0
             ? Widget.Style.BorderColor
             : colors.Border;

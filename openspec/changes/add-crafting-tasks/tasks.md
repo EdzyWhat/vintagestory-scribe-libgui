@@ -152,3 +152,50 @@
       depth-2 reachable. Verify on Lectern, Notebook, Tablet, Scriptorium, and the Pinned HUD.
 - [ ] 10.9 In-game: verify a liquid-ingredient recipe (e.g. poultice) surfaces the liquid as a
       non-counting note (or omits it), not a broken counting row.
+
+## 11. Add the "Add Crafting Task" entry to the editor add-kind picker
+
+Craft tasks could previously only be created from a Handbook recipe page; the editor footer picker didn't
+list them. Add a picker entry so players discover the flow, mirroring how Tracker/Link appear.
+
+- [x] 11.1 In `src/Mod/ScribeAddKind.cs`, register a `Craft` kind: `Id: "craft"`, `LabelLangKey:
+      "scribe:scribe-gui-addcraft"` (label already in `en.json` = "Add Crafting Task"),
+      `CountsAgainstTaskCap: true`, `RequiresItemContext: true`, and `Add: (_, _) => false` (a bare footer
+      click has no recipe signature to bind — creation only happens via the Handbook
+      `TryAddCraftFromHandbook` → `AddCraft` path, so like Tracker/Link the footer click just dispatches the
+      guide). Update the stale `ScribeAddKinds` class doc-comment (it still said "exactly two — Task and Note").
+- [x] 11.2 Reorder `ScribeAddKinds.Live` to `{ Task, Tracker, Craft, Link, Note }` (player-requested order:
+      Add Task → Add Item Tracker → Add Crafting Task → Add Link → Add Note). `Task` stays first so it's the
+      primary-button default.
+- [x] 11.3 Extend the shared guide string `scribe-gui-additem-guide` in `en.json` to name "Add Crafting Task"
+      alongside "Add Item Tracker" and "Add Link" (`DispatchItemKindGuide` is kind-agnostic, so all three
+      item-bound kinds share this message).
+- [x] 11.4 `dotnet build src/Mod/Mod.csproj` — 0 errors, 0 warnings.
+- [ ] 11.5 In-game: open the editor add-kind picker → the list reads Add Task, Add Item Tracker, Add Crafting
+      Task, Add Link, Add Note in that order. Clicking "Add Crafting Task" with no Handbook open opens the
+      Handbook search; with a Handbook page open it surfaces the guide error naming the "Add Crafting Task"
+      button. The primary add button still defaults to Add Task.
+
+## 12. Live subtask count refresh in the editor (bug fold)
+
+Playtest bug: when the Craft parent's target quantity is changed in EDIT view, the ingredient subtasks'
+need-counts only show the recomputed numbers AFTER the user exits edit view. §6.4 already reconciles the
+children on target-change (`SetEditorTrackerTargetQuantity` → `ReconcileCraftIngredients`), so the model IS
+updated live — the editor's rendered rows just aren't refreshed until the read-view rebuild. Fix: refresh the
+subtask rows in place when the parent target changes, so the new `have/need` shows immediately.
+
+- [ ] 12.1 Trace the target-change path in the editor: `SetEditorTrackerTargetQuantity` (in
+      `ScribeDialogBase.Editor.cs` or nearby) → `ReconcileCraftIngredients`. Confirm the reconcile mutates the
+      scratch document's child `TargetQuantity` values but does NOT trigger a row rebuild/`UpdateWidget` for
+      those child rows in edit view (the caret-preserving path). Identify why the child rows keep stale need
+      numbers until exit.
+- [ ] 12.2 After a Craft parent's target change reconciles its children, refresh the affected child rows'
+      displayed counts live — reuse the editor's existing in-place row-state update (the same mechanism the
+      external-completion merge / `ScribeEditRowState.UpdateWidget` uses) rather than a full `RebuildBody` that
+      would steal the caret. If a targeted refresh is impractical, rebuild while preserving the focused row
+      (`preserveFocusedRow`) so the parent's numeric field keeps focus.
+- [ ] 12.3 Build (0 warnings / 0 errors) + `dotnet test tests/Core.Tests` (no new failures) +
+      `build/restage.sh Debug` (client NOT running).
+- [ ] 12.4 In-game: with a Craft parent + ingredient subtasks open in EDIT view, raise/lower the parent
+      target — the subtasks' need-counts update IMMEDIATELY (no need to exit edit view), the parent's numeric
+      field keeps focus, and progress/have-counts are preserved.

@@ -12,7 +12,7 @@ set -euo pipefail
 PORT=8792
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TESTING_FILE="$REPO_ROOT/TESTING.md"
-APP_DIR="$HOME/claude/vs-playtest-checklist"
+APP_DIR="$HOME/claude/vintage-story/vs-playtest-checklist"
 URL="http://localhost:${PORT}/index.html"
 
 if [[ ! -d "$APP_DIR" ]]; then

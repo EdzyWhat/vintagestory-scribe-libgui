@@ -214,14 +214,14 @@ public abstract partial class ScribeDialogBase
     private bool IsPureSingleplayer => capi.IsSinglePlayer && !capi.OpenedToLan;
 
     /// <summary>Append the Handbook-originated Tracker/Link block to the live scratch document and flush it
-    /// through the dialog's existing save path (add-tracker-link-tasks 3.4/3.5). Enforces the task-cap gate
-    /// for cap-counting kinds (Tracker counts; Link does not — see <see cref="ScribeAddKind.CountsAgainstTaskCap"/>)
-    /// exactly as the footer add does, so a full tablet refuses with the same notice. No-op unless the editor
+    /// through the dialog's existing save path (add-tracker-link-tasks 3.4/3.5). Enforces the block-cap gate
+    /// for every kind (the cap is "N of anything" — Tracker and Link both count, refine-chalkboard §12) exactly
+    /// as the footer add does, so a full tablet/chalkboard refuses with the same notice. No-op unless the editor
     /// is live.</summary>
     private void ApplyHandbookAppend(ScribeAddKind kind, string itemCode)
     {
         if (scratch is null || !isEditorMode) return;
-        if (kind.CountsAgainstTaskCap && !CanAddTaskUnderPolicy()) { NotifyTabletFull(); return; }
+        if (!CanAddTaskUnderPolicy()) { NotifyTabletFull(); return; }
         if (!kind.Add(scratch, itemCode)) return;
         isDirty = true;
         SyncFocusNodesToScratch();
@@ -243,12 +243,13 @@ public abstract partial class ScribeDialogBase
 
     /// <summary>Append a guide-page Link block to the live scratch document and flush it through the dialog's
     /// existing save path (add-tracker-link-tasks 7.6) — the guide-page sibling of
-    /// <see cref="ApplyHandbookAppend"/>. A Link never counts against the task cap
-    /// (<see cref="ScribeAddKind.CountsAgainstTaskCap"/> is false for <see cref="ScribeAddKinds.Link"/>), so
-    /// unlike the item path there is no cap gate here. No-op unless the editor is live.</summary>
+    /// <see cref="ApplyHandbookAppend"/>. A guide link is a block like any other, so it counts against a finite
+    /// tier's "N of anything" cap (refine-chalkboard §12): a full tablet/chalkboard refuses it with the same
+    /// notice the item append and footer add use. No-op unless the editor is live.</summary>
     private void ApplyGuideLinkAppend(string pageCode, string title)
     {
         if (scratch is null || !isEditorMode) return;
+        if (!CanAddTaskUnderPolicy()) { NotifyTabletFull(); return; }
         if (!scratch.AddGuideLink(pageCode, title)) return;
         isDirty = true;
         SyncFocusNodesToScratch();

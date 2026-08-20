@@ -95,7 +95,10 @@ public abstract partial class ScribeDialogBase
             // editor's OnEditorRowCollapsed → RequestClampToExtent. The container retires the ghost itself.
             onDepartureSettled: RequestClampToExtent,
             // Live shade so the policy-caption hover tooltip dims with the body in low light (D2).
-            currentShade: currentShade);
+            currentShade: currentShade,
+            // Per-surface restyle of the policy picker's open menu (refine-chalkboard): the chalkboard fixes
+            // its unreadable selected-row colors; every other surface passes the theme default through.
+            decoratePolicyDropdownStyle: DecoratePolicyDropdownStyle);
     }
 
     /// <summary>Resolve a pinned Tracker/Link's item icon + display name from its snapshot code, or

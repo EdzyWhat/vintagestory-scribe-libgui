@@ -219,6 +219,10 @@ public sealed partial class ScribeModSystem : ModSystem
         api.RegisterBlockEntityClass("ScribeLectern", typeof(BlockEntityScribeLectern));
         api.RegisterBlockClass("BlockScriptorium", typeof(BlockScriptorium));
         api.RegisterBlockEntityClass("Scriptorium", typeof(BlockEntityScriptorium));
+        // The Chalkboard: a wall-mounted cosmetic variant of the Lectern. The string names match the
+        // committed chalkboard.json (class "BlockChalkboard" / entityclass "Chalkboard").
+        api.RegisterBlockClass("BlockChalkboard", typeof(BlockScribeChalkboard));
+        api.RegisterBlockEntityClass("Chalkboard", typeof(BlockEntityScribeChalkboard));
         api.RegisterItemClass("ItemScribeNotebook", typeof(ItemScribeNotebook));
         api.RegisterItemClass("ItemClockmakerNotebook", typeof(ItemClockmakerNotebook));
         api.RegisterItemClass("ItemScribeTablet", typeof(ItemScribeTablet));

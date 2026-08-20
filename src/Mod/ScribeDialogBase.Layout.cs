@@ -91,6 +91,58 @@ public abstract partial class ScribeDialogBase
     /// close button, which keeps its <c>Error</c> color.</summary>
     private protected virtual Vector4 TitleChromeGlyphColor(ColorScheme colors) => colors.OnSurfaceVariant;
 
+    /// <summary>Tint color for the INACTIVE (non-current-tab) right-column nav glyphs (read/edit/pin/settings
+    /// and any subclass extras like the chalkboard's guestbook). <c>private protected virtual</c> so a subclass
+    /// can restyle them without forking <see cref="BuildRightColNav"/>. Default is the theme's mid-gray
+    /// <c>OnSurfaceVariant</c> — the same role the muted body text uses — so the incumbents are unchanged. The
+    /// chalkboard overrides it to a darker slate-brown so the pale chalk-gray inactive icons don't read as
+    /// almost-active on the dark board, WITHOUT dragging muted body text down with them (which is why this is a
+    /// dedicated seam and not a change to the shared <c>OnSurfaceVariant</c> role). The ACTIVE tab keeps its own
+    /// per-view <c>activeColor</c>; only the resting/inactive tint routes through here.</summary>
+    private protected virtual Vector4 NavIconColor(ColorScheme colors) => colors.OnSurfaceVariant;
+
+    /// <summary>Border color for a FOCUSED editable field (task rows and the guestbook note field).
+    /// <c>private protected virtual</c> so a subclass can restyle it without forking the field. Default is the
+    /// theme's <c>Primary</c> accent — the focus outline every light surface has always used. The chalkboard
+    /// overrides it to a chalk-white (<see cref="ScribeTheme.ChalkboardInputFocusBorder"/>) because its
+    /// <c>Primary</c> is a forest green the author disliked on an input border; this is a dedicated seam (not a
+    /// change to <c>Primary</c>) so the accent still fills buttons in green while inputs outline in chalk. Both
+    /// the row path (seeded onto <see cref="ScribeRowStyle.InputFocusBorderColor"/> in <c>RowStyle</c>) and the
+    /// guestbook field consume this single seam so they can't drift apart.</summary>
+    private protected virtual Vector4 InputFocusBorderColor(ColorScheme colors) => colors.Primary;
+
+    /// <summary>Override for the task-row completion checkbox's TICK color (the checkmark), or <c>null</c> to
+    /// keep the ambient theme's checkbox tick (its <c>CheckColor</c> ← <c>Primary</c>). <c>private protected
+    /// virtual</c> so a subclass can retint just the tick without forking the row widget. Default is
+    /// <c>null</c> = unchanged everywhere. The chalkboard overrides it (gated on its Pixel-Art Display) to a
+    /// chalk-white so the completed-task tick matches its row text instead of the forest-green <c>Primary</c>
+    /// — the playtest verdict that superseded the brighter-green tick (refine-chalkboard §11). Seeded onto
+    /// <see cref="ScribeRowStyle.CheckTickColor"/> in <c>RowStyle</c>, so all four row surfaces (read, editor,
+    /// frozen, pinned) consume this single seam and can't drift.</summary>
+    private protected virtual Vector4? CheckTickColor(ColorScheme colors) => null;
+
+    /// <summary>Horizontal placement of the right-column nav-button stack within its <c>SideColW</c> column,
+    /// resolved from the already-computed column width and single nav-button box width (both passed in by
+    /// <see cref="BuildRightColNav"/>, which owns the layout math). <c>private protected virtual</c> so a
+    /// subclass can pick its surface family's placement rule without forking the nav build (refine-nav-button-placement).
+    /// <para>Default = the <b>Pages group</b> (Lectern, Notebook, Scriptorium, Clockmaker's Notebook):
+    /// <see cref="CrossAxisAlignment.Start"/>, buttons hugging the left/inner edge of the column — the layout
+    /// their paper-margin art was tuned for. The <b>Hard Border group</b> (the Chalkboard) overrides this with
+    /// an adaptive center/end rule. The Tablet is Hard Border by intent but renders no nav column
+    /// (its <see cref="BuildRightColNav"/> returns an empty box), so this seam never fires for it.</para></summary>
+    private protected virtual CrossAxisAlignment NavButtonAlignment(float sideColW, float navBoxW) =>
+        CrossAxisAlignment.Start;
+
+    /// <summary>Restyle the completion-policy Dropdown (Pin Tab picker) without forking the widget. Given the
+    /// theme's resolved <see cref="DropdownStyle"/>, return it (default) or a tweaked copy. <c>private
+    /// protected virtual</c> so a subclass can fix a per-theme legibility problem in its OPEN menu that the
+    /// cascade-from-<c>ColorScheme</c> defaults get wrong. The chalkboard overrides it because the stock menu
+    /// paints the selected row's fill from <c>StateSelected</c> (a translucent <c>Primary</c> tint) and its
+    /// selected LABEL from <c>SelectionAccentColor = Primary</c> — i.e. dark-green text on a see-through
+    /// dark-green wash over the dark slate, which is unreadable. Every light surface reads fine, so only the
+    /// chalkboard opts in (refine-chalkboard).</summary>
+    private protected virtual DropdownStyle DecoratePolicyDropdownStyle(DropdownStyle style) => style;
+
     /// <summary>Wrap the layout tree in the OuterArtBox: the notebook backdrop <see cref="Container"/> sized to
     /// <c>W × H</c> when Pixel-Art Display is ON, or the tree in a bare same-sized box when OFF (the existing
     /// gate — scribe-gui-backdrops D5). The single <see cref="host.BackdropSpec"/> spec backs both
@@ -154,7 +206,7 @@ public abstract partial class ScribeDialogBase
     /// <see cref="GuiBase.TryClose"/>.</summary>
     private Widget BuildTitleBar(ScribeLayout layout)
     {
-        var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
+        var colors = ResolveTheme(modSystem.MySettings.PixelArtDisplay).ColorScheme;
         // Title is 1.5× the window body text size — "50% larger" (v1-playtest-fixes 5.1). The body size is
         // BaseWindowFontSize × the player's WindowFontScale, so the title tracks a live font-scale change too.
         float titleFont = ScribeRowConstants.BaseWindowFontSize
@@ -395,11 +447,15 @@ public abstract partial class ScribeDialogBase
     /// (add-tablet-dialog D2).</summary>
     protected virtual Widget BuildRightColNav()
     {
-        var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
+        var colors = ResolveTheme(modSystem.MySettings.PixelArtDisplay).ColorScheme;
         // Sidebar nav buttons enlarged (v1-playtest-fixes 5.6): the base was RowCheckboxSize × 1.2; ×1.7 on
         // top of that grows BOTH the button box and its inscribed SVG, since ScribeRowButton derives its box
         // size AND glyph size from this one `size` value.
         float size = ScribeRowConstants.RowCheckboxSize * 1.7f;
+
+        // Resting/inactive nav-glyph tint (dedicated seam so a dark theme can darken the icons without
+        // dragging muted body text down with them — see NavIconColor). The active tab uses its own activeColor.
+        Vector4 navColor = NavIconColor(colors);
 
         // Whether the editor lock is held by ANOTHER player (fix-multiplayer-editor-lock §4.1). When true
         // the Edit nav button reads as unavailable (dimmed glyph) and its tap surfaces the native error
@@ -418,19 +474,19 @@ public abstract partial class ScribeDialogBase
 
         // Build baseline nav buttons; insert extra (subclass-supplied) between Pins and Settings.
         // Settings is always last per the nav contract.
-        Widget readBtn = TitleButton("scribecheck", "scribe-gui-nav-read", colors.OnSurfaceVariant,
+        Widget readBtn = TitleButton("scribecheck", "scribe-gui-nav-read", navColor,
             size: size, onTap: EnterReadMode, boxShadows: navShadow,
             activeColor: viewMode == ScribeLecternView.Read ? ScribeRowConstants.NavActiveRead : null);
         Widget editBtn = TitleButton("scribeedit", "scribe-gui-nav-edit",
-            editLockedByOther ? colors.OnSurfaceVariant with { W = 0.4f } : colors.OnSurfaceVariant,
+            editLockedByOther ? navColor with { W = 0.4f } : navColor,
             size: size, onTap: TryEnterEditor, boxShadows: navShadow,
             activeColor: viewMode == ScribeLecternView.Editor ? ScribeRowConstants.NavActiveEdit : null);
         // Pinned enlarged +15% (§10.2): the pin glyph reads a touch larger than the others.
-        Widget pinBtn = TitleButton("scribepin", "scribe-gui-nav-pinned", colors.OnSurfaceVariant,
+        Widget pinBtn = TitleButton("scribepin", "scribe-gui-nav-pinned", navColor,
             size: size, onTap: OnClickSwitchToPinned, iconScale: 1.15f, boxShadows: navShadow,
             activeColor: viewMode == ScribeLecternView.Pinned ? ScribeRowConstants.NavActivePinned : null);
         // Settings gear LAST in the group (§10.1), always after any extra buttons.
-        Widget settingsBtn = TitleButton("scribegear", "scribe-gui-nav-settings", colors.OnSurfaceVariant,
+        Widget settingsBtn = TitleButton("scribegear", "scribe-gui-nav-settings", navColor,
             size: size, onTap: modSystem.OpenSettings, boxShadows: navShadow,
             activeColor: modSystem.IsSettingsOpen ? ScribeRowConstants.NavActiveSettings : null);
 
@@ -439,10 +495,20 @@ public abstract partial class ScribeDialogBase
             .Append(settingsBtn)
             .ToArray();
 
+        // Horizontal placement of the buttons within their SideColW column, resolved through the
+        // NavButtonAlignment seam (refine-nav-button-placement). The base owns the layout math — the column
+        // width and the single drawn nav-button box width (NavButtonSize == this size, minus the
+        // ScribeRowButton BoxShrink) — and the seam maps them to a CrossAxisAlignment for this surface family.
+        // Default (Pages group) is Start/left-hugging, the layout the paper-margin art was tuned for; the
+        // chalkboard (Hard Border group) overrides it with the adaptive center/end rule. See NavButtonAlignment.
+        float sideColW = host.GetLayout(modSystem.MySettings.PixelArtSize).SideColW;
+        float navBoxW = size - ScribeRowButton.BoxShrink;
+        CrossAxisAlignment navAlign = NavButtonAlignment(sideColW, navBoxW);
+
         return new Column(
             spacing: 16,
             mainAxisAlignment: MainAxisAlignment.Start,
-            crossAxisAlignment: CrossAxisAlignment.Start,
+            crossAxisAlignment: navAlign,
             mainAxisSize: MainAxisSize.Max,
             children: navChildren);
     }
@@ -515,7 +581,14 @@ public abstract partial class ScribeDialogBase
         // Subtask indent depends on the window width (not a settings-only size), so it's layered on here from
         // the live layout rather than in FromSettings: 10px + 3%·W, mirroring the 0.04·W footer inset idiom
         // (task-subtasks 5.1). Applied before DecorateRowStyle so a subclass's `with` tweaks still compose.
-        with { SubtaskIndent = 10f + 0.03f * host.GetLayout(modSystem.MySettings.PixelArtSize).W });
+        // Focus-border color is seeded from the InputFocusBorderColor seam (default Primary; chalkboard →
+        // chalk-white) so every editable row shares the guestbook field's resolved focus color.
+        with
+        {
+            SubtaskIndent = 10f + 0.03f * host.GetLayout(modSystem.MySettings.PixelArtSize).W,
+            InputFocusBorderColor = InputFocusBorderColor(ResolveTheme(modSystem.MySettings.PixelArtDisplay).ColorScheme),
+            CheckTickColor = CheckTickColor(ResolveTheme(modSystem.MySettings.PixelArtDisplay).ColorScheme),
+        });
 
     /// <summary>Hook to adjust the settings-derived <see cref="ScribeRowStyle"/> for this dialog tier. The
     /// default returns it unchanged (Lectern/Notebook). The tablet overrides it to set

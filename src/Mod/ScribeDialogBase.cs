@@ -508,28 +508,39 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
             : modSystem.IsPinnedForMe(host.Document.DocId, taskId);
 
     /// <summary>Whether the tier cap (<see cref="IScribeDocumentHost.Policy"/>) still permits adding one
-    /// more TASK block to the document being edited. Counted against the live scratch document while
+    /// more block of ANY kind to the document being edited. The cap is "N of anything" — tasks, notes,
+    /// trackers, links, and craft parents all count equally (<see cref="ScribeDocument.BlockCount"/>), so
+    /// every add gesture routes through this one gate. Counted against the live scratch document while
     /// editing (falls back to the host document if scratch is not yet initialized). Uncapped tiers
     /// (Lectern, Notebook — <see cref="ScribeDocumentPolicy.Unlimited"/>) always return true, so this
-    /// gates only the tablet tier (scribe-document-policy).</summary>
+    /// gates only the finite tiers (tablet + chalkboard — scribe-document-policy).</summary>
     private bool CanAddTaskUnderPolicy()
     {
         var doc = scratch ?? host.Document;
-        return host.Policy.CanAdd(doc.TaskCount);
+        return host.Policy.CanAdd(doc.BlockCount);
     }
 
-    /// <summary>Surface the "tablet is full" in-game error when an add is refused by a FINITE task cap
-    /// (zero-point-three-fixes §7.2). Only fires for a capped tier (the tablet's
+    /// <summary>Lang key for the "task cap reached" in-game notice raised by <see cref="NotifyTabletFull"/>.
+    /// <c>protected virtual</c> so a capped surface can word the notice for its own object
+    /// (refine-chalkboard). Default is the tablet's <c>scribe:tablet-full</c> ("A tablet holds at most 10
+    /// tasks."); the chalkboard overrides it to <c>scribe:chalkboard-full</c> so a board never says
+    /// "tablet". Uncapped tiers never reach this notice, so the default is inert for them.</summary>
+    protected virtual string TaskCapReachedLangKey => "scribe:tablet-full";
+
+    /// <summary>Surface the "task cap reached" in-game error when an add is refused by a FINITE task cap
+    /// (zero-point-three-fixes §7.2). Only fires for a capped tier (the tablet's / chalkboard's
     /// <see cref="ScribeDocumentPolicy.MaxBlocks"/> is set) — uncapped tiers (Lectern, Notebook) never
     /// refuse, so this is inert there. Called from the add-task gestures right where they used to return
     /// silently, so the dimmed "Add task" button and the Enter-insert gesture now both explain themselves
-    /// via the same transient-error path the lock notice uses. Keeps Core pure: the refusal is decided by
-    /// the boolean <see cref="ScribeDocumentPolicy.CanAdd"/>; only the feedback lives here in the Mod.</summary>
+    /// via the same transient-error path the lock notice uses. The notice wording routes through the
+    /// <see cref="TaskCapReachedLangKey"/> seam so each capped surface names its own object. Keeps Core
+    /// pure: the refusal is decided by the boolean <see cref="ScribeDocumentPolicy.CanAdd"/>; only the
+    /// feedback lives here in the Mod.</summary>
     private void NotifyTabletFull()
     {
         if (host.Policy.MaxBlocks is int)
         {
-            capi.TriggerIngameError(this, "scribe-tablet-full", Lang.Get("scribe:tablet-full"));
+            capi.TriggerIngameError(this, "scribe-tablet-full", Lang.Get(TaskCapReachedLangKey));
         }
     }
 

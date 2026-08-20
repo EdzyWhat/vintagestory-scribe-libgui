@@ -64,6 +64,24 @@ internal static class ScribeRowControlNudge
     public static float CheckboxAndGripTop(ScribeRowStyle style)
         => MathF.Max(0f, (SingleLineInputHeight(style) - style.CheckboxSize) / 2f);
 
+    /// <summary>Build a task-row completion checkbox, applying the row style's optional tick-color override
+    /// (<see cref="ScribeRowStyle.CheckTickColor"/>, refine-chalkboard §11). When it is null (every surface
+    /// except the chalkboard) the ambient theme's <c>CheckboxStyle</c> is used unchanged, so the tick keeps
+    /// its usual accent. When set, ONLY the tick's <c>CheckColor</c> is overridden — the box background,
+    /// border, and focus behavior all stay the resolved theme defaults (we copy <c>Theme.Of(context)</c>'s
+    /// style and change one field), so the chalkboard's completed-task tick reads chalk-white to match its
+    /// row text without hardcoding white in this shared widget. Used by the read, editor, and pinned rows so
+    /// their ticks can't drift. A null <paramref name="onChanged"/> yields an inert (frozen) checkbox.</summary>
+    public static Checkbox BuildTaskCheckbox(
+        BuildContext context, ScribeRowStyle style, bool value, Action<bool>? onChanged)
+        => new Checkbox(
+            value: value,
+            onChanged: onChanged,
+            size: style.CheckboxSize,
+            style: style.CheckTickColor is { } tick
+                ? Theme.Of(context).CheckboxStyle with { CheckColor = tick }
+                : null);
+
     /// <summary>The grip glyph's insets in a row: the vertical centering top-nudge (kept, same as the
     /// checkbox), plus a NEGATIVE right inset that cancels the Row's <see cref="ScribeRowStyle.CheckboxTextGap"/>
     /// which would otherwise sit as a trailing margin between the grip and the next control (§10.4). With

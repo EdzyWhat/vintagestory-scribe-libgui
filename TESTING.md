@@ -21,6 +21,129 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## refine-nav-button-placement
+
+> Right nav-button horizontal placement is now a group-scoped seam: the **Pages group** (Lectern,
+> Notebook, Scriptorium, Clockmaker's Notebook) reverts to left-align (`Start`); the **Hard Border
+> group** (Chalkboard) keeps the adaptive center/spill-left rule. The Tablet is Hard Border by intent
+> but renders no nav column. **Fully quit and relaunch the client first** so the new build loads.
+
+- [x] `25ef2db2` **Pages nav left-align.** At large and small PixelArtSize, confirm Lectern /
+      Notebook / Scriptorium / Clockmaker's Notebook nav buttons left-align (hug the inner edge of
+      their column) as before — this is the regression check for the group that changed.
+      *(refine-nav-button-placement 3.3)*
+      - **Confirmed 2026-08-19** (playtest submission 2026-08-19T15-56-42): "Works."
+- [x] `179b120f` **Chalkboard nav placement.** At large PixelArtSize the chalkboard nav buttons
+      center in their column; shrink the window so the column is narrower than a button and confirm
+      they pin to the right edge and spill LEFT with no clipping off the window edge. Tablet
+      unaffected (no nav column). *(refine-nav-button-placement 3.3)*
+      - **Confirmed 2026-08-19** (playtest submission 2026-08-19T15-56-42): "Works."
+
+## refine-chalkboard
+
+> Chalkboard caps at 10 task blocks (like the wax tablet) — enforced through the shared
+> `CanAdd` path via a new `HostPolicy` seam — with pins left uncapped (shared block, per-player
+> pins) and its own "chalkboard-full" notice. Plus a cosmetic bundle: a brighter accent green
+> (+10 HSV Value), a legible completion-policy dropdown selection, and `SideColFrac` back to
+> `0.078`. A third cosmetic bundle recolors the chalkboard `Secondary` to a sage green (so the
+> pinned-row wash reads green over slate, not muddy amber) and unifies the two input fields globally —
+> both the note (multiline) and numeric fields now share the same theme caret + focused-border color.
+> **Fully quit and relaunch the client first** so the new build + lang string load.
+
+- [ ] `2a03c5d1` **Chalkboard 10-task cap.** Add 10 tasks to a chalkboard; the Add Task button
+      disables and a further add shows "A chalkboard holds at most 10 tasks." (NOT "tablet").
+      Confirm notes/text still add past 10, and pinning is not capped. Tablet's own cap notice
+      unchanged. *(refine-chalkboard 6.3)*
+      - **Still broken 2026-08-19** (playtest submission 2026-08-19T15-56-42): "I have a Chalkboard
+        with 50 tasks. This isn't working." The cap is NOT enforced — and notably there's also no
+        limit on plain tasks created without opening the Handbook at all. Investigate whether the
+        `HostPolicy`/`CanAdd` cap is wired for the chalkboard's normal add path (not just the
+        Handbook-add path), and whether the optimistic single-player add (server paused) bypasses it.
+- [ ] `dff63237` **Chalkboard checkbox reads.** On a chalkboard (Pixel-Art Display ON) confirm the
+      task-row checkbox tick is a brighter, legible green against the slate; confirm tablet/lectern
+      accents are unchanged. *(refine-chalkboard 6.4)*
+      - **Obsolete 2026-08-19** (playtest submission 2026-08-19T15-56-42): green goal superseded — user
+        wants the checkbox tick to be the SAME chalk-white as the text, on the chalkboard ONLY (not
+        other surfaces). New requirement to fold into refine-chalkboard; the "brighter green" test no
+        longer applies.
+- [x] `b57b3d27` **Policy dropdown legible.** Open the Pin tab Completion Behavior dropdown on a
+      chalkboard; the selected row is solid green with chalk-white text (not green-on-green). The
+      same dropdown on the lectern is visually unchanged. *(refine-chalkboard 6.5)*
+      - **Confirmed 2026-08-19** (playtest submission 2026-08-19T15-56-42): "Works."
+- [x] `496bce24` **Side-column width.** Confirm the wider `SideColFrac=0.078` nav column still
+      centers/holds the nav buttons within the slate frame with no clipping. *(refine-chalkboard 6.6)*
+      - **Confirmed 2026-08-19** (playtest submission 2026-08-19T15-56-42): "Works."
+- [x] `871bde9e` **Pinned wash sage green.** On a chalkboard, pin a task; confirm the pinned-row wash
+      now reads as a soft SAGE GREEN over the slate (harmonious with the accent), NOT the old muddy
+      amber, and the pinned task's text stays legible over it. *(refine-chalkboard 9.3)*
+      - **Confirmed 2026-08-19** (playtest submission 2026-08-19T15-56-42): "Works."
+- [x] `0e86ef32` **Chalkboard field parity.** On a chalkboard, focus a note (multiline) field and a
+      Tracker/Craft target-quantity numeric field; confirm BOTH light their focused border in the SAME
+      chalk-white and both carets read chalk-white ink (not accent-green). Confirm the +/- stepper and
+      other stock controls no longer show a gold focus ring. *(refine-chalkboard 9.4)*
+      - **Confirmed 2026-08-19** (playtest submission 2026-08-19T15-56-42): "Works."
+- [ ] `3e0b8328` **Lectern field parity.** On the Lectern/Notebook (Light theme), confirm the focused
+      numeric field's border now matches the multiline field's (both the parchment accent) rather than
+      the old stock gold, and nothing else regressed. *(refine-chalkboard 9.5)*
+
+## add-chalkboard-block
+
+- [x] `b88f98e7` **Craft & wall-mount.** Craft/spawn a chalkboard; mount it on a wall facing outward on
+      all four sides, confirm it needs no floor and breaks when its wall is removed, and renders fully
+      textured (no untextured faces). Confirm Lectern/Scriptorium still place floor-only facing the
+      player. *(add-chalkboard-block 6.4)*
+      - **Confirmed 2026-08-19**: "It mounts, needs no floor, breaks with its wall, is textured, and
+        other blocks place the way they still should." (Model was collapsed to 33 faces on the four
+        authored keys; dead placeholder texture declarations removed.)
+- [x] `219faf3f` **Dialog opens.** Open the chalkboard: the Scribe document dialog shows with its own GUI
+      background and chalk theme; all task kinds, tabs, and the guestbook work exactly as the Lectern.
+      *(add-chalkboard-block 6.5)*
+      - **Confirmed 2026-08-19**: "Dialog opens, looks right, and all the tabs work as expected."
+- [x] `36bf2dbc` **Edit sync/persist.** Edit on the chalkboard: the server-lock round-trip persists and
+      syncs across a re-open and a second client (inherited writing-station path intact).
+      *(add-chalkboard-block 6.6)*
+      - **Confirmed 2026-08-19**: "The full contents of Chalkboards persist in all scenarios."
+- [x] `007c7e8a` **Theme scoping.** Confirm your global Light/Default theme preference and the Lectern's
+      appearance are unchanged (the chalk theme is chalkboard-scoped, no bleed). *(add-chalkboard-block 6.7)*
+      - **Confirmed 2026-08-19**: "The theme is chalkboard only."
+- [x] `07275711` **Handbook & hints.** Confirm the chalkboard's Handbook entry reads chalkboard-specific
+      (not Scriptorium), and its interaction hints + default document title use chalkboard copy.
+      *(add-chalkboard-block 6.8)*
+      - **Confirmed 2026-08-19**: "The handbook & hints are unique to the Chalkboard." Follow-up noted:
+        the chalkboard entry reads notably cleaner — spun into a separate handbook-restructuring proposal.
+
+## add-crafting-tasks
+
+> A Crafting Task binds a task row to a grid recipe: a Craft parent shows the output item + have/need
+> counter, with one indented ingredient subtask per counting ingredient at batch quantity (loose
+> self-heal on target-change / open, never auto-deletes). Created from a Handbook recipe page's "Add
+> Crafting Task" link, and now also discoverable via the editor add-kind picker (Add Task → Add Item
+> Tracker → Add Crafting Task → Add Link → Add Note). **Fully quit and relaunch the client first** so
+> the new build + assets load.
+
+- [ ] `71b0b58e` **Handbook craft links.** Open an item Handbook page with one grid recipe → one "Add
+      Crafting Task" link; an item with several variants → one labeled link each; an item with no grid
+      recipe → no link. *(add-crafting-tasks 10.4)*
+- [ ] `1c901206` **Craft creates subtasks.** Click a crafting link → a Craft parent plus indented
+      ingredient subtasks appear on the resolved surface at correct batch quantities; verify ceil math
+      with an output-per-craft > 1. *(add-crafting-tasks 10.5)*
+- [ ] `56389c71` **Self-heal rescale.** Raise the parent target → ingredient subtasks rescale in place
+      (progress preserved); delete one child then re-edit the target → it's recreated, others untouched,
+      nothing auto-deleted. *(add-crafting-tasks 10.6)*
+- [ ] `7b5bc94f` **Craft carried counts.** Carry ingredients → children count families (wildcard) and
+      concrete `{var}` codes correctly; the parent counts the output; completion follows the Tracker
+      Completion setting. *(add-crafting-tasks 10.7)*
+- [ ] `31f630d6` **Grip-tap subtask toggle.** Tap a grip → the row indents/promotes (any kind);
+      press-hold-drag still reorders; no depth-2 reachable. Verify on Lectern, Notebook, Tablet,
+      Scriptorium, and the Pinned HUD. *(add-crafting-tasks 10.8)*
+- [ ] `4bdff687` **Liquid ingredient note.** Verify a liquid-ingredient recipe (e.g. poultice) surfaces
+      the liquid as a non-counting note (or omits it), not a broken counting row.
+      *(add-crafting-tasks 10.9)*
+- [ ] `64d254c3` **Craft picker entry.** Open the editor add-kind picker → order reads Add Task, Add
+      Item Tracker, Add Crafting Task, Add Link, Add Note. Clicking "Add Crafting Task" with no Handbook
+      open opens the Handbook search; with a page open it surfaces the guide naming the "Add Crafting
+      Task" button. Primary add still defaults to Add Task. *(add-crafting-tasks 11.5)*
+
 ## add-tracker-link-tasks
 
 > v1.2 Tracker and Link task types. Freshly implemented this session: **guide-page Links** — a

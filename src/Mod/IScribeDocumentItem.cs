@@ -37,9 +37,9 @@ public interface IScribeDocumentItem
 
     /// <summary>The document-capacity/editability policy for the item currently in <paramref name="slot"/>
     /// — the item-level counterpart of <see cref="IScribeDocumentHost.Policy"/>. The Transcribe copy uses
-    /// it to validate a target: a copy is refused unless <c>DocumentPolicy(target).CanHold(sourceTaskCount)</c>,
+    /// it to validate a target: a copy is refused unless <c>DocumentPolicy(target).CanHold(sourceBlockCount)</c>,
     /// which in one check rejects both a read-only target (a hardened/fired tablet — <c>ReadOnly</c>) and one
-    /// too small to hold the source's tasks (a wet tablet at its cap). Defaults to
+    /// too small to hold the source's blocks of any kind (a wet tablet at its "10 of anything" cap). Defaults to
     /// <see cref="Scribe.Core.ScribeDocumentPolicy.Unlimited"/> — the always-writeable, uncapped tiers
     /// (Notebook, Clockmaker's, picked-up Lectern/Scriptorium) need no override; only <see cref="ItemScribeTablet"/>
     /// reports a finite/read-only policy from its live clay state.</summary>

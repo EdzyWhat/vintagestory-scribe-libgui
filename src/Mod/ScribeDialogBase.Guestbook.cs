@@ -69,6 +69,9 @@ public abstract partial class ScribeDialogBase
                         fontSize: noteSize,
                         fontFamily: ScribeTaskFont.Resolve(modSystem.MySettings.TaskFontFamily),
                         padY: 6f,
+                        // Same focus-border seam the task rows use: chalk-white on the chalkboard, Primary
+                        // elsewhere — so the guestbook note field never outlines in the disliked forest green.
+                        focusBorderColor: InputFocusBorderColor(colors),
                         maxLength: GuestbookStore.MaxNoteLength,
                         onChanged: text => current = text,
                         onBlur: () =>

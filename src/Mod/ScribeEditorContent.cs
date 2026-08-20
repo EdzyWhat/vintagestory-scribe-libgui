@@ -98,9 +98,10 @@ internal sealed class ScribeFrozenEditorRow : StatelessWidget
         {
             // A frozen (disabled) checkbox reflecting the row's last done-state — no onChanged, so it can't
             // be toggled while it collapses. Task, Tracker, and Link all carry a Done flag (Completable).
+            // Tick color routes through the row style's CheckTickColor seam (§11) so it matches the live rows.
             children.Add(new Padding(
                 EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
-                child: new Checkbox(value: data.Done, onChanged: null, size: style.CheckboxSize)));
+                child: ScribeRowControlNudge.BuildTaskCheckbox(context, style, data.Done, onChanged: null)));
         }
 
         // Inset the label by the editor field's internal padding so the frozen row's text sits exactly where
@@ -854,10 +855,12 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                 textStyle: new TextStyle { Color = colors.OnSurface }));
         }
 
-        // Guide-page book glyph tinted Primary (feedback 7.11d) and row-height-neutral (7.11e/7.11f); the item
-        // icon ignores the color. The Tracker's stepper still drives this editor row's height by design.
+        // Guide-page book glyph tinted with the link accent (feedback 7.11d) — Primary on light surfaces, or
+        // the row's override where Primary is illegible on a dark surface (Chalkboard slate; see
+        // ScribeRowStyle.LinkColor). Row-height-neutral (7.11e/7.11f); the item icon ignores the color. The
+        // Tracker's stepper still drives this editor row's height by design.
         float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
-        rowChildren.Add(ScribeLinkIcon.Build(Widget.Data.DisplayStack, Widget.Data.LinkTarget, iconSize, colors.Primary, lineHeight));
+        rowChildren.Add(ScribeLinkIcon.Build(Widget.Data.DisplayStack, Widget.Data.LinkTarget, iconSize, style.LinkColor ?? colors.Primary, lineHeight));
         rowChildren.Add(new Expanded(child: ScribeItemLabel.Build(Widget.Data.Label, colors.OnSurface, style)));
 
         // Inset by the editor field's internal padding, matching the read view's item row and the Task/Text
@@ -929,14 +932,13 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         {
             children.Add(new Opacity(contentOpacity, child: new Padding(
                 EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
-                child: new Checkbox(
-                    value: done,
-                    onChanged: _ =>
+                child: ScribeRowControlNudge.BuildTaskCheckbox(
+                    context, style, done,
+                    _ =>
                     {
                         SetState(() => done = !done);
                         Widget.OnToggleTask(index);
-                    },
-                    size: style.CheckboxSize))));
+                    }))));
         }
 
         // A Tracker/Link row has no editable text field — its content is the referenced item's icon + name,
@@ -964,6 +966,10 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             fontFamily: ScribeTaskFont.Resolve(style.TaskFontFamily),
             padX: style.FieldPadX,
             padY: style.FieldPadY,
+            // Focus-border color for this row's field: null on light surfaces (→ theme Primary), a chalk-white
+            // on the Chalkboard so the focused task field doesn't outline in the forest-green Primary the
+            // author disliked (ScribeRowStyle.InputFocusBorderColor, seeded from the dialog seam).
+            focusBorderColor: style.InputFocusBorderColor,
             autoFocus: Widget.AutoFocus,
             // Tablet-only: render/edit this row as live cuneiform strokes (add-tablet-cuneiform-chrome).
             // Both flags are off for the Lectern/Notebook rows and for the disable-cuneiform fallback, so

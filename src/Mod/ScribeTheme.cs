@@ -75,7 +75,120 @@ internal static class ScribeTheme
         // lightens with a light tint at the same alphas.
         StateHover = new Vector4(Ink.X, Ink.Y, Ink.Z, 0.08f),
         StateSelected = new Vector4(Accent.X, Accent.Y, Accent.Z, 0.20f),
-    });
+    })
+    {
+        // Focused-input outline for STOCK LibGUI controls (numeric field's TextField, checkboxes, dropdowns).
+        // Point it at the accent (Primary) so a focused stock input matches the hand-drawn
+        // ScribeMultilineField, which lights its focus border with Primary; unset, it would fall back to
+        // LibGUI's stock bright gold and diverge from the parchment accent (refine-chalkboard field-consistency).
+        FocusOutlineColor = Accent,
+    };
+
+    /// <summary>Chalk-light text drawn on the brown-slate surfaces (<c>OnSurface</c>/<c>OnBackground</c>).
+    /// Sampled from the chalkboard's own <c>chalk.png</c> texture (≈<c>#e7e6e6</c>) and nudged a hair warm so
+    /// it reads like VS Chalk Stone / real chalk dust rather than a clinical pure white.</summary>
+    private static readonly Vector4 Chalk = new(0.91f, 0.90f, 0.87f, 1.0f);
+
+    /// <summary>The chalkboard accent (button fills, carets, selection, and the task-row CHECKBOX tick). A
+    /// strong FOREST GREEN — the classic schoolroom "greenboard" colour, complementary to the warm brown-slate
+    /// palette so buttons pop without clashing (it replaced an earlier chalk-yellow that read as UI gold).
+    /// Brightened by +10 HSV Value points (refine-chalkboard): the original <c>(0.17, 0.42, 0.24)</c> sat at
+    /// V≈0.42, which was too dark to read as a checkbox tick on the dark slate; lifting V→0.52 (a uniform ×
+    /// 0.52/0.42 scale on all three channels, which holds hue + saturation constant) keeps the exact same
+    /// green while making the accent legible. To try the NAVY alternative the author floated, swap this for
+    /// <c>new Vector4(0.16f, 0.24f, 0.46f, 1.0f)</c> — its content (<c>OnPrimary</c>) stays the same
+    /// chalk-white.</summary>
+    private static readonly Vector4 ChalkAccent = new(0.210f, 0.520f, 0.297f, 1.0f);
+
+    /// <summary>The link/tracked-item TEXT accent for the chalkboard (item-name hyperlink, guide-page book
+    /// glyph, Tracker have/need count) — a LIGHT chalk-green. The dark forest <see cref="ChalkAccent"/> works
+    /// as a button FILL (white text reads on it) but is illegible as small TEXT on the dark slate surface, so
+    /// links are decoupled onto this lighter tone (set via the chalkboard's <c>DecorateRowStyle</c> →
+    /// <c>ScribeRowStyle.LinkColor</c>). Same green hue family as the accent, lifted in Value so it reads as a
+    /// distinct, tappable colored link that is clearly not the chalk-white body text. Only the chalkboard uses
+    /// it; every other surface keeps <c>Primary</c> for links (its accent is dark-on-light, legible for free).</summary>
+    internal static readonly Vector4 ChalkboardLinkText = new(0.52f, 0.80f, 0.58f, 1.0f);
+
+    /// <summary>Resting tint for the INACTIVE right-column nav glyphs on the chalkboard (<c>#645c52</c>, a
+    /// dark slate-brown). The theme's <c>OnSurfaceVariant</c> (a pale chalk-gray) reads as almost-active on
+    /// the dark board, so inactive nav icons are darkened via the dedicated <c>NavIconColor</c> seam — muted
+    /// body text keeps the lighter <c>OnSurfaceVariant</c>. The ACTIVE tab still uses its own per-view accent.</summary>
+    internal static readonly Vector4 ChalkboardNavIcon = new(0.392f, 0.361f, 0.322f, 1.0f);
+
+    /// <summary>The focused-input BORDER color on the chalkboard (a solid chalk line — the <c>Border</c> hue
+    /// at full alpha). Every other theme lights a focused input's border with <c>Primary</c> (its accent), but
+    /// the chalkboard's <c>Primary</c> is the forest-green <see cref="ChalkAccent"/>, and the author disliked
+    /// green on an input border. So the chalkboard decouples the focus border onto this bright chalk tone via
+    /// the <c>InputFocusBorderColor</c> seam: at rest the border stays the faint chalk <c>Border</c>, on focus
+    /// it brightens to a crisp chalk outline — a "the input lights up in chalk" affordance with no green. The
+    /// resting-vs-focus contrast is alpha only (0.42 → 1.0), same RGB, so nothing reflows on focus.</summary>
+    internal static readonly Vector4 ChalkboardInputFocusBorder = new(0.82f, 0.84f, 0.80f, 1.0f);
+
+    /// <summary>The chalkboard <c>Secondary</c> role (pinned-row wash / secondary buttons): a muted, lighter
+    /// SAGE GREEN — a desaturated sibling of the forest-green <see cref="ChalkAccent"/> <c>Primary</c>
+    /// (<c>≈#5C8566</c>). This follows the pattern the Notebook/Lectern (Light theme) uses, where
+    /// <c>Secondary</c> (<c>#A07F4D</c>) is a lighter, desaturated sibling of that theme's gold <c>Primary</c>
+    /// (<c>#955F21</c>) — same hue family, not an unrelated color. The chalkboard originally used an unrelated
+    /// stained-wood brown (<c>0.42,0.31,0.22</c>) here, which — because <see cref="ScribeRowConstants.PinnedTint"/>
+    /// derives the pinned-row wash from <c>Secondary</c> (boosted ×1.35 saturation at 0.55 alpha) — read as a
+    /// discordant muddy amber over the dark slate (refine-chalkboard). A green-family sage keeps the pinned wash
+    /// harmonious with the accent, legible over slate, and still distinct enough from the focus cue.</summary>
+    private static readonly Vector4 ChalkSecondary = new(0.36f, 0.52f, 0.40f, 1.0f);
+
+    /// <summary>The chalkboard theme (add-chalkboard-block D3): chalk-light text on a dark slate surface.
+    /// Unlike <see cref="Light"/> and the clay palettes — which are light surfaces and therefore DARKEN on
+    /// hover/select — this is a DARK scheme, so its <c>StateHover</c>/<c>StateSelected</c> overlays LIGHTEN
+    /// (light tints at low alpha), the same mechanical direction as LibGUI's stock dark default. Only the 17
+    /// <see cref="ColorScheme"/> roles are authored; the per-widget style structs cascade from them. Resolved
+    /// for the chalkboard dialog ONLY (via its <c>ResolveTheme</c> override), so no other surface and no
+    /// global preference is affected.</summary>
+    internal static readonly ThemeData Chalkboard = new(new ColorScheme
+    {
+        // Accent + its content. The forest-green accent is a dark fill, so its content (OnPrimary) is a
+        // chalk-white that reads against it — matching the body text. Secondary is a muted sage green
+        // (pinned-row wash / secondary buttons), a desaturated sibling of the accent, also carrying chalk-white
+        // content.
+        Primary = ChalkAccent,
+        OnPrimary = new Vector4(0.94f, 0.95f, 0.91f, 1.0f),
+        Secondary = ChalkSecondary,
+        OnSecondary = Chalk,
+
+        // Surfaces: brown slate over dark stained wood, sampled from the chalkboard GUI art (frame ≈#5c4434,
+        // board ≈#665f5c). Background is the deepest — the dark stained-wood frame behind the panels; Surface
+        // the brown-slate board panel; SurfaceHigh raised (lighter, the input-field "writing" tone, seeded to
+        // the sampled board colour); SurfaceLow recessed (darker). Raised/recessed ordering kept correct for a
+        // dark scheme (raised = lighter). All warm (R ≥ G ≥ B) so the palette reads brown-slate, not the
+        // earlier green-grey.
+        Surface = new Vector4(0.30f, 0.27f, 0.25f, 1.0f),
+        OnSurface = Chalk,
+        OnSurfaceVariant = new Vector4(0.68f, 0.66f, 0.62f, 1.0f),
+        Background = new Vector4(0.20f, 0.15f, 0.11f, 1.0f),
+        OnBackground = Chalk,
+        SurfaceLow = new Vector4(0.24f, 0.21f, 0.19f, 1.0f),
+        SurfaceHigh = new Vector4(0.39f, 0.36f, 0.34f, 1.0f),
+
+        // Borders/dividers: a faint chalk line, so they read on the brown slate.
+        Border = new Vector4(0.82f, 0.84f, 0.80f, 0.42f),
+        OutlineVariant = new Vector4(0.82f, 0.84f, 0.80f, 0.20f),
+
+        // Error stays red but softened toward chalk so it reads on the dark surface; its content is dark.
+        Error = new Vector4(0.86f, 0.44f, 0.40f, 1.0f),
+        OnError = new Vector4(0.16f, 0.11f, 0.08f, 1.0f),
+
+        // DARK scheme: hover/select LIGHTEN the surface, so these translucent overlays are light chalk /
+        // accent tints at low alpha (the opposite direction from the Light/clay palettes).
+        StateHover = new Vector4(Chalk.X, Chalk.Y, Chalk.Z, 0.08f),
+        StateSelected = new Vector4(ChalkAccent.X, ChalkAccent.Y, ChalkAccent.Z, 0.24f),
+    })
+    {
+        // Focused-input outline for STOCK LibGUI controls (the numeric field's TextField, checkboxes,
+        // dropdowns, radios). Left unset, this defaults to LibGUI's stock gold (0.95,0.78,0.38), which read as
+        // a jarring gold focus ring on the dark slate and — for the numeric field — diverged from the
+        // hand-drawn ScribeMultilineField's chalk-white focus border. Point it at the same chalk tone the
+        // multiline field uses (ChalkboardInputFocusBorder) so both input types light their focus border the
+        // same, and every stock focus ring drops the gold (refine-chalkboard field-consistency).
+        FocusOutlineColor = ChalkboardInputFocusBorder,
+    };
 
     /// <summary>HSV <b>Value</b> points (Skia's 0–100 scale) the muted-text role (<c>OnSurfaceVariant</c>)
     /// is lifted ABOVE each clay palette's own <c>ink</c> — the single shared knob governing muted/hint/
@@ -147,7 +260,13 @@ internal static class ScribeTheme
             // tints at low alpha (see the Light theme's matching note). Shared alphas across clay types.
             StateHover = new Vector4(ink.X, ink.Y, ink.Z, 0.08f),
             StateSelected = new Vector4(accent.X, accent.Y, accent.Z, 0.20f),
-        });
+        })
+        {
+            // Focused-input outline for STOCK LibGUI controls: the clay accent, matching the hand-drawn
+            // ScribeMultilineField's Primary focus border (unset it would fall back to LibGUI's stock gold,
+            // which diverges from each clay's own accent) — refine-chalkboard field-consistency.
+            FocusOutlineColor = accent,
+        };
 
     /// <summary>Fire-clay tablet palette — warm tan earthenware. The original single-tablet palette
     /// (add-tablet-dialog, Proposal C) rebased through <see cref="ClayPalette"/>; also the fallback for

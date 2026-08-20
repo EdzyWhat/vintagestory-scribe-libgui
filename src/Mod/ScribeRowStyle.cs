@@ -72,6 +72,34 @@ internal readonly record struct ScribeRowStyle(
     /// <c>init</c>-only add-on so existing constructions stay valid.</summary>
     public Vector4? GripGlyphColor { get; init; }
 
+    /// <summary>Optional override for the accent color of a Link/Tracker/Craft row's tappable content — the
+    /// item-name hyperlink text, the guide-page book glyph, and the Tracker's "have/need" count. Null → the
+    /// row uses the theme's <c>Primary</c> as before (light themes: a dark accent that reads as a colored
+    /// link on the light surface). A DARK theme (the Chalkboard's slate) can't reuse <c>Primary</c> here: the
+    /// same dark accent that reads as a button FILL vanishes into the dark surface as TEXT, so the Chalkboard
+    /// sets this to a light chalk-green (<c>ScribeTheme.ChalkboardLinkText</c>) via its <c>DecorateRowStyle</c>
+    /// — decoupling the link color from the button/outline the user flagged as overloaded. An <c>init</c>-only
+    /// add-on so <see cref="FromSettings"/> and existing constructions stay valid.</summary>
+    public Vector4? LinkColor { get; init; }
+
+    /// <summary>Optional override for an editable row field's FOCUSED border color. Null → the field uses the
+    /// theme's <c>Primary</c> accent (every light theme: a legible accent outline on focus). The Chalkboard
+    /// sets this to a chalk-white (<c>ScribeTheme.ChalkboardInputFocusBorder</c>) because its <c>Primary</c> is
+    /// a forest green the author disliked on an input border — same decouple-from-<c>Primary</c> reasoning as
+    /// <see cref="LinkColor"/>. The base dialog seeds it from its <c>InputFocusBorderColor</c> seam so every
+    /// row carries the resolved value; an <c>init</c>-only add-on so existing constructions stay valid.</summary>
+    public Vector4? InputFocusBorderColor { get; init; }
+
+    /// <summary>Optional override for the task-row completion checkbox's TICK color (the checkmark itself).
+    /// Null → the checkbox uses the ambient theme's <c>CheckboxStyle</c> unchanged (its <c>CheckColor</c> is
+    /// the theme <c>Primary</c> accent — every surface except the chalkboard). The Chalkboard sets this to a
+    /// chalk-white (<c>ScribeTheme.ChalkboardInputFocusBorder</c>) so the completed-task tick matches its row
+    /// text instead of the forest-green <c>Primary</c> — the playtest verdict that superseded the
+    /// brighter-green tick (refine-chalkboard §11). Only the tick color changes; the box background/border
+    /// stay themed. The base dialog seeds it from its <c>CheckTickColor</c> seam so every row carries the
+    /// resolved value; an <c>init</c>-only add-on so existing constructions stay valid.</summary>
+    public Vector4? CheckTickColor { get; init; }
+
     /// <summary>
     /// Builds a row style from the player's consolidated settings. THIS IS THE SINGLE PLACE where the
     /// window font-size scale is applied: the scalable values are multiplied by

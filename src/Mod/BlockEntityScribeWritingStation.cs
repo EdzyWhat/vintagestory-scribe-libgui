@@ -37,6 +37,21 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     /// <summary>The dialog page's art aspect ratio (height / width), used to size the layout.</summary>
     protected abstract float PageAspect { get; }
 
+    /// <summary>Optional per-block override of the layout column/band proportions. Null (default) uses
+    /// <see cref="ScribeLayoutProportions.Default"/> — the Lectern/Scriptorium v1 split. A subclass whose
+    /// backdrop art frames the content differently (e.g. the Chalkboard's wood-framed slate) overrides this
+    /// to keep the tasks column and title/button bands within its own art. See <see cref="ScribeLayout"/>
+    /// for what each fraction controls.</summary>
+    protected virtual ScribeLayoutProportions? LayoutProportions => null;
+
+    /// <summary>Optional FIXED facing angle (radians) for a wall-mounted subclass (the Chalkboard),
+    /// derived from its <c>side</c> block variant. Null (default) keeps the free-standing Lectern/Scriptorium
+    /// behaviour, where the angle is the player-facing value stored at placement. This is applied in
+    /// <see cref="Initialize"/> because the custom rotated-mesh path in <see cref="OnTesselation"/> loads the
+    /// shape by <c>Base</c> only and so ignores the block shape's own <c>rotateYByType</c> — the placed mesh
+    /// rotates ONLY by <see cref="MeshAngleRad"/>, which is 0 for a wall block until we set it here.</summary>
+    protected virtual float? WallMountAngleRad => null;
+
     /// <summary>Lang key for the document's fallback title when the player clears the title and saves
     /// (e.g. <c>"scribe:doctitle-lectern"</c>).</summary>
     protected abstract string DefaultDocumentTitleKey { get; }
@@ -44,6 +59,15 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     /// <summary>Object-cache key prefix for this block's rotated mesh. MUST be distinct per block type
     /// so the Lectern and Scriptorium never collide in the shared mesh cache.</summary>
     protected abstract string MeshCacheKeyPrefix { get; }
+
+    /// <summary>The per-tier document cap this block reports through <see cref="IScribeDocumentHost.Policy"/>
+    /// (refine-chalkboard). Default is <see cref="ScribeDocumentPolicy.Unlimited"/> so the Lectern/Scriptorium
+    /// stay uncapped exactly as before. A capped block (the Chalkboard) overrides this seam; the explicit
+    /// interface member below delegates to it, because — as with the other host members — a bare <c>Policy</c>
+    /// property on a subclass would NOT re-map the interface's default member (see the note on
+    /// <c>NotebookHost.Policy</c>). The dialog consults <see cref="ScribeDocumentPolicy.CanAdd"/> before adding
+    /// a task, so overriding this seam is all a block needs to enforce a cap.</summary>
+    protected virtual ScribeDocumentPolicy HostPolicy => ScribeDocumentPolicy.Unlimited;
 
     /// <summary>Create the concrete LibGUI dialog for this block (client-side). The two views (read /
     /// editor) are internal states of the returned dialog; a subclass may add its own nav buttons.</summary>
@@ -63,10 +87,18 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     /// the block at the player with no per-piece offset (see VSAPI-NOTES "Block placement orientation").</summary>
     private float meshAngleRad;
 
-    /// <summary>The block's collision/selection box rotated to <see cref="MeshAngleRad"/>, surfaced by
-    /// the block's <c>GetCollisionBoxes</c>/<c>GetSelectionBoxes</c> so the hitbox tracks the mesh.
-    /// Null until the first angle set (then the block falls back to its un-rotated JSON box).</summary>
+    /// <summary>The block's COLLISION box rotated to <see cref="MeshAngleRad"/>, surfaced by the block's
+    /// <c>GetCollisionBoxes</c> so the solid hitbox tracks the mesh. Null when the block has no collision
+    /// box (e.g. the walk-through wall Chalkboard) — the block then falls back to its un-rotated JSON box
+    /// (which for the Chalkboard is none).</summary>
     public Cuboidf[]? RotatedBox { get; private set; }
+
+    /// <summary>The block's SELECTION box rotated to <see cref="MeshAngleRad"/>, surfaced by
+    /// <c>GetSelectionBoxes</c>. Tracked separately from <see cref="RotatedBox"/> so a painting-style block
+    /// can have a thin selection slab WITHOUT a collision box: the floor stations set both to the same box
+    /// (selection defaults to collision in their JSON), while the Chalkboard rotates only its slab
+    /// selection box and leaves collision null (walk-through). Null falls back to the un-rotated JSON box.</summary>
+    public Cuboidf[]? RotatedSelectionBox { get; private set; }
 
     public float MeshAngleRad
     {
@@ -75,9 +107,14 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
         {
             bool changed = meshAngleRad != value;
             meshAngleRad = value;
-            if (Block?.CollisionBoxes is { Length: > 0 } boxes)
+            float deg = value * (180f / (float)Math.PI);
+            if (Block?.CollisionBoxes is { Length: > 0 } cboxes)
             {
-                RotatedBox = new[] { boxes[0].RotatedCopy(0f, value * (180f / (float)Math.PI), 0f, new Vec3d(0.5, 0.5, 0.5)) };
+                RotatedBox = new[] { cboxes[0].RotatedCopy(0f, deg, 0f, new Vec3d(0.5, 0.5, 0.5)) };
+            }
+            if (Block?.SelectionBoxes is { Length: > 0 } sboxes)
+            {
+                RotatedSelectionBox = new[] { sboxes[0].RotatedCopy(0f, deg, 0f, new Vec3d(0.5, 0.5, 0.5)) };
             }
             if (changed) MarkDirty(true);
         }
@@ -128,7 +165,8 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     bool IScribeDocumentHost.IsLockedByOther(string viewerUid) => IsLockedByOther(viewerUid);
     void IScribeDocumentHost.ApplyLocalOptimisticEdit(ScribeDocument doc) => ApplyLocalOptimisticEdit(doc);
     ScribeBackdropSpec IScribeDocumentHost.BackdropSpec => PageBackdrop;
-    ScribeLayout IScribeDocumentHost.GetLayout(float w) => new ScribeLayout(w, PageAspect);
+    ScribeDocumentPolicy IScribeDocumentHost.Policy => HostPolicy;
+    ScribeLayout IScribeDocumentHost.GetLayout(float w) => new ScribeLayout(w, PageAspect, LayoutProportions);
     string IScribeDocumentHost.DefaultDocumentTitle => Lang.Get(DefaultDocumentTitleKey);
     GuestbookStore IScribeDocumentHost.Guestbook => _guestbook;
     void IScribeDocumentHost.SetTaskDoneFromReader(Guid taskId, bool done) => SetTaskDoneFromReader(taskId, done);
@@ -169,6 +207,17 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
                 needsV5Resave = false;
                 MarkDirty();
             }
+        }
+
+        // Wall-mounted subclasses (Chalkboard) take a fixed facing from their `side` variant. Set it here
+        // rather than at placement: Initialize runs on BOTH fresh placement and chunk load (and, per the
+        // API doc-comment, always AFTER FromTreeAttributes on load), so this is the one point that fixes the
+        // angle in every path. The custom rotated-mesh path ignores the shape's rotateYByType, so without
+        // this a wall block would render at angle 0 (facing one fixed cardinal) regardless of the wall it is
+        // on. The setter is a no-op when the value is unchanged.
+        if (api is ICoreClientAPI && WallMountAngleRad is float wallAngle)
+        {
+            MeshAngleRad = wallAngle;
         }
     }
 
@@ -220,12 +269,17 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     {
         base.FromTreeAttributes(tree, worldForResolving);
 
-        // Placement facing (vanilla Sign default: fall back to the shape's authored rotateY when a
-        // pre-orientation block has no persisted angle). Goes through the property so the rotated
-        // hitbox is rebuilt on load; the client re-tesselates on the following redraw.
-        MeshAngleRad = tree.HasAttribute("meshAngle")
-            ? tree.GetFloat("meshAngle", 0f)
-            : (Block?.Shape?.rotateY ?? 0f) * ((float)Math.PI / 180f);
+        // Placement facing. A wall-mounted subclass (Chalkboard) derives its angle purely from its `side`
+        // variant, so honor that FIRST — the persisted `meshAngle` is always 0 for a wall block (Initialize
+        // sets the angle client-side only, so the server serializes 0), and every interaction round-trips a
+        // block-entity packet through here; without this the board would snap back to angle 0 on the next
+        // MarkDirty after placement. Floor stations fall back to the vanilla Sign default: the persisted
+        // angle, or the shape's authored rotateY when a pre-orientation block has none. Goes through the
+        // property so the rotated hitbox is rebuilt on load; the client re-tesselates on the following redraw.
+        MeshAngleRad = WallMountAngleRad
+            ?? (tree.HasAttribute("meshAngle")
+                ? tree.GetFloat("meshAngle", 0f)
+                : (Block?.Shape?.rotateY ?? 0f) * ((float)Math.PI / 180f));
 
         // Client mirror of the editor-lock holder (fix-multiplayer-editor-lock §2.1). Empty string (the
         // "lock free" sentinel written above) maps back to null. Read on the client to drive the editor

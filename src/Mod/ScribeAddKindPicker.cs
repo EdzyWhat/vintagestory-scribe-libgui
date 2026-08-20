@@ -192,7 +192,7 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
         var tiles = new List<Widget>();
         foreach (var kind in ScribeAddKinds.Live)
         {
-            bool dim = kind.CountsAgainstTaskCap && !Widget.AddTaskEnabled;
+            bool dim = !Widget.AddTaskEnabled;
             TextStyle tileStyle = dim ? labelStyle with { Color = colors.OnPrimary with { W = 0.4f } } : labelStyle;
             tiles.Add(new Button(
                 child: BuildLabel(Lang.Get(kind.LabelLangKey), tileStyle),
@@ -273,7 +273,7 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
         };
         ButtonStyle caretStyle = segmentStyle with { Padding = EdgeInsets.Symmetric(padV, 10f) };
 
-        bool primaryDim = _selectedKind.CountsAgainstTaskCap && !Widget.AddTaskEnabled;
+        bool primaryDim = !Widget.AddTaskEnabled;
         TextStyle primaryLabelStyle = primaryDim
             ? labelStyle with { Color = colors.OnPrimary with { W = 0.4f } }
             : labelStyle;

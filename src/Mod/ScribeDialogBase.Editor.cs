@@ -543,16 +543,17 @@ public abstract partial class ScribeDialogBase
     private void OnClickAdd(ScribeAddKind kind)
     {
         if (scratch is null) return;
-        // Tier cap (scribe-document-policy): the tablet tier stops at 10 TASK blocks. Only task kinds are
-        // gated (CountsAgainstTaskCap) — notes are uncapped (design D4), since the cap is task-scoped. Uncapped
-        // tiers (Lectern, Notebook) never trip this. The footer's primary button is also disabled at the cap
-        // when its kind is a task, so this is a defensive backstop for any other add path.
+        // Tier cap (scribe-document-policy): a finite tier (tablet, chalkboard) stops at 10 blocks of ANY kind
+        // — tasks, notes, trackers, links, and craft parents all count equally (refine-chalkboard §12). Every
+        // add kind is gated, so a note trips the cap just like a task. Uncapped tiers (Lectern, Notebook) never
+        // trip this. The footer's primary button is also disabled at the cap, so this is a defensive backstop
+        // for any other add path.
         // add-tracker-link-tasks 3.7: Tracker/Link can't be created from a bare footer click — they need a
         // target item code, which only a Handbook page's "Add to Scribe" link supplies. A footer click on one
         // of these is a GUIDE gesture, not an add: open the explainer entry (Handbook closed) or point the
         // player at the per-item link (Handbook open). Nothing is mutated. See DispatchItemKindGuide.
         if (kind.RequiresItemContext) { DispatchItemKindGuide(kind); return; }
-        if (kind.CountsAgainstTaskCap && !CanAddTaskUnderPolicy()) { NotifyTabletFull(); return; }
+        if (!CanAddTaskUnderPolicy()) { NotifyTabletFull(); return; }
         if (focusedEditIndex is { } leaving) NormalizeRowOnCommit(leaving);
         // The second arg is the item code for item-bound kinds; Task/Note ignore it, so a footer add always
         // passes null (the item-bound kinds never reach here — they return above).

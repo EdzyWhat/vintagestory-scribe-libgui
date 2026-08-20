@@ -51,6 +51,12 @@ internal static class ScribeBackdrops
     public static readonly ScribeBackdropSpec NotebookPage =
         new(new AssetLocation("scribe", "textures/gui/scribe-notebook.png"));
 
+    /// <summary>The Chalkboard block's read/editor page (add-chalkboard-block): its own committed GUI art
+    /// (<c>scribe-chalkboard.png</c>, 128×145, aspect 145/128). Same stretch-to-fill path as every other
+    /// full-page spec — no tint, no renderer change. The Chalkboard block entity is sized to this aspect.</summary>
+    public static readonly ScribeBackdropSpec ChalkboardPage =
+        new(new AssetLocation("scribe", "textures/gui/scribe-chalkboard.png"));
+
     /// <summary>The Clockmaker's Notebook item's read/editor page. Passed to the shared
     /// <see cref="NotebookHost"/> ctor by <c>ItemClockmakerNotebook</c> so the Clockmaker draws distinct
     /// art from the plain Notebook (both items otherwise share the same host class).</summary>

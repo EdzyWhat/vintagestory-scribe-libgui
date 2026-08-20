@@ -80,7 +80,7 @@ shape = {
   "textures": textures,
   "elements": elements,
 }
-out = "/Users/nick.edises/claude/vintagestory-scribe-libgui/src/Mod/assets/scribe/shapes/block/scriptorium/scriptorium.json"
+out = "/Users/nick.edises/claude/vintage-story/vintagestory-scribe-libgui/src/Mod/assets/scribe/shapes/block/scriptorium/scriptorium.json"
 with open(out, "w") as f:
     json.dump(shape, f, indent="\t")
     f.write("\n")

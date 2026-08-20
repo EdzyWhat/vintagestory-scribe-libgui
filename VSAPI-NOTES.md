@@ -658,6 +658,74 @@ face-the-player fix; decompiled `VintagestoryAPI.dll` + `VSSurvivalMod.dll` 2026
   (2) a non-cubic selection/collision box must be rotated too, and becomes diagonal at 45°/22.5° —
   90°-only snapping keeps the box clean; (3) `IRotatable.OnTransformed` on the BE is optional polish
   for `/we` / schematic-rotation parity.
+- **A BE `OnTesselation` custom-mesh path IGNORES the block shape's `rotateYByType` — so Idiom A
+  and Idiom B do NOT compose** (add-chalkboard-block, 2026-08-18). The Sign idiom's `OnTesselation`
+  loads the shape by `capi.TesselatorManager.GetCachedShape(Block.Shape.Base)` — **`.Base` only** —
+  then applies `MeshAngleRad` as the sole rotation. So if you wall-mount a BE-rendered block with
+  `HorizontalAttachable` + `shapebytype.rotateYByType` (Idiom A), the placed mesh rotates by
+  `MeshAngleRad` (0 for a wall block that never runs the player-facing code) and the JSON
+  `rotateYByType` is dead — every board faces one fixed cardinal. Fix: drive `MeshAngleRad` from the
+  `side` variant yourself. `HorizontalAttachable.TryAttachTo` places `CodeWithParts(blockSel.Face
+  .Opposite.Code)`, i.e. the variant is named for the ATTACH direction (into the wall); the front
+  faces the OPPOSITE (outward). With our +Z-front shape and `front(r)=(sin r, cos r)`: north→0,
+  east→3π/2, south→π, west→π/2 (the mirror of vanilla painting's `rotateYByType` north:180/east:90/
+  south:0/west:270, because vanilla painting art faces −Z). Set it in `Initialize` (runs on both
+  fresh-place and load, and — per the API doc-comment — always AFTER `FromTreeAttributes` on load),
+  NOT `TryPlaceBlock`, since `ToTreeAttributes` persists `meshAngle=0` and the FromTree fallback to
+  `Shape.rotateY` would otherwise be clobbered. Also: a `Cuboidf` `selectionbox` has NO
+  `rotateYByType` (it's a shape-only field). But you don't need `selectionboxbytype`: the Sign idiom's
+  BE already rotates its hitbox by `MeshAngleRad` via `GetSelectionBoxes`/`GetCollisionBoxes`
+  (`box.RotatedCopy(0, deg, 0, (0.5,0.5,0.5))`). Author ONE thin slab for the angle-0 facing (painting
+  uses `x2:1,y2:1,z2:0.0625`, board-at-−Z-wall) and let the BE rotate it — set NO `rotateYByType` on the
+  box (that would double-rotate). For a walk-through painting keep `collisionbox:null` and rotate only the
+  SELECTION box, so track them separately (a shared "rotate CollisionBoxes[0]" won't build a slab when
+  collision is null).
+- **A BE resets `MeshAngleRad` from the tree on EVERY interaction, not just load** (add-chalkboard-block,
+  2026-08-19). The Sign idiom's `FromTreeAttributes` does `MeshAngleRad = tree.GetFloat("meshAngle", 0)`,
+  and every block-entity packet round-trip (any `MarkDirty` from an edit/open/sync) calls
+  `FromTreeAttributes` on the client. So a wall block whose angle is set only in `Initialize` renders
+  correctly when placed, then **snaps back to angle 0 the first time the player interacts with it** (the
+  persisted `meshAngle` is 0 — `Initialize` set the angle client-side only, so the server serialized 0).
+  Fix: honor the variant-derived angle FIRST in `FromTreeAttributes` (`MeshAngleRad = WallMountAngleRad ??
+  <persisted/shape fallback>`), not only in `Initialize`. Then every path — place, load, and each
+  interaction sync — lands the same angle.
+- **VS shape `.json` rotation is SCALAR `rotationX`/`rotationY`/`rotationZ` (degrees) — NOT a Blockbench
+  `rotation:[x,y,z]` array** (add-chalkboard-block, 2026-08-19; confirmed by decompiling
+  `Vintagestory.API.Common.ShapeElement` + `Vintagestory.Client.NoObf.ShapeTesselator.TesselateShapeElements`).
+  Newtonsoft SILENTLY DROPS the unknown `rotation` property, so a hand-added `"rotation":[-45,0,0]` sits in
+  the file and never rotates anything (the trap that burned a whole session here). Per element the tesselator
+  does, on a pushed matrix: `Translate(rotationOrigin/16)` → `Rotate X` → `Rotate Y` → `Rotate Z` → `Scale` →
+  `Translate((from−rotationOrigin)/16)` → tesselate own faces → **recurse into `children` inside the same
+  matrix** → pop. So (a) rotation works on BOTH leaf cubes and group/parent elements, and children fully
+  inherit every ancestor transform (referential rotation is real — no "must be a group" rule); (b) a child's
+  `rotationOrigin` is in the PARENT's local 0–16 space, not global; (c) if `rotationOrigin` is null the pivot
+  is the parent-local CORNER (0,0,0), which usually looks like "no rotation" or swings geometry out of view —
+  always set the pivot to the element's own centroid for an in-place spin. Block-level
+  `CompositeShape.rotateX/Y/Z` is separate (rotates the whole baked mesh about its centre) and COMPOSES with
+  element rotation.
+- **In Blockbench, apply rotation to the GROUP (outliner bone), NOT the cube ELEMENT — else the VS exporter
+  drops it** (add-chalkboard-block, 2026-08-19; CONFIRMED in-tool by the author). This is the durable macOS
+  workflow answer (no VS Model Creator). A cube's own `rotation` array set in Blockbench survives in the
+  `.bbmodel` but produces **no** `rotationX/Y/Z` in the exported `.json` (chalk's `[-45,0,0]` vanished on
+  export); moving that rotation onto the enclosing group exports correctly. **Why:** VS's model is a tree of
+  transform nodes (`ShapeElement` = pivot + `rotationX/Y/Z` + `scale` + `children`), and Blockbench's
+  **bone/group** is the 1:1 analogue of that node (free 3-axis rotation about a settable pivot), so the VS
+  codec maps group→element and writes the rotation. A Blockbench **cube** is leaf geometry (`from`/`to`/faces);
+  its rotation is a constrained, MC-derived per-cube concept the VS codec does not translate. Rule of thumb:
+  cube = geometry, group = transform — put every rotation on a group. Two fast checks: (1) you can **re-open
+  the exported `.json` in Blockbench** to preview EXACTLY what the game renders (Blockbench reads
+  `rotationX/Y/Z` correctly on import — the author's tightest iteration loop); (2) grep the `.json` for
+  `rotationX`/`Y`/`Z` on the element you expect to move.
+- **A Blockbench element rotation set in the `.bbmodel` is DEAD until you re-export the VS shape `.json`**
+  (add-chalkboard-block, 2026-08-19). The game loads the exported `shapes/.../*.json`, not the `.bbmodel`;
+  a rotation added in Blockbench and saved only to the `.bbmodel` never reaches the game (symptom: "the model
+  is 95% there but element X isn't rotated"). Either re-export cleanly (with the rotation on a GROUP per the
+  note above), or — the reliable fallback — surgically hand-add the SCALAR `"rotationX"/"rotationY"/"rotationZ"`
+  (NOT a `rotation` array) plus a centroid `"rotationOrigin"` to that element in the `.json` and treat the
+  `.json` as source of truth (the working scriptorium does exactly this — its `feather` is
+  `rotationX:-2,rotationY:-45` in the `.json` but `[0,5,0]` in the `.bbmodel`; they're intentionally decoupled).
+  Diff the two files by element `from`/`to` first — nested groups store child cubes in group-relative coords in
+  the `.json` but absolute in the `.bbmodel`, so only compare leaves whose extents match.
 - **`lecturn-book-open` authored front = SOUTH (+Z) at `rotateY=0`** (decompiled the shape +
   `Mat4f` 2026-07-26). The `rest` board (`rotationZ=-45`) + pages (`rotationZ=-56`) make the reading
   surface face +X pre-rotation, then the shape's own root `rotationY=-90` turns +X→+Z. So the front

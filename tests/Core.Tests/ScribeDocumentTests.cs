@@ -665,10 +665,10 @@ public class ScribeDocumentTests
         Assert.Equal(0, textOnly.CompletableCount);
     }
 
-    // --- TaskCount (Transcribe copy capacity check: matches the editor cap and MaxBlocks) ---
-    // Distinct from CompletableCount: TaskCount counts ONLY Task-kind blocks, since the wet-tablet
-    // cap (ScribeDocumentPolicy.MaxBlocks) and the editor's add-limit both count tasks, not trackers
-    // or links. The copy target check gates on CanHold(source.TaskCount).
+    // --- TaskCount (diagnostic task-only tally; NOT the cap measure) ---
+    // Distinct from CompletableCount (Task+Tracker+Link) and from BlockCount (all kinds). TaskCount counts
+    // ONLY Task-kind blocks. Since refine-chalkboard §12 the tier cap counts ALL blocks (BlockCount), so
+    // TaskCount is no longer the cap/capacity measure — it survives only for diagnostics and this coverage.
 
     [Fact]
     public void TaskCount_CountsTaskKindOnly_NotTrackerLinkOrText()
@@ -694,6 +694,52 @@ public class ScribeDocumentTests
         noTasks.AddTracker("game:stick", 4);
         noTasks.AddLink("game:ingot-tin");
         Assert.Equal(0, noTasks.TaskCount);
+    }
+
+    // --- BlockCount (the tier-cap measure: "N of anything", refine-chalkboard §12) ---
+    // Every kind counts equally — tasks, notes, trackers, links, craft parents — so a finite tier
+    // (Tablet, Chalkboard: MaxBlocks = 10) is full at 10 blocks of ANY mix and refuses an 11th of any kind.
+
+    [Fact]
+    public void BlockCount_CountsEveryKind()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("a");
+        doc.AddTextSection("just a note");
+        doc.AddTracker("game:ingot-copper", 8);
+        doc.AddLink("game:ingot-tin");
+
+        Assert.Equal(4, doc.BlockCount);          // task + note + tracker + link all count
+        Assert.Equal(doc.Blocks.Count, doc.BlockCount); // tracks the underlying list exactly
+    }
+
+    [Fact]
+    public void BlockCount_IsZero_ForEmptyDocument()
+    {
+        Assert.Equal(0, new ScribeDocument().BlockCount);
+    }
+
+    [Fact]
+    public void FiniteCap_CountsMixedKinds_RefusesEleventhOfAnyKind()
+    {
+        // A finite tier caps at 10 blocks of ANY kind. Fill to 10 with a deliberate mix, then confirm
+        // the policy (fed BlockCount) refuses the 11th regardless of what kind it would be.
+        var policy = ScribeDocumentPolicy.Tablet; // MaxBlocks = 10
+        var doc = new ScribeDocument();
+        doc.AddTask("t1");
+        doc.AddTextSection("n1");
+        doc.AddTracker("game:ingot-copper", 8);
+        doc.AddLink("game:ingot-tin");
+        doc.AddTask("t2");
+        doc.AddTextSection("n2");
+        doc.AddTask("t3");
+        doc.AddLink("game:stick");
+        doc.AddTextSection("n3");
+        doc.AddTracker("game:plank", 4);
+
+        Assert.Equal(10, doc.BlockCount);
+        Assert.False(policy.CanAdd(doc.BlockCount)); // full: an 11th of ANY kind is refused
+        Assert.True(policy.CanHold(doc.BlockCount));  // exactly 10 is a legal Transcribe destination
     }
 
     // --- CloneWithNewIdentity (Transcribe copy primitive) ---

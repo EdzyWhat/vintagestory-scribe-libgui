@@ -28,6 +28,20 @@ public abstract class BlockScribeWritingStation : Block
     /// <summary>Lang code for the shift+right-click "edit/quick-add" hint.</summary>
     protected abstract string EditHintLangCode { get; }
 
+    /// <summary>Whether this block is standing furniture that requires a solid ground cell below it
+    /// (the Lectern/Scriptorium default). A wall-mounted variant (the chalkboard) overrides this to
+    /// <c>false</c> so <see cref="CanPlaceBlock"/> skips the below-floor test and lets a wall-attach
+    /// behavior (vanilla <c>HorizontalAttachable</c>) place it against a vertical face instead.</summary>
+    protected virtual bool RequiresSolidGround => true;
+
+    /// <summary>Whether placing this block rotates it to face the player via
+    /// <see cref="BlockEntityScribeWritingStation.MeshAngleRad"/> (the Lectern/Scriptorium default). A
+    /// wall-mounted variant overrides this to <c>false</c>: its facing comes from the <c>side</c> block
+    /// variant (+ <c>rotateYByType</c> on the shape), so no per-instance mesh angle is stored and the
+    /// base's <c>RotatedBox</c> stays null (collision/selection fall back to the JSON boxes, which carry
+    /// their own <c>rotateYByType</c>).</summary>
+    protected virtual bool OrientTowardPlayerOnPlace => true;
+
     public override void OnLoaded(ICoreAPI api)
     {
         base.OnLoaded(api);
@@ -114,6 +128,10 @@ public abstract class BlockScribeWritingStation : Block
     {
         if (!base.CanPlaceBlock(world, byPlayer, blockSel, ref failureCode)) return false;
 
+        // A wall-mounted variant (chalkboard) opts out of the floor requirement: its attach-to-wall
+        // check is handled by the HorizontalAttachable behavior instead (add-chalkboard-block D6).
+        if (!RequiresSolidGround) return true;
+
         var posBelow = blockSel.Position.DownCopy();
         var blockBelow = world.BlockAccessor.GetBlock(posBelow);
         if (!blockBelow.CanAttachBlockAt(world.BlockAccessor, this, posBelow, BlockFacing.UP))
@@ -136,6 +154,12 @@ public abstract class BlockScribeWritingStation : Block
     public override bool TryPlaceBlock(IWorldAccessor world, IPlayer byPlayer, ItemStack itemstack, BlockSelection blockSel, ref string failureCode)
     {
         if (!base.TryPlaceBlock(world, byPlayer, itemstack, blockSel, ref failureCode)) return false;
+
+        // A wall-mounted variant takes its facing from the `side` block variant + shape rotateYByType,
+        // so it stores no per-instance mesh angle (add-chalkboard-block D6). Skipping this also avoids
+        // reading a block entity at blockSel.Position that the HorizontalAttachable behavior may have
+        // placed at an offset cell.
+        if (!OrientTowardPlayerOnPlace) return true;
 
         if (world.BlockAccessor.GetBlockEntity(blockSel.Position) is BlockEntityScribeWritingStation station
             && byPlayer?.Entity is { } entity)
@@ -161,7 +185,7 @@ public abstract class BlockScribeWritingStation : Block
 
     public override Cuboidf[] GetSelectionBoxes(IBlockAccessor blockAccessor, BlockPos pos)
     {
-        if (blockAccessor.GetBlockEntity(pos) is BlockEntityScribeWritingStation { RotatedBox: { } box }) return box;
+        if (blockAccessor.GetBlockEntity(pos) is BlockEntityScribeWritingStation { RotatedSelectionBox: { } box }) return box;
         return base.GetSelectionBoxes(blockAccessor, pos);
     }
 

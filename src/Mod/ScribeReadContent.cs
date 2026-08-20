@@ -349,16 +349,19 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
     {
         float iconSize = style.ControlSize * 1.4f;
         float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
-        // The guide-page book glyph renders Primary (not the near-black OnSurface) so it reads against the
-        // notebook parchment (feedback 7.11d); the item icon ignores the color.
-        Widget icon = ScribeLinkIcon.Build(Widget.Data.DisplayStack, Widget.Data.LinkTarget, iconSize, colors.Primary, lineHeight);
+        // Link accent: the theme's Primary on light surfaces (a dark accent that reads as a colored link),
+        // or a row-supplied override where Primary would be illegible as text (the Chalkboard's dark slate —
+        // see ScribeRowStyle.LinkColor). The guide-page book glyph renders in it (not the near-black
+        // OnSurface) so it reads against the surface (feedback 7.11d); the item icon ignores the color.
+        Vector4 linkColor = style.LinkColor ?? colors.Primary;
+        Widget icon = ScribeLinkIcon.Build(Widget.Data.DisplayStack, Widget.Data.LinkTarget, iconSize, linkColor, lineHeight);
 
         // The name is a hyperlink that opens the referenced item's Handbook page and never touches completion
-        // (feedback 6.5 — the Tracker, like a Link, "should also open the notebook entry"). Primary-colored to
+        // (feedback 6.5 — the Tracker, like a Link, "should also open the notebook entry"). Accent-colored to
         // read as tappable. Shared by both kinds so future Crafting tasks inherit the same affordance.
         Widget nameLink = new Expanded(child: new GestureDetector(
             onPress: e => { e.Handled = true; Widget.OnOpenLink(Widget.Data.TaskId); },
-            child: ScribeItemLabel.Build(Widget.Data.Label, colors.Primary, style)));
+            child: ScribeItemLabel.Build(Widget.Data.Label, linkColor, style)));
 
         var rowChildren = new List<Widget>();
 
@@ -376,7 +379,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
             // (muted) with a faint strikethrough over the number (7.11h). Shared helper so read/Pin/HUD match.
             rowChildren.Add(ScribeTrackerCounterText.Build(
                 Widget.Data.CurrentQuantity, Widget.Data.TargetQuantity, satisfied,
-                strongColor: colors.Primary, mutedColor: colors.OnSurfaceVariant, lineHeight: lineHeight,
+                strongColor: linkColor, mutedColor: colors.OnSurfaceVariant, lineHeight: lineHeight,
                 cuneiform: style));
             rowChildren.Add(icon);
             rowChildren.Add(nameLink);
@@ -424,19 +427,18 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         {
             children.Add(new Padding(
                 EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
-                child: new Checkbox(
-                    value: done,
-                    // The checkbox stays interactive whenever toggles are live: on any editable read view AND
-                    // on a hard/fired tablet, which keeps completion live so a pinned task can still be
-                    // completed/unpinned (zero-point-three-fixes §7.3). A null onChanged (only when toggles
-                    // are NOT live — not currently reached, but the safe inert fallback) reflects Done and
-                    // ignores taps.
-                    onChanged: !Widget.TogglesLive ? null : _ =>
+                // The checkbox stays interactive whenever toggles are live: on any editable read view AND
+                // on a hard/fired tablet, which keeps completion live so a pinned task can still be
+                // completed/unpinned (zero-point-three-fixes §7.3). A null onChanged (only when toggles
+                // are NOT live — not currently reached, but the safe inert fallback) reflects Done and
+                // ignores taps. Tick color routes through the row style's CheckTickColor seam (§11).
+                child: ScribeRowControlNudge.BuildTaskCheckbox(
+                    context, style, done,
+                    !Widget.TogglesLive ? null : _ =>
                     {
                         SetState(() => done = !done);
                         Widget.OnToggleTask(Widget.Data.TaskId);
-                    },
-                    size: style.CheckboxSize)));
+                    })));
         }
 
         // The row text. On the cuneiform tablet path (add-tablet-firing-mechanic) render it as display-only
