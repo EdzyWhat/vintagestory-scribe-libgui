@@ -98,7 +98,8 @@
       if any new lambda needs them (the VS API also defines those).
       DONE: build succeeded, 0 Warning(s) / 0 Error(s). (Had to copy the gitignored vendored `src/Mod/lib/*.dll`
       LibGUI deps into the fresh worktree first; those are not tracked.)
-- [ ] 5.2 `bash build/restage.sh Debug` (only while the client is NOT running).
+- [x] 5.2 `bash build/restage.sh Debug` — done as one combined restage after all four changes merged to main
+      (client confirmed not running); 137 files staged, build 0/0.
       LEFT FOR MAIN SESSION: per the agent handoff, restaging is handled once, combined, by the main session.
 
 ## 6. In-game verification gates

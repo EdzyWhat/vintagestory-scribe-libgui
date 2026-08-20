@@ -18,8 +18,8 @@
 - [x] 2.1 `dotnet build src/Mod/Mod.csproj` — 0 errors, 0 warnings.
 - [x] 2.2 `dotnet test tests/Core.Tests` — 463 pass, no new failures (the 7 failing are pre-existing
       illumination-floor tests, unrelated — no Core code was touched).
-- [ ] 2.3 `bash build/restage.sh Debug` (only while the client is quit). — Deferred to one combined restage for
-      the whole tablet lane (after this change + enable-tablet-row-links).
+- [x] 2.3 `bash build/restage.sh Debug` — done as one combined restage after all four changes merged to main
+      (client confirmed not running); 137 files staged, build 0/0.
 - [ ] 2.4 In-game gate: on a Tablet, add a Tracker/Link/Craft for an item with a long name (e.g. a
       wildcard cloth/shirt) → the cuneiform name WRAPS within the row instead of clipping mid-word, in
       both the wet (editor) and read views.

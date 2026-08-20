@@ -65,7 +65,8 @@
 
 ## 4. In-game verification
 
-- [ ] 4.1 `bash build/restage.sh Debug` (client NOT running) so the asset changes are staged.
+- [x] 4.1 `bash build/restage.sh Debug` — done as one combined restage after all four changes merged to main
+      (client confirmed not running); 137 files staged, build 0/0.
 - [ ] 4.2 In-game: open the Handbook → the new "Scribe Mod: Tabs & Views" article is present and describes
       the shared tabs once, with a working link to the editor-reference article.
 - [ ] 4.3 In-game: open the Lectern, Scriptorium, and Notebook entries → each is noticeably shorter, reads

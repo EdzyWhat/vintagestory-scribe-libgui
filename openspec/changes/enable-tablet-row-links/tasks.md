@@ -34,8 +34,8 @@
 ## 4. Build + restage + verify
 
 - [x] 4.1 `dotnet build src/Mod/Mod.csproj` — 0 errors, 0 warnings.
-- [ ] 4.2 `bash build/restage.sh Debug` (only while the client is NOT running). — Deferred to one combined
-      restage after Lane 1's second change (wrap-tablet-item-titles) lands, to avoid restaging mid-lane.
+- [x] 4.2 `bash build/restage.sh Debug` — done as one combined restage after all four changes merged to main
+      (client confirmed not running); 137 files staged, build 0/0.
 - [ ] 4.3 In-game gate: on a WET tablet, click a Link task's name → its Handbook page opens and the
       Link is NOT completed. Click a Tracker and a Craft task's item NAME → the item's Handbook page
       opens. Click the NUMBER on a Tracker/Craft row → the numeric field edits the target (no page
