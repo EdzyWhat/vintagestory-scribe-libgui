@@ -806,3 +806,66 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         bumped past 0.2.0, so a pre-fix PC 0.2.0 joined cleanly and ran the old code. After a `git pull` +
         rebuild/restage on the PC, all three orphaned-sibling paths (tap `15dd621`/`93c3b64`, blur `15dd621`,
         deferred-focus `63f2ebe`) hold. Closed.
+
+## enable-tablet-row-links
+
+> Link/Tracker/Craft task **names** on the wet Tablet now open the Handbook via an opt-in
+> `EditorRowsOpenLinks` seam (Lectern/Notebook editors stay non-clickable); the numeric stepper
+> stays its own hit region. Also fixes the read-view Craft-name no-op. **Relaunch the client first.**
+
+
+- [ ] `64a7b99f` **Tablet name opens page.** On a WET tablet, click a Link task's *name* -> its Handbook page opens and the Link is NOT completed. Click a Tracker's and a Craft's *name* -> the item's Handbook page opens. *(enable-tablet-row-links 4.3)*
+
+- [ ] `f5bcdf00` **Tablet number still edits.** On the same tablet, click the *number* on a Tracker/Craft row -> the numeric field edits the target and NO page opens. Click a plain Task/Note row -> it still edits text (no link hijack). *(enable-tablet-row-links 4.3)*
+
+- [ ] `05381201` **Cuneiform tablet links.** Repeat the name-click and number-edit checks with cuneiform ON -> the name is still clickable to the Handbook and the number still edits. *(enable-tablet-row-links 4.4)*
+
+- [ ] `348ea7f8` **Editors stay non-clickable.** On a Lectern/Notebook EDITOR view, item-row names are NOT clickable (unchanged); their READ view still opens links, and a Craft parent's name in the read view now opens its OUTPUT item's page (was a no-op before). *(enable-tablet-row-links 4.5)*
+
+
+## wrap-tablet-item-titles
+
+> Long cuneiform item names now wrap within the row (swapped to the wrapping
+> `ScribeCuneiformFieldRenderWidget`); title band / counter / picker stay single-line. **Relaunch first.**
+
+
+- [ ] `3d83b0c0` **Long name wraps.** On a Tablet, add a Tracker/Link/Craft for a long-named item (e.g. a wildcard cloth/shirt) -> the cuneiform name WRAPS within the row instead of clipping mid-word, in both the wet (editor) and read views. *(wrap-tablet-item-titles 2.4)*
+
+- [ ] `f56cf446` **Subtask name wraps.** Add a Craft with a long-named ingredient subtask -> the indented subtask's name wraps within its narrower bounds and indentation still reads correctly under the wrapped name. *(wrap-tablet-item-titles 2.5)*
+
+- [ ] `412d7bf0` **Title band unchanged.** Confirm the Tablet dialog TITLE band is still single-line, and Lectern/Notebook/Scriptorium/HUD item titles are visually unchanged. *(wrap-tablet-item-titles 2.6)*
+
+
+## support-attribute-encoded-items
+
+> Craft/Tracker/Link targets from the Handbook now carry item **attributes** (`stack@` encoding),
+> so metal-variant items track exactly (copper counts, iron doesn't). **Relaunch first.**
+
+
+- [ ] `87074827` **Lantern craft link + subtasks.** Open a lantern's Handbook page -> an "Add Crafting Task" link is present (was absent). Click it -> a Craft parent + ingredient subtasks appear. WATCH: for same-shape metal variants the generated subtasks may bind the wrong metal (signature-collision risk flagged by the implementer) - verify the subtask metal matches the lantern you opened. *(support-attribute-encoded-items 6.1)*
+
+- [ ] `6a582d51` **Variant name + icon.** Create a Link and a Tracker from the "Copper Lantern" Handbook page -> both rows read "Copper Lantern" (not `Game:Block-Lantern-Small-up`) and show the correct icon. *(support-attribute-encoded-items 6.2)*
+
+- [ ] `31d001cd` **Label opens variant page.** Click the Link's/Tracker's label -> the Handbook opens on the copper-lantern variant page (not a generic/empty page). Check the HUD Tracker tap too (it was re-encoded to keep attributes). *(support-attribute-encoded-items 6.3)*
+
+- [ ] `23a3dce2` **Meal page resolves.** Create tasks for a meal (an `IHandBookPageCodeProvider` item) -> the name resolves and the label opens the correct meal page. *(support-attribute-encoded-items 6.4)*
+
+- [ ] `3be87971` **Copper counts, iron doesn't.** With a copper-lantern Tracker, carry both copper and iron lanterns -> only the copper lanterns count toward progress. *(support-attribute-encoded-items 6.5)*
+
+- [ ] `2820f50a` **Old-doc backward-compat.** Open a document saved BEFORE this change whose Tracker/Link targets are bare codes -> every target still resolves, renders, and opens its page (no migration). *(support-attribute-encoded-items 6.6)*
+
+- [ ] `a50fdf2b` **Plain code unchanged.** Create a Tracker/Link for a plain code item (e.g. `game:ingot-copper`) -> behavior and stored target are unchanged (bare code, not `stack@`). *(support-attribute-encoded-items 6.7)*
+
+
+## restructure-handbook-entries
+
+> New "Scribe Mod: Tabs & Views" handbook article; per-block entries trimmed to link out instead
+> of restating the tab tour. No `*ByType` edits. **Relaunch first (assets load at boot).**
+
+
+- [ ] `50e20e27` **Tabs & Views article.** Open the Handbook -> the new "Scribe Mod: Tabs & Views" article is present, describes the shared tabs once, and has a working link to the editor-reference article. *(restructure-handbook-entries 4.2)*
+
+- [ ] `7de7d597` **Entries shorter, link out.** Open the Lectern, Scriptorium, and Notebook entries -> each is noticeably shorter, reads uniqueness-first, and links to the Tabs & Views article instead of restating the tour. No section is duplicated (no `*ByType` doubling). *(restructure-handbook-entries 4.3)*
+
+- [ ] `6f869220` **Unique content + links.** Confirm object-unique content still reads correctly - Scriptorium Transcribe, Guest Book, Notebook History, Clockmaker timer, Tablet material states - and every cross-link in the touched entries resolves. *(restructure-handbook-entries 4.4)*
+
