@@ -36,9 +36,13 @@ internal static class ScribeHandbookPatch
     // ReSharper disable once InconsistentNaming — Harmony injected parameter name is fixed.
     private static void Postfix(ItemSlot inSlot, ICoreClientAPI capi, ref RichTextComponentBase[] __result)
     {
-        // Need a resolvable collectible code to carry as the tracker/link target; bail on the odd empty page.
-        string? itemCode = inSlot?.Itemstack?.Collectible?.Code?.ToString();
-        if (itemCode is null || capi is null) return;
+        // Carry the page's OWN attributed stack (not a bare code): its meaningful attributes (a lantern's
+        // material/glass/lining) are what make the recipe probe match and the target resolve to the correct
+        // name (support-attribute-encoded-items). Bail on the odd empty page. Encode() collapses to the bare
+        // code for a common attribute-less item, so those targets are byte-identical to before.
+        var stack = inSlot?.Itemstack;
+        if (stack?.Collectible?.Code is null || capi is null) return;
+        string itemCode = ScribeItemRef.Encode(stack);
 
         var modSystem = capi.ModLoader.GetModSystem<ScribeModSystem>();
         if (modSystem is null) return;
@@ -65,11 +69,15 @@ internal static class ScribeHandbookPatch
         // recipe adds a single plain-labeled link, and a multi-recipe item adds one distinguished link each. The
         // signature the link carries lets the generator/self-heal re-resolve the exact variant later (D3). Each
         // variant's Label is already localized by the probe.
-        foreach (var variant in ScribeCraftRecipeProbe.ProbeVariants(capi, itemCode))
+        foreach (var variant in ScribeCraftRecipeProbe.ProbeVariants(capi, stack))
         {
             string signature = variant.Signature;
+            // The Craft parent's target is the recipe's resolved OUTPUT (already encoded by the probe), so a
+            // parent for an attribute-encoded output names correctly — not necessarily the same string as the
+            // page item's own encoded target.
+            string craftTarget = variant.OutputCode;
             appended.Add(new LinkTextComponent(capi, variant.Label + "\n", linkFont,
-                _ => modSystem.AddCraftFromHandbook(itemCode, signature)));
+                _ => modSystem.AddCraftFromHandbook(craftTarget, signature)));
         }
 
         var combined = new RichTextComponentBase[__result.Length + appended.Count];

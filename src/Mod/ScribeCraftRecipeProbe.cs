@@ -18,6 +18,9 @@ namespace Scribe;
 /// </summary>
 internal sealed record ScribeCraftRecipeVariant(
     string Signature,
+    // The Craft parent's target string: the recipe's resolved output re-encoded via ScribeItemRef.Encode
+    // (attribute-preserving for lanterns/meals; a bare code for common items). Used as the item code handed
+    // to AddCraftFromHandbook so the parent resolves to the correct display name.
     string OutputCode,
     int OutputPerCraft,
     string Label,
@@ -49,13 +52,20 @@ internal sealed record ScribeCraftRecipeVariant(
 /// </summary>
 internal static class ScribeCraftRecipeProbe
 {
-    /// <summary>All grid-recipe variants whose primary output is <paramref name="outputItemCode"/> (a concrete
-    /// item/block code from a Handbook page), deduplicated by <see cref="ScribeCraftRecipeVariant.Signature"/>
-    /// and labeled to distinguish them. Empty when the item has no grid recipe (the Handbook then shows no
-    /// "Add Crafting Task" link). Never throws.</summary>
-    public static IReadOnlyList<ScribeCraftRecipeVariant> ProbeVariants(ICoreClientAPI capi, string? outputItemCode)
+    /// <summary>All grid-recipe variants whose primary output satisfies <paramref name="stack"/> (the Handbook
+    /// page's own attributed <see cref="ItemStack"/>), deduplicated by
+    /// <see cref="ScribeCraftRecipeVariant.Signature"/> and labeled to distinguish them. Empty when the item
+    /// has no grid recipe (the Handbook then shows no "Add Crafting Task" link). Never throws.
+    ///
+    /// <para>Takes the attributed stack rather than a bare code (support-attribute-encoded-items Fix A): an
+    /// attribute-encoded output (a lantern's <c>material</c>/<c>glass</c>/<c>lining</c>) only satisfies its
+    /// recipe's <c>Output.ResolvedItemStack.Satisfies(stack)</c> when the stack actually carries those
+    /// attributes — the same input vanilla's "Created by" uses. Re-resolving a bare code would drop them and
+    /// match nothing, so the link never appeared. Each variant's <see cref="ScribeCraftRecipeVariant.OutputCode"/>
+    /// is the recipe's resolved output re-encoded via <see cref="ScribeItemRef.Encode"/>, so a Craft parent
+    /// created from it names correctly.</para></summary>
+    public static IReadOnlyList<ScribeCraftRecipeVariant> ProbeVariants(ICoreClientAPI capi, ItemStack? stack)
     {
-        var stack = ScribeItemRef.ResolveStack(capi.World, outputItemCode);
         if (stack is null) return System.Array.Empty<ScribeCraftRecipeVariant>();
 
         var matches = MatchingRecipes(capi, stack);
@@ -80,9 +90,15 @@ internal static class ScribeCraftRecipeProbe
             string label = single
                 ? Lang.Get("scribe:scribe-gui-addcraft")
                 : Lang.Get("scribe:scribe-gui-addcraft-variant", DistinguishingName(capi, recipe, ingredients, n));
+            // Encode the recipe's RESOLVED output stack (attributes included) as the Craft parent's target, so
+            // an attribute-encoded output (a copper lantern) names correctly; fall back to the queried stack's
+            // bare code if the recipe somehow has no resolved output stack.
+            string outputCode = recipe.Output?.ResolvedItemStack is { } outStack
+                ? ScribeItemRef.Encode(outStack)
+                : (CodeOf(recipe) ?? stack.Collectible.Code.ToString());
             result.Add(new ScribeCraftRecipeVariant(
                 sig,
-                CodeOf(recipe) ?? outputItemCode!,
+                outputCode,
                 OutputPerCraft(recipe),
                 label,
                 ingredients,

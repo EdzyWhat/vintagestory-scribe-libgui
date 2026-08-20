@@ -2874,6 +2874,35 @@ exercised for real by the Tracker/Link "Add to Scribe" links, and everything hel
   tags (`<strong>`, `<em>`, `<br>`, `<a href="...">`, `<hotkey>`) DO render. Bit us in the task-types article
   (`&amp;`, `12&#47;20` showed raw); other strings that already used literal `&`/`/` rendered fine.
 
+## Attribute-encoded items (lanterns, meals) — identity lives in `ItemStack.Attributes`, not the code (2026-08-19)
+
+**Symptom: a lantern (or meal) task shows the raw lang key `Game:Block-Lantern-Small-up` instead of
+"Copper Lantern", and its Handbook page has no "Add Crafting Task" link.** The block code is only
+`lantern-{size}-{position}`; `material`/`glass`/`lining` live in `stack.Attributes`, and
+`BlockLantern.GetHeldItemName` builds the name from the `material` attribute. Reducing the stack to
+`Collectible.Code.ToString()` throws the attributes away, so the name key never matches and
+`recipe.Output.ResolvedItemStack.Satisfies(bareStack)` matches no lantern recipe.
+
+**Encoding the meaningful attributes into a string (confirmed via decompiling VSSurvivalMod.dll):**
+`GuiHandbookItemStackPage.PageCodeForStack` is the canonical recipe — clone `stack.Attributes`, remove
+every `GlobalConstants.IgnoredStackAttributes` key (= `temperature`, `toolMode`, `renderVariant`,
+`transitionstate`) plus `durability`, take `SortedCopy(true)` for determinism, then
+`TreeAttribute.ToJsonToken(sorted)`. Round-trip back with `stack.Attributes = (ITreeAttribute)TreeAttribute.FromJson(json)`
+(the `ItemStack.Attributes` setter casts to `TreeAttribute`, and `FromJson` returns one). Scribe wraps
+that JSON in base64 behind a `stack@<code>|<b|i>|<blob>` marker (`ScribeItemRef.Encode`/`ResolveStack`).
+
+**Exact-variant matching direction:** `thisStack.Satisfies(other)` is `Collectible.Satisfies`, which for
+same class+id returns `this.Attributes.IsSubSetOf(world, other.Attributes)` — i.e. `this` is a satisfactory
+replacement of `other`, ignoring extra attributes on `other`. So to count "carried is exactly a copper
+lantern," use `targetStack.Satisfies(carried)` (target's material=copper must be present-and-equal in
+carried; an iron lantern fails). Slots into `CraftingRecipeIngredient` cleanly: set `MatchingType = Exact`
+and assign `ResolvedItemStack = targetStack` directly (do NOT call `Resolve()` — a fresh ingredient's
+`deduplicationIndex` is -1, so the `ResolvedItemStack` setter stores locally; then `SatisfiesAsIngredient`
+reduces to `ResolvedItemStack.Satisfies(input)`). **Fix pattern:** see `ScribeItemRef.cs`,
+`ScribeTrackerCounter.cs`, `ScribeCraftRecipeProbe.cs` (feed the probe the attributed `inSlot.Itemstack`,
+not a bare code). Meals: prefer `IHandBookPageCodeProvider.HandbookPageCodeForStack` (in
+`Vintagestory.GameContent`) over `PageCodeForStack` for the nav target, guarded with a fallback.
+
 ## Entry template
 
 ```
