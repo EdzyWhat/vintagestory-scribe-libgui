@@ -258,8 +258,12 @@ public sealed class ScribeDocument
 
         foreach (var ing in ingredients)
         {
-            int perCraft = ing.PerCraftQuantity < 1 ? 1 : ing.PerCraftQuantity;
-            int target = perCraft * craftsNeeded;
+            // A liquid ingredient counts in litres, so its target bypasses the integer per-craft multiply and
+            // ceils the batch litre total instead (add-liquid-ingredient-tracker D3). A solid stays
+            // PerCraftQuantity × craftsNeeded.
+            int target = ing.IsLiquid
+                ? ScribeCraftMath.LitreTarget(ing.LitresPerCraft, craftsNeeded)
+                : (ing.PerCraftQuantity < 1 ? 1 : ing.PerCraftQuantity) * craftsNeeded;
 
             int matchIdx = -1;
             for (int i = runStart; i < runEnd; i++)

@@ -1214,6 +1214,29 @@ chronicle/integration features — decompiled, not yet exercised.)
   `PageCode` is `handbook-mealrecipe-<recipe.Code>` (+`-pie`); a meal has no stable countable item
   (bowl contents are per-instance random) and is not a grid recipe, so meals get a Link only — no
   Tracker, no Craft.
+- **A containerized-liquid grid ingredient is NOT a grid cell — it's declared on the RECIPE
+  (`attributes.liquidContainerProps`).** For ink-and-quill / poultice / bandage / oillamp / beenade the
+  ingredient cell is a SOLID container (`bowl-*-fired`), and the liquid it must hold lives on the recipe:
+  `recipe.Attributes["liquidContainerProps"]` → `{ requiresContent: { type, code }, requiresLitres,
+  consumeContainer }` (e.g. ink → `item/dye-black`, poultice → `item/honeyportion`). There is a
+  per-ingredient fallback: `recipe.ResolvedIngredients[i].RecipeAttributes["requiresContent"]`.
+  Consequence: a `cell.ResolvedItemStack.Collectible.MatterState == EnumMatterState.Liquid` check NEVER
+  fires for these — the cell's matter state is Solid (the bowl). `CraftingRecipeIngredient` has no
+  liquid/content field at all. The authoritative "given a recipe, what liquid does it need" logic is
+  vanilla **`BlockLiquidContainerBase.OnHandbookRecipeRender`** (VSSurvivalMod): read
+  `requiresContent.{type,code}`, build the stack, `stack.GetName()` for the liquid's display name.
+  `ScribeCraftRecipeProbe.TryAddLiquid` mirrors this (recipe-level first, cell `RecipeAttributes`
+  fallback). As of add-liquid-ingredient-tracker it emits the liquid as a **counting litre Tracker**
+  (reading the sibling `requiresLitres` float, target = `ceil(litresPerCraft × craftsNeeded)`), degrading
+  to the old `scribe-gui-craft-liquid-note` only when the liquid can't be resolved (wildcard code, missing
+  `requiresLitres`, unresolvable stack). Counting happens in `ScribeTrackerCounter.CountCarried`: a target
+  whose resolved collectible is `EnumMatterState.Liquid` sums litres across carried
+  `BlockLiquidContainerBase`s via `container.GetContent(stack)` +
+  `BlockLiquidContainerBase.GetContainableProps(content).ItemsPerLitre` (both confirmed by decompile), not
+  loose stack sizes. The container bowl stays a counted ingredient.
+  **Tallybook does NOT solve this** — its `RecipeProbe` never reads `liquidContainerProps`, so it has
+  the same blind spot (would just count the bowl). 1.22 caveat: `GridRecipe.Ingredients`/`IngredientPattern`
+  are null client-side (use `ResolvedIngredients`), but `RecipeBase.Attributes` survives client-side.
 
 ## Custom TTF fonts in the GUI
 

@@ -5,6 +5,7 @@ using Scribe.Core;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
+using Vintagestory.API.Datastructures;   // JsonObject (recipe liquidContainerProps access)
 using Vintagestory.GameContent;   // GuiHandbookItemStackPage.PageCodeForStack (variant-identity primitive)
 
 namespace Scribe;
@@ -172,7 +173,9 @@ internal static class ScribeCraftRecipeProbe
             var (ingredients, notes) = DeriveIngredients(capi, recipe);
             sb.AppendLine($"  [{i}] sig={SignatureOf(recipe)}  out×{OutputPerCraft(recipe)}");
             foreach (var ing in ingredients)
-                sb.AppendLine($"        - {ing.ItemCode} ×{ing.PerCraftQuantity}");
+                sb.AppendLine(ing.IsLiquid
+                    ? $"        - {ing.ItemCode} ×{ing.LitresPerCraft:0.###} L/craft (liquid)"
+                    : $"        - {ing.ItemCode} ×{ing.PerCraftQuantity}");
             foreach (var note in notes)
                 sb.AppendLine($"        · {note}");
         }
@@ -227,7 +230,12 @@ internal static class ScribeCraftRecipeProbe
                 if (cell is null || cell.IsTool) continue;
 
                 var resolved = cell.ResolvedItemStack?.Collectible;
-                // Liquid ingredient (e.g. honey/water portion): not litre-countable in v1 — surface as a note.
+                // A liquid sitting directly in a GRID CELL (rare — vanilla liquids live in containers, so this
+                // path effectively never fires for survival grid recipes) has no `requiresLitres` to count in
+                // litres, so it degrades to a note here — the same resolve-or-note outcome the containerized
+                // path (TryAddLiquid, below) reaches when a liquid can't be resolved (add-liquid-ingredient-tracker
+                // 3.4). The container path reads recipe/ingredient attributes, not grid cells, so there is no
+                // double-emit with this branch.
                 if (resolved is not null && resolved.MatterState == EnumMatterState.Liquid)
                 {
                     string noteText = Lang.Get("scribe:scribe-gui-craft-liquid-note", DisplayName(capi, cell));
@@ -247,7 +255,119 @@ internal static class ScribeCraftRecipeProbe
         var ingredients = order
             .Select(code => new ScribeCraftIngredient(code, perCode[code]))
             .ToList();
+
+        // Containerized-liquid ingredients (ink-and-quill, poultice, bandage, oillamp, beenade): the liquid is
+        // NOT a grid cell — it's declared on the recipe as attributes.liquidContainerProps.requiresContent, so
+        // the per-cell MatterState check above never fires (the cell is the solid bowl). Emit each such liquid as
+        // a COUNTING liquid ingredient (litre-based Tracker), mirroring vanilla
+        // BlockLiquidContainerBase.OnHandbookRecipeRender (VSAPI-NOTES.md § craft); an unresolvable liquid
+        // degrades to the old note. The bowl stays counted as a normal ingredient (it is genuinely required).
+        TryAddLiquid(capi, recipe, ingredients, notes, seenNotes);
+
         return (ingredients, notes);
+    }
+
+    /// <summary>Emit each containerized-liquid requirement declared on the recipe (not on a grid cell) as a
+    /// COUNTING liquid ingredient, falling back to the old note when it can't be resolved
+    /// (add-liquid-ingredient-tracker D2/D6). The requirement lives at
+    /// <c>attributes.liquidContainerProps.requiresContent</c> (recipe-level, what the survival recipes use),
+    /// with a per-ingredient <c>RecipeAttributes.requiresContent</c> fallback — the same authoritative source
+    /// vanilla reads in <c>BlockLiquidContainerBase.OnHandbookRecipeRender</c>: <c>requiresContent.code</c>
+    /// (the liquid code), <c>requiresContent.type</c> (<c>item</c>|<c>block</c>), and the SIBLING
+    /// <c>requiresLitres</c> float. The container bowl remains a normal counted ingredient; only the liquid it
+    /// must hold is added here.
+    ///
+    /// <para>Per distinct liquid code: if the code is concrete, <c>requiresLitres &gt; 0</c>, and the item/block
+    /// stack resolves, add a liquid <see cref="ScribeCraftIngredient"/> (litre-counted). Otherwise append the
+    /// existing <c>scribe:scribe-gui-craft-liquid-note</c> Text note naming the liquid (graceful degrade).
+    /// Duplicate liquid codes are merged by summing their litres before emission, because
+    /// <see cref="ScribeDocument.ReconcileCraftIngredients"/> expects distinct codes. Defensive: every access is
+    /// null-safe and the only throw risk (a bad AssetLocation) is caught, so a malformed recipe simply yields
+    /// no ingredient and no note.</para></summary>
+    private static void TryAddLiquid(
+        ICoreClientAPI capi, GridRecipe recipe,
+        List<ScribeCraftIngredient> ingredients, List<string> notes, HashSet<string> seenNotes)
+    {
+        // Collect requirements (code + type + litres). Recipe-level liquidContainerProps takes precedence (the
+        // survival-recipe form); only when it is absent do we gather the per-ingredient RecipeAttributes across
+        // every cell that carries one.
+        var reqs = new List<(string Code, string? Type, float Litres)>();
+
+        var recipeProps = recipe.Attributes?["liquidContainerProps"];
+        if (recipeProps is not null && recipeProps.Exists && recipeProps["requiresContent"].Exists)
+        {
+            AddLiquidRequirement(reqs, recipeProps);
+        }
+        else
+        {
+            var cells = recipe.ResolvedIngredients;
+            if (cells is not null)
+            {
+                foreach (var cell in cells)
+                {
+                    var ra = cell?.RecipeAttributes;
+                    if (ra is not null && ra.Exists && ra["requiresContent"].Exists)
+                        AddLiquidRequirement(reqs, ra);
+                }
+            }
+        }
+        if (reqs.Count == 0) return;
+
+        // Merge duplicate liquid codes by summing litres (ReconcileCraftIngredients expects distinct codes).
+        var byCode = new Dictionary<string, (string? Type, float Litres)>();
+        var codeOrder = new List<string>();
+        foreach (var (code, type, litres) in reqs)
+        {
+            if (byCode.TryGetValue(code, out var cur))
+                byCode[code] = (cur.Type ?? type, cur.Litres + litres);
+            else { byCode[code] = (type, litres); codeOrder.Add(code); }
+        }
+
+        foreach (var code in codeOrder)
+        {
+            var (type, litres) = byCode[code];
+
+            // Fully resolvable → a counting liquid ingredient; anything else → the fallback note.
+            ItemStack? stack = code.Contains('*') ? null : ResolveLiquidStack(capi, code, type);
+            if (stack is not null && litres > 0f)
+            {
+                ingredients.Add(new ScribeCraftIngredient(
+                    code, PerCraftQuantity: 1, IsLiquid: true, LitresPerCraft: litres));
+            }
+            else
+            {
+                string liquidName = stack?.GetName() ?? code;
+                string noteText = Lang.Get("scribe:scribe-gui-craft-liquid-note", liquidName);
+                if (seenNotes.Add(noteText)) notes.Add(noteText);
+            }
+        }
+    }
+
+    /// <summary>Read one <c>requiresContent.code</c>/<c>type</c> + sibling <c>requiresLitres</c> off a
+    /// liquid-container props object (either the recipe-level <c>liquidContainerProps</c> or a cell's
+    /// <c>RecipeAttributes</c>) and append it to <paramref name="reqs"/>. Skips a missing/empty code.</summary>
+    private static void AddLiquidRequirement(List<(string Code, string? Type, float Litres)> reqs, JsonObject props)
+    {
+        string? code = props["requiresContent"]["code"].AsString(null);
+        if (string.IsNullOrEmpty(code)) return;
+        string? type = props["requiresContent"]["type"].AsString(null);
+        float litres = props["requiresLitres"].AsFloat(0f); // SIBLING of requiresContent, not nested inside it
+        reqs.Add((code!, type, litres));
+    }
+
+    /// <summary>Resolve a concrete liquid code to a display <see cref="ItemStack"/> (item vs block per
+    /// <paramref name="type"/>), used both to confirm the liquid's identity and to name it. Returns null on a
+    /// bad location or an unregistered code (the caller then degrades to the note).</summary>
+    private static ItemStack? ResolveLiquidStack(ICoreClientAPI capi, string code, string? type)
+    {
+        try
+        {
+            var loc = new AssetLocation(code);
+            return string.Equals(type, "block", System.StringComparison.OrdinalIgnoreCase)
+                ? (capi.World.GetBlock(loc) is { } b ? new ItemStack(b, 1) : null)
+                : (capi.World.GetItem(loc) is { } it ? new ItemStack(it, 1) : null);
+        }
+        catch { return null; }
     }
 
     /// <summary>The code a counting ingredient contributes to a child Tracker: the CONCRETE resolved code for

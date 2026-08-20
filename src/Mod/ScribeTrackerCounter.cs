@@ -1,5 +1,6 @@
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
+using Vintagestory.GameContent;   // BlockLiquidContainerBase (litre-summing liquid count)
 
 namespace Scribe;
 
@@ -102,11 +103,38 @@ internal static class ScribeTrackerCounter
         return true;
     }
 
-    /// <summary>Sum the stack sizes of every carried stack (hotbar + backpack) that satisfies
+    /// <summary>Sum the carried quantity (hotbar + backpack) of everything that satisfies
     /// <paramref name="ingredient"/>. <c>checkStackSize:false</c> so a stack of any size counts by its full
-    /// <see cref="ItemStack.StackSize"/> (we're tallying total held quantity, not testing craftability).</summary>
+    /// held amount (we're tallying total held quantity, not testing craftability).
+    ///
+    /// <para><b>Liquid target</b> (add-liquid-ingredient-tracker D4): a liquid never exists as a loose carried
+    /// stack — it lives as <c>WaterTightContainable</c> content INSIDE a bucket/bowl, measured in litres. When
+    /// the resolved target is a liquid (<see cref="EnumMatterState.Liquid"/>), sum the litres of the tracked
+    /// liquid across every carried liquid container: read each container's content stack, match it against the
+    /// ingredient (so the same exact/wildcard equivalence the solid path uses applies to the content), and add
+    /// <c>content.StackSize ÷ ItemsPerLitre</c>. The summed litres are floored (with a small epsilon absorbing
+    /// float error on exact multiples) to the whole-litre have/need readout. The target is <c>ceil</c>-rounded
+    /// and the have is <c>floor</c>-rounded, so a player holding exactly the required whole litres reads
+    /// satisfied and a hair under never falsely completes. The solid stacksize path below is byte-identical.</para></summary>
     public static int CountCarried(IClientPlayer player, CraftingRecipeIngredient ingredient)
     {
+        if (ingredient.ResolvedItemStack?.Collectible?.MatterState == EnumMatterState.Liquid)
+        {
+            float litres = 0f;
+            foreach (var slot in ScribeModSystem.EnumerateCarriedSlots(player))
+            {
+                var stack = slot.Itemstack;
+                if (stack?.Collectible is not BlockLiquidContainerBase container) continue;
+                var content = container.GetContent(stack);
+                if (content is null) continue;
+                if (!ingredient.SatisfiesAsIngredient(content, checkStackSize: false)) continue;
+                float ipl = BlockLiquidContainerBase.GetContainableProps(content)?.ItemsPerLitre ?? 1f;
+                if (ipl <= 0f) ipl = 1f; // guard a malformed props value; vanilla's own fallback is 1f
+                litres += content.StackSize / ipl;
+            }
+            return (int)System.Math.Floor(litres + 1e-3f);
+        }
+
         int total = 0;
         foreach (var slot in ScribeModSystem.EnumerateCarriedSlots(player))
         {

@@ -75,6 +75,21 @@ public class ScribeCraftTaskTests
         Assert.Equal(expected, ScribeCraftMath.CraftsNeeded(target, perCraft));
     }
 
+    [Theory]
+    [InlineData(1.0, 1, 1)]    // whole litre, single craft
+    [InlineData(2.0, 3, 6)]    // whole litre scales linearly
+    [InlineData(0.1, 10, 1)]   // fractional per-craft ceiled at the BATCH TOTAL (ceil(1.0)=1, not 10)
+    [InlineData(0.25, 1, 1)]   // sub-litre single craft ceils up to 1
+    [InlineData(1.5, 2, 3)]    // 3.0 total is exact → 3
+    [InlineData(0.0, 5, 1)]    // zero litres clamps to 1
+    [InlineData(-1.0, 5, 1)]   // negative litres clamps to 1
+    [InlineData(1.0, 0, 1)]    // zero crafts clamps to 1
+    [InlineData(1.0, -2, 1)]   // negative crafts clamps to 1
+    public void LitreTarget_CeilsBatchTotal(double litresPerCraft, int crafts, int expected)
+    {
+        Assert.Equal(expected, ScribeCraftMath.LitreTarget(litresPerCraft, crafts));
+    }
+
     // ---- reconcile: generate + self-heal ----
 
     [Fact]
@@ -192,6 +207,72 @@ public class ScribeCraftTaskTests
         var noteRows = doc.Blocks.Where(b => b.Kind == ScribeBlockKind.Text && b.Text == "Requires 0.25 L honey").ToList();
         Assert.Single(noteRows);
         Assert.Equal(1, noteRows[0].Depth);
+    }
+
+    [Fact]
+    public void Reconcile_LiquidIngredientBecomesTrackerAtCeilLitreTotal()
+    {
+        var doc = new ScribeDocument();
+        var id = doc.AddCraft("game:ink-and-quill", 2, "sig");
+
+        // A solid sibling (feather ×1/craft) and a fractional liquid (0.1 L/craft). With 3 crafts the liquid
+        // target ceils the 0.3 L batch total to 1; the solid scales linearly to 3.
+        var ingredients = new[]
+        {
+            new ScribeCraftIngredient("game:feather", 1),
+            new ScribeCraftIngredient("game:blackdye", 1, IsLiquid: true, LitresPerCraft: 0.1),
+        };
+        doc.ReconcileCraftIngredients(id, ingredients, Array.Empty<string>(), craftsNeeded: 3);
+
+        Assert.Equal(3, doc.Blocks.Count); // parent + feather + blackdye
+        var feather = doc.Blocks.Single(b => b.TargetItemCode == "game:feather");
+        var dye = doc.Blocks.Single(b => b.TargetItemCode == "game:blackdye");
+        Assert.Equal(ScribeBlockKind.Tracker, dye.Kind);
+        Assert.Equal(1, dye.Depth);
+        Assert.Equal(1, dye.TargetQuantity);   // ceil(0.1 × 3) = 1, NOT 0.1 × 3 int-multiplied
+        Assert.Equal(3, feather.TargetQuantity); // solid unaffected by the liquid path
+
+        // Rescale: raise crafts to 20 → liquid target ceils 2.0 L to 2, preserving the child's id + progress.
+        var dyeId = dye.TaskId;
+        doc.SetTrackerCurrentQuantity(dyeId, 1);
+        doc.ReconcileCraftIngredients(id, ingredients, Array.Empty<string>(), craftsNeeded: 20);
+
+        var dyeAfter = doc.Blocks.Single(b => b.TargetItemCode == "game:blackdye");
+        Assert.Equal(dyeId, dyeAfter.TaskId);        // same row, rescaled in place
+        Assert.Equal(2, dyeAfter.TargetQuantity);    // ceil(0.1 × 20) = 2
+        Assert.Equal(1, dyeAfter.CurrentQuantity);   // live progress preserved
+        Assert.Equal(20, doc.Blocks.Single(b => b.TargetItemCode == "game:feather").TargetQuantity);
+    }
+
+    [Fact]
+    public void Reconcile_DuplicateLiquidCodeCollapsesToOneChild_DistinctCodesGetOwnChildren()
+    {
+        // Two ingredients sharing a liquid code (the Mod layer would pre-merge them, but Core must also
+        // collapse them) reconcile to a single child.
+        var doc = new ScribeDocument();
+        var id = doc.AddCraft("out", 1, "sig");
+        doc.ReconcileCraftIngredients(id,
+            new[]
+            {
+                new ScribeCraftIngredient("game:blackdye", 1, IsLiquid: true, LitresPerCraft: 0.5),
+                new ScribeCraftIngredient("game:blackdye", 1, IsLiquid: true, LitresPerCraft: 0.5),
+            },
+            Array.Empty<string>(), craftsNeeded: 2);
+        Assert.Single(doc.Blocks, b => b.IsTracker && b.TargetItemCode == "game:blackdye");
+
+        // Two distinct liquid codes get their own children.
+        var doc2 = new ScribeDocument();
+        var id2 = doc2.AddCraft("out", 1, "sig");
+        doc2.ReconcileCraftIngredients(id2,
+            new[]
+            {
+                new ScribeCraftIngredient("game:blackdye", 1, IsLiquid: true, LitresPerCraft: 1),
+                new ScribeCraftIngredient("game:waterportion", 1, IsLiquid: true, LitresPerCraft: 1),
+            },
+            Array.Empty<string>(), craftsNeeded: 1);
+        Assert.Equal(3, doc2.Blocks.Count); // parent + 2 distinct liquid children
+        Assert.Single(doc2.Blocks, b => b.IsTracker && b.TargetItemCode == "game:blackdye");
+        Assert.Single(doc2.Blocks, b => b.IsTracker && b.TargetItemCode == "game:waterportion");
     }
 
     [Fact]
