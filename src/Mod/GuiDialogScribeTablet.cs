@@ -197,6 +197,18 @@ public class GuiDialogScribeTablet : ScribeDialogBase
         var chromeColor = TitleChromeGlyphColor(ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme);
         style = style with { GripGlyphColor = chromeColor };
 
+        // A row's tappable Link/Tracker/Craft name resolves its color as `style.LinkColor ?? colors.Primary`.
+        // On the clay backdrop, `Primary` is a mid-value FILL accent that fails AA as small text on the
+        // same-value clay (2.3–3.7 : 1, tablet-text-visibility) — so decouple it onto a dedicated per-material
+        // link ink that clears 4.5 : 1. Gated on Pixel-Art Display exactly like the chalkboard's link ink and
+        // this dialog's glow/theme: with Pixel-Art OFF the tablet is a flat themed panel where `Primary` is the
+        // correct, legible link color, so leave `LinkColor` unset there. Applies whether or not cuneiform is on
+        // (the readability problem is the clay ground, not the font).
+        if (modSystem.MySettings.PixelArtDisplay)
+        {
+            style = style with { LinkColor = ScribeTheme.ForTabletLink(_material) };
+        }
+
         if (ActiveCuneiformBundle is not { } bundle)
         {
             return style;

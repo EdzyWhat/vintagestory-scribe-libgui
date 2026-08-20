@@ -367,4 +367,32 @@ internal static class ScribeTheme
             _ => TabletFire, // any unrecognized material rides the fire palette (its backdrop twin)
         };
     }
+
+    // Per-material tablet LINK inks (tablet-text-visibility, Option C for links). A Link/Tracker/Craft
+    // row's tappable name resolves its color as `style.LinkColor ?? colors.Primary`. Each clay palette's
+    // `Primary` (the accent above) is a MID-VALUE fill color — legible as a button fill with light onAccent
+    // text on it, but as small dark-ish TEXT on the same-value clay ground it fails AA (measured 2.3–3.7 : 1
+    // across the four palettes). These decouple the link from `Primary` onto a deeper, more-saturated ink
+    // that clears ≥ 4.5 : 1 on its own backdrop while staying a distinct accent hue from the near-black body
+    // ink — the SAME decouple-from-Primary reasoning the chalkboard's `ChalkboardLinkText` documents, only
+    // pushed DARKER here because the clay grounds are light-mid (chalk is dark, so its link went lighter).
+    // Set via the tablet's `DecorateRowStyle` on the Pixel-Art path only (see `ForTabletLink`).
+    private static readonly Vector4 TabletFireLink = new(0.42f, 0.18f, 0.07f, 1.0f); // #6B2E12 deep rust, ~4.7 : 1
+    private static readonly Vector4 TabletRedLink  = new(0.44f, 0.11f, 0.11f, 1.0f); // #701C1C deep wine, ~4.8 : 1
+    private static readonly Vector4 TabletBlueLink = new(0.15f, 0.33f, 0.46f, 1.0f); // #265475 deep steel-blue, ~5.1 : 1
+    private static readonly Vector4 TabletWaxLink  = new(0.44f, 0.28f, 0.06f, 1.0f); // #70470F deep amber-bronze, ~4.9 : 1
+
+    /// <summary>The per-material tablet LINK ink (tablet-text-visibility). Mirrors <see cref="ForTablet"/>'s
+    /// material switch (<c>clay-blue</c>/<c>clay-red</c>/<c>clay-fire</c>/<c>wax</c>, default → fire) but is a
+    /// PURE material→color map with no Pixel-Art gate: the caller (the tablet's <c>DecorateRowStyle</c>) gates
+    /// on Pixel-Art Display, since with Pixel-Art off the tablet is a flat themed panel where <c>Primary</c> is
+    /// the correct, legible link color. Always returns an AA-clearing link ink; see the constant docs above for
+    /// why these are decoupled from each palette's <c>Primary</c> accent.</summary>
+    public static Vector4 ForTabletLink(string? material) => material switch
+    {
+        "clay-blue" => TabletBlueLink,
+        "clay-red" => TabletRedLink,
+        "wax" => TabletWaxLink,
+        _ => TabletFireLink, // clay-fire + any unrecognized material (the fire backdrop twin)
+    };
 }

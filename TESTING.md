@@ -21,6 +21,35 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## tablet-text-visibility
+
+> Two tablet readability fixes (hybrid A + C-for-links): the per-material cuneiform glow flipped from a
+> LIGHT halo to a soft DARK ink-derived outline (all four palettes, wax got its own seed), and a dedicated
+> per-material LINK ink (deep rust / wine / steel-blue / amber-bronze) so tappable Link/Tracker/Craft names
+> clear AA on the clay instead of washing out. Body ink unchanged. All gated on **Pixel-Art Display ON**.
+> **Fully quit and relaunch** to load the rebuilt DLL.
+
+- [ ] `00000011` **Fire link legible.** On a wet **fire** (tan) tablet with a Link/Tracker/Craft row, the
+      item name reads as a distinct warm-rust link — obviously not the body ink and no longer washed into
+      the clay. *(tablet-text-visibility 5.1)*
+- [ ] `00000012` **Red link legible.** On a **red** (rose) tablet the link reads as a deep wine, distinct
+      from the rosy ground (the worst camouflage case before). *(tablet-text-visibility 5.2)*
+- [ ] `00000013` **Blue link legible.** On a **blue** tablet the link reads as a lively deep steel-blue.
+      *(tablet-text-visibility 5.3)*
+- [ ] `00000014` **Wax link legible.** On a **wax** (pale honey) tablet the link reads as a deep
+      amber-bronze, legible on the honey ground (the 2.3 : 1 worst case before). *(tablet-text-visibility 5.4)*
+- [ ] `00000015` **Body glow seats, not grime.** Body task text on all four palettes: strokes read crisp
+      and firmly seated — the dark halo reads as a soft engraved shadow, NOT as grime/dirt over the clay.
+      (If grime, glow alpha wants dropping toward 0.40; if smearing, raise toward 0.65.) *(tablet-text-visibility 5.5)*
+- [ ] `00000016` **Fired matches wet.** Repeat the link + body checks on a **fired/hardened** (read-only)
+      tablet of the same clay — colors match the wet form (state must not change palette) and read-only rows
+      are equally legible. *(tablet-text-visibility 5.6)*
+- [ ] `00000017` **Title + counters glow.** Confirm the dark glow also reads well on the cuneiform TITLE and
+      the tracker "N / N" counters (they share the glow table). *(tablet-text-visibility 5.7)*
+- [ ] `00000018` **Pixel-Art OFF unchanged.** Turn Pixel-Art Display OFF: the tablet follows the global theme
+      over a flat panel, links use `Primary`, no glow — confirm it looks unchanged from before.
+      *(tablet-text-visibility 5.8)*
+
 ## fix-recipe-variant-identity
 
 > Metal-variant Crafting Tasks now key recipe identity on the Handbook **page code** (via

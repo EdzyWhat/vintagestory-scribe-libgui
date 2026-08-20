@@ -34,27 +34,40 @@ public readonly record struct CuneiformGlow(Vector4 Color, float BlurFraction)
 }
 
 /// <summary>
-/// Per-material cuneiform glow seeds. All three clay backdrops are mid-tone with DARK ink, so every seed is
-/// a LIGHT halo (a light halo lifts dark ink; a dark halo would be for light ink on a dark clay). The values
-/// were tuned in-game via a since-removed <c>.cuneiformglow</c> dev command and baked here (tasks 6.4 / 6.7).
+/// Per-material cuneiform glow seeds. Every clay/wax backdrop is a LIGHT-MID tone written with DARK ink, so
+/// each seed is a soft DARK halo — a tight, ink-derived outline / seating shadow that deepens the immediate
+/// stroke surround and separates the thin, jittered strokes from the clay. (tablet-text-visibility, Option A.)
+///
+/// This CORRECTS the previous light-halo polarity, which was inverted for our case: a light halo lifts dark
+/// ink only on a DARK ground; on a light-mid ground it sits between the ink and a ground of nearly its own
+/// luminance, adding no separating step and bleeding into the stroke edge — softening the ink instead of
+/// sharpening it. The old "a light halo lifts dark ink" comment described that opposite case. The two-pass
+/// render (all blurred halos first, then all crisp ink on top — see the render objects' PaintInternal) is
+/// UNCHANGED and still correct here: the crisp ink overwrites the halo inside each glyph, so a dark halo
+/// shows only as a thin darkened fringe where it spills onto the clay — exactly the desired outline.
 /// </summary>
 internal static class CuneiformGlowTable
 {
-    // Baked per-material seeds (halo RGB, strength alpha, blur-as-fraction-of-em). Tuned in-game, then baked.
-    // 2026-08-03 playtest (add-tablet-clay-type-themes 8.3): softer + wider — strength 0.55 → 0.30, blur
-    // fraction 0.09 → 0.117 (~+30% radius) — so the lift reads as a diffuse aura, not a bright rim.
-    private static readonly CuneiformGlow FireDefault = new(new Vector4(0.98f, 0.94f, 0.85f, 0.30f), 0.117f);
-    private static readonly CuneiformGlow RedDefault  = new(new Vector4(0.98f, 0.92f, 0.88f, 0.30f), 0.117f);
-    private static readonly CuneiformGlow BlueDefault = new(new Vector4(0.95f, 0.97f, 0.99f, 0.30f), 0.117f);
+    // Per-material dark seeds (halo RGB derived from each palette's own ink, strength alpha, blur-as-fraction-
+    // of-em). tablet-text-visibility: light → dark polarity flip, tighter blur (0.117 → 0.060) so the halo
+    // reads as a soft engraved outline rather than a diffuse aura, and wax gets its OWN seed (below) instead of
+    // riding the fire twin. Tuning guidance if the in-game pass wants it: alpha 0.55 / blur 0.060 is the start;
+    // drop alpha toward 0.40 if the halo reads as grime, raise toward 0.65 if strokes still smear, and keep the
+    // blur fraction in 0.05–0.08 (a soft outline, not an aura).
+    private static readonly CuneiformGlow FireDefault = new(new Vector4(0.20f, 0.10f, 0.05f, 0.55f), 0.060f);
+    private static readonly CuneiformGlow RedDefault  = new(new Vector4(0.24f, 0.10f, 0.09f, 0.55f), 0.060f);
+    private static readonly CuneiformGlow BlueDefault = new(new Vector4(0.12f, 0.16f, 0.20f, 0.55f), 0.060f);
+    private static readonly CuneiformGlow WaxDefault  = new(new Vector4(0.28f, 0.22f, 0.12f, 0.55f), 0.060f);
 
     /// <summary>Resolve the glow for a tablet's <c>material</c> variant.
-    /// <c>clay-red</c>/<c>clay-blue</c>/<c>clay-fire</c> map to their seed; <c>wax</c> and any unrecognized
-    /// material ride the fire seed (its backdrop twin), mirroring the theme/backdrop fallback.</summary>
+    /// <c>clay-red</c>/<c>clay-blue</c>/<c>clay-fire</c>/<c>wax</c> each map to their own ink-derived dark seed;
+    /// any unrecognized material rides the fire seed (its backdrop twin), mirroring the theme/backdrop fallback.</summary>
     public static CuneiformGlow For(string? material) => material switch
     {
         "clay-blue" => BlueDefault,
         "clay-red" => RedDefault,
-        _ => FireDefault, // clay-fire, wax, unknown
+        "wax" => WaxDefault,
+        _ => FireDefault, // clay-fire, unknown
     };
 }
 
