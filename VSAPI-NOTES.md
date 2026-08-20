@@ -1172,6 +1172,49 @@ chronicle/integration features — decompiled, not yet exercised.)
   (SpeedOfTime * CalendarSpeedMul)`. `SpeedOfTime` already includes any active
   `SetTimeSpeedModifier` contributions ("sum of all modifiers"), so read it live rather than caching.
 
+## Handbook variant identity + the three page classes (recipe / meal-link work, 2026-08-19)
+
+- **`GuiHandbookItemStackPage.PageCodeForStack(ItemStack)` is THE attribute-qualified variant-identity
+  primitive** — `public static` in `VSSurvivalMod.dll` / `Vintagestory.GameContent`, callable directly
+  (no reflection, ships with the base game). It clones the stack's attributes, strips every
+  `GlobalConstants.IgnoredStackAttributes` key + `durability`, takes a deterministic `SortedCopy(true)`,
+  and `TreeAttribute.ToJsonToken`s the rest, yielding e.g.
+  `block-lantern-large-up-{"glass":"quartz","lining":"plain","material":"gold"}`; an attribute-less
+  stack returns just `class-shortcode`. This is what VS keys each Handbook PAGE on, and what Tallybook
+  keys recipe groups on. **Use it — not `Output.ResolvedItemStack.Satisfies(pageStack)` — to bind a
+  grid recipe to the viewed variant.** `Satisfies` is an attribute-SUBSET test: every metal lantern
+  satisfies every other, so a bare-code-keyed signature collapsed all 13 metal fan-outs to the first
+  (the `fix-recipe-variant-identity` 6.1 bug). `ScribeCraftRecipeProbe` now keys both its signature and
+  its output-matching on `PageCodeForStack` equality. (Note: VS fans variant/wildcard grid recipes into
+  one CONCRETE `GridRecipe` per resolved output at load via
+  `GenerateRecipesForAllIngredientCombinations` → `FillPlaceHolder`, substituting `{var}` into both
+  ingredient codes AND the output's `attributes` JSON — so each metal lantern really is its own recipe
+  with its own attributed output stack; the probe just has to identify it correctly.)
+- **`handbook: { groupBy: [...] }` only dedups the Handbook LIST, not the pages.** Each variant still
+  gets its own `GuiHandbookItemStackPage` with a concrete attributed `dummySlot.Itemstack`, and THAT
+  exact on-screen stack (attributes intact) is what VS hands
+  `CollectibleBehaviorHandbookTextAndExtraInfo.GetHandbookInfo(inSlot, …)` (the method
+  `ScribeHandbookPatch` postfixes). So a grouped page (e.g. `lantern-{size}-*`) does NOT hand a fuzzy
+  representative stack — the probe already receives the right variant; earlier "grouped-page ambiguity"
+  theories were wrong.
+- **Three distinct Handbook page classes, only two of which route through patched methods:**
+  `GuiHandbookItemStackPage` (ordinary item/block — text via `GetHandbookInfo`, patched by
+  `ScribeHandbookPatch`); `GuiHandbookTextPage` (guide/explainer, `CategoryCode == "guide"` — text via
+  `Init` rebuilding `comps`, patched by `ScribeGuidePageHandbookPatch`); and
+  **`GuiHandbookMealRecipePage`** (cooked meals + pies — text via its OWN
+  `protected virtual RichTextComponentBase[] GetPageText(ICoreClientAPI, ItemStack[], ActionConsumable<string>)`,
+  which calls NEITHER patched method). A meal page therefore had zero Scribe presence until
+  `ScribeMealPageHandbookPatch` postfixed that `GetPageText` (the 6.4 bug). Gotchas for that patch:
+  (1) `GetPageText` is **overloaded** on the class (also a no-arg `PageText GetPageText()` summary), so
+  the `[HarmonyPatch]` MUST name the 3-arg parameter types to disambiguate;
+  (2) `GuiHandbookMealRecipePage.Title` is **already `Lang.Get`-resolved in the constructor**
+  (`Lang.Get("mealrecipe-name-" + recipe.Code)` / pie variant) — store it VERBATIM. Contrast
+  `GuiHandbookTextPage.Title`, which is a RAW lang key the guide patch must feed through `Lang.Get`. If a
+  meal Link row ever shows a raw `mealrecipe-name-…` key, this divergence is the trip-wire.
+  `PageCode` is `handbook-mealrecipe-<recipe.Code>` (+`-pie`); a meal has no stable countable item
+  (bowl contents are per-instance random) and is not a grid recipe, so meals get a Link only — no
+  Tracker, no Craft.
+
 ## Custom TTF fonts in the GUI
 
 **This is now the LibGUI/Skia path.** The old Cairo/`FreeTypeFontFace` note here described the

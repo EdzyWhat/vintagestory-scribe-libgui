@@ -83,6 +83,27 @@ public sealed partial class ScribeModSystem
                     ScribeAmbientLightSampler.Describe(api, MySettings)));
     }
 
+    /// <summary>DEV: register the client-side <c>.scribeprobe [code]</c> command — a one-shot dump of the
+    /// crafting-recipe variants the probe derives for the held item (or a supplied code): each matched recipe's
+    /// output page code, signature, counting ingredients, and notes. The measure-don't-theorize instrument for
+    /// confirming variant identity resolves distinctly (fix-recipe-variant-identity D6), mirroring
+    /// <c>.scribelight</c>. Client command, dot-prefix; reads only the live registry (no state change).</summary>
+    private void RegisterScribeProbeCommand(ICoreClientAPI api)
+    {
+        api.ChatCommands.Create("scribeprobe")
+            .WithDescription("[scribe dev] Dump the crafting-recipe variants/signatures the probe derives for the held item (or a given code).")
+            .WithArgs(api.ChatCommands.Parsers.OptionalWord("code"))
+            .HandleWith(args =>
+            {
+                string? code = args[0] as string;
+                ItemStack? stack = !string.IsNullOrEmpty(code)
+                    ? ScribeItemRef.ResolveStack(api.World, code)
+                    : api.World.Player?.InventoryManager?.ActiveHotbarSlot?.Itemstack;
+                return Vintagestory.API.Common.TextCommandResult.Success(
+                    ScribeCraftRecipeProbe.Describe(api, stack));
+            });
+    }
+
     /// <summary>Client-side: whether THIS player has pinned the given task, from the server-pushed
     /// cache. The lectern GUI drives its resting pin tint / pin-glyph accent off this. Returns false
     /// before the first push (a safe default — nothing shows as pinned until the server confirms).</summary>

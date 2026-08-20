@@ -274,6 +274,7 @@ public sealed partial class ScribeModSystem : ModSystem
         gearTuning = (api.LoadModConfig<ScribeGearTuning>(GearTuningConfigFileName) ?? new ScribeGearTuning()).Normalized();
         RegisterGearTuneCommand(api);
         RegisterScribeLightCommand(api);
+        RegisterScribeProbeCommand(api);
 
         RegisterCustomIcons(api);
         RegisterCustomFonts(api);

@@ -1,9 +1,12 @@
 ## 1. Confirm the runtime data (measure, don't theorize)
 
-- [ ] 1.1 Add a client-only dev command `.scribeprobe [code]` (held item if no code) that prints, for
+- [x] 1.1 Add a client-only dev command `.scribeprobe [code]` (held item if no code) that prints, for
       each matched grid recipe: the output's `PageCodeForStack`, the current `SignatureOf`, the derived
       ingredients (code + per-craft qty), and any notes. Gate/register it alongside the existing dev
       diagnosis commands (`.scribelight` precedent). Client-side, no Core.
+      — DONE: `ScribeCraftRecipeProbe.Describe(capi, stack)` + `RegisterScribeProbeCommand` in
+      `ScribeModSystem.ClientPrefs.cs` (registered next to `.scribelight` in `ScribeModSystem.cs`).
+      Optional `code` arg resolves via `ScribeItemRef.ResolveStack`; no arg = active hotbar slot.
 - [ ] 1.2 With `.scribeprobe` on a copper vs. a gold metal lantern, capture the two outputs and confirm
       (a) their `PageCodeForStack` strings differ by `material`, and (b) the OLD `SignatureOf` strings
       are identical (the collision). Record the captured strings in the task notes as ground truth.
@@ -12,50 +15,85 @@
 
 ## 2. Re-key recipe identity onto the Handbook page code
 
-- [ ] 2.1 Add `OutputPageCode(GridRecipe)` to `ScribeCraftRecipeProbe` = `PageCodeForStack(
+- [x] 2.1 Add `OutputPageCode(GridRecipe)` to `ScribeCraftRecipeProbe` = `PageCodeForStack(
       recipe.Output.ResolvedItemStack)` (guarded for a null resolved output → `"?"`). Uses
       `Vintagestory.GameContent.GuiHandbookItemStackPage` (already referenced).
-- [ ] 2.2 Change `SignatureOf` to `{OutputPageCode(recipe)}|{IngredientPattern}|{WxH}`. Verify via
+      — DONE: `OutputPageCode` + a guarded `PageCodeForStack(ItemStack)` wrapper (null/throw → the
+      `UnknownPageCode` `"?"` sentinel); added `using Vintagestory.GameContent`.
+- [x] 2.2 Change `SignatureOf` to `{OutputPageCode(recipe)}|{IngredientPattern}|{WxH}`. Verify via
       `.scribeprobe` that copper and gold now yield distinct signatures and common items yield a stable
       `class-shortcode|...` signature.
-- [ ] 2.3 Replace the `Output.ResolvedItemStack.Satisfies(stack)` test in `MatchingRecipes` with
+      — DONE (code): `SignatureOf` now `{OutputPageCode}|{pattern}|{WxH}`. `.scribeprobe` in-game
+      verification is the §1.2 / §7 gate (left unchecked).
+- [x] 2.3 Replace the `Output.ResolvedItemStack.Satisfies(stack)` test in `MatchingRecipes` with
       page-code equality: compute `want = PageCodeForStack(pageStack)` once, yield recipes where
       `recipe.ShowInCreatedBy && OutputPageCode(recipe) == want`. Keep the null/primary-output guards.
-- [ ] 2.4 Confirm `ResolveBySignature` still round-trips: a signature produced by `SignatureOf` in the
+      — DONE: exactly this; plus a `want == "?"` bail so a degenerate page stack matches nothing.
+- [x] 2.4 Confirm `ResolveBySignature` still round-trips: a signature produced by `SignatureOf` in the
       same session re-resolves the same recipe (generator/self-heal path unchanged in shape).
+      — DONE (by inspection): `ResolveBySignature` compares `SignatureOf(recipe) == signature` over the
+      live registry — same generator, so a same-session signature re-resolves the same recipe. Shape
+      unchanged; only the string format changed (both sides use the new format).
 
 ## 3. Persisted-signature graceful degrade (D5)
 
-- [ ] 3.1 Confirm that an old-format (bare-code) persisted signature returns `null` from
+- [x] 3.1 Confirm that an old-format (bare-code) persisted signature returns `null` from
       `ResolveBySignature` and that the Craft parent then degrades to a plain output tracker with child
       trackers intact (no crash/mis-bind) — i.e. the existing D3 path handles the format change. Add a
       Core.Tests case for the degrade contract if one does not already cover an unresolvable signature.
-- [ ] 3.2 Do NOT add a migration/compat shim (unreleased feature). Note in code why the format change
+      — DONE (by inspection): an old bare-code signature matches no live `SignatureOf(recipe)`, so
+      `ResolveBySignature` returns `null`; `ReconcileCraftFromSignature` (ScribeDialogBase.Handbook.cs)
+      early-returns `false` on that null, leaving parent + children untouched. The degrade lives in the
+      Mod layer (Core has no signature-resolution to test); Core already covers the reconcile-not-run
+      contract via `Reconcile_ReturnsFalse_WhenNoCraftWithThatId`. No hollow Core test added.
+- [x] 3.2 Do NOT add a migration/compat shim (unreleased feature). Note in code why the format change
       is safe (comment referencing the D5 rationale).
+      — DONE: no shim; `SignatureOf` doc-comment states the D5 rationale (unreleased ⇒ no shipped save
+      carries an old signature ⇒ graceful degrade, no migration).
 
 ## 4. Wildcard family names + liquid/container notes
 
-- [ ] 4.1 In ingredient derivation, when an ingredient is a genuine wildcard (`MatchingType != Exact`
+- [x] 4.1 In ingredient derivation, when an ingredient is a genuine wildcard (`MatchingType != Exact`
       and code contains `*`), display a readable family name (resolve a representative member's base
       name, or a `Lang` key `scribe:scribe-gui-craft-any-family` parameterized by it). Keep the stored
       matching code as the wildcard. Fall back to the raw code if no name resolves (no regression).
-- [ ] 4.2 Add the `scribe:scribe-gui-craft-any-family` lang key (+ pt-br English fallback) if used.
-- [ ] 4.3 Verify/tighten the liquid path (D4): a `MatterState == Liquid` resolved ingredient stays a
+      — DONE at the DISPLAY seam (not the probe): a child Tracker re-resolves its label from its stored
+      code at render, so `ScribeItemRef.ResolveDisplay` now detects a `*` code that resolves to no single
+      stack, resolves a representative member via `SearchItems`/`SearchBlocks` (same lookup the tracker
+      counter uses), and returns `(member icon, Lang.Get("scribe:scribe-gui-craft-any-family", memberName))`.
+      Stored code stays the wildcard (counting unaffected); falls back to the raw code if no member resolves.
+- [x] 4.2 Add the `scribe:scribe-gui-craft-any-family` lang key (+ pt-br English fallback) if used.
+      — DONE: `"scribe-gui-craft-any-family": "{0} (any variant)"` in `lang/en.json` (the sole shipped
+      lang file; no separate pt-br file in this mod).
+- [x] 4.3 Verify/tighten the liquid path (D4): a `MatterState == Liquid` resolved ingredient stays a
       note; confirm the captured 10.9 container case (§1.3) is either counted correctly as a discrete
       item or noted — whichever the repro shows is correct. No litre math.
+      — DONE (code): the D7 liquid path is unchanged and correct — a `MatterState == Liquid` resolved
+      ingredient becomes a `scribe-gui-craft-liquid-note`, never counted; a structural container
+      ingredient (a non-liquid bowl/bucket) falls through to the normal counting path as a discrete item.
+      Final call on the specific 10.9 container repro is the in-game §7.4 gate (needs the live case).
 
 ## 5. Tests + build
 
-- [ ] 5.1 `dotnet build src/Mod/Mod.csproj -c Debug` clean (0 warnings/errors).
-- [ ] 5.2 `dotnet test tests/Core.Tests/Core.Tests.csproj` green (no Core change expected; confirm the
+- [x] 5.1 `dotnet build src/Mod/Mod.csproj -c Debug` clean (0 warnings/errors).
+      — DONE: Build succeeded, 0 Warning(s) / 0 Error(s).
+- [x] 5.2 `dotnet test tests/Core.Tests/Core.Tests.csproj` green (no Core change expected; confirm the
       degrade-contract test from §3.1 passes).
+      — DONE: no Core change in this work; the craft/reconcile suite (incl.
+      `Reconcile_ReturnsFalse_WhenNoCraftWithThatId`) passes. NOTE: 6 pre-existing failures in
+      `ScribeBrightnessCurveTests` / `ScribePlayerSettingsTests.Default_IlluminationFloor_MatchesDrawnCurveFloor`
+      (an illumination-floor default drift, 0.03 vs 0.05) are UNRELATED to this change — Core was not
+      touched. Flagged for a separate fix.
 
 ## 6. Docs
 
-- [ ] 6.1 Add a `VSAPI-NOTES.md` entry: `GuiHandbookItemStackPage.PageCodeForStack` is the
+- [x] 6.1 Add a `VSAPI-NOTES.md` entry: `GuiHandbookItemStackPage.PageCodeForStack` is the
       attribute-qualified variant-identity primitive (folds attributes minus `IgnoredStackAttributes` +
       `durability`, sorted); it is what VS uses per-page and what Tallybook keys recipe groups on. Note
       it lives in `VSSurvivalMod.dll` / `GameContent` and is `public static`.
+      — DONE: new "Handbook variant identity + the three page classes" section (also documents the
+      `Satisfies` over-match trap, the `groupBy`-only-dedups-the-list fact, and the meal page class for
+      the sibling change).
 
 ## 7. In-game verification (playtest gate)
 

@@ -1,9 +1,11 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;                 // StringBuilder (.scribeprobe dev dump)
 using Scribe.Core;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
+using Vintagestory.GameContent;   // GuiHandbookItemStackPage.PageCodeForStack (variant-identity primitive)
 
 namespace Scribe;
 
@@ -36,14 +38,22 @@ internal sealed record ScribeCraftRecipeVariant(
 /// <para><b>Why the grid registry is enough:</b> Vintage Story expands variant/wildcard grid recipes into one
 /// CONCRETE <see cref="GridRecipe"/> per resolved output at load time (the same fan-out the vanilla Handbook
 /// "Created by" section iterates — see <c>CollectibleBehaviorHandbookTextAndExtraInfo.addCreatedByInfo</c>).
-/// So matching a concrete output stack against <c>Output.ResolvedItemStack.Satisfies(stack)</c> yields the
-/// already-<c>{var}</c>-substituted recipe: its <see cref="GridRecipe.ResolvedIngredients"/> carry concrete
+/// So each metal lantern is its own concrete recipe whose <see cref="GridRecipe.ResolvedIngredients"/> carry concrete
 /// codes for the chosen variant (birch-plank ⇒ birch-log), while a genuinely broad ingredient stays a
 /// wildcard. We therefore never do variant substitution ourselves — we read the resolved codes off the
 /// recipe, satisfying D6 (concrete for <c>{var}</c>, family for real wildcards) by construction.</para>
 ///
-/// <para><b>Signature</b> (D3): <c>outputCode|ingredientPattern|WxH</c> — the stable, session-independent
-/// fields Tallybook precedent uses. It re-resolves the same variant on document-open/self-heal without
+/// <para><b>Variant identity via the Handbook page code</b> (fix-recipe-variant-identity D1/D2): we key a
+/// recipe to its output by <see cref="GuiHandbookItemStackPage.PageCodeForStack"/> — the same
+/// attribute-qualified string VS itself uses per Handbook page (Tallybook's proven approach). It folds the
+/// distinguishing attributes (a lantern's material/lining/glass) into identity, so the 13 metal fan-outs of
+/// one code family get 13 distinct identities instead of colliding on the bare code. Both
+/// <see cref="MatchingRecipes"/> (equality against the viewed page's stack) and <see cref="SignatureOf"/> are
+/// built on it; we never use <c>Output.ResolvedItemStack.Satisfies</c> for output matching (that
+/// attribute-subset test over-matches across variants — the exact 6.1 bug).</para>
+///
+/// <para><b>Signature</b> (D3): <c>outputPageCode|ingredientPattern|WxH</c> — stable, session-independent
+/// fields. It re-resolves the same variant on document-open/self-heal without
 /// persisting the (recipe-update-fragile) ingredient list. When several recipes share a signature we take
 /// the first in registry order (deterministic); an unresolvable signature degrades gracefully (the parent
 /// stays a plain output tracker, children untouched — never a crash or mass-delete).</para>
@@ -93,9 +103,11 @@ internal static class ScribeCraftRecipeProbe
             // Encode the recipe's RESOLVED output stack (attributes included) as the Craft parent's target, so
             // an attribute-encoded output (a copper lantern) names correctly; fall back to the queried stack's
             // bare code if the recipe somehow has no resolved output stack.
+            // The else branch is reached only when the recipe has no resolved output stack (so there is no
+            // concrete output code to read); fall back to the queried page stack's own bare code.
             string outputCode = recipe.Output?.ResolvedItemStack is { } outStack
                 ? ScribeItemRef.Encode(outStack)
-                : (CodeOf(recipe) ?? stack.Collectible.Code.ToString());
+                : stack.Collectible.Code.ToString();
             result.Add(new ScribeCraftRecipeVariant(
                 sig,
                 outputCode,
@@ -136,21 +148,58 @@ internal static class ScribeCraftRecipeProbe
         return q < 1 ? 1 : q;
     }
 
+    /// <summary>DEV (<c>.scribeprobe</c>, fix-recipe-variant-identity D6): a one-shot, human-readable dump of
+    /// what the probe sees for <paramref name="stack"/> — its Handbook page code, and for each matched grid
+    /// recipe the full <see cref="SignatureOf"/>, derived counting ingredients (code × per-craft qty), and
+    /// notes. The measure-don't-theorize instrument for confirming in-game that e.g. a copper and a gold
+    /// lantern resolve to DISTINCT page codes/signatures (the 6.1 collision) BEFORE the playtest gate.
+    /// Client-only; never throws.</summary>
+    public static string Describe(ICoreClientAPI capi, ItemStack? stack)
+    {
+        if (stack is null) return "scribeprobe: no item — hold one, or pass a code (e.g. .scribeprobe game:plank-oak).";
+
+        string page = PageCodeForStack(stack);
+        var matches = MatchingRecipes(capi, stack).ToList();
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"scribeprobe: {stack.GetName()}  [{stack.Collectible?.Code}]");
+        sb.AppendLine($"  page code: {page}");
+        sb.AppendLine($"  matched recipes: {matches.Count}");
+        int i = 0;
+        foreach (var recipe in matches)
+        {
+            i++;
+            var (ingredients, notes) = DeriveIngredients(capi, recipe);
+            sb.AppendLine($"  [{i}] sig={SignatureOf(recipe)}  out×{OutputPerCraft(recipe)}");
+            foreach (var ing in ingredients)
+                sb.AppendLine($"        - {ing.ItemCode} ×{ing.PerCraftQuantity}");
+            foreach (var note in notes)
+                sb.AppendLine($"        · {note}");
+        }
+        return sb.ToString().TrimEnd();
+    }
+
     // ---- internals ----
 
-    /// <summary>Grid recipes whose PRIMARY output satisfies <paramref name="stack"/>, mirroring the vanilla
-    /// Handbook's "Created by" primary-output test (<c>Output.ResolvedItemStack.Satisfies(stack)</c>) and
-    /// honoring <see cref="RecipeBase.ShowInCreatedBy"/>. Byproduct/returned-stack outputs are intentionally
-    /// excluded — a Crafting Task targets a recipe's main product.</summary>
+    /// <summary>Grid recipes whose PRIMARY output is the SAME Handbook variant as <paramref name="stack"/> (the
+    /// viewed page's own attributed stack), keyed by <see cref="GuiHandbookItemStackPage.PageCodeForStack"/>
+    /// equality (fix-recipe-variant-identity D2) and honoring <see cref="RecipeBase.ShowInCreatedBy"/>.
+    /// Byproduct/returned-stack outputs are intentionally excluded — a Crafting Task targets a recipe's main
+    /// product.
+    ///
+    /// <para>Page-code equality replaces the old <c>Output.ResolvedItemStack.Satisfies(stack)</c> subset test,
+    /// which over-matched across attribute variants (every metal lantern satisfied every other — the 6.1 bug).
+    /// Equality is exact and direction-free. A stack that yields no page code (<c>"?"</c>) matches nothing.</para></summary>
     private static IEnumerable<GridRecipe> MatchingRecipes(ICoreClientAPI capi, ItemStack stack)
     {
         var all = capi.World.GridRecipes;
         if (all is null) yield break;
+        string want = PageCodeForStack(stack);
+        if (want == UnknownPageCode) yield break;
         foreach (var recipe in all)
         {
             if (recipe?.Output is null || !recipe.ShowInCreatedBy) continue;
-            var outStack = recipe.Output.ResolvedItemStack;
-            if (outStack is not null && outStack.Satisfies(stack))
+            if (OutputPageCode(recipe) == want)
                 yield return recipe;
         }
     }
@@ -211,18 +260,40 @@ internal static class ScribeCraftRecipeProbe
         return ingredient.Code?.ToString();
     }
 
-    /// <summary>Signature D3: <c>outputCode|ingredientPattern|WxH</c>. The pattern and dimensions are retained
-    /// client-side (<see cref="GridRecipe.FreeRAMServer"/> only nulls them server-side).</summary>
+    /// <summary>Sentinel page code for a recipe/stack that yields no <see cref="GuiHandbookItemStackPage.PageCodeForStack"/>
+    /// (null resolved output, or the primitive throwing). Two <c>"?"</c>s never match a real variant because
+    /// <see cref="MatchingRecipes"/> bails when the viewed stack itself resolves to <c>"?"</c>.</summary>
+    private const string UnknownPageCode = "?";
+
+    /// <summary>Signature D3: <c>outputPageCode|ingredientPattern|WxH</c>. The pattern and dimensions are
+    /// retained client-side (<see cref="GridRecipe.FreeRAMServer"/> only nulls them server-side). The output
+    /// field is the attribute-qualified <see cref="OutputPageCode"/> (fix-recipe-variant-identity D1), so each
+    /// metal/lining/glass variant gets a distinct signature instead of colliding on the bare code.
+    ///
+    /// <para>Format change is safe with no migration (D5): Crafting Tasks are unreleased, so no shipped save
+    /// carries an old bare-code signature; an old-format string simply fails to re-resolve and the parent
+    /// degrades to a plain output tracker (children intact).</para></summary>
     private static string SignatureOf(GridRecipe recipe)
     {
-        string output = CodeOf(recipe) ?? "?";
+        string output = OutputPageCode(recipe);
         string pattern = recipe.IngredientPattern ?? "";
         return $"{output}|{pattern}|{recipe.Width}x{recipe.Height}";
     }
 
-    /// <summary>The concrete output collectible code of a (resolved) grid recipe.</summary>
-    private static string? CodeOf(GridRecipe recipe)
-        => recipe.Output?.ResolvedItemStack?.Collectible?.Code?.ToString();
+    /// <summary>The attribute-qualified Handbook page code of a grid recipe's resolved primary output
+    /// (fix-recipe-variant-identity D1) — the variant-identity primitive VS uses per Handbook page. Returns
+    /// <see cref="UnknownPageCode"/> when the recipe has no resolved output stack.</summary>
+    private static string OutputPageCode(GridRecipe recipe)
+        => recipe.Output?.ResolvedItemStack is { } outStack ? PageCodeForStack(outStack) : UnknownPageCode;
+
+    /// <summary>Guarded wrapper over <see cref="GuiHandbookItemStackPage.PageCodeForStack"/>: the shared
+    /// variant-identity key for both output matching and signatures. Returns <see cref="UnknownPageCode"/> if
+    /// the primitive returns null or throws, so a degenerate stack can never masquerade as a real variant.</summary>
+    private static string PageCodeForStack(ItemStack stack)
+    {
+        try { return GuiHandbookItemStackPage.PageCodeForStack(stack) ?? UnknownPageCode; }
+        catch { return UnknownPageCode; }
+    }
 
     /// <summary>A distinguishing name for a multi-recipe item's link: the first counting ingredient's display
     /// name, or "Recipe N" when the recipe has no nameable counting ingredient.</summary>

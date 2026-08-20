@@ -150,7 +150,35 @@ internal static class ScribeItemRef
         if (ScribeLinkTarget.IsGuidePage(code))
             return (null, linkLabel ?? ScribeLinkTarget.PageCode(code));
         var stack = ResolveStack(world, code);
+        if (stack is null && code is not null && code.Contains('*'))
+        {
+            // A genuine wildcard/family ingredient code (e.g. "game:metalplate-*", stored by a Crafting Task's
+            // child Tracker) resolves to no single stack. Show a representative family member's icon + a
+            // readable "any variant" family label instead of the raw code (fix-recipe-variant-identity D3). The
+            // STORED code stays the wildcard, so counting still matches every member.
+            var member = ResolveWildcardMember(world, code);
+            if (member is not null)
+                return (member, Lang.Get("scribe:scribe-gui-craft-any-family", member.GetName()));
+        }
         return (stack, DisplayName(stack, code));
+    }
+
+    /// <summary>Resolve a representative stack for a wildcard/family code by taking the first member the
+    /// wildcard-aware registries return (<see cref="IWorldAccessor.SearchItems"/> then
+    /// <see cref="IWorldAccessor.SearchBlocks"/> — the same lookup <see cref="ScribeTrackerCounter"/> uses for
+    /// counting). Null when the code is malformed or the family has no live member (caller falls back to the
+    /// raw code — no regression).</summary>
+    private static ItemStack? ResolveWildcardMember(IWorldAccessor world, string code)
+    {
+        AssetLocation loc;
+        try { loc = new AssetLocation(code); }
+        catch { return null; }
+
+        var items = world.SearchItems(loc);
+        if (items is { Length: > 0 }) return new ItemStack(items[0]);
+        var blocks = world.SearchBlocks(loc);
+        if (blocks is { Length: > 0 }) return new ItemStack(blocks[0]);
+        return null;
     }
 
     /// <summary>Open the Handbook page a Link/Tracker points at, via the survival mod's registered

@@ -25,6 +25,7 @@
 	"scribe-gui-addlink": "Add Link",
 	"scribe-gui-addcraft": "Add Crafting Task",
 	"scribe-gui-addcraft-variant": "Add Crafting Task ({0})",
+	"scribe-gui-craft-any-family": "{0} (any variant)",
 	"scribe-gui-craft-liquid-note": "Also needs {0} (measured by volume)",
 	"scribe-gui-craft-recipe-ordinal": "Recipe {0}",
 	"scribe-gui-craft-row-label": "Craft {0}",
