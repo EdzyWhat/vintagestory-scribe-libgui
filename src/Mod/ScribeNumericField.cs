@@ -177,6 +177,39 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
         if (Widget.AutoFocus) _focusNode.RequestFocus();
     }
 
+    /// <summary>Resync the displayed value when an in-place reconcile hands this state a NEW widget whose
+    /// bound <see cref="ScribeNumericField.Value"/> changed — the fix for the Craft ingredient-subtask
+    /// live-rescale bug (fix-craft-subtask-live-rescale). The field is uncontrolled: it seeds
+    /// <see cref="_currentValue"/> + controller text from <c>Widget.Value</c> in <see cref="InitState"/>
+    /// ONLY, on the assumption the host remounts it via a <c>ValueKey</c> when the value changes. The editor
+    /// reconcile is keyed by <c>TaskId</c>, so a Craft parent's target step REUSES every ingredient row (and
+    /// its inner numeric field) rather than remounting it — with no <c>UpdateWidget</c> the reused field kept
+    /// painting its stale count until a view swap forced a remount. This mirrors
+    /// <c>ScribeEditRowState.UpdateWidget</c>'s optimistic-<c>done</c> resync: on reuse, re-seed from the
+    /// authoritative value, gated on it actually CHANGING.
+    ///
+    /// <para>The <c>!HasFocus</c> gate is load-bearing: it re-seeds only fields the player is NOT editing (the
+    /// unfocused ingredient steppers), and never stomps the one field being edited — the focused parent
+    /// stepper, whose own <see cref="Adjust"/> already <c>RequestFocus()</c>'d it before triggering the
+    /// rebuild, and whose <c>_currentValue</c> already reflects the step. So the "other" rows live-update while
+    /// the caret stays put. Callers that remount via a <c>ValueKey</c> (the Settings form) never reach here
+    /// (a new element runs <c>InitState</c>, not <c>UpdateWidget</c>); a plain Tracker stepper holds focus
+    /// while stepping (gate skips) and has no other path that changes its value (guard finds no change), so it
+    /// is byte-identical to before.</para></summary>
+    public override void UpdateWidget(ScribeNumericField oldWidget)
+    {
+        base.UpdateWidget(oldWidget);
+        if (Math.Abs(Widget.Value - oldWidget.Value) > 0.0001f && !_focusNode.HasFocus)
+        {
+            _currentValue = Widget.Value;
+            string text = _currentValue.ToString();
+            if (_controller.Text != text)
+            {
+                _controller.Value = new TextEditingValue(text, TextSelection.Collapsed(text.Length));
+            }
+        }
+    }
+
     /// <summary>While the field is focused, typing edits ONLY the local text — it does NOT write through
     /// (refine-settings-and-window-chrome). Writing on every keystroke fired the host's <c>Normalized()</c>
     /// + <c>ValueKey</c> remount, which re-seeded the uncontrolled field to the clamped value mid-edit and
