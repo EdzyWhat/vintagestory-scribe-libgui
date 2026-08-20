@@ -50,6 +50,7 @@ internal sealed class ScribeStamp : StatefulWidget
         float slotSize,
         float artWidth,
         Action? onEnd = null,
+        Action? onDescend = null,
         int durationMs = DefaultDurationMs,
         Gui.Widgets.Framework.Key? key = null) : base(key)
     {
@@ -62,6 +63,7 @@ internal sealed class ScribeStamp : StatefulWidget
         SlotSize = slotSize;
         ArtWidth = artWidth;
         OnEnd = onEnd;
+        OnDescend = onDescend;
         DurationMs = durationMs;
     }
 
@@ -82,6 +84,13 @@ internal sealed class ScribeStamp : StatefulWidget
     /// purpose: the visuals spill over the slot's sides (paint-only, unclipped), centred on the slot.</summary>
     public float ArtWidth { get; }
     public Action? OnEnd { get; }
+    /// <summary>Fired ONCE at the descend-complete / contact frame (when the stamp finishes translating down,
+    /// <see cref="ScribeStampState.DescendEnd"/>) — the natural moment for an audible stamp thump
+    /// (add-transcribe-stamp-sound). Because this widget is only ever mounted when its slot's Transcribe view
+    /// is the active body, wiring a sound here plays it only when the flourish is actually seen — a multiplayer
+    /// watcher on another tab never mounts the widget and so hears nothing. A late remount that has already
+    /// passed the descend does NOT fire it (see InitState), so the cue never plays for motion the viewer missed.</summary>
+    public Action? OnDescend { get; }
     public int DurationMs { get; }
 
     public override State CreateState() => new ScribeStampState();
@@ -89,7 +98,15 @@ internal sealed class ScribeStamp : StatefulWidget
 
 internal sealed class ScribeStampState : State<ScribeStamp>
 {
+    /// <summary>Normalized time at which the stamp finishes translating down onto the slot — the contact/press
+    /// beat. Both <see cref="Build"/> (visual phasing) and <see cref="OnValueChanged"/> (the sound cue) key off
+    /// this single value so the audible thump lands exactly when the stamp visually lands.</summary>
+    internal const float DescendEnd = 0.24f;
+
     private AnimationController? controller;
+    /// <summary>Guards <see cref="ScribeStamp.OnDescend"/> to fire exactly once per play, the first tick at or
+    /// after <see cref="DescendEnd"/>.</summary>
+    private bool descendFired;
 
     public override void InitState()
     {
@@ -102,9 +119,23 @@ internal sealed class ScribeStampState : State<ScribeStamp>
         // If the play finished while this widget was between remounts, fire the end callback now (the
         // status event won't fire again for an already-Completed controller).
         if (controller.Status == AnimationStatus.Completed) Widget.OnEnd?.Invoke();
+
+        // A late remount that is already at/past the contact frame (or fully Completed) missed the descend, so
+        // suppress the sound cue — the viewer never saw the stamp land, matching the OnEnd guard just above.
+        if (controller.Value >= DescendEnd || controller.Status == AnimationStatus.Completed) descendFired = true;
     }
 
-    private void OnValueChanged(double _) => Element.MarkNeedsBuild();
+    private void OnValueChanged(double value)
+    {
+        // Fire the contact cue once, the first tick that reaches the descend-complete frame. `>=` with the
+        // once-flag means a frame that hitches past DescendEnd still fires exactly once (never zero, never twice).
+        if (!descendFired && value >= DescendEnd)
+        {
+            descendFired = true;
+            Widget.OnDescend?.Invoke();
+        }
+        Element.MarkNeedsBuild();
+    }
 
     private void OnStatusChanged(AnimationStatus status)
     {
@@ -126,7 +157,7 @@ internal sealed class ScribeStampState : State<ScribeStamp>
         float liftDistance = descendDistance;
 
         // ---- Wooden stamp: fade-in + descend, a squash press, then lift + fade-out (NO tilt) ----
-        const float DescendEnd = 0.24f;
+        // DescendEnd (the contact frame) is a state-level const so the sound cue in OnValueChanged shares it.
         // Press window shortened 15% (0.115 → 0.09775; refinement 2026-08-16). The lift begins the instant the
         // press ends so the beats stay contiguous.
         const float PressLen = 0.115f * 0.85f;

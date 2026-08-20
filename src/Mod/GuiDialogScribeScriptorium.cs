@@ -358,7 +358,41 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
             slotSize: SlotSize,
             artWidth: artWidth,
             onEnd: () => OnStampEnded(id),
+            onDescend: PlayStampSound,
             key: new ValueKey<string>(id));
+    }
+
+    /// <summary>Play the one-shot stamp sound at the flourish's contact frame (add-transcribe-stamp-sound).
+    /// Wired to <see cref="ScribeStamp.OnDescend"/>, so it plays only when the flourish is actually mounted and
+    /// seen by this client — a multiplayer watcher on another tab never triggers it.
+    /// <para>Non-load-bearing (mirrors <see cref="ScribeAlarmSound"/> and the stamp bitmap): a null
+    /// <c>LoadSound</c> logs one warning and no-ops. <see cref="EnumSoundType.Sound"/> routes it through the
+    /// base-game "Sound Effects" volume; <c>DisposeOnFinish</c> self-cleans the ~0.6s clip.</para>
+    /// <para>Volume is FIXED at unity: the final loudness (the "alarm-volume-140" level the author calibrated
+    /// to in-game) is baked into the mono <c>stamp.ogg</c> (+16.9 dB / 7× the source, ~ −14 dBFS peak), so unity
+    /// plays it at exactly that level and stays within the engine's safe [0,1] range. The temporary
+    /// <see cref="ScribePlayerSettings.TimerAlarmVolume"/> calibration mapping (design Decision 0) was removed
+    /// 2026-08-20 once the level was confirmed. <see cref="EnumSoundType.Sound"/> still routes it through the
+    /// base-game "Sound Effects" slider — that is the intended, retained volume tie.</para></summary>
+    private void PlayStampSound()
+    {
+        var sound = capi.World.LoadSound(new SoundParams(new AssetLocation("scribe:sounds/stamp"))
+        {
+            ShouldLoop       = false,
+            DisposeOnFinish  = true,
+            SoundType        = EnumSoundType.Sound,
+            RelativePosition = true,
+            Position         = new Vec3f(0f, 0f, 0f),
+            Volume           = 1f,   // level baked into stamp.ogg; unmapped from the alarm slider (2026-08-20)
+        });
+
+        if (sound == null)
+        {
+            capi.Logger.Warning("[scribe] PlayStampSound: LoadSound returned null for scribe:sounds/stamp — stamp cue muted.");
+            return;
+        }
+
+        sound.Start();
     }
 
     /// <summary>The Copy button (D3/D4), sitting below the slot pair (refinement #4). Disabled (greyed, with an
