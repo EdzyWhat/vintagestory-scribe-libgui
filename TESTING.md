@@ -12,6 +12,12 @@ Each item's verdict line puts it in one of four states (its bold lead word): **C
 these as tabs. Any item carrying a verdict is kept across regeneration; only untested
 items are re-derived fresh from `tasks.md`.
 
+The loop: **what-to-test** generates this file → play + submit via the
+`vs-playtest-checklist` app → **reconcile-playtest** (`reconcile.py`) reads the submitted
+reports and writes the verdict lines below + flips the matching `tasks.md` checkboxes. The
+verdict lines here are written by that reconciler (or by an agent from first-hand
+evidence), never by hand-toggling a box.
+
 **How to refer to an item across machines:** quote its **code** (the `` `xxxxxxxx` ``
 fingerprint the app shows on each item). Item text leads with its task number in parentheses
 (e.g. `(3.5)`); the number is unambiguous under its spec group heading.

@@ -479,9 +479,12 @@ mention as a trigger to pull the evidence in and use it, not just acknowledge it
 ## Notes
 
 - This skill surfaces the list and (optionally) persists it to `TESTING.md`. It never
-  checks a `tasks.md` box itself — that still happens through the normal apply/
-  update-change flow, and only if the user explicitly wants the confirmation carried
-  upstream (see "Recording a verdict," step 3).
+  checks a `tasks.md` box itself. Propagating verdicts upstream (TESTING.md verdict lines
+  + `tasks.md` checkbox flips) is the job of the **`reconcile-playtest`** skill / its
+  `reconcile.py` command, which runs *after* a play session over the submitted reports.
+  The full loop is: **what-to-test** (generate this list) → play + submit via the
+  `vs-playtest-checklist` app → **reconcile-playtest** (close boxes + triage feedback).
+  `triage-screenshot` remains the image-review step within that loop.
 - `TESTING.md` and `tasks.md` have different authorities: `tasks.md` is OpenSpec's own
   planning artifact (edited via `/opsx:apply`/`/opsx:update`); `TESTING.md` is this
   skill's own regenerable, git-tracked scratch checklist. Don't conflate them, and don't
