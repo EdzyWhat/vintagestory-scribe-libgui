@@ -135,7 +135,7 @@ chalkboard; the fix is a one-line adoption of the pattern the Edit view already 
       `focusBorderColor` non-optional/seam-defaulted would touch many existing call sites for a defensive-only
       gain, so 10.1 stands alone.
 - [x] 10.3 Build (0 warnings / 0 errors) + `build/restage.sh Debug` (client NOT running).
-- [ ] 10.4 In-game gate: on the chalkboard, focus a PINNED-tab row's input and confirm its border lights in the
+- [x] 10.4 In-game gate: on the chalkboard, focus a PINNED-tab row's input and confirm its border lights in the
       SAME chalk-white as an Edit-view row (not green). Confirm the Lectern/Notebook/Tablet Pinned tab is
       visually unchanged (seam already equals `Primary` there).
 
@@ -157,7 +157,7 @@ button fill / selection tint; only the checkbox TICK color changes, and only on 
       `Theme.Of(context).CheckboxStyle with { CheckColor = tick }` when set (only the tick changes; box/border
       stay themed), routed through all four row sites. No white hardcoded in the shared widget.
 - [x] 11.3 Build (0 warnings / 0 errors) + `build/restage.sh Debug` (client NOT running).
-- [ ] 11.4 In-game gate: on the chalkboard (Pixel-Art Display ON), the completed task's checkbox tick reads as
+- [x] 11.4 In-game gate: on the chalkboard (Pixel-Art Display ON), the completed task's checkbox tick reads as
       chalk-white matching the text. Confirm the Tablet/Lectern/Notebook ticks are unchanged.
 
 ## 12. Make the cap count ALL blocks — "10 of anything" (fixes the cap-not-enforced playtest)
@@ -204,7 +204,7 @@ Tablet's old "notes/links add beyond the cap" behavior (D4) — one simple rule 
 - [x] 12.8 Build (0 warnings / 0 errors) + `dotnet test tests/Core.Tests` (my document/policy classes 90/90
       green; 7 pre-existing `ScribeBrightnessCurveTests`/`ScribePlayerSettingsTests` failures are unrelated —
       confirmed they fail with my changes stashed) + `build/restage.sh Debug` (client NOT running).
-- [ ] 12.9 In-game gate (authoritative; supersedes §6.3): on a chalkboard, add 10 blocks of a MIXED set
+- [x] 12.9 In-game gate (authoritative; supersedes §6.3): on a chalkboard, add 10 blocks of a MIXED set
       (some tasks, some notes, a tracker, a link, a craft) → the "Add" affordances (including Add Note / Add
       Link) all disable at 10 and an 11th add of any kind surfaces the chalkboard cap notice with the new
       wording (not "tablet"). Pinning is still uncapped. Then repeat on a TABLET and confirm it now caps the

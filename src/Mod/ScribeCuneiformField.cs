@@ -83,6 +83,9 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     private float rotationDegrees;
     // Per-stroke outer glow (add-tablet-clay-type-themes). Default disabled — non-tablet fields pay nothing.
     private CuneiformGlow glow;
+    // Per-view multiplier on each stroke's authored weight (adopt-glyph-forge-tablet-themes). 1 = the exact
+    // Core weight (every non-tablet field). The tablet firms the strokes up as the clay dries (wet<hard<fired).
+    private float strokeWeightScale = 1f;
     // Per-letter stroke-progression reveal (add-cuneiform-handwriting-feel). When active, strokes appear over
     // time: characters below the baseline are already fully pressed; characters at/after it press in on the
     // schedule as elapsed advances. Inactive (the default) paints every stroke immediately, as today.
@@ -145,6 +148,10 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     /// tablet sets a per-material glow. Repaint only — a paint-time effect that never touches layout, caret,
     /// selection, or hit-testing.</summary>
     public CuneiformGlow Glow { get => glow; set => SetProperty(ref glow, value, repaint: true); }
+    /// <summary>Per-view multiplier on each stroke's authored weight (adopt-glyph-forge-tablet-themes); 1 = the
+    /// exact Core weight. A paint-time transform applied at fill only — it never touches layout, caret,
+    /// selection, or hit-testing (those read the un-scaled advance metrics). Repaint only.</summary>
+    public float StrokeWeightScale { get => strokeWeightScale; set => SetProperty(ref strokeWeightScale, value <= 0f ? 1f : value, repaint: true); }
     /// <summary>Whether the stroke-progression reveal is active. When false (the default), every stroke is
     /// painted immediately (today's behaviour). Repaint only.</summary>
     public bool RevealActive { get => revealActive; set => SetProperty(ref revealActive, value, repaint: true); }
@@ -251,7 +258,22 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
         {
             paint.Color = glow.Color.ToSkColor();
             paint.MaskFilter = mask;
+            // Optional directional offset (a fraction of the em): translate ONLY the blurred halo pass so the
+            // glow reads as a seated drop rather than a symmetric aura (design D3). The crisp ink pass below
+            // draws un-offset, so the ink registers over the shifted halo. A zero offset is a centered halo.
+            float glowOffX = fontSizeEm * glow.OffsetXFraction;
+            float glowOffY = fontSizeEm * glow.OffsetYFraction;
+            bool offsetHalo = glowOffX != 0f || glowOffY != 0f;
+            if (offsetHalo)
+            {
+                context.Canvas.Save();
+                context.Canvas.Translate(glowOffX, glowOffY);
+            }
             DrawStrokePass(context, path, schedule, StrokePass.Revealed);
+            if (offsetHalo)
+            {
+                context.Canvas.Restore();
+            }
             paint.MaskFilter = null;   // clear before the crisp pass (and before return) — SharedPaint hygiene.
         }
 
@@ -354,6 +376,15 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
                         GlyphRotationPivot(lines[i], ps),
                         GlyphStrokeRotation.SeedFor(jitterSeed, ps.SourceCharIndex),
                         rotationDegrees);
+                }
+                // Per-view weight scale (adopt-glyph-forge-tablet-themes): firm the stroke up (or thin it) by
+                // rebuilding it with a scaled weight before it becomes a quad. Applied AFTER jitter/rotation so
+                // it composes with them, and only when it actually differs from 1 to keep the common path
+                // allocation-free. Corners() derives the quad half-width from Weight, so this changes only the
+                // painted thickness — the advance metrics the caret/selection read are the un-scaled layout.
+                if (strokeWeightScale != 1f)
+                {
+                    drawStroke = new GlyphStroke(drawStroke.Start, drawStroke.End, drawStroke.Weight * strokeWeightScale);
                 }
                 Scribe.Core.Cuneiform.Vec2[] corners = drawStroke.Corners();
                 path.Reset();
@@ -487,6 +518,7 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
         Vector4 boxColor, Vector4 borderColor, float borderThickness, Vector4 cornerRadii,
         bool singleLine = false, bool caretVisible = true,
         float jitterStrength = 0f, int jitterSeed = 0, float rotationDegrees = 0f, CuneiformGlow glow = default,
+        float strokeWeightScale = 1f,
         bool revealActive = false, int revealBaselineChars = 0, double revealElapsedMs = 0)
     {
         Text = text;
@@ -510,6 +542,7 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
         JitterSeed = jitterSeed;
         RotationDegrees = rotationDegrees;
         Glow = glow;
+        StrokeWeightScale = strokeWeightScale;
         RevealActive = revealActive;
         RevealBaselineChars = revealBaselineChars;
         RevealElapsedMs = revealElapsedMs;
@@ -536,6 +569,7 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
     public int JitterSeed { get; }
     public float RotationDegrees { get; }
     public CuneiformGlow Glow { get; }
+    public float StrokeWeightScale { get; }
     public bool RevealActive { get; }
     public int RevealBaselineChars { get; }
     public double RevealElapsedMs { get; }
@@ -566,6 +600,7 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
         ro.JitterSeed = JitterSeed;
         ro.RotationDegrees = RotationDegrees;
         ro.Glow = Glow;
+        ro.StrokeWeightScale = StrokeWeightScale;
         ro.RevealActive = RevealActive;
         ro.RevealBaselineChars = RevealBaselineChars;
         ro.RevealElapsedMs = RevealElapsedMs;

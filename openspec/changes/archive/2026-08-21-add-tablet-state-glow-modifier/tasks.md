@@ -50,3 +50,10 @@
       same dark halo, same legibility.
 - [ ] 4.4 Re-run `TESTING.md` `00000016` (fired/hardened cuneiform readability) and record the verdict
       there — the light halo should lift the ink instead of muddying it.
+
+> **Retired / folded into `adopt-glyph-forge-tablet-themes` (2026-08-21).** Gates 4.1–4.4 are NOT
+> verified-and-passed — they are superseded. `adopt-glyph-forge-tablet-themes` replaces the
+> placeholder `HardHalo`/`FiredHalo` shared seeds with per-`(material, state)` glyph-forge-tuned
+> halos and re-baselines the same in-game verification (its task 9.5 re-runs `TESTING.md`
+> `00000016`). This change is archived to bank its confirmed code; the tuning it left open is owned
+> by the new change. See `[[openspec-archive-order-header-drift]]`.

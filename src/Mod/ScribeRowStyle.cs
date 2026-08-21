@@ -57,6 +57,14 @@ internal readonly record struct ScribeRowStyle(
     /// Ignored when <see cref="UseCuneiform"/> is false.</summary>
     public CuneiformGlow CuneiformGlow { get; init; }
 
+    /// <summary>Per-view cuneiform stroke-weight scale (adopt-glyph-forge-tablet-themes), riding the same
+    /// tablet-only seam as <see cref="CuneiformGlow"/> to every cuneiform row/label. Multiplies the painted
+    /// stroke weight so the tablet firms the ink up (fired) or thins it (wet) per drying state. The
+    /// struct-default 0 means "use the base weight" — the render objects treat any non-positive value as 1 —
+    /// so every non-tablet cuneiform surface (which never sets it) is pixel-identical. Ignored when
+    /// <see cref="UseCuneiform"/> is false.</summary>
+    public float CuneiformStrokeWeightScale { get; init; }
+
     /// <summary>Left inset (already-scaled px) added to a <see cref="ScribeBlock.Depth"/> 1 subtask row so it
     /// reads as nested under its parent (task-subtasks 5.1). Zero for a depth-0 row. Set by the dialog's
     /// <c>RowStyle</c> from the live layout width (10px + 3%·W), since it depends on the window width rather

@@ -107,6 +107,9 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
     private float rotationDegrees;
     // Per-stroke outer glow (add-tablet-clay-type-themes). Default disabled — non-tablet surfaces pay nothing.
     private CuneiformGlow glow;
+    // Per-view stroke-weight scale (adopt-glyph-forge-tablet-themes). 1 = the Core-authored weight exactly;
+    // the tablet firms strokes up (fired) or thins them (wet). Paint-time only — never touches layout metrics.
+    private float strokeWeightScale = 1f;
 
     // Cached from the last PerformLayout, reused by PaintInternal so layout and paint agree.
     private CuneiformLine? line;
@@ -158,6 +161,17 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
     /// tablet sets a per-material glow to lift the ink off its clay backdrop. Repaint only — the glow is a
     /// paint-time effect that never touches layout.</summary>
     public CuneiformGlow Glow { get => glow; set => SetProperty(ref glow, value, repaint: true); }
+
+    /// <summary>Per-view stroke-weight scale (adopt-glyph-forge-tablet-themes). Multiplies each stroke's
+    /// <c>GlyphStroke.Weight</c> at paint time so the tablet can firm the ink up or thin it per drying state.
+    /// A non-positive value is treated as 1 (the struct-default <see cref="ScribeRowStyle.CuneiformStrokeWeightScale"/>
+    /// of 0 means "use the base weight"). Repaint only — it changes only the painted thickness, never the
+    /// advance metrics the layout emits.</summary>
+    public float StrokeWeightScale
+    {
+        get => strokeWeightScale;
+        set => SetProperty(ref strokeWeightScale, value <= 0f ? 1f : value, repaint: true);
+    }
 
     protected override void PerformLayout()
     {
@@ -217,10 +231,25 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
         {
             paint.Color = glow.Color.ToSkColor();
             paint.MaskFilter = mask;
+            // Optional directional offset (a fraction of the em): translate ONLY the blurred halo pass so the
+            // glow reads as a seated drop rather than a symmetric aura (design D3). The crisp ink pass below
+            // draws un-offset, so the ink registers over the shifted halo. A zero offset is a centered halo.
+            float glowOffX = fontSizeEm * glow.OffsetXFraction;
+            float glowOffY = fontSizeEm * glow.OffsetYFraction;
+            bool offsetHalo = glowOffX != 0f || glowOffY != 0f;
+            if (offsetHalo)
+            {
+                context.Canvas.Save();
+                context.Canvas.Translate(glowOffX, glowOffY);
+            }
             for (int i = 0; i < revealCount; i++)
             {
                 BuildStrokePath(path, line.Strokes[i]);
                 context.Canvas.DrawPath(path, paint);
+            }
+            if (offsetHalo)
+            {
+                context.Canvas.Restore();
             }
             paint.MaskFilter = null;   // clear before the crisp pass (and before return) — SharedPaint hygiene.
         }
@@ -266,6 +295,14 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
                 GlyphStrokeRotation.SeedFor(jitterSeed, ps.SourceCharIndex),
                 rotationDegrees);
         }
+        // Per-view weight scale (adopt-glyph-forge-tablet-themes): rebuild the stroke with a scaled weight
+        // before it becomes a quad. Applied AFTER jitter/rotation so it composes with them, only when it
+        // differs from 1. Corners() derives the quad half-width from Weight, so this changes only the painted
+        // thickness — the advance metrics the layout emits are the un-scaled geometry.
+        if (strokeWeightScale != 1f)
+        {
+            stroke = new GlyphStroke(stroke.Start, stroke.End, stroke.Weight * strokeWeightScale);
+        }
         Scribe.Core.Cuneiform.Vec2[] corners = stroke.Corners();
 
         path.Reset();
@@ -298,7 +335,8 @@ internal sealed class CuneiformTextRenderWidget : RenderObjectWidget
 {
     public CuneiformTextRenderWidget(
         string text, float fontSizeEm, Vector4 inkColor, GlyphBundle? bundle, float revealFraction,
-        float jitterStrength = 0f, int jitterSeed = 0, float rotationDegrees = 0f, CuneiformGlow glow = default)
+        float jitterStrength = 0f, int jitterSeed = 0, float rotationDegrees = 0f, CuneiformGlow glow = default,
+        float strokeWeightScale = 1f)
     {
         Text = text;
         FontSizeEm = fontSizeEm;
@@ -309,6 +347,7 @@ internal sealed class CuneiformTextRenderWidget : RenderObjectWidget
         JitterSeed = jitterSeed;
         RotationDegrees = rotationDegrees;
         Glow = glow;
+        StrokeWeightScale = strokeWeightScale;
     }
 
     public string Text { get; }
@@ -320,6 +359,7 @@ internal sealed class CuneiformTextRenderWidget : RenderObjectWidget
     public int JitterSeed { get; }
     public float RotationDegrees { get; }
     public CuneiformGlow Glow { get; }
+    public float StrokeWeightScale { get; }
 
     public override RenderObject CreateRenderObject() => new CuneiformTextRender();
 
@@ -335,6 +375,7 @@ internal sealed class CuneiformTextRenderWidget : RenderObjectWidget
         ro.JitterSeed = JitterSeed;
         ro.RotationDegrees = RotationDegrees;
         ro.Glow = Glow;
+        ro.StrokeWeightScale = StrokeWeightScale;
     }
 }
 
@@ -357,6 +398,7 @@ public sealed class CuneiformText : StatefulWidget
         float? jitterStrength = null,
         float? rotationDegrees = null,
         CuneiformGlow glow = default,
+        float strokeWeightScale = 1f,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
@@ -369,6 +411,7 @@ public sealed class CuneiformText : StatefulWidget
         JitterStrength = jitterStrength ?? CuneiformMetrics.DefaultJitterStrength;
         RotationDegrees = rotationDegrees ?? CuneiformMetrics.DefaultRotationDegrees;
         Glow = glow;
+        StrokeWeightScale = strokeWeightScale;
     }
 
     /// <summary>The line of text to render.</summary>
@@ -402,6 +445,11 @@ public sealed class CuneiformText : StatefulWidget
     /// <summary>The per-stroke outer glow. Disabled by default (non-tablet display text pays nothing); the
     /// tablet passes a per-material glow so its cuneiform title/label lifts off the clay backdrop.</summary>
     public CuneiformGlow Glow { get; }
+
+    /// <summary>Per-view cuneiform stroke-weight scale (adopt-glyph-forge-tablet-themes). Defaults to 1 =
+    /// the Core-authored weight exactly; the tablet passes its per-state scale so display text firms up or
+    /// thins with the drying state. Non-tablet display text leaves it at 1 and is pixel-identical.</summary>
+    public float StrokeWeightScale { get; }
 
     public override State CreateState() => new CuneiformTextState();
 }
@@ -458,5 +506,6 @@ internal sealed class CuneiformTextState : State<CuneiformText>
         // Static display text seeds off its own content, so the same label always wobbles identically.
         jitterSeed: CuneiformMetrics.SeedFromString(Widget.Text),
         rotationDegrees: Widget.RotationDegrees,
-        glow: Widget.Glow);
+        glow: Widget.Glow,
+        strokeWeightScale: Widget.StrokeWeightScale);
 }

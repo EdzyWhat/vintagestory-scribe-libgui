@@ -825,8 +825,8 @@ public abstract partial class ScribeDialogBase
             // menu to match the window (the menu paints in the Overlay, outside this body's ScribeGlobalTint).
             currentShade: currentShade,
             hintLangKey: EmptyHintLangKey,
-            // Tier cap (scribe-document-policy): dim + disable "Add task" at the tablet's 10-task cap.
-            // Uncapped tiers (Lectern, Notebook) always pass true, so their footer is unchanged.
+            // Tier cap (scribe-document-policy): dim the add-picker at a finite tier's 10-entry cap.
+            // Buttons stay clickable so the tap surfaces NotifyTabletFull. Uncapped tiers always pass true.
             addTaskEnabled: CanAddTaskUnderPolicy(),
             // Whether the "Done editing" (switch-to-read) footer button renders. True for the tabbed
             // dialogs; the always-edit tablet overrides ShowEditorSwitchToRead to false since it has no

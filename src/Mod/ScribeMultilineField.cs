@@ -450,6 +450,7 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         float cuneiformRotation = 0f,
         bool cuneiformProgression = false,
         CuneiformGlow cuneiformGlow = default,
+        float cuneiformStrokeWeightScale = 1f,
         Action<string>? onChanged = null,
         Action? onCommitAndAdvance = null,
         Action? onCommitAndRetreat = null,
@@ -480,6 +481,7 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
         CuneiformRotation = cuneiformRotation;
         CuneiformProgression = cuneiformProgression;
         CuneiformGlow = cuneiformGlow;
+        CuneiformStrokeWeightScale = cuneiformStrokeWeightScale;
         OnChanged = onChanged;
         OnCommitAndAdvance = onCommitAndAdvance;
         OnCommitAndRetreat = onCommitAndRetreat;
@@ -547,6 +549,9 @@ public sealed class ScribeMultilineField : StatefulWidget, IFocusable
     /// <summary>Per-material outer glow behind the cuneiform strokes (add-tablet-clay-type-themes); default
     /// disabled. Ignored when <see cref="UseCuneiform"/> is false.</summary>
     public CuneiformGlow CuneiformGlow { get; }
+    /// <summary>Per-view cuneiform stroke-weight scale (adopt-glyph-forge-tablet-themes); 1 = base weight.
+    /// Ignored when <see cref="UseCuneiform"/> is false.</summary>
+    public float CuneiformStrokeWeightScale { get; }
     public Action<string>? OnChanged { get; }
     /// <summary>Tab (no Shift): the field has committed its text via <see cref="OnChanged"/>; the
     /// parent should normalize + flush the row and move focus to the next row.</summary>
@@ -1324,6 +1329,7 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 jitterSeed: Widget.CuneiformJitterSeed,
                 rotationDegrees: Widget.CuneiformRotation,
                 glow: Widget.CuneiformGlow,
+                strokeWeightScale: Widget.CuneiformStrokeWeightScale,
                 revealActive: revealActive,
                 revealBaselineChars: revealBaselineChars,
                 revealElapsedMs: revealController is not null

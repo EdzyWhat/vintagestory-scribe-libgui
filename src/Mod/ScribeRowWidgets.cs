@@ -232,7 +232,8 @@ internal static class ScribeItemLabel
                 jitterStrength: style.CuneiformJitter,
                 jitterSeed: label.GetHashCode(),
                 rotationDegrees: style.CuneiformRotation,
-                glow: style.CuneiformGlow);
+                glow: style.CuneiformGlow,
+                strokeWeightScale: style.CuneiformStrokeWeightScale);
         }
         return new Text(label, new TextStyle { Color = color, SoftWrap = true });
     }
@@ -273,7 +274,8 @@ internal static class ScribeTrackerCounterText
                 bundle: bundle,
                 jitterStrength: cs.CuneiformJitter,
                 rotationDegrees: cs.CuneiformRotation,
-                glow: cs.CuneiformGlow);
+                glow: cs.CuneiformGlow,
+                strokeWeightScale: cs.CuneiformStrokeWeightScale);
         }
         else
         {

@@ -16,6 +16,13 @@ coverage/
 .vscode/
 *.DS_Store
 
+# AI Tools Ignore List
+.cursorindexingignore
+.claudeignore
+.claude/
+CLAUDE.md
+TESTING.md
+playtest-history/
 # Claude Code local worktrees / scratch state -- machine-local, never committed
 .claude/worktrees/
 # Personal, machine-local permissions/settings (absolute local paths) -- not committed

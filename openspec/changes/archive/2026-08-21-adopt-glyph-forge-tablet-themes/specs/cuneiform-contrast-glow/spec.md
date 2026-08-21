@@ -1,8 +1,5 @@
-# cuneiform-contrast-glow Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change add-tablet-clay-type-themes. Update Purpose after archive.
-## Requirements
 ### Requirement: Cuneiform strokes render with a per-stroke outer glow for contrast
 
 Cuneiform text rendered on the tablet (both the display-only title via `CuneiformTextRender` and the
@@ -46,49 +43,3 @@ reveal-timing constants); it SHALL NOT be a persisted user setting.
 - **THEN** each view uses the halo authored for its own `(material, state)` cell — wet views use a
   dark-polarity halo and hard/fired views use a light-polarity halo — and changing one cell's value
   does not change any other cell (the current wet views happening to share a seed is data, not a rule)
-
-### Requirement: Overlapping strokes within a glyph do not compound the glow
-
-The glow SHALL be rendered in two passes over the visible (revealed) stroke range: a first pass drawing
-all strokes' blurred halos, then a second pass drawing all strokes' crisp ink fills on top. As a
-result, where strokes overlap within a glyph the halos SHALL NOT stack into a darker/brighter seam —
-the crisp ink SHALL overwrite the halos so the glow is visible only where it extends past the ink onto
-the backdrop. When jitter is active, both passes SHALL use the identical (jittered) stroke geometry so
-the halo tracks the drawn ink.
-
-#### Scenario: Dense/overlapping strokes glow uniformly
-
-- **WHEN** a glyph with overlapping or adjacent strokes is rendered with the glow active
-- **THEN** the halo appears as one uniform soft glow behind the whole letterform, with no darkened or
-  doubled seam where strokes meet
-
-#### Scenario: Reveal range is respected
-
-- **WHEN** only part of a line is revealed (the press-in progression is mid-animation)
-- **THEN** the glow passes cover exactly the revealed strokes, matching the crisp ink that is shown
-
-### Requirement: Glow rendering leaves the shared paint state clean
-
-The glow SHALL use the cached blur mask filter from the painting context (never disposing it
-per-frame). After using it, the renderer SHALL reset the shared paint's mask filter to null (between
-the two passes and before returning) and restore any other shared-paint properties it mutates, so that
-subsequent unrelated draw operations are unaffected.
-
-#### Scenario: Later draws are not blurred
-
-- **WHEN** cuneiform glow rendering completes for a widget
-- **THEN** the shared paint's mask filter is null and its color/style are restored, so the next widget
-  painted with the shared paint is unaffected by the glow's filter
-
-### Requirement: A dev console command tunes the glow at runtime
-
-A client-side (dot-prefixed) dev console command SHALL allow adjusting the glow parameters (strength /
-blur and halo polarity) at runtime and force a repaint of an open tablet, so tuning values can be
-found in-game and reported back for baking. The command SHALL mutate in-memory tuning state only and
-SHALL NOT persist anything. It is a developer aid, consistent with the existing `.cuneiform` harness.
-
-#### Scenario: Live glow tuning
-
-- **WHEN** a developer runs the glow dev command with new parameter values while a tablet is open
-- **THEN** the open tablet repaints with the adjusted glow, and nothing is written to disk
-

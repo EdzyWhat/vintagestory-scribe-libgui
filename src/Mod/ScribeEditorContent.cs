@@ -256,11 +256,11 @@ internal sealed class ScribeEditorContent : StatefulWidget
     /// this with its current primary kind (defaults to Task) on a primary click, or with the picked kind from
     /// the inline list. See <see cref="ScribeDialogBase.OnClickAdd"/>.</summary>
     public Action<ScribeAddKind> OnAdd { get; }
-    /// <summary>Whether the footer's add control may add a TASK. Default true (uncapped tiers — Lectern,
-    /// Notebook — always). The tablet tier passes false once its document holds the max task blocks
-    /// (scribe-document-policy), which dims the primary button (when its kind is a task) and makes a task add a
-    /// no-op so the 10-task cap is a visible affordance. Notes are uncapped, so the Note entry stays enabled
-    /// regardless (design D4).</summary>
+    /// <summary>Whether the footer's add control may add another block. Default true (uncapped tiers —
+    /// Lectern, Notebook — always). Finite tiers (tablet, chalkboard) pass false once the document holds
+    /// 10 entries of any kind (scribe-document-policy), which DIMS the primary button and every drop-up
+    /// tile. The buttons stay clickable so the tap reaches <see cref="ScribeDialogBase.OnClickAdd"/> and
+    /// surfaces the cap notice (refine-chalkboard §12.9).</summary>
     public bool AddTaskEnabled { get; }
     public Action OnSwitchToRead { get; }
     /// <summary>Whether the footer shows the "Done editing" (switch-to-read) button. Default true for the
@@ -587,8 +587,8 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
             // (defaults to Task, so one click still adds a task) plus a caret that opens a floating drop-up
             // of the kinds (Task / Note). Self-contained (ScribeAddKindPicker owns its selected-kind + open
             // state and its overlay), so it builds its own cuneiform-aware labels + segment styles from
-            // Widget.Style. AddTaskEnabled flows through so the primary button + Task entry dim + inert at
-            // the tablet's task cap (Notes stay enabled — uncapped, design D4).
+            // Widget.Style. AddTaskEnabled flows through so the primary button + every drop-up tile dim at
+            // a finite tier's 10-entry cap but stay clickable (the tap raises the cap notice).
             new Expanded(child: new ScribeAddKindPicker(
                 onAdd: Widget.OnAdd,
                 addTaskEnabled: Widget.AddTaskEnabled,
@@ -1015,6 +1015,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             cuneiformJitterSeed: Widget.Data.TaskId.GetHashCode(),
             cuneiformProgression: style.UseCuneiform && style.CuneiformProgression,
             cuneiformGlow: style.UseCuneiform ? style.CuneiformGlow : default,
+            cuneiformStrokeWeightScale: style.UseCuneiform ? style.CuneiformStrokeWeightScale : 1f,
             // Each kind is held to its own maxlength as a live affordance: Task rows to the soft task cap,
             // Note rows to the larger freeform cap. The codec clips both on read regardless, so this is the
             // UX half of the same limit (RELEASE.md A1). Hitting the cap fires OnMaxLengthReached below so the

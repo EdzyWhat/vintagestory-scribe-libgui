@@ -76,6 +76,7 @@
 - [ ] 5.6 Repeat 5.1/5.5 on a **fired/hardened** (read-only) tablet of the same clay — confirm the
       colors match the wet form (state must not change palette) and read-only rows are equally legible.
   - Still broken 2026-08-20: TESTING.md `00000016` — fired/hardened cuneiform readability, retested via /scribe tablet fired|hard, still fails. The fix is owned by add-tablet-state-glow-modifier §4 (state-aware light halo); this box unblocks when that ships.
+  - Retired / folded 2026-08-21: superseded by `adopt-glyph-forge-tablet-themes`, which sources fired/hardened ink + glow from the glyph-forge exports and re-runs `TESTING.md` `00000016` as its own authoritative gate (task 9.5). This change is archived to bank its confirmed code (5.1–5.5, 5.7); 5.6 is retired here, not passed. See `[[openspec-archive-order-header-drift]]`.
 - [x] 5.7 Title (cuneiform) and tracker "N / N" counters: confirm the dark glow reads well on them too
       (they share `CuneiformGlowTable`).
   - Confirmed 2026-08-20: TESTING.md `00000017` "Works." — dark glow reads well on the cuneiform title and N/N counters.

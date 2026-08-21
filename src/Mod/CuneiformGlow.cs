@@ -20,86 +20,47 @@ namespace Scribe;
 
 /// <summary>
 /// The resolved outer-glow parameters for one cuneiform surface: a halo <see cref="Color"/> (RGB + alpha,
-/// where alpha is the glow STRENGTH) and a <see cref="BlurFraction"/> of the em size that becomes the blur
-/// sigma at paint time. Expressed as a FRACTION of the font size (not a fixed pixel sigma) so the title and
-/// the smaller task rows glow proportionally at any GUI scale. <see cref="Enabled"/> gates the whole effect,
-/// so the default value (all-zero) is a safe "no glow" — every non-tablet cuneiform surface passes it and
-/// pays nothing.
+/// where alpha is the glow STRENGTH), a <see cref="BlurFraction"/> of the em size that becomes the blur
+/// sigma at paint time, and an optional directional <see cref="OffsetXFraction"/>/<see cref="OffsetYFraction"/>
+/// (also a fraction of the em) that shifts the blurred halo pass so the glow reads as a SEATED DROP rather than
+/// a symmetric aura. All three are expressed as a FRACTION of the font size (not fixed pixel values) so the
+/// title and the smaller task rows glow proportionally at any GUI scale. <see cref="Enabled"/> gates the whole
+/// effect, so the default value (all-zero) is a safe "no glow" — every non-tablet cuneiform surface passes it
+/// and pays nothing. The default offsets (0,0) reproduce a centered halo, keeping every existing caller
+/// (which never set an offset) pixel-identical.
 /// </summary>
-public readonly record struct CuneiformGlow(Vector4 Color, float BlurFraction)
+public readonly record struct CuneiformGlow(
+    Vector4 Color, float BlurFraction, float OffsetXFraction = 0f, float OffsetYFraction = 0f)
 {
     /// <summary>True when the glow should be painted: a visible halo (alpha &gt; 0) and a non-zero blur.
-    /// The all-zero default is disabled, so a surface that never sets a glow renders exactly as before.</summary>
+    /// The all-zero default is disabled, so a surface that never sets a glow renders exactly as before.
+    /// The offset does not gate the effect — a zero offset is simply a centered halo.</summary>
     public bool Enabled => Color.W > 0f && BlurFraction > 0f;
 }
 
 /// <summary>
-/// Cuneiform glow seeds, selected by clay material AND drying state (add-tablet-state-glow-modifier).
+/// The cuneiform glow lookup, now a thin adapter over the <see cref="TabletReadability"/> bundle
+/// (adopt-glyph-forge-tablet-themes). The per-<c>(material, state)</c> glow values used to live here as seeds
+/// (per-material dark wet halos + two shared light hard/fired halos); they now live in the bundle table
+/// alongside the ink/link/stroke values for the same view, so a view can't drift across those dimensions.
+/// This class survives only as the <see cref="For"/> entry point the three cuneiform call sites already use.
 ///
-/// The glow's correct POLARITY depends on the backdrop's luminance, so it splits by state:
-///   • WET clay/wax backdrops are LIGHT-MID tones written with DARK ink, so each material uses a soft DARK
-///     halo — a tight, ink-derived outline / seating shadow that separates the thin, jittered strokes from
-///     the clay. (tablet-text-visibility, Option A. A light halo is wrong here: on a light-mid ground it sits
-///     between the ink and a ground of nearly its own luminance, adding no separating step and bleeding into
-///     the stroke edge — softening the ink instead of sharpening it.)
-///   • HARD and FIRED backdrops are DARKER, where a dark halo sits dark-on-dark and reduces contrast
-///     (playtest 00000016). There the classic polarity is correct: a LIGHT halo lifts the dark ink off the
-///     dark ground. These two states share one light halo across all clay colors, distinct between hard/fired.
-///
-/// The two-pass render (all blurred halos first, then all crisp ink on top — see the render objects'
-/// PaintInternal) is UNCHANGED and correct for either polarity: the crisp ink overwrites the halo inside each
-/// glyph, so the halo shows only as a thin fringe where it spills onto the backdrop — dark on wet clay, light
-/// on the darker set states.
+/// The glow's correct POLARITY still tracks the backdrop's luminance — WET clay backdrops are light-mid tones
+/// written with dark ink (a soft DARK seating halo separates the strokes), while the darker HARD/FIRED
+/// backdrops use a LIGHT halo (lifting dark ink off a dark ground) — but that is now an authoring property of
+/// each bundle cell, not a rule encoded here. The two-pass render (all blurred halos first, then all crisp ink
+/// on top — see the render objects' PaintInternal) is UNCHANGED and correct for either polarity: the crisp ink
+/// overwrites the halo inside each glyph, so the halo shows only as a thin fringe where it spills onto the
+/// backdrop — dark on wet clay, light on the darker set states.
 /// </summary>
 internal static class CuneiformGlowTable
 {
-    // Per-material dark seeds (halo RGB derived from each palette's own ink, strength alpha, blur-as-fraction-
-    // of-em). tablet-text-visibility: light → dark polarity flip, tighter blur (0.117 → 0.060) so the halo
-    // reads as a soft engraved outline rather than a diffuse aura, and wax gets its OWN seed (below) instead of
-    // riding the fire twin. The initial alpha 0.55 read as GRIME over the clay in the first in-game pass
-    // (submission 2026-08-20T16-47-03), so it was dropped to 0.40 per the tuning guidance below — a fainter
-    // halo that seats the stroke without dirtying the ground. Tuning guidance: keep alpha in ~0.35–0.65 (drop
-    // toward 0.35 if it still reads as grime, raise toward 0.55–0.65 only if strokes smear back into the clay)
-    // and the blur fraction in 0.05–0.08 (a soft outline, not an aura).
-    private static readonly CuneiformGlow FireDefault = new(new Vector4(0.20f, 0.10f, 0.05f, 0.40f), 0.060f);
-    private static readonly CuneiformGlow RedDefault  = new(new Vector4(0.24f, 0.10f, 0.09f, 0.40f), 0.060f);
-    private static readonly CuneiformGlow BlueDefault = new(new Vector4(0.12f, 0.16f, 0.20f, 0.40f), 0.060f);
-    private static readonly CuneiformGlow WaxDefault  = new(new Vector4(0.28f, 0.22f, 0.12f, 0.40f), 0.060f);
-
-    // Hardened + fired tablets have visibly DARKER backdrops than wet clay, so the dark seeds above sit
-    // dark-on-dark and REDUCE contrast (playtest 00000016). On a dark ground the correct polarity is the
-    // opposite: a LIGHT halo behind dark ink lifts the strokes off the ground (add-tablet-state-glow-modifier).
-    // These two seeds are shared across all clay colors (blue/red/fire) — the darkened backdrops are close
-    // enough in value that one light halo per state serves all three — and are DISTINCT between hard and fired
-    // (fired is the darker, more vitrified surface, so it carries a slightly brighter/stronger halo). Same
-    // tuning envelope as the wet seeds (alpha ~0.35–0.65, blur fraction 0.05–0.08).
-    // PLACEHOLDER VALUES — tuned in-game via the glow dev command on real hard/fired tablets of each color,
-    // then baked (add-tablet-state-glow-modifier tasks 4.1–4.2), exactly as the wet seeds were found.
-    private static readonly CuneiformGlow HardHalo  = new(new Vector4(0.86f, 0.82f, 0.74f, 0.45f), 0.065f);
-    private static readonly CuneiformGlow FiredHalo = new(new Vector4(0.94f, 0.90f, 0.82f, 0.50f), 0.065f);
-
-    /// <summary>Resolve the glow for a tablet's <c>material</c> variant and drying <paramref name="state"/>.
-    /// WET tablets use their per-material dark seed (a soft engraved outline over the light-mid wet clay). HARD
-    /// and FIRED tablets have darker backdrops, so they use a shared LIGHT halo per state (dark ink lifted off a
-    /// dark ground) — state wins over color for those two, which is why the switch reads state first. Wax has no
-    /// hard/fired variant, so it only ever reaches the wet branch and keeps its own seed.</summary>
-    public static CuneiformGlow For(string? material, TabletState state) => state switch
-    {
-        TabletState.Hard => HardHalo,
-        TabletState.Fired => FiredHalo,
-        _ => ForWetMaterial(material), // TabletState.Wet
-    };
-
-    /// <summary>The wet-clay dark seed for a <c>material</c> variant.
-    /// <c>clay-red</c>/<c>clay-blue</c>/<c>clay-fire</c>/<c>wax</c> each map to their own ink-derived dark seed;
-    /// any unrecognized material rides the fire seed (its backdrop twin), mirroring the theme/backdrop fallback.</summary>
-    private static CuneiformGlow ForWetMaterial(string? material) => material switch
-    {
-        "clay-blue" => BlueDefault,
-        "clay-red" => RedDefault,
-        "wax" => WaxDefault,
-        _ => FireDefault, // clay-fire, unknown
-    };
+    /// <summary>Resolve the glow for a tablet's <paramref name="material"/> variant and drying
+    /// <paramref name="state"/> by reading it from that view's <see cref="TabletReadability"/> bundle. Kept as a
+    /// distinct method so the existing cuneiform call sites (row glow, resting title, editing title) are
+    /// untouched; it now simply forwards to the single source of truth.</summary>
+    public static CuneiformGlow For(string? material, TabletState state) =>
+        TabletReadability.For(material, state).Glow;
 }
 
 /// <summary>

@@ -35,11 +35,11 @@ path SHALL render no nav column.
 The tablet dialog's central region SHALL retain the editable task list inherited from
 `ScribeDialogBase` (the same editor Proposal B exposed through the interim dialog), presented without
 tab navigation. Adding, editing, checking off, and pinning tasks SHALL continue to work under the
-tablet document policy (10-task / 1-pin caps). This change SHALL NOT remove task-editing capability
+tablet document policy (10-entry / 1-pin caps). This change SHALL NOT remove task-editing capability
 that the tablet has today.
 
-When an add is refused because the tablet already holds the maximum number of task blocks (10), the
-dialog SHALL surface a standard in-game error through the game's transient-error path rather than
+When an add is refused because the tablet already holds the maximum number of entries of any kind (10),
+the dialog SHALL surface a standard in-game error through the game's transient-error path rather than
 silently doing nothing, so the player learns why no row appeared. The refusal SHALL be reported at
 every add gesture that the cap governs (the footer add-task control and the keyboard insert-below
 gesture), and the add-task control MAY additionally remain visually disabled at the cap.
@@ -47,14 +47,14 @@ gesture), and the add-task control MAY additionally remain visually disabled at 
 #### Scenario: Tasks remain editable on the tablet
 
 - **WHEN** a player opens a tablet and adds, edits, checks, or pins a task
-- **THEN** the edit is applied and saved exactly as before, subject to the tablet's 10-task / 1-pin
+- **THEN** the edit is applied and saved exactly as before, subject to the tablet's 10-entry / 1-pin
   policy, with no tab navigation shown
 
-#### Scenario: Adding an 11th task shows an in-game error
+#### Scenario: Adding an 11th entry shows an in-game error
 
-- **WHEN** a player attempts to add a task to a wet tablet that already holds 10 task blocks (via the
-  add-task control or the keyboard insert gesture)
-- **THEN** no task is added and a standard in-game error message tells the player the tablet is full
+- **WHEN** a player attempts to add an entry of any kind to a wet tablet that already holds 10 entries
+  (via the add-task control or the keyboard insert gesture)
+- **THEN** no entry is added and a standard in-game error message tells the player the tablet is full
 
 ### Requirement: A single branch honors the disable-cuneiform setting
 
@@ -93,18 +93,23 @@ The tablet dialog SHALL select a clay-type-specific `ScribeTheme` palette in its
 wrapper, keyed to the tablet item's `material` variant, when Pixel-Art Display is ON. There SHALL be
 three authored per-clay-type palettes (red, blue, fire) whose colors harmonize with each type's
 backdrop art; `wax` and any unrecognized material SHALL resolve to the fire palette (its interim
-backdrop twin), so the resolved theme and the resolved backdrop always agree. Each per-material palette
-SHALL vary the roles that carry material identity — the ink (`OnSurface`/`OnBackground`), the accent
-(`Primary`, which programmatically drives button fill, button text, hover, press, caret, focused-input
-border, and text selection), the secondary tone (`Secondary`, which drives the pinned-row tint), the
-input field background (`SurfaceHigh`), the input/divider border (`Border`), and the panel
-`Background`. Within each palette, `Secondary` SHALL read clearly distinct from `Primary` so a focused
-input inside a pinned row shows a legible focus border against the pinned wash.
+backdrop twin), so the resolved theme and the resolved backdrop always agree.
+
+The **body ink** (`OnSurface`/`OnBackground`) and the per-material **link ink** (the row style's
+`LinkColor`) SHALL be resolved with the tablet's **drying state** as an additional input, sourced from
+the readability bundle for the current `(material, state)` view, so ink can differ across wet, hard, and
+fired (fired ink is darker). The remaining material-identity roles — the accent (`Primary`, which
+programmatically drives button fill, button text, hover, press, caret, focused-input border, and text
+selection), the secondary tone (`Secondary`, which drives the pinned-row tint), the input field
+background (`SurfaceHigh`), the input/divider border (`Border`), and the panel `Background` — SHALL
+remain per-material (state-independent). Within each palette, `Secondary` SHALL read clearly distinct
+from `Primary` so a focused input inside a pinned row shows a legible focus border against the pinned
+wash.
 
 The per-material **muted-text role (`OnSurfaceVariant`)** — used for hint/placeholder and secondary
-text — SHALL be **derived from that palette's own ink** by a single shared HSV **Value** lift (via
+text — SHALL be **derived from that view's own ink** by a single shared HSV **Value** lift (via
 `ScribeRowConstants.ShiftBrightness`, which preserves hue and chroma), governed by one shared constant
-across all three clay palettes, rather than authored as an independent per-palette color. This makes the
+across all clay palettes, rather than authored as an independent per-palette color. This makes the
 muted-vs-ink contrast a consistent perceptual step across fire, red, and blue, and makes "darken the
 muted text" a single-constant adjustment. The derived muted tone SHALL remain clearly lighter/weaker
 than the body `ink` so it still reads as secondary text, not body text.
@@ -120,6 +125,14 @@ tablet dialog backdrop is chosen by clay type and state").
 - **WHEN** a player opens a red, blue, or fire clay tablet with Pixel-Art Display ON
 - **THEN** the dialog is drawn with that clay type's palette (its own ink, accent, input
   background/border, and panel background) and the backdrop slot for that material
+
+#### Scenario: Ink and link ink vary by drying state
+
+- **WHEN** a wet, a hardened, and a fired tablet of the same clay type are each opened with Pixel-Art
+  Display ON
+- **THEN** the body ink (`OnSurface`) and the link ink resolve to that clay's authored values for each
+  state (the fired view's ink is darker than the wet view's), while the accent (`Primary`), secondary,
+  surfaces, border, and background stay the same across the three states
 
 #### Scenario: Muted text contrast is consistent across clay types
 
@@ -139,7 +152,8 @@ tablet dialog backdrop is chosen by clay type and state").
 
 - **WHEN** the tablet dialog resolves the theme for a `wax` tablet or an unrecognized material with
   Pixel-Art Display ON
-- **THEN** it resolves to the fire clay palette, matching the fire interim backdrop that material uses
+- **THEN** it resolves to the fire clay palette for the matching state, matching the fire interim
+  backdrop that material uses
 
 #### Scenario: Pixel-Art off follows the global theme
 
@@ -160,6 +174,40 @@ tablet dialog backdrop is chosen by clay type and state").
 - **THEN** its theme is unchanged from before this change (the parchment `Light`/global theme), EXCEPT
   the pinned-row tint, which is now derived from `Secondary` instead of `Primary` (the same global
   remap applied for focus clarity)
+
+### Requirement: Tablet Link/Tracker/Craft rows use a distinct per-`(material, state)` link ink
+
+On the Pixel-Art path, the tablet dialog SHALL supply a dedicated **link ink** for the tappable content
+of a Link/Tracker/Craft row (the item-name hyperlink, the guide-page book glyph, and the Tracker
+have/need count) via `ScribeRowStyle.LinkColor`, rather than letting the row fall through to the theme
+accent (`colors.Primary`). The link ink SHALL be resolved from the readability bundle for the current
+`(material, state)` view — the same source as body ink — so it can differ across wet, hard, and fired.
+Each view's link ink SHALL be a deeper, more-saturated tone than that palette's accent, chosen to clear
+WCAG AA (≥ 4.5 : 1) against that material's clay/wax face while remaining chromatically distinct from
+the near-black body ink, so a link reads as a legible, tappable colored link and not as body text.
+
+The link ink SHALL be keyed off the same `material` and drying `state` the theme and backdrop use (one
+parameterized dialog, not a subclass per material). With Pixel-Art Display OFF, the tablet follows the
+global theme over a flat panel and MAY use the theme accent for links unchanged.
+
+#### Scenario: A tablet link reads as a distinct legible link
+
+- **WHEN** a Link/Tracker/Craft row is shown on a tablet with Pixel-Art Display ON
+- **THEN** the item name renders in the view's dedicated link ink, clearly distinct from both the
+  clay backdrop and the near-black body ink
+
+#### Scenario: Link ink is material- and state-keyed
+
+- **WHEN** the same row is shown on a fire vs. red vs. blue vs. wax tablet, and across wet/hard/fired
+  of one clay
+- **THEN** each uses the link ink authored for that `(material, state)` view (a deep rust / wine /
+  steel-blue / amber-bronze family respectively), all clearing AA on their own backdrop
+
+#### Scenario: Flat-panel fallback is unchanged
+
+- **WHEN** the tablet is shown with Pixel-Art Display OFF
+- **THEN** the row link color follows the global theme accent exactly as before (no material link ink is
+  applied)
 
 ### Requirement: Empty-tablet hint text reads legibly on the clay backdrops
 

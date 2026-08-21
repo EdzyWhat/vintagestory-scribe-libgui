@@ -44,6 +44,7 @@ public sealed class ScribeCuneiformTitleField : StatefulWidget, IFocusable
         float rotationDegrees = 0f,
         bool progression = false,
         CuneiformGlow glow = default,
+        float strokeWeightScale = 1f,
         bool singleLine = true,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
@@ -58,6 +59,7 @@ public sealed class ScribeCuneiformTitleField : StatefulWidget, IFocusable
         RotationDegrees = rotationDegrees;
         Progression = progression;
         Glow = glow;
+        StrokeWeightScale = strokeWeightScale;
         SingleLine = singleLine;
     }
 
@@ -79,6 +81,10 @@ public sealed class ScribeCuneiformTitleField : StatefulWidget, IFocusable
     /// <summary>Per-material outer glow behind the title strokes (add-tablet-clay-type-themes); default
     /// disabled. Lifts the editing title off the clay backdrop the same way the resting title and rows do.</summary>
     public CuneiformGlow Glow { get; }
+    /// <summary>Per-view cuneiform stroke-weight scale (adopt-glyph-forge-tablet-themes); 1 = base weight.
+    /// Passed straight to the title render object so the editing title firms up/thins with the drying
+    /// state exactly like the rows and resting title.</summary>
+    public float StrokeWeightScale { get; }
     /// <summary>When true (default) the title is one hard-clipped line; when false it WRAPS to the band width
     /// (wrap-tablet-title-band) — the enclosing title slot caps the visible height at two lines. Caret nav is
     /// by character index either way, so wrapping is purely a render/layout property of the same text buffer.</summary>
@@ -356,6 +362,7 @@ internal sealed class ScribeCuneiformTitleFieldState : State<ScribeCuneiformTitl
                 jitterSeed: Widget.JitterSeed,
                 rotationDegrees: Widget.RotationDegrees,
                 glow: Widget.Glow,
+                strokeWeightScale: Widget.StrokeWeightScale,
                 revealActive: revealActive,
                 revealBaselineChars: revealBaselineChars,
                 revealElapsedMs: revealController is not null

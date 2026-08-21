@@ -475,7 +475,8 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                 jitterStrength: style.CuneiformJitter,
                 jitterSeed: Widget.Data.TaskId.GetHashCode(),
                 rotationDegrees: style.CuneiformRotation,
-                glow: style.CuneiformGlow)
+                glow: style.CuneiformGlow,
+                strokeWeightScale: style.CuneiformStrokeWeightScale)
             : new Padding(
                 EdgeInsets.Symmetric(vertical: style.FieldPadY, horizontal: style.FieldPadX),
                 child: new Text(Widget.Data.Text, textStyle));

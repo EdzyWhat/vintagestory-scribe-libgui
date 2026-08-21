@@ -162,7 +162,14 @@ public class GuiDialogScribeTablet : ScribeDialogBase
     /// item's <see cref="_material"/> variant (add-tablet-clay-type-themes) — red/blue/fire tablets each
     /// resolve their own colors, and the resolved theme agrees with the resolved backdrop (both key off the
     /// same material). Pixel-Art off still falls back to the player's global theme.</summary>
-    protected override ThemeData ResolveTheme(bool pixelArt) => ScribeTheme.ForTablet(_material, pixelArt);
+    /// <summary>The resolved <see cref="TabletReadability"/> bundle for this tablet's material + drying state
+    /// (adopt-glyph-forge-tablet-themes). Resolved once here and decomposed into the existing seams — theme ink,
+    /// row link ink, cuneiform glow, and the per-view stroke-weight scale — so every readability dimension of a
+    /// tablet view comes from one source and can't drift. Recomputed per read (state can change via
+    /// <c>/scribe tablet hard|fired</c>), which is cheap (a switch over baked structs).</summary>
+    private TabletReadability Readability => TabletReadability.For(_material, _state);
+
+    protected override ThemeData ResolveTheme(bool pixelArt) => ScribeTheme.ForTablet(_material, _state, pixelArt);
 
     /// <summary>Engrave the title-bar pencil + drag-grip into the clay (add-tablet-clay-type-themes 8.5):
     /// tint them with this tablet's dark material ink (<c>OnSurface</c>) at partial alpha instead of the
@@ -206,7 +213,7 @@ public class GuiDialogScribeTablet : ScribeDialogBase
         // (the readability problem is the clay ground, not the font).
         if (modSystem.MySettings.PixelArtDisplay)
         {
-            style = style with { LinkColor = ScribeTheme.ForTabletLink(_material) };
+            style = style with { LinkColor = ScribeTheme.ForTabletLink(_material, _state) };
         }
 
         if (ActiveCuneiformBundle is not { } bundle)
@@ -233,6 +240,10 @@ public class GuiDialogScribeTablet : ScribeDialogBase
             // (add-tablet-state-glow-modifier). Wet uses a dark halo over light-mid clay; hard/fired flip to a
             // light halo over their darker backdrops. Keyed off the same material+state the backdrop uses.
             CuneiformGlow = CuneiformGlowTable.For(_material, _state),
+            // Per-view stroke-weight scale from the same readability bundle (adopt-glyph-forge-tablet-themes):
+            // firms the row ink up as the tablet dries (wet 0.9 → fired 1.1). Rides the same tablet-only seam
+            // as the glow to every cuneiform row/label; non-tablet surfaces never set it (base weight).
+            CuneiformStrokeWeightScale = Readability.StrokeWeightScale,
         };
     }
 
@@ -278,7 +289,9 @@ public class GuiDialogScribeTablet : ScribeDialogBase
                 jitterSeed: CuneiformMetrics.SeedFromString(displayTitle),
                 rotationDegrees: CuneiformMetrics.DefaultRotationDegrees,
                 // Per-material, per-state glow so the resting title lifts off the clay backdrop like the rows do.
-                glow: CuneiformGlowTable.For(_material, _state)));
+                glow: CuneiformGlowTable.For(_material, _state),
+                // Same per-view stroke-weight scale as the rows so the resting title firms up with the state.
+                strokeWeightScale: Readability.StrokeWeightScale));
     }
 
     /// <summary>Editing title: a live single-line cuneiform input bound to the SAME title controller/focus
@@ -312,6 +325,8 @@ public class GuiDialogScribeTablet : ScribeDialogBase
             // rows/resting title. (The editing title only shows on a wet tablet, but we thread state here too
             // so all three glow call sites stay uniform.)
             glow: CuneiformGlowTable.For(_material, _state),
+            // Same per-view stroke-weight scale as the rows/resting title (uniform across all three glyph sites).
+            strokeWeightScale: Readability.StrokeWeightScale,
             // Wrap the editing title to two lines too (wrap-tablet-title-band), so typing past one line drops to
             // a second line instead of clipping off the right; Enter still commits via OnTitleFieldKeyDown.
             singleLine: false);

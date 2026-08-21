@@ -58,9 +58,11 @@ internal sealed class ScribeAddKindPicker : StatefulWidget
     /// <summary>Add a block of the given kind (wired to <see cref="ScribeDialogBase.OnClickAdd"/>).</summary>
     public Action<ScribeAddKind> OnAdd { get; }
 
-    /// <summary>Whether a TASK may currently be added. When false (tablet at its task cap), the primary
-    /// button dims + inerts while its kind is a task, and the Task entry in the drop-up dims + inerts.
-    /// Notes are uncapped and stay enabled regardless (design D4).</summary>
+    /// <summary>Whether a block of any kind may currently be added. When false (tablet/chalkboard at its
+    /// 10-entry cap), the primary button and every drop-up tile DIM but stay clickable so the tap still
+    /// reaches <see cref="ScribeDialogBase.OnClickAdd"/> and surfaces <c>NotifyTabletFull</c> (the same
+    /// <c>TriggerIngameError</c> path Enter-insert uses). Nulling <c>onTap</c> would swallow the click and
+    /// skip the notice (refine-chalkboard §12.9). Uncapped tiers always pass true.</summary>
     public bool AddTaskEnabled { get; }
 
     /// <summary>Row style, threaded for the cuneiform-aware label rendering (tablet path) and its bundle.</summary>
@@ -197,7 +199,7 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
             tiles.Add(new Button(
                 child: BuildLabel(Lang.Get(kind.LabelLangKey), tileStyle),
                 style: tileButtonStyle,
-                onTap: dim ? null : _ => PickKind(kind)));
+                onTap: _ => PickKind(kind)));
         }
 
         // Transparent panel (user preference): no SurfaceHigh fill behind the kind buttons — the floating
@@ -285,7 +287,7 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
         var primaryButton = new Button(
             child: new Center(child: BuildLabel(Lang.Get(_selectedKind.LabelLangKey), primaryLabelStyle)),
             style: segmentStyle,
-            onTap: primaryDim ? null : _ => AddSelectedKind());
+            onTap: _ => AddSelectedKind());
 
         // Caret: ▲ when closed (the menu will expand upward), ▼ when open (tap to collapse). The Row's
         // Stretch (below) stretches this caret button to the group's height, which can exceed the glyph's own
