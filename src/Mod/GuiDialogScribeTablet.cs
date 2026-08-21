@@ -229,9 +229,10 @@ public class GuiDialogScribeTablet : ScribeDialogBase
             // off). Re-deriving the row style per build means toggling it in Scribe Settings repaints an
             // open tablet.
             CuneiformProgression = modSystem.MySettings.CuneiformProgression,
-            // Per-material outer glow to lift the row ink off this tablet's clay backdrop
-            // (add-tablet-clay-type-themes). Keyed off the same material the theme/backdrop use.
-            CuneiformGlow = CuneiformGlowTable.For(_material),
+            // Per-material, per-state outer glow to lift the row ink off this tablet's clay backdrop
+            // (add-tablet-state-glow-modifier). Wet uses a dark halo over light-mid clay; hard/fired flip to a
+            // light halo over their darker backdrops. Keyed off the same material+state the backdrop uses.
+            CuneiformGlow = CuneiformGlowTable.For(_material, _state),
         };
     }
 
@@ -276,8 +277,8 @@ public class GuiDialogScribeTablet : ScribeDialogBase
                 jitterStrength: CuneiformMetrics.DefaultJitterStrength,
                 jitterSeed: CuneiformMetrics.SeedFromString(displayTitle),
                 rotationDegrees: CuneiformMetrics.DefaultRotationDegrees,
-                // Per-material glow so the resting title lifts off the clay backdrop like the rows do.
-                glow: CuneiformGlowTable.For(_material)));
+                // Per-material, per-state glow so the resting title lifts off the clay backdrop like the rows do.
+                glow: CuneiformGlowTable.For(_material, _state)));
     }
 
     /// <summary>Editing title: a live single-line cuneiform input bound to the SAME title controller/focus
@@ -307,8 +308,10 @@ public class GuiDialogScribeTablet : ScribeDialogBase
             jitterSeed: TitleJitterSeed,
             // Stroke-by-stroke title reveal, gated by the same player setting as the rows (defaults off).
             progression: modSystem.MySettings.CuneiformProgression,
-            // Per-material glow so the editing title lifts off the clay backdrop like the rows/resting title.
-            glow: CuneiformGlowTable.For(_material),
+            // Per-material, per-state glow so the editing title lifts off the clay backdrop like the
+            // rows/resting title. (The editing title only shows on a wet tablet, but we thread state here too
+            // so all three glow call sites stay uniform.)
+            glow: CuneiformGlowTable.For(_material, _state),
             // Wrap the editing title to two lines too (wrap-tablet-title-band), so typing past one line drops to
             // a second line instead of clipping off the right; Enter still commits via OnTitleFieldKeyDown.
             singleLine: false);

@@ -2412,6 +2412,17 @@ after a view swap (edit↔read) or other forced redraw.** Root-caused by reading
   relevant "not being edited" signal). Don't `ValueKey`-remount a field that might be focused (drops caret),
   and don't assume an uncontrolled `InitState`-seeded widget picks up a reconcile value on its own.
 
+### Wrapping a title into a fixed band without a metric bump — bottom-anchor + two-line clip budget (2026-08-21)
+
+To let a title wrap to N lines *inside an existing single-line band* (tablet title), don't grow the shared
+band metric. Instead: size the title slot's `contentBoxH` to `TitleBtnsH + (N-1)·titleLineH`, set
+`titleCrossAlign` to bottom so **line 1 grows UP into the band's existing headroom** (the band already has
+slack — `TitleBarH = 0.13·H` exceeds the one content row `0.065·H`), and keep the enclosing `Clip` capped at
+exactly N line-heights so a title longer than N lines clips cleanly at the end of line N (no partial line).
+A tablet-only band-height override (`private protected virtual int TitleMaxLines`) was scaffolded as a
+fallback but proved unnecessary — the two-line box fits within `TitleBarH` untouched, so base
+(Lectern/Notebook) bands stay byte-identical. See `ScribeDialogBase.Layout.cs` `BuildTitleBar`.
+
 ## Held-item dialog flickers closed on FIRST open of a not-yet-crafted item (2026-08-06)
 
 **Symptom: the first time a player opens a Scribe item they did NOT craft (notebook, clockmaker's
@@ -2780,6 +2791,22 @@ self-inflicted, not the Rosetta bug.
 check whether a post-1.22.3 VS release ships a native ARM64 build. Mention this in any LibGUI
 author outreach (task 9.4 of `v1-release-checklist`) — they may want to flag it in LibGUI docs as
 a known platform limitation while the VS ARM64 build is pending.
+
+---
+
+## Sound playback volume — `SoundParams.Volume` clamps to `[0,1]`, `SetVolume` does not (2026-08-21)
+
+Two engine facts (decompiled) constrain GUI/one-shot sound volume:
+
+- `Vintagestory.API.Client.SoundParams.Volume`'s **setter hard-clamps to `[0f, 1f]`** — assigning >1 stores
+  exactly 1. A "5× via `Volume`" is impossible.
+- `LoadedSoundNative.SetVolume(float val)` stores the clamped value into `soundParams.Volume` but passes the
+  **raw** `val` to OpenAL as `AL_GAIN = val * GlobalVolume`. OpenAL honors gain >1, but amplifying past unity
+  risks implementation-dependent clipping/distortion against the source's headroom.
+
+**Takeaway:** to make a quiet source louder, **bake the gain into the audio file** and keep runtime gain in
+`[0,1]` — don't rely on `SetVolume(>1)`. Precedent: `ScribeAlarmSound` / the transcribe stamp cue both load
+via `capi.World.LoadSound(new SoundParams{...})` and drive volume with `SetVolume` reading a `/100f` setting.
 
 ---
 

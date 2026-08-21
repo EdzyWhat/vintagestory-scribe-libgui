@@ -42,7 +42,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [x] `00000014` **Wax link legible.** On a **wax** (pale honey) tablet the link reads as a deep
       amber-bronze, legible on the honey ground (the 2.3 : 1 worst case before). *(tablet-text-visibility 5.4)*
       - **Confirmed 2026-08-20** (submission 2026-08-20T16-47-03): "Works." Wax link reads as a deep amber-bronze on the honey ground (closes the old 2.3 : 1 worst case).
-- [ ] `00000015` **Body glow seats, not grime.** Body task text on all four palettes: strokes read crisp
+- [x] `00000015` **Body glow seats, not grime.** Body task text on all four palettes: strokes read crisp
       and firmly seated — the dark halo reads as a soft engraved shadow, NOT as grime/dirt over the clay.
       (If grime, glow alpha wants dropping toward 0.40; if smearing, raise toward 0.65.) *(tablet-text-visibility 5.5)*
       - **Still broken 2026-08-20** (submission 2026-08-20T16-47-03): "It reads more as grime. I think it
@@ -53,6 +53,9 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         Built + restaged (Debug). **Relaunch and re-check** all four palettes — the halo should now read as a
         faint seated shadow, not grime. If still grimy, drop toward `0.35`; if strokes smear back into the
         clay, raise toward `0.55`.
+      - **Confirmed 2026-08-20** (submission 2026-08-20T21-32-19): "Works." The `0.40` alpha reads as a
+        seated engraved shadow on WET tablets. Caveat carried forward to `00000016`: this dark-glow approach
+        backfires on fired/hardened tablets, whose backdrops are darker — tracked as its own fix there.
 - [ ] `00000016` **Fired matches wet.** Repeat the link + body checks on a **fired/hardened** (read-only)
       tablet of the same clay — colors match the wet form (state must not change palette) and read-only rows
       are equally legible. *(tablet-text-visibility 5.6)*
@@ -65,12 +68,53 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Backlogged 2026-08-20 (unblocker SHIPPED, ready to retest):** `add-tablet-state-dev-command` is
         implemented + restaged. In creative, hold a written wet clay tablet and run `/scribe tablet fired`
         (or `hard`), then run this check; `/scribe tablet wet` resets it. Retest and update this verdict.
-- [ ] `00000017` **Title + counters glow.** Confirm the dark glow also reads well on the cuneiform TITLE and
+      - **Still broken 2026-08-20** (submission 2026-08-20T21-32-19): retested via `/scribe tablet fired|hard`.
+        Fired AND hardened tablets have a DARKER backdrop than wet, so the text's dark outer glow (the
+        `00000015` engraved-shadow fix) makes the strokes LESS legible, not more. The wet-tuned dark-glow
+        approach is wrong for these states. Needs a per-state fix — a state-scoped theme or per-state glow
+        modifier, applied uniformly across all three clay palettes (blue/red/fire) per state (all fired share
+        one modifier, all hardened share one). User asked to design this as a NEW OpenSpec proposal via
+        AskUserQuestion. Palette must not otherwise change between states.
+- [x] `00000017` **Title + counters glow.** Confirm the dark glow also reads well on the cuneiform TITLE and
       the tracker "N / N" counters (they share the glow table). *(tablet-text-visibility 5.7)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T21-32-19): "Works." The dark glow reads well on the
+        cuneiform title and tracker counters (shared glow table) on wet tablets.
 - [x] `00000018` **Pixel-Art OFF unchanged.** Turn Pixel-Art Display OFF: the tablet follows the global theme
       over a flat panel, links use `Primary`, no glow — confirm it looks unchanged from before.
       *(tablet-text-visibility 5.8)*
       - **Confirmed 2026-08-20** (submission 2026-08-20T16-47-03): "Works." Pixel-Art OFF renders unchanged — flat panel, `Primary` links, no glow.
+
+## add-tablet-state-dev-command
+
+> A server-side, creative-gated `/scribe tablet <wet|hard|fired>` dev command that swaps the held Scribe
+> Tablet's `material` variant to the requested life-cycle sibling, carrying the document + history across.
+> Exists chiefly to unblock the `00000016` fired/hardened readability retest above (task 5.6 = re-run
+> `00000016`). Reaching wet/hard from a fired tablet is an intentional testing override of the
+> permanent-fired rule. **Fully quit and relaunch the client first** so the new command loads.
+
+- [x] `0000001a` **Fired swap keeps doc.** In creative, hold a written wet `clay-red` tablet and run
+      `/scribe tablet fired` → it becomes read-only fired, the document + History are intact, and the
+      command reports success. *(add-tablet-state-dev-command 5.1)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T21-32-19): "Works." Fired swap preserves the
+        document + History and reports success.
+- [x] `0000001b` **Hard↔wet round-trip.** On that same tablet run `/scribe tablet hard`, then
+      `/scribe tablet wet` → each transition applies and the document survives every swap.
+      *(add-tablet-state-dev-command 5.2)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T21-32-19): "Works." Each transition applies and the
+        document survives every swap.
+- [x] `0000001c` **Wax can't harden.** Hold a `wax` tablet and run `/scribe tablet hard` → a clean "wax
+      never hardens" error, no swap performed. *(add-tablet-state-dev-command 5.3)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T21-32-19): "Works." Wax hard/fire is refused with a
+        clean error, no swap.
+- [x] `0000001d` **Fired→wet override note.** On a fired tablet run `/scribe tablet wet` → it resets to
+      wet and the success message flags the "(testing override)" of the permanent-fired rule.
+      *(add-tablet-state-dev-command 5.4)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T21-32-19): passed — the fired→wet override resets
+        the tablet and reports the intentional-override note.
+- [x] `0000001e` **Gate errors.** With no tablet in hand run the command → "no held tablet" error; switch
+      to survival mode and run it → refused by the creative-only gate. *(add-tablet-state-dev-command 5.5)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T21-32-19): "Works." No-tablet and survival-mode
+        (creative-only gate) both error cleanly.
 
 ## fix-recipe-variant-identity
 
@@ -119,6 +163,13 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Confirmed 2026-08-20** (submission 2026-08-20T09-47-32): "Works, we now have the note for liquid."
         Retest of the recipe-level `TryAddLiquidNote` fix — the liquid note now surfaces. (Follow-up in
         general notes: user wants to replace the note with a real liquid **tracker** task; tracked separately.)
+- [x] `00000019` **Hunter's Backpack family.** Add a Crafting Task from the **Hunter's Backpack** Handbook
+      page. Confirm the papyrus/cattail-tops subtask reads as a real family name (e.g. "Papyrus tops (any
+      variant)"), NOT "Game: Item-Air (any variant)"; then hold a stack of unrelated items and confirm its
+      carried count reflects ONLY papyrus + cattail tops (no over-count from a bare `*` match).
+      *(fix-recipe-variant-identity 7.5)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T21-32-19): "Works!" The D8 microformat fix — the
+        subtask reads a real family name (no "Item-Air") and counts only the allowed variant family.
 
 ## wrap-tablet-title-band
 
@@ -1147,7 +1198,10 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Confirmed 2026-08-20** (submission 2026-08-20T16-47-03): "Works." Empty reads `0 / N`; carried-container litres raise the count.
 - [x] `0000000d` **Litres sum; wrong liquid = 0.** Carry multiple containers of the same liquid -> litres sum. A container of a different liquid contributes `0`. *(add-liquid-ingredient-tracker 6.3)*
       - **Confirmed 2026-08-20** (submission 2026-08-20T16-47-03): "Works." Same-liquid containers sum; a different liquid contributes 0.
-- [ ] `0000000e` **Fill applies completion setting.** Carrying >= the target litres marks the Tracker satisfied and applies your tracker-completion setting (complete / delete / nothing); dropping below afterward does not re-fire. *(add-liquid-ingredient-tracker 6.4)*
-- [ ] `0000000f` **HUD pin counts too.** Pin the liquid Tracker to the HUD -> it updates from carried containers exactly like in the dialog (same count path). *(add-liquid-ingredient-tracker 6.5)*
-- [ ] `00000010` **Probe-sweep edge cases.** `.scribeprobe` a few real liquid recipes -> a block-`type` liquid and a sub-1-litre requirement round up as expected, and any wildcard/unresolvable liquid still degrades to a note. *(add-liquid-ingredient-tracker 6.6)*
+- [x] `0000000e` **Fill applies completion setting.** Carrying >= the target litres marks the Tracker satisfied and applies your tracker-completion setting (complete / delete / nothing); dropping below afterward does not re-fire. *(add-liquid-ingredient-tracker 6.4)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T21-32-19): "Works." Reaching the litre target applies the completion setting; dropping below does not re-fire.
+- [x] `0000000f` **HUD pin counts too.** Pin the liquid Tracker to the HUD -> it updates from carried containers exactly like in the dialog (same count path). *(add-liquid-ingredient-tracker 6.5)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T21-32-19): "Works." The pinned liquid Tracker updates from carried containers on the HUD (same count path).
+- [x] `00000010` **Probe-sweep edge cases.** `.scribeprobe` a few real liquid recipes -> a block-`type` liquid and a sub-1-litre requirement round up as expected, and any wildcard/unresolvable liquid still degrades to a note. *(add-liquid-ingredient-tracker 6.6)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T21-32-19): "Works." block-`type` liquid + sub-1-litre round-up behave, unresolvable liquid degrades to a note.
 

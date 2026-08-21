@@ -54,18 +54,22 @@
 
 - [x] 6.1 Build (0 warnings / 0 errors).
 - [x] 6.2 Run `build/restage.sh Debug` (only while the client is NOT running).
-- [ ] 6.3 In-game gate (SUPERSEDED by §12 — the cap now counts ALL blocks, not just tasks): add
+- [x] 6.3 In-game gate (SUPERSEDED by §12 — the cap now counts ALL blocks, not just tasks): add
       10 blocks of ANY MIX (tasks, notes, trackers, links, craft) to a chalkboard → the 11th add of
       any kind is refused and surfaces the chalkboard cap notice (not "tablet"). Confirm pinning is
       NOT capped. See §12.4 for the authoritative gate.
-- [ ] 6.4 In-game gate: on a chalkboard (Pixel-Art Display ON), confirm the task-row checkbox
+  - Superseded 2026-08-21: the authoritative cap gate is now §12.9 (counts ALL blocks, not just tasks). Cap enforcement itself is Confirmed (TESTING.md `2a03c5d1`); the mixed-block gate is tracked at 12.9.
+- [x] 6.4 In-game gate: on a chalkboard (Pixel-Art Display ON), confirm the task-row checkbox
       tick reads clearly as brighter green against the slate. Confirm the tablet/lectern accents
       are unchanged (they use their own themes).
-- [ ] 6.5 In-game gate: open the Pin tab's Completion Behavior dropdown on a chalkboard — the
+  - Obsolete 2026-08-19: TESTING.md `dff63237` — the brighter-green tick goal was superseded; §11 changes the chalkboard tick to chalk-white instead. Retest lives at 11.4.
+- [x] 6.5 In-game gate: open the Pin tab's Completion Behavior dropdown on a chalkboard — the
       SELECTED row is a solid green with legible chalk-white text (not green-on-green). Confirm
       the same dropdown on the lectern (global theme) is visually unchanged.
-- [ ] 6.6 In-game gate: confirm the wider `SideColFrac = 0.078` nav column still centers/holds the
+  - Confirmed 2026-08-19: TESTING.md `b57b3d27` "Works." — selected dropdown row is solid green with legible chalk-white text; lectern unchanged.
+- [x] 6.6 In-game gate: confirm the wider `SideColFrac = 0.078` nav column still centers/holds the
       nav buttons within the slate frame without clipping.
+  - Confirmed 2026-08-19: TESTING.md `496bce24` "Works." — SideColFrac 0.078 holds the nav buttons within the slate frame without clipping.
 
 ## 7. Recolor the chalkboard `Secondary` (fix the amber pinned-row wash)
 
@@ -100,16 +104,19 @@ stock widget.
 
 - [x] 9.1 Build (0 warnings / 0 errors).
 - [x] 9.2 Run `build/restage.sh Debug` (only while the client is NOT running).
-- [ ] 9.3 In-game gate: on a chalkboard, pin a task and confirm the pinned-row wash now reads as a soft
+- [x] 9.3 In-game gate: on a chalkboard, pin a task and confirm the pinned-row wash now reads as a soft
       SAGE GREEN over the slate (harmonious with the accent), NOT the old muddy amber, and the pinned task's
       text is still legible over it.
-- [ ] 9.4 In-game gate: on a chalkboard, focus a multiline note field and the Tracker/Craft target-quantity
+  - Confirmed 2026-08-19: TESTING.md `871bde9e` "Works." — pinned-row wash reads as a soft sage green.
+- [x] 9.4 In-game gate: on a chalkboard, focus a multiline note field and the Tracker/Craft target-quantity
       numeric field — confirm BOTH light their focused border in the SAME chalk-white (no green on one, gold
       on the other), and both carets read as chalk-white ink (not accent-green). Confirm the +/- stepper and
       other stock controls no longer show a gold focus ring.
-- [ ] 9.5 In-game gate: on the Lectern/Notebook (Light theme), confirm the focused numeric field's border now
+  - Confirmed 2026-08-19: TESTING.md `0e86ef32` "Works." — chalkboard note + target-quantity field parity.
+- [x] 9.5 In-game gate: on the Lectern/Notebook (Light theme), confirm the focused numeric field's border now
       matches the multiline field's (both the parchment accent) rather than the old stock gold, and nothing
       else regressed.
+  - Confirmed 2026-08-19: TESTING.md `3e0b8328` "Works." — Lectern/Notebook focused numeric border matches the multiline field (parchment accent).
 
 ## 10. Unify the Pinned-tab focus border with the Edit view (adopt the Edit pattern globally)
 

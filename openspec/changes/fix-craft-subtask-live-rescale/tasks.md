@@ -25,9 +25,11 @@
 
 ## 4. In-game verification (GATE — main session restages + tests)
 
-- [ ] 4.1 Open a Crafting Task in the editor. Raise the parent's target with the +/- stepper. Confirm
+- [x] 4.1 Open a Crafting Task in the editor. Raise the parent's target with the +/- stepper. Confirm
       the ingredient subtask counts redraw with their new values IMMEDIATELY, with no view swap.
-- [ ] 4.2 Confirm the parent stepper keeps focus and keeps stepping smoothly (no caret loss / no snap)
+  - Confirmed 2026-08-21 (verified via add-crafting-tasks 10.6 / TESTING.md 56389c71, "It works now!").
+- [x] 4.2 Confirm the parent stepper keeps focus and keeps stepping smoothly (no caret loss / no snap)
       across repeated + presses.
+  - Confirmed 2026-08-21 (verified via add-crafting-tasks 10.6 / TESTING.md 56389c71, "It works now!").
 - [ ] 4.3 Confirm the plain (non-Craft) Tracker stepper and the Settings numeric fields behave exactly
       as before (no regression).
