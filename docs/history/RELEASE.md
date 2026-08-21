@@ -1,9 +1,13 @@
 # Release plan — Scribe v1.0.0 (Tablets tier + first "complete" cut)
 
+> **Archived (historical).** This is the completed v1.0.0 release-cut checklist, kept for the
+> record. The shipping version is now tracked in [`CHANGELOG.md`](../../CHANGELOG.md); the live
+> forward plan is [`ROADMAP.md`](../../ROADMAP.md).
+
 Tracked checklist for the **in-flight** release cut. This is the **map**; the framing/rationale
 hub is the Slack canvas *"Scribe v1.0.0 — Release Hub"* (`F0BMW2XE2H5`), per-task detail lives in
 the linked OpenSpec changes and `docs/`, shipped releases are recorded in
-[`CHANGELOG.md`](./CHANGELOG.md), and the forward tier-map is [`ROADMAP.md`](./ROADMAP.md).
+[`CHANGELOG.md`](../../CHANGELOG.md), and the forward tier-map is [`ROADMAP.md`](../../ROADMAP.md).
 
 **v1.0.0 is LOCKED** (2026-08-05). The first "complete" cut: a feature-complete handheld + lectern
 writing system across three tiers (Lectern, Notebooks, **Tablets** — the marquee new tier), with an

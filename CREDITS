@@ -50,6 +50,15 @@ Noto Serif
   selector; those faces are provided and registered by the LibGUI (`gui`)
   dependency, not bundled by Scribe, and are credited by that project.
 
+Sounds
+------
+
+Alarm clock ("alarm_clock_ringing_01.wav")
+  Freesound ID: 78562, by joedeshon.
+  Licensed under the Creative Commons Attribution 4.0 International (CC BY 4.0)
+  license, which requires this attribution.
+  Source: https://freesound.org/s/78562/
+
 Inspiration
 -----------
 
