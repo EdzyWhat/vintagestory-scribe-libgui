@@ -51,13 +51,15 @@ internal static class CuneiformGlowTable
     // Per-material dark seeds (halo RGB derived from each palette's own ink, strength alpha, blur-as-fraction-
     // of-em). tablet-text-visibility: light → dark polarity flip, tighter blur (0.117 → 0.060) so the halo
     // reads as a soft engraved outline rather than a diffuse aura, and wax gets its OWN seed (below) instead of
-    // riding the fire twin. Tuning guidance if the in-game pass wants it: alpha 0.55 / blur 0.060 is the start;
-    // drop alpha toward 0.40 if the halo reads as grime, raise toward 0.65 if strokes still smear, and keep the
-    // blur fraction in 0.05–0.08 (a soft outline, not an aura).
-    private static readonly CuneiformGlow FireDefault = new(new Vector4(0.20f, 0.10f, 0.05f, 0.55f), 0.060f);
-    private static readonly CuneiformGlow RedDefault  = new(new Vector4(0.24f, 0.10f, 0.09f, 0.55f), 0.060f);
-    private static readonly CuneiformGlow BlueDefault = new(new Vector4(0.12f, 0.16f, 0.20f, 0.55f), 0.060f);
-    private static readonly CuneiformGlow WaxDefault  = new(new Vector4(0.28f, 0.22f, 0.12f, 0.55f), 0.060f);
+    // riding the fire twin. The initial alpha 0.55 read as GRIME over the clay in the first in-game pass
+    // (submission 2026-08-20T16-47-03), so it was dropped to 0.40 per the tuning guidance below — a fainter
+    // halo that seats the stroke without dirtying the ground. Tuning guidance: keep alpha in ~0.35–0.65 (drop
+    // toward 0.35 if it still reads as grime, raise toward 0.55–0.65 only if strokes smear back into the clay)
+    // and the blur fraction in 0.05–0.08 (a soft outline, not an aura).
+    private static readonly CuneiformGlow FireDefault = new(new Vector4(0.20f, 0.10f, 0.05f, 0.40f), 0.060f);
+    private static readonly CuneiformGlow RedDefault  = new(new Vector4(0.24f, 0.10f, 0.09f, 0.40f), 0.060f);
+    private static readonly CuneiformGlow BlueDefault = new(new Vector4(0.12f, 0.16f, 0.20f, 0.40f), 0.060f);
+    private static readonly CuneiformGlow WaxDefault  = new(new Vector4(0.28f, 0.22f, 0.12f, 0.40f), 0.060f);
 
     /// <summary>Resolve the glow for a tablet's <c>material</c> variant.
     /// <c>clay-red</c>/<c>clay-blue</c>/<c>clay-fire</c>/<c>wax</c> each map to their own ink-derived dark seed;
