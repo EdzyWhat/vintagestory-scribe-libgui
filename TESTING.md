@@ -29,26 +29,45 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > clear AA on the clay instead of washing out. Body ink unchanged. All gated on **Pixel-Art Display ON**.
 > **Fully quit and relaunch** to load the rebuilt DLL.
 
-- [ ] `00000011` **Fire link legible.** On a wet **fire** (tan) tablet with a Link/Tracker/Craft row, the
+- [x] `00000011` **Fire link legible.** On a wet **fire** (tan) tablet with a Link/Tracker/Craft row, the
       item name reads as a distinct warm-rust link — obviously not the body ink and no longer washed into
       the clay. *(tablet-text-visibility 5.1)*
-- [ ] `00000012` **Red link legible.** On a **red** (rose) tablet the link reads as a deep wine, distinct
+      - **Confirmed 2026-08-20** (submission 2026-08-20T16-47-03): "Works." Fire link reads as a distinct warm rust.
+- [x] `00000012` **Red link legible.** On a **red** (rose) tablet the link reads as a deep wine, distinct
       from the rosy ground (the worst camouflage case before). *(tablet-text-visibility 5.2)*
-- [ ] `00000013` **Blue link legible.** On a **blue** tablet the link reads as a lively deep steel-blue.
+      - **Confirmed 2026-08-20** (submission 2026-08-20T16-47-03): "Works." Red link reads as a deep wine on the rosy ground.
+- [x] `00000013` **Blue link legible.** On a **blue** tablet the link reads as a lively deep steel-blue.
       *(tablet-text-visibility 5.3)*
-- [ ] `00000014` **Wax link legible.** On a **wax** (pale honey) tablet the link reads as a deep
+      - **Confirmed 2026-08-20** (submission 2026-08-20T16-47-03): "Works." Blue link reads as a deep steel-blue.
+- [x] `00000014` **Wax link legible.** On a **wax** (pale honey) tablet the link reads as a deep
       amber-bronze, legible on the honey ground (the 2.3 : 1 worst case before). *(tablet-text-visibility 5.4)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T16-47-03): "Works." Wax link reads as a deep amber-bronze on the honey ground (closes the old 2.3 : 1 worst case).
 - [ ] `00000015` **Body glow seats, not grime.** Body task text on all four palettes: strokes read crisp
       and firmly seated — the dark halo reads as a soft engraved shadow, NOT as grime/dirt over the clay.
       (If grime, glow alpha wants dropping toward 0.40; if smearing, raise toward 0.65.) *(tablet-text-visibility 5.5)*
+      - **Still broken 2026-08-20** (submission 2026-08-20T16-47-03): "It reads more as grime. I think it
+        actually warrants being reduced." The dark halo read as dirt over the clay rather than a seated
+        engraved shadow.
+      - **Fix applied 2026-08-20, awaiting retest:** dropped all four `CuneiformGlowTable` seed alphas
+        `0.55` → `0.40` (Fire/Red/Blue/Wax) per the tuning guidance; blur fraction (`0.060`) unchanged.
+        Built + restaged (Debug). **Relaunch and re-check** all four palettes — the halo should now read as a
+        faint seated shadow, not grime. If still grimy, drop toward `0.35`; if strokes smear back into the
+        clay, raise toward `0.55`.
 - [ ] `00000016` **Fired matches wet.** Repeat the link + body checks on a **fired/hardened** (read-only)
       tablet of the same clay — colors match the wet form (state must not change palette) and read-only rows
       are equally legible. *(tablet-text-visibility 5.6)*
+      - **Backlogged 2026-08-20** (submission 2026-08-20T16-47-03): not tested — the user has no easy way to
+        put a tablet into the fired/hardened state to run the check, and requested a dev command to toggle
+        tablet state (e.g. `.scribe tablet fired`, kept in for players). Blocked on that command; retest once
+        it exists. **Unblocker now tracked:** OpenSpec change `add-tablet-state-dev-command`
+        (`/scribe tablet <wet|hard|fired>`) — its task 5.6 is this retest. Stays backlogged until that
+        command ships.
 - [ ] `00000017` **Title + counters glow.** Confirm the dark glow also reads well on the cuneiform TITLE and
       the tracker "N / N" counters (they share the glow table). *(tablet-text-visibility 5.7)*
-- [ ] `00000018` **Pixel-Art OFF unchanged.** Turn Pixel-Art Display OFF: the tablet follows the global theme
+- [x] `00000018` **Pixel-Art OFF unchanged.** Turn Pixel-Art Display OFF: the tablet follows the global theme
       over a flat panel, links use `Primary`, no glow — confirm it looks unchanged from before.
       *(tablet-text-visibility 5.8)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T16-47-03): "Works." Pixel-Art OFF renders unchanged — flat panel, `Primary` links, no glow.
 
 ## fix-recipe-variant-identity
 
@@ -133,23 +152,30 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > base + `maxLines: TitleMaxLines` on the readable RichText. Tablet wrap width widened per-material
 > (clay `0.86f`, wax `0.82f`). **Fully quit and relaunch the client first** so the new build loads.
 
-- [ ] `00000004` **Standard surfaces wrap.** On Lectern, Notebook, and Scriptorium, set a very long title →
+- [x] `00000004` **Standard surfaces wrap.** On Lectern, Notebook, and Scriptorium, set a very long title →
       the resting title wraps to two lines within the band, is fully readable (line 1 not clipped at the top),
       the drag/pencil/close chrome stays clear, and a title longer than two lines ends with an ellipsis on
       line 2. *(wrap-titles-all-surfaces 6.1/6.2/6.3, 4.1)*
-- [ ] `00000005` **Chalkboard wraps.** Long title on the Chalkboard → wraps to two lines within its taller
+      - **Confirmed 2026-08-20** (submission 2026-08-20T16-47-03): "Works." Lectern/Notebook/Scriptorium titles wrap to two lines within the band, chrome clear.
+- [x] `00000005` **Chalkboard wraps.** Long title on the Chalkboard → wraps to two lines within its taller
       band, chrome stays clear, no line-1 clipping. *(wrap-titles-all-surfaces 6.4)*
-- [ ] `00000006` **Tablet cuneiform-OFF wraps.** Disable cuneiform, set a long tablet title on BOTH clay and
+      - **Confirmed 2026-08-20** (submission 2026-08-20T16-47-03): "Works." Chalkboard title wraps to two lines in its taller band.
+- [x] `00000006` **Tablet cuneiform-OFF wraps.** Disable cuneiform, set a long tablet title on BOTH clay and
       wax → the readable title now wraps to two lines (was single-line ellipsized before). *(wrap-titles-all-surfaces 6.6)*
-- [ ] `00000007` **Tablet cuneiform-ON regression.** With cuneiform on, the proven tablet two-line cuneiform
+      - **Confirmed 2026-08-20** (submission 2026-08-20T16-47-03): "Works." Cuneiform-OFF tablet title wraps to two lines on clay and wax.
+- [x] `00000007` **Tablet cuneiform-ON regression.** With cuneiform on, the proven tablet two-line cuneiform
       wrap is unchanged — wraps, clips at line 2 (no ellipsis glyph), no visual shift. *(wrap-titles-all-surfaces 6.5)*
-- [ ] `00000008` **Editing stays single-line.** On Lectern/Notebook/Scriptorium, click the pencil and type a
+      - **Confirmed 2026-08-20** (submission 2026-08-20T16-47-03): "Works." Cuneiform-ON tablet wrap unchanged, no visual shift.
+- [x] `00000008` **Editing stays single-line.** On Lectern/Notebook/Scriptorium, click the pencil and type a
       long title → the editing field stays single-line (readable path), Enter commits with no newline, and the
       resting title re-wraps to two lines on commit. *(wrap-titles-all-surfaces 6.7)*
-- [ ] `00000009` **Short-title regression.** On every surface, a title that fits on one line renders exactly
+      - **Confirmed 2026-08-20** (submission 2026-08-20T16-47-03): "Works." Editing field stays single-line; resting title re-wraps on commit.
+- [x] `00000009` **Short-title regression.** On every surface, a title that fits on one line renders exactly
       as before — no band-height change, no layout shift. *(wrap-titles-all-surfaces 6.8)*
-- [ ] `0000000a` **Tablet width tuning.** Confirm the tablet title wraps LATER than the old default and clay
+      - **Confirmed 2026-08-20** (submission 2026-08-20T16-47-03): "Works." Short titles render exactly as before on every surface.
+- [x] `0000000a` **Tablet width tuning.** Confirm the tablet title wraps LATER than the old default and clay
       (`0.86f`) wraps a touch later than wax (`0.82f`); other surfaces' wrap points are unaffected. *(wrap-titles-all-surfaces 6.9)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T16-47-03): "Works." Tablet wraps later than the old default; clay wraps a touch later than wax; other surfaces unaffected.
 
 ## add-meal-page-scribe-link
 
@@ -835,16 +861,24 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > through the base-game "Sound Effects" slider. **Fully quit and relaunch the client** so `stamp.ogg`
 > loads.
 
-- [ ] `00000001` **Stamp sound fires once.** In single-player, perform a Transcribe copy — the stamp
+- [x] `00000001` **Stamp sound fires once.** In single-player, perform a Transcribe copy — the stamp
       sound plays exactly once, on the beat the wooden stamp lands (contact/press), not on fade-in or
       lift. Repeat for import and export — each plays its own single stamp sound. *(add-transcribe-stamp-sound 5.1)*
-- [ ] `00000002` **Volume baked + unmapped.** Confirm the stamp plays at the confirmed "alarm-140"
+      - **Confirmed 2026-08-20** (submission 2026-08-20T16-47-03): "It fires once." Single stamp sound on the contact frame.
+- [x] `00000002` **Volume baked + unmapped.** Confirm the stamp plays at the confirmed "alarm-140"
       level and that the **Timer alarm slider no longer affects it** (move it 0↔100 — the stamp volume
       is unchanged). The base-game "Sound Effects" slider **still** scales it (0 there silences the
       stamp). *(add-transcribe-stamp-sound 5.2)*
-- [ ] `00000003` **Watcher hears it only if visible.** Two clients on one shared Scriptorium: a watcher on
+      - **Confirmed 2026-08-20** (submission 2026-08-20T16-47-03): "Works." Volume is baked and no longer
+        tied to the Timer alarm slider.
+      - **Follow-up completed 2026-08-20** (over-rain loudness): the "too quiet over rain, want ~50% louder"
+        note from general notes was resolved by re-baking `stamp.ogg` up to the alarm-140-equivalent level
+        (max_volume now `-8.3 dB`, mean `-26.4 dB`) with the runtime `Volume` fixed at `1f`. Staged; audible
+        over rain on next relaunch.
+- [x] `00000003` **Watcher hears it only if visible.** Two clients on one shared Scriptorium: a watcher on
       the same Transcribe/import-export view hears the stamp at the contact frame; a watcher on a different
       tab (or with the dialog closed) hears nothing. *(add-transcribe-stamp-sound 5.3)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T16-47-03): "Works." Watcher on the same view hears it; on a different tab / closed dialog hears nothing.
 
 ## hud-settings-button-tweaks
 
@@ -1104,9 +1138,12 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > Liquid recipe ingredients (ink-and-quill's dye, a poultice's water) become counting **litre Trackers**
 > instead of plain notes; counted from carried buckets/bowls. **Relaunch first** to load the new build.
 
-- [ ] `0000000b` **Liquid becomes a Tracker.** Open an ink-and-quill (or similar liquid recipe) Handbook page and Add Crafting Task -> the liquid appears as a **Tracker child with a have/need counter**, not a Text note. Confirm its target = the recipe's litres for the chosen batch via `.scribeprobe`. *(add-liquid-ingredient-tracker 6.1)*
-- [ ] `0000000c` **Empty -> carried litres.** With an empty inventory the liquid Tracker reads `0 / N`. Pick up a bucket/bowl holding the liquid -> the count rises to the container's litres within ~1s. *(add-liquid-ingredient-tracker 6.2)*
-- [ ] `0000000d` **Litres sum; wrong liquid = 0.** Carry multiple containers of the same liquid -> litres sum. A container of a different liquid contributes `0`. *(add-liquid-ingredient-tracker 6.3)*
+- [x] `0000000b` **Liquid becomes a Tracker.** Open an ink-and-quill (or similar liquid recipe) Handbook page and Add Crafting Task -> the liquid appears as a **Tracker child with a have/need counter**, not a Text note. Confirm its target = the recipe's litres for the chosen batch via `.scribeprobe`. *(add-liquid-ingredient-tracker 6.1)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T16-47-03): "Works." The liquid appears as a counting litre Tracker child, not a note.
+- [x] `0000000c` **Empty -> carried litres.** With an empty inventory the liquid Tracker reads `0 / N`. Pick up a bucket/bowl holding the liquid -> the count rises to the container's litres within ~1s. *(add-liquid-ingredient-tracker 6.2)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T16-47-03): "Works." Empty reads `0 / N`; carried-container litres raise the count.
+- [x] `0000000d` **Litres sum; wrong liquid = 0.** Carry multiple containers of the same liquid -> litres sum. A container of a different liquid contributes `0`. *(add-liquid-ingredient-tracker 6.3)*
+      - **Confirmed 2026-08-20** (submission 2026-08-20T16-47-03): "Works." Same-liquid containers sum; a different liquid contributes 0.
 - [ ] `0000000e` **Fill applies completion setting.** Carrying >= the target litres marks the Tracker satisfied and applies your tracker-completion setting (complete / delete / nothing); dropping below afterward does not re-fire. *(add-liquid-ingredient-tracker 6.4)*
 - [ ] `0000000f` **HUD pin counts too.** Pin the liquid Tracker to the HUD -> it updates from carried containers exactly like in the dialog (same count path). *(add-liquid-ingredient-tracker 6.5)*
 - [ ] `00000010` **Probe-sweep edge cases.** `.scribeprobe` a few real liquid recipes -> a block-`type` liquid and a sub-1-litre requirement round up as expected, and any wildcard/unresolvable liquid still degrades to a note. *(add-liquid-ingredient-tracker 6.6)*

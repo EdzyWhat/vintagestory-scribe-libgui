@@ -110,6 +110,49 @@ ingredients, and notes. This is the cheap "measure don't theorize" instrument to
 copper resolve distinctly in-game before the playtest gate, mirroring `.scribelight`/`.geartune`
 precedent. Gate it behind the existing dev-diagnosis toolkit conventions.
 
+**D8 — Whole-code wildcard + `allowedVariants` (the item-air trap).** *Added after the 2026-08-20
+playtest:* the Hunter's Backpack grid recipe uses a **whole-code** wildcard ingredient —
+`{ code: "*", allowedVariants: ["papyrustops", "cattailtops"] }` — not a path-prefix wildcard like
+`metalplate-*`. D3 assumed the stored wildcard code still "counts any member," but that assumption
+only holds for a prefix wildcard whose `SearchItems` members ARE the family. For a bare `*`:
+
+- **Display** — `ResolveWildcardMember` does `SearchItems(new AssetLocation("*"))`, which matches
+  *every* game item; the registry returns `game:item-air` first, so the child Tracker reads
+  "**Game: Item-Air (any variant)**". The playtest-reported symptom.
+- **Counting** — `ScribeTrackerCounter.TryResolveIngredient` builds a `Wildcard` ingredient with
+  `Code = game:*` and **drops `AllowedVariants`**, so `SatisfiesAsIngredient` → `WildcardUtil.Match`
+  matches *every carried item*. The tracker over-counts massively (not just the reported cosmetic bug).
+
+Root cause: the child Tracker's target is a **plain string** (`ScribeBlock.TargetItemCode`), by
+design, so a wildcard ingredient's `AllowedVariants`/`SkipVariants` are lost in the round-trip. VS's
+own `WildcardUtil.Match(wildCard, code, allowedVariants)` overload and
+`CraftingRecipeIngredient.SatisfiesAsIngredient` DO honor `AllowedVariants` — *if the ingredient
+carries them*. This is exactly the case Tallybook's `RecipeProbe` handles by never reducing an
+ingredient to a bare code: it keeps the full `CraftingRecipeIngredient` (its `FirstMatchSample`
+resolves a representative by iterating collectibles and testing `SatisfiesAsIngredient(stack, false)`,
+which excludes air and honors `allowedVariants`), and counts via the same `SatisfiesAsIngredient`.
+
+Options (final choice deferred to implementation; **B is recommended**):
+- **A — Store a representative concrete code.** For a wildcard with `AllowedVariants`, store the first
+  allowed variant's concrete code (Exact). *Simple, correct display, but under-counts* a multi-variant
+  family (counts only one of papyrus/cattail tops). Rejected as the sole fix.
+- **B — Carry `AllowedVariants` through the target reference (recommended).** Extend the stored tracker
+  reference to persist the wildcard's `AllowedVariants` (+ `SkipVariants`) alongside the code — either
+  as a new optional field on the block/`ScribeCraftIngredient` (a persisted-schema addition; note it is
+  a plain `string[]`, so **Core stays VS-API-free** — no `Vintagestory.*` reference) with codec
+  round-trip, or a Mod-side code microformat (`game:*|papyrustops,cattailtops`) parsed only where the
+  probe/counter/`ResolveWildcardMember` consume it (no Core/schema change). Then set `AllowedVariants`
+  on the counting ingredient (correct count) and resolve the representative member via
+  `SatisfiesAsIngredient`/an allowed variant (correct display, never air). Persistence decision — schema
+  field vs. code microformat — to be made at implementation; the microformat keeps the change Mod-only
+  and avoids touching the document format, matching the "stored references are plain strings" invariant.
+- **C — Suppress air + degrade.** At minimum, `ResolveWildcardMember` must skip `*-air` members and any
+  degenerate bare-`*` code so it never shows "Item-Air"; combine with B for a real family, or fall back
+  to a generic "any suitable item" label (Tallybook's own fallback) when no allowed set is available.
+
+Regardless of A/B/C, `ResolveWildcardMember` gains an **air-exclusion guard** (skip `item-air`/`block-air`)
+so the cosmetic failure can never recur even for an unforeseen wildcard shape.
+
 ## Risks / Trade-offs
 
 - **`PageCodeForStack` attribute set vs. recipe output attributes.** The method strips

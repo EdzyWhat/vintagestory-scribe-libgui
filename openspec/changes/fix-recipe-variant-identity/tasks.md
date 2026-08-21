@@ -81,6 +81,24 @@
       (genuinely required). The old per-cell `MatterState == Liquid` check is kept (harmless; covers a
       hypothetical future raw-liquid cell). Build 0/0. In-game §7.4 remains the retest gate.
 
+- [ ] 4.4 **(NEW — 2026-08-20 playtest: "Game: Item-Air (any variant)" on the Hunter's Backpack).** Fix the
+      whole-code wildcard + `allowedVariants` case (design **D8**). The Hunter's Backpack ingredient is
+      `{ code: "*", allowedVariants: ["papyrustops","cattailtops"] }`; the current 4.1 display path does
+      `SearchItems("*")` → `game:item-air` first, and `ScribeTrackerCounter` builds a `game:*` wildcard that
+      DROPS `AllowedVariants`, so it also over-counts every carried item. Fix both:
+      - Add an **air-exclusion guard** to `ScribeItemRef.ResolveWildcardMember` (skip `item-air`/`block-air`
+        and any degenerate bare-`*` code) so "Item-Air" can never surface again, for any wildcard shape.
+      - **Carry `AllowedVariants`/`SkipVariants`** through the tracker's target reference (D8 option B —
+        prefer the Mod-side code microformat, e.g. `game:*|papyrustops,cattailtops`, to keep the persisted
+        document format and Core untouched) so (a) `ScribeTrackerCounter.TryResolveIngredient` sets them on
+        the `Wildcard` ingredient → `SatisfiesAsIngredient` counts only the allowed family, and (b) the
+        representative member is resolved via an allowed variant / `SatisfiesAsIngredient`, matching Tallybook's
+        `RecipeProbe.FirstMatchSample`. Family label reads e.g. "Papyrus tops (any variant)" / an "any suitable
+        item" fallback, never air. Update `IngredientCode`/`DeriveIngredients` to emit the enriched code.
+      - Ground truth captured: Tallybook `RecipeProbe` keeps full `CraftingRecipeIngredient`s and resolves
+        samples via `SatisfiesAsIngredient(stack, false)` (excludes air, honors `allowedVariants`); VS's
+        `WildcardUtil.Match(wildCard, code, allowedVariants)` overload is the counting primitive.
+
 ## 5. Tests + build
 
 - [x] 5.1 `dotnet build src/Mod/Mod.csproj -c Debug` clean (0 warnings/errors).
@@ -114,3 +132,7 @@
       the same ingredients/labels as before (no regression).
 - [ ] 7.4 In-game: confirm a wildcard-ingredient recipe shows a readable family name on the subtask,
       and a liquid-consuming recipe shows the liquid as a note.
+- [ ] 7.5 In-game (regression for 4.4 / D8): add a Crafting Task from the **Hunter's Backpack** Handbook page.
+      Confirm the papyrus/cattail-tops subtask reads as a real family name (NOT "Game: Item-Air (any variant)"),
+      and that its carried count reflects only papyrus + cattail tops — hold a stack of unrelated items and
+      confirm the count does NOT balloon (no over-count from a bare `*` match).
