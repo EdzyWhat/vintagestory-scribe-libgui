@@ -63,7 +63,72 @@ public sealed partial class ScribeModSystem
                     parsers.WordRange("what", "tasks", "notes", "history", "guestbook", "all"),
                     parsers.OptionalWordRange("target", "notebook", "lectern"))
                 .HandleWith(OnSeedCommand)
+            .EndSubCommand()
+            .BeginSubCommand("tablet")
+                .WithDescription("[scribe dev] Set the held Scribe Tablet's life-cycle state. " +
+                    "Usage: /scribe tablet <wet|hard|fired>")
+                .WithArgs(parsers.WordRange("state", "wet", "hard", "fired"))
+                .HandleWith(OnTabletCommand)
             .EndSubCommand();
+    }
+
+    /// <summary>Handler for <c>/scribe tablet &lt;wet|hard|fired&gt;</c> (add-tablet-state-dev-command): set the
+    /// calling player's HELD Scribe Tablet to the requested life-cycle state by swapping its <c>material</c>
+    /// variant to the corresponding sibling and carrying the document/history across
+    /// (<see cref="ItemScribeTablet.BuildStateVariant"/>). Server-authoritative — the held item lives in the
+    /// server-side inventory, so the swap + <see cref="ItemSlot.MarkDirty"/> run here, exactly like the
+    /// natural <c>Soften</c>/<c>DoSmelt</c> paths. Double-gated identically to <c>/scribe seed</c>
+    /// (<c>controlserver</c> privilege on the root + this in-handler creative check). Reaching a
+    /// <c>wet</c>/<c>hard</c> state from a FIRED tablet bypasses the normally-permanent fired rule; that is an
+    /// intentional testing override and is reported as such (D3).</summary>
+    private TextCommandResult OnTabletCommand(TextCommandCallingArgs args)
+    {
+        if (sapi is null) return TextCommandResult.Error("Server not ready.");
+        if (args.Caller.Player is not IServerPlayer player)
+            return TextCommandResult.Error("This command must be run by a player.");
+        if (player.WorldData.CurrentGameMode != EnumGameMode.Creative)
+            return TextCommandResult.Error(Lang.Get("scribe:cmd-tablet-creative-only"));
+
+        var slot = FindHeldTablet(player);
+        if (slot is null)
+            return TextCommandResult.Error(Lang.Get("scribe:cmd-tablet-no-tablet"));
+
+        string stateArg = (string)args[0];
+        var target = stateArg switch
+        {
+            "hard"  => TabletState.Hard,
+            "fired" => TabletState.Fired,
+            _       => TabletState.Wet,
+        };
+
+        // Capture whether the source was fired BEFORE the swap, so we can flag the deliberate override of the
+        // permanent-fired rule (fired → wet/hard) in the result message.
+        bool wasFired = ItemScribeTablet.ReadFired(slot.Itemstack);
+
+        var swapped = ItemScribeTablet.BuildStateVariant(slot.Itemstack, target, sapi.World);
+        if (swapped is null)
+            // The only way BuildStateVariant returns null for a real tablet is a missing sibling variant —
+            // i.e. a wax tablet asked to harden/fire (wax has no -hard/-fired sibling).
+            return TextCommandResult.Error(Lang.Get("scribe:cmd-tablet-wax-cannot", stateArg));
+
+        slot.Itemstack = swapped;
+        slot.MarkDirty();
+
+        bool overrode = wasFired && target != TabletState.Fired;
+        return TextCommandResult.Success(overrode
+            ? Lang.Get("scribe:cmd-tablet-set-override", stateArg)
+            : Lang.Get("scribe:cmd-tablet-set", stateArg));
+    }
+
+    /// <summary>Resolve the calling player's currently held Scribe Tablet: the active hotbar slot first, then
+    /// the offhand, so a dev toggle acts on whatever hand holds a tablet. Null when neither hand holds one.</summary>
+    private static ItemSlot? FindHeldTablet(IServerPlayer player)
+    {
+        var active = player.InventoryManager?.ActiveHotbarSlot;
+        if (active?.Itemstack?.Collectible is ItemScribeTablet) return active;
+        var offhand = player.Entity?.LeftHandItemSlot;
+        if (offhand?.Itemstack?.Collectible is ItemScribeTablet) return offhand;
+        return null;
     }
 
     private TextCommandResult OnSeedCommand(TextCommandCallingArgs args)

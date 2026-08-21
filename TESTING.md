@@ -62,6 +62,9 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         it exists. **Unblocker now tracked:** OpenSpec change `add-tablet-state-dev-command`
         (`/scribe tablet <wet|hard|fired>`) — its task 5.6 is this retest. Stays backlogged until that
         command ships.
+      - **Backlogged 2026-08-20 (unblocker SHIPPED, ready to retest):** `add-tablet-state-dev-command` is
+        implemented + restaged. In creative, hold a written wet clay tablet and run `/scribe tablet fired`
+        (or `hard`), then run this check; `/scribe tablet wet` resets it. Retest and update this verdict.
 - [ ] `00000017` **Title + counters glow.** Confirm the dark glow also reads well on the cuneiform TITLE and
       the tracker "N / N" counters (they share the glow table). *(tablet-text-visibility 5.7)*
 - [x] `00000018` **Pixel-Art OFF unchanged.** Turn Pixel-Art Display OFF: the tablet follows the global theme

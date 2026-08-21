@@ -336,17 +336,43 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
     /// returned stack back into its slot/entity.</summary>
     private static ItemStack? Soften(ItemStack? stack, IWorldAccessor world)
     {
-        if (stack?.Collectible is null) return null;
-        var (material, state) = ResolveMaterialState(stack);
-        if (state != TabletState.Hard) return null;
+        // Natural rehydration only softens a HARD tablet (a wet tablet is already editable; a fired one is
+        // permanent — the guard here is what enforces that, NOT BuildStateVariant). The seam does the
+        // variant swap + document carry; a freshly-built stack carries no transitionstate, so the engine
+        // re-seeds the ~2-day dry-out clock from now on its next tick.
+        if (ResolveMaterialState(stack).state != TabletState.Hard) return null;
+        return BuildStateVariant(stack, TabletState.Wet, world);
+    }
 
-        var softItem = world.GetItem(stack.Collectible.CodeWithVariant("material", material));
-        if (softItem is null) return null;
+    /// <summary>Build a fresh tablet stack in the requested life-cycle <paramref name="target"/> state,
+    /// carrying the source's document + history onto it — the single swap+carry seam shared by the natural
+    /// <see cref="Soften"/> path and the <c>/scribe tablet</c> dev command (add-tablet-state-dev-command D2).
+    /// Resolves the base clay/wax material from <paramref name="current"/>, maps <paramref name="target"/> to
+    /// the sibling <c>material</c> variant (<see cref="TabletState.Wet"/> → bare <c>clay-&lt;color&gt;</c>;
+    /// <see cref="TabletState.Hard"/> → <c>-hard</c>; <see cref="TabletState.Fired"/> → <c>-fired</c>), and
+    /// <see cref="IWorldAccessor.GetItem"/>s it. Returns <c>null</c> when that sibling variant does not exist
+    /// (wax has no <c>-hard</c>/<c>-fired</c> sibling, or an unregistered variant) — the caller reports it.
+    ///
+    /// <para>State-AGNOSTIC by design: it will happily build a wet/hard sibling FROM a fired stack (the
+    /// normally-permanent fired state), because the permanence rule lives only in <see cref="Soften"/>'s own
+    /// guard, not here. The dev command relies on this to reset a fired tablet for testing.</para></summary>
+    public static ItemStack? BuildStateVariant(ItemStack? current, TabletState target, IWorldAccessor world)
+    {
+        if (current?.Collectible is null) return null;
+        var (material, _) = ResolveMaterialState(current);
+        string variant = target switch
+        {
+            TabletState.Hard  => material + "-hard",
+            TabletState.Fired => material + "-fired",
+            _                 => material, // Wet = the bare clay/wax variant
+        };
 
-        var softStack = new ItemStack(softItem);
-        CarryStackData(stack, softStack);
-        // No transitionstate copied → the transition tick re-seeds the dry-out clock from now.
-        return softStack;
+        var item = world.GetItem(current.Collectible.CodeWithVariant("material", variant));
+        if (item is null) return null;
+
+        var stack = new ItemStack(item);
+        CarryStackData(current, stack);
+        return stack;
     }
 
     /// <summary>Copy the persisted document + history bytes from <paramref name="from"/> onto
