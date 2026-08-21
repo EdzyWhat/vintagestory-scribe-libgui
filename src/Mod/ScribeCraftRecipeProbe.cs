@@ -371,13 +371,19 @@ internal static class ScribeCraftRecipeProbe
     }
 
     /// <summary>The code a counting ingredient contributes to a child Tracker: the CONCRETE resolved code for
-    /// an exact (<c>{var}</c>-bound) ingredient, or the broad WILDCARD pattern for a genuine family ingredient
-    /// (D6). Null when neither is available.</summary>
+    /// an exact (<c>{var}</c>-bound) ingredient, or the WILDCARD code for a genuine family ingredient (D6).
+    /// A wildcard that carries an <c>allowedVariants</c>/<c>skipVariants</c> restriction (e.g. the Hunter's
+    /// Backpack's <c>{ code:"*", allowedVariants:[…] }</c>) is encoded via
+    /// <see cref="ScribeItemRef.EncodeWildcard"/> so the child Tracker keeps the variant filter — otherwise a
+    /// bare <c>game:*</c> counts every carried item and displays as "Item-Air" (fix-recipe-variant-identity
+    /// D8). An unrestricted wildcard encodes to its bare code (unchanged). Null when neither is available.</summary>
     private static string? IngredientCode(CraftingRecipeIngredient ingredient)
     {
         if (ingredient.MatchingType == EnumRecipeMatchType.Exact && ingredient.ResolvedItemStack?.Collectible?.Code is { } concrete)
             return concrete.ToString();
-        return ingredient.Code?.ToString();
+        return ingredient.Code is { } wild
+            ? ScribeItemRef.EncodeWildcard(wild, ingredient.AllowedVariants, ingredient.SkipVariants)
+            : null;
     }
 
     /// <summary>Sentinel page code for a recipe/stack that yields no <see cref="GuiHandbookItemStackPage.PageCodeForStack"/>

@@ -63,6 +63,31 @@ internal static class ScribeTrackerCounter
             return true;
         }
 
+        // Restricted-wildcard microformat (fix-recipe-variant-identity D8): the target carries the
+        // ingredient's allowedVariants (and any skipVariants) so the count honors the exact family — a bare
+        // "game:*" (the Hunter's Backpack case) would otherwise match every carried item. Resolve a
+        // representative member (an allowed variant) purely to fix the ingredient's item CLASS, which
+        // SatisfiesAsIngredient requires to equal the carried stack's class; the match itself runs through
+        // WildcardUtil.Match(Code, code, AllowedVariants). Must precede the AssetLocation parse below (the
+        // microformat string contains '|', not a valid code char) and the bare-wildcard branch.
+        if (ScribeItemRef.TryParseWildcard(targetItemCode, out var wildLoc, out var allowed, out var skip)
+            && wildLoc is not null)
+        {
+            var member = ScribeItemRef.ResolveWildcardMember(world, targetItemCode);
+            if (member?.Collectible is null) return false;
+
+            ingredient = new CraftingRecipeIngredient
+            {
+                Type = member.Class,
+                Code = wildLoc,
+                Quantity = 1,
+                MatchingType = EnumRecipeMatchType.Wildcard, // routes SatisfiesAsIngredient through WildcardUtil.Match
+                AllowedVariants = allowed,
+                SkipVariants = skip,
+            };
+            return true; // NO Resolve: the wildcard match path does not use ResolvedItemStack
+        }
+
         AssetLocation loc;
         try { loc = new AssetLocation(targetItemCode); }
         catch { return false; }

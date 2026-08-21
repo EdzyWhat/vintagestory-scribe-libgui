@@ -81,7 +81,7 @@
       (genuinely required). The old per-cell `MatterState == Liquid` check is kept (harmless; covers a
       hypothetical future raw-liquid cell). Build 0/0. In-game §7.4 remains the retest gate.
 
-- [ ] 4.4 **(NEW — 2026-08-20 playtest: "Game: Item-Air (any variant)" on the Hunter's Backpack).** Fix the
+- [x] 4.4 **(NEW — 2026-08-20 playtest: "Game: Item-Air (any variant)" on the Hunter's Backpack).** Fix the
       whole-code wildcard + `allowedVariants` case (design **D8**). The Hunter's Backpack ingredient is
       `{ code: "*", allowedVariants: ["papyrustops","cattailtops"] }`; the current 4.1 display path does
       `SearchItems("*")` → `game:item-air` first, and `ScribeTrackerCounter` builds a `game:*` wildcard that
@@ -98,6 +98,15 @@
       - Ground truth captured: Tallybook `RecipeProbe` keeps full `CraftingRecipeIngredient`s and resolves
         samples via `SatisfiesAsIngredient(stack, false)` (excludes air, honors `allowedVariants`); VS's
         `WildcardUtil.Match(wildCard, code, allowedVariants)` overload is the counting primitive.
+      — DONE (option B, Mod-side microformat): `ScribeItemRef.EncodeWildcard`/`TryParseWildcard` store a
+        restricted wildcard as `"<code>|<allowed,csv>[|<skip,csv>]"` (a plain string — Core/document schema
+        untouched); unrestricted wildcards still store the bare code (no regression). `IngredientCode` emits it.
+        `ScribeTrackerCounter` parses it, sets `AllowedVariants`/`SkipVariants` on the `Wildcard` ingredient
+        (exact-family count, verified against decompiled `SatisfiesAsIngredient` + `WildcardUtil.Match`), and
+        fixes the ingredient class from a representative allowed-variant member. `ResolveWildcardMember` gained
+        (a) a microformat branch that resolves the representative by substituting the first allowed variant into
+        `*` (never air), and (b) an `air`-exclusion guard (`FirstNonAir`, `Code.Path != "air"`) for ANY wildcard
+        shape. Build 0/0. §7.5 is the in-game retest gate.
 
 ## 5. Tests + build
 

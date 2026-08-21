@@ -30,11 +30,67 @@ internal static class ScribeItemRef
     /// code (a <c>domain:path</c> <c>AssetLocation</c>) or a <c>"page:"</c> guide-page reference.</summary>
     private const string StackPrefix = "stack@";
 
+    /// <summary>Field separator for the <b>restricted-wildcard microformat</b> (fix-recipe-variant-identity
+    /// D8, option B): <c>"&lt;wildcardCode&gt;|&lt;allowed,csv&gt;[|&lt;skip,csv&gt;]"</c>. A bare
+    /// <c>domain:path</c> code never contains <c>'|'</c>, and the attribute-encoded <see cref="StackPrefix"/>
+    /// form (which also uses <c>'|'</c>) is always distinguished by its marker first, so this separator only
+    /// ever appears in a wildcard microformat.</summary>
+    private const char WildcardSep = '|';
+
     /// <summary>True when <paramref name="code"/> is an <see cref="Encode"/>d attribute-encoded target (carries
     /// meaningful stack attributes) rather than a bare collectible code. Lets the Tracker counter pick an
     /// exact-variant matcher for these and keep the wildcard-friendly collectible match for bare codes.</summary>
     public static bool IsAttributeEncoded(string? code)
         => code is not null && code.StartsWith(StackPrefix, StringComparison.Ordinal);
+
+    /// <summary>Build the stored target code for a (possibly restricted) wildcard ingredient
+    /// (fix-recipe-variant-identity D8). An <b>unrestricted</b> wildcard — no <paramref name="allowedVariants"/>
+    /// and no <paramref name="skipVariants"/>, e.g. a plain <c>game:metalplate-*</c> whose <c>*</c>-prefix
+    /// already IS the family — stores the bare wildcard code, byte-identical to before (no regression). A
+    /// <b>restricted</b> wildcard — one carrying an allowed/skip variant list, e.g. the Hunter's Backpack's
+    /// <c>{ code: "*", allowedVariants: ["papyrustops","cattailtops"] }</c> — stores a Mod-side microformat
+    /// <c>"&lt;code&gt;|&lt;allowed,csv&gt;[|&lt;skip,csv&gt;]"</c> so the counter can honor the variant filter.
+    /// Without it a bare <c>game:*</c> would match every carried item and resolve its display to
+    /// <c>game:item-air</c> (the 2026-08-20 playtest symptom). The stored value stays a plain string, so
+    /// Core's document schema is untouched.</summary>
+    public static string EncodeWildcard(AssetLocation code, string[]? allowedVariants, string[]? skipVariants)
+    {
+        string bare = code.ToString();
+        bool hasAllowed = allowedVariants is { Length: > 0 };
+        bool hasSkip = skipVariants is { Length: > 0 };
+        if (!hasAllowed && !hasSkip) return bare;
+
+        var sb = new StringBuilder(bare);
+        sb.Append(WildcardSep).Append(hasAllowed ? string.Join(",", allowedVariants!) : "");
+        if (hasSkip) sb.Append(WildcardSep).Append(string.Join(",", skipVariants!));
+        return sb.ToString();
+    }
+
+    /// <summary>Parse an <see cref="EncodeWildcard"/> restricted-wildcard microformat into its base wildcard
+    /// <paramref name="code"/> plus the allowed/skip variant arrays. Returns false — leaving all out-params
+    /// null — for a bare code (no <see cref="WildcardSep"/>), an attribute-encoded <see cref="StackPrefix"/>
+    /// target, or a malformed base location, so callers fall through to their existing bare-code handling.</summary>
+    public static bool TryParseWildcard(string? code, out AssetLocation? baseCode,
+        out string[]? allowedVariants, out string[]? skipVariants)
+    {
+        baseCode = null; allowedVariants = null; skipVariants = null;
+        if (string.IsNullOrEmpty(code)) return false;
+        if (code.StartsWith(StackPrefix, StringComparison.Ordinal)) return false;
+
+        int sep = code.IndexOf(WildcardSep);
+        if (sep < 0) return false;
+
+        try { baseCode = new AssetLocation(code[..sep]); }
+        catch { baseCode = null; return false; }
+
+        string[] rest = code[(sep + 1)..].Split(WildcardSep);
+        allowedVariants = SplitCsv(rest[0]);
+        if (rest.Length > 1) skipVariants = SplitCsv(rest[1]);
+        return true;
+    }
+
+    private static string[]? SplitCsv(string s)
+        => string.IsNullOrEmpty(s) ? null : s.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
     /// <summary>Encode an <see cref="ItemStack"/> into a target string that preserves its meaningful,
     /// identity-bearing attributes (support-attribute-encoded-items Fix B). Mirrors
@@ -163,21 +219,69 @@ internal static class ScribeItemRef
         return (stack, DisplayName(stack, code));
     }
 
-    /// <summary>Resolve a representative stack for a wildcard/family code by taking the first member the
-    /// wildcard-aware registries return (<see cref="IWorldAccessor.SearchItems"/> then
-    /// <see cref="IWorldAccessor.SearchBlocks"/> — the same lookup <see cref="ScribeTrackerCounter"/> uses for
-    /// counting). Null when the code is malformed or the family has no live member (caller falls back to the
-    /// raw code — no regression).</summary>
-    private static ItemStack? ResolveWildcardMember(IWorldAccessor world, string code)
+    /// <summary>Resolve a representative stack for a wildcard/family code — used both for a Tracker row's
+    /// display icon+name and by <see cref="ScribeTrackerCounter"/> to pick the counting ingredient's item
+    /// class. Two shapes (fix-recipe-variant-identity D8):
+    /// <list type="bullet">
+    /// <item>A <b>restricted-wildcard microformat</b> (<see cref="EncodeWildcard"/>) resolves a concrete member
+    /// by substituting its first resolvable allowed variant into the wildcard's <c>*</c> (e.g.
+    /// <c>game:*</c> + <c>"papyrustops"</c> → <c>game:papyrustops</c>, matching how
+    /// <c>WildcardUtil.MatchesVariants</c> extracts the variant), so the representative is always a real
+    /// family member — never <c>game:item-air</c>.</item>
+    /// <item>A <b>bare wildcard</b> (e.g. <c>game:metalplate-*</c>) takes the first member the wildcard-aware
+    /// registries return (<see cref="IWorldAccessor.SearchItems"/> then <see cref="IWorldAccessor.SearchBlocks"/>),
+    /// skipping the <c>air</c> sentinel so a degenerate bare <c>*</c> can never surface "Item-Air".</item>
+    /// </list>
+    /// Null when the code is malformed or the family has no live member (caller falls back to the raw code —
+    /// no regression).</summary>
+    public static ItemStack? ResolveWildcardMember(IWorldAccessor world, string code)
     {
+        // Restricted-wildcard microformat: prefer a concrete allowed-variant member (guaranteed non-air).
+        if (TryParseWildcard(code, out var baseLoc, out var allowed, out _) && baseLoc is not null)
+        {
+            if (allowed is not null)
+                foreach (string variant in allowed)
+                {
+                    var member = ResolveConcreteMember(world, baseLoc, variant);
+                    if (member is not null) return member;
+                }
+            // No allowed variant resolved → fall through to a filtered search on the bare wildcard code.
+            code = baseLoc.ToString();
+        }
+
         AssetLocation loc;
         try { loc = new AssetLocation(code); }
         catch { return null; }
 
-        var items = world.SearchItems(loc);
-        if (items is { Length: > 0 }) return new ItemStack(items[0]);
-        var blocks = world.SearchBlocks(loc);
-        if (blocks is { Length: > 0 }) return new ItemStack(blocks[0]);
+        // Air-exclusion guard (D8): SearchItems("*") returns game:item-air first — never present air (or any
+        // air sentinel) as a family representative, for ANY wildcard shape.
+        if (FirstNonAir(world.SearchItems(loc)) is { } item) return new ItemStack(item);
+        if (FirstNonAir(world.SearchBlocks(loc)) is { } block) return new ItemStack(block);
+        return null;
+    }
+
+    /// <summary>Build the concrete member of <paramref name="wildCard"/> for one allowed
+    /// <paramref name="variant"/> by replacing the single <c>*</c> in its path (e.g. <c>metalplate-*</c> +
+    /// <c>"copper"</c> → <c>metalplate-copper</c>; <c>*</c> + <c>"papyrustops"</c> → <c>papyrustops</c>), then
+    /// resolving it from the item registry first, then blocks. Null when there is no <c>*</c> to fill or the
+    /// resolved code is not registered.</summary>
+    private static ItemStack? ResolveConcreteMember(IWorldAccessor world, AssetLocation wildCard, string variant)
+    {
+        if (!wildCard.Path.Contains('*')) return null;
+        var loc = new AssetLocation(wildCard.Domain, wildCard.Path.Replace("*", variant));
+        if (world.GetItem(loc) is { } item) return new ItemStack(item);
+        if (world.GetBlock(loc) is { } block) return new ItemStack(block);
+        return null;
+    }
+
+    /// <summary>The first non-<c>air</c> collectible in a wildcard search result. The <c>air</c> sentinel
+    /// (item and block alike register code path <c>"air"</c>) sorts first in a bare-<c>*</c> search and would
+    /// otherwise be shown as the family representative.</summary>
+    private static T? FirstNonAir<T>(T[]? found) where T : CollectibleObject
+    {
+        if (found is null) return null;
+        foreach (var c in found)
+            if (c?.Code is { } loc && loc.Path != "air") return c;
         return null;
     }
 
