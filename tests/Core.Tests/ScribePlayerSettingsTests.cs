@@ -262,8 +262,8 @@ public class ScribePlayerSettingsTests
     {
         // The shipped default equals the author-drawn curve's x=0 anchor, so a fresh profile reproduces the
         // graph exactly. Normalized() leaves an in-range value untouched.
-        Assert.Equal(0.03f, new ScribePlayerSettings().IlluminationFloor, 4);
-        Assert.Equal(0.03f, new ScribePlayerSettings().Normalized().IlluminationFloor, 4);
+        Assert.Equal(0.05f, new ScribePlayerSettings().IlluminationFloor, 4);
+        Assert.Equal(0.05f, new ScribePlayerSettings().Normalized().IlluminationFloor, 4);
     }
 
     [Theory]

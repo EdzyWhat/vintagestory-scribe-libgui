@@ -203,6 +203,7 @@ public class ScribeDocumentCodecTests
         Assert.Equal(0, block.CurrentQuantity);
         Assert.Null(block.LinkTarget);
         Assert.Null(block.LinkLabel); // v7 field — defaulted for a v5 blob
+        Assert.Equal("", block.RecipeSignature); // v8 field — defaulted for a v5 blob
         Assert.Empty(legacyPinned);
     }
 
@@ -245,12 +246,59 @@ public class ScribeDocumentCodecTests
         Assert.Equal(ScribeBlockKind.Link, link.Kind);
         Assert.Equal("game:ingot-tin", link.LinkTarget);
         Assert.Null(link.LinkLabel); // v7 field — defaulted for a v6 blob
+        Assert.Equal("", link.RecipeSignature); // v8 field — defaulted for a v6 blob
+    }
+
+    [Fact]
+    public void TryDeserialize_V7Bytes_Succeeds_AndDefaultsRecipeSignature()
+    {
+        // v7 carried Tracker/Link fields and LinkLabel but NOT the v8 RecipeSignature. A hand-built
+        // v7 blob must read via progressive reads: its v7 fields round-trip, and RecipeSignature
+        // defaults empty.
+        var docId = Guid.NewGuid();
+        var taskId = Guid.NewGuid();
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write(new byte[] { (byte)'S', (byte)'C', (byte)'R', (byte)'B' });
+            w.Write((byte)7);
+            w.Write(docId.ToByteArray());
+            w.Write(1); // blockCount
+            w.Write(taskId.ToByteArray());
+            w.Write((byte)ScribeBlockKind.Link);
+            w.Write(false); // done
+            w.Write(0);     // depth
+            w.Write(false); // hasAssignedToUid
+            w.Write("");    // text (Link carries empty text)
+            // v6 Tracker/Link fields:
+            w.Write(false); // hasTargetItemCode
+            w.Write(1);     // targetQuantity
+            w.Write(0);     // currentQuantity
+            w.Write(true);  // hasLinkTarget
+            w.Write("page:craftinginfo-knapping"); // linkTarget
+            // v7 LinkLabel:
+            w.Write(true);  // hasLinkLabel
+            w.Write("Knapping");
+            // v7 has NO RecipeSignature field here — that's the point.
+            w.Write("V7 Notes"); // title
+        }
+
+        bool ok = ScribeDocumentCodec.TryDeserialize(ms.ToArray(), out ScribeDocument? restored);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        Assert.Equal("V7 Notes", restored!.Title);
+        var link = restored.Blocks[0];
+        Assert.Equal(ScribeBlockKind.Link, link.Kind);
+        Assert.Equal("page:craftinginfo-knapping", link.LinkTarget);
+        Assert.Equal("Knapping", link.LinkLabel);
+        Assert.Equal("", link.RecipeSignature); // v8 field — defaulted for a v7 blob
     }
 
     [Fact]
     public void TryDeserialize_V4Bytes_FailsSafely()
     {
-        // v4 is older than MinVersion (5), so it stays out of the accepted window [v5, v7]. A
+        // v4 is older than MinVersion (5), so it stays out of the accepted window [v5, v8]. A
         // well-formed v4 payload must be rejected outright rather than misread.
         using var ms = new MemoryStream();
         using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
@@ -299,7 +347,7 @@ public class ScribeDocumentCodecTests
     [Fact]
     public void TryDeserialize_UnsupportedOlderVersionBytes_FailsSafely()
     {
-        // The reader accepts any version in [MinVersion=5, Version=7] (progressive reads).
+        // The reader accepts any version in [MinVersion=5, Version=8] (progressive reads).
         // A v2-shaped payload is older than that and must be rejected outright, not misread by
         // reading v5+ fields (ids, title, tracker/link/label) that aren't present.
         using var ms = new MemoryStream();

@@ -1,6 +1,6 @@
 # Editor Reference
 
-This page covers keyboard shortcuts, text mechanics, and editing behaviour in the **Edit view**. The same editor powers the Lectern, the [Notebook](The-Notebook), and the [Clockmaker's Notebook](Clockmakers-Notebook-and-Timers), so everything here applies to all three.
+This page covers keyboard shortcuts, text mechanics, and editing behaviour in the **Edit view**. The same editor powers the Lectern, the [Chalkboard](Chalkboard), the [Scriptorium](Scriptorium), the [Notebook](The-Notebook), and the [Clockmaker's Notebook](Clockmakers-Notebook-and-Timers), so everything here applies to all of them.
 
 ---
 
@@ -58,8 +58,10 @@ An empty row that is still focused is not deleted — only on commit (focus leav
 
 - **New Task button** — always visible at the bottom of the editor; adds a new empty task and focuses it.
 - **Enter** — inserts a new empty task directly below the current row and focuses it. Faster than reaching for the button when you're mid-list.
+- **Item Trackers, Links, and Crafting Tasks** — added from an item's Handbook page ("Add to Scribe"), not the Add button. A Crafting Task binds a grid recipe and builds ingredient subtasks underneath.
+- **Grip tap** — tap the drag grip (without holding to reorder) to indent a row as a subtask, or tap again to promote it. One level only.
 
-Both methods create the task empty so you can type immediately with no placeholder text to clear first.
+Both of the first two methods create the task empty so you can type immediately with no placeholder text to clear first.
 
 ---
 

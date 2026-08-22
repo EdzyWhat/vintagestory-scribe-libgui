@@ -1,14 +1,16 @@
 # Scribe
 
-Scribe is a note-taking and task-management mod for Vintage Story 1.22.x. Scratch a quick list into a **clay Tablet**, place a **Lectern**, or carry a **Notebook** — write tasks and notes, check them off, and pin important items to a persistent **HUD overlay** visible while you play, no need to keep the window open.
+Scribe is a note-taking and task-management mod for Vintage Story 1.22.x. Scratch a quick list into a **clay Tablet**, place a **Lectern** or hang a **Chalkboard**, carry a **Notebook**, or copy documents at a **Scriptorium** — write tasks and notes, check them off, and pin important items to a persistent **HUD overlay** visible while you play, no need to keep the window open.
 
 ![Welcome to Scribe!](https://i.imgur.com/r4kNzN7.png)
 
 ## Pages
 
 - [Items](Items) — what ships with the mod
-- [Crafting the Lectern](Crafting-the-Lectern) — ingredients and recipe
+- [Crafting](Crafting-the-Lectern) — ingredients and recipes
 - [Using the Lectern](Using-the-Lectern) — the Read, Edit, Pinned, and Settings views
+- [Scriptorium](Scriptorium) — Transcribe, copy, and import/export
+- [Chalkboard](Chalkboard) — the wall-mounted Lectern
 - [The Notebook](The-Notebook) — the carried, personal document
 - [Clockmaker's Notebook & Timers](Clockmakers-Notebook-and-Timers) — the advanced Notebook with reminders
 - [Clay & Wax Tablets](Clay-and-Wax-Tablets) — the early-game handheld tablets, with drying and firing
@@ -33,8 +35,14 @@ The earliest writing tier: simple handheld [Tablets](Clay-and-Wax-Tablets) groun
 **v1.1 — Interim polish** *(released)*
 An open Scribe page now dims and warms to the real light around you; you can add plain **notes** alongside tasks, store Notebooks and Tablets on shelves and in cabinets, type `->`/`<-` into `→`/`←`, and watch task and pin lists animate as rows come and go — plus a batch of editor and HUD fixes.
 
-**v1.2 — Writing Desk** *(planned)*
-A private desk block that expands on the Lectern with copy/paste export between the Lectern, Notebook, and Desk.
+**v1.2 — Scriptorium** *(released)*
+A dedicated shared writing station with **Transcribe** (copy/append between Scribe items) and clipboard **import/export** (JSON and TSV). Two new handbook-created task types: **Item Trackers** (live have/need of items you are carrying) and **Links** (jump to a Handbook page).
+
+**v1.3 — Crafting Tasks & Chalkboard** *(released, v1.3.0)*
+**Crafting Tasks** bind a grid recipe from an item's Handbook page and build an ingredient shopping list underneath. The **Chalkboard** is a wall-mounted Lectern — same shared document, hung like a painting, capped at 10 tasks. Tablet cuneiform is readable in every drying state.
+
+**Later — assignment**
+Assign & History / Inbox on the Scriptorium cluster. Not a numbered 1.4.
 
 The goal is a natural progression of capability through Vintage Story's tiers.
 
@@ -65,4 +73,3 @@ Scribe's task-pinning concept was inspired in part by **Wanderer's Sketchbook** 
 **Arquimago** — Brazilian Portuguese (pt-br) translation.
 
 Scapholène was suggested for Scribe by **Artekuno** in the release teaser thread.
-</content>

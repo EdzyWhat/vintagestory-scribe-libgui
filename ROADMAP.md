@@ -19,9 +19,9 @@ age (the saw); anything past that is cosmetic.
 | Scratch | Clay & wax tablet (handheld) | up to 10 tasks, 1 pin; clay dries hard → re-wet in water or fire to make permanent; wax always rewritable | **shipped v1.0** |
 | ~~Scratch+~~ | ~~Reed/cattail paper~~ | ~~a few more lines~~ | **cut** — the clay→wax step already covers the low tier; a paper micro-tier added no capability |
 | Collection | Leather-bound notebook | infinite pages | **shipped v0.2** |
-| Organization | Scriptorium (shared block) | dedicated shared writing station; copy/paste + import/export; foundation for Tracker/Link tasks & the v1.3 assignment system | **block foundation + Tracker/Link task types landed** (provisional art); copy/paste + import/export remain, v1.2 → `docs/specs/v7-scriptorium-and-task-types.md` |
+| Organization | Scriptorium (shared block) | dedicated shared writing station; copy/paste + import/export; Tracker/Link/Crafting Tasks | **shipped v1.2** (block + Transcribe + Tracker/Link); Crafting Tasks + Chalkboard **shipped v1.3**. Assignment (Assign & History / Inbox) is **later** — still on this cluster, not a numbered 1.4. |
 | Portability | Pinned-task HUD | pins from any source shown on an always-on HUD; quick-add gesture | **HUD shipped** (v0.1); backpack container **cut** |
-| Social | Bulletin board (public) + chalkboard | shared board; chalkboard is drawable | planned (Board) |
+| Social | Bulletin board (public) + chalkboard | shared board; chalkboard is drawable | planned (Board). The **wall-mounted Chalkboard** that shipped in v1.3 is a Lectern form-factor variant (same document, hung on a wall, 10-task cap) — **not** this drawable v6 board. |
 
 ## Staged plan
 
@@ -58,23 +58,23 @@ age (the saw); anything past that is cosmetic.
   - **Added beyond the spec:** tablet text renders in a bespoke **cuneiform script** by default
     (toggleable in Settings), and the unified **Shift+right-click quick-add** gesture (see v5) — a
     BREAKING change to the lectern/held-item interaction map — landed alongside this tier.
-- **v4 → v7 — Organization tier (now the Scriptorium)** *(v1.2, in progress)* → `docs/specs/v7-scriptorium-and-task-types.md`
+- **v4 → v7 — Organization tier (now the Scriptorium)** *(v1.2, shipped)* → `docs/specs/v7-scriptorium-and-task-types.md`
   **re-scopes the old `v4-writing-desk.md`**: the organization tier is a **shared** writing station (the
-  **Scriptorium**), **not** the private owner-gated desk with kanban tabs originally sketched. The
-  **block foundation shipped via `add-scriptorium-block`** (block + block entity + recipe + handbook,
-  reusing the shared writing-station base and the existing Scribe dialog; provisional Lectern-derived
-  art pending the dedicated model). **The Tracker/Link task types shipped via `add-tracker-link-tasks`**
-  (carried-inventory count Trackers with a per-player on-target completion setting, Handbook-linking
-  Link tasks, and an "Add to Scribe" entry point on every item's Handbook page). Remaining v1.2 scope —
-  copy/paste and JSON/CSV import/export — and the v1.3 assignment system (Assign & History / Inbox
-  views, place-bound assignment) land as their own follow-up changes. VS's first-party player-group system may cover the
-  assignment side with no external dependency (see open decision below).
-  - **Link tasks for cookable foods (v1.3).** *(Requested 2026-08-18.)* We can't *track* or *craft*
-    cooked meals yet (no carried-count / recipe-batch model for them), but a **Link** task is just a
-    Handbook-page pointer — kind-independent of tracking — so it should work for meals too. The item is
-    to verify/enable the "Add Link" affordance on cookable-food Handbook pages (meal/liquid items can
-    render their Handbook page differently), NOT to build new tracking machinery. Small; promote to an
-    OpenSpec change when picked up.
+  **Scriptorium**), **not** the private owner-gated desk with kanban tabs originally sketched. **Shipped in
+  v1.2:** the Scriptorium block (plus Transcribe copy/append and JSON/TSV import/export) and the Tracker/Link
+  task types (carried-inventory count Trackers, Handbook-linking Links, and an "Add to Scribe" entry point on
+  every item's Handbook page). Provisional Lectern-derived art is still pending a dedicated model.
+- **v1.3 — Crafting Tasks + Chalkboard** *(shipped, v1.3.0)*. A **Crafting Task** is a handbook-created,
+  recipe-bound goal that auto-builds ingredient Item Tracker subtasks (including litre trackers for liquid
+  ingredients). The **Chalkboard** is a wall-mounted Lectern form-factor (same shared document, 10-task cap,
+  hung like a painting) — **not** the drawable chalkboard sketched for v6. Tablet cuneiform also gained
+  per-state readability (ink/glow/stroke by clay colour and wet/hard/fired).
+- **Later — assignment (Assign & History / Inbox).** Still on the Scriptorium cluster; not a numbered 1.4.
+  Place-bound assignment of tasks, with Inbox/History views. VS's first-party player-group system may cover
+  the assignment side with no external dependency (see open decision below).
+  - **Link tasks for cookable foods.** *(Shipped v1.3.)* Cooked-meal Handbook pages (stews, pies) now carry
+    an **Add Link** affordance, the same guide-page Link used for craftinginfo articles. Tracking or crafting
+    meals is still out of scope.
 - **v5 — Portability** → `docs/specs/v5-backpack-hud.md`. **The HUD half shipped early (v0.1.0):**
   the always-on **pinned-task HUD** (native `HudElement`, not ImGui) now aggregates pins from every
   source — lectern, notebook, and tablet — not just a held document. **Quick-add shipped in v1.0** but

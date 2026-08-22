@@ -8,6 +8,9 @@ Scribe is my attempt to bridge that gap — a mod for keeping your goals inside 
 	•	Lectern block — a craftable, placeable notebook you write directly on. Task checklist + freeform note section. Multiplayer-safe: edits sync live, one person edits at a time while everyone else reads. Drop one outside your base and its Guest Book tab records visitors, who can leave a note.
 	•	Notebook — a carried, craftable item you write in anywhere. Same task checklist + notes as the Lectern, but personal and portable: it's yours, it travels with you, and it quietly keeps a History chronicle of what happened while you carried it (crafted, picked up, deaths, PvP and boss kills, temporal storms).
 	•	Clockmaker's Notebook — the Notebook's advanced sibling, adding a Timer tab for real-time and in-game-time reminders that fire a toast and sound (optionally alongside your pinned tasks). Crafted from a Notebook + a temporal gear + metal parts. Its craft is gated to the Clockmaker character class (the tinkerer trait) by default; a server can lift that with /worldconfig scribeClockmakerRequiresTrait false (takes effect on restart), or anyone can craft it with the trader-sold Schematic.
+	•	Scriptorium — a dedicated shared writing station, crafted like a more-expensive Lectern (same writing kit, eight planks). Drop a Scribe item in and transcribe it onto another — duplicate a checklist, or append one document onto another — with a stamp flourish and sound. The same tab round-trips a document as JSON (exact) or TSV (spreadsheet-friendly).
+	•	Chalkboard (NEW in v1.3) — the Lectern hung on a wall like a painting. Same shared document, Guest Book, and editor lock; capped at 10 tasks. Point at a wall to mount it. Not a drawable board — you write tasks on it the same way you write on a Lectern.
+	•	Crafting Tasks (NEW in v1.3) — from an item's Handbook page, Add Crafting Task binds a grid recipe: the row tracks the output and builds an ingredient shopping list underneath (liquids as litre trackers). Items with several recipes get a labeled link per variant. Item Trackers and Links live in the same "Add to Scribe" footer; cooked-meal pages offer Add Link.
 	•	Pinned Task HUD — hover any task, click the pin icon, and it appears on an always-on overlay visible while you play. Your pins are yours — pinning doesn't affect other players on the same Lectern.
 	•	Pin Tab — a dedicated view that lists all your pinned tasks across every Scribe item and Lectern in the world, editable in place.
 	•	Scribe Settings — all preferences in one panel: pixel-art notebook theme, window size, HUD anchor and size, completion policy, font selector, and a UI sound mute. Everything updates live.
@@ -42,7 +45,8 @@ Note-taking tools grow with your tech tree — scratchy clay in the stone age, c
 	•	✅ v0.2 — Notebook & Clockmaker's Notebook — a carried item for personal notes with a passive History chronicle; the Clockmaker's variant adds timers and reminders (released)
 	•	✅ v1.0 — Clay & Wax Tablets — the early-game handheld tier, with the dry/harden/re-wet/fire life-cycle and a cuneiform script; Scribe's first "complete" cut (released)
 	•	✅ v1.1 — Interim polish — light-aware pages, plain notes alongside tasks, shelf storage for Notebooks and Tablets, typed arrows, smooth list animations, and a batch of editor and HUD fixes (released)
-	•	⬜ v1.2 — Writing Desk — a private block with richer organization and copy/paste export between the Lectern, Notebook, and Desk
+	•	✅ v1.2 — Scriptorium + Tracker/Link + Transcribe — a shared writing station, item-bound task types, and copy/import/export (released)
+	•	✅ v1.3.0 — Crafting Tasks + Chalkboard — recipe-bound shopping lists and a wall-hung Lectern (released)
 	•	⬜ Later — Bulletin Board — a shared, public board for multiplayer
 
 📚 You might also like

@@ -7,7 +7,7 @@ namespace Scribe.Core.Tests;
 // semantics (x=0 anchor + monotonic lift), and the clamping of out-of-range inputs. Pure/game-agnostic.
 public class ScribeBrightnessCurveTests
 {
-    private const float Floor = ScribePlayerSettings.DefaultIlluminationFloor; // 0.03 (the drawn floor)
+    private const float Floor = ScribePlayerSettings.DefaultIlluminationFloor; // 0.05 (the shipped floor)
 
     [Fact]
     public void AtZeroLight_ReturnsFloor()
@@ -16,10 +16,10 @@ public class ScribeBrightnessCurveTests
     }
 
     [Theory]
-    // The plotted control points map exactly (input local brightness → GUI brightness). The high anchors are
-    // pinned to VS's blockLightLevels table: 0.814 = V=20 (large lantern) → 0.85; 1.0 = V≥26 → full.
-    [InlineData(0.45f, 0.50f)]
-    [InlineData(0.814f, 0.85f)]
+    // The plotted control points map exactly (input local brightness → GUI brightness). The high knee is
+    // 0.90 → 1.00 (full GUI brightness before noon); 1.0 is a flat tail.
+    [InlineData(0.45f, 0.53f)]
+    [InlineData(0.90f, 1.00f)]
     [InlineData(1.00f, 1.00f)]
     public void PlottedControlPoints_MapExactly(float input, float expected)
     {
@@ -27,27 +27,26 @@ public class ScribeBrightnessCurveTests
     }
 
     [Fact]
-    public void LanternAnchor_MapsToEightyFivePercent()
+    public void BrightKnee_MapsToFull()
     {
-        // A large lantern (V=20) sits at blockLightLevels[20] = 0.814 on the input axis; the author pinned that
-        // to 85% output. Guards the specific value the point-1 tuning request set.
-        Assert.Equal(0.85f, ScribeBrightnessCurve.Evaluate(0.814f, Floor), 4);
+        // Full GUI brightness is reached at input 0.90 (a bright-but-not-noon source), not only at noon.
+        Assert.Equal(1.0f, ScribeBrightnessCurve.Evaluate(0.90f, Floor), 4);
     }
 
     [Fact]
-    public void HighShoulder_InterpolatesBetweenLanternAndFull()
+    public void MidRamp_InterpolatesBetweenFirstPointAndFull()
     {
-        // Between the 0.85 shoulder (x=0.814) and full (x=1.0) the curve ramps linearly — a value strictly
-        // between the two, not snapped to either. e.g. x=0.907 (~halfway) → ~0.925.
-        float y = ScribeBrightnessCurve.Evaluate(0.907f, Floor);
-        Assert.True(y > 0.85f && y < 1.0f, $"expected a mid-shoulder value in (0.85, 1.0), got {y}");
+        // Between the 0.53 mid point (x=0.45) and full (x=0.90) the curve ramps linearly — a value strictly
+        // between the two, not snapped to either. e.g. x=0.675 (halfway) → ~0.765.
+        float y = ScribeBrightnessCurve.Evaluate(0.675f, Floor);
+        Assert.True(y > 0.53f && y < 1.0f, $"expected a mid-ramp value in (0.53, 1.0), got {y}");
     }
 
     [Fact]
     public void BelowFirstPoint_InterpolatesFromFloor()
     {
-        // Halfway (x=0.225) between the floor anchor (0, 0.03) and the first point (0.45, 0.50).
-        float expected = Floor + (0.50f - Floor) * 0.5f;
+        // Halfway (x=0.225) between the floor anchor (0, 0.05) and the first point (0.45, 0.53).
+        float expected = Floor + (0.53f - Floor) * 0.5f;
         Assert.Equal(expected, ScribeBrightnessCurve.Evaluate(0.225f, Floor), 4);
     }
 
@@ -55,7 +54,7 @@ public class ScribeBrightnessCurveTests
     public void MidRange_OutputExceedsInput()
     {
         // The whole point of the custom curve: for a given amount of local light the GUI is a touch brighter
-        // than a straight linear mapping — at input 0.45 the output (0.50) exceeds it. (On the author's
+        // than a straight linear mapping — at input 0.45 the output (0.53) exceeds it. (On the author's
         // transposed axes this is the pencil curve below-right of the red identity line, never crossing it.)
         Assert.True(ScribeBrightnessCurve.Evaluate(0.45f, Floor) > 0.45f);
     }
@@ -63,10 +62,11 @@ public class ScribeBrightnessCurveTests
     [Fact]
     public void ReachesFullOnlyAtTop()
     {
-        // The curve reaches full brightness at x=1.0 (V≥26) and holds it for any clamped-high input; just below
-        // the top it is still under full (the gentle high shoulder, not an early plateau).
+        // The curve reaches full brightness at x=0.90 and holds it through noon; just below the knee it is
+        // still under full (the mid ramp, not an early plateau).
+        Assert.Equal(1.0f, ScribeBrightnessCurve.Evaluate(0.90f, Floor), 4);
         Assert.Equal(1.0f, ScribeBrightnessCurve.Evaluate(1.0f, Floor), 4);
-        Assert.True(ScribeBrightnessCurve.Evaluate(0.95f, Floor) < 1.0f);
+        Assert.True(ScribeBrightnessCurve.Evaluate(0.80f, Floor) < 1.0f);
     }
 
     [Fact]

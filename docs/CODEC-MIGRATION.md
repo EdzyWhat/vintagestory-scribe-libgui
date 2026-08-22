@@ -129,7 +129,7 @@ add-tracker-link-tasks 7.6). v6 blocks have no such field.
 switch below. v6 shipped **only on the WIP branch**, but **v5 is shipped and live in real player saves**
 (v1.1.1). A naive `{v7, v6}` two-version window would have *rejected every shipped v5 document* — silent
 data loss on upgrade. So `ScribeDocumentCodec` switched to **progressive append-only reads**: it accepts any
-version in `[MinVersion, Version]` (`[5, 7]`) and reads each later version's trailing fields only behind a
+version in `[MinVersion, Version]` (`[5, 7]` at this bump; later `[5, 8]` — see Current state) and reads each later version's trailing fields only behind a
 `version >=` threshold.
 
 **What changed in the serialization format:**
@@ -178,6 +178,35 @@ Covered by `RoundTrip_PreservesTrackerAndLinkFields` (v7 round-trip of a guide-p
 survives, and an item Link asserting it stays null) and `TryDeserialize_V6Bytes_Succeeds_AndDefaultsLinkLabel`
 (hand-built v6 blob → asserts `LinkLabel` defaults to null while the tracker/link fields still round-trip).
 The existing v5 test still passes (progressive reads keep v5 accepted).
+
+### Worked example: v7 → v8 (`ScribeDocumentCodec`)
+
+v8 appended **one per-block field** after each block's `LinkLabel`: `RecipeSignature` (a plain string; empty when none), the grid-recipe binding of a **Craft** task (kind 4). v7 blocks have no such field. The codec already uses progressive reads, so this bump just extends the range to `[5, 8]` and adds one more `version >=` group.
+
+Unlike the earlier Tracker/Link fields, `RecipeSignature` is **always written** from v8 (empty string for non-Craft blocks), so it is a plain string — not a has/value pair.
+
+**What changed in the serialization format:**
+```
+// v7 per-block: ...v6... | hasLinkLabel | [linkLabel]
+// v8 per-block: ...v7... | recipeSignature   (always present; empty when none)
+```
+
+**How the migration works** — one more threshold-gated read; `ApplyPreV6Defaults` also seeds `recipeSignature` to `""`:
+
+```csharp
+// private const byte Version = 8;   // current  (MinVersion stays 5)
+
+// In TryDeserialize's per-block loop, after the v7 LinkLabel group:
+if (version >= 8)
+{
+    recipeSignature = r.ReadString(); // always written from v8; empty when none
+}
+```
+
+Covered by `RoundTrip_PreservesTrackerAndLinkFields` (v8 round-trip) and
+`TryDeserialize_V7Bytes_Succeeds_AndDefaultsRecipeSignature` (hand-built v7 blob → asserts
+`RecipeSignature` defaults to empty while the v7 `LinkLabel` still round-trips). The existing
+v5/v6 tests still pass (progressive reads keep them accepted).
 
 ### Worked example: v1 → v2 (`ScribePinCodec`)
 
@@ -318,6 +347,35 @@ Covered by `List_RoundTrip_PreservesLinkLabel` (v4 round-trip) and
 `TryDeserialize_V3Bytes_LinkLabel_IsDefaulted` (hand-built v3 blob → asserts `LinkLabel` defaults to null).
 The existing v1/v2 tests still pass.
 
+### Worked example: v4 → v5 (`ScribePinCodec`)
+
+v5 appended **one per-pin field** after each pin's `LinkLabel`: `Depth` (int), the pinned task's subtask
+depth, so the HUD and Pin Tab indent a pinned subtask like the other surfaces (add-crafting-tasks /
+task-subtasks 5.1). The codec already uses progressive reads, so this bump just extends the range to
+`[1, 5]` and adds one more `version >=` group. `ApplyPreV2Defaults` seeds `Depth` to `0`.
+
+**What changed in the serialization format:**
+```
+// v4 per-pin: ...v3... | hasLinkLabel | [linkLabel]
+// v5 per-pin: ...v4... | depth
+```
+
+**How the migration works** — one more threshold-gated read, clamped to the one-level subtask contract:
+
+```csharp
+// private const byte PinVersion = 5;    // current  (MinPinVersion stays 1)
+
+// In TryReadPinList's per-pin loop, after the v4 LinkLabel group:
+if (version >= 5)
+{
+    // Clamp on read to the one-level subtask contract, matching ScribeBlock.Depth, so a
+    // malformed/hostile blob can't smuggle a depth-2+ pin past the reader.
+    pin.Depth = Math.Clamp(r.ReadInt32(), 0, 1);
+}
+```
+
+A pre-v5 pin simply never wrote `Depth` and reads as a top-level row (`Depth = 0`).
+
 ## How to add a new version (step-by-step)
 
 1. **Add your new field(s) to `Serialize`**, appending them after all existing fields.
@@ -402,7 +460,7 @@ Type · Done · Text · Special · Count · Depth
 
 | Codec | Kind | Current | Accepted | Migration method / stability rule |
 |---|---|---|---|---|
-| `ScribeDocumentCodec` | binary (save/sync) | v7 | v5–v7 (progressive reads) | `ApplyPreV6Defaults` — defaults Tracker/Link per-block fields (v6) + guide-page `LinkLabel` (v7); v6/v7 fields then read behind `version >=` thresholds |
-| `ScribePinCodec` | binary (save/sync) | v4 | v1–v4 (progressive reads) | `ApplyPreV2Defaults` — seeds Kind (→Task), LinkTarget (→null), TargetItemCode (→null), quantities, LinkLabel (→null); v2/v3/v4 fields then read behind `version >=` thresholds |
+| `ScribeDocumentCodec` | binary (save/sync) | v8 | v5–v8 (progressive reads) | `ApplyPreV6Defaults` — defaults Tracker/Link per-block fields (v6) + guide-page `LinkLabel` (v7) + Craft `RecipeSignature` (v8); later fields then read behind `version >=` thresholds |
+| `ScribePinCodec` | binary (save/sync) | v5 | v1–v5 (progressive reads) | `ApplyPreV2Defaults` — seeds Kind (→Task), LinkTarget (→null), TargetItemCode (→null), quantities, LinkLabel (→null), Depth (→0); v2–v5 fields then read behind `version >=` thresholds |
 | `ScribeDocumentJsonCodec` | text (clipboard) | v1 | v1+ (`v >= MinVersion`; missing `v` → rejected) | Version window; unknown keys ignored on read. Add a field → append to DTO + bump `Version`; raise `MinVersion` only if an old payload becomes unreadable |
 | `ScribeDocumentTsvCodec` | text (clipboard) | — (no version) | any header with the known columns (by name) | Fixed 6 columns forever (`Type · Done · Text · Special · Count · Depth`); new richness goes in the comma-packed `Special` cell, never a new column; unknown columns ignored, missing columns defaulted |

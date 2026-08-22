@@ -1,24 +1,26 @@
-# Scribe wiki drafts (1.0.0)
+# Scribe wiki drafts (1.3.0)
 
-In-repo working copies of the GitHub wiki pages, refreshed for the **1.0.0** release. These are
+In-repo working copies of the GitHub wiki pages, refreshed for the **1.3.0** release. These are
 authored here and published to the wiki manually (`../vintagestory-scribe-libgui.wiki`), matching
-the launch-material convention in `docs/media/` (design decision 8).
+the launch-material convention in `docs/media/` (design decision 8). Publishing to the GitHub wiki
+clone stays a **manual post-tag step** — this change only updates the drafts.
 
-## What changed for 1.0.0
+## What changed for 1.3.0
 
-- Added the **Tablets** tier:
-  - **Clay & Wax Tablets** (`Clay-and-Wax-Tablets.md`) — the new early-game handheld tier: the
-    wet → hardened → fired clay life-cycle, water re-wetting, the never-drying Wax Tablet, the
-    10-task/1-pin limits, the Shift+right-click quick-add gesture, and the cuneiform script toggle.
-  - **Items** (`Items.md`) — added a Tablets section.
-  - **Crafting** (`Crafting-the-Lectern.md`) — added the clay and wax Tablet grid recipes.
-  - **Home** (`Home.md`) — added the Tablets nav link and intro mention; roadmap updated (Tablets
-    shipped as **v1.0**, Writing Desk moved to **v1.1**).
+- **Home** (`Home.md`) — intro mentions Scriptorium + Chalkboard; nav links; roadmap ticks v1.2
+  and v1.3 as released; assignment listed as later.
+- **Items** (`Items.md`) — added Scriptorium and Chalkboard sections (uniqueness-first).
+- **Crafting** (`Crafting-the-Lectern.md`) — Scriptorium recipe (same writing kit, eight planks)
+  and Chalkboard recipe (hammer + chisel + chalk stone + slate rock + planks + nails, no ink kit).
+- **New pages:**
+  - **Scriptorium** (`Scriptorium.md`) — Transcribe / copy / import-export.
+  - **Chalkboard** (`Chalkboard.md`) — wall-mount, 10-task cap, not the drawable v6 board.
+- **Editor Reference** (`Editor-Reference.md`) — Crafting Tasks and grip-tap subtask indent.
 
 ## Publishing checklist
 
 1. Copy each page here over the same-named file in the wiki clone.
-2. Add the new **Clay & Wax Tablets** page to the wiki sidebar / `Home` page nav (already linked in `Home.md`).
-3. Verify image links still resolve (imgur URLs are carried over unchanged; 1.0 screenshots go in
-   `docs/media/screenshots/1.0/` and can be swapped in once uploaded). The Tablets page currently
-   has no images — add tablet/cuneiform/firing screenshots once captured (Track B.2).
+2. Add the new **Scriptorium** and **Chalkboard** pages to the wiki sidebar / `Home` page nav
+   (already linked in `Home.md`).
+3. Verify image links still resolve (imgur URLs are carried over unchanged). No new screenshots
+   are required for 1.3.0 (imgur gaps already exist for Tablets).

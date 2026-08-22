@@ -127,7 +127,7 @@ public static class ScribeDocumentCodec
     }
 
     /// <summary>
-    /// Deserializes a document. Accepts any version in [MinVersion=5, Version=7] via progressive reads;
+    /// Deserializes a document. Accepts any version in [MinVersion=5, Version=8] via progressive reads;
     /// any other version fails safely. Signature-stable for callers that don't need the legacy-pin out-param — routes through the
     /// three-arg overload and discards it.
     /// </summary>

@@ -13,7 +13,7 @@ it dry hard, then re-wet to revise or fire it to keep it forever), the carried *
 (and its **Clockmaker's** timer variant), and the placeable, shared **Lectern** — all feeding
 a per-player pinned-task **HUD** that keeps your goals on screen while you play.
 
-> **Status:** released — v1.1.0, [live on the mod DB](https://mods.vintagestory.at/scribe).
+> **Status:** released — v1.3.0, [live on the mod DB](https://mods.vintagestory.at/scribe).
 > See [`ROADMAP.md`](./ROADMAP.md) for the staged plan ahead and [`CHANGELOG.md`](./CHANGELOG.md)
 > for what has shipped.
 
@@ -51,6 +51,13 @@ A placeable, multiplayer-safe note board. Anyone in reach can read it and check 
 one player edits at a time (server-authoritative, with a single-editor lock). It logs its
 visitors on a **Guest Book** tab — handy for a base or trader stall.
 
+### 🧱 Chalkboard — the wall-hung Lectern
+
+The same shared writing surface as the Lectern, hung on a wall like a painting instead of
+stood on the floor. Point at a wall to mount it facing outward. It holds a short list (up
+to 10 tasks) and keeps a Guest Book of its visitors. This is **not** a drawable board —
+you write tasks on it the same way you write on a Lectern.
+
 ### 📜 Scriptorium — the copy desk
 
 A placeable workbench for moving documents around. Drop a Scribe item in and **transcribe** it
@@ -67,6 +74,14 @@ result stamped like sealed paper.
     (overwrite or append, same as transcribe). Unknown item/link references land as plain tasks
     rather than failing the whole paste, and **imported tasks are never pinned** — an import brings
     the words, not anyone's HUD state.
+
+### 🔨 Crafting Tasks
+
+Open an item's Handbook page and click **Add Crafting Task** to pin a recipe-bound goal: the
+row tracks the output like an Item Tracker, and it builds a shopping list of ingredient
+subtasks underneath (liquids as litre trackers). Items with several grid recipes get a
+labeled link per variant. Item Trackers and Links are created the same way, from the same
+"Add to Scribe" footer.
 
 ### 📌 Pinned Task HUD
 

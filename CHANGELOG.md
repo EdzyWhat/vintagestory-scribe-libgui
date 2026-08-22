@@ -4,6 +4,49 @@ All notable changes to Scribe are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-08-21
+
+Crafting Tasks and the wall-mounted Chalkboard. Open an item's Handbook page and add a
+recipe-bound goal that builds its own ingredient shopping list; hang a short shared list
+on a wall like a painting. Tablets are easier to read in every drying state. Fully
+save-compatible with 1.0–1.2 worlds — existing documents open unchanged. New writes use
+document codec v8 (`RecipeSignature` per block) and pin codec v5 (`Depth`); a 1.2 client
+cannot read a 1.3 save. Vintage Story requires matching mod versions, so mixed-version
+multiplayer is not a supported case.
+
+### Added
+- **Crafting Tasks.** From an item's Handbook page, **Add Crafting Task** binds a grid
+  recipe: the row tracks the output like an Item Tracker and auto-builds one ingredient
+  Item Tracker subtask per recipe input (liquids as litre trackers). Items with several
+  recipe variants get a labeled link for each. Tap a row's drag grip (without holding to
+  reorder) to indent it as a subtask.
+- **Chalkboard.** A wall-mounted form-factor of the Lectern — the same shared document,
+  Guest Book, and one-at-a-time editor lock, hung on a wall like a painting. Capped at
+  10 tasks. Not a drawable board.
+- **Meal-page Add to Scribe.** Cooked-meal Handbook pages (stews, pies) now carry an
+  **Add Link** that creates a guide-page Link to that meal's recipe.
+- **Transcribe stamp sound.** The Scriptorium's stamp flourish now thumps when it lands
+  on copy, import, or export. Volume follows the existing Timer alarm slider.
+- **Tablet readability.** Cuneiform ink, glow, and stroke weight now follow each clay
+  colour and drying state (wet / hard / fired), so fired and hardened tablets stay
+  legible. Long titles wrap on every surface, including the tablet title band.
+- **Tablet row links.** Link rows on a tablet render as tappable cuneiform names, not
+  just on Lecterns and Notebooks.
+
+### Changed
+- **Handbook uniqueness-first.** Per-object entries (Lectern, Scriptorium, Chalkboard,
+  Notebook, Tablet) describe what makes that surface unique and link out to shared
+  guides (Getting Started, Tabs & Views, Editor Reference) instead of repeating the
+  same tab tour. Getting Started, the task-types explainer, and the editor reference
+  now name Crafting Tasks and the Chalkboard.
+
+### Fixed
+- **Recipe variant identity.** Crafting Tasks for attribute-encoded outputs (Hunter's
+  Backpack, metal lanterns, whole-code wildcards) now bind the variant whose Handbook
+  page you opened, not whichever recipe came first in the registry.
+- **Craft-subtask live rescale.** Changing a Crafting Task's target count updates its
+  ingredient subtask quantities immediately.
+
 ## [1.2.1] - 2026-08-18
 
 ### Added
@@ -348,6 +391,8 @@ First public release.
 - `game` 1.22.0
 - `gui` 2.0.0 (LibGUI)
 
+[1.3.0]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v1.2.1...v1.3.0
+[1.2.1]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v1.0.1...v1.1.0

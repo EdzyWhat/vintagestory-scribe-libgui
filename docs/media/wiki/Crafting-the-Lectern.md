@@ -1,6 +1,6 @@
 # Crafting
 
-All Scribe items are crafted at a normal grid. The Lectern, Notebook, and Tablets are ungated; the
+All Scribe items are crafted at a normal grid. The Lectern, Scriptorium, Chalkboard, Notebook, and Tablets are ungated; the
 Clockmaker's Notebook is gated to the Clockmaker character class (see below).
 
 ## Lectern
@@ -20,6 +20,44 @@ Produces **1 Lectern**.
 - The bowl must be **fired** (unfired clay bowls do not work) and must contain at least **1 litre of black dye**. The bowl is consumed in the craft.
 - Any wood plank type works for all four plank slots.
 - Any metal nails and strips work (copper, tin bronze, bismuth bronze, iron, etc.).
+
+## Scriptorium
+
+A more-expensive Lectern: the **same writing kit** (feather, parchment, leather, fired ink bowl, nails) with **eight planks** instead of four.
+
+```
+[ Feather ]  [ Parchment ]  [ Leather ]
+[ Ink bowl]  [ Plank ×2  ]  [ Plank ×2]
+[ Nails   ]  [ Plank ×2  ]  [ Plank ×2]
+```
+
+Produces **1 Scriptorium**.
+
+- The bowl must be **fired** and hold at least **1 litre of black dye**, and is consumed — exactly like the Lectern.
+- Any wood plank type works; each of the four plank cells takes **2 planks** (8 total).
+- Any metal nails and strips work.
+
+See [Scriptorium](Scriptorium) for Transcribe and import/export.
+
+## Chalkboard
+
+A wooden frame around a slate-rock face, chalked and pinned — **no ink kit**.
+
+```
+[ Hammer ]  [ Plank       ]  [ Plank ]
+[ Chisel ]  [ Chalk stone ]  [ Slate rock ]
+[ Nails  ]  [ Plank       ]  [ Plank ]
+```
+
+Produces **1 Chalkboard**.
+
+- Any wood plank type works (4 planks).
+- Any metal nails and strips work.
+- Any hammer and any chisel work. Both are tools and take a little durability; they are not consumed.
+- **Chalk stone** is the loose stone (not Chalk rock). **Slate rock** is the full block (not loose Slate stone).
+- No feather, parchment, leather, or ink bowl.
+
+See [Chalkboard](Chalkboard) for wall-mount placement and the 10-task cap.
 
 ## Notebook
 

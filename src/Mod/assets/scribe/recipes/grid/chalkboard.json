@@ -1,16 +1,12 @@
 [
 	{
-		// A simple, thematic recipe (add-chalkboard-block, design open-question 4 default): a wooden
-		// frame (planks) around a black slate face (charcoal), pinned with a nail. Cheaper than the
-		// Lectern — the chalkboard carries no ink/parchment writing kit. Output is the -north variant
-		// (the creative/drop variant); HorizontalAttachable rotates it to the placed wall face.
-		//   PPP   planks    planks   planks
-		//   PCP   planks    charcoal planks
-		//   PPN   planks    planks   nails
-		ingredientPattern: "PPP,PCP,PPN",
+		ingredientPattern: "HPP,ISC,NPP",
 		ingredients: {
+			"H": { type: "item", tags: ["tool-hammer"], isTool: true },
 			"P": { type: "item", code: "game:plank-*" },
-			"C": { type: "item", code: "game:charcoal" },
+			"I": { type: "item", tags: ["tool-chisel"], isTool: true },
+			"C": { type: "item", code: "game:stone-chalk" },
+			"S": { type: "block", code: "game:rock-slate" },
 			"N": { type: "item", code: "game:metalnailsandstrips-*" }
 		},
 		width: 3,
