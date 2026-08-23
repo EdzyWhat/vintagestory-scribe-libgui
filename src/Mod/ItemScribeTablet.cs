@@ -3,6 +3,7 @@ using Scribe.Core;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
+using Vintagestory.API.Datastructures;
 using Vintagestory.API.Server;
 using Vintagestory.GameContent;
 using Vintagestory.API.Util;
@@ -289,7 +290,7 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
     /// <see cref="EnumHandHandling.PreventDefault"/> — this both stops the container's own fill/pour from also
     /// firing AND suppresses the crouch ground-storage passthrough for this one gesture. When the aimed-at
     /// block is not a water container, returns <c>false</c> so the caller falls through to the existing
-    /// shift-passthrough. Only a HARD tablet actually softens; a wet or fired tablet aimed at water is a
+    /// shift-passthrough. Hard tablets swap back to wet; wet tablets reset their harden clock; fired is a
     /// no-op that still returns <c>true</c> (the water container was the interaction target either way), so
     /// the gesture never leaks into ground-storage placement when the player clearly aimed at water.
     /// Server-authoritative like the two passive paths: the swap + slot write happen server-side; both sides
@@ -302,7 +303,7 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
         if (!IsWaterContent(container, blockSel.Position)) return false;
 
         // Aimed at a water container: this gesture is ours regardless of state (so it never falls through to
-        // ground storage). Only a hard tablet actually softens; wet/fired no-op via Soften's own guard.
+        // ground storage). Hard tablets swap back to wet; wet tablets reset their harden clock; fired no-op.
         if (world.Side == EnumAppSide.Server && Soften(slot.Itemstack, world) is { } softened)
         {
             slot.Itemstack = softened;
@@ -327,21 +328,43 @@ public class ItemScribeTablet : Item, IScribeDocumentItem
         return code is not null && code.EndsWith("waterportion");
     }
 
-    /// <summary>Soften a hard clay tablet back to its wet variant: build a fresh stack of the SOFT sibling
-    /// variant (<c>clay-&lt;color&gt;-hard</c> → <c>clay-&lt;color&gt;</c>), carry the document/history onto it, and
-    /// leave it with no <c>transitionstate</c> subtree so the engine re-seeds the ~2-day dry-out clock from
-    /// now on its next tick (VSAPI-NOTES.md). Because state is the item VARIANT now, softening SWAPS the item
-    /// (wire-tablet-clay-art-and-variants) rather than clearing an attribute. Returns the replacement stack,
-    /// or <c>null</c> (no-op) on a wet or fired stack — a fired tablet never rehydrates. The caller writes the
-    /// returned stack back into its slot/entity.</summary>
+    /// <summary>Rehydrate on water: a HARD tablet swaps to its wet sibling (document/history carried;
+    /// fresh stack has no <c>transitionstate</c> so the engine re-seeds the ~2-day clock). A WET tablet
+    /// stays the same item but drops <c>transitionstate</c> so the harden clock restarts from now
+    /// (VSAPI-NOTES.md). A fired tablet never rehydrates. Returns the stack the caller should write back
+    /// (new stack on hard→wet, the same stack on a wet clock reset), or <c>null</c> when nothing changed.</summary>
     private static ItemStack? Soften(ItemStack? stack, IWorldAccessor world)
     {
-        // Natural rehydration only softens a HARD tablet (a wet tablet is already editable; a fired one is
-        // permanent — the guard here is what enforces that, NOT BuildStateVariant). The seam does the
-        // variant swap + document carry; a freshly-built stack carries no transitionstate, so the engine
-        // re-seeds the ~2-day dry-out clock from now on its next tick.
-        if (ResolveMaterialState(stack).state != TabletState.Hard) return null;
-        return BuildStateVariant(stack, TabletState.Wet, world);
+        if (stack is null) return null;
+        var state = ResolveMaterialState(stack).state;
+        if (state == TabletState.Fired) return null;
+        if (state == TabletState.Hard) return BuildStateVariant(stack, TabletState.Wet, world);
+
+        // Already wet: reset the harden clock in place if it has actually progressed. Returning the same
+        // stack tells callers to MarkDirty so the cleared transitionstate syncs. Skip near-zero clocks so
+        // idle-in-water does not dirty the slot every tick (the engine's own advance threshold is 0.05h).
+        return TryResetHardenClock(stack) ? stack : null;
+    }
+
+    /// <summary>Read the engine's accumulated harden hours from <c>transitionstate</c>, or 0 when absent.</summary>
+    private static float PeekTransitionedHours(ItemStack? stack)
+    {
+        if (stack?.Attributes["transitionstate"] is ITreeAttribute tree
+            && tree["transitionedHours"] is FloatArrayAttribute arr
+            && arr.value.Length > 0)
+            return arr.value[0];
+        return 0f;
+    }
+
+    /// <summary>Drop <c>transitionstate</c> so the next engine tick re-seeds the Harden clock from now.
+    /// Returns false when there is nothing to reset (no tree, or elapsed hours below the engine's 0.05h
+    /// advance threshold) to avoid per-tick MarkDirty while the tablet sits in water.</summary>
+    private static bool TryResetHardenClock(ItemStack stack)
+    {
+        if (stack.Attributes["transitionstate"] is not ITreeAttribute) return false;
+        if (PeekTransitionedHours(stack) < 0.05f) return false;
+        stack.Attributes.RemoveAttribute("transitionstate");
+        return true;
     }
 
     /// <summary>Build a fresh tablet stack in the requested life-cycle <paramref name="target"/> state,

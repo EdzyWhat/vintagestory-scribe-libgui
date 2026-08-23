@@ -4,6 +4,20 @@ All notable changes to Scribe are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-08-23
+
+A bugfix for clay tablets that were already wet.
+
+### Fixed
+- **Dunking a wet clay tablet in water now resets its drying timer.** In 1.3.0, water only
+  restarted the clock when a *hard* tablet softened back to wet. Dropping a still-wet tablet
+  into water, swimming with one in hand, or quenching it against a water container left the
+  existing harden timer running — so a half-dry tablet could still lock on the original
+  schedule. Those three water paths now restart the ~2-day drying clock. Fired tablets are
+  unchanged.
+
+Fully save-compatible with 1.3.0 — no codec change.
+
 ## [1.3.0] - 2026-08-21
 
 Crafting Tasks and the wall-mounted Chalkboard. Open an item's Handbook page and add a
@@ -391,6 +405,7 @@ First public release.
 - `game` 1.22.0
 - `gui` 2.0.0 (LibGUI)
 
+[1.3.1]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v1.1.1...v1.2.0
