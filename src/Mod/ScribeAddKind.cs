@@ -19,11 +19,12 @@ namespace Scribe;
 /// <param name="Id">Stable identifier (not player-facing); used for equality/diagnostics.</param>
 /// <param name="LabelLangKey">Fully-qualified lang key for the label shown on the primary button and in
 /// the kind list, e.g. <c>"scribe:scribe-gui-addtask"</c>.</param>
-/// <param name="Add">Appends a block of this kind to the scratch document; returns whether a block was
-/// added (mirrors <see cref="ScribeDocument.AddTask"/> / <see cref="ScribeDocument.AddTextSection"/>).
+/// <param name="Add">Inserts a block of this kind at the given document index; returns whether a block was
+/// added (mirrors <see cref="ScribeDocument.InsertTask"/> / <see cref="ScribeDocument.InsertTextSection"/>).
 /// The second parameter is the target item code (e.g. <c>"game:ingot-copper"</c>) for the item-bound
-/// kinds (Tracker/Link); Task and Note ignore it. Kinds with <see cref="RequiresItemContext"/> return
-/// false when it is null (there is nothing to track/link), so a footer click without an item is a
+/// kinds (Tracker/Link); Task and Note ignore it. The third is the insert index from
+/// <see cref="ScribeDocument.InsertIndex"/>. Kinds with <see cref="RequiresItemContext"/> return
+/// false when the item code is null (there is nothing to track/link), so a footer click without an item is a
 /// safe no-op that the caller turns into a guide action instead.</param>
 /// <param name="RequiresItemContext">True for kinds that only make sense against a specific item
 /// (Tracker/Link): they cannot be created from a bare footer click, only from a Handbook page's
@@ -33,7 +34,7 @@ namespace Scribe;
 internal sealed record ScribeAddKind(
     string Id,
     string LabelLangKey,
-    Func<ScribeDocument, string?, bool> Add,
+    Func<ScribeDocument, string?, int, bool> Add,
     bool RequiresItemContext = false);
 
 /// <summary>
@@ -51,7 +52,7 @@ internal static class ScribeAddKinds
     public static readonly ScribeAddKind Task = new(
         Id: "task",
         LabelLangKey: "scribe:scribe-gui-addtask",
-        Add: (doc, _) => doc.AddTask(""));
+        Add: (doc, _, at) => doc.InsertTask(at, ""));
 
     /// <summary>A freeform note — a <see cref="ScribeBlockKind.Text"/> block with no checkbox and no
     /// completion state. Counts against a finite tier's cap like every other kind (the cap is "N of
@@ -60,7 +61,7 @@ internal static class ScribeAddKinds
     public static readonly ScribeAddKind Note = new(
         Id: "note",
         LabelLangKey: "scribe:scribe-gui-addtext",
-        Add: (doc, _) => doc.AddTextSection(""));
+        Add: (doc, _, at) => doc.InsertTextSection(at, ""));
 
     /// <summary>An item Tracker — a <see cref="ScribeBlockKind.Tracker"/> block bound to a specific item
     /// code, whose <c>have/need</c> counter follows the viewer's carried inventory (add-tracker-link-tasks).
@@ -71,7 +72,7 @@ internal static class ScribeAddKinds
     public static readonly ScribeAddKind Tracker = new(
         Id: "tracker",
         LabelLangKey: "scribe:scribe-gui-addtracker",
-        Add: (doc, code) => code is not null && doc.AddTracker(code, 1),
+        Add: (doc, code, at) => code is not null && doc.InsertTracker(at, code, 1),
         RequiresItemContext: true);
 
     /// <summary>An item Link — a <see cref="ScribeBlockKind.Link"/> block whose label opens the referenced
@@ -82,7 +83,7 @@ internal static class ScribeAddKinds
     public static readonly ScribeAddKind Link = new(
         Id: "link",
         LabelLangKey: "scribe:scribe-gui-addlink",
-        Add: (doc, code) => code is not null && doc.AddLink(code),
+        Add: (doc, code, at) => code is not null && doc.InsertLink(at, code),
         RequiresItemContext: true);
 
     /// <summary>A Crafting Task — a <see cref="ScribeBlockKind.Craft"/> parent bound to a recipe, whose
@@ -96,7 +97,7 @@ internal static class ScribeAddKinds
     public static readonly ScribeAddKind Craft = new(
         Id: "craft",
         LabelLangKey: "scribe:scribe-gui-addcraft",
-        Add: (_, _) => false,
+        Add: (_, _, _) => false,
         RequiresItemContext: true);
 
     /// <summary>The kinds the add picker offers, in the order they appear in the picker's inline list

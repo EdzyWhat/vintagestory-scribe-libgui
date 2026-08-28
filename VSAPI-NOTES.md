@@ -926,6 +926,18 @@ other windows" idea — decompiled `VintagestoryLib.dll`/`VintagestoryAPI.dll`, 
   dialog **coexists** with the inventory/Handbook. Focus model: exactly one focused dialog gets
   keyboard; mouse goes to any opened dialog and clicking a background one refocuses it
   (`RequestFocus`). On close, `GuiManager.OnGuiClosed` auto-refocuses the first remaining focusable.
+- **`RequestFocus` only reorders within a `DrawOrder` band — and LibGUI paint does not follow that
+  band.** `GuiDialog.DrawOrder` default is **0.1**; Handbook, player inventory, and chests override
+  to **0.2**; Escape is **0.89**. `RequestFocus` only moves among peers with the *same* DrawOrder,
+  so a 0.1 LibGUI window (`GuiBase` does not override it) can shuffle over other Scribe windows
+  but never joins the Handbook/Inventory *hit-test* band. Raising Scribe to 0.2 **does** put
+  clicks in that band — then pixels and hits diverge: LibGUI paints every window into one Skia
+  surface that `PostSkiaPipeline` flushes at Ortho RenderOrder 1.0 *before* `GuiManager` (equal-
+  order insert-before). Vanilla Cairo/GL draws after that blit, so Handbook always covers Scribe
+  even when Scribe is focused. Spikes that flushed/Ended Skia during the GuiManager pass hid
+  vanilla GUI or dropped the opaque terrain pass (sky through the ground). **Do not override
+  DrawOrder to 0.2 until LibGUI can composite per-window in the `OpenedGuis` loop.** (2026-08-27
+  spike; decompiled `GuiDialog` / `GuiManager` / `PostSkiaPipeline`.)
 - **Alt mouse-mode is unaffected by stacking.** Alt = hotkey `"togglemousecontrol"`. Any open
   `Dialog`-type with `PrefersUngrabbedMouse` (default true) already frees the cursor;
   `ClientMain.UpdateFreeMouse()` XORs that with Alt-held. Inventory/Handbook already ungrab, so
@@ -2351,6 +2363,16 @@ Two LibGUI facts from tuning the Tracker/Link row icons + counter:
   equally above/below. Non-positioned children lay out under `LayoutConstraints.Loose`, and the stack sizes to
   their max. There is **no `OverflowBox`/`UnconstrainedBox`** in this LibGUI build — this Stack trick is the way.
   Caveat: the overflow paints into neighbors' space, so keep the excess modest and vertically centered.
+
+**Fact: `GuiBase` does NOT override `DrawOrder`, and matching vanilla's 0.2 band is not enough
+to stack above Handbook/Inventory.** Hit-testing follows `OpenedGuis`/`LoadedGuis`; LibGUI pixels
+do not. `PostSkiaPipeline` (RenderOrder 1.0) inserts *before* `GuiManager` (also 1.0) and flushes
+the shared wrapped-FBO Skia surface first, so vanilla dialogs always paint on top. Overriding
+Scribe `DrawOrder => 0.2` makes clicks hit Scribe while Handbook still covers it — worse than
+leaving the default 0.1. Per-window `SkiaRenderer.End`/`Flush` during `OnRenderGUI` hid vanilla
+GUI or leaked GL into the next opaque-terrain pass. Leave DrawOrder at the `GuiBase` default
+until LibGUI composites each window in the GuiManager loop. See the DrawOrder-band bullet in
+the HUD/hotkeys section above.
 
 **Fact: `GuiBase` layout+paint is NOT gated on `Focused`/`IsActiveWindow` — every OPEN dialog re-lays-out
 and repaints each frame.** Decompiling `Gui.dll` (`GuiBase.OnRenderGUI` + `FramePipeline.Run`): render is

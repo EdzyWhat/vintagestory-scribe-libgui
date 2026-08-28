@@ -139,15 +139,19 @@ public sealed class ScribeDocument
         linkLabel: block.LinkLabel,
         recipeSignature: block.RecipeSignature);
 
+    /// <summary>The index a document-level create should use for <paramref name="pos"/>: 0 for
+    /// <see cref="ScribeNewTaskInsert.Top"/>, <see cref="Blocks"/>.Count for Bottom. Unknown values
+    /// follow <see cref="ScribePlayerSettings.NormalizeNewTaskInsert"/> (Top).</summary>
+    public int InsertIndex(ScribeNewTaskInsert pos) =>
+        ScribePlayerSettings.NormalizeNewTaskInsert(pos) == ScribeNewTaskInsert.Bottom
+            ? _blocks.Count
+            : 0;
+
     /// <summary>Adds a checkbox task to the end. Any text is accepted and stored verbatim,
     /// including empty/whitespace-only text (a new task starts empty and the player types into it).
     /// Whitespace normalization (trimming) and removal of an abandoned empty task are the editing
     /// layer's responsibility, not the model's -- see <see cref="SetBlockText"/>.</summary>
-    public bool AddTask(string text)
-    {
-        _blocks.Add(new ScribeBlock(ScribeBlockKind.Task, text));
-        return true;
-    }
+    public bool AddTask(string text) => InsertTask(_blocks.Count, text);
 
     /// <summary>
     /// Inserts a checkbox task at <paramref name="index"/>, shifting later blocks down (so passing
@@ -156,29 +160,27 @@ public sealed class ScribeDocument
     /// Any text is accepted and stored verbatim, including empty/whitespace-only text; an
     /// out-of-range index fails safely (see <see cref="AddTask"/>).
     /// </summary>
-    public bool InsertTask(int index, string text)
-    {
-        if (index < 0 || index > _blocks.Count) return false;
-        _blocks.Insert(index, new ScribeBlock(ScribeBlockKind.Task, text));
-        return true;
-    }
+    public bool InsertTask(int index, string text) =>
+        TryInsert(index, new ScribeBlock(ScribeBlockKind.Task, text));
 
     /// <summary>Adds a freeform text section to the end. Blank/empty text is allowed.</summary>
-    public bool AddTextSection(string? text)
-    {
-        _blocks.Add(new ScribeBlock(ScribeBlockKind.Text, text ?? ""));
-        return true;
-    }
+    public bool AddTextSection(string? text) => InsertTextSection(_blocks.Count, text);
+
+    /// <summary>Inserts a freeform text section at <paramref name="index"/>. Out-of-range fails safely.</summary>
+    public bool InsertTextSection(int index, string? text) =>
+        TryInsert(index, new ScribeBlock(ScribeBlockKind.Text, text ?? ""));
 
     /// <summary>Adds a Tracker task ("gather N of item X") to the end and gives it a fresh stable
     /// <see cref="ScribeBlock.TaskId"/>. <paramref name="itemCode"/> is the plain item code to count
     /// (may be null and set later); <paramref name="targetQuantity"/> is clamped to ≥ 1 by the block.
     /// The row's display label is derived by the Mod layer from the code, so Text starts empty.</summary>
-    public bool AddTracker(string? itemCode, int targetQuantity)
-    {
-        _blocks.Add(new ScribeBlock(ScribeBlockKind.Tracker, "", targetItemCode: itemCode, targetQuantity: targetQuantity));
-        return true;
-    }
+    public bool AddTracker(string? itemCode, int targetQuantity) =>
+        InsertTracker(_blocks.Count, itemCode, targetQuantity);
+
+    /// <summary>Inserts a Tracker at <paramref name="index"/>. Out-of-range fails safely.</summary>
+    public bool InsertTracker(int index, string? itemCode, int targetQuantity) =>
+        TryInsert(index, new ScribeBlock(ScribeBlockKind.Tracker, "",
+            targetItemCode: itemCode, targetQuantity: targetQuantity));
 
     /// <summary>Adds a Craft task ("craft N of item X") to the end and gives it a fresh stable
     /// <see cref="ScribeBlock.TaskId"/>, returning that id so the caller can immediately reconcile its
@@ -187,32 +189,45 @@ public sealed class ScribeDocument
     /// is clamped to ≥ 1 by the block; <paramref name="recipeSignature"/> binds the grid recipe variant the
     /// ingredients are generated from (empty when unresolved). The row's display label is derived by the Mod
     /// layer from the code, so Text starts empty.</summary>
-    public Guid AddCraft(string? outputItemCode, int targetQuantity, string recipeSignature)
+    public Guid AddCraft(string? outputItemCode, int targetQuantity, string recipeSignature) =>
+        InsertCraft(_blocks.Count, outputItemCode, targetQuantity, recipeSignature);
+
+    /// <summary>Inserts a Craft parent at <paramref name="index"/> and returns its <see cref="ScribeBlock.TaskId"/>
+    /// so the caller can reconcile ingredient children into the owned run under it. Out-of-range returns
+    /// <see cref="Guid.Empty"/> and inserts nothing.</summary>
+    public Guid InsertCraft(int index, string? outputItemCode, int targetQuantity, string recipeSignature)
     {
         var block = new ScribeBlock(ScribeBlockKind.Craft, "",
             targetItemCode: outputItemCode, targetQuantity: targetQuantity, recipeSignature: recipeSignature);
-        _blocks.Add(block);
-        return block.TaskId;
+        return TryInsert(index, block) ? block.TaskId : Guid.Empty;
     }
 
     /// <summary>Adds an <b>item</b> Link task (a reference to an item's Handbook page) to the end and gives
     /// it a fresh stable <see cref="ScribeBlock.TaskId"/>. <paramref name="target"/> is the plain collectible
     /// code (may be null). The row's display label is derived live by the Mod layer from the item, so Text
     /// and <see cref="ScribeBlock.LinkLabel"/> start empty.</summary>
-    public bool AddLink(string? target)
-    {
-        _blocks.Add(new ScribeBlock(ScribeBlockKind.Link, "", linkTarget: target));
-        return true;
-    }
+    public bool AddLink(string? target) => InsertLink(_blocks.Count, target);
+
+    /// <summary>Inserts an item Link at <paramref name="index"/>. Out-of-range fails safely.</summary>
+    public bool InsertLink(int index, string? target) =>
+        TryInsert(index, new ScribeBlock(ScribeBlockKind.Link, "", linkTarget: target));
 
     /// <summary>Adds a <b>guide-page</b> Link task (a reference to a non-item Handbook guide/explainer page)
     /// to the end. <paramref name="pageCode"/> is the bare Handbook page code (stored <c>"page:"</c>-prefixed
     /// via <see cref="ScribeLinkTarget.ForPage"/>); <paramref name="label"/> is the guide's title, captured at
     /// creation because a guide page has no item to resolve a name from later (add-tracker-link-tasks 7.6).</summary>
-    public bool AddGuideLink(string pageCode, string? label)
-    {
-        _blocks.Add(new ScribeBlock(ScribeBlockKind.Link, "",
+    public bool AddGuideLink(string pageCode, string? label) =>
+        InsertGuideLink(_blocks.Count, pageCode, label);
+
+    /// <summary>Inserts a guide-page Link at <paramref name="index"/>. Out-of-range fails safely.</summary>
+    public bool InsertGuideLink(int index, string pageCode, string? label) =>
+        TryInsert(index, new ScribeBlock(ScribeBlockKind.Link, "",
             linkTarget: ScribeLinkTarget.ForPage(pageCode), linkLabel: label));
+
+    bool TryInsert(int index, ScribeBlock block)
+    {
+        if (index < 0 || index > _blocks.Count) return false;
+        _blocks.Insert(index, block);
         return true;
     }
 

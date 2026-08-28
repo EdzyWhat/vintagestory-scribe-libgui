@@ -520,6 +520,14 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
         return host.Policy.CanAdd(doc.BlockCount);
     }
 
+    /// <summary>Index for a document-level create (footer Add, quick-add, Handbook), from the player's
+    /// New Task Insert setting. Top → 0; Bottom → scratch count. Callers must have a live scratch.</summary>
+    private int NewTaskInsertIndex()
+    {
+        var pos = ScribePlayerSettings.NormalizeNewTaskInsert(modSystem.MySettings.NewTaskInsert);
+        return scratch!.InsertIndex(pos);
+    }
+
     /// <summary>Lang key for the "task cap reached" in-game notice raised by <see cref="NotifyTabletFull"/>.
     /// <c>protected virtual</c> so a capped surface can word the notice for its own object
     /// (refine-chalkboard). Default is the tablet's <c>scribe:tablet-full</c> ("A tablet holds at most 10

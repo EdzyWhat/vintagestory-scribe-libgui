@@ -97,17 +97,19 @@ public abstract partial class ScribeDialogBase
     internal void TryAddCraftFromHandbook(string itemCode, string signature)
         => TryHandbookAppend(() => ApplyCraftHandbookAppend(itemCode, signature));
 
-    /// <summary>Append a Crafting Task (a <see cref="ScribeBlockKind.Craft"/> parent + generated ingredient
-    /// <see cref="ScribeBlockKind.Tracker"/> children at depth 1) to the live scratch and flush it through the
-    /// dialog's existing save path — the Craft sibling of <see cref="ApplyHandbookAppend"/>. A Craft counts
-    /// against the task cap (like a Tracker), so a full tablet refuses with the same notice. The parent starts
-    /// at target 1; <see cref="ReconcileCraftFromSignature"/> expands the bound recipe into children at the
-    /// batch quantity. No-op unless the editor is live.</summary>
+    /// <summary>Insert a Crafting Task (a <see cref="ScribeBlockKind.Craft"/> parent + generated ingredient
+    /// <see cref="ScribeBlockKind.Tracker"/> children at depth 1) at the player's New Task Insert edge
+    /// and flush it through the dialog's existing save path — the Craft sibling of
+    /// <see cref="ApplyHandbookAppend"/>. A Craft counts against the task cap (like a Tracker), so a full
+    /// tablet refuses with the same notice. The parent starts at target 1;
+    /// <see cref="ReconcileCraftFromSignature"/> expands the bound recipe into children at the batch
+    /// quantity. No-op unless the editor is live.</summary>
     private void ApplyCraftHandbookAppend(string itemCode, string signature)
     {
         if (scratch is null || !isEditorMode) return;
         if (!CanAddTaskUnderPolicy()) { NotifyTabletFull(); return; } // Craft counts against the cap
-        var craftId = scratch.AddCraft(itemCode, 1, signature);
+        var craftId = scratch.InsertCraft(NewTaskInsertIndex(), itemCode, 1, signature);
+        if (craftId == Guid.Empty) return;
         var craftBlock = scratch.FindByTaskId(craftId);
         if (craftBlock is not null) ReconcileCraftFromSignature(scratch, craftBlock);
         isDirty = true;
@@ -207,16 +209,16 @@ public abstract partial class ScribeDialogBase
     /// ticking, other players may join) from a truly local one.</summary>
     private bool IsPureSingleplayer => capi.IsSinglePlayer && !capi.OpenedToLan;
 
-    /// <summary>Append the Handbook-originated Tracker/Link block to the live scratch document and flush it
-    /// through the dialog's existing save path (add-tracker-link-tasks 3.4/3.5). Enforces the block-cap gate
-    /// for every kind (the cap is "N of anything" — Tracker and Link both count, refine-chalkboard §12) exactly
-    /// as the footer add does, so a full tablet/chalkboard refuses with the same notice. No-op unless the editor
-    /// is live.</summary>
+    /// <summary>Insert the Handbook-originated Tracker/Link block at the player's New Task Insert edge
+    /// and flush it through the dialog's existing save path (add-tracker-link-tasks 3.4/3.5). Enforces the
+    /// block-cap gate for every kind (the cap is "N of anything" — Tracker and Link both count,
+    /// refine-chalkboard §12) exactly as the footer add does, so a full tablet/chalkboard refuses with the
+    /// same notice. No-op unless the editor is live.</summary>
     private void ApplyHandbookAppend(ScribeAddKind kind, string itemCode)
     {
         if (scratch is null || !isEditorMode) return;
         if (!CanAddTaskUnderPolicy()) { NotifyTabletFull(); return; }
-        if (!kind.Add(scratch, itemCode)) return;
+        if (!kind.Add(scratch, itemCode, NewTaskInsertIndex())) return;
         isDirty = true;
         SyncFocusNodesToScratch();
         // NOTE (feedback 6.4, round 2): we do NOT auto-focus the new Tracker's stepper. The add originates
@@ -235,16 +237,16 @@ public abstract partial class ScribeDialogBase
         RebuildBody();
     }
 
-    /// <summary>Append a guide-page Link block to the live scratch document and flush it through the dialog's
-    /// existing save path (add-tracker-link-tasks 7.6) — the guide-page sibling of
-    /// <see cref="ApplyHandbookAppend"/>. A guide link is a block like any other, so it counts against a finite
-    /// tier's "N of anything" cap (refine-chalkboard §12): a full tablet/chalkboard refuses it with the same
-    /// notice the item append and footer add use. No-op unless the editor is live.</summary>
+    /// <summary>Insert a guide-page Link block at the player's New Task Insert edge and flush it through
+    /// the dialog's existing save path (add-tracker-link-tasks 7.6) — the guide-page sibling of
+    /// <see cref="ApplyHandbookAppend"/>. A guide link is a block like any other, so it counts against a
+    /// finite tier's "N of anything" cap (refine-chalkboard §12): a full tablet/chalkboard refuses it with
+    /// the same notice the item insert and footer add use. No-op unless the editor is live.</summary>
     private void ApplyGuideLinkAppend(string pageCode, string title)
     {
         if (scratch is null || !isEditorMode) return;
         if (!CanAddTaskUnderPolicy()) { NotifyTabletFull(); return; }
-        if (!scratch.AddGuideLink(pageCode, title)) return;
+        if (!scratch.InsertGuideLink(NewTaskInsertIndex(), pageCode, title)) return;
         isDirty = true;
         SyncFocusNodesToScratch();
         // Persist immediately (the player clicked in the Handbook and expects the task to exist right away);

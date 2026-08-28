@@ -414,6 +414,77 @@ public class ScribeDocumentTests
         Assert.Single(doc.Blocks);
     }
 
+    [Fact]
+    public void InsertIndex_TopIsZero_BottomIsCount()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("A");
+        doc.AddTask("B");
+        Assert.Equal(0, doc.InsertIndex(ScribeNewTaskInsert.Top));
+        Assert.Equal(2, doc.InsertIndex(ScribeNewTaskInsert.Bottom));
+        Assert.Equal(0, doc.InsertIndex((ScribeNewTaskInsert)99)); // unknown → Top
+    }
+
+    [Fact]
+    public void InsertTask_TopThenBottom_PlacesAtEachEdge()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("existing");
+
+        Assert.True(doc.InsertTask(doc.InsertIndex(ScribeNewTaskInsert.Top), "new-top"));
+        Assert.Equal(new[] { "new-top", "existing" }, doc.Blocks.Select(b => b.Text));
+
+        Assert.True(doc.InsertTask(doc.InsertIndex(ScribeNewTaskInsert.Bottom), "new-bottom"));
+        Assert.Equal(new[] { "new-top", "existing", "new-bottom" }, doc.Blocks.Select(b => b.Text));
+    }
+
+    [Fact]
+    public void InsertTask_TwoTops_StackNewestFirst()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("old");
+        doc.InsertTask(doc.InsertIndex(ScribeNewTaskInsert.Top), "first");
+        doc.InsertTask(doc.InsertIndex(ScribeNewTaskInsert.Top), "second");
+        Assert.Equal(new[] { "second", "first", "old" }, doc.Blocks.Select(b => b.Text));
+    }
+
+    [Fact]
+    public void InsertCraft_AtTop_ReconcileKeepsChildrenUnderParent()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("already-there");
+        var id = doc.InsertCraft(0, "game:plank-oak", 1, "sig");
+        Assert.NotEqual(Guid.Empty, id);
+
+        Assert.True(doc.ReconcileCraftIngredients(id,
+            new[] { new ScribeCraftIngredient("game:log-oak", 1) },
+            Array.Empty<string>(),
+            craftsNeeded: 1));
+
+        Assert.Equal(3, doc.Blocks.Count);
+        Assert.True(doc.Blocks[0].IsCraft);
+        Assert.Equal(id, doc.Blocks[0].TaskId);
+        Assert.Equal(ScribeBlockKind.Tracker, doc.Blocks[1].Kind);
+        Assert.Equal(1, doc.Blocks[1].Depth);
+        Assert.Equal("game:log-oak", doc.Blocks[1].TargetItemCode);
+        Assert.Equal("already-there", doc.Blocks[2].Text);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(2)]
+    public void InsertTracker_OnInvalidIndex_FailsSafely(int badIndex)
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("A");
+        Assert.False(doc.InsertTracker(badIndex, "game:ingot-copper", 1));
+        Assert.Equal(Guid.Empty, doc.InsertCraft(badIndex, "game:plank-oak", 1, "sig"));
+        Assert.False(doc.InsertLink(badIndex, "game:ingot-copper"));
+        Assert.False(doc.InsertGuideLink(badIndex, "scribe-getting-started", "Getting Started"));
+        Assert.False(doc.InsertTextSection(badIndex, "note"));
+        Assert.Single(doc.Blocks);
+    }
+
     // --- Reorder ---
 
     [Fact]

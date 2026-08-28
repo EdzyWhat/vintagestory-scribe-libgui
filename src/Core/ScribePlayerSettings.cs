@@ -42,6 +42,12 @@ public sealed class ScribePlayerSettings
     /// document/pin action on the mutated rows.</summary>
     public ScribeSubtaskBehavior SubtaskBehavior { get; set; } = ScribeSubtaskBehavior.Bound;
 
+    /// <summary>Where footer Add, Shift+right-click quick-add, and Handbook Add to Scribe insert the
+    /// new block: <see cref="ScribeNewTaskInsert.Top"/> (default — index 0, newest first) or
+    /// <see cref="ScribeNewTaskInsert.Bottom"/> (append). Client-local; the editor scratch picks the
+    /// index before the existing save path. Enter insert-below does not read this.</summary>
+    public ScribeNewTaskInsert NewTaskInsert { get; set; } = ScribeNewTaskInsert.Top;
+
     /// <summary>Whether the pinned-task HUD header shows its settings gear. Default <c>true</c>. When
     /// <c>false</c>, the gear is omitted from the HUD; the Lectern/Notebook/Scriptorium Settings tab
     /// remains available. A per-player, client-local display preference: never server-synced. A plain
@@ -378,6 +384,12 @@ public sealed class ScribePlayerSettings
     public static ScribeSubtaskBehavior NormalizeSubtaskBehavior(ScribeSubtaskBehavior value) =>
         Enum.IsDefined(typeof(ScribeSubtaskBehavior), value) ? value : ScribeSubtaskBehavior.Bound;
 
+    /// <summary>Maps a loaded New Task Insert value to a defined <see cref="ScribeNewTaskInsert"/>,
+    /// falling back to the default (<see cref="ScribeNewTaskInsert.Top"/>) for any unrecognized value
+    /// so a missing JSON key or a hand-edited config can't select an undefined edge.</summary>
+    public static ScribeNewTaskInsert NormalizeNewTaskInsert(ScribeNewTaskInsert value) =>
+        Enum.IsDefined(typeof(ScribeNewTaskInsert), value) ? value : ScribeNewTaskInsert.Top;
+
     /// <summary>Maps a loaded timer-mode value to a defined <see cref="TimerMode"/>, falling back to the
     /// default (<see cref="TimerMode.RealTime"/>) for any unrecognized value so a hand-edited or corrupted
     /// config can't select an undefined timer type.</summary>
@@ -416,6 +428,7 @@ public sealed class ScribePlayerSettings
         CompletionPolicy = NormalizePolicy(CompletionPolicy);
         TrackerCompletion = NormalizeTrackerCompletion(TrackerCompletion);
         SubtaskBehavior = NormalizeSubtaskBehavior(SubtaskBehavior);
+        NewTaskInsert = NormalizeNewTaskInsert(NewTaskInsert);
         PreferredTimerMode = NormalizeTimerMode(PreferredTimerMode);
         HudAnchor = NormalizeAnchor(HudAnchor);
         HudRowWidth = ClampHudRowWidth(HudRowWidth);

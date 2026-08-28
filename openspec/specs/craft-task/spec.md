@@ -153,7 +153,9 @@ its bound recipe, placed contiguously directly below the parent at `Depth` 1 (su
 its `TargetQuantity` SHALL be **ingredient quantity × crafts-needed**, where crafts-needed is
 `ceil(TargetQuantity ÷ recipe output quantity)`. Children are ordinary Tracker rows: they render,
 count carried inventory, and complete exactly like any Item Tracker. The parent `Craft` row itself
-tracks the output item's carried count.
+tracks the output item's carried count. Cells that are tools (`IsTool`), not consumed (`Consume` is
+false), or tag-only with no usable item code (including the default `*:*` code) SHALL NOT become
+children.
 
 #### Scenario: Ingredients are generated at batch quantity
 - **WHEN** a Craft task targets 16 of an output whose recipe yields 4 per craft and consumes 2 of ingredient A per craft
@@ -166,6 +168,10 @@ tracks the output item's carried count.
 #### Scenario: Each ingredient becomes its own subtask row
 - **WHEN** a recipe has three distinct counting ingredients
 - **THEN** three `Tracker` children are created at `Depth` 1 directly below the `Craft` parent, one per ingredient
+
+#### Scenario: Debarked-log tools are omitted
+- **WHEN** a Crafting Task is created for a debarked oak log (recipe cells: tag-only axe, tag-only hammer, oak log)
+- **THEN** the only generated ingredient child is the oak log; no wildcard/`*:*` Tracker (e.g. “Pocketsun (any variant)”) is created
 
 ### Requirement: Ingredient matching resolves wildcard families and concrete bound variables
 An ingredient child's carried-count SHALL match the recipe ingredient's intent. A **wildcard/family**
@@ -194,24 +200,30 @@ it SHALL NOT be litre-counted. Litre-accurate liquid tracking is deferred.
 - **THEN** no counting Tracker child is generated for the liquid; it appears as a non-counting note or is omitted
 
 ### Requirement: A Craft task loosely self-heals its ingredient subtasks
-When a Craft task's `TargetQuantity` changes, or when the document is opened, the task SHALL
-re-derive its ingredient list and reconcile the **contiguous run of `Depth` 1 rows directly below it**
-that it owns, matching them to ingredients by item code. For each ingredient it SHALL update the
-matched child's `TargetQuantity` to the new batch amount, and create a child for any ingredient with
-no matching row. It SHALL **never auto-delete** rows (player-added or player-edited rows survive),
-and it SHALL manage exactly **one level deep** (it never descends into or creates depth-2 rows). Rows
-the player manually promotes out of the depth-1 run (or reorders away) leave the managed set.
+When a Craft task's `TargetQuantity` is changed from the editor's inline stepper, the task SHALL
+re-derive its ingredient list and reconcile **only** the contiguous run of `Depth` 1 rows directly
+below it, matching them to ingredients by item code (order among those rows SHALL NOT matter). For
+each matched child Tracker it SHALL update `TargetQuantity` to the new batch amount. It SHALL **not**
+create a child for a missing ingredient, SHALL **not** run on document or editor open, and SHALL
+**not** run on complete, delete, unindent, or reorder. It SHALL **never auto-delete** rows
+(player-added or player-edited rows survive), and it SHALL manage exactly **one level deep**. The
+first non-depth-1 row ends the owned run. Handbook **creation** still generates children once (see
+auto-generate); that is not heal.
 
 #### Scenario: Raising the target rescales existing ingredient subtasks
 - **WHEN** the player increases a Craft task's `TargetQuantity` so crafts-needed doubles
 - **THEN** each owned ingredient child's `TargetQuantity` is doubled in place, preserving its carried progress
 
-#### Scenario: A missing ingredient subtask is recreated, others are left alone
+#### Scenario: A deleted ingredient is not recreated when the target changes
 - **WHEN** the player deletes one ingredient child and then edits the parent's target
-- **THEN** the deleted ingredient's child is recreated at the correct quantity and the remaining children are only rescaled, not duplicated or removed
+- **THEN** that ingredient is not recreated; remaining children in the owned run are only rescaled
+
+#### Scenario: Opening the editor does not recreate children
+- **WHEN** the player opens the editor on a Craft parent whose owned run is empty
+- **THEN** no ingredient children are created
 
 #### Scenario: Self-heal never deletes and never nests deeper
-- **WHEN** self-heal runs against a Craft task whose depth-1 run contains extra player-added rows
+- **WHEN** the stepper reconcile runs against a Craft task whose depth-1 run contains extra player-added rows
 - **THEN** the player-added rows are preserved, no row is auto-deleted, and no depth-2 row is created
 
 ### Requirement: Ingredient subtask counts redraw live when the parent target changes
@@ -268,30 +280,31 @@ sees intent at a glance. Ingredient children render as ordinary indented Tracker
 - **THEN** each row has a distinct label or icon identifying its kind
 
 ### Requirement: Craft tasks are created only from Handbook grid-recipe links
-A `Craft` task SHALL be creatable **only** from an item's Handbook page, via an injected "Add Crafting
-Task" link, and never from a bare editor footer click (the `Craft` kind requires item context and
+A `Craft` task SHALL be creatable **only** from an item's Handbook page, via an injected crafting
+link, and never from a bare editor footer click (the `Craft` kind requires item context and
 no-ops on a null code). An item's Handbook page SHALL show **one crafting link per grid recipe
 variant**, collapsing to a single link when the item has exactly one grid recipe, and showing **no
-crafting link** when the item has no grid recipe. Each link SHALL be labeled by the variant's
-distinguishing ingredient, with a "Recipe N" fallback when no distinguishing label is available.
-Variants SHALL be grouped by recipe group, wildcard-material fan-out SHALL be collapsed to one link,
-and disabled recipes and pure tool ingredients SHALL be filtered out. Clicking a link SHALL create
-the `Craft` task (and generate its ingredient subtasks) on the resolved Scribe surface, reusing the
-existing three-tier Handbook "Add to Scribe" surface resolution.
+crafting link** when the item has no grid recipe. On the Handbook the single-recipe label SHALL be
+**Add ingredients** and a multi-recipe label SHALL be **Add ingredients ({0})** with the
+distinguishing ingredient (or "Recipe N"). The editor Add picker SHALL keep the existing
+"Add Crafting Task" label. Variants SHALL be grouped by recipe group, wildcard-material fan-out
+SHALL be collapsed to one link, and disabled recipes and pure tool ingredients SHALL be filtered
+out. Clicking a link SHALL create the `Craft` task (and generate its ingredient subtasks) on the
+resolved Scribe surface.
 
 #### Scenario: A single-recipe item shows one crafting link
 - **WHEN** an item has exactly one enabled grid recipe
-- **THEN** its Handbook page shows one "Add Crafting Task" link that creates a Craft task bound to that recipe
+- **THEN** its Handbook page shows one "Add ingredients" link that creates a Craft task bound to that recipe
 
 #### Scenario: A multi-recipe item shows one link per variant
 - **WHEN** an item has more than one distinct grid recipe variant (after grouping and wildcard collapse)
-- **THEN** its Handbook page shows one labeled crafting link per variant, each labeled by its distinguishing ingredient (or "Recipe N")
+- **THEN** its Handbook page shows one labeled crafting link per variant, each labeled "Add ingredients ({0})" with its distinguishing ingredient (or "Recipe N")
 
 #### Scenario: An item with no grid recipe shows no crafting link
 - **WHEN** an item has no grid recipe (or only non-grid production methods)
-- **THEN** its Handbook page shows no "Add Crafting Task" link
+- **THEN** its Handbook page shows no crafting link
 
 #### Scenario: Clicking a crafting link creates the composite task
-- **WHEN** the player clicks an "Add Crafting Task" link on an item's Handbook page
+- **WHEN** the player clicks an "Add ingredients" link on an item's Handbook page
 - **THEN** a `Craft` parent bound to that recipe and its ingredient subtasks are added to the resolved Scribe surface
 

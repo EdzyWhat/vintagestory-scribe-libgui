@@ -19,7 +19,7 @@ namespace Scribe;
 
 /// <summary>
 /// The host-agnostic Scribe settings form (add-settings-tab). One LibGUI widget that renders every
-/// per-player preference, grouped into a Behavior and an Appearance section, and writes each change
+/// per-player preference, grouped into Mod Behavior, Window Appearance, and HUD Appearance, and writes each change
 /// through instantly with no OK/Cancel (design D3). It makes NO assumption about window size — it is
 /// wrapped in a <see cref="SingleChildScrollView"/> + <see cref="Scrollbar"/> so it fits a small host
 /// (a future Desk) as well as the roomy Lectern — so the same widget is swapped into the Lectern's
@@ -59,8 +59,8 @@ internal sealed class ScribeSettingsContent : StatelessWidget
         // Size live-previews on Read/Edit, not on this form (peg-task-fonts-to-caudex playtest).
         const float scale = 1f;
 
-        // Four sections separated by horizontal Dividers: Mod Behavior, Timer, Window Appearance, HUD
-        // Appearance. Timer groups the two Clockmaker's Notebook timer preferences.
+        // Three sections: Mod Behavior (task policy + mute + timer), Window Appearance (incl. cuneiform),
+        // HUD Appearance (incl. collapse + storm). Same widget in the Lectern region and the HUD-gear dialog.
         var body = new Column(
             spacing: 14 * scale,
             crossAxisAlignment: CrossAxisAlignment.Stretch,
@@ -69,9 +69,6 @@ internal sealed class ScribeSettingsContent : StatelessWidget
             {
                 SectionTitle(Lang.Get("scribe:settings-section-modbehavior"), colors, scale),
                 BuildModBehaviorSection(colors, scale),
-                new Divider(),
-                SectionTitle(Lang.Get("scribe:settings-section-timer"), colors, scale),
-                BuildTimerSection(colors, scale),
                 new Divider(),
                 SectionTitle(Lang.Get("scribe:settings-section-windowappearance"), colors, scale),
                 BuildWindowAppearanceSection(colors, scale),
@@ -95,8 +92,8 @@ internal sealed class ScribeSettingsContent : StatelessWidget
 
     // ---------------- Sections ----------------
 
-    /// <summary>Mod Behavior: how the mod behaves regardless of surface — completion policy and the HUD
-    /// collapse toggle (a behavior switch, not an appearance one).</summary>
+    /// <summary>Mod Behavior: document/task policy, mute, and Clockmaker timer prefs (always shown —
+    /// survival lets anyone take the trait).</summary>
     private Widget BuildModBehaviorSection(ColorScheme colors, float scale)
     {
         return new Column(
@@ -109,10 +106,6 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                     "settings-completionpolicy", colors, scale,
                     new Dropdown<ScribeCompletionPolicy>(
                         value: settings.CompletionPolicy,
-                        // Explicit display order (v1-playtest-fixes 5.2): 1. Keep (stay in place),
-                        // 2. Keep (sink to bottom), 3. Unpin, 4. Delete — NOT the enum/alphabetical order the
-                        // dropdown would otherwise show. Keep this order in sync with the Pinned-view picker
-                        // in GuiDialogScribeLecternLibGui.
                         items: new List<DropdownItem<ScribeCompletionPolicy>>
                         {
                             new() { Value = ScribeCompletionPolicy.Keep,      Label = Lang.Get("scribe:scribe-completion-keep") },
@@ -123,11 +116,6 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         },
                         onChanged: v => onMutate(s => s.CompletionPolicy = v))),
 
-                // What happens to a Tracker task the moment its carried-item count first reaches its
-                // target (add-tracker-link-tasks 5.4/D6). Distinct axis from the completion policy above:
-                // that one governs a PIN when you check it off; this one governs a TRACKER's auto-action.
-                // Explicit display order Complete → Delete → Nothing (the useful-to-least-active order),
-                // not the enum/alphabetical order the dropdown would otherwise pick.
                 LabeledControl(
                     "settings-trackercompletion", colors, scale,
                     new Dropdown<ScribeTrackerCompletion>(
@@ -140,9 +128,6 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         },
                         onChanged: v => onMutate(s => s.TrackerCompletion = v))),
 
-                // What happens to owned-run children when the parent is completed / sunk / deleted / trashed
-                // (refine-crafting-tasks-1-3-2). Distinct from Task Completion Behavior above (pins) and from
-                // Item Tracker Completion (auto-complete when the count fills). Bound is the tree-like default.
                 LabeledControl(
                     "settings-subtaskbehavior", colors, scale,
                     new Dropdown<ScribeSubtaskBehavior>(
@@ -155,65 +140,37 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         },
                         onChanged: v => onMutate(s => s.SubtaskBehavior = v))),
 
-                // "Collapse the HUD" + "Mute Scribe UI sounds" share one row as two columns
-                // (scribe-mute-ui-sounds 3.2). Each hugs its own label at the start of its column
-                // (scribe-settings-followups 3.3); PairedControls splits the width evenly between them.
-                PairedControls(colors, scale,
-                    HuggingCheckbox(
-                        "settings-hudcollapsed", colors, scale,
-                        value: settings.HudCollapsed,
-                        onChanged: v => onMutate(s => s.HudCollapsed = v)),
-                    HuggingCheckbox(
-                        "settings-muteuisounds", colors, scale,
-                        value: settings.MuteUiSounds,
-                        onChanged: v => onMutate(s => s.MuteUiSounds = v))),
+                LabeledControl(
+                    "settings-newtaskinsert", colors, scale,
+                    new Dropdown<ScribeNewTaskInsert>(
+                        value: settings.NewTaskInsert,
+                        items: new List<DropdownItem<ScribeNewTaskInsert>>
+                        {
+                            new() { Value = ScribeNewTaskInsert.Top,    Label = Lang.Get("scribe:scribe-newtaskinsert-top") },
+                            new() { Value = ScribeNewTaskInsert.Bottom, Label = Lang.Get("scribe:scribe-newtaskinsert-bottom") },
+                        },
+                        onChanged: v => onMutate(s => s.NewTaskInsert = v))),
 
-                // Storm text corruption (hud-temporal-storm-corruption): when on, the HUD scrambles its
-                // text and swaps its title during a temporal storm / low stability. Behavior switch (not
-                // appearance), so it sits here. Timer-related settings (Timer disappears + Alarm Volume)
-                // are in the dedicated Timer section below.
                 HuggingCheckbox(
-                    "settings-stormcorruption", colors, scale,
-                    value: settings.StormCorruption,
-                    onChanged: v => onMutate(s => s.StormCorruption = v)),
+                    "settings-muteuisounds", colors, scale,
+                    value: settings.MuteUiSounds,
+                    onChanged: v => onMutate(s => s.MuteUiSounds = v)),
 
-                // Cuneiform toggles share one paired row. "Cuneiform tablets" (add-cuneiform-glyph-font;
-                // positive polarity per D8): when on (the default), the tablet tier writes in the
-                // carved-wedge cuneiform script; when off, that text renders in the player's selected task
-                // font instead. "Cuneiform press-in" (add-cuneiform-handwriting-feel): when on, newly-typed
-                // cuneiform presses in stroke-by-stroke; off by default, and only has an effect while
-                // Cuneiform tablets is on (it animates the cuneiform glyphs). Both are behavior switches, so
-                // they live here; each hugs its own label.
                 PairedControls(colors, scale,
                     HuggingCheckbox(
-                        "settings-cuneiformtablets", colors, scale,
-                        value: settings.CuneiformTablets,
-                        onChanged: v => onMutate(s => s.CuneiformTablets = v)),
-                    HuggingCheckbox(
-                        "settings-cuneiformprogression", colors, scale,
-                        value: settings.CuneiformProgression,
-                        onChanged: v => onMutate(s => s.CuneiformProgression = v))),
+                        "settings-timerdisappear", colors, scale,
+                        value: settings.TimerAutoDisappear,
+                        onChanged: v => onMutate(s => s.TimerAutoDisappear = v)),
+                    LabeledControl(
+                        "settings-timeralarmvolume", colors, scale,
+                        IntField("timeralarmvolume", settings.TimerAlarmVolume, step: 5,
+                            onChanged: v => onMutate(s => s.TimerAlarmVolume = v),
+                            clamp: ScribePlayerSettings.ClampTimerAlarmVolume))),
             });
     }
 
-    /// <summary>Timer: Clockmaker's Notebook timer preferences — "Timer disappears" auto-clear toggle
-    /// and "Alarm Volume" numeric (0–100). Side by side in one paired row.</summary>
-    private Widget BuildTimerSection(ColorScheme colors, float scale)
-    {
-        return PairedControls(colors, scale,
-            HuggingCheckbox(
-                "settings-timerdisappear", colors, scale,
-                value: settings.TimerAutoDisappear,
-                onChanged: v => onMutate(s => s.TimerAutoDisappear = v)),
-            LabeledControl(
-                "settings-timeralarmvolume", colors, scale,
-                IntField("timeralarmvolume", settings.TimerAlarmVolume, step: 5,
-                    onChanged: v => onMutate(s => s.TimerAlarmVolume = v),
-                    clamp: ScribePlayerSettings.ClampTimerAlarmVolume)));
-    }
-
-    /// <summary>Window Appearance: how Scribe's block windows (the Lectern) look — the pixel-art theme
-    /// toggle, the notebook's Pixel Art Size, and the window text scale.</summary>
+    /// <summary>Window Appearance: Lectern look (pixel-art theme, Pixel Art Size, window/task fonts)
+    /// plus tablet cuneiform toggles.</summary>
     private Widget BuildWindowAppearanceSection(ColorScheme colors, float scale)
     {
         return new Column(
@@ -255,6 +212,19 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         value: ScribePlayerSettings.NormalizeTaskFontFamily(settings.TaskFontFamily),
                         items: TaskFontItems(),
                         onChanged: v => onMutate(s => s.TaskFontFamily = v))),
+
+                // Cuneiform is a tablet-surface look (add-cuneiform-glyph-font / add-cuneiform-handwriting-feel),
+                // so it sits with Window Appearance rather than Mod Behavior. Press-in only animates while
+                // Cuneiform tablets is on.
+                PairedControls(colors, scale,
+                    HuggingCheckbox(
+                        "settings-cuneiformtablets", colors, scale,
+                        value: settings.CuneiformTablets,
+                        onChanged: v => onMutate(s => s.CuneiformTablets = v)),
+                    HuggingCheckbox(
+                        "settings-cuneiformprogression", colors, scale,
+                        value: settings.CuneiformProgression,
+                        onChanged: v => onMutate(s => s.CuneiformProgression = v))),
             });
     }
 
@@ -274,8 +244,8 @@ internal sealed class ScribeSettingsContent : StatelessWidget
         return items;
     }
 
-    /// <summary>HUD Appearance: how the pinned-task HUD looks — anchor, row cap, row width, position
-    /// offsets, and its text scale.</summary>
+    /// <summary>HUD Appearance: collapse, storm, icons, gear, then layout (anchor, row cap, width,
+    /// offsets, text scale).</summary>
     private Widget BuildHudAppearanceSection(ColorScheme colors, float scale)
     {
         return new Column(
@@ -284,18 +254,25 @@ internal sealed class ScribeSettingsContent : StatelessWidget
             mainAxisSize: MainAxisSize.Min,
             children: new Widget[]
             {
-                // Show icons on the HUD (add-tracker-link-tasks 7.11j): when on (the default), Tracker/Link
-                // rows render their item icon / guide-page book glyph; off gives a leaner text-only HUD.
-                // Hugs its label like PixelArtDisplay in the Window Appearance section.
-                HuggingCheckbox(
-                    "settings-hudshowicons", colors, scale,
-                    value: settings.HudShowIcons,
-                    onChanged: v => onMutate(s => s.HudShowIcons = v)),
+                PairedControls(colors, scale,
+                    HuggingCheckbox(
+                        "settings-hudcollapsed", colors, scale,
+                        value: settings.HudCollapsed,
+                        onChanged: v => onMutate(s => s.HudCollapsed = v)),
+                    HuggingCheckbox(
+                        "settings-stormcorruption", colors, scale,
+                        value: settings.StormCorruption,
+                        onChanged: v => onMutate(s => s.StormCorruption = v))),
 
-                HuggingCheckbox(
-                    "settings-hudshowsettingsgear", colors, scale,
-                    value: settings.HudShowSettingsGear,
-                    onChanged: v => onMutate(s => s.HudShowSettingsGear = v)),
+                PairedControls(colors, scale,
+                    HuggingCheckbox(
+                        "settings-hudshowicons", colors, scale,
+                        value: settings.HudShowIcons,
+                        onChanged: v => onMutate(s => s.HudShowIcons = v)),
+                    HuggingCheckbox(
+                        "settings-hudshowsettingsgear", colors, scale,
+                        value: settings.HudShowSettingsGear,
+                        onChanged: v => onMutate(s => s.HudShowSettingsGear = v))),
 
                 LabeledControl(
                     "settings-hudanchor", colors, scale,

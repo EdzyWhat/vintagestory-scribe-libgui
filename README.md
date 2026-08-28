@@ -13,7 +13,7 @@ it dry hard, then re-wet to revise or fire it to keep it forever), the carried *
 (and its **Clockmaker's** timer variant), and the placeable, shared **Lectern** — all feeding
 a per-player pinned-task **HUD** that keeps your goals on screen while you play.
 
-> **Status:** released — v1.3.1, [live on the mod DB](https://mods.vintagestory.at/scribe).
+> **Status:** released — v1.3.2, [live on the mod DB](https://mods.vintagestory.at/scribe).
 > See [`ROADMAP.md`](./ROADMAP.md) for the staged plan ahead and [`CHANGELOG.md`](./CHANGELOG.md)
 > for what has shipped.
 

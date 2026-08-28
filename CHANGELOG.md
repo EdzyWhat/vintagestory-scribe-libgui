@@ -4,7 +4,11 @@ All notable changes to Scribe are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.3.2] - 2026-08-26
+## [1.3.2] - 2026-08-28
+
+Crafting Tasks keep their ingredient lists together, new rows land at the top by default,
+and switching task fonts no longer jumps the list. Fully save-compatible with 1.3.0 —
+no codec change.
 
 ### Added
 - **Subtask Behavior.** A Settings dropdown (Bound by default, Independent, Discard children)
@@ -14,6 +18,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Pin notes.** Text rows can be pinned. The HUD shows them as text only (no checkbox); unpin
   from the Pin Tab.
 - **HUD settings gear toggle.** Hide the HUD gear from Settings; the Lectern Settings tab stays.
+- **New Task Insert.** A Settings dropdown (Top by default, or Bottom) chooses where Add,
+  Shift+right-click, and Handbook Add to Scribe put a new row. Enter in the editor still inserts
+  under the row you are typing in.
 
 ### Changed
 - **Crafting Tasks no longer recreate deleted ingredients.** Opening the editor does not heal
@@ -29,14 +36,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   The editor Add ▾ labels are unchanged.
 - **Grip tap vs drag.** Nesting is tap-only; a drag starts after the pointer moves, and
   releasing a drag (even on the same row) does not nest.
+- **Task fonts share Caudex's line height.** Switching Task Text Font no longer grows or
+  shrinks single-line rows on Read or Edit. Titles, buttons, the HUD, Settings chrome, and
+  cuneiform tablets are unchanged.
+- **Settings layout.** Timer prefs sit in Mod Behavior (not a Clockmaker-only section).
+  Cuneiform tablets and press-in sit in Window Appearance. HUD collapse and storm
+  corruption sit in HUD Appearance. The HUD-gear settings window is 480×620.
 
 ### Fixed
 - **Tracker counts while paused.** Inventory clicks with a Scribe dialog open no longer call
   `RegisterCallback` in a way that throws in developer mode. Counts recompute immediately while
   paused; delayed coalescing uses `permittedWhilePaused: true`.
 
-Fully save-compatible with 1.3.0 — no codec change. The Windows/Optimum `c00000fd` silent crash
-reproduced with Scribe disabled; this cut has no remaining diagnostic probes.
+The Windows/Optimum `c00000fd` silent crash reproduced with Scribe disabled; this cut has no
+remaining diagnostic probes.
 
 ## [1.3.1] - 2026-08-23
 

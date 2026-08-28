@@ -50,11 +50,13 @@ release the lock, so the settings surface is shown lock-free.
 ### Requirement: Settings are grouped into Behavior and Appearance sections
 The settings surface SHALL present its controls in three labeled sections separated by horizontal
 dividers: a Mod Behavior section, a Window Appearance section, and a HUD Appearance section. The Mod
-Behavior section SHALL contain the
-completion policy and the mute-UI-sounds toggle. The Window Appearance section SHALL contain the window
-font-size scale, the Pixel Art Display toggle, the Pixel Art Size, and the **task font selector**. The
-HUD Appearance section SHALL contain the HUD anchor, HUD maximum rows, HUD row width, HUD horizontal
-and vertical offsets, the HUD font-size scale, and the collapsed-HUD toggle.
+Behavior section SHALL contain task-policy dropdowns (completion, tracker completion, subtask,
+new-task insert), the mute-UI-sounds toggle, and Clockmaker timer prefs (Timer disappears and Alarm
+Volume) — always shown, not gated on the Clockmaker trait. The Window Appearance section SHALL contain
+the Pixel Art Display toggle, Pixel Art Size, window font-size scale, the **task font selector**, and
+the cuneiform tablets / press-in toggles. The HUD Appearance section SHALL contain the collapsed-HUD
+toggle, storm-corruption toggle, HUD icons, HUD settings-gear toggle, HUD anchor, HUD maximum rows,
+HUD row width, HUD horizontal and vertical offsets, and the HUD font-size scale.
 
 #### Scenario: Font selector appears under Window Appearance
 - **WHEN** the settings surface is shown
@@ -63,9 +65,9 @@ and vertical offsets, the HUD font-size scale, and the collapsed-HUD toggle.
 
 #### Scenario: Controls appear under their section
 - **WHEN** the settings surface is shown
-- **THEN** the completion-policy and mute-sounds controls appear under Mod Behavior; the window
-  font-scale, pixel art, and font-selector controls appear under Window Appearance; and the HUD
-  position/size and HUD font-scale controls appear under HUD Appearance
+- **THEN** the completion-policy, mute-sounds, and timer controls appear under Mod Behavior; the window
+  font-scale, pixel art, font-selector, and cuneiform controls appear under Window Appearance; and the
+  collapsed-HUD, storm-corruption, and HUD position/size/font-scale controls appear under HUD Appearance
 
 #### Scenario: Sections are visually separated
 - **WHEN** the settings surface is shown
@@ -132,8 +134,12 @@ row's text caret.
 Changing any control on the settings surface SHALL immediately write the new value to the player's
 client-local preferences and persist it, with no separate apply or confirm step. The change SHALL take
 effect live: a change to a HUD-affecting preference SHALL update the HUD without reopening it, and a
-change to the window font-size scale SHALL update an open host dialog without reopening it. Values SHALL
-be normalized/clamped on write, so a control can never persist an out-of-range value.
+change to the window font-size scale SHALL update an open host dialog's **task text** (Read/Edit and
+other task-font surfaces) without reopening it. The settings form's own labels, helptext, and
+checkboxes SHALL stay at the unscaled settings size (`BaseSettingsFontSize` / `BaseSettingsCheckboxSize`)
+in LibGUI's default body face — they SHALL NOT re-scale with Window Text Size and SHALL NOT inherit
+Task Text Font. Values SHALL be normalized/clamped on write, so a control can never persist an
+out-of-range value.
 
 #### Scenario: A HUD preference updates the HUD live
 - **WHEN** a player changes the HUD anchor, rows, width, offsets, or HUD font scale on the settings surface
@@ -141,11 +147,13 @@ be normalized/clamped on write, so a control can never persist an out-of-range v
 
 #### Scenario: The window font scale updates the open dialog live
 - **WHEN** a player changes the window font-size scale while a Lectern dialog is open
-- **THEN** the dialog's text re-renders at the new scale without the dialog being closed and reopened
+- **THEN** the dialog's Read/Edit (and other task-text) re-renders at the new scale without the dialog
+  being closed and reopened
 
-#### Scenario: The settings form re-scales itself live
+#### Scenario: The settings form stays at 100% when window text size changes
 - **WHEN** a player changes the window font-size scale on the settings surface
-- **THEN** the settings form's own text and checkboxes re-render at the new scale without reopening
+- **THEN** the settings form's own text and checkboxes stay at the unscaled settings size
+- **AND** they still render in LibGUI's default body face, not the selected Task Text Font
 
 #### Scenario: No separate apply step
 - **WHEN** a player changes a control and then dismisses the settings surface
@@ -191,16 +199,15 @@ no separate apply or reopen step.
 - **THEN** the new value is persisted at the moment it is toggled and takes effect for Scribe's UI with no
   apply, confirm, or reopen step
 
-### Requirement: The mute-UI-sounds control is paired beside the collapsed-HUD checkbox
-In the Mod Behavior section, the mute-UI-sounds preference SHALL be presented as a labeled checkbox laid
-out as a second column beside the collapsed-HUD checkbox, so the two checkboxes share one paired row. The
-control SHALL be labeled and SHALL provide localized helptext on demand, and its label and helptext SHALL
+### Requirement: The mute-UI-sounds control is in Mod Behavior
+In the Mod Behavior section, the mute-UI-sounds preference SHALL be presented as a labeled checkbox.
+The control SHALL be labeled and SHALL provide localized helptext on demand, and its label and helptext SHALL
 be drawn from the localization assets.
 
-#### Scenario: The two checkboxes share a paired row
+#### Scenario: Mute sits in Mod Behavior
 - **WHEN** the settings surface's Mod Behavior section is shown
-- **THEN** the collapsed-HUD checkbox and the mute-UI-sounds checkbox appear together on one row as two
-  columns
+- **THEN** the mute-UI-sounds checkbox is present (not paired with the collapsed-HUD checkbox, which
+  lives in HUD Appearance)
 
 #### Scenario: The mute control is labeled and localized
 - **WHEN** the mute-UI-sounds control renders its label and helptext
@@ -231,11 +238,11 @@ immediately — including for a timer that is already fired — with no separate
 
 ### Requirement: A preference toggles the storm-corruption effect
 
-The settings surface SHALL provide a labeled, localized-helptext control that toggles the temporal
-storm-corruption HUD effect (both the text corruption and the storm title swap). The control SHALL
-default to on. When off, the HUD SHALL never corrupt its text or swap its title regardless of storm
-or stability state. The setting SHALL be client-local (a display/behavior preference), consistent
-with the other Scribe client preferences, and SHALL write through immediately.
+The settings surface SHALL provide a labeled, localized-helptext control in the HUD Appearance
+section that toggles the temporal storm-corruption HUD effect (both the text corruption and the storm
+title swap). The control SHALL default to on. When off, the HUD SHALL never corrupt its text or swap
+its title regardless of storm or stability state. The setting SHALL be client-local (a display
+preference), consistent with the other Scribe client preferences, and SHALL write through immediately.
 
 #### Scenario: Disabling the effect stops corruption immediately
 
@@ -268,6 +275,14 @@ live, following the same write-through-with-live-preview behavior as the other a
 - **THEN** the value is clamped to the range (and snapped to the 10-step grid), and in-range values persist
   across sessions like the other client-local preferences
 
+### Requirement: The standalone settings window is a fixed 480×620
+The HUD-gear settings window SHALL open at 480×620 logical pixels and SHALL NOT be resizable. The
+settings form SHALL still scroll inside that window if the content overflows.
+
+#### Scenario: Gear-opened settings is 480×620
+- **WHEN** the player opens Scribe Settings from the pinned-task HUD gear
+- **THEN** the standalone window is 480 pixels wide and 620 pixels tall
+
 ### Requirement: The settings surface paints a default window background
 The standalone settings window SHALL paint the active LibGUI theme's default surface color behind the
 settings form, so the form's inputs sit on an opaque window panel rather than floating on a fully
@@ -282,4 +297,43 @@ into Scribe's pixel-art theme).
 #### Scenario: The background follows the global theme
 - **WHEN** the player's global LibGUI theme differs from Scribe's pixel-art theme
 - **THEN** the painted background uses the global theme's surface color, consistent with the window's frame
+
+### Requirement: Subtask Behavior is a Settings picker
+The Behavior section of Scribe Settings SHALL include a Subtask Behavior dropdown with **Bound to
+parent** (default), **Independent**, and **Discard children**, each with localized helptext describing
+complete and trash of a parent.
+
+#### Scenario: Player can choose Independent
+- **WHEN** the player selects Independent in Subtask Behavior
+- **THEN** subsequent parent completions leave children as they are
+
+### Requirement: HUD gear visibility is a Settings checkbox
+The HUD section of Scribe Settings SHALL include a boolean to show or hide the pinned-task HUD
+settings gear, default on.
+
+#### Scenario: Toggle HUD gear from Settings
+- **WHEN** the player turns off the HUD gear visibility checkbox
+- **THEN** the HUD header no longer shows a settings gear, and the setting persists across sessions
+
+### Requirement: HUD maximum rows may be set up to 30
+The HUD maximum-rows numeric control SHALL allow values from 1 through **30**. Values above 30 SHALL
+clamp to 30 on load and on blur. A stored value of 30 SHALL survive reload (it SHALL NOT clamp back to 10).
+
+#### Scenario: Setting 30 sticks
+- **WHEN** the player sets HUD maximum rows to 30 and reopens Settings
+- **THEN** the control still shows 30
+
+### Requirement: New Task Insert dropdown
+The Mod Behavior section SHALL include a **New Task Insert** dropdown with two localized values,
+**Top** (default) and **Bottom**. Changing it SHALL persist on `ScribePlayerSettings` immediately
+(same write-through as other Behavior dropdowns). Helptext SHALL state that it applies to the
+footer Add control, Shift+right-click quick-add, and Handbook Add to Scribe.
+
+#### Scenario: Dropdown is in Mod Behavior
+- **WHEN** the settings surface is shown
+- **THEN** a New Task Insert dropdown listing Top and Bottom is present in the Mod Behavior section
+
+#### Scenario: Choosing Bottom persists
+- **WHEN** the player selects Bottom
+- **THEN** subsequent document-level creates append until they change the setting again
 

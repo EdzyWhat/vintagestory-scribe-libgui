@@ -60,7 +60,7 @@ public sealed class ScribeSettingsDialog : GuiBase
     {
         // Fixed, comfortably-sized settings window (the form scrolls within it if it overflows). Draggable
         // so the player can move it off the HUD; resizable off — the form has a natural width.
-        Size = new Vector2(420, 480),
+        Size = new Vector2(480, 620),
         Draggable = true,
         Resizable = false,
     };

@@ -62,7 +62,7 @@
 
 - [x] 10.1 Grip hover must not start a drag (press-gate `onMove`; hover was firing `OnDragStart` because `PointerEvent.Button` defaults to Left).
 - [x] 10.2 Drag-reordering a depth-0 parent moves its owned run as one cluster (parent first). Dropping on own children is a no-op.
-- [ ] 10.3 Item-row FieldPadY is 0 (was 6px). In-game: compare a Tracker/Craft row to a neighboring Task text row in editor AND read — do they still line up, or does the pad need to come back? Also confirm stepper +/− sit in their buttons, and a wrapping item name top-aligns stepper, icon, and text.
-- [ ] 10.4 Tablet vs Notebook item-row: cuneiform names should share a top edge with the stepper/checkbox (no extra FieldPadY inside the glyph-font label). Compare a Craft/Tracker row on a Notebook and a tablet.
-- [ ] 10.5 Tablet cuneiform only: checkbox, grip, and Tracker/Craft stepper should match one cuneiform line (~FontSize×1.848). Notebook/Lectern stay at 22px. Disable-cuneiform on a tablet should revert the controls.
-- [ ] 10.6 Item-row names: single-line ("Leather") should sit on the icon/checkbox horizon; wrapping names stay top-aligned and must not lift the icon. Check editor, read, and Pin Tab.
+- [x] 10.3 Item-row FieldPadY is 0 (was 6px). In-game: compare a Tracker/Craft row to a neighboring Task text row in editor AND read — do they still line up, or does the pad need to come back? Also confirm stepper +/− sit in their buttons, and a wrapping item name top-aligns stepper, icon, and text.
+- [x] 10.4 Tablet vs Notebook item-row: cuneiform names should share a top edge with the stepper/checkbox (no extra FieldPadY inside the glyph-font label). Compare a Craft/Tracker row on a Notebook and a tablet.
+- [x] 10.5 Tablet cuneiform only: checkbox, grip, and Tracker/Craft stepper should match one cuneiform line (~FontSize×1.848). Notebook/Lectern stay at 22px. Disable-cuneiform on a tablet should revert the controls.
+- [x] 10.6 Item-row names: single-line ("Leather") should sit on the icon/checkbox horizon; wrapping names stay top-aligned and must not lift the icon. Check editor, read, and Pin Tab.

@@ -185,6 +185,24 @@ public class ScribePlayerSettingsTests
     }
 
     [Fact]
+    public void Default_NewTaskInsert_IsTop()
+    {
+        Assert.Equal(ScribeNewTaskInsert.Top, new ScribePlayerSettings().NewTaskInsert);
+        Assert.Equal(ScribeNewTaskInsert.Top, new ScribePlayerSettings().Normalized().NewTaskInsert);
+        Assert.Equal(ScribeNewTaskInsert.Bottom,
+            new ScribePlayerSettings { NewTaskInsert = ScribeNewTaskInsert.Bottom }.Normalized().NewTaskInsert);
+    }
+
+    [Fact]
+    public void NormalizeNewTaskInsert_Unknown_FallsBackToTop()
+    {
+        Assert.Equal(ScribeNewTaskInsert.Top,
+            ScribePlayerSettings.NormalizeNewTaskInsert((ScribeNewTaskInsert)99));
+        Assert.Equal(ScribeNewTaskInsert.Top,
+            new ScribePlayerSettings { NewTaskInsert = (ScribeNewTaskInsert)99 }.Normalized().NewTaskInsert);
+    }
+
+    [Fact]
     public void Default_HudShowSettingsGear_IsOn()
     {
         Assert.True(new ScribePlayerSettings().HudShowSettingsGear);

@@ -108,16 +108,16 @@ highlight inside the row's pinned tint), so the two states are never the same sh
 
 ### Requirement: Task rows expose a pin-toggle affordance
 Each task row in the editor view SHALL provide a control that toggles the task's pinned
-flag. Text-section rows SHALL NOT expose this control.
+flag. Text-section (note) rows SHALL also expose this control so notes can be pinned.
 
 #### Scenario: Toggling pin from the GUI
 - **WHEN** the player activates a task row's pin-toggle control
 - **THEN** the task's pinned flag flips, and the control's visual state reflects the new
   value
 
-#### Scenario: Text sections have no pin control
-- **WHEN** a text-section row is composed
-- **THEN** no pin-toggle control is present for that row
+#### Scenario: Text sections expose a pin control
+- **WHEN** a text-section row is composed in the editor
+- **THEN** a pin-toggle control is present for that row
 
 ### Requirement: Editor rows reserve a drag-handle affordance column
 Each editor-view row SHALL reserve a drag-handle (grip) affordance column and render a grip control
@@ -581,7 +581,9 @@ editor view. Switching between views on the same lectern SHALL NOT change the ro
 In addition, a task row SHALL occupy the same vertical space in the read view and the editor
 view: for a single-line task, the read-view row and the editor-view row SHALL have identical
 rendered height, and each task SHALL remain at the same vertical position when the player
-switches views on the same lectern. This parity SHALL be achieved by unifying the row font
+switches views on the same lectern. This parity SHALL hold for every selectable task-text font,
+not only Caudex: both views SHALL reserve Caudex's Skia line-box at the current window font
+scale (see `task-font-metrics`). This parity SHALL be achieved by unifying the row font
 size, vertical alignment, per-row padding, and inter-row spacing between the two views. The
 read-view row SHALL NOT draw a text-field border, while the editor-view row's field border
 (drawn inside its existing internal padding) SHALL NOT change the row's height. Multi-line
@@ -598,6 +600,14 @@ or field chrome differ.
   on a single line
 - **THEN** each task's row occupies the same vertical height and the same vertical position in
   both views, so no task visibly jumps or shifts when the view changes
+
+#### Scenario: Read/Edit height parity holds for a non-Caudex task font
+- **WHEN** the player has selected a non-Caudex task font (for example Scapholene or La Belle
+  Aurore)
+- **AND** the player switches between read and editor view on a lectern whose tasks each fit
+  on a single line
+- **THEN** each task's row occupies the same vertical height and the same vertical position in
+  both views, matching the Caudex-tuned line-box at that window font scale
 
 #### Scenario: Read-view rows have no border while matching the editor field's box
 - **WHEN** a task row is shown in the read view
@@ -896,7 +906,7 @@ the list genuinely became shorter).
 ### Requirement: Read-view rows expose a pin-toggle affordance
 Each task row in the read view SHALL provide a control that toggles the task's pinned state for the
 acting player, addressed by stable identity, mirroring the editor view's pin control. Text-section
-rows SHALL NOT expose this control. The control's visual state SHALL reflect whether the task is
+rows SHALL also expose this control. The control's visual state SHALL reflect whether the task is
 currently pinned for the player.
 
 #### Scenario: Toggling pin from a read-view row
@@ -904,9 +914,9 @@ currently pinned for the player.
 - **THEN** the task's pinned state for that player flips and the control's visual state reflects the
   new value
 
-#### Scenario: Read-view text sections have no pin control
+#### Scenario: Read-view text sections expose a pin control
 - **WHEN** a text-section row is composed in the read view
-- **THEN** no pin-toggle control is present for that row
+- **THEN** a pin-toggle control is present for that row
 
 ### Requirement: Every Lectern view completes a task with the player's completion policy
 Completing a task via its checkbox SHALL apply the player's completion policy identically in all three
@@ -954,4 +964,17 @@ same per-player completion-policy preference that the settings surface edits.
 - **WHEN** the player changes the completion policy from the pinned view's picker
 - **THEN** the same per-player completion-policy preference is updated, and the settings surface
   reflects the same value
+
+### Requirement: Footer Add uses New Task Insert
+When the player adds a Standard Task or a Note from the editor footer add control, the new empty
+row SHALL be inserted at the player's **New Task Insert** edge (`Top` → index 0, `Bottom` → append)
+and SHALL receive focus. Enter (insert-below) is unchanged.
+
+#### Scenario: Add task at top
+- **WHEN** New Task Insert is Top and the player uses the add control to add a Standard Task
+- **THEN** the new empty task is at the top of the list and focused
+
+#### Scenario: Add note at bottom
+- **WHEN** New Task Insert is Bottom and the player uses the add control to add a Note
+- **THEN** the new empty note is appended and focused
 

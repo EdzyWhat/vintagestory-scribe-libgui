@@ -22,10 +22,6 @@ What happens when you check off a pinned task (from the HUD, Read view, Edit vie
 
 The policy picker is also available at the top of the **Pinned view**.
 
-### Collapse the HUD
-
-Minimizes the HUD to just its header (same as clicking the ▾ chevron or pressing P).
-
 ### Mute Scribe UI sounds
 
 Silences the click sounds from Scribe's own buttons. Your game sounds and other mods are unaffected.
@@ -33,6 +29,10 @@ Silences the click sounds from Scribe's own buttons. Your game sounds and other 
 ### Timer disappears
 
 When on, a finished [Clockmaker's Notebook](Clockmakers-Notebook-and-Timers) timer disappears from the HUD after about 30 seconds. Turn it off to keep the fired timer showing until you click it or press **Stop Timer**.
+
+### Alarm Volume (0–100)
+
+Volume of the Clockmaker's Notebook alarm bell. 0 is silent, 100 is loudest. Default 65.
 
 ---
 
@@ -57,9 +57,25 @@ The typeface used for task and note row text. Options include:
 - Scapholène, Caudex, La Belle Aurore, Noto Sans, Noto Serif (bundled with Scribe)
 - Playfair Display, Cormorant Unicase (from LibGUI)
 
+### Cuneiform tablets
+
+When on (the default), Tablet text is written in the carved-wedge cuneiform script. Turn it off to render Tablet text in your selected task font instead.
+
+### Cuneiform press-in
+
+When on, newly typed cuneiform letters carve in stroke-by-stroke. Only has an effect while **Cuneiform tablets** is on.
+
 ---
 
 ## HUD Appearance
+
+### Collapse the HUD
+
+Minimizes the HUD to just its header (same as clicking the ▾ chevron or pressing P).
+
+### Storm text corruption
+
+During a temporal storm — or when your stability drops low — the HUD scrambles its text and its title reads "Survive the Storm". Turn off to keep the HUD fully legible.
 
 ### HUD position
 

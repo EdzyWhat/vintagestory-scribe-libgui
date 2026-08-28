@@ -6,9 +6,9 @@ TBD - created by archiving change v1-release-checklist. Update Purpose after arc
 ### Requirement: Player can select the font used for task text
 The mod SHALL allow the player to choose a font family for task row text from a set of bundled options.
 The selection SHALL be stored in `ScribePlayerSettings` (client-local, persisted in `scribe:settings:v1`)
-and applied immediately to all open Lectern dialogs and the HUD without requiring a restart or reload.
-The default value SHALL be the existing body font so the existing UX is unchanged for players who never
-interact with the selector.
+and applied immediately to all open Lectern dialogs without requiring a restart or reload. The pinned-task
+HUD SHALL keep its own face (see `task-font-metrics`). The default value SHALL be the existing body font so
+the existing UX is unchanged for players who never interact with the selector.
 
 #### Scenario: Font selector appears in Settings
 - **WHEN** a player opens the Scribe Settings window
@@ -49,4 +49,20 @@ tracked in design.md open question #2.
 #### Scenario: Selector shows at least 3 options
 - **WHEN** a player opens the font selector control in Settings
 - **THEN** at least 3 distinct named font options are listed
+
+### Requirement: Changing the task font does not change single-line row height
+Selecting a different family in the task-font selector SHALL NOT change the laid-out height of a
+single-line task row relative to Caudex at the same window font scale. The selector still changes
+glyphs immediately (existing live-update requirement); only the line-box height is invariant. This
+applies to Lectern Read and Edit views.
+
+#### Scenario: Cycling the selector leaves a single-line Edit row in place
+- **WHEN** a Lectern is on the Edit view showing a single-line task
+- **AND** the player cycles through every option in the task-font selector
+- **THEN** that row's vertical position and height do not jump (within 1 px) as the family changes
+
+#### Scenario: Cycling the selector leaves a single-line Read row in place
+- **WHEN** a Lectern is on the Read view showing a single-line task
+- **AND** the player cycles through every option in the task-font selector
+- **THEN** that row's vertical position and height do not jump (within 1 px) as the family changes
 

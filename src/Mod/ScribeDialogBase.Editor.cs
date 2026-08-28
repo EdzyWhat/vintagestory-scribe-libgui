@@ -180,13 +180,14 @@ public abstract partial class ScribeDialogBase
         }
     }
 
-    /// <summary>Quick-add seam (add-unified-quick-add-interaction): insert a fresh EMPTY task at the TOP
-    /// of the document and focus its caret, so the Shift+right-click capture gesture drops the player
-    /// straight into a new top-of-list row. Called AFTER the editor view is already active (the lectern's
-    /// server round-trip lands here via <see cref="EnterEditorMode"/> → <see cref="QuickAddTopTask"/>; the
-    /// item hosts call it right after their immediate <see cref="RequestEditorAccess"/> grant). Reuses the
-    /// existing add path (<see cref="ScribeDocument.InsertTask"/> at index 0 + the focus/rebuild machinery
-    /// <see cref="EditorInsertTaskBelow"/> uses) rather than a new Core mutation.
+    /// <summary>Quick-add seam (add-unified-quick-add-interaction): insert a fresh EMPTY task at the
+    /// player's New Task Insert edge (Top = index 0, Bottom = append) and focus its caret, so the
+    /// Shift+right-click capture gesture drops the player straight into that new row. Called AFTER the
+    /// editor view is already active (the lectern's server round-trip lands here via
+    /// <see cref="EnterEditorMode"/> → <see cref="QuickAddTopTask"/>; the item hosts call it right after
+    /// their immediate <see cref="RequestEditorAccess"/> grant). Reuses
+    /// <see cref="ScribeDocument.InsertTask"/> + the focus/rebuild machinery
+    /// <see cref="EditorInsertTaskBelow"/> uses rather than a new Core mutation.
     ///
     /// <para>Respects the tier cap exactly like the editor's own add controls: at the cap the editor still
     /// opens but no task is inserted and the same "document full" feedback (<see cref="NotifyTabletFull"/>)
@@ -194,22 +195,23 @@ public abstract partial class ScribeDialogBase
     public void QuickAddTopTask()
     {
         if (!isEditorMode || scratch is null) return;
-        TraceScroll("quick-add-top");
+        TraceScroll("quick-add");
 
-        // Tier cap (scribe-document-policy): mirror OnClickAddTask / EditorInsertTaskBelow — open the editor
+        // Tier cap (scribe-document-policy): mirror OnClickAdd / EditorInsertTaskBelow — open the editor
         // but refuse the insert at the cap, surfacing the same transient "document full" notice.
         if (!CanAddTaskUnderPolicy()) { NotifyTabletFull(); return; }
 
-        // Commit whatever row was focused before we shift indices (parity with OnClickAddTask).
+        // Commit whatever row was focused before we shift indices (parity with OnClickAdd).
         if (focusedEditIndex is { } leaving) NormalizeRowOnCommit(leaving);
 
-        if (scratch.InsertTask(0, ""))
+        int at = NewTaskInsertIndex();
+        if (scratch.InsertTask(at, ""))
         {
             isDirty = true;
             SyncFocusNodesToScratch();
-            // The fresh top row MOUNTS, so autoFocus fires on it (reconcile path — see EditorInsertTaskBelow).
-            autoFocusRowOnRebuild = 0;
-            focusedEditIndex = 0;
+            // The fresh row MOUNTS, so autoFocus fires on it (reconcile path — see EditorInsertTaskBelow).
+            autoFocusRowOnRebuild = at;
+            focusedEditIndex = at;
             pendingEnsureVisible = true;
             if (IsOpened()) RebuildBody();
         }
@@ -530,14 +532,15 @@ public abstract partial class ScribeDialogBase
         RebuildBody();
     }
 
-    /// <summary>Footer add-picker action (add-note-kind-picker D2): append an EMPTY block of the chosen
-    /// <paramref name="kind"/> (Task or Note), grow the focus-node list, and rebuild with the new row
-    /// auto-focused so the player types straight into it (no boilerplate to clear —
-    /// add-empty-task-lifecycle). A task field renders a dimmed "New task…" ghost hint while empty, a note
-    /// "New note…"; either row, if abandoned without typing, is removed on blur (see <see cref="OnRowBlurred"/>).
-    /// The picker's primary button passes its current kind (defaults to Task, so one click still adds a task);
-    /// picking from the inline kind list passes that kind. Kinds and their add delegates come from
-    /// <see cref="ScribeAddKinds"/> — adding a future kind touches the registry, not this method.</summary>
+    /// <summary>Footer add-picker action (add-note-kind-picker D2): insert an EMPTY block of the chosen
+    /// <paramref name="kind"/> (Task or Note) at the player's New Task Insert edge, grow the focus-node
+    /// list, and rebuild with the new row auto-focused so the player types straight into it (no boilerplate
+    /// to clear — add-empty-task-lifecycle). A task field renders a dimmed "New task…" ghost hint while
+    /// empty, a note "New note…"; either row, if abandoned without typing, is removed on blur (see
+    /// <see cref="OnRowBlurred"/>). The picker's primary button passes its current kind (defaults to Task,
+    /// so one click still adds a task); picking from the inline kind list passes that kind. Kinds and their
+    /// add delegates come from <see cref="ScribeAddKinds"/> — adding a future kind touches the registry,
+    /// not this method.</summary>
     private void OnClickAdd(ScribeAddKind kind)
     {
         if (scratch is null) return;
@@ -558,12 +561,14 @@ public abstract partial class ScribeDialogBase
         if (focusedEditIndex is { } leaving) NormalizeRowOnCommit(leaving);
         // The second arg is the item code for item-bound kinds; Task/Note ignore it, so a footer add always
         // passes null (the item-bound kinds never reach here — they return above).
-        if (!kind.Add(scratch, null)) return;
+        int at = NewTaskInsertIndex();
+        if (!kind.Add(scratch, null, at)) return;
         isDirty = true;
         SyncFocusNodesToScratch();
-        // Appended row MOUNTS at the new last slot, so its field's mount-only autoFocus fires; every
-        // existing row keeps its slot and is reused (carets intact). Reconcile path — see EditorInsertTaskBelow.
-        autoFocusRowOnRebuild = scratch.Blocks.Count - 1;
+        // The new row MOUNTS at `at`, so its field's mount-only autoFocus fires; rows above keep their
+        // slots (carets intact). Reconcile path — see EditorInsertTaskBelow.
+        autoFocusRowOnRebuild = at;
+        focusedEditIndex = at;
         pendingEnsureVisible = true;
         RebuildBody();
     }

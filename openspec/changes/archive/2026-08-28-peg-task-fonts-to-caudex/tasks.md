@@ -31,11 +31,11 @@
 
 - [x] 6.1 Height lock: on a Lectern with a mix of single-line tasks, cycle every font in Settings on Read and on Edit. Confirmed: single-line row height/position does not jump (within 1 px), including Default, Scapholene, and La Belle Aurore. `OffsetEm` filled from the tuner (task 7.4).
 - [x] 6.2 HUD: leave it alone. Confirmed it uses a different font and must not pick up the peg. Cuneiform tablets unchanged.
-- [ ] 6.3 Confirm titles and in-dialog buttons stay unscaled Caudex while the task font is not Caudex. Confirm Read ↔ Edit on a non-Caudex font does not jump single-line rows (`lectern-gui-shell` parity).
+- [x] 6.3 Confirm titles and in-dialog buttons stay unscaled Caudex while the task font is not Caudex. Confirm Read ↔ Edit on a non-Caudex font does not jump single-line rows (`lectern-gui-shell` parity).
 
 ## 7. Settings chrome, optical scale, tuner
 
 - [x] 7.1 Settings form uses LibGUI default face (`sans-serif`) at 100% (`WrapSettingsChrome` / `scale = 1`). It does not inherit Task Text Font or Window Text Size. Window scale still live-previews Read/Edit.
 - [x] 7.2 Revert HUD task-font / `EffectiveSize` / `OffsetWrap` wiring from the first impl.
 - [x] 7.3 Add `OpticalScale` on `FamilyMetrics` (`EffectiveSize = nominal × SizeScale × OpticalScale`). Land every family at 1. Add `tools/task-font-optical-scale/index.html` (line-box lock + optical sliders + Copy C#).
-- [ ] 7.4 Confirm in-game that Read/Edit row height still does not jump after OpticalScale + OffsetEm (La Belle Aurore offset 0.18, Scapholene 0.05, Playfair −0.03, Cormorant −0.02). Values are in `OpticalScaleOf` / `OffsetEmOf`.
+- [x] 7.4 Confirm in-game that Read/Edit row height still does not jump after OpticalScale + OffsetEm (La Belle Aurore offset 0.18, Scapholene 0.05, Playfair −0.03, Cormorant −0.02). Values are in `OpticalScaleOf` / `OffsetEmOf`.
