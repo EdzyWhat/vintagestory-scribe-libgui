@@ -347,21 +347,24 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
     /// snapshot carried on the row data, so this stays <c>capi</c>-free.</summary>
     private Widget BuildItemContent(ColorScheme colors, ScribeRowStyle style)
     {
-        float iconSize = style.ControlSize * 1.4f;
+        float iconSize = ScribeRowConstants.ItemIconSize
+            * (style.ControlSize / ScribeRowConstants.RowCheckboxSize);
         float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
+        float bandHeight = ScribeLinkIcon.VisualSize(iconSize, Widget.Data.LinkTarget);
         // Link accent: the theme's Primary on light surfaces (a dark accent that reads as a colored link),
         // or a row-supplied override where Primary would be illegible as text (the Chalkboard's dark slate —
         // see ScribeRowStyle.LinkColor). The guide-page book glyph renders in it (not the near-black
         // OnSurface) so it reads against the surface (feedback 7.11d); the item icon ignores the color.
         Vector4 linkColor = style.LinkColor ?? colors.Primary;
-        Widget icon = ScribeLinkIcon.Build(Widget.Data.DisplayStack, Widget.Data.LinkTarget, iconSize, linkColor, lineHeight);
+        Widget icon = ScribeLinkIcon.Build(Widget.Data.DisplayStack, Widget.Data.LinkTarget, iconSize, linkColor, lineHeight, heightNeutral: false);
 
         // The name is a hyperlink that opens the referenced item's Handbook page and never touches completion
         // (feedback 6.5 — the Tracker, like a Link, "should also open the notebook entry"). Accent-colored to
         // read as tappable. Shared by both kinds so future Crafting tasks inherit the same affordance.
         Widget nameLink = new Expanded(child: new GestureDetector(
             onPress: e => { e.Handled = true; Widget.OnOpenLink(Widget.Data.TaskId); },
-            child: ScribeItemLabel.Build(Widget.Data.Label, linkColor, style)));
+            child: ScribeCenterIfShort.Name(
+                ScribeItemLabel.Build(Widget.Data.Label, linkColor, style), style, bandHeight)));
 
         var rowChildren = new List<Widget>();
 
@@ -377,21 +380,24 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
             // Crafting tasks inherit this). Emphasis is INVERTED (feedback 7.11g): an in-progress count reads
             // STRONG (Primary/bold — the thing you're still collecting), a satisfied count reads FADED
             // (muted) with a faint strikethrough over the number (7.11h). Shared helper so read/Pin/HUD match.
-            rowChildren.Add(ScribeTrackerCounterText.Build(
-                Widget.Data.CurrentQuantity, Widget.Data.TargetQuantity, satisfied,
-                strongColor: linkColor, mutedColor: colors.OnSurfaceVariant, lineHeight: lineHeight,
-                cuneiform: style));
+            rowChildren.Add(ScribeCenterIfShort.InBand(
+                ScribeTrackerCounterText.Build(
+                    Widget.Data.CurrentQuantity, Widget.Data.TargetQuantity, satisfied,
+                    strongColor: linkColor, mutedColor: colors.OnSurfaceVariant, lineHeight: lineHeight,
+                    cuneiform: style),
+                bandHeight));
             rowChildren.Add(icon);
             rowChildren.Add(nameLink);
         }
 
-        // Inset by the editor field's internal padding, matching the Task/Text row, so icon rows line up with
-        // text rows across a view switch. Center the icon against the (taller-than-a-line) content.
+        // Read-only item rows (Tracker/Craft counter, Link icon) sit flush against the checkbox after
+        // FieldPadX was dropped so the *editor* stepper could line up with a Task field. A 4px left
+        // inset is read-only — the editor ScribeNumericField path is unchanged.
         return new Padding(
-            EdgeInsets.Symmetric(vertical: style.FieldPadY, horizontal: style.FieldPadX),
+            EdgeInsets.Only(left: 4f, right: style.FieldPadX),
             child: new Row(
                 spacing: style.CheckboxTextGap,
-                crossAxisAlignment: CrossAxisAlignment.Center,
+                crossAxisAlignment: CrossAxisAlignment.Start,
                 mainAxisSize: MainAxisSize.Max,
                 children: rowChildren));
     }
@@ -414,7 +420,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         // SAME GripInsets as the editor grip (top nudge + the -CheckboxTextGap trailing cancel, §10.4) so
         // the reserved column — and thus the text's left edge — stays aligned row-for-row across a switch.
         children.Add(new Padding(
-            ScribeRowControlNudge.GripInsets(style),
+            ScribeRowControlNudge.GripInsets(style, Widget.Data.IsItemKind),
             child: new Opacity(
                 opacity: 0f,
                 child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant))));
@@ -426,7 +432,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         if (Widget.Data.Completable)
         {
             children.Add(new Padding(
-                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
+                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style, Widget.Data.IsItemKind)),
                 // The checkbox stays interactive whenever toggles are live: on any editable read view AND
                 // on a hard/fired tablet, which keeps completion live so a pinned task can still be
                 // completed/unpinned (zero-point-three-fixes §7.3). A null onChanged (only when toggles
@@ -520,7 +526,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         rowBody = new Container(
             style: new BoxStyle
             {
-                Color = Widget.Data.Completable && Widget.Data.Pinned ? ScribeRowConstants.PinnedTint(colors) : Vector4.Zero,
+                Color = Widget.Data.Pinned ? ScribeRowConstants.PinnedTint(colors) : Vector4.Zero,
             },
             child: rowBody);
 
@@ -531,7 +537,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         // AND on a hard/fired tablet (zero-point-three-fixes §7.3 — pin/unpin stays reachable so a fired
         // tablet's pin is never stranded on the HUD). Only a non-live surface would hide it.
         var stackChildren = new List<Widget> { rowBody };
-        if (hovered && Widget.Data.Completable && Widget.TogglesLive)
+        if (hovered && Widget.TogglesLive)
         {
             stackChildren.Add(new Positioned(
                 right: 5f, top: ScribeRowControlNudge.FloatingButtonTop(style),

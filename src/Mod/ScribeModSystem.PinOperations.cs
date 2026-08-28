@@ -43,23 +43,28 @@ public sealed partial class ScribeModSystem
             int currentQuantity = fallbackCurrentQuantity;
             string? linkLabel = fallbackLinkLabel;
             int depth = fallbackDepth;
+            ScribeDocument? source = null;
             // Prefer the server's own authoritative document when available; fall back to the
             // client-supplied snapshot for items whose host is not registered server-side (e.g. Notebooks).
-            if (_hostRegistry.TryGetValue(docId, out var host)
-                && host.Document.FindByTaskId(taskId) is { } block)
+            // The same resolved document drives pin insert/gather (owned-run placement).
+            if (TryResolveDocHost(docId, out var docHost, player))
             {
-                text = block.Text;
-                done = block.Done;
-                kind = block.Kind;
-                linkTarget = block.LinkTarget;
-                targetItemCode = block.TargetItemCode;
-                targetQuantity = block.TargetQuantity;
-                currentQuantity = block.CurrentQuantity;
-                linkLabel = block.LinkLabel;
-                depth = block.Depth;
+                source = docHost!.Document;
+                if (source.FindByTaskId(taskId) is { } block)
+                {
+                    text = block.Text;
+                    done = block.Done;
+                    kind = block.Kind;
+                    linkTarget = block.LinkTarget;
+                    targetItemCode = block.TargetItemCode;
+                    targetQuantity = block.TargetQuantity;
+                    currentQuantity = block.CurrentQuantity;
+                    linkLabel = block.LinkLabel;
+                    depth = block.Depth;
+                }
             }
             changed = pinStore.SetPin(player.PlayerUID, docId, taskId, sapi.World.Calendar.TotalHours, text, done, kind, linkTarget,
-                targetItemCode, targetQuantity, currentQuantity, linkLabel, depth);
+                targetItemCode, targetQuantity, currentQuantity, linkLabel, depth, source);
         }
         else
         {
@@ -89,18 +94,19 @@ public sealed partial class ScribeModSystem
     /// the exact production path.
     /// </summary>
     public void CompleteTaskForPlayer(IServerPlayer player, Guid docId, Guid taskId,
-        ScribeCompletionPolicy policy = ScribeCompletionPolicy.Sink)
+        ScribeCompletionPolicy policy = ScribeCompletionPolicy.Sink,
+        ScribeSubtaskBehavior behavior = ScribeSubtaskBehavior.Bound)
     {
         if (sapi is null || pinStore is null) return;
+        behavior = ScribePlayerSettings.NormalizeSubtaskBehavior(behavior);
 
-        // The store owns the pinned task's done-state; toggle from there (not the possibly-gone source).
         bool? current = pinStore.GetPinDone(player.PlayerUID, docId, taskId);
         if (current is null)
         {
             // Not pinned by this player — a plain checkbox on an unpinned document task. Toggle the
             // shared document directly and apply the policy there too (the policy is not limited to
             // pinned tasks — scribe-lectern-view-consistency): Sink→bottom, Delete→remove.
-            CompleteUnpinnedTaskAtSource(player, docId, taskId, policy);
+            CompleteUnpinnedTaskAtSource(player, docId, taskId, policy, behavior);
             return;
         }
         bool nowDone = !current.Value;
@@ -108,40 +114,32 @@ public sealed partial class ScribeModSystem
         bool changed = pinStore.SetPinDone(player.PlayerUID, docId, taskId, nowDone);
         Trace("  complete: {0}'s pin on task {1} done {2} -> {3}", player.PlayerName, taskId, current.Value, nowDone);
 
-        // Write through to the shared source document when it resolves (best-effort; a gone source just
-        // skips this). Reconciles only the acting player — other pinners keep their own copies.
         bool resolved = TryResolveDocHost(docId, out var docHost, player);
-        if (resolved) docHost!.SetTaskDoneFromReader(taskId, nowDone);
-
-        // On a read-only (hard/fired) tablet, the source can't be reordered or have tasks removed, and
-        // firing must never strand a pin on the HUD. Every document-mutating policy therefore collapses
-        // to a plain Unpin (zero-point-three-fixes §7.5 / D8) — so completing simply clears the pin.
         policy = CollapsePolicyForReadOnlySource(policy, resolved ? docHost : null);
 
-        // Apply the completion policy — only on a transition INTO done (unchecking never removes). The
-        // Delete/Sink/Unpin mapping lives in the shared Core decision (reconcile-animating-surfaces D9);
-        // here we DISPATCH it through the persistence-aware write-through (MoveTaskToBottomFromReader /
-        // DeleteTaskFromReader mark the source dirty and resync) and the pin store, rather than re-deriving
-        // the switch. The pin removal is applied here regardless of whether the source resolves (the pin is
-        // store-authoritative), while the document action is best-effort (a gone source just skips it).
-        var decision = ScribeCompletion.Decide(nowDone, policy);
-        switch (decision.DocAction)
+        if (resolved)
         {
-            case ScribeCompletionDocAction.SinkToBottom:
-                if (resolved && docHost!.MoveTaskToBottomFromReader(taskId))
-                    Trace("  policy {0}: moved task {1} to bottom of source doc {2}", policy, taskId, docId);
-                break;
-            case ScribeCompletionDocAction.Delete:
-                if (resolved && docHost!.DeleteTaskFromReader(taskId))
-                    Trace("  policy Delete: removed task {0} from source doc {1}", taskId, docId);
-                else
-                    Trace("  policy Delete: source unresolvable for task {0} — pin removed only", taskId);
-                break;
+            var outcome = ScribeCompletion.ApplyGivenDone(docHost!.Document, taskId, nowDone, policy, behavior);
+            if (outcome.DocChanged) docHost.PersistFromReader();
+
+            foreach (var id in outcome.DeletedTaskIds)
+                changed |= pinStore.RemovePin(player.PlayerUID, docId, id);
+
+            if (outcome.ShouldRemovePin)
+            {
+                foreach (var id in outcome.AffectedTaskIds)
+                    changed |= pinStore.RemovePin(player.PlayerUID, docId, id);
+                Trace("  policy {0}: removed {1}'s pins on mutated tasks", policy, player.PlayerName);
+            }
+            else
+            {
+                foreach (var id in outcome.AffectedTaskIds)
+                    changed |= pinStore.SetPinDone(player.PlayerUID, docId, id, nowDone);
+            }
         }
-        if (decision.ShouldRemovePin)
+        else if (ScribeCompletion.Decide(nowDone, policy).ShouldRemovePin)
         {
             changed |= pinStore.RemovePin(player.PlayerUID, docId, taskId);
-            Trace("  policy {0}: removed {1}'s pin on task {2}", policy, player.PlayerName, taskId);
         }
 
         if (changed) PushPinsTo(player);
@@ -190,16 +188,27 @@ public sealed partial class ScribeModSystem
     /// (a safe no-op if it's already gone) and re-push. Snapshot/store-only when the source is unresolvable.
     /// Public so the integration suite drives the exact production path.
     /// </summary>
-    public void DeleteTaskForPlayer(IServerPlayer player, Guid docId, Guid taskId)
+    public void DeleteTaskForPlayer(IServerPlayer player, Guid docId, Guid taskId,
+        ScribeSubtaskBehavior behavior = ScribeSubtaskBehavior.Bound)
     {
         if (sapi is null || pinStore is null) return;
+        behavior = ScribePlayerSettings.NormalizeSubtaskBehavior(behavior);
 
-        if (TryResolveDocHost(docId, out var docHost, player) && docHost!.DeleteTaskFromReader(taskId))
-            Trace("  delete: removed task {0} from source doc {1}", taskId, docId);
+        IReadOnlyList<Guid> deleted = new[] { taskId };
+        if (TryResolveDocHost(docId, out var docHost, player))
+        {
+            deleted = ScribeCompletion.ApplyDelete(docHost!.Document, taskId, behavior);
+            if (deleted.Count > 0) docHost.PersistFromReader();
+            Trace("  delete: removed {0} row(s) from source doc {1}", deleted.Count, docId);
+        }
         else
+        {
             Trace("  delete: source unresolvable for task {0} — pin removed only", taskId);
+        }
 
-        bool changed = pinStore.RemovePin(player.PlayerUID, docId, taskId);
+        bool changed = false;
+        foreach (var id in deleted)
+            changed |= pinStore.RemovePin(player.PlayerUID, docId, id);
         if (changed) PushPinsTo(player);
     }
 
@@ -292,7 +301,7 @@ public sealed partial class ScribeModSystem
     /// it from the source; <c>Keep</c>/<c>Unpin</c> just toggle (there is nothing to unpin). A no-op when
     /// the source is unresolvable (nothing to toggle without a document).</summary>
     private void CompleteUnpinnedTaskAtSource(IServerPlayer player, Guid docId, Guid taskId,
-        ScribeCompletionPolicy policy)
+        ScribeCompletionPolicy policy, ScribeSubtaskBehavior behavior)
     {
         if (!TryResolveDocHost(docId, out var docHost, player))
         {
@@ -306,30 +315,15 @@ public sealed partial class ScribeModSystem
             return;
         }
         bool nowDone = !block.Done;
-        docHost.SetTaskDoneFromReader(taskId, nowDone);
-        Trace("  complete(unpinned): task {0} toggled to done={1}", taskId, nowDone);
 
         // A read-only (hard/fired) tablet can't be reordered or have tasks removed; collapse every
         // document-mutating policy to Unpin (zero-point-three-fixes §7.5). With no pin here that leaves a
         // plain toggle, so a hardened tablet's checkbox flips done-state without disturbing the document.
         policy = CollapsePolicyForReadOnlySource(policy, docHost);
 
-        // Apply the policy on the shared document — only on a transition INTO done (unchecking never moves
-        // or removes). No pin to unpin here (Decision.ShouldRemovePin is irrelevant — there is no pin), so
-        // only the document action matters; dispatch it through the write-through. Shared decision table
-        // (reconcile-animating-surfaces D9), so this path can never drift from the pinned/editor paths.
-        var decision = ScribeCompletion.Decide(nowDone, policy);
-        switch (decision.DocAction)
-        {
-            case ScribeCompletionDocAction.SinkToBottom:
-                if (docHost.MoveTaskToBottomFromReader(taskId))
-                    Trace("  policy {0}(unpinned): moved task {1} to bottom of source doc {2}", policy, taskId, docId);
-                break;
-            case ScribeCompletionDocAction.Delete:
-                if (docHost.DeleteTaskFromReader(taskId))
-                    Trace("  policy Delete(unpinned): removed task {0} from source doc {1}", taskId, docId);
-                break;
-        }
+        var outcome = ScribeCompletion.ApplyGivenDone(docHost.Document, taskId, nowDone, policy, behavior);
+        if (outcome.DocChanged) docHost.PersistFromReader();
+        Trace("  complete(unpinned): task {0} toggled to done={1} (affected {2})", taskId, nowDone, outcome.AffectedTaskIds.Count);
     }
 
     /// <summary>Re-push a single player their own full pin set (server → client). Called on join and

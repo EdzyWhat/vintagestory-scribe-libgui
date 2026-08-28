@@ -99,8 +99,8 @@ internal static class ScribeCraftRecipeProbe
             n++;
             var (ingredients, notes) = DeriveIngredients(capi, recipe);
             string label = single
-                ? Lang.Get("scribe:scribe-gui-addcraft")
-                : Lang.Get("scribe:scribe-gui-addcraft-variant", DistinguishingName(capi, recipe, ingredients, n));
+                ? Lang.Get("scribe:scribe-gui-handbook-addcraft")
+                : Lang.Get("scribe:scribe-gui-handbook-addcraft-variant", DistinguishingName(capi, recipe, ingredients, n));
             // Encode the recipe's RESOLVED output stack (attributes included) as the Craft parent's target, so
             // an attribute-encoded output (a copper lantern) names correctly; fall back to the queried stack's
             // bare code if the recipe somehow has no resolved output stack.
@@ -227,7 +227,11 @@ internal static class ScribeCraftRecipeProbe
         {
             foreach (var cell in cells)
             {
-                if (cell is null || cell.IsTool) continue;
+                // Tools / non-consumed cells / tags-only matchers never become a counting child.
+                // Consume is the API's preferred "not a tool" flag (≈ !IsTool). TagsOnly + the default
+                // Code of *:* would otherwise EncodeWildcard into a "Pocketsun (any variant)" Tracker.
+                if (cell is null || cell.IsTool || !cell.Consume) continue;
+                if (cell.MatchingType == EnumRecipeMatchType.TagsOnly) continue;
 
                 var resolved = cell.ResolvedItemStack?.Collectible;
                 // A liquid sitting directly in a GRID CELL (rare — vanilla liquids live in containers, so this
@@ -381,9 +385,12 @@ internal static class ScribeCraftRecipeProbe
     {
         if (ingredient.MatchingType == EnumRecipeMatchType.Exact && ingredient.ResolvedItemStack?.Collectible?.Code is { } concrete)
             return concrete.ToString();
-        return ingredient.Code is { } wild
-            ? ScribeItemRef.EncodeWildcard(wild, ingredient.AllowedVariants, ingredient.SkipVariants)
-            : null;
+        if (ingredient.MatchingType == EnumRecipeMatchType.TagsOnly) return null;
+        if (ingredient.Code is not { } wild) return null;
+        // CraftingRecipeIngredient.Code defaults to new AssetLocation("*","*") (*:*). Never encode that
+        // as a family Tracker — it counts every carried item and displays as "Pocketsun (any variant)".
+        if (wild.Domain == "*" && wild.Path == "*") return null;
+        return ScribeItemRef.EncodeWildcard(wild, ingredient.AllowedVariants, ingredient.SkipVariants);
     }
 
     /// <summary>Sentinel page code for a recipe/stack that yields no <see cref="GuiHandbookItemStackPage.PageCodeForStack"/>

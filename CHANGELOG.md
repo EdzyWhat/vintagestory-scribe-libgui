@@ -4,6 +4,40 @@ All notable changes to Scribe are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 2026-08-26
+
+### Added
+- **Subtask Behavior.** A Settings dropdown (Bound by default, Independent, Discard children)
+  decides what happens to rows nested under a parent when you complete, sink, delete, or trash
+  it. Bound keeps the group together; Independent changes only the parent; Discard removes the
+  children first.
+- **Pin notes.** Text rows can be pinned. The HUD shows them as text only (no checkbox); unpin
+  from the Pin Tab.
+- **HUD settings gear toggle.** Hide the HUD gear from Settings; the Lectern Settings tab stays.
+
+### Changed
+- **Crafting Tasks no longer recreate deleted ingredients.** Opening the editor does not heal
+  missing children. Bumping the parent target rescales remaining matches only. Handbook create
+  still expands the recipe once.
+- **Tool and tag-only ingredients are skipped** (axes, `!Consume`, default `*:*`). A debarked
+  oak log's Crafting Task is the parent plus the oak log — no catch-all child.
+- **Pinning a child inserts it under its pinned parent** instead of appending; pinning the
+  parent gathers already-pinned children.
+- **HUD Crafting Tasks show have/need.** Title is **Scribe Pins**, sized with the row font. Max
+  HUD rows goes to 30.
+- **Handbook "Add to Scribe"** reads Link to this page → Count this item → Add ingredients.
+  The editor Add ▾ labels are unchanged.
+- **Grip tap vs drag.** Nesting is tap-only; a drag starts after the pointer moves, and
+  releasing a drag (even on the same row) does not nest.
+
+### Fixed
+- **Tracker counts while paused.** Inventory clicks with a Scribe dialog open no longer call
+  `RegisterCallback` in a way that throws in developer mode. Counts recompute immediately while
+  paused; delayed coalescing uses `permittedWhilePaused: true`.
+
+Fully save-compatible with 1.3.0 — no codec change. The Windows/Optimum `c00000fd` silent crash
+reproduced with Scribe disabled; this cut has no remaining diagnostic probes.
+
 ## [1.3.1] - 2026-08-23
 
 A bugfix for clay tablets that were already wet.
@@ -405,6 +439,7 @@ First public release.
 - `game` 1.22.0
 - `gui` 2.0.0 (LibGUI)
 
+[1.3.2]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/EdzyWhat/vintagestory-scribe-libgui/compare/v1.2.0...v1.2.1

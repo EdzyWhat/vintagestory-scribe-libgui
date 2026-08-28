@@ -78,42 +78,170 @@ public static class ScribeCompletion
     /// is the done state after the toggle. <see cref="DocChanged"/> is true when the document content
     /// changed in any way (the flip itself, or a policy delete/sink) — a view uses it to decide whether to
     /// refresh. <see cref="ShouldRemovePin"/> is the decided pin action, for the caller to apply against
-    /// the pin store.</summary>
-    public readonly record struct LocalOutcome(bool Toggled, bool NowDone, bool DocChanged, bool ShouldRemovePin);
+    /// the pin store for every id in <see cref="AffectedTaskIds"/> that is currently pinned.
+    /// <see cref="AffectedTaskIds"/> is the rows this option mutated (parent + completable children under
+    /// Bound; parent only under Independent; parent after discarding children under Discard). Deleted
+    /// children under Discard are listed in <see cref="DeletedTaskIds"/> so the caller can drop their pins
+    /// even though they were not "completed."</summary>
+    public readonly record struct LocalOutcome(
+        bool Toggled, bool NowDone, bool DocChanged, bool ShouldRemovePin,
+        IReadOnlyList<Guid> AffectedTaskIds, IReadOnlyList<Guid> DeletedTaskIds)
+    {
+        public LocalOutcome(bool Toggled, bool NowDone, bool DocChanged, bool ShouldRemovePin)
+            : this(Toggled, NowDone, DocChanged, ShouldRemovePin,
+                AffectedTaskIds: Array.Empty<Guid>(), DeletedTaskIds: Array.Empty<Guid>()) { }
+    }
 
     /// <summary>Client convenience: toggle the task with <paramref name="taskId"/>'s done flag on a LOCAL
-    /// document copy, then apply <see cref="Decide"/>'s document action directly (there is no persistence
-    /// layer to honor client-side — the authoritative resync supersedes this shortly). Produces the same
-    /// document the server produces through its write-through, so an optimistic local apply and the later
-    /// resync agree. On an unknown or non-completable (Text) id the document is unchanged and
-    /// <see cref="LocalOutcome.Toggled"/> is false.</summary>
-    public static LocalOutcome ApplyLocal(ScribeDocument doc, Guid taskId, ScribeCompletionPolicy policy)
+    /// document copy, then apply <see cref="Decide"/>'s document action. When the row is a parent (depth 0
+    /// with a non-empty owned run), <paramref name="behavior"/> drives a single range mutation (Bound /
+    /// Discard) or a parent-only mutation (Independent). A depth-1 row is always a leaf. On an unknown or
+    /// non-completable (Text) id the document is unchanged and <see cref="LocalOutcome.Toggled"/> is false.
+    /// Unknown <paramref name="behavior"/> values fall back to Bound.</summary>
+    public static LocalOutcome ApplyLocal(ScribeDocument doc, Guid taskId, ScribeCompletionPolicy policy,
+        ScribeSubtaskBehavior behavior = ScribeSubtaskBehavior.Bound)
     {
         if (doc is null) throw new ArgumentNullException(nameof(doc));
 
-        var block = doc.FindByTaskId(taskId);
-        if (block is null || !block.IsCompletable)
+        int idx = doc.IndexOf(taskId);
+        if (idx < 0) return new LocalOutcome(Toggled: false, NowDone: false, DocChanged: false, ShouldRemovePin: false);
+        var block = doc.Blocks[idx];
+        if (!block.IsCompletable)
             return new LocalOutcome(Toggled: false, NowDone: false, DocChanged: false, ShouldRemovePin: false);
 
         bool nowDone = !block.Done;
-        block.Done = nowDone;
-        bool docChanged = true; // the flip itself is a content change
+        return ApplyGivenDone(doc, taskId, nowDone, policy, behavior);
+    }
 
+    /// <summary>Set the acting row to <paramref name="nowDone"/> and apply the document action. Unlike
+    /// <see cref="ApplyLocal"/> this does not toggle — the server uses it when the pin store is
+    /// authoritative for the next done-state. Same parent-range rules as <see cref="ApplyLocal"/>.</summary>
+    public static LocalOutcome ApplyGivenDone(ScribeDocument doc, Guid taskId, bool nowDone,
+        ScribeCompletionPolicy policy, ScribeSubtaskBehavior behavior = ScribeSubtaskBehavior.Bound)
+    {
+        if (doc is null) throw new ArgumentNullException(nameof(doc));
+
+        int idx = doc.IndexOf(taskId);
+        if (idx < 0) return new LocalOutcome(Toggled: false, NowDone: false, DocChanged: false, ShouldRemovePin: false);
+        var block = doc.Blocks[idx];
+        if (!block.IsCompletable)
+            return new LocalOutcome(Toggled: false, NowDone: false, DocChanged: false, ShouldRemovePin: false);
+
+        behavior = ScribePlayerSettings.NormalizeSubtaskBehavior(behavior);
+        var (runStart, runEnd) = doc.OwnedRun(idx);
+        bool isParent = block.Depth == 0 && runStart < runEnd;
+
+        if (!isParent || behavior == ScribeSubtaskBehavior.Independent)
+            return ApplyLeaf(doc, idx, taskId, nowDone, policy);
+
+        if (behavior == ScribeSubtaskBehavior.DiscardChildren)
+            return ApplyDiscardParent(doc, idx, taskId, nowDone, policy, runStart, runEnd);
+
+        return ApplyBoundParent(doc, idx, taskId, nowDone, policy, runEnd);
+    }
+
+    /// <summary>Standalone trash of <paramref name="taskId"/>. A depth-1 row (or a depth-0 with an empty
+    /// run, or Independent) deletes only that row. Bound or Discard of a parent deletes the owned run
+    /// (parent + contiguous depth-1 children) as one range. Returns the TaskIds that left the document
+    /// (empty when the id was unknown).</summary>
+    public static IReadOnlyList<Guid> ApplyDelete(ScribeDocument doc, Guid taskId,
+        ScribeSubtaskBehavior behavior = ScribeSubtaskBehavior.Bound)
+    {
+        if (doc is null) throw new ArgumentNullException(nameof(doc));
+
+        int idx = doc.IndexOf(taskId);
+        if (idx < 0) return Array.Empty<Guid>();
+
+        behavior = ScribePlayerSettings.NormalizeSubtaskBehavior(behavior);
+        var (runStart, runEnd) = doc.OwnedRun(idx);
+        bool isParent = doc.Blocks[idx].Depth == 0 && runStart < runEnd;
+
+        if (!isParent || behavior == ScribeSubtaskBehavior.Independent)
+        {
+            var id = doc.Blocks[idx].TaskId;
+            doc.DeleteBlock(idx);
+            return new[] { id };
+        }
+
+        var deleted = new Guid[runEnd - idx];
+        for (int i = idx; i < runEnd; i++) deleted[i - idx] = doc.Blocks[i].TaskId;
+        doc.DeleteRange(idx, runEnd);
+        return deleted;
+    }
+
+    private static LocalOutcome ApplyLeaf(ScribeDocument doc, int idx, Guid taskId, bool nowDone,
+        ScribeCompletionPolicy policy)
+    {
+        doc.Blocks[idx].Done = nowDone;
         var decision = Decide(nowDone, policy);
+        var deleted = Array.Empty<Guid>();
         switch (decision.DocAction)
         {
             case ScribeCompletionDocAction.Delete:
-                TryDeleteTask(doc, taskId); // docChanged already true from the flip
+                TryDeleteTask(doc, taskId);
+                deleted = new[] { taskId };
                 break;
             case ScribeCompletionDocAction.SinkToBottom:
-                doc.MoveTaskToBottom(taskId); // no-op if already last; the flip still counts as a change
-                break;
-            case ScribeCompletionDocAction.None:
-            default:
+                doc.MoveTaskToBottom(taskId);
                 break;
         }
+        return new LocalOutcome(Toggled: true, NowDone: nowDone, DocChanged: true,
+            ShouldRemovePin: decision.ShouldRemovePin,
+            AffectedTaskIds: new[] { taskId }, DeletedTaskIds: deleted);
+    }
 
-        return new LocalOutcome(Toggled: true, NowDone: nowDone, DocChanged: docChanged, ShouldRemovePin: decision.ShouldRemovePin);
+    private static LocalOutcome ApplyBoundParent(ScribeDocument doc, int parentIndex, Guid taskId,
+        bool nowDone, ScribeCompletionPolicy policy, int runEnd)
+    {
+        var completable = new List<Guid>();
+        for (int i = parentIndex; i < runEnd; i++)
+        {
+            if (doc.Blocks[i].IsCompletable)
+            {
+                doc.Blocks[i].Done = nowDone;
+                completable.Add(doc.Blocks[i].TaskId);
+            }
+        }
+
+        var decision = Decide(nowDone, policy);
+        var deleted = Array.Empty<Guid>();
+        if (nowDone)
+        {
+            switch (decision.DocAction)
+            {
+                case ScribeCompletionDocAction.Delete:
+                    deleted = new Guid[runEnd - parentIndex];
+                    for (int i = parentIndex; i < runEnd; i++)
+                        deleted[i - parentIndex] = doc.Blocks[i].TaskId;
+                    doc.DeleteRange(parentIndex, runEnd);
+                    break;
+                case ScribeCompletionDocAction.SinkToBottom:
+                    doc.MoveRangeToBottom(parentIndex, runEnd);
+                    break;
+            }
+        }
+        // Uncheck: completable rows in the run are already flipped; no unsink, no undelete.
+
+        return new LocalOutcome(Toggled: true, NowDone: nowDone, DocChanged: true,
+            ShouldRemovePin: decision.ShouldRemovePin,
+            AffectedTaskIds: completable, DeletedTaskIds: deleted);
+    }
+
+    private static LocalOutcome ApplyDiscardParent(ScribeDocument doc, int parentIndex, Guid taskId,
+        bool nowDone, ScribeCompletionPolicy policy, int runStart, int runEnd)
+    {
+        var discarded = new Guid[runEnd - runStart];
+        for (int i = runStart; i < runEnd; i++) discarded[i - runStart] = doc.Blocks[i].TaskId;
+        doc.DeleteRange(runStart, runEnd);
+
+        // Parent is still at parentIndex; apply its completion policy alone (leaf).
+        var leaf = ApplyLeaf(doc, parentIndex, taskId, nowDone, policy);
+        var deleted = new List<Guid>(discarded.Length + leaf.DeletedTaskIds.Count);
+        deleted.AddRange(discarded);
+        deleted.AddRange(leaf.DeletedTaskIds);
+        return new LocalOutcome(Toggled: true, NowDone: nowDone, DocChanged: true,
+            ShouldRemovePin: leaf.ShouldRemovePin,
+            AffectedTaskIds: leaf.AffectedTaskIds, DeletedTaskIds: deleted);
     }
 
     /// <summary>Delete the task with <paramref name="taskId"/> by identity, preserving the order of the

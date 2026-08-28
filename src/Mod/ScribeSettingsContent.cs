@@ -80,14 +80,19 @@ internal sealed class ScribeSettingsContent : StatelessWidget
             });
 
         // Wrapped in a scroll view + bar so the form fits a shorter host without clipping (design D2).
-        return new Padding(
-            EdgeInsets.All(10),
-            child: new Scrollbar(
-                controller: scrollController,
-                child: new SingleChildScrollView(
+        // Task Text Font ancestor so ScribeNumericField (which does not inherit like Text) still matches
+        // the player's chosen family after Merge(DefaultTextStyle.Of).
+        return ScribeTextDefaults.Wrap(
+            settings.TaskFontFamily,
+            ScribeRowConstants.BaseSettingsFontSize * scale,
+            new Padding(
+                EdgeInsets.All(10),
+                child: new Scrollbar(
                     controller: scrollController,
-                    child: body))
-            { AutoHide = false });
+                    child: new SingleChildScrollView(
+                        controller: scrollController,
+                        child: body))
+                { AutoHide = false }));
     }
 
     // ---------------- Sections ----------------
@@ -136,6 +141,21 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                             new() { Value = ScribeTrackerCompletion.Nothing,  Label = Lang.Get("scribe:scribe-trackercompletion-nothing") },
                         },
                         onChanged: v => onMutate(s => s.TrackerCompletion = v))),
+
+                // What happens to owned-run children when the parent is completed / sunk / deleted / trashed
+                // (refine-crafting-tasks-1-3-2). Distinct from Task Completion Behavior above (pins) and from
+                // Item Tracker Completion (auto-complete when the count fills). Bound is the tree-like default.
+                LabeledControl(
+                    "settings-subtaskbehavior", colors, scale,
+                    new Dropdown<ScribeSubtaskBehavior>(
+                        value: settings.SubtaskBehavior,
+                        items: new List<DropdownItem<ScribeSubtaskBehavior>>
+                        {
+                            new() { Value = ScribeSubtaskBehavior.Bound,           Label = Lang.Get("scribe:scribe-subtaskbehavior-bound") },
+                            new() { Value = ScribeSubtaskBehavior.Independent,     Label = Lang.Get("scribe:scribe-subtaskbehavior-independent") },
+                            new() { Value = ScribeSubtaskBehavior.DiscardChildren, Label = Lang.Get("scribe:scribe-subtaskbehavior-discard") },
+                        },
+                        onChanged: v => onMutate(s => s.SubtaskBehavior = v))),
 
                 // "Collapse the HUD" + "Mute Scribe UI sounds" share one row as two columns
                 // (scribe-mute-ui-sounds 3.2). Each hugs its own label at the start of its column
@@ -273,6 +293,11 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                     "settings-hudshowicons", colors, scale,
                     value: settings.HudShowIcons,
                     onChanged: v => onMutate(s => s.HudShowIcons = v)),
+
+                HuggingCheckbox(
+                    "settings-hudshowsettingsgear", colors, scale,
+                    value: settings.HudShowSettingsGear,
+                    onChanged: v => onMutate(s => s.HudShowSettingsGear = v)),
 
                 LabeledControl(
                     "settings-hudanchor", colors, scale,

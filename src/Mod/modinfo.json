@@ -4,7 +4,7 @@
   "name": "Scribe",
   "authors": ["RaptorKhan"],
   "description": "A note-taking and light task-management mod. Alarm sound: freesound.org/s/78562 by joedeshon, CC BY 4.0.",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "side": "Universal",
   "requiredOnClient": true,
   "requiredOnServer": true,

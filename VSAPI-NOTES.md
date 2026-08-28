@@ -1237,6 +1237,12 @@ chronicle/integration features — decompiled, not yet exercised.)
   **Tallybook does NOT solve this** — its `RecipeProbe` never reads `liquidContainerProps`, so it has
   the same blind spot (would just count the bowl). 1.22 caveat: `GridRecipe.Ingredients`/`IngredientPattern`
   are null client-side (use `ResolvedIngredients`), but `RecipeBase.Attributes` survives client-side.
+- **`CraftingRecipeIngredient.Code` defaults to `new AssetLocation("*","*")` (`*:*`).** `Consume` is
+  documented as equal to `!IsTool` and is the preferred flag. `MatchingType == TagsOnly` is a tag matcher
+  with no usable item code. Encoding that default `*:*` via `ScribeItemRef.EncodeWildcard` produced a
+  "Pocketsun (any variant)" child on recipes whose tool slot is tags-only (debarked oak log). Skip
+  `IsTool`, `!Consume`, `TagsOnly`, and `Domain=="*" && Path=="*"` in `DeriveIngredients` /
+  `IngredientCode`. (refine-crafting-tasks-1-3-2)
 
 ## Custom TTF fonts in the GUI
 
@@ -1438,6 +1444,13 @@ disagree on one Scribe-critical point — `ListView` variable-height rows).
 When we resolve a complex LibGUI layout bug or correct a LibGUI misconception, append a note here
 (same symptom-indexed style as the rest of this file), so it isn't re-derived. Known facts so far:
 
+**Fact: `GestureDetector.OnTap` fires on `OnPointerClick` regardless of movement.** Decompiled
+`Gui.dll`: `OnPointerClick` invokes `OnTap` and marks Handled whenever `OnTap` is set — there is no
+built-in drag threshold. `OnPress` similarly marks Handled (which is what captures the pointer). A
+grip that must distinguish tap-to-nest from drag-to-reorder therefore cannot trust `onTap` to stay
+silent after a drag: start drag only after pointer movement, and suppress `OnGripTap` in our own
+state if a drag started that gesture, including a from==to cancel. (refine-crafting-tasks-1-3-2 D11)
+
 **Fact: `PaintingContext.DrawText` does NO font fallback; the `CanvasDrawExtensions.DrawText`
 extension does.** A glyph the chosen font lacks (e.g. `←`/`→` in the subsetted Noto Sans/Serif/La
 Belle Aurore we bundle) renders as tofu (□) when drawn through the *instance* method
@@ -1465,7 +1478,11 @@ this; but see the two facts below for why editable rows are a different story.
 **Fact (spike, 2026-07-23): `TextField` is SINGLE-LINE. LibGUI has no multi-line text input.**
 `RenderTextField` (`reference/vslibgui/Gui/Gui/Core/Input/RenderTextField.cs`) measures a single line
 (one `MeasureText` + one `lineHeight`), does no newline/soft-wrap handling, and exposes no
-`maxLines`/`multiline` flag. `MaxLines` exists only on the *read-only* display widgets (`Text`,
+`maxLines`/`multiline` flag. Its caret is hardcoded `Vector4.One` (white) — `TextFieldStyle` and
+`TextFieldOverrides` have no caret-color field. Scribe task rows paint `OnSurface` carets via
+`ScribeMultilineField`; a stock `TextField` (the `ScribeNumericField` typing box) cannot match that
+without an overlay or a custom one-line renderer. Left content inset is also hardcoded 10px.
+`MaxLines` exists only on the *read-only* display widgets (`Text`,
 `VtmlText`, `RichText`), not the editable `TextField`. So Scribe's core interaction — a wrapping,
 growing, editable task/note row — is NOT achievable with the stock LibGUI input widget. Adopting
 LibGUI would require **building a custom multi-line editable RenderObject** (the same
@@ -1491,7 +1508,13 @@ list, where each row is both scrollable content and an interactive field.
 **Fix pattern: a `TextField` with a `BoxStyle` that sets no `Height` collapses to a thin line.**
 `RenderTextField : RenderConstrainedBox`; with no child and no explicit `Height`, `PerformLayout`
 sizes to 0 (`RenderConstrainedBox.cs:104-117`). Always give a `TextField`'s `BoxStyle` an explicit
-`Height` (the showcase uses 35).
+`Height` (the showcase uses 35). The same collapse happens on **width** when the parent loosens
+constraints: `RenderBox.PerformLayout` (every `Container`/`BoxWidget`) and `RenderStack` both lay
+out children with `LayoutConstraints.Loose`. `TextFieldStyle.Width` is not copied onto the inner
+`BoxStyle`, so a `TextField` inside `Expanded(Container(...))` becomes 0px wide — empty chrome,
+clipped text, nearly unclickable — while the Container still fills the Expanded slot. Keep the
+`TextField` under a parent that forwards tight width (`Expanded` directly, or a `RenderProxyBox`
+wrapper). Do not put a `Container` between `Expanded` and the field.
 
 **Fix pattern (custom editable widget): set `FocusNode.Owner = Element` in `InitState`, or the field
 never focuses.** `FocusNode.RequestFocus()` resolves its `FocusManager` via `Owner?.Owner?.FocusManager`
@@ -2159,6 +2182,14 @@ element to `BuildOwner`'s `_dirtyElements` set (idempotent: a second `MarkNeedsB
 already-dirty element is a no-op), drained on the next `BuildDirtyElements` pass. That drain loops
 `while (_dirtyElements.Count > 0)` and its doc-comment explicitly says it "handles cascaded rebuilds
 from animation controllers or state changes triggered inside `Build()`."
+
+**Consequence for host reentrancy guards:** a `try/finally` lock around `RebuildHudBody()` /
+`body.Rebuild()` (a `SetState`) does **not** cover `BuildHudTree` — the flag is already cleared
+when LibGUI later drains `_dirtyElements`. The lock must also be held inside the `Build()` that
+constructs the tree, so a side-effect during that pass cannot call back into `RecomputeHudTrackers`
+or `RebuildHudBody`. `BuildDirtyElements` itself is an **uncapped** `while (_dirtyElements.Count > 0)`
+loop: if `Build()` marks any element dirty, that drain never finishes (hang). Recursive
+`StatefulElement.Rebuild()`/`Mount` (not the while loop) is what would stack-overflow (`c00000fd`).
 
 **Consequence:** a callback firing from inside the animation tick pump (e.g. a collapse's `onEnd`) MAY
 call `SetState` to schedule *its own* subtree's rebuild — there is no re-entrancy, because the rebuild
@@ -2862,6 +2893,26 @@ restage + **full client relaunch** (mod assemblies and lang/assets load once at 
 `.reload` commands above are the only in-session shortcut, and only for assets. If a future VS
 build flips that flag to `true`, revisit — until then, the loop is: `build/verify.sh` (or
 `restage.sh`) → relaunch → `build/scribe-log.sh`.
+
+## `RegisterCallback` while paused throws in developer mode (2026-08-23)
+
+**Symptom: `System.Exception: Call to RegisterCallback while game is paused` with developer mode
++ extended debug info on, stack pointing at a Scribe `RegisterCallback` from a `SlotModified`
+handler (e.g. a LibGUI inventory click while a Scribe dialog is open).**
+
+`IEventAPI.RegisterCallback(Action<float>, int)` forwards to
+`ClientMain.RegisterCallback(..., permittedWhilePaused: false)`. If `ClientMain.IsPaused` is
+true, that logs a Notification and, when `ClientSettings.DeveloperMode && extendedDebugInfo`,
+**throws**. The 3-arg overload
+`RegisterCallback(Action<float> OnTimePassed, int millisecondDelay, bool permittedWhilePaused)`
+skips the throw when the third argument is `true`. Delayed callbacks are scheduled against
+`EventManager.InWorldEllapsedMs`, so even a permitted-while-paused callback will not fire until
+the world clock advances (unpause). For a UI refresh that must happen during a paused inventory
+click, recompute immediately when `capi.IsGamePaused` instead of waiting on the delay.
+
+**Fix pattern:** UI-only delayed work should register with `permittedWhilePaused: true`, and if
+the handler is running *already paused*, do the work now rather than queueing. See
+`ScribeDialogBase.TrackerCount.OnTrackerSlotModified`.
 
 ## Minimap on/off setting key
 

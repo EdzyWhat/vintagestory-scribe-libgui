@@ -917,7 +917,7 @@ public abstract partial class ScribeDialogBase
             var bytes = ScribeDocumentCodec.Serialize(host.Document);
             if (ScribeDocumentCodec.TryDeserialize(bytes, out var copy) && copy is not null)
             {
-                var outcome = ScribeCompletion.ApplyLocal(copy, taskId, policy);
+                var outcome = ScribeCompletion.ApplyLocal(copy, taskId, policy, modSystem.MySettings.SubtaskBehavior);
                 if (outcome.DocChanged)
                 {
                     host.ApplyLocalOptimisticEdit(copy);
@@ -931,6 +931,7 @@ public abstract partial class ScribeDialogBase
             DocId = host.Document.DocId.ToByteArray(),
             TaskId = taskId.ToByteArray(),
             Policy = (byte)policy,
+            SubtaskBehavior = (byte)modSystem.MySettings.SubtaskBehavior,
         });
     }
 

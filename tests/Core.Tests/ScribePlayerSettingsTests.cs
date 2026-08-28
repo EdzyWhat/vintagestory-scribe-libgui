@@ -158,11 +158,38 @@ public class ScribePlayerSettingsTests
     }
 
     [Fact]
-    public void MaxHudMaxRows_IsTen()
+    public void MaxHudMaxRows_IsThirty()
     {
-        // The HUD row cap was lowered 20 -> 10 (§10.3); a saved 11-20 re-clamps to 10 on next load. The
-        // clamp behavior across the bound is covered by ScribePinCodecTests.Settings_ClampHudMaxRows_*.
-        Assert.Equal(10, ScribePlayerSettings.MaxHudMaxRows);
+        Assert.Equal(30, ScribePlayerSettings.MaxHudMaxRows);
+        Assert.Equal(30, ScribePlayerSettings.ClampHudMaxRows(30));
+        Assert.Equal(30, ScribePlayerSettings.ClampHudMaxRows(31));
+        Assert.Equal(11, ScribePlayerSettings.ClampHudMaxRows(11)); // previously re-clamped to 10
+    }
+
+    [Fact]
+    public void Default_SubtaskBehavior_IsBound()
+    {
+        Assert.Equal(ScribeSubtaskBehavior.Bound, new ScribePlayerSettings().SubtaskBehavior);
+        Assert.Equal(ScribeSubtaskBehavior.Bound, new ScribePlayerSettings().Normalized().SubtaskBehavior);
+        Assert.Equal(ScribeSubtaskBehavior.Independent,
+            new ScribePlayerSettings { SubtaskBehavior = ScribeSubtaskBehavior.Independent }.Normalized().SubtaskBehavior);
+    }
+
+    [Fact]
+    public void NormalizeSubtaskBehavior_Unknown_FallsBackToBound()
+    {
+        Assert.Equal(ScribeSubtaskBehavior.Bound,
+            ScribePlayerSettings.NormalizeSubtaskBehavior((ScribeSubtaskBehavior)99));
+        Assert.Equal(ScribeSubtaskBehavior.Bound,
+            new ScribePlayerSettings { SubtaskBehavior = (ScribeSubtaskBehavior)99 }.Normalized().SubtaskBehavior);
+    }
+
+    [Fact]
+    public void Default_HudShowSettingsGear_IsOn()
+    {
+        Assert.True(new ScribePlayerSettings().HudShowSettingsGear);
+        Assert.True(new ScribePlayerSettings().Normalized().HudShowSettingsGear);
+        Assert.False(new ScribePlayerSettings { HudShowSettingsGear = false }.Normalized().HudShowSettingsGear);
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using ProtoBuf;
+using Scribe.Core;
 
 namespace Scribe;
 
@@ -26,4 +27,10 @@ public sealed class ScribeDeleteTaskMessage
     /// <summary>The task's <c>TaskId</c> as 16 raw bytes.</summary>
     [ProtoMember(2)]
     public byte[]? TaskId { get; set; }
+
+    /// <summary>The acting player's Subtask Behavior, sent as its raw byte. Defaults to 0
+    /// (<see cref="ScribeSubtaskBehavior.Bound"/>), so an absent/old client that omits this field
+    /// gets Bound; the server normalizes any unrecognized value back to Bound.</summary>
+    [ProtoMember(3)]
+    public byte SubtaskBehavior { get; set; }
 }

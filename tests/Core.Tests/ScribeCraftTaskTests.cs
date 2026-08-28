@@ -146,7 +146,32 @@ public class ScribeCraftTaskTests
     }
 
     [Fact]
-    public void Reconcile_RecreatesDeletedChild_LeavesOthersAndNeverDeletes()
+    public void Rescale_DeletedChildStaysGone_RemainingRescale()
+    {
+        var doc = new ScribeDocument();
+        var id = doc.AddCraft("game:plank-aged", 4, "sig");
+        var ingredients = new[]
+        {
+            new ScribeCraftIngredient("game:log-oak", 2),
+            new ScribeCraftIngredient("game:resin", 1),
+        };
+        doc.ReconcileCraftIngredients(id, ingredients, Array.Empty<string>(), craftsNeeded: 1);
+        Assert.Equal(3, doc.Blocks.Count);
+
+        // Player deletes the oak child (index 1). Create-once would recreate it; the stepper must not.
+        doc.DeleteBlock(1, out _);
+        Assert.Equal(2, doc.Blocks.Count);
+
+        doc.RescaleCraftIngredients(id, ingredients, Array.Empty<string>(), craftsNeeded: 2);
+
+        Assert.Equal(2, doc.Blocks.Count); // parent + resin only
+        Assert.DoesNotContain(doc.Blocks, b => b.IsTracker && b.TargetItemCode == "game:log-oak");
+        var resin = Assert.Single(doc.Blocks, b => b.IsTracker && b.TargetItemCode == "game:resin");
+        Assert.Equal(2, resin.TargetQuantity); // 1 per-craft × 2 crafts
+    }
+
+    [Fact]
+    public void Reconcile_CreateOnce_StillInsertsMissingChild()
     {
         var doc = new ScribeDocument();
         var id = doc.AddCraft("game:plank-aged", 4, "sig");
@@ -156,17 +181,13 @@ public class ScribeCraftTaskTests
             new ScribeCraftIngredient("game:resin", 1),
         };
         doc.ReconcileCraftIngredients(id, ingredients, Array.Empty<string>(), 1);
-        Assert.Equal(3, doc.Blocks.Count);
-
-        // Player deletes the oak child (index 1).
         doc.DeleteBlock(1, out _);
-        Assert.Equal(2, doc.Blocks.Count);
 
-        // Re-edit target → reconcile recreates the missing oak child, leaves resin alone.
-        doc.ReconcileCraftIngredients(id, ingredients, Array.Empty<string>(), 1);
+        // Handbook/create-once path still inserts a missing ingredient.
+        doc.ReconcileCraftIngredients(id, ingredients, Array.Empty<string>(), 1, createMissing: true);
         Assert.Equal(3, doc.Blocks.Count);
         Assert.Contains(doc.Blocks, b => b.IsTracker && b.TargetItemCode == "game:log-oak");
-        Assert.Single(doc.Blocks, b => b.IsTracker && b.TargetItemCode == "game:resin"); // not duplicated
+        Assert.Single(doc.Blocks, b => b.IsTracker && b.TargetItemCode == "game:resin");
     }
 
     [Fact]
@@ -190,6 +211,27 @@ public class ScribeCraftTaskTests
         Assert.Equal(before, doc.Blocks.Count); // nothing deleted, nothing duplicated
         Assert.Contains(doc.Blocks, b => b.Kind == ScribeBlockKind.Text && b.Text == "buy an axe first");
         Assert.All(doc.Blocks, b => Assert.True(b.Depth <= 1)); // never a depth-2 row
+    }
+
+    [Fact]
+    public void Rescale_LeavesExtraPlayerRowAlone_AndDoesNotInsertMissing()
+    {
+        var parent = new ScribeBlock(ScribeBlockKind.Craft, "",
+            targetItemCode: "game:plank-aged", targetQuantity: 4, recipeSignature: "sig");
+        var extra = new ScribeBlock(ScribeBlockKind.Text, "buy an axe first", depth: 1);
+        var doc = new ScribeDocument();
+        doc.ReplaceBlocks(new[]
+        {
+            parent,
+            extra,
+        });
+
+        doc.RescaleCraftIngredients(parent.TaskId,
+            new[] { new ScribeCraftIngredient("game:log-oak", 2) }, Array.Empty<string>(), craftsNeeded: 3);
+
+        Assert.Equal(2, doc.Blocks.Count); // extra left alone; oak NOT created
+        Assert.Equal("buy an axe first", doc.Blocks[1].Text);
+        Assert.DoesNotContain(doc.Blocks, b => b.IsTracker);
     }
 
     [Fact]

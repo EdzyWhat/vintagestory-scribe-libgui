@@ -33,6 +33,21 @@ public sealed class ScribePlayerSettings
     /// <see cref="CompletionPolicy"/>, which is about pins.</summary>
     public ScribeTrackerCompletion TrackerCompletion { get; set; } = ScribeTrackerCompletion.Complete;
 
+    /// <summary>What completing or trashing a parent (depth-0 plus its contiguous depth-1 run) does to
+    /// those children: <see cref="ScribeSubtaskBehavior.Bound"/> (default — the run moves/completes/
+    /// deletes with the parent), <see cref="ScribeSubtaskBehavior.Independent"/> (parent only), or
+    /// <see cref="ScribeSubtaskBehavior.DiscardChildren"/> (drop the children, then apply the parent's
+    /// completion policy alone). Sent on complete and standalone-delete requests; the server normalizes
+    /// unknown values to Bound. Distinct from <see cref="CompletionPolicy"/>, which is about the
+    /// document/pin action on the mutated rows.</summary>
+    public ScribeSubtaskBehavior SubtaskBehavior { get; set; } = ScribeSubtaskBehavior.Bound;
+
+    /// <summary>Whether the pinned-task HUD header shows its settings gear. Default <c>true</c>. When
+    /// <c>false</c>, the gear is omitted from the HUD; the Lectern/Notebook/Scriptorium Settings tab
+    /// remains available. A per-player, client-local display preference: never server-synced. A plain
+    /// bool, so <see cref="Normalized"/> leaves it untouched.</summary>
+    public bool HudShowSettingsGear { get; set; } = true;
+
     /// <summary>The pinned-task HUD: whether the player has collapsed or hidden it. Persisted and
     /// synced so the collapsed state is restored across sessions; toggled by the HUD's rebindable
     /// show/hide hotkey.</summary>
@@ -148,8 +163,9 @@ public sealed class ScribePlayerSettings
     public const int MinHudMaxRows = 1;
 
     /// <summary>Inclusive upper bound clamped on load, so a hand-edited or garbled preference file
-    /// can't request an unbounded number of rows. A saved 11–20 re-clamps to 10 on next load (§10.3).</summary>
-    public const int MaxHudMaxRows = 10;
+    /// can't request an unbounded number of rows. A saved value above 30 re-clamps to 30 on next load
+    /// (refine-crafting-tasks-1-3-2); 11–30 now stick instead of clamping back to 10.</summary>
+    public const int MaxHudMaxRows = 30;
 
     /// <summary>Which screen corner/edge the HUD is pinned to (default <see cref="ScribeHudAnchor.TopRight"/>,
     /// pre-offset left of the minimap by the Mod layer). A per-player display preference; the Mod layer
@@ -355,6 +371,13 @@ public sealed class ScribePlayerSettings
     public static ScribeTrackerCompletion NormalizeTrackerCompletion(ScribeTrackerCompletion value) =>
         Enum.IsDefined(typeof(ScribeTrackerCompletion), value) ? value : ScribeTrackerCompletion.Complete;
 
+    /// <summary>Maps a loaded (or on-the-wire) Subtask Behavior value to a defined
+    /// <see cref="ScribeSubtaskBehavior"/>, falling back to the default
+    /// (<see cref="ScribeSubtaskBehavior.Bound"/>) for any unrecognized value so a hand-edited config
+    /// or an old client that omitted the packet field can't select an undefined behavior.</summary>
+    public static ScribeSubtaskBehavior NormalizeSubtaskBehavior(ScribeSubtaskBehavior value) =>
+        Enum.IsDefined(typeof(ScribeSubtaskBehavior), value) ? value : ScribeSubtaskBehavior.Bound;
+
     /// <summary>Maps a loaded timer-mode value to a defined <see cref="TimerMode"/>, falling back to the
     /// default (<see cref="TimerMode.RealTime"/>) for any unrecognized value so a hand-edited or corrupted
     /// config can't select an undefined timer type.</summary>
@@ -392,6 +415,7 @@ public sealed class ScribePlayerSettings
         HudMaxRows = ClampHudMaxRows(HudMaxRows);
         CompletionPolicy = NormalizePolicy(CompletionPolicy);
         TrackerCompletion = NormalizeTrackerCompletion(TrackerCompletion);
+        SubtaskBehavior = NormalizeSubtaskBehavior(SubtaskBehavior);
         PreferredTimerMode = NormalizeTimerMode(PreferredTimerMode);
         HudAnchor = NormalizeAnchor(HudAnchor);
         HudRowWidth = ClampHudRowWidth(HudRowWidth);

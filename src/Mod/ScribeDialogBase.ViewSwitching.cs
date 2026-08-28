@@ -73,10 +73,6 @@ public abstract partial class ScribeDialogBase
         // clean seed stays isDirty=false. Runs BEFORE SyncFocusNodesToScratch so the node count matches the
         // trued-up block list, and touches only empty TASK blocks (empty text sections are valid, untouched).
         PurgeEmptyRowsFromScratch();
-        // Bring every Crafting Task's ingredient subtasks current with the live recipe registry (add-crafting-tasks
-        // 6.4 on-open self-heal). Runs after the empty-purge and BEFORE SyncFocusNodesToScratch below so the
-        // node count matches the healed block list; sets isDirty only if a child was created.
-        SelfHealCraftTasks();
         isEditorMode = true;
         focusedEditIndex = null;
         autoFocusRowOnRebuild = null;

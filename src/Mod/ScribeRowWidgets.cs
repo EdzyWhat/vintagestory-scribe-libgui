@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using System.Diagnostics;        // Conditional (DEBUG-only scroll trace)
 using System.Linq;
 using Gui;                       // GuiDialogBlockEntityBase, WindowConfig
+using Gui.Core.Framework;        // RenderObject, RenderProxyBox
+using Gui.Core.Layout;           // MainAxisSize
 using Gui.Rendering;             // EdgeInsets
 using Gui.Rendering.Text;        // TextStyle, FontWeight
 using Gui.Widgets.Basic;         // Text, WindowFrame, VsIcon, Container, Button
 using Gui.Widgets.Events;        // PointerEvent
-using Gui.Widgets.Framework;     // Widget, StatefulWidget, State, Theme, ValueKey, Key
+using Gui.Widgets.Framework;     // Widget, StatefulWidget, State, Theme, ValueKey, Key, SingleChildWidget
 using Gui.Widgets.Input;         // Checkbox, FocusNode, GestureDetector, MouseRegion, Dropdown, DropdownItem
 using Gui.Widgets.Inventory;     // ItemStackDisplay (Tracker/Link item icon)
 using Gui.Widgets.Gestures;      // ScrollController
@@ -15,7 +17,6 @@ using Gui.Widgets.Layout;        // Column, Row, Expanded, Padding, SizedBox, Ce
 using Gui.Widgets.Overlay;       // Tooltip
 using Gui.Widgets.Painting;      // BoxStyle
 using Gui.Widgets.Scroll;        // ListView, SingleChildScrollView, Scrollable, Scrollbar
-using Gui.Core.Layout;           // MainAxisSize
 using OpenTK.Mathematics;        // Vector2
 using Scribe.Core;
 using Vintagestory.API.Client;
@@ -58,11 +59,45 @@ internal static class ScribeRowControlNudge
         return lineHeight > 0 ? lineHeight : fontSize * 1.2f; // same fallback as the field
     }
 
+    /// <summary>One line of an item-row NAME: cuneiform's ratio-boosted line on the tablet path, else the
+    /// Latin "Ag" line. Used to tell a wrapping name from a single-line one so we can center short names
+    /// on the icon without centering a wrapped block (which would lift the first line above the icon).</summary>
+    public static float ItemNameLineHeight(ScribeRowStyle style)
+        => style.UseCuneiform
+            ? style.FontSize * CuneiformMetrics.LineHeightRatio
+            : TextLineHeight(style.FontSize);
+
+    /// <summary>Extra downward optical offset for item-row checkbox/grip, in ems of
+    /// <see cref="ScribeRowStyle.FontSize"/>. Applied after centering on the icon band so a "smidge"
+    /// tracks text size (≈1.5px at 15pt, ≈2.8px on a tablet cuneiform line) instead of a fixed pixel
+    /// nudge. Raise/lower this one constant to tune; Task/Note rows stay at geometric center of the
+    /// one-line field (set <see cref="TaskControlOpticalNudgeEm"/> if those also read high).</summary>
+    internal const float ItemControlOpticalNudgeEm = 0.1f;
+
+    /// <summary>Same optical-offset knob as <see cref="ItemControlOpticalNudgeEm"/>, for Task/Note
+    /// rows. 0 keeps them geometrically centered on the one-line field.</summary>
+    internal const float TaskControlOpticalNudgeEm = 0f;
+
     /// <summary>Down-nudge for the drag grip and the task checkbox (both <see cref="ScribeRowStyle.CheckboxSize"/>
-    /// tall) so they center on a one-line input. Computed, not constant, so it stays centered at any font
-    /// scale.</summary>
-    public static float CheckboxAndGripTop(ScribeRowStyle style)
-        => MathF.Max(0f, (SingleLineInputHeight(style) - style.CheckboxSize) / 2f);
+    /// tall). On a Task/Note row this centers them on a one-line text field. On an item row the name/stepper
+    /// sit in the (taller) icon band, so the same Latin-field formula leaves the controls a smidge high —
+    /// center on that icon band instead, then add a font-relative optical offset. Both paths scale with
+    /// <see cref="ScribeRowStyle.FontSize"/> (<see cref="ScribeRowStyle.ControlSize"/> / icon size track it).</summary>
+    public static float CheckboxAndGripTop(ScribeRowStyle style, bool itemRow = false)
+    {
+        float centered;
+        if (!itemRow)
+        {
+            centered = MathF.Max(0f, (SingleLineInputHeight(style) - style.CheckboxSize) / 2f);
+            return centered + style.FontSize * TaskControlOpticalNudgeEm;
+        }
+
+        float iconBand = ScribeRowConstants.ItemIconSize
+            * (style.ControlSize / ScribeRowConstants.RowCheckboxSize)
+            * 1.1f; // ScribeLinkIcon.ItemIconScale — item rows always show the item icon
+        centered = MathF.Max(0f, (iconBand - style.CheckboxSize) / 2f);
+        return centered + style.FontSize * ItemControlOpticalNudgeEm;
+    }
 
     /// <summary>Build a task-row completion checkbox, applying the row style's optional tick-color override
     /// (<see cref="ScribeRowStyle.CheckTickColor"/>, refine-chalkboard §11). When it is null (every surface
@@ -88,8 +123,8 @@ internal static class ScribeRowControlNudge
     /// the trailing gap zeroed the grip sits flush against the checkbox and the text column reclaims that
     /// width. Used identically for the editor/pin grips AND the read/frozen grip-column spacers so read and
     /// editor rows stay column-aligned across a view switch.</summary>
-    public static EdgeInsets GripInsets(ScribeRowStyle style)
-        => EdgeInsets.Only(top: CheckboxAndGripTop(style), right: -style.CheckboxTextGap);
+    public static EdgeInsets GripInsets(ScribeRowStyle style, bool itemRow = false)
+        => EdgeInsets.Only(top: CheckboxAndGripTop(style, itemRow), right: -style.CheckboxTextGap);
 
     /// <summary>Absolute top offset (from the row's top edge) that centers a floating pin/delete button's
     /// DRAWN box on the one-line input. The button box is <see cref="ScribeRowButton.BoxShrink"/> px
@@ -158,15 +193,21 @@ internal static class ScribeLinkIcon
     /// full control size, so it renders smaller than the item icon.</summary>
     private const float BookGlyphScale = 0.8f;
 
+    public static float VisualSize(float iconSize, string? linkTarget)
+        => iconSize * (ScribeLinkTarget.IsGuidePage(linkTarget) ? BookGlyphScale : ItemIconScale);
+
     public static Widget Build(ItemStack? stack, string? linkTarget, float iconSize, Vector4 bookColor,
-        float lineHeight)
+        float lineHeight, bool heightNeutral = true)
     {
         bool guidePage = ScribeLinkTarget.IsGuidePage(linkTarget);
-        float visual = guidePage ? iconSize * BookGlyphScale : iconSize * ItemIconScale;
+        float visual = VisualSize(iconSize, linkTarget);
         Widget art = guidePage
             ? new ScribeVsIconGlyph("scribebook", visual, bookColor)
             : new ItemStackDisplay(stack, width: visual, height: visual, renderSize: 48);
-        return HeightNeutral(art, visual, lineHeight);
+        // Window item rows top-align the icon with the stepper/name, so the icon must occupy its
+        // real visual height in layout (otherwise HeightNeutral overflows above the row). HUD still
+        // uses the height-neutral wrap so a pin row matches a single text line.
+        return heightNeutral ? HeightNeutral(art, visual, lineHeight) : art;
     }
 
     /// <summary>Wrap a <paramref name="visual"/>-px-square icon so it occupies only <paramref name="lineHeight"/>
@@ -185,6 +226,77 @@ internal static class ScribeLinkIcon
             new SizedBox(width: visual, height: lineHeight),
             new Positioned(left: 0f, top: top, width: visual, height: visual, child: art),
         });
+    }
+}
+
+/// <summary>
+/// Vertically centers a child inside <see cref="BandHeight"/> when the child is still a single line,
+/// and leaves a wrapping child top-aligned at its natural height. Item rows stay
+/// <c>CrossAxisAlignment.Start</c> so a wrapped name does not float the icon/checkbox into the middle
+/// of the block; this wrapper is how a short name still sits on the icon's horizon without growing
+/// the row (the band is already the icon's height).
+/// </summary>
+internal static class ScribeCenterIfShort
+{
+    /// <summary>Always-center (counter, stepper): treat the child as short so it sits in the icon band.</summary>
+    public static Widget InBand(Widget child, float bandHeight)
+        => new ScribeCenterIfShortWidget(oneLineHeight: float.MaxValue, bandHeight, child);
+
+    /// <summary>Center when the child is ≤ one line; top-align when it wraps.</summary>
+    public static Widget Name(Widget child, ScribeRowStyle style, float bandHeight)
+        => new ScribeCenterIfShortWidget(ScribeRowControlNudge.ItemNameLineHeight(style), bandHeight, child);
+}
+
+internal sealed class ScribeCenterIfShortWidget : SingleChildWidget
+{
+    public ScribeCenterIfShortWidget(float oneLineHeight, float bandHeight, Widget? child = null,
+        Gui.Widgets.Framework.Key? key = null) : base(child, key)
+    {
+        OneLineHeight = oneLineHeight;
+        BandHeight = bandHeight;
+    }
+
+    public float OneLineHeight { get; }
+    public float BandHeight { get; }
+
+    public override RenderObject CreateRenderObject() => new ScribeCenterIfShortRender
+    {
+        OneLineHeight = OneLineHeight,
+        BandHeight = BandHeight,
+    };
+
+    public override void UpdateRenderObject(RenderObject renderObject)
+    {
+        var ro = (ScribeCenterIfShortRender)renderObject;
+        ro.OneLineHeight = OneLineHeight;
+        ro.BandHeight = BandHeight;
+    }
+}
+
+internal sealed class ScribeCenterIfShortRender : RenderProxyBox
+{
+    public float OneLineHeight { get => field; set => SetProperty(ref field, value, relayout: true); }
+    public float BandHeight { get => field; set => SetProperty(ref field, value, relayout: true); }
+
+    protected override void PerformLayout()
+    {
+        if (Children.Count == 0)
+        {
+            Size = Constraints.Constrain(Vector2.Zero);
+            return;
+        }
+
+        var child = Children[0];
+        child.Layout(Constraints);
+        bool wrapped = child.Size.Y > OneLineHeight * 1.4f;
+        // Use the child's own width. A Row gives non-flex children a bounded MaxWidth equal to the
+        // leftover row — claiming that leftover made the stepper/counter as wide as the row and
+        // zeroed the icon + name (playtest: only the first control after the checkbox survived).
+        // Expanded names already pass a tight width, so child.Size.X is the flex slot in that case.
+        float height = (wrapped || BandHeight <= child.Size.Y) ? child.Size.Y : BandHeight;
+        child.X = 0f;
+        child.Y = height > child.Size.Y ? (height - child.Size.Y) / 2f : 0f;
+        Size = Constraints.Constrain(new Vector2(child.Size.X, height));
     }
 }
 
@@ -210,8 +322,10 @@ internal static class ScribeItemLabel
             // left at its default (false) wraps to width like the non-cuneiform Text branch below. No caret/
             // selection (this is a label, not a field): caret/selection are zeroed and hidden. Jitter is seeded
             // from the label so the strokes are deterministic frame-to-frame (no TaskId is available here — the
-            // seed only needs to be stable, not unique). PadX/PadY match the read-view note so the wrapped name's
-            // left edge and vertical rhythm line up with the row's other content.
+            // seed only needs to be stable, not unique). Inner pad is 0: the item row applies a right
+            // FieldPadX only (the stepper sits flush with the Task field box). Notebook names are a
+            // bare Text with no pad. Matching Task-row FieldPadY here dropped tablet names ~6px below
+            // the checkbox/stepper horizon (the taller cuneiform line is LineHeightRatio, not extra pad).
             return new ScribeCuneiformFieldRenderWidget(
                 text: label,
                 caret: 0,
@@ -222,8 +336,8 @@ internal static class ScribeItemLabel
                 caretColor: Vector4.Zero,
                 selectionColor: Vector4.Zero,
                 bundle: bundle,
-                padX: style.FieldPadX,
-                padY: style.FieldPadY,
+                padX: 0f,
+                padY: 0f,
                 boxColor: Vector4.Zero,
                 borderColor: Vector4.Zero,
                 borderThickness: 1f,

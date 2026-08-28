@@ -217,20 +217,115 @@ public sealed class ScribeDocument
     }
 
     /// <summary>
+    /// The contiguous depth-1 run owned by the block at <paramref name="parentIndex"/>: half-open
+    /// <c>[start, end)</c> starting at the row after the parent and stopping at the first row that is
+    /// not depth 1 (a depth-0 gap, a later parent, or the document end). Kind-agnostic — any depth-0
+    /// row can own the run, not only Craft. An invalid index or a parent with no following depth-1
+    /// rows yields an empty run (<c>start == end</c>). Completing a depth-1 row is a leaf; callers that
+    /// treat only depth-0 as a parent should check <see cref="ScribeBlock.Depth"/> first.
+    /// </summary>
+    public (int Start, int End) OwnedRun(int parentIndex)
+    {
+        if (!IsValidIndex(parentIndex)) return (0, 0);
+        int start = parentIndex + 1;
+        int end = start;
+        while (end < _blocks.Count && _blocks[end].Depth == 1) end++;
+        return (start, end);
+    }
+
+    /// <summary>The index of the block with <paramref name="taskId"/>, or -1 if none matches.</summary>
+    public int IndexOf(Guid taskId)
+    {
+        for (int i = 0; i < _blocks.Count; i++)
+        {
+            if (_blocks[i].TaskId == taskId) return i;
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// Walks backward from a depth-1 row to the depth-0 parent that owns its contiguous run. Returns
+    /// -1 when the index is invalid, the row is not depth 1, or no depth-0 row sits above it.
+    /// Parent identity is this walk-back, never "any depth-0 from the same document."
+    /// </summary>
+    public int FindParentIndex(int childIndex)
+    {
+        if (!IsValidIndex(childIndex) || _blocks[childIndex].Depth != 1) return -1;
+        for (int i = childIndex - 1; i >= 0; i--)
+        {
+            if (_blocks[i].Depth == 0) return i;
+        }
+        return -1;
+    }
+
+    /// <summary>Moves the half-open slice <c>[startInclusive, endExclusive)</c> so its first row lands
+    /// at <paramref name="destIndex"/>, preserving relative order inside the slice. <paramref name="destIndex"/>
+    /// uses the same convention as <see cref="MoveBlock"/> (a row index in the list before the move).
+    /// Dropping onto a row inside the slice is a successful no-op. Returns false when the range or dest
+    /// is invalid.</summary>
+    public bool MoveRange(int startInclusive, int endExclusive, int destIndex)
+    {
+        if (startInclusive < 0 || endExclusive > _blocks.Count || startInclusive >= endExclusive)
+            return false;
+        if (!IsValidIndex(destIndex)) return false;
+        if (destIndex >= startInclusive && destIndex < endExclusive) return true;
+
+        int len = endExclusive - startInclusive;
+        var slice = _blocks.GetRange(startInclusive, len);
+        _blocks.RemoveRange(startInclusive, len);
+        int insertAt = destIndex < startInclusive ? destIndex : destIndex - len + 1;
+        insertAt = Math.Clamp(insertAt, 0, _blocks.Count);
+        _blocks.InsertRange(insertAt, slice);
+        return true;
+    }
+
+    /// <summary>
+    /// Moves the half-open slice <c>[startInclusive, endExclusive)</c> to the end of the document as
+    /// one block, preserving relative order inside the slice. Returns false (unchanged) when the
+    /// range is empty/invalid or already at the bottom. Used for Bound Sink so parent+children stay
+    /// contiguous (parent first) rather than N independent <see cref="MoveTaskToBottom"/> calls.
+    /// </summary>
+    public bool MoveRangeToBottom(int startInclusive, int endExclusive)
+    {
+        if (startInclusive < 0 || endExclusive > _blocks.Count || startInclusive >= endExclusive)
+            return false;
+        if (endExclusive == _blocks.Count) return false; // already last
+        int len = endExclusive - startInclusive;
+        var slice = _blocks.GetRange(startInclusive, len);
+        _blocks.RemoveRange(startInclusive, len);
+        _blocks.AddRange(slice);
+        return true;
+    }
+
+    /// <summary>
+    /// Removes the half-open slice <c>[startInclusive, endExclusive)</c>. Returns false when the
+    /// range is empty or out of bounds.
+    /// </summary>
+    public bool DeleteRange(int startInclusive, int endExclusive)
+    {
+        if (startInclusive < 0 || endExclusive > _blocks.Count || startInclusive >= endExclusive)
+            return false;
+        _blocks.RemoveRange(startInclusive, endExclusive - startInclusive);
+        return true;
+    }
+
+    /// <summary>
     /// Loosely self-heals the ingredient subtasks of the Craft task identified by <paramref name="craftTaskId"/>
     /// (craft-task capability). Reconciles ONLY the contiguous run of <see cref="ScribeBlock.Depth"/>-1 rows
     /// directly below the parent — the rows it owns — against the freshly derived ingredient list:
     /// <list type="bullet">
     /// <item>For each counting <paramref name="ingredients"/> entry, sets the matched child Tracker's
     /// <see cref="ScribeBlock.TargetQuantity"/> to <c>PerCraftQuantity × craftsNeeded</c> (matching by item
-    /// code, preserving the child's id and live progress), or creates a Tracker child at depth 1 when none
-    /// matches.</item>
+    /// code, preserving the child's id and live progress). When <paramref name="createMissing"/> is true
+    /// (Handbook create-once), a Tracker child is inserted at depth 1 when none matches; when false
+    /// (the parent-target stepper) a missing ingredient is left missing — never inserted.</item>
     /// <item>For each non-counting <paramref name="notes"/> entry (e.g. a liquid ingredient in v1), ensures a
-    /// depth-1 Text note with that exact text exists, creating it when missing.</item>
+    /// depth-1 Text note with that exact text exists, creating it when missing <b>only</b> when
+    /// <paramref name="createMissing"/> is true.</item>
     /// </list>
     /// It NEVER deletes a row (a player who removed or edited a subtask keeps their choice) and NEVER touches
-    /// anything below depth 1 (one level only). New children append to the END of the owned run, keeping the
-    /// group contiguous. Returns false (document unchanged) when no Craft block has that id.
+    /// anything below depth 1 (one level only). New children (create-once only) append to the END of the owned
+    /// run, keeping the group contiguous. Returns false (document unchanged) when no Craft block has that id.
     ///
     /// <para>Expects DISTINCT item codes across <paramref name="ingredients"/> (the Mod layer merges a recipe's
     /// duplicate ingredients before calling); a repeated code would resolve to the first unclaimed match.
@@ -238,7 +333,8 @@ public sealed class ScribeDocument
     /// (clamped to ≥ 1 here). Pure data; no VS API.</para>
     /// </summary>
     public bool ReconcileCraftIngredients(Guid craftTaskId,
-        IReadOnlyList<ScribeCraftIngredient> ingredients, IReadOnlyList<string> notes, int craftsNeeded)
+        IReadOnlyList<ScribeCraftIngredient> ingredients, IReadOnlyList<string> notes, int craftsNeeded,
+        bool createMissing = true)
     {
         int parentIndex = -1;
         for (int i = 0; i < _blocks.Count; i++)
@@ -250,9 +346,7 @@ public sealed class ScribeDocument
 
         // The owned run: the contiguous depth-1 rows immediately below the parent. runEnd is exclusive and
         // grows as we append new children so they stay inside (and at the end of) the run.
-        int runStart = parentIndex + 1;
-        int runEnd = runStart;
-        while (runEnd < _blocks.Count && _blocks[runEnd].Depth == 1) runEnd++;
+        var (runStart, runEnd) = OwnedRun(parentIndex);
 
         var claimed = new HashSet<int>(); // rows already matched this pass, so duplicate codes don't double-claim
 
@@ -282,7 +376,7 @@ public sealed class ScribeDocument
                 claimed.Add(matchIdx);
                 _blocks[matchIdx].TargetQuantity = target; // rescale in place; keep id + CurrentQuantity
             }
-            else
+            else if (createMissing)
             {
                 _blocks.Insert(runEnd, new ScribeBlock(ScribeBlockKind.Tracker, "",
                     depth: 1, targetItemCode: ing.ItemCode, targetQuantity: target));
@@ -303,7 +397,7 @@ public sealed class ScribeDocument
                     break;
                 }
             }
-            if (!exists)
+            if (!exists && createMissing)
             {
                 _blocks.Insert(runEnd, new ScribeBlock(ScribeBlockKind.Text, note, depth: 1));
                 runEnd++;
@@ -312,6 +406,15 @@ public sealed class ScribeDocument
 
         return true;
     }
+
+    /// <summary>
+    /// Stepper-only reconcile: update <see cref="ScribeBlock.TargetQuantity"/> on item-code matches
+    /// inside the owned run. Never inserts, never deletes. Handbook create still uses
+    /// <see cref="ReconcileCraftIngredients"/> with <c>createMissing: true</c> (the default).
+    /// </summary>
+    public bool RescaleCraftIngredients(Guid craftTaskId,
+        IReadOnlyList<ScribeCraftIngredient> ingredients, IReadOnlyList<string> notes, int craftsNeeded)
+        => ReconcileCraftIngredients(craftTaskId, ingredients, notes, craftsNeeded, createMissing: false);
 
     /// <summary>
     /// Changes a block's text. Both Task and Text blocks may be set to any value, including

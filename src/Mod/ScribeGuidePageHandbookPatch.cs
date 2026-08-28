@@ -60,7 +60,7 @@ internal static class ScribeGuidePageHandbookPatch
             // Match the item page's spacing idiom: a small gap, a bold heading, then the single action.
             new ClearFloatTextComponent(capi, 14f),
             new RichTextComponent(capi, Lang.Get("scribe:scribe-gui-additem-heading") + "\n", headingFont),
-            new LinkTextComponent(capi, Lang.Get("scribe:scribe-gui-addlink") + "\n", linkFont,
+            new LinkTextComponent(capi, Lang.Get("scribe:scribe-gui-handbook-addlink") + "\n", linkFont,
                 _ => modSystem.AddGuideLinkFromHandbook(pageCode, title)),
         };
 

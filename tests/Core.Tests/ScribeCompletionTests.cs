@@ -189,4 +189,169 @@ public class ScribeCompletionTests
         Assert.False(outcome.DocChanged);
         Assert.Single(doc.Blocks);
     }
+
+    // --- Parent range (refine-crafting-tasks-1-3-2) ---
+
+    private static ScribeDocument ParentWithTwoChildren()
+    {
+        var doc = new ScribeDocument();
+        doc.ReplaceBlocks(new[]
+        {
+            new ScribeBlock(ScribeBlockKind.Task, "parent", depth: 0),
+            new ScribeBlock(ScribeBlockKind.Task, "c1", depth: 1),
+            new ScribeBlock(ScribeBlockKind.Task, "c2", depth: 1),
+            new ScribeBlock(ScribeBlockKind.Task, "other", depth: 0),
+        });
+        return doc;
+    }
+
+    [Fact]
+    public void Bound_Sink_KeepsParentFirstContiguity()
+    {
+        var doc = ParentWithTwoChildren();
+        var parentId = doc.Blocks[0].TaskId;
+
+        ScribeCompletion.ApplyLocal(doc, parentId, ScribeCompletionPolicy.Sink, ScribeSubtaskBehavior.Bound);
+
+        Assert.Equal(new[] { "other", "parent", "c1", "c2" }, doc.Blocks.Select(b => b.Text));
+        Assert.True(doc.Blocks[1].Done);
+        Assert.True(doc.Blocks[2].Done);
+        Assert.True(doc.Blocks[3].Done);
+        Assert.Equal(0, doc.Blocks[1].Depth);
+        Assert.Equal(1, doc.Blocks[2].Depth);
+        Assert.Equal(1, doc.Blocks[3].Depth);
+    }
+
+    [Fact]
+    public void Bound_Sink_IsNotSequentialPerRow()
+    {
+        // Sequential MoveTaskToBottom(child, child, parent) reverses to children-then-parent.
+        // One range mutation keeps parent first. This document has a trailing row so a botched
+        // per-row sink would be visible as reversed order at the bottom.
+        var doc = ParentWithTwoChildren();
+        var parentId = doc.Blocks[0].TaskId;
+
+        ScribeCompletion.ApplyLocal(doc, parentId, ScribeCompletionPolicy.Sink, ScribeSubtaskBehavior.Bound);
+
+        int parentAt = doc.IndexOf(parentId);
+        Assert.Equal("parent", doc.Blocks[parentAt].Text);
+        Assert.Equal("c1", doc.Blocks[parentAt + 1].Text);
+        Assert.Equal("c2", doc.Blocks[parentAt + 2].Text);
+        Assert.Equal(doc.Blocks.Count - 3, parentAt); // the three-row range is at the bottom, parent first
+    }
+
+    [Fact]
+    public void Independent_Sink_LeavesChildrenInPlace()
+    {
+        var doc = ParentWithTwoChildren();
+        var parentId = doc.Blocks[0].TaskId;
+
+        ScribeCompletion.ApplyLocal(doc, parentId, ScribeCompletionPolicy.Sink, ScribeSubtaskBehavior.Independent);
+
+        Assert.Equal(new[] { "c1", "c2", "other", "parent" }, doc.Blocks.Select(b => b.Text));
+        Assert.True(doc.Blocks[3].Done);
+        Assert.False(doc.Blocks[0].Done); // c1 stayed, incomplete
+        Assert.False(doc.Blocks[1].Done);
+    }
+
+    [Fact]
+    public void CompletingAChild_DoesNotTakeSiblings()
+    {
+        var doc = ParentWithTwoChildren();
+        var c1 = doc.Blocks[1].TaskId;
+
+        ScribeCompletion.ApplyLocal(doc, c1, ScribeCompletionPolicy.Sink, ScribeSubtaskBehavior.Bound);
+
+        Assert.Equal(new[] { "parent", "c2", "other", "c1" }, doc.Blocks.Select(b => b.Text));
+        Assert.False(doc.Blocks[0].Done);
+        Assert.False(doc.Blocks[1].Done); // c2 unchanged
+        Assert.True(doc.Blocks[3].Done);
+    }
+
+    [Fact]
+    public void Discard_ThenUncheck_DoesNotRestoreChildren()
+    {
+        var doc = ParentWithTwoChildren();
+        var parentId = doc.Blocks[0].TaskId;
+
+        ScribeCompletion.ApplyLocal(doc, parentId, ScribeCompletionPolicy.Keep, ScribeSubtaskBehavior.DiscardChildren);
+        Assert.Equal(new[] { "parent", "other" }, doc.Blocks.Select(b => b.Text));
+        Assert.True(doc.Blocks[0].Done);
+
+        ScribeCompletion.ApplyLocal(doc, parentId, ScribeCompletionPolicy.Keep, ScribeSubtaskBehavior.DiscardChildren);
+        Assert.Equal(new[] { "parent", "other" }, doc.Blocks.Select(b => b.Text));
+        Assert.False(doc.Blocks[0].Done); // unchecked; children stay gone
+    }
+
+    [Fact]
+    public void Bound_Trash_DeletesOwnedRun()
+    {
+        var doc = ParentWithTwoChildren();
+        var parentId = doc.Blocks[0].TaskId;
+
+        var deleted = ScribeCompletion.ApplyDelete(doc, parentId, ScribeSubtaskBehavior.Bound);
+
+        Assert.Equal(3, deleted.Count);
+        Assert.Equal(new[] { "other" }, doc.Blocks.Select(b => b.Text));
+    }
+
+    [Fact]
+    public void Independent_Trash_DeletesOnlyParent()
+    {
+        var doc = ParentWithTwoChildren();
+        var parentId = doc.Blocks[0].TaskId;
+
+        ScribeCompletion.ApplyDelete(doc, parentId, ScribeSubtaskBehavior.Independent);
+
+        Assert.Equal(new[] { "c1", "c2", "other" }, doc.Blocks.Select(b => b.Text));
+    }
+
+    [Fact]
+    public void Discard_Trash_DeletesOwnedRun()
+    {
+        var doc = ParentWithTwoChildren();
+        var parentId = doc.Blocks[0].TaskId;
+
+        ScribeCompletion.ApplyDelete(doc, parentId, ScribeSubtaskBehavior.DiscardChildren);
+
+        Assert.Equal(new[] { "other" }, doc.Blocks.Select(b => b.Text));
+    }
+
+    [Fact]
+    public void Bound_Uncheck_DoesNotUnsink()
+    {
+        var doc = ParentWithTwoChildren();
+        var parentId = doc.Blocks[0].TaskId;
+        ScribeCompletion.ApplyLocal(doc, parentId, ScribeCompletionPolicy.Sink, ScribeSubtaskBehavior.Bound);
+        Assert.Equal(new[] { "other", "parent", "c1", "c2" }, doc.Blocks.Select(b => b.Text));
+
+        ScribeCompletion.ApplyLocal(doc, parentId, ScribeCompletionPolicy.Sink, ScribeSubtaskBehavior.Bound);
+
+        // Uncheck mirrors the run's done flags but does not move them back.
+        Assert.Equal(new[] { "other", "parent", "c1", "c2" }, doc.Blocks.Select(b => b.Text));
+        Assert.False(doc.Blocks[1].Done);
+        Assert.False(doc.Blocks[2].Done);
+        Assert.False(doc.Blocks[3].Done);
+    }
+
+    [Fact]
+    public void Bound_Sink_MovesTextInTheRun()
+    {
+        var doc = new ScribeDocument();
+        doc.ReplaceBlocks(new[]
+        {
+            new ScribeBlock(ScribeBlockKind.Task, "parent", depth: 0),
+            new ScribeBlock(ScribeBlockKind.Text, "note", depth: 1),
+            new ScribeBlock(ScribeBlockKind.Task, "c1", depth: 1),
+            new ScribeBlock(ScribeBlockKind.Task, "other", depth: 0),
+        });
+        var parentId = doc.Blocks[0].TaskId;
+
+        ScribeCompletion.ApplyLocal(doc, parentId, ScribeCompletionPolicy.Sink, ScribeSubtaskBehavior.Bound);
+
+        Assert.Equal(new[] { "other", "parent", "note", "c1" }, doc.Blocks.Select(b => b.Text));
+        Assert.False(doc.Blocks[2].Done); // text has no done flag
+        Assert.True(doc.Blocks[1].Done);
+        Assert.True(doc.Blocks[3].Done);
+    }
 }

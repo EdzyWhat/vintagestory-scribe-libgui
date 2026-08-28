@@ -113,6 +113,11 @@ public interface IScribeDocumentHost
     /// For block hosts: marks dirty and resyncs. For item hosts: writes to the ItemStack.</summary>
     bool DeleteTaskFromReader(Guid taskId);
 
+    /// <summary>Server-side: persist the in-memory document after a Core mutation (range complete/delete)
+    /// already applied to <see cref="Document"/>. For block hosts: marks dirty and resyncs. For item hosts:
+    /// writes to the ItemStack.</summary>
+    void PersistFromReader();
+
     /// <summary>Server-side: move a task to the bottom of the document. Returns true if moved.
     /// For block hosts: marks dirty and resyncs. For item hosts: writes to the ItemStack.</summary>
     bool MoveTaskToBottomFromReader(Guid taskId);

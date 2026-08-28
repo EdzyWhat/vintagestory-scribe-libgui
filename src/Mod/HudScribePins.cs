@@ -244,7 +244,6 @@ public sealed class HudScribePins : GuiBase
     private bool _corruptionWasActive;
     private bool _stormWasActiveHud;
 
-
     public HudScribePins(ICoreClientAPI capi, ScribeModSystem modSystem) : base(capi)
     {
         this.modSystem = modSystem;
@@ -638,7 +637,6 @@ public sealed class HudScribePins : GuiBase
     {
         if (!IsOpened()) return false;
         if (capi.World.Player is not { } player) return false;
-
         // Both plain Trackers and Craft parents count the viewer's carried inventory against a target (a
         // Craft parent counts its recipe OUTPUT), so drive both here — mirrors the dialog engine's
         // IsCarriedCountTracked gate (add-crafting-tasks 9.2). Craft ingredient CHILDREN are themselves
@@ -746,6 +744,7 @@ public sealed class HudScribePins : GuiBase
                 {
                     DocId = pin.OwnerDocId.ToByteArray(),
                     TaskId = pin.TaskId.ToByteArray(),
+                    SubtaskBehavior = (byte)modSystem.MySettings.SubtaskBehavior,
                 });
                 break;
             case ScribeTrackerCompletion.Nothing:
@@ -854,6 +853,7 @@ public sealed class HudScribePins : GuiBase
             DocId = docId.ToByteArray(),
             TaskId = taskId.ToByteArray(),
             Policy = (byte)policy,
+            SubtaskBehavior = (byte)modSystem.MySettings.SubtaskBehavior,
         });
     }
 
@@ -1101,6 +1101,7 @@ public sealed class HudScribePins : GuiBase
             checkboxSize: ScribeRowConstants.BaseHudCheckboxSize
                 * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.HudFontScale),
             showIcons: modSystem.MySettings.HudShowIcons,
+            showSettingsGear: modSystem.MySettings.HudShowSettingsGear,
             onToggleRow: OnToggleRow,
             onOpenLink: OpenPinnedLink,
             onToggleCollapsed: ToggleCollapsed,
@@ -1205,6 +1206,8 @@ internal readonly record struct HudPinRow(
     /// A Craft parent renders exactly like a Tracker — its recipe output icon + a have/need counter —
     /// differing only in the "Craft {0}" label framing below (add-crafting-tasks 9.1).</summary>
     public bool IsItemKind => IsTracker || IsLink || IsCraft;
+    /// <summary>Kinds whose HUD row carries a have/need counter: Tracker and the Craft parent.</summary>
+    public bool IsCarriedCountTracked => IsTracker || IsCraft;
     /// <summary>The label to show: the "Craft {0}" framing for a Craft parent, the plain resolved item
     /// name for a Tracker/Link, else the task text.</summary>
     public string Label => IsCraft
@@ -1248,6 +1251,9 @@ internal sealed class HudPinsContent : StatelessWidget
     /// <summary>Whether Tracker/Link rows render their item icon / guide-page book glyph on the HUD
     /// (<see cref="ScribePlayerSettings.HudShowIcons"/>); off gives a text-only HUD.</summary>
     private readonly bool showIcons;
+    /// <summary>Whether the HUD header shows the settings gear (<see cref="ScribePlayerSettings.HudShowSettingsGear"/>).
+    /// Off omits the gear; the Lectern Settings tab remains reachable.</summary>
+    private readonly bool showSettingsGear;
     private readonly Action<Guid, Guid, bool> onToggleRow;
     /// <summary>Open a pinned Link's Handbook page by its snapshotted link-target (add-tracker-link-tasks
     /// 5.5). Wired only for a Link row's label; null-safe target.</summary>
@@ -1272,6 +1278,7 @@ internal sealed class HudPinsContent : StatelessWidget
         float rowFontSize,
         float checkboxSize,
         bool showIcons,
+        bool showSettingsGear,
         Action<Guid, Guid, bool> onToggleRow,
         Action<string?> onOpenLink,
         Action onToggleCollapsed,
@@ -1293,6 +1300,7 @@ internal sealed class HudPinsContent : StatelessWidget
         this.rowFontSize = rowFontSize;
         this.checkboxSize = checkboxSize;
         this.showIcons = showIcons;
+        this.showSettingsGear = showSettingsGear;
         this.onToggleRow = onToggleRow;
         this.onOpenLink = onOpenLink;
         this.onToggleCollapsed = onToggleCollapsed;
@@ -1411,7 +1419,7 @@ internal sealed class HudPinsContent : StatelessWidget
         string chevron = collapsed ? "▸" : "▾"; // ▸ / ▾
         var titleStyle = new TextStyle
         {
-            FontSize = 14,
+            FontSize = rowFontSize,
             Color = new Vector4(1f, 1f, 1f, 1f), // pure opaque white header (feedback 2026-08-16, was off-white 0.80)
             GlowWidth = GlowWidth,
             GlowColor = glow,
@@ -1436,21 +1444,25 @@ internal sealed class HudPinsContent : StatelessWidget
                         titleStyle),
                 }));
 
-        // Gear sized to sit proportionally with the chevron/title beside it (scribe-settings-followups 4.2):
-        // 12px reads right against the 14px title, where the prior 16px looked oversized. Its base color is now
-        // pure opaque white to match the header title (feedback 2026-08-16, previously a 66%-desaturated muted
-        // grey off OnSurfaceVariant); ScribeHudGearButton owns the up-3/left-5 nudge + tap (the +10 V hover
-        // brighten is a no-op at full white, which is fine — white is the intended resting look). It is
-        // self-stateful so its state survives the HUD's ForceRebuild (mirroring ScribeFadeText).
-        var gear = new ScribeHudGearButton(
-            baseColor: new Vector4(1f, 1f, 1f, 1f),
-            onTap: onOpenSettings);
+        var headerChildren = new List<Widget> { collapseToggle };
+        if (showSettingsGear)
+        {
+            // Gear sized to sit proportionally with the chevron/title beside it (scribe-settings-followups 4.2):
+            // 12px reads right against the 14px title, where the prior 16px looked oversized. Its base color is now
+            // pure opaque white to match the header title (feedback 2026-08-16, previously a 66%-desaturated muted
+            // grey off OnSurfaceVariant); ScribeHudGearButton owns the up-3/left-5 nudge + tap (the +10 V hover
+            // brighten is a no-op at full white, which is fine — white is the intended resting look). It is
+            // self-stateful so its state survives the HUD's ForceRebuild (mirroring ScribeFadeText).
+            headerChildren.Add(new ScribeHudGearButton(
+                baseColor: new Vector4(1f, 1f, 1f, 1f),
+                onTap: onOpenSettings));
+        }
 
         return new Row(
             spacing: 4,
             mainAxisSize: MainAxisSize.Min,
             crossAxisAlignment: CrossAxisAlignment.Center,
-            children: new Widget[] { collapseToggle, gear });
+            children: headerChildren);
     }
 
     /// <summary>Full duration of the destructive-pending (Unpin/Delete) text fade, matched to the HUD pin
@@ -1490,6 +1502,23 @@ internal sealed class HudPinsContent : StatelessWidget
         // by the item-kind branch (it corrupts the resolved name in BuildHudItemContent instead).
         string rowText = Corrupt(row.Text, seedOffset: row.TaskId.GetHashCode());
 
+        Widget rowBody;
+        if (row.Kind == ScribeBlockKind.Text)
+        {
+            // A pinned note is text-only on the HUD: no checkbox, no unpin. Unpin from the Pin Tab.
+            Widget text = new ScribeFadeText(
+                fading: row.FadingOut,
+                durationMs: FadeWindowMs,
+                text: rowText,
+                style: textStyle);
+            rowBody = new Row(
+                spacing: 6,
+                mainAxisSize: MainAxisSize.Max,
+                crossAxisAlignment: CrossAxisAlignment.Start,
+                children: new Widget[] { new Expanded(child: text) });
+        }
+        else
+        {
         var checkbox = new Checkbox(
             value: row.Done,
             onChanged: _ => onToggleRow(row.DocId, row.TaskId, row.Done),
@@ -1509,7 +1538,6 @@ internal sealed class HudPinsContent : StatelessWidget
                 LabelStyle = textStyle,   // unused (no label) but required by the struct
             });
 
-        Widget rowBody;
         if (row.IsItemKind)
         {
             // A pinned Tracker/Link renders the referenced item's icon + name (+ a have/need counter on the
@@ -1554,6 +1582,7 @@ internal sealed class HudPinsContent : StatelessWidget
                     // Expanded so the (SoftWrap) text wraps within the remaining fixed width.
                     new Expanded(child: text),
                 });
+        }
         }
 
         // A Depth-1 subtask adds a left inset so a pinned subtask reads as nested — the HUD analog of the
@@ -1616,7 +1645,7 @@ internal sealed class HudPinsContent : StatelessWidget
         }
 
         var children = new List<Widget>();
-        if (row.IsTracker)
+        if (row.IsCarriedCountTracked)
         {
             // A "have / need" counter on the LEFT (future Crafting tasks inherit this). Emphasis INVERTED
             // (7.11g): an in-progress count reads STRONG (the row's bright near-white, bold — still collecting);
@@ -1666,34 +1695,34 @@ internal sealed class HudPinsContent : StatelessWidget
         // metrics exactly as it collapses.
         string rowText = Corrupt(row.Text, seedOffset: row.TaskId.GetHashCode());
 
+        Widget body = row.IsItemKind
+            ? new Expanded(child: new Opacity(0f, BuildHudItemContent(row, textStyle, interactive: false)))
+            : new Expanded(child: new Opacity(0f, new Text(rowText, textStyle)));
+
+        var ghostChildren = new List<Widget>();
+        if (row.Kind != ScribeBlockKind.Text)
+        {
+            ghostChildren.Add(new Checkbox(
+                value: row.Done,
+                onChanged: null,
+                size: checkboxSize,
+                style: new CheckboxStyle
+                {
+                    CheckColor = new Vector4(0.867f, 0.867f, 0.867f, 1f),
+                    BackgroundColor = new Vector4(0.28f, 0.28f, 0.28f, 0.75f),
+                    BorderColor = new Vector4(0.8f, 0.8f, 0.8f, 0.75f),
+                    BorderThickness = 1.5f,
+                    CornerRadius = 2f,
+                    LabelStyle = textStyle,
+                }));
+        }
+        ghostChildren.Add(body);
+
         Widget ghost = new Row(
             spacing: 6,
             mainAxisSize: MainAxisSize.Max,
             crossAxisAlignment: CrossAxisAlignment.Start,
-            children: new Widget[]
-            {
-                // A frozen (disabled) checkbox mirroring the row's last done-state — no onChanged, so it
-                // can't be toggled while it collapses. Same grayscale HUD style as the live row's checkbox.
-                new Checkbox(
-                    value: row.Done,
-                    onChanged: null,
-                    size: checkboxSize,
-                    style: new CheckboxStyle
-                    {
-                        CheckColor = new Vector4(0.867f, 0.867f, 0.867f, 1f),
-                        BackgroundColor = new Vector4(0.28f, 0.28f, 0.28f, 0.75f),
-                        BorderColor = new Vector4(0.8f, 0.8f, 0.8f, 0.75f),
-                        BorderThickness = 1.5f,
-                        CornerRadius = 2f,
-                        LabelStyle = textStyle,
-                    }),
-                // For an item-kind row, freeze the SAME item content (icon + name + Tracker counter) at zero
-                // opacity so the collapsing ghost matches the live row's metrics exactly; else the plain text.
-                // Non-interactive (no hyperlink) — the ghost is inert while it collapses.
-                row.IsItemKind
-                    ? new Expanded(child: new Opacity(0f, BuildHudItemContent(row, textStyle, interactive: false)))
-                    : new Expanded(child: new Opacity(0f, new Text(rowText, textStyle))),
-            });
+            children: ghostChildren);
 
         // Match the live row's Depth-1 indent so the collapsing ghost keeps identical metrics (task-subtasks 5.1).
         if (row.Depth > 0)

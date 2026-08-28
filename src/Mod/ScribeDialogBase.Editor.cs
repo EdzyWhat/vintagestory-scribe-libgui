@@ -63,7 +63,7 @@ public abstract partial class ScribeDialogBase
         // action whose whole point is the visible rescaling of the ingredient list, so the rebuild is warranted.
         if (block.IsCraft)
         {
-            ReconcileCraftFromSignature(scratch, block);
+            RescaleCraftFromSignature(scratch, block);
             RebuildBody();
         }
     }
@@ -287,45 +287,29 @@ public abstract partial class ScribeDialogBase
         var block = scratch.Blocks[index];
         if (!block.IsCompletable) return;
 
-        bool nowDone = !block.Done;
         Guid taskId = block.TaskId;
-
-        if (!scratch.ToggleTask(index)) return;
+        var behavior = modSystem.MySettings.SubtaskBehavior;
+        var outcome = ScribeCompletion.ApplyLocal(scratch, taskId, modSystem.MySettings.CompletionPolicy, behavior);
+        if (!outcome.Toggled) return;
+        bool nowDone = outcome.NowDone;
         isDirty = true;
         TraceScroll($"complete {index} done={nowDone} policy={modSystem.MySettings.CompletionPolicy}");
-
-        // Apply the policy only on a transition INTO done — unchecking never sinks/deletes/unpins.
-        if (nowDone)
+        if (outcome.ShouldRemovePin)
         {
-            switch (modSystem.MySettings.CompletionPolicy)
-            {
-                case ScribeCompletionPolicy.Delete:
-                    // Drop the row (with the collapse animation + focus fix-up); the flush's
-                    // ReconcileActorPins then removes any pin on the now-gone task. DeleteEditorBlock
-                    // owns the rebuild, so return without the focus re-home below.
-                    DeleteEditorBlock(index);
-                    return;
-                case ScribeCompletionPolicy.Sink:
-                    // Move the (now-done) task to the document bottom — a real reorder of the shared doc
-                    // once flushed, matching every other surface. ReorderEditorBlock owns the rebuild and
-                    // keeps the moved row focused; a task already last is a safe no-op there. anchorViewport:
-                    // true holds the scroll where it was (design: Sink completion shouldn't yank the viewport
-                    // to the bottom the row sinks to — see the ReorderEditorBlock remarks + Phase 2 trace).
-                    ReorderEditorBlock(index, scratch.Blocks.Count - 1, anchorViewport: true);
-                    return;
-                case ScribeCompletionPolicy.Unpin:
-                    // The task stays, so the flush's snapshot reconcile keeps the pin — unpin explicitly.
-                    if (IsPinnedForMe(taskId)) SendSetPin(taskId, false);
-                    break;
-                case ScribeCompletionPolicy.UnpinSink:
-                    // Unpin + sink: move the task to the bottom (like Sink), AND unpin it (like Unpin).
-                    ReorderEditorBlock(index, scratch.Blocks.Count - 1, anchorViewport: true);
-                    if (IsPinnedForMe(taskId)) SendSetPin(taskId, false);
-                    return;
-                case ScribeCompletionPolicy.Keep:
-                default:
-                    break;
-            }
+            foreach (var id in outcome.AffectedTaskIds)
+                if (IsPinnedForMe(id)) SendSetPin(id, false);
+        }
+        foreach (var id in outcome.DeletedTaskIds)
+            if (IsPinnedForMe(id)) SendSetPin(id, false);
+
+        bool rangeOrMove = outcome.AffectedTaskIds.Count > 1
+            || outcome.DeletedTaskIds.Count > 0
+            || (nowDone && modSystem.MySettings.CompletionPolicy is ScribeCompletionPolicy.Delete
+                or ScribeCompletionPolicy.Sink or ScribeCompletionPolicy.UnpinSink);
+        if (rangeOrMove)
+        {
+            RebuildBody();
+            return;
         }
 
         // Keep/Unpin (and any un-check): no rebuild happened, so re-home the caret to the row that held
@@ -352,20 +336,19 @@ public abstract partial class ScribeDialogBase
         if (scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
         TraceScroll($"delete {index}");
 
-        // Delete the block from scratch immediately (data model + autosave stay correct at once). The
-        // visual removal is now owned by ScribeAnimatedList (D0 / extract-animated-task-list §6.1): on the
-        // RebuildBody below, the container sees this TaskId absent from the row set and collapses its frozen
-        // ghost out in place, then self-cleans — no dialog-side snapshot / departing-row map / cleanup flag.
-        if (!scratch.DeleteBlock(index)) return; // deletion refused: nothing removed, no departure
+        Guid taskId = scratch.Blocks[index].TaskId;
+        var deleted = ScribeCompletion.ApplyDelete(scratch, taskId, modSystem.MySettings.SubtaskBehavior);
+        if (deleted.Count == 0) return; // deletion refused: nothing removed, no departure
+        int removedCount = deleted.Count;
 
         isDirty = true;
 
         // Fix up the focused index across the deletion: the focused row is gone (clear), or sat after
-        // the deleted one (shift up by one), or before it (unchanged).
+        // the deleted range (shift up by the number removed), or before it (unchanged).
         if (focusedEditIndex is { } f)
         {
-            if (f == index) focusedEditIndex = null;
-            else if (f > index) focusedEditIndex = f - 1;
+            if (f >= index && f < index + removedCount) focusedEditIndex = null;
+            else if (f >= index + removedCount) focusedEditIndex = f - removedCount;
         }
 
         // Re-home the caret after the reconcile. Pressing the (non-IFocusable) delete button already blurred
@@ -401,16 +384,15 @@ public abstract partial class ScribeDialogBase
         RebuildBody();
     }
 
-    /// <summary>Per-row pin toggle (task rows only; the pin control is absent on text-section rows).
-    /// Pinning is a per-player action now, NOT document state: fire a lock-free
-    /// <see cref="ScribeSetPinMessage"/> keyed by the task's stable id, toggled against the client's
-    /// own pin cache. It never touches the scratch document, the edit lock, or autosave. The server
-    /// re-pushes this player's set, which lands in <see cref="OnMyPinsChanged"/> and repaints the row.</summary>
+    /// <summary>Per-row pin toggle (any block kind, including Text notes). Pinning is a per-player
+    /// action now, NOT document state: fire a lock-free <see cref="ScribeSetPinMessage"/> keyed by the
+    /// task's stable id, toggled against the client's own pin cache. It never touches the scratch
+    /// document, the edit lock, or autosave. The server re-pushes this player's set, which lands in
+    /// <see cref="OnMyPinsChanged"/> and repaints the row.</summary>
     private void TogglePinnedEditorTask(int index)
     {
         if (scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
         var block = scratch.Blocks[index];
-        if (!block.IsCompletable) return; // no pin control on a text section (Task/Tracker/Link are all pinnable)
         // Tier cap (scribe-document-policy): the tablet tier allows only 1 pin. Unpinning is always
         // allowed; pinning a new task at the cap seamlessly SWAPS — the older pin is released so the
         // new one fits. Uncapped tiers (Lectern/Notebook) just pin.
@@ -476,32 +458,48 @@ public abstract partial class ScribeDialogBase
     {
         if (scratch is null) return;
         TraceScroll($"reorder {from}->{to} anchor={anchorViewport} preserveFocus={preserveFocusedRow}");
-        if (from == to)
+
+        int start = from;
+        int end = from + 1;
+        if (from >= 0 && from < scratch.Blocks.Count && scratch.Blocks[from].Depth == 0)
+            end = scratch.OwnedRun(from).End; // cluster [from, runEnd); empty run → from+1
+
+        bool dropOnCluster = to >= start && to < end;
+        if (from == to || dropOnCluster)
         {
-            // Released in place (or a grip click that never dragged): no edit — but the grip press already
-            // blurred the focused field via LibGUI's DispatchPointerDown focus-clear (the grip isn't
-            // IFocusable), so re-home the caret to the row that was being edited or nothing else will
-            // (a05caret1). No rebuild is needed to move the doc; RequestFocus alone re-grants focus.
+            // Released in place (or a grip click that never dragged, or drop onto own children): no edit —
+            // but the grip press already blurred the focused field via LibGUI's DispatchPointerDown
+            // focus-clear (the grip isn't IFocusable), so re-home the caret to the row that was being
+            // edited or nothing else will (a05caret1). No rebuild is needed to move the doc; RequestFocus
+            // alone re-grants focus.
             if (focusedEditIndex is { } held && held < editorFocusNodes.Count) FocusEditorRow(held);
             return;
         }
-        if (!scratch.MoveBlock(from, to)) return;
+
+        Guid? preservedId = null;
+        if (preserveFocusedRow && focusedEditIndex is { } pf && pf < scratch.Blocks.Count)
+            preservedId = scratch.Blocks[pf].TaskId;
+
+        int len = end - start;
+        bool ok = len == 1
+            ? scratch.MoveBlock(from, to)
+            : scratch.MoveRange(start, end, to);
+        if (!ok) return;
 
         isDirty = true;
-        // Where the moved slot's neighbors land: MoveBlock removes at `from` and inserts at `to`, so an
-        // index strictly between them shifts one step toward `from` (up by one when sinking down, down by
-        // one when rising up); `from` itself becomes `to`; anything outside the span is unmoved.
-        int ShiftIndex(int x) =>
-            x == from ? to
-            : from < to ? (x > from && x <= to ? x - 1 : x)
-            : (x >= to && x < from ? x + 1 : x);
+        int newStart = to < start ? to : to - len + 1;
 
         int? previousFocus = focusedEditIndex;
-        int focusTarget = preserveFocusedRow
-            // External move: keep focus on the edited row (index recomputed across the shift), NOT the moved row.
-            ? (previousFocus is { } pf ? ShiftIndex(pf) : -1)
-            // Local move: focus follows the moved row itself.
-            : to;
+        int focusTarget;
+        if (preserveFocusedRow)
+        {
+            int preserved = preservedId is { } id ? scratch.IndexOf(id) : -1;
+            focusTarget = preserved;
+        }
+        else
+        {
+            focusTarget = newStart;
+        }
         focusedEditIndex = focusTarget >= 0 ? focusTarget : (int?)null;
         SyncFocusNodesToScratch();
         // Re-home focus through the persistent node (§3.1). A reorder shifts every slot between from and to,
@@ -516,7 +514,7 @@ public abstract partial class ScribeDialogBase
         }
         else
         {
-            pendingFocusRow = to;
+            pendingFocusRow = newStart;
         }
         if (anchorViewport)
         {

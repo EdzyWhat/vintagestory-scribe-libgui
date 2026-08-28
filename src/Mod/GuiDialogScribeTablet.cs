@@ -244,6 +244,14 @@ public class GuiDialogScribeTablet : ScribeDialogBase
             // firms the row ink up as the tablet dries (wet 0.9 → fired 1.1). Rides the same tablet-only seam
             // as the glow to every cuneiform row/label; non-tablet surfaces never set it (base weight).
             CuneiformStrokeWeightScale = Readability.StrokeWeightScale,
+            // Cuneiform's line box is FontSize×LineHeightRatio (~27.7px at scale 1), taller than the
+            // Latin checkbox/grip (22px). Size those controls — and ControlSize, which the Tracker/Craft
+            // stepper and grip glyph read — to one cuneiform line so they sit on the same horizon as
+            // the glyph-font. Gated on this cuneiform branch: Notebook/Lectern and the disable-cuneiform
+            // fallback keep the settings-derived 22px. (Pin/delete also use ControlSize; they grow with
+            // the grip so the row's affordance column stays one size.)
+            CheckboxSize = style.FontSize * CuneiformMetrics.LineHeightRatio,
+            ControlSize = style.FontSize * CuneiformMetrics.LineHeightRatio,
         };
     }
 

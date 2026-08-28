@@ -230,11 +230,18 @@ public abstract partial class ScribeDialogBase
     /// re-pushes, which lands in <see cref="OnMyPinsChanged"/>).</summary>
     private void OnPinCompleteTask(Guid docId, Guid taskId)
     {
+        var pin = modSystem.MyPins.FirstOrDefault(p => p.TaskId == taskId);
+        if (pin?.Kind == ScribeBlockKind.Text)
+        {
+            OnPinUnpinTask(docId, taskId);
+            return;
+        }
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeCompleteTaskMessage
         {
             DocId = docId.ToByteArray(),
             TaskId = taskId.ToByteArray(),
             Policy = (byte)modSystem.MySettings.CompletionPolicy,
+            SubtaskBehavior = (byte)modSystem.MySettings.SubtaskBehavior,
         });
     }
 
@@ -248,6 +255,7 @@ public abstract partial class ScribeDialogBase
         {
             DocId = docId.ToByteArray(),
             TaskId = taskId.ToByteArray(),
+            SubtaskBehavior = (byte)modSystem.MySettings.SubtaskBehavior,
         });
     }
 

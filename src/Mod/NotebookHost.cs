@@ -129,6 +129,8 @@ public class NotebookHost : IScribeDocumentHost
         return false;
     }
 
+    public void PersistFromReader() => Flush();
+
     public bool MoveTaskToBottomFromReader(Guid taskId)
     {
         if (!_document.MoveTaskToBottom(taskId)) return false;

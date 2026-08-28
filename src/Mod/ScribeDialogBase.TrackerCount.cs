@@ -127,12 +127,23 @@ public abstract partial class ScribeDialogBase
     /// (see <see cref="trackerRecomputeCallbackId"/>).</summary>
     private void OnTrackerSlotModified(int slotId)
     {
+        // While paused, delayed callbacks are keyed off in-world elapsed ms and will not fire
+        // until unpause — and the 2-arg RegisterCallback throws in developer mode. Recompute
+        // now; skip coalescing (a click is at most source+dest SlotModified).
+        if (capi.IsGamePaused)
+        {
+            RecomputeTrackers();
+            return;
+        }
         if (trackerRecomputeCallbackId is not null) return;
+        // permittedWhilePaused: true — this callback only refreshes Tracker UI, so it is
+        // safe if the game pauses between register and fire. The 2-arg overload defaults
+        // false and throws in developer mode (ClientMain.RegisterCallback).
         trackerRecomputeCallbackId = capi.Event.RegisterCallback(_ =>
         {
             trackerRecomputeCallbackId = null;
             RecomputeTrackers();
-        }, 150);
+        }, 150, permittedWhilePaused: true);
     }
 
     /// <summary>Recount every Tracker from carried inventory and reconcile: push a changed count through the
@@ -209,6 +220,7 @@ public abstract partial class ScribeDialogBase
                 {
                     DocId = host.Document.DocId.ToByteArray(),
                     TaskId = block.TaskId.ToByteArray(),
+                    SubtaskBehavior = (byte)modSystem.MySettings.SubtaskBehavior,
                 });
                 break;
             case ScribeTrackerCompletion.Nothing:

@@ -1,13 +1,16 @@
 using System;
+using Gui.Core.Framework;        // ClipBehavior, RenderObject, RenderBox, RenderProxyBox
+using Gui.Rendering;             // EdgeInsets
 using Gui.Rendering.Text;        // TextStyle
 using Gui.Widgets.Basic;         // Text, Container
+using Gui.Widgets.Basic.Theming; // DefaultTextStyle (Task Text Font ancestor)
 using Gui.Widgets.Events;        // KeyboardEvent, PointerEvent
-using Gui.Widgets.Framework;     // Widget, StatefulWidget, State, BuildContext, Theme
+using Gui.Widgets.Framework;     // Widget, StatefulWidget, State, BuildContext, Theme, SingleChildWidget
 using Gui.Widgets.Input;         // TextField, TextEditingController, TextSelection, FocusNode, GestureDetector
-using Gui.Widgets.Layout;        // Row, Column, Expanded, Center, CrossAxisAlignment
+using Gui.Widgets.Layout;        // Row, Column, Expanded, Center, Padding, CrossAxisAlignment
 using Gui.Core.Layout;           // MainAxisSize
-using Gui.Widgets.Painting;      // BoxStyle
-using OpenTK.Mathematics;        // Vector4
+using Gui.Widgets.Painting;      // BoxStyle, Transform
+using OpenTK.Mathematics;        // Vector2, Vector4
 using Vintagestory.API.Client;   // GlKeys
 
 namespace Scribe;
@@ -98,7 +101,8 @@ public sealed class ScribeNumericField : StatefulWidget
         bool autoFocus = false,
         Action? onStepped = null,
         Func<float, float>? clamp = null,
-        TextStyle? textStyle = null)
+        TextStyle? textStyle = null,
+        Vector4? focusBorderColor = null)
     {
         Value = initialValue;
         Step = step;
@@ -109,6 +113,7 @@ public sealed class ScribeNumericField : StatefulWidget
         OnStepped = onStepped;
         Clamp = clamp;
         TextStyle = textStyle;
+        FocusBorderColor = focusBorderColor;
     }
 
     public float Value { get; }
@@ -140,6 +145,10 @@ public sealed class ScribeNumericField : StatefulWidget
     /// <summary>Optional explicit text style for the number input. When set, overrides the theme
     /// default so the text color matches the host dialog's surface (e.g. Scribe parchment theme).</summary>
     public TextStyle? TextStyle { get; }
+
+    /// <summary>Focused-border color for the typing box, matching task-row fields
+    /// (<see cref="ScribeRowStyle.InputFocusBorderColor"/>). Null → theme Primary.</summary>
+    public Vector4? FocusBorderColor { get; }
 
     public override State CreateState() => new ScribeNumericFieldState();
 }
@@ -253,26 +262,32 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
         if (has == _hadFocus) return;
         _hadFocus = has;
 
-        if (has) return;
-
-        // Focus lost → commit. Parse the current text (fall back to the last good value on junk).
-        if (!float.TryParse(_controller.Text, out var typed)) typed = _currentValue;
-        float committed = Widget.Clamp is not null ? Widget.Clamp(typed) : typed;
-
-        _currentValue = committed;
-        string text = committed.ToString();
-        if (_controller.Text != text)
+        if (!has)
         {
-            _controller.Value = new TextEditingValue(text, TextSelection.Collapsed(text.Length));
+            // Focus lost → commit. Parse the current text (fall back to the last good value on junk).
+            if (!float.TryParse(_controller.Text, out var typed)) typed = _currentValue;
+            float committed = Widget.Clamp is not null ? Widget.Clamp(typed) : typed;
+
+            _currentValue = committed;
+            string text = committed.ToString();
+            if (_controller.Text != text)
+            {
+                _controller.Value = new TextEditingValue(text, TextSelection.Collapsed(text.Length));
+            }
+
+            // Only write through (and thus rebuild) when the value actually changed from the mounted value. A
+            // step-button press blurs us with the value unchanged; skipping onChanged there keeps the host from
+            // rebuilding out from under the button before its tap fires (§8.2 — see the doc comment above).
+            if (Math.Abs(committed - Widget.Value) > 0.0001f)
+            {
+                Widget.OnChanged?.Invoke(committed);
+                return;
+            }
         }
 
-        // Only write through (and thus rebuild) when the value actually changed from the mounted value. A
-        // step-button press blurs us with the value unchanged; skipping onChanged there keeps the host from
-        // rebuilding out from under the button before its tap fires (§8.2 — see the doc comment above).
-        if (Math.Abs(committed - Widget.Value) > 0.0001f)
-        {
-            Widget.OnChanged?.Invoke(committed);
-        }
+        // Repaint so the typing-box border tracks focus (Primary / InputFocusBorderColor vs Border),
+        // matching ScribeMultilineField. Skipped above when onChanged already triggers a parent rebuild.
+        SetState(() => { });
     }
 
     /// <summary>Step the value by <paramref name="delta"/> (shared by the +/- buttons and arrow keys) and
@@ -315,6 +330,12 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
         float fieldHeight = Widget.Style.Height ?? 40;
         float buttonSize = fieldHeight / 2;
 
+        // Body-sized "+" / "−" overflow a half-field button (Tracker/Craft ~12.6px): LibGUI Text's
+        // layout box includes descent, Center clips the cap-height glyph at the top, and the symbols
+        // read as sitting too low. Size the glyph to 85% of the button and nudge 4% up so it optically
+        // centers; stock NumericField uses SVG StepperButtons instead of text, which is why this
+        // clone needs the extra optical correction.
+        float glyphSize = buttonSize * 0.85f;
         Widget MakeButton(string label, Action<PointerEvent> onTap) =>
             new GestureDetector(
                 onTap: onTap,
@@ -326,11 +347,13 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
                         Color = colors.Primary,
                         CornerRadius = Vector4.Zero,
                     },
-                    new Center(new Text(label, new TextStyle
-                    {
-                        FontSize = theme.TextTheme.Body.FontSize,
-                        Color = colors.OnPrimary,
-                    }))));
+                    new Center(Transform.Translate(
+                        new Text(label, new TextStyle
+                        {
+                            FontSize = glyphSize,
+                            Color = colors.OnPrimary,
+                        }),
+                        new Vector2(0f, -buttonSize * 0.04f)))));
 
         // The clamp still fires on blur (in OnFocusChanged); the visible valid-range feedback line was
         // dropped as unwanted (§8.2), so the field is just the input + its +/- step column.
@@ -342,26 +365,51 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
         var fillColor = Widget.Style.Color.W > 0
             ? Widget.Style.Color
             : colors.SurfaceHigh;
-        var borderColor = Widget.Style.BorderColor.W > 0
-            ? Widget.Style.BorderColor
+        bool focused = _focusNode.HasFocus;
+        var borderColor = focused
+            ? (Widget.FocusBorderColor ?? colors.Primary)
             : colors.Border;
+
+        // LibGUI's TextField hardcodes a 10px inset on BOTH sides (RenderTextField clip). Shift the
+        // borderless field inward so visual pad is 5px left and right; clip children after painting
+        // the chrome so the overflow does not spill into the +/- column.
+        //
+        // Chrome MUST be a RenderProxyBox (ScribeTightChrome), not a Container. Container/BoxWidget
+        // uses RenderBox.PerformLayout, which gives children *loose* constraints — a TextField with
+        // only Height then collapses to 0 width (empty beige box, unclickable). RenderProxyBox
+        // forwards the Expanded slot's tight width, so the field actually lays out.
+        const float stockTextPadX = 10f;
+        const float visualPadX = 5f;
+        float shift = stockTextPadX - visualPadX;
+        var inherited = DefaultTextStyle.Of(context);
+        var typingTextStyle = (Widget.TextStyle ?? new TextStyle { Color = colors.OnSurface })
+            .Merge(inherited);
+
+        Widget typingBox = new ScribeTightChrome(
+            fillColor,
+            borderColor,
+            borderThickness: 1f,
+            cornerRadii: Vector4.One * 4f,
+            child: new ScribeTightClip(
+                child: new Padding(
+                    EdgeInsets.Only(left: -shift, right: -shift),
+                    child: new TextField(
+                        _controller,
+                        _focusNode,
+                        new TextFieldStyle
+                        {
+                            Height = fieldHeight,
+                            FillColor = Vector4.Zero,
+                            BorderThickness = 0,
+                            TextStyle = typingTextStyle,
+                        },
+                        onKeyDown: OnFieldKeyDown))));
 
         return new Container(
             Widget.Style,
             new Row(children: new Widget[]
             {
-                new Expanded(new TextField(
-                    _controller,
-                    _focusNode,
-                    new TextFieldStyle
-                    {
-                        Height = fieldHeight,
-                        FillColor = fillColor,
-                        BorderThickness = 1,
-                        BorderColor = borderColor,
-                        TextStyle = Widget.TextStyle ?? new TextStyle { Color = colors.OnSurface },
-                    },
-                    onKeyDown: OnFieldKeyDown)),
+                new Expanded(typingBox),
                 new Column(children: new Widget[]
                 {
                     MakeButton("+", _ => Adjust(Widget.Step)),
@@ -381,4 +429,61 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
         _internalFocusNode?.Dispose();
         base.Dispose();
     }
+}
+
+/// <summary>
+/// A single-child box that paints fill/border/clip like a <c>Container</c> but lays out its child
+/// with the <b>same</b> constraints it received. LibGUI <c>Container</c> → <c>BoxWidget</c> →
+/// <c>RenderBox.PerformLayout</c> always passes <c>LayoutConstraints.Loose</c>, so a stock
+/// <see cref="TextField"/> (Height set, Width unset) inside an <c>Expanded</c> <c>Container</c>
+/// collapses to 0px wide. <see cref="RenderProxyBox"/> forwards tight width from <c>Expanded</c>.
+/// </summary>
+internal sealed class ScribeTightChrome : SingleChildWidget
+{
+    public ScribeTightChrome(
+        Vector4 color,
+        Vector4 borderColor,
+        float borderThickness,
+        Vector4 cornerRadii,
+        Widget? child = null)
+        : base(child)
+    {
+        Color = color;
+        BorderColor = borderColor;
+        BorderThickness = borderThickness;
+        CornerRadii = cornerRadii;
+    }
+
+    public Vector4 Color { get; }
+    public Vector4 BorderColor { get; }
+    public float BorderThickness { get; }
+    public Vector4 CornerRadii { get; }
+
+    public override RenderObject CreateRenderObject() => new RenderProxyBox();
+
+    public override void UpdateRenderObject(RenderObject renderObject)
+    {
+        var box = (RenderBox)renderObject;
+        box.Color = Color;
+        box.BorderColor = BorderColor;
+        box.BorderThickness = BorderThickness;
+        box.CornerRadii = CornerRadii;
+        box.ClipBehavior = ClipBehavior.None;
+    }
+}
+
+/// <summary>
+/// Clips a child to this box without painting fill or border. Nested inside
+/// <see cref="ScribeTightChrome"/> so the 1px chrome stroke is not shaved by an anti-aliased clip
+/// (stock <c>RenderBox.Paint</c> clips before drawing the border, which made the numeric field look
+/// thinner than <c>ScribeMultilineField</c>).
+/// </summary>
+internal sealed class ScribeTightClip : SingleChildWidget
+{
+    public ScribeTightClip(Widget? child = null) : base(child) { }
+
+    public override RenderObject CreateRenderObject() => new RenderProxyBox();
+
+    public override void UpdateRenderObject(RenderObject renderObject)
+        => ((RenderBox)renderObject).ClipBehavior = ClipBehavior.AntiAlias;
 }

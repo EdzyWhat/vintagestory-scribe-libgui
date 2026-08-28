@@ -171,6 +171,7 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     GuestbookStore IScribeDocumentHost.Guestbook => _guestbook;
     void IScribeDocumentHost.SetTaskDoneFromReader(Guid taskId, bool done) => SetTaskDoneFromReader(taskId, done);
     bool IScribeDocumentHost.DeleteTaskFromReader(Guid taskId) => DeleteTaskFromReader(taskId);
+    void IScribeDocumentHost.PersistFromReader() => PersistFromReader();
     bool IScribeDocumentHost.MoveTaskToBottomFromReader(Guid taskId) => MoveTaskToBottomFromReader(taskId);
     bool IScribeDocumentHost.SetTaskTextFromReader(Guid taskId, string text) => SetTaskTextFromReader(taskId, text);
     bool IScribeDocumentHost.SetTrackerCurrentQuantityFromReader(Guid taskId, int qty) => SetTrackerCurrentQuantityFromReader(taskId, qty);
@@ -570,6 +571,13 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
             }
         }
         return false;
+    }
+
+    /// <summary>Server-side: persist after a Core mutation already applied to <see cref="Document"/>.</summary>
+    public void PersistFromReader()
+    {
+        if (Api is not ICoreServerAPI) return;
+        MarkDirty(redrawOnClient: true);
     }
 
     /// <summary>

@@ -119,18 +119,18 @@ public abstract partial class ScribeDialogBase
 
     /// <summary>Re-resolve a Craft parent's bound recipe (by its persisted signature) against the live recipe
     /// registry and reconcile its depth-1 ingredient run to the current batch size (add-crafting-tasks 6.3/6.4).
-    /// Shared by the create path (<see cref="ApplyCraftHandbookAppend"/>), the target-change path
-    /// (<see cref="SetEditorTrackerTargetQuantity"/>), and the on-open self-heal (<see cref="SelfHealCraftTasks"/>).
-    /// Batch math (ceil target ÷ output-per-craft) and the loose, never-delete reconciliation both live in Core
-    /// (<see cref="ScribeCraftMath"/> / <see cref="ScribeDocument.ReconcileCraftIngredients"/>); this only
-    /// supplies the VS recipe data. An unresolvable signature degrades gracefully — the parent stays a plain
-    /// output tracker and its existing children are left untouched (D3 risk mitigation). Returns whether the
-    /// block list changed size (a child was created), so callers can decide whether to re-flush.</summary>
+    /// Shared by the create path (<see cref="ApplyCraftHandbookAppend"/>) and the target-change path
+    /// (<see cref="SetEditorTrackerTargetQuantity"/>). Handbook create uses
+    /// <see cref="ScribeDocument.ReconcileCraftIngredients"/> (insert missing); the stepper uses
+    /// <see cref="ScribeDocument.RescaleCraftIngredients"/> (update targets only). An unresolvable
+    /// signature degrades gracefully — the parent stays a plain output tracker and its existing children
+    /// are left untouched (D3 risk mitigation). Returns whether the block list changed size (a child was
+    /// created), so callers can decide whether to re-flush.</summary>
     private bool ReconcileCraftFromSignature(ScribeDocument doc, ScribeBlock craftBlock)
     {
         if (!craftBlock.IsCraft) return false;
         var probe = ScribeCraftRecipeProbe.ResolveBySignature(capi, craftBlock.RecipeSignature);
-        if (probe is not { } p) return false; // unresolved signature: leave parent + children as-is
+        if (probe is not { } p) return false;
 
         int before = doc.Blocks.Count;
         int craftsNeeded = ScribeCraftMath.CraftsNeeded(craftBlock.TargetQuantity, p.OutputPerCraft);
@@ -138,21 +138,15 @@ public abstract partial class ScribeDialogBase
         return doc.Blocks.Count != before;
     }
 
-    /// <summary>On editor entry, re-heal every Craft parent in the freshly seeded scratch (add-crafting-tasks
-    /// 6.4 "on document open"): re-resolve each bound recipe and reconcile its ingredient run, so a recipe that
-    /// changed since last save (or a child deleted in a prior session and now re-editable) is brought current
-    /// without the player touching the target. Never deletes (Core reconcile contract). Sets
-    /// <see cref="isDirty"/> only when a child was actually created, so a clean open stays clean (no spurious
-    /// flush). Called from <see cref="EnterEditorMode"/> after the scratch seed + empty-purge and BEFORE
-    /// <see cref="SyncFocusNodesToScratch"/> so the focus-node count matches the healed block list.</summary>
-    private void SelfHealCraftTasks()
+    /// <summary>Stepper-only: rescale matched ingredient children; never insert.</summary>
+    private bool RescaleCraftFromSignature(ScribeDocument doc, ScribeBlock craftBlock)
     {
-        if (scratch is null) return;
-        bool changed = false;
-        // Snapshot: reconcile mutates scratch.Blocks, so iterate a stable copy of the current Craft parents.
-        foreach (var craft in scratch.Blocks.Where(b => b.IsCraft).ToList())
-            changed |= ReconcileCraftFromSignature(scratch, craft);
-        if (changed) isDirty = true;
+        if (!craftBlock.IsCraft) return false;
+        var probe = ScribeCraftRecipeProbe.ResolveBySignature(capi, craftBlock.RecipeSignature);
+        if (probe is not { } p) return false;
+
+        int craftsNeeded = ScribeCraftMath.CraftsNeeded(craftBlock.TargetQuantity, p.OutputPerCraft);
+        return doc.RescaleCraftIngredients(craftBlock.TaskId, p.Ingredients, p.Notes, craftsNeeded);
     }
 
     /// <summary>Shared deferral for a Handbook-originated append (item or guide-page). If already editing, run

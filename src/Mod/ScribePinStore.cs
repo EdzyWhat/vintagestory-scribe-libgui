@@ -94,13 +94,13 @@ public sealed class ScribePinStore
     public bool SetPin(string playerUid, Guid docId, Guid taskId, double pinnedAtTotalHours, string lastKnownText, bool lastKnownDone,
         ScribeBlockKind kind = ScribeBlockKind.Task, string? linkTarget = null,
         string? targetItemCode = null, int targetQuantity = 1, int currentQuantity = 0, string? linkLabel = null,
-        int depth = 0)
+        int depth = 0, ScribeDocument? source = null)
     {
         var list = _pins.TryGetValue(playerUid, out var existing) ? existing : _pins[playerUid] = new List<ScribePinnedRef>();
         if (list.Any(p => p.OwnerDocId == docId && p.TaskId == taskId)) return false; // idempotent
         if (list.Count >= ScribePinCodec.MaxPinsPerPlayer) return false;
 
-        list.Add(new ScribePinnedRef
+        var pin = new ScribePinnedRef
         {
             OwnerDocId = docId,
             TaskId = taskId,
@@ -108,22 +108,15 @@ public sealed class ScribePinStore
             Orphaned = false,
             LastKnownText = lastKnownText,
             LastKnownDone = lastKnownDone,
-            // Snapshot the kind (and a Link's target) so the HUD can render/act on the pin by kind even
-            // when the source is unloaded — most importantly opening a pinned Link's Handbook page (5.5).
             Kind = kind,
             LinkTarget = linkTarget,
-            // Snapshot the Tracker's target item + have/need counts so a pinned Tracker renders its
-            // icon + name + counter with the source document unloaded (add-tracker-link-tasks 7.8).
             TargetItemCode = targetItemCode,
             TargetQuantity = targetQuantity,
             CurrentQuantity = currentQuantity,
-            // Snapshot a guide-page Link's display title so a pinned guide-page Link renders its name
-            // with no item to resolve it from (add-tracker-link-tasks 7.6).
             LinkLabel = linkLabel,
-            // Snapshot the subtask depth so a pinned subtask indents on the HUD/Pin Tab like the other
-            // surfaces (add-crafting-tasks / task-subtasks 5.1).
             Depth = depth,
-        });
+        };
+        ScribePinOrdering.PlaceNewPin(list, pin, source);
         return true;
     }
 

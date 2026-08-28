@@ -47,8 +47,8 @@ internal readonly record struct ScribeEditRowData(
     /// Craft parent (both count the viewer's carried inventory — add-crafting-tasks 9.2). Mirrors
     /// <see cref="ScribeBlock.IsCarriedCountTracked"/>.</summary>
     public bool IsCarriedCountTracked => IsTracker || IsCraft;
-    /// <summary>Task, Tracker, and Link all carry a Done flag, so all three get a completion checkbox + pin;
-    /// only a freeform Text section doesn't.</summary>
+    /// <summary>Task, Tracker, Link, and Craft all carry a Done flag, so they get a completion checkbox;
+    /// a freeform Text section doesn't. Pin is offered on every kind (including notes).</summary>
     public bool Completable => Kind != ScribeBlockKind.Text;
     /// <summary>The row's display label: a Craft parent frames its output name ("Craft Iron Ingot"), a
     /// Tracker/Link shows its resolved item name (its own Text is empty), a Task/Text shows its authored
@@ -88,7 +88,7 @@ internal sealed class ScribeFrozenEditorRow : StatelessWidget
             // Grip-column spacer (invisible, uninteractable), matching the editor row's far-left grip (same
             // GripInsets, §10.4) so the ghost's columns line up with its neighbors as it collapses.
             new Padding(
-                ScribeRowControlNudge.GripInsets(style),
+                ScribeRowControlNudge.GripInsets(style, data.IsItemKind),
                 child: new Opacity(
                     opacity: 0f,
                     child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant))),
@@ -100,7 +100,7 @@ internal sealed class ScribeFrozenEditorRow : StatelessWidget
             // be toggled while it collapses. Task, Tracker, and Link all carry a Done flag (Completable).
             // Tick color routes through the row style's CheckTickColor seam (§11) so it matches the live rows.
             children.Add(new Padding(
-                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
+                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style, data.IsItemKind)),
                 child: ScribeRowControlNudge.BuildTaskCheckbox(context, style, data.Done, onChanged: null)));
         }
 
@@ -119,7 +119,7 @@ internal sealed class ScribeFrozenEditorRow : StatelessWidget
                 mainAxisSize: MainAxisSize.Max,
                 children: children));
 
-        if (data.Completable && data.Pinned)
+        if (data.Pinned)
         {
             rowBody = new Container(
                 style: new BoxStyle { Color = ScribeRowConstants.PinnedTint(colors) },
@@ -322,21 +322,37 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
     // is the row the cursor is currently over (the prospective drop). Both null when no drag active.
     private int? dragFromIndex;
     private int? dragOverIndex;
+    /// <summary>True after a grip drag started this gesture. Survives the SetState remount that
+    /// <see cref="OnRowDragStart"/> triggers, so a from==to release still suppresses <see cref="OnGripTap"/>.</summary>
+    private bool skipGripTap;
 
     // The add-kind picker (selected kind + open/closed) is a self-contained widget in the footer
     // (ScribeAddKindPicker), which owns that state so its floating drop-up menu can manage its own overlay
     // entries; see BuildFooterButtons.
 
-    /// <summary>Grip pressed: begin a drag from this row. The event dispatcher auto-captures the grip's
-    /// element on press, so the subsequent moves/release keep arriving here even as the cursor crosses
-    /// sibling rows (the same mechanism Scrollbar's thumb relies on).</summary>
+    /// <summary>Grip pressed: reset the tap-suppression flag for this gesture. Drag itself starts only
+    /// after the pointer moves past a threshold (task-subtasks D11).</summary>
+    private void OnRowGripPress() => skipGripTap = false;
+
+    /// <summary>Grip moved past the drag threshold: begin a drag from this row. The event dispatcher
+    /// auto-captures the grip's element on press, so the subsequent moves/release keep arriving here even
+    /// as the cursor crosses sibling rows (the same mechanism Scrollbar's thumb relies on).</summary>
     private void OnRowDragStart(int index)
     {
+        skipGripTap = true;
         SetState(() =>
         {
             dragFromIndex = index;
             dragOverIndex = index;
         });
+    }
+
+    /// <summary>A tap on the grip (press and release without starting a drag) toggles depth. Once a
+    /// drag has started this gesture, skip — including a from==to cancel.</summary>
+    private void OnGripTapAttempt(int index)
+    {
+        if (skipGripTap) { skipGripTap = false; return; }
+        Widget.OnGripTap(index);
     }
 
     /// <summary>A row reports the cursor entered it during a drag. The dispatcher fires enter/exit on
@@ -418,7 +434,8 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                     onDragStart: OnRowDragStart,
                     onDragOver: OnRowDragOver,
                     onDragEnd: OnRowDragEnd,
-                    onGripTap: Widget.OnGripTap,
+                    onGripPress: OnRowGripPress,
+                    onGripTap: OnGripTapAttempt,
                     // Non-null only on the tablet: its item-row names open the Handbook (enable-tablet-row-links).
                     onOpenLink: Widget.OnOpenLink,
                     style: Widget.Style,
@@ -699,6 +716,7 @@ internal sealed class ScribeEditRow : StatefulWidget
         Action<int> onDragStart,
         Action<int> onDragOver,
         Action onDragEnd,
+        Action onGripPress,
         Action<int> onGripTap,
         ScribeRowStyle style,
         System.Action<Guid>? onOpenLink = null,
@@ -728,6 +746,7 @@ internal sealed class ScribeEditRow : StatefulWidget
         OnDragStart = onDragStart;
         OnDragOver = onDragOver;
         OnDragEnd = onDragEnd;
+        OnGripPress = onGripPress;
         OnGripTap = onGripTap;
         OnOpenLink = onOpenLink;
         Style = style;
@@ -774,6 +793,9 @@ internal sealed class ScribeEditRow : StatefulWidget
     public Action<int> OnDragStart { get; }
     public Action<int> OnDragOver { get; }
     public Action OnDragEnd { get; }
+    /// <summary>Grip pressed (before any movement). Clears the parent’s tap-suppression so a genuine
+    /// tap after a cancelled drag still nests.</summary>
+    public Action OnGripPress { get; }
     public Action<int> OnGripTap { get; }
     /// <summary>Non-null only on the tablet (enable-tablet-row-links): clicking a Link/Tracker/Craft row's
     /// name label opens the item's Handbook page, keyed by TaskId. Null elsewhere, so the label stays a plain
@@ -787,6 +809,15 @@ internal sealed class ScribeEditRow : StatefulWidget
 internal sealed class ScribeEditRowState : State<ScribeEditRow>
 {
     private bool done;
+    /// <summary>Pointer position at grip-press, used to start a drag only after movement (D11).</summary>
+    private float gripPressX, gripPressY;
+    /// <summary>True once this row's grip crossed the drag threshold this press (lost on remount;
+    /// <see cref="ScribeEditRow.IsDragSource"/> covers the post-remount case).</summary>
+    private bool localGripDragStarted;
+    /// <summary>True between this grip's press and release. Hover moves must not start a drag.</summary>
+    private bool gripPressed;
+    /// <summary>Pixels of movement before a grip press becomes a reorder drag rather than a nest tap.</summary>
+    private const float GripDragThreshold = 5f;
     /// <summary>True while the pointer is over this row: the delete and (task-only) pin controls are
     /// hidden until then (lectern-gui-shell "Row icons are hover-conditional"). Tracked with a
     /// row-level <see cref="MouseRegion"/>; hit-testing is innermost-first and enter/exit propagate up
@@ -847,27 +878,39 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
     /// dialog-resolved snapshot on the row data, so this stays capi-free.</summary>
     private Widget BuildItemEditorContent(ColorScheme colors, ScribeRowStyle style, int index)
     {
-        float iconSize = style.ControlSize * 1.4f;
+        float iconSize = ScribeRowConstants.ItemIconSize
+            * (style.ControlSize / ScribeRowConstants.RowCheckboxSize);
+        float iconVisual = ScribeLinkIcon.VisualSize(iconSize, Widget.Data.LinkTarget);
+        float stepperHeight = Widget.Data.IsCarriedCountTracked ? style.ControlSize * 1.15f : 0f;
+        float bandHeight = MathF.Max(iconVisual, stepperHeight);
         var rowChildren = new List<Widget>();
 
         if (Widget.Data.IsCarriedCountTracked)
         {
             // Inline target-quantity stepper, placed at the LEFT of the row (feedback 6.3): the row's
             // hover-revealed delete/pin buttons float over the RIGHT edge, so a right-hand stepper sat
-            // UNDER them and was unreachable (which also made the pin untappable — feedback 6.9). Font-relative
-            // off iconSize so it scales with the row height rather than a fixed literal. The +/- button column
-            // is a fixed fieldHeight/2, so widening the total flows entirely into the text region: at
-            // 2.26·iconSize the input reads ~three digits comfortably — 60% wider than the first pass's
-            // 1.6·iconSize (whose ~1.1·iconSize input the +/- buttons were crowding, feedback 6.3 round 2).
+            // UNDER them and was unreachable (which also made the pin untappable — feedback 6.9).
+            // Height is ControlSize×1.15 (a hair taller than the checkbox); width is that height×2.
+            // No translate on the stepper — Tracker/Craft keep the field in its layout box. Centered in
+            // the icon band when the name is one line; stays at the top when the name wraps.
             // clamp keeps the target a whole number ≥ 1 (matching the Core setter); onChanged writes the
             // rounded int through to scratch via the dialog.
-            rowChildren.Add(new ScribeNumericField(
-                initialValue: Widget.Data.TargetQuantity,
-                step: 1,
-                clamp: v => v < 1 ? 1 : (float)Math.Round(v),
-                onChanged: v => Widget.OnTrackerQuantityChanged(index, (int)Math.Round(v)),
-                style: new BoxStyle { Width = iconSize * 2.26f, Height = iconSize },
-                textStyle: new TextStyle { Color = colors.OnSurface }));
+            float stepperWidth = stepperHeight * 2f;
+            rowChildren.Add(ScribeCenterIfShort.InBand(
+                new ScribeNumericField(
+                    initialValue: Widget.Data.TargetQuantity,
+                    step: 1,
+                    clamp: v => v < 1 ? 1 : (float)Math.Round(v),
+                    onChanged: v => Widget.OnTrackerQuantityChanged(index, (int)Math.Round(v)),
+                    style: new BoxStyle { Width = stepperWidth, Height = stepperHeight },
+                    textStyle: new TextStyle
+                    {
+                        Color = colors.OnSurface,
+                        FontFamily = ScribeTaskFont.Resolve(style.TaskFontFamily),
+                        FontSize = style.FontSize,
+                    },
+                    focusBorderColor: style.InputFocusBorderColor),
+                bandHeight));
         }
 
         // Guide-page book glyph tinted with the link accent (feedback 7.11d) — Primary on light surfaces, or
@@ -875,7 +918,9 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         // ScribeRowStyle.LinkColor). Row-height-neutral (7.11e/7.11f); the item icon ignores the color. The
         // Tracker's stepper still drives this editor row's height by design.
         float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
-        rowChildren.Add(ScribeLinkIcon.Build(Widget.Data.DisplayStack, Widget.Data.LinkTarget, iconSize, style.LinkColor ?? colors.Primary, lineHeight));
+        rowChildren.Add(ScribeCenterIfShort.InBand(
+            ScribeLinkIcon.Build(Widget.Data.DisplayStack, Widget.Data.LinkTarget, iconSize, style.LinkColor ?? colors.Primary, lineHeight, heightNeutral: false),
+            bandHeight));
 
         // The item name is a hyperlink ONLY where the surface opts its editor rows into link activation (the
         // tablet — enable-tablet-row-links, which has no read view). Wrap it in the same GestureDetector shape the
@@ -890,16 +935,16 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                 onPress: e => { e.Handled = true; openLink(Widget.Data.TaskId); },
                 child: ScribeItemLabel.Build(Widget.Data.Label, style.LinkColor ?? colors.Primary, style))
             : ScribeItemLabel.Build(Widget.Data.Label, colors.OnSurface, style);
-        rowChildren.Add(new Expanded(child: nameLabel));
+        rowChildren.Add(new Expanded(child: ScribeCenterIfShort.Name(nameLabel, style, bandHeight)));
 
-        // Inset by the editor field's internal padding, matching the read view's item row and the Task/Text
-        // field, so icon rows line up with text rows across a view switch. Center the icon/stepper against the
-        // (taller-than-a-line) content.
+        // No left FieldPadX: a Task row's field BOX starts immediately after the checkbox gap, and the
+        // Tracker stepper must line up with that edge (playtest: FieldPadX indented the numeric box).
+        // Keep the right inset so wrapped names don't run into the hover pin/delete.
         return new Padding(
-            EdgeInsets.Symmetric(vertical: style.FieldPadY, horizontal: style.FieldPadX),
+            EdgeInsets.Only(right: style.FieldPadX),
             child: new Row(
                 spacing: style.CheckboxTextGap,
-                crossAxisAlignment: CrossAxisAlignment.Center,
+                crossAxisAlignment: CrossAxisAlignment.Start,
                 mainAxisSize: MainAxisSize.Max,
                 children: rowChildren));
     }
@@ -938,13 +983,36 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             : new ScribeVsIconGlyph("scribegrip", style.ControlSize, gripColor);
 
         children.Add(new Padding(
-            ScribeRowControlNudge.GripInsets(style),
+            ScribeRowControlNudge.GripInsets(style, Widget.Data.IsItemKind),
             child: new GestureDetector(
-                onPress: _ => Widget.OnDragStart(index),
-                onRelease: _ => Widget.OnDragEnd(),
-                // A single tap on the grip (no drag) toggles this row's subtask depth 0↔1 (task-subtasks 5.3).
-                // The dispatcher fires OnPointerClick only for a genuine tap, so a press-hold-drag reorder never
-                // triggers this; a tap's OnDragStart→OnDragEnd pair is a from==to no-op reorder (harmless).
+                onPress: e =>
+                {
+                    gripPressed = true;
+                    localGripDragStarted = false;
+                    gripPressX = e.X;
+                    gripPressY = e.Y;
+                    Widget.OnGripPress();
+                },
+                onMove: e =>
+                {
+                    // LibGUI fires OnMove on hover as well as drag; PointerEvent.Button defaults to Left
+                    // even when the button is up. Only start a drag after an actual press on this grip.
+                    if (!gripPressed || localGripDragStarted || Widget.IsDragSource) return;
+                    float dx = e.X - gripPressX;
+                    float dy = e.Y - gripPressY;
+                    if (dx * dx + dy * dy < GripDragThreshold * GripDragThreshold) return;
+                    localGripDragStarted = true;
+                    Widget.OnDragStart(index);
+                },
+                onRelease: _ =>
+                {
+                    bool started = localGripDragStarted || Widget.IsDragSource;
+                    gripPressed = false;
+                    if (started)
+                        Widget.OnDragEnd();
+                },
+                // LibGUI fires OnPointerClick (OnTap) after up regardless of movement. Parent skipGripTap
+                // swallows the tap once a drag started, including a from==to cancel.
                 onTap: _ => Widget.OnGripTap(index),
                 child: gripGlyph)));
 
@@ -960,7 +1028,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         if (Widget.Data.Completable)
         {
             children.Add(new Opacity(contentOpacity, child: new Padding(
-                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
+                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style, Widget.Data.IsItemKind)),
                 child: ScribeRowControlNudge.BuildTaskCheckbox(
                     context, style, done,
                     _ =>
@@ -1106,7 +1174,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             // on the one-line input at any font scale rather than the old font-15 constant.
             float btnRight = gap + 1f;
             float btnTop = ScribeRowControlNudge.FloatingButtonTop(style);
-            // delete: right-most; pin: to its left (task rows only).
+            // delete: right-most; pin: to its left (every kind, including notes).
             stackChildren.Add(new Positioned(
                 right: btnRight, top: btnTop,
                 child: new ScribeRowButton(
@@ -1114,19 +1182,16 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                     iconColor: colors.Error,
                     size: btn,
                     onTap: () => Widget.OnDelete(index))));
-            // Task, Tracker, and Link are all pinnable (Completable); only a Text section isn't.
-            if (Widget.Data.Completable)
-            {
-                stackChildren.Add(new Positioned(
-                    right: btnRight + boxW + gap, top: btnTop,
-                    child: new ScribeRowButton(
-                        iconName: "scribepin",
-                        // Pinned reads "active" (accent); unpinned is muted.
-                        iconColor: Widget.Data.Pinned ? colors.Primary : colors.OnSurfaceVariant,
-                        size: btn,
-                        onTap: () => Widget.OnTogglePinned(index),
-                        iconScale: 1.15f))); // pin glyph +15% (§10.2)
-            }
+            // Task, Tracker, Link, Craft, and Text notes are all pinnable.
+            stackChildren.Add(new Positioned(
+                right: btnRight + boxW + gap, top: btnTop,
+                child: new ScribeRowButton(
+                    iconName: "scribepin",
+                    // Pinned reads "active" (accent); unpinned is muted.
+                    iconColor: Widget.Data.Pinned ? colors.Primary : colors.OnSurfaceVariant,
+                    size: btn,
+                    onTap: () => Widget.OnTogglePinned(index),
+                    iconScale: 1.15f))); // pin glyph +15% (§10.2)
         }
 
         Widget row = new Stack(stackChildren);

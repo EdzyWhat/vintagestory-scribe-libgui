@@ -38,4 +38,10 @@ public sealed class ScribeCompleteTaskMessage
     /// value back to Sink.</summary>
     [ProtoMember(3)]
     public byte Policy { get; set; }
+
+    /// <summary>The acting player's Subtask Behavior, sent as its raw byte. Defaults to 0
+    /// (<see cref="ScribeSubtaskBehavior.Bound"/>), so an absent/old client that omits this field
+    /// gets Bound; the server normalizes any unrecognized value back to Bound.</summary>
+    [ProtoMember(4)]
+    public byte SubtaskBehavior { get; set; }
 }

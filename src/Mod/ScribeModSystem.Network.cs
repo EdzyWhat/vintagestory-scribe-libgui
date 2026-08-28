@@ -85,8 +85,9 @@ public sealed partial class ScribeModSystem
         // The completion policy is a client-local preference carried in the packet; normalize an
         // unknown/hostile byte back to the safe default before applying (Sink).
         var policy = ScribePlayerSettings.NormalizePolicy((ScribeCompletionPolicy)message.Policy);
-        Trace("complete-task received from {0}: doc={1} task={2} policy={3}", fromPlayer.PlayerName, docId, taskId, policy);
-        CompleteTaskForPlayer(fromPlayer, docId, taskId, policy);
+        var behavior = ScribePlayerSettings.NormalizeSubtaskBehavior((ScribeSubtaskBehavior)message.SubtaskBehavior);
+        Trace("complete-task received from {0}: doc={1} task={2} policy={3} subtask={4}", fromPlayer.PlayerName, docId, taskId, policy, behavior);
+        CompleteTaskForPlayer(fromPlayer, docId, taskId, policy, behavior);
     }
 
     private void OnServerReceivedEditPinnedTask(IServerPlayer fromPlayer, ScribeEditPinnedTaskMessage message)
@@ -107,8 +108,9 @@ public sealed partial class ScribeModSystem
             Trace("delete-task from {0}: MALFORMED packet (docId/taskId not 16 bytes) — ignored", fromPlayer.PlayerName);
             return;
         }
-        Trace("delete-task received from {0}: doc={1} task={2}", fromPlayer.PlayerName, docId, taskId);
-        DeleteTaskForPlayer(fromPlayer, docId, taskId);
+        var behavior = ScribePlayerSettings.NormalizeSubtaskBehavior((ScribeSubtaskBehavior)message.SubtaskBehavior);
+        Trace("delete-task received from {0}: doc={1} task={2} subtask={3}", fromPlayer.PlayerName, docId, taskId, behavior);
+        DeleteTaskForPlayer(fromPlayer, docId, taskId, behavior);
     }
 
     private void OnServerReceivedSetTrackerQuantity(IServerPlayer fromPlayer, ScribeSetTrackerQuantityMessage message)

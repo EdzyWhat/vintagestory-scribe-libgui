@@ -54,8 +54,14 @@ internal static class ScribeRowConstants
     public const float RowHorizontalPadding = 2f;
 
     /// <summary>Horizontal gap between a row's checkbox and its text/input (pixels); scaled. Former
-    /// <c>ScribeClientConfig.RowCheckboxTextGap</c>.</summary>
-    public const float RowCheckboxTextGap = 6f;
+    /// <c>ScribeClientConfig.RowCheckboxTextGap</c>. Tightened 6 → 4 so the Tracker/Craft stepper sits
+    /// closer to the item icon (refine-crafting-tasks-1-3-2 playtest).</summary>
+    public const float RowCheckboxTextGap = 4f;
+
+    /// <summary>Tracker/Link/Craft item-icon size (pixels at scale 1.0); scaled with the window font via
+    /// <c>ControlSize / RowCheckboxSize</c>. Formerly <c>ControlSize × 1.4</c> (~30.8px); reduced so the
+    /// icon sits closer to the checkbox/stepper height.</summary>
+    public const float ItemIconSize = 28f;
 
     /// <summary>Checkbox widget size (pixels), shared by both views; scaled. Former
     /// <c>ScribeClientConfig.RowCheckboxSize</c>.</summary>

@@ -25,8 +25,8 @@ using Vintagestory.API.MathTools;  // BlockPos
 
 namespace Scribe;
 
-/// <summary>A value snapshot of one Pin Tab row. <see cref="Kind"/> distinguishes Task / Tracker / Link
-/// (a pinned Text section can't exist — only completable blocks pin). A Tracker/Link's icon + name are
+/// <summary>A value snapshot of one Pin Tab row. <see cref="Kind"/> distinguishes Task / Tracker / Link /
+/// Craft / Text (notes are pinnable; the HUD shows them as text only). A Tracker/Link's icon + name are
 /// resolved by the dialog (where <c>capi</c> lives) and passed in as <see cref="DisplayStack"/> /
 /// <see cref="DisplayName"/>, so the pure LibGUI row widget stays API-free — mirroring
 /// <see cref="ScribeReadRowData"/> (add-tracker-link-tasks 7.8).</summary>
@@ -461,17 +461,20 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
     private Widget BuildItemContent(ColorScheme colors, ScribeRowStyle style)
     {
         var data = Widget.Data;
-        float iconSize = style.ControlSize * 1.4f;
+        float iconSize = ScribeRowConstants.ItemIconSize
+            * (style.ControlSize / ScribeRowConstants.RowCheckboxSize);
         float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
+        float bandHeight = ScribeLinkIcon.VisualSize(iconSize, data.LinkTarget);
         // Link accent: Primary on light surfaces, or the row's override where Primary is illegible as text on
         // a dark surface (the Chalkboard slate — ScribeRowStyle.LinkColor). Guide-page book glyph (7.11d),
         // item icon grown + row-height-neutral (7.11e/7.11f).
         Vector4 linkColor = style.LinkColor ?? colors.Primary;
-        Widget icon = ScribeLinkIcon.Build(data.DisplayStack, data.LinkTarget, iconSize, linkColor, lineHeight);
+        Widget icon = ScribeLinkIcon.Build(data.DisplayStack, data.LinkTarget, iconSize, linkColor, lineHeight, heightNeutral: false);
 
         Widget nameLink = new Expanded(child: new GestureDetector(
             onPress: e => { e.Handled = true; Widget.OnOpenLink(data.TaskId); },
-            child: new Text(data.Label, new TextStyle { Color = linkColor, SoftWrap = true })));
+            child: ScribeCenterIfShort.Name(
+                new Text(data.Label, new TextStyle { Color = linkColor, SoftWrap = true }), style, bandHeight)));
 
         var rowChildren = new List<Widget>();
         if (data.IsLink)
@@ -483,20 +486,21 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
         {
             bool satisfied = data.CurrentQuantity >= data.TargetQuantity;
             // Inverted emphasis + satisfied strikethrough, shared with the read/HUD counters (7.11g/7.11h).
-            rowChildren.Add(ScribeTrackerCounterText.Build(
-                data.CurrentQuantity, data.TargetQuantity, satisfied,
-                strongColor: linkColor, mutedColor: colors.OnSurfaceVariant, lineHeight: lineHeight));
+            rowChildren.Add(ScribeCenterIfShort.InBand(
+                ScribeTrackerCounterText.Build(
+                    data.CurrentQuantity, data.TargetQuantity, satisfied,
+                    strongColor: linkColor, mutedColor: colors.OnSurfaceVariant, lineHeight: lineHeight),
+                bandHeight));
             rowChildren.Add(icon);
             rowChildren.Add(nameLink);
         }
 
-        // Inset by the editor field's internal padding, matching the Task row, so icon rows line up with text
-        // rows. Center the icon against the (taller-than-a-line) content.
+        // Same 4px left inset as the read item row (Pin and Read must match). Editor stepper stays flush.
         return new Padding(
-            EdgeInsets.Symmetric(vertical: style.FieldPadY, horizontal: style.FieldPadX),
+            EdgeInsets.Only(left: 4f, right: style.FieldPadX),
             child: new Row(
                 spacing: style.CheckboxTextGap,
-                crossAxisAlignment: CrossAxisAlignment.Center,
+                crossAxisAlignment: CrossAxisAlignment.Start,
                 mainAxisSize: MainAxisSize.Max,
                 children: rowChildren));
     }
@@ -530,7 +534,7 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
             : new ScribeVsIconGlyph("scribegrip", style.ControlSize, gripColor);
 
         children.Add(new Padding(
-            ScribeRowControlNudge.GripInsets(style),
+            ScribeRowControlNudge.GripInsets(style, Widget.Data.IsItemKind),
             child: new GestureDetector(
                 onPress: _ => Widget.OnDragStart(Widget.Index),
                 onRelease: _ => Widget.OnDragEnd(),
@@ -543,12 +547,18 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
 
         // Completion checkbox — completes with NO undo delay (the send fires immediately; see the dialog's
         // OnPinCompleteTask). Flips optimistically in its own State; the server re-push reconciles it.
+        // A pinned note has no Done: the checkbox unpins instead (Pin Tab is how you drop a HUD note).
         children.Add(new Opacity(contentOpacity, child: new Padding(
-            EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style)),
+            EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style, data.IsItemKind)),
             child: ScribeRowControlNudge.BuildTaskCheckbox(
                 context, style, done,
                 _ =>
                 {
+                    if (data.Kind == ScribeBlockKind.Text)
+                    {
+                        Widget.OnUnpin(data.DocId, data.TaskId);
+                        return;
+                    }
                     SetState(() => done = !done);
                     Widget.OnToggleComplete(data.DocId, data.TaskId);
                 }))));

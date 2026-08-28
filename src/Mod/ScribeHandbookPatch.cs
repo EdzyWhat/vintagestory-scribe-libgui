@@ -56,12 +56,11 @@ internal static class ScribeHandbookPatch
             new ClearFloatTextComponent(capi, 14f),
             new RichTextComponent(capi, Lang.Get("scribe:scribe-gui-additem-heading") + "\n", headingFont),
 
-            // The two clickable actions. Each captures the item code and dispatches to the mod system, which
-            // owns the "which Scribe surface?" resolution. A trailing newline separates the two links.
-            new LinkTextComponent(capi, Lang.Get("scribe:scribe-gui-addtracker") + "\n", linkFont,
-                _ => modSystem.AddFromHandbook(ScribeAddKinds.Tracker, itemCode)),
-            new LinkTextComponent(capi, Lang.Get("scribe:scribe-gui-addlink") + "\n", linkFont,
+            // Link → Tracker → Craft (handbook-only labels; the editor Add ▾ keeps scribe-gui-add*).
+            new LinkTextComponent(capi, Lang.Get("scribe:scribe-gui-handbook-addlink") + "\n", linkFont,
                 _ => modSystem.AddFromHandbook(ScribeAddKinds.Link, itemCode)),
+            new LinkTextComponent(capi, Lang.Get("scribe:scribe-gui-handbook-addtracker") + "\n", linkFont,
+                _ => modSystem.AddFromHandbook(ScribeAddKinds.Tracker, itemCode)),
         };
 
         // One "Add Crafting Task" link per grid recipe that produces this item (add-crafting-tasks 8.2). Probed
