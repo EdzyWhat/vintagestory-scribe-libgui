@@ -96,21 +96,26 @@ public sealed partial class ScribeModSystem
         // regular. If a future surface needs regular Caudex, ship the regular under its own family name (or
         // a distinct alias) rather than reintroducing a Normal-weight registration here.
         var bold = loader.LoadFont("scribe", "textures/fonts/caudex-bold.ttf");
+        bool caudexRegistered = bold is not null;
         if (bold is null)
         {
             // Missing/corrupt asset: LoadFont already logged the failure. Leave Scribe's text on its
             // current family (sans-serif) rather than crashing — the mod stays fully usable without the face.
+            // Do NOT return: the other bundled task fonts still register, and BuildMetrics falls back to
+            // sans-serif as the line-box peg (peg-task-fonts-to-caudex).
             api.Logger.Warning("[scribe] bundled font 'Caudex' failed to load; title stays on the default family");
-            return;
         }
-        // FontRegistry.GetCustomTypeface is keyed by (family, weight) and returns null on a miss — a weight
-        // with no registration falls through to a system font. Register the bold cut under all four weights
-        // so every lookup resolves to it.
-        foreach (var weight in new[] { FontWeight.Normal, FontWeight.SemiBold, FontWeight.Bold, FontWeight.Italic })
+        else
         {
-            FontRegistry.RegisterCustomFont("Caudex", weight, bold);
+            // FontRegistry.GetCustomTypeface is keyed by (family, weight) and returns null on a miss — a weight
+            // with no registration falls through to a system font. Register the bold cut under all four weights
+            // so every lookup resolves to it.
+            foreach (var weight in new[] { FontWeight.Normal, FontWeight.SemiBold, FontWeight.Bold, FontWeight.Italic })
+            {
+                FontRegistry.RegisterCustomFont("Caudex", weight, bold);
+            }
+            api.Logger.Notification("[scribe] bundled font 'Caudex' (bold cut) registered under all weights for the lectern dialog title");
         }
-        api.Logger.Notification("[scribe] bundled font 'Caudex' (bold cut) registered under all weights for the lectern dialog title");
 
         // Task-text font selector faces (v1-release-checklist §6): the player picks one of these for the
         // Lectern's task/note rows. Each is a single-cut regular TTF registered under ALL weights (same
@@ -140,6 +145,7 @@ public sealed partial class ScribeModSystem
             }
         }
         api.Logger.Notification("[scribe] bundled task-text fonts registered for the settings font selector");
+        ScribeTaskFont.BuildMetrics(api.Logger, caudexRegistered);
     }
 
     /// <summary>

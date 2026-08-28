@@ -5,10 +5,11 @@ using Gui.Widgets.Framework;       // Widget
 namespace Scribe;
 
 /// <summary>
-/// Roots a tab's widget subtree in a <see cref="DefaultTextStyle"/> carrying the player's Task Text Font
-/// and window-scaled base size, so descendant <c>Text</c> widgets inherit them instead of each threading
-/// <c>FontFamily = ScribeTaskFont.Resolve(...)</c> by hand (adopt-libgui-31-improvements). 3.1.0's
-/// <c>Text.Build</c> does <c>StyleOverride?.Merge(DefaultTextStyle.Of(context))</c>, so a partial
+/// Roots a <b>task-text</b> tab's widget subtree in a <see cref="DefaultTextStyle"/> carrying the
+/// player's Task Text Font and window-scaled pegged size, so descendant <c>Text</c> widgets inherit
+/// them instead of each threading <c>FontFamily = ScribeTaskFont.Resolve(...)</c> by hand
+/// (adopt-libgui-31-improvements). Settings chrome uses <see cref="WrapSettingsChrome"/> instead.
+/// 3.1.0's <c>Text.Build</c> does <c>StyleOverride?.Merge(DefaultTextStyle.Of(context))</c>, so a partial
 /// per-widget override (e.g. just <c>Color</c>) inherits family + size from this ancestor.
 ///
 /// <para><b>Merge landmine (verified from the shipped <c>Gui.dll</c>):</b> <c>override.Merge(base)</c>
@@ -21,16 +22,32 @@ namespace Scribe;
 /// </summary>
 internal static class ScribeTextDefaults
 {
-    /// <summary>The ancestor style: the resolved Task Text Font family plus the tab's window-scaled base
-    /// size, every other field left at default so descendant overrides always win. Reuses
-    /// <see cref="ScribeTaskFont.Resolve"/> for the empty-default → built-in-body-face mapping.</summary>
+    /// <summary>The ancestor style: the resolved Task Text Font family plus the Caudex-matched
+    /// <em>layout</em> size (<see cref="ScribeTaskFont.LayoutSize"/> — line-box scale only, no optical).
+    /// Stock <c>Text</c> then reports Caudex's line-box; <see cref="ScribeTaskFont.OffsetWrap"/> applies
+    /// optical scale and sit as paint-only transforms. Custom painters still draw at
+    /// <see cref="ScribeTaskFont.EffectiveSize"/>.</summary>
     /// <param name="taskFontFamily">The player's stored <c>TaskFontFamily</c> (empty = built-in default).</param>
-    /// <param name="baseFontSize">The tab's scaled base font size (e.g. <c>BaseWindowFontSize * scale</c>).</param>
+    /// <param name="baseFontSize">The tab's scaled <em>nominal</em> font size (e.g. <c>BaseWindowFontSize * scale</c>).</param>
     public static TextStyle Style(string? taskFontFamily, float baseFontSize) =>
-        new() { FontFamily = ScribeTaskFont.Resolve(taskFontFamily), FontSize = baseFontSize };
+        new()
+        {
+            FontFamily = ScribeTaskFont.Resolve(taskFontFamily),
+            FontSize = ScribeTaskFont.LayoutSize(taskFontFamily, baseFontSize),
+        };
 
     /// <summary>Wraps <paramref name="child"/> in a <see cref="DefaultTextStyle"/> rooted with
     /// <see cref="Style"/>, so the whole subtree inherits the player's font + base size.</summary>
     public static DefaultTextStyle Wrap(string? taskFontFamily, float baseFontSize, Widget child) =>
         new(Style(taskFontFamily, baseFontSize), child);
+
+    /// <summary>Settings chrome: the player's LibGUI default body face at the unscaled settings size.
+    /// Does NOT follow Task Text Font or Window Text Size — those knobs live on this form and must not
+    /// restyle the form itself (peg-task-fonts-to-caudex playtest).</summary>
+    public static DefaultTextStyle WrapSettingsChrome(Widget child) =>
+        new(new TextStyle
+        {
+            FontFamily = ScribeTaskFont.DefaultFamily,
+            FontSize = ScribeRowConstants.BaseSettingsFontSize,
+        }, child);
 }

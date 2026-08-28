@@ -273,7 +273,11 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
         // Caption font family inherited from the tab's DefaultTextStyle ancestor; the smaller 13*scale
         // size is a deliberate delta and stays explicit.
         Widget policyCaption = new Text(Lang.Get("scribe:settings-completionpolicy"),
-            new TextStyle { FontSize = 13 * scale, Color = colors.OnSurfaceVariant });
+            new TextStyle
+            {
+                FontSize = ScribeTaskFont.LayoutSize(Widget.Style.TaskFontFamily, 13 * scale),
+                Color = colors.OnSurfaceVariant,
+            });
         policyCaption = ScribeGlobalTint.ShadedTooltip(
             child: policyCaption,
             // Shade the whole tooltip — bubble + text — to match the body in low light
@@ -284,7 +288,13 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                 EdgeInsets.All(6),
                 child: new Text(
                     Lang.Get("scribe:settings-completionpolicy-help"),
-                    new TextStyle { FontSize = 13 * scale, Color = colors.OnSurface, SoftWrap = true, FontFamily = taskFont })),
+                    new TextStyle
+                    {
+                        FontSize = ScribeTaskFont.LayoutSize(Widget.Style.TaskFontFamily, 13 * scale),
+                        Color = colors.OnSurface,
+                        SoftWrap = true,
+                        FontFamily = taskFont,
+                    })),
             baseTheme: Theme.Of(context),
             shade: Widget.CurrentShade);
 
@@ -474,7 +484,7 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
         Widget nameLink = new Expanded(child: new GestureDetector(
             onPress: e => { e.Handled = true; Widget.OnOpenLink(data.TaskId); },
             child: ScribeCenterIfShort.Name(
-                new Text(data.Label, new TextStyle { Color = linkColor, SoftWrap = true }), style, bandHeight)));
+                ScribeItemLabel.Build(data.Label, linkColor, style), style, bandHeight)));
 
         var rowChildren = new List<Widget>();
         if (data.IsLink)

@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scribe task-font metrics</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Unicase:wght@400;700&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    @font-face {
+      font-family: "Caudex";
+      src: url("../../src/Mod/assets/scribe/textures/fonts/caudex-bold.ttf") format("truetype");
+      font-weight: 700;
+    }
+    @font-face {
+      font-family: "Scapholene";
+      src: url("../../src/Mod/assets/scribe/textures/fonts/scapholene-regular.ttf") format("truetype");
+    }
+    @font-face {
+      font-family: "La Belle Aurore";
+      src: url("../../src/Mod/assets/scribe/textures/fonts/labelleaurore-regular.ttf") format("truetype");
+    }
+    @font-face {
+      font-family: "Noto Sans";
+      src: url("../../src/Mod/assets/scribe/textures/fonts/notosans-regular.ttf") format("truetype");
+    }
+    @font-face {
+      font-family: "Noto Serif";
+      src: url("../../src/Mod/assets/scribe/textures/fonts/notoserif-regular.ttf") format("truetype");
+    }
+
+    :root {
+      --ink: #2c2416;
+      --paper: #f3ead8;
+      --rule: #c9b99a;
+      --accent: #6b4e2e;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 15px/1.45 system-ui, sans-serif;
+      color: var(--ink);
+      background: #e7dcc6;
+    }
+    main {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 24px 20px 64px;
+    }
+    h1 { font-size: 1.35rem; margin: 0 0 0.4rem; }
+    p.lede { margin: 0 0 1.25rem; max-width: 72ch; }
+    code { font-size: 0.9em; }
+
+    .row {
+      display: grid;
+      grid-template-columns: 168px 1fr 320px;
+      gap: 12px;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--rule);
+    }
+    .row.head {
+      font-weight: 650;
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+    .name { font-weight: 600; }
+    .auto { font-variant-numeric: tabular-nums; font-size: 12px; color: #5c5346; margin-top: 2px; }
+
+    .preview-frame {
+      position: relative;
+      height: var(--box-h, 28px);
+      background: var(--paper);
+      border: 1px solid var(--rule);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+    }
+    .preview-frame.ref { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .preview-frame::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
+      border-top: 1px dashed rgba(107, 78, 46, 0.35);
+      pointer-events: none;
+    }
+    .preview {
+      white-space: nowrap;
+      line-height: 1;
+      transform-origin: left center;
+    }
+
+    .knobs {
+      display: grid;
+      grid-template-columns: 58px 72px 1fr;
+      gap: 6px 8px;
+      align-items: center;
+    }
+    .knobs label { font-size: 12px; color: var(--accent); }
+    input[type="range"] { width: 100%; }
+    input[type="number"] { width: 72px; }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin: 18px 0 8px;
+    }
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: 0;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+    pre {
+      background: #1e1a14;
+      color: #f3ead8;
+      padding: 14px;
+      overflow: auto;
+      font-size: 12px;
+      border-radius: 4px;
+    }
+    .note { font-size: 13px; color: #5c5346; max-width: 74ch; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Task-font optical scale &amp; offset</h1>
+  <p class="lede">
+    Row <em>height</em> stays locked to Caudex’s line-box. <strong>Optical</strong> multiplies draw
+    size so letters read similarly big. <strong>Offset</strong> is <code>OffsetEm</code>: ems of the
+    nominal 15px size, positive is down — same as <code>ScribeTaskFont.OffsetY</code>. The dashed
+    line is the box midline, not a true baseline. Paste both generated switches into
+    <code>OpticalScaleOf</code> and <code>OffsetEmOf</code>. Browser metrics are not Skia; confirm
+    in-game. The HUD is not part of this table.
+  </p>
+
+  <p class="note">
+    Overflow clips like a tight input row. Caudex (outlined) is the reference — match size, then
+    sit. Default is CSS <code>sans-serif</code>; Playfair Display and Cormorant Unicase load from
+    Google Fonts.
+  </p>
+
+  <div class="toolbar">
+    <label>Sample
+      <input id="sample" type="text" value="Gather 12 flax fibers" style="width: 240px; margin-left: 6px;">
+    </label>
+    <button type="button" id="copy">Copy C# switches</button>
+    <button type="button" class="ghost" id="reset-optical">Reset optical to 1.00</button>
+    <button type="button" class="ghost" id="reset-offset">Reset offset to 0</button>
+  </div>
+
+  <div id="rows"></div>
+  <h2 style="margin-top: 1.5rem; font-size: 1rem;">Generated</h2>
+  <pre id="out"></pre>
+</main>
+<script>
+const FONTS = [
+  { id: "Caudex", css: '"Caudex"', csharp: "Caudex", locked: true },
+  { id: "Default", css: "sans-serif", csharp: "sans-serif" },
+  { id: "Scapholene", css: '"Scapholene"', csharp: "Scapholene" },
+  { id: "La Belle Aurore", css: '"La Belle Aurore"', csharp: "La Belle Aurore" },
+  { id: "Noto Sans", css: '"Noto Sans"', csharp: "Noto Sans" },
+  { id: "Noto Serif", css: '"Noto Serif"', csharp: "Noto Serif" },
+  { id: "Playfair Display", css: '"Playfair Display"', csharp: "Playfair Display" },
+  { id: "Cormorant Unicase", css: '"Cormorant Unicase"', csharp: "Cormorant Unicase" },
+];
+
+const NOMINAL = 15;
+const STORE_V1 = "scribe-optical-scale-v1";
+const STORE = "scribe-task-font-metrics-v2";
+
+function lineBoxPx(cssFamily, px, weight = 400) {
+  const ctx = document.createElement("canvas").getContext("2d");
+  ctx.font = `${weight} ${px}px ${cssFamily}`;
+  const m = ctx.measureText("Ag");
+  const up = m.fontBoundingBoxAscent ?? m.actualBoundingBoxAscent ?? px * 0.8;
+  const down = m.fontBoundingBoxDescent ?? m.actualBoundingBoxDescent ?? px * 0.2;
+  return up + down;
+}
+
+function loadSaved() {
+  try {
+    const v2 = JSON.parse(localStorage.getItem(STORE) || "null");
+    if (v2 && (v2.optical || v2.offset)) {
+      return { optical: v2.optical || {}, offset: v2.offset || {} };
+    }
+    const v1 = JSON.parse(localStorage.getItem(STORE_V1) || "null");
+    if (v1 && typeof v1 === "object") return { optical: v1, offset: {} };
+  } catch { /* ignore */ }
+  return { optical: {}, offset: {} };
+}
+
+const saved = loadSaved();
+const optical = Object.fromEntries(FONTS.map(f => [f.id, f.locked ? 1 : Number(saved.optical[f.id] ?? 1)]));
+const offset = Object.fromEntries(FONTS.map(f => [f.id, f.locked ? 0 : Number(saved.offset[f.id] ?? 0)]));
+let built = false;
+let caudexBox = 18;
+
+function autoScale(cssFamily, weight) {
+  const y = lineBoxPx(cssFamily, NOMINAL, weight);
+  return y > 0 ? caudexBox / y : 1;
+}
+
+function switchBody(lines, fallback) {
+  return `{\n${lines.join("\n")}\n        _ => ${fallback},\n};`;
+}
+
+function csharp() {
+  const opticalLines = FONTS.filter(f => !f.locked).map(f =>
+    `        "${f.csharp}" => ${Number(optical[f.id]).toFixed(2)}f,`);
+  const offsetLines = FONTS.filter(f => !f.locked).map(f =>
+    `        "${f.csharp}" => ${Number(offset[f.id]).toFixed(2)}f,`);
+  return [
+    `private static float OpticalScaleOf(string family) => family switch\n${switchBody(opticalLines, "1f")}`,
+    "",
+    `private static float OffsetEmOf(string family) => family switch\n${switchBody(offsetLines, "0f")}`,
+  ].join("\n");
+}
+
+function persist() {
+  localStorage.setItem(STORE, JSON.stringify({ optical, offset }));
+}
+
+function clampOptical(v) {
+  return Math.min(2, Math.max(0.5, Number(v) || 1));
+}
+
+function clampOffset(v) {
+  const n = Number(v);
+  return Math.min(1, Math.max(-1, Number.isFinite(n) ? n : 0));
+}
+
+function paint() {
+  caudexBox = lineBoxPx('"Caudex"', NOMINAL, 700) || 18;
+  document.documentElement.style.setProperty("--box-h", `${caudexBox}px`);
+  const sample = document.getElementById("sample").value;
+
+  if (!built) {
+    const host = document.getElementById("rows");
+    host.innerHTML = "";
+    const head = document.createElement("div");
+    head.className = "row head";
+    head.innerHTML = "<div>Face</div><div>Preview (Caudex line-box)</div><div>Optical / Offset</div>";
+    host.appendChild(head);
+
+    for (const f of FONTS) {
+      const row = document.createElement("div");
+      row.className = "row";
+      row.dataset.id = f.id;
+      const disabled = f.locked ? "disabled" : "";
+      row.innerHTML = `
+        <div>
+          <div class="name">${f.id}${f.locked ? " (ref)" : ""}</div>
+          <div class="auto" data-auto></div>
+        </div>
+        <div class="preview-frame${f.locked ? " ref" : ""}">
+          <span class="preview"></span>
+        </div>
+        <div class="knobs">
+          <label>Optical</label>
+          <input type="number" min="0.5" max="2" step="0.01" ${disabled} data-id="${f.id}" data-knob="optical">
+          <input type="range" min="0.5" max="2" step="0.01" ${disabled} data-id="${f.id}" data-knob="optical">
+          <label>Offset</label>
+          <input type="number" min="-1" max="1" step="0.01" ${disabled} data-id="${f.id}" data-knob="offset">
+          <input type="range" min="-1" max="1" step="0.01" ${disabled} data-id="${f.id}" data-knob="offset">
+        </div>
+      `;
+      host.appendChild(row);
+    }
+    built = true;
+  }
+
+  for (const f of FONTS) {
+    const weight = f.id === "Caudex" ? 700 : 400;
+    const a = f.locked ? 1 : autoScale(f.css, weight);
+    const o = optical[f.id];
+    const em = offset[f.id];
+    const draw = NOMINAL * a * o;
+    const row = document.querySelector(`.row[data-id="${f.id}"]`);
+    const preview = row.querySelector(".preview");
+    preview.textContent = sample;
+    preview.style.fontFamily = f.css;
+    preview.style.fontSize = `${draw}px`;
+    preview.style.fontWeight = f.id === "Caudex" ? "700" : "400";
+    preview.style.transform = `translateY(${em * NOMINAL}px)`;
+    row.querySelector("[data-auto]").textContent = `auto ${a.toFixed(2)}`;
+    for (const el of row.querySelectorAll('[data-knob="optical"]')) {
+      if (document.activeElement !== el) el.value = Number(o).toFixed(2);
+    }
+    for (const el of row.querySelectorAll('[data-knob="offset"]')) {
+      if (document.activeElement !== el) el.value = Number(em).toFixed(2);
+    }
+  }
+
+  document.getElementById("out").textContent = csharp();
+}
+
+document.getElementById("rows").addEventListener("input", e => {
+  const id = e.target.dataset.id;
+  const knob = e.target.dataset.knob;
+  if (!id || !knob) return;
+  if (knob === "optical") optical[id] = clampOptical(e.target.value);
+  else offset[id] = clampOffset(e.target.value);
+  persist();
+  paint();
+});
+
+document.getElementById("sample").addEventListener("input", paint);
+document.getElementById("copy").addEventListener("click", async () => {
+  await navigator.clipboard.writeText(csharp());
+  document.getElementById("copy").textContent = "Copied";
+  setTimeout(() => document.getElementById("copy").textContent = "Copy C# switches", 1200);
+});
+document.getElementById("reset-optical").addEventListener("click", () => {
+  for (const f of FONTS) if (!f.locked) optical[f.id] = 1;
+  persist();
+  paint();
+});
+document.getElementById("reset-offset").addEventListener("click", () => {
+  for (const f of FONTS) if (!f.locked) offset[f.id] = 0;
+  persist();
+  paint();
+});
+
+document.fonts.addEventListener("loadingdone", paint);
+
+async function waitFonts() {
+  const faces = [
+    '700 15px "Caudex"',
+    '400 15px "Scapholene"',
+    '400 15px "La Belle Aurore"',
+    '400 15px "Noto Sans"',
+    '400 15px "Noto Serif"',
+    '400 15px "Playfair Display"',
+    '400 15px "Cormorant Unicase"',
+  ];
+  await Promise.all(faces.map(f => document.fonts.load(f).catch(() => {})));
+  await document.fonts.ready;
+  paint();
+}
+
+waitFonts();
+</script>
+</body>
+</html>

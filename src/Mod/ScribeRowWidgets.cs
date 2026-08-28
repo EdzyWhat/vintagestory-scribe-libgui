@@ -30,34 +30,25 @@ internal static class ScribeRowControlNudge
 {
     /// <summary>The family Scribe's dialog TITLE text is drawn in: "Caudex", the mod's bundled humanist
     /// serif, registered with LibGUI's Skia font registry in
-    /// <see cref="ScribeModSystem.RegisterCustomFonts"/> (prove-bundled-font-seam). Only the title uses it;
-    /// task-row text stays on the default family (see <see cref="FontFamily"/>). If registration fails the
-    /// family falls back to a system face via <c>TextLayoutHelper</c>, so the title still renders.</summary>
+    /// <see cref="ScribeModSystem.RegisterCustomFonts"/> (prove-bundled-font-seam). Only the title (and
+    /// in-dialog buttons) uses unscaled Caudex; task-row text uses the player's selected face, laid out
+    /// against Caudex's line-box (see <see cref="TextLineHeight"/>). If registration fails the family
+    /// falls back to a system face via <c>TextLayoutHelper</c>, so the title still renders.</summary>
     internal const string TitleFontFamily = "Caudex";
 
-    /// <summary>Font family used to measure the single-line input height. MUST match
-    /// <c>ScribeMultilineField.FontFamily</c> (and the read <c>Text</c> default) so the measured height
-    /// equals the field's actual single-line height. Row text is NOT in the title's Caudex face — the two
-    /// are deliberately separate.</summary>
-    private const string FontFamily = "sans-serif";
-
-    /// <summary>Measured single-line input height at the style's current font size: the "Ag" line height
-    /// (same family the field/read text use) plus the field's top+bottom internal padding — mirroring
+    /// <summary>Measured single-line input height at the style's current <em>nominal</em> font size: the
+    /// Caudex-pegged "Ag" line height plus the field's top+bottom internal padding — mirroring
     /// <c>ScribeMultilineFieldRender.PerformLayout</c>'s <c>lineCount * lineHeight + PadY*2</c> for one
-    /// line.</summary>
+    /// line. Independent of the selected task font (peg-task-fonts-to-caudex).</summary>
     private static float SingleLineInputHeight(ScribeRowStyle style)
         => TextLineHeight(style.FontSize) + style.FieldPadY * 2f;
 
-    /// <summary>The bare "Ag" line height for the row text family at <paramref name="fontSize"/> — one line of
-    /// wrapped row text with NO field padding. Used to cap a Tracker/Link icon's LAYOUT height to a single
-    /// text line so an oversized (row-height-neutral) icon paints larger without growing the row
-    /// (add-tracker-link-tasks 7.11f — see <see cref="ScribeLinkIcon"/>). Same family/fallback the field and
-    /// read text use, so the measured line matches the Task/Text row it must equal.</summary>
-    public static float TextLineHeight(float fontSize)
-    {
-        float lineHeight = TextLayoutHelper.MeasureText("Ag", FontFamily, fontSize, FontWeight.Normal).Y;
-        return lineHeight > 0 ? lineHeight : fontSize * 1.2f; // same fallback as the field
-    }
+    /// <summary>The bare "Ag" line height at <paramref name="fontSize"/> — always Caudex's Skia line-box
+    /// (peg-task-fonts-to-caudex), not the selected family's native Y. Used to cap a Tracker/Link icon's
+    /// LAYOUT height to a single text line so an oversized (row-height-neutral) icon paints larger without
+    /// growing the row (add-tracker-link-tasks 7.11f — see <see cref="ScribeLinkIcon"/>). Read reserved
+    /// height and the editor field must agree on this number.</summary>
+    public static float TextLineHeight(float fontSize) => ScribeTaskFont.LineHeight(fontSize);
 
     /// <summary>One line of an item-row NAME: cuneiform's ratio-boosted line on the tablet path, else the
     /// Latin "Ag" line. Used to tell a wrapping name from a single-line one so we can center short names
@@ -349,7 +340,8 @@ internal static class ScribeItemLabel
                 glow: style.CuneiformGlow,
                 strokeWeightScale: style.CuneiformStrokeWeightScale);
         }
-        return new Text(label, new TextStyle { Color = color, SoftWrap = true });
+        return ScribeTaskFont.OffsetWrap(style.TaskFontFamily, style.FontSize,
+            new Text(label, new TextStyle { Color = color, SoftWrap = true }));
     }
 }
 
@@ -399,6 +391,10 @@ internal static class ScribeTrackerCounterText
                 Weight = satisfied ? FontWeight.Normal : FontWeight.Bold,
             };
             text = new Text(label, style);
+            if (cuneiform is { } row)
+            {
+                text = ScribeTaskFont.OffsetWrap(row.TaskFontFamily, row.FontSize, text);
+            }
         }
         if (!satisfied) return text; // in-progress: strong, no strike.
 

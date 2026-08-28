@@ -11,6 +11,7 @@ using Gui.Widgets.Overlay;       // Tooltip
 using Gui.Widgets.Painting;      // BoxStyle
 using Gui.Widgets.Scroll;        // SingleChildScrollView, Scrollbar
 using Gui.Core.Layout;           // MainAxisSize
+using OpenTK.Mathematics;        // Vector4
 using Scribe.Core;
 using Vintagestory.API.Config;   // Lang
 
@@ -54,9 +55,9 @@ internal sealed class ScribeSettingsContent : StatelessWidget
     {
         var colors = Theme.Of(context).ColorScheme;
 
-        // The form's own text/checkboxes scale with the WINDOW font scale (add-settings-tab round 1), so
-        // the whole form re-renders at the new size on the write-through rebuild UpdateMySettings fires.
-        float scale = ScribePlayerSettings.ClampFontScale(settings.WindowFontScale);
+        // Settings chrome stays at 100% of BaseSettingsFontSize in the LibGUI default face. Window Text
+        // Size live-previews on Read/Edit, not on this form (peg-task-fonts-to-caudex playtest).
+        const float scale = 1f;
 
         // Four sections separated by horizontal Dividers: Mod Behavior, Timer, Window Appearance, HUD
         // Appearance. Timer groups the two Clockmaker's Notebook timer preferences.
@@ -80,11 +81,8 @@ internal sealed class ScribeSettingsContent : StatelessWidget
             });
 
         // Wrapped in a scroll view + bar so the form fits a shorter host without clipping (design D2).
-        // Task Text Font ancestor so ScribeNumericField (which does not inherit like Text) still matches
-        // the player's chosen family after Merge(DefaultTextStyle.Of).
-        return ScribeTextDefaults.Wrap(
-            settings.TaskFontFamily,
-            ScribeRowConstants.BaseSettingsFontSize * scale,
+        // LibGUI default face at unscaled settings size — not the Task Text Font (peg-task-fonts-to-caudex).
+        return ScribeTextDefaults.WrapSettingsChrome(
             new Padding(
                 EdgeInsets.All(10),
                 child: new Scrollbar(
@@ -406,7 +404,7 @@ internal sealed class ScribeSettingsContent : StatelessWidget
             mainAxisSize: MainAxisSize.Min,
             children: new Widget[]
             {
-                new Text(caption, new TextStyle { FontSize = 13 * scale, Color = colors.OnSurfaceVariant }),
+                new Text(caption, Pegged(13 * scale, colors.OnSurfaceVariant)),
                 IntField(id, value, step: 5, onChanged: onChanged,
                     clamp: ScribePlayerSettings.ClampHudOffset),
             });
@@ -427,11 +425,24 @@ internal sealed class ScribeSettingsContent : StatelessWidget
             clamp: v => MathF.Round(ScribePlayerSettings.ClampFontScale(v / 100f) * 100f));
     }
 
+    private static TextStyle Pegged(float nominalSize, Vector4 color, FontWeight weight = FontWeight.Normal, bool softWrap = false)
+    {
+        var style = new TextStyle
+        {
+            FontFamily = ScribeTaskFont.DefaultFamily,
+            FontSize = nominalSize,
+            Color = color,
+            Weight = weight,
+        };
+        if (softWrap) style = style with { SoftWrap = true };
+        return style;
+    }
+
     // ---------------- Layout helpers ----------------
 
-    private static Widget SectionTitle(string text, ColorScheme colors, float scale) =>
-        // Only ~8% larger than the window text (§9.1) — the old "+2f" absolute bump read too large.
-        new Text(text, new TextStyle { FontSize = ScribeRowConstants.BaseSettingsFontSize * scale * 1.08f, Weight = FontWeight.Bold, Color = colors.OnSurface });
+    private Widget SectionTitle(string text, ColorScheme colors, float scale) =>
+        // Only ~8% larger than the settings body size (§9.1) — the old "+2f" absolute bump read too large.
+        new Text(text, Pegged(ScribeRowConstants.BaseSettingsFontSize * scale * 1.08f, colors.OnSurface, FontWeight.Bold));
 
     /// <summary>Lay two labeled controls side by side as equal-width columns in one row
     /// (scribe-settings-followups 3.1/3.2). Each child is <see cref="Expanded"/> so they split the
@@ -444,14 +455,14 @@ internal sealed class ScribeSettingsContent : StatelessWidget
             children: new Widget[] { new Expanded(child: left), new Expanded(child: right) });
 
     /// <summary>A checkbox that hugs its label at the START of the row instead of stretching across the
-    /// full form width (scribe-settings-followups 3.3). The label keeps its hover helptext (design D6) and
-    /// scales with the window font size. Unlike <see cref="LabeledControl"/> (label-above-control, stretched
+    /// full form width (scribe-settings-followups 3.3). The label keeps its hover helptext (design D6).
+    /// Unlike <see cref="LabeledControl"/> (label-above-control, stretched
     /// for full-width inputs), a toggle reads best inline with its label.</summary>
-    private static Widget HuggingCheckbox(string keyBase, ColorScheme colors, float scale, bool value, Action<bool> onChanged)
+    private Widget HuggingCheckbox(string keyBase, ColorScheme colors, float scale, bool value, Action<bool> onChanged)
     {
         Widget label = new Text(
             Lang.Get("scribe:" + keyBase),
-            new TextStyle { FontSize = ScribeRowConstants.BaseSettingsFontSize * scale, Color = colors.OnSurface });
+            Pegged(ScribeRowConstants.BaseSettingsFontSize * scale, colors.OnSurface));
 
         Widget labelWithHelp = new Tooltip(
             child: label,
@@ -459,7 +470,7 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                 EdgeInsets.All(6),
                 child: new Text(
                     Lang.Get("scribe:" + keyBase + "-help"),
-                    new TextStyle { FontSize = 13 * scale, Color = colors.OnSurface, SoftWrap = true })),
+                    Pegged(13 * scale, colors.OnSurface, softWrap: true))),
             useGlobalOverlay: true);
 
         return new Row(
@@ -479,13 +490,12 @@ internal sealed class ScribeSettingsContent : StatelessWidget
 
     /// <summary>Wraps a control with its localized label (a <see cref="Tooltip"/>-carrying caption above
     /// the control), so the field is labeled and its helptext is available on hover (design D6). The
-    /// label text scales with the window font scale (round 1). The label + control stack keeps a
-    /// consistent left-aligned column layout for every field.</summary>
-    private static Widget LabeledControl(string keyBase, ColorScheme colors, float scale, Widget control)
+    /// label + control stack keeps a consistent left-aligned column layout for every field.</summary>
+    private Widget LabeledControl(string keyBase, ColorScheme colors, float scale, Widget control)
     {
         var label = new Text(
             Lang.Get("scribe:" + keyBase),
-            new TextStyle { FontSize = ScribeRowConstants.BaseSettingsFontSize * scale, Color = colors.OnSurface });
+            Pegged(ScribeRowConstants.BaseSettingsFontSize * scale, colors.OnSurface));
 
         // Helptext surfaced on hover over the label (design D6 / spec "Helptext is available per
         // setting"). useGlobalOverlay so the tooltip isn't clipped by a scroll viewport / small host.
@@ -495,7 +505,7 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                 EdgeInsets.All(6),
                 child: new Text(
                     Lang.Get("scribe:" + keyBase + "-help"),
-                    new TextStyle { FontSize = 13 * scale, Color = colors.OnSurface, SoftWrap = true })),
+                    Pegged(13 * scale, colors.OnSurface, softWrap: true))),
             useGlobalOverlay: true);
 
         return new Column(

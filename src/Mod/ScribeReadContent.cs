@@ -16,7 +16,7 @@ using Gui.Widgets.Overlay;       // Tooltip
 using Gui.Widgets.Painting;      // BoxStyle
 using Gui.Widgets.Scroll;        // ListView, SingleChildScrollView, Scrollable, Scrollbar
 using Gui.Core.Layout;           // MainAxisSize
-using OpenTK.Mathematics;        // Vector2
+using OpenTK.Mathematics;        // Vector2, Vector4
 using Scribe.Core;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;   // ItemStack (Tracker/Link display item)
@@ -406,9 +406,6 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
     {
         var colors = Theme.Of(context).ColorScheme;
         var style = Widget.Style;
-        // Font family + base size inherited from the tab's DefaultTextStyle ancestor; only color and
-        // wrap are non-default here.
-        TextStyle textStyle = new() { Color = colors.OnSurface, SoftWrap = true };
 
         var children = new List<Widget>();
 
@@ -451,9 +448,9 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         // cuneiform strokes so a dried/fired tablet reads in the SAME glyphs the wet tablet types in —
         // reusing the editable field's wrapping render object with focus/caret OFF (no new rendering code),
         // seeded off the same TaskId so a row wobbles identically whether wet-editable or read-only. Off the
-        // cuneiform path (Lectern/Notebook, or cuneiform disabled) it stays the normal wrapped Text, inset by
-        // the editor field's internal padding so a single-line read row matches the editor field height and
-        // its text's left edge aligns across a view switch.
+        // cuneiform path (Lectern/Notebook, or cuneiform disabled) it uses the same Latin field renderer as
+        // Edit (display-only: no caret, no box) so wrap, Caudex line-box, and optical draw size match across
+        // a view switch. Stock Text + OffsetWrap Scale crushed multi-line Read rows.
         // A Tracker/Link/Craft row swaps its text for an item icon + name (+ a have/need counter for the
         // count-tracked kinds): the block's own Text is empty, its content is the referenced item
         // (add-tracker-link-tasks 5.1/5.3; add-crafting-tasks 9.1 — a Craft parent shows its recipe output).
@@ -483,9 +480,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                 rotationDegrees: style.CuneiformRotation,
                 glow: style.CuneiformGlow,
                 strokeWeightScale: style.CuneiformStrokeWeightScale)
-            : new Padding(
-                EdgeInsets.Symmetric(vertical: style.FieldPadY, horizontal: style.FieldPadX),
-                child: new Text(Widget.Data.Text, textStyle));
+            : ScribeTaskTextDisplay.Build(Widget.Data.Text, style, colors.OnSurface);
 
         // On a read-only tablet, tapping the row TEXT is the "I want to edit this" gesture — there is no text
         // field to click into, so this is where the material-specific locked message is surfaced

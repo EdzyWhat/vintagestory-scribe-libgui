@@ -87,9 +87,10 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
 
         // Family inherited from the tab's DefaultTextStyle ancestor (below): bodyStyle drops its explicit
         // FontFamily; kind/date carried no family and now follow the task font too (approved change).
-        var bodyStyle = new TextStyle { FontSize = bodySize, Color = colors.OnSurface };
-        var kindStyle = new TextStyle { FontSize = kindSize, Color = colors.OnSurface with { W = colors.OnSurface.W * 0.65f }, Weight = FontWeight.SemiBold };
-        var dateStyle = new TextStyle { FontSize = dateSize, Color = colors.OnSurface with { W = colors.OnSurface.W * 0.55f } };
+        string taskFont = modSystem.MySettings.TaskFontFamily;
+        var bodyStyle = new TextStyle { FontSize = ScribeTaskFont.LayoutSize(taskFont, bodySize), Color = colors.OnSurface };
+        var kindStyle = new TextStyle { FontSize = ScribeTaskFont.LayoutSize(taskFont, kindSize), Color = colors.OnSurface with { W = colors.OnSurface.W * 0.65f }, Weight = FontWeight.SemiBold };
+        var dateStyle = new TextStyle { FontSize = ScribeTaskFont.LayoutSize(taskFont, dateSize), Color = colors.OnSurface with { W = colors.OnSurface.W * 0.55f } };
 
         var rows = new List<Widget>(entries.Count);
         for (int i = entries.Count - 1; i >= 0; i--)

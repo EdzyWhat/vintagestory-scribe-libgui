@@ -484,7 +484,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     {
         var labelStyle = new TextStyle
         {
-            FontSize = 14,
+            FontSize = ScribeTaskFont.LayoutSize(modSystem.MySettings.TaskFontFamily, 14),
             Color = colors.OnSurface,
             FontFamily = ScribeTaskFont.Resolve(modSystem.MySettings.TaskFontFamily),
         };

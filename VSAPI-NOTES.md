@@ -1702,6 +1702,23 @@ slightly different row. **Fix pattern:** any custom text RenderObject that must 
 MUST use the same `FontFamily` string for both `MeasureText` and `DrawText` — mirror `TextStyle`'s default
 (`"sans-serif"`), never `""`. See `ScribeMultilineFieldRender.FontFamily`.
 
+**Fact (peg-task-fonts-to-caudex, 2026-08-27): selectable task fonts do not share a Skia line-box at the
+same nominal point size.** `TextLayoutHelper.MeasureText("Ag").Y` is `metrics.Descent − metrics.Ascent +
+metrics.Leading`, so Scapholene / La Belle Aurore / Noto / Playfair / Default `sans-serif` produce
+different input-row heights than Caudex (the face the Read/Edit geometry was locked against).
+**Fix pattern:** layout height is always Caudex's line-box at the *nominal* window size
+(`ScribeTaskFont.LineHeight`). Stock `Text` must use `LayoutSize` (auto `caudexY / familyY` only) in
+`TextStyle.FontSize` — never `OpticalScale`. Optical size is a paint-only `Transform.Scale` inside
+`OffsetWrap` (plus `OffsetEm` translate). Custom painters (`ScribeMultilineField`) draw at
+`EffectiveSize` (= layout × optical) but still reserve `LineHeight` per line. Putting optical into
+`FontSize` makes LibGUI report a taller box (La Belle Aurore at 2× grew Edit craft rows).
+`ScribeRowControlNudge.TextLineHeight` must NOT measure the selected family. Default/`sans-serif` is
+included. Tablet cuneiform stays on `CuneiformMetrics`; titles/buttons stay unscaled Caudex
+(`ButtonFamily` / `TitleFontFamily`). The pinned HUD keeps its own face and is not pegged. Settings
+chrome uses LibGUI `sans-serif` at 100% (`WrapSettingsChrome`) and does not follow Task Text Font or
+Window Text Size. Call `BuildMetrics` once after `RegisterCustomFonts`. Tune `OpticalScaleOf` /
+`OffsetEmOf` with `tools/task-font-optical-scale/index.html`.
+
 **Symptom (a05caret1): clicking a per-row control (delete / pin / drag grip) while a text field is focused
 makes the caret vanish — focus is lost and nothing re-homes it.** LibGUI clears focus on EVERY pointer
 press whose hit path contains no focusable element: `EventDispatcher.DispatchPointerDown`

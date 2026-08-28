@@ -1,7 +1,14 @@
+using System;
+using System.Collections.Generic;
 using Gui.Rendering;           // SkiaExtensions.ToSkColor
-using Gui.Widgets.Framework;   // ColorScheme
-using OpenTK.Mathematics;      // Vector4
+using Gui.Rendering.Text;      // TextLayoutHelper, FontWeight
+using Gui.Widgets.Framework;   // ColorScheme, Widget
+using Gui.Widgets.Layout;      // Alignment
+using Gui.Widgets.Painting;    // Transform
+using OpenTK.Mathematics;      // Vector2, Vector4
+using Scribe.Core;             // ScribePlayerSettings.KnownTaskFonts
 using SkiaSharp;               // SKColor.ToHsv/FromHsv
+using Vintagestory.API.Common; // ILogger
 
 namespace Scribe;
 
@@ -35,13 +42,13 @@ internal static class ScribeRowConstants
     /// round 1). The HUD's former hardcoded checkbox size.</summary>
     public const float BaseHudCheckboxSize = 20f;
 
-    /// <summary>Base (scale-1.0) font size for the Scribe settings form's own labels/section text
-    /// (points); multiplied by <c>ScribePlayerSettings.WindowFontScale</c> so the form re-scales live with
-    /// the window text size (add-settings-tab round 1).</summary>
+    /// <summary>Font size for the Scribe settings form's own labels/section text (points). The form stays
+    /// at this size (100%); Window Text Size live-previews Read/Edit, not Settings chrome
+    /// (peg-task-fonts-to-caudex playtest).</summary>
     public const float BaseSettingsFontSize = 14f;
 
-    /// <summary>Base (scale-1.0) size for the settings form's own checkboxes (pixels); multiplied by
-    /// <c>ScribePlayerSettings.WindowFontScale</c>.</summary>
+    /// <summary>Size for the settings form's own checkboxes (pixels). Stays at this size with the form
+    /// text; not multiplied by Window Text Size.</summary>
     public const float BaseSettingsCheckboxSize = 22f;
 
     /// <summary>Each row's own top/bottom padding (pixels); scaled by the window font scale so inter-row
@@ -158,11 +165,13 @@ internal static class ScribeRowConstants
 
 /// <summary>Maps the player's task-font preference (<c>ScribePlayerSettings.TaskFontFamily</c>) to the
 /// concrete family name a LibGUI <c>TextStyle</c>/<c>ScribeMultilineField</c> should render with
-/// (v1-release-checklist §6). The stored value is a registered family name or the empty-string default;
+/// (v1-release-checklist §6), and pegs every selectable TTF's Skia line-box to Caudex
+/// (peg-task-fonts-to-caudex). The stored value is a registered family name or the empty-string default;
 /// this resolves the default to LibGUI's built-in body family (<c>"sans-serif"</c>, the <c>TextStyle</c>
-/// default) so the row text is unchanged for a player who never picks a font. Any non-empty value is
-/// assumed already-normalized by <c>ScribePlayerSettings.NormalizeTaskFontFamily</c> to a registered
-/// family, so it is passed through verbatim.</summary>
+/// default). Any non-empty value is assumed already-normalized by
+/// <c>ScribePlayerSettings.NormalizeTaskFontFamily</c> to a registered family, so it is passed through
+/// verbatim. Size scale / vertical offset live here so callers do not sprinkle per-font fudge; cuneiform
+/// and Caudex chrome (<see cref="ButtonFamily"/>) do not go through the scale table.</summary>
 internal static class ScribeTaskFont
 {
     /// <summary>LibGUI's default <c>TextStyle.FontFamily</c>; the resting body face when no font is chosen.</summary>
@@ -173,6 +182,28 @@ internal static class ScribeTaskFont
     /// player's task-font choice: the buttons keep one consistent face regardless of the task-text font.
     /// Caudex is registered under every weight in <c>ScribeModSystem.RegisterCustomFonts</c>.</summary>
     public const string ButtonFamily = "Caudex";
+
+    /// <summary>Probe string whose measured Y is Skia's line-box (<c>Descent − Ascent + Leading</c>),
+    /// matching <c>TextLayoutHelper.MeasureText</c> / LibGUI <c>Text</c> layout.</summary>
+    private const string LineBoxProbe = "Ag";
+
+    /// <summary>Nominal size at which <see cref="BuildMetrics"/> samples line-boxes. The resulting
+    /// <see cref="FamilyMetrics.SizeScale"/> is dimensionless, so it holds at every window/HUD scale.</summary>
+    private const float MetricsReferenceSize = ScribeRowConstants.BaseWindowFontSize;
+
+    /// <summary>Family whose line-box is the layout lock. Starts as Caudex; <see cref="BuildMetrics"/>
+    /// falls back to <see cref="DefaultFamily"/> if Caudex failed to register.</summary>
+    private static string referenceFamily = ButtonFamily;
+
+    /// <summary>Per-family optical knobs. <see cref="FamilyMetrics.SizeScale"/> is filled by
+    /// <see cref="BuildMetrics"/> (line-box match). <see cref="FamilyMetrics.OpticalScale"/> is a
+    /// hand-tuned multiplier on top so letters read similarly sized after that match (Default too
+    /// big, La Belle Aurore too small). <see cref="FamilyMetrics.OffsetEm"/> is a vertical sit nudge
+    /// (still 0 until a later pass). <see cref="FamilyMetrics.SizeScaleOverride"/> replaces the auto
+    /// line-box scale entirely if needed.</summary>
+    private readonly record struct FamilyMetrics(float SizeScale, float OffsetEm, float OpticalScale, float? SizeScaleOverride);
+
+    private static readonly Dictionary<string, FamilyMetrics> Metrics = new(StringComparer.Ordinal);
 
     /// <summary>Family name to render with: the built-in body face for the empty default, else the chosen
     /// registered family.</summary>
@@ -188,4 +219,138 @@ internal static class ScribeTaskFont
     /// the player's own client-local <see cref="ScribePlayerSettings.CuneiformTablets"/> preference; with
     /// its positive polarity (true = cuneiform) this is now a straight pass-through (D8).</summary>
     public static bool UseCuneiform(bool cuneiformTablets) => cuneiformTablets;
+
+    /// <summary>Point size LibGUI should <em>layout</em> this family at so its Skia line-box matches
+    /// Caudex: auto line-box scale (or its override) times <paramref name="nominalSize"/>. Does NOT
+    /// include <see cref="FamilyMetrics.OpticalScale"/> — that is paint-only (see
+    /// <see cref="OffsetWrap"/>). Putting optical into <c>TextStyle.FontSize</c> makes stock
+    /// <c>Text</c> report a taller layout box (La Belle Aurore at 2× grew Edit craft rows).</summary>
+    public static float LayoutSize(string? taskFontFamily, float nominalSize)
+    {
+        FamilyMetrics m = Lookup(Resolve(taskFontFamily));
+        float scale = m.SizeScaleOverride ?? m.SizeScale;
+        return nominalSize * scale;
+    }
+
+    /// <summary>Point size to <em>draw</em> the resolved family at: <see cref="LayoutSize"/> ×
+    /// hand-tuned <see cref="FamilyMetrics.OpticalScale"/>. Custom painters
+    /// (<see cref="ScribeMultilineField"/>) use this; stock <c>Text</c> keeps
+    /// <see cref="LayoutSize"/> and is scaled by <see cref="OffsetWrap"/>.</summary>
+    public static float EffectiveSize(string? taskFontFamily, float nominalSize)
+    {
+        FamilyMetrics m = Lookup(Resolve(taskFontFamily));
+        return LayoutSize(taskFontFamily, nominalSize) * m.OpticalScale;
+    }
+
+    /// <summary>Vertical glyph nudge in pixels (positive is down), <see cref="FamilyMetrics.OffsetEm"/> ×
+    /// <paramref name="nominalSize"/>. Does not change the reserved line-box.</summary>
+    public static float OffsetY(string? taskFontFamily, float nominalSize) =>
+        Lookup(Resolve(taskFontFamily)).OffsetEm * nominalSize;
+
+    /// <summary>Layout line-box height at <paramref name="nominalSize"/>: always Caudex's (or the
+    /// sans-serif fallback) <c>"Ag"</c> Y, never the selected family's native Y.</summary>
+    public static float LineHeight(float nominalSize)
+    {
+        float h = TextLayoutHelper.MeasureText(LineBoxProbe, referenceFamily, nominalSize, FontWeight.Normal).Y;
+        return h > 0 ? h : nominalSize * 1.2f;
+    }
+
+    /// <summary>Paint-only sit + optical size. <see cref="Transform"/> does not change layout
+    /// constraints, so stock <c>Text</c> still reports Caudex's line-box while glyphs can draw larger
+    /// or smaller. Wrap only the text child — not the row's checkbox/grip. Scale origin is center-left
+    /// so a 2× script face grows in place rather than down-right.</summary>
+    public static Widget OffsetWrap(string? taskFontFamily, float nominalSize, Widget child)
+    {
+        FamilyMetrics m = Lookup(Resolve(taskFontFamily));
+        if (MathF.Abs(m.OpticalScale - 1f) > 0.001f)
+            child = Transform.Scale(child, m.OpticalScale, Alignment.CenterLeft);
+        float dy = m.OffsetEm * nominalSize;
+        return dy == 0f ? child : Transform.Translate(child, new Vector2(0f, dy));
+    }
+
+    /// <summary>Measures each selectable task font (every <see cref="ScribePlayerSettings.KnownTaskFonts"/>
+    /// entry plus the empty default → <see cref="DefaultFamily"/>) against Caudex and stores
+    /// <c>SizeScale = caudexY / familyY</c>. Call once after typefaces are registered. Caudex is forced
+    /// to identity (scale 1, offset 0). OffsetEm stays 0 until playtest fills it.</summary>
+    public static void BuildMetrics(ILogger logger, bool caudexRegistered)
+    {
+        referenceFamily = caudexRegistered ? ButtonFamily : DefaultFamily;
+        if (!caudexRegistered)
+        {
+            logger.Warning("[scribe] Caudex failed to register; task-font line-box pegs to '{0}' instead",
+                DefaultFamily);
+        }
+
+        float referenceY = ProbeY(referenceFamily);
+        if (referenceY <= 0f)
+        {
+            logger.Warning("[scribe] reference font '{0}' measured no line-box; task-font size scales stay 1",
+                referenceFamily);
+            referenceY = MetricsReferenceSize * 1.2f;
+        }
+
+        Metrics.Clear();
+        SeedFamily(DefaultFamily, referenceY);
+        foreach (string family in ScribePlayerSettings.KnownTaskFonts)
+        {
+            SeedFamily(family, referenceY);
+        }
+        // Caudex as a task-font choice is a no-op even if auto-measure rounded off 1.0.
+        Upsert(ButtonFamily, MetricsOf(ButtonFamily, sizeScale: 1f));
+    }
+
+    private static void SeedFamily(string family, float referenceY)
+    {
+        float familyY = ProbeY(family);
+        float scale = family == ButtonFamily || familyY <= 0f ? 1f : referenceY / familyY;
+        Upsert(family, MetricsOf(family, scale));
+    }
+
+    private static FamilyMetrics MetricsOf(string family, float sizeScale) =>
+        new(sizeScale, OffsetEmOf(family), OpticalScaleOf(family), OverrideOf(family));
+
+    private static void Upsert(string family, FamilyMetrics metrics) => Metrics[family] = metrics;
+
+    private static FamilyMetrics Lookup(string resolved) =>
+        Metrics.TryGetValue(resolved, out FamilyMetrics m) ? m : MetricsOf(resolved, sizeScale: 1f);
+
+    private static float ProbeY(string family) =>
+        TextLayoutHelper.MeasureText(LineBoxProbe, family, MetricsReferenceSize, FontWeight.Normal).Y;
+
+    /// <summary>Hand-tuned vertical sit vs Caudex, in ems of the nominal size (positive is down).
+    /// Tune in <c>tools/task-font-optical-scale/index.html</c> and paste the generated switch here.</summary>
+    private static float OffsetEmOf(string family) => family switch
+    {
+        "sans-serif" => 0.00f,
+        "Scapholene" => 0.05f,
+        "La Belle Aurore" => 0.18f,
+        "Noto Sans" => 0.00f,
+        "Noto Serif" => 0.00f,
+        "Playfair Display" => -0.03f,
+        "Cormorant Unicase" => -0.02f,
+        _ => 0f,
+    };
+
+    /// <summary>Hand-tuned optical size vs Caudex, multiplied on top of the auto line-box scale.
+    /// 1 = no extra change. Tune in <c>tools/task-font-optical-scale/index.html</c> and paste the
+    /// generated switch here. Default (sans-serif) is too big after line-box matching; La Belle Aurore
+    /// is too small.</summary>
+    private static float OpticalScaleOf(string family) => family switch
+    {
+        "sans-serif" => 0.92f,
+        "Scapholene" => 0.96f,
+        "La Belle Aurore" => 2.00f,
+        "Noto Sans" => 1.02f,
+        "Noto Serif" => 1.01f,
+        "Playfair Display" => 1.10f,
+        "Cormorant Unicase" => 1.08f,
+        _ => 1f,
+    };
+
+    /// <summary>Optional replacement for the auto-measured size scale. Unset unless playtest finds a
+    /// face unreadable after line-box matching.</summary>
+    private static float? OverrideOf(string family) => family switch
+    {
+        _ => null,
+    };
 }

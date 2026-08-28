@@ -99,13 +99,21 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
     public Vector4 CaretColor { get => caretColor; set => SetProperty(ref caretColor, value, repaint: true); }
     public Vector4 SelectionColor { get => selectionColor; set => SetProperty(ref selectionColor, value, repaint: true); }
 
+    /// <summary>Point size to draw/wrap at so glyphs match the player's optical size. Layout height
+    /// still uses <see cref="ScribeTaskFont.LineHeight"/> of the nominal size — optical must not go
+    /// into this field's laid-out height (peg-task-fonts-to-caudex).</summary>
+    private float DrawSize => ScribeTaskFont.EffectiveSize(fontFamily, fontSize);
+
+    /// <summary>Glyph-only vertical nudge; caret and selection stay on the Caudex line-box.</summary>
+    private float GlyphOffsetY => ScribeTaskFont.OffsetY(fontFamily, fontSize);
+
     protected override void PerformLayout()
     {
         float availWidth = float.IsPositiveInfinity(Constraints.MaxWidth) ? 300f : Constraints.MaxWidth;
         float textWidth = Math.Max(1f, availWidth - PadX * 2);
 
-        WrapInto(visualLines, text, textWidth, fontSize, fontFamily);
-        lineHeight = MeasureLineHeight(fontSize, fontFamily);
+        WrapInto(visualLines, text, textWidth, DrawSize, fontFamily);
+        lineHeight = ScribeTaskFont.LineHeight(fontSize);
 
         float height = visualLines.Count * lineHeight + PadY * 2;
         // Fill the available width (so it looks like a field); height follows content = auto-grow.
@@ -153,15 +161,15 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
         // overpaint it, and gated on empty text so it never sits behind typed characters.
         if (text.Length == 0 && placeholder.Length > 0)
         {
-            ScribeGlyphFallback.DrawLine(context, placeholder, new Vector2(PadX, PadY + ascent), fontSize, placeholderColor, FontFamily, FontWeight.Normal);
+            ScribeGlyphFallback.DrawLine(context, placeholder, new Vector2(PadX, PadY + ascent + GlyphOffsetY), DrawSize, placeholderColor, FontFamily, FontWeight.Normal);
         }
 
         for (int i = 0; i < visualLines.Count; i++)
         {
-            float y = PadY + i * lineHeight + ascent;
+            float y = PadY + i * lineHeight + ascent + GlyphOffsetY;
             // DrawLine (not context.DrawText) so a stored ←/→ that the active font lacks renders in the
             // fallback family instead of tofu; a no-arrow line takes DrawLine's single-draw fast path.
-            ScribeGlyphFallback.DrawLine(context, visualLines[i].Text, new Vector2(PadX, y), fontSize, textColor, FontFamily, FontWeight.Normal);
+            ScribeGlyphFallback.DrawLine(context, visualLines[i].Text, new Vector2(PadX, y), DrawSize, textColor, FontFamily, FontWeight.Normal);
         }
 
         // Caret: map the flat caret offset onto (line, column) of the wrapped text, then draw a bar.
@@ -180,7 +188,7 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
     // between the active font's (absent) arrow and the fallback font's. No-arrow strings hit the fast path
     // and measure identically to TextLayoutHelper.MeasureText.
     private float MeasureWidth(string s) =>
-        s.Length == 0 ? 0f : ScribeGlyphFallback.MeasureWidth(s, fontSize, FontFamily, FontWeight.Normal);
+        s.Length == 0 ? 0f : ScribeGlyphFallback.MeasureWidth(s, DrawSize, FontFamily, FontWeight.Normal);
 
     // Greedy word-wrap to a pixel width, honoring explicit '\n', recording each visual line's source
     // offset so the caret/selection can map flat offsets onto (line, column). Public API only
@@ -231,12 +239,6 @@ internal sealed class ScribeMultilineFieldRender : Gui.Core.Framework.RenderBox,
         {
             outLines.Add(new ScribeVisualLine("", 0));
         }
-    }
-
-    private static float MeasureLineHeight(float fontSize, string fontFamily)
-    {
-        float h = TextLayoutHelper.MeasureText("Ag", fontFamily, fontSize, FontWeight.Normal).Y;
-        return h > 0 ? h : fontSize * 1.2f;
     }
 
     // Map a flat caret offset in the source text onto a (visualLine, column). A caret that lands in a
@@ -423,6 +425,34 @@ internal sealed class ScribeMultilineFieldRenderWidget : RenderObjectWidget
         ro.BorderThickness = BorderThickness;
         ro.CornerRadii = CornerRadii;
     }
+}
+
+/// <summary>Display-only Latin task/note text using the same render object as the editor field, so
+/// Read and Edit share wrap, Caudex line-box height, optical draw size, and <c>OffsetEm</c>. Stock
+/// <c>Text</c> plus a paint-only <c>Transform.Scale</c> scaled the whole block (glyphs <em>and</em>
+/// line gap) and crushed multi-line Read rows. No caret, no field chrome.</summary>
+internal static class ScribeTaskTextDisplay
+{
+    public static Widget Build(string text, ScribeRowStyle style, Vector4 ink) =>
+        new ScribeMultilineFieldRenderWidget(
+            text: text,
+            placeholder: "",
+            caret: 0,
+            selectionAnchor: 0,
+            hasFocus: false,
+            fontSize: style.FontSize,
+            padX: style.FieldPadX,
+            padY: style.FieldPadY,
+            textColor: ink,
+            placeholderColor: Vector4.Zero,
+            caretColor: Vector4.Zero,
+            selectionColor: Vector4.Zero,
+            boxColor: Vector4.Zero,
+            borderColor: Vector4.Zero,
+            borderThickness: 1f,
+            cornerRadii: Vector4.One * 4f,
+            fontFamily: ScribeTaskFont.Resolve(style.TaskFontFamily),
+            caretVisible: false);
 }
 
 /// <summary>

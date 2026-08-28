@@ -36,9 +36,12 @@ public abstract partial class ScribeDialogBase
             * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale);
         float dateSize  = bodySize * 0.7f;
         float noteSize  = bodySize * 0.8f;
+        string taskFont = modSystem.MySettings.TaskFontFamily;
         var headerStyle = new TextStyle { FontFamily = ScribeRowControlNudge.TitleFontFamily, Weight = FontWeight.Bold, FontSize = bodySize, Color = colors.OnSurface };
-        var bodyStyle   = new TextStyle { FontSize = bodySize, Color = colors.OnSurface };
-        var dateStyle   = new TextStyle { FontSize = dateSize, Color = colors.OnSurface with { W = colors.OnSurface.W * 0.8f } };
+        // Visitor names inherit the tab's pegged layout size; date/note are intentionally smaller so
+        // they set LayoutSize at their own nominal (peg-task-fonts-to-caudex).
+        var bodyStyle   = new TextStyle { Color = colors.OnSurface };
+        var dateStyle   = new TextStyle { FontSize = ScribeTaskFont.LayoutSize(taskFont, dateSize), Color = colors.OnSurface with { W = colors.OnSurface.W * 0.8f } };
         var myName = capi.World.Player.PlayerName;
 
         var entries = host.Guestbook.Entries;
@@ -91,8 +94,14 @@ public abstract partial class ScribeDialogBase
             }
             else
             {
-                var noteStyle = new TextStyle { FontSize = noteSize, Color = colors.OnSurface };
-                noteSlot = new Expanded(new Text(entry.Note, noteStyle), flex: 5);
+                var noteStyle = new TextStyle
+                {
+                    FontSize = ScribeTaskFont.LayoutSize(taskFont, noteSize),
+                    Color = colors.OnSurface,
+                };
+                noteSlot = new Expanded(
+                    ScribeTaskFont.OffsetWrap(taskFont, noteSize, new Text(entry.Note, noteStyle)),
+                    flex: 5);
             }
 
             rows.Add(new Padding(
@@ -107,8 +116,8 @@ public abstract partial class ScribeDialogBase
                                 crossAxisAlignment: CrossAxisAlignment.Stretch,
                                 children: new Widget[]
                                 {
-                                    new Text(entry.PlayerName, bodyStyle),
-                                    new Text(entry.InGameDate, dateStyle),
+                                    ScribeTaskFont.OffsetWrap(taskFont, bodySize, new Text(entry.PlayerName, bodyStyle)),
+                                    ScribeTaskFont.OffsetWrap(taskFont, dateSize, new Text(entry.InGameDate, dateStyle)),
                                 })),
                         flex: 3),
                     noteSlot,
@@ -116,7 +125,8 @@ public abstract partial class ScribeDialogBase
         }
 
         Widget body = entries.Count == 0
-            ? new Center(child: new Text(Lang.Get("scribe:scribe-guestbook-empty"), bodyStyle))
+            ? new Center(child: ScribeTaskFont.OffsetWrap(taskFont, bodySize,
+                new Text(Lang.Get("scribe:scribe-guestbook-empty"), bodyStyle)))
             : new Scrollbar(controller: sharedScrollController,
                 child: new SingleChildScrollView(controller: sharedScrollController,
                     child: new Column(children: rows.ToArray(), mainAxisSize: MainAxisSize.Min)))

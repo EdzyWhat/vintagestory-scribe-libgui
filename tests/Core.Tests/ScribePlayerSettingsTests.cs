@@ -282,6 +282,31 @@ public class ScribePlayerSettingsTests
         Assert.Equal(expected, anchor.IsLeftAnchored());
     }
 
+    [Fact]
+    public void KnownTaskFonts_CoversTheCaudexPegLineup()
+    {
+        // peg-task-fonts-to-caudex: Mod-side BuildMetrics iterates this allowlist (plus the empty
+        // default → sans-serif). Keep the names here so a removed/renamed face cannot silently drop
+        // out of the metrics table. No Skia in Core — this is the string set only.
+        Assert.Contains("Caudex", ScribePlayerSettings.KnownTaskFonts);
+        Assert.Contains("Scapholene", ScribePlayerSettings.KnownTaskFonts);
+        Assert.Contains("La Belle Aurore", ScribePlayerSettings.KnownTaskFonts);
+        Assert.Contains("Noto Sans", ScribePlayerSettings.KnownTaskFonts);
+        Assert.Contains("Noto Serif", ScribePlayerSettings.KnownTaskFonts);
+        Assert.Contains("Playfair Display", ScribePlayerSettings.KnownTaskFonts);
+        Assert.Contains("Cormorant Unicase", ScribePlayerSettings.KnownTaskFonts);
+    }
+
+    [Theory]
+    [InlineData(null, "")]
+    [InlineData("", "")]
+    [InlineData("Caudex", "Caudex")]
+    [InlineData("not-a-font", "")]
+    public void NormalizeTaskFontFamily_AllowlistOrDefault(string? raw, string expected)
+    {
+        Assert.Equal(expected, ScribePlayerSettings.NormalizeTaskFontFamily(raw));
+    }
+
     // ---- Illumination floor (respect-local-illumination) ----
 
     [Fact]

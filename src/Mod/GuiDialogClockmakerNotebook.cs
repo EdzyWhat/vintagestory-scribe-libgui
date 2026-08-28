@@ -124,10 +124,10 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
         // ancestor, so dropping it would regress those inputs to sans-serif. big/label flow only into
         // Text widgets, so their family is inherited from the wrap below. small never set a family and
         // now inherits the task font too (adopt-libgui-31-improvements — approved chrome-label change).
-        var bodyStyle  = new TextStyle { FontSize = body,  Color = colors.OnSurface, FontFamily = taskFont };
-        var bigStyle   = new TextStyle { FontSize = big,   Color = colors.OnSurface };
-        var labelStyle = new TextStyle { FontSize = body,  Color = colors.OnSurface with { W = colors.OnSurface.W * 0.7f } };
-        var smallStyle = new TextStyle { FontSize = small, Color = colors.OnSurfaceVariant };
+        var bodyStyle  = new TextStyle { FontSize = ScribeTaskFont.LayoutSize(taskFont, body),  Color = colors.OnSurface, FontFamily = taskFont };
+        var bigStyle   = new TextStyle { FontSize = ScribeTaskFont.LayoutSize(taskFont, big),   Color = colors.OnSurface };
+        var labelStyle = new TextStyle { FontSize = ScribeTaskFont.LayoutSize(taskFont, body),  Color = colors.OnSurface with { W = colors.OnSurface.W * 0.7f } };
+        var smallStyle = new TextStyle { FontSize = ScribeTaskFont.LayoutSize(taskFont, small), Color = colors.OnSurfaceVariant };
 
         if (_resyncRemaining && timer is not null)
         {

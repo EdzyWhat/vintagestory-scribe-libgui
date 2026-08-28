@@ -16,7 +16,7 @@ using Gui.Widgets.Overlay;       // Tooltip
 using Gui.Widgets.Painting;      // BoxStyle
 using Gui.Widgets.Scroll;        // ListView, SingleChildScrollView, Scrollable, Scrollbar
 using Gui.Core.Layout;           // MainAxisSize
-using OpenTK.Mathematics;        // Vector2
+using OpenTK.Mathematics;        // Vector2, Vector4
 using Scribe.Core;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;   // ItemStack (Tracker/Link display item)
@@ -104,12 +104,14 @@ internal sealed class ScribeFrozenEditorRow : StatelessWidget
                 child: ScribeRowControlNudge.BuildTaskCheckbox(context, style, data.Done, onChanged: null)));
         }
 
-        // Inset the label by the editor field's internal padding so the frozen row's text sits exactly where
-        // the live field's text did (matches ScribeReadRow), avoiding a horizontal jump as it collapses. A
-        // Tracker/Link collapses showing its resolved item name (its own Text is empty) rather than blank.
-        children.Add(new Expanded(child: new Padding(
-            EdgeInsets.Symmetric(vertical: style.FieldPadY, horizontal: style.FieldPadX),
-            child: new Text(data.Label, textStyle))));
+        // Display-only field renderer (same as Read) so a collapsing Task/Note keeps Edit wrap + line-box.
+        // Item kinds stay a padded label — they have no multiline field.
+        children.Add(new Expanded(child: data.IsItemKind
+            ? new Padding(
+                EdgeInsets.Symmetric(vertical: style.FieldPadY, horizontal: style.FieldPadX),
+                child: ScribeTaskFont.OffsetWrap(style.TaskFontFamily, style.FontSize,
+                    new Text(data.Label, textStyle)))
+            : ScribeTaskTextDisplay.Build(data.Label, style, colors.OnSurface)));
 
         Widget rowBody = new Padding(
             EdgeInsets.Symmetric(vertical: style.RowVerticalPadding, horizontal: style.RowHorizontalPadding),
@@ -907,7 +909,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                     {
                         Color = colors.OnSurface,
                         FontFamily = ScribeTaskFont.Resolve(style.TaskFontFamily),
-                        FontSize = style.FontSize,
+                        FontSize = ScribeTaskFont.LayoutSize(style.TaskFontFamily, style.FontSize),
                     },
                     focusBorderColor: style.InputFocusBorderColor),
                 bandHeight));
