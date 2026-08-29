@@ -164,6 +164,101 @@ public class ScribePinOrderingTests
         Assert.Equal(new[] { "already", "new" }, list.Select(p => p.LastKnownText));
     }
 
+    // ---- Pin Insert edge (update-pins-1-3-3) ----
+
+    [Fact]
+    public void PlaceNewPin_NullSource_Top_InsertsAtHead()
+    {
+        var list = new List<ScribePinnedRef> { Pin("already", done: false) };
+        var incoming = Pin("new", done: false);
+        ScribePinOrdering.PlaceNewPin(list, incoming, source: null, insertEdge: ScribePinInsert.Top);
+        Assert.Equal(new[] { "new", "already" }, list.Select(p => p.LastKnownText));
+    }
+
+    [Fact]
+    public void PlaceNewPin_NullSource_Bottom_Appends()
+    {
+        var list = new List<ScribePinnedRef> { Pin("already", done: false) };
+        var incoming = Pin("new", done: false);
+        ScribePinOrdering.PlaceNewPin(list, incoming, source: null, insertEdge: ScribePinInsert.Bottom);
+        Assert.Equal(new[] { "already", "new" }, list.Select(p => p.LastKnownText));
+    }
+
+    [Fact]
+    public void PlaceNewPin_UnrelatedDepth0_Top_InsertsAtHead()
+    {
+        var (doc, parent, _, _) = CraftFamily();
+        var other = PinOn(doc, "other-task", depth: 0);
+        var list = new List<ScribePinnedRef> { other };
+
+        var parentPin = PinOn(doc, parent.Text, parent.TaskId, depth: 0);
+        ScribePinOrdering.PlaceNewPin(list, parentPin, doc, insertEdge: ScribePinInsert.Top);
+
+        Assert.Equal(new[] { parent.TaskId, other.TaskId }, list.Select(p => p.TaskId));
+    }
+
+    [Fact]
+    public void PlaceNewPin_UnrelatedDepth0_Bottom_Appends()
+    {
+        var (doc, parent, _, _) = CraftFamily();
+        var other = PinOn(doc, "other-task", depth: 0);
+        var list = new List<ScribePinnedRef> { other };
+
+        var parentPin = PinOn(doc, parent.Text, parent.TaskId, depth: 0);
+        ScribePinOrdering.PlaceNewPin(list, parentPin, doc, insertEdge: ScribePinInsert.Bottom);
+
+        Assert.Equal(new[] { other.TaskId, parent.TaskId }, list.Select(p => p.TaskId));
+    }
+
+    [Fact]
+    public void PlaceNewPin_ChildWithUnpinnedParent_Top_InsertsAtHead()
+    {
+        var (doc, _, c1, _) = CraftFamily();
+        var other = PinOn(doc, "other", depth: 0);
+        var list = new List<ScribePinnedRef> { other };
+
+        var childPin = PinOn(doc, c1.Text, c1.TaskId, depth: 1);
+        ScribePinOrdering.PlaceNewPin(list, childPin, doc, insertEdge: ScribePinInsert.Top);
+
+        Assert.Equal(new[] { c1.TaskId, other.TaskId }, list.Select(p => p.TaskId));
+    }
+
+    [Fact]
+    public void PlaceNewPin_ChildUnderPinnedParent_IgnoresPinInsertTop()
+    {
+        // A subtask always attaches directly under its pinned parent's cluster — Pin Insert (even Top)
+        // must never pull it away to index 0.
+        var (doc, parent, c1, _) = CraftFamily();
+        var other = PinOn(doc, "other-task", depth: 0);
+        var parentPin = PinOn(doc, parent.Text, parent.TaskId, depth: 0);
+        var list = new List<ScribePinnedRef> { other, parentPin };
+
+        var childPin = PinOn(doc, c1.Text, c1.TaskId, depth: 1);
+        ScribePinOrdering.PlaceNewPin(list, childPin, doc, insertEdge: ScribePinInsert.Top);
+
+        Assert.Equal(new[] { other.TaskId, parent.TaskId, c1.TaskId }, list.Select(p => p.TaskId));
+    }
+
+    [Fact]
+    public void PlaceNewPin_PinningParent_Top_StillGathersChildren()
+    {
+        // The parent itself goes to Top, but already-pinned children still cluster directly under it,
+        // not at the true head of the list.
+        var (doc, parent, c1, c2) = CraftFamily();
+        var filler = PinOn(doc, "filler", depth: 0);
+        var list = new List<ScribePinnedRef>
+        {
+            PinOn(doc, c2.Text, c2.TaskId, depth: 1),
+            filler,
+            PinOn(doc, c1.Text, c1.TaskId, depth: 1),
+        };
+
+        var parentPin = PinOn(doc, parent.Text, parent.TaskId, depth: 0);
+        ScribePinOrdering.PlaceNewPin(list, parentPin, doc, insertEdge: ScribePinInsert.Top);
+
+        Assert.Equal(new[] { parent.TaskId, c2.TaskId, c1.TaskId, filler.TaskId }, list.Select(p => p.TaskId));
+    }
+
     private static (ScribeDocument Doc, ScribeBlock Parent, ScribeBlock C1, ScribeBlock C2) CraftFamily()
     {
         var parent = new ScribeBlock(ScribeBlockKind.Craft, "craft", depth: 0);

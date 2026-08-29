@@ -403,10 +403,34 @@ public abstract partial class ScribeDialogBase
 
     /// <summary>Fire-and-forget a pin/unpin for a task by stable identity. The document's DocId plus
     /// the task's TaskId fully address the pin; no block position is sent (so the same shape works
-    /// from a future HUD). The server derives the snapshot from its own document.</summary>
+    /// from a future HUD). The server derives the snapshot from its own document.
+    ///
+    /// <para>Also records the SAME snapshot as an optimistic overlay entry on <see cref="modSystem"/>
+    /// (update-pins-1-3-3) before the packet goes out, so the HUD/Pin Tab/dialog rows all show the
+    /// pin/unpin at once rather than waiting for the server round-trip — which in singleplayer stalls for
+    /// as long as the Handbook holds the embedded server paused.</para></summary>
     private void SendSetPin(Guid taskId, bool pinned)
     {
         var block = host.Document.FindByTaskId(taskId);
+        var insertEdge = ScribePlayerSettings.NormalizePinInsert(modSystem.MySettings.PinInsert);
+
+        ScribePinnedRef? snapshot = !pinned ? null : new ScribePinnedRef
+        {
+            OwnerDocId = host.Document.DocId,
+            TaskId = taskId,
+            PinnedAtTotalHours = capi.World.Calendar.TotalHours,
+            LastKnownText = block?.Text ?? "",
+            LastKnownDone = block?.Done ?? false,
+            Kind = block?.Kind ?? Scribe.Core.ScribeBlockKind.Task,
+            LinkTarget = block?.LinkTarget,
+            TargetItemCode = block?.TargetItemCode,
+            TargetQuantity = block?.TargetQuantity ?? 1,
+            CurrentQuantity = block?.CurrentQuantity ?? 0,
+            LinkLabel = block?.LinkLabel,
+            Depth = block?.Depth ?? 0,
+        };
+        modSystem.SetOptimisticPin(host.Document.DocId, taskId, snapshot, host.Document, insertEdge);
+
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeSetPinMessage
         {
             DocId = host.Document.DocId.ToByteArray(),
@@ -430,6 +454,10 @@ public abstract partial class ScribeDialogBase
             // The subtask depth, so a pinned subtask indents on the HUD/Pin Tab like the other surfaces
             // (add-crafting-tasks / task-subtasks 5.1).
             SnapshotDepth = block?.Depth ?? 0,
+            // Where an unrelated (no pinned-parent) new pin lands — Top or Bottom — per the player's
+            // client-local Pin Insert setting (update-pins-1-3-3). Only meaningful when pinned; the
+            // server ignores it on an unpin.
+            PinInsert = (byte)insertEdge,
         });
     }
 

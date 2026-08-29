@@ -104,10 +104,15 @@ public sealed partial class ScribeModSystem
             });
     }
 
-    /// <summary>Client-side: whether THIS player has pinned the given task, from the server-pushed
-    /// cache. The lectern GUI drives its resting pin tint / pin-glyph accent off this. Returns false
-    /// before the first push (a safe default — nothing shows as pinned until the server confirms).</summary>
-    public bool IsPinnedForMe(Guid docId, Guid taskId) => myPins.Contains((docId, taskId));
+    /// <summary>Client-side: whether THIS player has pinned the given task — the optimistic overlay
+    /// (<see cref="optimisticPinOverlay"/>) if a pin/unpin for this task is still in flight, else the
+    /// server-pushed cache. The lectern GUI drives its resting pin tint / pin-glyph accent off this.
+    /// Returns false before the first push and with no in-flight optimism (a safe default — nothing shows
+    /// as pinned until the server confirms).</summary>
+    public bool IsPinnedForMe(Guid docId, Guid taskId)
+        => optimisticPinOverlay.TryGetValue((docId, taskId), out var overlay)
+            ? overlay is not null
+            : myPins.Contains((docId, taskId));
 
     /// <summary>
     /// Client-side: load (once) and return the decoded backdrop bitmap for a dialog backdrop, or
@@ -310,10 +315,79 @@ public sealed partial class ScribeModSystem
             ? silentSoundPlayer ??= new SilentSoundPlayer(capi)
             : new SoundPlayer(capi);
 
-    /// <summary>Client-side: THIS player's full pin list (empty until the first push), in server order,
-    /// each carrying its <c>LastKnownText</c>/<c>LastKnownDone</c> snapshot. The HUD renders from this;
-    /// callers must not mutate it.</summary>
-    public IReadOnlyList<ScribePinnedRef> MyPins => myPinList;
+    /// <summary>Client-side: THIS player's full pin list to DISPLAY (empty until the first push), in
+    /// display order, each carrying its <c>LastKnownText</c>/<c>LastKnownDone</c> snapshot. This is the
+    /// authoritative server-pushed set with any in-flight optimistic pin/unpin
+    /// (<see cref="optimisticPinOverlay"/>) already applied — every consumer (HUD, Pin Tab, dialog rows)
+    /// reads through here, so they all see an optimistic change identically and at once. Callers must not
+    /// mutate the returned list.</summary>
+    public IReadOnlyList<ScribePinnedRef> MyPins => displayPinList;
+
+    /// <summary>Client-side: record an optimistic pin/unpin ahead of the server round-trip, so
+    /// <see cref="MyPins"/>/<see cref="IsPinnedForMe"/> reflect it immediately for every consumer rather than
+    /// waiting for the authoritative push (see <see cref="optimisticPinOverlay"/>'s remarks on why this
+    /// matters). Pinning (<paramref name="snapshotIfPinned"/> non-null) is placed into the display list via
+    /// <see cref="ScribePinOrdering.PlaceNewPin"/> — the SAME rule the server applies — using
+    /// <paramref name="source"/> (the document the task lives in, for pinned-parent clustering) and the
+    /// player's Pin Insert <paramref name="insertEdge"/>. Unpinning just hides the existing entry.</summary>
+    public void SetOptimisticPin(Guid docId, Guid taskId, ScribePinnedRef? snapshotIfPinned,
+        ScribeDocument? source, ScribePinInsert insertEdge)
+    {
+        var key = (docId, taskId);
+        if (!optimisticPinOverlay.ContainsKey(key)) optimisticPinOrder.Add(key);
+        optimisticPinOverlay[key] = snapshotIfPinned;
+        if (snapshotIfPinned is not null) optimisticPinPlan[key] = (source, insertEdge);
+        else optimisticPinPlan.Remove(key);
+
+        RebuildDisplayPinList();
+        MyPinsChanged?.Invoke();
+    }
+
+    /// <summary>Recompute <see cref="displayPinList"/> from <see cref="myPinList"/> with
+    /// <see cref="optimisticPinOverlay"/> applied. Cheap no-op copy when there is no in-flight optimism.</summary>
+    private void RebuildDisplayPinList()
+    {
+        if (optimisticPinOverlay.Count == 0)
+        {
+            displayPinList = myPinList;
+            return;
+        }
+
+        var list = new List<ScribePinnedRef>(myPinList);
+        list.RemoveAll(p => optimisticPinOverlay.ContainsKey((p.OwnerDocId, p.TaskId)));
+
+        // Replay adds in the order they happened (not dictionary order) so a parent-then-child pinned in
+        // quick succession while both are still unconfirmed clusters correctly — PlaceNewPin needs to see
+        // the parent already placed to attach the child under it.
+        foreach (var key in optimisticPinOrder)
+        {
+            if (optimisticPinOverlay[key] is not { } snapshot) continue; // an optimistic remove — already dropped above
+            var (source, insertEdge) = optimisticPinPlan.TryGetValue(key, out var plan) ? plan : default;
+            ScribePinOrdering.PlaceNewPin(list, snapshot, source, insertEdge);
+        }
+
+        displayPinList = list;
+    }
+
+    /// <summary>Drop each optimistic entry the authoritative push now agrees with (the server has the pin
+    /// iff we optimistically wanted it pinned), leaving only genuinely still-in-flight requests. Called from
+    /// <see cref="OnClientReceivedPinnedSet"/> before <see cref="RebuildDisplayPinList"/> re-derives the
+    /// display list from the fresh <see cref="myPinList"/>.</summary>
+    private void ReconcileOptimisticPins()
+    {
+        if (optimisticPinOverlay.Count == 0) return;
+        for (int i = optimisticPinOrder.Count - 1; i >= 0; i--)
+        {
+            var key = optimisticPinOrder[i];
+            bool serverHasIt = myPins.Contains(key);
+            bool weWantPinned = optimisticPinOverlay[key] is not null;
+            if (serverHasIt != weWantPinned) continue; // still in flight — keep it
+
+            optimisticPinOverlay.Remove(key);
+            optimisticPinPlan.Remove(key);
+            optimisticPinOrder.RemoveAt(i);
+        }
+    }
 
     private void OnClientReceivedPinnedSet(ScribePinnedSetMessage message)
     {
@@ -327,6 +401,8 @@ public sealed partial class ScribeModSystem
         {
             myPinList = Array.Empty<ScribePinnedRef>();
         }
+        ReconcileOptimisticPins();
+        RebuildDisplayPinList();
         MyPinsChanged?.Invoke();
     }
 

@@ -4,6 +4,30 @@ All notable changes to Scribe are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2026-08-29
+
+### Added
+- **Pin Insert.** A Settings dropdown (Bottom by default, or Top) chooses where a newly pinned
+  task lands in your pin list — separate from New Task Insert. A subtask pinned under an
+  already-pinned parent still attaches directly beneath it either way.
+- Existing rows now slide smoothly to their new position instead of jumping instantly whenever the
+  list around them changes — a row inserted above them (e.g. New Task Insert / Pin Insert set to
+  Top), a row removed elsewhere, or a completion policy reordering a pin all animate the same way.
+  Applies everywhere Scribe animates rows today (editor, Read view, Pin Tab, HUD) and to any future
+  surface built the same way, with no extra work required.
+
+### Fixed
+- Pinning or unpinning a task while the game is paused (e.g. singleplayer auto-pause while the
+  Handbook is open) now updates the HUD and Pin Tab immediately, instead of only after unpausing.
+
+### Changed
+- Reordered and regrouped the Scribe Settings menu for better scanability: New Task Insert/Pin
+  Insert and Counter Completion Behavior/Subtask Behavior now sit in side-by-side column pairs;
+  Font moved to the top of Window Appearance; Pixel-Art Display and Cuneiform Tablets now share a
+  row at the bottom of Window Appearance, with Cuneiform Press-In alone below them. Also renamed
+  "Item Tracker Completion Behavior" to "Counter Completion Behavior", "Task text font" to "Font",
+  and "HUD task width" to "HUD width".
+
 ## [1.3.2] - 2026-08-28
 
 Crafting Tasks keep their ingredient lists together, new rows land at the top by default,

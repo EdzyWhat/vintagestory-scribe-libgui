@@ -94,7 +94,7 @@ public sealed class ScribePinStore
     public bool SetPin(string playerUid, Guid docId, Guid taskId, double pinnedAtTotalHours, string lastKnownText, bool lastKnownDone,
         ScribeBlockKind kind = ScribeBlockKind.Task, string? linkTarget = null,
         string? targetItemCode = null, int targetQuantity = 1, int currentQuantity = 0, string? linkLabel = null,
-        int depth = 0, ScribeDocument? source = null)
+        int depth = 0, ScribeDocument? source = null, ScribePinInsert insertEdge = ScribePinInsert.Bottom)
     {
         var list = _pins.TryGetValue(playerUid, out var existing) ? existing : _pins[playerUid] = new List<ScribePinnedRef>();
         if (list.Any(p => p.OwnerDocId == docId && p.TaskId == taskId)) return false; // idempotent
@@ -116,7 +116,7 @@ public sealed class ScribePinStore
             LinkLabel = linkLabel,
             Depth = depth,
         };
-        ScribePinOrdering.PlaceNewPin(list, pin, source);
+        ScribePinOrdering.PlaceNewPin(list, pin, source, insertEdge);
         return true;
     }
 

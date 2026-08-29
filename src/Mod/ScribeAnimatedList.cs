@@ -163,12 +163,59 @@ internal sealed class ScribeAnimatedListState : State<ScribeAnimatedList>
     /// LATER build (a genuine add into an already-mounted list) animate.</summary>
     private bool firstBuild = true;
 
+    /// <summary>Each row's last-measured real rendered height (animate-row-reposition), reported by the
+    /// <see cref="ScribeSizeReportWidget"/> every row is wrapped in. Reset only when this State itself is
+    /// torn down (a genuine <c>ForceRebuild</c>) — an ordinary row mutation goes through the surface's local
+    /// <c>RebuildBody</c>, which reconciles this State rather than recreating it, so the cache survives
+    /// across exactly the builds where a reposition needs to compare an old height to a new one.</summary>
+    private readonly Dictionary<Guid, float> knownHeight = new();
+
+    /// <summary>For a row that has ever been repositioned, its CURRENT generation number
+    /// (animate-row-reposition) — bumped each time a fresh, non-negligible displacement starts, so
+    /// <see cref="ScribeRowReposition"/> can tell "resume this animation" (unchanged generation) apart from
+    /// "start a new one" (bumped) without unmounting the row's wrapper (which would drop a live caret).
+    /// Once added, an id is never removed except on departure — the wrapper renders forever (inert at rest)
+    /// for the same focus-safety reason <see cref="entering"/> does.</summary>
+    private readonly Dictionary<Guid, int> repositionGeneration = new();
+
     private static string Key(Guid id) => id.ToString("N");
 
     /// <summary>Registry key for a row's ENTRY controller. Distinct from the collapse key (<see cref="Key"/>)
     /// for the same id so a grow-then-delete of one row starts a FRESH collapse instead of resuming the
     /// already-Completed entry controller (which would render an instantly-closed ghost).</summary>
     private static string EntryKey(Guid id) => "enter:" + id.ToString("N");
+
+    /// <summary>Registry key for a row's reposition controller at a given generation
+    /// (animate-row-reposition). The generation is embedded in the key itself (not looked up separately) so
+    /// a fresh displacement gets a genuinely new <see cref="AnimationController"/> from the registry, while
+    /// an unchanged generation resumes the existing one across a reconciling rebuild.</summary>
+    private static string MoveKey(Guid id, int generation) => "move:" + id.ToString("N") + ":" + generation;
+
+    /// <summary>Below this many logical px, a survivor's computed displacement is treated as noise (float
+    /// accumulation, a sub-pixel wrap difference) rather than a real reposition worth animating.</summary>
+    private const float RepositionEpsilon = 1f;
+
+    /// <summary>Cumulative Y position immediately BEFORE each id in <paramref name="order"/>, using each id's
+    /// last-known real height (animate-row-reposition). A missing height (a row never yet measured — only
+    /// possible for one that just appeared this very build, e.g. a brand-new task) falls back to the
+    /// SMALLEST currently-known row height rather than zero: defaulting to zero was the exact bug found in
+    /// playtest — a single fresh insertion's survivor delta rounded to nothing (nothing separated old and
+    /// new position except the unmeasured row), so it never animated at all. A brand-new task starts as
+    /// empty text, so the shortest known row is a reasonable stand-in for its real height until the next
+    /// build measures it for real (the row's OWN entry animation is unaffected either way — this fallback
+    /// only feeds OTHER survivors' displacement math).</summary>
+    private Dictionary<Guid, float> PrefixY(IReadOnlyList<Guid> order)
+    {
+        float fallback = knownHeight.Count > 0 ? knownHeight.Values.Min() : 0f;
+        var result = new Dictionary<Guid, float>(order.Count);
+        float y = 0f;
+        foreach (var id in order)
+        {
+            result[id] = y;
+            y += knownHeight.TryGetValue(id, out var h) ? h : fallback;
+        }
+        return result;
+    }
 
     public override Widget Build(BuildContext context)
     {
@@ -226,6 +273,8 @@ internal sealed class ScribeAnimatedListState : State<ScribeAnimatedList>
         foreach (var dep in diff.Departed)
         {
             if (entering.Remove(dep.Id)) Widget.Registry.Release(EntryKey(dep.Id));
+            if (repositionGeneration.Remove(dep.Id, out var gen)) Widget.Registry.Release(MoveKey(dep.Id, gen));
+            knownHeight.Remove(dep.Id);
             if (priorSnapshots.TryGetValue(dep.Id, out var snapshot))
             {
                 ghostSlots[dep.Id] = dep.Slot;
@@ -245,15 +294,52 @@ internal sealed class ScribeAnimatedListState : State<ScribeAnimatedList>
             foreach (var id in diff.Appeared) entering.Add(id);
         }
 
+        // 4c. Reposition (animate-row-reposition): a survivor — an id live in BOTH the previous and current
+        //     render order (so neither departing, reviving, nor freshly appeared) — whose cumulative Y
+        //     position changes gets a fresh displacement animation. Computed purely from the before/after
+        //     order and each row's real measured height, so it fires uniformly regardless of WHY the slot
+        //     changed (an insertion above it, a removal elsewhere, or an explicit reorder). Skipped on the
+        //     first build: there is no meaningful "previous position" right after a ForceRebuild reset.
+        //     This computed value is only USED by ScribeRowReposition at the exact moment a fresh
+        //     generation attaches (see its class doc comment) — a later build recomputing ~0 here (because
+        //     the order has already caught up to itself) does NOT retroactively cancel an in-flight motion.
+        var survivorTargetOffset = new Dictionary<Guid, float>();
+        if (!firstBuild)
+        {
+            var oldPrefixY = PrefixY(prevRenderOrder);
+            var newPrefixY = PrefixY(diff.RenderOrder);
+            foreach (var id in newLiveIds)
+            {
+                if (!prevLiveIds.Contains(id)) continue; // appeared/revived — not a survivor
+                if (!oldPrefixY.TryGetValue(id, out var oldY) || !newPrefixY.TryGetValue(id, out var newY)) continue;
+
+                float delta = oldY - newY;
+                if (Math.Abs(delta) < RepositionEpsilon) continue;
+
+                // A fresh displacement needs a NEW generation (and so a fresh controller) whenever this row
+                // has never been repositioned before, or its last reposition already finished — resuming a
+                // Completed controller would render zero motion for what should be a brand-new slide.
+                bool needsFreshGeneration = !repositionGeneration.TryGetValue(id, out var currentGen)
+                    || Widget.Registry.IsComplete(MoveKey(id, currentGen));
+                if (needsFreshGeneration) repositionGeneration[id] = currentGen + 1;
+
+                survivorTargetOffset[id] = delta;
+            }
+        }
+
         // 5. Materialize the render order: a ghost id → its frozen snapshot wrapped in a Collapse animation
-        //    (keyed by id so its controller is found across rebuilds); a live id → the caller's row widget.
+        //    (keyed by id so its controller is found across rebuilds); a live id → the caller's row widget,
+        //    optionally wrapped in its entry slide-in or its reposition displacement. Every rendered row is
+        //    additionally wrapped in a size reporter so knownHeight stays current for the next build's
+        //    reposition math (animate-row-reposition), regardless of which (if any) animation wraps it.
         var rows = new List<Widget>(diff.RenderOrder.Count);
         foreach (var id in diff.RenderOrder)
         {
+            Widget row;
             if (ghostSlots.ContainsKey(id) && capturedGhosts.TryGetValue(id, out var ghost))
             {
                 Guid captured = id;
-                rows.Add(new ScribeRowSizeAnimation(
+                row = new ScribeRowSizeAnimation(
                     id: Key(captured),
                     animating: true,
                     direction: ScribeRowSizeDirection.Collapse,
@@ -261,31 +347,63 @@ internal sealed class ScribeAnimatedListState : State<ScribeAnimatedList>
                     onEnd: () => OnGhostCollapsed(captured),
                     durationMs: Widget.DurationMs,
                     child: ghost,
-                    key: new ValueKey<Guid>(captured)));
+                    key: new ValueKey<Guid>(captured));
             }
             else if (liveById.TryGetValue(id, out var live))
             {
-                // A live row that is entering is wrapped in its slide-in (keyed by id so its controller is
-                // found across rebuilds); the wrapper stays for the row's whole live lifetime (a settled slide
-                // is an inert pass-through), so a completed entry never type-swaps the slot back to a bare row
-                // and remounts the field. A row that never entered (present since the first build) renders bare.
+                // Both wrappers are INDEPENDENT and stack rather than being mutually exclusive: `entering`
+                // NEVER clears for a row's whole live lifetime (a settled ScribeSlideIn is an inert
+                // pass-through, kept forever for focus safety — see its own doc comment), so a row that
+                // entered once and later needs to reposition (e.g. a brand-new task, still "entering"
+                // forever, later shifted by ANOTHER new task landing above it) would otherwise be
+                // permanently stuck on the entry branch and never reposition-animate again for the rest of
+                // its life in this mounted session (the exact bug this fixes — confirmed by testing: it
+                // only "fixed itself" after a ForceRebuild, i.e. reopening the dialog or switching tabs,
+                // reset `entering` to empty). A row is excluded from reposition only on the EXACT build it
+                // first appears (no prior position exists yet — survivorTargetOffset excludes it by
+                // construction); from the next build on it is eligible even while still mid-slide-in.
+                Widget content = live;
+
+                if (repositionGeneration.TryGetValue(id, out var gen))
+                {
+                    // Wrapped forever once ever repositioned (same focus-safety reasoning as entering below);
+                    // a build with no active displacement for this id still renders the wrapper, settled at
+                    // offset zero via its own controller's Completed state.
+                    Guid capturedMove = id;
+                    float offset = survivorTargetOffset.TryGetValue(id, out var d) ? d : 0f;
+                    content = new ScribeRowReposition(
+                        id: MoveKey(capturedMove, gen),
+                        targetOffsetY: offset,
+                        registry: Widget.Registry,
+                        child: content,
+                        key: new ValueKey<Guid>(capturedMove));
+                }
+
                 if (entering.Contains(id))
                 {
-                    Guid captured = id;
-                    rows.Add(new ScribeSlideIn(
-                        id: EntryKey(captured),
+                    Guid capturedEnter = id;
+                    content = new ScribeSlideIn(
+                        id: EntryKey(capturedEnter),
                         animating: true,
                         registry: Widget.Registry,
-                        onEnd: () => OnEntryComplete(captured),
+                        onEnd: () => OnEntryComplete(capturedEnter),
                         durationMs: Widget.DurationMs,
-                        child: live,
-                        key: new ValueKey<Guid>(captured)));
+                        child: content,
+                        key: new ValueKey<Guid>(capturedEnter));
                 }
-                else
-                {
-                    rows.Add(live);
-                }
+
+                row = content;
             }
+            else
+            {
+                continue; // shouldn't happen — every RenderOrder id is either a kept ghost or a live row
+            }
+
+            Guid measuredId = id;
+            rows.Add(new ScribeSizeReportWidget(
+                onMeasured: size => knownHeight[measuredId] = size.Y,
+                child: row,
+                key: new ValueKey<Guid>(measuredId)));
         }
 
         // 6. Refresh caches for next frame: snapshot every current live row, and record what we rendered.

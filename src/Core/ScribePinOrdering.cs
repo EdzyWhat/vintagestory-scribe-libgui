@@ -38,35 +38,39 @@ public static class ScribePinOrdering
 
     /// <summary>
     /// Inserts <paramref name="newPin"/> into <paramref name="pins"/> using the source document's
-    /// owned-run geometry (refine-crafting-tasks-1-3-2 D6). Depth-0: append, then gather already-pinned
+    /// owned-run geometry (refine-crafting-tasks-1-3-2 D6) and the player's <paramref name="insertEdge"/>
+    /// (update-pins-1-3-3). Depth-0: insert at <paramref name="insertEdge"/>, then gather already-pinned
     /// children whose <c>TaskId</c> is in that parent's current owned run (preserving their relative
     /// pin order). Depth-1: walk back to the document parent; if that parent is pinned, insert after
-    /// its contiguous HUD cluster (parent, then following pins in the owned run); otherwise append.
-    /// Never auto-pins the parent. An unresolvable source (null document, or the task missing) appends.
+    /// its contiguous HUD cluster (parent, then following pins in the owned run) — this branch ignores
+    /// <paramref name="insertEdge"/>, since a subtask always attaches to its pinned parent rather than the
+    /// list edge; otherwise insert at <paramref name="insertEdge"/>. Never auto-pins the parent. An
+    /// unresolvable source (null document, or the task missing) also inserts at <paramref name="insertEdge"/>.
     /// Caller has already checked uniqueness and the pin cap; this only chooses the insert index.
     /// </summary>
-    public static void PlaceNewPin(List<ScribePinnedRef> pins, ScribePinnedRef newPin, ScribeDocument? source)
+    public static void PlaceNewPin(List<ScribePinnedRef> pins, ScribePinnedRef newPin, ScribeDocument? source,
+        ScribePinInsert insertEdge = ScribePinInsert.Bottom)
     {
         ArgumentNullException.ThrowIfNull(pins);
         ArgumentNullException.ThrowIfNull(newPin);
 
         if (source is null)
         {
-            pins.Add(newPin);
+            InsertAtEdge(pins, newPin, insertEdge);
             return;
         }
 
         int idx = source.IndexOf(newPin.TaskId);
         if (idx < 0)
         {
-            pins.Add(newPin);
+            InsertAtEdge(pins, newPin, insertEdge);
             return;
         }
 
         var block = source.Blocks[idx];
         if (block.Depth == 0)
         {
-            pins.Add(newPin);
+            InsertAtEdge(pins, newPin, insertEdge);
             GatherOwnedRunChildren(pins, newPin, source, idx);
             return;
         }
@@ -74,7 +78,7 @@ public static class ScribePinOrdering
         int parentIdx = source.FindParentIndex(idx);
         if (parentIdx < 0)
         {
-            pins.Add(newPin);
+            InsertAtEdge(pins, newPin, insertEdge);
             return;
         }
 
@@ -82,7 +86,7 @@ public static class ScribePinOrdering
         int parentPinIdx = IndexOfPin(pins, newPin.OwnerDocId, parentTaskId);
         if (parentPinIdx < 0)
         {
-            pins.Add(newPin);
+            InsertAtEdge(pins, newPin, insertEdge);
             return;
         }
 
@@ -95,6 +99,14 @@ public static class ScribePinOrdering
             insertAt++;
         }
         pins.Insert(insertAt, newPin);
+    }
+
+    /// <summary>Insert a pin with no pinned-parent relationship at the player's chosen edge: index 0 for
+    /// <see cref="ScribePinInsert.Top"/>, appended for <see cref="ScribePinInsert.Bottom"/>.</summary>
+    private static void InsertAtEdge(List<ScribePinnedRef> pins, ScribePinnedRef newPin, ScribePinInsert insertEdge)
+    {
+        if (insertEdge == ScribePinInsert.Top) pins.Insert(0, newPin);
+        else pins.Add(newPin);
     }
 
     /// <summary>Pull already-pinned owned-run children to sit immediately after the newly appended

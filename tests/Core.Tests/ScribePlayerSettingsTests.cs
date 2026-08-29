@@ -203,6 +203,24 @@ public class ScribePlayerSettingsTests
     }
 
     [Fact]
+    public void Default_PinInsert_IsBottom()
+    {
+        Assert.Equal(ScribePinInsert.Bottom, new ScribePlayerSettings().PinInsert);
+        Assert.Equal(ScribePinInsert.Bottom, new ScribePlayerSettings().Normalized().PinInsert);
+        Assert.Equal(ScribePinInsert.Top,
+            new ScribePlayerSettings { PinInsert = ScribePinInsert.Top }.Normalized().PinInsert);
+    }
+
+    [Fact]
+    public void NormalizePinInsert_Unknown_FallsBackToBottom()
+    {
+        Assert.Equal(ScribePinInsert.Bottom,
+            ScribePlayerSettings.NormalizePinInsert((ScribePinInsert)99));
+        Assert.Equal(ScribePinInsert.Bottom,
+            new ScribePlayerSettings { PinInsert = (ScribePinInsert)99 }.Normalized().PinInsert);
+    }
+
+    [Fact]
     public void Default_HudShowSettingsGear_IsOn()
     {
         Assert.True(new ScribePlayerSettings().HudShowSettingsGear);

@@ -20,6 +20,7 @@ coverage/
 .cursorindexingignore
 .claudeignore
 .claude/
+.cursor/
 CLAUDE.md
 TESTING.md
 playtest-history/
@@ -70,6 +71,11 @@ docs/media/screenshots/
 #   git clone --depth 1 https://github.com/ripls56/vslibgui.git reference/vslibgui
 .wiki/
 reference/vslibgui/
+
+# Decompiled dump of our OWN vendored src/Mod/lib/Gui.dll (the shipped binary, more authoritative
+# than the vslibgui source above when they disagree) -- derived output, not ours to commit, and
+# goes stale whenever Gui.dll is bumped. Regenerate with: build/decompile-libgui.sh
+reference/vslibgui-decompiled/
 
 # Atlas (integration-test harness) local references: source + wiki cloned for ground-truth
 # lookups when the mods.vintagestory.at page is thin. Upstream repos, not ours -- re-clone with:

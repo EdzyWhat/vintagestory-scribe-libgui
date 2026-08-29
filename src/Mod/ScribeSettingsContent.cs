@@ -116,40 +116,51 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         },
                         onChanged: v => onMutate(s => s.CompletionPolicy = v))),
 
-                LabeledControl(
-                    "settings-trackercompletion", colors, scale,
-                    new Dropdown<ScribeTrackerCompletion>(
-                        value: settings.TrackerCompletion,
-                        items: new List<DropdownItem<ScribeTrackerCompletion>>
-                        {
-                            new() { Value = ScribeTrackerCompletion.Complete, Label = Lang.Get("scribe:scribe-trackercompletion-complete") },
-                            new() { Value = ScribeTrackerCompletion.Delete,   Label = Lang.Get("scribe:scribe-trackercompletion-delete") },
-                            new() { Value = ScribeTrackerCompletion.Nothing,  Label = Lang.Get("scribe:scribe-trackercompletion-nothing") },
-                        },
-                        onChanged: v => onMutate(s => s.TrackerCompletion = v))),
+                PairedControls(colors, scale,
+                    LabeledControl(
+                        "settings-trackercompletion", colors, scale,
+                        new Dropdown<ScribeTrackerCompletion>(
+                            value: settings.TrackerCompletion,
+                            items: new List<DropdownItem<ScribeTrackerCompletion>>
+                            {
+                                new() { Value = ScribeTrackerCompletion.Complete, Label = Lang.Get("scribe:scribe-trackercompletion-complete") },
+                                new() { Value = ScribeTrackerCompletion.Delete,   Label = Lang.Get("scribe:scribe-trackercompletion-delete") },
+                                new() { Value = ScribeTrackerCompletion.Nothing,  Label = Lang.Get("scribe:scribe-trackercompletion-nothing") },
+                            },
+                            onChanged: v => onMutate(s => s.TrackerCompletion = v))),
+                    LabeledControl(
+                        "settings-subtaskbehavior", colors, scale,
+                        new Dropdown<ScribeSubtaskBehavior>(
+                            value: settings.SubtaskBehavior,
+                            items: new List<DropdownItem<ScribeSubtaskBehavior>>
+                            {
+                                new() { Value = ScribeSubtaskBehavior.Bound,           Label = Lang.Get("scribe:scribe-subtaskbehavior-bound") },
+                                new() { Value = ScribeSubtaskBehavior.Independent,     Label = Lang.Get("scribe:scribe-subtaskbehavior-independent") },
+                                new() { Value = ScribeSubtaskBehavior.DiscardChildren, Label = Lang.Get("scribe:scribe-subtaskbehavior-discard") },
+                            },
+                            onChanged: v => onMutate(s => s.SubtaskBehavior = v)))),
 
-                LabeledControl(
-                    "settings-subtaskbehavior", colors, scale,
-                    new Dropdown<ScribeSubtaskBehavior>(
-                        value: settings.SubtaskBehavior,
-                        items: new List<DropdownItem<ScribeSubtaskBehavior>>
-                        {
-                            new() { Value = ScribeSubtaskBehavior.Bound,           Label = Lang.Get("scribe:scribe-subtaskbehavior-bound") },
-                            new() { Value = ScribeSubtaskBehavior.Independent,     Label = Lang.Get("scribe:scribe-subtaskbehavior-independent") },
-                            new() { Value = ScribeSubtaskBehavior.DiscardChildren, Label = Lang.Get("scribe:scribe-subtaskbehavior-discard") },
-                        },
-                        onChanged: v => onMutate(s => s.SubtaskBehavior = v))),
-
-                LabeledControl(
-                    "settings-newtaskinsert", colors, scale,
-                    new Dropdown<ScribeNewTaskInsert>(
-                        value: settings.NewTaskInsert,
-                        items: new List<DropdownItem<ScribeNewTaskInsert>>
-                        {
-                            new() { Value = ScribeNewTaskInsert.Top,    Label = Lang.Get("scribe:scribe-newtaskinsert-top") },
-                            new() { Value = ScribeNewTaskInsert.Bottom, Label = Lang.Get("scribe:scribe-newtaskinsert-bottom") },
-                        },
-                        onChanged: v => onMutate(s => s.NewTaskInsert = v))),
+                PairedControls(colors, scale,
+                    LabeledControl(
+                        "settings-newtaskinsert", colors, scale,
+                        new Dropdown<ScribeNewTaskInsert>(
+                            value: settings.NewTaskInsert,
+                            items: new List<DropdownItem<ScribeNewTaskInsert>>
+                            {
+                                new() { Value = ScribeNewTaskInsert.Top,    Label = Lang.Get("scribe:scribe-newtaskinsert-top") },
+                                new() { Value = ScribeNewTaskInsert.Bottom, Label = Lang.Get("scribe:scribe-newtaskinsert-bottom") },
+                            },
+                            onChanged: v => onMutate(s => s.NewTaskInsert = v))),
+                    LabeledControl(
+                        "settings-pininsert", colors, scale,
+                        new Dropdown<ScribePinInsert>(
+                            value: settings.PinInsert,
+                            items: new List<DropdownItem<ScribePinInsert>>
+                            {
+                                new() { Value = ScribePinInsert.Top,    Label = Lang.Get("scribe:scribe-pininsert-top") },
+                                new() { Value = ScribePinInsert.Bottom, Label = Lang.Get("scribe:scribe-pininsert-bottom") },
+                            },
+                            onChanged: v => onMutate(s => s.PinInsert = v)))),
 
                 HuggingCheckbox(
                     "settings-muteuisounds", colors, scale,
@@ -179,13 +190,17 @@ internal sealed class ScribeSettingsContent : StatelessWidget
             mainAxisSize: MainAxisSize.Min,
             children: new Widget[]
             {
-                // The pixel-art master toggle (scribe-themed-toggle): flips the Lectern between Scribe's
-                // light "pixel-art" look (with notebook art) and the player's own global GUI theme, live.
-                // Hugs its label like HudCollapsed.
-                HuggingCheckbox(
-                    "settings-pixelartdisplay", colors, scale,
-                    value: settings.PixelArtDisplay,
-                    onChanged: v => onMutate(s => s.PixelArtDisplay = v)),
+                // Font selector (v1-release-checklist §6): picks the family for task/note ROW text; the
+                // empty-string default keeps the built-in body font. Governs task text only — the
+                // in-Lectern buttons keep a fixed face. Writes through UpdateMySettings, which
+                // NormalizeTaskFontFamily-clamps and repaints the open Lectern live. First in this section
+                // per the settings-menu reorder.
+                LabeledControl(
+                    "settings-taskfont", colors, scale,
+                    new Dropdown<string>(
+                        value: ScribePlayerSettings.NormalizeTaskFontFamily(settings.TaskFontFamily),
+                        items: TaskFontItems(),
+                        onChanged: v => onMutate(s => s.TaskFontFamily = v))),
 
                 // Pixel Art Size + Window text scale share one row as two columns (§9.2). Pixel Art Size (W)
                 // is the single driving width of the Lectern's proportional layout (scribe-notebook-frame),
@@ -202,29 +217,23 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         "settings-windowfontscale", colors, scale,
                         FontScaleField("windowfontscale", settings.WindowFontScale, v => onMutate(s => s.WindowFontScale = v)))),
 
-                // Task-text font selector (v1-release-checklist §6): picks the family for task/note ROW
-                // text; the empty-string default keeps the built-in body font. Governs task text only —
-                // the in-Lectern buttons keep a fixed face. Writes through UpdateMySettings, which
-                // NormalizeTaskFontFamily-clamps and repaints the open Lectern live.
-                LabeledControl(
-                    "settings-taskfont", colors, scale,
-                    new Dropdown<string>(
-                        value: ScribePlayerSettings.NormalizeTaskFontFamily(settings.TaskFontFamily),
-                        items: TaskFontItems(),
-                        onChanged: v => onMutate(s => s.TaskFontFamily = v))),
-
-                // Cuneiform is a tablet-surface look (add-cuneiform-glyph-font / add-cuneiform-handwriting-feel),
-                // so it sits with Window Appearance rather than Mod Behavior. Press-in only animates while
-                // Cuneiform tablets is on.
+                // The pixel-art master toggle (scribe-themed-toggle) and Cuneiform tablets share one row at
+                // the bottom of the section, with Cuneiform press-in (which only applies while Cuneiform
+                // tablets is on) alone below them.
                 PairedControls(colors, scale,
+                    HuggingCheckbox(
+                        "settings-pixelartdisplay", colors, scale,
+                        value: settings.PixelArtDisplay,
+                        onChanged: v => onMutate(s => s.PixelArtDisplay = v)),
                     HuggingCheckbox(
                         "settings-cuneiformtablets", colors, scale,
                         value: settings.CuneiformTablets,
-                        onChanged: v => onMutate(s => s.CuneiformTablets = v)),
-                    HuggingCheckbox(
-                        "settings-cuneiformprogression", colors, scale,
-                        value: settings.CuneiformProgression,
-                        onChanged: v => onMutate(s => s.CuneiformProgression = v))),
+                        onChanged: v => onMutate(s => s.CuneiformTablets = v))),
+
+                HuggingCheckbox(
+                    "settings-cuneiformprogression", colors, scale,
+                    value: settings.CuneiformProgression,
+                    onChanged: v => onMutate(s => s.CuneiformProgression = v)),
             });
     }
 

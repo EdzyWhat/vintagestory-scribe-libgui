@@ -27,7 +27,8 @@ public sealed partial class ScribeModSystem
         string? fallbackText = null, bool fallbackDone = false,
         ScribeBlockKind fallbackKind = ScribeBlockKind.Task, string? fallbackLinkTarget = null,
         string? fallbackTargetItemCode = null, int fallbackTargetQuantity = 1, int fallbackCurrentQuantity = 0,
-        string? fallbackLinkLabel = null, int fallbackDepth = 0)
+        string? fallbackLinkLabel = null, int fallbackDepth = 0,
+        ScribePinInsert insertEdge = ScribePinInsert.Bottom)
     {
         if (sapi is null || pinStore is null) return;
 
@@ -64,7 +65,7 @@ public sealed partial class ScribeModSystem
                 }
             }
             changed = pinStore.SetPin(player.PlayerUID, docId, taskId, sapi.World.Calendar.TotalHours, text, done, kind, linkTarget,
-                targetItemCode, targetQuantity, currentQuantity, linkLabel, depth, source);
+                targetItemCode, targetQuantity, currentQuantity, linkLabel, depth, source, insertEdge);
         }
         else
         {

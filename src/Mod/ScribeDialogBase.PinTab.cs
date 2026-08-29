@@ -260,10 +260,13 @@ public abstract partial class ScribeDialogBase
     }
 
     /// <summary>Pin Tab unpin control: remove only the pin (the task survives), via the existing
-    /// <see cref="ScribeSetPinMessage"/> with <c>Pinned = false</c> — no block resolution needed.</summary>
+    /// <see cref="ScribeSetPinMessage"/> with <c>Pinned = false</c> — no block resolution needed. Also
+    /// records the optimistic removal (update-pins-1-3-3) so the row disappears from every surface at
+    /// once rather than waiting for the server round-trip.</summary>
     private void OnPinUnpinTask(Guid docId, Guid taskId)
     {
         pinEditBuffer.Remove(taskId);
+        modSystem.SetOptimisticPin(docId, taskId, snapshotIfPinned: null, source: null, insertEdge: default);
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeSetPinMessage
         {
             DocId = docId.ToByteArray(),

@@ -18,7 +18,7 @@ reports and writes the verdict lines below + flips the matching `tasks.md` check
 verdict lines here are written by that reconciler (or by an agent from first-hand
 evidence), never by hand-toggling a box.
 
-**How to refer to an item across machines:** quote its **code** (the `` `xxxxxxxx` ``
+**How to refer to an item across machines:** quote its **code** (the ``xxxxxxxx``
 fingerprint the app shows on each item). Item text leads with its task number in parentheses
 (e.g. `(3.5)`); the number is unambiguous under its spec group heading.
 
@@ -26,6 +26,83 @@ fingerprint the app shows on each item). Item text leads with its task number in
 mouse while its window is expanded, so click-and-drag on the game's scrollbar won't work
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
+
+## refine-crafting-tasks-1-3-2
+
+> v1.3.2 ship pass. Fully quit and relaunch so the restaged DLL loads. Settings: Bound subtask
+> behavior, HUD gear on. Other in-progress changes (fonts, white-flash, LibGUI decoupling) are
+> not this cut.
+
+- [x] `00000028` **Skip tools, no heal.** Handbook-create a Crafting Task for a debarked oak log:
+      parent + oak log only — no `*:*` / "Pocketsun (any variant)" child. Delete that log child,
+      bump the parent target, reopen the editor — the child stays gone and remaining matches
+      rescale. *(refine-crafting-tasks-1-3-2 9.1 / 9.2)*
+      - **Confirmed 2026-08-27** via author in-game ship pass (TESTING.md check-off).
+- [x] `00000029` **Bound parent range.** With Bound: Sink a Craft parent — parent and children
+      sink together, parent first. Completing one child does not take siblings. Independent
+      leaves children. Discard then uncheck does not restore children.
+      *(refine-crafting-tasks-1-3-2 9.3)*
+      - **Confirmed 2026-08-27** via author in-game ship pass (TESTING.md check-off).
+- [x] `0000002a` **Pin cluster and notes.** Pin a child under a pinned parent (inserts, not
+      appends). Pin the parent later — already-pinned children gather under it. Pin a note:
+      HUD is text-only (no checkbox); unpin from the Pin Tab.
+      *(refine-crafting-tasks-1-3-2 9.4)*
+      - **Confirmed 2026-08-27** via author in-game ship pass (TESTING.md check-off).
+- [x] `0000002b` **HUD chrome and grip.** A pinned Craft parent shows have/need. HUD title is
+      **Scribe Pins**. Hide the HUD gear from Settings. HudMaxRows 30 sticks after reload.
+      Grip: tap still nests; press-move-release on the same row does not.
+      *(refine-crafting-tasks-1-3-2 9.5 / 9.6)*
+      - **Confirmed 2026-08-27** via author in-game ship pass (TESTING.md check-off).
+- [x] `00000024` **Item-row FieldPadY.** Put a Tracker/Craft row next to a Task text row in
+      editor AND read — they still line up (pad is now 0). Stepper +/− sit in their buttons.
+      A wrapping item name top-aligns stepper, icon, and text.
+      *(refine-crafting-tasks-1-3-2 10.3)*
+      - **Confirmed 2026-08-27** via author in-game ship pass (TESTING.md check-off).
+- [x] `00000025` **Tablet vs Notebook names.** On a Craft/Tracker row, cuneiform names share a
+      top edge with the stepper/checkbox (no extra pad inside the glyph-font label). Compare
+      the same row on a Notebook and a tablet. *(refine-crafting-tasks-1-3-2 10.4)*
+      - **Confirmed 2026-08-27** via author in-game ship pass (TESTING.md check-off).
+- [x] `00000026` **Tablet control height.** On a cuneiform tablet, checkbox, grip, and
+      Tracker/Craft stepper match one cuneiform line. Notebook/Lectern stay at 22px.
+      Disable-cuneiform on the tablet reverts the controls.
+      *(refine-crafting-tasks-1-3-2 10.5)*
+      - **Confirmed 2026-08-27** via author in-game ship pass (TESTING.md check-off).
+- [x] `00000027` **Single-line vs wrap.** A short name ("Leather") sits on the icon/checkbox
+      horizon; a wrapping name stays top-aligned and does not lift the icon. Check editor,
+      read, and Pin Tab. *(refine-crafting-tasks-1-3-2 10.6)*
+      - **Confirmed 2026-08-27** via author in-game ship pass (TESTING.md check-off).
+
+## add-new-task-insert-position
+
+> v1.3.2. Settings → Mod Behavior → **New Task Insert** (Top default). Fully quit and relaunch
+> so lang keys load.
+
+- [ ] `0000002f` **Footer Add follows the setting.** Default Top: Add Task lands at the top and is
+      focused. Switch to Bottom: the next Add appends. *(add-new-task-insert-position 5.1)*
+- [ ] `00000030` **Quick-add follows the setting.** Shift+right-click with Top puts a new empty
+      task first; with Bottom it appends. *(add-new-task-insert-position 5.2)*
+- [ ] `00000031` **Handbook + Enter.** With Top, Handbook Link and Craft land at the top (Craft
+      children sit under the parent). Enter on a mid-list row still inserts below that row.
+      *(add-new-task-insert-position 5.3)*
+
+## peg-task-fonts-to-caudex
+
+> Include this in v1.3.2. Task-text fonts are size-pegged to Caudex's line-box so switching
+> faces does not change single-line row height. Titles/buttons stay Caudex. HUD and Settings
+> chrome stay off this table. Cycle fonts from Settings → Task Text Font.
+
+- [ ] `0000002c` **Chrome stays Caudex.** Set Task Text Font to Scapholene or La Belle Aurore.
+      Confirm the dialog title and in-dialog buttons (Add, Settings, nav tabs) stay Caudex —
+      they must not pick up the scripty/display face. Settings form itself stays the LibGUI
+      default face at 100%. *(peg-task-fonts-to-caudex 6.3)*
+- [ ] `0000002d` **Read/Edit height parity.** On a Lectern with several single-line tasks, pick
+      a non-Caudex font (Scapholene or La Belle Aurore). Switch Read ↔ Edit: those rows must
+      not jump (within ~1px). *(peg-task-fonts-to-caudex 6.3)*
+- [ ] `0000002e` **Offsets don't break the lock.** Cycle Task Text Font through La Belle Aurore,
+      Scapholene, Playfair Display, and Cormorant Unicase (those have OffsetEm 0.18 / 0.05 /
+      −0.03 / −0.02). On Read and Edit, single-line row height/position must still match
+      Caudex — letters may sit a hair higher/lower in the box, the row itself must not grow.
+      *(peg-task-fonts-to-caudex 7.4)*
 
 ## adopt-glyph-forge-tablet-themes
 
@@ -38,38 +115,50 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > tablet between states. **Fully quit and relaunch** to load the rebuilt DLL.
 
 - [x] `0000001f` **Per-state clay readability.** For each clay (blue, red, fire), on a written tablet run
-      `/scribe tablet hard` then `/scribe tablet fired` — confirm the cuneiform reads clearly in ALL three
-      states: ink darkens on fired, the per-clay LIGHT halo lifts the ink on hard/fired, and the shared
-      DARK halo seats the ink on wet. *(adopt-glyph-forge-tablet-themes 9.1)*
-      - **Confirmed 2026-08-21** (submission 2026-08-21T11-24-55): "pass." All three clays read clearly in
-        wet/hard/fired — fired ink darkens, the light halo lifts ink on hard/fired, the dark halo seats it
-        on wet. (Verified against the first baked bundle; a same-session glyph-forge retune followed —
-        re-glance tracked as `00000023`.)
+  ```
+  `/scribe tablet hard` then `/scribe tablet fired` — confirm the cuneiform reads clearly in ALL three
+  states: ink darkens on fired, the per-clay LIGHT halo lifts the ink on hard/fired, and the shared
+  DARK halo seats the ink on wet. *(adopt-glyph-forge-tablet-themes 9.1)*
+  - **Confirmed 2026-08-21** (submission 2026-08-21T11-24-55): "pass." All three clays read clearly in
+    wet/hard/fired — fired ink darkens, the light halo lifts ink on hard/fired, the dark halo seats it
+    on wet. (Verified against the first baked bundle; a same-session glyph-forge retune followed —
+    re-glance tracked as `00000023`.)
+  ```
 - [x] `00000020` **Stroke firms + seated drop.** Compare the same text wet → fired: strokes visibly firm
-      up (0.9 → 1.1 weight) with NO layout shift, and on hard/fired the glow reads as a seated DROP shadow
-      (offset to one side) rather than a symmetric aura. *(adopt-glyph-forge-tablet-themes 9.2)*
-      - **Confirmed 2026-08-21** (submission 2026-08-21T11-24-55): "pass." Stroke weight visibly varies by
-        state with no layout shift, and the hard/fired glow reads as an offset seated drop, not a symmetric
-        aura. NOTE the follow-up retune (`00000023`) INVERTS the stroke direction to wet-heavy → fired-light
-        (1.2 → 0.95); the per-state variation + drop-offset mechanism this item verifies is unchanged.
+  ```
+  up (0.9 → 1.1 weight) with NO layout shift, and on hard/fired the glow reads as a seated DROP shadow
+  (offset to one side) rather than a symmetric aura. *(adopt-glyph-forge-tablet-themes 9.2)*
+  - **Confirmed 2026-08-21** (submission 2026-08-21T11-24-55): "pass." Stroke weight visibly varies by
+    state with no layout shift, and the hard/fired glow reads as an offset seated drop, not a symmetric
+    aura. NOTE the follow-up retune (`00000023`) INVERTS the stroke direction to wet-heavy → fired-light
+    (1.2 → 0.95); the per-state variation + drop-offset mechanism this item verifies is unchanged.
+  ```
 - [x] `00000021` **Per-state link ink.** On Link/Tracker/Craft rows, confirm the item name uses the new
-      per-state link ink and stays legible in wet/hard/fired; confirm a **wax** tablet renders unchanged
-      (its own wet bundle) and an **unknown** material rides the fire bundle.
-      *(adopt-glyph-forge-tablet-themes 9.3)*
-      - **Confirmed 2026-08-21** (submission 2026-08-21T11-24-55): "pass." Link/Tracker/Craft names use the
-        per-state link ink and stay legible across states; wax renders from its own wet bundle; unknown
-        material rides fire. (Link inks softened slightly in the `00000023` retune.)
+  ```
+  per-state link ink and stays legible in wet/hard/fired; confirm a **wax** tablet renders unchanged
+  (its own wet bundle) and an **unknown** material rides the fire bundle.
+  *(adopt-glyph-forge-tablet-themes 9.3)*
+  - **Confirmed 2026-08-21** (submission 2026-08-21T11-24-55): "pass." Link/Tracker/Craft names use the
+    per-state link ink and stay legible across states; wax renders from its own wet bundle; unknown
+    material rides fire. (Link inks softened slightly in the `00000023` retune.)
+  ```
 - [x] `00000022` **Non-tablet regression.** Confirm Lectern / Notebook / Chalkboard and the cuneiform-OFF
-      readable path look unchanged (no bundle applied), and that Pixel-Art OFF still follows the global
-      theme. *(adopt-glyph-forge-tablet-themes 9.4)*
-      - **Confirmed 2026-08-21** (submission 2026-08-21T11-24-55): "pass." Lectern/Notebook/Chalkboard and
-        the cuneiform-OFF readable path are unchanged (no bundle applied); Pixel-Art OFF follows the global
-        theme. (Chalkboard's separate untextured-WIP issue is unrelated to this change.)
+  ```
+  readable path look unchanged (no bundle applied), and that Pixel-Art OFF still follows the global
+  theme. *(adopt-glyph-forge-tablet-themes 9.4)*
+  - **Confirmed 2026-08-21** (submission 2026-08-21T11-24-55): "pass." Lectern/Notebook/Chalkboard and
+    the cuneiform-OFF readable path are unchanged (no bundle applied); Pixel-Art OFF follows the global
+    theme. (Chalkboard's separate untextured-WIP issue is unrelated to this change.)
+  ```
 - [x] `00000023` **Retuned wet/wax re-glance.** After the same-session glyph-forge retune (11:23 exports),
-      re-check the WET tablets and the WAX tablet: each wet clay now has its OWN tinted seating glow
-      (stronger/wider, no longer the shared near-black halo), wet strokes are now the HEAVIEST (1.2) and
-      fired the lightest (0.95), and wax is lighter-inked with a warmer near-white glow. Confirm all still
-      read cleanly and nothing regressed vs. the first tune. *(adopt-glyph-forge-tablet-themes 9.1/9.2 retune)*
+  ```
+  re-check the WET tablets and the WAX tablet: each wet clay now has its OWN tinted seating glow
+  (stronger/wider, no longer the shared near-black halo), wet strokes are now the HEAVIEST (1.2) and
+  fired the lightest (0.95), and wax is lighter-inked with a warmer near-white glow. Confirm all still
+  read cleanly and nothing regressed vs. the first tune. *(adopt-glyph-forge-tablet-themes 9.1/9.2 retune)*
+  ```
+
+
 
 ## reconcile-animating-surfaces
 
@@ -79,146 +168,184 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > assume broken.
 
 - [x] `a6a9fd2f` **Caret survives edits.** Type into a task row (leave unsaved text + a mid-word caret),
-      then delete a DIFFERENT row, insert a row below another, and drag-reorder another — after each,
-      confirm your row still holds its exact caret position and unsaved text. *(reconcile-animating-surfaces 3.7)*
-      - **Confirmed 2026-08-09** via playtest submission (2026-08-09T11-13-15): "All work as expected."
+  ```
+  then delete a DIFFERENT row, insert a row below another, and drag-reorder another — after each,
+  confirm your row still holds its exact caret position and unsaved text. *(reconcile-animating-surfaces 3.7)*
+  - **Confirmed 2026-08-09** via playtest submission (2026-08-09T11-13-15): "All work as expected."
+  ```
 - [x] `4c90c394` **Focus doesn't leak.** After a delete or reorder, confirm keyboard focus lands on the
-      intended neighbor row and nowhere else — typing goes to that row, no phantom focus on a stale/other
-      row. *(reconcile-animating-surfaces 3.7)*
-      - **Confirmed 2026-08-09** via playtest submission (2026-08-09T11-13-15): "Works." Focus lands on the
-        intended neighbor after delete/reorder.
+  ```
+  intended neighbor row and nowhere else — typing goes to that row, no phantom focus on a stale/other
+  row. *(reconcile-animating-surfaces 3.7)*
+  - **Confirmed 2026-08-09** via playtest submission (2026-08-09T11-13-15): "Works." Focus lands on the
+    intended neighbor after delete/reorder.
+  ```
 - [x] `2bd024a2` **Scroll holds steady.** Scroll a long task list mid-way, then add/delete/reorder a row —
-      confirm the viewport stays put with no jump-to-top or one-frame bounce (reconcile now preserves the
-      offset without capture-restore). *(reconcile-animating-surfaces 3.7)*
-      - **Confirmed 2026-08-09** via playtest submission (2026-08-09T11-13-15): viewport holds steady on
-        add/delete/reorder (mid-list). NOTE a distinct edge remains — deleting the LAST row while scrolled
-        to the bottom jumps the offset upward (see `29b05ca5` below); the mid-list steady-state is confirmed.
+  ```
+  confirm the viewport stays put with no jump-to-top or one-frame bounce (reconcile now preserves the
+  offset without capture-restore). *(reconcile-animating-surfaces 3.7)*
+  - **Confirmed 2026-08-09** via playtest submission (2026-08-09T11-13-15): viewport holds steady on
+    add/delete/reorder (mid-list). NOTE a distinct edge remains — deleting the LAST row while scrolled
+    to the bottom jumps the offset upward (see `29b05ca5` below); the mid-list steady-state is confirmed.
+  ```
 - [x] `dff1dff6` **Mass-delete first click.** Rapidly delete several rows in a row (Delete policy or the
-      delete button) — confirm the FIRST click on each delete button lands while the prior row is still
-      collapsing; no dead first-click that you have to repeat. *(reconcile-animating-surfaces 3.7)*
-      - **Confirmed 2026-08-09** via playtest submission (2026-08-09T11-13-15): "Works." First click lands
-        mid-collapse — the original mass-delete bug this whole change targets is resolved.
+  ```
+  delete button) — confirm the FIRST click on each delete button lands while the prior row is still
+  collapsing; no dead first-click that you have to repeat. *(reconcile-animating-surfaces 3.7)*
+  - **Confirmed 2026-08-09** via playtest submission (2026-08-09T11-13-15): "Works." First click lands
+    mid-collapse — the original mass-delete bug this whole change targets is resolved.
+  ```
 - [x] `1f95e1ec` **Resync keeps local row.** While editing (a focused row, and separately a brand-new
-      empty row), have a second client change the doc so a resync lands mid-edit — confirm your in-flight
-      row is NOT yanked out from under you. *(reconcile-animating-surfaces 3.7)*
-      - **Backlogged 2026-08-09** (playtest submission 2026-08-09T11-13-15): "Wait for multiplayer test."
-        Needs a second client; retest when a multiplayer session is available (§3.4 guard verifies here).
-      - **Confirmed 2026-08-17** via 2-client session: a resync landing mid-edit (focused row and brand-new
-        empty row) does not yank the in-flight row out from under the editor.
+  ```
+  empty row), have a second client change the doc so a resync lands mid-edit — confirm your in-flight
+  row is NOT yanked out from under you. *(reconcile-animating-surfaces 3.7)*
+  - **Backlogged 2026-08-09** (playtest submission 2026-08-09T11-13-15): "Wait for multiplayer test."
+    Needs a second client; retest when a multiplayer session is available (§3.4 guard verifies here).
+  - **Confirmed 2026-08-17** via 2-client session: a resync landing mid-edit (focused row and brand-new
+    empty row) does not yank the in-flight row out from under the editor.
+  ```
 - [x] `1d685c84` **Judge caret-position caveat.** Specifically delete a row ABOVE the one you're editing,
-      and separately reorder the edited row — the caret POSITION is expected to reset (text is preserved).
-      Judge whether that residual reset is acceptable to ship or trips the §3.8 bail-out.
-      *(reconcile-animating-surfaces 3.7)*
-      - **Confirmed 2026-08-09** via playtest submission (2026-08-09T11-13-15): BETTER than the predicted
-        caveat — "when you delete a row above the one you're editing, the caret stays" and "when you reorder
-        the edited row, the caret stays where the player expects." No unacceptable reset; does NOT trip §3.8.
+  ```
+  and separately reorder the edited row — the caret POSITION is expected to reset (text is preserved).
+  Judge whether that residual reset is acceptable to ship or trips the §3.8 bail-out.
+  *(reconcile-animating-surfaces 3.7)*
+  - **Confirmed 2026-08-09** via playtest submission (2026-08-09T11-13-15): BETTER than the predicted
+    caveat — "when you delete a row above the one you're editing, the caret stays" and "when you reorder
+    the edited row, the caret stays where the player expects." No unacceptable reset; does NOT trip §3.8.
+  ```
 - [x] `331c44ad` **View switches still work.** Switch read⇄editor⇄settings, open a fresh (empty) editor,
-      and force a lost-lock recovery — confirm each still rebuilds cleanly (these deliberately KEEP
-      ForceRebuild, so they must be unaffected by the reconcile conversion). *(reconcile-animating-surfaces 3.3)*
-      - **Confirmed 2026-08-09** via playtest submission (2026-08-09T11-13-15): "Work." View switches / fresh
-        seed / lost-lock recovery all rebuild cleanly.
+  ```
+  and force a lost-lock recovery — confirm each still rebuilds cleanly (these deliberately KEEP
+  ForceRebuild, so they must be unaffected by the reconcile conversion). *(reconcile-animating-surfaces 3.3)*
+  - **Confirmed 2026-08-09** via playtest submission (2026-08-09T11-13-15): "Work." View switches / fresh
+    seed / lost-lock recovery all rebuild cleanly.
+  ```
 - [x] `7ab1e7dc` **Empty-task true-up on save.** Rapidly press "Add task" to make several empty rows, then
-      Editor→Read→Editor. Empty tasks must be culled at every save boundary (Esc / switch view / Done
-      editing) — trailing whitespace/newlines trimmed, empty/invalid tasks removed. *(reconcile-animating-surfaces follow-up)*
-      - **Still broken 2026-08-09** (playtest submission 2026-08-09T11-13-15): empty rows are invisible in the
-        interim Read step but REAPPEAR on switching back to Editor — they should have been culled.
-      - **Confirmed 2026-08-10** (playtest submission 2026-08-10T09-02-17): "Properly fixed. Now if I use
-        'Add Task' to create 20 empty tasks, on going Edit → Read → Edit, they are all properly culled." The
-        LOAD-boundary purge in EnterEditorMode (fix `7d9489e`) holds. *(reconcile-animating-surfaces 3.9)*
+  ```
+  Editor→Read→Editor. Empty tasks must be culled at every save boundary (Esc / switch view / Done
+  editing) — trailing whitespace/newlines trimmed, empty/invalid tasks removed. *(reconcile-animating-surfaces follow-up)*
+  - **Still broken 2026-08-09** (playtest submission 2026-08-09T11-13-15): empty rows are invisible in the
+    interim Read step but REAPPEAR on switching back to Editor — they should have been culled.
+  - **Confirmed 2026-08-10** (playtest submission 2026-08-10T09-02-17): "Properly fixed. Now if I use
+    'Add Task' to create 20 empty tasks, on going Edit → Read → Edit, they are all properly culled." The
+    LOAD-boundary purge in EnterEditorMode (fix `7d9489e`) holds. *(reconcile-animating-surfaces 3.9)*
+  ```
 - [x] `29b05ca5` **Animate scroll on shrink.** Fill the list past one scroll page, scroll to the bottom,
-      then delete the last row. The resulting upward scroll should ease smoothly, not snap.
-      *(reconcile-animating-surfaces follow-up)*
-      - **Still broken 2026-08-09** (playtest submission 2026-08-09T11-13-15): the row collapses out of view
-        but the scroll offset is then set upward INSTANTLY — a jarring jump.
-      - **Confirmed 2026-08-10** (playtest submission 2026-08-10T09-02-17): "It's so goooooood." The
-        pin-during-collapse fix (`fcf1a5d`) glides the offset in lockstep with the collapse — no snap.
-        *(reconcile-animating-surfaces 3.10)*
+  ```
+  then delete the last row. The resulting upward scroll should ease smoothly, not snap.
+  *(reconcile-animating-surfaces follow-up)*
+  - **Still broken 2026-08-09** (playtest submission 2026-08-09T11-13-15): the row collapses out of view
+    but the scroll offset is then set upward INSTANTLY — a jarring jump.
+  - **Confirmed 2026-08-10** (playtest submission 2026-08-10T09-02-17): "It's so goooooood." The
+    pin-during-collapse fix (`fcf1a5d`) glides the offset in lockstep with the collapse — no snap.
+    *(reconcile-animating-surfaces 3.10)*
+  ```
 - [x] `66bbd8f0` **Pinned surfaces hold.** Exercise the HUD and Pin Tab: pin/unpin, complete a task,
-      let the undo window run, watch the sink/fade/collapse, rapid-remove several rows, re-pin, and
-      hover a row under a STILL cursor — confirm no flicker, no lost hover, and deletes land on the
-      first click. *(reconcile-animating-surfaces 4.4)*
-      - **Confirmed 2026-08-10** (playtest submission 2026-08-10T21-36-38): "Looks good." Pinned HUD +
-        Pin Tab hold across pin/complete/undo/collapse/rapid-remove/re-pin/hover-under-still-cursor.
+  ```
+  let the undo window run, watch the sink/fade/collapse, rapid-remove several rows, re-pin, and
+  hover a row under a STILL cursor — confirm no flicker, no lost hover, and deletes land on the
+  first click. *(reconcile-animating-surfaces 4.4)*
+  - **Confirmed 2026-08-10** (playtest submission 2026-08-10T21-36-38): "Looks good." Pinned HUD +
+    Pin Tab hold across pin/complete/undo/collapse/rapid-remove/re-pin/hover-under-still-cursor.
+  ```
 - [x] `e5abb165` **Read scroll holds on HUD-delete.** Open the Read view, scroll down, then complete a
-      task on the HUD under the Delete completion policy — the row vanishes and the scroll offset HOLDS
-      (no snap to top). *(reconcile-animating-surfaces 5.3)*
-      - **Still broken 2026-08-10** (playtest re-confirmed 2026-08-10, verbal): the scroll offset HOLDS
-        (no snap to top — the reconcile fix works, confirmed twice). BUT the policy-deleted row
-        DISAPPEARS INSTANTLY instead of animating out. The read list is a plain Column, not routed
-        through `ScribeAnimatedList`, so it gets no collapse-on-removal animation the pinned surfaces
-        get. Fix = wire the read list through the animated-list harness. *(scope: reconcile §6.1 —
-        read-view is a "later surface" for animation; the resync correctness is db3c8ff4 below)*
-      - **Fix landed 2026-08-10, AWAITING RETEST** (reconcile §5.5): `ScribeReadContent` now routes its
-        rows through `ScribeAnimatedList` (the same collapse container the editor + Pin Tab use), with a
-        `ScribeFrozenEditorRow` ghost and a dialog-owned `readCollapseRegistry` wired into the OnRenderGUI
-        scroll-pin/hover loops. Retest: complete a task in Read under Delete → the row should COLLAPSE out
-        (rows below slide up) instead of vanishing; scroll offset should still hold. Also delete the LAST
-        row → it collapses before the empty hint appears (empty-check moved inside the container).
-      - **Confirmed 2026-08-11** via playtest: "Works perfectly." Read scroll holds on HUD-delete and the
-        row now collapses out through `ScribeAnimatedList` (retest of the §5.5 fix passed).
+  ```
+  task on the HUD under the Delete completion policy — the row vanishes and the scroll offset HOLDS
+  (no snap to top). *(reconcile-animating-surfaces 5.3)*
+  - **Still broken 2026-08-10** (playtest re-confirmed 2026-08-10, verbal): the scroll offset HOLDS
+    (no snap to top — the reconcile fix works, confirmed twice). BUT the policy-deleted row
+    DISAPPEARS INSTANTLY instead of animating out. The read list is a plain Column, not routed
+    through `ScribeAnimatedList`, so it gets no collapse-on-removal animation the pinned surfaces
+    get. Fix = wire the read list through the animated-list harness. *(scope: reconcile §6.1 —
+    read-view is a "later surface" for animation; the resync correctness is db3c8ff4 below)*
+  - **Fix landed 2026-08-10, AWAITING RETEST** (reconcile §5.5): `ScribeReadContent` now routes its
+    rows through `ScribeAnimatedList` (the same collapse container the editor + Pin Tab use), with a
+    `ScribeFrozenEditorRow` ghost and a dialog-owned `readCollapseRegistry` wired into the OnRenderGUI
+    scroll-pin/hover loops. Retest: complete a task in Read under Delete → the row should COLLAPSE out
+    (rows below slide up) instead of vanishing; scroll offset should still hold. Also delete the LAST
+    row → it collapses before the empty hint appears (empty-check moved inside the container).
+  - **Confirmed 2026-08-11** via playtest: "Works perfectly." Read scroll holds on HUD-delete and the
+    row now collapses out through `ScribeAnimatedList` (retest of the §5.5 fix passed).
+  ```
 - [x] `4fe96b09` **Read pin repaints in place.** Pin/unpin a task from the Read view — the resting pin
-      tint repaints while the scroll offset and hover both hold steady (reconcile, not a full rebuild).
-      *(reconcile-animating-surfaces 5.3)*
-      - **Confirmed 2026-08-10** (playtest submission 2026-08-10T21-36-38): "Works." Pin tint repaints
-        in place; scroll + hover hold.
+  ```
+  tint repaints while the scroll offset and hover both hold steady (reconcile, not a full rebuild).
+  *(reconcile-animating-surfaces 5.3)*
+  - **Confirmed 2026-08-10** (playtest submission 2026-08-10T21-36-38): "Works." Pin tint repaints
+    in place; scroll + hover hold.
+  ```
 - [x] `db3c8ff4` **Read checkbox sticks.** Toggle a Read-view checkbox — it sticks and does NOT revert
-      on the next external resync (optimistic `done` survives a chrome-only reconcile).
-      *(reconcile-animating-surfaces 5.3)*
-      - **Still broken 2026-08-10** (playtest re-confirmed 2026-08-10, verbal — root cause narrowed):
-        the box sticks (narrow test passed), but a Read-view completion of a NON-PINNED (vanilla) task
-        under the Delete policy does NOT update the Read view — the row stays visible until some OTHER
-        actor forces a refresh (view switch, or a pinned row changing and pushing a HUD/pin update). A
-        PINNED task DOES update, because completing it pushes a pin update that the client already
-        listens for. So the gap is precise: the acting client's own `OnReadViewCompleteTask` fires the
-        server mutation but nothing refreshes THIS client's Read view for a plain document task — the
-        server's `MarkDirty(redrawOnClient:true)` resync isn't reaching/refreshing the acting client's
-        open read dialog (the pinned path only works incidentally, via `PushPinsTo`). Fix = make a
-        Read-view completion refresh the acting client's read view directly (optimistic local removal
-        or a guaranteed resync callback), not rely on a pin side-channel.
-      - **Fix landed 2026-08-10, AWAITING RETEST** (reconcile §5.4): `OnReadViewCompleteTask` now applies
-        the completion OPTIMISTICALLY — `ScribeCompletion.ApplyLocal` on a codec-round-trip copy of the
-        document → `host.ApplyLocalOptimisticEdit` → `RefreshReadView()` → THEN send the packet, exactly
-        as the editor does. So an unpinned completion updates the acting client's Read view immediately,
-        not via the pin side-channel. Policy logic is now shared via the pure Core `ScribeCompletion.Decide`
-        table (server + client dispatch off one definition). Read-only tablet skips the optimistic mutation
-        (server collapses Delete→Unpin there). Retest: complete an UNPINNED task in Read under Delete → it
-        disappears immediately with NO view switch needed; a PINNED task behaves identically (no regression).
-      - **Confirmed 2026-08-10** (§5.6a playtest, verbal): "Works as expected." Unpinned Delete completion in
-        Read collapses out immediately and stays gone, no view switch needed; scroll holds. Closes both the
-        e5abb165 animation gap AND the db3c8ff4 correctness gap (§5.4 + §5.5 compose).
+  ```
+  on the next external resync (optimistic `done` survives a chrome-only reconcile).
+  *(reconcile-animating-surfaces 5.3)*
+  - **Still broken 2026-08-10** (playtest re-confirmed 2026-08-10, verbal — root cause narrowed):
+    the box sticks (narrow test passed), but a Read-view completion of a NON-PINNED (vanilla) task
+    under the Delete policy does NOT update the Read view — the row stays visible until some OTHER
+    actor forces a refresh (view switch, or a pinned row changing and pushing a HUD/pin update). A
+    PINNED task DOES update, because completing it pushes a pin update that the client already
+    listens for. So the gap is precise: the acting client's own `OnReadViewCompleteTask` fires the
+    server mutation but nothing refreshes THIS client's Read view for a plain document task — the
+    server's `MarkDirty(redrawOnClient:true)` resync isn't reaching/refreshing the acting client's
+    open read dialog (the pinned path only works incidentally, via `PushPinsTo`). Fix = make a
+    Read-view completion refresh the acting client's read view directly (optimistic local removal
+    or a guaranteed resync callback), not rely on a pin side-channel.
+  - **Fix landed 2026-08-10, AWAITING RETEST** (reconcile §5.4): `OnReadViewCompleteTask` now applies
+    the completion OPTIMISTICALLY — `ScribeCompletion.ApplyLocal` on a codec-round-trip copy of the
+    document → `host.ApplyLocalOptimisticEdit` → `RefreshReadView()` → THEN send the packet, exactly
+    as the editor does. So an unpinned completion updates the acting client's Read view immediately,
+    not via the pin side-channel. Policy logic is now shared via the pure Core `ScribeCompletion.Decide`
+    table (server + client dispatch off one definition). Read-only tablet skips the optimistic mutation
+    (server collapses Delete→Unpin there). Retest: complete an UNPINNED task in Read under Delete → it
+    disappears immediately with NO view switch needed; a PINNED task behaves identically (no regression).
+  - **Confirmed 2026-08-10** (§5.6a playtest, verbal): "Works as expected." Unpinned Delete completion in
+    Read collapses out immediately and stays gone, no view switch needed; scroll holds. Closes both the
+    e5abb165 animation gap AND the db3c8ff4 correctness gap (§5.4 + §5.5 compose).
+  ```
 - [x] `7ec9bba7` **Pinned Delete no regression.** In Read view under Delete policy, complete a PINNED task
-      -- it should collapse out smoothly and stay gone, exactly like before. *(reconcile-animating-surfaces 5.6)*
-      - **Confirmed 2026-08-10** (§5.6b playtest, verbal): "Works." Pinned Delete in Read collapses out; no regression.
+  ```
+  -- it should collapse out smoothly and stay gone, exactly like before. *(reconcile-animating-surfaces 5.6)*
+  - **Confirmed 2026-08-10** (§5.6b playtest, verbal): "Works." Pinned Delete in Read collapses out; no regression.
+  ```
 - [x] `054d1aac` **Sink moves to bottom.** Set the completion policy to Sink, then complete a task in Read
-      view -- the row should slide down to the bottom of the list, not jump. *(reconcile-animating-surfaces 5.6)*
-      - **Confirmed 2026-08-10** (§5.6c playtest, verbal): "Work." The Read-view Sink slide is correct.
-        NOTE surfaced a SEPARATE cross-surface bug (not this item's failure): under Sink, the Read view, HUD,
-        and Pinned Tab DISAGREE about where a completed PINNED task sits, and pin/unpin desyncs them further.
-        Only Read + Editor agree on relative positioning. Tracked as new item `40be9d31` below.
+  ```
+  view -- the row should slide down to the bottom of the list, not jump. *(reconcile-animating-surfaces 5.6)*
+  - **Confirmed 2026-08-10** (§5.6c playtest, verbal): "Work." The Read-view Sink slide is correct.
+    NOTE surfaced a SEPARATE cross-surface bug (not this item's failure): under Sink, the Read view, HUD,
+    and Pinned Tab DISAGREE about where a completed PINNED task sits, and pin/unpin desyncs them further.
+    Only Read + Editor agree on relative positioning. Tracked as new item `40be9d31` below.
+  ```
 - [x] `1cb0725e` **Read-only tablet no flicker.** On a hard/fired tablet in Read view, complete a task -- it
-      must NOT flash a delete that then reverts (server keeps the row, only unpins). *(reconcile-animating-surfaces 5.6)*
-      - **Confirmed 2026-08-10** (§5.6e playtest, verbal): "Works. No flicker." Read-only tablet completion
-        is not double-applied; no predicted-then-reverted delete.
+  ```
+  must NOT flash a delete that then reverts (server keeps the row, only unpins). *(reconcile-animating-surfaces 5.6)*
+  - **Confirmed 2026-08-10** (§5.6e playtest, verbal): "Works. No flicker." Read-only tablet completion
+    is not double-applied; no predicted-then-reverted delete.
+  ```
 - [x] `40be9d31` **Sink ordering agrees across surfaces.** Under Sink policy, complete a PINNED task, then
-      pin/unpin others -- the Read view, the HUD, and the Pinned Tab should all agree on where the completed
-      task sits (and re-agree after pin/unpin). *(reconcile-animating-surfaces follow-up)*
-      - **Still broken 2026-08-10** (playtest, verbal + screenshot Screenshot 2026-08-10 at 11.40.16 PM.png):
-        the three surfaces DISAGREE about the position of completed pinned tasks under Sink; pinning/unpinning
-        desyncs them further. Only Read + Editor share one ordering opinion. Likely the HUD's session-durable
-        `sunkOrder` / undo-window ordering overlay (BuildOrderedRows) diverging from the server/Read ordering.
-      - **Confirmed 2026-08-11** via playtest: "Works." Read, HUD, and Pinned Tab now agree on completed-pinned
-        Sink position and re-agree after pin/unpin (retest passed).
+  ```
+  pin/unpin others -- the Read view, the HUD, and the Pinned Tab should all agree on where the completed
+  task sits (and re-agree after pin/unpin). *(reconcile-animating-surfaces follow-up)*
+  - **Still broken 2026-08-10** (playtest, verbal + screenshot Screenshot 2026-08-10 at 11.40.16 PM.png):
+    the three surfaces DISAGREE about the position of completed pinned tasks under Sink; pinning/unpinning
+    desyncs them further. Only Read + Editor share one ordering opinion. Likely the HUD's session-durable
+    `sunkOrder` / undo-window ordering overlay (BuildOrderedRows) diverging from the server/Read ordering.
+  - **Confirmed 2026-08-11** via playtest: "Works." Read, HUD, and Pinned Tab now agree on completed-pinned
+    Sink position and re-agree after pin/unpin (retest passed).
+  ```
 - [ ] `f2d0a7e5` **HUD blank-checkbox regression (recurred).** After completing tasks (seen after a Read-view
-      Sink completion sequence), the HUD shows one or more checkboxes with NO text -- a checked/empty ghost row.
-      This is the hud-fade-text-stale-controller-bug class, thought fixed 2026-08-10 (`d978dce8`). *(reconcile-animating-surfaces follow-up)*
-      - **Still broken 2026-08-10** (playtest, verbal + screenshot Screenshot 2026-08-10 at 11.40.16 PM.png):
-        two HUD rows render a checkbox with no text (one dark/completed, one light), sitting at the TOP not the
-        bottom. Recurrence of the blank-checkbox bug via a NEW trigger path (Read-view completion under Sink,
-        not an on-HUD late undo). Needs re-diagnosis: the SyncFadeController fix covers the HUD-undo path but a
-        Read-view completion drives the fade/optimistic state through a different route.
-      - **Backlogged 2026-08-11** via playtest: "I don't see it happening right now. Let's backlog it in case
-        it recurs." Not reproducing on the current build; parked as a watch item (blank-checkbox bug class has
-        recurred before via new triggers, so kept on record rather than closed).
+  ```
+  Sink completion sequence), the HUD shows one or more checkboxes with NO text -- a checked/empty ghost row.
+  This is the hud-fade-text-stale-controller-bug class, thought fixed 2026-08-10 (`d978dce8`). *(reconcile-animating-surfaces follow-up)*
+  - **Still broken 2026-08-10** (playtest, verbal + screenshot Screenshot 2026-08-10 at 11.40.16 PM.png):
+    two HUD rows render a checkbox with no text (one dark/completed, one light), sitting at the TOP not the
+    bottom. Recurrence of the blank-checkbox bug via a NEW trigger path (Read-view completion under Sink,
+    not an on-HUD late undo). Needs re-diagnosis: the SyncFadeController fix covers the HUD-undo path but a
+    Read-view completion drives the fade/optimistic state through a different route.
+  - **Backlogged 2026-08-11** via playtest: "I don't see it happening right now. Let's backlog it in case
+    it recurs." Not reproducing on the current build; parked as a watch item (blank-checkbox bug class has
+    recurred before via new triggers, so kept on record rather than closed).
+  ```
+
+
 
 ## add-transcribe-copy-paste
 
@@ -230,125 +357,171 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > **Fully quit and relaunch the client first** so the new lang/assets load.
 
 - [x] `f9551592` **Golden-orange tab.** Open a Scriptorium and click the Transcribe nav button — its
-      active fill is golden-orange (not the old purple), while Guest Book's active fill is still plum.
-      *(add-transcribe-copy-paste 8.1)*
-      - **Confirmed 2026-08-16** via visual review of the running Transcribe tab; superseded by the brighter
-        gold `#cf9d2e` (see `6a68ab79`), which the user approved.
+  ```
+  active fill is golden-orange (not the old purple), while Guest Book's active fill is still plum.
+  *(add-transcribe-copy-paste 8.1)*
+  - **Confirmed 2026-08-16** via visual review of the running Transcribe tab; superseded by the brighter
+    gold `#cf9d2e` (see `6a68ab79`), which the user approved.
+  ```
 - [x] `869adb9b` **Copy pair layout.** On the Transcribe tab: two slots with a → arrow between them,
-      captioned "Copy from" (left) and "Paste into" (right); the Copy button sits BELOW the pair, hugging
-      its text in the Caudex font; the tab is split 50/50 with each half vertically centred; and grabbing
-      an item out of a slot drops its hover card instantly (no lingering ghost).
-      *(add-transcribe-copy-paste 8.4 / 7.6 / 7.11)*
-      - **Confirmed 2026-08-16** via visual review: layout reads as specced (slots + arrow + captions +
-        button-below + 50/50 split). The hover-card-vanish micro-behavior was not separately re-poked.
+  ```
+  captioned "Copy from" (left) and "Paste into" (right); the Copy button sits BELOW the pair, hugging
+  its text in the Caudex font; the tab is split 50/50 with each half vertically centred; and grabbing
+  an item out of a slot drops its hover card instantly (no lingering ghost).
+  *(add-transcribe-copy-paste 8.4 / 7.6 / 7.11)*
+  - **Confirmed 2026-08-16** via visual review: layout reads as specced (slots + arrow + captions +
+    button-below + 50/50 split). The hover-card-vanish micro-behavior was not separately re-poked.
+  ```
 - [x] `a5d3bf9d` **Import/export section.** In the lower half the slot caption reads "Export from," /
-      "or import into" on two centred lines; the three Export JSON / Export CSV / Import buttons are ~30%
-      narrower with centred labels and all disabled with a "coming soon" tooltip.
-      *(add-transcribe-copy-paste 8.2 / 8.3)*
-      - **Confirmed 2026-08-16** via visual review of the running tab; the ballooning is fixed and the
-        section reads as specced. (Disabled "coming soon" tooltip not separately hovered.)
+  ```
+  "or import into" on two centred lines; the three Export JSON / Export CSV / Import buttons are ~30%
+  narrower with centred labels and all disabled with a "coming soon" tooltip.
+  *(add-transcribe-copy-paste 8.2 / 8.3)*
+  - **Confirmed 2026-08-16** via visual review of the running tab; the ballooning is fixed and the
+    section reads as specced. (Disabled "coming soon" tooltip not separately hovered.)
+  ```
 - [ ] `a535f0a1` **Stamp reads from above.** Put Scribe items in both slots and press Copy — the wooden
-      stamp reads as a stamp seen from ABOVE (knob + round base, no red underside), not squished; it is
-      larger than the slot and its size tracks the Pixel Art Size setting.
-      *(add-transcribe-copy-paste 8.5)*
-      - **Obsolete 2026-08-16** — the flourish plays ("Copy does the full pass") but round-4 replaced the
-        ROUND base with a flat-bottomed RECTANGLE; the round-base specifics no longer apply. Superseded by
-        `add-transcribe-copy-paste 10.7` (rectangular bottom matching the "COPIED" box width).
+  ```
+  stamp reads as a stamp seen from ABOVE (knob + round base, no red underside), not squished; it is
+  larger than the slot and its size tracks the Pixel Art Size setting.
+  *(add-transcribe-copy-paste 8.5)*
+  - **Obsolete 2026-08-16** — the flourish plays ("Copy does the full pass") but round-4 replaced the
+    ROUND base with a flat-bottomed RECTANGLE; the round-base specifics no longer apply. Superseded by
+    `add-transcribe-copy-paste 10.7` (rectangular bottom matching the "COPIED" box width).
+  ```
 - [ ] `c4447e9f` **Stamp motion.** During the flourish the stamp is noticeably slower (~2×), travels
-      further down and back up, and gives a slight squash as it hits the bottom of its travel.
-      *(add-transcribe-copy-paste 8.6)*
-      - **Obsolete 2026-08-16** — round-4 retimed the stamp again (3000ms), REMOVED the tilt, made the lift
-        travel the full descend distance, and equalized fade-in/out. The "~2×" motion spec no longer applies.
-        Superseded by `add-transcribe-copy-paste 10.7`.
+  ```
+  further down and back up, and gives a slight squash as it hits the bottom of its travel.
+  *(add-transcribe-copy-paste 8.6)*
+  - **Obsolete 2026-08-16** — round-4 retimed the stamp again (3000ms), REMOVED the tilt, made the lift
+    travel the full descend distance, and equalized fade-in/out. The "~2×" motion spec no longer applies.
+    Superseded by `add-transcribe-copy-paste 10.7`.
+  ```
 - [x] `8f2be4fe` **COPIED imprint lingers.** After the stamp lifts, the "COPIED" imprint (all caps) pops
-      in, holds fully visible for about a second, then fades out. *(add-transcribe-copy-paste 8.7)*
-      - **Confirmed 2026-08-16** — user: "Copy does the full pass." The pop/hold/fade linger is unchanged by
-        round-4 (only the outline thickness, lean, and width were retuned — retest those under 10.7).
+  ```
+  in, holds fully visible for about a second, then fades out. *(add-transcribe-copy-paste 8.7)*
+  - **Confirmed 2026-08-16** — user: "Copy does the full pass." The pop/hold/fade linger is unchanged by
+    round-4 (only the outline thickness, lean, and width were retuned — retest those under 10.7).
+  ```
 - [x] `c809ed93` **Overwrite confirm + cancel.** Copy onto a NON-empty Paste-into slot: first press flips
-      the button to a red "overwrite N tasks", second press overwrites. Re-arm it, then pull or swap a
-      slot item between the two presses — the confirm cancels and the button reverts to Copy.
-      *(add-transcribe-copy-paste 6.3)*
-      - **Confirmed 2026-08-16** — user: "Overwrite is confirmed." The two-press flow works. NOTE the
-        wording changed in round-4 to "Click again to overwrite all tasks" (no count), and there is
-        deliberately NO cancel gesture — user: "There is no cancel — I also don't want there to be." The
-        slot-change re-arm still exists as a safety (re-validates against changed contents), not a user cancel.
+  ```
+  the button to a red "overwrite N tasks", second press overwrites. Re-arm it, then pull or swap a
+  slot item between the two presses — the confirm cancels and the button reverts to Copy.
+  *(add-transcribe-copy-paste 6.3)*
+  - **Confirmed 2026-08-16** — user: "Overwrite is confirmed." The two-press flow works. NOTE the
+    wording changed in round-4 to "Click again to overwrite all tasks" (no count), and there is
+    deliberately NO cancel gesture — user: "There is no cancel — I also don't want there to be." The
+    slot-change re-arm still exists as a safety (re-validates against changed contents), not a user cancel.
+  ```
 - [x] `2194235a` **Copy blocked when illegal.** Try to Copy onto a fired/hardened tablet (read-only) and
-      onto a near-full tablet — the Copy button stays disabled with the matching tooltip (read-only vs.
-      too many tasks). *(add-transcribe-copy-paste 7.1)*
-      - **Confirmed 2026-08-16** — user: "Illegal targets are appropriately errored out."
+  ```
+  onto a near-full tablet — the Copy button stays disabled with the matching tooltip (read-only vs.
+  too many tasks). *(add-transcribe-copy-paste 7.1)*
+  - **Confirmed 2026-08-16** — user: "Illegal targets are appropriately errored out."
+  ```
 - [x] `7032e329` **Old Scriptorium migrates.** Open a Scriptorium that was placed before this change — it
-      opens on the Transcribe tab with both copy slots and their contents intact, no resize or wipe.
-      *(add-transcribe-copy-paste 6.7)*
-      - **Confirmed 2026-08-16** — user: "The migration works."
+  ```
+  opens on the Transcribe tab with both copy slots and their contents intact, no resize or wipe.
+  *(add-transcribe-copy-paste 6.7)*
+  - **Confirmed 2026-08-16** — user: "The migration works."
+  ```
 - [x] `33783622` **Multiplayer copy sync.** With two clients on one Scriptorium, a copy performed by one
-      client shows for the other with the correct contents — no duplicate, no desync.
-      *(add-transcribe-copy-paste 6.8)*
-      - **Backlogged 2026-08-16** — user: "We need to backlog the multiplayer testing." Deferred to a
-        two-client session; the single-client copy path is confirmed.
-      - **Confirmed 2026-08-17** via 2-client session: copy propagates to the watching client with correct
-        contents, no duplicate/desync. Caveat (enhancement, not a defect): the IMPRINT stamp animation only
-        plays for the acting client — the watcher sees the new content appear without the stamp flourish.
-        Tracked as a possible cheap follow-up (hook the watcher's sync-triggered redraw).
-      - **Follow-up implemented 2026-08-17** (watcher-stamp-sync): the server now broadcasts a
-        `ScribeTranscribeStampMessage` to all-except-actor after a committed copy/import, and each OTHER open
-        Scriptorium dialog on that block replays the COPIED/IMPORTED flourish. Its own 2-client re-test is
-        backlogged as `fe69e4b0` below (the singleplayer stamp is confirmed working).
+  ```
+  client shows for the other with the correct contents — no duplicate, no desync.
+  *(add-transcribe-copy-paste 6.8)*
+  - **Backlogged 2026-08-16** — user: "We need to backlog the multiplayer testing." Deferred to a
+    two-client session; the single-client copy path is confirmed.
+  - **Confirmed 2026-08-17** via 2-client session: copy propagates to the watching client with correct
+    contents, no duplicate/desync. Caveat (enhancement, not a defect): the IMPRINT stamp animation only
+    plays for the acting client — the watcher sees the new content appear without the stamp flourish.
+    Tracked as a possible cheap follow-up (hook the watcher's sync-triggered redraw).
+  - **Follow-up implemented 2026-08-17** (watcher-stamp-sync): the server now broadcasts a
+    `ScribeTranscribeStampMessage` to all-except-actor after a committed copy/import, and each OTHER open
+    Scriptorium dialog on that block replays the COPIED/IMPORTED flourish. Its own 2-client re-test is
+    backlogged as `fe69e4b0` below (the singleplayer stamp is confirmed working).
+  ```
 - [ ] `fe69e4b0` **Multiplayer watcher stamp.** With two clients on one Scriptorium, one client copies (and
-      separately, imports) while the other has the dialog open on the same block — confirm the watcher now
-      sees the COPIED/IMPORTED flourish *play*, not just the new content appear. *(add-transcribe-copy-paste 6.8)*
-      - **Backlogged 2026-08-17** — user: the singleplayer stamp works; the multiplayer watcher-visibility
-        path (watcher-stamp-sync, server broadcast → other clients replay the flourish) is deferred to a
-        two-client session. Low-risk, additive; shipped in 1.2 unverified in MP.
+  ```
+  separately, imports) while the other has the dialog open on the same block — confirm the watcher now
+  sees the COPIED/IMPORTED flourish *play*, not just the new content appear. *(add-transcribe-copy-paste 6.8)*
+  - **Backlogged 2026-08-17** — user: the singleplayer stamp works; the multiplayer watcher-visibility
+    path (watcher-stamp-sync, server broadcast → other clients replay the flourish) is deferred to a
+    two-client session. Low-risk, additive; shipped in 1.2 unverified in MP.
+  ```
 - [x] `7a1a5633` **IO buttons sized right.** Open the Transcribe tab; confirm the Export JSON/CSV/Import
-      buttons sit at a tidy fixed width with centred labels — none balloons to fill the lower half of the
-      page. *(add-transcribe-copy-paste 9.6)*
-      - **Confirmed 2026-08-16** via visual review of the running tab — the giant Export JSON button is
-        gone; the three buttons sit at their fixed width with centred labels.
+  ```
+  buttons sit at a tidy fixed width with centred labels — none balloons to fill the lower half of the
+  page. *(add-transcribe-copy-paste 9.6)*
+  - **Confirmed 2026-08-16** via visual review of the running tab — the giant Export JSON button is
+    gone; the three buttons sit at their fixed width with centred labels.
+  ```
 - [x] `6a68ab79` **Gold Transcribe tab.** With the Transcribe tab active, confirm its nav button reads as a
-      distinct bright gold — clearly different from the Primary brown and the History amber tabs.
-      *(add-transcribe-copy-paste 9.6)*
-      - **Confirmed 2026-08-16** via visual review; the brighter gold `#cf9d2e` reads distinctly. User: "the
-        rest of this looks great."
+  ```
+  distinct bright gold — clearly different from the Primary brown and the History amber tabs.
+  *(add-transcribe-copy-paste 9.6)*
+  - **Confirmed 2026-08-16** via visual review; the brighter gold `#cf9d2e` reads distinctly. User: "the
+    rest of this looks great."
+  ```
 - [x] `2a69db02` **Divider under title.** Confirm a horizontal divider sits directly under the dialog title
-      bar on the Transcribe tab, separating the title from the copy and import/export sections.
-      *(add-transcribe-copy-paste 9.6)*
-      - **Confirmed 2026-08-16** via visual review of the running tab.
+  ```
+  bar on the Transcribe tab, separating the title from the copy and import/export sections.
+  *(add-transcribe-copy-paste 9.6)*
+  - **Confirmed 2026-08-16** via visual review of the running tab.
+  ```
 - [x] `97946c3e` **Transcribe features button.** Click the bottom-right ⓘ button (now nudged up-and-left off
-      the corner by 3% of Pixel Art Size); confirm it opens a "The Transcribe Tab" handbook page (and a
-      second click closes it), and its hover tooltip reads "Show / hide Transcribe features".
-      *(add-transcribe-copy-paste 9.6 / 9.7)*
-      - **Confirmed 2026-08-16** — user: "The information button on Transcribe tab opens and closes. It works."
+  ```
+  the corner by 3% of Pixel Art Size); confirm it opens a "The Transcribe Tab" handbook page (and a
+  second click closes it), and its hover tooltip reads "Show / hide Transcribe features".
+  *(add-transcribe-copy-paste 9.6 / 9.7)*
+  - **Confirmed 2026-08-16** — user: "The information button on Transcribe tab opens and closes. It works."
+  ```
 - [x] `3bd3c832` **Faster slot hover.** Hover a filled Scriptorium copy slot; confirm its summary card pops
-      up noticeably faster than a normal item tooltip (delay halved 350 → 175ms).
-      *(add-transcribe-copy-paste 9.8)*
-      - **Confirmed 2026-08-16** — user: "the hover is faster" / "the faster inventory slot hover is good."
+  ```
+  up noticeably faster than a normal item tooltip (delay halved 350 → 175ms).
+  *(add-transcribe-copy-paste 9.8)*
+  - **Confirmed 2026-08-16** — user: "the hover is faster" / "the faster inventory slot hover is good."
+  ```
 - [x] `b369cca8` **COPIED imprint reverted.** Press Copy and watch the "COPIED" imprint — it LEANS again (not
-      square), its outline is the THINNER weight, and it spans the full art width. *(add-transcribe-copy-paste 11.6)*
-      - **Confirmed 2026-08-18** — verified during round-5 development: lean restored, thin outline, full-width span.
+  ```
+  square), its outline is the THINNER weight, and it spans the full art width. *(add-transcribe-copy-paste 11.6)*
+  - **Confirmed 2026-08-18** — verified during round-5 development: lean restored, thin outline, full-width span.
+  ```
 - [x] `2e2e7f77` **New stamp art.** Press Copy — the descending wooden stamp is the new hand-painted art (not
-      the old baked PNG). *(add-transcribe-copy-paste 11.6)*
-      - **Confirmed 2026-08-18** — verified during round-5 development: hand-painted stamp art in place.
+  ```
+  the old baked PNG). *(add-transcribe-copy-paste 11.6)*
+  - **Confirmed 2026-08-18** — verified during round-5 development: hand-painted stamp art in place.
+  ```
 - [x] `1d779db3` **Downward squish.** Press Copy — as the stamp hits the page it presses straight DOWN (its
-      bottom edge stays planted, only the top compresses), the squash is subtler (~40% less), and the press is a
-      touch quicker. *(add-transcribe-copy-paste 11.6)*
-      - **Confirmed 2026-08-18** — verified during round-5 development: downward squish, bottom planted, subtler squash.
+  ```
+  bottom edge stays planted, only the top compresses), the squash is subtler (~40% less), and the press is a
+  touch quicker. *(add-transcribe-copy-paste 11.6)*
+  - **Confirmed 2026-08-18** — verified during round-5 development: downward squish, bottom planted, subtler squash.
+  ```
 - [x] `9f18d798` **Cuneiform Tracker/Link.** On a TABLET, add a Tracker and a Link task — confirm the item NAME
-      and the Tracker's "N / N" counter render in cuneiform strokes (digits + slash) in both read and editor
-      views. Confirm a Lectern/Notebook (or cuneiform-off) shows them in the normal font, and HUD/Pin counters
-      are unchanged. *(add-transcribe-copy-paste 10.8)*
-      - **Confirmed 2026-08-18** — verified during development: cuneiform name + counter on tablet; normal font elsewhere.
+  ```
+  and the Tracker's "N / N" counter render in cuneiform strokes (digits + slash) in both read and editor
+  views. Confirm a Lectern/Notebook (or cuneiform-off) shows them in the normal font, and HUD/Pin counters
+  are unchanged. *(add-transcribe-copy-paste 10.8)*
+  - **Confirmed 2026-08-18** — verified during development: cuneiform name + counter on tablet; normal font elsewhere.
+  ```
 - [x] `271de55e` **Full stamp flourish.** Press Copy and check the whole flourish: the stamp enters from and
-      retreats to ~30% FARTHER above the slot; it accelerates DOWN into the page (easeInSine) and eases smoothly
-      back UP (easeInOutSine); it fades IN over the first half of the descent and OUT over the second half of the
-      lift (no fading in place); and the "COPIED" imprint leans a touch, sits BEHIND the stamp (stamp passes over
-      it), is ~20% SMALLER, and lingers ~20% LESS before fading out with the flourish.
-      *(add-transcribe-copy-paste 11.12)*
-      - **Confirmed 2026-08-18** — verified during round-5/6 development: easing, travel distance, z-order, smaller imprint all in.
+  ```
+  retreats to ~30% FARTHER above the slot; it accelerates DOWN into the page (easeInSine) and eases smoothly
+  back UP (easeInOutSine); it fades IN over the first half of the descent and OUT over the second half of the
+  lift (no fading in place); and the "COPIED" imprint leans a touch, sits BEHIND the stamp (stamp passes over
+  it), is ~20% SMALLER, and lingers ~20% LESS before fading out with the flourish.
+  *(add-transcribe-copy-paste 11.12)*
+  - **Confirmed 2026-08-18** — verified during round-5/6 development: easing, travel distance, z-order, smaller imprint all in.
+  ```
 - [x] `060d99e3` **Stamp imprint pop + lean.** Press Copy and watch the "COPIED" imprint: it should POP ON
-      INSTANTLY the instant the stamp touches down (no fade-in), render in **Caudex** with the border **hugging
-      the text** (no oversized/undersized box), lean just a touch (~-3.4°), and the whole stamp should sit a hair
-      (1% of art width) lower on the page. *(add-transcribe-copy-paste 12.5 / 12.6)*
-      - **Confirmed 2026-08-18** — verified during round-6 development: instant pop, Caudex font, tight border, subtle lean.
+  ```
+  INSTANTLY the instant the stamp touches down (no fade-in), render in **Caudex** with the border **hugging
+  the text** (no oversized/undersized box), lean just a touch (~-3.4°), and the whole stamp should sit a hair
+  (1% of art width) lower on the page. *(add-transcribe-copy-paste 12.5 / 12.6)*
+  - **Confirmed 2026-08-18** — verified during round-6 development: instant pop, Caudex font, tight border, subtle lean.
+  ```
+
+
 
 ## fix-dialog-open-white-flash
 
@@ -357,18 +530,23 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > only if the flash is currently reproducing (it's intermittent; dormant as of 2026-08-10).
 
 - [x] `f79c21bf` **Pixel-Art-OFF discriminator.** When the flash reproduces, open a flashing surface
-      (Lectern/Notebook/Tablet) with **Pixel Art Display OFF** in Scribe Settings and watch for the
-      flash. Gone → backdrop-bitmap paint is the cause (go to §2); survives → not the backdrop (go to
-      §3). Capture a frame trace/recording if you can. *(fix-dialog-open-white-flash 1.1)*
-      - **Confirmed 2026-08-11** via playtest: "The flash is gone!" With Pixel Art Display OFF the flash does
-        NOT occur → per the discriminator this ROOT-CAUSES the white flash to backdrop-bitmap paint. Advances
-        the change to §2 (the fix now targets the backdrop-bitmap paint path).
+  ```
+  (Lectern/Notebook/Tablet) with **Pixel Art Display OFF** in Scribe Settings and watch for the
+  flash. Gone → backdrop-bitmap paint is the cause (go to §2); survives → not the backdrop (go to
+  §3). Capture a frame trace/recording if you can. *(fix-dialog-open-white-flash 1.1)*
+  - **Confirmed 2026-08-11** via playtest: "The flash is gone!" With Pixel Art Display OFF the flash does
+    NOT occur → per the discriminator this ROOT-CAUSES the white flash to backdrop-bitmap paint. Advances
+    the change to §2 (the fix now targets the backdrop-bitmap paint path).
+  ```
 - [ ] `44e70c5f` **Frame-trace the open flash.** When the flash reproduces, DEBUG frame-trace the first open
-      (fresh session) of each backdropped surface (Lectern/Notebook/Clockmaker/Tablet/wax) — confirm no
-      one-frame opaque-terrain dropout; Settings + `.ui` showcase unregressed. *(fix-dialog-open-white-flash 4.1)*
-      - **Backlogged 2026-08-16** (memory white-flash-is-world-render-stall): the change is PARKED — the flash
-        is INTERMITTENT with no reliable repro and the root cause is still unknown. Three theories (cold upload,
-        first-draw cost, driver shader-cache warmup) were falsified by measurement; the Route-1 pre-upload fix
-        was a net regression and was reverted. RESUME only once a reliable repro exists, THEN frame-trace the
-        open frame — do not write another speculative fix first. (Tasks 4.2/4.3 test the reverted `FromTexture`
-        path + are bookkeeping, so they're not listed here.)
+  ```
+  (fresh session) of each backdropped surface (Lectern/Notebook/Clockmaker/Tablet/wax) — confirm no
+  one-frame opaque-terrain dropout; Settings + `.ui` showcase unregressed. *(fix-dialog-open-white-flash 4.1)*
+  - **Backlogged 2026-08-16** (memory white-flash-is-world-render-stall): the change is PARKED — the flash
+    is INTERMITTENT with no reliable repro and the root cause is still unknown. Three theories (cold upload,
+    first-draw cost, driver shader-cache warmup) were falsified by measurement; the Route-1 pre-upload fix
+    was a net regression and was reverted. RESUME only once a reliable repro exists, THEN frame-trace the
+    open frame — do not write another speculative fix first. (Tasks 4.2/4.3 test the reverted `FromTexture`
+    path + are bookkeeping, so they're not listed here.)
+  ```
+

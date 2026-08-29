@@ -48,6 +48,14 @@ public sealed class ScribePlayerSettings
     /// index before the existing save path. Enter insert-below does not read this.</summary>
     public ScribeNewTaskInsert NewTaskInsert { get; set; } = ScribeNewTaskInsert.Top;
 
+    /// <summary>Where a newly pinned task with no pinned-parent relationship lands in the pin list:
+    /// <see cref="ScribePinInsert.Top"/> (index 0, newest first) or
+    /// <see cref="ScribePinInsert.Bottom"/> (append — the default, matching the pin list's original
+    /// always-append behavior so existing players see no reorder until they opt in). Distinct from
+    /// <see cref="NewTaskInsert"/> — see <see cref="ScribePinInsert"/>. A subtask attaching under its
+    /// pinned parent, or re-parenting under a parent pinned later, ignores this setting.</summary>
+    public ScribePinInsert PinInsert { get; set; } = ScribePinInsert.Bottom;
+
     /// <summary>Whether the pinned-task HUD header shows its settings gear. Default <c>true</c>. When
     /// <c>false</c>, the gear is omitted from the HUD; the Lectern/Notebook/Scriptorium Settings tab
     /// remains available. A per-player, client-local display preference: never server-synced. A plain
@@ -390,6 +398,12 @@ public sealed class ScribePlayerSettings
     public static ScribeNewTaskInsert NormalizeNewTaskInsert(ScribeNewTaskInsert value) =>
         Enum.IsDefined(typeof(ScribeNewTaskInsert), value) ? value : ScribeNewTaskInsert.Top;
 
+    /// <summary>Maps a loaded Pin Insert value to a defined <see cref="ScribePinInsert"/>, falling back
+    /// to the default (<see cref="ScribePinInsert.Bottom"/>) for any unrecognized value so a missing
+    /// JSON key or a hand-edited config can't select an undefined edge.</summary>
+    public static ScribePinInsert NormalizePinInsert(ScribePinInsert value) =>
+        Enum.IsDefined(typeof(ScribePinInsert), value) ? value : ScribePinInsert.Bottom;
+
     /// <summary>Maps a loaded timer-mode value to a defined <see cref="TimerMode"/>, falling back to the
     /// default (<see cref="TimerMode.RealTime"/>) for any unrecognized value so a hand-edited or corrupted
     /// config can't select an undefined timer type.</summary>
@@ -429,6 +443,7 @@ public sealed class ScribePlayerSettings
         TrackerCompletion = NormalizeTrackerCompletion(TrackerCompletion);
         SubtaskBehavior = NormalizeSubtaskBehavior(SubtaskBehavior);
         NewTaskInsert = NormalizeNewTaskInsert(NewTaskInsert);
+        PinInsert = NormalizePinInsert(PinInsert);
         PreferredTimerMode = NormalizeTimerMode(PreferredTimerMode);
         HudAnchor = NormalizeAnchor(HudAnchor);
         HudRowWidth = ClampHudRowWidth(HudRowWidth);

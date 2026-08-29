@@ -1634,6 +1634,15 @@ dialog's raw-`KeyEvent` layer even though the field can't see Cmd — no `gui` f
 old `reference/vslibgui/` clone was deleted 2026-08-12; decompile the vendored `src/Mod/lib/Gui.dll`
 for ground truth, not that path — several older citations in this file still name it.)
 
+**Note (2026-08-29): a persistent decompiled dump now exists, so ad-hoc `ilspycmd -t <Type>` calls
+are no longer the only option.** `build/decompile-libgui.sh` decompiles the vendored
+`src/Mod/lib/Gui.dll` in full into gitignored `reference/vslibgui-decompiled/` (whole-project
+decompile, not a single type) — run it once, then `rg <term> reference/vslibgui-decompiled/` like
+`.wiki/`. It's derived output (not committed) and goes stale whenever `Gui.dll` is bumped; re-run
+the script after any LibGUI version update. Single-type `ilspycmd -t <FullTypeName>` is still fine
+for a quick one-off lookup — this is just for sessions doing sustained digging (e.g. animation
+internals) where re-running single-type decompiles repeatedly is wasteful.
+
 **Fact (migrate-editor-view-libgui): no focus-traversal API — a parent coordinates focus manually.**
 `FocusManager` tracks a single `PrimaryFocus` and offers only `RequestFocus(node)` / `RequestFocus(null)`;
 there is no next/previous traversal, `FocusScope`, or sibling/parent links on `FocusNode`. To move

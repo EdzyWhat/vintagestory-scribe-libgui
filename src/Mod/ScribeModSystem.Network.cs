@@ -69,10 +69,11 @@ public sealed partial class ScribeModSystem
             return;
         }
         Trace("set-pin received from {0}: pinned={1} doc={2} task={3}", fromPlayer.PlayerName, message.Pinned, docId, taskId);
+        var insertEdge = ScribePlayerSettings.NormalizePinInsert((Scribe.Core.ScribePinInsert)message.PinInsert);
         SetPinForPlayer(fromPlayer, docId, taskId, message.Pinned, message.SnapshotText, message.SnapshotDone,
             (Scribe.Core.ScribeBlockKind)message.SnapshotKind, message.SnapshotLinkTarget,
             message.SnapshotTargetItemCode, message.SnapshotTargetQuantity, message.SnapshotCurrentQuantity,
-            message.SnapshotLinkLabel, message.SnapshotDepth);
+            message.SnapshotLinkLabel, message.SnapshotDepth, insertEdge);
     }
 
     private void OnServerReceivedCompleteTask(IServerPlayer fromPlayer, ScribeCompleteTaskMessage message)

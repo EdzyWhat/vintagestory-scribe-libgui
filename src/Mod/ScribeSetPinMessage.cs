@@ -81,4 +81,15 @@ public sealed class ScribeSetPinMessage
     /// (add-crafting-tasks / task-subtasks 5.1).</summary>
     [ProtoMember(12)]
     public int SnapshotDepth { get; set; }
+
+    /// <summary>The acting player's client-local <see cref="Scribe.Core.ScribePinInsert"/> preference (as
+    /// a byte), read only when <see cref="Pinned"/> is true — where an unrelated (no pinned-parent) pin
+    /// lands in the pin list (update-pins-1-3-3). Pin placement is decided server-side
+    /// (<see cref="ScribePinStore.SetPin"/>), so this travels with the request the same way
+    /// <c>ScribeCompleteTaskMessage.Policy</c> carries the completion policy. Defaults to 0
+    /// (<see cref="Scribe.Core.ScribePinInsert.Bottom"/>) for an old client that never sets it — which is
+    /// deliberately the correct legacy always-append behavior; see the remarks on
+    /// <see cref="Scribe.Core.ScribePinInsert"/>.</summary>
+    [ProtoMember(13)]
+    public byte PinInsert { get; set; }
 }

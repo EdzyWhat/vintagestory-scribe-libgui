@@ -74,6 +74,33 @@ public sealed partial class ScribeModSystem : ModSystem
     /// the lectern only needs the <see cref="myPins"/> key set for its tint.</summary>
     private IReadOnlyList<ScribePinnedRef> myPinList = Array.Empty<ScribePinnedRef>();
 
+    /// <summary>Client-side optimistic pin/unpin overlay, keyed by (OwnerDocId, TaskId): a non-null value is
+    /// a pin the player just requested that hasn't been confirmed by the authoritative push yet (its display
+    /// snapshot); a null value is a pin the player just requested REMOVED. Exists because pin placement is
+    /// server-side (<see cref="ScribePinStore.SetPin"/>), and in singleplayer the embedded server's tick loop
+    /// — and therefore its handling of the network message — is paused for as long as the Handbook holds the
+    /// client paused (update-pins-1-3-3): without this overlay every pin-consuming surface (HUD, Pin Tab,
+    /// dialog row tint) would show nothing until the player unpaused. Cleared per-key once
+    /// <see cref="OnClientReceivedPinnedSet"/> confirms the server agrees (see <see cref="ReconcileOptimisticPins"/>).</summary>
+    private readonly Dictionary<(Guid, Guid), ScribePinnedRef?> optimisticPinOverlay = new();
+
+    /// <summary>Insertion order of <see cref="optimisticPinOverlay"/>'s keys, so <see cref="RebuildDisplayPinList"/>
+    /// replays optimistic pin-ADDs through <see cref="ScribePinOrdering.PlaceNewPin"/> in the order they actually
+    /// happened — load-bearing when a parent is pinned and then a child is pinned under it while both are still
+    /// unconfirmed, since the child's placement depends on the parent already being in the working list.</summary>
+    private readonly List<(Guid, Guid)> optimisticPinOrder = new();
+
+    /// <summary>Per-optimistic-pin placement inputs (the source document + the player's Pin Insert edge),
+    /// captured at the moment of the optimistic add so <see cref="RebuildDisplayPinList"/> can call
+    /// <see cref="ScribePinOrdering.PlaceNewPin"/> the same way the server will. Not used for an optimistic
+    /// remove (no placement to compute).</summary>
+    private readonly Dictionary<(Guid, Guid), (ScribeDocument? Source, ScribePinInsert InsertEdge)> optimisticPinPlan = new();
+
+    /// <summary>The list <see cref="MyPins"/> actually returns: <see cref="myPinList"/> with
+    /// <see cref="optimisticPinOverlay"/> applied. Recomputed (not derived per-read) whenever either input
+    /// changes, since <c>MyPins</c> is read many times per frame across the HUD/Pin Tab/dialog rows.</summary>
+    private IReadOnlyList<ScribePinnedRef> displayPinList = Array.Empty<ScribePinnedRef>();
+
     /// <summary>Rebindable hotkey code that toggles the pinned-task HUD's collapse state (design D6).
     /// Registered client-side; its handler flips the HUD's client-local collapse preference.</summary>
     public const string HudHotkeyCode = "scribepinhud";

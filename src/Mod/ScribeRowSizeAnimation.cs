@@ -183,6 +183,44 @@ internal sealed class ScribeHeightFactorWidget : SingleChildWidget
 }
 
 /// <summary>
+/// A transparent pass-through (animate-row-reposition) that reports its child's real measured layout
+/// size back to the caller after every layout pass, so <see cref="ScribeAnimatedList"/> can learn each
+/// row's actual rendered height without altering that row's layout at all — the same
+/// <see cref="RenderProxyBox"/>-subclass technique <see cref="ScribeHeightFactorRender"/> already proves
+/// is the right primitive for a list row here. <see cref="RenderProxyBox"/>'s own base
+/// <c>PerformLayout</c> already lays the child out at full constraints and reports its size as its own
+/// (verified by decompiling <c>Gui.dll</c>), so this only needs to call it and read the result.
+/// </summary>
+internal sealed class ScribeSizeReportRender : RenderProxyBox
+{
+    /// <summary>Invoked with this box's measured size after every layout pass this frame.</summary>
+    public Action<Vector2>? OnMeasured { get; set; }
+
+    protected override void PerformLayout()
+    {
+        base.PerformLayout();
+        OnMeasured?.Invoke(Size);
+    }
+}
+
+/// <summary>The create/update bridge for <see cref="ScribeSizeReportRender"/> (animate-row-reposition).</summary>
+internal sealed class ScribeSizeReportWidget : SingleChildWidget
+{
+    public ScribeSizeReportWidget(Action<Vector2> onMeasured, Widget child, Gui.Widgets.Framework.Key? key = null)
+        : base(child, key)
+    {
+        OnMeasured = onMeasured;
+    }
+
+    public Action<Vector2> OnMeasured { get; }
+
+    public override RenderObject CreateRenderObject() => new ScribeSizeReportRender { OnMeasured = OnMeasured };
+
+    public override void UpdateRenderObject(RenderObject renderObject) =>
+        ((ScribeSizeReportRender)renderObject).OnMeasured = OnMeasured;
+}
+
+/// <summary>
 /// Host-owned animation state for a list's animating rows (gui-row-animation-harness). The host (HUD or
 /// lectern dialog) owns one registry for its lifetime and passes it into each <see cref="ScribeRowSizeAnimation"/>,
 /// which looks up its <see cref="AnimationController"/> by the row's stable id. Because the controller
@@ -198,6 +236,17 @@ internal sealed class ScribeHeightFactorWidget : SingleChildWidget
 internal sealed class ScribeAnimationRegistry
 {
     private readonly Dictionary<string, AnimationController> controllers = new();
+
+    /// <summary>Per-id seed values for a motion's fixed starting parameter (animate-row-reposition
+    /// task 3.4) — e.g. <see cref="ScribeRowReposition"/>'s <c>TargetOffsetY</c>. Lives here, not on the
+    /// transient <c>State</c>, for the SAME reason the <see cref="AnimationController"/> does: LibGUI's
+    /// reconciler is positional (<c>MultiChildElement.Update</c> matches slots by index, not by id — see
+    /// <c>VSAPI-NOTES.md</c> § LibGUI), so a row whose Column index shifts gets its Element unmounted and
+    /// remounted, and a State-local seed captured only in <c>InitState</c> would be reseeded from
+    /// whatever the CURRENT build happens to pass (frequently a stale/zero fallback on a non-triggering
+    /// build) — snapping an in-flight motion to rest. Storing the seed in the registry, keyed like the
+    /// controller, makes it survive a remount exactly the same way the controller's elapsed progress does.</summary>
+    private readonly Dictionary<string, float> seeds = new();
 
     /// <summary>The persistent animation controller for a row id, created (and started
     /// <see cref="AnimationController.Forward"/>) on first request and resumed on later requests, so a
@@ -219,6 +268,14 @@ internal sealed class ScribeAnimationRegistry
         }
         return controller;
     }
+
+    /// <summary>The seed value for a keyed motion: <paramref name="value"/> on first request for this
+    /// <paramref name="id"/>, then that SAME original value on every later request regardless of what's
+    /// passed — so a widget re-attaching to an id it's already seeded (an ordinary reconcile, OR an
+    /// Element remount the positional reconciler forced) can't have its in-flight motion truncated by a
+    /// caller that (correctly, per its own contract) only computes the real value on the one build that
+    /// triggered it.</summary>
+    public float Seed(string id, float value) => seeds.TryGetValue(id, out var existing) ? existing : seeds[id] = value;
 
     /// <summary>Whether the animation for this id has already finished (reached its terminal factor). The
     /// host uses this to guard against re-arming a completed animation before its cleanup is processed.</summary>
@@ -245,6 +302,7 @@ internal sealed class ScribeAnimationRegistry
     public void Release(string id)
     {
         if (controllers.Remove(id, out var controller)) controller.Dispose();
+        seeds.Remove(id);
     }
 
     /// <summary>Dispose all owned controllers (the host calls this in its own Dispose).</summary>
@@ -513,6 +571,166 @@ internal sealed class ScribeSlideInState : State<ScribeSlideIn>
             controller.OnStatusChanged -= OnStatusChanged;
             controller = null;
         }
+        base.Dispose();
+    }
+}
+
+/// <summary>
+/// Displaces a surviving row from its real previous rendered position to its new one
+/// (animate-row-reposition) — a third self-ticking, registry-keyed row motion alongside
+/// <see cref="ScribeRowSizeAnimation"/> (departure/entry height) and <see cref="ScribeSlideIn"/> (entry
+/// translate+fade). Unlike <see cref="ScribeSlideIn"/>'s FIXED slide distance — safe there only because a
+/// brand-new row has no prior on-screen position to match — this widget's <see cref="TargetOffsetY"/> is
+/// the row's REAL measured displacement (<c>ScribeAnimatedList</c> computes it from live row-height
+/// measurements each build); an assumed distance would pop visibly at the very start of the motion for a
+/// row that was genuinely visible somewhere else last frame.
+///
+/// <para><see cref="TargetOffsetY"/> is captured ONCE, the moment a fresh generation starts (mirroring
+/// <see cref="ScribeSlideIn"/>'s fixed <c>SlideDistance</c>), NOT re-read from the widget prop on every
+/// build. This was a deliberate change from an earlier "recompute every build" design: the container
+/// (<c>ScribeAnimatedList</c>) does not reliably rebuild every animation tick — its own `Build` only
+/// runs when something calls `SetState`/`MarkNeedsBuild` on ITS Element, which the reposition motion
+/// itself never does (unlike collapse/entry, which call back in on completion). If a LATER, unrelated
+/// rebuild of the container happened to occur mid-animation, re-reading `TargetOffsetY` from that build
+/// would recompute a near-zero delta (the order has already caught up to itself) and SNAP the animation
+/// to rest early — a real regression found in playtest. Seeding once and holding it locally makes the
+/// motion immune to how many times (or how few) the container itself rebuilds while it eases.</para>
+///
+/// <para>The seed itself is stored in <see cref="ScribeAnimationRegistry.Seed"/>, not just a private
+/// field (task 3.4, found via a Sink completion: the sinking row instant-jumped instead of animating,
+/// while merely-displaced siblings animated fine). LibGUI's reconciler matches Column slots by INDEX,
+/// not by id (<c>MultiChildElement.Update</c> — see <c>VSAPI-NOTES.md</c> § LibGUI); any row whose slot
+/// shifts gets its Element unmounted and a fresh one mounted, which re-runs <see cref="ScribeRowRepositionState.InitState"/>.
+/// A private field alone would be reseeded from whatever that build happens to pass — fine on the
+/// triggering build (a real delta), but a SNAP if some later, unrelated rebuild forces another remount
+/// of the same still-animating row before its motion finishes (that build's `TargetOffsetY` defaults to
+/// zero, per the materialize-step fallback in <c>ScribeAnimatedList</c>). Reading the seed from the
+/// registry instead means a re-attach to an id already seeded gets the ORIGINAL value back, no matter
+/// how many times or why the Element remounts in between — the same survival guarantee the
+/// <see cref="AnimationController"/> already has, extended to its starting parameter.</para>
+///
+/// <para>Like <see cref="ScribeSlideIn"/>, once a row has ever been wrapped it MUST keep rendering the
+/// same wrapper shape for the rest of its live lifetime (a settled reposition is an inert
+/// <c>Transform.Translate(child, Vector2.Zero)</c> pass-through) — unwrapping on completion would
+/// type-swap the slot under the positional reconciler and remount the row's field, dropping a live
+/// caret mid-edit. A LATER reposition of the same row reuses the wrapper's Element but needs a FRESH
+/// controller (the row can move more than once across its lifetime, unlike entry); <see cref="Id"/>
+/// therefore embeds a generation number the host bumps each time a fresh displacement starts, so
+/// <see cref="UpdateWidget"/> can detect the change and swap to a new registry-held controller without
+/// remounting the Element itself.</para>
+/// </summary>
+internal sealed class ScribeRowReposition : StatefulWidget
+{
+    public const int DefaultDurationMs = ScribeRowSizeAnimation.DefaultDurationMs;
+
+    public ScribeRowReposition(
+        string id,
+        float targetOffsetY,
+        ScribeAnimationRegistry registry,
+        Widget child,
+        int durationMs = DefaultDurationMs,
+        Gui.Widgets.Framework.Key? key = null) : base(key)
+    {
+        Id = id;
+        TargetOffsetY = targetOffsetY;
+        Registry = registry;
+        Child = child;
+        DurationMs = durationMs;
+    }
+
+    /// <summary>Registry key for this row's CURRENT reposition generation (<c>move:&lt;id&gt;:&lt;gen&gt;</c>)
+    /// — changes each time the host starts a fresh displacement for this row, so a new controller is
+    /// created instead of resuming a completed one.</summary>
+    public string Id { get; }
+
+    /// <summary>The row's total displacement (old Y minus new Y) at the moment this generation started.
+    /// Read once, when a fresh generation is attached (see the class doc comment) — later builds that
+    /// pass the SAME generation may feed a different value here (the container only computes a real one
+    /// on the triggering build; later builds default it to zero), which is fine because the State ignores
+    /// it once already attached to that generation.</summary>
+    public float TargetOffsetY { get; }
+    public ScribeAnimationRegistry Registry { get; }
+    public Widget Child { get; }
+    public int DurationMs { get; }
+
+    public override State CreateState() => new ScribeRowRepositionState();
+}
+
+internal sealed class ScribeRowRepositionState : State<ScribeRowReposition>
+{
+    /// <summary>Same easing family as every other Scribe row animation, for a consistent feel.</summary>
+    private static readonly Curve MoveCurve = Curves.EaseInOutCubic;
+
+    private AnimationController? controller;
+    private string? controllerId;
+
+    /// <summary>The displacement captured once, when the current generation attached (the class doc
+    /// comment explains why this is NOT re-read from <see cref="ScribeRowReposition.TargetOffsetY"/> on
+    /// every build) — mirrored from <see cref="ScribeAnimationRegistry.Seed"/> so it also survives an
+    /// Element remount forced by the positional reconciler mid-animation (task 3.4: seeding into a
+    /// State-local field alone isn't enough, since a remount re-runs <see cref="InitState"/> with
+    /// whatever the CURRENT build passes — often a stale zero — discarding this field entirely).</summary>
+    private float seededOffset;
+
+    public override void InitState()
+    {
+        base.InitState();
+        Attach(Widget.Id, Widget.TargetOffsetY);
+    }
+
+    public override void UpdateWidget(ScribeRowReposition oldWidget)
+    {
+        base.UpdateWidget(oldWidget);
+        if (Widget.Id == controllerId) return; // same generation — keep animating toward the seeded offset
+
+        Detach();
+        Widget.Registry.Release(oldWidget.Id); // the old generation's controller is done; free it
+        Attach(Widget.Id, Widget.TargetOffsetY);
+    }
+
+    private void Attach(string id, float offset)
+    {
+        controllerId = id;
+        // Registry.Seed returns the ORIGINAL value the first time this id was ever seeded (even if that
+        // happened on a prior mount of this same generation, before a positional-reconciler remount tore
+        // this State down) — so a remount can't clobber an in-flight motion's target with a stale/zero
+        // value just because it re-attaches to an id it's already seeded.
+        seededOffset = Widget.Registry.Seed(id, offset);
+        controller = Widget.Registry.Controller(
+            id, TimeSpan.FromMilliseconds(Widget.DurationMs), Element.Owner!.GetTickerProvider());
+        controller.OnValueChanged += OnValueChanged;
+        // No OnEnd callback: unlike Collapse (must remove the row) or entry (releases the entry-only
+        // wrapper decision elsewhere), a completed reposition simply rests at offset zero — the host
+        // only needs OnValueChanged to keep repainting while it eases, and reads Registry.IsComplete
+        // itself to decide when a LATER displacement needs a fresh generation.
+    }
+
+    private void Detach()
+    {
+        if (controller == null) return;
+        controller.OnValueChanged -= OnValueChanged;
+        controller = null;
+    }
+
+    private void OnValueChanged(double _) => Element.MarkNeedsBuild();
+
+    public override Widget Build(BuildContext context)
+    {
+        if (controller == null) return Widget.Child;
+
+        float eased = (float)MoveCurve.Transform(controller.Value);
+        float offsetY = seededOffset * (1f - eased);
+        // ALWAYS render the same Transform > child shape (even settled, offset zero) — same load-bearing
+        // reasoning ScribeSlideIn documents: swapping the wrapper away on completion would remount the
+        // row's field under the positional reconciler and drop a live caret mid-edit.
+        return Transform.Translate(Widget.Child, new Vector2(0f, offsetY));
+    }
+
+    public override void Dispose()
+    {
+        // Detach this (transient) widget's handlers; the controller is host-owned, so leave it for the
+        // next mount to resume (identical discipline to ScribeRowSizeAnimation/ScribeSlideIn).
+        Detach();
         base.Dispose();
     }
 }

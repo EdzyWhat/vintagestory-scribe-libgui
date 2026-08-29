@@ -487,25 +487,14 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     private void ApplyUiSoundPreference()
         => BuildOwner.SetSoundPlayer(modSystem.GetUiSoundPlayer(capi));
 
-    /// <summary>Optimistic pin overlay keyed by TaskId → the pinned state this player just requested, applied
-    /// to the open dialog's own rows BEFORE the server confirms (add-tracker-link-tasks 7.11b). Pin actions
-    /// route through the server round-trip (<see cref="SendSetPin"/>), but in single-player the server clock is
-    /// PAUSED while the Handbook is open — so a pin created/toggled from a Handbook link only queues, and the
-    /// row gave no feedback until the Handbook closed. Editing/completing already felt instant because they
-    /// apply optimistically; this gives pinning the same treatment. Entries are dropped in
-    /// <see cref="OnMyPinsChanged"/> once the authoritative pushed state agrees, after which
-    /// <see cref="modSystem"/> alone drives the row. Scoped to this dialog's rows (the feedback target); the
-    /// HUD / Pin Tab read the authoritative set directly and catch up on the same push.</summary>
-    private readonly Dictionary<Guid, bool> optimisticPin = new();
-
     /// <summary>Whether THIS player has pinned the given task in this lectern's document. Drives the
-    /// resting pin tint and the pin-glyph accent in both views. An in-flight optimistic toggle
-    /// (<see cref="optimisticPin"/>) wins so the row repaints immediately; otherwise sourced from the
-    /// server-pushed cache rather than any document field (pinning is per-player, not document state).</summary>
-    private bool IsPinnedForMe(Guid taskId)
-        => optimisticPin.TryGetValue(taskId, out bool optimistic)
-            ? optimistic
-            : modSystem.IsPinnedForMe(host.Document.DocId, taskId);
+    /// resting pin tint and the pin-glyph accent in both views. Delegates straight to
+    /// <see cref="ScribeModSystem.IsPinnedForMe"/>, which is itself optimism-aware (add-tracker-link-tasks
+    /// 7.11b / update-pins-1-3-3) — a pin/unpin this player just requested reads through the SAME overlay
+    /// the HUD and Pin Tab consume, so every surface agrees the instant the request is made rather than
+    /// waiting for the server round-trip (in singleplayer, that round-trip stalls for as long as the
+    /// Handbook holds the embedded server paused).</summary>
+    private bool IsPinnedForMe(Guid taskId) => modSystem.IsPinnedForMe(host.Document.DocId, taskId);
 
     /// <summary>Whether the tier cap (<see cref="IScribeDocumentHost.Policy"/>) still permits adding one
     /// more block of ANY kind to the document being edited. The cap is "N of anything" — tasks, notes,
@@ -558,31 +547,21 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// cap (the tablet tier: 1 pin per document), the player's oldest pins for THIS document are
     /// released first so the new pin fits — a seamless "pin this one instead" swap. Uncapped tiers
     /// (Lectern, Notebook — <see cref="ScribeDocumentPolicy.Unlimited"/>) never release anything and
-    /// simply pin. Pin actions are per-player and lock-free (see <see cref="SendSetPin"/>); the server
-    /// re-pushes this player's set, landing in <see cref="OnMyPinsChanged"/> to repaint the rows.</summary>
+    /// simply pin. Pin actions are per-player and lock-free (see <see cref="SendSetPin"/>), which applies
+    /// the optimistic overlay itself — every subscriber to <see cref="ScribeModSystem.MyPinsChanged"/>
+    /// (including this dialog's own <see cref="OnMyPinsChanged"/>) repaints immediately; the server's
+    /// eventual re-push just confirms it.</summary>
     private void TogglePinWithPolicy(Guid taskId)
     {
         bool willPin = !IsPinnedForMe(taskId);
         if (!willPin)
         {
             SendSetPin(taskId, false);
-            optimisticPin[taskId] = false;
-            RepaintPinsOptimistically();
             return;
         }
         ReleasePinsToFitPolicy(taskId);
         SendSetPin(taskId, true);
-        optimisticPin[taskId] = true;
-        RepaintPinsOptimistically();
     }
-
-    /// <summary>Repaint the open dialog's rows off the just-updated <see cref="optimisticPin"/> overlay,
-    /// without waiting for the server round-trip (add-tracker-link-tasks 7.11b — the single-player
-    /// Handbook-paused case). Routes through the SAME per-view reconcile + focus-rehome path a server pin push
-    /// uses (<see cref="OnMyPinsChanged"/>) so the pin tint updates in place with no caret loss; the overlay's
-    /// reconcile-drop there is a no-op now (the authoritative set hasn't changed yet) and takes over once the
-    /// push lands.</summary>
-    private void RepaintPinsOptimistically() => OnMyPinsChanged();
 
     /// <summary>Release the player's oldest pins for the current document until pinning one more task
     /// stays within the tier's <see cref="ScribeDocumentPolicy.MaxPins"/> cap. No-op for uncapped tiers
@@ -600,7 +579,6 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
         for (int i = 0; i < toRelease && i < existing.Count; i++)
         {
             SendSetPin(existing[i].TaskId, false);
-            optimisticPin[existing[i].TaskId] = false; // reflect the swap-out immediately (7.11b)
         }
     }
 
@@ -619,19 +597,9 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     {
         if (!IsOpened()) return;
         TraceScroll("pins-changed");
-        // Reconcile the optimistic pin overlay (7.11b): drop any entry the authoritative pushed set now agrees
-        // with, so the server cache resumes driving the row. Entries still ahead of the server (the SP
-        // Handbook-paused case, before the queued packet is processed) are kept, so the row holds its
-        // optimistic tint. Runs before the per-view rebuild below so the fresh rows read the reconciled state.
-        if (optimisticPin.Count > 0)
-        {
-            Guid docId = host.Document.DocId;
-            var settled = optimisticPin
-                .Where(kv => modSystem.IsPinnedForMe(docId, kv.Key) == kv.Value)
-                .Select(kv => kv.Key)
-                .ToList();
-            foreach (Guid taskId in settled) optimisticPin.Remove(taskId);
-        }
+        // The optimistic pin overlay (7.11b / update-pins-1-3-3) reconciles itself inside
+        // ScribeModSystem (ReconcileOptimisticPins), before it fires this event — IsPinnedForMe already
+        // reads the settled state by the time this rebuild runs.
         // A settings change may have flipped the mute preference — re-install the matching sound player
         // so a live toggle takes effect on this already-open dialog (scribe-mute-ui-sounds).
         ApplyUiSoundPreference();
