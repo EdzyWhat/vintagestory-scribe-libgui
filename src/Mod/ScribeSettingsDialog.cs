@@ -56,6 +56,11 @@ public sealed class ScribeSettingsDialog : GuiBase
     /// <summary>Stable position/persistence key distinct from the lectern's (design DialogCode).</summary>
     public override string DialogCode => "scribesettings";
 
+    /// <summary>Match <see cref="ScribeDialogBase.DrawOrder"/>'s 0.2 band — this can open on top of a
+    /// Lectern/Notebook/Tablet (via their Settings gear), which now sits in that band, so staying at the
+    /// unset 0.1 default would render this UNDER its own parent.</summary>
+    public override double DrawOrder => 0.2;
+
     protected override WindowConfig CreateWindowConfig() => new()
     {
         // Fixed, comfortably-sized settings window (the form scrolls within it if it overflows). Draggable

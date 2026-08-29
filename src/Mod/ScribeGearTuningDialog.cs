@@ -40,6 +40,10 @@ public sealed class ScribeGearTuningDialog : GuiBase
 
     public override string DialogCode => "scribegeartune";
 
+    /// <summary>Match <see cref="ScribeDialogBase.DrawOrder"/>'s 0.2 band so this stays on top of the
+    /// Clockmaker's Notebook it tunes live.</summary>
+    public override double DrawOrder => 0.2;
+
     protected override WindowConfig CreateWindowConfig() => new()
     {
         Size = new Vector2(360, 400),

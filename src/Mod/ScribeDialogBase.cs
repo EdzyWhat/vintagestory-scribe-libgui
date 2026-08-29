@@ -760,6 +760,18 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// </summary>
     protected override double InteractionRange => GlobalConstants.DefaultPickingRange + 0.5;
 
+    /// <summary>
+    /// Match the vanilla Inventory/Handbook/chest <c>DrawOrder</c> band (0.2) instead of <c>GuiBase</c>'s
+    /// unset default (vanilla <c>GuiDialog</c>'s 0.1), so Scribe surfaces stack correctly against OTHER
+    /// LibGUI windows in the same band — e.g. PlayerInvUI's <c>SurvivalInventoryDialog</c>, which itself
+    /// overrides to 0.2. Both windows paint through the SAME shared Skia surface, so within this band
+    /// pixels and hit-tests agree and <c>RequestFocus</c> correctly brings whichever one opened/focused
+    /// last to the top. This does NOT fix overlap with vanilla Cairo/GL dialogs (real Handbook/Inventory):
+    /// that failure mode is a different pipeline-ordering problem (PostSkiaPipeline flushes before
+    /// GuiManager) and is a deliberately parked, harder fix — see the DrawOrder notes in VSAPI-NOTES.md.
+    /// </summary>
+    public override double DrawOrder => 0.2;
+
     // ---------------- Input capture + macOS caret translation ----------------
 
     /// <summary>

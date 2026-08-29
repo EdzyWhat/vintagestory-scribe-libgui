@@ -936,8 +936,11 @@ other windows" idea — decompiled `VintagestoryLib.dll`/`VintagestoryAPI.dll`, 
   order insert-before). Vanilla Cairo/GL draws after that blit, so Handbook always covers Scribe
   even when Scribe is focused. Spikes that flushed/Ended Skia during the GuiManager pass hid
   vanilla GUI or dropped the opaque terrain pass (sky through the ground). **Do not override
-  DrawOrder to 0.2 until LibGUI can composite per-window in the `OpenedGuis` loop.** (2026-08-27
-  spike; decompiled `GuiDialog` / `GuiManager` / `PostSkiaPipeline`.)
+  DrawOrder to 0.2 to fix vanilla Handbook/Inventory overlap until LibGUI can composite per-window
+  in the `OpenedGuis` loop.** (2026-08-27 spike; decompiled `GuiDialog` / `GuiManager` /
+  `PostSkiaPipeline`.) That said, `DrawOrder => 0.2` IS the correct fix for stacking against OTHER
+  LibGUI windows (e.g. PlayerInvUI, which itself sits at 0.2) — see the follow-up fix note lower in
+  this file, dated 2026-08-29.
 - **Alt mouse-mode is unaffected by stacking.** Alt = hotkey `"togglemousecontrol"`. Any open
   `Dialog`-type with `PrefersUngrabbedMouse` (default true) already frees the cursor;
   `ClientMain.UpdateFreeMouse()` XORs that with Alt-held. Inventory/Handbook already ungrab, so
@@ -2370,9 +2373,17 @@ do not. `PostSkiaPipeline` (RenderOrder 1.0) inserts *before* `GuiManager` (also
 the shared wrapped-FBO Skia surface first, so vanilla dialogs always paint on top. Overriding
 Scribe `DrawOrder => 0.2` makes clicks hit Scribe while Handbook still covers it — worse than
 leaving the default 0.1. Per-window `SkiaRenderer.End`/`Flush` during `OnRenderGUI` hid vanilla
-GUI or leaked GL into the next opaque-terrain pass. Leave DrawOrder at the `GuiBase` default
-until LibGUI composites each window in the GuiManager loop. See the DrawOrder-band bullet in
-the HUD/hotkeys section above.
+GUI or leaked GL into the next opaque-terrain pass. **This finding is scoped to vanilla
+Cairo/GL dialogs only — it does NOT apply between two LibGUI/Skia windows.** Two LibGUI windows
+(e.g. Scribe vs. PlayerInvUI's `SurvivalInventoryDialog`) both paint through the SAME shared Skia
+surface in the SAME `OpenedGuis` pass, so for them `DrawOrder` pixels and hit-tests agree — there's
+no separate-pipeline mismatch to avoid. Decompiling `PlayerInvUI.dll` confirms `SurvivalInventoryDialog
+: GuiBase` overrides `DrawOrder => 0.2` to match vanilla's Inventory band; leaving Scribe unset at 0.1
+meant Scribe always painted UNDER PlayerInvUI (and any other 0.2-band LibGUI window). **Fix (2026-08-29,
+`ScribeDialogBase.DrawOrder => 0.2`, plus `ScribeSettingsDialog`/`ScribeGearTuningDialog` so they stay
+on top of the now-raised parent dialog):** restores LibGUI-vs-LibGUI stacking parity without
+resurrecting the vanilla-Handbook-overlap attempt, which stays parked until LibGUI composites each
+window in the `GuiManager` loop. See the DrawOrder-band bullet in the HUD/hotkeys section above.
 
 **Fact: `GuiBase` layout+paint is NOT gated on `Focused`/`IsActiveWindow` — every OPEN dialog re-lays-out
 and repaints each frame.** Decompiling `Gui.dll` (`GuiBase.OnRenderGUI` + `FramePipeline.Run`): render is
