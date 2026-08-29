@@ -495,13 +495,20 @@ public abstract partial class ScribeDialogBase
             end = scratch.OwnedRun(from).End; // cluster [from, runEnd); empty run → from+1
 
         bool dropOnCluster = to >= start && to < end;
-        if (from == to || dropOnCluster)
+        // Same-depth-reorder: a depth-0 cluster may only land on another depth-0 row, and a depth-1
+        // leaf only on another depth-1 row (both surfaces share this rule via ScribeReorderValidity so
+        // the grip's drop-target arrow can never light up on a drop the commit here then refuses).
+        // IsValidDropTarget already treats dropOnCluster as valid (a no-op), so a false result here
+        // means specifically a cross-depth drop outside the dragged row's own cluster.
+        var depths = scratch.Blocks.Select(b => b.Depth).ToList();
+        bool crossDepth = !ScribeReorderValidity.IsValidDropTarget(depths, start, end, to);
+        if (from == to || dropOnCluster || crossDepth)
         {
-            // Released in place (or a grip click that never dragged, or drop onto own children): no edit —
-            // but the grip press already blurred the focused field via LibGUI's DispatchPointerDown
-            // focus-clear (the grip isn't IFocusable), so re-home the caret to the row that was being
-            // edited or nothing else will (a05caret1). No rebuild is needed to move the doc; RequestFocus
-            // alone re-grants focus.
+            // Released in place (or a grip click that never dragged, drop onto own children, or an
+            // invalid cross-depth drop): no edit — but the grip press already blurred the focused field
+            // via LibGUI's DispatchPointerDown focus-clear (the grip isn't IFocusable), so re-home the
+            // caret to the row that was being edited or nothing else will (a05caret1). No rebuild is
+            // needed to move the doc; RequestFocus alone re-grants focus.
             if (focusedEditIndex is { } held && held < editorFocusNodes.Count) FocusEditorRow(held);
             return;
         }
@@ -510,14 +517,18 @@ public abstract partial class ScribeDialogBase
         if (preserveFocusedRow && focusedEditIndex is { } pf && pf < scratch.Blocks.Count)
             preservedId = scratch.Blocks[pf].TaskId;
 
+        // Resolve the actual destination so dropping forward onto a parent with its own children lands
+        // AFTER that parent's whole cluster rather than wedging between it and its first child (the
+        // upward direction already lands correctly with no adjustment — see ResolveDestination).
+        int destination = ScribeReorderValidity.ResolveDestination(depths, start, to);
         int len = end - start;
         bool ok = len == 1
-            ? scratch.MoveBlock(from, to)
-            : scratch.MoveRange(start, end, to);
+            ? scratch.MoveBlock(from, destination)
+            : scratch.MoveRange(start, end, destination);
         if (!ok) return;
 
         isDirty = true;
-        int newStart = to < start ? to : to - len + 1;
+        int newStart = destination < start ? destination : destination - len + 1;
 
         int? previousFocus = focusedEditIndex;
         int focusTarget;

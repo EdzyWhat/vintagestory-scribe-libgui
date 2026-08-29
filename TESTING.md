@@ -550,3 +550,35 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
     path + are bookkeeping, so they're not listed here.)
   ```
 
+## same-depth-reorder
+
+> Drag-reorder restricted to same-depth targets (editor + Pin Tab), with a cluster-aware
+> destination fix and a Pin-Tab-only display-order bug found during playtest.
+
+- [x] `00000032` **Cross-depth drop is rejected.** In the editor, drag a depth-1 subtask over a
+  ```
+  depth-0 row (no arrow, no reorder), and drag a depth-0 parent with subtasks over an unrelated
+  depth-1 row (no arrow, no reorder). *(same-depth-reorder 3.1/3.2, 6.2)*
+  - **Confirmed 2026-08-29** via in-game playtest.
+  ```
+- [x] `00000033` **Forward drag onto a parent-with-children doesn't reparent.** Drag an earlier
+  ```
+  depth-0 parent (with its own subtasks/pinned children) forward past a later parent that also has
+  children — both clusters stay intact, nothing gets wedged between the target and its children.
+  *(same-depth-reorder 1.3, 6.2)*
+  - **Confirmed 2026-08-29** via in-game playtest.
+  ```
+- [x] `00000034` **Pin Tab: pinned parent's children move with it.** Drag a pinned parent with
+  ```
+  pinned children past a sibling pin on the Pin Tab — the children move together with the parent.
+  *(same-depth-reorder 4.1, 6.2)*
+  - **Confirmed 2026-08-29** via in-game playtest.
+  ```
+- [x] `00000035` **Pin Tab: reorder is correct with a completed pin mixed in.** Under the default
+  ```
+  Sink completion policy, mix a completed pin in with active ones, then drag-reorder — the drag
+  must apply to the on-screen row under the cursor, not a different row from raw storage order
+  (the `OnPinReorder` display-order bug found this session). *(same-depth-reorder 1.5, 6.2)*
+  - **Confirmed 2026-08-29** via in-game playtest.
+  ```
+

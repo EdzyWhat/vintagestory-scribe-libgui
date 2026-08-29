@@ -259,6 +259,130 @@ public class ScribePinOrderingTests
         Assert.Equal(new[] { parent.TaskId, c2.TaskId, c1.TaskId, filler.TaskId }, list.Select(p => p.TaskId));
     }
 
+    // ---- Reorder (same-depth-reorder) ----
+
+    [Fact]
+    public void Reorder_SameDepthPins_Moves()
+    {
+        var a = Pin("a", done: false);
+        var b = Pin("b", done: false);
+        var c = Pin("c", done: false);
+        var list = new List<ScribePinnedRef> { a, b, c };
+
+        bool changed = ScribePinOrdering.Reorder(list, from: 0, to: 2);
+
+        Assert.True(changed);
+        Assert.Equal(new[] { b.TaskId, c.TaskId, a.TaskId }, list.Select(p => p.TaskId));
+    }
+
+    [Fact]
+    public void Reorder_ParentWithChildren_MovingForwardOntoAnotherParentWithChildren_KeepsBothClustersIntact()
+    {
+        // Regression: dragging an EARLIER pinned parent (with its own pinned child) forward past a
+        // LATER pinned parent that ALSO has a pinned child must not wedge the dragged cluster between
+        // the target parent and its child -- both clusters must stay intact and contiguous.
+        var parentA = Pin("parentA", done: false);
+        var childA1 = Pin("childA1", done: false);
+        childA1.Depth = 1;
+        var parentB = Pin("parentB", done: false);
+        var childB1 = Pin("childB1", done: false);
+        childB1.Depth = 1;
+        var list = new List<ScribePinnedRef> { parentA, childA1, parentB, childB1 };
+
+        // Drag parentA's cluster [0,2) forward, dropping on parentB (index 2).
+        bool changed = ScribePinOrdering.Reorder(list, from: 0, to: 2);
+
+        Assert.True(changed);
+        Assert.Equal(new[] { parentB.TaskId, childB1.TaskId, parentA.TaskId, childA1.TaskId },
+            list.Select(p => p.TaskId));
+    }
+
+    [Fact]
+    public void Reorder_CrossDepth_Rejected()
+    {
+        var (doc, parent, c1, _) = CraftFamily();
+        var parentPin = PinOn(doc, parent.Text, parent.TaskId, depth: 0);
+        var childPin = PinOn(doc, c1.Text, c1.TaskId, depth: 1);
+        var list = new List<ScribePinnedRef> { parentPin, childPin };
+
+        // Drag the depth-1 child onto the depth-0 parent: invalid.
+        bool changed = ScribePinOrdering.Reorder(list, from: 1, to: 0);
+
+        Assert.False(changed);
+        Assert.Equal(new[] { parentPin.TaskId, childPin.TaskId }, list.Select(p => p.TaskId));
+    }
+
+    [Fact]
+    public void Reorder_CrossDepth_OtherDirection_Rejected()
+    {
+        var (doc, _, c1, _) = CraftFamily();
+        // The depth-1 pin sits at index 0, NOT immediately after "other" -- so it isn't swept into
+        // "other"'s cluster by adjacency (Cluster() is purely positional, like ScribeDocument.OwnedRun).
+        var unrelatedChild = PinOn(doc, c1.Text, c1.TaskId, depth: 1);
+        var other = Pin("other", done: false);
+        var list = new List<ScribePinnedRef> { unrelatedChild, other };
+
+        // Drag the depth-0 "other" pin (index 1) onto the unrelated depth-1 pin (index 0): invalid.
+        bool changed = ScribePinOrdering.Reorder(list, from: 1, to: 0);
+
+        Assert.False(changed);
+        Assert.Equal(new[] { unrelatedChild.TaskId, other.TaskId }, list.Select(p => p.TaskId));
+    }
+
+    [Fact]
+    public void Reorder_PinnedParentWithChildren_MovesClusterTogether()
+    {
+        var (doc, parent, c1, c2) = CraftFamily();
+        var parentPin = PinOn(doc, parent.Text, parent.TaskId, depth: 0);
+        var childPin1 = PinOn(doc, c1.Text, c1.TaskId, depth: 1);
+        var childPin2 = PinOn(doc, c2.Text, c2.TaskId, depth: 1);
+        var sibling = Pin("sibling", done: false);
+        var list = new List<ScribePinnedRef> { parentPin, childPin1, childPin2, sibling };
+
+        // Drag the parent (cluster [0,3)) past the sibling depth-0 pin at index 3.
+        bool changed = ScribePinOrdering.Reorder(list, from: 0, to: 3);
+
+        Assert.True(changed);
+        Assert.Equal(new[] { sibling.TaskId, parentPin.TaskId, childPin1.TaskId, childPin2.TaskId },
+            list.Select(p => p.TaskId));
+    }
+
+    [Fact]
+    public void Reorder_DropOnOwnCluster_IsNoOp()
+    {
+        var (doc, parent, c1, _) = CraftFamily();
+        var parentPin = PinOn(doc, parent.Text, parent.TaskId, depth: 0);
+        var childPin = PinOn(doc, c1.Text, c1.TaskId, depth: 1);
+        var list = new List<ScribePinnedRef> { parentPin, childPin };
+
+        bool changed = ScribePinOrdering.Reorder(list, from: 0, to: 1);
+
+        Assert.False(changed);
+        Assert.Equal(new[] { parentPin.TaskId, childPin.TaskId }, list.Select(p => p.TaskId));
+    }
+
+    [Fact]
+    public void Reorder_SameIndex_IsNoOp()
+    {
+        var list = new List<ScribePinnedRef> { Pin("a", done: false), Pin("b", done: false) };
+
+        bool changed = ScribePinOrdering.Reorder(list, from: 0, to: 0);
+
+        Assert.False(changed);
+    }
+
+    [Theory]
+    [InlineData(-1, 0)]
+    [InlineData(0, 5)]
+    public void Reorder_OutOfRangeIndices_IsNoOp(int from, int to)
+    {
+        var list = new List<ScribePinnedRef> { Pin("a", done: false), Pin("b", done: false) };
+
+        bool changed = ScribePinOrdering.Reorder(list, from, to);
+
+        Assert.False(changed);
+    }
+
     private static (ScribeDocument Doc, ScribeBlock Parent, ScribeBlock C1, ScribeBlock C2) CraftFamily()
     {
         var parent = new ScribeBlock(ScribeBlockKind.Craft, "craft", depth: 0);

@@ -4,6 +4,15 @@ All notable changes to Scribe are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- Drag-reordering a task or pinned task now only allows dropping onto a target at the same
+  indentation depth — dropping a subtask among top-level tasks (or vice versa) is rejected, and the
+  drop-target arrow only appears over a valid same-depth row. Dragging a parent task (or pinned
+  parent) with subtasks/pinned children now always moves the whole group together, including when
+  dragged forward past another parent's group.
+
 ## [1.3.3] - 2026-08-29
 
 ### Added

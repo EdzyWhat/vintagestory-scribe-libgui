@@ -197,6 +197,23 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
         // collapse and its focus node is gone once the pin leaves the set), so we snapshot it as a static
         // ScribeFrozenEditorRow — the same [grip-spacer][checkbox][text] shape the editor's ghost uses, so the
         // Pin Tab and editor collapse identically. Pinned:false → no resting tint (a Pin Tab row has none).
+        // same-depth-reorder: mirrors the editor's arrow gate (ScribeEditorContent.cs) — the drop-target
+        // arrow is a direct rendering of the same validity check ScribePinOrdering.Reorder's commit uses,
+        // excluding the dragged pin's own cluster (dropping on your own already-pinned children is a no-op).
+        List<int>? dragDepths = null;
+        (int ClusterStart, int ClusterEnd) dragCluster = default;
+        if (dragFromIndex is { } dragFrom)
+        {
+            dragDepths = Widget.Rows.Select(r => r.Depth).ToList();
+            dragCluster = ScribeReorderValidity.Cluster(dragDepths, dragFrom);
+        }
+        bool IsValidDropTarget(int index)
+        {
+            if (dragDepths is null) return false;
+            if (index >= dragCluster.ClusterStart && index < dragCluster.ClusterEnd) return false; // own cluster: no-op
+            return ScribeReorderValidity.IsValidDropTarget(dragDepths, dragCluster.ClusterStart, dragCluster.ClusterEnd, index);
+        }
+
         var items = Widget.Rows
             .Select((r, i) => new ScribeAnimatedListItem(
                 Id: r.TaskId,
@@ -205,7 +222,7 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                     index: i,
                     focusNode: Widget.FocusNodes.TryGetValue(r.TaskId, out var fn) ? fn : null,
                     autoFocus: Widget.AutoFocusTaskId == r.TaskId,
-                    isDropTarget: dragFromIndex is not null && dragOverIndex == i,
+                    isDropTarget: dragFromIndex is not null && dragOverIndex == i && IsValidDropTarget(i),
                     isDragSource: dragFromIndex == i,
                     // Any drag in progress → non-source/non-target rows hide their grip glyph.
                     dragActive: dragFromIndex is not null,

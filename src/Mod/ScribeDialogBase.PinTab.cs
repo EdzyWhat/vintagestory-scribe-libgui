@@ -275,23 +275,25 @@ public abstract partial class ScribeDialogBase
         });
     }
 
-    /// <summary>Pin Tab drag-reorder drop: send the whole new pin order (permuting the current list so the
-    /// pin at <paramref name="from"/> lands at <paramref name="to"/>) via <see cref="ScribeReorderPinsMessage"/>.
-    /// The server permutes only this player's list and re-pushes. A move-to-same index is a no-op.</summary>
+    /// <summary>Pin Tab drag-reorder drop: send the whole new pin order via <see cref="ScribeReorderPinsMessage"/>.
+    /// <paramref name="from"/>/<paramref name="to"/> are row indices into the ON-SCREEN order — which, under a
+    /// sink policy (the default), is <see cref="OrderedPinsForDisplay"/>'s done-sunk order, NOT
+    /// <see cref="ScribeModSystem.MyPins"/>'s raw storage order. Building the working copy from the raw list
+    /// would silently apply the drag to the wrong rows whenever a done pin is mixed in with not-done ones — so
+    /// this must start from the SAME list <see cref="BuildPinnedContent"/> rendered the rows from. The
+    /// permutation itself is computed by <see cref="ScribePinOrdering.Reorder"/> (same-depth-reorder): a
+    /// depth-0 pin moves together with its already-pinned depth-1 children, and a cross-depth drop (or a
+    /// move-to-same index) is a no-op — no packet is sent. The server permutes only this player's list and
+    /// re-pushes.</summary>
     private void OnPinReorder(int from, int to)
     {
-        var pins = modSystem.MyPins;
-        if (from == to || from < 0 || to < 0 || from >= pins.Count || to >= pins.Count) return;
-
-        var order = pins.Select(p => (p.OwnerDocId, p.TaskId)).ToList();
-        var moved = order[from];
-        order.RemoveAt(from);
-        order.Insert(to, moved);
+        var pins = OrderedPinsForDisplay().ToList();
+        if (!ScribePinOrdering.Reorder(pins, from, to)) return;
 
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeReorderPinsMessage
         {
-            DocIds = order.Select(o => o.Item1.ToByteArray()).ToList(),
-            TaskIds = order.Select(o => o.Item2.ToByteArray()).ToList(),
+            DocIds = pins.Select(p => p.OwnerDocId.ToByteArray()).ToList(),
+            TaskIds = pins.Select(p => p.TaskId.ToByteArray()).ToList(),
         });
     }
 

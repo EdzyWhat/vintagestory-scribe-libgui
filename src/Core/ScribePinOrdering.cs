@@ -141,6 +141,42 @@ public static class ScribePinOrdering
         return ids;
     }
 
+    /// <summary>
+    /// Manual drag-reorder of an existing pin (same-depth-reorder): moves the pin at
+    /// <paramref name="from"/> — together with its owned-run cluster, if it is a depth-0 pin with
+    /// already-pinned depth-1 children immediately following it in <paramref name="pins"/> — to land
+    /// at <paramref name="to"/>. Clustering and same-depth drop-target validity are both computed from
+    /// the pin list's own <see cref="ScribePinnedRef.Depth"/> values via <see cref="ScribeReorderValidity"/>
+    /// (positionally, over the current pin list — no source document resolution needed, so this works
+    /// even when a pin's source document is unloaded). Returns <c>false</c> without mutating
+    /// <paramref name="pins"/> when the target is invalid (cross-depth), <paramref name="from"/> equals
+    /// <paramref name="to"/>, the drop lands inside the dragged pin's own cluster, or either index is
+    /// out of range.
+    /// </summary>
+    public static bool Reorder(List<ScribePinnedRef> pins, int from, int to)
+    {
+        ArgumentNullException.ThrowIfNull(pins);
+        if (from < 0 || from >= pins.Count || to < 0 || to >= pins.Count) return false;
+
+        var depths = pins.Select(p => p.Depth).ToList();
+        var (start, end) = ScribeReorderValidity.Cluster(depths, from);
+        bool dropOnCluster = to >= start && to < end;
+        if (from == to || dropOnCluster || !ScribeReorderValidity.IsValidDropTarget(depths, start, end, to))
+            return false;
+
+        // Resolve the actual destination so dropping forward onto a pinned parent with its own pinned
+        // children lands AFTER that parent's whole cluster rather than wedging between it and its
+        // first child (the upward direction already lands correctly with no adjustment).
+        int destination = ScribeReorderValidity.ResolveDestination(depths, start, to);
+        int len = end - start;
+        var slice = pins.GetRange(start, len);
+        pins.RemoveRange(start, len);
+        int insertAt = destination < start ? destination : destination - len + 1;
+        insertAt = Math.Clamp(insertAt, 0, pins.Count);
+        pins.InsertRange(insertAt, slice);
+        return true;
+    }
+
     private static int IndexOfPin(List<ScribePinnedRef> pins, Guid docId, Guid taskId)
     {
         for (int i = 0; i < pins.Count; i++)

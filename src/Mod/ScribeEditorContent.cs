@@ -405,6 +405,25 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
         // node is gone once the scratch block leaves), so the container animates the snapshot instead of the
         // live child. Drag-reorder state stays in THIS State (dragFromIndex/dragOverIndex) and is baked into
         // each live row here, so the container stays content-agnostic (its D6).
+        //
+        // same-depth-reorder: the drop-target arrow is a direct rendering of the same validity check
+        // ReorderEditorBlock's commit uses, so it can't promise a drop the commit then refuses. Excluding
+        // the dragged row's own cluster (not just cross-depth rows) matches "the arrow only appears where
+        // dropping would actually reorder something" — dropping on your own children is already a no-op.
+        List<int>? dragDepths = null;
+        (int ClusterStart, int ClusterEnd) dragCluster = default;
+        if (dragFromIndex is { } dragFrom)
+        {
+            dragDepths = Widget.Blocks.Select(b => b.Depth).ToList();
+            dragCluster = ScribeReorderValidity.Cluster(dragDepths, dragFrom);
+        }
+        bool IsValidDropTarget(int index)
+        {
+            if (dragDepths is null) return false;
+            if (index >= dragCluster.ClusterStart && index < dragCluster.ClusterEnd) return false; // own cluster: no-op
+            return ScribeReorderValidity.IsValidDropTarget(dragDepths, dragCluster.ClusterStart, dragCluster.ClusterEnd, index);
+        }
+
         var items = Widget.Blocks
             .Select(b => new ScribeAnimatedListItem(
                 Id: b.TaskId,
@@ -412,7 +431,7 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                     data: b,
                     focusNode: b.Index < Widget.FocusNodes.Count ? Widget.FocusNodes[b.Index] : null,
                     autoFocus: Widget.AutoFocusIndex == b.Index,
-                    isDropTarget: dragFromIndex is not null && dragOverIndex == b.Index,
+                    isDropTarget: dragFromIndex is not null && dragOverIndex == b.Index && IsValidDropTarget(b.Index),
                     // The origin row of the in-progress drag (null-safe: false when no drag is active). Its
                     // Build shows the ◀ grip glyph + dims the row, and takes priority over the ▶ drop-target
                     // glyph when the cursor hovers back over the source.
