@@ -58,6 +58,11 @@ public sealed partial class ScribeModSystem : ModSystem
     /// <summary>Server-side pin/settings store. Null on a pure client.</summary>
     private ScribePinStore? pinStore;
 
+    /// <summary>Server-side reflection bridge to the CarryOn mod family, so Notebooks/Tablets inside
+    /// a CarryOn-carried container also participate in history recording. Null on a pure client.
+    /// See <see cref="CarryOnBridge"/>.</summary>
+    private CarryOnBridge? carryOnBridge;
+
     /// <summary>Server-side per-player timer store. Keyed by PlayerUID. Null on a pure client.</summary>
     private Dictionary<string, TimerStore>? timerStores;
 
@@ -372,6 +377,7 @@ public sealed partial class ScribeModSystem : ModSystem
         base.StartServerSide(api);
         sapi = api;
         pinStore = new ScribePinStore();
+        carryOnBridge = new CarryOnBridge(api);
 
         var channel = api.Network.GetChannel(NetworkChannelName);
         channel.SetMessageHandler<ScribeEditDocumentMessage>(OnServerReceivedEdit);

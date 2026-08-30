@@ -12,6 +12,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   drop-target arrow only appears over a valid same-depth row. Dragging a parent task (or pinned
   parent) with subtasks/pinned children now always moves the whole group together, including when
   dragged forward past another parent's group.
+- Notebook/Tablet Death, PvP Kill, and Temporal Storm history now records correctly when the
+  notebook is carried in an inventory added by another mod (e.g. a bonus storage slot granted by a
+  skill/ability mod) — previously such inventories were invisible to history recording because they
+  weren't on a hardcoded allow-list. A Notebook sitting in the crafting grid now also counts as
+  carried, so it participates in this recording too (previously excluded).
+
+### Added
+- Notebooks/Tablets stored inside a container the player is currently carrying via the CarryOn mod
+  (e.g. a chest carried on the back) now also record Death, PvP Kill, and Temporal Storm history,
+  when CarryOn is installed. No effect if CarryOn isn't installed.
 
 ## [1.3.3] - 2026-08-29
 

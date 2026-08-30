@@ -34,38 +34,48 @@ public sealed partial class ScribeModSystem
         ("erel",    "scribe:scribe-history-boss-erel"),
     };
 
-    /// <summary>The inventory <see cref="Vintagestory.API.Common.InventoryBase.ClassName"/>s a
-    /// notebook counts as "carried on the player's person" for history recording: the hotbar, the
-    /// backpack bags, worn character/clothing slots, and the mouse-cursor drag slot (a real held
-    /// stack while a GUI is open). Deliberately EXCLUDES the creative inventory
-    /// (<c>creativeInvClassName</c>) — it holds infinite *template* stacks, and writing history into
-    /// one mutates the template so every future copy carries phantom entries (the observed
-    /// "new notebook auto-populates past kills" bug) — as well as the transient <c>ground</c> and
-    /// <c>craftinggrid</c> staging inventories, which are not "on your person". Names come from
-    /// <see cref="Vintagestory.API.Config.GlobalConstants"/>.</summary>
-    private static readonly HashSet<string> CarriedInventoryClasses = new()
+    /// <summary>The two inventory <see cref="Vintagestory.API.Common.InventoryBase.ClassName"/>s
+    /// that ARE the engine's own <see cref="Vintagestory.API.Common.InventoryBasePlayer"/> (i.e.
+    /// genuinely "on the player" per that class's own doc-comment) but must still be excluded from
+    /// history recording, for reasons unrelated to each other: <c>creative</c>
+    /// (<see cref="GlobalConstants.creativeInvClassName"/>) holds infinite *template* stacks, and
+    /// writing history into one mutates the template so every future copy carries phantom entries
+    /// (the observed "new notebook auto-populates past kills" bug); <c>ground</c>
+    /// (<see cref="GlobalConstants.groundInvClassName"/>) is transient block-drop staging, not
+    /// on-person. Everything else that is an <c>InventoryBasePlayer</c> — hotbar, backpack, worn
+    /// character slots, the mouse-cursor drag slot, the crafting grid, and any inventory a mod adds
+    /// directly to the player's own inventory manager (e.g. a skill/ability bonus bag) — counts as
+    /// carried automatically, without Scribe needing to recognize its <c>ClassName</c> in advance.
+    /// See <c>fix-carried-notebook-detection</c>'s design.md for the full rationale, including why a
+    /// name-only denylist (no type check) would be unsafe: a chest/oven/trader dialog a player merely
+    /// has open nearby is also temporarily added to <c>InventoriesOrdered</c>, but as a plain
+    /// <see cref="Vintagestory.API.Common.InventoryGeneric"/> (not an <c>InventoryBasePlayer</c>), so
+    /// the type check is what excludes those without needing to know their names.</summary>
+    private static readonly HashSet<string> DeniedInventoryClasses = new()
     {
-        GlobalConstants.hotBarInvClassName,      // "hotbar"
-        GlobalConstants.backpackInvClassName,    // "backpack"
-        GlobalConstants.characterInvClassName,   // "character"
-        GlobalConstants.mousecursorInvClassName, // "mouse"
+        GlobalConstants.creativeInvClassName, // "creative"
+        GlobalConstants.groundInvClassName,   // "ground"
     };
 
     /// <summary>Yields a server-attached <see cref="NotebookHost"/> for EVERY Notebook stack the
-    /// player is carrying on their person (see <see cref="CarriedInventoryClasses"/>), so a live
-    /// history event (death, storm, boss kill) is recorded on ALL of them, not just the first found.
-    /// Matches BOTH <see cref="ItemScribeNotebook"/> and its sibling <see cref="ItemClockmakerNotebook"/>
-    /// — both carry a document + history store. Scoped to real carried inventories on purpose: the
-    /// old "walk InventoriesOrdered, return the first match" logic also walked the CREATIVE inventory
-    /// (whose template stacks it then mutated) and the ground/crafting staging inventories, so in a
-    /// creative world the killer's real notebook got nothing while a creative-tab template silently
-    /// accumulated the kills.</summary>
+    /// player is carrying on their person — any <see cref="Vintagestory.API.Common.InventoryBasePlayer"/>
+    /// inventory except the two denied in <see cref="DeniedInventoryClasses"/> — so a live history
+    /// event (death, storm, boss kill) is recorded on ALL of them, not just the first found. Matches
+    /// BOTH <see cref="ItemScribeNotebook"/> and its sibling <see cref="ItemClockmakerNotebook"/> —
+    /// both carry a document + history store. The type check (not just a name-based filter) is what
+    /// keeps this safe: it excludes transiently-opened external containers (chests, ovens, traders —
+    /// plain <see cref="Vintagestory.API.Common.InventoryGeneric"/>, temporarily added to
+    /// <c>InventoriesOrdered</c> while their dialog is open) without needing to know their
+    /// <c>ClassName</c>s, while still excluding the creative inventory specifically (whose template
+    /// stacks the old allow-list-less "walk everything" logic once mutated, silently accumulating
+    /// phantom entries on every future copy).</summary>
     private IEnumerable<NotebookHost> FindCarriedNotebooks(IServerPlayer player)
     {
         if (sapi is null) yield break;
         foreach (var inv in player.InventoryManager.InventoriesOrdered)
         {
-            if (!CarriedInventoryClasses.Contains(inv.ClassName)) continue;
+            if (inv is not InventoryBasePlayer) continue;
+            if (DeniedInventoryClasses.Contains(inv.ClassName)) continue;
             foreach (var slot in inv)
             {
                 if (slot.Itemstack?.Collectible is not IScribeDocumentItem) continue;
@@ -87,6 +97,22 @@ public sealed partial class ScribeModSystem
     private NotebookHost? FindNotebookInInventory(IServerPlayer player)
         => FindCarriedNotebooks(player).FirstOrDefault();
 
+    /// <summary>Fans out to every Notebook/Tablet a player carries, from BOTH sources: on-person
+    /// (<see cref="FindCarriedNotebooks"/>) and, when the CarryOn mod is installed, inside a
+    /// container the player is currently carrying via it (<see cref="CarryOnBridge"/>). This is what
+    /// every live history-recording site (Death, PvpKill, TemporalStorm, BossKill) should walk,
+    /// rather than <see cref="FindCarriedNotebooks"/> alone, so a Notebook stashed in a carried chest
+    /// records history exactly like one in a pocket.</summary>
+    private IEnumerable<IHistoryRecordable> FindAllCarriedNotebookRecords(IServerPlayer player)
+    {
+        foreach (var host in FindCarriedNotebooks(player)) yield return host;
+        if (carryOnBridge is not null)
+        {
+            foreach (var carried in carryOnBridge.FindCarriedNotebooks(player.Entity))
+                yield return carried;
+        }
+    }
+
     private void OnEntityDeath(Vintagestory.API.Common.Entities.Entity entity, Vintagestory.API.Common.DamageSource dmg)
     {
         if (sapi is null) return;
@@ -101,7 +127,7 @@ public sealed partial class ScribeModSystem
                 double dist = player.Entity.Pos.XYZ.DistanceTo(deathPos);
                 if (dist > 100) continue;
                 // Record on EVERY notebook the player carries, not just the first found.
-                foreach (var host in FindCarriedNotebooks(player))
+                foreach (var host in FindAllCarriedNotebookRecords(player))
                 {
                     // The whole descriptive sentence lives in Detail (ActorName empty); the History row
                     // shows Detail alone when ActorName is empty, so no "Name — " prefix is prepended.
@@ -128,12 +154,12 @@ public sealed partial class ScribeModSystem
         IServerPlayer? killer = null;
         // Materialize the killer's carried notebooks once so we can both (a) index the generic-verb
         // pool off one of them and (b) record the PvpKill on ALL of them.
-        List<NotebookHost> killerHosts = new();
+        List<IHistoryRecordable> killerHosts = new();
         if (dmg?.GetCauseEntity() is Vintagestory.API.Common.EntityPlayer killerEntity
             && killerEntity.Player is IServerPlayer k && k.PlayerUID != sp.PlayerUID)
         {
             killer      = k;
-            killerHosts = FindCarriedNotebooks(k).ToList();
+            killerHosts = FindAllCarriedNotebookRecords(k).ToList();
         }
 
         // A PvP death names the killer with a weapon-aware verb; any other death reconstructs a
@@ -164,7 +190,7 @@ public sealed partial class ScribeModSystem
         }
 
         // Record the Death on EVERY notebook the victim carries, not just the first found.
-        foreach (var nbHost in FindCarriedNotebooks(sp))
+        foreach (var nbHost in FindAllCarriedNotebookRecords(sp))
         {
             nbHost.History.TryAddEntry(new Scribe.Core.HistoryEntry
             {
@@ -207,7 +233,7 @@ public sealed partial class ScribeModSystem
     private static string ResolvePvpVerbKey(
         Vintagestory.API.Common.EntityPlayer killerEntity,
         Vintagestory.API.Common.DamageSource dmg,
-        NotebookHost? killerHost)
+        IHistoryRecordable? killerHost)
     {
         // Tier 1 — weapon category from the killer's currently-held item.
         var tool = killerEntity.RightHandItemSlot?.Itemstack?.Collectible?.Tool;
@@ -274,7 +300,7 @@ public sealed partial class ScribeModSystem
         foreach (var player in sapi.World.AllOnlinePlayers.OfType<IServerPlayer>())
         {
             // Record on EVERY notebook the player carries, not just the first found.
-            foreach (var host in FindCarriedNotebooks(player))
+            foreach (var host in FindAllCarriedNotebookRecords(player))
             {
                 host.History.TryAddEntry(new Scribe.Core.HistoryEntry
                 {

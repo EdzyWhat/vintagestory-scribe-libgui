@@ -100,3 +100,7 @@ reference/tablet-placeholder/
 
 # Base-game oak textures pulled for local art reference (proprietary; scratch, never committed)
 reference/oak-textures/
+
+# Unpacked third-party mods used for the fix-carried-notebook-detection investigation
+# (proprietary; scratch, never committed)
+reference/BackpackInvestigations/

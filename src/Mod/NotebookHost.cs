@@ -16,7 +16,7 @@ namespace Scribe;
 /// Owner-only: <see cref="IsLockedByOther"/> always returns false because only one player
 /// can hold the item at a time.
 /// </summary>
-public class NotebookHost : IScribeDocumentHost
+public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
 {
     private readonly ItemSlot _slot;
     private readonly ScribeBackdropSpec _backdrop;

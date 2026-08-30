@@ -3132,6 +3132,52 @@ reduces to `ResolvedItemStack.Satisfies(input)`). **Fix pattern:** see `ScribeIt
 not a bare code). Meals: prefer `IHandBookPageCodeProvider.HandbookPageCodeForStack` (in
 `Vintagestory.GameContent`) over `PageCodeForStack` for the nav target, guarded with a fallback.
 
+## `InventoryBasePlayer` is the engine's real "on the player" boundary — a `ClassName` allow-list isn't (2026-08-30)
+
+**Symptom: a carried Notebook silently never records Death/TemporalStorm history on a modded
+server, despite genuinely being on the player's person, while the mod author's own testing always
+worked.** `FindCarriedNotebooks`'s old `CarriedInventoryClasses` allow-list (`hotbar`/`backpack`/
+`character`/`mouse`) has no way to know about a mod-added inventory in advance.
+
+Confirmed via decompiling `VintagestoryLib.dll`: `PlayerInventoryManager.InventoriesOrdered` is
+literally `Inventories.ValuesOrdered` — the same `OrderedDictionary<string, InventoryBase>` any mod
+can add its own inventory into directly and permanently. xSkills' "Strong Back" survival ability
+does exactly this (`Inventories.Add(bag.InventoryID, bag)`, `ClassName = "xskillshotbar"`), with no
+dialog needing to be open. `InventoryBasePlayer`'s own doc-comment defines it as "all inventories
+that are 'on' the player" — the actual engine boundary. A transiently-opened external container
+(chest/oven/trader) is also added to the same `InventoriesOrdered` while its dialog is open, but as
+a plain `InventoryGeneric` (confirmed via `vsapi` source: none of `InventoryGeneric`'s derived types
+— `CreativeInventoryTab`, `InventoryDisplayed`, `InventoryPerPlayer` — are `InventoryBasePlayer`),
+which is what makes a type check safe where a name-only denylist wouldn't be.
+
+**Fix pattern:** don't allow-list `ClassName`s. Check `inv is InventoryBasePlayer` first (this alone
+makes any current or future mod-added player inventory visible automatically), then deny by name
+only the couple of vanilla `InventoryBasePlayer`s that aren't really "carried" for reasons unrelated
+to the type check (`creative` — infinite template stacks; `ground` — transient drop staging). See
+`ScribeModSystem.History.cs`'s `FindCarriedNotebooks` and `DeniedInventoryClasses`.
+
+## Reflecting into another mod's API with zero compile-time dependency: `GetModSystem(string)` + a small reflected surface (2026-08-30)
+
+**Symptom: need to call into another mod's own API (here, CarryOn's `ICarryManager`, to find
+Notebooks inside a carried container) without adding a build-time reference to that mod's DLL.**
+
+The zero-dependency lookup chain, all vanilla up to the boundary: `sapi.ModLoader.IsModEnabled(modId)`
+→ `sapi.ModLoader.GetModSystem("Full.Namespace.TypeName")` (the *string-based* overload — returns a
+base `ModSystem`, so no reference to the other mod's assembly is needed even for this step) → reflect
+a property/field off that instance's runtime `Type` to reach the mod's real API object → reflect
+`MethodInfo`s off THAT object's runtime type for the calls actually needed. Confirmed via decompiling
+`CarryOnLib.dll`: `CarryOn.CarryOnLib.CarryOnLibSystem : ModSystem { public ICarryManager? CarryManager
+{ get; set; } }`. Once a reflected call returns a value typed as a vanilla `vsapi` class (e.g.
+`ItemStack`, `ITreeAttribute` — confirmed `CarriedBlock.ItemStack`/`.BlockEntityData` are exactly
+this), everything past that point is ordinary fully-typed code; reflection is only needed to cross
+the boundary into the other mod's own types, and the reflected surface can stay very small (5
+members total for the whole CarryOn integration).
+
+**Fix pattern:** wrap every reflected call in try/catch; on the first failure (mod not installed, or
+a future version whose API shape moved), disable the whole bridge and log once — never per event —
+so an API-shape change degrades to "feature silently inactive" rather than a recurring exception.
+See `CarryOnBridge.cs`.
+
 ## Entry template
 
 ```
