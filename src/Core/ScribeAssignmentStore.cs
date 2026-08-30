@@ -224,6 +224,9 @@ public sealed class ScribeAssignmentStore
             bool hasLinkLabel = block.LinkLabel is not null;
             w.Write(hasLinkLabel);
             if (hasLinkLabel) w.Write(block.LinkLabel!);
+            bool hasLinkDescription = block.LinkDescription is not null;
+            w.Write(hasLinkDescription);
+            if (hasLinkDescription) w.Write(block.LinkDescription!);
             w.Write(block.Depth);
 
             // Every store record carries an Assignment by construction; a defensive empty default guards
@@ -256,6 +259,7 @@ public sealed class ScribeAssignmentStore
             int currentQuantity = r.ReadInt32();
             string? linkTarget = r.ReadBoolean() ? r.ReadString() : null;
             string? linkLabel = r.ReadBoolean() ? r.ReadString() : null;
+            string? linkDescription = r.ReadBoolean() ? r.ReadString() : null;
             int depth = r.ReadInt32();
 
             string assignerUid = r.ReadString();
@@ -267,7 +271,7 @@ public sealed class ScribeAssignmentStore
 
             list.Add(new ScribeBlock(kind, text, depth: depth, taskId: taskId,
                 targetItemCode: targetItemCode, targetQuantity: targetQuantity, currentQuantity: currentQuantity,
-                linkTarget: linkTarget, linkLabel: linkLabel, assignment: assignment));
+                linkTarget: linkTarget, linkLabel: linkLabel, assignment: assignment, linkDescription: linkDescription));
         }
         records = list;
         return true;

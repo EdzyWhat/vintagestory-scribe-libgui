@@ -18,7 +18,9 @@ namespace Scribe.Core;
 ///   "blocks": [
 ///     { "kind": "task", "text": "Chop wood", "done": false, "depth": 0 },
 ///     { "kind": "tracker", "done": false, "depth": 0, "targetItemCode": "game:ingot-copper", "targetQuantity": 8 },
-///     { "kind": "link", "linkTarget": "page:craftinginfo-knapping", "linkLabel": "Knapping" }
+///     { "kind": "link", "linkTarget": "page:craftinginfo-knapping", "linkLabel": "Knapping" },
+///     { "kind": "link", "linkTarget": "quest:vsquest:quest-freeghost", "linkLabel": "Free the Ghost",
+///       "linkDescription": "..." }
 ///   ] }
 /// </code>
 ///
@@ -77,6 +79,7 @@ public static class ScribeDocumentJsonCodec
                 TargetQuantity = block.Kind is ScribeBlockKind.Tracker or ScribeBlockKind.Craft ? block.TargetQuantity : null,
                 LinkTarget = block.LinkTarget,
                 LinkLabel = block.LinkLabel,
+                LinkDescription = block.LinkDescription,
                 // Only a Craft carries a recipe binding; omit the empty string elsewhere.
                 RecipeSignature = string.IsNullOrEmpty(block.RecipeSignature) ? null : block.RecipeSignature,
             });
@@ -136,7 +139,8 @@ public static class ScribeDocumentJsonCodec
                     currentQuantity: 0,           // live/derived — recomputed from carried inventory
                     linkTarget: b.LinkTarget,
                     linkLabel: b.LinkLabel,
-                    recipeSignature: b.RecipeSignature)); // empty for non-Craft; Craft re-generates ingredients from it
+                    recipeSignature: b.RecipeSignature, // empty for non-Craft; Craft re-generates ingredients from it
+                    linkDescription: b.LinkDescription));
             }
         }
 
@@ -176,6 +180,7 @@ public static class ScribeDocumentJsonCodec
         public int? TargetQuantity { get; set; }
         public string? LinkTarget { get; set; }
         public string? LinkLabel { get; set; }
+        public string? LinkDescription { get; set; }
         public string? RecipeSignature { get; set; }
     }
 }

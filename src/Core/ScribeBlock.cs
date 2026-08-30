@@ -133,11 +133,19 @@ public sealed class ScribeBlock
     /// <see cref="LinkLabel"/> and its icon is a generic book (add-tracker-link-tasks 7.6).</para></summary>
     public string? LinkTarget { get; set; }
 
-    /// <summary>For a guide-page <see cref="ScribeBlockKind.Link"/> (a <c>"page:"</c>-prefixed
-    /// <see cref="LinkTarget"/>): the guide's display title, captured from the Handbook page at creation
-    /// time (a guide page has no <c>ItemStack</c> to resolve a name from). Null for an item Link (whose
-    /// name resolves live from the item) and for non-Link kinds (add-tracker-link-tasks 7.6).</summary>
+    /// <summary>For a guide-page or quest <see cref="ScribeBlockKind.Link"/> (a <c>"page:"</c>- or
+    /// <c>"quest:"</c>-prefixed <see cref="LinkTarget"/>): the referenced page/quest's display title,
+    /// captured at creation time (neither has an <c>ItemStack</c> to resolve a name from later). Null for
+    /// an item Link (whose name resolves live from the item) and for non-Link kinds
+    /// (add-tracker-link-tasks 7.6; quest links added by add-assignment-and-quest-support 10.1).</summary>
     public string? LinkLabel { get; set; }
+
+    /// <summary>For a quest <see cref="ScribeBlockKind.Link"/> (a <c>"quest:"</c>-prefixed
+    /// <see cref="LinkTarget"/>): the quest's captured description, resolved from the installed quest mod's
+    /// catalog at creation time and never re-derived (add-assignment-and-quest-support 10.1/Decision 10 —
+    /// orphan-safe: a since-uninstalled quest mod still renders this text). Null for every other kind,
+    /// including guide-page and item Links.</summary>
+    public string? LinkDescription { get; set; }
 
     /// <summary>For a <see cref="ScribeBlockKind.Craft"/>: a stable string identifying which grid recipe
     /// variant this task generates its ingredient subtasks from (the working composition is
@@ -149,7 +157,7 @@ public sealed class ScribeBlock
 
     public ScribeBlock(ScribeBlockKind kind, string text, bool done = false, int depth = 0, string? assignedToUid = null, Guid? taskId = null,
         string? targetItemCode = null, int targetQuantity = 1, int currentQuantity = 0, string? linkTarget = null, string? linkLabel = null,
-        string? recipeSignature = null, ScribeAssignment? assignment = null)
+        string? recipeSignature = null, ScribeAssignment? assignment = null, string? linkDescription = null)
     {
         Kind = kind;
         Text = text;
@@ -163,6 +171,7 @@ public sealed class ScribeBlock
         LinkTarget = linkTarget;
         LinkLabel = linkLabel;
         RecipeSignature = recipeSignature ?? "";
+        LinkDescription = linkDescription;
     }
 
     public bool IsTask => Kind == ScribeBlockKind.Task;

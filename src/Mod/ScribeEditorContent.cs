@@ -168,6 +168,8 @@ internal sealed class ScribeEditorContent : StatefulWidget
         Action<int, int> onReorderBlock,
         Action<int, int> onTrackerQuantityChanged,
         Action<ScribeAddKind> onAdd,
+        IReadOnlyList<ScribeQuestCatalogEntry> questCatalog,
+        Action<ScribeQuestCatalogEntry> onAddQuestLink,
         Action onSwitchToRead,
         Action onOpenEditorReference,
         Action? onOpenSettings,
@@ -202,6 +204,8 @@ internal sealed class ScribeEditorContent : StatefulWidget
         OnReorderBlock = onReorderBlock;
         OnTrackerQuantityChanged = onTrackerQuantityChanged;
         OnAdd = onAdd;
+        QuestCatalog = questCatalog;
+        OnAddQuestLink = onAddQuestLink;
         OnSwitchToRead = onSwitchToRead;
         OnOpenEditorReference = onOpenEditorReference;
         OnOpenSettings = onOpenSettings;
@@ -263,6 +267,13 @@ internal sealed class ScribeEditorContent : StatefulWidget
     /// this with its current primary kind (defaults to Task) on a primary click, or with the picked kind from
     /// the inline list. See <see cref="ScribeDialogBase.OnClickAdd"/>.</summary>
     public Action<ScribeAddKind> OnAdd { get; }
+    /// <summary>The installed quest mod's catalog, for the footer add-kind picker's "Quest Link" option
+    /// (add-assignment-and-quest-support 10.1/10.2). Empty hides the option entirely — see
+    /// <see cref="ScribeDialogBase.QuestCatalogForPicker"/>.</summary>
+    public IReadOnlyList<ScribeQuestCatalogEntry> QuestCatalog { get; }
+    /// <summary>Add a quest Link for the chosen catalog entry. See
+    /// <see cref="ScribeDialogBase.OnClickAddQuestLink"/>.</summary>
+    public Action<ScribeQuestCatalogEntry> OnAddQuestLink { get; }
     /// <summary>Whether the footer's add control may add another block. Default true (uncapped tiers —
     /// Lectern, Notebook — always). Finite tiers (tablet, chalkboard) pass false once the document holds
     /// 10 entries of any kind (scribe-document-policy), which DIMS the primary button and every drop-up
@@ -638,7 +649,9 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                 style: Widget.Style,
                 // The drop-up menu paints in the Overlay, outside the dialog's ScribeGlobalTint wrap, so the
                 // picker re-tints it to match the window (add-note-kind-picker tint fix).
-                currentShade: Widget.CurrentShade)),
+                currentShade: Widget.CurrentShade,
+                questCatalog: Widget.QuestCatalog,
+                onAddQuestLink: Widget.OnAddQuestLink)),
         };
 
         if (Widget.ShowSwitchToRead)

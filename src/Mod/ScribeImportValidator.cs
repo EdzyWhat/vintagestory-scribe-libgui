@@ -15,7 +15,10 @@ namespace Scribe;
 ///
 /// <para>Guide-page Links (<c>"page:"</c>-prefixed) are left typed without a resolve: enumerating every Handbook
 /// page to prove existence is expensive, and a dangling guide link degrades gracefully anyway — clicking it is a
-/// no-op (<see cref="ScribeItemRef.OpenHandbookPage"/>) rather than an error. Only ITEM references are resolved.</para>
+/// no-op (<see cref="ScribeItemRef.OpenHandbookPage"/>) rather than an error. Quest Links (<c>"quest:"</c>-prefixed)
+/// are exempted the same way: they carry no item to resolve and render from their own captured
+/// label/description regardless of whether the quest mod is installed (add-assignment-and-quest-support 10.3).
+/// Only ITEM references are resolved.</para>
 /// </summary>
 internal static class ScribeImportValidator
 {
@@ -61,6 +64,7 @@ internal static class ScribeImportValidator
         if (block.Kind == ScribeBlockKind.Link)
         {
             if (ScribeLinkTarget.IsGuidePage(block.LinkTarget)) return false; // guide pages stay typed (see class doc)
+            if (ScribeLinkTarget.IsQuest(block.LinkTarget)) return false; // quest links stay typed too (no item to resolve)
             return ScribeItemRef.ResolveStack(world, block.LinkTarget) is null;
         }
 

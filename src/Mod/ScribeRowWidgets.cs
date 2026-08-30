@@ -202,13 +202,19 @@ internal static class ScribeLinkIcon
     /// full control size, so it renders smaller than the item icon.</summary>
     private const float BookGlyphScale = 0.8f;
 
+    /// <summary>True for a Link whose row has no item to draw an <see cref="ItemStackDisplay"/> for — a
+    /// guide-page or quest Link — so it renders the shared book glyph instead (add-assignment-and-quest-support
+    /// 10.1: a quest Link is exactly as item-less as a guide-page Link).</summary>
+    private static bool IsBookGlyph(string? linkTarget)
+        => ScribeLinkTarget.IsGuidePage(linkTarget) || ScribeLinkTarget.IsQuest(linkTarget);
+
     public static float VisualSize(float iconSize, string? linkTarget)
-        => iconSize * (ScribeLinkTarget.IsGuidePage(linkTarget) ? BookGlyphScale : ItemIconScale);
+        => iconSize * (IsBookGlyph(linkTarget) ? BookGlyphScale : ItemIconScale);
 
     public static Widget Build(ItemStack? stack, string? linkTarget, float iconSize, Vector4 bookColor,
         float lineHeight, bool heightNeutral = true)
     {
-        bool guidePage = ScribeLinkTarget.IsGuidePage(linkTarget);
+        bool guidePage = IsBookGlyph(linkTarget);
         float visual = VisualSize(iconSize, linkTarget);
         Widget art = guidePage
             ? new ScribeVsIconGlyph("scribebook", visual, bookColor)

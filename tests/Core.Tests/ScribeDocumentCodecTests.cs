@@ -90,6 +90,29 @@ public class ScribeDocumentCodecTests
     }
 
     [Fact]
+    public void RoundTrip_PreservesQuestLinkLabelAndDescription()
+    {
+        var original = new ScribeDocument();
+        original.AddQuestLink("vsquest:quest-freeghost", "Free the Ghost", "Plant 8 flowers nearby.");
+        original.AddGuideLink("craftinginfo-knapping", "Knapping"); // v11 field must default null for other kinds
+
+        byte[] bytes = ScribeDocumentCodec.Serialize(original);
+        bool ok = ScribeDocumentCodec.TryDeserialize(bytes, out ScribeDocument? restored);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+
+        var questLink = restored!.Blocks[0];
+        Assert.Equal(ScribeBlockKind.Link, questLink.Kind);
+        Assert.Equal("quest:vsquest:quest-freeghost", questLink.LinkTarget);
+        Assert.Equal("Free the Ghost", questLink.LinkLabel);
+        Assert.Equal("Plant 8 flowers nearby.", questLink.LinkDescription);
+
+        var guideLink = restored.Blocks[1];
+        Assert.Null(guideLink.LinkDescription); // v11 field is quest-only; absent elsewhere
+    }
+
+    [Fact]
     public void RoundTrip_PreservesDocIdAndTaskIds()
     {
         var original = new ScribeDocument();

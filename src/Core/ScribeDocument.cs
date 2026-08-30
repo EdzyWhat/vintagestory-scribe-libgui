@@ -147,7 +147,8 @@ public sealed class ScribeDocument
         linkTarget: block.LinkTarget,
         linkLabel: block.LinkLabel,
         recipeSignature: block.RecipeSignature,
-        assignment: block.Assignment?.Clone());
+        assignment: block.Assignment?.Clone(),
+        linkDescription: block.LinkDescription);
 
     /// <summary>The index a document-level create should use for <paramref name="pos"/>: 0 for
     /// <see cref="ScribeNewTaskInsert.Top"/>, <see cref="Blocks"/>.Count for Bottom. Unknown values
@@ -233,6 +234,20 @@ public sealed class ScribeDocument
     public bool InsertGuideLink(int index, string pageCode, string? label) =>
         TryInsert(index, new ScribeBlock(ScribeBlockKind.Link, "",
             linkTarget: ScribeLinkTarget.ForPage(pageCode), linkLabel: label));
+
+    /// <summary>Adds a <b>quest</b> Link task (a reference to an installed quest mod's catalog entry) to the
+    /// end. <paramref name="questCode"/> is the quest's own (already domain-qualified) id, stored
+    /// <c>"quest:"</c>-prefixed via <see cref="ScribeLinkTarget.ForQuest"/>; <paramref name="title"/> and
+    /// <paramref name="description"/> are captured at creation time (add-assignment-and-quest-support 10.1)
+    /// and never re-derived, so the Link still renders correctly if the quest mod is later uninstalled
+    /// (design.md Decision 10's orphan handling).</summary>
+    public bool AddQuestLink(string questCode, string? title, string? description) =>
+        InsertQuestLink(_blocks.Count, questCode, title, description);
+
+    /// <summary>Inserts a quest Link at <paramref name="index"/>. Out-of-range fails safely.</summary>
+    public bool InsertQuestLink(int index, string questCode, string? title, string? description) =>
+        TryInsert(index, new ScribeBlock(ScribeBlockKind.Link, "",
+            linkTarget: ScribeLinkTarget.ForQuest(questCode), linkLabel: title, linkDescription: description));
 
     bool TryInsert(int index, ScribeBlock block)
     {

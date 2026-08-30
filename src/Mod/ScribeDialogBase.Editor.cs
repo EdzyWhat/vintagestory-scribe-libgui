@@ -612,6 +612,33 @@ public abstract partial class ScribeDialogBase
         RebuildBody();
     }
 
+    /// <summary>Footer add-picker action for a chosen quest (add-assignment-and-quest-support 10.1): insert
+    /// a quest Link at the player's New Task Insert edge, exactly like <see cref="OnClickAdd"/>'s tail, but
+    /// with no text field to auto-focus (a Link has no player-editable text — same reason
+    /// <see cref="ApplyGuideLinkAppend"/> never autofocuses). The kind list's cap check
+    /// (<see cref="CanAddTaskUnderPolicy"/>) applies here too: a quest Link counts against a finite tier's
+    /// "N of anything" cap like every other kind.</summary>
+    private void OnClickAddQuestLink(ScribeQuestCatalogEntry entry)
+    {
+        if (scratch is null) return;
+        if (!CanAddTaskUnderPolicy()) { NotifyTabletFull(); return; }
+        if (focusedEditIndex is { } leaving) NormalizeRowOnCommit(leaving);
+        int at = NewTaskInsertIndex();
+        if (!scratch.InsertQuestLink(at, entry.QuestCode, entry.Title, entry.Description)) return;
+        isDirty = true;
+        SyncFocusNodesToScratch();
+        pendingEnsureVisible = true;
+        RebuildBody();
+    }
+
+    /// <summary>The Quest Link picker's catalog, read once per dialog session (add-assignment-and-quest-support
+    /// 10.1/10.2): empty — and the picker's "Quest Link" option hidden — when <c>vsquest</c> isn't installed
+    /// or its catalog is empty/unparseable. Not re-read on every footer open: the installed catalog cannot
+    /// change while the game is running, so a lazily-cached read is enough.</summary>
+    private IReadOnlyList<ScribeQuestCatalogEntry>? questCatalogCache;
+    private IReadOnlyList<ScribeQuestCatalogEntry> QuestCatalogForPicker
+        => questCatalogCache ??= ScribeQuestCatalog.ReadCatalog(capi);
+
     /// <summary>Moves editor focus to <paramref name="index"/> by requesting focus on that row's node
     /// (the row stays mounted — the editor uses a non-virtualized scroll container, design D2 — so its
     /// node is always live) and scheduling a scroll-into-view.</summary>

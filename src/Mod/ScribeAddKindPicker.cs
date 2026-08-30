@@ -46,6 +46,8 @@ internal sealed class ScribeAddKindPicker : StatefulWidget
         bool addTaskEnabled,
         ScribeRowStyle style,
         ScribeAmbientLightSampler.Shade currentShade,
+        IReadOnlyList<ScribeQuestCatalogEntry>? questCatalog = null,
+        Action<ScribeQuestCatalogEntry>? onAddQuestLink = null,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
@@ -53,10 +55,21 @@ internal sealed class ScribeAddKindPicker : StatefulWidget
         AddTaskEnabled = addTaskEnabled;
         Style = style;
         CurrentShade = currentShade;
+        QuestCatalog = questCatalog ?? Array.Empty<ScribeQuestCatalogEntry>();
+        OnAddQuestLink = onAddQuestLink;
     }
 
     /// <summary>Add a block of the given kind (wired to <see cref="ScribeDialogBase.OnClickAdd"/>).</summary>
     public Action<ScribeAddKind> OnAdd { get; }
+
+    /// <summary>The installed quest mod's catalog (add-assignment-and-quest-support 10.1/10.2). Empty hides
+    /// the drop-up's "Quest Link" tile entirely — this picker never shows an option that would do nothing.</summary>
+    public IReadOnlyList<ScribeQuestCatalogEntry> QuestCatalog { get; }
+
+    /// <summary>Add a quest Link for the chosen catalog entry (wired to
+    /// <see cref="ScribeDialogBase.OnClickAddQuestLink"/>). Null exactly when <see cref="QuestCatalog"/> is
+    /// empty.</summary>
+    public Action<ScribeQuestCatalogEntry>? OnAddQuestLink { get; }
 
     /// <summary>Whether a block of any kind may currently be added. When false (tablet/chalkboard at its
     /// 10-entry cap), the primary button and every drop-up tile DIM but stay clickable so the tap still
@@ -91,8 +104,19 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
     // still adds a task; remembers the last-picked kind for the life of this State (see the widget doc).
     private ScribeAddKind _selectedKind = ScribeAddKinds.Live[0];
 
+    // True while the SAME floating menu is showing the quest list instead of the kind tiles
+    // (add-assignment-and-quest-support 10.1/10.2): tapping "Quest Link" swaps the menu's content in place
+    // rather than opening a second overlay, reusing every bit of the existing open/close/animate/barrier
+    // plumbing. Reset on Close() so reopening always starts at the kind list.
+    private bool _questListOpen;
+
     // A few px of air between the menu's bottom edge and the button's top edge.
     private const float MenuGap = 4f;
+
+    // Captured at Open() time so the quest-list swap (RebuildMenuContent) can rebuild the SAME follower
+    // without needing a fresh BuildContext/width from whichever tile's onTap fired.
+    private BuildContext? _menuContext;
+    private float _menuWidth;
 
     private void Toggle(BuildContext context)
     {
@@ -110,21 +134,37 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
         // Match the floating menu's width to the group's on-screen width so it reads as an extension of
         // the button (Dropdown reads Element.RenderObject.Size the same way at open time).
         float width = Element.RenderObject?.Size.X ?? 0f;
+        _menuContext = context;
+        _menuWidth = width;
 
         _barrierEntry = new OverlayEntry(BuildBarrier());
-        _menuEntry = new OverlayEntry(new CompositedTransformFollower(
-            _link,
-            // showAbove pins the follower's BOTTOM edge to the target's TOP edge; a negative Y offset lifts
-            // it a few px further up for a gap (see CompositedTransformFollower's doc example).
-            offset: new Vector2(0, -MenuGap),
-            child: BuildMenu(context, width),
-            showAbove: true));
+        _menuEntry = new OverlayEntry(BuildFollower(context, width));
 
         // Barrier first so the menu paints on top of it (later entries paint later); the barrier catches
         // any outside tap and closes.
         overlay.Insert(_barrierEntry);
         overlay.Insert(_menuEntry);
         SetState(() => _isOpen = true);
+    }
+
+    private Widget BuildFollower(BuildContext context, float width) => new CompositedTransformFollower(
+        _link,
+        // showAbove pins the follower's BOTTOM edge to the target's TOP edge; a negative Y offset lifts
+        // it a few px further up for a gap (see CompositedTransformFollower's doc example).
+        offset: new Vector2(0, -MenuGap),
+        child: BuildMenu(context, width),
+        showAbove: true);
+
+    /// <summary>Swap the OPEN menu's content in place (add-assignment-and-quest-support 10.1/10.2's "Quest
+    /// Link" tile → quest list, and back) without closing/reopening the overlay — <see cref="OverlayEntry"/>'s
+    /// <c>Widget</c> setter + <see cref="OverlayEntry.MarkNeedsBuild"/> replace the follower's subtree
+    /// directly, since a <see cref="SetState"/> on this State does not itself touch the separately-inserted
+    /// overlay tree.</summary>
+    private void RebuildMenuContent()
+    {
+        if (_menuEntry is null || _menuContext is null) return;
+        _menuEntry.Widget = BuildFollower(_menuContext.Value, _menuWidth);
+        _menuEntry.MarkNeedsBuild();
     }
 
     private void Close()
@@ -134,7 +174,8 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
         _menuEntry = null;
         _barrierEntry?.Remove();
         _barrierEntry = null;
-        SetState(() => _isOpen = false);
+        _menuContext = null;
+        SetState(() => { _isOpen = false; _questListOpen = false; });
     }
 
     private Widget BuildBarrier() => new Positioned(
@@ -159,6 +200,25 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
         Widget.OnAdd(_selectedKind);
     }
 
+    /// <summary>The "Quest Link" tile (add-assignment-and-quest-support 10.1/10.2): swap the SAME open menu
+    /// to the quest list rather than adding anything — picking a quest is a second step, unlike every other
+    /// kind tile. Only reachable when <see cref="ScribeAddKindPicker.QuestCatalog"/> is non-empty (the tile
+    /// itself is omitted otherwise — see <see cref="BuildMenu"/>).</summary>
+    private void OpenQuestList()
+    {
+        SetState(() => _questListOpen = true);
+        RebuildMenuContent();
+    }
+
+    /// <summary>Pick a quest from the quest list: close the menu and add a quest Link for it. No
+    /// <see cref="_selectedKind"/> change — a quest Link isn't a repeatable primary-button kind (the whole
+    /// point of a second-step picker is that the primary button can't pre-select a specific quest).</summary>
+    private void PickQuest(ScribeQuestCatalogEntry entry)
+    {
+        Close();
+        Widget.OnAddQuestLink?.Invoke(entry);
+    }
+
     /// <summary>A label for a button/menu tile: cuneiform strokes on the single tablet cuneiform branch
     /// (add-tablet-cuneiform-chrome), else the normal <see cref="Text"/>. Returned DIRECTLY with no
     /// Center/Align wrapper (the balloon-regression rule the footer labels follow); both label widgets
@@ -177,6 +237,52 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
         return new Text(label, labelStyle);
     }
 
+    /// <summary>The drop-up's default content: one tile per <see cref="ScribeAddKinds.Live"/> kind, plus a
+    /// trailing "Quest Link" tile when <see cref="ScribeAddKindPicker.QuestCatalog"/> is non-empty
+    /// (add-assignment-and-quest-support 10.1/10.2) — omitted entirely when vsquest isn't installed or its
+    /// catalog is empty, so this menu never shows an option that would do nothing.</summary>
+    private List<Widget> BuildKindTiles(TextStyle labelStyle, ButtonStyle tileButtonStyle, ColorScheme colors)
+    {
+        bool dim = !Widget.AddTaskEnabled;
+        TextStyle tileStyle = dim ? labelStyle with { Color = colors.OnPrimary with { W = 0.4f } } : labelStyle;
+
+        var tiles = new List<Widget>();
+        foreach (var kind in ScribeAddKinds.Live)
+        {
+            tiles.Add(new Button(
+                child: BuildLabel(Lang.Get(kind.LabelLangKey), tileStyle),
+                style: tileButtonStyle,
+                onTap: _ => PickKind(kind)));
+        }
+        if (Widget.QuestCatalog.Count > 0)
+        {
+            tiles.Add(new Button(
+                child: BuildLabel(Lang.Get("scribe:scribe-gui-addquestlink"), tileStyle),
+                style: tileButtonStyle,
+                onTap: _ => OpenQuestList()));
+        }
+        return tiles;
+    }
+
+    /// <summary>The quest-list content swapped in when the "Quest Link" tile is picked (add-assignment-and-
+    /// quest-support 10.1/10.2): one tile per catalog entry's resolved title. No search/scroll — vsquest
+    /// catalogs are typically a handful to a few dozen entries (the picker-UI decision's own scale
+    /// assumption); a very large third-party catalog would overflow ungracefully, a disclosed limit rather
+    /// than something this pass builds a search-first list for (see tasks.md's 10.1 note). Never empty in
+    /// practice — the tile that reaches this is itself omitted when the catalog is empty.</summary>
+    private List<Widget> BuildQuestTiles(TextStyle labelStyle, ButtonStyle tileButtonStyle)
+    {
+        var tiles = new List<Widget>();
+        foreach (var entry in Widget.QuestCatalog)
+        {
+            tiles.Add(new Button(
+                child: BuildLabel(entry.Title, labelStyle),
+                style: tileButtonStyle,
+                onTap: _ => PickQuest(entry)));
+        }
+        return tiles;
+    }
+
     private Widget BuildMenu(BuildContext context, float width)
     {
         var theme = Theme.Of(context);
@@ -191,16 +297,9 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
             ? theme.ButtonStyle with { Padding = EdgeInsets.Symmetric(cuneiformLabelPadY, 20) }
             : theme.ButtonStyle;
 
-        var tiles = new List<Widget>();
-        foreach (var kind in ScribeAddKinds.Live)
-        {
-            bool dim = !Widget.AddTaskEnabled;
-            TextStyle tileStyle = dim ? labelStyle with { Color = colors.OnPrimary with { W = 0.4f } } : labelStyle;
-            tiles.Add(new Button(
-                child: BuildLabel(Lang.Get(kind.LabelLangKey), tileStyle),
-                style: tileButtonStyle,
-                onTap: _ => PickKind(kind)));
-        }
+        var tiles = _questListOpen
+            ? BuildQuestTiles(labelStyle, tileButtonStyle)
+            : BuildKindTiles(labelStyle, tileButtonStyle, colors);
 
         // Transparent panel (user preference): no SurfaceHigh fill behind the kind buttons — the floating
         // menu is just the stack of Primary "add" buttons over the scroll content, with a thin border for

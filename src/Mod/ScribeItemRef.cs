@@ -195,16 +195,19 @@ internal static class ScribeItemRef
         => stack?.GetName() ?? fallbackCode ?? "";
 
     /// <summary>Resolve the display icon-stack + name for a Tracker/Link row from its snapshot
-    /// <paramref name="code"/> (add-tracker-link-tasks 5/7.6). A guide-page Link (a <c>"page:"</c>-prefixed
-    /// code) has no item to draw, so it resolves to <c>(null, LinkLabel)</c> — the caller draws a book glyph
-    /// in place of an <c>ItemStackDisplay</c> and shows the stored guide title (falling back to the bare page
-    /// code if no label was captured). Every other code is an item/block resolved to a stack whose name is
-    /// used. Shared by the read/editor rows, the Pin Tab, and the HUD so all three classify and label a Link
-    /// identically. <paramref name="linkLabel"/> is ignored for item/Tracker codes (where it is null anyway).</summary>
+    /// <paramref name="code"/> (add-tracker-link-tasks 5/7.6). A guide-page or quest Link (a <c>"page:"</c>-
+    /// or <c>"quest:"</c>-prefixed code) has no item to draw, so it resolves to <c>(null, LinkLabel)</c> —
+    /// the caller draws a book glyph in place of an <c>ItemStackDisplay</c> and shows the stored title
+    /// (falling back to the bare page/quest code if no label was captured; add-assignment-and-quest-support
+    /// 10.1/10.3). Every other code is an item/block resolved to a stack whose name is used. Shared by the
+    /// read/editor rows, the Pin Tab, and the HUD so all three classify and label a Link identically.
+    /// <paramref name="linkLabel"/> is ignored for item/Tracker codes (where it is null anyway).</summary>
     public static (ItemStack? Stack, string? Name) ResolveDisplay(IWorldAccessor world, string? code, string? linkLabel)
     {
         if (ScribeLinkTarget.IsGuidePage(code))
             return (null, linkLabel ?? ScribeLinkTarget.PageCode(code));
+        if (ScribeLinkTarget.IsQuest(code))
+            return (null, linkLabel ?? ScribeLinkTarget.QuestCode(code));
         var stack = ResolveStack(world, code);
         if (stack is null && code is not null && code.Contains('*'))
         {
@@ -286,11 +289,15 @@ internal static class ScribeItemRef
     }
 
     /// <summary>Open the Handbook page a Link/Tracker points at, via the survival mod's registered
-    /// <c>"handbook"</c> link protocol (add-tracker-link-tasks 5.3/5.5/7.6). Two flavors of
+    /// <c>"handbook"</c> link protocol (add-tracker-link-tasks 5.3/5.5/7.6). Three flavors of
     /// <paramref name="code"/>: a <c>"page:"</c>-prefixed <b>guide-page</b> code opens that raw Handbook page
-    /// directly (no item to resolve); anything else is an item/attribute-encoded code, resolved to a stack
-    /// whose Handbook page is opened. No-op when the code is empty/doesn't resolve, or the survival mod (and
-    /// thus the protocol) isn't loaded — never toggles any completion state.
+    /// directly (no item to resolve); a <c>"quest:"</c>-prefixed <b>quest</b> code is a Layer-1 no-op (there
+    /// is no Handbook page or live navigation target for a manually-linked quest — see
+    /// add-assignment-and-quest-support 10.1's disclosed scope; the row still renders correctly via
+    /// <see cref="ResolveDisplay"/>, it simply doesn't open anything on click); anything else is an
+    /// item/attribute-encoded code, resolved to a stack whose Handbook page is opened. No-op when the code is
+    /// empty/doesn't resolve, or the survival mod (and thus the protocol) isn't loaded — never toggles any
+    /// completion state.
     ///
     /// <para>The page code prefers the collectible's own <see cref="IHandBookPageCodeProvider"/> when it
     /// implements one (e.g. <c>BlockMeal</c> maps every meal-with-ingredients to one shared page), falling
@@ -305,6 +312,7 @@ internal static class ScribeItemRef
             OpenHandbookByPageCode(capi, ScribeLinkTarget.PageCode(code));
             return;
         }
+        if (ScribeLinkTarget.IsQuest(code)) return;
         var stack = ResolveStack(capi.World, code);
         if (stack is null) return;
 

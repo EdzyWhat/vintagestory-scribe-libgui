@@ -238,6 +238,30 @@ v9 never shipped (this is a same-cycle addition within the same in-progress chan
 real migration gap to bridge — a `version >= 10` read gate exists anyway, defaulting a hypothetical
 v9-only blob's `TargetPlayerUid` to `""`, for consistency with every other version-gated field.
 
+### Worked example: v10 → v11 (`ScribeDocumentCodec`)
+
+v11 appends one per-block field after the (optional) assignment block: `LinkDescription`
+(string?), a quest Link's captured description (add-assignment-and-quest-support 10.1). A quest
+Link is otherwise identical to a guide-page Link (a `LinkTarget` prefix marker + a `LinkLabel`
+title) — this field is the one place a quest Link carries MORE than a guide-page Link, because a
+guide page's description is always one click away (open the Handbook page), while a quest has no
+navigable target for Layer 1 to reopen.
+
+```text
+// v10 per-block: ...v9... | targetPlayerUid (only if hasAssignment)
+// v11 per-block: ...v10... | hasLinkDescription | [linkDescription]
+```
+
+Written unconditionally per block (a has/value pair, like `LinkTarget`/`LinkLabel` — not the always-written
+plain-string shape `RecipeSignature` uses), so pre-v11 documents simply stop reading before it and default
+to `null`. Also carried by the lossless JSON codec (`LinkDescription` on `BlockDto`, without a JSON-codec
+version bump — an additive DTO field follows the same practice `RecipeSignature` already established
+there); intentionally NOT carried by the fixed-column TSV codec (no spare column, and the format is
+lossy by design) nor by `ScribePinCodec` (no pin-row surface renders a description today).
+
+Covered by `RoundTrip_PreservesQuestLinkLabelAndDescription` (v11 round-trip of a quest Link asserting
+`LinkDescription` survives, and a guide-page Link asserting it stays null).
+
 ### Worked example: v1 → v2 (`ScribePinCodec`)
 
 v2 appended **two per-pin fields** after each pin's `LastKnownText`, so the HUD can treat a pinned

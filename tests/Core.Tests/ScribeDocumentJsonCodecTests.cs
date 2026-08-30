@@ -14,6 +14,7 @@ public class ScribeDocumentJsonCodecTests
         doc.AddTracker("game:ingot-copper", 8);
         doc.AddLink("game:pickaxe-copper");
         doc.AddGuideLink("craftinginfo-knapping", "Knapping");
+        doc.AddQuestLink("vsquest:quest-freeghost", "Free the Ghost", "Plant 8 flowers nearby.");
         doc.ToggleTask(0); // "Chop wood" done
         return doc;
     }
@@ -44,6 +45,12 @@ public class ScribeDocumentJsonCodecTests
         var guideLink = restored.Blocks[4];
         Assert.Equal("page:craftinginfo-knapping", guideLink.LinkTarget);
         Assert.Equal("Knapping", guideLink.LinkLabel);
+        Assert.Null(guideLink.LinkDescription);
+
+        var questLink = restored.Blocks[5];
+        Assert.Equal("quest:vsquest:quest-freeghost", questLink.LinkTarget);
+        Assert.Equal("Free the Ghost", questLink.LinkLabel);
+        Assert.Equal("Plant 8 flowers nearby.", questLink.LinkDescription);
     }
 
     [Fact]

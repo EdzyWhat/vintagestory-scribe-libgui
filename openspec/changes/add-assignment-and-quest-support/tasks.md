@@ -284,13 +284,53 @@
 
 ## 10. Quest Link (Layer 1)
 
-- [ ] 10.1 Add the Quest Link creation path: reading the installed quest mod's static
+- [x] 10.1 Add the Quest Link creation path: reading the installed quest mod's static
       `config/quests/*.json` catalog, capturing name/description into the new Link block at
-      creation time.
-- [ ] 10.2 Gate the Quest Link option in every Link-creation picker (item handbook's Add Link,
-      New Task dropdown, etc.) behind `IsModEnabled("vsquest")`.
-- [ ] 10.3 Confirm an orphaned Quest Link (vsquest since uninstalled) renders correctly from its
-      captured text with no error state.
+      creation time. New `ScribeQuestCatalog` (Mod) reads `vsquest`'s own catalog via
+      `capi.Assets.GetMany<T>` with a tiny local DTO (no reference to the vsquest assembly —
+      decompiling confirmed the JSON carries only `id`; title/description resolve via
+      `Lang.Get(id + "-title"/"-desc")`, matching how `VsQuest.QuestSystem` itself loads them).
+      `ScribeBlock` gained `LinkDescription` (Core; codec v11 — see docs/CODEC-MIGRATION.md and
+      `ScribeAssignmentStore`'s own record format, also bumped) alongside the existing `LinkLabel`,
+      since a quest Link's description has no Handbook page to reopen later the way a guide-page
+      Link's does. `ScribeDocument.AddQuestLink`/`InsertQuestLink` mirror the existing guide-link
+      pair exactly. **UI decision (asked the user, not guessed)**: the footer's "New Task" add-kind
+      drop-up gained a "Quest Link" tile (hidden when the catalog is empty) that swaps the SAME
+      open floating menu to a flat list of quest titles in place — reusing every bit of the
+      existing overlay/animation/barrier plumbing rather than opening a second dropdown or building
+      a search-first list dialog. No search/scroll: vsquest catalogs are typically a handful to a
+      few dozen entries; a very large third-party catalog would overflow ungracefully — a disclosed
+      limit, not something this pass builds search for. `LinkDescription` is captured and persisted
+      but has NO consuming display surface yet (no Scribe UI renders a Link's description anywhere,
+      for any Link flavor) — a disclosed gap, not a silent drop; a future pass could surface it as
+      a tooltip/expandable line. Fixed two related pre-existing gaps found while wiring this: the
+      TSV codec's `TextFor`/`BuildBlock` only special-cased `IsGuidePage` for the title-in-Text
+      convention, so a quest Link would have round-tripped with a blank Text/title before this fix.
+- [x] 10.2 Gate the Quest Link option in every Link-creation picker (item handbook's Add Link,
+      New Task dropdown, etc.) behind `IsModEnabled("vsquest")`. **Scope call**: the item/guide-page/
+      meal-page Handbook patches (`ScribeHandbookPatch`/`ScribeGuidePageHandbookPatch`/
+      `ScribeMealPageHandbookPatch`) inject their "Add Link" onto a SPECIFIC page a specific
+      item/guide/meal already opened — vsquest has no Handbook integration at all (confirmed via
+      decompiling its shipped assembly: no handbook page registration anywhere), so there is no
+      per-quest Handbook page for a Quest Link option to attach to. The only "every Link" picker a
+      Quest Link option can actually plug into is the generic New Task dropdown, which is where it
+      was added; `ScribeQuestCatalog.IsAvailable`/`ReadCatalog`'s emptiness gates it (an empty
+      catalog — vsquest absent or installed with zero quests — omits the tile entirely, satisfying
+      the `IsModEnabled` gate transitively via "nothing to show").
+- [x] 10.3 Confirm an orphaned Quest Link (vsquest since uninstalled) renders correctly from its
+      captured text with no error state. `ScribeItemRef.ResolveDisplay`/`OpenHandbookPage` and
+      `ScribeRowWidgets.ScribeLinkIcon` gained an `IsQuest` branch alongside the existing
+      `IsGuidePage` one (book glyph, label from the stored `LinkLabel`, click is an intentional
+      no-op — Layer 1 has no navigable target for a quest the way a guide page always has a
+      Handbook page to reopen). Also fixed a real bug this surfaced: `ScribeImportValidator.
+      ShouldDegrade` checked `IsGuidePage` but not `IsQuest`, so importing a quest Link would have
+      tried to resolve `"quest:vsquest:..."` as an item code and degraded it to a plain Task —
+      added the same exemption guide-page Links already had. Every render/click surface (read,
+      editor, Pin Tab, HUD) funnels through these same shared helpers, so the fix and the no-op
+      apply uniformly with no per-surface duplication to verify separately. Verified by the Core
+      round-trip tests (10.1) plus manual reasoning over every call site (no game-side smoke test
+      run this pass, since vsquest isn't installed in this dev environment — orphan rendering was
+      verified by code inspection of the shared helpers, not an in-game screenshot).
 
 ## 11. Quest soft auto-detect (Layer 2)
 

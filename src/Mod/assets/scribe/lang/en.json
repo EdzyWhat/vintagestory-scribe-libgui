@@ -34,6 +34,7 @@
 	"scribe-gui-addtext": "Add Note",
 	"scribe-gui-addtracker": "Add Item Tracker",
 	"scribe-gui-addlink": "Add Link",
+	"scribe-gui-addquestlink": "Add Quest Link",
 	"scribe-gui-addcraft": "Add Crafting Task",
 	"scribe-gui-addcraft-variant": "Add Crafting Task ({0})",
 	"scribe-gui-handbook-addlink": "Link to this page",

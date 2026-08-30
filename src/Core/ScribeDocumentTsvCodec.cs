@@ -146,13 +146,15 @@ public static class ScribeDocumentTsvCodec
         return true;
     }
 
-    /// <summary>The Text-column value for a block: its label. A guide-page Link keeps its captured title in
-    /// <see cref="ScribeBlock.LinkLabel"/> rather than Text, so surface that here; otherwise the block's own
-    /// Text (a task's text; empty for an item Tracker/Link whose name derives live from the item).</summary>
+    /// <summary>The Text-column value for a block: its label. A guide-page or quest Link keeps its captured
+    /// title in <see cref="ScribeBlock.LinkLabel"/> rather than Text, so surface that here; otherwise the
+    /// block's own Text (a task's text; empty for an item Tracker/Link whose name derives live from the
+    /// item). A quest Link's <see cref="ScribeBlock.LinkDescription"/> has no column in this fixed-width
+    /// format and does not round-trip through TSV (the lossless JSON codec carries it instead).</summary>
     private static string TextFor(ScribeBlock block)
     {
         if (block.Kind == ScribeBlockKind.Link
-            && ScribeLinkTarget.IsGuidePage(block.LinkTarget)
+            && (ScribeLinkTarget.IsGuidePage(block.LinkTarget) || ScribeLinkTarget.IsQuest(block.LinkTarget))
             && !string.IsNullOrEmpty(block.LinkLabel))
             return block.LinkLabel!;
         return block.Text;
@@ -168,8 +170,9 @@ public static class ScribeDocumentTsvCodec
 
             case ScribeBlockKind.Link:
                 string? target = NullIfBlank(special);
-                // A guide-page target has no item to name it live, so its Text IS its display label.
-                string? label = ScribeLinkTarget.IsGuidePage(target) && !string.IsNullOrEmpty(text) ? text : null;
+                // A guide-page or quest target has no item to name it live, so its Text IS its display label.
+                string? label = (ScribeLinkTarget.IsGuidePage(target) || ScribeLinkTarget.IsQuest(target))
+                    && !string.IsNullOrEmpty(text) ? text : null;
                 return new ScribeBlock(kind, text, done: done, depth: depth,
                     linkTarget: target, linkLabel: label);
 

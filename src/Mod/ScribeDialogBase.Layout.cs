@@ -819,6 +819,11 @@ public abstract partial class ScribeDialogBase
             // completion passes anchorViewport: true to hold the viewport still.
             onReorderBlock: (from, to) => ReorderEditorBlock(from, to),
             onAdd: OnClickAdd,
+            // Quest Link picker (add-assignment-and-quest-support 10.1/10.2): an empty catalog hides the
+            // option entirely (vsquest not installed, or installed with no quests) — the footer never shows
+            // a Quest Link tile that would do nothing.
+            questCatalog: QuestCatalogForPicker,
+            onAddQuestLink: OnClickAddQuestLink,
             onSwitchToRead: OnClickSwitchToRead,
             onOpenEditorReference: ToggleEditorReferenceHandbook,
             // Footer gear (tablet only). The base returns null so the Lectern/Notebook footer omits it —
