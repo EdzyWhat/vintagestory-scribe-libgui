@@ -104,3 +104,7 @@ reference/oak-textures/
 # Unpacked third-party mods used for the fix-carried-notebook-detection investigation
 # (proprietary; scratch, never committed)
 reference/BackpackInvestigations/
+
+# Third-party quest/particle mod zips, decompiles, and cloned sources used for the
+# add-assignment-and-quest-support investigation (proprietary; scratch, never committed)
+reference/QuestsInvestigations/
