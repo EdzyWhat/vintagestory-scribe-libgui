@@ -6,30 +6,6 @@
 	"textureWidth": 32,
 	"textureHeight": 32,
 	"textureSizes": {
-		"glass": [
-			16,
-			16
-		],
-		"material": [
-			16,
-			16
-		],
-		"lining": [
-			16,
-			16
-		],
-		"material-deco": [
-			16,
-			16
-		],
-		"material-grid": [
-			16,
-			16
-		],
-		"scribe-wax-32": [
-			32,
-			32
-		],
 		"chalk": [
 			32,
 			32
@@ -48,12 +24,6 @@
 		]
 	},
 	"textures": {
-		"glass": "glass",
-		"material": "material",
-		"lining": "lining",
-		"material-deco": "material-deco",
-		"material-grid": "material-grid",
-		"scribe-wax-32": "scribe-wax-32",
 		"chalk": "chalk",
 		"slate": "slate",
 		"wood-h": "wood-h",
@@ -613,7 +583,7 @@
 									]
 								},
 								"down": {
-									"texture": "#default",
+									"texture": "#wood-h",
 									"uv": [
 										7,
 										4,
