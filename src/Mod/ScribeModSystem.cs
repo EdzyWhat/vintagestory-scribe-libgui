@@ -286,7 +286,10 @@ public sealed partial class ScribeModSystem : ModSystem
             .RegisterMessageType<ScribeSetTrackerQuantityMessage>()
             .RegisterMessageType<ScribeTranscribeCopyMessage>()
             .RegisterMessageType<ScribeTranscribeImportMessage>()
-            .RegisterMessageType<ScribeTranscribeStampMessage>();
+            .RegisterMessageType<ScribeTranscribeStampMessage>()
+            .RegisterMessageType<ScribeAddHistoryEntryMessage>()
+            .RegisterMessageType<ScribeSetHistoryEntryTextMessage>()
+            .RegisterMessageType<ScribeDeleteHistoryEntryMessage>();
     }
 
     /// <summary>Server-side accessor for the pin store, so the block entity can register/orphan its
@@ -397,6 +400,9 @@ public sealed partial class ScribeModSystem : ModSystem
         channel.SetMessageHandler<ScribeSetTrackerQuantityMessage>(OnServerReceivedSetTrackerQuantity);
         channel.SetMessageHandler<ScribeTranscribeCopyMessage>(OnServerReceivedTranscribeCopy);
         channel.SetMessageHandler<ScribeTranscribeImportMessage>(OnServerReceivedTranscribeImport);
+        channel.SetMessageHandler<ScribeAddHistoryEntryMessage>(OnServerReceivedAddHistoryEntry);
+        channel.SetMessageHandler<ScribeSetHistoryEntryTextMessage>(OnServerReceivedSetHistoryEntryText);
+        channel.SetMessageHandler<ScribeDeleteHistoryEntryMessage>(OnServerReceivedDeleteHistoryEntry);
 
         // Persist/load the pin + settings stores with the save game (the WaypointMapLayer pattern).
         api.Event.SaveGameLoaded += OnSaveGameLoaded;

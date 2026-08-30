@@ -14,4 +14,9 @@ public enum HistoryEventKind : byte
     /// A <see cref="HistoryEntry"/> with this kind round-trips through the codec correctly so a
     /// future version can begin writing these entries without a breaking codec change.</summary>
     LoreDiscovery = 6,
+
+    /// <summary>A player-authored free-text entry, addressed by <see cref="HistoryEntry.EntryId"/>
+    /// and editable/deletable only by the player named in <see cref="HistoryEntry.ActorName"/>. See
+    /// <see cref="HistoryStore.TrySetManualEntryText"/>/<see cref="HistoryStore.TryDeleteManualEntry"/>.</summary>
+    Manual = 7,
 }

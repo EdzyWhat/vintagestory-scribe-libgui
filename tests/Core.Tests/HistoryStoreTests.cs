@@ -30,12 +30,17 @@ public class HistoryStoreTests
         store.TryAddEntry(Entry(HistoryEventKind.BossKill, "Alice", "Eidolon"));
         store.TryAddEntry(Entry(HistoryEventKind.TemporalStorm, "", "Heavy"));
         store.TryAddEntry(Entry(HistoryEventKind.LoreDiscovery, "Alice", "The Miller Part 1/2"));
+        store.TryAddEntry(new HistoryEntry
+        {
+            Kind = HistoryEventKind.Manual, ActorName = "Alice", Detail = "Found the archives",
+            InGameDate = "Year 1, Day 1", EntryId = Guid.NewGuid(),
+        });
 
         var restored = HistoryStore.Deserialize(store.Serialize());
 
-        Assert.Equal(7, restored.Entries.Count);
-        Assert.Equal(HistoryEventKind.Crafted,       restored.Entries[0].Kind);
-        Assert.Equal(HistoryEventKind.LoreDiscovery, restored.Entries[6].Kind);
+        Assert.Equal(8, restored.Entries.Count);
+        Assert.Equal(HistoryEventKind.Crafted, restored.Entries[0].Kind);
+        Assert.Equal(HistoryEventKind.Manual,  restored.Entries[7].Kind);
     }
 
     [Fact]
@@ -160,6 +165,179 @@ public class HistoryStoreTests
 
         var kills = store.Entries.Where(e => e.Kind == HistoryEventKind.BossKill).ToList();
         Assert.Equal(HistoryStore.MaxBossKills, kills.Count);
+    }
+
+    // ---- Manual: sliding window at MaxManual ----
+
+    [Fact]
+    public void Manual_SlidingWindowAtCap()
+    {
+        var store = new HistoryStore();
+        for (int i = 0; i < HistoryStore.MaxManual; i++)
+            store.TryAddEntry(new HistoryEntry
+            {
+                Kind = HistoryEventKind.Manual, ActorName = "Alice", Detail = $"entry {i}",
+                InGameDate = "Year 1, Day 1", EntryId = Guid.NewGuid(),
+            });
+
+        Assert.Equal(HistoryStore.MaxManual, store.Entries.Count);
+
+        store.TryAddEntry(new HistoryEntry
+        {
+            Kind = HistoryEventKind.Manual, ActorName = "Alice", Detail = "entry new",
+            InGameDate = "Year 1, Day 1", EntryId = Guid.NewGuid(),
+        });
+
+        var manuals = store.Entries.Where(e => e.Kind == HistoryEventKind.Manual).ToList();
+        Assert.Equal(HistoryStore.MaxManual, manuals.Count);
+        Assert.DoesNotContain(manuals, e => e.Detail == "entry 0");
+        Assert.Contains(manuals, e => e.Detail == "entry new");
+    }
+
+    // ---- Manual: edit/delete ownership ----
+
+    [Fact]
+    public void TrySetManualEntryText_SucceedsForOwnEntry()
+    {
+        var store = new HistoryStore();
+        var id = Guid.NewGuid();
+        store.TryAddEntry(new HistoryEntry
+        {
+            Kind = HistoryEventKind.Manual, ActorName = "Alice", Detail = "",
+            InGameDate = "Year 1, Day 1", EntryId = id,
+        });
+
+        Assert.True(store.TrySetManualEntryText(id, "Alice", "Found the archives"));
+        Assert.Equal("Found the archives", store.Entries[0].Detail);
+    }
+
+    [Fact]
+    public void TrySetManualEntryText_NoOpsForWrongAuthor()
+    {
+        var store = new HistoryStore();
+        var id = Guid.NewGuid();
+        store.TryAddEntry(new HistoryEntry
+        {
+            Kind = HistoryEventKind.Manual, ActorName = "Alice", Detail = "original",
+            InGameDate = "Year 1, Day 1", EntryId = id,
+        });
+
+        Assert.False(store.TrySetManualEntryText(id, "Bob", "tampered"));
+        Assert.Equal("original", store.Entries[0].Detail);
+    }
+
+    [Fact]
+    public void TrySetManualEntryText_NoOpsForUnknownEntryId()
+    {
+        var store = new HistoryStore();
+        Assert.False(store.TrySetManualEntryText(Guid.NewGuid(), "Alice", "text"));
+    }
+
+    [Fact]
+    public void TrySetManualEntryText_ClampsToMaxTaskTextLength()
+    {
+        var store = new HistoryStore();
+        var id = Guid.NewGuid();
+        store.TryAddEntry(new HistoryEntry
+        {
+            Kind = HistoryEventKind.Manual, ActorName = "Alice", Detail = "",
+            InGameDate = "Year 1, Day 1", EntryId = id,
+        });
+
+        string tooLong = new string('x', ScribeDocumentCodec.MaxTaskTextLength + 500);
+        store.TrySetManualEntryText(id, "Alice", tooLong);
+        Assert.Equal(ScribeDocumentCodec.MaxTaskTextLength, store.Entries[0].Detail.Length);
+    }
+
+    [Fact]
+    public void TryDeleteManualEntry_SucceedsForOwnEntry()
+    {
+        var store = new HistoryStore();
+        var id = Guid.NewGuid();
+        store.TryAddEntry(new HistoryEntry
+        {
+            Kind = HistoryEventKind.Manual, ActorName = "Alice", Detail = "text",
+            InGameDate = "Year 1, Day 1", EntryId = id,
+        });
+
+        Assert.True(store.TryDeleteManualEntry(id, "Alice"));
+        Assert.Empty(store.Entries);
+    }
+
+    [Fact]
+    public void TryDeleteManualEntry_NoOpsForWrongAuthor()
+    {
+        var store = new HistoryStore();
+        var id = Guid.NewGuid();
+        store.TryAddEntry(new HistoryEntry
+        {
+            Kind = HistoryEventKind.Manual, ActorName = "Alice", Detail = "text",
+            InGameDate = "Year 1, Day 1", EntryId = id,
+        });
+
+        Assert.False(store.TryDeleteManualEntry(id, "Bob"));
+        Assert.Single(store.Entries);
+    }
+
+    [Fact]
+    public void TryDeleteManualEntry_NoOpsForUnknownEntryId()
+    {
+        var store = new HistoryStore();
+        Assert.False(store.TryDeleteManualEntry(Guid.NewGuid(), "Alice"));
+    }
+
+    // ---- Manual: EntryId round-trips through the v2 codec ----
+
+    [Fact]
+    public void Manual_EntryIdRoundTripsThroughCodec()
+    {
+        var store = new HistoryStore();
+        var id = Guid.NewGuid();
+        store.TryAddEntry(new HistoryEntry
+        {
+            Kind = HistoryEventKind.Manual, ActorName = "Alice", Detail = "text",
+            InGameDate = "Year 1, Day 1", EntryId = id,
+        });
+
+        var restored = HistoryStore.Deserialize(store.Serialize());
+        Assert.Single(restored.Entries);
+        Assert.Equal(id, restored.Entries[0].EntryId);
+    }
+
+    [Fact]
+    public void NonManualEntry_EntryIdRoundTripsAsEmpty()
+    {
+        var store = new HistoryStore();
+        store.TryAddEntry(Entry(HistoryEventKind.Death, "Alice", "died"));
+
+        var restored = HistoryStore.Deserialize(store.Serialize());
+        Assert.Equal(Guid.Empty, restored.Entries[0].EntryId);
+    }
+
+    // ---- v1 -> v2 migration ----
+
+    [Fact]
+    public void Deserialize_V1Payload_MigratesWithEmptyEntryIds()
+    {
+        // Hand-build a v1 payload: magic, version=1, count=1, one Death entry with the OLD field
+        // layout (no EntryId bytes at all).
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write("SHST"u8.ToArray());
+            w.Write((byte)1); // v1
+            w.Write(1);       // entryCount
+            w.Write((byte)HistoryEventKind.Death);
+            w.Write("Alice");
+            w.Write("Alice fell to her death.");
+            w.Write("Year 1, Day 1");
+            // no EntryId bytes in v1
+        }
+
+        var store = HistoryStore.Deserialize(ms.ToArray());
+        Assert.Single(store.Entries);
+        Assert.Equal(HistoryEventKind.Death, store.Entries[0].Kind);
+        Assert.Equal(Guid.Empty, store.Entries[0].EntryId);
     }
 
     // ---- Mixed kinds don't interfere with each other's caps ----

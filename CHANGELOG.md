@@ -4,26 +4,7 @@ All notable changes to Scribe are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Fixed
-- Drag-reordering a task or pinned task now only allows dropping onto a target at the same
-  indentation depth — dropping a subtask among top-level tasks (or vice versa) is rejected, and the
-  drop-target arrow only appears over a valid same-depth row. Dragging a parent task (or pinned
-  parent) with subtasks/pinned children now always moves the whole group together, including when
-  dragged forward past another parent's group.
-- Notebook/Tablet Death, PvP Kill, and Temporal Storm history now records correctly when the
-  notebook is carried in an inventory added by another mod (e.g. a bonus storage slot granted by a
-  skill/ability mod) — previously such inventories were invisible to history recording because they
-  weren't on a hardcoded allow-list. A Notebook sitting in the crafting grid now also counts as
-  carried, so it participates in this recording too (previously excluded).
-
-### Added
-- Notebooks/Tablets stored inside a container the player is currently carrying via the CarryOn mod
-  (e.g. a chest carried on the back) now also record Death, PvP Kill, and Temporal Storm history,
-  when CarryOn is installed. No effect if CarryOn isn't installed.
-
-## [1.3.3] - 2026-08-29
+## [1.3.3] - 2026-08-30
 
 ### Added
 - **Pin Insert.** A Settings dropdown (Bottom by default, or Top) chooses where a newly pinned
@@ -34,10 +15,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Top), a row removed elsewhere, or a completion policy reordering a pin all animate the same way.
   Applies everywhere Scribe animates rows today (editor, Read view, Pin Tab, HUD) and to any future
   surface built the same way, with no extra work required.
+- Notebooks/Tablets stored inside a container the player is currently carrying via the CarryOn mod
+  (e.g. a chest carried on the back) now also record Death, PvP Kill, and Temporal Storm history,
+  when CarryOn is installed. No effect if CarryOn isn't installed.
+- A Notebook's History tab now has an "Add Entry" button for writing your own custom entries
+  (up to 1,000 characters) alongside the automatically recorded events. Only the player who wrote
+  an entry can edit or delete it; an empty entry left untyped is discarded rather than saved. A
+  Notebook keeps up to 30 custom entries (oldest dropped first).
+- The Temporal Storm history cap is raised from 5 to 10 entries per notebook.
 
 ### Fixed
 - Pinning or unpinning a task while the game is paused (e.g. singleplayer auto-pause while the
   Handbook is open) now updates the HUD and Pin Tab immediately, instead of only after unpausing.
+- Drag-reordering a task or pinned task now only allows dropping onto a target at the same
+  indentation depth — dropping a subtask among top-level tasks (or vice versa) is rejected, and the
+  drop-target arrow only appears over a valid same-depth row. Dragging a parent task (or pinned
+  parent) with subtasks/pinned children now always moves the whole group together, including when
+  dragged forward past another parent's group.
+- Notebook/Tablet Death, PvP Kill, and Temporal Storm history now records correctly when the
+  notebook is carried in an inventory added by another mod (e.g. a bonus storage slot granted by a
+  skill/ability mod) — previously such inventories were invisible to history recording because they
+  weren't on a hardcoded allow-list. A Notebook sitting in the crafting grid now also counts as
+  carried, so it participates in this recording too (previously excluded).
 
 ### Changed
 - Reordered and regrouped the Scribe Settings menu for better scanability: New Task Insert/Pin

@@ -2513,6 +2513,36 @@ A tablet-only band-height override (`private protected virtual int TitleMaxLines
 fallback but proved unnecessary — the two-line box fits within `TitleBarH` untouched, so base
 (Lectern/Notebook) bands stay byte-identical. See `ScribeDialogBase.Layout.cs` `BuildTitleBar`.
 
+**Fact: a field's `onBlur` fires only on a FocusManager-driven focus transition, never merely from
+unmounting/disposing its `FocusNode`.** Decompiled `Gui.Widgets.Input.FocusNode`: `Dispose()` (inherited
+`ChangeNotifier.Dispose`) never calls `SetHasFocus(false, ...)`, so a row that's still focused when its
+widget tree is torn down (e.g. the dialog closing) never sees a true→false `HasFocus` transition and
+`ScribeMultilineFieldState.OnFocusChanged` never invokes `Widget.OnBlur`. This is exactly why editor Task
+rows don't rely on blur at all — their `onChanged` already writes straight into the live scratch document
+every keystroke, so "closing commits" is automatic. The Guestbook's own-note field and the Manual History
+entry field (add-custom-history-entries) instead defer network sends to blur via captured
+`current`/`lastSent` locals — for those, "closing while still focused and mid-edit" needs an EXPLICIT
+flush in `OnGuiClosed` (calling the same commit function used by `onBlur`) or the last few keystrokes are
+silently lost. See `GuiDialogScribeNotebook.OnGuiClosed`'s `CommitManualEntry` sweep.
+
+**Fact: `Center`/`Align` greedily claims the incoming MaxHeight/MaxWidth whenever it's finite — it does
+NOT shrink to its child's size unless that axis is unbounded.** Decompiled `RenderPositionedBox.PerformLayout`
+(`Gui.Core.Layout`): `num2 = base.Constraints.MaxHeight; if (float.IsPositiveInfinity(num2)) num2 =
+val.Y;` — i.e. it only falls back to the child's measured height when the incoming constraint is
+literally infinite; any finite bound is claimed in full. This collides with `RenderFlex.LayoutFixedChild`
+(`Column`/`Row`'s own render object): a non-flex child is measured with `maxHeight = base.Constraints.
+MaxHeight` — the PARENT FLEX'S OWN full height, not "whatever's left after other children" (fixed
+children are measured in a first pass, before flex/`Expanded` children get whatever remains). Put a
+`Center` as a plain (non-`Expanded`) child alongside an `Expanded` sibling in a bounded-height `Column`
+and it silently reports its own height as the ENTIRE column's height, starving the `Expanded` sibling
+down to ~0 — a single centered button can visually swallow an entire tab (add-custom-history-entries,
+"Add Entry" button ate the whole History tab). Fix: don't use `Center`/`Align` for an axis you want to
+shrink-wrap; use a `Row`/`Column` with the matching `MainAxisAlignment.Center` instead — a `Flex`'s
+CROSS-axis size is always just `Math.Max` of its children's actual measured cross-axis sizes
+(`LayoutFixedChild`'s return value), never inflated to the incoming constraint, so it doesn't have this
+failure mode. (`LayoutBuilder` itself is innocent here — `RenderLayoutBuilder.Size = child.Size` always,
+it just passes constraints through.)
+
 ## Held-item dialog flickers closed on FIRST open of a not-yet-crafted item (2026-08-06)
 
 **Symptom: the first time a player opens a Scribe item they did NOT craft (notebook, clockmaker's

@@ -472,6 +472,46 @@ public sealed partial class ScribeModSystem
         }, fromPlayer);
     }
 
+    /// <summary>Resolves the exact slot a Manual-history-entry packet targets, via
+    /// <see cref="ResolveItemPacketSlot"/>, then attaches a fresh, server-context-bound
+    /// <see cref="NotebookHost"/> over it — but ONLY for the Notebook and Clockmaker's Notebook
+    /// (<see cref="ItemScribeNotebook"/>/<see cref="ItemClockmakerNotebook"/>). The Tablet
+    /// (<see cref="ItemScribeTablet"/>) is explicitly excluded: custom History entries are scoped to
+    /// the Notebook family only (add-custom-history-entries design.md's Non-Goals) — a legitimate
+    /// client never sends these messages for a Tablet (its dialog has no Add Entry button), and this
+    /// is the server-side belt-and-suspenders against a client that tried anyway.</summary>
+    private NotebookHost? ResolveManualEntryHost(IServerPlayer fromPlayer, string? targetInventoryId, int targetSlotId)
+    {
+        if (sapi is null) return null;
+        var slot = ResolveItemPacketSlot(fromPlayer, targetInventoryId, targetSlotId);
+        if (slot?.Itemstack?.Collectible is not (ItemScribeNotebook or ItemClockmakerNotebook)) return null;
+
+        var host = new NotebookHost(slot);
+        host.AttachServerContext(sapi, fromPlayer);
+        return host;
+    }
+
+    private void OnServerReceivedAddHistoryEntry(IServerPlayer fromPlayer, ScribeAddHistoryEntryMessage message)
+    {
+        if (!TryReadGuid(message.EntryId, out var entryId)) return;
+        var host = ResolveManualEntryHost(fromPlayer, message.TargetInventoryId, message.TargetSlotId);
+        host?.AddManualEntry(sapi!, fromPlayer, entryId, (message.Text ?? "").Trim());
+    }
+
+    private void OnServerReceivedSetHistoryEntryText(IServerPlayer fromPlayer, ScribeSetHistoryEntryTextMessage message)
+    {
+        if (!TryReadGuid(message.EntryId, out var entryId)) return;
+        var host = ResolveManualEntryHost(fromPlayer, message.TargetInventoryId, message.TargetSlotId);
+        host?.SetManualEntryText(fromPlayer, entryId, (message.Text ?? "").Trim());
+    }
+
+    private void OnServerReceivedDeleteHistoryEntry(IServerPlayer fromPlayer, ScribeDeleteHistoryEntryMessage message)
+    {
+        if (!TryReadGuid(message.EntryId, out var entryId)) return;
+        var host = ResolveManualEntryHost(fromPlayer, message.TargetInventoryId, message.TargetSlotId);
+        host?.DeleteManualEntry(fromPlayer, entryId);
+    }
+
     private void OnClientReceivedNotebookSave(ScribeNotebookSaveMessage message)
     {
         if (capi is null || !TryReadGuid(message.DocIdBytes, out var docId)) return;

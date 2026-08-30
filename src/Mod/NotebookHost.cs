@@ -200,6 +200,42 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
         }
     }
 
+    /// <summary>Server-side: creates a new Manual history entry authored by <paramref name="player"/>
+    /// (the packet SENDER — never a client-claimed identity) with the given client-minted
+    /// <paramref name="entryId"/> and text, then flushes and syncs. A no-op if the store's
+    /// <c>MaxManual</c> sliding-window somehow rejected it (defensive; <c>TryAddEntry</c> currently
+    /// never rejects a Manual add outright, it drops the oldest instead — see
+    /// <see cref="Scribe.Core.HistoryStore.TryAddEntry"/>).</summary>
+    public void AddManualEntry(ICoreServerAPI sapi, IServerPlayer player, Guid entryId, string text)
+    {
+        var added = _history.TryAddEntry(new HistoryEntry
+        {
+            Kind       = HistoryEventKind.Manual,
+            ActorName  = player.PlayerName,
+            Detail     = text,
+            InGameDate = FormatDate(sapi),
+            EntryId    = entryId,
+        });
+        if (added) FlushHistory();
+    }
+
+    /// <summary>Server-side: updates an existing Manual entry's text, authorized by matching
+    /// <paramref name="player"/>'s own name against the entry's stored author — see
+    /// <see cref="Scribe.Core.HistoryStore.TrySetManualEntryText"/>. Silently no-ops on an author
+    /// mismatch or unknown <paramref name="entryId"/>.</summary>
+    public void SetManualEntryText(IServerPlayer player, Guid entryId, string text)
+    {
+        if (_history.TrySetManualEntryText(entryId, player.PlayerName, text)) FlushHistory();
+    }
+
+    /// <summary>Server-side: deletes a Manual entry, authorized the same way as
+    /// <see cref="SetManualEntryText"/>. Silently no-ops on an author mismatch or unknown
+    /// <paramref name="entryId"/>.</summary>
+    public void DeleteManualEntry(IServerPlayer player, Guid entryId)
+    {
+        if (_history.TryDeleteManualEntry(entryId, player.PlayerName)) FlushHistory();
+    }
+
     private void RecordPickedUpIfNew(ICoreServerAPI sapi, IServerPlayer player)
     {
         // The crafter already has a "Crafted by X" entry standing in for their acquisition, so don't
@@ -253,9 +289,14 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
         return bytes;
     }
 
-    internal static string FormatDate(ICoreServerAPI sapi)
+    internal static string FormatDate(ICoreServerAPI sapi) => FormatDate(sapi.World);
+
+    /// <summary>Client-side counterpart of <see cref="FormatDate(ICoreServerAPI)"/>, used only to preview
+    /// a pending Manual entry draft's date before the server confirms creation with its own authoritative
+    /// stamp — <see cref="IWorldAccessor.Calendar"/> is shared by both client and server world accessors.</summary>
+    internal static string FormatDate(IWorldAccessor world)
     {
-        var cal = sapi.World.Calendar;
+        var cal = world.Calendar;
         int dayOfMonth = (int)(cal.TotalDays % cal.DaysPerMonth) + 1;
         return FormatCalendarDate(dayOfMonth, cal.MonthName, cal.Year);
     }
