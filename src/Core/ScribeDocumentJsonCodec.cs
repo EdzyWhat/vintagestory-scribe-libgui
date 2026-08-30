@@ -24,7 +24,7 @@ namespace Scribe.Core;
 ///
 /// <para>What is written: <c>kind</c> (a stable string token, see <see cref="ScribeBlockKindToken"/>),
 /// <c>text</c>, <c>done</c>, <c>depth</c>, and the Tracker/Link references. What is OMITTED and why:
-/// <c>TaskId</c>/<c>DocId</c> (import mints fresh identity — see the Mod import handler), <c>assignedToUid</c>
+/// <c>TaskId</c>/<c>DocId</c> (import mints fresh identity — see the Mod import handler), <c>assignment</c>
 /// (assignment is place-bound, not shareable), and <c>currentQuantity</c> (live/derived from carried
 /// inventory, recomputed after import). Null references are omitted for legibility.</para>
 ///
@@ -129,7 +129,7 @@ public static class ScribeDocumentJsonCodec
                     text,
                     done: b.Done,
                     depth: b.Depth < 0 ? 0 : b.Depth,
-                    assignedToUid: null,          // never imported (place-bound)
+                    assignedToUid: null,          // assignment is never imported (place-bound)
                     taskId: null,                 // fresh id → never pinned
                     targetItemCode: b.TargetItemCode,
                     targetQuantity: targetQuantity,

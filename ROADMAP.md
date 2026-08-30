@@ -19,11 +19,14 @@ age (the saw); anything past that is cosmetic.
 | Scratch | Clay & wax tablet (handheld) | up to 10 tasks, 1 pin; clay dries hard → re-wet in water or fire to make permanent; wax always rewritable | **shipped v1.0** |
 | ~~Scratch+~~ | ~~Reed/cattail paper~~ | ~~a few more lines~~ | **cut** — the clay→wax step already covers the low tier; a paper micro-tier added no capability |
 | Collection | Leather-bound notebook | infinite pages | **shipped v0.2** |
-| Organization | Scriptorium (shared block) | dedicated shared writing station; copy/paste + import/export; Tracker/Link/Crafting Tasks | **shipped v1.2** (block + Transcribe + Tracker/Link); Crafting Tasks + Chalkboard **shipped v1.3**. Assignment (Assign & History / Inbox) is **later** — still on this cluster, not a numbered 1.4. |
+| Organization | Scriptorium (shared block) | dedicated shared writing station; copy/paste + import/export; Tracker/Link/Crafting Tasks | **shipped v1.2** (block + Transcribe + Tracker/Link); Crafting Tasks + Chalkboard **shipped v1.3**. Assignment Desk + Inbox are **v1.4.0** work. |
 | Portability | Pinned-task HUD | pins from any source shown on an always-on HUD; quick-add gesture | **HUD shipped** (v0.1); backpack container **cut** |
 | Social | Bulletin board (public) + chalkboard | shared board; chalkboard is drawable | planned (Board). The **wall-mounted Chalkboard** that shipped in v1.3 is a Lectern form-factor variant (same document, hung on a wall, 10-task cap) — **not** this drawable v6 board. |
 
 ## Staged plan
+
+- **v1.4.0 — Assignments & Quest support** *(in progress)*: Assignment Desk and Inbox blocks,
+  player-to-player assignment state, and optional soft integration with VS Quest.
 
 - **v1 — Lectern slice** *(shipped, v0.1.x)*: one lectern block (reuses the vanilla
   "lecturn-book-open" shape — plain wood) with a task checklist + short note,

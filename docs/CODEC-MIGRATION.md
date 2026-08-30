@@ -208,6 +208,36 @@ Covered by `RoundTrip_PreservesTrackerAndLinkFields` (v8 round-trip) and
 `RecipeSignature` defaults to empty while the v7 `LinkLabel` still round-trips). The existing
 v5/v6 tests still pass (progressive reads keep them accepted).
 
+### Worked example: v8 → v9 (`ScribeDocumentCodec`)
+
+v9 appends an optional rich assignment record after `RecipeSignature`: assigner UID, state,
+assigned date, and the unseen/seen flag. The retired v5-v8 bare-UID slot remains unpopulated by
+new writers, preserving the append-only layout while allowing old saves to load.
+
+```text
+// v8 per-block: ...v7... | recipeSignature
+// v9 per-block: ...v8... | hasAssignment | [assignerUid | state | assignedDate | seen]
+```
+
+Pre-v9 documents default to no assignment. Assignment data is intentionally omitted from JSON/TSV
+clipboard exports because it is place-bound and must not be shared by import.
+
+### Worked example: v9 → v10 (`ScribeDocumentCodec`)
+
+v10 appends one more field to the assignment record added in v9: `TargetPlayerUid` (the recipient),
+written right after `Seen`. Needed once a separate `ScribeAssignmentStore` had to filter "what did I
+send" vs. "what did I receive" without relying on which dictionary a record happened to be filed
+under — the block itself now names both parties.
+
+```text
+// v9  per-block assignment: hasAssignment | [assignerUid | state | assignedDate | seen]
+// v10 per-block assignment: hasAssignment | [assignerUid | state | assignedDate | seen | targetPlayerUid]
+```
+
+v9 never shipped (this is a same-cycle addition within the same in-progress change), so there is no
+real migration gap to bridge — a `version >= 10` read gate exists anyway, defaulting a hypothetical
+v9-only blob's `TargetPlayerUid` to `""`, for consistency with every other version-gated field.
+
 ### Worked example: v1 → v2 (`ScribePinCodec`)
 
 v2 appended **two per-pin fields** after each pin's `LastKnownText`, so the HUD can treat a pinned
@@ -460,7 +490,8 @@ Type · Done · Text · Special · Count · Depth
 
 | Codec | Kind | Current | Accepted | Migration method / stability rule |
 |---|---|---|---|---|
-| `ScribeDocumentCodec` | binary (save/sync) | v8 | v5–v8 (progressive reads) | `ApplyPreV6Defaults` — defaults Tracker/Link per-block fields (v6) + guide-page `LinkLabel` (v7) + Craft `RecipeSignature` (v8); later fields then read behind `version >=` thresholds |
+| `ScribeDocumentCodec` | binary (save/sync) | v10 | v5–v10 (progressive reads) | `ApplyPreV6Defaults` — defaults Tracker/Link per-block fields (v6) + guide-page `LinkLabel` (v7) + Craft `RecipeSignature` (v8); v9 assignment then reads behind `version >= 9`, v10 `TargetPlayerUid` behind `version >= 10` |
+| `ScribeAssignmentStore` | binary (save/sync) | v1 | v1 only | New in add-assignment-and-quest-support; no prior version to migrate from yet |
 | `ScribePinCodec` | binary (save/sync) | v5 | v1–v5 (progressive reads) | `ApplyPreV2Defaults` — seeds Kind (→Task), LinkTarget (→null), TargetItemCode (→null), quantities, LinkLabel (→null), Depth (→0); v2–v5 fields then read behind `version >=` thresholds |
 | `ScribeDocumentJsonCodec` | text (clipboard) | v1 | v1+ (`v >= MinVersion`; missing `v` → rejected) | Version window; unknown keys ignored on read. Add a field → append to DTO + bump `Version`; raise `MinVersion` only if an old payload becomes unreadable |
 | `ScribeDocumentTsvCodec` | text (clipboard) | — (no version) | any header with the known columns (by name) | Fixed 6 columns forever (`Type · Done · Text · Special · Count · Depth`); new richness goes in the comma-packed `Special` cell, never a new column; unknown columns ignored, missing columns defaulted |

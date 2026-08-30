@@ -34,7 +34,8 @@ namespace Scribe;
 internal readonly record struct ScribeEditRowData(
     int Index, ScribeBlockKind Kind, bool Done, bool Pinned, Guid TaskId, string Text,
     ItemStack? DisplayStack = null, string? DisplayName = null,
-    int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null, int Depth = 0)
+    int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null, int Depth = 0,
+    bool ReadOnly = false, bool CompletionAndPinLive = true)
 {
     public bool IsTask => Kind == ScribeBlockKind.Task;
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;

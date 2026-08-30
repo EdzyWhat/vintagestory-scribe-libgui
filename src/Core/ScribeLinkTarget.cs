@@ -7,7 +7,8 @@ namespace Scribe.Core;
 /// collectible code (an item/block Link — the Mod layer resolves it live to an <c>ItemStack</c> for its
 /// icon + name) OR a Handbook <b>guide-page</b> reference marked by the <see cref="GuidePagePrefix"/> (a
 /// non-item guide/explainer page, e.g. <c>"page:craftinginfo-knapping"</c> — it has no item, so its display
-/// name is stored in <see cref="ScribeBlock.LinkLabel"/> and its icon is a generic book).
+/// name is stored in <see cref="ScribeBlock.LinkLabel"/> and its icon is a generic book). Quest links use
+/// a <c>quest:</c> prefix and retain their captured label/description in the block.
 ///
 /// <para>Kept in Core as pure string logic (no VS API) so every surface — read view, editor, Pin Tab, HUD —
 /// classifies a link identically and can't drift (add-tracker-link-tasks 7.6).</para>
@@ -18,6 +19,7 @@ public static class ScribeLinkTarget
     /// A collectible code is an <c>AssetLocation</c> (<c>domain:path</c>) whose domain is never <c>"page"</c>,
     /// so this scheme-like prefix is unambiguous.</summary>
     public const string GuidePagePrefix = "page:";
+    public const string QuestPrefix = "quest:";
 
     /// <summary>True when <paramref name="target"/> references a Handbook guide page rather than an item.</summary>
     public static bool IsGuidePage(string? target)
@@ -31,4 +33,12 @@ public static class ScribeLinkTarget
     /// <summary>Build a guide-page target string from a bare Handbook page code (e.g.
     /// <c>"craftinginfo-knapping"</c> → <c>"page:craftinginfo-knapping"</c>).</summary>
     public static string ForPage(string pageCode) => GuidePagePrefix + pageCode;
+
+    public static bool IsQuest(string? target)
+        => target is not null && target.StartsWith(QuestPrefix, StringComparison.Ordinal);
+
+    public static string? QuestCode(string? target)
+        => IsQuest(target) ? target![QuestPrefix.Length..] : null;
+
+    public static string ForQuest(string questCode) => QuestPrefix + questCode;
 }

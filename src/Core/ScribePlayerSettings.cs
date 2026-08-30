@@ -24,6 +24,12 @@ public sealed class ScribePlayerSettings
     /// removal). Replaces the earlier boolean <c>CompleteUnpins</c>.</summary>
     public ScribeCompletionPolicy CompletionPolicy { get; set; } = ScribeCompletionPolicy.Sink;
 
+    /// <summary>Policy for automatically linking quests detected by the optional VS Quest integration.</summary>
+    public ScribeQuestAcceptPolicy QuestAcceptPolicy { get; set; } = ScribeQuestAcceptPolicy.Prompt;
+
+    /// <summary>Policy for automatically completing tasks linked to quests detected by the optional VS Quest integration.</summary>
+    public ScribeQuestCompletionPolicy QuestCompletionPolicy { get; set; } = ScribeQuestCompletionPolicy.Prompt;
+
     /// <summary>What a Tracker task does when its carried-inventory count reaches its target
     /// (add-tracker-link-tasks D6): <see cref="ScribeTrackerCompletion.Complete"/> (default — mark it
     /// done, the same edit as ticking its checkbox), <see cref="ScribeTrackerCompletion.Delete"/>
@@ -379,6 +385,12 @@ public sealed class ScribePlayerSettings
     public static ScribeCompletionPolicy NormalizePolicy(ScribeCompletionPolicy value) =>
         Enum.IsDefined(typeof(ScribeCompletionPolicy), value) ? value : ScribeCompletionPolicy.Sink;
 
+    public static ScribeQuestAcceptPolicy NormalizeQuestAcceptPolicy(ScribeQuestAcceptPolicy value) =>
+        Enum.IsDefined(typeof(ScribeQuestAcceptPolicy), value) ? value : ScribeQuestAcceptPolicy.Prompt;
+
+    public static ScribeQuestCompletionPolicy NormalizeQuestCompletionPolicy(ScribeQuestCompletionPolicy value) =>
+        Enum.IsDefined(typeof(ScribeQuestCompletionPolicy), value) ? value : ScribeQuestCompletionPolicy.Prompt;
+
     /// <summary>Maps a loaded tracker-completion value to a defined <see cref="ScribeTrackerCompletion"/>,
     /// falling back to the default (<see cref="ScribeTrackerCompletion.Complete"/>) for any unrecognized
     /// value so a hand-edited or corrupted config can't select an undefined behavior.</summary>
@@ -440,6 +452,8 @@ public sealed class ScribePlayerSettings
         MigrateLegacyKeys();
         HudMaxRows = ClampHudMaxRows(HudMaxRows);
         CompletionPolicy = NormalizePolicy(CompletionPolicy);
+        QuestAcceptPolicy = NormalizeQuestAcceptPolicy(QuestAcceptPolicy);
+        QuestCompletionPolicy = NormalizeQuestCompletionPolicy(QuestCompletionPolicy);
         TrackerCompletion = NormalizeTrackerCompletion(TrackerCompletion);
         SubtaskBehavior = NormalizeSubtaskBehavior(SubtaskBehavior);
         NewTaskInsert = NormalizeNewTaskInsert(NewTaskInsert);

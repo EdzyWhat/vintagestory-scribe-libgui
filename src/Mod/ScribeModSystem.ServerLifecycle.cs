@@ -55,6 +55,8 @@ public sealed partial class ScribeModSystem
         var pinBytes = sapi.WorldManager.SaveGame.GetData(PinStoreSaveKey);
         pinStore.LoadFrom(pinBytes);
 
+        assignmentStore?.LoadFrom(sapi.WorldManager.SaveGame.GetData(AssignmentStoreSaveKey));
+
         if (timerStores is not null)
         {
             timerStores.Clear();
@@ -93,6 +95,9 @@ public sealed partial class ScribeModSystem
         if (sapi is null || pinStore is null) return;
         sapi.WorldManager.SaveGame.StoreData(PinStoreSaveKey, pinStore.SerializePins());
 
+        if (assignmentStore is not null)
+            sapi.WorldManager.SaveGame.StoreData(AssignmentStoreSaveKey, assignmentStore.SerializeStore());
+
         if (timerStores is not null)
         {
             // Persist Running AND fired-but-undismissed timers. A fired timer is a notification the player
@@ -130,6 +135,7 @@ public sealed partial class ScribeModSystem
     {
         PushPinsTo(player);
         PushTimerTo(player);
+        PushAssignmentsTo(player);
     }
 
 }

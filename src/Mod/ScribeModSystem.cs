@@ -33,6 +33,9 @@ public sealed partial class ScribeModSystem : ModSystem
     private const string PinStoreSaveKey   = "scribe:pins:v1";
     private const string TimerStoreSaveKey = "scribe:timer:v1";
 
+    /// <summary>Savegame key for the persisted assignment store (<see cref="ScribeAssignmentStore"/>).</summary>
+    private const string AssignmentStoreSaveKey = "scribe:assignments:v1";
+
     /// <summary>Client-local JSON file holding ALL of this player's Scribe preferences — completion
     /// policy, HUD rows/anchor/offsets/width/collapse, and the HUD/window font-size scales — per-player,
     /// cross-world, never server-synced. As of add-settings-tab this is the SINGLE client-local
@@ -57,6 +60,9 @@ public sealed partial class ScribeModSystem : ModSystem
 
     /// <summary>Server-side pin/settings store. Null on a pure client.</summary>
     private ScribePinStore? pinStore;
+
+    /// <summary>Server-side player-to-player assignment store. Null on a pure client.</summary>
+    private ScribeAssignmentStore? assignmentStore;
 
     /// <summary>Server-side reflection bridge to the CarryOn mod family, so Notebooks/Tablets inside
     /// a CarryOn-carried container also participate in history recording. Null on a pure client.
@@ -105,6 +111,24 @@ public sealed partial class ScribeModSystem : ModSystem
     /// <see cref="optimisticPinOverlay"/> applied. Recomputed (not derived per-read) whenever either input
     /// changes, since <c>MyPins</c> is read many times per frame across the HUD/Pin Tab/dialog rows.</summary>
     private IReadOnlyList<ScribePinnedRef> displayPinList = Array.Empty<ScribePinnedRef>();
+
+    /// <summary>Client-side cache of THIS player's SENT assignments (their Assignment-tab history),
+    /// populated by the server push. Empty until the first push arrives.</summary>
+    private IReadOnlyList<ScribeBlock> mySentAssignments = Array.Empty<ScribeBlock>();
+
+    /// <summary>Client-side cache of THIS player's RECEIVED assignments (their Inbox), populated by
+    /// the same push as <see cref="mySentAssignments"/>.</summary>
+    private IReadOnlyList<ScribeBlock> myReceivedAssignments = Array.Empty<ScribeBlock>();
+
+    /// <summary>This player's sent assignments (Assignment-tab history) — never another player's.</summary>
+    public IReadOnlyList<ScribeBlock> MySentAssignments => mySentAssignments;
+
+    /// <summary>This player's received assignments (Inbox) — never another player's.</summary>
+    public IReadOnlyList<ScribeBlock> MyReceivedAssignments => myReceivedAssignments;
+
+    /// <summary>Raised on the client whenever a fresh assignment sync push arrives, so an open
+    /// Assignment Desk/Inbox dialog can repaint its rows.</summary>
+    public event Action? MyAssignmentsChanged;
 
     /// <summary>Rebindable hotkey code that toggles the pinned-task HUD's collapse state (design D6).
     /// Registered client-side; its handler flips the HUD's client-local collapse preference.</summary>
@@ -289,12 +313,18 @@ public sealed partial class ScribeModSystem : ModSystem
             .RegisterMessageType<ScribeTranscribeStampMessage>()
             .RegisterMessageType<ScribeAddHistoryEntryMessage>()
             .RegisterMessageType<ScribeSetHistoryEntryTextMessage>()
-            .RegisterMessageType<ScribeDeleteHistoryEntryMessage>();
+            .RegisterMessageType<ScribeDeleteHistoryEntryMessage>()
+            .RegisterMessageType<ScribeSendAssignmentMessage>()
+            .RegisterMessageType<ScribeAssignmentActionMessage>()
+            .RegisterMessageType<ScribeAssignmentSyncMessage>();
     }
 
     /// <summary>Server-side accessor for the pin store, so the block entity can register/orphan its
     /// document and refresh snapshots. Null on the client.</summary>
     public ScribePinStore? PinStore => pinStore;
+
+    /// <summary>Server-side accessor for the assignment store. Null on the client.</summary>
+    public ScribeAssignmentStore? AssignmentStore => assignmentStore;
 
     public override void StartClientSide(ICoreClientAPI api)
     {
@@ -324,7 +354,8 @@ public sealed partial class ScribeModSystem : ModSystem
             .SetMessageHandler<ScribeGuestbookSyncMessage>(OnClientReceivedGuestbookSync)
             .SetMessageHandler<ScribeNotebookSaveMessage>(OnClientReceivedNotebookSave)
             .SetMessageHandler<ScribeTimerStateMessage>(OnClientReceivedTimerState)
-            .SetMessageHandler<ScribeTranscribeStampMessage>(OnClientReceivedTranscribeStamp);
+            .SetMessageHandler<ScribeTranscribeStampMessage>(OnClientReceivedTranscribeStamp)
+            .SetMessageHandler<ScribeAssignmentSyncMessage>(OnClientReceivedAssignmentSync);
 
         // The pinned-task HUD self-shows once the player's pin set arrives (it subscribes to
         // MyPinsChanged in its ctor), so it can be constructed here regardless of current pin count —
@@ -380,6 +411,7 @@ public sealed partial class ScribeModSystem : ModSystem
         base.StartServerSide(api);
         sapi = api;
         pinStore = new ScribePinStore();
+        assignmentStore = new ScribeAssignmentStore();
         carryOnBridge = new CarryOnBridge(api);
 
         var channel = api.Network.GetChannel(NetworkChannelName);
@@ -403,6 +435,8 @@ public sealed partial class ScribeModSystem : ModSystem
         channel.SetMessageHandler<ScribeAddHistoryEntryMessage>(OnServerReceivedAddHistoryEntry);
         channel.SetMessageHandler<ScribeSetHistoryEntryTextMessage>(OnServerReceivedSetHistoryEntryText);
         channel.SetMessageHandler<ScribeDeleteHistoryEntryMessage>(OnServerReceivedDeleteHistoryEntry);
+        channel.SetMessageHandler<ScribeSendAssignmentMessage>(OnServerReceivedSendAssignment);
+        channel.SetMessageHandler<ScribeAssignmentActionMessage>(OnServerReceivedAssignmentAction);
 
         // Persist/load the pin + settings stores with the save game (the WaypointMapLayer pattern).
         api.Event.SaveGameLoaded += OnSaveGameLoaded;

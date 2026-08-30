@@ -131,13 +131,14 @@ public sealed class ScribeDocument
         block.Text,
         done: block.Done,
         depth: block.Depth,
-        assignedToUid: block.AssignedToUid,
+        assignedToUid: null,
         targetItemCode: block.TargetItemCode,
         targetQuantity: block.TargetQuantity,
         currentQuantity: block.CurrentQuantity,
         linkTarget: block.LinkTarget,
         linkLabel: block.LinkLabel,
-        recipeSignature: block.RecipeSignature);
+        recipeSignature: block.RecipeSignature,
+        assignment: block.Assignment?.Clone());
 
     /// <summary>The index a document-level create should use for <paramref name="pos"/>: 0 for
     /// <see cref="ScribeNewTaskInsert.Top"/>, <see cref="Blocks"/>.Count for Bottom. Unknown values
@@ -456,6 +457,8 @@ public sealed class ScribeDocument
         var block = _blocks[index];
         if (!block.IsCompletable) return false;
         block.Done = !block.Done;
+        if (block.Done && block.Assignment is { } assignment)
+            ScribeAssignmentTransitions.TryMarkCompleted(assignment, taskDone: true);
         return true;
     }
 
@@ -471,6 +474,9 @@ public sealed class ScribeDocument
             return false;
         }
         deletedTaskId = _blocks[index].TaskId;
+        if (_blocks[index].Assignment is { State: ScribeAssignmentState.Accepted } assignment)
+            ScribeAssignmentTransitions.TryApply(assignment, ScribeAssignmentActor.Assignee,
+                ScribeAssignmentAction.Discard);
         _blocks.RemoveAt(index);
         return true;
     }

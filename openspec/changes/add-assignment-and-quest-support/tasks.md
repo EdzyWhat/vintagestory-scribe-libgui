@@ -1,46 +1,56 @@
 ## 1. Core: assignment data model
 
-- [ ] 1.1 Replace `ScribeBlock.AssignedToUid` (`src/Core/ScribeBlock.cs`) with a `ScribeAssignment?`
+- [x] 1.1 Replace `ScribeBlock.AssignedToUid` (`src/Core/ScribeBlock.cs`) with a `ScribeAssignment?`
       value type carrying assigner UID, current state, in-game assigned-date, and the Seen flag.
-- [ ] 1.2 Add a `ScribeAssignmentState` enum (`Unaccepted`, `Accepted`, `Declined`, `Cancelled`,
+- [x] 1.2 Add a `ScribeAssignmentState` enum (`Unaccepted`, `Accepted`, `Declined`, `Cancelled`,
       `Discarded`, `Completed`) to `src/Core/`.
-- [ ] 1.3 Add pure transition-validation logic (which actor may move which state to which state)
+- [x] 1.3 Add pure transition-validation logic (which actor may move which state to which state)
       in `src/Core/`, matching the matrix in `design.md` exactly.
-- [ ] 1.4 Add `ScribeQuestAcceptPolicy` and `ScribeQuestCompletionPolicy` enums (`Always`/`Never`/
+- [x] 1.4 Add `ScribeQuestAcceptPolicy` and `ScribeQuestCompletionPolicy` enums (`Always`/`Never`/
       `Prompt`) to `src/Core/`, mirroring `ScribeCompletionPolicy`'s shape.
-- [ ] 1.5 Add a Quest-namespaced `LinkTarget` convention (e.g. a `quest:` prefix) alongside the
+- [x] 1.5 Add a Quest-namespaced `LinkTarget` convention (e.g. a `quest:` prefix) alongside the
       existing `page:` guide-page convention, staying within the existing `Link` block kind (no
       new `ScribeBlockKind`).
 
 ## 2. Core: unit tests
 
-- [ ] 2.1 Unit-test every legal and illegal transition in the assignment state matrix (both
+- [x] 2.1 Unit-test every legal and illegal transition in the assignment state matrix (both
       actors, every state).
-- [ ] 2.2 Unit-test that Completed is only reachable via the underlying task's done-flag, never
+- [x] 2.2 Unit-test that Completed is only reachable via the underlying task's done-flag, never
       directly.
-- [ ] 2.3 Unit-test Delete-on-Accepted performing the Discard transition.
-- [ ] 2.4 Unit-test the Seen flag's default-unseen and mark-seen-on-view behavior independent of
+- [x] 2.3 Unit-test Delete-on-Accepted performing the Discard transition.
+- [x] 2.4 Unit-test the Seen flag's default-unseen and mark-seen-on-view behavior independent of
       state transitions.
-- [ ] 2.5 Unit-test codec round-trip of the new `ScribeAssignment` field (present and absent
+- [x] 2.5 Unit-test codec round-trip of the new `ScribeAssignment` field (present and absent
       cases) and of the Quest-namespaced `LinkTarget`.
 
 ## 3. Codec/serialization
 
-- [ ] 3.1 Update `ScribeDocumentJsonCodec`/binary codec to serialize/deserialize the new
+- [x] 3.1 Update `ScribeDocumentJsonCodec`/binary codec to serialize/deserialize the new
       `ScribeAssignment` type in place of the old bare `AssignedToUid` string.
-- [ ] 3.2 Confirm import (`ScribeDocumentJsonCodec.cs`'s existing "assignment is place-bound, not
+- [x] 3.2 Confirm import (`ScribeDocumentJsonCodec.cs`'s existing "assignment is place-bound, not
       shareable" rule) still strips assignment state on import — update the comment to reference
       the new type instead of the old bare UID.
-- [ ] 3.3 Update `docs/CODEC-MIGRATION.md` and any codec version-window tests/comments affected by
+- [x] 3.3 Update `docs/CODEC-MIGRATION.md` and any codec version-window tests/comments affected by
       the field shape change.
 
 ## 4. Networking
 
-- [ ] 4.1 Add client→server messages for: send assignment, Accept, Decline, Cancel, Discard.
-- [ ] 4.2 Add server→client sync for assignment state changes (both Assigner's and Assignee's open
-      dialogs, if any, update live).
-- [ ] 4.3 Add the Quest Accept/Completion policy preferences to the existing player-settings sync
-      message, following `ScribeCompletionPolicy`'s existing wire pattern.
+- [x] 4.1 Add client→server messages for: send assignment, Accept, Decline, Cancel, Discard.
+- [x] 4.2 Add server→client sync for assignment state changes (both Assigner's and Assignee's open
+      dialogs, if any, update live). Added `ScribeAssignmentStore` (Core, append-only, one canonical
+      record per assignment keyed by its `TaskId`/`AssignmentId`) + `ScribeAssignmentSyncMessage`
+      (server→client push of a player's Sent+Received views) + server handlers for the two 4.1
+      messages, wired into `ScribeModSystem` start/save/load/join like `ScribePinStore`. Open-dialog
+      live refresh itself lands with the Assignment Desk/Inbox GUI (section 5-7), which doesn't
+      exist yet — the sync plumbing and the `MyAssignmentsChanged` event it's built to drive are
+      ready for those views to subscribe to.
+- [x] 4.3 Add the Quest Accept/Completion policy preferences to the existing player-settings sync
+      message, following `ScribeCompletionPolicy`'s existing wire pattern. **Resolved as no-op**: the
+      `settings-tab`/`quest-auto-detect` specs mark both policies as per-player, CLIENT-LOCAL only
+      (unlike `CompletionPolicy`, which the server needs at completion time) — there is no
+      server-side consumer, so no wire message was added. The Core enums + `ScribePlayerSettings`
+      fields already exist (task 1.4).
 
 ## 5. Assignment Desk block
 
@@ -49,7 +59,7 @@
 - [ ] 5.2 Implement `IScribeDocumentHost.GetLayout` for the Assignment Desk: `W = PixelArtSize`,
       `AspectH = 1.2`, with the active tab's content region laid out as a 1:1 square within that
       box (design.md Decision 8) — a real layout, not a placeholder pending art.
-- [ ] 5.3 Add `Assignment` and `Inbox` members to `ScribeLecternView`
+- [x] 5.3 Add `Assignment` and `Inbox` members to `ScribeLecternView`
       (`ScribeDialogBase.cs:88`) and the corresponding `IsAssignmentView`/`IsInboxView` exposers.
 - [ ] 5.4 Build the Assignment Desk's GUI dialog class, defaulting to the Assignment tab, with a
       nav button pair switching between Assignment and Inbox — reusing Lectern/Scriptorium widget
@@ -84,11 +94,11 @@
 
 ## 8. Nav buttons and particle indicator on existing blocks
 
-- [ ] 8.1 Add the Inbox nav button to `GuiDialogScribeLecternLibGui.GetExtraNavButtons()`.
-- [ ] 8.2 Add the Inbox nav button to `GuiDialogScribeScriptorium.GetExtraNavButtons()`; remove/
+- [x] 8.1 Add the Inbox nav button to `GuiDialogScribeLecternLibGui.GetExtraNavButtons()`.
+- [x] 8.2 Add the Inbox nav button to `GuiDialogScribeScriptorium.GetExtraNavButtons()`; remove/
       update the stale "Scriptorium-only Assign & History" comment in
       `BlockEntityScriptorium.cs:17`.
-- [ ] 8.3 Add the Inbox nav button to `GuiDialogScribeChalkboard.GetExtraNavButtons()`.
+- [x] 8.3 Add the Inbox nav button to `GuiDialogScribeChalkboard.GetExtraNavButtons()`.
 - [ ] 8.4 Implement the ambient particle emitter (tick-interval-gated, client-side, player-local),
       scoped to Assignment Desk, Inbox, Lectern, Scriptorium, and Chalkboard block entities.
       Manual `SimpleParticleProperties`/`AdvancedParticleProperties` spawn on the sampler tick —
@@ -109,7 +119,7 @@
 - [ ] 9.1 Implement Accept-time placement resolution: currently-held Scribe document → inventory
       scan (picker if multiple) → disabled Accept control if none, per
       `assignment-state-machine`'s placement requirement.
-- [ ] 9.2 Add a `ReadOnly`/`CompletionAndPinLive`-style pair to `ScribeEditRowData`
+- [x] 9.2 Add a `ReadOnly`/`CompletionAndPinLive`-style pair to `ScribeEditRowData`
       (`ScribeEditorContent.cs`), mirroring `ScribeReadRowData`'s existing fields
       (`ScribeReadContent.cs:79,134,137-139`), so an accepted assigned task's text renders frozen
       in the Editor view too, not just Read.
@@ -159,8 +169,8 @@
 
 ## 14. Documentation and release hygiene
 
-- [ ] 14.1 Add a `VSAPI-NOTES.md` entry documenting the vsquest dialog-reflection technique (field
+- [x] 14.1 Add a `VSAPI-NOTES.md` entry documenting the vsquest dialog-reflection technique (field
       names, fragility, the try/catch self-disable pattern) so it isn't re-derived later.
-- [ ] 14.2 Update `ROADMAP.md` to move Assignment out of "later" and record Quest support as a new
+- [x] 14.2 Update `ROADMAP.md` to move Assignment out of "later" and record Quest support as a new
       v1.4.0 tier.
-- [ ] 14.3 Add a `CHANGELOG.md` `[Unreleased]` entry once implementation lands.
+- [x] 14.3 Add a `CHANGELOG.md` `[Unreleased]` entry once implementation lands.

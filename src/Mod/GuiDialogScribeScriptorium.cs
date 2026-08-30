@@ -136,6 +136,14 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
             OnClickSwitchToInventory,
             boxShadows: NavButtonShadow,
             activeColor: IsInventoryView ? ScribeRowConstants.NavActiveTranscribe : null);
+        yield return TitleButton(
+            "scribeinventory",
+            "scribe-tab-inbox",
+            colors.OnSurfaceVariant,
+            NavButtonSize,
+            OnClickSwitchToInbox,
+            boxShadows: NavButtonShadow,
+            activeColor: IsInboxView ? ScribeRowConstants.NavActiveGuestbook : null);
     }
 
     /// <summary>Slot edge length in pixels — matches LibGUI's <c>SlotGrid</c>/<c>ItemSlotStyle.Default</c> so

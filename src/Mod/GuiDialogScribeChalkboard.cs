@@ -128,5 +128,13 @@ public sealed class GuiDialogScribeChalkboard : ScribeDialogBase
             OnClickSwitchToVisitors,
             boxShadows: NavButtonShadow,
             activeColor: IsVisitorsView ? ScribeRowConstants.NavActiveGuestbook : null);
+        yield return TitleButton(
+            "scribeinventory",
+            "scribe-tab-inbox",
+            NavIconColor(colors),
+            NavButtonSize,
+            OnClickSwitchToInbox,
+            boxShadows: NavButtonShadow,
+            activeColor: IsInboxView ? ScribeRowConstants.NavActiveGuestbook : null);
     }
 }

@@ -3208,6 +3208,17 @@ a future version whose API shape moved), disable the whole bridge and log once â
 so an API-shape change degrades to "feature silently inactive" rather than a recurring exception.
 See `CarryOnBridge.cs`.
 
+**Symptom: VS Quest integration needs live accept/progress state without a hard dependency.**
+
+Find the open dialog by runtime type name `VsQuest.QuestSelectGui`, then use Harmony
+`AccessTools.Field`/`AccessTools.Property` to read its private `questGiverId` and `activeQuests`
+members and the `killTrackers`, `blockPlaceTrackers`, and `blockBreakTrackers[].count`
+properties. This is observational only; never invoke setters or methods that mutate the quest mod.
+
+**Fix pattern:** wrap every lookup and read in `try/catch`, disable the bridge for the rest of the
+session after the first shape mismatch, and keep manual Quest Links independent of the reflection
+layer. Field names are private implementation details and may change between vsquest versions.
+
 ## Entry template
 
 ```

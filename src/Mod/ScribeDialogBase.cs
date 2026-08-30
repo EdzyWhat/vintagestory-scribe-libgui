@@ -85,7 +85,7 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// <summary>The Lectern dialog's central-region view. Read and Editor are the original two views;
     /// Pinned is the Pin Tab (scribe-pin-editor) — a peer view listing the player's pins, selected from the
     /// <c>scribepin</c> nav button. <see cref="BuildCentralRegion"/> chooses the body from this.</summary>
-    private enum ScribeLecternView { Read, Editor, Pinned, Visitors, History, Timer, Inventory }
+    private enum ScribeLecternView { Read, Editor, Pinned, Visitors, History, Timer, Inventory, Assignment, Inbox }
 
     private ScribeLecternView viewMode = ScribeLecternView.Read;
 
@@ -105,6 +105,10 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// storage — add-scriptorium-inventory). Exposed so the Scriptorium subclass can apply the active
     /// color to its Inventory nav button in <see cref="GetExtraNavButtons"/>.</summary>
     protected bool IsInventoryView => viewMode == ScribeLecternView.Inventory;
+
+    protected bool IsAssignmentView => viewMode == ScribeLecternView.Assignment;
+
+    protected bool IsInboxView => viewMode == ScribeLecternView.Inbox;
 
     /// <summary>The pixel size used for sidebar nav buttons — subclasses call this when building
     /// their own nav buttons via <see cref="GetExtraNavButtons"/> so the size matches.</summary>

@@ -82,9 +82,17 @@ public sealed class ScribeBlock
     /// raw bytes by <see cref="ScribeDocumentCodec"/>.</summary>
     public Guid TaskId { get; }
 
-    /// <summary>Reserved for a future assignment capability (player/group UID). Unset by
-    /// default; no mutation method exists yet and nothing in this codebase reads it.</summary>
-    public string? AssignedToUid { get; set; }
+    /// <summary>The optional player assignment carried by this block.</summary>
+    public ScribeAssignment? Assignment { get; set; }
+
+    /// <summary>Compatibility shim for pre-assignment callers. New code must use
+    /// <see cref="Assignment"/>; this legacy UID cannot represent assignment state.</summary>
+    [Obsolete("Use Assignment instead.")]
+    public string? AssignedToUid
+    {
+        get => Assignment?.AssignerUid;
+        set => Assignment = value is null ? null : new ScribeAssignment(value, "");
+    }
 
     /// <summary>For a <see cref="ScribeBlockKind.Tracker"/>: the item to count, as a plain code
     /// string (e.g. <c>"game:ingot-copper"</c>). Null for other kinds. Stored as a string, never a
@@ -141,13 +149,13 @@ public sealed class ScribeBlock
 
     public ScribeBlock(ScribeBlockKind kind, string text, bool done = false, int depth = 0, string? assignedToUid = null, Guid? taskId = null,
         string? targetItemCode = null, int targetQuantity = 1, int currentQuantity = 0, string? linkTarget = null, string? linkLabel = null,
-        string? recipeSignature = null)
+        string? recipeSignature = null, ScribeAssignment? assignment = null)
     {
         Kind = kind;
         Text = text;
         Done = done;
         Depth = depth;
-        AssignedToUid = assignedToUid;
+        Assignment = assignment ?? (assignedToUid is null ? null : new ScribeAssignment(assignedToUid, ""));
         TaskId = taskId ?? Guid.NewGuid();
         TargetItemCode = targetItemCode;
         TargetQuantity = targetQuantity;

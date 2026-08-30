@@ -75,6 +75,8 @@
 	"scribe-tab-guestbook": "Guest Book",
 	"scribe-tab-inventory": "Item storage",
 	"scribe-tab-transcribe": "Transcribe",
+	"scribe-tab-inbox": "Assignment Inbox",
+	"scribe-gui-inbox-empty": "No assignments yet.",
 	"scribe-transcribe-heading": "Transcribe",
 	"scribe-transcribe-copyfrom": "Copy from",
 	"scribe-transcribe-pasteinto": "Paste into",

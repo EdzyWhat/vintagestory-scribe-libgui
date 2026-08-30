@@ -7,7 +7,7 @@ namespace Scribe.Core;
 /// used for both world persistence and network sync, so the round-trip is exact and any
 /// malformed input fails safely (returns false) rather than throwing.
 ///
-/// Current format (v8, little-endian via <see cref="BinaryWriter"/>):
+/// Current format (v9, little-endian via <see cref="BinaryWriter"/>):
 ///   [4 bytes magic "SCRB"][1 byte version][16 bytes DocId][int blockCount]
 ///   [per block: 16 bytes TaskId, byte kind, bool done, int depth, bool hasAssignedToUid,
 ///    string assignedToUid (only if hasAssignedToUid), string text,
@@ -15,11 +15,13 @@ namespace Scribe.Core;
 ///    int targetQuantity, int currentQuantity,
 ///    bool hasLinkTarget, string linkTarget (only if hasLinkTarget),
 ///    bool hasLinkLabel, string linkLabel (only if hasLinkLabel),
-///    string recipeSignature (v8+; empty string when none)]
+///    string recipeSignature (v8+; empty string when none),
+///    bool hasAssignment, string assignerUid, byte state, string assignedDate, bool seen (v9+),
+///    string targetPlayerUid (only when hasAssignment; v10+)]
 ///   [string title]
 ///
 /// Accepted-version window (PROGRESSIVE append-only reads, NOT a two-version window):
-///   Reads any version in [<see cref="MinVersion"/>=5, <see cref="Version"/>=8]; older/newer → fail-safe false.
+///   Reads any version in [<see cref="MinVersion"/>=5, <see cref="Version"/>=9]; older/newer → fail-safe false.
 ///   Each version-group's trailing fields are read only behind a <c>version &gt;=</c> threshold, so an
 ///   older blob simply stops reading before the fields it never wrote. Missing fields default via
 ///   <see cref="ApplyPreV6Defaults"/>. This departs from the strict two-version window because v5 docs
@@ -45,6 +47,10 @@ namespace Scribe.Core;
 ///   v8 — appended one per-block field after LinkLabel (RecipeSignature, a plain string; empty when
 ///        none), the grid-recipe binding of a Craft task (kind 4). Written for every block (empty for
 ///        non-Craft); a pre-v8 blob simply stops before it and defaults to empty.
+///   v9 — appended the optional assignment state after RecipeSignature.
+///   v10 — appended the assignment's TargetPlayerUid, written only when an assignment is present
+///        (right after Seen). Added when the assignment store needed to know who an assignment was
+///        sent to, not just who sent it.
 ///
 /// A hand-rolled format keeps Core free of any external dependency. The version byte lets
 /// us evolve the format while still reading every prior save layout back to <see cref="MinVersion"/>.
@@ -52,7 +58,7 @@ namespace Scribe.Core;
 public static class ScribeDocumentCodec
 {
     private static readonly byte[] Magic = "SCRB"u8.ToArray();
-    private const byte Version = 8; // see the "Field history" above; v8 adds the per-block RecipeSignature field.
+    private const byte Version = 10; // v10 adds the assignment's TargetPlayerUid.
 
     /// <summary>Oldest format version the reader still accepts. Progressive append-only reads accept
     /// any version in [<see cref="MinVersion"/>, <see cref="Version"/>]; v5 is the oldest because it is
@@ -103,8 +109,9 @@ public static class ScribeDocumentCodec
                 w.Write((byte)block.Kind);
                 w.Write(block.Done);
                 w.Write(block.Depth);
-                w.Write(block.AssignedToUid is not null);
-                if (block.AssignedToUid is not null) w.Write(block.AssignedToUid);
+                // This legacy slot remains in the layout for v5-v8 readers. New assignments use
+                // the richer v9 field below and never populate the old bare UID slot.
+                w.Write(false);
                 w.Write(block.Text);
                 // v6: Tracker/Link fields, appended after text (see the format table above).
                 w.Write(block.TargetItemCode is not null);
@@ -120,6 +127,17 @@ public static class ScribeDocumentCodec
                 // task. Always written (empty string for non-Craft blocks), so it is a plain string,
                 // not a has/value pair.
                 w.Write(block.RecipeSignature);
+                // v9: optional assignment state, appended after RecipeSignature.
+                w.Write(block.Assignment is not null);
+                if (block.Assignment is { } assignment)
+                {
+                    w.Write(assignment.AssignerUid);
+                    w.Write((byte)assignment.State);
+                    w.Write(assignment.AssignedDate);
+                    w.Write(assignment.Seen);
+                    // v10: the recipient's uid, appended after Seen.
+                    w.Write(assignment.TargetPlayerUid);
+                }
             }
             w.Write(doc.Title); // v5+: document title appended after block list
         }
@@ -217,11 +235,26 @@ public static class ScribeDocumentCodec
                 {
                     recipeSignature = r.ReadString(); // always written from v8; empty when none
                 }
+                ScribeAssignment? assignment = null;
+                if (version >= 9 && r.ReadBoolean())
+                {
+                    string assignerUid = r.ReadString();
+                    var state = (ScribeAssignmentState)r.ReadByte();
+                    string assignedDate = r.ReadString();
+                    bool seen = r.ReadBoolean();
+                    // v10: TargetPlayerUid, read only when this v9+ block actually has an assignment.
+                    // A pre-v10 blob (v9 only) simply has no such field to read; default to "" — v9 never
+                    // shipped, so this is a same-cycle addition, not a real migration gap.
+                    string targetPlayerUid = version >= 10 ? r.ReadString() : "";
+                    assignment = new ScribeAssignment(assignerUid, assignedDate, state, seen, targetPlayerUid);
+                }
+                if (version >= 9) assignedToUid = null;
 
                 // The block's setters clamp TargetQuantity (≥ 1), CurrentQuantity ([0, target]),
                 // and Depth ([0, 1]).
                 blocks.Add(new ScribeBlock(kind, text, done, depth, assignedToUid, taskId,
-                    targetItemCode, targetQuantity, currentQuantity, linkTarget, linkLabel, recipeSignature));
+                    targetItemCode, targetQuantity, currentQuantity, linkTarget, linkLabel, recipeSignature,
+                    assignment));
             }
 
             // Both accepted versions (v6 and v5) append a document title after the block list.

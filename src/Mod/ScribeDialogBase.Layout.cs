@@ -593,8 +593,12 @@ public abstract partial class ScribeDialogBase
         ScribeLecternView.History  => BuildHistoryContent(),
         ScribeLecternView.Timer    => BuildTimerContent(),
         ScribeLecternView.Inventory => BuildInventoryContent(),
+        ScribeLecternView.Assignment => BuildAssignmentContent(),
+        ScribeLecternView.Inbox     => BuildInboxContent(),
         _                          => BuildReadContent(),
     };
+
+    protected virtual Widget BuildAssignmentContent() => BuildInboxContent();
 
     /// <summary>The live row style for this build, derived from the player's current settings (NOT cached
     /// at open — add-settings-tab D4), so a window-font-scale change from the settings view repaints the

@@ -283,6 +283,32 @@ public abstract partial class ScribeDialogBase
         if (viewMode == ScribeLecternView.Inventory && IsOpened()) ForceRebuild();
     }
 
+    protected void OnClickSwitchToInbox()
+    {
+        CommitTitleIfEditing();
+        if (isEditorMode)
+        {
+            if (focusedEditIndex is { } idx) NormalizeRowOnCommit(idx);
+            PurgeEmptyRowsFromScratch();
+            pendingEmptyRowRemoval = null;
+            FlushIfDirty();
+            SendReleaseLockPacket();
+            LeaveEditorMode();
+        }
+        viewMode = ScribeLecternView.Inbox;
+        if (IsOpened()) ForceRebuild();
+    }
+
+    protected virtual Widget BuildInboxContent()
+    {
+        var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
+        float bodySize = ScribeRowConstants.BaseWindowFontSize
+            * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale);
+        return ScribeTextDefaults.Wrap(modSystem.MySettings.TaskFontFamily, bodySize,
+            new Center(child: new Text(Lang.Get("scribe:scribe-gui-inbox-empty"),
+                new TextStyle { FontSize = bodySize, Color = colors.OnSurface })));
+    }
+
     /// <summary>Builds the Inventory tab content. Only the Scriptorium exposes this tab, so the base
     /// returns an empty placeholder; <see cref="GuiDialogScribeScriptorium"/> overrides it to place the
     /// Scribe-item slots. Mirrors <see cref="BuildHistoryContent"/> / <see cref="BuildTimerContent"/>.</summary>
