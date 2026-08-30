@@ -973,4 +973,38 @@ public class ScribeDocumentTests
         Assert.Equal("only task", block.Text);
         Assert.NotEqual(source.Blocks[0].TaskId, block.TaskId);
     }
+
+    // --- AppendAssignedBlock (Accept-time assignment placement) ---
+
+    [Fact]
+    public void AppendAssignedBlock_PreservesTaskId_UnlikeAppendClonedBlocksFrom()
+    {
+        var target = new ScribeDocument();
+        var assignmentId = Guid.NewGuid();
+        var assignment = new ScribeAssignment("assigner-uid", "Day 1", ScribeAssignmentState.Accepted,
+            seen: true, targetPlayerUid: "assignee-uid");
+        var placed = new ScribeBlock(ScribeBlockKind.Task, "gather 10 logs", taskId: assignmentId, assignment: assignment);
+
+        target.AppendAssignedBlock(placed);
+
+        var block = Assert.Single(target.Blocks);
+        Assert.Same(placed, block);
+        Assert.Equal(assignmentId, block.TaskId);
+        Assert.Same(assignment, block.Assignment);
+    }
+
+    [Fact]
+    public void AppendAssignedBlock_AppendsToEnd_KeepingExistingBlocks()
+    {
+        var target = new ScribeDocument();
+        target.AddTask("existing task");
+        var placed = new ScribeBlock(ScribeBlockKind.Task, "assigned task",
+            assignment: new ScribeAssignment("assigner-uid", "Day 1", ScribeAssignmentState.Accepted));
+
+        target.AppendAssignedBlock(placed);
+
+        Assert.Equal(2, target.Blocks.Count);
+        Assert.Equal("existing task", target.Blocks[0].Text);
+        Assert.Same(placed, target.Blocks[1]);
+    }
 }

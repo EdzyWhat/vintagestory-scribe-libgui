@@ -1,0 +1,27 @@
+[
+	{
+		// PLACEHOLDER RECIPE (add-assignment-and-quest-support §5.1): the Lectern-tier ingredient set
+		// (scribelectern.json) unchanged, pending real balancing once the Desk's own art/identity exists
+		// (§13.1) — same rationale as the placeholder shape in assignmentdesk.json.
+		ingredientPattern: "FRL,PPP,BPN",
+		ingredients: {
+			"F": { type: "item", code: "game:feather" },
+			"R": { type: "item", code: "game:paper-parchment" },
+			"L": { type: "item", code: "game:leather-normal-plain" },
+			"P": { type: "item", code: "game:plank-*" },
+			"B": { type: "block", code: "game:bowl-*-fired" },
+			"N": { type: "item", code: "game:metalnailsandstrips-*" }
+		},
+		width: 3,
+		height: 3,
+		attributes: {
+			liquidContainerProps: {
+				requiresContent: { type: "item", code: "game:dye-black" },
+				requiresLitres: 1,
+				consumeContainer: true
+			}
+		},
+		name: "scribe:scribeassignmentdesk",
+		output: { type: "block", code: "scribe:scribeassignmentdesk", quantity: 1 }
+	}
+]

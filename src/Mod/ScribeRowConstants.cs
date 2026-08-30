@@ -281,7 +281,14 @@ internal static class ScribeTaskFont
                 DefaultFamily);
         }
 
+        // Diagnostic bracket (fix-linux-sans-serif-font-crash): this is the first real text-shaping
+        // call of the session (MeasureText -> HarfBuzz). If a future crash log shows this line but not
+        // the "measured reference line-box" line below, the abort is in shaping Caudex itself -- NOT
+        // the "sans-serif" resolution this change fixes -- and points back to a HarfBuzzSharp/system
+        // ABI mismatch (the original ripls56/vslibgui#2 theory) rather than an unresolved family name.
+        logger.Notification("[scribe] measuring '{0}' as the task-font line-box reference", referenceFamily);
         float referenceY = ProbeY(referenceFamily);
+        logger.Notification("[scribe] measured reference line-box ({0}px); measuring remaining task fonts", referenceY);
         if (referenceY <= 0f)
         {
             logger.Warning("[scribe] reference font '{0}' measured no line-box; task-font size scales stay 1",
@@ -290,7 +297,14 @@ internal static class ScribeTaskFont
         }
 
         Metrics.Clear();
+        // This specific probe is the one fix-linux-sans-serif-font-crash targets: DefaultFamily is
+        // "sans-serif", which (absent the alias registered in RegisterCustomFonts) resolves to a live
+        // OS/fontconfig lookup. If a crash lands between this line and the next, the alias didn't
+        // land in time or didn't cover the actual resolved family -- re-check the alias registration,
+        // not this measurement.
+        logger.Notification("[scribe] measuring default family '{0}'", DefaultFamily);
         SeedFamily(DefaultFamily, referenceY);
+        logger.Notification("[scribe] measured default family '{0}'; measuring selectable task fonts", DefaultFamily);
         foreach (string family in ScribePlayerSettings.KnownTaskFonts)
         {
             SeedFamily(family, referenceY);

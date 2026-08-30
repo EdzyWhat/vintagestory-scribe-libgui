@@ -406,6 +406,34 @@ if (version >= 5)
 
 A pre-v5 pin simply never wrote `Depth` and reads as a top-level row (`Depth = 0`).
 
+### Worked example: v5 → v6 (`ScribePinCodec`)
+
+v6 appended **one per-pin field** after each pin's `Depth`: `IsAcceptedAssignment` (bool), so the HUD and
+Pin Tab can render the leading-icon assignment marker without resolving the (possibly unloaded) source
+document (add-assignment-and-quest-support 9.3). Same pattern as v4→v5: extend the range to `[1, 6]` and
+add one more `version >=` group. No migration default needed — the field's own C# default (`false`) is
+already correct for a pre-v6 pin (an un-assigned task, or one whose assignment wasn't yet Accepted).
+
+**What changed in the serialization format:**
+```
+// v5 per-pin: ...v4... | depth
+// v6 per-pin: ...v5... | isAcceptedAssignment
+```
+
+**How the migration works** — one more threshold-gated read, no clamping needed for a bool:
+
+```csharp
+// private const byte PinVersion = 6;    // current  (MinPinVersion stays 1)
+
+// In TryReadPinList's per-pin loop, after the v5 Depth read:
+if (version >= 6)
+{
+    pin.IsAcceptedAssignment = r.ReadBoolean();
+}
+```
+
+A pre-v6 pin simply never wrote `IsAcceptedAssignment` and reads as `false` (its C# default).
+
 ## How to add a new version (step-by-step)
 
 1. **Add your new field(s) to `Serialize`**, appending them after all existing fields.
@@ -492,6 +520,6 @@ Type · Done · Text · Special · Count · Depth
 |---|---|---|---|---|
 | `ScribeDocumentCodec` | binary (save/sync) | v10 | v5–v10 (progressive reads) | `ApplyPreV6Defaults` — defaults Tracker/Link per-block fields (v6) + guide-page `LinkLabel` (v7) + Craft `RecipeSignature` (v8); v9 assignment then reads behind `version >= 9`, v10 `TargetPlayerUid` behind `version >= 10` |
 | `ScribeAssignmentStore` | binary (save/sync) | v1 | v1 only | New in add-assignment-and-quest-support; no prior version to migrate from yet |
-| `ScribePinCodec` | binary (save/sync) | v5 | v1–v5 (progressive reads) | `ApplyPreV2Defaults` — seeds Kind (→Task), LinkTarget (→null), TargetItemCode (→null), quantities, LinkLabel (→null), Depth (→0); v2–v5 fields then read behind `version >=` thresholds |
+| `ScribePinCodec` | binary (save/sync) | v6 | v1–v6 (progressive reads) | `ApplyPreV2Defaults` — seeds Kind (→Task), LinkTarget (→null), TargetItemCode (→null), quantities, LinkLabel (→null), Depth (→0); v2–v6 fields then read behind `version >=` thresholds (v6's `IsAcceptedAssignment` needs no explicit default — its C# `false` default is already correct) |
 | `ScribeDocumentJsonCodec` | text (clipboard) | v1 | v1+ (`v >= MinVersion`; missing `v` → rejected) | Version window; unknown keys ignored on read. Add a field → append to DTO + bump `Version`; raise `MinVersion` only if an old payload becomes unreadable |
 | `ScribeDocumentTsvCodec` | text (clipboard) | — (no version) | any header with the known columns (by name) | Fixed 6 columns forever (`Type · Done · Text · Special · Count · Depth`); new richness goes in the comma-packed `Special` cell, never a new column; unknown columns ignored, missing columns defaulted |

@@ -123,6 +123,15 @@ public sealed class ScribeDocument
             _blocks.Add(CloneBlockWithNewTaskId(block));
     }
 
+    /// <summary>Appends a fully-formed block onto the end VERBATIM, preserving its
+    /// <see cref="ScribeBlock.TaskId"/> as-is — the one path that intentionally reuses an external id
+    /// rather than minting a fresh one (contrast <see cref="AppendClonedBlocksFrom"/>). Used for Accept-time
+    /// assignment placement (assignment-state-machine's placement requirement): the placed block must keep
+    /// the SAME TaskId as the assignment record it correlates to, since it is a MOVE of one canonical
+    /// assignment into the Assignee's document, not a copy. The caller is responsible for any capacity
+    /// check (this method does not enforce a block cap).</summary>
+    public void AppendAssignedBlock(ScribeBlock block) => _blocks.Add(block);
+
     /// <summary>Deep-copy one block, minting a FRESH <see cref="ScribeBlock.TaskId"/> (the ctor's default when
     /// no taskId is supplied) so the copy is independent of the original on pins/completion resolution. Shared
     /// by <see cref="CloneWithNewIdentity"/> and <see cref="AppendClonedBlocksFrom"/>.</summary>

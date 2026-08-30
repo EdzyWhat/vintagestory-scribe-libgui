@@ -82,4 +82,11 @@ public sealed class ScribePinnedRef
     /// indent a pinned subtask identically to the editor/read surfaces (add-crafting-tasks / task-subtasks
     /// 5.1). Defaults to 0, so a pin from an old blob (or a top-level task) is unaffected.</summary>
     public int Depth { get; set; }
+
+    /// <summary>True when the pinned task carries an Accepted player-to-player assignment
+    /// (<see cref="ScribeBlock.Assignment"/>'s <see cref="ScribeAssignmentState.Accepted"/>), snapshotted
+    /// so the HUD and Pin Tab can render the leading-icon assignment marker without resolving the
+    /// (possibly unloaded) source document (add-assignment-and-quest-support 9.3). Defaults to false, so a
+    /// pin from an old blob (or an un-assigned task) is unaffected.</summary>
+    public bool IsAcceptedAssignment { get; set; }
 }

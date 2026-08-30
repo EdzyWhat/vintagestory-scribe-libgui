@@ -199,6 +199,17 @@ public abstract partial class ScribeDialogBase
         if (IsOpened()) ForceRebuild();
     }
 
+    /// <summary>Rebuilds the Inbox/Assignment view if either is currently active, in place (reconcile,
+    /// not <see cref="GuiBase.ForceRebuild"/>) so each row's own <c>expanded</c> state and the filter-chip
+    /// selection (both live in <see cref="ScribeInboxContent"/>'s State) survive the refresh — mirroring
+    /// how a pin/settings change reconciles the Read/Editor/Pinned views rather than remounting them.
+    /// Called on every <see cref="ScribeModSystem.MyAssignmentsChanged"/> push (§7.5).</summary>
+    private void OnMyAssignmentsChanged()
+    {
+        if (!IsOpened()) return;
+        if (viewMode == ScribeLecternView.Inbox || viewMode == ScribeLecternView.Assignment) RebuildBody();
+    }
+
     /// <summary>Rebuilds the History view if it is currently active. Called after a history sync.</summary>
     protected internal void RefreshHistoryView()
     {
@@ -283,6 +294,25 @@ public abstract partial class ScribeDialogBase
         if (viewMode == ScribeLecternView.Inventory && IsOpened()) ForceRebuild();
     }
 
+    /// <summary>Switches to the Assignment tab, tearing down the editor first if active. Called from the
+    /// Assignment Desk's own Assignment nav button — no other surface ever calls this (design.md
+    /// Decision 1: "Only the Assignment Desk dialog ever sets viewMode to Assignment").</summary>
+    protected void OnClickSwitchToAssignment()
+    {
+        CommitTitleIfEditing();
+        if (isEditorMode)
+        {
+            if (focusedEditIndex is { } idx) NormalizeRowOnCommit(idx);
+            PurgeEmptyRowsFromScratch();
+            pendingEmptyRowRemoval = null;
+            FlushIfDirty();
+            SendReleaseLockPacket();
+            LeaveEditorMode();
+        }
+        viewMode = ScribeLecternView.Assignment;
+        if (IsOpened()) ForceRebuild();
+    }
+
     protected void OnClickSwitchToInbox()
     {
         CommitTitleIfEditing();
@@ -296,17 +326,150 @@ public abstract partial class ScribeDialogBase
             LeaveEditorMode();
         }
         viewMode = ScribeLecternView.Inbox;
+        // "Opening the Inbox flips [Seen] server-side" (design.md Decision 4) — the request is
+        // unconditional (server no-ops/skips the re-push when nothing was actually unseen).
+        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeMarkAssignmentsSeenMessage());
         if (IsOpened()) ForceRebuild();
     }
 
+    /// <summary>Builds the shared Inbox tab (add-assignment-and-quest-support §7): the viewing player's
+    /// RECEIVED assignments (<see cref="ScribeModSystem.MyReceivedAssignments"/>), rendered by
+    /// <see cref="ScribeInboxContent"/> — one implementation reused by every Inbox-capable surface
+    /// (§7.5). Sent-history rendering (the Assignment Desk's Assignment tab, design.md Decision 3) is a
+    /// separate, not-yet-built view (§5.5); this is Received-only, viewed as the Assignee.</summary>
     protected virtual Widget BuildInboxContent()
     {
-        var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
-        float bodySize = ScribeRowConstants.BaseWindowFontSize
-            * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale);
-        return ScribeTextDefaults.Wrap(modSystem.MySettings.TaskFontFamily, bodySize,
-            new Center(child: new Text(Lang.Get("scribe:scribe-gui-inbox-empty"),
-                new TextStyle { FontSize = bodySize, Color = colors.OnSurface })));
+        var rows = modSystem.MyReceivedAssignments
+            .Where(b => b.Assignment is not null)
+            .Select(b => new ScribeInboxRowData(
+                TaskId: b.TaskId, Text: b.Text, Depth: b.Depth,
+                State: b.Assignment!.State, AssignerUid: b.Assignment.AssignerUid,
+                TargetPlayerUid: b.Assignment.TargetPlayerUid, AssignedDate: b.Assignment.AssignedDate,
+                Seen: b.Assignment.Seen, ViewerRole: ScribeAssignmentActor.Assignee))
+            .ToList();
+
+        return new ScribeInboxContent(
+            rows: rows,
+            resolvePlayerName: ResolvePlayerNameForInbox,
+            onAction: SendAssignmentAction,
+            onAccept: AcceptAssignment,
+            acceptCandidates: ComputeAcceptCandidates(),
+            style: RowStyle,
+            scrollController: sharedScrollController);
+    }
+
+    /// <summary>UID→display-name lookup for the Inbox tab's "Assigned by" line — see
+    /// <see cref="ScribeInboxContent.ResolvePlayerName"/>'s remarks on why this has no dedicated cache.</summary>
+    private string ResolvePlayerNameForInbox(string uid) => capi.World.PlayerByUid(uid)?.PlayerName ?? uid;
+
+    /// <summary>Sends a Decline/Cancel/Discard request for an assignment (§4.1's
+    /// <see cref="ScribeAssignmentActionMessage"/>). Accept goes through <see cref="AcceptAssignment"/>
+    /// instead — it needs a placement target. Purely a request — the server re-validates and the row
+    /// updates once its resync (<see cref="ScribeModSystem.MyAssignmentsChanged"/>) arrives.</summary>
+    private void SendAssignmentAction(Guid taskId, ScribeAssignmentAction action)
+    {
+        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeAssignmentActionMessage
+        {
+            AssignmentId = taskId.ToByteArray(),
+            Action = (byte)action,
+        });
+    }
+
+    /// <summary>Sends an Accept request naming the resolved placement target (assignment-state-machine's
+    /// placement requirement) — the currently-held document, or the single/chosen inventory candidate the
+    /// row's Accept control resolved via <see cref="ComputeAcceptCandidates"/>. The server re-validates and
+    /// re-resolves the slot itself; this is a request, not a locally-applied placement.</summary>
+    private void AcceptAssignment(Guid taskId, ScribeAcceptCandidate target)
+    {
+        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeAssignmentActionMessage
+        {
+            AssignmentId = taskId.ToByteArray(),
+            Action = (byte)ScribeAssignmentAction.Accept,
+            TargetInventoryId = target.InventoryId,
+            TargetSlotId = target.SlotId,
+        });
+    }
+
+    /// <summary>Computes this player's current Accept-placement candidates (assignment-state-machine's
+    /// placement requirement): (1) the currently held item, if it's an eligible (writeable) Scribe
+    /// document item — "opening a block GUI doesn't clear the hotbar selection, so 'most recently held' is
+    /// simply 'currently held'" (design.md Decision 7) — returned alone, since a held eligible surface wins
+    /// outright; else (2) every eligible item found scanning the rest of inventory, so the row can offer a
+    /// picker when there's more than one. An empty result means the Accept control has nothing to place
+    /// onto and renders disabled. Recomputed on each Inbox/Assignment rebuild — a stale list (inventory
+    /// changed without a rebuild trigger) is harmless, since the server re-validates the resolved slot
+    /// itself regardless.</summary>
+    private List<ScribeAcceptCandidate> ComputeAcceptCandidates()
+    {
+        var candidates = new List<ScribeAcceptCandidate>();
+        var invMgr = capi.World.Player?.InventoryManager;
+        if (invMgr is null) return candidates;
+
+        var held = invMgr.ActiveHotbarSlot;
+        if (held?.Itemstack?.Collectible is IScribeDocumentItem heldItem && heldItem.IsSlotWriteable(held)
+            && held.Inventory is { } heldInv)
+        {
+            candidates.Add(new ScribeAcceptCandidate(heldInv.InventoryID, heldInv.GetSlotId(held), held.Itemstack!.GetName()));
+            return candidates;
+        }
+
+        foreach (var inv in invMgr.InventoriesOrdered)
+        {
+            IEnumerable<Vintagestory.API.Common.ItemSlot>? slots;
+            try { slots = new List<Vintagestory.API.Common.ItemSlot>(inv); }
+            catch { continue; }
+
+            foreach (var slot in slots)
+            {
+                if (slot?.Itemstack?.Collectible is not IScribeDocumentItem item || !item.IsSlotWriteable(slot)) continue;
+                candidates.Add(new ScribeAcceptCandidate(inv.InventoryID, inv.GetSlotId(slot), slot.Itemstack!.GetName()));
+            }
+        }
+        return candidates;
+    }
+
+    /// <summary>Builds the Assignment Desk's Assignment tab (§5.5 / <c>assignment-desk-block</c> spec):
+    /// the create-and-send form plus this player's own Sent history, both via
+    /// <see cref="ScribeAssignmentFormContent"/>. Only <see cref="GuiDialogScribeAssignmentDesk"/> ever
+    /// routes <c>viewMode</c> here (design.md Decision 1), so the real implementation lives directly in
+    /// the base rather than behind a per-surface override.</summary>
+    protected virtual Widget BuildAssignmentContent()
+    {
+        var targetPlayers = capi.World.AllOnlinePlayers
+            .Where(p => p.PlayerUID != capi.World.Player.PlayerUID)
+            .Select(p => (p.PlayerUID, p.PlayerName))
+            .ToList();
+
+        var sentRows = modSystem.MySentAssignments
+            .Where(b => b.Assignment is not null)
+            .Select(b => new ScribeInboxRowData(
+                TaskId: b.TaskId, Text: b.Text, Depth: b.Depth,
+                State: b.Assignment!.State, AssignerUid: b.Assignment.AssignerUid,
+                TargetPlayerUid: b.Assignment.TargetPlayerUid, AssignedDate: b.Assignment.AssignedDate,
+                Seen: b.Assignment.Seen, ViewerRole: ScribeAssignmentActor.Assigner))
+            .ToList();
+
+        return new ScribeAssignmentFormContent(
+            targetPlayers: targetPlayers,
+            sentRows: sentRows,
+            resolvePlayerName: ResolvePlayerNameForInbox,
+            onSend: SendNewAssignment,
+            onAction: SendAssignmentAction,
+            style: RowStyle,
+            scrollController: sharedScrollController);
+    }
+
+    /// <summary>Client → server: create and send a new assignment (§5.5's Send action). Mints a fresh
+    /// <see cref="ScribeSendAssignmentMessage.AssignmentId"/> client-side — the server is authoritative
+    /// for everything else (assigner identity, assigned date, initial state).</summary>
+    private void SendNewAssignment(string targetPlayerUid, string taskText)
+    {
+        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeSendAssignmentMessage
+        {
+            AssignmentId = Guid.NewGuid().ToByteArray(),
+            TargetPlayerUid = targetPlayerUid,
+            TaskText = taskText,
+        });
     }
 
     /// <summary>Builds the Inventory tab content. Only the Scriptorium exposes this tab, so the base

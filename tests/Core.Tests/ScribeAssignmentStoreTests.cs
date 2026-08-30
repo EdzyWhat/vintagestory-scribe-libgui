@@ -134,6 +134,33 @@ public class ScribeAssignmentStoreTests
         Assert.False(store.TryMarkSeen(id, Assignee)); // already seen — no-op
     }
 
+    [Fact]
+    public void MarkAllSeen_MarksEveryUnseenReceivedAssignment_AndOnlyThoseAddressedToTheCaller()
+    {
+        var store = new ScribeAssignmentStore();
+        var idA = Guid.NewGuid();
+        var idB = Guid.NewGuid();
+        var idOther = Guid.NewGuid();
+        const string otherAssignee = "other-assignee-uid";
+        Assert.True(store.TryCreate(idA, Assigner, Assignee, "Task A", "Year 1, Day 1", out _));
+        Assert.True(store.TryCreate(idB, Assigner, Assignee, "Task B", "Year 1, Day 1", out _));
+        Assert.True(store.TryCreate(idOther, Assigner, otherAssignee, "Task C", "Year 1, Day 1", out _));
+
+        Assert.True(store.MarkAllSeen(Assignee));
+
+        Assert.True(store.TryGet(idA)!.Assignment!.Seen);
+        Assert.True(store.TryGet(idB)!.Assignment!.Seen);
+        Assert.False(store.TryGet(idOther)!.Assignment!.Seen); // addressed to a different player — untouched
+    }
+
+    [Fact]
+    public void MarkAllSeen_ReturnsFalse_WhenNothingWasUnseen()
+    {
+        var store = NewStoreWithOneAssignment(out var id);
+        Assert.True(store.MarkAllSeen(Assignee));
+        Assert.False(store.MarkAllSeen(Assignee)); // already all seen — no-op
+    }
+
     // ---- Round-trip: network list ----
 
     [Fact]

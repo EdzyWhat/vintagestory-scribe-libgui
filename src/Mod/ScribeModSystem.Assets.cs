@@ -95,14 +95,17 @@ public sealed partial class ScribeModSystem
         // the earlier all-weights registration (commit 8b1fb14) but with the real bold TTF instead of the
         // regular. If a future surface needs regular Caudex, ship the regular under its own family name (or
         // a distinct alias) rather than reintroducing a Normal-weight registration here.
+        // Tracks which bundled families actually registered, in preference order, so the
+        // "sans-serif" alias below (fix-linux-sans-serif-font-crash) can pick a real fallback
+        // instead of a family that itself failed to load.
+        var registeredFamilies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         var bold = loader.LoadFont("scribe", "textures/fonts/caudex-bold.ttf");
         bool caudexRegistered = bold is not null;
         if (bold is null)
         {
-            // Missing/corrupt asset: LoadFont already logged the failure. Leave Scribe's text on its
-            // current family (sans-serif) rather than crashing — the mod stays fully usable without the face.
-            // Do NOT return: the other bundled task fonts still register, and BuildMetrics falls back to
-            // sans-serif as the line-box peg (peg-task-fonts-to-caudex).
+            // Missing/corrupt asset: LoadFont already logged the failure. The mod stays fully usable
+            // without the face; the title falls back to whatever "sans-serif" resolves to below.
             api.Logger.Warning("[scribe] bundled font 'Caudex' failed to load; title stays on the default family");
         }
         else
@@ -114,6 +117,7 @@ public sealed partial class ScribeModSystem
             {
                 FontRegistry.RegisterCustomFont("Caudex", weight, bold);
             }
+            registeredFamilies.Add("Caudex");
             api.Logger.Notification("[scribe] bundled font 'Caudex' (bold cut) registered under all weights for the lectern dialog title");
         }
 
@@ -143,8 +147,26 @@ public sealed partial class ScribeModSystem
             {
                 FontRegistry.RegisterCustomFont(family, weight, face);
             }
+            registeredFamilies.Add(family);
         }
         api.Logger.Notification("[scribe] bundled task-text fonts registered for the settings font selector");
+
+        // LibGUI's FontRegistry hardcodes "sans-serif" -> "Arial", which is not a custom-registered
+        // typeface, so resolving it falls through to a live SKTypeface.FromFamilyName OS/fontconfig
+        // lookup (followed by HarfBuzz shaping). On Linux systems with no/broken installed fonts that
+        // live lookup is a plausible native-abort site ("free(): invalid pointer", reported on
+        // rolling-release distros — see fix-linux-sans-serif-font-crash). "sans-serif" is Scribe's own
+        // DefaultFamily/task-font default AND LibGUI's own stock TextStyle default, so this alias must
+        // be registered before BuildMetrics (below) probes it. Pick the first bundled face that
+        // actually loaded, preferring a general-purpose sans body font.
+        foreach (var family in new[] { "Noto Sans", "Noto Serif", "Scapholene", "La Belle Aurore", "Caudex" })
+        {
+            if (!registeredFamilies.Contains(family)) continue;
+            FontRegistry.RegisterFontAlias("sans-serif", family);
+            api.Logger.Notification($"[scribe] \"sans-serif\" aliased to bundled font '{family}' (avoids a live OS font lookup)");
+            break;
+        }
+
         ScribeTaskFont.BuildMetrics(api.Logger, caudexRegistered);
     }
 

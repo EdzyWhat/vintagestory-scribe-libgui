@@ -22,4 +22,17 @@ public sealed class ScribeAssignmentActionMessage
     /// </summary>
     [ProtoMember(2)]
     public byte Action { get; set; }
+
+    /// <summary>Accept-time placement target (assignment-state-machine's placement requirement) — the
+    /// <c>InventoryID</c> of the slot the client resolved to receive the accepted task (the currently
+    /// held document, or the single/chosen inventory candidate). Ignored for every action other than
+    /// Accept. Null falls back to the active hand, mirroring <c>ResolveItemPacketSlot</c>'s existing
+    /// convention.</summary>
+    [ProtoMember(3)]
+    public string? TargetInventoryId { get; set; }
+
+    /// <summary>Slot index within <see cref="TargetInventoryId"/>. Ignored for every action other than
+    /// Accept. Defaults to -1 (unresolved) so an absent value never aliases slot 0.</summary>
+    [ProtoMember(4)]
+    public int TargetSlotId { get; set; } = -1;
 }

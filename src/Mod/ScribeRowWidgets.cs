@@ -161,6 +161,24 @@ internal sealed class ScribeVsIconGlyph : StatelessWidget
     public override Widget Build(BuildContext context) => new VsIcon(iconName, size, color);
 }
 
+/// <summary>The leading-icon marker for an accepted player-to-player assignment
+/// (assignment-state-machine's Accepted state / add-assignment-and-quest-support 9.3), shown before the
+/// checkbox on Read, Editor, and Pin Tab rows so an assigned task is recognizable everywhere it renders — a
+/// Tablet's rows inherit it for free, since it reuses the same Read/Editor row widgets rather than a
+/// per-surface copy. UNLIKE the grip glyph's zero-opacity reserved-width spacer, this column is only added
+/// (and only then takes up width/gap) for a row that actually is an accepted assignment — callers must gate
+/// the <c>children.Add(...)</c> call on the row's own <c>IsAcceptedAssignment</c> flag rather than call this
+/// unconditionally, so an ordinary row's layout is untouched. Placeholder icon (<c>scribeguest</c>, the
+/// Visitors/Guestbook person glyph — reused rather than invented, matching the Assignment tab's own
+/// placeholder-icon precedent) pending a dedicated asset (§13.4).</summary>
+internal static class ScribeAssignedTaskIcon
+{
+    public static Widget Build(ScribeRowStyle style, Vector4 color, bool itemRow = false)
+        => new Padding(
+            EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style, itemRow)),
+            child: new ScribeVsIconGlyph("scribeguest", style.ControlSize, color));
+}
+
 /// <summary>Builds the leading icon for a Tracker/Link row. Normally an <see cref="ItemStackDisplay"/> of the
 /// referenced item; but a guide-page Link (a <c>"page:"</c>-prefixed <see cref="ScribeLinkTarget"/>) has no
 /// item to draw, so it renders the generic <c>scribebook</c> glyph tinted <paramref name="bookColor"/>

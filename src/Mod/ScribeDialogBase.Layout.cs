@@ -541,9 +541,13 @@ public abstract partial class ScribeDialogBase
     /// <paramref name="iconScale"/> grows just the glyph (not the box) — used to enlarge the pin +15%
     /// (§10.2). <paramref name="boxShadows"/> passes an optional drop shadow through to the button's
     /// <c>BoxStyle</c> (the sidebar nav buttons use one to read as raised chrome — v1-playtest-fixes 5.6).
+    /// <paramref name="shimmer"/> wraps the button in the Inbox nav-button shimmer sweep
+    /// (<see cref="ScribeShimmerWrap"/>, §8.5) when true — every caller except the four Inbox nav
+    /// buttons leaves it false, in which case the wrap is a costless pass-through.
     /// Protected so subclasses can build matching nav buttons in <see cref="GetExtraNavButtons"/>.</summary>
-    protected Widget TitleButton(string iconName, string tooltipKey, Vector4 color, float size, Action onTap, float iconScale = 1f, BoxShadow[]? boxShadows = null, Vector4? activeColor = null) =>
-        WithTooltip(tooltipKey, new ScribeRowButton(iconName: iconName, iconColor: color, size: size, onTap: onTap, iconScale: iconScale, boxShadows: boxShadows, activeColor: activeColor));
+    protected Widget TitleButton(string iconName, string tooltipKey, Vector4 color, float size, Action onTap, float iconScale = 1f, BoxShadow[]? boxShadows = null, Vector4? activeColor = null, bool shimmer = false) =>
+        WithTooltip(tooltipKey, new ScribeShimmerWrap(shimmer, size,
+            new ScribeRowButton(iconName: iconName, iconColor: color, size: size, onTap: onTap, iconScale: iconScale, boxShadows: boxShadows, activeColor: activeColor)));
 
     /// <summary>Wrap a button in a localized hover tooltip (<c>scribe:&lt;key&gt;</c>), using the global
     /// overlay so it isn't clipped by the surrounding boxes. The bubble fills with the theme's
@@ -597,8 +601,6 @@ public abstract partial class ScribeDialogBase
         ScribeLecternView.Inbox     => BuildInboxContent(),
         _                          => BuildReadContent(),
     };
-
-    protected virtual Widget BuildAssignmentContent() => BuildInboxContent();
 
     /// <summary>The live row style for this build, derived from the player's current settings (NOT cached
     /// at open — add-settings-tab D4), so a window-font-scale change from the settings view repaints the
@@ -727,7 +729,8 @@ public abstract partial class ScribeDialogBase
                         Index: i, Kind: b.Kind, Done: b.Done, Pinned: IsPinnedForMe(b.TaskId), TaskId: b.TaskId,
                         Text: b.Text, DisplayStack: stack, DisplayName: name,
                         TargetQuantity: b.TargetQuantity, CurrentQuantity: b.CurrentQuantity, LinkTarget: b.LinkTarget,
-                        Depth: b.Depth);
+                        Depth: b.Depth,
+                        IsAcceptedAssignment: b.Assignment?.State == ScribeAssignmentState.Accepted);
                 })
                 // Drop only an empty-text Task (a stray blank checkbox — belt-and-suspenders, see below).
                 // A Text note may be legitimately empty, and a Tracker/Link has no text of its own (it renders
@@ -771,11 +774,18 @@ public abstract partial class ScribeDialogBase
             .Select((b, i) =>
             {
                 var (stack, name) = ResolveRowItem(b);
+                // Leading-icon marker only (add-assignment-and-quest-support 9.3) — NOT yet wiring
+                // ReadOnly=true here for an accepted assignment's text (design.md Decision 5's "frozen
+                // text" half): ScribeEditRow's ScribeMultilineField wiring (focus-node indexing, tablet
+                // cuneiform, jump-navigation) has no read-only branch yet, and swapping it for the static
+                // display renderer without checking every one of those interactions risked a subtly broken
+                // Tab/Enter row-navigation experience. Deferred as a disclosed follow-up (see tasks.md 9.3).
+                bool isAcceptedAssignment = b.Assignment?.State == ScribeAssignmentState.Accepted;
                 return new ScribeEditRowData(
                     Index: i, Kind: b.Kind, Done: b.Done, Pinned: IsPinnedForMe(b.TaskId), TaskId: b.TaskId,
                     Text: b.Text, DisplayStack: stack, DisplayName: name,
                     TargetQuantity: b.TargetQuantity, CurrentQuantity: b.CurrentQuantity, LinkTarget: b.LinkTarget,
-                    Depth: b.Depth);
+                    Depth: b.Depth, IsAcceptedAssignment: isAcceptedAssignment);
             })
             .ToList();
 

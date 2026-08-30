@@ -35,7 +35,7 @@ internal readonly record struct ScribeEditRowData(
     int Index, ScribeBlockKind Kind, bool Done, bool Pinned, Guid TaskId, string Text,
     ItemStack? DisplayStack = null, string? DisplayName = null,
     int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null, int Depth = 0,
-    bool ReadOnly = false, bool CompletionAndPinLive = true)
+    bool ReadOnly = false, bool CompletionAndPinLive = true, bool IsAcceptedAssignment = false)
 {
     public bool IsTask => Kind == ScribeBlockKind.Task;
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
@@ -94,6 +94,10 @@ internal sealed class ScribeFrozenEditorRow : StatelessWidget
                     opacity: 0f,
                     child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant))),
         };
+        // Leading-icon assignment marker (add-assignment-and-quest-support 9.3) — only takes up space when
+        // the collapsing row actually was an accepted assignment.
+        if (data.IsAcceptedAssignment)
+            children.Add(ScribeAssignedTaskIcon.Build(style, colors.OnSurfaceVariant, data.IsItemKind));
 
         if (data.Completable)
         {
@@ -1037,6 +1041,11 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                 // swallows the tap once a drag started, including a from==to cancel.
                 onTap: _ => Widget.OnGripTap(index),
                 child: gripGlyph)));
+
+        // Leading-icon assignment marker (add-assignment-and-quest-support 9.3) — only takes up space when
+        // this row actually is an accepted assignment.
+        if (Widget.Data.IsAcceptedAssignment)
+            children.Add(ScribeAssignedTaskIcon.Build(style, colors.OnSurfaceVariant, Widget.Data.IsItemKind));
 
         // Source-row "lifted / in-hand" dim (replace-drag-wash-with-grip-arrows): while THIS row is the one
         // being dragged, its CONTENT (checkbox + text) paints at ~half opacity so the row reads as picked up.

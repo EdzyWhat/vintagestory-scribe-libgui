@@ -1,0 +1,47 @@
+{
+	code: "scribeinbox",
+	class: "BlockInbox",
+	entityclass: "Inbox",
+
+	// PLACEHOLDER MODEL (add-assignment-and-quest-support §6.1): reuses the Scriptorium's combined shape
+	// wholesale ahead of the Inbox's own dedicated art (§13.2) — see assignmentdesk.json's identical note.
+	shape: { base: "scribe:block/scriptorium/scriptorium" },
+
+	textures: {
+		"charred": { base: "scribe:block/scriptorium/charred" },
+		"ebony": { base: "scribe:block/scriptorium/ebony" },
+		"ebony-ornate": { base: "scribe:block/scriptorium/ebony-ornate" },
+		"opened-normal": { base: "scribe:block/scriptorium/opened-normal" },
+		"normal-orangebrown": { base: "scribe:block/scriptorium/normal-orangebrown" },
+		"feather": { base: "scribe:block/scriptorium/feather" },
+		"bituminous": { base: "scribe:block/scriptorium/bituminous" },
+		"quartz": { base: "scribe:block/scriptorium/quartz" },
+		"brass": { base: "scribe:block/scriptorium/brass" }
+	},
+
+	creativeinventory: { "general": ["*"], "decorative": ["*"] },
+
+	blockmaterial: "Wood",
+	lightAbsorption: 0,
+	sidesolid: { all: false },
+	sideopaque: { all: false },
+	faceCullMode: "NeverCull",
+	replaceable: 500,
+	resistance: 2,
+
+	collisionbox: { x1: 0.1817, y1: 0, z1: 0.1875, x2: 0.8188, y2: 1.2563, z2: 0.8125 },
+	selectionbox: { x1: 0.1817, y1: 0, z1: 0.1875, x2: 0.8188, y2: 1.2563, z2: 0.8125 },
+
+	sounds: {
+		place: "block/planks",
+		hit: "block/planks",
+		break: "block/planks",
+		walk: "walk/wood"
+	},
+
+	guiTransform: {
+		rotation: { x: -22.6, y: 142 },
+		origin: { x: 0.5, y: 0.6, z: 0.5 },
+		scale: 1
+	}
+}

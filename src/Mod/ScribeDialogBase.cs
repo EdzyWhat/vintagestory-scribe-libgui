@@ -110,6 +110,25 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
 
     protected bool IsInboxView => viewMode == ScribeLecternView.Inbox;
 
+    /// <summary>Whether this dialog's Inbox nav button should shimmer right now (design.md Decision 9b,
+    /// §8.5): the viewing player has an unseen received assignment AND the Inbox tab is not already the
+    /// active view (so it never plays redundantly while Inbox is open). Exposed so the four subclasses
+    /// with a non-default Inbox nav button (Lectern/Scriptorium/Chalkboard/Assignment Desk) can pass it
+    /// straight into their <see cref="TitleButton"/> call.</summary>
+    protected bool ShowInboxShimmer => modSystem.HasUnseenAssignment && !IsInboxView;
+
+    /// <summary>Called from the Assignment Desk dialog's constructor to select the Assignment tab as
+    /// this dialog's initial view instead of the default Read view (design.md Decision 1 — "Only the
+    /// Assignment Desk dialog ever sets viewMode to Assignment"). Safe to call from a subclass ctor:
+    /// <c>GuiBase.TryOpen</c> calls <see cref="Build"/> before <c>OnGuiOpened</c> runs, and the ctor runs
+    /// before <c>TryOpen</c>, so this always lands before the first tree is inflated.</summary>
+    protected void DefaultToAssignmentView() => viewMode = ScribeLecternView.Assignment;
+
+    /// <summary>Called from the standalone Inbox block's dialog constructor to select the Inbox tab as
+    /// this dialog's initial (and, per its spec, only ever) view instead of the default Read view — the
+    /// Inbox block exposes no other tab to switch away to, so this view never changes after open.</summary>
+    protected void DefaultToInboxView() => viewMode = ScribeLecternView.Inbox;
+
     /// <summary>The pixel size used for sidebar nav buttons — subclasses call this when building
     /// their own nav buttons via <see cref="GetExtraNavButtons"/> so the size matches.</summary>
     protected float NavButtonSize => ScribeRowConstants.RowCheckboxSize * 1.7f;
@@ -424,6 +443,11 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
         // (add-active-tab-nav-colors) — it can be toggled from the HUD gear while the lectern is open,
         // so we can't rely on a lectern interaction to trigger the rebuild. Unsubscribed in OnGuiClosed.
         modSystem.SettingsVisibilityChanged += OnSettingsVisibilityChanged;
+
+        // Refresh an open Inbox/Assignment tab when this player's Sent/Received assignment views resync
+        // (add-assignment-and-quest-support §7.5) — e.g. after this player (or the other party) applies a
+        // state transition, or a brand-new assignment arrives. Unsubscribed in OnGuiClosed.
+        modSystem.MyAssignmentsChanged += OnMyAssignmentsChanged;
 
         // Restrict Tab / Shift+Tab to this dialog's own editable text fields (exclude-checkboxes-from-tab-focus).
         // gui@3.1.0 made every checkbox focusable AND made GuiBase.OnKeyDown drive Tab through

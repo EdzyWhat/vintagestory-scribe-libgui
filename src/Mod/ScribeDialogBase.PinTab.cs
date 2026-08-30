@@ -62,7 +62,7 @@ public abstract partial class ScribeDialogBase
                     pinEditBuffer.TryGetValue(p.TaskId, out var buffered) ? buffered : p.LastKnownText,
                     Kind: p.Kind, DisplayStack: stack, DisplayName: name,
                     TargetQuantity: p.TargetQuantity, CurrentQuantity: p.CurrentQuantity, LinkTarget: p.LinkTarget,
-                    Depth: p.Depth);
+                    Depth: p.Depth, IsAcceptedAssignment: p.IsAcceptedAssignment);
             })
             .ToList();
 

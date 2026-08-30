@@ -160,6 +160,11 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
 
     private GuestbookStore _guestbook = new();
 
+    /// <summary>Sample interval (ms) for the particle indicator's periodic check, mirroring
+    /// <see cref="ScribeAmbientLightSampler"/>'s periodic-sample precedent rather than a per-frame
+    /// check (design.md Decision 9) — playtest-tunable, not final.</summary>
+    private const int AssignmentParticleTickIntervalMs = 1500;
+
     // ── IScribeDocumentHost explicit implementations ──────────────────────
     ScribeDocument IScribeDocumentHost.Document => Document;
     bool IScribeDocumentHost.IsLockedByOther(string viewerUid) => IsLockedByOther(viewerUid);
@@ -216,15 +221,42 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
         // angle in every path. The custom rotated-mesh path ignores the shape's rotateYByType, so without
         // this a wall block would render at angle 0 (facing one fixed cardinal) regardless of the wall it is
         // on. The setter is a no-op when the value is unchanged.
-        if (api is ICoreClientAPI && WallMountAngleRad is float wallAngle)
+        if (api is ICoreClientAPI capi)
         {
-            MeshAngleRad = wallAngle;
+            if (WallMountAngleRad is float wallAngle)
+            {
+                MeshAngleRad = wallAngle;
+            }
+
+            // Unseen-assignment ambient particle indicator (§8.4) — every subclass of this base is one
+            // of the five Inbox-capable blocks design.md Decision 9 scopes it to, so registering it once
+            // here covers all of them with no per-block duplication. Uses the BlockEntity's OWN
+            // RegisterGameTickListener (not capi.Event's) so OnBlockRemoved/OnBlockUnloaded's inherited
+            // UnregisterAllTickListeners() cleans it up automatically — no manual bookkeeping needed.
+            RegisterGameTickListener(OnAssignmentParticleTick, AssignmentParticleTickIntervalMs);
         }
+    }
+
+    /// <summary>Client-side periodic check (§8.4): if the local player has an unseen received assignment
+    /// AND is within <see cref="ScribeAssignmentParticleEmitter.DetectionRadius"/> of this block, spawn
+    /// this tick's mote batch. Player-specific and local-only — never touches the server or any other
+    /// client (design.md Decision 9).</summary>
+    private void OnAssignmentParticleTick(float dt)
+    {
+        if (Api is not ICoreClientAPI capi) return;
+        if (ModSystem is not { HasUnseenAssignment: true }) return;
+
+        var player = capi.World.Player?.Entity;
+        if (player is null) return;
+        if (Pos.DistanceTo(player.Pos.X, player.Pos.Y, player.Pos.Z) > ScribeAssignmentParticleEmitter.DetectionRadius)
+            return;
+
+        ScribeAssignmentParticleEmitter.SpawnAt(capi, Pos);
     }
 
     public override void OnBlockRemoved()
     {
-        base.OnBlockRemoved();
+        base.OnBlockRemoved(); // unregisters the §8.4 particle tick listener (UnregisterAllTickListeners)
 
         if (Api is ICoreServerAPI sapi)
         {

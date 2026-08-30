@@ -34,7 +34,8 @@ internal readonly record struct ScribePinRowData(
     Guid DocId, Guid TaskId, bool Done, string Text,
     ScribeBlockKind Kind = ScribeBlockKind.Task,
     ItemStack? DisplayStack = null, string? DisplayName = null,
-    int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null, int Depth = 0)
+    int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null, int Depth = 0,
+    bool IsAcceptedAssignment = false)
 {
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
     public bool IsLink => Kind == ScribeBlockKind.Link;
@@ -247,7 +248,7 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                     new ScribeEditRowData(Index: i, Kind: r.Kind, Done: r.Done, Pinned: false, TaskId: r.TaskId,
                         Text: r.Text, DisplayStack: r.DisplayStack, DisplayName: r.DisplayName,
                         TargetQuantity: r.TargetQuantity, CurrentQuantity: r.CurrentQuantity, LinkTarget: r.LinkTarget,
-                        Depth: r.Depth),
+                        Depth: r.Depth, IsAcceptedAssignment: r.IsAcceptedAssignment),
                     Widget.Style)))
             .ToList();
 
@@ -566,6 +567,12 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
                 onPress: _ => Widget.OnDragStart(Widget.Index),
                 onRelease: _ => Widget.OnDragEnd(),
                 child: gripGlyph)));
+
+        // Leading-icon marker for an accepted assignment (add-assignment-and-quest-support 9.3), matching
+        // the Read/Editor rows' placement: after the grip, before the checkbox. Only takes up space when
+        // this row actually is an accepted assignment.
+        if (data.IsAcceptedAssignment)
+            children.Add(ScribeAssignedTaskIcon.Build(style, colors.OnSurfaceVariant, data.IsItemKind));
 
         // Source-row "lifted / in-hand" dim (matching the editor): while THIS row is dragged, its CONTENT
         // (checkbox + text) paints at ~half opacity, applied per-child so the grip column keeps full opacity

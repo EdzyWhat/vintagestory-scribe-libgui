@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Gui.Rendering;             // SkiaAssetLoader
 using Gui.Rendering.Text;        // FontRegistry, FontWeight
 using Gui.Sound;                 // ISoundPlayer, SoundPlayer (UI click sound)
@@ -125,6 +126,13 @@ public sealed partial class ScribeModSystem : ModSystem
 
     /// <summary>This player's received assignments (Inbox) — never another player's.</summary>
     public IReadOnlyList<ScribeBlock> MyReceivedAssignments => myReceivedAssignments;
+
+    /// <summary>Whether this player currently has at least one received assignment they haven't opened
+    /// the Inbox to see yet (design.md Decision 4's <c>Seen</c> flag) — the shared trigger condition for
+    /// both the ambient particle indicator (§8.4) and the Inbox nav-button shimmer (§8.5). Re-evaluated on
+    /// every read rather than cached, since <see cref="myReceivedAssignments"/> only changes on a resync
+    /// push (infrequent relative to how often this is polled).</summary>
+    public bool HasUnseenAssignment => myReceivedAssignments.Any(b => b.Assignment is { Seen: false });
 
     /// <summary>Raised on the client whenever a fresh assignment sync push arrives, so an open
     /// Assignment Desk/Inbox dialog can repaint its rows.</summary>
@@ -275,6 +283,12 @@ public sealed partial class ScribeModSystem : ModSystem
         api.RegisterBlockEntityClass("ScribeLectern", typeof(BlockEntityScribeLectern));
         api.RegisterBlockClass("BlockScriptorium", typeof(BlockScriptorium));
         api.RegisterBlockEntityClass("Scriptorium", typeof(BlockEntityScriptorium));
+        // The Assignment Desk and standalone Inbox blocks (add-assignment-and-quest-support §5/§6):
+        // placeholder shapes/backdrop for now, real content lands with the Assignment/Inbox tab UI.
+        api.RegisterBlockClass("BlockAssignmentDesk", typeof(BlockAssignmentDesk));
+        api.RegisterBlockEntityClass("AssignmentDesk", typeof(BlockEntityAssignmentDesk));
+        api.RegisterBlockClass("BlockInbox", typeof(BlockInbox));
+        api.RegisterBlockEntityClass("Inbox", typeof(BlockEntityInbox));
         // The Chalkboard: a wall-mounted cosmetic variant of the Lectern. The string names match the
         // committed chalkboard.json (class "BlockChalkboard" / entityclass "Chalkboard").
         api.RegisterBlockClass("BlockChalkboard", typeof(BlockScribeChalkboard));
@@ -316,7 +330,8 @@ public sealed partial class ScribeModSystem : ModSystem
             .RegisterMessageType<ScribeDeleteHistoryEntryMessage>()
             .RegisterMessageType<ScribeSendAssignmentMessage>()
             .RegisterMessageType<ScribeAssignmentActionMessage>()
-            .RegisterMessageType<ScribeAssignmentSyncMessage>();
+            .RegisterMessageType<ScribeAssignmentSyncMessage>()
+            .RegisterMessageType<ScribeMarkAssignmentsSeenMessage>();
     }
 
     /// <summary>Server-side accessor for the pin store, so the block entity can register/orphan its
@@ -437,6 +452,7 @@ public sealed partial class ScribeModSystem : ModSystem
         channel.SetMessageHandler<ScribeDeleteHistoryEntryMessage>(OnServerReceivedDeleteHistoryEntry);
         channel.SetMessageHandler<ScribeSendAssignmentMessage>(OnServerReceivedSendAssignment);
         channel.SetMessageHandler<ScribeAssignmentActionMessage>(OnServerReceivedAssignmentAction);
+        channel.SetMessageHandler<ScribeMarkAssignmentsSeenMessage>(OnServerReceivedMarkAssignmentsSeen);
 
         // Persist/load the pin + settings stores with the save game (the WaypointMapLayer pattern).
         api.Event.SaveGameLoaded += OnSaveGameLoaded;

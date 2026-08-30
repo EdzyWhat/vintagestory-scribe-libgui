@@ -143,7 +143,8 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
             NavButtonSize,
             OnClickSwitchToInbox,
             boxShadows: NavButtonShadow,
-            activeColor: IsInboxView ? ScribeRowConstants.NavActiveGuestbook : null);
+            activeColor: IsInboxView ? ScribeRowConstants.NavActiveGuestbook : null,
+            shimmer: ShowInboxShimmer);
     }
 
     /// <summary>Slot edge length in pixels — matches LibGUI's <c>SlotGrid</c>/<c>ItemSlotStyle.Default</c> so

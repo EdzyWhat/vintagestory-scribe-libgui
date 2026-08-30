@@ -10,7 +10,7 @@ public class ScribePinCodecTests
     private static ScribePinnedRef Pin(string text = "Find copper", bool done = false, bool orphaned = false,
         ScribeBlockKind kind = ScribeBlockKind.Task, string? linkTarget = null,
         string? targetItemCode = null, int targetQuantity = 1, int currentQuantity = 0,
-        string? linkLabel = null, int depth = 0) => new()
+        string? linkLabel = null, int depth = 0, bool isAcceptedAssignment = false) => new()
     {
         OwnerDocId = Guid.NewGuid(),
         TaskId = Guid.NewGuid(),
@@ -25,6 +25,7 @@ public class ScribePinCodecTests
         CurrentQuantity = currentQuantity,
         LinkLabel = linkLabel,
         Depth = depth,
+        IsAcceptedAssignment = isAcceptedAssignment,
     };
 
     private static void AssertPinEqual(ScribePinnedRef expected, ScribePinnedRef actual)
@@ -42,6 +43,7 @@ public class ScribePinCodecTests
         Assert.Equal(expected.CurrentQuantity, actual.CurrentQuantity);
         Assert.Equal(expected.LinkLabel, actual.LinkLabel);
         Assert.Equal(expected.Depth, actual.Depth);
+        Assert.Equal(expected.IsAcceptedAssignment, actual.IsAcceptedAssignment);
     }
 
     // ---- SPIN: list round-trip ----
@@ -355,6 +357,65 @@ public class ScribePinCodecTests
         Assert.True(ok);
         Assert.NotNull(restored);
         Assert.Equal(1, Assert.Single(restored!).Depth);
+    }
+
+    // ---- v6: accepted-assignment marker (add-assignment-and-quest-support 9.3) ----
+
+    [Fact]
+    public void List_RoundTrip_PreservesIsAcceptedAssignment()
+    {
+        var pins = new List<ScribePinnedRef>
+        {
+            Pin("Deliver 10 logs", isAcceptedAssignment: true),
+            Pin("Ordinary task", isAcceptedAssignment: false),
+        };
+
+        byte[] bytes = ScribePinCodec.SerializeList(pins);
+        bool ok = ScribePinCodec.TryDeserializeList(bytes, out var restored);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        Assert.Equal(2, restored!.Count);
+        AssertPinEqual(pins[0], restored[0]);
+        AssertPinEqual(pins[1], restored[1]);
+        Assert.True(restored[0].IsAcceptedAssignment);
+        Assert.False(restored[1].IsAcceptedAssignment);
+    }
+
+    [Fact]
+    public void TryDeserialize_V5Bytes_IsAcceptedAssignment_IsDefaulted()
+    {
+        // Hand-build a v5 SPIN blob (Depth present, but no v6 IsAcceptedAssignment) as the pre-assignment
+        // codec wrote it, and assert the progressive read stops after Depth and defaults
+        // IsAcceptedAssignment→false rather than mis-reading.
+        var docId = Guid.NewGuid();
+        var taskId = Guid.NewGuid();
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write("SPIN"u8.ToArray());
+            w.Write((byte)5);          // v5
+            w.Write(1);                // one pin
+            w.Write(docId.ToByteArray());
+            w.Write(taskId.ToByteArray());
+            w.Write(555.0);            // PinnedAtTotalHours
+            w.Write(false);            // Orphaned
+            w.Write(false);            // LastKnownDone
+            w.Write("Copper");         // LastKnownText
+            w.Write((byte)ScribeBlockKind.Task); // Kind
+            w.Write(false);            // hasLinkTarget
+            w.Write(false);            // hasTargetItemCode
+            w.Write(1);                // TargetQuantity
+            w.Write(0);                // CurrentQuantity
+            w.Write(false);            // hasLinkLabel
+            w.Write(0);                // Depth — v5 ends here, no IsAcceptedAssignment
+        }
+
+        bool ok = ScribePinCodec.TryDeserializeList(ms.ToArray(), out var restored);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        Assert.False(Assert.Single(restored!).IsAcceptedAssignment); // defaulted by the progressive read
     }
 
     [Fact]

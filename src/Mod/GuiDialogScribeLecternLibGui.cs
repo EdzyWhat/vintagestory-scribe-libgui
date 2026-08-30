@@ -41,6 +41,7 @@ public sealed class GuiDialogScribeLecternLibGui : ScribeDialogBase
             NavButtonSize,
             OnClickSwitchToInbox,
             boxShadows: NavButtonShadow,
-            activeColor: IsInboxView ? ScribeRowConstants.NavActiveGuestbook : null);
+            activeColor: IsInboxView ? ScribeRowConstants.NavActiveGuestbook : null,
+            shimmer: ShowInboxShimmer);
     }
 }

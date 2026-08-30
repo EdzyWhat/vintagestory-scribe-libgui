@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Gui.Rendering;             // SkiaAssetLoader
 using Gui.Rendering.Text;        // FontRegistry, FontWeight
 using Gui.Sound;                 // ISoundPlayer, SoundPlayer (UI click sound)
@@ -44,6 +45,7 @@ public sealed partial class ScribeModSystem
             int currentQuantity = fallbackCurrentQuantity;
             string? linkLabel = fallbackLinkLabel;
             int depth = fallbackDepth;
+            bool isAcceptedAssignment = false;
             ScribeDocument? source = null;
             // Prefer the server's own authoritative document when available; fall back to the
             // client-supplied snapshot for items whose host is not registered server-side (e.g. Notebooks).
@@ -62,10 +64,14 @@ public sealed partial class ScribeModSystem
                     currentQuantity = block.CurrentQuantity;
                     linkLabel = block.LinkLabel;
                     depth = block.Depth;
+                    // Snapshot the leading-icon assignment marker (add-assignment-and-quest-support 9.3) —
+                    // no client-supplied fallback exists for this field since it's always resolvable here
+                    // (the same document that resolves every other field above).
+                    isAcceptedAssignment = block.Assignment?.State == ScribeAssignmentState.Accepted;
                 }
             }
             changed = pinStore.SetPin(player.PlayerUID, docId, taskId, sapi.World.Calendar.TotalHours, text, done, kind, linkTarget,
-                targetItemCode, targetQuantity, currentQuantity, linkLabel, depth, source, insertEdge);
+                targetItemCode, targetQuantity, currentQuantity, linkLabel, depth, source, insertEdge, isAcceptedAssignment);
         }
         else
         {
@@ -120,8 +126,12 @@ public sealed partial class ScribeModSystem
 
         if (resolved)
         {
-            var outcome = ScribeCompletion.ApplyGivenDone(docHost!.Document, taskId, nowDone, policy, behavior);
+            // Captured BEFORE the mutation: a Delete policy can remove the block entirely, but the
+            // Assignment object itself (if any) survives independent of the block's document membership.
+            var assignmentOnBlock = docHost!.Document.FindByTaskId(taskId)?.Assignment;
+            var outcome = ScribeCompletion.ApplyGivenDone(docHost.Document, taskId, nowDone, policy, behavior);
             if (outcome.DocChanged) docHost.PersistFromReader();
+            NotifyAssignmentDoneChanged(taskId, nowDone, assignmentOnBlock);
 
             foreach (var id in outcome.DeletedTaskIds)
                 changed |= pinStore.RemovePin(player.PlayerUID, docId, id);
@@ -198,8 +208,11 @@ public sealed partial class ScribeModSystem
         IReadOnlyList<Guid> deleted = new[] { taskId };
         if (TryResolveDocHost(docId, out var docHost, player))
         {
-            deleted = ScribeCompletion.ApplyDelete(docHost!.Document, taskId, behavior);
+            // Captured BEFORE the delete — the block is about to be removed from the document.
+            var assignmentOnBlock = docHost!.Document.FindByTaskId(taskId)?.Assignment;
+            deleted = ScribeCompletion.ApplyDelete(docHost.Document, taskId, behavior);
             if (deleted.Count > 0) docHost.PersistFromReader();
+            if (deleted.Contains(taskId)) NotifyAssignmentDiscardOnDelete(taskId, assignmentOnBlock, player.PlayerUID);
             Trace("  delete: removed {0} row(s) from source doc {1}", deleted.Count, docId);
         }
         else
@@ -324,6 +337,7 @@ public sealed partial class ScribeModSystem
 
         var outcome = ScribeCompletion.ApplyGivenDone(docHost.Document, taskId, nowDone, policy, behavior);
         if (outcome.DocChanged) docHost.PersistFromReader();
+        NotifyAssignmentDoneChanged(taskId, nowDone, block.Assignment);
         Trace("  complete(unpinned): task {0} toggled to done={1} (affected {2})", taskId, nowDone, outcome.AffectedTaskIds.Count);
     }
 

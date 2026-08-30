@@ -33,7 +33,8 @@ namespace Scribe;
 internal readonly record struct ScribeReadRowData(
     int Index, ScribeBlockKind Kind, bool Done, bool Pinned, Guid TaskId, string Text,
     ItemStack? DisplayStack = null, string? DisplayName = null,
-    int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null, int Depth = 0)
+    int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null, int Depth = 0,
+    bool IsAcceptedAssignment = false)
 {
     public bool IsTask => Kind == ScribeBlockKind.Task;
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
@@ -421,6 +422,12 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
             child: new Opacity(
                 opacity: 0f,
                 child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant))));
+
+        // Leading-icon assignment marker (add-assignment-and-quest-support 9.3) — unlike the grip spacer
+        // above, this column is NOT reserved for an ordinary row: it's only added (and only then takes up
+        // width/gap) when the task actually IS an accepted assignment.
+        if (Widget.Data.IsAcceptedAssignment)
+            children.Add(ScribeAssignedTaskIcon.Build(style, colors.OnSurfaceVariant, Widget.Data.IsItemKind));
 
         // Task, Tracker, AND Link all carry a Done flag, so all three show a completion checkbox (only a
         // freeform Text section doesn't — Completable). A Tracker's checkbox also flips automatically when its

@@ -113,6 +113,17 @@ public sealed class ScribeAssignmentStore
         return true;
     }
 
+    /// <summary>Marks EVERY currently-unseen assignment this player received as seen (design.md Decision 4:
+    /// "opening the Inbox flips it server-side"). Returns true if anything actually changed, so the caller
+    /// can skip a re-push when nothing was unseen.</summary>
+    public bool MarkAllSeen(string viewingPlayerUid)
+    {
+        bool changed = false;
+        foreach (var block in Received(viewingPlayerUid))
+            changed |= TryMarkSeen(block.TaskId, viewingPlayerUid);
+        return changed;
+    }
+
     // ---------------- Persistence / network bridge ----------------
 
     private static readonly byte[] ListMagic = "SASN"u8.ToArray();

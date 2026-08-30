@@ -94,7 +94,8 @@ public sealed class ScribePinStore
     public bool SetPin(string playerUid, Guid docId, Guid taskId, double pinnedAtTotalHours, string lastKnownText, bool lastKnownDone,
         ScribeBlockKind kind = ScribeBlockKind.Task, string? linkTarget = null,
         string? targetItemCode = null, int targetQuantity = 1, int currentQuantity = 0, string? linkLabel = null,
-        int depth = 0, ScribeDocument? source = null, ScribePinInsert insertEdge = ScribePinInsert.Bottom)
+        int depth = 0, ScribeDocument? source = null, ScribePinInsert insertEdge = ScribePinInsert.Bottom,
+        bool isAcceptedAssignment = false)
     {
         var list = _pins.TryGetValue(playerUid, out var existing) ? existing : _pins[playerUid] = new List<ScribePinnedRef>();
         if (list.Any(p => p.OwnerDocId == docId && p.TaskId == taskId)) return false; // idempotent
@@ -115,6 +116,7 @@ public sealed class ScribePinStore
             CurrentQuantity = currentQuantity,
             LinkLabel = linkLabel,
             Depth = depth,
+            IsAcceptedAssignment = isAcceptedAssignment,
         };
         ScribePinOrdering.PlaceNewPin(list, pin, source, insertEdge);
         return true;
@@ -241,11 +243,12 @@ public sealed class ScribePinStore
             // Link hyperlink needs (a Link's target can be edited, so keep it in sync — add-tracker-link-tasks 5.5),
             // and the Tracker's target item + have/need counts, which change as the player edits the target
             // quantity or collects/drops items while a dialog is open (add-tracker-link-tasks 7.8).
+            bool blockIsAcceptedAssignment = block.Assignment?.State == ScribeAssignmentState.Accepted;
             if (pin.LastKnownText != block.Text || pin.LastKnownDone != block.Done
                 || pin.Kind != block.Kind || pin.LinkTarget != block.LinkTarget
                 || pin.TargetItemCode != block.TargetItemCode || pin.TargetQuantity != block.TargetQuantity
                 || pin.CurrentQuantity != block.CurrentQuantity || pin.LinkLabel != block.LinkLabel
-                || pin.Depth != block.Depth)
+                || pin.Depth != block.Depth || pin.IsAcceptedAssignment != blockIsAcceptedAssignment)
             {
                 pin.LastKnownText = block.Text;
                 pin.LastKnownDone = block.Done;
@@ -258,6 +261,9 @@ public sealed class ScribePinStore
                 // Keep the pinned subtask depth in sync so a grip-tap depth change on the source reflects
                 // in the HUD/Pin Tab indent (add-crafting-tasks / task-subtasks 5.1).
                 pin.Depth = block.Depth;
+                // Keep the leading-icon assignment marker in sync — e.g. a Discard/Complete transition
+                // (add-assignment-and-quest-support 9.3) that fires alongside this same edit round-trip.
+                pin.IsAcceptedAssignment = blockIsAcceptedAssignment;
                 changed = true;
             }
         }
