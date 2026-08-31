@@ -725,12 +725,19 @@ public abstract partial class ScribeDialogBase
                 .Select((b, i) =>
                 {
                     var (stack, name) = ResolveRowItem(b);
+                    // A quest Link's live kill/block-place/block-break progress (§11.3) — null for every
+                    // other row kind, a plain/guide-page Link, or when the watcher has nothing for this
+                    // quest yet (see ScribeModSystem.TryGetQuestProgressText's doc-comment).
+                    string? questProgress = ScribeLinkTarget.QuestCode(b.LinkTarget) is { } questCode
+                        ? modSystem.TryGetQuestProgressText(questCode)
+                        : null;
                     return new ScribeReadRowData(
                         Index: i, Kind: b.Kind, Done: b.Done, Pinned: IsPinnedForMe(b.TaskId), TaskId: b.TaskId,
                         Text: b.Text, DisplayStack: stack, DisplayName: name,
                         TargetQuantity: b.TargetQuantity, CurrentQuantity: b.CurrentQuantity, LinkTarget: b.LinkTarget,
                         Depth: b.Depth,
-                        IsAcceptedAssignment: b.Assignment?.State == ScribeAssignmentState.Accepted);
+                        IsAcceptedAssignment: b.Assignment?.State == ScribeAssignmentState.Accepted,
+                        QuestProgressText: questProgress);
                 })
                 // Drop only an empty-text Task (a stray blank checkbox — belt-and-suspenders, see below).
                 // A Text note may be legitimately empty, and a Tracker/Link has no text of its own (it renders

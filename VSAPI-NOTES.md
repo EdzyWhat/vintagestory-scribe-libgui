@@ -3210,14 +3210,36 @@ See `CarryOnBridge.cs`.
 
 **Symptom: VS Quest integration needs live accept/progress state without a hard dependency.**
 
-Find the open dialog by runtime type name `VsQuest.QuestSelectGui`, then use Harmony
-`AccessTools.Field`/`AccessTools.Property` to read its private `questGiverId` and `activeQuests`
-members and the `killTrackers`, `blockPlaceTrackers`, and `blockBreakTrackers[].count`
-properties. This is observational only; never invoke setters or methods that mutate the quest mod.
+There are TWO separate mechanisms, and the better one for accept/completion needs no reflection at
+all — confirmed by reading vsquest's own MIT source (`reference/QuestsInvestigations/vsquest-src/`,
+not just decompiling), which is a straight-up better ground truth than a third-party mod's guess:
 
-**Fix pattern:** wrap every lookup and read in `try/catch`, disable the bridge for the rest of the
-session after the first shape mismatch, and keep manual Quest Links independent of the reflection
-layer. Field names are private implementation details and may change between vsquest versions.
+1. **Accept/completion detection (primary, zero-reflection):** `VsQuest.QuestSystem` stamps two keys
+   onto the quest-GIVER ENTITY's `WatchedAttributes` server-side (`Systems/QuestSystem.cs`,
+   `Entity/Behavior/BehaviorQuestGiver.cs`) — `"lastaccepted-{questId}-{playerUid}"` (a `double`, the
+   day accepted) for a `perPlayer` quest, or `"lastaccepted-{questId}"` (no player suffix) for a
+   shared one; and `"playercompleted-{playerUid}"` (a `string[]` of completed quest ids). Both are
+   ordinary vanilla `ITreeAttribute` entries that sync to every client with that entity loaded — ANY
+   entity with the `"questgiver"` behavior (`entity.GetBehavior("questgiver") != null`, itself vanilla
+   API, no reflection) can be scanned directly against every catalog quest id with `HasAttribute`/
+   `GetStringArray`. No dialog needs to be open; this works from just standing near a quest giver.
+   `ScribeQuestWatcher.ScanGiver` in `Scribe`. The third-party mod Tallybook (`VsQuests.GiverState`,
+   decompiled) independently arrived at the same mechanism, confirming it's the intended integration
+   surface, not an accident of vsquest's implementation.
+2. **Live kill/block-place/block-break progress (secondary, best-effort reflection):** ONLY available
+   while `VsQuest.QuestSelectGui` is actually open — vsquest keeps no server-synced live counter for
+   these, unlike accept/completion. Find the open dialog by runtime type name `VsQuest.QuestSelectGui`
+   (among both `capi.Gui.OpenedGuis` and `LoadedGuis`), then Harmony `AccessTools.Field`/
+   `AccessTools.Property` to read its private `activeQuests` field and each active quest's `questId`,
+   `killTrackers`, `blockPlaceTrackers`, `blockBreakTrackers[].count` properties. Gather objectives
+   have no counter anywhere (vsquest scans inventory on demand instead) — a permanent gap.
+   `ScribeQuestWatcher.ReadDialogProgress`.
+
+**Fix pattern:** (1) is plain vanilla API, so it needs no try/catch beyond ordinary defensive nulls.
+(2) wraps every lookup/read in `try/catch` and permanently disables itself for the rest of the
+session after the first shape mismatch — (1) is entirely unaffected if (2) breaks, since they are
+independent code paths reading independent data sources. Field/attribute-key names are private
+implementation details and may change between vsquest versions.
 
 ## Entry template
 

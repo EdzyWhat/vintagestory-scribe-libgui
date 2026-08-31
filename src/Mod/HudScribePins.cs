@@ -253,6 +253,7 @@ public sealed class HudScribePins : GuiBase
         modSystem.MyPinsChanged += OnMyPinsChanged;
         modSystem.MyTimerChanged += OnMyTimerChanged;
         modSystem.TimerDisplayTick += OnTimerDisplayTick;
+        modSystem.QuestPromptsChanged += OnQuestPromptsChanged;
         tickListenerId = capi.Event.RegisterGameTickListener(OnTick, TickIntervalMs);
     }
 
@@ -450,11 +451,12 @@ public sealed class HudScribePins : GuiBase
         var rawTimer = modSystem.MyTimer;
         bool hasTimer = rawTimer is { Status: Scribe.Core.TimerStatus.Running or Scribe.Core.TimerStatus.Fired };
         bool hasPins = modSystem.MyPins.Count > 0;
-        if ((hasPins || hasTimer) && !IsOpened())
+        bool hasPrompt = modSystem.PendingQuestPrompts.Count > 0;
+        if ((hasPins || hasTimer || hasPrompt) && !IsOpened())
         {
             TryOpen(); // withFocus defaults false via base; a HUD never steals focus anyway
         }
-        else if (!hasPins && !hasTimer && IsOpened())
+        else if (!hasPins && !hasTimer && !hasPrompt && IsOpened())
         {
             TryClose();
         }
@@ -493,14 +495,32 @@ public sealed class HudScribePins : GuiBase
         }
 
         bool hasTimer = status is Scribe.Core.TimerStatus.Running or Scribe.Core.TimerStatus.Fired;
-        if (hasTimer && !IsOpened() && modSystem.MyPins.Count == 0)
+        if (hasTimer && !IsOpened() && modSystem.MyPins.Count == 0 && modSystem.PendingQuestPrompts.Count == 0)
             TryOpen();
-        else if (!hasTimer && !modSystem.MyPins.Any() && IsOpened())
+        else if (!hasTimer && !modSystem.MyPins.Any() && modSystem.PendingQuestPrompts.Count == 0 && IsOpened())
             TryClose();
         // Only rebuild here on a genuine status transition (start/fire/clear). The routine per-second
         // running push does NOT rebuild — TimerDisplayTick owns the steady countdown repaint, so the HUD
         // rebuilds once per second, not twice.
         else if (statusChanged && IsOpened())
+            RebuildHudBody();
+    }
+
+    /// <summary>A Quest Accept/Completion prompt was queued or resolved (add-assignment-and-quest-support
+    /// §11.2/§11.4): apply the same self-open/close rule as pins/timer (a prompt alone, with zero pins and
+    /// no running timer, still opens the HUD so the player actually sees it) and rebuild.</summary>
+    private void OnQuestPromptsChanged()
+    {
+        bool hasPrompt = modSystem.PendingQuestPrompts.Count > 0;
+        var rawTimer = modSystem.MyTimer;
+        bool hasTimer = rawTimer is { Status: Scribe.Core.TimerStatus.Running or Scribe.Core.TimerStatus.Fired };
+        bool hasPins = modSystem.MyPins.Count > 0;
+
+        if (hasPrompt && !IsOpened())
+            TryOpen();
+        else if (!hasPrompt && !hasPins && !hasTimer && IsOpened())
+            TryClose();
+        else if (IsOpened())
             RebuildHudBody();
     }
 
@@ -1108,7 +1128,10 @@ public sealed class HudScribePins : GuiBase
             onOpenSettings: modSystem.OpenSettings,
             timerData: timerSnapshot,
             onClearTimer: SendClearTimer,
-            capiForTimer: capi);
+            capiForTimer: capi,
+            questPrompts: modSystem.PendingQuestPrompts,
+            onAcceptPrompt: modSystem.AcceptQuestPrompt,
+            onDismissPrompt: modSystem.DismissQuestPrompt);
     }
 
     // ---------------- DEBUG: blank-checkbox diagnostics ----------------
@@ -1169,6 +1192,7 @@ public sealed class HudScribePins : GuiBase
         modSystem.MyPinsChanged -= OnMyPinsChanged;
         modSystem.MyTimerChanged -= OnMyTimerChanged;
         modSystem.TimerDisplayTick -= OnTimerDisplayTick;
+        modSystem.QuestPromptsChanged -= OnQuestPromptsChanged;
         if (tickListenerId != 0)
         {
             capi.Event.UnregisterGameTickListener(tickListenerId);
@@ -1263,6 +1287,11 @@ internal sealed class HudPinsContent : StatelessWidget
     private readonly Scribe.Core.TimerStore? timerData;
     private readonly Action? onClearTimer;
     private readonly ICoreClientAPI? capiForTimer;
+    /// <summary>Pending Quest Accept/Completion notifications (add-assignment-and-quest-support
+    /// §11.2/§11.4); only the first is rendered as a banner at a time.</summary>
+    private readonly IReadOnlyList<ScribeQuestPrompt> questPrompts;
+    private readonly Action<ScribeQuestPrompt>? onAcceptPrompt;
+    private readonly Action<ScribeQuestPrompt>? onDismissPrompt;
 
     public HudPinsContent(
         IReadOnlyList<HudPinRow> rows,
@@ -1285,7 +1314,10 @@ internal sealed class HudPinsContent : StatelessWidget
         Action onOpenSettings,
         Scribe.Core.TimerStore? timerData = null,
         Action? onClearTimer = null,
-        ICoreClientAPI? capiForTimer = null)
+        ICoreClientAPI? capiForTimer = null,
+        IReadOnlyList<ScribeQuestPrompt>? questPrompts = null,
+        Action<ScribeQuestPrompt>? onAcceptPrompt = null,
+        Action<ScribeQuestPrompt>? onDismissPrompt = null)
     {
         this.rows = rows;
         this.moreCount = moreCount;
@@ -1308,6 +1340,9 @@ internal sealed class HudPinsContent : StatelessWidget
         this.timerData = timerData;
         this.onClearTimer = onClearTimer;
         this.capiForTimer = capiForTimer;
+        this.questPrompts = questPrompts ?? Array.Empty<ScribeQuestPrompt>();
+        this.onAcceptPrompt = onAcceptPrompt;
+        this.onDismissPrompt = onDismissPrompt;
     }
 
     /// <summary>Run a user-visible string through the Core corruptor at this build's
@@ -1327,6 +1362,11 @@ internal sealed class HudPinsContent : StatelessWidget
         Vector4 glow = new(0f, 0f, 0f, 1.0f);
 
         var children = new List<Widget> { BuildHeader(colors, glow) };
+
+        // Quest Accept/Completion prompt banner (add-assignment-and-quest-support §11.2/§11.4): shown
+        // regardless of collapse state — a player who collapsed the HUD before a prompt arrived should
+        // still see it, not have to expand to notice.
+        if (questPrompts.Count > 0) children.Add(BuildQuestPromptBanner(colors, glow));
 
         if (!collapsed)
         {
@@ -1463,6 +1503,60 @@ internal sealed class HudPinsContent : StatelessWidget
             mainAxisSize: MainAxisSize.Min,
             crossAxisAlignment: CrossAxisAlignment.Center,
             children: headerChildren);
+    }
+
+    /// <summary>The Quest Accept/Completion prompt banner (add-assignment-and-quest-support §11.2/§11.4,
+    /// user-directed design: an interactive Accept/Dismiss + a Settings shortcut, since a plain chat line
+    /// alone isn't an actionable way to opt in under <see cref="Scribe.Core.ScribeQuestAcceptPolicy.Prompt"/>/
+    /// <see cref="Scribe.Core.ScribeQuestCompletionPolicy.Prompt"/>). Renders only the OLDEST pending prompt;
+    /// a second prompt queued behind it appears once the first is Accepted/Dismissed. Deliberately plain —
+    /// no icon/animation — to keep this addition small relative to the rest of the HUD's row machinery.</summary>
+    private Widget BuildQuestPromptBanner(ColorScheme colors, Vector4 glow)
+    {
+        var prompt = questPrompts[0];
+        var messageStyle = new TextStyle
+        {
+            FontSize = rowFontSize,
+            Color = new Vector4(1f, 0.92f, 0.65f, 1f), // warm pale-gold — distinct from ordinary row text
+            GlowWidth = GlowWidth,
+            GlowColor = glow,
+            SoftWrap = true,
+        };
+        var linkStyle = new TextStyle
+        {
+            FontSize = rowFontSize,
+            Color = colors.Primary,
+            GlowWidth = GlowWidth,
+            GlowColor = glow,
+        };
+
+        Widget LinkButton(string label, Action onTap) => new GestureDetector(
+            onTap: _ => onTap(),
+            child: new Text(label, linkStyle));
+
+        string title = Lang.Get(
+            prompt.IsCompletion ? "scribe:scribe-hud-questprompt-complete-title" : "scribe:scribe-hud-questprompt-accept-title",
+            prompt.Title);
+
+        return new Column(
+            spacing: 2,
+            mainAxisSize: MainAxisSize.Min,
+            crossAxisAlignment: leftAligned ? CrossAxisAlignment.Start : CrossAxisAlignment.End,
+            children: new Widget[]
+            {
+                new Text(title, messageStyle),
+                new Row(
+                    spacing: 10,
+                    mainAxisSize: MainAxisSize.Min,
+                    children: new Widget[]
+                    {
+                        LinkButton(Lang.Get("scribe:scribe-hud-questprompt-accept-button"),
+                            () => onAcceptPrompt?.Invoke(prompt)),
+                        LinkButton(Lang.Get("scribe:scribe-hud-questprompt-dismiss-button"),
+                            () => onDismissPrompt?.Invoke(prompt)),
+                        LinkButton(Lang.Get("scribe:scribe-hud-questprompt-settings-button"), onOpenSettings),
+                    }),
+            });
     }
 
     /// <summary>Full duration of the destructive-pending (Unpin/Delete) text fade, matched to the HUD pin

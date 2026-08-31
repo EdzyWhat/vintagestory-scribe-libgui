@@ -29,12 +29,16 @@ namespace Scribe;
 /// Link (add-tracker-link-tasks Group 5); the Tracker/Link icon + name are resolved by the dialog (where
 /// <c>capi</c> lives) and passed in as <see cref="DisplayStack"/> / <see cref="DisplayName"/> so the pure
 /// LibGUI row widget stays API-free. Tracker rows carry the live <see cref="CurrentQuantity"/>/
-/// <see cref="TargetQuantity"/> counter; Link rows carry the <see cref="LinkTarget"/> code to open.</summary>
+/// <see cref="TargetQuantity"/> counter; Link rows carry the <see cref="LinkTarget"/> code to open. A
+/// quest Link row additionally carries <see cref="QuestProgressText"/> — pre-formatted kill/block-place/
+/// block-break progress from <see cref="ScribeQuestWatcher"/>, or null when unavailable (vsquest absent,
+/// the quest's own dialog never read this session, or a non-quest/plain Link) — add-assignment-and-quest-support
+/// §11.3. Resolved by the dialog (where <c>modSystem</c> lives) so this stays API-free.</summary>
 internal readonly record struct ScribeReadRowData(
     int Index, ScribeBlockKind Kind, bool Done, bool Pinned, Guid TaskId, string Text,
     ItemStack? DisplayStack = null, string? DisplayName = null,
     int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null, int Depth = 0,
-    bool IsAcceptedAssignment = false)
+    bool IsAcceptedAssignment = false, string? QuestProgressText = null)
 {
     public bool IsTask => Kind == ScribeBlockKind.Task;
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
@@ -394,13 +398,37 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         // Read-only item rows (Tracker/Craft counter, Link icon) sit flush against the checkbox after
         // FieldPadX was dropped so the *editor* stepper could line up with a Task field. A 4px left
         // inset is read-only — the editor ScribeNumericField path is unchanged.
-        return new Padding(
+        Widget content = new Padding(
             EdgeInsets.Only(left: 4f, right: style.FieldPadX),
             child: new Row(
                 spacing: style.CheckboxTextGap,
                 crossAxisAlignment: CrossAxisAlignment.Start,
                 mainAxisSize: MainAxisSize.Max,
                 children: rowChildren));
+
+        // A quest Link's live kill/block-place/block-break progress (§11.3), when the watcher has any —
+        // a second, smaller line under the icon/name row rather than crowding the hyperlink itself.
+        if (!string.IsNullOrEmpty(Widget.Data.QuestProgressText))
+        {
+            content = new Column(
+                spacing: 1,
+                mainAxisSize: MainAxisSize.Min,
+                crossAxisAlignment: CrossAxisAlignment.Stretch,
+                children: new Widget[]
+                {
+                    content,
+                    new Padding(
+                        EdgeInsets.Only(left: 4f + iconSize + style.CheckboxTextGap, right: style.FieldPadX),
+                        child: new Text(Widget.Data.QuestProgressText!, new TextStyle
+                        {
+                            FontSize = style.FontSize * 0.85f,
+                            Color = colors.OnSurfaceVariant,
+                            SoftWrap = true,
+                        })),
+                });
+        }
+
+        return content;
     }
 
     public override Widget Build(BuildContext context)

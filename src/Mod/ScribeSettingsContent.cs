@@ -38,17 +38,20 @@ internal sealed class ScribeSettingsContent : StatelessWidget
     private readonly Action<Action<ScribePlayerSettings>> onMutate;
     private readonly ScrollController scrollController;
     private readonly ScribeNumericFocusRegistry focus;
+    private readonly bool showQuestSettings;
 
     public ScribeSettingsContent(
         ScribePlayerSettings settings,
         Action<Action<ScribePlayerSettings>> onMutate,
         ScrollController scrollController,
-        ScribeNumericFocusRegistry focus)
+        ScribeNumericFocusRegistry focus,
+        bool showQuestSettings = false)
     {
         this.settings = settings;
         this.onMutate = onMutate;
         this.scrollController = scrollController;
         this.focus = focus;
+        this.showQuestSettings = showQuestSettings;
     }
 
     public override Widget Build(BuildContext context)
@@ -96,11 +99,7 @@ internal sealed class ScribeSettingsContent : StatelessWidget
     /// survival lets anyone take the trait).</summary>
     private Widget BuildModBehaviorSection(ColorScheme colors, float scale)
     {
-        return new Column(
-            spacing: 12 * scale,
-            crossAxisAlignment: CrossAxisAlignment.Stretch,
-            mainAxisSize: MainAxisSize.Min,
-            children: new Widget[]
+        var children = new List<Widget>
             {
                 LabeledControl(
                     "settings-completionpolicy", colors, scale,
@@ -177,7 +176,43 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         IntField("timeralarmvolume", settings.TimerAlarmVolume, step: 5,
                             onChanged: v => onMutate(s => s.TimerAlarmVolume = v),
                             clamp: ScribePlayerSettings.ClampTimerAlarmVolume))),
-            });
+        };
+
+        // Quest Accept/Completion Policy (add-assignment-and-quest-support §11): only shown when vsquest
+        // is installed (ScribeSettingsDialog passes showQuestSettings via ScribeQuestCatalog.IsAvailable)
+        // — invisible clutter otherwise, since both settings are inert with no vsquest to detect.
+        if (showQuestSettings)
+        {
+            children.Add(PairedControls(colors, scale,
+                LabeledControl(
+                    "settings-questacceptpolicy", colors, scale,
+                    new Dropdown<ScribeQuestAcceptPolicy>(
+                        value: settings.QuestAcceptPolicy,
+                        items: new List<DropdownItem<ScribeQuestAcceptPolicy>>
+                        {
+                            new() { Value = ScribeQuestAcceptPolicy.Always, Label = Lang.Get("scribe:scribe-questpolicy-always") },
+                            new() { Value = ScribeQuestAcceptPolicy.Never,  Label = Lang.Get("scribe:scribe-questpolicy-never") },
+                            new() { Value = ScribeQuestAcceptPolicy.Prompt, Label = Lang.Get("scribe:scribe-questpolicy-prompt") },
+                        },
+                        onChanged: v => onMutate(s => s.QuestAcceptPolicy = v))),
+                LabeledControl(
+                    "settings-questcompletionpolicy", colors, scale,
+                    new Dropdown<ScribeQuestCompletionPolicy>(
+                        value: settings.QuestCompletionPolicy,
+                        items: new List<DropdownItem<ScribeQuestCompletionPolicy>>
+                        {
+                            new() { Value = ScribeQuestCompletionPolicy.Always, Label = Lang.Get("scribe:scribe-questpolicy-always") },
+                            new() { Value = ScribeQuestCompletionPolicy.Never,  Label = Lang.Get("scribe:scribe-questpolicy-never") },
+                            new() { Value = ScribeQuestCompletionPolicy.Prompt, Label = Lang.Get("scribe:scribe-questpolicy-prompt") },
+                        },
+                        onChanged: v => onMutate(s => s.QuestCompletionPolicy = v)))));
+        }
+
+        return new Column(
+            spacing: 12 * scale,
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Min,
+            children: children);
     }
 
     /// <summary>Window Appearance: Lectern look (pixel-art theme, Pixel Art Size, window/task fonts)

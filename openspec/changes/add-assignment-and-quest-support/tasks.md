@@ -334,19 +334,69 @@
 
 ## 11. Quest soft auto-detect (Layer 2)
 
-- [ ] 11.1 Add the Harmony patch/reflection layer scoped to `VsQuest.QuestSelectGui` (found by
+- [x] 11.1 Add the Harmony patch/reflection layer scoped to `VsQuest.QuestSelectGui` (found by
       type name), reading `questGiverId`/`activeQuests` and the three tracker-count properties,
-      wrapped in try/catch with self-disable on failure.
-- [ ] 11.2 Wire detected accept-state into the Quest Accept policy's Always/Never/Prompt behavior.
-- [ ] 11.3 Wire detected kill/place/break progress into the linked task's display; leave gather
-      objectives at accept-state-only.
-- [ ] 11.4 Wire detected quest completion into the Quest Completion policy's Always/Never/Prompt
-      behavior.
+      wrapped in try/catch with self-disable on failure. **Design refinement found while
+      implementing**: reading vsquest's own MIT source (`reference/QuestsInvestigations/vsquest-src/`,
+      not just decompiling) showed accept/completion detection has a far better mechanism than dialog
+      reflection — `VsQuest.QuestSystem` stamps `"lastaccepted-{questId}[-{playerUid}]"` and
+      `"playercompleted-{playerUid}"` directly onto the quest-GIVER ENTITY's `WatchedAttributes`
+      (ordinary vanilla, server-synced, no dialog or reflection needed). New `ScribeQuestWatcher`
+      (Mod, client-only) therefore uses TWO independent mechanisms: (a) primary — every ~1s, scan
+      every loaded entity with the `"questgiver"` behavior against every catalog quest id's two
+      WatchedAttribute keys (zero reflection, vanilla API only) for accept/completion; (b) secondary,
+      best-effort — the originally-planned `AccessTools.Field`/`Property` reflection into an open
+      `QuestSelectGui` (found by type name across `OpenedGuis`/`LoadedGuis`, mirroring the third-party
+      mod Tallybook's own `VsQuests.ReadQuestDialog`, decompiled for confirmation) for live
+      kill/block-place/block-break tracker counts only, wrapped in try/catch with permanent
+      self-disable on first failure — (a) is entirely unaffected if (b) breaks. `ScribeQuestCatalog`
+      extended to also parse each quest's kill/block-place/block-break objective demands (needed to
+      pair with (b)'s live counts). Documented in `VSAPI-NOTES.md`'s VS Quest entry (corrected —
+      it previously only described the dialog-reflection half).
+- [x] 11.2 Wire detected accept-state into the Quest Accept policy's Always/Never/Prompt behavior.
+      **Two design decisions asked of the user (not guessed), both answered**: (1) where an
+      auto-created Quest Link goes under Always — the sending player's first carried Notebook/Tablet,
+      mirroring the existing `FindNotebookInInventory` convention already used for History
+      auto-recording; a new client→server `ScribeAutoLinkQuestMessage` carries the detected quest's
+      code/title/description, and the server handler is authoritative + idempotent (silently
+      no-ops if no Scribe document is carried, there's no capacity, or a Link for that exact quest
+      code already exists — this dedup is what makes repeat detection across a relog harmless with
+      no persisted client state). (2) what Prompt shows — the user directed that a chat notification
+      ALWAYS fires regardless of policy ("it's not intuitive that Scribe is picking these things up"),
+      and that Prompt additionally shows a real interactive control (not just chat) with a shortcut to
+      change the policy — implemented as a small banner on the pinned-task HUD (`HudPinsContent`,
+      reusing the existing always-on-screen HUD surface rather than building a second standalone
+      GuiBase) with Accept/Dismiss + a Settings button (`modSystem.OpenSettings`, the same one the
+      HUD gear already uses). The HUD's self-open/close condition is extended so a prompt alone (zero
+      pins, no running timer) still opens it.
+- [x] 11.3 Wire detected kill/place/break progress into the linked task's display; leave gather
+      objectives at accept-state-only. **Scoped to the READ VIEW only** (`ScribeReadContent`'s Quest
+      Link rows, via a new `ScribeReadRowData.QuestProgressText` resolved in
+      `ScribeDialogBase.Layout.BuildReadContent`) — a disclosed gap, not wired into the editor view,
+      HUD, or Pin Tab this pass. Formatted as a compact category+count line ("Kills 2/5 · Blocks
+      placed 0/3") via `ScribeQuestCatalog.FormatProgress`, zipping the catalog's per-objective
+      demands against the watcher's live counts positionally — a simplification vs. the third-party
+      mod Tallybook's own richer per-creature/item naming (`ObjectiveLabel`), which this pass does not
+      replicate. Null (nothing rendered) whenever vsquest isn't installed, the quest's own dialog
+      hasn't been read this session, or the Link isn't a quest Link.
+- [x] 11.4 Wire detected quest completion into the Quest Completion policy's Always/Never/Prompt
+      behavior. **Scope call, mirroring the existing HUD Tracker-completion engine's own precedent**:
+      only an ALREADY-PINNED Quest Link for the exact detected quest code counts as "linked" — a Link
+      that exists but isn't pinned, in a document that isn't open, is a disclosed gap (matching how
+      the Tracker engine already only acts on visible/live pin state, not every unloaded document).
+      Always/a Prompt-accepted match reuses the EXISTING `ScribeCompleteTaskMessage`/
+      `CompleteTaskForPlayer` path unchanged (the same op a checkbox click sends) — no new message
+      type was needed for this half, unlike 11.2's create path.
 
 ## 12. Settings and handbook
 
-- [ ] 12.1 Add the Quest Accept Policy and Quest Completion Policy dropdowns to the Settings
-      dialog's Behavior section, gated on `IsModEnabled("vsquest")`.
+- [x] 12.1 Add the Quest Accept Policy and Quest Completion Policy dropdowns to the Settings
+      dialog's Behavior section, gated on `IsModEnabled("vsquest")`. Done alongside §11 (the two
+      settings this task adds UI for). `ScribeSettingsContent` gained an optional
+      `showQuestSettings` constructor flag (default false, so its host-agnostic design isn't broken
+      for any other/future caller); `ScribeSettingsDialog` passes
+      `ScribeQuestCatalog.IsAvailable(capi)` — the same emptiness-gate 10.2 already established,
+      so the row is invisible clutter for a player without vsquest rather than two inert dropdowns.
 - [ ] 12.2 Add handbook documentation for the Assignment Desk, Inbox block, and assignment
       workflow (ungated — always visible).
 - [ ] 12.3 Add handbook documentation for Quest Links and auto-detect, gated on

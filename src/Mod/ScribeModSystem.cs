@@ -331,7 +331,8 @@ public sealed partial class ScribeModSystem : ModSystem
             .RegisterMessageType<ScribeSendAssignmentMessage>()
             .RegisterMessageType<ScribeAssignmentActionMessage>()
             .RegisterMessageType<ScribeAssignmentSyncMessage>()
-            .RegisterMessageType<ScribeMarkAssignmentsSeenMessage>();
+            .RegisterMessageType<ScribeMarkAssignmentsSeenMessage>()
+            .RegisterMessageType<ScribeAutoLinkQuestMessage>();
     }
 
     /// <summary>Server-side accessor for the pin store, so the block entity can register/orphan its
@@ -377,6 +378,10 @@ public sealed partial class ScribeModSystem : ModSystem
         // it stays closed until there is ≥1 pin. It owns its own subscription + tick; we dispose it.
         pinHud = new HudScribePins(api, this);
 
+        // Quest soft auto-detect (Layer 2, add-assignment-and-quest-support §11): a no-op tick listener
+        // when vsquest isn't installed (ScribeQuestWatcher checks IsAvailable itself each tick).
+        StartQuestWatcher(api);
+
         // Single shared 1Hz display tick: drives BOTH the HUD timer row and the Notebook Timer tab
         // countdown so they repaint on the same dispatch (see TimerDisplayTick). One listener, so there
         // is one authoritative second-boundary rather than two out-of-phase 250ms listeners.
@@ -401,6 +406,7 @@ public sealed partial class ScribeModSystem : ModSystem
         DisposeHandbookPatch();
         pinHud?.Dispose();
         pinHud = null;
+        DisposeQuestWatcher();
         if (timerDisplayTickId != 0 && capi is not null)
         {
             capi.World.UnregisterGameTickListener(timerDisplayTickId);
@@ -453,6 +459,7 @@ public sealed partial class ScribeModSystem : ModSystem
         channel.SetMessageHandler<ScribeSendAssignmentMessage>(OnServerReceivedSendAssignment);
         channel.SetMessageHandler<ScribeAssignmentActionMessage>(OnServerReceivedAssignmentAction);
         channel.SetMessageHandler<ScribeMarkAssignmentsSeenMessage>(OnServerReceivedMarkAssignmentsSeen);
+        channel.SetMessageHandler<ScribeAutoLinkQuestMessage>(OnServerReceivedAutoLinkQuest);
 
         // Persist/load the pin + settings stores with the save game (the WaypointMapLayer pattern).
         api.Event.SaveGameLoaded += OnSaveGameLoaded;

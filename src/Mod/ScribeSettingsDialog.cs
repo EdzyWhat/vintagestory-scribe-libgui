@@ -101,7 +101,8 @@ public sealed class ScribeSettingsDialog : GuiBase
                     settings: modSystem.MySettings,
                     onMutate: modSystem.UpdateMySettings,
                     scrollController: scrollController,
-                    focus: numericFocus)));
+                    focus: numericFocus,
+                    showQuestSettings: ScribeQuestCatalog.IsAvailable(capi))));
 
     /// <summary>Notify listeners (the lectern's Settings nav button) that this window just opened, so it
     /// can recolor live (add-active-tab-nav-colors).</summary>
