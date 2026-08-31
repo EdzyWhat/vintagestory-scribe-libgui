@@ -231,6 +231,11 @@ internal sealed class ScribeInboxRowState : State<ScribeInboxRow>
     /// <summary>Selected index into <see cref="ScribeInboxRow.AcceptCandidates"/> when more than one
     /// exists (the placement picker). Lives on this State so it survives a data-only reconcile.</summary>
     private int selectedCandidateIndex;
+    /// <summary>Whether the placement picker is currently revealed (playtest fix 2026-08-30: the picker
+    /// used to render unconditionally alongside the Accept button, which could crowd/overflow the row's
+    /// narrow content width and leave the Accept button unreachable). Accept is now a two-step tap when
+    /// there's more than one candidate: the first tap reveals the picker + a second Accept to confirm.</summary>
+    private bool showAcceptPicker;
 
     public override Widget Build(BuildContext context)
     {
@@ -336,9 +341,12 @@ internal sealed class ScribeInboxRowState : State<ScribeInboxRow>
 
     /// <summary>The Accept control, gated by <see cref="ScribeInboxRow.AcceptCandidates"/>
     /// (assignment-state-machine's placement requirement): disabled with an explanatory tooltip when
-    /// nothing is eligible; a plain Accept button naming the sole candidate when exactly one is; a
-    /// picker + Accept button when more than one is (the held item always wins outright and never reaches
-    /// this branch — see <c>ScribeDialogBase.ComputeAcceptCandidates</c>).</summary>
+    /// nothing is eligible; a plain Accept button naming the sole candidate when exactly one is (the held
+    /// item always wins outright and never reaches the multi-candidate branch — see
+    /// <c>ScribeDialogBase.ComputeAcceptCandidates</c>). With more than one candidate, Accept is a TWO-STEP
+    /// tap (playtest fix 2026-08-30): the first tap only reveals the picker (stacked above a second Accept
+    /// that actually confirms) rather than rendering picker + button side by side, which could overflow the
+    /// row's width in the Assignment Desk/Inbox's narrow 1:1 content region and leave Accept unreachable.</summary>
     private Widget BuildAcceptControl(BuildContext context, ScribeInboxRowData data, ColorScheme colors)
     {
         var candidates = Widget.AcceptCandidates;
@@ -356,17 +364,26 @@ internal sealed class ScribeInboxRowState : State<ScribeInboxRow>
                 useGlobalOverlay: true);
         }
 
-        int idx = Math.Clamp(selectedCandidateIndex, 0, candidates.Count - 1);
-        Widget acceptButton = ActionButton("scribe:scribe-assignment-action-accept", ButtonVariant.Primary,
-            () => Widget.OnAccept(data.TaskId, candidates[idx]), colors);
-        if (candidates.Count == 1) return acceptButton;
+        if (candidates.Count == 1)
+            return ActionButton("scribe:scribe-assignment-action-accept", ButtonVariant.Primary,
+                () => Widget.OnAccept(data.TaskId, candidates[0]), colors);
 
+        if (!showAcceptPicker)
+            return ActionButton("scribe:scribe-assignment-action-accept", ButtonVariant.Primary,
+                () => SetState(() => showAcceptPicker = true), colors);
+
+        int idx = Math.Clamp(selectedCandidateIndex, 0, candidates.Count - 1);
         Widget picker = new Dropdown<int>(
             value: idx,
             items: candidates.Select((c, i) => new DropdownItem<int> { Value = i, Label = c.Label }).ToList(),
             onChanged: v => SetState(() => selectedCandidateIndex = v),
             style: Theme.Of(context).DropdownStyle);
-        return new Row(spacing: 6f, mainAxisSize: MainAxisSize.Min, crossAxisAlignment: CrossAxisAlignment.Center,
-            children: new Widget[] { picker, acceptButton });
+        Widget confirmButton = ActionButton("scribe:scribe-assignment-action-accept", ButtonVariant.Primary,
+            () => Widget.OnAccept(data.TaskId, candidates[idx]), colors);
+        return new Column(
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Min,
+            spacing: 4f,
+            children: new Widget[] { picker, confirmButton });
     }
 }

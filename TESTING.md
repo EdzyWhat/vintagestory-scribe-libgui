@@ -58,6 +58,15 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         picker renders but nothing to confirm the pick with; (2) UX request — picker should
         appear as a step AFTER pressing Accept (not shown unconditionally up front), and
         each candidate should read as `<Type> "<Title>"` instead of its current bare label.
+      - **Fix landed 2026-08-30, AWAITING RETEST**: `BuildAcceptControl` (`ScribeInboxContent.cs`)
+        no longer renders the picker + Accept side by side when there's more than one candidate
+        (likely root cause of the vanished button: that Row could overflow the Desk/Inbox's
+        narrow 1:1 content width). Accept is now two-step — first tap reveals a picker stacked
+        above a second Accept that confirms. Candidate labels now read `<Type> "<Title>"` via a
+        new `FormatCandidateLabel` (`ScribeDialogBase.ViewSwitching.cs`, reusing
+        `ScribeDocumentAttributes.TryReadFrom` the same way `ScribeDocumentSlot`'s hover card
+        does), falling back to the bare item name when the stack has no document/no custom title
+        yet. Restaged 2026-08-30 21:31 — retest needs a relaunch.
 - [ ] `00000039` **Leading-icon scroll marker.** Once accepted, check the Read, Editor, and
       Pinned views of that task — confirm the new rolled-scroll icon shows as its leading
       marker (not the old guestbook-person placeholder). *(add-assignment-and-quest-support

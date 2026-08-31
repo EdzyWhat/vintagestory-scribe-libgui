@@ -409,7 +409,7 @@ public abstract partial class ScribeDialogBase
         if (held?.Itemstack?.Collectible is IScribeDocumentItem heldItem && heldItem.IsSlotWriteable(held)
             && held.Inventory is { } heldInv)
         {
-            candidates.Add(new ScribeAcceptCandidate(heldInv.InventoryID, heldInv.GetSlotId(held), held.Itemstack!.GetName()));
+            candidates.Add(new ScribeAcceptCandidate(heldInv.InventoryID, heldInv.GetSlotId(held), FormatCandidateLabel(held.Itemstack!)));
             return candidates;
         }
 
@@ -422,10 +422,26 @@ public abstract partial class ScribeDialogBase
             foreach (var slot in slots)
             {
                 if (slot?.Itemstack?.Collectible is not IScribeDocumentItem item || !item.IsSlotWriteable(slot)) continue;
-                candidates.Add(new ScribeAcceptCandidate(inv.InventoryID, inv.GetSlotId(slot), slot.Itemstack!.GetName()));
+                candidates.Add(new ScribeAcceptCandidate(inv.InventoryID, inv.GetSlotId(slot), FormatCandidateLabel(slot.Itemstack!)));
             }
         }
         return candidates;
+    }
+
+    /// <summary>Labels an Accept-placement candidate as `<Type> "<Title>"` (playtest feedback
+    /// 2026-08-30: the bare item name alone doesn't distinguish two carried Notebooks) — e.g.
+    /// `Notebook "Book of Nick"`. Falls back to the bare item name when the stack carries no document yet
+    /// or still has the untitled default, matching <see cref="ScribeDocumentSlot.BuildSummaryCard"/>'s same
+    /// "don't imply a title that isn't there" rule.</summary>
+    private static string FormatCandidateLabel(Vintagestory.API.Common.ItemStack stack)
+    {
+        string name = stack.GetName();
+        if (ScribeDocumentAttributes.TryReadFrom(stack, out var doc) && doc is not null
+            && !string.IsNullOrWhiteSpace(doc.Title) && doc.Title != ScribeDocument.DefaultTitle)
+        {
+            return Lang.Get("scribe:scribe-assignment-candidate-label", name, doc.Title);
+        }
+        return name;
     }
 
     /// <summary>Builds the Assignment Desk's Assignment tab (§5.5 / <c>assignment-desk-block</c> spec):
@@ -435,9 +451,15 @@ public abstract partial class ScribeDialogBase
     /// the base rather than behind a per-surface override.</summary>
     protected virtual Widget BuildAssignmentContent()
     {
+        // Self-assignment is deliberately allowed (ScribeAssignmentStore.TryApplyAction already resolves
+        // it correctly — a self-assignment matches both the Assigner and Assignee role checks) so the
+        // list is never empty in singleplayer, where the local player is the only "online" player. The
+        // local player's own entry is labeled distinctly so it doesn't read as a stray duplicate.
+        var localUid = capi.World.Player.PlayerUID;
         var targetPlayers = capi.World.AllOnlinePlayers
-            .Where(p => p.PlayerUID != capi.World.Player.PlayerUID)
-            .Select(p => (p.PlayerUID, p.PlayerName))
+            .Select(p => (p.PlayerUID, p.PlayerUID == localUid
+                ? Lang.Get("scribe:scribe-assignment-target-self", p.PlayerName)
+                : p.PlayerName))
             .ToList();
 
         var sentRows = modSystem.MySentAssignments
