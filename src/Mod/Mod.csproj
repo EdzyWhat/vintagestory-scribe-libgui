@@ -88,6 +88,13 @@
       <HintPath>lib/Gui.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- HarfBuzzSharp is LibGUI's managed native-loader companion. Referencing it lets Scribe
+         install a resolver before any text shaping call; the installed gui mod still supplies
+         the assembly at runtime. -->
+    <Reference Include="HarfBuzzSharp">
+      <HintPath>lib/HarfBuzzSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <!-- LibGUI's public API surfaces OpenTK.Mathematics types (Vector2/Vector4). Resolve from
          the game's Lib/ like the other game DLLs (Private=false: the game provides it). -->
     <Reference Include="OpenTK.Mathematics">

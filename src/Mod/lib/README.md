@@ -41,6 +41,17 @@ If you install a newer version of either mod, re-extract and update the version 
 (and re-verify any API assumptions still hold — these are not stable published packages with
 change logs to check against).
 
+## Linux native-loading note
+
+LibGUI's bundled `libHarfBuzzSharp.so` exports HarfBuzz symbols that can collide with a
+different system `libharfbuzz.so.0` already loaded by the Vintage Story process. This is
+not a KDE- or Qt-specific condition: GTK-based desktops and other host toolkits can load
+the conflicting system library too. Scribe installs a glibc-only resolver early in client
+startup and uses `RTLD_DEEPBIND` for the bundled library. On non-glibc Linux, that
+isolation is unavailable; Scribe leaves the normal runtime loader in place and logs that
+the workaround was not applied. A non-glibc failure must not be classified as the same
+HarfBuzz crash without native backtrace or loader evidence.
+
 ## Upstream references
 
 Check these before decompiling the vendored DLLs — decompiling is the last-resort

@@ -344,6 +344,9 @@ public sealed partial class ScribeModSystem : ModSystem
 
     public override void StartClientSide(ICoreClientAPI api)
     {
+        // Install native HarfBuzz isolation before any client-side text shaping or
+        // dependent LibGUI mod startup can reach the default loader.
+        InitializeHarfBuzzNativeLoader(api);
         base.StartClientSide(api);
         capi = api;
 
