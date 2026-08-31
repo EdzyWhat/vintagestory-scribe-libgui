@@ -25,8 +25,9 @@ namespace Scribe;
 internal static class ScribeAssignmentParticleEmitter
 {
     /// <summary>How close (blocks) the player must be to a block entity for its indicator to consider
-    /// spawning — playtest-tunable, not final.</summary>
-    public const double DetectionRadius = 6.0;
+    /// spawning. Widened 6 → 12 (playtest feedback 2026-08-31: the old range felt too short to notice
+    /// the indicator before walking right up to the block) — still playtest-tunable, not final.</summary>
+    public const double DetectionRadius = 12.0;
 
     // Base (amber/gold) HSV band, 0-255 scale matching VS's own range (design.md Decision 9).
     private const float BaseHue = 32f, BaseHueVar = 8f;
@@ -35,30 +36,59 @@ internal static class ScribeAssignmentParticleEmitter
     private const float BaseAlpha = 180f, BaseAlphaVar = 40f;
 
     /// <summary>Fraction of each tick's spawned motes that get a randomized full-range hue instead of
-    /// the base amber band (starting ratio ~1-in-5, tunable).</summary>
-    private const float RainbowRatio = 0.2f;
+    /// the base amber band. Started at ~1-in-5 (0.2); playtest feedback (2026-08-31) settled on a flat
+    /// 50/50 split after discussion, still tunable.</summary>
+    private const float RainbowRatio = 0.5f;
+
+    /// <summary>Scales the base 1-3-per-tick mote count. Playtest feedback (2026-08-31) tried +30%
+    /// (1.3), settled back on the original count (1.0), then — after living with the widened detection
+    /// radius and lower spawn origin — asked for a sparser field overall: 1.0 → 0.6. Kept as a named
+    /// multiplier (rather than folded away) since it's an active tuning knob.</summary>
+    private const float CountMultiplier = 0.6f;
+
+    /// <summary>One-time multiplier applied on the tick a player's proximity+unseen-assignment trigger
+    /// first turns true this session (see <see cref="BlockEntityScribeWritingStation"/>'s tick
+    /// listener), so the ambient field looks already-established the moment the player turns toward the
+    /// block instead of visibly accruing over the first several ticks (playtest feedback 2026-08-31).
+    /// Sized to roughly fill the steady-state population in one shot: steady-state count is
+    /// approximately (mean per-tick spawn) × (mean lifetime ÷ tick interval) ≈ 2.6 × (2s ÷ 1.5s) ≈ 3.5×
+    /// a single tick's spawn.</summary>
+    public const float SeedBurstMultiplier = 3.5f;
 
     private const float LifeLengthAvg = 2f, LifeLengthVar = 0.5f;
     private const float SizeAvg = 0.12f, SizeVar = 0.04f;
 
-    /// <summary>Slight NEGATIVE gravity so motes float upward rather than fall/drip (design.md Decision 9).</summary>
-    private const float GravityEffect = -0.006f;
+    /// <summary>Slight NEGATIVE gravity so motes float upward rather than fall/drip (design.md Decision 9).
+    /// Scaled to 2/3 of its original magnitude alongside <see cref="Velocity"/>'s Y component (playtest
+    /// feedback 2026-08-31: "runs too tall" — shrink vertical travel, not particle lifetime) so the field
+    /// covers roughly 2/3 of its previous vertical distance over the same <see cref="LifeLengthAvg"/>.</summary>
+    private const float GravityEffect = -0.004f;
+
+    /// <summary>Upward drift speed (mean, variance) — see <see cref="GravityEffect"/>'s remarks; scaled to
+    /// 2/3 of its original 0.01 mean/variance alongside it.</summary>
+    private const float VelocityYAvg = 0.0067f, VelocityYVar = 0.0067f;
 
     private static readonly Random Rand = new();
 
-    /// <summary>Spawns this tick's mote batch centered just above <paramref name="pos"/>'s reading
-    /// surface. Call only after confirming the trigger condition (an unseen assignment) and proximity —
-    /// this method itself does no gating, so a caller-side gate (see
-    /// <see cref="BlockEntityScribeWritingStation"/>'s tick listener) controls WHEN it fires.</summary>
-    public static void SpawnAt(ICoreClientAPI capi, BlockPos pos)
+    /// <summary>Spawns this tick's mote batch centered around <paramref name="pos"/>'s vertical midpoint
+    /// (moved down from just-above-the-block per playtest feedback 2026-08-31: something blocking the
+    /// top half of the block no longer hides the whole field). Call only after confirming the trigger
+    /// condition (an unseen assignment) and proximity — this method itself does no gating, so a
+    /// caller-side gate (see <see cref="BlockEntityScribeWritingStation"/>'s tick listener) controls WHEN
+    /// it fires. <paramref name="seedBurst"/> is set on the first tick after the trigger turns true,
+    /// spawning a larger one-time batch so the field doesn't need several ticks to build up to its
+    /// steady-state density (playtest feedback 2026-08-31).</summary>
+    public static void SpawnAt(ICoreClientAPI capi, BlockPos pos, bool seedBurst = false)
     {
-        // 1-3 sparse motes per tick (design.md: "low spawn quantity — sparse motes, not a fountain").
-        int total = 1 + Rand.Next(3);
+        // 1-3 sparse motes per tick (design.md: "low spawn quantity — sparse motes, not a fountain"),
+        // scaled by CountMultiplier and, on entry, SeedBurstMultiplier.
+        float scale = CountMultiplier * (seedBurst ? SeedBurstMultiplier : 1f);
+        int total = (int)MathF.Round((1 + Rand.Next(3)) * scale);
         int rainbowCount = (int)MathF.Round(total * RainbowRatio);
         int baseCount = total - rainbowCount;
 
-        var minPos = new Vec3d(pos.X + 0.2, pos.Y + 0.85, pos.Z + 0.2);
-        var maxPos = new Vec3d(pos.X + 0.8, pos.Y + 1.25, pos.Z + 0.8);
+        var minPos = new Vec3d(pos.X + 0.2, pos.Y + 0.35, pos.Z + 0.2);
+        var maxPos = new Vec3d(pos.X + 0.8, pos.Y + 0.65, pos.Z + 0.8);
 
         if (baseCount > 0)
             capi.World.SpawnParticles(BuildBatch(minPos, maxPos, baseCount,
@@ -96,7 +126,7 @@ internal static class ScribeAssignmentParticleEmitter
             Velocity = new[]
             {
                 NatFloat.createUniform(0f, 0.01f),
-                NatFloat.createUniform(0.01f, 0.01f),
+                NatFloat.createUniform(VelocityYAvg, VelocityYVar),
                 NatFloat.createUniform(0f, 0.01f),
             },
         };

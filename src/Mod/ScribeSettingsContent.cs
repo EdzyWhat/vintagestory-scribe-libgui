@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Gui.Rendering;             // EdgeInsets
 using Gui.Rendering.Text;        // TextStyle, FontWeight
-using Gui.Widgets.Basic;         // Text, Divider
+using Gui.Widgets.Basic;         // Text, Divider, Button, ButtonVariant
 using Gui.Widgets.Framework;     // Widget, StatelessWidget, BuildContext, Theme, ValueKey
 using Gui.Widgets.Gestures;      // ScrollController
 using Gui.Widgets.Input;         // Dropdown, DropdownItem, NumericField, Checkbox
@@ -39,18 +39,21 @@ internal sealed class ScribeSettingsContent : StatelessWidget
     private readonly ScrollController scrollController;
     private readonly ScribeNumericFocusRegistry focus;
     private readonly bool showQuestSettings;
+    private readonly Action onOpenThemePicker;
 
     public ScribeSettingsContent(
         ScribePlayerSettings settings,
         Action<Action<ScribePlayerSettings>> onMutate,
         ScrollController scrollController,
         ScribeNumericFocusRegistry focus,
+        Action onOpenThemePicker,
         bool showQuestSettings = false)
     {
         this.settings = settings;
         this.onMutate = onMutate;
         this.scrollController = scrollController;
         this.focus = focus;
+        this.onOpenThemePicker = onOpenThemePicker;
         this.showQuestSettings = showQuestSettings;
     }
 
@@ -269,6 +272,17 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                     "settings-cuneiformprogression", colors, scale,
                     value: settings.CuneiformProgression,
                     onChanged: v => onMutate(s => s.CuneiformProgression = v)),
+
+                // Surfaces LibGUI's own theme picker (refine-assignment-desk-inbox-ux D6/6.2), otherwise
+                // reachable only via the hidden `.ui settings` client command.
+                LabeledControl(
+                    "settings-themepicker", colors, scale,
+                    new Button(
+                        child: new Text(
+                            Lang.Get("scribe:settings-themepicker-button"),
+                            new TextStyle { FontSize = ScribeRowConstants.BaseSettingsFontSize * scale, Color = colors.OnPrimary }),
+                        variant: ButtonVariant.Primary,
+                        onTap: _ => onOpenThemePicker())),
             });
     }
 

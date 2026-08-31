@@ -7,7 +7,7 @@ using Gui.Widgets.Basic;         // Text, Button, ButtonVariant, Divider
 using Gui.Widgets.Framework;     // Widget, StatefulWidget, State, Theme, ColorScheme
 using Gui.Widgets.Gestures;      // ScrollController
 using Gui.Widgets.Input;         // TextField, TextFieldStyle, TextEditingController, TextEditingValue, TextSelection, Dropdown, DropdownItem, FocusNode
-using Gui.Widgets.Layout;        // Column, Padding, Expanded, CrossAxisAlignment
+using Gui.Widgets.Layout;        // Column, Row, Padding, Expanded, CrossAxisAlignment
 using Gui.Core.Layout;           // MainAxisSize
 using Scribe.Core;
 using Vintagestory.API.Config;   // Lang
@@ -111,6 +111,21 @@ internal sealed class ScribeAssignmentFormContentState : State<ScribeAssignmentF
                 }
                 : null);
 
+        // "Send to" row as a LibGUI flex Row (refine-assignment-desk-inbox-ux 7.1 / vslibgui wiki's
+        // Layout pattern): a fixed-width label, the player picker taking the flexible remaining space,
+        // and the fixed-width Send button — replacing three separate full-width stacked rows (label /
+        // dropdown / button) with one tighter row.
+        Widget sendToRow = new Row(
+            crossAxisAlignment: CrossAxisAlignment.Center,
+            spacing: 8f,
+            children: new Widget[]
+            {
+                new Text(Lang.Get("scribe:scribe-assignment-target-label"),
+                    new TextStyle { FontSize = style.FontSize * 0.85f, Color = colors.OnSurfaceVariant }),
+                new Expanded(flex: 1, child: playerPicker),
+                sendButton,
+            });
+
         var form = new Column(
             crossAxisAlignment: CrossAxisAlignment.Stretch,
             mainAxisSize: MainAxisSize.Min,
@@ -119,13 +134,10 @@ internal sealed class ScribeAssignmentFormContentState : State<ScribeAssignmentF
             {
                 new Text(Lang.Get("scribe:scribe-assignment-form-heading"),
                     new TextStyle { FontSize = style.FontSize * 1.1f, Weight = FontWeight.Bold, Color = colors.OnSurface }),
-                new Text(Lang.Get("scribe:scribe-assignment-target-label"),
-                    new TextStyle { FontSize = style.FontSize * 0.85f, Color = colors.OnSurfaceVariant }),
-                playerPicker,
+                sendToRow,
                 new Text(Lang.Get("scribe:scribe-assignment-text-label"),
                     new TextStyle { FontSize = style.FontSize * 0.85f, Color = colors.OnSurfaceVariant }),
                 textField,
-                sendButton,
             });
 
         Widget sentHistory = new ScribeInboxContent(

@@ -136,15 +136,21 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
             OnClickSwitchToInventory,
             boxShadows: NavButtonShadow,
             activeColor: IsInventoryView ? ScribeRowConstants.NavActiveTranscribe : null);
-        yield return TitleButton(
-            "scribeinventory",
-            "scribe-tab-inbox",
-            colors.OnSurfaceVariant,
-            NavButtonSize,
-            OnClickSwitchToInbox,
-            boxShadows: NavButtonShadow,
-            activeColor: IsInboxView ? ScribeRowConstants.NavActiveGuestbook : null,
-            shimmer: ShowInboxShimmer);
+        // Gated on assignment history (refine-assignment-desk-inbox-ux 3.2 / inbox-tab spec): a player
+        // who has never received an assignment gets no Inbox nav button here — the Assignment Desk and
+        // standalone Inbox block are unaffected, they always show their Inbox surface.
+        if (modSystem.MyReceivedAssignments.Count > 0)
+        {
+            yield return TitleButton(
+                "scribeinboxarrow",
+                "scribe-tab-inbox",
+                colors.OnSurfaceVariant,
+                NavButtonSize,
+                OnClickSwitchToInbox,
+                boxShadows: NavButtonShadow,
+                activeColor: IsInboxView ? ScribeRowConstants.NavActiveGuestbook : null,
+                shimmer: ShowInboxShimmer);
+        }
     }
 
     /// <summary>Slot edge length in pixels — matches LibGUI's <c>SlotGrid</c>/<c>ItemSlotStyle.Default</c> so

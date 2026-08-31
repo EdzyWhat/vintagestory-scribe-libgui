@@ -5,6 +5,7 @@ using Gui.Widgets.Gestures;      // ScrollController
 using Gui.Widgets.Painting;      // BoxStyle
 using OpenTK.Mathematics;        // Vector2
 using Vintagestory.API.Client;
+using Vintagestory.API.Common;   // Caller, TextCommandCallingArgs
 using Vintagestory.API.Config;   // Lang
 
 namespace Scribe;
@@ -102,7 +103,15 @@ public sealed class ScribeSettingsDialog : GuiBase
                     onMutate: modSystem.UpdateMySettings,
                     scrollController: scrollController,
                     focus: numericFocus,
+                    onOpenThemePicker: OpenLibGuiThemePicker,
                     showQuestSettings: ScribeQuestCatalog.IsAvailable(capi))));
+
+    /// <summary>Runs LibGUI's own `.ui settings` client command (refine-assignment-desk-inbox-ux D6),
+    /// surfacing its theme picker — otherwise reachable only by a player who already knows that hidden
+    /// command exists. <see cref="Caller.Player"/>'s setter also sets <c>Type</c>/<c>Entity</c>, matching
+    /// how a typed chat command's calling args are populated.</summary>
+    private void OpenLibGuiThemePicker() =>
+        capi.ChatCommands.ExecuteUnparsed(".ui settings", new TextCommandCallingArgs { Caller = new Caller { Player = capi.World.Player } });
 
     /// <summary>Notify listeners (the lectern's Settings nav button) that this window just opened, so it
     /// can recolor live (add-active-tab-nav-colors).</summary>

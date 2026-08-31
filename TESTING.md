@@ -27,64 +27,39 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
-## add-assignment-and-quest-support
+## refine-assignment-desk-inbox-ux
 
-> v1.4 proposal, all 56 tasks implemented and checked off but NOT yet manually verified
-> in-game — this is the first playtest pass. Fully quit and relaunch first (restaged
-> 2026-08-30 18:15). Singleplayer-friendly: the recipient picker now always includes your
-> own name (labeled "(You)") so you can send an assignment to yourself with no second
-> player needed. Quest Link / soft-detect items (§10-11) need vsquest installed and are
-> left off this list until that's available to test with.
+> Playtest-driven UX refinement pass over the Assignment Desk/Inbox surface (batch of 7
+> items). Restaged Debug 2026-08-31. `add-assignment-and-quest-support`'s own playtest
+> group retired to `playtest-history/TESTING-archive.md` (all its items reached Confirmed;
+> its particle-tuning item is explicitly superseded by 5.1-5.4 below).
 
-- [x] `00000036` **Place the Desk and Inbox.** Craft/creative-spawn an Assignment Desk and
-      an Inbox and place both — confirm they render as Lecterns (the art placeholder swap),
-      have a working collision box, and open their dialog without errors.
-      *(add-assignment-and-quest-support 5.1, 6.1, 13.1, 13.2)*
-      - **Confirmed 2026-08-30** (submission 2026-08-30T21-25-05): "pass."
-- [x] `00000037` **Self-assign and send.** Open the Assignment Desk's Assignment tab, open
-      the recipient dropdown — confirm your own name shows labeled "(You)" instead of an
-      empty list — write a task and send it to yourself. Confirm it also shows up in your
-      own Sent history on the same tab. *(add-assignment-and-quest-support 5.5, follow-up)*
-      - **Confirmed 2026-08-30** (submission 2026-08-30T21-25-05): "pass."
-- [ ] `00000038` **Accept with placement picker.** Open the Inbox (same Desk, or a
-      standalone Inbox block) and accept the assignment you sent yourself — confirm the
-      held-item → inventory-scan → picker flow resolves correctly, and it's disabled with a
-      tooltip if you're holding nothing eligible. *(add-assignment-and-quest-support 9.1)*
-      - **Still broken 2026-08-30** (submission 2026-08-30T21-25-05): "There's no place to
-        accept. The picker is there though. The flow should be that the Accept button is
-        clicked, then the picker appears if the user has multiple Scribe items. Also we
-        should show the title of the items with the type, like e.g. 'Notebook \"Book of
-        Nick\"'." Two issues: (1) the Accept button itself isn't reachable/visible — the
-        picker renders but nothing to confirm the pick with; (2) UX request — picker should
-        appear as a step AFTER pressing Accept (not shown unconditionally up front), and
-        each candidate should read as `<Type> "<Title>"` instead of its current bare label.
-      - **Fix landed 2026-08-30, AWAITING RETEST**: `BuildAcceptControl` (`ScribeInboxContent.cs`)
-        no longer renders the picker + Accept side by side when there's more than one candidate
-        (likely root cause of the vanished button: that Row could overflow the Desk/Inbox's
-        narrow 1:1 content width). Accept is now two-step — first tap reveals a picker stacked
-        above a second Accept that confirms. Candidate labels now read `<Type> "<Title>"` via a
-        new `FormatCandidateLabel` (`ScribeDialogBase.ViewSwitching.cs`, reusing
-        `ScribeDocumentAttributes.TryReadFrom` the same way `ScribeDocumentSlot`'s hover card
-        does), falling back to the bare item name when the stack has no document/no custom title
-        yet. Restaged 2026-08-30 21:31 — retest needs a relaunch.
-- [ ] `00000039` **Leading-icon scroll marker.** Once accepted, check the Read, Editor, and
-      Pinned views of that task — confirm the new rolled-scroll icon shows as its leading
-      marker (not the old guestbook-person placeholder). *(add-assignment-and-quest-support
-      9.3, 13.4)*
-- [ ] `0000003a` **Discard-via-delete and derived Completed.** Delete the accepted task from
-      your notebook — confirm it performs a Discard (terminal state), not a plain delete.
-      Separately, check the task's done box — confirm the assignment record derives
-      Completed on its own (never directly settable). *(add-assignment-and-quest-support
-      9.1)*
-- [ ] `0000003b` **Ambient particle indicator.** With an unseen assignment pending, stand
-      within ~6 blocks of an Inbox-capable block — confirm sparse amber/gold motes spawn
-      above it, with an occasional rainbow-hued one; note if the density/timing feels off
-      (starting values are explicitly tune-by-eye, not final).
-      *(add-assignment-and-quest-support 8.4)*
-- [ ] `0000003c` **Inbox nav-button shimmer.** With an unseen assignment pending, open a
-      Lectern/Scriptorium/Chalkboard (NOT the Inbox tab) — confirm its Inbox nav button
-      shimmers; switch to the Inbox tab — confirm the shimmer stops while that tab is
-      active. *(add-assignment-and-quest-support 8.5)*
+- [ ] `00000044` **Check chip colors.** Open the Assignment Inbox or Create Assignments tab's
+      filter-chip row — confirm New/Accepted/Cancelled/Completed each render in their own
+      distinct color and Declined+Discarded share one color, all legible against the chip's
+      light glyph text. *(refine-assignment-desk-inbox-ux 2.3)*
+- [ ] `00000045` **Check Inbox gate.** On a player with zero assignment history, open a
+      Lectern, Scriptorium, and Chalkboard — confirm none shows an Inbox nav button; send
+      that player an assignment and confirm the button appears on all three without
+      reopening any dialog. *(refine-assignment-desk-inbox-ux 3.4)*
+- [ ] `00000046` **Check standalone Inbox seen-fix.** Send an assignment, then open the
+      standalone Inbox block directly (not via another surface's nav button) and close it
+      without acting — confirm the ambient particle and nav shimmer both clear afterward.
+      *(refine-assignment-desk-inbox-ux 4.3)*
+- [ ] `00000047` **Check Decline clears particle.** Send an assignment, view it via any
+      Inbox-capable surface, then Decline it — confirm the particle clears and does not
+      resume. *(refine-assignment-desk-inbox-ux 4.4)*
+- [ ] `00000048` **Check particle range/shape.** Approach an Inbox-capable block with an
+      unseen assignment from up to 12 blocks out — confirm it triggers throughout that
+      range, spawns from around the block's mid-height (not above it), and rises a shorter
+      distance than before over the same duration. *(refine-assignment-desk-inbox-ux 5.5)*
+- [ ] `00000049` **Check theme-picker button.** In Scribe Settings' Window Appearance
+      section, click "Open Theme Picker" — confirm LibGUI's own theme-picker dialog opens,
+      matching typing `.ui settings` directly. *(refine-assignment-desk-inbox-ux 6.3)*
+- [ ] `0000004a` **Check Send-to row layout.** Open Create Assignments — confirm the "Send
+      to" label, player picker, and Send button sit on one row (label and button
+      fixed-width, picker filling the space between), and stay usable at a couple different
+      Pixel Art Size settings. *(refine-assignment-desk-inbox-ux 7.3)*
 
 ## reconcile-animating-surfaces
 

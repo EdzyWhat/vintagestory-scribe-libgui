@@ -33,8 +33,10 @@ document behaviors already defined for a Scribe writing station — Read and Edi
 and editing tasks, toggling completion by identity, deleting and reordering blocks, pinning,
 the document title header, the shift+right-click quick-add gesture, and the guestbook — SHALL
 be available on the Scriptorium exactly as they are on the Lectern, because they flow through
-the same shared machinery. The Scriptorium's Assign & History and Inbox views are NOT part of
-this capability and SHALL NOT appear.
+the same shared machinery. The Scriptorium's own Assign & History (create-and-send) surface is
+NOT part of this capability and SHALL NOT appear — that role belongs exclusively to the
+Assignment Desk (`assignment-desk-block`). Viewing the shared Inbox tab via a nav button IS part
+of this capability, covered by a separate requirement below.
 
 #### Scenario: Open by right-click
 - **WHEN** a player right-clicks a placed Scriptorium
@@ -49,10 +51,11 @@ this capability and SHALL NOT appear.
 - **WHEN** the player adds a task and marks it complete through the Scriptorium's dialog
 - **THEN** the Scriptorium's document contains that task shown as completed
 
-#### Scenario: No assignment surfaces are exposed
+#### Scenario: No create-and-send surface is exposed
 - **WHEN** a player opens the Scriptorium's dialog
-- **THEN** no Assign & History view and no Inbox nav-rail view are present (these are deferred to
-  the v1.3 assignment system)
+- **THEN** no Assign & History (create-and-send) view is present — only the Assignment Desk can
+  create and send an assignment; the Scriptorium's own Inbox nav button (see below) is a
+  view-only affordance
 
 ### Requirement: Scriptorium persistence and sync follow the vanilla Sign pattern
 
@@ -156,4 +159,30 @@ show world-interaction hints on look-at for its right-click (open) and shift+rig
 #### Scenario: Handbook entry exists
 - **WHEN** a player opens the handbook entry for the Scriptorium
 - **THEN** it describes the block as a Scribe writing station
+
+### Requirement: The Scriptorium exposes an Inbox nav button
+
+The Scriptorium's dialog SHALL show a nav button that switches its view to the shared Inbox tab
+(`inbox-tab` capability). This supersedes the Scriptorium's earlier reserved plan to host its own
+Scriptorium-only Assign & History surface — that create-and-send role now belongs exclusively to
+the Assignment Desk (`assignment-desk-block`); the Scriptorium only ever gains a viewing nav
+button, never a create affordance.
+
+#### Scenario: Opening the Inbox from a Scriptorium
+- **WHEN** a player at a Scriptorium clicks its Inbox nav button
+- **THEN** the Scriptorium's dialog switches to the same Inbox tab shown by the Assignment Desk
+  and the standalone Inbox block
+
+#### Scenario: The Scriptorium never gains a create-and-send affordance
+- **WHEN** a player opens a Scriptorium's dialog
+- **THEN** no control for creating and sending a new assignment is present
+
+### Requirement: The Scriptorium shows the ambient unseen-assignment particle
+
+A placed Scriptorium SHALL emit the ambient particle effect defined by the `inbox-tab` capability
+when the viewing player has a New (unseen) assignment and is within range.
+
+#### Scenario: A Scriptorium particles for a player with an unseen assignment
+- **WHEN** a player with an unseen assignment is within range of a placed Scriptorium
+- **THEN** that Scriptorium emits the ambient particle effect for that player's client
 

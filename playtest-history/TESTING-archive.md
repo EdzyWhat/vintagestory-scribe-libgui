@@ -4822,3 +4822,83 @@ regression checks specific to this change's scoped-to-the-input approach.
   read cleanly and nothing regressed vs. the first tune. *(adopt-glyph-forge-tablet-themes 9.1/9.2 retune)*
   - **Confirmed 2026-08-30** (submission 2026-08-30T18-17-29): "pass."
   ```
+
+## add-assignment-and-quest-support
+
+> v1.4 proposal, all 56 tasks implemented and checked off but NOT yet manually verified
+> in-game — this is the first playtest pass. Fully quit and relaunch first (restaged
+> 2026-08-30 18:15). Singleplayer-friendly: the recipient picker now always includes your
+> own name (labeled "(You)") so you can send an assignment to yourself with no second
+> player needed. Quest Link / soft-detect items (§10-11) need vsquest installed and are
+> left off this list until that's available to test with. Retired 2026-08-31 (archived,
+> all items reached a terminal Confirmed verdict) — see `refine-assignment-desk-inbox-ux`
+> and `add-assignment-activity-log` for the follow-up polish/log work built on top of this.
+
+- [x] `00000036` **Place the Desk and Inbox.** Craft/creative-spawn an Assignment Desk and
+      an Inbox and place both — confirm they render as Lecterns (the art placeholder swap),
+      have a working collision box, and open their dialog without errors.
+      *(add-assignment-and-quest-support 5.1, 6.1, 13.1, 13.2)*
+      - **Confirmed 2026-08-30** (submission 2026-08-30T21-25-05): "pass."
+- [x] `00000037` **Self-assign and send.** Open the Assignment Desk's Assignment tab, open
+      the recipient dropdown — confirm your own name shows labeled "(You)" instead of an
+      empty list — write a task and send it to yourself. Confirm it also shows up in your
+      own Sent history on the same tab. *(add-assignment-and-quest-support 5.5, follow-up)*
+      - **Confirmed 2026-08-30** (submission 2026-08-30T21-25-05): "pass."
+- [x] `00000038` **Accept with placement picker.** Open the Inbox (same Desk, or a
+      standalone Inbox block) and accept the assignment you sent yourself — confirm the
+      held-item → inventory-scan → picker flow resolves correctly, and it's disabled with a
+      tooltip if you're holding nothing eligible. *(add-assignment-and-quest-support 9.1)*
+      - **Still broken 2026-08-30** (submission 2026-08-30T21-25-05): "There's no place to
+        accept. The picker is there though. The flow should be that the Accept button is
+        clicked, then the picker appears if the user has multiple Scribe items. Also we
+        should show the title of the items with the type, like e.g. 'Notebook \"Book of
+        Nick\"'." Two issues: (1) the Accept button itself isn't reachable/visible — the
+        picker renders but nothing to confirm the pick with; (2) UX request — picker should
+        appear as a step AFTER pressing Accept (not shown unconditionally up front), and
+        each candidate should read as `<Type> "<Title>"` instead of its current bare label.
+      - **Fix landed 2026-08-30**: `BuildAcceptControl` (`ScribeInboxContent.cs`)
+        no longer renders the picker + Accept side by side when there's more than one candidate
+        (likely root cause of the vanished button: that Row could overflow the Desk/Inbox's
+        narrow 1:1 content width). Accept is now two-step — first tap reveals a picker stacked
+        above a second Accept that confirms. Candidate labels now read `<Type> "<Title>"` via a
+        new `FormatCandidateLabel` (`ScribeDialogBase.ViewSwitching.cs`, reusing
+        `ScribeDocumentAttributes.TryReadFrom` the same way `ScribeDocumentSlot`'s hover card
+        does), falling back to the bare item name when the stack has no document/no custom title
+        yet.
+      - **Confirmed 2026-08-31**: retested after the fix — "Works."
+- [x] `00000039` **Leading-icon scroll marker.** Once accepted, check the Read, Editor, and
+      Pinned views of that task — confirm the new rolled-scroll icon shows as its leading
+      marker (not the old guestbook-person placeholder). *(add-assignment-and-quest-support
+      9.3, 13.4)*
+      - **Confirmed 2026-08-31**: "Works."
+- [x] `0000003a` **Discard-via-delete and derived Completed.** Delete the accepted task from
+      your notebook — confirm it performs a Discard (terminal state), not a plain delete.
+      Separately, check the task's done box — confirm the assignment record derives
+      Completed on its own (never directly settable). *(add-assignment-and-quest-support
+      9.1)*
+      - **Confirmed 2026-08-31**: "Works." Follow-up (not blocking): author wants to rework
+        this state's visual with a custom stamp `.png` — art in progress, tracked separately.
+- [x] `0000003b` **Ambient particle indicator.** With an unseen assignment pending, stand
+      within ~6 blocks of an Inbox-capable block — confirm sparse amber/gold motes spawn
+      above it, with an occasional rainbow-hued one; note if the density/timing feels off
+      (starting values are explicitly tune-by-eye, not final).
+      *(add-assignment-and-quest-support 8.4)*
+      - **Backlogged 2026-08-31**: "Works, but we need to tune it up." Three tuning requests:
+        (1) increase particle count by 30%; (2) particles currently ramp up after the player
+        has been looking at/near the block for a period — they should already be present the
+        moment the player turns toward it, not build up over time; (3) increase the relative
+        frequency of non-amber (rainbow-hued) particles by ~50%.
+      - **Tuning pass 2026-08-31**: seed-burst fix landed for (2); `RainbowRatio` settled at a flat
+        0.5 (50/50 split, not a relative bump) for (3); the count bump for (1) was tried at 1.3x
+        then reverted back to the original count after a follow-up look.
+      - **Confirmed 2026-08-31**: retested after restage — "Its great."
+      - **Superseded 2026-08-31** by `refine-assignment-desk-inbox-ux` 5.1-5.4: detection radius
+        6 → 12 blocks, per-tick count ×0.6 (down from the ×1.0 this verdict confirmed), spawn
+        origin moved from above the block to its vertical midpoint, and vertical travel reduced
+        to ~2/3 with lifetime unchanged. That change's own item 5.5 covers retesting the new
+        values.
+- [x] `0000003c` **Inbox nav-button shimmer.** With an unseen assignment pending, open a
+      Lectern/Scriptorium/Chalkboard (NOT the Inbox tab) — confirm its Inbox nav button
+      shimmers; switch to the Inbox tab — confirm the shimmer stops while that tab is
+      active. *(add-assignment-and-quest-support 8.5)*
+      - **Confirmed 2026-08-31**: "Works. Perfect."

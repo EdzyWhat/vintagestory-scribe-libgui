@@ -112,10 +112,20 @@
       5.2.
 - [x] 6.3 Build the Inbox block's GUI dialog class, opening directly to the shared Inbox tab with
       no Assignment tab present. `GuiDialogScribeInbox` calls the new
-      `ScribeDialogBase.DefaultToInboxView()` from its ctor and overrides `BuildRightColNav()` to a
-      single Settings button — no Read/Editor/Pinned (this block has none) and no Inbox nav button
-      either (Inbox is the only view, so there is nothing to switch away from and back to). Since no
-      button here ever changes `viewMode`, the dialog stays on Inbox for its whole open lifetime.
+      `ScribeDialogBase.DefaultToInboxView()` from its ctor and overrides `BuildRightColNav()` — no
+      Read/Editor/Pinned (this block has none). **Revised 2026-08-31**: originally shipped with only
+      a Settings button (Inbox being the only view, "nothing to switch away from and back to"); a
+      playtest call reversed that — the Inbox block now shows a visible, labeled "Assignment Inbox"
+      nav button (always active, wired to the existing `OnClickSwitchToInbox()`) alongside Settings,
+      so the sole capability isn't implicit. Also fixed the same day: `BlockEntityScribeWritingStation
+      .HandleServerReply`'s non-editor branch unconditionally called `EnterReadMode()` after opening
+      any writing-station dialog, which force-switched the Desk/Inbox off their constructor-selected
+      Assignment/Inbox default and onto a Read view neither has a nav button for — every plain
+      right-click open landed on a dead Read tab. Fixed via a new `ScribeDialogBase.EnterGrantedView()`
+      virtual (base = `EnterReadMode()`, unchanged for Lectern/Notebook/Scriptorium/Chalkboard),
+      overridden by `GuiDialogScribeAssignmentDesk`/`GuiDialogScribeInbox` to tear down an editor
+      session if one was active (via the new shared `LeaveEditorIfActive()`) without reasserting any
+      particular tab.
 
 ## 7. Shared Inbox tab UI
 
@@ -184,6 +194,19 @@
       **Prerequisite fix, not originally scoped here**: the Seen-flag flip-on-open (design.md Decision 4)
       had no wire message yet — a gap §7.5 explicitly disclosed and deferred to "revisit alongside
       §8.4/8.5" — so both this task and 8.5 would have had no way to ever clear their trigger condition.
+
+      **Tuning pass 2026-08-31** (playtest verdict on `TESTING.md` `0000003b`: "works, but tune it up"):
+      three changes in `ScribeAssignmentParticleEmitter.cs`. (1) `RainbowRatio` 0.2 → 0.5 — first read as
+      "~50% more often" (a relative 0.2 × 1.5 = 0.3 bump), but settled after discussion on a flat 50/50
+      split instead. (2) New `CountMultiplier`, tried at 1.3 (+30% motes) then reverted back to 1.0 (the
+      original count) after a follow-up look — kept as a named knob for future tuning rather than folded
+      away. (3) The gate had no memory of its own tick-to-tick,
+      so entering range read as a slow multi-second build-up while the population accrued to steady state;
+      `BlockEntityScribeWritingStation` now tracks the trigger's own true/false edge
+      (`assignmentParticlesWereActive`) and the first active tick after a false→true edge passes
+      `seedBurst: true` into `SpawnAt`, which applies a new `SeedBurstMultiplier` (3.5×, sized to
+      approximate the steady-state population in one shot) so the field looks already-established the
+      moment the player comes into range instead of visibly filling in.
       Added `ScribeAssignmentStore.MarkAllSeen` (Core), a new empty-payload `ScribeMarkAssignmentsSeenMessage`
       (mirroring the `ScribeClearTimerMessage` precedent), its server handler
       `OnServerReceivedMarkAssignmentsSeen`, and a client-side send from `OnClickSwitchToInbox` — so
@@ -208,7 +231,9 @@
       dialog subclasses) wasn't judged worth it for a cosmetic effect explicitly marked tune-by-eye. New
       `ScribeDialogBase.ShowInboxShimmer` (`HasUnseenAssignment && !IsInboxView`) is the shared trigger,
       passed as `TitleButton`'s new `shimmer` parameter from the Assignment Desk/Lectern/Scriptorium/
-      Chalkboard Inbox nav-button call sites; the standalone Inbox block has no other tab and needs none.
+      Chalkboard Inbox nav-button call sites; the standalone Inbox block's own Inbox button (added
+      6.3, 2026-08-31) omits `shimmer` — it's always the active view, so the "not already showing"
+      condition can never hold and the sweep would never play.
 
 ## 9. Accepted-task placement and rendering
 

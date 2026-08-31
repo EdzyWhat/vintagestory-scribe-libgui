@@ -107,28 +107,46 @@ public abstract partial class ScribeDialogBase
     /// lock/scratch, so nothing to tear down — just select the view).</summary>
     public void EnterReadMode()
     {
-        CommitTitleIfEditing();
-        if (isEditorMode)
-        {
-            // Full editor teardown, matching OnClickSwitchToPinned/History and the editor footer's
-            // OnClickSwitchToRead: flush the last edit AND release the server-held lock before leaving.
-            // The Read nav button routes here directly (onTap: EnterReadMode), so without the release a
-            // switch to Read via the nav button leaked the lock while every other tab freed it — the
-            // exact asymmetry reported (fix-transient-lectern-editor-lock). LeaveEditorMode itself does
-            // NOT release, by contract.
-            if (focusedEditIndex is { } idx) NormalizeRowOnCommit(idx);
-            PurgeEmptyRowsFromScratch();
-            pendingEmptyRowRemoval = null;
-            FlushIfDirty();
-            SendReleaseLockPacket();
-            LeaveEditorMode();
-        }
+        LeaveEditorIfActive();
         viewMode = ScribeLecternView.Read; // also covers a Pin Tab → Read switch (no editor teardown)
         if (IsOpened())
         {
             ForceRebuild();
         }
     }
+
+    /// <summary>Shared teardown half of <see cref="EnterReadMode"/>: flushes and releases the editor
+    /// lock if one is held, without touching <c>viewMode</c>. Full editor teardown, matching
+    /// OnClickSwitchToPinned/History and the editor footer's OnClickSwitchToRead: flush the last edit
+    /// AND release the server-held lock before leaving (LeaveEditorMode itself does NOT release, by
+    /// contract — the missing release here was the exact asymmetry reported in
+    /// fix-transient-lectern-editor-lock). Exposed so <see cref="EnterGrantedView"/> overrides that have
+    /// no Read view to land on (Assignment Desk, Inbox) can tear down an editor session without being
+    /// forced onto Read.</summary>
+    protected void LeaveEditorIfActive()
+    {
+        CommitTitleIfEditing();
+        if (!isEditorMode) return;
+        if (focusedEditIndex is { } idx) NormalizeRowOnCommit(idx);
+        PurgeEmptyRowsFromScratch();
+        pendingEmptyRowRemoval = null;
+        FlushIfDirty();
+        SendReleaseLockPacket();
+        LeaveEditorMode();
+    }
+
+    /// <summary>Called by <see cref="BlockEntityScribeWritingStation.HandleServerReply"/> for every
+    /// non-editor access grant/refusal — the ordinary reply a plain right-click gets. The base lands this
+    /// on the Read view, matching every Read/Editor/Pinned surface (Lectern, Notebook, Scriptorium,
+    /// Chalkboard). The Assignment Desk and Inbox have no Read view in their nav model at all (design.md
+    /// Decision 1 / <c>inbox-block</c>'s spec) — routing them through <see cref="EnterReadMode"/>
+    /// force-switched them to a tab that doesn't exist for them every time the block was opened, which is
+    /// what a plain right-click always triggers. They override this to tear down an editor session if one
+    /// was (rarely, incidentally) active without reasserting any particular tab, leaving whatever view is
+    /// already selected — the constructor's <see cref="DefaultToAssignmentView"/>/
+    /// <see cref="DefaultToInboxView"/> on first open, or the player's own last nav-button pick on a
+    /// re-open of an already-open dialog.</summary>
+    public virtual void EnterGrantedView() => EnterReadMode();
 
     /// <summary>Switch to the Pin Tab view (scribe-pin-editor). Wired to the <c>scribepin</c> nav button —
     /// a real entry method, not an inline flag flip (the nav discipline the editor's
@@ -326,11 +344,19 @@ public abstract partial class ScribeDialogBase
             LeaveEditorMode();
         }
         viewMode = ScribeLecternView.Inbox;
-        // "Opening the Inbox flips [Seen] server-side" (design.md Decision 4) — the request is
-        // unconditional (server no-ops/skips the re-push when nothing was actually unseen).
-        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeMarkAssignmentsSeenMessage());
+        MarkInboxSeenIfNeeded();
         if (IsOpened()) ForceRebuild();
     }
+
+    /// <summary>Sends the mark-seen request (design.md Decision 4: "Opening the Inbox flips [Seen]
+    /// server-side"). The request is unconditional — the server no-ops/skips the re-push when nothing
+    /// was actually unseen — so it is safe to call from every path that makes the Inbox view active,
+    /// not only <see cref="OnClickSwitchToInbox"/>'s nav-button click (refine-assignment-desk-inbox-ux
+    /// D2): the standalone Inbox block's dialog also calls this from its constructor and its
+    /// <c>EnterGrantedView()</c> override, since it lands on (and stays on) the Inbox view without ever
+    /// going through <see cref="OnClickSwitchToInbox"/>.</summary>
+    protected void MarkInboxSeenIfNeeded() =>
+        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeMarkAssignmentsSeenMessage());
 
     /// <summary>Builds the shared Inbox tab (add-assignment-and-quest-support §7): the viewing player's
     /// RECEIVED assignments (<see cref="ScribeModSystem.MyReceivedAssignments"/>), rendered by

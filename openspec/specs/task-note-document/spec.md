@@ -6,20 +6,28 @@ TBD - created via spec sync from change `skeuomorphic-lectern-gui`. The base
 task-note-document requirements are owned by the not-yet-synced `add-lectern-block` change;
 this file currently holds only the requirements added by `skeuomorphic-lectern-gui`.
 ## Requirements
-### Requirement: Reserved assignment field
-Every block SHALL carry an assignment field (an optional identifier, absent by default)
-that is persisted through serialization but has no mutation operation and no consumer in
-this document capability. This field exists so a future capability can define its own
-semantics (e.g. assigning a task to a player or group) without a further format change.
+### Requirement: Assignment field carries assigner, state, and assigned date
+Every block SHALL carry an optional assignment reference (absent by default) that, when present,
+records the assigner's player UID, the current assignment state (one of the six states defined
+by the `assignment-state-machine` capability), and the in-game date the assignment was sent.
+This field is persisted through serialization. The bare identifier previously reserved for this
+purpose (an unset, semantics-free field) is replaced by this richer type — no prior shipped save
+ever populated the old field, so no migration path is required.
 
 #### Scenario: A new block has no assignment
 - **WHEN** a task or text section is added
-- **THEN** its assignment field is absent (unset)
+- **THEN** its assignment reference is absent (unset)
 
-#### Scenario: Assignment survives serialization even though nothing sets it
-- **WHEN** a document containing blocks with unset assignment fields is serialized and
+#### Scenario: An assigned block carries assigner, state, and date
+- **WHEN** a task is created via the Assignment Desk's Assignment tab and sent to another player
+- **THEN** the resulting block's assignment reference records the assigner's UID, an initial
+  Unaccepted state, and the in-game date it was sent
+
+#### Scenario: Assignment survives serialization
+- **WHEN** a document containing both assigned and unassigned blocks is serialized and
   deserialized
-- **THEN** the resulting blocks still have their assignment fields absent (unset)
+- **THEN** unassigned blocks still have an absent assignment reference, and assigned blocks
+  retain their assigner UID, state, and assigned date unchanged
 
 ### Requirement: Document stores task text verbatim
 The document model SHALL store a task's text exactly as supplied, without trimming leading,

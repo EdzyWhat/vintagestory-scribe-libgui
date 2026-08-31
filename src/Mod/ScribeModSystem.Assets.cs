@@ -63,6 +63,12 @@ public sealed partial class ScribeModSystem
         // Accepted-assignment leading-icon marker (add-assignment-and-quest-support §13.4): a rolled
         // scroll, distinct from the guestbook/book glyphs it previously borrowed as a placeholder.
         RegisterSvgIcon(api, "scribeassignment", new AssetLocation("scribe", "textures/icons/scroll.svg"));
+        // Shared Inbox tab nav button (refine-assignment-desk-inbox-ux 1.3/1.4): a dedicated
+        // inbox-with-down-arrow glyph, replacing the borrowed "scribeinventory" (book) icon.
+        RegisterSvgIcon(api, "scribeinboxarrow", new AssetLocation("scribe", "textures/icons/inbox-arrow.svg"));
+        // Assignment Desk's Create Assignments nav button (refine-assignment-desk-inbox-ux 1.3/1.4): a
+        // plus glyph, replacing the borrowed "scribeassignment" (scroll) icon on that one nav button.
+        RegisterSvgIcon(api, "scribeplus", new AssetLocation("scribe", "textures/icons/plus.svg"));
     }
 
     /// <summary>

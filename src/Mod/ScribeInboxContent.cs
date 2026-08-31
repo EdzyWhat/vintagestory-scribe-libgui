@@ -184,13 +184,13 @@ internal static class ScribeAssignmentChip
 {
     public static (string LangKey, Vector4 Color) For(ScribeAssignmentState state, ColorScheme colors) => state switch
     {
-        ScribeAssignmentState.Unaccepted => ("scribe:scribe-assignment-state-unaccepted", ScribeRowConstants.NavActiveEdit),
-        ScribeAssignmentState.Accepted => ("scribe:scribe-assignment-state-accepted", ScribeRowConstants.NavActivePinned),
-        ScribeAssignmentState.Declined => ("scribe:scribe-assignment-state-declined", colors.OnSurfaceVariant with { W = 1f }),
-        ScribeAssignmentState.Cancelled => ("scribe:scribe-assignment-state-cancelled", colors.OnSurfaceVariant with { W = 1f }),
-        ScribeAssignmentState.Discarded => ("scribe:scribe-assignment-state-discarded", colors.OnSurfaceVariant with { W = 1f }),
-        ScribeAssignmentState.Completed => ("scribe:scribe-assignment-state-completed", ScribeRowConstants.NavActiveRead),
-        _ => ("scribe:scribe-assignment-state-unaccepted", colors.OnSurfaceVariant with { W = 1f }),
+        ScribeAssignmentState.Unaccepted => ("scribe:scribe-assignment-state-unaccepted", ScribeRowConstants.AssignmentChipNew),
+        ScribeAssignmentState.Accepted => ("scribe:scribe-assignment-state-accepted", ScribeRowConstants.AssignmentChipAccepted),
+        ScribeAssignmentState.Declined => ("scribe:scribe-assignment-state-declined", ScribeRowConstants.AssignmentChipRejected),
+        ScribeAssignmentState.Cancelled => ("scribe:scribe-assignment-state-cancelled", ScribeRowConstants.AssignmentChipCancelled),
+        ScribeAssignmentState.Discarded => ("scribe:scribe-assignment-state-discarded", ScribeRowConstants.AssignmentChipRejected),
+        ScribeAssignmentState.Completed => ("scribe:scribe-assignment-state-completed", ScribeRowConstants.AssignmentChipCompleted),
+        _ => ("scribe:scribe-assignment-state-unaccepted", ScribeRowConstants.AssignmentChipNew),
     };
 }
 

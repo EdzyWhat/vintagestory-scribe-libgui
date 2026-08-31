@@ -128,14 +128,20 @@ public sealed class GuiDialogScribeChalkboard : ScribeDialogBase
             OnClickSwitchToVisitors,
             boxShadows: NavButtonShadow,
             activeColor: IsVisitorsView ? ScribeRowConstants.NavActiveGuestbook : null);
-        yield return TitleButton(
-            "scribeinventory",
-            "scribe-tab-inbox",
-            NavIconColor(colors),
-            NavButtonSize,
-            OnClickSwitchToInbox,
-            boxShadows: NavButtonShadow,
-            activeColor: IsInboxView ? ScribeRowConstants.NavActiveGuestbook : null,
-            shimmer: ShowInboxShimmer);
+        // Gated on assignment history (refine-assignment-desk-inbox-ux 3.2 / inbox-tab spec): a player
+        // who has never received an assignment gets no Inbox nav button here — the Assignment Desk and
+        // standalone Inbox block are unaffected, they always show their Inbox surface.
+        if (modSystem.MyReceivedAssignments.Count > 0)
+        {
+            yield return TitleButton(
+                "scribeinboxarrow",
+                "scribe-tab-inbox",
+                NavIconColor(colors),
+                NavButtonSize,
+                OnClickSwitchToInbox,
+                boxShadows: NavButtonShadow,
+                activeColor: IsInboxView ? ScribeRowConstants.NavActiveGuestbook : null,
+                shimmer: ShowInboxShimmer);
+        }
     }
 }

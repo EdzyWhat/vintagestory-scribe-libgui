@@ -41,6 +41,17 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
     /// append targeting this host) behaves consistently with every other writing station.</summary>
     protected override bool EditorAccessIsAsync => true;
 
+    /// <summary>This dialog has no Read view to land on (see class remarks) — a plain access grant, the
+    /// ordinary reply every right-click on the block gets, must leave the already-selected
+    /// Assignment/Inbox tab alone instead of being force-switched to a nonexistent Read view. Overriding
+    /// the base's <c>EnterReadMode()</c> default this way was the fix for the Desk always opening on Read
+    /// despite having no Read nav button.</summary>
+    public override void EnterGrantedView()
+    {
+        LeaveEditorIfActive();
+        if (IsOpened()) ForceRebuild();
+    }
+
     /// <summary>Replaces the base's Read/Editor/Pinned/Settings column with just this dialog's own
     /// Assignment/Inbox tab-switcher pair plus Settings — this dialog has no Read/Editor/Pinned view to
     /// switch to (see class remarks). Mirrors <see cref="GuiDialogScribeTablet"/>'s precedent for
@@ -52,12 +63,13 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
         float size = NavButtonSize;
         var navColor = NavIconColor(colors);
 
-        // Dedicated rolled-scroll glyph (§13.4), matching the same icon the row-level accepted-
-        // assignment marker uses (ScribeAssignedTaskIcon) — replaces the earlier edit-pencil placeholder.
-        Widget assignmentBtn = TitleButton("scribeassignment", "scribe-tab-assignment", navColor,
+        // Plus glyph (refine-assignment-desk-inbox-ux 1.6) — the Create Assignments tab is this dialog's
+        // sole create-and-send surface, distinct from the rolled-scroll glyph the row-level accepted-
+        // assignment marker still uses (ScribeAssignedTaskIcon, unrelated to this nav button).
+        Widget assignmentBtn = TitleButton("scribeplus", "scribe-tab-assignment", navColor,
             size: size, onTap: OnClickSwitchToAssignment, boxShadows: NavButtonShadow,
             activeColor: IsAssignmentView ? ScribeRowConstants.NavActiveEdit : null);
-        Widget inboxBtn = TitleButton("scribeinventory", "scribe-tab-inbox", navColor,
+        Widget inboxBtn = TitleButton("scribeinboxarrow", "scribe-tab-inbox", navColor,
             size: size, onTap: OnClickSwitchToInbox, boxShadows: NavButtonShadow,
             activeColor: IsInboxView ? ScribeRowConstants.NavActiveGuestbook : null,
             shimmer: ShowInboxShimmer);

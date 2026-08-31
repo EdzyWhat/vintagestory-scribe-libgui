@@ -237,21 +237,38 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
         }
     }
 
+    /// <summary>Tracks whether the previous tick's proximity+unseen-assignment check was true, so the
+    /// next tick that turns it true again after being false can tell it's a fresh entry (see
+    /// <see cref="OnAssignmentParticleTick"/>'s <c>seedBurst</c> — playtest feedback 2026-08-31).
+    /// Client-side, transient, per-instance only — never persisted.</summary>
+    private bool assignmentParticlesWereActive;
+
     /// <summary>Client-side periodic check (§8.4): if the local player has an unseen received assignment
     /// AND is within <see cref="ScribeAssignmentParticleEmitter.DetectionRadius"/> of this block, spawn
     /// this tick's mote batch. Player-specific and local-only — never touches the server or any other
-    /// client (design.md Decision 9).</summary>
+    /// client (design.md Decision 9). The gate has no memory of its own, so a one-tick-late accrual to
+    /// steady-state density read as a slow "build-up" (playtest feedback 2026-08-31); tracking the
+    /// trigger's own true/false edge here lets the first active tick request a seed burst instead.</summary>
     private void OnAssignmentParticleTick(float dt)
     {
         if (Api is not ICoreClientAPI capi) return;
-        if (ModSystem is not { HasUnseenAssignment: true }) return;
 
-        var player = capi.World.Player?.Entity;
-        if (player is null) return;
-        if (Pos.DistanceTo(player.Pos.X, player.Pos.Y, player.Pos.Z) > ScribeAssignmentParticleEmitter.DetectionRadius)
+        bool active = ModSystem is { HasUnseenAssignment: true };
+        if (active)
+        {
+            var player = capi.World.Player?.Entity;
+            active = player is not null
+                && Pos.DistanceTo(player.Pos.X, player.Pos.Y, player.Pos.Z) <= ScribeAssignmentParticleEmitter.DetectionRadius;
+        }
+
+        if (!active)
+        {
+            assignmentParticlesWereActive = false;
             return;
+        }
 
-        ScribeAssignmentParticleEmitter.SpawnAt(capi, Pos);
+        ScribeAssignmentParticleEmitter.SpawnAt(capi, Pos, seedBurst: !assignmentParticlesWereActive);
+        assignmentParticlesWereActive = true;
     }
 
     public override void OnBlockRemoved()
@@ -726,15 +743,16 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
             if (!open)
             {
                 OpenDialog(capi);
-                dialog!.EnterReadMode();
+                dialog!.EnterGrantedView();
             }
             else
             {
                 // Editor access denied while the dialog is already open — e.g. a Back-from-settings that
                 // re-requested the editor lock but another player grabbed it first (add-settings-tab round
-                // 1). Fall back to the read view so the dialog can't be stranded on a stale view; the error
-                // toast above already told the player why. (The save-failed recovery returned earlier.)
-                dialog!.EnterReadMode();
+                // 1). Fall back to the dialog's own granted view so it can't be stranded on a stale view;
+                // the error toast above already told the player why. (The save-failed recovery returned
+                // earlier.)
+                dialog!.EnterGrantedView();
             }
             return;
         }
@@ -759,7 +777,7 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
         }
         else
         {
-            dialog!.EnterReadMode();
+            dialog!.EnterGrantedView();
         }
     }
 

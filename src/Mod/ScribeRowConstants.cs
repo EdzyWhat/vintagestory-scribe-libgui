@@ -161,6 +161,29 @@ internal static class ScribeRowConstants
     /// <summary>Cream glyph color <c>#eae6dd</c> used for a nav button's icon while that button is the
     /// active tab, for contrast against the thematic fill (add-active-tab-nav-colors).</summary>
     public static readonly Vector4 NavActiveGlyph = new(0.9176f, 0.9020f, 0.8667f, 1f);
+
+    // ── Assignment state chip colors (refine-assignment-desk-inbox-ux D1) ─────────────────────────
+    // Dedicated constants, deliberately NOT the NavActive* colors above — e.g. NavActiveGuestbook is
+    // already a similar plum/mauve, and reusing it for the Accepted chip would tie two unrelated
+    // meanings (a nav button's active-tab fill, an assignment state) to one constant. Starting values
+    // approximating the named palette from playtest feedback (2026-08-31); tunable like every other
+    // color/particle constant here — not locked to these exact hex values.
+
+    /// <summary>New/Unaccepted state chip — Deep Indigo <c>#4a3f8c</c>.</summary>
+    public static readonly Vector4 AssignmentChipNew = new(0.29f, 0.25f, 0.55f, 1f);
+
+    /// <summary>Accepted state chip — Rich Plum/Amethyst <c>#7a4a8c</c>.</summary>
+    public static readonly Vector4 AssignmentChipAccepted = new(0.48f, 0.29f, 0.55f, 1f);
+
+    /// <summary>Declined AND Discarded state chip (shared — both read as terminal rejections) —
+    /// Crimson/Burgundy <c>#7a1f2b</c>.</summary>
+    public static readonly Vector4 AssignmentChipRejected = new(0.48f, 0.12f, 0.17f, 1f);
+
+    /// <summary>Cancelled state chip — Charcoal/Dark Sepia <c>#3d3a35</c>.</summary>
+    public static readonly Vector4 AssignmentChipCancelled = new(0.24f, 0.23f, 0.21f, 1f);
+
+    /// <summary>Completed state chip — Verdigris/Emerald Ink <c>#2e6b5e</c>.</summary>
+    public static readonly Vector4 AssignmentChipCompleted = new(0.18f, 0.42f, 0.37f, 1f);
 }
 
 /// <summary>Maps the player's task-font preference (<c>ScribePlayerSettings.TaskFontFamily</c>) to the
