@@ -4660,3 +4660,72 @@ regression checks specific to this change's scoped-to-the-input approach.
       - **Confirmed 2026-08-20** (submission 2026-08-20T21-32-19): "Works." The pinned liquid Tracker updates from carried containers on the HUD (same count path).
 - [x] `00000010` **Probe-sweep edge cases.** `.scribeprobe` a few real liquid recipes -> a block-`type` liquid and a sub-1-litre requirement round up as expected, and any wildcard/unresolvable liquid still degrades to a note. *(add-liquid-ingredient-tracker 6.6)*
       - **Confirmed 2026-08-20** (submission 2026-08-20T21-32-19): "Works." block-`type` liquid + sub-1-litre round-up behave, unresolvable liquid degrades to a note.
+
+## refine-crafting-tasks-1-3-2
+
+> v1.3.2 ship pass. Fully quit and relaunch so the restaged DLL loads. Settings: Bound subtask
+> behavior, HUD gear on. Other in-progress changes (fonts, white-flash, LibGUI decoupling) are
+> not this cut.
+
+- [x] `00000028` **Skip tools, no heal.** Handbook-create a Crafting Task for a debarked oak log:
+      parent + oak log only — no `*:*` / "Pocketsun (any variant)" child. Delete that log child,
+      bump the parent target, reopen the editor — the child stays gone and remaining matches
+      rescale. *(refine-crafting-tasks-1-3-2 9.1 / 9.2)*
+      - **Confirmed 2026-08-27** via author in-game ship pass (TESTING.md check-off).
+- [x] `00000029` **Bound parent range.** With Bound: Sink a Craft parent — parent and children
+      sink together, parent first. Completing one child does not take siblings. Independent
+      leaves children. Discard then uncheck does not restore children.
+      *(refine-crafting-tasks-1-3-2 9.3)*
+      - **Confirmed 2026-08-27** via author in-game ship pass (TESTING.md check-off).
+- [x] `0000002a` **Pin cluster and notes.** Pin a child under a pinned parent (inserts, not
+      appends). Pin the parent later — already-pinned children gather under it. Pin a note:
+      HUD is text-only (no checkbox); unpin from the Pin Tab.
+      *(refine-crafting-tasks-1-3-2 9.4)*
+      - **Confirmed 2026-08-27** via author in-game ship pass (TESTING.md check-off).
+- [x] `0000002b` **HUD chrome and grip.** A pinned Craft parent shows have/need. HUD title is
+      **Scribe Pins**. Hide the HUD gear from Settings. HudMaxRows 30 sticks after reload.
+      Grip: tap still nests; press-move-release on the same row does not.
+      *(refine-crafting-tasks-1-3-2 9.5 / 9.6)*
+      - **Confirmed 2026-08-27** via author in-game ship pass (TESTING.md check-off).
+- [x] `00000024` **Item-row FieldPadY.** Put a Tracker/Craft row next to a Task text row in
+      editor AND read — they still line up (pad is now 0). Stepper +/− sit in their buttons.
+      A wrapping item name top-aligns stepper, icon, and text.
+      *(refine-crafting-tasks-1-3-2 10.3)*
+      - **Confirmed 2026-08-27** via author in-game ship pass (TESTING.md check-off).
+- [x] `00000025` **Tablet vs Notebook names.** On a Craft/Tracker row, cuneiform names share a
+      top edge with the stepper/checkbox (no extra pad inside the glyph-font label). Compare
+      the same row on a Notebook and a tablet. *(refine-crafting-tasks-1-3-2 10.4)*
+      - **Confirmed 2026-08-27** via author in-game ship pass (TESTING.md check-off).
+- [x] `00000026` **Tablet control height.** On a cuneiform tablet, checkbox, grip, and
+      Tracker/Craft stepper match one cuneiform line. Notebook/Lectern stay at 22px.
+      Disable-cuneiform on the tablet reverts the controls.
+      *(refine-crafting-tasks-1-3-2 10.5)*
+      - **Confirmed 2026-08-27** via author in-game ship pass (TESTING.md check-off).
+- [x] `00000027` **Single-line vs wrap.** A short name ("Leather") sits on the icon/checkbox
+      horizon; a wrapping name stays top-aligned and does not lift the icon. Check editor,
+      read, and Pin Tab. *(refine-crafting-tasks-1-3-2 10.6)*
+      - **Confirmed 2026-08-27** via author in-game ship pass (TESTING.md check-off).
+
+## same-depth-reorder
+
+> Drag-reorder restricted to same-depth targets (editor + Pin Tab), with a cluster-aware
+> destination fix and a Pin-Tab-only display-order bug found during playtest.
+
+- [x] `00000032` **Cross-depth drop is rejected.** In the editor, drag a depth-1 subtask over a
+      depth-0 row (no arrow, no reorder), and drag a depth-0 parent with subtasks over an unrelated
+      depth-1 row (no arrow, no reorder). *(same-depth-reorder 3.1/3.2, 6.2)*
+      - **Confirmed 2026-08-29** via in-game playtest.
+- [x] `00000033` **Forward drag onto a parent-with-children doesn't reparent.** Drag an earlier
+      depth-0 parent (with its own subtasks/pinned children) forward past a later parent that also has
+      children — both clusters stay intact, nothing gets wedged between the target and its children.
+      *(same-depth-reorder 1.3, 6.2)*
+      - **Confirmed 2026-08-29** via in-game playtest.
+- [x] `00000034` **Pin Tab: pinned parent's children move with it.** Drag a pinned parent with
+      pinned children past a sibling pin on the Pin Tab — the children move together with the parent.
+      *(same-depth-reorder 4.1, 6.2)*
+      - **Confirmed 2026-08-29** via in-game playtest.
+- [x] `00000035` **Pin Tab: reorder is correct with a completed pin mixed in.** Under the default
+      Sink completion policy, mix a completed pin in with active ones, then drag-reorder — the drag
+      must apply to the on-screen row under the cursor, not a different row from raw storage order
+      (the `OnPinReorder` display-order bug found this session). *(same-depth-reorder 1.5, 6.2)*
+      - **Confirmed 2026-08-29** via in-game playtest.
