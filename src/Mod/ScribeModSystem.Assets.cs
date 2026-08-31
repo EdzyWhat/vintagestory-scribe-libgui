@@ -60,6 +60,9 @@ public sealed partial class ScribeModSystem
         // UPWARD, over the scroll body) and flips ▼ when open (tap again to collapse).
         RegisterSvgIcon(api, "scribetriangleup",   new AssetLocation("scribe", "textures/icons/triangle-up.svg"));
         RegisterSvgIcon(api, "scribetriangledown", new AssetLocation("scribe", "textures/icons/triangle-down.svg"));
+        // Accepted-assignment leading-icon marker (add-assignment-and-quest-support §13.4): a rolled
+        // scroll, distinct from the guestbook/book glyphs it previously borrowed as a placeholder.
+        RegisterSvgIcon(api, "scribeassignment", new AssetLocation("scribe", "textures/icons/scroll.svg"));
     }
 
     /// <summary>

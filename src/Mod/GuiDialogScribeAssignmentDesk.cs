@@ -52,10 +52,9 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
         float size = NavButtonSize;
         var navColor = NavIconColor(colors);
 
-        // Icon choice is a placeholder (no dedicated Assignment-tab glyph exists yet — see §13): the
-        // create/send form's pencil-like intent borrows the existing edit glyph, same "reuse now, art
-        // later" rationale as the block shape/recipe clones (§5.1's tasks.md note).
-        Widget assignmentBtn = TitleButton("scribeedit", "scribe-tab-assignment", navColor,
+        // Dedicated rolled-scroll glyph (§13.4), matching the same icon the row-level accepted-
+        // assignment marker uses (ScribeAssignedTaskIcon) — replaces the earlier edit-pencil placeholder.
+        Widget assignmentBtn = TitleButton("scribeassignment", "scribe-tab-assignment", navColor,
             size: size, onTap: OnClickSwitchToAssignment, boxShadows: NavButtonShadow,
             activeColor: IsAssignmentView ? ScribeRowConstants.NavActiveEdit : null);
         Widget inboxBtn = TitleButton("scribeinventory", "scribe-tab-inbox", navColor,

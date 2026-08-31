@@ -3,21 +3,11 @@
 	class: "BlockInbox",
 	entityclass: "Inbox",
 
-	// PLACEHOLDER MODEL (add-assignment-and-quest-support §6.1): reuses the Scriptorium's combined shape
-	// wholesale ahead of the Inbox's own dedicated art (§13.2) — see assignmentdesk.json's identical note.
-	shape: { base: "scribe:block/scriptorium/scriptorium" },
-
-	textures: {
-		"charred": { base: "scribe:block/scriptorium/charred" },
-		"ebony": { base: "scribe:block/scriptorium/ebony" },
-		"ebony-ornate": { base: "scribe:block/scriptorium/ebony-ornate" },
-		"opened-normal": { base: "scribe:block/scriptorium/opened-normal" },
-		"normal-orangebrown": { base: "scribe:block/scriptorium/normal-orangebrown" },
-		"feather": { base: "scribe:block/scriptorium/feather" },
-		"bituminous": { base: "scribe:block/scriptorium/bituminous" },
-		"quartz": { base: "scribe:block/scriptorium/quartz" },
-		"brass": { base: "scribe:block/scriptorium/brass" }
-	},
+	// PLACEHOLDER MODEL (add-assignment-and-quest-support §13.2, 2026-08-30 direction): reuses the
+	// Lectern's own shape wholesale ahead of the Inbox's own dedicated art — see assignmentdesk.json's
+	// identical note (both blocks used to clone the Scriptorium's shape; the Lectern's desk/stand shape
+	// reads as a closer fit for a mail-tray block). No textures override needed; the shape self-resolves.
+	shape: { base: "scribe:block/lectern/lectern" },
 
 	creativeinventory: { "general": ["*"], "decorative": ["*"] },
 

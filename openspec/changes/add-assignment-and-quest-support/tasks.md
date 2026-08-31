@@ -423,10 +423,37 @@
 
 ## 13. Assets
 
-- [ ] 13.1 Model/texture/crafting-recipe assets for the Assignment Desk block and item.
-- [ ] 13.2 Model/texture/crafting-recipe assets for the Inbox block and item.
-- [ ] 13.3 Particle texture/visual tuning for the ambient unseen-assignment indicator.
-- [ ] 13.4 Leading-icon glyph asset for the accepted-assigned-task visual marker.
+- [x] 13.1 Model/texture/crafting-recipe assets for the Assignment Desk block and item. **Scope call
+      (2026-08-30 user direction): bespoke pixel art is out of scope for this pass — everything else is
+      in.** Retargeted the placeholder shape from the Scriptorium's cabinet clone to the Lectern's own
+      shape/textures (`assignmentdesk.json`) — a desk stand is a closer visual fit for "Assignment Desk"
+      than a large cabinet, the collision/selection boxes already matched the Lectern's exactly (no
+      literal scaling needed), and the shape self-resolves its own textures (`scribe:block/lectern/*`)
+      exactly like `lectern.json`'s own blocktype, so no texture-override block is needed either. The
+      crafting recipe was already the unmodified Lectern-tier ingredient set (`recipes/grid/
+      assignmentdesk.json`'s existing comment) — no separate recipe work required. Dedicated bespoke
+      model/texture art remains a future JSON-only swap once authored.
+- [x] 13.2 Model/texture/crafting-recipe assets for the Inbox block and item. Same swap and rationale as
+      13.1, applied to `inbox.json` — reuses the Lectern's shape/textures in place of the Scriptorium
+      clone; recipe was already the unmodified Lectern-tier set, unchanged.
+- [x] 13.3 Particle texture/visual tuning for the ambient unseen-assignment indicator. **Disclosed
+      finding**: "particle texture" doesn't apply to the implementation actually used —
+      `ScribeAssignmentParticleEmitter` spawns `AdvancedParticleProperties` with `ParticleModel:
+      EnumParticleModel.Quad`, an engine-native HSV-colored sprite (confirmed via `vsapi`: no field on
+      `AdvancedParticleProperties`/`SimpleParticleProperties` accepts a custom texture asset for this
+      model) — there is no PNG for a mod to supply here. Re-verified the "visual tuning" half instead:
+      every starting constant (hue/sat/val/alpha bands, gravity, life length, quantity, rainbow ratio)
+      already matches design.md Decision 9's decided target values exactly, and the values are already
+      flagged in-code as "playtest-tunable, not final." Further tuning needs an in-game observation pass
+      this environment can't run (no vsquest install / no live client) — left as a genuine follow-up for
+      whoever first playtests this with the mod installed, not a gap I can close blind.
+- [x] 13.4 Leading-icon glyph asset for the accepted-assigned-task visual marker. Authored a dedicated
+      hand-drawn SVG (`textures/icons/scroll.svg`, a rolled-parchment silhouette, following the same
+      flat-shape/flood-recolor convention as `book.svg`/`pin.svg`), registered it as `scribeassignment`
+      in `ScribeModSystem.Assets.cs`, and wired it into both consumers that were flagged as placeholders
+      pending this asset: `ScribeAssignedTaskIcon` (the row leading-icon marker itself, previously
+      borrowing the guestbook/person glyph) and `GuiDialogScribeAssignmentDesk`'s Assignment-tab nav
+      button (previously borrowing the edit-pencil glyph) — both now share the same scroll icon.
 
 ## 14. Documentation and release hygiene
 
