@@ -32,6 +32,34 @@ received, in any state" list; no new persisted per-player flag is needed to answ
 been assigned a task" — `MyReceivedAssignments.Count > 0` (synced client-side already) answers it
 directly.
 
+**`assignment-multi-item-creation`'s investigation** (once the 7-item batch above was underway, the same
+playtest pass surfaced this deeper need — see proposal.md's "New: multi-item assignment creation"
+section). Three structural facts, found by reading the actual code rather than assuming from the
+proposal's wording:
+- `ScribeAssignmentStore.TryCreate` (`src/Core/ScribeAssignmentStore.cs:59`) only knows how to build a
+  Task-kind record from plain text — it never touches `ScribeBlock.Kind`/`TargetItemCode`/
+  `TargetQuantity`/`LinkTarget`/`LinkLabel`/`LinkDescription`/`Depth`, even though `ScribeBlock` already
+  carries every one of those fields and the store's own binary serializer (`WriteRecordList`/
+  `TryReadRecordList`) already round-trips all of them. The storage layer is not the constraint; only the
+  creation entry point is narrower than what it stores.
+- `IScribeDocumentItem` is implemented only by `ItemScribeNotebook`, `ItemClockmakerNotebook`, and
+  `ItemScribeTablet` — a placed Lectern/Scriptorium/Assignment Desk's document lives on its
+  `BlockEntityScribeWritingStation`, not an `ItemStack`, so it alone would not qualify a picked-up Lectern
+  for an `IScribeDocumentItem`-gated slot.
+- That gap is already closed by a purpose-built slot type: `ItemSlotScribeDocument.CanHold`
+  (`src/Mod/ItemSlotScribeDocument.cs:35`) accepts a source slot whose `Collectible` is either
+  `IScribeDocumentItem` **or** `BlockScribeWritingStation` — the latter covers a picked-up Lectern/
+  Scriptorium/Assignment Desk, which carries its document onto the block-item via
+  `BlockScribeWritingStation.GetDrops`. This is the exact slot type `BlockEntityScriptorium`'s three copy/
+  import-export slots already use, so a Lectern really can be staged the same way a Notebook can — no new
+  accept-filter needs writing.
+- `BlockEntityAssignmentDesk` (`src/Mod/BlockEntityAssignmentDesk.cs`) currently has no `Inventory` at
+  all — unlike its sibling `BlockEntityScriptorium`, which declares a 3-slot `InventoryGeneric` (lazy
+  `EnsureInventory`, `Initialize`/`LateInitialize`, `ToTreeAttributes`/`FromTreeAttributes` under a
+  dedicated sub-tree key, `OnReceivedClientPacket` packet forwarding, `OnBlockBroken` → `DropAll`). Adding
+  a 1-slot inventory to the Assignment Desk is a mechanical mirror of that existing pattern, not new
+  architecture.
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -44,16 +72,21 @@ directly.
 - Stop showing an Inbox nav button to players who have no reason to ever look at one.
 - Surface LibGUI's own theme picker instead of leaving it fully hidden.
 - Tighten the Create Assignments form's layout using LibGUI's flex primitives.
+- Let the assigner delegate any existing, already-authored row (Task, Tracker, Craft, Link, Text,
+  subtasks) from one of their own Scribe items, instead of only a bare freeform-text quick-send.
 
 **Non-Goals:**
 - No change to `ScribeAssignmentTransitions` / the state machine's legality rules.
 - No change to what an expanded Inbox row shows (that's `add-assignment-activity-log`'s scope, a sibling
   in-progress change — this proposal doesn't touch `ScribeInboxRow.BuildExpandedDetail`).
 - No new persisted preference or block-entity field — the "ever assigned" gate reads existing synced
-  state.
+  state. (The new "Delete from source on send" checkbox is UI-only session state too — see D13 — not a
+  new persisted preference either.)
 - Not attempting exact hex-value fidelity to "Deep Indigo" / "Rich Plum" etc. as brand colors — these are
   descriptive names the palette below approximates; final tuning happens visually in-game like the
   particle's existing tunable constants.
+- No "bundle" concept in the state machine or store — a multi-row send still creates N fully independent
+  `ScribeAssignment` records, each with its own lifecycle, per proposal.md.
 
 ## Decisions
 
@@ -133,6 +166,75 @@ child: <player picker>)`, then the Send button (fixed). This is a like-for-like 
 existing `playerPicker` widget into the row — no change to the dropdown's own behavior (self/other player
 listing, live-selection tracking).
 
+### `assignment-multi-item-creation` decisions
+
+**D8 — The staging slot mirrors `BlockEntityScriptorium`'s copy-slot verbatim, including its slot type.**
+Add a 1-slot `InventoryGeneric` to `BlockEntityAssignmentDesk`, following the Scriptorium's exact
+plumbing (lazy `EnsureInventory`, `Initialize`/`LateInitialize` with `Pos` set, `ToTreeAttributes`/
+`FromTreeAttributes` under its own sub-tree key so it's additive for existing saves, packet-id routing in
+`OnReceivedClientPacket`, `OnBlockBroken` → `DropAll`). Populate it with the SAME `ItemSlotScribeDocument`
+slot type the Scriptorium already uses — per author direction ("borrow that model") this is a literal
+reuse, not a new type. Its existing `CanHold` already accepts both `IScribeDocumentItem` (Notebook/
+Tablet) and `BlockScribeWritingStation` (a picked-up Lectern/Scriptorium/Assignment Desk), so nothing
+about acceptance needs to change to support staging any of those. Whatever lands in the slot is read
+fresh via `ScribeDocumentAttributes.TryReadFrom` on every rebuild (a pure client-side read of already-
+synced inventory state, exactly like the Scriptorium's own slot reads) — an item with no readable
+document (or the slot sitting empty) shows the tab's empty state, the same graceful "no document" the
+Scriptorium's slots already fall back to.
+
+**D9 — No new lock concept.** Held items (Notebook/Tablet) have no lock at all
+(`NotebookHost.IsLockedByOther` hardcodes `false` — single-owner). A picked-up writing-station item has
+already left the player's own inventory and become an inert item stack the moment it's picked up; nobody
+else can be mid-edit against a stack sitting in someone's inventory or in the Assignment Desk's slot. So
+staging introduces no new concurrent-edit hazard and needs no new lock plumbing — the existing
+`IsLockedByOther` server-lock concept (Lectern/Scriptorium/Chalkboard, while still PLACED) is simply
+orthogonal to this flow.
+
+**D10 — The staged-rows renderer is a new row widget, reusing `ScribeReadRowData` as its value snapshot
+but not `ScribeReadRow` itself.** `ScribeReadRowData` already carries everything a staged document's row
+needs to render (`Kind`, `Text`, `DisplayStack`/`DisplayName`, `TargetQuantity`/`CurrentQuantity`,
+`LinkTarget`, `Depth`) — reused verbatim as the data model, resolved by the dialog the same way
+`ScribeReadContent`'s caller already resolves it (Tracker/Link icon + name lookups stay in the dialog,
+keeping the row widget itself API-free). But `ScribeReadRow`'s checkbox is hard-wired to `Done`
+(completion); overloading that same control to also mean "selected for this batch" would conflate two
+different concerns on one widget rather than composing them. A new row widget (working name
+`ScribeAssignmentStageRow`) reuses `ScribeReadRow.BuildItemContent`'s per-kind rendering (task text / item
+icon+name / tracker have-need counter) but swaps the Done-checkbox for a Selected-checkbox, and drops the
+pin affordance and the read view's "switch to editor" footer entirely — this is a picker surface, not an
+editable or completable one.
+
+**D11 — Selection cascades from parent to subtask as a convenience default, but every row stays
+independently overridable.** Per author direction ("auto-include but allow deselect... independent
+selections with a bit of helping"): checking a parent row's Selected checkbox also sets every immediate
+subtask's Selected state to true in the same `SetState`. From that point every row — parent or subtask —
+is a fully independent toggle: unchecking one subtask afterward leaves the parent and its siblings checked
+and simply drops that one subtask from the batch; there is no re-locking or re-graying once the cascade
+has run once. Mirrors the flat, independently-keyed (by `TaskId`) row state `ScribeReadRow`/
+`ScribeInboxRow` already use — no new "linked selection" data structure, just a cascade at toggle time.
+
+**D12 — `ScribeAssignmentStore.TryCreate` gains a richer parameter set carrying the full block shape.**
+Broaden it from `(assignmentId, assignerUid, targetPlayerUid, taskText, assignedDate)` to also accept
+`Kind`, `TargetItemCode`, `TargetQuantity`, `LinkTarget`, `LinkLabel`, `LinkDescription`, and `Depth` — a
+strict superset of what it validates/writes today, additive to (not a rewrite of) the existing method,
+since every one of those fields is already part of `ScribeBlock` and already round-tripped by the store's
+serializer. The existing single-item Task-only send path (`ScribeSendAssignmentMessage` →
+`OnServerReceivedSendAssignment`) keeps calling it exactly as today (Kind defaults to Task, the new fields
+default empty) — zero behavior change to that path, even though proposal.md retires its UI-side quick-send
+field in the same change.
+
+**D13 — The batch-send message carries N row snapshots, one recipient, and one delete flag; "Delete from
+source on send" is UI-only session state, not a preference.** A new message (working name
+`ScribeSendAssignmentBatchMessage`) carries a list of per-row payloads (each row's `Kind`/`Text`/item
+fields/`Depth` — no cross-row bundling id needed, since each becomes its own independent
+`ScribeAssignment` per proposal.md), one `TargetPlayerUid`, and one `DeleteFromSource` bool. The server
+handler loops the list, calling the D12-broadened `TryCreate` once per row, then — only if
+`DeleteFromSource` is true — removes the selected rows from the staged item's document and re-syncs the
+Assignment Desk's slot, mirroring how `ScribeTranscribeCopyMessage`/`ScribeTranscribeImportMessage`
+already mutate a slotted document server-side and push the result back through the inventory channel. The
+checkbox itself lives as plain `bool` state on the Create Assignments tab, defaulting `false` and reset on
+every tab (re)open/rebuild — never written to `ScribePlayerSettings` or any other persisted store, per the
+earlier "resets every send" decision.
+
 ## Risks / Trade-offs
 
 - [Icon SVGs are new hand-authored assets, not sourced from an existing library] → Keep them simple
@@ -150,6 +252,14 @@ listing, live-selection tracking).
   `MyReceivedAssignments.Count`, `add-assignment-activity-log` only touches
   `ScribeInboxRow.BuildExpandedDetail` and the assignment log-entry model. Land in either order without
   conflict.
+- [Broadening `ScribeAssignmentStore.TryCreate`'s signature (D12) touches its one existing caller] →
+  Zero regression risk: the old call site passes the new parameters at their Task-only defaults, so its
+  behavior is byte-identical; there is exactly one call site today (`OnServerReceivedSendAssignment`) to
+  update.
+- [A 4th `BlockEntityScribeWritingStation`-derived inventory (Assignment Desk, alongside the Scriptorium's)
+  duplicates the same `InventoryGeneric` lazy-init/tree-persistence/packet-routing boilerplate a second
+  time (D8)] → Accepted duplication, matching the existing precedent (the Scriptorium didn't extract a
+  shared base for this either). A shared helper is a fair follow-up refactor, out of scope here.
 
 ## Open Questions
 
@@ -157,3 +267,8 @@ listing, live-selection tracking).
   before considering this item done (see D4).
 - Exact API call for triggering `.ui settings` programmatically from Scribe's own button (see D6) —
   resolve during implementation, not blocking the rest of this change.
+- Exact wire-format field layout for the new batch-send message and its per-row payload type (D13) —
+  an implementation detail (likely a length-prefixed list of fixed-shape row structs, mirroring how
+  `ScribeAssignmentStore`'s own serializer already encodes a `ScribeBlock`), not a design blocker.
+- Working names (`ScribeAssignmentStageRow`, `ScribeSendAssignmentBatchMessage`) are placeholders to be
+  finalized during tasks/implementation, not locked by this design pass.

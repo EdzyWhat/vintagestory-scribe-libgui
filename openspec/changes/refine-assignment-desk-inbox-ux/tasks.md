@@ -101,7 +101,7 @@
       added 7 in-game items (codes `00000044`-`0000004a`), retired the fully-Confirmed
       `add-assignment-and-quest-support` group to `playtest-history/TESTING-archive.md`.
 
-## 9. Multi-item assignment creation (design pending — do not start implementation yet)
+## 9. Multi-item assignment creation (design settled via D8-D13 — spec deltas (9.2) still needed before implementation)
 
 - [x] 9.1 Run a design pass (design.md decisions) for `assignment-multi-item-creation`: how the staged-item
       slot works (placement, locking while a source document is open elsewhere), whether a selected
