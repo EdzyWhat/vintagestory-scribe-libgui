@@ -36,18 +36,28 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > player needed. Quest Link / soft-detect items (§10-11) need vsquest installed and are
 > left off this list until that's available to test with.
 
-- [ ] `00000036` **Place the Desk and Inbox.** Craft/creative-spawn an Assignment Desk and
+- [x] `00000036` **Place the Desk and Inbox.** Craft/creative-spawn an Assignment Desk and
       an Inbox and place both — confirm they render as Lecterns (the art placeholder swap),
       have a working collision box, and open their dialog without errors.
       *(add-assignment-and-quest-support 5.1, 6.1, 13.1, 13.2)*
-- [ ] `00000037` **Self-assign and send.** Open the Assignment Desk's Assignment tab, open
+      - **Confirmed 2026-08-30** (submission 2026-08-30T21-25-05): "pass."
+- [x] `00000037` **Self-assign and send.** Open the Assignment Desk's Assignment tab, open
       the recipient dropdown — confirm your own name shows labeled "(You)" instead of an
       empty list — write a task and send it to yourself. Confirm it also shows up in your
       own Sent history on the same tab. *(add-assignment-and-quest-support 5.5, follow-up)*
+      - **Confirmed 2026-08-30** (submission 2026-08-30T21-25-05): "pass."
 - [ ] `00000038` **Accept with placement picker.** Open the Inbox (same Desk, or a
       standalone Inbox block) and accept the assignment you sent yourself — confirm the
       held-item → inventory-scan → picker flow resolves correctly, and it's disabled with a
       tooltip if you're holding nothing eligible. *(add-assignment-and-quest-support 9.1)*
+      - **Still broken 2026-08-30** (submission 2026-08-30T21-25-05): "There's no place to
+        accept. The picker is there though. The flow should be that the Accept button is
+        clicked, then the picker appears if the user has multiple Scribe items. Also we
+        should show the title of the items with the type, like e.g. 'Notebook \"Book of
+        Nick\"'." Two issues: (1) the Accept button itself isn't reachable/visible — the
+        picker renders but nothing to confirm the pick with; (2) UX request — picker should
+        appear as a step AFTER pressing Accept (not shown unconditionally up front), and
+        each candidate should read as `<Type> "<Title>"` instead of its current bare label.
 - [ ] `00000039` **Leading-icon scroll marker.** Once accepted, check the Read, Editor, and
       Pinned views of that task — confirm the new rolled-scroll icon shows as its leading
       marker (not the old guestbook-person placeholder). *(add-assignment-and-quest-support
