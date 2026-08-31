@@ -4729,3 +4729,96 @@ regression checks specific to this change's scoped-to-the-input approach.
       must apply to the on-screen row under the cursor, not a different row from raw storage order
       (the `OnPinReorder` display-order bug found this session). *(same-depth-reorder 1.5, 6.2)*
       - **Confirmed 2026-08-29** via in-game playtest.
+
+## add-new-task-insert-position
+
+> v1.3.2. Settings → Mod Behavior → **New Task Insert** (Top default). Fully quit and relaunch
+> so lang keys load.
+
+- [x] `0000002f` **Footer Add follows the setting.** Default Top: Add Task lands at the top and is
+      focused. Switch to Bottom: the next Add appends. *(add-new-task-insert-position 5.1)*
+      - **Confirmed 2026-08-30** (submission 2026-08-30T18-17-29): "pass."
+- [x] `00000030` **Quick-add follows the setting.** Shift+right-click with Top puts a new empty
+      task first; with Bottom it appends. *(add-new-task-insert-position 5.2)*
+      - **Confirmed 2026-08-30** (submission 2026-08-30T18-17-29): "pass."
+- [x] `00000031` **Handbook + Enter.** With Top, Handbook Link and Craft land at the top (Craft
+      children sit under the parent). Enter on a mid-list row still inserts below that row.
+      *(add-new-task-insert-position 5.3)*
+      - **Confirmed 2026-08-30** (submission 2026-08-30T18-17-29): "pass."
+
+## peg-task-fonts-to-caudex
+
+> Include this in v1.3.2. Task-text fonts are size-pegged to Caudex's line-box so switching
+> faces does not change single-line row height. Titles/buttons stay Caudex. HUD and Settings
+> chrome stay off this table. Cycle fonts from Settings → Task Text Font.
+
+- [x] `0000002c` **Chrome stays Caudex.** Set Task Text Font to Scapholene or La Belle Aurore.
+      Confirm the dialog title and in-dialog buttons (Add, Settings, nav tabs) stay Caudex —
+      they must not pick up the scripty/display face. Settings form itself stays the LibGUI
+      default face at 100%. *(peg-task-fonts-to-caudex 6.3)*
+      - **Confirmed 2026-08-30** (submission 2026-08-30T18-17-29): "pass."
+- [x] `0000002d` **Read/Edit height parity.** On a Lectern with several single-line tasks, pick
+      a non-Caudex font (Scapholene or La Belle Aurore). Switch Read ↔ Edit: those rows must
+      not jump (within ~1px). *(peg-task-fonts-to-caudex 6.3)*
+      - **Confirmed 2026-08-30** (submission 2026-08-30T18-17-29): "pass."
+- [x] `0000002e` **Offsets don't break the lock.** Cycle Task Text Font through La Belle Aurore,
+      Scapholene, Playfair Display, and Cormorant Unicase (those have OffsetEm 0.18 / 0.05 /
+      −0.03 / −0.02). On Read and Edit, single-line row height/position must still match
+      Caudex — letters may sit a hair higher/lower in the box, the row itself must not grow.
+      *(peg-task-fonts-to-caudex 7.4)*
+      - **Confirmed 2026-08-30** (submission 2026-08-30T18-17-29): "pass."
+
+## adopt-glyph-forge-tablet-themes
+
+> Bakes the glyph-forge tool's per-`(material, state)` tablet readability exports as ONE `TabletReadability`
+> bundle, resolved once at dialog build and decomposed into the existing seams: body ink → theme `OnSurface`,
+> link ink → row-style `LinkColor`, glow → `CuneiformGlowTable`, plus a NEW per-view stroke-weight scale
+> (0.9 wet → 1.1 fired). Fixes the fired/hardened legibility gap (`00000016`): hard/fired now get a LIGHT
+> halo that lifts dark ink off the darker backdrop, with a seated-drop offset. Ink is state-varying by
+> design. All gated on **Pixel-Art Display ON**. Use `/scribe tablet <wet|hard|fired>` to move a written
+> tablet between states. **Fully quit and relaunch** to load the rebuilt DLL.
+
+- [x] `0000001f` **Per-state clay readability.** For each clay (blue, red, fire), on a written tablet run
+  ```
+  `/scribe tablet hard` then `/scribe tablet fired` — confirm the cuneiform reads clearly in ALL three
+  states: ink darkens on fired, the per-clay LIGHT halo lifts the ink on hard/fired, and the shared
+  DARK halo seats the ink on wet. *(adopt-glyph-forge-tablet-themes 9.1)*
+  - **Confirmed 2026-08-21** (submission 2026-08-21T11-24-55): "pass." All three clays read clearly in
+    wet/hard/fired — fired ink darkens, the light halo lifts ink on hard/fired, the dark halo seats it
+    on wet. (Verified against the first baked bundle; a same-session glyph-forge retune followed —
+    re-glance tracked as `00000023`.)
+  ```
+- [x] `00000020` **Stroke firms + seated drop.** Compare the same text wet → fired: strokes visibly firm
+  ```
+  up (0.9 → 1.1 weight) with NO layout shift, and on hard/fired the glow reads as a seated DROP shadow
+  (offset to one side) rather than a symmetric aura. *(adopt-glyph-forge-tablet-themes 9.2)*
+  - **Confirmed 2026-08-21** (submission 2026-08-21T11-24-55): "pass." Stroke weight visibly varies by
+    state with no layout shift, and the hard/fired glow reads as an offset seated drop, not a symmetric
+    aura. NOTE the follow-up retune (`00000023`) INVERTS the stroke direction to wet-heavy → fired-light
+    (1.2 → 0.95); the per-state variation + drop-offset mechanism this item verifies is unchanged.
+  ```
+- [x] `00000021` **Per-state link ink.** On Link/Tracker/Craft rows, confirm the item name uses the new
+  ```
+  per-state link ink and stays legible in wet/hard/fired; confirm a **wax** tablet renders unchanged
+  (its own wet bundle) and an **unknown** material rides the fire bundle.
+  *(adopt-glyph-forge-tablet-themes 9.3)*
+  - **Confirmed 2026-08-21** (submission 2026-08-21T11-24-55): "pass." Link/Tracker/Craft names use the
+    per-state link ink and stay legible across states; wax renders from its own wet bundle; unknown
+    material rides fire. (Link inks softened slightly in the `00000023` retune.)
+  ```
+- [x] `00000022` **Non-tablet regression.** Confirm Lectern / Notebook / Chalkboard and the cuneiform-OFF
+  ```
+  readable path look unchanged (no bundle applied), and that Pixel-Art OFF still follows the global
+  theme. *(adopt-glyph-forge-tablet-themes 9.4)*
+  - **Confirmed 2026-08-21** (submission 2026-08-21T11-24-55): "pass." Lectern/Notebook/Chalkboard and
+    the cuneiform-OFF readable path are unchanged (no bundle applied); Pixel-Art OFF follows the global
+    theme. (Chalkboard's separate untextured-WIP issue is unrelated to this change.)
+  ```
+- [x] `00000023` **Retuned wet/wax re-glance.** After the same-session glyph-forge retune (11:23 exports),
+  ```
+  re-check the WET tablets and the WAX tablet: each wet clay now has its OWN tinted seating glow
+  (stronger/wider, no longer the shared near-black halo), wet strokes are now the HEAVIEST (1.2) and
+  fired the lightest (0.95), and wax is lighter-inked with a warmer near-white glow. Confirm all still
+  read cleanly and nothing regressed vs. the first tune. *(adopt-glyph-forge-tablet-themes 9.1/9.2 retune)*
+  - **Confirmed 2026-08-30** (submission 2026-08-30T18-17-29): "pass."
+  ```
