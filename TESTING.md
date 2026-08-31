@@ -27,6 +27,46 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## add-assignment-and-quest-support
+
+> v1.4 proposal, all 56 tasks implemented and checked off but NOT yet manually verified
+> in-game — this is the first playtest pass. Fully quit and relaunch first (restaged
+> 2026-08-30 18:15). Singleplayer-friendly: the recipient picker now always includes your
+> own name (labeled "(You)") so you can send an assignment to yourself with no second
+> player needed. Quest Link / soft-detect items (§10-11) need vsquest installed and are
+> left off this list until that's available to test with.
+
+- [ ] `00000036` **Place the Desk and Inbox.** Craft/creative-spawn an Assignment Desk and
+      an Inbox and place both — confirm they render as Lecterns (the art placeholder swap),
+      have a working collision box, and open their dialog without errors.
+      *(add-assignment-and-quest-support 5.1, 6.1, 13.1, 13.2)*
+- [ ] `00000037` **Self-assign and send.** Open the Assignment Desk's Assignment tab, open
+      the recipient dropdown — confirm your own name shows labeled "(You)" instead of an
+      empty list — write a task and send it to yourself. Confirm it also shows up in your
+      own Sent history on the same tab. *(add-assignment-and-quest-support 5.5, follow-up)*
+- [ ] `00000038` **Accept with placement picker.** Open the Inbox (same Desk, or a
+      standalone Inbox block) and accept the assignment you sent yourself — confirm the
+      held-item → inventory-scan → picker flow resolves correctly, and it's disabled with a
+      tooltip if you're holding nothing eligible. *(add-assignment-and-quest-support 9.1)*
+- [ ] `00000039` **Leading-icon scroll marker.** Once accepted, check the Read, Editor, and
+      Pinned views of that task — confirm the new rolled-scroll icon shows as its leading
+      marker (not the old guestbook-person placeholder). *(add-assignment-and-quest-support
+      9.3, 13.4)*
+- [ ] `0000003a` **Discard-via-delete and derived Completed.** Delete the accepted task from
+      your notebook — confirm it performs a Discard (terminal state), not a plain delete.
+      Separately, check the task's done box — confirm the assignment record derives
+      Completed on its own (never directly settable). *(add-assignment-and-quest-support
+      9.1)*
+- [ ] `0000003b` **Ambient particle indicator.** With an unseen assignment pending, stand
+      within ~6 blocks of an Inbox-capable block — confirm sparse amber/gold motes spawn
+      above it, with an occasional rainbow-hued one; note if the density/timing feels off
+      (starting values are explicitly tune-by-eye, not final).
+      *(add-assignment-and-quest-support 8.4)*
+- [ ] `0000003c` **Inbox nav-button shimmer.** With an unseen assignment pending, open a
+      Lectern/Scriptorium/Chalkboard (NOT the Inbox tab) — confirm its Inbox nav button
+      shimmers; switch to the Inbox tab — confirm the shimmer stops while that tab is
+      active. *(add-assignment-and-quest-support 8.5)*
+
 ## reconcile-animating-surfaces
 
 > §3.7 editor proof gate (design D2) for the ForceRebuild→in-place-reconcile conversion. All must hold,
