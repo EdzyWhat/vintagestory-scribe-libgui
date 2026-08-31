@@ -112,9 +112,13 @@
       `ScribeAssignmentStageRow` widget reuses `ScribeReadRowData` but not `ScribeReadRow`'s checkbox;
       parent-checks-subtasks cascades once but every row stays independently overridable; `TryCreate`
       gains the full block shape; a new batch-send message carries N rows + 1 recipient + 1 delete flag.
-- [ ] 9.2 Write spec deltas for the new `assignment-multi-item-creation` capability and the
+- [x] 9.2 Write spec deltas for the new `assignment-multi-item-creation` capability and the
       `assignment-desk-block` modification (Create Assignments tab's content swaps from freeform text to
-      this flow) once 9.1's decisions are settled.
+      this flow) once 9.1's decisions are settled. Written as
+      `specs/assignment-multi-item-creation/spec.md` (5 ADDED requirements: staging slot,
+      Read-view-style selectable rows, parent-cascades-to-subtasks selection, one independent
+      assignment per selected row, "Delete from source on send") and a MODIFIED requirement on
+      `assignment-desk-block` clarifying creation is staging-and-select, not freeform text entry.
 - [ ] 9.3 Design + implement the batch-send network message (N selected rows, one recipient UID, one
       delete-from-source-on-send flag) and its server-side handling (one independent `ScribeAssignment`
       per row, all addressed to that recipient).

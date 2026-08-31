@@ -79,12 +79,10 @@ delegating existing, already-authored rows of any kind.
   target-player picker itself survives unchanged (still one recipient, still the same control); only the
   adjacent free-text field and its immediately-adjacent Send button are removed in favor of the new slot +
   row-list + batch-send flow.
-- **Not yet designed at the spec/task level.** This is a materially larger surface than the rest of this
-  batch (new staged-item slot state, a Read-view-style multi-select renderer, batch-send networking) and
-  needs its own design.md decisions before specs/tasks are written — e.g., whether a selected parent row's
-  subtasks are auto-included, what happens to the staged slot if the source document is mid-edit-lock
-  elsewhere, and how much of `ScribeReadContent`/`ScribeInboxContent` this can reuse vs. needs new widgetry
-  for. Tracked as a follow-up design pass, not implemented by this change's current task list.
+- **Designed (design.md D8-D13); not yet implemented.** This is a materially larger surface than the rest
+  of this batch (new staged-item slot state, a Read-view-style multi-select renderer, batch-send
+  networking). Its design pass is done and specced (`specs/assignment-multi-item-creation/spec.md`);
+  tasks.md group 9 tracks the remaining implementation work.
 
 Out of scope: no change to the assignment state machine's transitions/validity rules beyond what's needed
 for the new creation flow, no change to what data an Inbox row shows when expanded, no change to who can
@@ -94,11 +92,11 @@ change as implementation proceeds.
 ## Capabilities
 
 ### New Capabilities
-- `assignment-multi-item-creation` (design pending — see note above; NOT specced/tasked by this pass):
-  staging an existing Scribe item into a slot on the Create Assignments tab, rendering its rows Read-view-
-  style with independent multi-select checkboxes, sending each selected row as its own independent
-  assignment to one chosen recipient, and an optional move-not-copy "delete from source on send" toggle
-  (default off, resets every send).
+- `assignment-multi-item-creation` (specced — see `specs/assignment-multi-item-creation/spec.md`; not yet
+  implemented, tracked by tasks.md group 9): staging an existing Scribe item into a slot on the Create
+  Assignments tab, rendering its rows Read-view-style with independent multi-select checkboxes, sending
+  each selected row as its own independent assignment to one chosen recipient, and an optional
+  move-not-copy "delete from source on send" toggle (default off, resets every send).
 
 ### Modified Capabilities
 - `inbox-tab`: state-chip colors (five named colors replacing the current two-tone scheme), the Inbox
@@ -106,9 +104,9 @@ change as implementation proceeds.
   position/travel height, and a new gating rule for the Inbox nav button on non-Desk/non-Inbox-block
   surfaces (has the player ever received an assignment).
 - `assignment-desk-block`: the Assignment tab's rename to "Create Assignments" (label + tooltip), its new
-  plus icon, and — pending the design pass above — the Create Assignments tab's content ultimately becomes
-  `assignment-multi-item-creation`'s flow rather than a freeform-text field; the flex-row layout already
-  implemented in this change is an interim step, superseded once that lands.
+  plus icon, and the Create Assignments tab's content becoming `assignment-multi-item-creation`'s flow
+  rather than a freeform-text field; the target-player row's flex layout survives unchanged (see that
+  capability's spec).
 - `lectern-block`, `scriptorium-block`, `chalkboard-block`: each block's existing "exposes an Inbox nav
   button" requirement gains the ever-assigned gating clause defined by `inbox-tab`.
 - `settings-tab`: a new control that opens LibGUI's theme picker via the `.ui settings` client command.

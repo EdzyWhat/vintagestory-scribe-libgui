@@ -1,3 +1,23 @@
+## MODIFIED Requirements
+
+### Requirement: The Assignment tab is the sole creation surface for assignments
+The Assignment Desk's Assignment tab SHALL be the only surface in the mod that lets a player
+create a task and send it to another player. No other Scribe surface (Lectern, Scriptorium,
+Chalkboard, Notebook, Tablet, the standalone Inbox block) SHALL expose a create-and-send
+affordance; those surfaces may only view/act on assignments already sent (see `inbox-tab`).
+Creation on the Assignment tab SHALL happen by staging an existing Scribe item into the tab's
+staging slot and sending one or more of that document's rows, per the `assignment-multi-item-
+creation` capability — not by typing freeform text.
+
+#### Scenario: Only the Assignment Desk can send an assignment
+- **WHEN** a player is at a Lectern, Scriptorium, Chalkboard, or the standalone Inbox block
+- **THEN** no control for creating and sending a new assignment to another player is present
+
+#### Scenario: Creation is staging-and-select, not freeform text entry
+- **WHEN** the player opens the Create Assignments tab
+- **THEN** the tab presents a staging slot and (once a document is staged) a selectable row list,
+  with no freeform text field for authoring a new task from scratch
+
 ## ADDED Requirements
 
 ### Requirement: The Assignment tab is labeled "Create Assignments" with a plus icon
