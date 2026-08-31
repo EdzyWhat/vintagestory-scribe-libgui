@@ -7,8 +7,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
-- Initial assignment state model and optional VS Quest policy/link primitives for the upcoming
-  Assignment Desk and Inbox surfaces.
+- **Assignment Desk and Inbox.** A new Assignment Desk block lets you write a task and send it
+  directly to another player; a new standalone Inbox block (plus an Inbox tab reachable from the
+  Lectern, Scriptorium, and Chalkboard) is where you receive one. Accept, Decline, or Cancel before
+  it's accepted; once accepted it's yours to check off (which completes the assignment
+  automatically) or Discard. An unseen assignment glows softly on the nearby block until you open
+  its Inbox.
+- **Quest Links**, for players who also have an optional supported quest mod installed (currently
+  VS Quest): add a Quest Link from the footer's New Task menu to keep one of that mod's quests
+  listed next to your other goals. Scribe also notices when you accept or complete a quest near its
+  giver and always says so in chat; a new Quest Accept Policy and Quest Completion Policy in
+  Settings (Always/Never/Prompt, default Prompt) choose what happens next — automatically link/mark
+  it done, do nothing, or ask via a small HUD banner. While a quest's own window is open, its Quest
+  Link row shows live kill/place/break progress underneath it.
 
 ## [1.3.3] - 2026-08-30
 

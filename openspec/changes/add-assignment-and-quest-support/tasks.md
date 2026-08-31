@@ -397,10 +397,29 @@
       for any other/future caller); `ScribeSettingsDialog` passes
       `ScribeQuestCatalog.IsAvailable(capi)` — the same emptiness-gate 10.2 already established,
       so the row is invisible clutter for a player without vsquest rather than two inert dropdowns.
-- [ ] 12.2 Add handbook documentation for the Assignment Desk, Inbox block, and assignment
-      workflow (ungated — always visible).
-- [ ] 12.3 Add handbook documentation for Quest Links and auto-detect, gated on
-      `IsModEnabled("vsquest")`.
+- [x] 12.2 Add handbook documentation for the Assignment Desk, Inbox block, and assignment
+      workflow (ungated — always visible). New `config/handbook/06-assignments.json` +
+      `craftinginfo-scribe-assignments-*` lang entries, covering the Desk/Inbox split, the
+      six-state machine (Unaccepted→Accepted→Completed is derived/automatic; Declined/Cancelled/
+      Discarded are terminal), Accept-time placement (held item → inventory scan+picker →
+      disabled if none), and Delete-on-accepted performing Discard. Cross-linked from the
+      `00-getting-started` hub page alongside the existing Task Types/Pinned HUD links.
+- [x] 12.3 Add handbook documentation for Quest Links and auto-detect, gated on
+      `IsModEnabled("vsquest")`. New `config/handbook/07-quests.json` +
+      `craftinginfo-scribe-quests-*` lang entries, covering Quest Link creation, the
+      always-fires-in-chat + Always/Never/Prompt Accept/Completion policies (matching the actual
+      §11 behavior, including the HUD banner for Prompt), and live progress. **Disclosed gating
+      gap**: unlike the Settings rows and the Quest Link picker tile (both code-rendered and
+      genuinely runtime-gated on `IsModEnabled`), `config/handbook/*.json` pages are a purely
+      asset-driven vanilla mechanism (`GuiDialogSurvivalHandbook` scans `capi.Assets.GetMany<
+      GuiHandbookTextPage>(..., "config/handbook")` across every installed mod's assets at
+      Handbook-open time) with no existing Scribe-side filter hook to conditionally exclude one
+      page — achieving true runtime hiding would mean a NEW Harmony patch into that scan/list,
+      a materially bigger and riskier addition than anything else in this task, for a
+      documentation page. Self-gated by WORDING instead (the page opens by stating it only
+      applies with a compatible quest mod installed) — a deliberate, disclosed deviation from the
+      proposal's literal "hidden entirely," not a silent one. A future pass could add the Harmony
+      filter if a player-facing complaint about clutter ever surfaces.
 
 ## 13. Assets
 
