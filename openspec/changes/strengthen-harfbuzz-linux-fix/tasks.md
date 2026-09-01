@@ -62,9 +62,11 @@
 
 ## 4. Upstream coordination
 
-- [ ] 4.1 Post a comment on `ripls56/vslibgui#2` (opened by this repo's maintainer) summarizing the
+- [x] 4.1 Post a comment on `ripls56/vslibgui#2` (opened by this repo's maintainer) summarizing the
       confirmed root cause (bundled HarfBuzzSharp vs. a system `libharfbuzz` already resident,
       `RTLD_DEEPBIND` isolation), crediting Seralth's independently-shipped fix as corroborating
       evidence, and linking this change's mechanism as a second independent implementation — making
       the case for a durable fix inside `gui` itself so every dependent mod's users benefit without
       per-mod patching.
+      Done — author raised this directly with ripls (LibGUI's maintainer) in a thread referencing
+      this fix.
