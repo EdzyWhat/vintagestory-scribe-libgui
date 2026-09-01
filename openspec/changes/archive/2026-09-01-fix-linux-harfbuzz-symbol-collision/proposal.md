@@ -34,9 +34,9 @@ targeted at the confirmed mechanism.
 ## Capabilities
 
 ### New Capabilities
-- `harfbuzz-native-load-isolation`: Scribe forces the bundled HarfBuzzSharp native library to load
-  with symbol-isolation flags on Linux, ahead of any other mod's startup code, so the default
-  (unisolated) load path is never reached on an affected system.
+(none — see Disposition below. The `harfbuzz-native-load-isolation` capability this proposal
+originally introduced never landed under its own name; its shipped equivalent is
+`linux-native-runtime-compatibility`, introduced by `broaden-linux-harfbuzz-fix`.)
 
 ### Modified Capabilities
 (none — `bundled-font-rendering`, touched by the disproven prior change, is not modified here; this
@@ -54,3 +54,17 @@ change addresses a different, non-font-related mechanism.)
   unaffected Linux setup (falls through to today's exact default behavior on any failure).
 - **Verification:** community-assisted only (no local Linux test machine) — same ModDB/Discord
   reporters as the prior change, primarily SnuwWulfie (has working `coredumpctl` tooling already).
+
+## Disposition (2026-08-31)
+
+**Superseded by `broaden-linux-harfbuzz-fix`, archived rather than continued.** This change's
+implementation (the `dlopen(RTLD_DEEPBIND)` pre-load in a standalone `ScribeHarfBuzzLoadFix`
+ModSystem, including the mid-implementation correction away from a colliding
+`SetDllImportResolver` approach) was built and locally verified on this change's own git branch, but
+that branch was never merged to `main`. `broaden-linux-harfbuzz-fix` independently hit the same
+collision this branch had already found and fixed, and resolved it by porting this branch's exact
+fix forward into `main` (see that change's task 2.6). The implementation this proposal describes is
+therefore live on `main` today, just delivered under a different change's name. This change's
+remaining community-verification and upstream-relay tasks are folded into `broaden-linux-harfbuzz-fix`'s
+own Group 3, which covers the same ground under a broader, not-KDE-only framing. See `tasks.md`'s
+own Disposition note for the full accounting.
