@@ -24,7 +24,19 @@ namespace Scribe;
 /// <see cref="ScribeReadRowData"/>'s discipline.</summary>
 internal readonly record struct ScribeInboxRowData(
     Guid TaskId, string Text, int Depth, ScribeAssignmentState State, string AssignerUid,
-    string TargetPlayerUid, string AssignedDate, bool Seen, ScribeAssignmentActor ViewerRole);
+    string TargetPlayerUid, string AssignedDate, bool Seen, ScribeAssignmentActor ViewerRole,
+    string? DisplayName = null, string? AcceptedDate = null, string? DeclinedDate = null,
+    string? CancelledDate = null, string? DiscardedDate = null, string? CompletedDate = null)
+{
+    /// <summary>What this row actually shows (playtest 2026-08-31 bug fix): a Task/Text row's own
+    /// authored <see cref="Text"/> is blank by convention for a Tracker/Link/Craft row (its label lives
+    /// on <see cref="ScribeBlock.TargetItemCode"/>/<see cref="ScribeBlock.LinkTarget"/> instead — see
+    /// <see cref="ScribeAssignmentStore.TryCreate"/>'s remarks) — this Inbox/Sent-history row previously
+    /// rendered <see cref="Text"/> unconditionally and showed those kinds blank. The caller resolves
+    /// <see cref="DisplayName"/> the same way the read view does (<c>ScribeDialogBase.ResolveRowItem</c>)
+    /// and this falls back to <see cref="Text"/> when it's null (every Task/Text row).</summary>
+    public string Label => DisplayName ?? Text;
+}
 
 /// <summary>One Accept-placement candidate (assignment-state-machine's placement requirement) — an
 /// eligible (writeable Scribe document) item's slot identity, exactly what
@@ -99,26 +111,28 @@ internal sealed class ScribeInboxContent : StatefulWidget
 
 internal sealed class ScribeInboxContentState : State<ScribeInboxContent>
 {
-    /// <summary>Which assignment states are currently visible (inbox-tab: "The Inbox tab can filter by
-    /// assignment state via a chip row"). Defaults to every state shown — nothing is hidden until the
-    /// player narrows it themselves. Lives on this State so it survives a data-only reconcile (the
-    /// dialog's <c>RebuildBody</c> on an assignment sync) rather than resetting on every server push.</summary>
-    private readonly HashSet<ScribeAssignmentState> activeFilters = new(AllStates());
+    /// <summary>Which single filter group is currently visible (triage 2026-08-31: "the pills should act
+    /// like radio buttons, in that only one of these views should be visible at any time" — replaces the
+    /// original independently-toggleable multi-select chip row). Defaults to <see cref="ScribeAssignmentFilterGroup.All"/>.
+    /// Lives on this State so it survives a data-only reconcile (the dialog's <c>RebuildBody</c> on an
+    /// assignment sync) rather than resetting on every server push.</summary>
+    private ScribeAssignmentFilterGroup activeFilterGroup = ScribeAssignmentFilterGroup.All;
 
-    private static ScribeAssignmentState[] AllStates() =>
-        (ScribeAssignmentState[])Enum.GetValues(typeof(ScribeAssignmentState));
+    private static ScribeAssignmentFilterGroup[] AllGroups() =>
+        (ScribeAssignmentFilterGroup[])Enum.GetValues(typeof(ScribeAssignmentFilterGroup));
 
     public override Widget Build(BuildContext context)
     {
         var colors = Theme.Of(context).ColorScheme;
         var style = Widget.Style;
 
-        var visibleRows = Widget.Rows.Where(r => activeFilters.Contains(r.State)).ToList();
+        var visibleStates = ScribeAssignmentFilterGroups.StatesFor(activeFilterGroup);
+        var visibleRows = Widget.Rows.Where(r => visibleStates.Contains(r.State)).ToList();
 
         Widget filterRow = new Wrap(
             spacing: 6f,
             runSpacing: 6f,
-            children: AllStates().Select(s => BuildFilterChip(s, colors)).ToList());
+            children: AllGroups().Select(g => BuildFilterChip(g, colors)).ToList());
 
         Widget list = visibleRows.Count == 0
             ? new Center(child: new Text(
@@ -140,31 +154,35 @@ internal sealed class ScribeInboxContentState : State<ScribeInboxContent>
                             .ToList())))
             { AutoHide = false };
 
-        return new Column(
-            crossAxisAlignment: CrossAxisAlignment.Stretch,
-            mainAxisSize: MainAxisSize.Max,
-            children: new Widget[]
-            {
-                new Padding(EdgeInsets.Only(bottom: 8f), child: filterRow),
-                new Divider(),
-                new Expanded(child: new Padding(EdgeInsets.Only(top: 4f), child: list)),
-            });
+        // Rooted in the same Task Text Font + EdgeInsets.All(10) inset every other tab uses
+        // (ScribeReadContent/ScribePinnedContent/the Guestbook/the Timer tab) — this tab used to return its
+        // Column bare, so its Divider spanned edge-to-edge instead of sitting inset like theirs (refine-
+        // assignment-desk-inbox-ux 11.1).
+        return ScribeTextDefaults.Wrap(style.TaskFontFamily, style.FontSize, new Padding(
+            EdgeInsets.All(10),
+            child: new Column(
+                crossAxisAlignment: CrossAxisAlignment.Stretch,
+                mainAxisSize: MainAxisSize.Max,
+                children: new Widget[]
+                {
+                    new Padding(EdgeInsets.Only(bottom: 8f), child: filterRow),
+                    new Divider(),
+                    new Expanded(child: new Padding(EdgeInsets.Only(top: 4f), child: list)),
+                })));
     }
 
-    /// <summary>One toggleable pill per state (inbox-tab: "the active/inactive state of every chip is
-    /// visible without opening any additional control") — filled when active, outlined when inactive.</summary>
-    private Widget BuildFilterChip(ScribeAssignmentState state, ColorScheme colors)
+    /// <summary>One radio-button-style pill per filter group (inbox-tab: "the active/inactive state of
+    /// every chip is visible without opening any additional control") — filled when it's the sole active
+    /// group, outlined otherwise. Tapping one selects it exclusively (triage 2026-08-31).</summary>
+    private Widget BuildFilterChip(ScribeAssignmentFilterGroup group, ColorScheme colors)
     {
-        bool active = activeFilters.Contains(state);
-        var (labelKey, chipColor) = ScribeAssignmentChip.For(state, colors);
+        bool active = activeFilterGroup == group;
+        var (labelKey, chipColor) = ScribeAssignmentFilterGroups.LabelAndColor(group);
         Vector4 bg = active ? chipColor with { W = 1f } : colors.SurfaceHigh with { W = 1f };
         Vector4 fg = active ? ScribeRowConstants.NavActiveGlyph : colors.OnSurfaceVariant;
 
         return new GestureDetector(
-            onTap: _ => SetState(() =>
-            {
-                if (!activeFilters.Remove(state)) activeFilters.Add(state);
-            }),
+            onTap: _ => SetState(() => activeFilterGroup = group),
             child: new Container(
                 style: new BoxStyle
                 {
@@ -178,8 +196,10 @@ internal sealed class ScribeInboxContentState : State<ScribeInboxContent>
     }
 }
 
-/// <summary>Lang key + thematic color for an assignment state's chip, shared by the filter-chip row and
-/// each row's own compact state chip so the two can never disagree (inbox-tab requirements).</summary>
+/// <summary>Lang key + thematic color for an assignment state's chip, shared by every row's own compact
+/// state chip (inbox-tab requirements). The filter-CHIP row's own labels/colors are a separate, coarser
+/// grouping — see <see cref="ScribeAssignmentFilterGroups"/> — since triage 2026-08-31 combined three of
+/// these six states into one filter pill while keeping their per-row chips visually distinct.</summary>
 internal static class ScribeAssignmentChip
 {
     public static (string LangKey, Vector4 Color) For(ScribeAssignmentState state, ColorScheme colors) => state switch
@@ -188,9 +208,58 @@ internal static class ScribeAssignmentChip
         ScribeAssignmentState.Accepted => ("scribe:scribe-assignment-state-accepted", ScribeRowConstants.AssignmentChipAccepted),
         ScribeAssignmentState.Declined => ("scribe:scribe-assignment-state-declined", ScribeRowConstants.AssignmentChipRejected),
         ScribeAssignmentState.Cancelled => ("scribe:scribe-assignment-state-cancelled", ScribeRowConstants.AssignmentChipCancelled),
-        ScribeAssignmentState.Discarded => ("scribe:scribe-assignment-state-discarded", ScribeRowConstants.AssignmentChipRejected),
+        ScribeAssignmentState.Discarded => ("scribe:scribe-assignment-state-discarded", ScribeRowConstants.AssignmentChipDiscarded),
         ScribeAssignmentState.Completed => ("scribe:scribe-assignment-state-completed", ScribeRowConstants.AssignmentChipCompleted),
         _ => ("scribe:scribe-assignment-state-unaccepted", ScribeRowConstants.AssignmentChipNew),
+    };
+}
+
+/// <summary>The Inbox/Sent-history filter-chip row's groups (triage 2026-08-31): coarser than
+/// <see cref="ScribeAssignmentState"/> — <see cref="RejectedGroup"/> combines Declined/Cancelled/Discarded
+/// into one pill, and <see cref="All"/> is a new group with no per-row-chip equivalent. The pill row acts
+/// as radio buttons (<see cref="ScribeInboxContentState"/>): exactly one group is visible at a time.</summary>
+internal enum ScribeAssignmentFilterGroup
+{
+    All,
+    New,
+    Accepted,
+    RejectedGroup,
+    Completed,
+}
+
+internal static class ScribeAssignmentFilterGroups
+{
+    private static readonly ScribeAssignmentState[] RejectedStates =
+        { ScribeAssignmentState.Declined, ScribeAssignmentState.Cancelled, ScribeAssignmentState.Discarded };
+
+    /// <summary>Every <see cref="ScribeAssignmentState"/> a row must be in to show while this group is
+    /// active.</summary>
+    public static IReadOnlyCollection<ScribeAssignmentState> StatesFor(ScribeAssignmentFilterGroup group) => group switch
+    {
+        ScribeAssignmentFilterGroup.All => AllStates,
+        ScribeAssignmentFilterGroup.New => new[] { ScribeAssignmentState.Unaccepted },
+        ScribeAssignmentFilterGroup.Accepted => new[] { ScribeAssignmentState.Accepted },
+        ScribeAssignmentFilterGroup.RejectedGroup => RejectedStates,
+        ScribeAssignmentFilterGroup.Completed => new[] { ScribeAssignmentState.Completed },
+        _ => AllStates,
+    };
+
+    private static readonly ScribeAssignmentState[] AllStates =
+        (ScribeAssignmentState[])Enum.GetValues(typeof(ScribeAssignmentState));
+
+    /// <summary>Lang key + representative swatch color for the pill itself (distinct from any one row's
+    /// own state-chip color for <see cref="ScribeAssignmentFilterGroup.RejectedGroup"/>, which spans three
+    /// visually-different per-row chips). Uses Declined's red (glance feedback on 14.10, 2026-08-31: "mark
+    /// this complete, but update color of the combined pill to Declined") rather than the blended
+    /// Discarded color a per-row Discarded chip still uses on its own.</summary>
+    public static (string LangKey, Vector4 Color) LabelAndColor(ScribeAssignmentFilterGroup group) => group switch
+    {
+        ScribeAssignmentFilterGroup.All => ("scribe:scribe-assignment-filter-all", ScribeRowConstants.AssignmentChipAll),
+        ScribeAssignmentFilterGroup.New => ("scribe:scribe-assignment-state-unaccepted", ScribeRowConstants.AssignmentChipNew),
+        ScribeAssignmentFilterGroup.Accepted => ("scribe:scribe-assignment-state-accepted", ScribeRowConstants.AssignmentChipAccepted),
+        ScribeAssignmentFilterGroup.RejectedGroup => ("scribe:scribe-assignment-filter-rejected-group", ScribeRowConstants.AssignmentChipRejected),
+        ScribeAssignmentFilterGroup.Completed => ("scribe:scribe-assignment-state-completed", ScribeRowConstants.AssignmentChipCompleted),
+        _ => ("scribe:scribe-assignment-filter-all", ScribeRowConstants.AssignmentChipAll),
     };
 }
 
@@ -264,7 +333,7 @@ internal sealed class ScribeInboxRowState : State<ScribeInboxRow>
                 new TextStyle { FontSize = style.FontSize * 0.7f, Color = ScribeRowConstants.NavActiveGlyph }));
 
         Widget textWidget = ScribeTaskFont.OffsetWrap(style.TaskFontFamily, style.FontSize,
-            new Text(data.Text, new TextStyle { FontSize = style.FontSize, Color = colors.OnSurface, SoftWrap = true }));
+            new Text(data.Label, new TextStyle { FontSize = style.FontSize, Color = colors.OnSurface, SoftWrap = true }));
 
         Widget collapsedRow = new Row(
             crossAxisAlignment: CrossAxisAlignment.Center,
@@ -294,9 +363,24 @@ internal sealed class ScribeInboxRowState : State<ScribeInboxRow>
     private Widget BuildExpandedDetail(BuildContext context, ScribeInboxRowData data, ColorScheme colors, ScribeRowStyle style)
     {
         string assignerName = Widget.ResolvePlayerName(data.AssignerUid);
-        var meta = new Text(
-            Lang.Get("scribe:scribe-assignment-assigned-by", assignerName, data.AssignedDate),
-            new TextStyle { FontSize = style.FontSize * 0.85f, Color = colors.OnSurfaceVariant });
+        var metaStyle = new TextStyle { FontSize = style.FontSize * 0.85f, Color = colors.OnSurfaceVariant };
+        var metaLines = new List<Widget>
+        {
+            new Text(Lang.Get("scribe:scribe-assignment-assigned-by", assignerName, data.AssignedDate), metaStyle),
+        };
+        // Per-transition history stubs (triage 2026-08-31: "we should also see stubs for when it was
+        // accepted, discarded, etc."). AcceptedDate can coexist with a terminal date (Accepted always
+        // precedes Completed/Discarded); the four terminal dates are mutually exclusive by construction.
+        if (data.AcceptedDate is { } acceptedDate)
+            metaLines.Add(new Text(Lang.Get("scribe:scribe-assignment-accepted-on", acceptedDate), metaStyle));
+        if (data.DeclinedDate is { } declinedDate)
+            metaLines.Add(new Text(Lang.Get("scribe:scribe-assignment-declined-on", declinedDate), metaStyle));
+        if (data.CancelledDate is { } cancelledDate)
+            metaLines.Add(new Text(Lang.Get("scribe:scribe-assignment-cancelled-on", cancelledDate), metaStyle));
+        if (data.DiscardedDate is { } discardedDate)
+            metaLines.Add(new Text(Lang.Get("scribe:scribe-assignment-discarded-on", discardedDate), metaStyle));
+        if (data.CompletedDate is { } completedDate)
+            metaLines.Add(new Text(Lang.Get("scribe:scribe-assignment-completed-on", completedDate), metaStyle));
 
         var actions = new List<Widget>();
         if (data.ViewerRole == ScribeAssignmentActor.Assignee)
@@ -319,15 +403,14 @@ internal sealed class ScribeInboxRowState : State<ScribeInboxRow>
                 () => Widget.OnAction(data.TaskId, ScribeAssignmentAction.Cancel), colors));
         }
 
-        var rowChildren = new List<Widget> { meta };
         if (actions.Count > 0)
-            rowChildren.Add(new Row(spacing: 8f, mainAxisSize: MainAxisSize.Min, children: actions));
+            metaLines.Add(new Row(spacing: 8f, mainAxisSize: MainAxisSize.Min, children: actions));
 
         return new Column(
             crossAxisAlignment: CrossAxisAlignment.Start,
             mainAxisSize: MainAxisSize.Min,
             spacing: 4f,
-            children: rowChildren);
+            children: metaLines);
     }
 
     private static Widget ActionButton(string labelKey, ButtonVariant variant, Action onTap, ColorScheme colors)
@@ -353,10 +436,15 @@ internal sealed class ScribeInboxRowState : State<ScribeInboxRow>
         if (candidates.Count == 0)
         {
             return new Tooltip(
+                // Secondary (transparent + bordered), not Primary (triage 2026-08-31: a disabled Primary
+                // button still paints its full amber fill — LibGUI's Button has no disabled-background
+                // variant, only a 45%-opacity dim on the label — so grey-text-on-solid-amber read as
+                // active, not inert). Secondary's own dim label plus its transparent fill together read
+                // clearly as "can't tap this" without needing a custom style override.
                 child: new Button(
                     child: new Text(Lang.Get("scribe:scribe-assignment-action-accept"),
                         new TextStyle { FontSize = 13, Color = colors.OnSurfaceVariant, FontFamily = ScribeTaskFont.ButtonFamily }),
-                    variant: ButtonVariant.Primary,
+                    variant: ButtonVariant.Secondary,
                     enabled: false),
                 content: new Padding(EdgeInsets.All(6), child: new Text(
                     Lang.Get("scribe:scribe-assignment-no-eligible-target"),

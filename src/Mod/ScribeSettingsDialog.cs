@@ -109,9 +109,24 @@ public sealed class ScribeSettingsDialog : GuiBase
     /// <summary>Runs LibGUI's own `.ui settings` client command (refine-assignment-desk-inbox-ux D6),
     /// surfacing its theme picker — otherwise reachable only by a player who already knows that hidden
     /// command exists. <see cref="Caller.Player"/>'s setter also sets <c>Type</c>/<c>Entity</c>, matching
-    /// how a typed chat command's calling args are populated.</summary>
-    private void OpenLibGuiThemePicker() =>
-        capi.ChatCommands.ExecuteUnparsed(".ui settings", new TextCommandCallingArgs { Caller = new Caller { Player = capi.World.Player } });
+    /// how a typed chat command's calling args are populated.
+    ///
+    /// <para>Closes THIS window first (playtest 2026-08-31: the button "did nothing" — decompiling the
+    /// shipped `Gui.dll`'s `.ui settings` handler confirmed the command itself just builds+opens LibGUI's
+    /// own <c>SettingsDialog</c> unconditionally; the likely explanation is that dialog opening BEHIND this
+    /// still-open Scribe Settings window, since both are separate top-level windows and nothing coordinates
+    /// their stacking order). Since this is the only Scribe surface that ever opens the theme picker
+    /// (design D6), closing it here can't strand any other Scribe view. The result callback logs to the
+    /// client log (not a chat message — this is a diagnostic for the next retest, not a player-facing
+    /// notice) so a further-recurrence pinpoints the exact <c>TextCommandResult</c> instead of another
+    /// silent "nothing happened".</para></summary>
+    private void OpenLibGuiThemePicker()
+    {
+        TryClose();
+        capi.ChatCommands.ExecuteUnparsed(".ui settings",
+            new TextCommandCallingArgs { Caller = new Caller { Player = capi.World.Player } },
+            result => capi.Logger.Notification("[scribe] .ui settings -> {0} {1}", result.Status, result.StatusMessage));
+    }
 
     /// <summary>Notify listeners (the lectern's Settings nav button) that this window just opened, so it
     /// can recolor live (add-active-tab-nav-colors).</summary>

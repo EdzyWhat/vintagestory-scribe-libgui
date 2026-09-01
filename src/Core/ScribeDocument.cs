@@ -132,6 +132,15 @@ public sealed class ScribeDocument
     /// check (this method does not enforce a block cap).</summary>
     public void AppendAssignedBlock(ScribeBlock block) => _blocks.Add(block);
 
+    /// <summary>Same contract as <see cref="AppendAssignedBlock"/> (a verbatim MOVE, TaskId preserved),
+    /// but at an explicit position instead of always the end — Accept-time placement follows the
+    /// accepting player's own New Task Insert preference (refine-assignment-desk-inbox-ux 13.1) rather
+    /// than always landing at the bottom. <paramref name="index"/> is clamped into
+    /// <c>[0, Blocks.Count]</c> so an out-of-range value (a stale index from a settings change mid-flight)
+    /// degrades to the nearest valid position instead of throwing.</summary>
+    public void InsertAssignedBlock(int index, ScribeBlock block) =>
+        _blocks.Insert(Math.Clamp(index, 0, _blocks.Count), block);
+
     /// <summary>Deep-copy one block, minting a FRESH <see cref="ScribeBlock.TaskId"/> (the ctor's default when
     /// no taskId is supplied) so the copy is independent of the original on pins/completion resolution. Shared
     /// by <see cref="CloneWithNewIdentity"/> and <see cref="AppendClonedBlocksFrom"/>.</summary>
@@ -157,6 +166,33 @@ public sealed class ScribeDocument
         ScribePlayerSettings.NormalizeNewTaskInsert(pos) == ScribeNewTaskInsert.Bottom
             ? _blocks.Count
             : 0;
+
+    /// <summary>The index Accept-time placement should use for a row carrying <paramref name="batchId"/>
+    /// (refine-assignment-desk-inbox-ux triage 2026-08-31): if a sibling from the same batch is already
+    /// placed in this document, insert directly after its cluster (its own owned run, if it's a depth-0
+    /// parent with children already placed) so the batch's rows stay contiguous regardless of which order
+    /// they were individually Accepted in — each Accept is a separate round-trip with no other batch
+    /// coordination. Falls back to <paramref name="fallback"/>'s <see cref="InsertIndex"/> when no sibling
+    /// is placed yet (the first row of a batch to be Accepted) or <paramref name="batchId"/> is the shared
+    /// <see cref="Guid.Empty"/> default some callers use (see <see cref="ScribeAssignment.BatchId"/>'s
+    /// remarks) — gluing together every such caller's unrelated rows would be wrong, not helpful.
+    ///
+    /// <para>Known limitation: a subtask Accepted BEFORE its parent has no sibling to find yet and falls
+    /// back to Top/Bottom; when the parent is Accepted afterward it lands next to that already-placed
+    /// subtask rather than ahead of it. Fixing that fully needs deferring placement until a whole batch is
+    /// resolved, which this does not attempt.</para></summary>
+    public int InsertIndexForBatch(Guid batchId, ScribeNewTaskInsert fallback)
+    {
+        if (batchId != Guid.Empty)
+        {
+            for (int i = _blocks.Count - 1; i >= 0; i--)
+            {
+                if (_blocks[i].Assignment?.BatchId != batchId) continue;
+                return _blocks[i].Depth == 0 ? OwnedRun(i).End : i + 1;
+            }
+        }
+        return InsertIndex(fallback);
+    }
 
     /// <summary>Adds a checkbox task to the end. Any text is accepted and stored verbatim,
     /// including empty/whitespace-only text (a new task starts empty and the player types into it).

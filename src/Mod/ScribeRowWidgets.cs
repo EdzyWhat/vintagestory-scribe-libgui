@@ -18,6 +18,7 @@ using Gui.Widgets.Overlay;       // Tooltip
 using Gui.Widgets.Painting;      // BoxStyle
 using Gui.Widgets.Scroll;        // ListView, SingleChildScrollView, Scrollable, Scrollbar
 using OpenTK.Mathematics;        // Vector2
+using SkiaSharp;                 // SKBitmap (assigned-task stamp raster)
 using Scribe.Core;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;   // ItemStack (Tracker/Link display item)
@@ -161,21 +162,63 @@ internal sealed class ScribeVsIconGlyph : StatelessWidget
     public override Widget Build(BuildContext context) => new VsIcon(iconName, size, color);
 }
 
-/// <summary>The leading-icon marker for an accepted player-to-player assignment
-/// (assignment-state-machine's Accepted state / add-assignment-and-quest-support 9.3), shown before the
-/// checkbox on Read, Editor, and Pin Tab rows so an assigned task is recognizable everywhere it renders — a
-/// Tablet's rows inherit it for free, since it reuses the same Read/Editor row widgets rather than a
-/// per-surface copy. UNLIKE the grip glyph's zero-opacity reserved-width spacer, this column is only added
-/// (and only then takes up width/gap) for a row that actually is an accepted assignment — callers must gate
-/// the <c>children.Add(...)</c> call on the row's own <c>IsAcceptedAssignment</c> flag rather than call this
+/// <summary>The assignment marker icon for an accepted player-to-player assignment
+/// (assignment-state-machine's Accepted state / add-assignment-and-quest-support 9.3), shown after the
+/// checkbox on Read, Editor, and Pin Tab rows (assignment-icon-and-tab-defaults moved it from before to
+/// after) so an assigned task is recognizable everywhere it renders — a Tablet's rows inherit it for
+/// free, since it reuses the same Read/Editor row widgets rather than a per-surface copy. UNLIKE the
+/// grip glyph's zero-opacity reserved-width spacer, this column is only added (and only then takes up
+/// width/gap) for a row that actually is an accepted assignment — callers must gate the
+/// <c>children.Add(...)</c> call on the row's own <c>IsAcceptedAssignment</c> flag rather than call this
 /// unconditionally, so an ordinary row's layout is untouched. Dedicated rolled-scroll glyph
-/// (<c>scribeassignment</c>, §13.4), replacing the earlier guestbook-person placeholder.</summary>
+/// (<c>scribeassignment</c>, §13.4), replacing the earlier guestbook-person placeholder. Hovering it
+/// shows a two-line tooltip (assigner + assigned date; accepted date) when that data is supplied.</summary>
 internal static class ScribeAssignedTaskIcon
 {
-    public static Widget Build(ScribeRowStyle style, Vector4 color, bool itemRow = false)
-        => new Padding(
+    /// <summary>The full-color raster stamp asset (replacing the earlier rolled-scroll SVG glyph).
+    /// Resolved once per dialog rebuild by whichever caller owns <c>modSystem</c>
+    /// (<see cref="ScribeModSystem.GetGuiTextureBitmap"/>, self-caching) and passed down as
+    /// <c>stampBitmap</c> so this row-widget file stays API-free.</summary>
+    public static readonly AssetLocation Asset = new("scribe", "textures/gui/scribe-assigned-stamp.png");
+
+    /// <summary><paramref name="context"/>/<paramref name="currentShade"/> are only used to build the
+    /// hover tooltip (via <see cref="ScribeGlobalTint.ShadedTooltip"/>, matching every other row/nav
+    /// tooltip's illumination-correct shading), so they're only required when a caller also passes
+    /// <paramref name="assignerName"/> — a null <paramref name="assignerName"/> (a legacy pin snapshot
+    /// with no provenance yet) renders the plain icon with no tooltip at all, never crashing.</summary>
+    public static Widget Build(ScribeRowStyle style, Vector4 color, bool itemRow = false, SKBitmap? stampBitmap = null,
+        BuildContext? context = null, ScribeAmbientLightSampler.Shade? currentShade = null,
+        string? assignerName = null, string? assignedDate = null, string? acceptedDate = null)
+    {
+        Widget icon = new Padding(
             EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style, itemRow)),
-            child: new ScribeVsIconGlyph("scribeassignment", style.ControlSize, color));
+            child: stampBitmap is not null
+                ? new ScribeRasterIcon(stampBitmap, style.ControlSize)
+                : new ScribeVsIconGlyph("scribeassignment", style.ControlSize, color));
+
+        if (assignerName is null || context is null || currentShade is null) return icon;
+
+        var theme = Theme.Of(context.Value);
+        var lines = new List<Widget>
+        {
+            new Text(Lang.Get("scribe:assignment-marker-tooltip-assigned", assignerName, assignedDate ?? ""),
+                new TextStyle { FontSize = 13, SoftWrap = true, Color = theme.ColorScheme.OnBackground }),
+        };
+        if (acceptedDate is not null)
+        {
+            lines.Add(new Text(Lang.Get("scribe:assignment-marker-tooltip-accepted", acceptedDate),
+                new TextStyle { FontSize = 13, SoftWrap = true, Color = theme.ColorScheme.OnBackground }));
+        }
+
+        return ScribeGlobalTint.ShadedTooltip(
+            child: icon,
+            content: new Padding(
+                EdgeInsets.All(6),
+                child: new Column(spacing: 2f, crossAxisAlignment: CrossAxisAlignment.Start,
+                    mainAxisSize: MainAxisSize.Min, children: lines)),
+            baseTheme: theme,
+            shade: currentShade.Value);
+    }
 }
 
 /// <summary>Builds the leading icon for a Tracker/Link row. Normally an <see cref="ItemStackDisplay"/> of the

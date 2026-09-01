@@ -97,9 +97,6 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     /// nearest-neighbour by <see cref="ScribeStamp"/>. Swappable art — same path, no code change to repaint.</summary>
     private static readonly AssetLocation StampAsset = new("scribe", "textures/gui/scribe-copy-stamp.png");
 
-    /// <summary>Ink-red for the "COPY" imprint, matched to the rubber face in the stamp PNG.</summary>
-    private static readonly Vector4 ImprintInk = new(0.66f, 0.18f, 0.16f, 1f);
-
     public GuiDialogScribeScriptorium(BlockPos pos, IScribeDocumentHost host, ICoreClientAPI capi)
         // Pass the BE's inventory to the inventory-carrying GuiDialogBlockEntityBase ctor so OpenInventory /
         // CloseInventoryAndSync fire automatically on open/close. The Lectern/Notebook/Tablet dialogs keep
@@ -107,6 +104,9 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
         : base(pos, host, capi, ((BlockEntityScriptorium)host).Inventory)
     {
         scriptorium = (BlockEntityScriptorium)host;
+        // Transcribe is the Scriptorium's default view — what a plain right-click opens
+        // (assignment-icon-and-tab-defaults D6). See EnterGrantedView below.
+        DefaultToInventoryView();
     }
 
     /// <summary>The Scriptorium is a shared placed block (like the Lectern): editor access requires a
@@ -114,6 +114,28 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     /// <see cref="ScribeDialogBase.EnterEditorMode"/>. A Handbook "Add to Scribe" click stashes its append
     /// and waits for that grant (add-tracker-link-tasks 3.4).</summary>
     protected override bool EditorAccessIsAsync => true;
+
+    /// <summary>Transcribe is the Scriptorium's first tab (assignment-icon-and-tab-defaults D5) — it
+    /// reads before Read/Edit/Pinned in <see cref="ScribeDialogBase.BuildRightColNav"/>'s nav order,
+    /// rather than after Pinned like the other extra tabs below.</summary>
+    protected override IEnumerable<Widget> GetLeadingNavButtons()
+    {
+        var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
+        yield return TitleButton(
+            "scribeinventory",
+            "scribe-tab-transcribe",
+            colors.OnSurfaceVariant,
+            NavButtonSize,
+            OnClickSwitchToInventory,
+            boxShadows: NavButtonShadow,
+            activeColor: IsInventoryView ? ScribeRowConstants.NavActiveTranscribe : null);
+    }
+
+    /// <summary>Right-click always lands on Transcribe (assignment-icon-and-tab-defaults D6) rather than
+    /// the base's Read view — Read is still reachable via its own nav button, just no longer the default.
+    /// Crouch+right-click is unaffected: it's the quick-add gesture handled entirely in
+    /// <see cref="BlockScribeWritingStation.OnBlockInteractStart"/>, upstream of any dialog view.</summary>
+    public override void EnterGrantedView() => OnClickSwitchToInventory();
 
     protected override IEnumerable<Widget> GetExtraNavButtons()
     {
@@ -127,15 +149,6 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
             boxShadows: NavButtonShadow,
             activeColor: IsVisitorsView ? ScribeRowConstants.NavActiveGuestbook : null);
 
-        // Scriptorium-only Transcribe tab: the two-slot document-copy surface (add-transcribe-copy-paste).
-        yield return TitleButton(
-            "scribeinventory",
-            "scribe-tab-transcribe",
-            colors.OnSurfaceVariant,
-            NavButtonSize,
-            OnClickSwitchToInventory,
-            boxShadows: NavButtonShadow,
-            activeColor: IsInventoryView ? ScribeRowConstants.NavActiveTranscribe : null);
         // Gated on assignment history (refine-assignment-desk-inbox-ux 3.2 / inbox-tab spec): a player
         // who has never received an assignment gets no Inbox nav button here — the Assignment Desk and
         // standalone Inbox block are unaffected, they always show their Inbox surface.
@@ -368,7 +381,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
             registry: stampRegistry,
             stampBitmap: modSystem.GetGuiTextureBitmap(StampAsset),
             copyLabel: stampLabel,
-            imprintColor: ImprintInk,
+            imprintColor: ScribeRowConstants.StampImprintInk,
             glowColor: colors.Surface with { W = 0.6f },
             slotSize: SlotSize,
             artWidth: artWidth,
@@ -379,36 +392,10 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
 
     /// <summary>Play the one-shot stamp sound at the flourish's contact frame (add-transcribe-stamp-sound).
     /// Wired to <see cref="ScribeStamp.OnDescend"/>, so it plays only when the flourish is actually mounted and
-    /// seen by this client — a multiplayer watcher on another tab never triggers it.
-    /// <para>Non-load-bearing (mirrors <see cref="ScribeAlarmSound"/> and the stamp bitmap): a null
-    /// <c>LoadSound</c> logs one warning and no-ops. <see cref="EnumSoundType.Sound"/> routes it through the
-    /// base-game "Sound Effects" volume; <c>DisposeOnFinish</c> self-cleans the ~0.6s clip.</para>
-    /// <para>Volume is FIXED at unity: the final loudness (the "alarm-volume-140" level the author calibrated
-    /// to in-game) is baked into the mono <c>stamp.ogg</c> (+16.9 dB / 7× the source, ~ −14 dBFS peak), so unity
-    /// plays it at exactly that level and stays within the engine's safe [0,1] range. The temporary
-    /// <see cref="ScribePlayerSettings.TimerAlarmVolume"/> calibration mapping (design Decision 0) was removed
-    /// 2026-08-20 once the level was confirmed. <see cref="EnumSoundType.Sound"/> still routes it through the
-    /// base-game "Sound Effects" slider — that is the intended, retained volume tie.</para></summary>
-    private void PlayStampSound()
-    {
-        var sound = capi.World.LoadSound(new SoundParams(new AssetLocation("scribe:sounds/stamp"))
-        {
-            ShouldLoop       = false,
-            DisposeOnFinish  = true,
-            SoundType        = EnumSoundType.Sound,
-            RelativePosition = true,
-            Position         = new Vec3f(0f, 0f, 0f),
-            Volume           = 1f,   // level baked into stamp.ogg; unmapped from the alarm slider (2026-08-20)
-        });
-
-        if (sound == null)
-        {
-            capi.Logger.Warning("[scribe] PlayStampSound: LoadSound returned null for scribe:sounds/stamp — stamp cue muted.");
-            return;
-        }
-
-        sound.Start();
-    }
+    /// seen by this client — a multiplayer watcher on another tab never triggers it. Extracted to
+    /// <see cref="ScribeStampSound"/> (refine-assignment-desk-inbox-ux 10.3) so the Assignment Desk's own
+    /// stamp shares the same cue without duplicating the sound-load boilerplate.</summary>
+    private void PlayStampSound() => ScribeStampSound.Play(capi);
 
     /// <summary>The Copy button (D3/D4), sitting below the slot pair (refinement #4). Disabled (greyed, with an
     /// explainer tooltip) until both copy slots hold a Scribe item AND the Duplicate is a valid target —

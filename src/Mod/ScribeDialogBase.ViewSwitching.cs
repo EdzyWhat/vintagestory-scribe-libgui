@@ -225,7 +225,13 @@ public abstract partial class ScribeDialogBase
     private void OnMyAssignmentsChanged()
     {
         if (!IsOpened()) return;
-        if (viewMode == ScribeLecternView.Inbox || viewMode == ScribeLecternView.Assignment) RebuildBody();
+        // SentHistory added here (triage 2026-08-31: "we aren't updating Completed or Discarded properly")
+        // — its own tab was split out by 13.2 after this check was written and was never added to it, so a
+        // sync arriving while that tab was the open view updated modSystem.MySentAssignments correctly but
+        // never told this dialog to repaint; the stale chip only refreshed on the next unrelated rebuild
+        // (e.g. navigating away and back).
+        if (viewMode is ScribeLecternView.Inbox or ScribeLecternView.Assignment or ScribeLecternView.SentHistory)
+            RebuildBody();
     }
 
     /// <summary>Rebuilds the History view if it is currently active. Called after a history sync.</summary>
@@ -348,6 +354,25 @@ public abstract partial class ScribeDialogBase
         if (IsOpened()) ForceRebuild();
     }
 
+    /// <summary>Switches to the Sent Assignment History tab (refine-assignment-desk-inbox-ux 12.2) —
+    /// mirrors <see cref="OnClickSwitchToAssignment"/>'s editor-teardown; only the Assignment Desk's own
+    /// nav button ever calls this.</summary>
+    protected void OnClickSwitchToSentHistory()
+    {
+        CommitTitleIfEditing();
+        if (isEditorMode)
+        {
+            if (focusedEditIndex is { } idx) NormalizeRowOnCommit(idx);
+            PurgeEmptyRowsFromScratch();
+            pendingEmptyRowRemoval = null;
+            FlushIfDirty();
+            SendReleaseLockPacket();
+            LeaveEditorMode();
+        }
+        viewMode = ScribeLecternView.SentHistory;
+        if (IsOpened()) ForceRebuild();
+    }
+
     /// <summary>Sends the mark-seen request (design.md Decision 4: "Opening the Inbox flips [Seen]
     /// server-side"). The request is unconditional — the server no-ops/skips the re-push when nothing
     /// was actually unseen — so it is safe to call from every path that makes the Inbox view active,
@@ -361,17 +386,21 @@ public abstract partial class ScribeDialogBase
     /// <summary>Builds the shared Inbox tab (add-assignment-and-quest-support §7): the viewing player's
     /// RECEIVED assignments (<see cref="ScribeModSystem.MyReceivedAssignments"/>), rendered by
     /// <see cref="ScribeInboxContent"/> — one implementation reused by every Inbox-capable surface
-    /// (§7.5). Sent-history rendering (the Assignment Desk's Assignment tab, design.md Decision 3) is a
-    /// separate, not-yet-built view (§5.5); this is Received-only, viewed as the Assignee.</summary>
+    /// (§7.5). Sent-history rendering is the Assignment Desk's separate Sent Assignment History tab
+    /// (<see cref="BuildSentAssignmentHistoryContent"/>, design.md Decision 3, split out by
+    /// refine-assignment-desk-inbox-ux 12.2); this is Received-only, viewed as the Assignee.</summary>
     protected virtual Widget BuildInboxContent()
     {
-        var rows = modSystem.MyReceivedAssignments
-            .Where(b => b.Assignment is not null)
+        var received = modSystem.MyReceivedAssignments.Where(b => b.Assignment is not null);
+        var rows = NewestBatchFirst(received)
             .Select(b => new ScribeInboxRowData(
                 TaskId: b.TaskId, Text: b.Text, Depth: b.Depth,
                 State: b.Assignment!.State, AssignerUid: b.Assignment.AssignerUid,
                 TargetPlayerUid: b.Assignment.TargetPlayerUid, AssignedDate: b.Assignment.AssignedDate,
-                Seen: b.Assignment.Seen, ViewerRole: ScribeAssignmentActor.Assignee))
+                Seen: b.Assignment.Seen, ViewerRole: ScribeAssignmentActor.Assignee,
+                DisplayName: ResolveRowItem(b).Name, AcceptedDate: b.Assignment.AcceptedDate,
+                DeclinedDate: b.Assignment.DeclinedDate, CancelledDate: b.Assignment.CancelledDate,
+                DiscardedDate: b.Assignment.DiscardedDate, CompletedDate: b.Assignment.CompletedDate))
             .ToList();
 
         return new ScribeInboxContent(
@@ -384,15 +413,36 @@ public abstract partial class ScribeDialogBase
             scrollController: sharedScrollController);
     }
 
+    /// <summary>Newest-batch-first ordering shared by the Inbox and Sent Assignment History tabs
+    /// (refine-assignment-desk-inbox-ux 12.2 / triage 2026-08-31 general notes): groups by
+    /// <see cref="ScribeAssignment.BatchId"/> (every row one send call created shares one id — see its
+    /// remarks), preserving each group's own internal creation order (parent-before-subtask), then
+    /// reverses the GROUP order so the most-recently-sent batch surfaces at the top intact. <c>GroupBy</c>
+    /// preserves both properties by contract (group-of-first-occurrence order, and source order within
+    /// each group), so this needs no manual contiguous-run bookkeeping — and works even if two batches'
+    /// records aren't contiguous in the source (they always are here, but nothing relies on it).</summary>
+    private static IEnumerable<ScribeBlock> NewestBatchFirst(IEnumerable<ScribeBlock> blocks) =>
+        blocks.GroupBy(b => b.Assignment!.BatchId).Reverse().SelectMany(g => g);
+
     /// <summary>UID→display-name lookup for the Inbox tab's "Assigned by" line — see
     /// <see cref="ScribeInboxContent.ResolvePlayerName"/>'s remarks on why this has no dedicated cache.</summary>
-    private string ResolvePlayerNameForInbox(string uid) => capi.World.PlayerByUid(uid)?.PlayerName ?? uid;
+    private protected string ResolvePlayerNameForInbox(string uid) => capi.World.PlayerByUid(uid)?.PlayerName ?? uid;
+
+    /// <summary>Resolves the (assigner name, assigned date, accepted date) triple for the assignment
+    /// marker's hover tooltip on Read/Editor rows — null for a task that isn't an accepted assignment.
+    /// The Pin Tab has its own equivalent (<see cref="ScribePinnedRef"/>'s snapshotted fields; it has no
+    /// live <see cref="ScribeAssignment"/> to read from — assignment-icon-and-tab-defaults).</summary>
+    private protected (string? name, string? assignedDate, string? acceptedDate) ResolveAssignmentTooltipInfo(
+        ScribeAssignment? assignment)
+        => assignment is { State: ScribeAssignmentState.Accepted }
+            ? (ResolvePlayerNameForInbox(assignment.AssignerUid), assignment.AssignedDate, assignment.AcceptedDate)
+            : (null, null, null);
 
     /// <summary>Sends a Decline/Cancel/Discard request for an assignment (§4.1's
     /// <see cref="ScribeAssignmentActionMessage"/>). Accept goes through <see cref="AcceptAssignment"/>
     /// instead — it needs a placement target. Purely a request — the server re-validates and the row
     /// updates once its resync (<see cref="ScribeModSystem.MyAssignmentsChanged"/>) arrives.</summary>
-    private void SendAssignmentAction(Guid taskId, ScribeAssignmentAction action)
+    private protected void SendAssignmentAction(Guid taskId, ScribeAssignmentAction action)
     {
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeAssignmentActionMessage
         {
@@ -413,14 +463,20 @@ public abstract partial class ScribeDialogBase
             Action = (byte)ScribeAssignmentAction.Accept,
             TargetInventoryId = target.InventoryId,
             TargetSlotId = target.SlotId,
+            NewTaskInsert = (byte)ScribePlayerSettings.NormalizeNewTaskInsert(modSystem.MySettings.NewTaskInsert),
         });
     }
 
     /// <summary>Computes this player's current Accept-placement candidates (assignment-state-machine's
-    /// placement requirement): (1) the currently held item, if it's an eligible (writeable) Scribe
-    /// document item — "opening a block GUI doesn't clear the hotbar selection, so 'most recently held' is
-    /// simply 'currently held'" (design.md Decision 7) — returned alone, since a held eligible surface wins
-    /// outright; else (2) every eligible item found scanning the rest of inventory, so the row can offer a
+    /// placement requirement), scoped and prioritized the same way the Handbook's "Add to Scribe" flow
+    /// resolves a target (<see cref="ScribeModSystem.ResolveWriteableCarriedSlot"/> — triage 2026-08-31:
+    /// the old version scanned <c>InventoryManager.InventoriesOrdered</c>, which pulls in anything
+    /// currently registered — e.g. an open chest's — producing "a massive list of items in no particular
+    /// order that aren't on the player"): (1) the player's own hotbar + backpack ONLY
+    /// (<see cref="ScribeModSystem.EnumerateCarriedSlots"/> — never ground/chest/creative), filtered to
+    /// eligible (writeable) Scribe document items; (2) among those, the book whose DocId matches
+    /// <see cref="ScribeModSystem.LastOpenedScribeItemDocId"/> — the one the player was just using — wins
+    /// outright and is returned alone; (3) otherwise every eligible carried item, so the row can offer a
     /// picker when there's more than one. An empty result means the Accept control has nothing to place
     /// onto and renders disabled. Recomputed on each Inbox/Assignment rebuild — a stale list (inventory
     /// changed without a rebuild trigger) is harmless, since the server re-validates the resolved slot
@@ -428,28 +484,29 @@ public abstract partial class ScribeDialogBase
     private List<ScribeAcceptCandidate> ComputeAcceptCandidates()
     {
         var candidates = new List<ScribeAcceptCandidate>();
-        var invMgr = capi.World.Player?.InventoryManager;
-        if (invMgr is null) return candidates;
+        if (capi.World.Player is not { } player) return candidates;
 
-        var held = invMgr.ActiveHotbarSlot;
-        if (held?.Itemstack?.Collectible is IScribeDocumentItem heldItem && heldItem.IsSlotWriteable(held)
-            && held.Inventory is { } heldInv)
+        var eligible = ScribeModSystem.EnumerateCarriedSlots(player)
+            .Where(slot => slot.Itemstack?.Collectible is IScribeDocumentItem item && item.IsSlotWriteable(slot))
+            .ToList();
+        if (eligible.Count == 0) return candidates;
+
+        if (modSystem.LastOpenedScribeItemDocId is { } wanted)
         {
-            candidates.Add(new ScribeAcceptCandidate(heldInv.InventoryID, heldInv.GetSlotId(held), FormatCandidateLabel(held.Itemstack!)));
-            return candidates;
+            var lastOpened = eligible.FirstOrDefault(slot =>
+                ScribeDocumentAttributes.TryReadFrom(slot.Itemstack!, out var doc) && doc?.DocId == wanted);
+            if (lastOpened is not null)
+            {
+                var inv = lastOpened.Inventory;
+                candidates.Add(new ScribeAcceptCandidate(inv.InventoryID, inv.GetSlotId(lastOpened), FormatCandidateLabel(lastOpened.Itemstack!)));
+                return candidates;
+            }
         }
 
-        foreach (var inv in invMgr.InventoriesOrdered)
+        foreach (var slot in eligible)
         {
-            IEnumerable<Vintagestory.API.Common.ItemSlot>? slots;
-            try { slots = new List<Vintagestory.API.Common.ItemSlot>(inv); }
-            catch { continue; }
-
-            foreach (var slot in slots)
-            {
-                if (slot?.Itemstack?.Collectible is not IScribeDocumentItem item || !item.IsSlotWriteable(slot)) continue;
-                candidates.Add(new ScribeAcceptCandidate(inv.InventoryID, inv.GetSlotId(slot), FormatCandidateLabel(slot.Itemstack!)));
-            }
+            var inv = slot.Inventory;
+            candidates.Add(new ScribeAcceptCandidate(inv.InventoryID, inv.GetSlotId(slot), FormatCandidateLabel(slot.Itemstack!)));
         }
         return candidates;
     }
@@ -470,55 +527,67 @@ public abstract partial class ScribeDialogBase
         return name;
     }
 
-    /// <summary>Builds the Assignment Desk's Assignment tab (§5.5 / <c>assignment-desk-block</c> spec):
-    /// the create-and-send form plus this player's own Sent history, both via
-    /// <see cref="ScribeAssignmentFormContent"/>. Only <see cref="GuiDialogScribeAssignmentDesk"/> ever
-    /// routes <c>viewMode</c> here (design.md Decision 1), so the real implementation lives directly in
-    /// the base rather than behind a per-surface override.</summary>
+    /// <summary>Builds the Assignment Desk's Create Assignments tab. Only
+    /// <see cref="GuiDialogScribeAssignmentDesk"/> ever routes <c>viewMode</c> here (design.md Decision 1),
+    /// and its real content (the staging slot + multi-select row list + batch-send form, per
+    /// assignment-multi-item-creation design.md D8-D13) needs that dialog's typed
+    /// <see cref="BlockEntityAssignmentDesk"/>/slot-controller access — mirroring how
+    /// <see cref="BuildInventoryContent"/> is a base placeholder overridden by the one surface that
+    /// actually has that tab. The base placeholder is never seen in practice.</summary>
     protected virtual Widget BuildAssignmentContent()
     {
-        // Self-assignment is deliberately allowed (ScribeAssignmentStore.TryApplyAction already resolves
-        // it correctly — a self-assignment matches both the Assigner and Assignee role checks) so the
-        // list is never empty in singleplayer, where the local player is the only "online" player. The
-        // local player's own entry is labeled distinctly so it doesn't read as a stray duplicate.
+        var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
+        return new Center(child: new Text(Lang.Get("scribe:scribe-gui-inventory-empty"),
+            new TextStyle { Color = colors.OnSurfaceVariant }));
+    }
+
+    /// <summary>Every other online player, as (uid, display name) — the target-player picker's options,
+    /// shared by the Create Assignments form. Self-assignment is deliberately allowed
+    /// (<c>ScribeAssignmentStore.TryApplyAction</c> already resolves it correctly — a self-assignment
+    /// matches both the Assigner and Assignee role checks) so the list is never empty in singleplayer,
+    /// where the local player is the only "online" player; their own entry is labeled distinctly so it
+    /// doesn't read as a stray duplicate.</summary>
+    private protected List<(string Uid, string Name)> ComputeAssignmentTargetPlayers()
+    {
         var localUid = capi.World.Player.PlayerUID;
-        var targetPlayers = capi.World.AllOnlinePlayers
+        return capi.World.AllOnlinePlayers
             .Select(p => (p.PlayerUID, p.PlayerUID == localUid
                 ? Lang.Get("scribe:scribe-assignment-target-self", p.PlayerName)
                 : p.PlayerName))
             .ToList();
+    }
 
-        var sentRows = modSystem.MySentAssignments
-            .Where(b => b.Assignment is not null)
+    /// <summary>This player's own Sent assignments (design.md Decision 3's read-only history), as
+    /// <see cref="ScribeInboxRowData"/> for <see cref="ScribeInboxContent"/>. Newest-batch-first, matching
+    /// the Inbox tab (triage 2026-08-31 general notes: "Both ... should have the same ordering").</summary>
+    private protected List<ScribeInboxRowData> ComputeSentAssignmentRows() =>
+        NewestBatchFirst(modSystem.MySentAssignments.Where(b => b.Assignment is not null))
             .Select(b => new ScribeInboxRowData(
                 TaskId: b.TaskId, Text: b.Text, Depth: b.Depth,
                 State: b.Assignment!.State, AssignerUid: b.Assignment.AssignerUid,
                 TargetPlayerUid: b.Assignment.TargetPlayerUid, AssignedDate: b.Assignment.AssignedDate,
-                Seen: b.Assignment.Seen, ViewerRole: ScribeAssignmentActor.Assigner))
+                Seen: b.Assignment.Seen, ViewerRole: ScribeAssignmentActor.Assigner,
+                DisplayName: ResolveRowItem(b).Name, AcceptedDate: b.Assignment.AcceptedDate,
+                DeclinedDate: b.Assignment.DeclinedDate, CancelledDate: b.Assignment.CancelledDate,
+                DiscardedDate: b.Assignment.DiscardedDate, CompletedDate: b.Assignment.CompletedDate))
             .ToList();
 
-        return new ScribeAssignmentFormContent(
-            targetPlayers: targetPlayers,
-            sentRows: sentRows,
+    /// <summary>Builds the Sent Assignment History tab (refine-assignment-desk-inbox-ux 12.2/12.3): this
+    /// player's own read-only Sent history — state pills + the historical row list — split OUT of the
+    /// Create Assignments tab, which now shows staging-and-select only (12.1). Only the Assignment Desk
+    /// routes <c>viewMode</c> here (mirrors <see cref="BuildAssignmentContent"/>'s Decision-1 scoping),
+    /// but unlike that method this needs nothing Desk-specific — every piece
+    /// (<see cref="ComputeSentAssignmentRows"/>, <see cref="ResolvePlayerNameForInbox"/>,
+    /// <see cref="SendAssignmentAction"/>) already lives on the base — so this is a real implementation,
+    /// not a placeholder-plus-override.</summary>
+    protected Widget BuildSentAssignmentHistoryContent() =>
+        new ScribeInboxContent(
+            rows: ComputeSentAssignmentRows(),
             resolvePlayerName: ResolvePlayerNameForInbox,
-            onSend: SendNewAssignment,
             onAction: SendAssignmentAction,
             style: RowStyle,
-            scrollController: sharedScrollController);
-    }
-
-    /// <summary>Client → server: create and send a new assignment (§5.5's Send action). Mints a fresh
-    /// <see cref="ScribeSendAssignmentMessage.AssignmentId"/> client-side — the server is authoritative
-    /// for everything else (assigner identity, assigned date, initial state).</summary>
-    private void SendNewAssignment(string targetPlayerUid, string taskText)
-    {
-        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeSendAssignmentMessage
-        {
-            AssignmentId = Guid.NewGuid().ToByteArray(),
-            TargetPlayerUid = targetPlayerUid,
-            TaskText = taskText,
-        });
-    }
+            scrollController: sharedScrollController,
+            emptyHintLangKey: "scribe:scribe-assignment-sent-empty");
 
     /// <summary>Builds the Inventory tab content. Only the Scriptorium exposes this tab, so the base
     /// returns an empty placeholder; <see cref="GuiDialogScribeScriptorium"/> overrides it to place the
@@ -612,8 +681,10 @@ public abstract partial class ScribeDialogBase
     /// state — see BuildRightColNav / the read-view footer). Otherwise it requests access normally; the
     /// server refusal remains the authoritative backstop for the render→click race. Distinct from
     /// <see cref="RequestEditorAccess"/>, which is the raw request also used by the lost-lock recovery
-    /// re-acquire (<see cref="HandleSaveFailed"/>) and must NOT be gated.</summary>
-    private void TryEnterEditor()
+    /// re-acquire (<see cref="HandleSaveFailed"/>) and must NOT be gated. Protected (not private) so a
+    /// subclass building its own Edit nav button (the Assignment Desk, add-assignment-desk-own-tasks) can
+    /// wire directly to it instead of duplicating the lock-check.</summary>
+    protected void TryEnterEditor()
     {
         if (host.IsLockedByOther(capi.World.Player.PlayerUID))
         {

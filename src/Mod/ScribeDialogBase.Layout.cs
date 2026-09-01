@@ -514,7 +514,8 @@ public abstract partial class ScribeDialogBase
             size: size, onTap: modSystem.OpenSettings, boxShadows: navShadow,
             activeColor: modSystem.IsSettingsOpen ? ScribeRowConstants.NavActiveSettings : null);
 
-        var navChildren = new Widget[] { readBtn, editBtn, pinBtn }
+        var navChildren = GetLeadingNavButtons()
+            .Concat(new Widget[] { readBtn, editBtn, pinBtn })
             .Concat(GetExtraNavButtons())
             .Append(settingsBtn)
             .ToArray();
@@ -599,6 +600,7 @@ public abstract partial class ScribeDialogBase
         ScribeLecternView.Inventory => BuildInventoryContent(),
         ScribeLecternView.Assignment => BuildAssignmentContent(),
         ScribeLecternView.Inbox     => BuildInboxContent(),
+        ScribeLecternView.SentHistory => BuildSentAssignmentHistoryContent(),
         _                          => BuildReadContent(),
     };
 
@@ -607,7 +609,7 @@ public abstract partial class ScribeDialogBase
     /// open dialog on the next rebuild. Passes through <see cref="DecorateRowStyle"/> so a subclass may
     /// layer tier-specific row behavior (the tablet flips on the cuneiform row path) without duplicating
     /// the settings-derivation.</summary>
-    private ScribeRowStyle RowStyle => DecorateRowStyle(ScribeRowStyle.FromSettings(modSystem.MySettings)
+    private protected ScribeRowStyle RowStyle => DecorateRowStyle(ScribeRowStyle.FromSettings(modSystem.MySettings)
         // Subtask indent depends on the window width (not a settings-only size), so it's layered on here from
         // the live layout rather than in FromSettings: 10px + 3%·W, mirroring the 0.04·W footer inset idiom
         // (task-subtasks 5.1). Applied before DecorateRowStyle so a subclass's `with` tweaks still compose.
@@ -681,8 +683,11 @@ public abstract partial class ScribeDialogBase
     /// <c>(null, null)</c> for a Task/Text block (which render their authored text instead). A Tracker uses
     /// its <see cref="ScribeBlock.TargetItemCode"/>, a Link its <see cref="ScribeBlock.LinkTarget"/>; both are
     /// plain code strings that Core stores API-free, so the parse against the live registries happens here in
-    /// the Mod layer (add-tracker-link-tasks Group 5). Kept off the row widgets so they stay <c>capi</c>-free.</summary>
-    private (ItemStack? Stack, string? Name) ResolveRowItem(ScribeBlock b)
+    /// the Mod layer (add-tracker-link-tasks Group 5). Kept off the row widgets so they stay <c>capi</c>-free.
+    /// Protected (not private): takes any <see cref="ScribeBlock"/>, not just one from <c>host.Document</c> —
+    /// <see cref="GuiDialogScribeAssignmentDesk"/> reuses it to resolve rows from a STAGED item's document
+    /// (assignment-multi-item-creation design.md D10).</summary>
+    protected (ItemStack? Stack, string? Name) ResolveRowItem(ScribeBlock b)
     {
         if (!b.IsTracker && !b.IsLink && !b.IsCraft) return (null, null);
         // A Link resolves its LinkTarget; a Tracker AND a Craft parent both resolve the item they count —
@@ -731,13 +736,15 @@ public abstract partial class ScribeDialogBase
                     string? questProgress = ScribeLinkTarget.QuestCode(b.LinkTarget) is { } questCode
                         ? modSystem.TryGetQuestProgressText(questCode)
                         : null;
+                    var (assignerName, assignedDate, acceptedDate) = ResolveAssignmentTooltipInfo(b.Assignment);
                     return new ScribeReadRowData(
                         Index: i, Kind: b.Kind, Done: b.Done, Pinned: IsPinnedForMe(b.TaskId), TaskId: b.TaskId,
                         Text: b.Text, DisplayStack: stack, DisplayName: name,
                         TargetQuantity: b.TargetQuantity, CurrentQuantity: b.CurrentQuantity, LinkTarget: b.LinkTarget,
                         Depth: b.Depth,
                         IsAcceptedAssignment: b.Assignment?.State == ScribeAssignmentState.Accepted,
-                        QuestProgressText: questProgress);
+                        QuestProgressText: questProgress,
+                        AssignerName: assignerName, AssignedDate: assignedDate, AcceptedDate: acceptedDate);
                 })
                 // Drop only an empty-text Task (a stray blank checkbox — belt-and-suspenders, see below).
                 // A Text note may be legitimately empty, and a Tracker/Link has no text of its own (it renders
@@ -765,10 +772,12 @@ public abstract partial class ScribeDialogBase
             // A departing read row finished collapsing → re-clamp the (now shorter) scroll extent, mirroring the
             // Pin Tab's onDepartureSettled → RequestClampToExtent. The container retires the ghost itself.
             onDepartureSettled: RequestClampToExtent,
+            currentShade: currentShade,
             hintLangKey: EmptyHintLangKey,
             readOnly: ReadViewIsReadOnly,
             completionAndPinLive: ReadViewCompletionAndPinLive,
-            onTextEditRefused: ReadViewTextEditRefused);
+            onTextEditRefused: ReadViewTextEditRefused,
+            assignedStampBitmap: modSystem.GetGuiTextureBitmap(ScribeAssignedTaskIcon.Asset));
 
     /// <summary>The editable task list for the current scratch document. Promoted from <c>private</c> to
     /// <c>protected</c> so a subclass may reuse the inherited editor rather than fork it — the tablet
@@ -788,11 +797,13 @@ public abstract partial class ScribeDialogBase
                 // display renderer without checking every one of those interactions risked a subtly broken
                 // Tab/Enter row-navigation experience. Deferred as a disclosed follow-up (see tasks.md 9.3).
                 bool isAcceptedAssignment = b.Assignment?.State == ScribeAssignmentState.Accepted;
+                var (assignerName, assignedDate, acceptedDate) = ResolveAssignmentTooltipInfo(b.Assignment);
                 return new ScribeEditRowData(
                     Index: i, Kind: b.Kind, Done: b.Done, Pinned: IsPinnedForMe(b.TaskId), TaskId: b.TaskId,
                     Text: b.Text, DisplayStack: stack, DisplayName: name,
                     TargetQuantity: b.TargetQuantity, CurrentQuantity: b.CurrentQuantity, LinkTarget: b.LinkTarget,
-                    Depth: b.Depth, IsAcceptedAssignment: isAcceptedAssignment);
+                    Depth: b.Depth, IsAcceptedAssignment: isAcceptedAssignment,
+                    AssignerName: assignerName, AssignedDate: assignedDate, AcceptedDate: acceptedDate);
             })
             .ToList();
 
@@ -861,7 +872,8 @@ public abstract partial class ScribeDialogBase
             // Click-to-open-Handbook on an item row's name label — the SAME dispatch the read view uses, but
             // only where EditorRowsOpenLinks is on (the tablet, which has no read view). Every other surface
             // passes null, so its editor names stay plain editable regions and render byte-identical to before.
-            onOpenLink: EditorRowsOpenLinks ? OpenRowLink : null);
+            onOpenLink: EditorRowsOpenLinks ? OpenRowLink : null,
+            assignedStampBitmap: modSystem.GetGuiTextureBitmap(ScribeAssignedTaskIcon.Asset));
     }
 
     /// <summary>Whether the editor footer shows the "Done editing" (switch-to-read) button. True for the

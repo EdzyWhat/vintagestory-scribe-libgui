@@ -85,7 +85,7 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// <summary>The Lectern dialog's central-region view. Read and Editor are the original two views;
     /// Pinned is the Pin Tab (scribe-pin-editor) — a peer view listing the player's pins, selected from the
     /// <c>scribepin</c> nav button. <see cref="BuildCentralRegion"/> chooses the body from this.</summary>
-    private enum ScribeLecternView { Read, Editor, Pinned, Visitors, History, Timer, Inventory, Assignment, Inbox }
+    private enum ScribeLecternView { Read, Editor, Pinned, Visitors, History, Timer, Inventory, Assignment, Inbox, SentHistory }
 
     private ScribeLecternView viewMode = ScribeLecternView.Read;
 
@@ -110,6 +110,25 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
 
     protected bool IsInboxView => viewMode == ScribeLecternView.Inbox;
 
+    /// <summary>True when the Read tab is the active view. Exposed so a subclass that rebuilds its own nav
+    /// column (e.g. the Assignment Desk, add-assignment-desk-own-tasks) can apply the active color to its
+    /// own Read nav button without the base's default <see cref="BuildRightColNav"/>.</summary>
+    protected bool IsReadView => viewMode == ScribeLecternView.Read;
+
+    /// <summary>True when the Editor tab is the active view. Exposed so a subclass that rebuilds its own
+    /// nav column can apply the active color to its own Editor nav button (see <see cref="IsReadView"/>).</summary>
+    protected bool IsEditorView => viewMode == ScribeLecternView.Editor;
+
+    /// <summary>Whether the editor lock is held by ANOTHER player right now — the base's default
+    /// <see cref="BuildRightColNav"/> uses this inline to dim its own Edit button; exposed so a subclass
+    /// building its own Edit nav button (add-assignment-desk-own-tasks) can match the same styling.</summary>
+    protected bool EditLockedByOther => host.IsLockedByOther(capi.World.Player.PlayerUID);
+
+    /// <summary>True when the Sent Assignment History tab is the active view (refine-assignment-desk-
+    /// inbox-ux 12.2 — split out of the Create Assignments tab, which now shows staging-and-select
+    /// only). Exposed so the Assignment Desk can apply the active color to its own nav button.</summary>
+    protected bool IsSentHistoryView => viewMode == ScribeLecternView.SentHistory;
+
     /// <summary>Whether this dialog's Inbox nav button should shimmer right now (design.md Decision 9b,
     /// §8.5): the viewing player has an unseen received assignment AND the Inbox tab is not already the
     /// active view (so it never plays redundantly while Inbox is open). Exposed so the four subclasses
@@ -128,6 +147,16 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// this dialog's initial (and, per its spec, only ever) view instead of the default Read view — the
     /// Inbox block exposes no other tab to switch away to, so this view never changes after open.</summary>
     protected void DefaultToInboxView() => viewMode = ScribeLecternView.Inbox;
+
+    /// <summary>Called from the Scriptorium dialog's constructor to select the Transcribe (Inventory)
+    /// tab as this dialog's initial view instead of the default Read view
+    /// (assignment-icon-and-tab-defaults D6) — Read remains reachable via its own nav button afterward.</summary>
+    protected void DefaultToInventoryView() => viewMode = ScribeLecternView.Inventory;
+
+    /// <summary>Called from the Lectern dialog's constructor to select the Guest Book (Visitors) tab as
+    /// this dialog's initial view instead of the default Read view (assignment-icon-and-tab-defaults D6) —
+    /// Read remains reachable via its own nav button afterward.</summary>
+    protected void DefaultToVisitorsView() => viewMode = ScribeLecternView.Visitors;
 
     /// <summary>The pixel size used for sidebar nav buttons — subclasses call this when building
     /// their own nav buttons via <see cref="GetExtraNavButtons"/> so the size matches.</summary>
@@ -477,6 +506,15 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// Settings is always last. The base implementation returns an empty sequence (no extra buttons).
     /// </summary>
     protected virtual IEnumerable<Widget> GetExtraNavButtons() => Array.Empty<Widget>();
+
+    /// <summary>
+    /// Override to supply nav buttons inserted BEFORE the Read tab — for a subclass whose own tab
+    /// (Transcribe on the Scriptorium, Guest Book on the Lectern) should read as the first item in nav
+    /// order (assignment-icon-and-tab-defaults D5), without forking the rest of
+    /// <see cref="ScribeDialogBase.BuildRightColNav"/>'s layout/shadow/alignment plumbing. The base
+    /// implementation returns an empty sequence (no leading buttons — Read stays first).
+    /// </summary>
+    protected virtual IEnumerable<Widget> GetLeadingNavButtons() => Array.Empty<Widget>();
 
 #if DEBUG
     /// <summary>DEBUG-only: fires on every <see cref="sharedScrollController"/> offset change (our JumpTo,

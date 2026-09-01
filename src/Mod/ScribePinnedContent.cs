@@ -18,6 +18,7 @@ using Gui.Widgets.Scroll;        // ListView, SingleChildScrollView, Scrollable,
 using Gui.Core.Layout;           // MainAxisSize
 using OpenTK.Mathematics;        // Vector2
 using Scribe.Core;
+using SkiaSharp;                 // SKBitmap (assigned-task stamp raster)
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;   // ItemStack (Tracker/Link display item)
 using Vintagestory.API.Config;   // Lang, GlobalConstants
@@ -35,7 +36,8 @@ internal readonly record struct ScribePinRowData(
     ScribeBlockKind Kind = ScribeBlockKind.Task,
     ItemStack? DisplayStack = null, string? DisplayName = null,
     int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null, int Depth = 0,
-    bool IsAcceptedAssignment = false)
+    bool IsAcceptedAssignment = false,
+    string? AssignerName = null, string? AssignedDate = null, string? AcceptedDate = null)
 {
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
     public bool IsLink => Kind == ScribeBlockKind.Link;
@@ -82,7 +84,8 @@ internal sealed class ScribePinnedContent : StatefulWidget
         ScribeAnimationRegistry collapseRegistry,
         Action onDepartureSettled,
         ScribeAmbientLightSampler.Shade currentShade,
-        System.Func<DropdownStyle, DropdownStyle>? decoratePolicyDropdownStyle = null)
+        System.Func<DropdownStyle, DropdownStyle>? decoratePolicyDropdownStyle = null,
+        SKBitmap? assignedStampBitmap = null)
     {
         Rows = rows;
         FocusNodes = focusNodes;
@@ -103,6 +106,7 @@ internal sealed class ScribePinnedContent : StatefulWidget
         OnDepartureSettled = onDepartureSettled;
         CurrentShade = currentShade;
         DecoratePolicyDropdownStyle = decoratePolicyDropdownStyle;
+        AssignedStampBitmap = assignedStampBitmap;
     }
 
     public IReadOnlyList<ScribePinRowData> Rows { get; }
@@ -143,6 +147,10 @@ internal sealed class ScribePinnedContent : StatefulWidget
     /// chalkboard supplies one to make its open menu's SELECTED row legible (fully-opaque accent fill +
     /// <c>OnPrimary</c> label) — see the seam's doc-comment (refine-chalkboard).</summary>
     public System.Func<DropdownStyle, DropdownStyle>? DecoratePolicyDropdownStyle { get; }
+    /// <summary>The full-color assigned-task stamp raster (see <see cref="ScribeAssignedTaskIcon"/>),
+    /// resolved once by the dialog and passed down so this row widget stays API-free. Null falls back to
+    /// the plain SVG glyph.</summary>
+    public SKBitmap? AssignedStampBitmap { get; }
 
     public override State CreateState() => new ScribePinnedContentState();
 }
@@ -237,6 +245,8 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                     onDragOver: OnRowDragOver,
                     onDragEnd: OnRowDragEnd,
                     style: Widget.Style,
+                    assignedStampBitmap: Widget.AssignedStampBitmap,
+                    currentShade: Widget.CurrentShade,
                     // Key by TaskId (not index) so a row's field State + element identity track the pin
                     // across a reorder/resync rebuild rather than by list position.
                     key: new ValueKey<Guid>(r.TaskId)),
@@ -248,8 +258,9 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                     new ScribeEditRowData(Index: i, Kind: r.Kind, Done: r.Done, Pinned: false, TaskId: r.TaskId,
                         Text: r.Text, DisplayStack: r.DisplayStack, DisplayName: r.DisplayName,
                         TargetQuantity: r.TargetQuantity, CurrentQuantity: r.CurrentQuantity, LinkTarget: r.LinkTarget,
-                        Depth: r.Depth, IsAcceptedAssignment: r.IsAcceptedAssignment),
-                    Widget.Style)))
+                        Depth: r.Depth, IsAcceptedAssignment: r.IsAcceptedAssignment,
+                        AssignerName: r.AssignerName, AssignedDate: r.AssignedDate, AcceptedDate: r.AcceptedDate),
+                    Widget.Style, Widget.AssignedStampBitmap)))
             .ToList();
 
         Widget scrollBody = new ScribeAnimatedList(
@@ -401,6 +412,8 @@ internal sealed class ScribePinRow : StatefulWidget
         Action<int> onDragOver,
         Action onDragEnd,
         ScribeRowStyle style,
+        SKBitmap? assignedStampBitmap = null,
+        ScribeAmbientLightSampler.Shade currentShade = default,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
@@ -421,6 +434,8 @@ internal sealed class ScribePinRow : StatefulWidget
         OnDragOver = onDragOver;
         OnDragEnd = onDragEnd;
         Style = style;
+        AssignedStampBitmap = assignedStampBitmap;
+        CurrentShade = currentShade;
     }
 
     public ScribePinRowData Data { get; }
@@ -449,6 +464,10 @@ internal sealed class ScribePinRow : StatefulWidget
     public Action<int> OnDragOver { get; }
     public Action OnDragEnd { get; }
     public ScribeRowStyle Style { get; }
+    /// <summary>The full-color assigned-task stamp raster, threaded down from the content widget (see
+    /// <see cref="ScribePinnedContent.AssignedStampBitmap"/>). Null falls back to the plain SVG glyph.</summary>
+    public SKBitmap? AssignedStampBitmap { get; }
+    public ScribeAmbientLightSampler.Shade CurrentShade { get; }
 
     public override State CreateState() => new ScribePinRowState();
 }
@@ -568,12 +587,6 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
                 onRelease: _ => Widget.OnDragEnd(),
                 child: gripGlyph)));
 
-        // Leading-icon marker for an accepted assignment (add-assignment-and-quest-support 9.3), matching
-        // the Read/Editor rows' placement: after the grip, before the checkbox. Only takes up space when
-        // this row actually is an accepted assignment.
-        if (data.IsAcceptedAssignment)
-            children.Add(ScribeAssignedTaskIcon.Build(style, colors.OnSurfaceVariant, data.IsItemKind));
-
         // Source-row "lifted / in-hand" dim (matching the editor): while THIS row is dragged, its CONTENT
         // (checkbox + text) paints at ~half opacity, applied per-child so the grip column keeps full opacity
         // and the ◀ source arrow retains its ink. Always-present (value flips 1.0↔0.5) so no widget swap.
@@ -596,6 +609,14 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
                     SetState(() => done = !done);
                     Widget.OnToggleComplete(data.DocId, data.TaskId);
                 }))));
+
+        // Assignment marker for an accepted assignment (matching the Read/Editor rows' placement): after
+        // the grip and checkbox, inside the checkbox to its right. Only takes up space when this row
+        // actually is an accepted assignment.
+        if (data.IsAcceptedAssignment)
+            children.Add(ScribeAssignedTaskIcon.Build(style, colors.OnSurfaceVariant, data.IsItemKind, Widget.AssignedStampBitmap,
+                context: context, currentShade: Widget.CurrentShade,
+                assignerName: data.AssignerName, assignedDate: data.AssignedDate, acceptedDate: data.AcceptedDate));
 
         // A Tracker/Link pin renders a non-editable item icon + name (+ a have/need counter for a Tracker),
         // NOT the editable text field — its own Text is empty, its content is the referenced item, exactly

@@ -89,4 +89,20 @@ public sealed class ScribePinnedRef
     /// (possibly unloaded) source document (add-assignment-and-quest-support 9.3). Defaults to false, so a
     /// pin from an old blob (or an un-assigned task) is unaffected.</summary>
     public bool IsAcceptedAssignment { get; set; }
+
+    /// <summary>When <see cref="IsAcceptedAssignment"/>, the assigner's player uid; empty otherwise.
+    /// Snapshotted (alongside <see cref="AssignedDate"/>/<see cref="AcceptedDate"/>) so the HUD and
+    /// Pin Tab can render the assignment marker's tooltip without resolving the (possibly unloaded)
+    /// source document (assignment-icon-and-tab-defaults).</summary>
+    public string AssignerUid { get; set; } = "";
+
+    /// <summary>When <see cref="IsAcceptedAssignment"/>, the in-game date the assignment was sent
+    /// (<see cref="ScribeAssignment.AssignedDate"/>); empty otherwise.</summary>
+    public string AssignedDate { get; set; } = "";
+
+    /// <summary>When <see cref="IsAcceptedAssignment"/>, the in-game date the assignment was accepted
+    /// (<see cref="ScribeAssignment.AcceptedDate"/>); null otherwise (mirrors the source field, which
+    /// is itself null until Accept happens — though by the time <see cref="IsAcceptedAssignment"/> is
+    /// true this should always be set).</summary>
+    public string? AcceptedDate { get; set; }
 }

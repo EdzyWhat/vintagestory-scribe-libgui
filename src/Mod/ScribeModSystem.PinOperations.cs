@@ -46,6 +46,9 @@ public sealed partial class ScribeModSystem
             string? linkLabel = fallbackLinkLabel;
             int depth = fallbackDepth;
             bool isAcceptedAssignment = false;
+            string assignerUid = "";
+            string assignedDate = "";
+            string? acceptedDate = null;
             ScribeDocument? source = null;
             // Prefer the server's own authoritative document when available; fall back to the
             // client-supplied snapshot for items whose host is not registered server-side (e.g. Notebooks).
@@ -68,10 +71,17 @@ public sealed partial class ScribeModSystem
                     // no client-supplied fallback exists for this field since it's always resolvable here
                     // (the same document that resolves every other field above).
                     isAcceptedAssignment = block.Assignment?.State == ScribeAssignmentState.Accepted;
+                    if (isAcceptedAssignment)
+                    {
+                        assignerUid = block.Assignment!.AssignerUid;
+                        assignedDate = block.Assignment!.AssignedDate;
+                        acceptedDate = block.Assignment!.AcceptedDate;
+                    }
                 }
             }
             changed = pinStore.SetPin(player.PlayerUID, docId, taskId, sapi.World.Calendar.TotalHours, text, done, kind, linkTarget,
-                targetItemCode, targetQuantity, currentQuantity, linkLabel, depth, source, insertEdge, isAcceptedAssignment);
+                targetItemCode, targetQuantity, currentQuantity, linkLabel, depth, source, insertEdge, isAcceptedAssignment,
+                assignerUid, assignedDate, acceptedDate);
         }
         else
         {

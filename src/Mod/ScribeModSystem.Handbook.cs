@@ -33,6 +33,13 @@ public sealed partial class ScribeModSystem
     /// session.</summary>
     private Guid? lastOpenedScribeItemDocId;
 
+    /// <summary>Public read-only view of <see cref="lastOpenedScribeItemDocId"/> — used by
+    /// <see cref="ScribeDialogBase.ComputeAcceptCandidates"/> (refine-assignment-desk-inbox-ux triage
+    /// 2026-08-31) to prefer the same "book the player was just using" target that the Handbook's "Add to
+    /// Scribe" flow already does, instead of listing every writeable Scribe item across ALL registered
+    /// inventories (which could include an open chest's).</summary>
+    internal Guid? LastOpenedScribeItemDocId => lastOpenedScribeItemDocId;
+
     /// <summary>Record that the player just opened this item-hosted Scribe document, so a later Handbook
     /// "Add to Scribe" click with no dialog open re-targets the same book (add-tracker-link-tasks 3.2). Called
     /// from each Scribe item's dialog-open path. No-op semantics off the client (it only ever runs there).</summary>

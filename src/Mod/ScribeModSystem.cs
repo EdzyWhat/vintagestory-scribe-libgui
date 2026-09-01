@@ -328,11 +328,11 @@ public sealed partial class ScribeModSystem : ModSystem
             .RegisterMessageType<ScribeAddHistoryEntryMessage>()
             .RegisterMessageType<ScribeSetHistoryEntryTextMessage>()
             .RegisterMessageType<ScribeDeleteHistoryEntryMessage>()
-            .RegisterMessageType<ScribeSendAssignmentMessage>()
             .RegisterMessageType<ScribeAssignmentActionMessage>()
             .RegisterMessageType<ScribeAssignmentSyncMessage>()
             .RegisterMessageType<ScribeMarkAssignmentsSeenMessage>()
-            .RegisterMessageType<ScribeAutoLinkQuestMessage>();
+            .RegisterMessageType<ScribeAutoLinkQuestMessage>()
+            .RegisterMessageType<ScribeSendAssignmentBatchMessage>();
     }
 
     /// <summary>Server-side accessor for the pin store, so the block entity can register/orphan its
@@ -461,10 +461,10 @@ public sealed partial class ScribeModSystem : ModSystem
         channel.SetMessageHandler<ScribeAddHistoryEntryMessage>(OnServerReceivedAddHistoryEntry);
         channel.SetMessageHandler<ScribeSetHistoryEntryTextMessage>(OnServerReceivedSetHistoryEntryText);
         channel.SetMessageHandler<ScribeDeleteHistoryEntryMessage>(OnServerReceivedDeleteHistoryEntry);
-        channel.SetMessageHandler<ScribeSendAssignmentMessage>(OnServerReceivedSendAssignment);
         channel.SetMessageHandler<ScribeAssignmentActionMessage>(OnServerReceivedAssignmentAction);
         channel.SetMessageHandler<ScribeMarkAssignmentsSeenMessage>(OnServerReceivedMarkAssignmentsSeen);
         channel.SetMessageHandler<ScribeAutoLinkQuestMessage>(OnServerReceivedAutoLinkQuest);
+        channel.SetMessageHandler<ScribeSendAssignmentBatchMessage>(OnServerReceivedSendAssignmentBatch);
 
         // Persist/load the pin + settings stores with the save game (the WaypointMapLayer pattern).
         api.Event.SaveGameLoaded += OnSaveGameLoaded;

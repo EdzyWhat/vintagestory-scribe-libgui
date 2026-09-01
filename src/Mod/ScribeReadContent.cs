@@ -18,6 +18,7 @@ using Gui.Widgets.Scroll;        // ListView, SingleChildScrollView, Scrollable,
 using Gui.Core.Layout;           // MainAxisSize
 using OpenTK.Mathematics;        // Vector2, Vector4
 using Scribe.Core;
+using SkiaSharp;                 // SKBitmap (assigned-task stamp raster)
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;   // ItemStack (Tracker/Link display item)
 using Vintagestory.API.Config;   // Lang, GlobalConstants
@@ -38,7 +39,8 @@ internal readonly record struct ScribeReadRowData(
     int Index, ScribeBlockKind Kind, bool Done, bool Pinned, Guid TaskId, string Text,
     ItemStack? DisplayStack = null, string? DisplayName = null,
     int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null, int Depth = 0,
-    bool IsAcceptedAssignment = false, string? QuestProgressText = null)
+    bool IsAcceptedAssignment = false, string? QuestProgressText = null,
+    string? AssignerName = null, string? AssignedDate = null, string? AcceptedDate = null)
 {
     public bool IsTask => Kind == ScribeBlockKind.Task;
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
@@ -80,10 +82,12 @@ internal sealed class ScribeReadContent : StatefulWidget
         ScrollController scrollController,
         ScribeAnimationRegistry collapseRegistry,
         Action onDepartureSettled,
+        ScribeAmbientLightSampler.Shade currentShade,
         string hintLangKey = "scribe:scribe-gui-edit-hint",
         bool readOnly = false,
         bool completionAndPinLive = false,
-        Action<Guid>? onTextEditRefused = null)
+        Action<Guid>? onTextEditRefused = null,
+        SKBitmap? assignedStampBitmap = null)
     {
         Blocks = blocks;
         OnToggleTask = onToggleTask;
@@ -95,10 +99,12 @@ internal sealed class ScribeReadContent : StatefulWidget
         ScrollController = scrollController;
         CollapseRegistry = collapseRegistry;
         OnDepartureSettled = onDepartureSettled;
+        CurrentShade = currentShade;
         HintLangKey = hintLangKey;
         ReadOnly = readOnly;
         CompletionAndPinLive = completionAndPinLive;
         OnTextEditRefused = onTextEditRefused;
+        AssignedStampBitmap = assignedStampBitmap;
     }
 
     public IReadOnlyList<ScribeReadRowData> Blocks { get; }
@@ -126,6 +132,10 @@ internal sealed class ScribeReadContent : StatefulWidget
     /// <summary>Fired (deferred) when a departing read row's collapse completes and the list has shrunk, so the
     /// dialog can re-clamp the shared scroll extent — see <see cref="ScribeAnimatedList.OnDepartureSettled"/>.</summary>
     public Action OnDepartureSettled { get; }
+    /// <summary>The live ambient-illumination shade, threaded down so the assignment marker's hover
+    /// tooltip can match the body's shading instead of rendering full-bright in low light (mirroring
+    /// <see cref="ScribeEditorContent.CurrentShade"/>/<see cref="ScribePinnedContent.CurrentShade"/>).</summary>
+    public ScribeAmbientLightSampler.Shade CurrentShade { get; }
     public string HintLangKey { get; }
     /// <summary>When true this is a permanently-read-only surface (a hard or fired tablet — tablet-firing):
     /// the "switch to editor" footer button is omitted. It also gates row text-editing affordances (there are
@@ -148,6 +158,11 @@ internal sealed class ScribeReadContent : StatefulWidget
     /// be changed" in-game message. Null on the tabbed read view (and on a wet tablet), where the text isn't a
     /// blocked-edit affordance.</summary>
     public Action<Guid>? OnTextEditRefused { get; }
+    /// <summary>The full-color assigned-task stamp raster (see <see cref="ScribeAssignedTaskIcon"/>),
+    /// resolved once by the dialog via <c>modSystem.GetGuiTextureBitmap</c> and passed down so this row
+    /// widget stays API-free. Null on a pure server (no client bitmap to resolve) — the icon falls back
+    /// to the plain SVG glyph in that case.</summary>
+    public SKBitmap? AssignedStampBitmap { get; }
 
     public override State CreateState() => new ScribeReadContentState();
 }
@@ -201,13 +216,13 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
         var items = Widget.Blocks
             .Select(b => new ScribeAnimatedListItem(
                 Id: b.TaskId,
-                Child: new ScribeReadRow(b, Widget.OnToggleTask, Widget.OnTogglePinned, Widget.OnOpenLink, style, Widget.ReadOnly, Widget.CompletionAndPinLive, Widget.OnTextEditRefused, new ValueKey<Guid>(b.TaskId)),
+                Child: new ScribeReadRow(b, Widget.OnToggleTask, Widget.OnTogglePinned, Widget.OnOpenLink, style, Widget.ReadOnly, Widget.CompletionAndPinLive, Widget.OnTextEditRefused, assignedStampBitmap: Widget.AssignedStampBitmap, currentShade: Widget.CurrentShade, key: new ValueKey<Guid>(b.TaskId)),
                 Ghost: new ScribeFrozenEditorRow(
                     new ScribeEditRowData(
                         Index: b.Index, Kind: b.Kind, Done: b.Done, Pinned: b.Pinned, TaskId: b.TaskId, Text: b.Text,
                         DisplayStack: b.DisplayStack, DisplayName: b.DisplayName,
                         TargetQuantity: b.TargetQuantity, CurrentQuantity: b.CurrentQuantity, LinkTarget: b.LinkTarget),
-                    style)))
+                    style, Widget.AssignedStampBitmap)))
             .ToList();
 
         Widget rowList = new ScribeAnimatedList(
@@ -279,7 +294,7 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
 /// </summary>
 internal sealed class ScribeReadRow : StatefulWidget
 {
-    public ScribeReadRow(ScribeReadRowData data, Action<Guid> onToggleTask, Action<Guid> onTogglePinned, Action<Guid> onOpenLink, ScribeRowStyle style, bool readOnly = false, bool completionAndPinLive = false, Action<Guid>? onTextEditRefused = null, Gui.Widgets.Framework.Key? key = null)
+    public ScribeReadRow(ScribeReadRowData data, Action<Guid> onToggleTask, Action<Guid> onTogglePinned, Action<Guid> onOpenLink, ScribeRowStyle style, bool readOnly = false, bool completionAndPinLive = false, Action<Guid>? onTextEditRefused = null, SKBitmap? assignedStampBitmap = null, ScribeAmbientLightSampler.Shade currentShade = default, Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
         Data = data;
@@ -290,6 +305,8 @@ internal sealed class ScribeReadRow : StatefulWidget
         ReadOnly = readOnly;
         CompletionAndPinLive = completionAndPinLive;
         OnTextEditRefused = onTextEditRefused;
+        AssignedStampBitmap = assignedStampBitmap;
+        CurrentShade = currentShade;
     }
 
     public ScribeReadRowData Data { get; }
@@ -310,6 +327,12 @@ internal sealed class ScribeReadRow : StatefulWidget
     /// through this callback (§7.4). Null where a text tap is not a blocked-edit affordance (tabbed read view,
     /// wet tablet).</summary>
     public Action<Guid>? OnTextEditRefused { get; }
+    /// <summary>The full-color assigned-task stamp raster, threaded down from the content widget (see
+    /// <see cref="ScribeReadContent.AssignedStampBitmap"/>). Null falls back to the plain SVG glyph.</summary>
+    public SKBitmap? AssignedStampBitmap { get; }
+    /// <summary>The live ambient-illumination shade, threaded down so the assignment marker's hover
+    /// tooltip can match the body's shading (see <see cref="ScribeReadContent.CurrentShade"/>).</summary>
+    public ScribeAmbientLightSampler.Shade CurrentShade { get; }
     /// <summary>Whether this row's checkbox and pin should behave as interactive: true on any editable read
     /// view (<see cref="ReadOnly"/> = false) OR on a read-only surface that keeps completion/pin live
     /// (<see cref="CompletionAndPinLive"/>). Consolidates the two so the checkbox/pin render off one predicate.</summary>
@@ -451,12 +474,6 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                 opacity: 0f,
                 child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant))));
 
-        // Leading-icon assignment marker (add-assignment-and-quest-support 9.3) — unlike the grip spacer
-        // above, this column is NOT reserved for an ordinary row: it's only added (and only then takes up
-        // width/gap) when the task actually IS an accepted assignment.
-        if (Widget.Data.IsAcceptedAssignment)
-            children.Add(ScribeAssignedTaskIcon.Build(style, colors.OnSurfaceVariant, Widget.Data.IsItemKind));
-
         // Task, Tracker, AND Link all carry a Done flag, so all three show a completion checkbox (only a
         // freeform Text section doesn't — Completable). A Tracker's checkbox also flips automatically when its
         // count fills up under the Complete policy (the count engine issues the same toggle); a Link's is an
@@ -478,6 +495,14 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                         Widget.OnToggleTask(Widget.Data.TaskId);
                     })));
         }
+
+        // Assignment marker — unlike the grip spacer above, this column is NOT reserved for an ordinary
+        // row: it's only added (and only then takes up width/gap) when the task actually IS an accepted
+        // assignment. Placed inside the checkbox, to its right.
+        if (Widget.Data.IsAcceptedAssignment)
+            children.Add(ScribeAssignedTaskIcon.Build(style, colors.OnSurfaceVariant, Widget.Data.IsItemKind, Widget.AssignedStampBitmap,
+                context: context, currentShade: Widget.CurrentShade,
+                assignerName: Widget.Data.AssignerName, assignedDate: Widget.Data.AssignedDate, acceptedDate: Widget.Data.AcceptedDate));
 
         // The row text. On the cuneiform tablet path (add-tablet-firing-mechanic) render it as display-only
         // cuneiform strokes so a dried/fired tablet reads in the SAME glyphs the wet tablet types in —

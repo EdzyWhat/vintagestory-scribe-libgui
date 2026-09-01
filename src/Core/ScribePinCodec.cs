@@ -27,7 +27,12 @@ namespace Scribe.Core;
 /// the blob's version is at least that high. This lets shipped v1 pins keep loading unchanged when v2
 /// (WIP-only, never released) and v3 add fields — a naive "current + immediately-prior" window would
 /// have dropped v1 pins (data loss) once v3 landed.
-///   Current : v6 — appended per-pin <see cref="ScribePinnedRef.IsAcceptedAssignment"/> (bool), so the HUD
+///   Current : v7 — appended per-pin <see cref="ScribePinnedRef.AssignerUid"/> (string),
+///                  <see cref="ScribePinnedRef.AssignedDate"/> (string), and
+///                  <see cref="ScribePinnedRef.AcceptedDate"/> (bool + optional string), so the Pin Tab
+///                  can render the assignment marker's tooltip without resolving the source document
+///                  (assignment-icon-and-tab-defaults).
+///   v6 — appended per-pin <see cref="ScribePinnedRef.IsAcceptedAssignment"/> (bool), so the HUD
 ///                  and Pin Tab can render the leading-icon assignment marker without resolving the
 ///                  source document (add-assignment-and-quest-support 9.3).
 ///   v5 — appended per-pin <see cref="ScribePinnedRef.Depth"/> (int), the pinned task's subtask
@@ -50,17 +55,20 @@ namespace Scribe.Core;
 ///
 /// Per-pin field history (in serialized order): OwnerDocId, TaskId, PinnedAtTotalHours, Orphaned,
 /// LastKnownDone, LastKnownText (v1); Kind, LinkTarget (added v2); TargetItemCode, TargetQuantity,
-/// CurrentQuantity (added v3); LinkLabel (added v4); Depth (added v5); IsAcceptedAssignment (added v6).
+/// CurrentQuantity (added v3); LinkLabel (added v4); Depth (added v5); IsAcceptedAssignment (added v6);
+/// AssignerUid, AssignedDate, AcceptedDate (added v7).
 /// </summary>
 public static class ScribePinCodec
 {
     private static readonly byte[] ListMagic = "SPIN"u8.ToArray();
     private static readonly byte[] StoreMagic = "SPST"u8.ToArray();
 
-    /// <summary>Version of the pin-list blobs (SPIN/SPST). Bumped to 6 for the appended per-pin
-    /// <see cref="ScribePinnedRef.IsAcceptedAssignment"/> flag (add-assignment-and-quest-support 9.3);
-    /// v5 added the <see cref="ScribePinnedRef.Depth"/> subtask depth.</summary>
-    private const byte PinVersion = 6;
+    /// <summary>Version of the pin-list blobs (SPIN/SPST). Bumped to 7 for the appended per-pin
+    /// assignment-provenance fields (<see cref="ScribePinnedRef.AssignerUid"/>/
+    /// <see cref="ScribePinnedRef.AssignedDate"/>/<see cref="ScribePinnedRef.AcceptedDate"/>,
+    /// assignment-icon-and-tab-defaults); v6 added the <see cref="ScribePinnedRef.IsAcceptedAssignment"/>
+    /// flag.</summary>
+    private const byte PinVersion = 7;
 
     /// <summary>
     /// The OLDEST pin-list version the reader still accepts. Reads are progressive (append-only): any
@@ -217,6 +225,15 @@ public static class ScribePinCodec
             // v6 appended field (add-assignment-and-quest-support 9.3): whether the pinned task carries an
             // Accepted assignment, so the HUD/Pin Tab can render the leading-icon marker.
             w.Write(pin.IsAcceptedAssignment);
+            // v7 appended fields (assignment-icon-and-tab-defaults): the assigner's uid and the
+            // assigned date (plain strings, empty when not an assignment) plus the accepted date
+            // (nullable string, presence bool + value) — so the Pin Tab can render the assignment
+            // marker's tooltip without resolving the source document.
+            w.Write(pin.AssignerUid);
+            w.Write(pin.AssignedDate);
+            bool hasAcceptedDate = pin.AcceptedDate != null;
+            w.Write(hasAcceptedDate);
+            if (hasAcceptedDate) w.Write(pin.AcceptedDate!);
         }
     }
 
@@ -291,6 +308,24 @@ public static class ScribePinCodec
             if (version >= 6)
             {
                 pin.IsAcceptedAssignment = r.ReadBoolean();
+            }
+            if (version >= 7)
+            {
+                string assignerUid = r.ReadString();
+                if (assignerUid.Length > MaxUidLength) return false;
+                pin.AssignerUid = assignerUid;
+
+                string assignedDate = r.ReadString();
+                if (assignedDate.Length > ScribeDocumentCodec.MaxTextLength) return false;
+                pin.AssignedDate = assignedDate;
+
+                bool hasAcceptedDate = r.ReadBoolean();
+                if (hasAcceptedDate)
+                {
+                    string acceptedDate = r.ReadString();
+                    if (acceptedDate.Length > ScribeDocumentCodec.MaxTextLength) return false;
+                    pin.AcceptedDate = acceptedDate;
+                }
             }
 
             list.Add(pin);

@@ -10,7 +10,8 @@ public class ScribePinCodecTests
     private static ScribePinnedRef Pin(string text = "Find copper", bool done = false, bool orphaned = false,
         ScribeBlockKind kind = ScribeBlockKind.Task, string? linkTarget = null,
         string? targetItemCode = null, int targetQuantity = 1, int currentQuantity = 0,
-        string? linkLabel = null, int depth = 0, bool isAcceptedAssignment = false) => new()
+        string? linkLabel = null, int depth = 0, bool isAcceptedAssignment = false,
+        string assignerUid = "", string assignedDate = "", string? acceptedDate = null) => new()
     {
         OwnerDocId = Guid.NewGuid(),
         TaskId = Guid.NewGuid(),
@@ -26,6 +27,9 @@ public class ScribePinCodecTests
         LinkLabel = linkLabel,
         Depth = depth,
         IsAcceptedAssignment = isAcceptedAssignment,
+        AssignerUid = assignerUid,
+        AssignedDate = assignedDate,
+        AcceptedDate = acceptedDate,
     };
 
     private static void AssertPinEqual(ScribePinnedRef expected, ScribePinnedRef actual)
@@ -44,6 +48,9 @@ public class ScribePinCodecTests
         Assert.Equal(expected.LinkLabel, actual.LinkLabel);
         Assert.Equal(expected.Depth, actual.Depth);
         Assert.Equal(expected.IsAcceptedAssignment, actual.IsAcceptedAssignment);
+        Assert.Equal(expected.AssignerUid, actual.AssignerUid);
+        Assert.Equal(expected.AssignedDate, actual.AssignedDate);
+        Assert.Equal(expected.AcceptedDate, actual.AcceptedDate);
     }
 
     // ---- SPIN: list round-trip ----
@@ -416,6 +423,75 @@ public class ScribePinCodecTests
         Assert.True(ok);
         Assert.NotNull(restored);
         Assert.False(Assert.Single(restored!).IsAcceptedAssignment); // defaulted by the progressive read
+    }
+
+    // ---- v7: assignment marker tooltip provenance (assignment-icon-and-tab-defaults) ----
+
+    [Fact]
+    public void List_RoundTrip_PreservesAssignmentProvenance()
+    {
+        var pins = new List<ScribePinnedRef>
+        {
+            Pin("Deliver 10 logs", isAcceptedAssignment: true, assignerUid: "player-123",
+                assignedDate: "8 August, Year 0", acceptedDate: "9 August, Year 0"),
+            Pin("Ordinary task", isAcceptedAssignment: false),
+        };
+
+        byte[] bytes = ScribePinCodec.SerializeList(pins);
+        bool ok = ScribePinCodec.TryDeserializeList(bytes, out var restored);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        Assert.Equal(2, restored!.Count);
+        AssertPinEqual(pins[0], restored[0]);
+        AssertPinEqual(pins[1], restored[1]);
+        Assert.Equal("player-123", restored[0].AssignerUid);
+        Assert.Equal("8 August, Year 0", restored[0].AssignedDate);
+        Assert.Equal("9 August, Year 0", restored[0].AcceptedDate);
+        Assert.Equal("", restored[1].AssignerUid);
+        Assert.Equal("", restored[1].AssignedDate);
+        Assert.Null(restored[1].AcceptedDate);
+    }
+
+    [Fact]
+    public void TryDeserialize_V6Bytes_AssignmentProvenance_IsDefaulted()
+    {
+        // Hand-build a v6 SPIN blob (IsAcceptedAssignment present, but no v7 provenance fields) as the
+        // pre-provenance codec wrote it, and assert the progressive read stops after IsAcceptedAssignment
+        // and defaults the new fields (empty/null) rather than mis-reading.
+        var docId = Guid.NewGuid();
+        var taskId = Guid.NewGuid();
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write("SPIN"u8.ToArray());
+            w.Write((byte)6);          // v6
+            w.Write(1);                // one pin
+            w.Write(docId.ToByteArray());
+            w.Write(taskId.ToByteArray());
+            w.Write(555.0);            // PinnedAtTotalHours
+            w.Write(false);            // Orphaned
+            w.Write(false);            // LastKnownDone
+            w.Write("Copper");         // LastKnownText
+            w.Write((byte)ScribeBlockKind.Task); // Kind
+            w.Write(false);            // hasLinkTarget
+            w.Write(false);            // hasTargetItemCode
+            w.Write(1);                // TargetQuantity
+            w.Write(0);                // CurrentQuantity
+            w.Write(false);            // hasLinkLabel
+            w.Write(0);                // Depth
+            w.Write(true);             // IsAcceptedAssignment — v6 ends here, no provenance fields
+        }
+
+        bool ok = ScribePinCodec.TryDeserializeList(ms.ToArray(), out var restored);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        var pin = Assert.Single(restored!);
+        Assert.True(pin.IsAcceptedAssignment);
+        Assert.Equal("", pin.AssignerUid);      // defaulted by the progressive read
+        Assert.Equal("", pin.AssignedDate);
+        Assert.Null(pin.AcceptedDate);
     }
 
     [Fact]

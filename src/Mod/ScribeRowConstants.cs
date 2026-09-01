@@ -162,28 +162,48 @@ internal static class ScribeRowConstants
     /// active tab, for contrast against the thematic fill (add-active-tab-nav-colors).</summary>
     public static readonly Vector4 NavActiveGlyph = new(0.9176f, 0.9020f, 0.8667f, 1f);
 
-    // ── Assignment state chip colors (refine-assignment-desk-inbox-ux D1) ─────────────────────────
-    // Dedicated constants, deliberately NOT the NavActive* colors above — e.g. NavActiveGuestbook is
-    // already a similar plum/mauve, and reusing it for the Accepted chip would tie two unrelated
-    // meanings (a nav button's active-tab fill, an assignment state) to one constant. Starting values
-    // approximating the named palette from playtest feedback (2026-08-31); tunable like every other
-    // color/particle constant here — not locked to these exact hex values.
+    // ── Assignment state chip colors (refine-assignment-desk-inbox-ux 12.1) ───────────────────────
+    // Reversed from the original "dedicated, not NavActive*" decision: playtest feedback (2026-08-31)
+    // found the first custom palette read as too saturated/"fancy" next to the rest of the GUI's muted
+    // nav-icon backgrounds, and asked to directly borrow specific nav colors instead of inventing new
+    // ones. These are now aliases (not independently-tuned values) — a nav color retune here flows
+    // through to the matching chip automatically, which is the intended coupling this time.
 
-    /// <summary>New/Unaccepted state chip — Deep Indigo <c>#4a3f8c</c>.</summary>
-    public static readonly Vector4 AssignmentChipNew = new(0.29f, 0.25f, 0.55f, 1f);
+    /// <summary>New/Unaccepted state chip — borrows the Guest Book nav button's purple.</summary>
+    public static readonly Vector4 AssignmentChipNew = NavActiveGuestbook;
 
-    /// <summary>Accepted state chip — Rich Plum/Amethyst <c>#7a4a8c</c>.</summary>
-    public static readonly Vector4 AssignmentChipAccepted = new(0.48f, 0.29f, 0.55f, 1f);
+    /// <summary>Accepted state chip — borrows the Read view nav button's blue.</summary>
+    public static readonly Vector4 AssignmentChipAccepted = NavActiveRead;
 
-    /// <summary>Declined AND Discarded state chip (shared — both read as terminal rejections) —
-    /// Crimson/Burgundy <c>#7a1f2b</c>.</summary>
-    public static readonly Vector4 AssignmentChipRejected = new(0.48f, 0.12f, 0.17f, 1f);
+    /// <summary>Declined state chip — borrows the Edit view nav button's red.</summary>
+    public static readonly Vector4 AssignmentChipRejected = NavActiveEdit;
 
-    /// <summary>Cancelled state chip — Charcoal/Dark Sepia <c>#3d3a35</c>.</summary>
-    public static readonly Vector4 AssignmentChipCancelled = new(0.24f, 0.23f, 0.21f, 1f);
+    /// <summary>Cancelled state chip — borrows the Transcribe nav button's orange/gold.</summary>
+    public static readonly Vector4 AssignmentChipCancelled = NavActiveTranscribe;
 
-    /// <summary>Completed state chip — Verdigris/Emerald Ink <c>#2e6b5e</c>.</summary>
-    public static readonly Vector4 AssignmentChipCompleted = new(0.18f, 0.42f, 0.37f, 1f);
+    /// <summary>Discarded state chip (triage 2026-08-31: "the color for Discarded should be halfway
+    /// between the colors for Declined and Cancelled") — no longer shares <see cref="AssignmentChipRejected"/>
+    /// with Declined; the two are grouped under one combined filter pill
+    /// (<see cref="ScribeAssignmentFilterGroup.RejectedGroup"/>) but still read as visually distinct
+    /// per-row states.</summary>
+    public static readonly Vector4 AssignmentChipDiscarded = new(
+        (AssignmentChipRejected.X + AssignmentChipCancelled.X) / 2f,
+        (AssignmentChipRejected.Y + AssignmentChipCancelled.Y) / 2f,
+        (AssignmentChipRejected.Z + AssignmentChipCancelled.Z) / 2f,
+        1f);
+
+    /// <summary>Completed state chip — borrows the Pinned Tasks nav button's green.</summary>
+    public static readonly Vector4 AssignmentChipCompleted = NavActivePinned;
+
+    /// <summary>The "All" filter pill's neutral swatch (triage 2026-08-31) — borrows the Settings nav
+    /// button's warm gray, deliberately non-committal since it doesn't represent any one state.</summary>
+    public static readonly Vector4 AssignmentChipAll = NavActiveSettings;
+
+    /// <summary>The dark-red ink color of a <see cref="ScribeStamp"/>'s "COPIED"/"IMPORTED"/"Submitted to
+    /// Player" imprint text and border — promoted from a Scriptorium-private constant
+    /// (refine-assignment-desk-inbox-ux 10.2) so the Assignment Desk's own stamp can't drift from the
+    /// Scriptorium's tuned color.</summary>
+    public static readonly Vector4 StampImprintInk = new(0.66f, 0.18f, 0.16f, 1f);
 }
 
 /// <summary>Maps the player's task-font preference (<c>ScribePlayerSettings.TaskFontFamily</c>) to the

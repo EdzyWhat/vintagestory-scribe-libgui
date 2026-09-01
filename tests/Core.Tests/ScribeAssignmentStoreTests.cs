@@ -47,6 +47,39 @@ public class ScribeAssignmentStoreTests
         Assert.Equal(ScribeDocumentCodec.MaxTaskTextLength, record!.Text.Length);
     }
 
+    [Fact]
+    public void TryCreate_ItemKindRowAllowsBlankText()
+    {
+        // A Tracker/Link/Craft row's label lives on TargetItemCode/LinkTarget, not Text (matching every
+        // other ScribeBlock of that kind) — assignment-multi-item-creation design.md D12.
+        var store = new ScribeAssignmentStore();
+        Assert.True(store.TryCreate(Guid.NewGuid(), Assigner, Assignee, "", "Year 1, Day 1", out var record,
+            kind: ScribeBlockKind.Tracker, targetItemCode: "game:log-oak", targetQuantity: 10));
+        Assert.NotNull(record);
+        Assert.Equal(ScribeBlockKind.Tracker, record!.Kind);
+        Assert.Equal("game:log-oak", record.TargetItemCode);
+        Assert.Equal(10, record.TargetQuantity);
+    }
+
+    [Fact]
+    public void TryCreate_TaskKindStillRejectsBlankText_EvenWithOtherFieldsSupplied()
+    {
+        var store = new ScribeAssignmentStore();
+        Assert.False(store.TryCreate(Guid.NewGuid(), Assigner, Assignee, "", "Year 1, Day 1", out var record));
+        Assert.Null(record);
+    }
+
+    [Fact]
+    public void TryCreate_CarriesFullBlockShapeForACraftRow()
+    {
+        var store = new ScribeAssignmentStore();
+        Assert.True(store.TryCreate(Guid.NewGuid(), Assigner, Assignee, "", "Year 1, Day 1", out var record,
+            kind: ScribeBlockKind.Craft, targetItemCode: "game:ingot-iron", targetQuantity: 4,
+            recipeSignature: "recipe-sig-abc", depth: 0));
+        Assert.NotNull(record);
+        Assert.Equal("recipe-sig-abc", record!.RecipeSignature);
+    }
+
     // ---- Sent / Received filtering ----
 
     [Fact]
@@ -184,6 +217,115 @@ public class ScribeAssignmentStoreTests
     {
         Assert.False(ScribeAssignmentStore.TryDeserializeList(null, out _));
         Assert.False(ScribeAssignmentStore.TryDeserializeList(new byte[] { 1, 2, 3 }, out _));
+    }
+
+    [Fact]
+    public void RoundTrip_SerializeList_PreservesRecipeSignatureForACraftRow()
+    {
+        var store = new ScribeAssignmentStore();
+        Assert.True(store.TryCreate(Guid.NewGuid(), Assigner, Assignee, "", "Year 1, Day 1", out _,
+            kind: ScribeBlockKind.Craft, targetItemCode: "game:ingot-iron", targetQuantity: 4,
+            recipeSignature: "recipe-sig-abc"));
+        var bytes = ScribeAssignmentStore.SerializeList(store.Received(Assignee));
+
+        Assert.True(ScribeAssignmentStore.TryDeserializeList(bytes, out var restored));
+        var record = Assert.Single(restored!);
+        Assert.Equal("recipe-sig-abc", record.RecipeSignature);
+    }
+
+    [Fact]
+    public void TryDeserializeList_AcceptsAPriorVersionBlob_DefaultingRecipeSignatureToEmpty()
+    {
+        // Hand-build a v1 blob (no RecipeSignature field) to prove a save/sync predating that field still
+        // loads — the whole point of the MinVersion/Version window (design.md D12's serializer note).
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write("SASN"u8.ToArray());
+            w.Write((byte)1); // v1
+            w.Write(1); // record count
+            w.Write(Guid.NewGuid().ToByteArray());
+            w.Write((byte)ScribeBlockKind.Task);
+            w.Write("Chop 10 logs");
+            w.Write(false); // no TargetItemCode
+            w.Write(1); // TargetQuantity
+            w.Write(0); // CurrentQuantity
+            w.Write(false); // no LinkTarget
+            w.Write(false); // no LinkLabel
+            w.Write(false); // no LinkDescription
+            w.Write(0); // Depth
+            // NOTE: no RecipeSignature field here — this IS the v1 shape.
+            w.Write(Assigner);
+            w.Write(Assignee);
+            w.Write((byte)ScribeAssignmentState.Unaccepted);
+            w.Write("Year 1, Day 1");
+            w.Write(false); // Seen
+        }
+
+        Assert.True(ScribeAssignmentStore.TryDeserializeList(ms.ToArray(), out var restored));
+        var record = Assert.Single(restored!);
+        Assert.Equal("", record.RecipeSignature);
+        Assert.Equal("Chop 10 logs", record.Text);
+    }
+
+    // ---- Round-trip: v4 per-transition timestamps ----
+
+    [Fact]
+    public void RoundTrip_SerializeList_PreservesTransitionTimestamps()
+    {
+        var store = NewStoreWithOneAssignment(out var id);
+        var assignment = store.TryGet(id)!.Assignment!;
+        assignment.AcceptedDate = "Year 1, Day 2";
+        assignment.CompletedDate = "Year 1, Day 3";
+        var bytes = ScribeAssignmentStore.SerializeList(store.Received(Assignee));
+
+        Assert.True(ScribeAssignmentStore.TryDeserializeList(bytes, out var restored));
+        var record = Assert.Single(restored!);
+        Assert.Equal("Year 1, Day 2", record.Assignment!.AcceptedDate);
+        Assert.Equal("Year 1, Day 3", record.Assignment!.CompletedDate);
+        Assert.Null(record.Assignment!.DeclinedDate);
+        Assert.Null(record.Assignment!.CancelledDate);
+        Assert.Null(record.Assignment!.DiscardedDate);
+    }
+
+    [Fact]
+    public void TryDeserializeList_AcceptsAPriorVersionBlob_DefaultingTransitionTimestampsToNull()
+    {
+        // A v3 blob (BatchId present, no timestamp fields at all) predates every transition timestamp —
+        // those genuinely never happened as far as the record can say, so null is the correct default.
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write("SASN"u8.ToArray());
+            w.Write((byte)3); // v3
+            w.Write(1); // record count
+            w.Write(Guid.NewGuid().ToByteArray());
+            w.Write((byte)ScribeBlockKind.Task);
+            w.Write("Chop 10 logs");
+            w.Write(false); // no TargetItemCode
+            w.Write(1); // TargetQuantity
+            w.Write(0); // CurrentQuantity
+            w.Write(false); // no LinkTarget
+            w.Write(false); // no LinkLabel
+            w.Write(false); // no LinkDescription
+            w.Write(0); // Depth
+            w.Write(""); // RecipeSignature (v2+)
+            w.Write(Assigner);
+            w.Write(Assignee);
+            w.Write((byte)ScribeAssignmentState.Unaccepted);
+            w.Write("Year 1, Day 1");
+            w.Write(false); // Seen
+            w.Write(Guid.NewGuid().ToByteArray()); // BatchId (v3+)
+            // NOTE: no timestamp fields here — this IS the v3 shape.
+        }
+
+        Assert.True(ScribeAssignmentStore.TryDeserializeList(ms.ToArray(), out var restored));
+        var record = Assert.Single(restored!);
+        Assert.Null(record.Assignment!.AcceptedDate);
+        Assert.Null(record.Assignment!.DeclinedDate);
+        Assert.Null(record.Assignment!.CancelledDate);
+        Assert.Null(record.Assignment!.DiscardedDate);
+        Assert.Null(record.Assignment!.CompletedDate);
     }
 
     // ---- Round-trip: whole store (savegame) ----

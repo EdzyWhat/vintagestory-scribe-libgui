@@ -57,12 +57,18 @@ public abstract partial class ScribeDialogBase
                 // read/editor views (add-tracker-link-tasks 7.8). A plain Task resolves to (null, null) and
                 // keeps its editable text field.
                 var (stack, name) = ResolvePinItem(p);
+                // Unlike Read/Editor (which read a live ScribeAssignment via ResolveAssignmentTooltipInfo),
+                // the pin snapshot carries its own assignment provenance directly (no source document to
+                // read from — assignment-icon-and-tab-defaults), so only the assigner's uid needs resolving.
+                string? assignerName = p.IsAcceptedAssignment ? ResolvePlayerNameForInbox(p.AssignerUid) : null;
                 return new ScribePinRowData(
                     p.OwnerDocId, p.TaskId, p.LastKnownDone,
                     pinEditBuffer.TryGetValue(p.TaskId, out var buffered) ? buffered : p.LastKnownText,
                     Kind: p.Kind, DisplayStack: stack, DisplayName: name,
                     TargetQuantity: p.TargetQuantity, CurrentQuantity: p.CurrentQuantity, LinkTarget: p.LinkTarget,
-                    Depth: p.Depth, IsAcceptedAssignment: p.IsAcceptedAssignment);
+                    Depth: p.Depth, IsAcceptedAssignment: p.IsAcceptedAssignment,
+                    AssignerName: assignerName, AssignedDate: p.IsAcceptedAssignment ? p.AssignedDate : null,
+                    AcceptedDate: p.IsAcceptedAssignment ? p.AcceptedDate : null);
             })
             .ToList();
 
@@ -98,7 +104,8 @@ public abstract partial class ScribeDialogBase
             currentShade: currentShade,
             // Per-surface restyle of the policy picker's open menu (refine-chalkboard): the chalkboard fixes
             // its unreadable selected-row colors; every other surface passes the theme default through.
-            decoratePolicyDropdownStyle: DecoratePolicyDropdownStyle);
+            decoratePolicyDropdownStyle: DecoratePolicyDropdownStyle,
+            assignedStampBitmap: modSystem.GetGuiTextureBitmap(ScribeAssignedTaskIcon.Asset));
     }
 
     /// <summary>Resolve a pinned Tracker/Link's item icon + display name from its snapshot code, or

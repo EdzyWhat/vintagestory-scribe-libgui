@@ -1007,4 +1007,59 @@ public class ScribeDocumentTests
         Assert.Equal("existing task", target.Blocks[0].Text);
         Assert.Same(placed, target.Blocks[1]);
     }
+
+    // --- InsertIndexForBatch (refine-assignment-desk-inbox-ux triage 2026-08-31: keep a batch's
+    // Accept-placed rows contiguous regardless of the order they were individually Accepted in) ---
+
+    [Fact]
+    public void InsertIndexForBatch_NoSiblingPlacedYet_FallsBackToInsertIndex()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("existing");
+        var batchId = Guid.NewGuid();
+
+        Assert.Equal(0, doc.InsertIndexForBatch(batchId, ScribeNewTaskInsert.Top));
+        Assert.Equal(1, doc.InsertIndexForBatch(batchId, ScribeNewTaskInsert.Bottom));
+    }
+
+    [Fact]
+    public void InsertIndexForBatch_FindsLeafSibling_InsertsRightAfterIt()
+    {
+        var doc = new ScribeDocument();
+        var batchId = Guid.NewGuid();
+        doc.AppendAssignedBlock(new ScribeBlock(ScribeBlockKind.Task, "sibling",
+            assignment: new ScribeAssignment("assigner", "Day 1", batchId: batchId)));
+        doc.AddTask("unrelated, sent separately");
+
+        // Ignores the Top/Bottom preference once a sibling is found — always lands next to it.
+        Assert.Equal(1, doc.InsertIndexForBatch(batchId, ScribeNewTaskInsert.Bottom));
+        Assert.Equal(1, doc.InsertIndexForBatch(batchId, ScribeNewTaskInsert.Top));
+    }
+
+    [Fact]
+    public void InsertIndexForBatch_FindsParentSiblingWithChildrenAlreadyPlaced_InsertsAfterOwnedRun()
+    {
+        var doc = new ScribeDocument();
+        var batchId = Guid.NewGuid();
+        doc.AppendAssignedBlock(new ScribeBlock(ScribeBlockKind.Task, "parent",
+            assignment: new ScribeAssignment("assigner", "Day 1", batchId: batchId)));
+        doc.AppendAssignedBlock(new ScribeBlock(ScribeBlockKind.Task, "child", depth: 1,
+            assignment: new ScribeAssignment("assigner", "Day 1", batchId: batchId)));
+
+        // Parent's owned run is [1, 2) — a third batch row lands after it (index 2), not wedged
+        // between parent and child.
+        Assert.Equal(2, doc.InsertIndexForBatch(batchId, ScribeNewTaskInsert.Top));
+    }
+
+    [Fact]
+    public void InsertIndexForBatch_GuidEmpty_NeverGluesOntoUnrelatedDefaultBatchRows()
+    {
+        var doc = new ScribeDocument();
+        // Default (unset) BatchId — callers that don't care, per ScribeAssignment.BatchId's remarks.
+        doc.AppendAssignedBlock(new ScribeBlock(ScribeBlockKind.Task, "unrelated",
+            assignment: new ScribeAssignment("assigner", "Day 1")));
+
+        Assert.Equal(0, doc.InsertIndexForBatch(Guid.Empty, ScribeNewTaskInsert.Top));
+        Assert.Equal(1, doc.InsertIndexForBatch(Guid.Empty, ScribeNewTaskInsert.Bottom));
+    }
 }

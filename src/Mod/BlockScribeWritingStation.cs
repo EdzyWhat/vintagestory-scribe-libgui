@@ -42,6 +42,14 @@ public abstract class BlockScribeWritingStation : Block
     /// their own <c>rotateYByType</c>).</summary>
     protected virtual bool OrientTowardPlayerOnPlace => true;
 
+    /// <summary>Whether the placed/held-item tooltip appends a "Title: ..." line at all (the
+    /// Lectern/Scriptorium default — they carry a real, renamable document title). The Inbox and
+    /// Assignment Desk blocks override this to <c>false</c> (triage 2026-08-31: "we should remove
+    /// [Title: (untitled)] since they can't be renamed") — they're thin subclasses of this base for their
+    /// placement/interaction/carry-over plumbing, but have no document title a player can ever set, so
+    /// the line only ever reads as a confusing permanent "(untitled)" placeholder.</summary>
+    protected virtual bool ShowsDocumentTitleInTooltip => true;
+
     public override void OnLoaded(ICoreAPI api)
     {
         base.OnLoaded(api);
@@ -77,10 +85,13 @@ public abstract class BlockScribeWritingStation : Block
     /// to the placeholder via <see cref="ScribeTooltip.FormatTitleLine"/> (null → untitled).</summary>
     public override string GetPlacedBlockInfo(IWorldAccessor world, BlockPos pos, IPlayer forPlayer)
     {
+        string baseInfo = base.GetPlacedBlockInfo(world, pos, forPlayer);
+        if (!ShowsDocumentTitleInTooltip) return baseInfo;
+
         string title = world.BlockAccessor.GetBlockEntity(pos) is BlockEntityScribeWritingStation station
             ? station.Document.Title
             : null!;
-        return base.GetPlacedBlockInfo(world, pos, forPlayer) + ScribeTooltip.FormatTitleLine(title) + "\n";
+        return baseInfo + ScribeTooltip.FormatTitleLine(title) + "\n";
     }
 
     /// <summary>Append the title to the block's held/inventory tooltip too, matching the Notebook items.
@@ -90,6 +101,8 @@ public abstract class BlockScribeWritingStation : Block
     public override void GetHeldItemInfo(ItemSlot inSlot, StringBuilder dsc, IWorldAccessor world, bool withDebugInfo)
     {
         base.GetHeldItemInfo(inSlot, dsc, world, withDebugInfo);
+        if (!ShowsDocumentTitleInTooltip) return;
+
         string? title = inSlot.Itemstack is { } stack
             && ScribeDocumentAttributes.TryReadFrom(stack, out var doc) && doc is not null
             ? doc.Title

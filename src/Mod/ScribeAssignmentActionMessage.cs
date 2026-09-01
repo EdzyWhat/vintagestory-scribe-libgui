@@ -35,4 +35,12 @@ public sealed class ScribeAssignmentActionMessage
     /// Accept. Defaults to -1 (unresolved) so an absent value never aliases slot 0.</summary>
     [ProtoMember(4)]
     public int TargetSlotId { get; set; } = -1;
+
+    /// <summary>The accepting player's own New Task Insert preference (<c>ScribePlayerSettings.NewTaskInsert</c>,
+    /// refine-assignment-desk-inbox-ux 13.1) — a client-local preference the server has no other way to see
+    /// (see <c>ScribeModSystem.MySettings</c>'s remarks: behavior preferences are never server state), sent
+    /// along so Accept-time placement can honor it instead of always appending to the bottom. Ignored for
+    /// every action other than Accept.</summary>
+    [ProtoMember(5)]
+    public byte NewTaskInsert { get; set; }
 }

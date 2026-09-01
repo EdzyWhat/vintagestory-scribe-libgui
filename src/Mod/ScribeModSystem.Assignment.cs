@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Gui.Rendering;             // SkiaAssetLoader
 using Gui.Rendering.Text;        // FontRegistry, FontWeight
 using Gui.Sound;                 // ISoundPlayer, SoundPlayer (UI click sound)
@@ -16,37 +17,121 @@ public sealed partial class ScribeModSystem
 {
     // ── Assignment ───────────────────────────────────────────────────────────────────────────────
 
-    /// <summary>Client → server: create and send a new player-to-player assignment (the Assignment
-    /// Desk's create/send form). The server mints the assigned date and is authoritative for
-    /// everything except the client-minted <c>AssignmentId</c>, target player, and task text — see
-    /// <see cref="ScribeSendAssignmentMessage"/>. Rejects an unknown target player uid, a duplicate
-    /// id, or blank text (<see cref="ScribeAssignmentStore.TryCreate"/> enforces the latter two).</summary>
-    private void OnServerReceivedSendAssignment(IServerPlayer fromPlayer, ScribeSendAssignmentMessage message)
+    /// <summary>Client → server: send a multi-item assignment batch from the Create Assignments tab's
+    /// staging slot (assignment-multi-item-creation, design.md D8-D13). Creates one independent
+    /// assignment per row via the D12-broadened <see cref="ScribeAssignmentStore.TryCreate"/> — a
+    /// malformed or store-rejected row is skipped, not fatal to the rest of the batch (matches "each row
+    /// behaves exactly like any other assignment" — one bad row shouldn't sink the others). When
+    /// <see cref="ScribeSendAssignmentBatchMessage.DeleteFromSource"/> is set, every successfully-created
+    /// row is also removed from the staged document afterward via <see cref="TryRemoveStagedRows"/>.</summary>
+    private void OnServerReceivedSendAssignmentBatch(IServerPlayer fromPlayer, ScribeSendAssignmentBatchMessage message)
     {
         if (sapi is null || assignmentStore is null) return;
-        if (!TryReadGuid(message.AssignmentId, out var assignmentId))
-        {
-            Trace("send-assignment from {0}: MALFORMED packet (assignmentId not 16 bytes) — ignored", fromPlayer.PlayerName);
-            return;
-        }
 
         string? targetUid = message.TargetPlayerUid;
         if (string.IsNullOrWhiteSpace(targetUid) || sapi.World.PlayerByUid(targetUid) is null)
         {
-            Trace("send-assignment from {0}: unknown target player uid — ignored", fromPlayer.PlayerName);
+            Trace("send-assignment-batch from {0}: unknown target player uid — ignored", fromPlayer.PlayerName);
+            return;
+        }
+
+        var rows = message.Rows;
+        if (rows is null || rows.Count == 0)
+        {
+            Trace("send-assignment-batch from {0}: empty batch — ignored", fromPlayer.PlayerName);
             return;
         }
 
         string date = NotebookHost.FormatDate(sapi);
-        if (!assignmentStore.TryCreate(assignmentId, fromPlayer.PlayerUID, targetUid, message.TaskText ?? "", date, out _))
+        // One fresh id per SEND CALL, shared by every row it creates (refine-assignment-desk-inbox-ux
+        // 12.2 root-cause fix) — see ScribeAssignment.BatchId's remarks on why `date` alone isn't a safe
+        // batch-grouping key (two separate sends on the same in-game day would collide on it).
+        var batchId = Guid.NewGuid();
+        var sentSourceTaskIds = new List<Guid>();
+        int createdCount = 0;
+
+        foreach (var row in rows)
         {
-            Trace("send-assignment from {0}: rejected (duplicate id, blank text, or store full)", fromPlayer.PlayerName);
-            return;
+            if (!TryReadGuid(row.AssignmentId, out var assignmentId))
+            {
+                Trace("send-assignment-batch from {0}: MALFORMED row (assignmentId not 16 bytes) — skipped", fromPlayer.PlayerName);
+                continue;
+            }
+
+            if (!assignmentStore.TryCreate(assignmentId, fromPlayer.PlayerUID, targetUid, row.Text ?? "", date, out _,
+                    kind: (ScribeBlockKind)row.Kind, targetItemCode: row.TargetItemCode, targetQuantity: row.TargetQuantity,
+                    linkTarget: row.LinkTarget, linkLabel: row.LinkLabel, linkDescription: row.LinkDescription,
+                    recipeSignature: row.RecipeSignature, depth: row.Depth, batchId: batchId))
+            {
+                Trace("send-assignment-batch from {0}: row rejected (duplicate id, blank text, or store full)", fromPlayer.PlayerName);
+                continue;
+            }
+
+            createdCount++;
+            if (message.DeleteFromSource && TryReadGuid(row.SourceTaskId, out var sourceTaskId))
+                sentSourceTaskIds.Add(sourceTaskId);
         }
 
-        Trace("send-assignment from {0}: created assignment {1} -> {2}", fromPlayer.PlayerName, assignmentId, targetUid);
+        if (createdCount == 0) return;
+
+        if (message.DeleteFromSource && sentSourceTaskIds.Count > 0)
+        {
+            // add-assignment-desk-own-tasks design.md D6: the client tells us which document the batch was
+            // drawn from, since there's no ItemStack to mutate when the source was the Desk's own document.
+            if (message.SourceIsDeskDocument)
+                TryRemoveDeskOwnRows(message.X, message.Y, message.Z, sentSourceTaskIds);
+            else
+                TryRemoveStagedRows(message.X, message.Y, message.Z, message.StagingSlot, sentSourceTaskIds);
+        }
+
+        Trace("send-assignment-batch from {0}: created {1} assignment(s) -> {2}", fromPlayer.PlayerName, createdCount, targetUid);
         PushAssignmentsTo(fromPlayer);
         if (sapi.World.PlayerByUid(targetUid) is IServerPlayer targetPlayer) PushAssignmentsTo(targetPlayer);
+    }
+
+    /// <summary>"Delete from source on send" (design.md D13): removes the sent rows (matched by their
+    /// staged-document TaskId) from the Assignment Desk's staged item, then re-syncs the slot. A no-op if
+    /// the block/slot/item/document can no longer be resolved — the assignments were already created
+    /// server-authoritatively regardless, so a lost staging item never loses the send itself, only the
+    /// cleanup.</summary>
+    private void TryRemoveStagedRows(int x, int y, int z, int stagingSlot, List<Guid> sourceTaskIdsToRemove)
+    {
+        if (sapi is null) return;
+        var pos = new Vintagestory.API.MathTools.BlockPos(x, y, z);
+        if (sapi.World.BlockAccessor.GetBlockEntity(pos) is not BlockEntityAssignmentDesk desk) return;
+
+        var inv = desk.Inventory;
+        if (stagingSlot < 0 || stagingSlot >= inv.Count) return;
+        var slot = inv[stagingSlot];
+        if (slot.Itemstack is null) return;
+        if (!ScribeDocumentAttributes.TryReadFrom(slot.Itemstack, out var doc) || doc is null) return;
+
+        var remaining = doc.Blocks.Where(b => !sourceTaskIdsToRemove.Contains(b.TaskId)).ToList();
+        if (remaining.Count == doc.Blocks.Count) return; // nothing in this batch actually matched
+
+        doc.ReplaceBlocks(remaining);
+        ScribeDocumentAttributes.WriteTo(slot.Itemstack, doc);
+        slot.MarkDirty();
+    }
+
+    /// <summary>"Delete from source on send" (design.md D13), Desk-own-document sibling of
+    /// <see cref="TryRemoveStagedRows"/> (add-assignment-desk-own-tasks design.md D6): removes the sent
+    /// rows from the Assignment Desk block entity's OWN persisted document rather than a staged item's
+    /// embedded one. Reuses <see cref="BlockEntityScribeWritingStation.DeleteTaskFromReader"/> — the same
+    /// lock-free mutate-and-persist-and-sync path a normal viewer action (e.g. the Delete completion
+    /// policy) already uses on this block entity, so this introduces no new persistence mechanism. Each
+    /// call independently no-ops (and skips, never errors) a TaskId the document no longer contains —
+    /// e.g. another player already deleted it via the Editor tab between this player's snapshot and the
+    /// server processing this removal — mirroring <see cref="TryRemoveStagedRows"/>'s best-effort
+    /// semantics. A no-op if the block itself can no longer be resolved.</summary>
+    private void TryRemoveDeskOwnRows(int x, int y, int z, List<Guid> sourceTaskIdsToRemove)
+    {
+        if (sapi is null) return;
+        var pos = new Vintagestory.API.MathTools.BlockPos(x, y, z);
+        if (sapi.World.BlockAccessor.GetBlockEntity(pos) is not BlockEntityAssignmentDesk desk) return;
+
+        foreach (var taskId in sourceTaskIdsToRemove)
+            desk.DeleteTaskFromReader(taskId);
     }
 
     /// <summary>Client → server: request an Accept/Decline/Cancel/Discard transition. The server
@@ -81,6 +166,7 @@ public sealed partial class ScribeModSystem
             Trace("assignment-action from {0}: illegal transition {1} on {2} — ignored", fromPlayer.PlayerName, action, assignmentId);
             return;
         }
+        StampTransitionDate(record.Assignment, NotebookHost.FormatDate(sapi));
 
         if (action == ScribeAssignmentAction.Accept) TryPlaceAcceptedAssignment(fromPlayer, record, message);
 
@@ -131,8 +217,25 @@ public sealed partial class ScribeModSystem
             return;
         }
 
-        var placed = new ScribeBlock(record.Kind, record.Text, taskId: record.TaskId, assignment: record.Assignment!.Clone());
-        doc.AppendAssignedBlock(placed);
+        // Carry every kind-specific field, not just Kind/Text (playtest 2026-08-31 bug fix): a
+        // Tracker/Link/Craft assignment's real content lives on TargetItemCode/LinkTarget/RecipeSignature
+        // (its own Text is blank by convention — see ScribeAssignmentStore.TryCreate's remarks), and Depth
+        // positions a subtask under its parent. Dropping these silently placed a blank, un-indented block
+        // that looked nothing like what was accepted.
+        var placed = new ScribeBlock(record.Kind, record.Text, depth: record.Depth, taskId: record.TaskId,
+            targetItemCode: record.TargetItemCode, targetQuantity: record.TargetQuantity,
+            currentQuantity: record.CurrentQuantity, linkTarget: record.LinkTarget, linkLabel: record.LinkLabel,
+            recipeSignature: record.RecipeSignature, linkDescription: record.LinkDescription,
+            assignment: record.Assignment!.Clone());
+        // Follow the accepting player's own New Task Insert preference (refine-assignment-desk-inbox-ux
+        // 13.1) instead of always appending to the bottom — the byte on the wire since this preference
+        // is client-local and never server state (see ScribeModSystem.MySettings's remarks). Prefer
+        // landing next to an already-placed sibling from the same batch (triage 2026-08-31: accepting a
+        // batch's rows one at a time was scattering subtasks away from their parent) over the raw
+        // Top/Bottom preference — see ScribeDocument.InsertIndexForBatch's remarks.
+        doc.InsertAssignedBlock(
+            doc.InsertIndexForBatch(placed.Assignment!.BatchId, (ScribeNewTaskInsert)message.NewTaskInsert),
+            placed);
         ScribeDocumentAttributes.WriteTo(slot.Itemstack!, doc);
         slot.MarkDirty();
 
@@ -154,15 +257,28 @@ public sealed partial class ScribeModSystem
     /// assignment. Marks the canonical <see cref="ScribeAssignmentStore"/> record (found by the shared
     /// TaskId — see <see cref="TryPlaceAcceptedAssignment"/>) Completed and mirrors it onto the placed
     /// block's own (cloned) Assignment object, then pushes a fresh sync to both parties so the Assigner's
-    /// read-only Sent view reflects it too.</summary>
+    /// read-only Sent view reflects it too.
+    ///
+    /// Gates on the CANONICAL store record's state, not just <paramref name="assignmentOnBlock"/>'s own —
+    /// the placed block's clone can go stale: the Inbox's manual Discard action (legal from Accepted,
+    /// <see cref="OnServerReceivedAssignmentAction"/>) transitions only the store record, since the task it
+    /// discards is deliberately left in place rather than deleted (that's <see
+    /// cref="NotifyAssignmentDiscardOnDelete"/>'s job). Without this check, checking off that
+    /// already-discarded task would still derive a bogus local Completed on the placed clone while the
+    /// canonical record stayed Discarded forever — a permanent divergence invisible only because no current
+    /// UI renders the placed clone's own Assignment state.</summary>
     public void NotifyAssignmentDoneChanged(Guid taskId, bool nowDone, ScribeAssignment? assignmentOnBlock)
     {
         if (!nowDone || sapi is null || assignmentStore is null) return;
         if (assignmentOnBlock is not { State: ScribeAssignmentState.Accepted } assignment) return;
+        if (assignmentStore.TryGet(taskId)?.Assignment is not { State: ScribeAssignmentState.Accepted } storeAssignment)
+            return;
 
+        string date = NotebookHost.FormatDate(sapi);
         ScribeAssignmentTransitions.TryMarkCompleted(assignment, true);
-        if (assignmentStore.TryGet(taskId)?.Assignment is { } storeAssignment)
-            ScribeAssignmentTransitions.TryMarkCompleted(storeAssignment, true);
+        StampTransitionDate(assignment, date);
+        ScribeAssignmentTransitions.TryMarkCompleted(storeAssignment, true);
+        StampTransitionDate(storeAssignment, date);
 
         PushAssignmentSyncToBothParties(assignment.AssignerUid, assignment.TargetPlayerUid);
     }
@@ -176,8 +292,26 @@ public sealed partial class ScribeModSystem
         if (sapi is null || assignmentStore is null) return;
         if (assignmentOnBlock is not { State: ScribeAssignmentState.Accepted }) return;
         if (!assignmentStore.TryApplyAction(taskId, actingPlayerUid, ScribeAssignmentAction.Discard)) return;
+        if (assignmentStore.TryGet(taskId)?.Assignment is { } storeAssignment)
+            StampTransitionDate(storeAssignment, NotebookHost.FormatDate(sapi));
 
         PushAssignmentSyncToBothParties(assignmentOnBlock.AssignerUid, assignmentOnBlock.TargetPlayerUid);
+    }
+
+    /// <summary>Stamps the appropriate per-transition date field (refine-assignment-desk-inbox-ux triage
+    /// 2026-08-31) for whichever state <paramref name="assignment"/> is CURRENTLY in — call this
+    /// immediately after a transition actually succeeded, never speculatively. Core has no calendar
+    /// access, so this Mod-layer stamp is the only place these fields are ever set.</summary>
+    private static void StampTransitionDate(ScribeAssignment assignment, string date)
+    {
+        switch (assignment.State)
+        {
+            case ScribeAssignmentState.Accepted: assignment.AcceptedDate = date; break;
+            case ScribeAssignmentState.Declined: assignment.DeclinedDate = date; break;
+            case ScribeAssignmentState.Cancelled: assignment.CancelledDate = date; break;
+            case ScribeAssignmentState.Discarded: assignment.DiscardedDate = date; break;
+            case ScribeAssignmentState.Completed: assignment.CompletedDate = date; break;
+        }
     }
 
     private void PushAssignmentSyncToBothParties(string assignerUid, string assigneeUid)

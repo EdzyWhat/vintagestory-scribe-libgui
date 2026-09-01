@@ -233,12 +233,24 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                 // in-Lectern buttons keep a fixed face. Writes through UpdateMySettings, which
                 // NormalizeTaskFontFamily-clamps and repaints the open Lectern live. First in this section
                 // per the settings-menu reorder.
-                LabeledControl(
-                    "settings-taskfont", colors, scale,
-                    new Dropdown<string>(
-                        value: ScribePlayerSettings.NormalizeTaskFontFamily(settings.TaskFontFamily),
-                        items: TaskFontItems(),
-                        onChanged: v => onMutate(s => s.TaskFontFamily = v))),
+                // Font selector paired with the theme-picker button on one row (playtest 2026-08-31: a
+                // full-width button read as oversized on its own row) — an arbitrary but harmless pairing,
+                // there's no thematic link between them, just two controls that fit together at this width.
+                PairedControls(colors, scale,
+                    LabeledControl(
+                        "settings-taskfont", colors, scale,
+                        new Dropdown<string>(
+                            value: ScribePlayerSettings.NormalizeTaskFontFamily(settings.TaskFontFamily),
+                            items: TaskFontItems(),
+                            onChanged: v => onMutate(s => s.TaskFontFamily = v))),
+                    LabeledControl(
+                        "settings-themepicker", colors, scale,
+                        new Button(
+                            child: new Text(
+                                Lang.Get("scribe:settings-themepicker-button"),
+                                new TextStyle { FontSize = ScribeRowConstants.BaseSettingsFontSize * scale, Color = colors.OnPrimary }),
+                            variant: ButtonVariant.Primary,
+                            onTap: _ => onOpenThemePicker()))),
 
                 // Pixel Art Size + Window text scale share one row as two columns (§9.2). Pixel Art Size (W)
                 // is the single driving width of the Lectern's proportional layout (scribe-notebook-frame),
@@ -272,17 +284,6 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                     "settings-cuneiformprogression", colors, scale,
                     value: settings.CuneiformProgression,
                     onChanged: v => onMutate(s => s.CuneiformProgression = v)),
-
-                // Surfaces LibGUI's own theme picker (refine-assignment-desk-inbox-ux D6/6.2), otherwise
-                // reachable only via the hidden `.ui settings` client command.
-                LabeledControl(
-                    "settings-themepicker", colors, scale,
-                    new Button(
-                        child: new Text(
-                            Lang.Get("scribe:settings-themepicker-button"),
-                            new TextStyle { FontSize = ScribeRowConstants.BaseSettingsFontSize * scale, Color = colors.OnPrimary }),
-                        variant: ButtonVariant.Primary,
-                        onTap: _ => onOpenThemePicker())),
             });
     }
 

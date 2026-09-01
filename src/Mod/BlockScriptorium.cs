@@ -11,7 +11,10 @@ public sealed class BlockScriptorium : BlockScribeWritingStation
 {
     protected override string InteractionsCacheKey => "scribeScriptoriumBlockInteractions";
 
-    protected override string OpenHintLangCode => "scribe:blockhelp-scriptorium-open";
+    // Right-click now opens Transcribe (assignment-icon-and-tab-defaults D6/D7) — the help text reuses
+    // Transcribe's own tab-title lang key (self-match) rather than a bespoke "open" string, so it
+    // inherits multi-language support automatically.
+    protected override string OpenHintLangCode => "scribe:scribe-tab-transcribe";
 
     protected override string EditHintLangCode => "scribe:blockhelp-scriptorium-edit";
 }

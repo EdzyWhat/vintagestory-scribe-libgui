@@ -13,4 +13,8 @@ public sealed class BlockAssignmentDesk : BlockScribeWritingStation
     protected override string OpenHintLangCode => "scribe:blockhelp-scribeassignmentdesk-open";
 
     protected override string EditHintLangCode => "scribe:blockhelp-scribeassignmentdesk-edit";
+
+    /// <summary>The Assignment Desk has no renamable document — see the base's doc comment (triage
+    /// 2026-08-31).</summary>
+    protected override bool ShowsDocumentTitleInTooltip => false;
 }

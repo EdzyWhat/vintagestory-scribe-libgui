@@ -18,6 +18,7 @@ using Gui.Widgets.Scroll;        // ListView, SingleChildScrollView, Scrollable,
 using Gui.Core.Layout;           // MainAxisSize
 using OpenTK.Mathematics;        // Vector2, Vector4
 using Scribe.Core;
+using SkiaSharp;                 // SKBitmap (assigned-task stamp raster)
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;   // ItemStack (Tracker/Link display item)
 using Vintagestory.API.Config;   // Lang, GlobalConstants
@@ -35,7 +36,8 @@ internal readonly record struct ScribeEditRowData(
     int Index, ScribeBlockKind Kind, bool Done, bool Pinned, Guid TaskId, string Text,
     ItemStack? DisplayStack = null, string? DisplayName = null,
     int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null, int Depth = 0,
-    bool ReadOnly = false, bool CompletionAndPinLive = true, bool IsAcceptedAssignment = false)
+    bool ReadOnly = false, bool CompletionAndPinLive = true, bool IsAcceptedAssignment = false,
+    string? AssignerName = null, string? AssignedDate = null, string? AcceptedDate = null)
 {
     public bool IsTask => Kind == ScribeBlockKind.Task;
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
@@ -70,11 +72,13 @@ internal sealed class ScribeFrozenEditorRow : StatelessWidget
 {
     private readonly ScribeEditRowData data;
     private readonly ScribeRowStyle style;
+    private readonly SKBitmap? assignedStampBitmap;
 
-    public ScribeFrozenEditorRow(ScribeEditRowData data, ScribeRowStyle style)
+    public ScribeFrozenEditorRow(ScribeEditRowData data, ScribeRowStyle style, SKBitmap? assignedStampBitmap = null)
     {
         this.data = data;
         this.style = style;
+        this.assignedStampBitmap = assignedStampBitmap;
     }
 
     public override Widget Build(BuildContext context)
@@ -94,11 +98,6 @@ internal sealed class ScribeFrozenEditorRow : StatelessWidget
                     opacity: 0f,
                     child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant))),
         };
-        // Leading-icon assignment marker (add-assignment-and-quest-support 9.3) — only takes up space when
-        // the collapsing row actually was an accepted assignment.
-        if (data.IsAcceptedAssignment)
-            children.Add(ScribeAssignedTaskIcon.Build(style, colors.OnSurfaceVariant, data.IsItemKind));
-
         if (data.Completable)
         {
             // A frozen (disabled) checkbox reflecting the row's last done-state — no onChanged, so it can't
@@ -108,6 +107,11 @@ internal sealed class ScribeFrozenEditorRow : StatelessWidget
                 EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style, data.IsItemKind)),
                 child: ScribeRowControlNudge.BuildTaskCheckbox(context, style, data.Done, onChanged: null)));
         }
+
+        // Assignment marker, inside the checkbox (to its right) — only takes up space when the collapsing
+        // row actually was an accepted assignment.
+        if (data.IsAcceptedAssignment)
+            children.Add(ScribeAssignedTaskIcon.Build(style, colors.OnSurfaceVariant, data.IsItemKind, assignedStampBitmap));
 
         // Display-only field renderer (same as Read) so a collapsing Task/Note keeps Edit wrap + line-box.
         // Item kinds stay a padded label — they have no multiline field.
@@ -182,7 +186,8 @@ internal sealed class ScribeEditorContent : StatefulWidget
         string hintLangKey = "scribe:scribe-gui-edit-hint",
         bool addTaskEnabled = true,
         bool showSwitchToRead = true,
-        System.Action<Guid>? onOpenLink = null)
+        System.Action<Guid>? onOpenLink = null,
+        SKBitmap? assignedStampBitmap = null)
     {
         Blocks = blocks;
         FocusNodes = focusNodes;
@@ -219,6 +224,7 @@ internal sealed class ScribeEditorContent : StatefulWidget
         AddTaskEnabled = addTaskEnabled;
         ShowSwitchToRead = showSwitchToRead;
         OnOpenLink = onOpenLink;
+        AssignedStampBitmap = assignedStampBitmap;
     }
 
     public IReadOnlyList<ScribeEditRowData> Blocks { get; }
@@ -328,6 +334,10 @@ internal sealed class ScribeEditorContent : StatefulWidget
     /// link activation (the tablet, which has no read view — see <see cref="ScribeDialogBase.EditorRowsOpenLinks"/>).
     /// Null on every other surface, so their editor names stay plain editable regions and render byte-identical.</summary>
     public System.Action<Guid>? OnOpenLink { get; }
+    /// <summary>The full-color assigned-task stamp raster (see <see cref="ScribeAssignedTaskIcon"/>),
+    /// resolved once by the dialog and passed down so this row widget stays API-free. Null falls back to
+    /// the plain SVG glyph.</summary>
+    public SKBitmap? AssignedStampBitmap { get; }
 
     public override State CreateState() => new ScribeEditorContentState();
 }
@@ -476,6 +486,8 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                     // Non-null only on the tablet: its item-row names open the Handbook (enable-tablet-row-links).
                     onOpenLink: Widget.OnOpenLink,
                     style: Widget.Style,
+                    assignedStampBitmap: Widget.AssignedStampBitmap,
+                    currentShade: Widget.CurrentShade,
                     // Stable per-row identity (reconcile-animating-surfaces §3.2): keyed by the block's
                     // TaskId, NOT its list index. Under the in-place reconcile a RebuildBody() drives
                     // (RebuildBody → BodyState.Build → this Build re-runs → MultiChildElement.Update walks
@@ -488,7 +500,7 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                     // rows below in place; a delete/insert ABOVE the focused row still shifts + remounts it
                     // (the accepted positional caveat — text survives via the scratch write-through).
                     key: new ValueKey<Guid>(b.TaskId)),
-                Ghost: new ScribeFrozenEditorRow(b, Widget.Style)))
+                Ghost: new ScribeFrozenEditorRow(b, Widget.Style, Widget.AssignedStampBitmap)))
             .ToList();
 
         // Wrapped in a Scrollbar so a tall editor list shows a draggable track (task 8.15). AutoHide off
@@ -759,6 +771,8 @@ internal sealed class ScribeEditRow : StatefulWidget
         Action<int> onGripTap,
         ScribeRowStyle style,
         System.Action<Guid>? onOpenLink = null,
+        SKBitmap? assignedStampBitmap = null,
+        ScribeAmbientLightSampler.Shade currentShade = default,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
@@ -789,6 +803,8 @@ internal sealed class ScribeEditRow : StatefulWidget
         OnGripTap = onGripTap;
         OnOpenLink = onOpenLink;
         Style = style;
+        AssignedStampBitmap = assignedStampBitmap;
+        CurrentShade = currentShade;
     }
 
     public ScribeEditRowData Data { get; }
@@ -841,6 +857,12 @@ internal sealed class ScribeEditRow : StatefulWidget
     /// (non-clickable) region and non-tablet editor rows render exactly as before.</summary>
     public System.Action<Guid>? OnOpenLink { get; }
     public ScribeRowStyle Style { get; }
+    /// <summary>The full-color assigned-task stamp raster, threaded down from the content widget (see
+    /// <see cref="ScribeEditorContent.AssignedStampBitmap"/>). Null falls back to the plain SVG glyph.</summary>
+    public SKBitmap? AssignedStampBitmap { get; }
+    /// <summary>The live ambient-illumination shade, threaded down so the assignment marker's hover
+    /// tooltip can match the body's shading (see <see cref="ScribeEditorContent.CurrentShade"/>).</summary>
+    public ScribeAmbientLightSampler.Shade CurrentShade { get; }
 
     public override State CreateState() => new ScribeEditRowState();
 }
@@ -1055,11 +1077,6 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                 onTap: _ => Widget.OnGripTap(index),
                 child: gripGlyph)));
 
-        // Leading-icon assignment marker (add-assignment-and-quest-support 9.3) — only takes up space when
-        // this row actually is an accepted assignment.
-        if (Widget.Data.IsAcceptedAssignment)
-            children.Add(ScribeAssignedTaskIcon.Build(style, colors.OnSurfaceVariant, Widget.Data.IsItemKind));
-
         // Source-row "lifted / in-hand" dim (replace-drag-wash-with-grip-arrows): while THIS row is the one
         // being dragged, its CONTENT (checkbox + text) paints at ~half opacity so the row reads as picked up.
         // The dim is applied per-child, NOT to the whole row — the grip column stays full opacity so the ◀
@@ -1081,6 +1098,13 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
                         Widget.OnToggleTask(index);
                     }))));
         }
+
+        // Assignment marker, inside the checkbox (to its right) — only takes up space when this row
+        // actually is an accepted assignment.
+        if (Widget.Data.IsAcceptedAssignment)
+            children.Add(ScribeAssignedTaskIcon.Build(style, colors.OnSurfaceVariant, Widget.Data.IsItemKind, Widget.AssignedStampBitmap,
+                context: context, currentShade: Widget.CurrentShade,
+                assignerName: Widget.Data.AssignerName, assignedDate: Widget.Data.AssignedDate, acceptedDate: Widget.Data.AcceptedDate));
 
         // A Tracker/Link row has no editable text field — its content is the referenced item's icon + name,
         // and a Tracker additionally carries an inline +/- stepper for its target quantity

@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 
 namespace Scribe.Core;
@@ -50,18 +51,36 @@ public sealed class ScribeAssignmentStore
     // ---------------- Create ----------------
 
     /// <summary>
-    /// Creates a new Task-kind assignment record, server-authoritative aside from the client-minted
+    /// Creates a new assignment record, server-authoritative aside from the client-minted
     /// <paramref name="assignmentId"/> (which must be fresh — a collision is rejected rather than
-    /// overwriting an existing record). Rejects blank text/uids and enforces <see cref="MaxAssignments"/>.
+    /// overwriting an existing record). Rejects blank uids and enforces <see cref="MaxAssignments"/>.
     /// Text is clipped to <see cref="ScribeDocumentCodec.MaxTaskTextLength"/>, matching every other
     /// Task-kind text path. Returns the created record via <paramref name="record"/> on success.
+    ///
+    /// <para><b>Trailing optional parameters (assignment-multi-item-creation, design.md D12):</b> the
+    /// original Task-only shape is <paramref name="kind"/>'s default, so the single-item quick-send path
+    /// (<c>OnServerReceivedSendAssignment</c>) keeps calling this with only the first six arguments,
+    /// behavior-identical to before. The batch-send path (<c>OnServerReceivedSendAssignmentBatch</c>)
+    /// supplies the rest to carry a Tracker/Link/Craft row's full shape. <paramref name="taskText"/> is
+    /// required non-blank ONLY for a Task/Text-kind row — a Tracker/Link/Craft row's label lives on
+    /// <paramref name="targetItemCode"/>/<paramref name="linkTarget"/> instead, exactly like any other
+    /// <see cref="ScribeBlock"/> of that kind (its own <c>Text</c> is blank by convention).</para>
+    ///
+    /// <para><paramref name="batchId"/> (refine-assignment-desk-inbox-ux 12.2 root-cause fix): the
+    /// caller mints ONE fresh <see cref="Guid"/> per send call and passes it for every row that call
+    /// creates, so the client can group/newest-first-sort a batch by an unambiguous id instead of the
+    /// coarse, collidable <paramref name="assignedDate"/> string. See <see cref="ScribeAssignment.BatchId"/>.</para>
     /// </summary>
     public bool TryCreate(Guid assignmentId, string assignerUid, string targetPlayerUid, string taskText,
-        string assignedDate, out ScribeBlock? record)
+        string assignedDate, out ScribeBlock? record,
+        ScribeBlockKind kind = ScribeBlockKind.Task, string? targetItemCode = null, int targetQuantity = 1,
+        string? linkTarget = null, string? linkLabel = null, string? linkDescription = null,
+        string? recipeSignature = null, int depth = 0, Guid batchId = default)
     {
         record = null;
         if (string.IsNullOrWhiteSpace(assignerUid) || string.IsNullOrWhiteSpace(targetPlayerUid)) return false;
-        if (string.IsNullOrWhiteSpace(taskText)) return false;
+        bool isItemKind = kind is ScribeBlockKind.Tracker or ScribeBlockKind.Link or ScribeBlockKind.Craft;
+        if (!isItemKind && string.IsNullOrWhiteSpace(taskText)) return false;
         if (_records.ContainsKey(assignmentId)) return false; // ids are client-minted; must be fresh
         if (_records.Count >= MaxAssignments) return false;
 
@@ -69,8 +88,10 @@ public sealed class ScribeAssignmentStore
             ? taskText[..ScribeDocumentCodec.MaxTaskTextLength]
             : taskText;
         var assignment = new ScribeAssignment(assignerUid, assignedDate,
-            ScribeAssignmentState.Unaccepted, seen: false, targetPlayerUid);
-        var block = new ScribeBlock(ScribeBlockKind.Task, text, taskId: assignmentId, assignment: assignment);
+            ScribeAssignmentState.Unaccepted, seen: false, targetPlayerUid, batchId);
+        var block = new ScribeBlock(kind, text, depth: depth, taskId: assignmentId, assignment: assignment,
+            targetItemCode: targetItemCode, targetQuantity: targetQuantity, linkTarget: linkTarget,
+            linkLabel: linkLabel, recipeSignature: recipeSignature, linkDescription: linkDescription);
         _records[assignmentId] = block;
         record = block;
         return true;
@@ -128,7 +149,21 @@ public sealed class ScribeAssignmentStore
 
     private static readonly byte[] ListMagic = "SASN"u8.ToArray();
     private static readonly byte[] StoreMagic = "SAST"u8.ToArray();
-    private const byte Version = 1;
+    // v2 adds RecipeSignature (assignment-multi-item-creation D12 — a Craft row's recipe binding).
+    // v3 adds BatchId (refine-assignment-desk-inbox-ux 12.2 root-cause fix — see ScribeAssignment.BatchId).
+    // v4 adds AcceptedDate/DeclinedDate/CancelledDate/DiscardedDate/CompletedDate (refine-assignment-
+    // desk-inbox-ux triage 2026-08-31 — per-transition history stubs, see ScribeAssignment's remarks).
+    // Progressive append-only reads (matching ScribeDocumentCodec's convention): any version in
+    // [MinVersion, Version] is accepted; a v1 blob simply predates Craft-kind assignments (which didn't
+    // exist yet), so every one of its records is genuinely RecipeSignature-less — defaulting it to ""
+    // on read is exactly correct, not a lossy guess. A pre-v3 blob predates BatchId entirely; its records
+    // are synthesized a deterministic per-(assigner,target,date) id on read (DeriveLegacyBatchId) so
+    // pre-existing multi-item batches keep grouping the same way they always displayed, without a real
+    // minted id ever having existed for them. A pre-v4 blob predates every transition timestamp — those
+    // genuinely never happened as far as the record can say, so defaulting all five to null on read is
+    // exactly correct, not a lossy guess.
+    private const byte Version = 4;
+    private const byte MinVersion = 1;
 
     /// <summary>Serializes a single player's view (<see cref="Sent"/> or <see cref="Received"/>) for the
     /// server→client push.</summary>
@@ -153,8 +188,9 @@ public sealed class ScribeAssignmentStore
         {
             using var ms = new MemoryStream(bytes, writable: false);
             using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: true);
-            if (ReadHeader(r, ListMagic) != Version) return false;
-            if (!TryReadRecordList(r, bytes.Length, out var list)) return false;
+            int version = ReadHeader(r, ListMagic);
+            if (version < MinVersion || version > Version) return false;
+            if (!TryReadRecordList(r, bytes.Length, version, out var list)) return false;
             records = list;
             return true;
         }
@@ -188,8 +224,9 @@ public sealed class ScribeAssignmentStore
         {
             using var ms = new MemoryStream(bytes, writable: false);
             using var r = new BinaryReader(ms, Encoding.UTF8, leaveOpen: true);
-            if (ReadHeader(r, StoreMagic) != Version) return;
-            if (!TryReadRecordList(r, bytes.Length, out var list)) return;
+            int version = ReadHeader(r, StoreMagic);
+            if (version < MinVersion || version > Version) return;
+            if (!TryReadRecordList(r, bytes.Length, version, out var list)) return;
             foreach (var block in list) _records[block.TaskId] = block;
         }
         catch (Exception ex) when (ex is EndOfStreamException or IOException or FormatException)
@@ -228,6 +265,7 @@ public sealed class ScribeAssignmentStore
             w.Write(hasLinkDescription);
             if (hasLinkDescription) w.Write(block.LinkDescription!);
             w.Write(block.Depth);
+            w.Write(block.RecipeSignature); // v2+ (never null — ScribeBlock defaults it to "")
 
             // Every store record carries an Assignment by construction; a defensive empty default guards
             // against a hand-built ScribeBlock without one rather than throwing.
@@ -237,10 +275,16 @@ public sealed class ScribeAssignmentStore
             w.Write((byte)assignment.State);
             w.Write(assignment.AssignedDate);
             w.Write(assignment.Seen);
+            w.Write(assignment.BatchId.ToByteArray()); // v3+
+            WriteOptionalString(w, assignment.AcceptedDate);   // v4+
+            WriteOptionalString(w, assignment.DeclinedDate);   // v4+
+            WriteOptionalString(w, assignment.CancelledDate);  // v4+
+            WriteOptionalString(w, assignment.DiscardedDate);  // v4+
+            WriteOptionalString(w, assignment.CompletedDate);  // v4+
         }
     }
 
-    private static bool TryReadRecordList(BinaryReader r, int totalBytes, out List<ScribeBlock> records)
+    private static bool TryReadRecordList(BinaryReader r, int totalBytes, int version, out List<ScribeBlock> records)
     {
         records = new List<ScribeBlock>();
         int count = r.ReadInt32();
@@ -261,21 +305,62 @@ public sealed class ScribeAssignmentStore
             string? linkLabel = r.ReadBoolean() ? r.ReadString() : null;
             string? linkDescription = r.ReadBoolean() ? r.ReadString() : null;
             int depth = r.ReadInt32();
+            // v1 predates Craft-kind assignments, so a v1 record genuinely has no recipe binding to lose.
+            string recipeSignature = version >= 2 ? r.ReadString() : "";
 
             string assignerUid = r.ReadString();
             string targetPlayerUid = r.ReadString();
             var state = (ScribeAssignmentState)r.ReadByte();
             string assignedDate = r.ReadString();
             bool seen = r.ReadBoolean();
-            var assignment = new ScribeAssignment(assignerUid, assignedDate, state, seen, targetPlayerUid);
+            // v1/v2 predate BatchId entirely — synthesize a stable one so a pre-existing multi-item batch
+            // still groups together after upgrading (see the Version-constant remarks above).
+            Guid batchId = version >= 3
+                ? new Guid(ReadExactly(r, 16))
+                : DeriveLegacyBatchId(assignerUid, targetPlayerUid, assignedDate);
+            var assignment = new ScribeAssignment(assignerUid, assignedDate, state, seen, targetPlayerUid, batchId)
+            {
+                AcceptedDate = ReadOptionalString(r, version),
+                DeclinedDate = ReadOptionalString(r, version),
+                CancelledDate = ReadOptionalString(r, version),
+                DiscardedDate = ReadOptionalString(r, version),
+                CompletedDate = ReadOptionalString(r, version),
+            };
 
             list.Add(new ScribeBlock(kind, text, depth: depth, taskId: taskId,
                 targetItemCode: targetItemCode, targetQuantity: targetQuantity, currentQuantity: currentQuantity,
-                linkTarget: linkTarget, linkLabel: linkLabel, assignment: assignment, linkDescription: linkDescription));
+                linkTarget: linkTarget, linkLabel: linkLabel, recipeSignature: recipeSignature,
+                assignment: assignment, linkDescription: linkDescription));
         }
         records = list;
         return true;
     }
+
+    /// <summary>Synthesizes a stable <see cref="ScribeAssignment.BatchId"/> for a pre-v3 record that never
+    /// had a real one, from the same three fields the old (buggy) grouping used — so a pre-existing
+    /// multi-item batch keeps grouping together after upgrading rather than exploding into one "batch"
+    /// per row. Not security-sensitive (a display-grouping key only), so SHA-256 truncated to 16 bytes is
+    /// just a convenient stable hash, not a cryptographic use.</summary>
+    private static Guid DeriveLegacyBatchId(string assignerUid, string targetPlayerUid, string assignedDate)
+    {
+        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes($"{assignerUid} {targetPlayerUid} {assignedDate}"));
+        return new Guid(hash.AsSpan(0, 16));
+    }
+
+    /// <summary>Writes a nullable string as a has-value flag plus the string when present — the same
+    /// pattern already used inline for TargetItemCode/LinkTarget/LinkLabel/LinkDescription, extracted here
+    /// because v4 repeats it five times for the new per-transition timestamp fields.</summary>
+    private static void WriteOptionalString(BinaryWriter w, string? value)
+    {
+        bool hasValue = value is not null;
+        w.Write(hasValue);
+        if (hasValue) w.Write(value!);
+    }
+
+    /// <summary>Reads a v4+ <see cref="WriteOptionalString"/> value, or null when this blob predates v4
+    /// (no bytes were ever written for it).</summary>
+    private static string? ReadOptionalString(BinaryReader r, int version) =>
+        version >= 4 ? (r.ReadBoolean() ? r.ReadString() : null) : null;
 
     private static byte[] ReadExactly(BinaryReader r, int count)
     {

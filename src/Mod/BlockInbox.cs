@@ -14,4 +14,7 @@ public sealed class BlockInbox : BlockScribeWritingStation
     protected override string OpenHintLangCode => "scribe:blockhelp-scribeinbox-open";
 
     protected override string EditHintLangCode => "scribe:blockhelp-scribeinbox-edit";
+
+    /// <summary>The Inbox has no renamable document — see the base's doc comment (triage 2026-08-31).</summary>
+    protected override bool ShowsDocumentTitleInTooltip => false;
 }

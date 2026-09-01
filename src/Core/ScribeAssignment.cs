@@ -43,18 +43,51 @@ public sealed class ScribeAssignment
     public string AssignedDate { get; set; }
     public bool Seen { get; set; }
 
+    /// <summary>In-game date this assignment reached the given transition, or null if it never has
+    /// (refine-assignment-desk-inbox-ux triage 2026-08-31: "we should also see stubs for when it was
+    /// accepted, discarded, etc."). <see cref="AcceptedDate"/> can coexist with any terminal date (an
+    /// assignment passes through Accepted before Completed/Discarded); the other four are mutually
+    /// exclusive since a state transition is one-way and terminal. Stamped by the Mod layer (which has
+    /// calendar access this game-agnostic type does not) immediately after a transition actually
+    /// happens — see <c>ScribeModSystem</c>'s assignment-action handlers.</summary>
+    public string? AcceptedDate { get; set; }
+    public string? DeclinedDate { get; set; }
+    public string? CancelledDate { get; set; }
+    public string? DiscardedDate { get; set; }
+    public string? CompletedDate { get; set; }
+
+    /// <summary>Identifies which single send call created this record, alongside any sibling rows sent
+    /// in the same batch (refine-assignment-desk-inbox-ux 12.2 root-cause fix). <see cref="AssignedDate"/>
+    /// is a coarse, human-readable in-game-day string that two SEPARATE batches sent on the same day can
+    /// share — grouping the Inbox/Sent-history lists by it (the original approach) could silently merge
+    /// two unrelated batches into one run. This is a fresh <see cref="Guid"/> minted once per send call
+    /// (<c>ScribeModSystem.OnServerReceivedSendAssignmentBatch</c>) and stamped on every row it creates,
+    /// giving the client an unambiguous batch boundary to group and newest-first-sort by, independent of
+    /// the display date string. Defaults to <see cref="Guid.Empty"/> for callers that don't care (e.g.
+    /// most Core unit tests) — every record from one such caller lands in a single default-Id "batch",
+    /// which is harmless since nothing in Core itself groups by it.</summary>
+    public Guid BatchId { get; set; }
+
     public ScribeAssignment(string assignerUid, string assignedDate,
         ScribeAssignmentState state = ScribeAssignmentState.Unaccepted, bool seen = false,
-        string? targetPlayerUid = null)
+        string? targetPlayerUid = null, Guid batchId = default)
     {
         AssignerUid = assignerUid ?? "";
         TargetPlayerUid = targetPlayerUid ?? "";
         AssignedDate = assignedDate ?? "";
         State = state;
         Seen = seen;
+        BatchId = batchId;
     }
 
-    public ScribeAssignment Clone() => new(AssignerUid, AssignedDate, State, Seen, TargetPlayerUid);
+    public ScribeAssignment Clone() => new(AssignerUid, AssignedDate, State, Seen, TargetPlayerUid, BatchId)
+    {
+        AcceptedDate = AcceptedDate,
+        DeclinedDate = DeclinedDate,
+        CancelledDate = CancelledDate,
+        DiscardedDate = DiscardedDate,
+        CompletedDate = CompletedDate,
+    };
 
     /// <summary>Marks an incoming assignment as seen without changing its lifecycle state.</summary>
     public void MarkSeen() => Seen = true;
