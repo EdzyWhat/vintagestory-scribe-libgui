@@ -344,9 +344,11 @@ public sealed partial class ScribeModSystem : ModSystem
 
     public override void StartClientSide(ICoreClientAPI api)
     {
-        // Install native HarfBuzz isolation before any client-side text shaping or
-        // dependent LibGUI mod startup can reach the default loader.
-        InitializeHarfBuzzNativeLoader(api);
+        // HarfBuzz native-load isolation (Linux) now lives in the standalone ScribeHarfBuzzLoadFix
+        // ModSystem — see that file for why it must NOT be a ScribeModSystem partial: a low
+        // ExecuteOrder here would preempt `gui`'s own StartClientSide (which extracts/registers its
+        // bundled native libraries), breaking font shaping on EVERY platform, not just Linux. That
+        // regression is exactly what happened when this used to be inlined here at ExecuteOrder -1000.
         base.StartClientSide(api);
         capi = api;
 

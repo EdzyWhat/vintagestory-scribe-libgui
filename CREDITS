@@ -73,3 +73,13 @@ Gearlock Firearms (by JeanPierre) — derived gear assets
   modification; Scribe copies and modifies them and does not reference Gearlock at
   runtime. The large escape/great wheel is Scribe's own procedural generation, not a
   Gearlock asset. Thanks again to JeanPierre.
+
+HarfBuzzFix (by Seralth) — independent Linux HarfBuzz crash fix
+  Seralth independently diagnosed the same Linux/glibc HarfBuzz symbol-collision crash
+  Scribe's own fix addresses, and shipped a standalone mod
+  (https://mods.vintagestory.at/show/mod/66713, https://github.com/Seralth/harfbuzzfix)
+  that isolates LibGUI's bundled native library via a Harmony patch on its loader. Scribe's
+  own fix (src/Mod/ScribeHarfBuzzLoadFix.cs) independently reimplements that same technique
+  from first-hand analysis of the shipped LibGUI DLL — his repository carries no license, so
+  no source was copied — but the approach is his to credit. Thanks to Seralth for the
+  corroborating diagnosis and a working, validated technique.
