@@ -6,13 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.0-rc.1] - 2026-09-01
+
+Early release candidate — includes the new Assignment Desk/Inbox and Quest Links features below
+alongside the Linux HarfBuzz durability fix, ahead of the next real release.
+
 ### Added
 - **Assignment Desk and Inbox.** A new Assignment Desk block lets you write a task and send it
   directly to another player; a new standalone Inbox block (plus an Inbox tab reachable from the
   Lectern, Scriptorium, and Chalkboard) is where you receive one. Accept, Decline, or Cancel before
   it's accepted; once accepted it's yours to check off (which completes the assignment
   automatically) or Discard. An unseen assignment glows softly on the nearby block until you open
-  its Inbox.
+  its Inbox. **Not yet obtainable via survival crafting in this build** — the grid recipes are
+  pending final art/balancing; use creative mode or `/giveblock` to place one for testing.
 - **Quest Links**, for players who also have an optional supported quest mod installed (currently
   VS Quest): add a Quest Link from the footer's New Task menu to keep one of that mod's quests
   listed next to your other goals. Scribe also notices when you accept or complete a quest near its
@@ -20,6 +26,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Settings (Always/Never/Prompt, default Prompt) choose what happens next — automatically link/mark
   it done, do nothing, or ask via a small HUD banner. While a quest's own window is open, its Quest
   Link row shows live kill/place/break progress underneath it.
+
+### Fixed
+- **Linux/glibc HarfBuzz crash, hardened further.** The font-shaping crash affecting some Linux
+  desktops (bundled HarfBuzzSharp colliding with a system `libharfbuzz` already resident in the
+  process) is now isolated via a Harmony patch on `gui`'s own native-library registration, replacing
+  the previous startup-order-dependent `dlopen` race. This mechanism doesn't depend on mod load
+  order, matches an independently-shipped community fix (Seralth's `harfbuzzfix`) validated against
+  the same root cause, and fails closed (falls back to today's behavior) if it can't apply. **This
+  release candidate is specifically to gather confirmation from Linux users** that the fix holds
+  across different desktop/toolkit environments (KDE, GTK, Qt) — reports welcome via Mod DB
+  comments, Discord, or GitHub.
 
 ## [1.3.3] - 2026-08-30
 
