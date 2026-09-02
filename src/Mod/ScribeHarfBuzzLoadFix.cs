@@ -195,12 +195,27 @@ public sealed class ScribeHarfBuzzLoadFix : ModSystem
         string? assemblyDir = Path.GetDirectoryName(assembly.Location);
         if (string.IsNullOrEmpty(assemblyDir)) return null;
 
-        string rid = RuntimeInformation.RuntimeIdentifier;
+        string rid = GetLinuxRid();
         string nativeDir = Path.Combine(assemblyDir, "native", rid, "native");
         return Directory.Exists(nativeDir) && File.Exists(Path.Combine(nativeDir, "libHarfBuzzSharp.so"))
             ? nativeDir
             : null;
     }
+
+    /// <summary>Deliberately NOT <see cref="RuntimeInformation.RuntimeIdentifier"/> — decompiling the
+    /// shipped <c>Gui.dll</c> shows <c>Gui.NativeLibraryLoader.GetRid()</c> (which resolves this exact
+    /// same <c>native/&lt;rid&gt;/native/</c> layout for the same assembly, in the normal, unpatched
+    /// case) manually maps <see cref="RuntimeInformation.ProcessArchitecture"/> instead; Seralth's
+    /// independently-shipped <c>harfbuzzfix</c> does the same. <c>RuntimeIdentifier</c> can return a
+    /// longer, distro-qualified RID that doesn't match the flat folder name the native asset actually
+    /// ships under — this mirrors the known-correct mapping rather than that fragile API.</summary>
+    private static string GetLinuxRid() => RuntimeInformation.ProcessArchitecture switch
+    {
+        Architecture.Arm => "linux-arm",
+        Architecture.Arm64 => "linux-arm64",
+        Architecture.X86 => "linux-x86",
+        _ => "linux-x64",
+    };
 
     [DllImport("libdl.so.2", CharSet = CharSet.Ansi, SetLastError = true)]
     private static extern IntPtr dlopen(string filename, int flags);
