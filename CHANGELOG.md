@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.0-rc.2] - 2026-09-02
+
+### Fixed
+- **Linux HarfBuzz fix from `1.4.0-rc.1`, corrected further.** That release candidate's
+  font-shaping crash fix (a Harmony patch isolating Scribe's bundled HarfBuzz copy from a system
+  one already resident in the process) regressed for a Linux tester after initially working in an
+  earlier build. Root-caused by decompiling `gui`'s own native-library loader and comparing it
+  against ours: our fix located its bundled library's folder using .NET's
+  `RuntimeInformation.RuntimeIdentifier`, which can return a longer, distro-qualified string that
+  doesn't match the flat folder name (`linux-x64`, `linux-arm64`, etc.) the native asset actually
+  ships under on some systems. When that lookup fails, the isolation silently falls back to `gui`'s
+  original, unisolated loader — reintroducing the exact crash the fix exists to prevent. Corrected
+  to resolve that folder name the same way `gui`'s own loader does (a manual mapping off CPU
+  architecture, not the fragile distro-qualified API), matching the approach an independently-shipped
+  community fix (Seralth's `harfbuzzfix`) already takes for the same reason. Re-tested on a VM
+  matching the affected tester's desktop/distro: 3 clean runs in a row, versus the prior code
+  crashing in 3 of 4 runs under the same conditions.
+
 ## [1.4.0-rc.1] - 2026-09-01
 
 Early release candidate — includes the new Assignment Desk/Inbox and Quest Links features below
