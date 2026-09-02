@@ -1456,7 +1456,6 @@ internal sealed class HudPinsContent : StatelessWidget
     /// in its own GestureDetector so tapping it opens settings without also toggling the collapse.</summary>
     private Widget BuildHeader(ColorScheme colors, Vector4 glow)
     {
-        string chevron = collapsed ? "▸" : "▾"; // ▸ / ▾
         var titleStyle = new TextStyle
         {
             FontSize = rowFontSize,
@@ -1464,6 +1463,26 @@ internal sealed class HudPinsContent : StatelessWidget
             GlowWidth = GlowWidth,
             GlowColor = glow,
         };
+
+        // The chevron is Scribe's own scribetriangleright/scribetriangledown SVG icon (the same slim
+        // triangle the Inbox row's expand/collapse toggle uses), not a raw Unicode character — a
+        // deliberate switch away from text glyphs (playtest 2026-09-02: no bundled OR system font on
+        // Linux reliably carries a ▸/▾ glyph, unlike the dropdown chevron's ▼/▲, which a font can at
+        // least be patched to cover). A texture-based icon has no font/glyph-coverage dependency at
+        // all, so it can't tofu on any platform. VsIcon has no text-style glow, so match the halo with
+        // a Container BoxShadow instead, mirroring ScribeHudGearButton's identical tradeoff.
+        Widget chevronIcon = new Container(
+            new BoxStyle
+            {
+                BoxShadows = new[]
+                {
+                    new BoxShadow(Color: new Vector4(0f, 0f, 0f, 0.3f), Offset: new Vector2(0f, 0f), BlurRadius: 2.25f),
+                },
+            },
+            new ScribeVsIconGlyph(
+                collapsed ? "scribetriangleright" : "scribetriangledown",
+                rowFontSize * 0.6f, // scaled down ~40% (feedback 2026-09-02): full em read as too large next to the title
+                titleStyle.Color));
 
         // Chevron + title toggle collapse; the trailing gear opens settings. Separate GestureDetectors
         // so the two targets don't overlap (a gear tap must not also flip the collapse state).
@@ -1475,10 +1494,7 @@ internal sealed class HudPinsContent : StatelessWidget
                 crossAxisAlignment: CrossAxisAlignment.Center,
                 children: new Widget[]
                 {
-                    // The chevron is a glyph affordance, not prose — leave it uncorrupted. The title text
-                    // swaps to the storm call-to-action while a storm is active, then is corrupted like the
-                    // rest of the HUD (hud-temporal-storm-corruption 3.3).
-                    new Text(chevron, titleStyle),
+                    chevronIcon,
                     new Text(
                         Corrupt(Lang.Get(stormActive ? "scribe:scribe-hud-title-storm" : "scribe:scribe-hud-title")),
                         titleStyle),
@@ -1488,13 +1504,16 @@ internal sealed class HudPinsContent : StatelessWidget
         if (showSettingsGear)
         {
             // Gear sized to sit proportionally with the chevron/title beside it (scribe-settings-followups 4.2):
-            // 12px reads right against the 14px title, where the prior 16px looked oversized. Its base color is now
+            // 0.75em reads right against the title, where the prior 16px looked oversized. Its base color is now
             // pure opaque white to match the header title (feedback 2026-08-16, previously a 66%-desaturated muted
-            // grey off OnSurfaceVariant); ScribeHudGearButton owns the up-3/left-5 nudge + tap (the +10 V hover
-            // brighten is a no-op at full white, which is fine — white is the intended resting look). It is
-            // self-stateful so its state survives the HUD's ForceRebuild (mirroring ScribeFadeText).
+            // grey off OnSurfaceVariant); ScribeHudGearButton owns the nudge + tap (the +10 V hover brighten is a
+            // no-op at full white, which is fine — white is the intended resting look). Sized and nudged in em
+            // units off rowFontSize so it scales with the "HUD text size" setting instead of staying a fixed
+            // pixel size while everything around it grows/shrinks (playtest 2026-09-02). It is self-stateful so
+            // its state survives the HUD's ForceRebuild (mirroring ScribeFadeText).
             headerChildren.Add(new ScribeHudGearButton(
                 baseColor: new Vector4(1f, 1f, 1f, 1f),
+                fontSize: rowFontSize,
                 onTap: onOpenSettings));
         }
 
@@ -1836,8 +1855,6 @@ internal sealed class HudPinsContent : StatelessWidget
             GlowWidth = GlowWidth,
             GlowColor = glow,
         };
-        var muted = textStyle with { Color = new Vector4(0.70f, 0.70f, 0.70f, 1f) };
-
         // Countdown or blinking 00:00 — corrupted like the rest of the HUD (hud-temporal-storm-corruption
         // 3.4). Distinct per-string seed offsets so the label and countdown don't share a mark pattern.
         string timeText = Corrupt(
@@ -1853,7 +1870,9 @@ internal sealed class HudPinsContent : StatelessWidget
             ? new ScribeTimerIcon(rowFontSize * 1.1f, new Vector4(0.93f, 0.93f, 0.93f, 1f), capi)
             : new ScribeVsIconGlyph("scribetimer", rowFontSize * 1.1f, new Vector4(0.93f, 0.93f, 0.93f, 1f));
 
-        // Label (if any) muted next to the icon — corrupted with its own seed offset.
+        // Label (if any) next to the icon, full-strength like the rest of the row (not muted like a
+        // completed/sunk row — a live timer's label is primary information, not secondary) — corrupted
+        // with its own seed offset.
         string label = Corrupt(
             timer.Label.Length > 0 ? timer.Label : Lang.Get("scribe:scribe-hud-timer-label"),
             seedOffset: 303);
@@ -1865,7 +1884,7 @@ internal sealed class HudPinsContent : StatelessWidget
             children: new Widget[]
             {
                 iconWidget,
-                new Expanded(child: new Text(label, muted)),
+                new Expanded(child: new Text(label, textStyle)),
                 timeWidget,
             });
 
@@ -1999,18 +2018,21 @@ internal sealed class ScribeFadeTextState : State<ScribeFadeText>
 /// <summary>The HUD header's settings gear: a self-stateful icon button that brightens +10 HSV Value on
 /// hover and opens the settings surface on tap. Stateful (not a bare GestureDetector) so the hover state
 /// survives the HUD's <see cref="GuiBase.ForceRebuild"/> — the same reason <see cref="ScribeFadeText"/> is.
-/// The up-3/left-5 nudge lives here: left comes off the leading pad, and the −3 y is a
-/// <c>Transform.Translate</c> wrapping the GestureDetector so the CLICKABLE region moves with the paint
-/// (<c>RenderTransform.GlobalToChild</c>), not just the drawn glyph.</summary>
+/// The nudge lives here, in em units off <see cref="FontSize"/>: left comes off the leading pad, and the
+/// y-offset is a <c>Transform.Translate</c> wrapping the GestureDetector so the CLICKABLE region moves
+/// with the paint (<c>RenderTransform.GlobalToChild</c>), not just the drawn glyph.</summary>
 internal sealed class ScribeHudGearButton : StatefulWidget
 {
-    public ScribeHudGearButton(Vector4 baseColor, Action onTap, Gui.Widgets.Framework.Key? key = null) : base(key)
+    public ScribeHudGearButton(Vector4 baseColor, float fontSize, Action onTap, Gui.Widgets.Framework.Key? key = null)
+        : base(key)
     {
         BaseColor = baseColor;
+        FontSize = fontSize;
         OnTap = onTap;
     }
 
     public Vector4 BaseColor { get; }
+    public float FontSize { get; }
     public Action OnTap { get; }
 
     public override State CreateState() => new ScribeHudGearButtonState();
@@ -2028,10 +2050,18 @@ internal sealed class ScribeHudGearButtonState : State<ScribeHudGearButton>
             ? ScribeRowConstants.ShiftBrightness(Widget.BaseColor, +10f)
             : Widget.BaseColor;
 
+        float em = Widget.FontSize;
+        float iconSize = 0.75f * em;    // 12px at the tuned 16px baseline (scribe-settings-followups 4.2)
+        float leftPad = 0.0625f * em;   // 1px at baseline
+        float offsetX = -0.0625f * em;  // 1px at baseline
+        // -1px at baseline (feedback 2026-08-16) plus a down nudge (playtest 2026-09-02), reduced to
+        // 1/3 of its original size after that nudge overshot (feedback 2026-09-02): 0.1875em / 3 = 0.0625em.
+        float offsetY = 0.0625f * em;
+
         // VsIcon has no text-style glow (it's a tinted texture, not Skia text), so match the HUD text's
         // dark halo with a Container BoxShadow instead — black, zero-offset, blurred — the same mechanism
-        // the lectern sidebar nav buttons use. It halos the icon's ~12px box rather than the glyph outline
-        // the way text glow hugs letterforms, but reads as the same legibility halo over a busy world.
+        // the lectern sidebar nav buttons use. It halos the icon's box rather than the glyph outline the
+        // way text glow hugs letterforms, but reads as the same legibility halo over a busy world.
         var haloed = new Container(
             new BoxStyle
             {
@@ -2045,7 +2075,7 @@ internal sealed class ScribeHudGearButtonState : State<ScribeHudGearButton>
                         BlurRadius: 2.25f),
                 },
             },
-            new VsIcon("scribegearhud", 12f, color));   // HUD-only gear-ring (dialogs keep the solid "scribegear")
+            new VsIcon("scribegearhud", iconSize, color));   // HUD-only gear-ring (dialogs keep the solid "scribegear")
 
         return Transform.Translate(
             new MouseRegion(
@@ -2054,10 +2084,8 @@ internal sealed class ScribeHudGearButtonState : State<ScribeHudGearButton>
                 child: new GestureDetector(
                     onTap: _ => Widget.OnTap(),
                     child: new Padding(
-                        EdgeInsets.Only(left: 1),
+                        EdgeInsets.Only(left: leftPad),
                         child: haloed))),
-            // Nudged down 2 / left 1 from the prior (0, -3) resting nudge (feedback 2026-08-16): -3 + 2 = -1 y,
-            // 0 - 1 = -1 x.
-            new Vector2(-1f, -1f));
+            new Vector2(offsetX, offsetY));
     }
 }

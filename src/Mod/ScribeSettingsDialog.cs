@@ -108,23 +108,27 @@ public sealed class ScribeSettingsDialog : GuiBase
 
     /// <summary>Runs LibGUI's own `.ui settings` client command (refine-assignment-desk-inbox-ux D6),
     /// surfacing its theme picker — otherwise reachable only by a player who already knows that hidden
-    /// command exists. <see cref="Caller.Player"/>'s setter also sets <c>Type</c>/<c>Entity</c>, matching
-    /// how a typed chat command's calling args are populated.
+    /// command exists.
     ///
-    /// <para>Closes THIS window first (playtest 2026-08-31: the button "did nothing" — decompiling the
-    /// shipped `Gui.dll`'s `.ui settings` handler confirmed the command itself just builds+opens LibGUI's
-    /// own <c>SettingsDialog</c> unconditionally; the likely explanation is that dialog opening BEHIND this
-    /// still-open Scribe Settings window, since both are separate top-level windows and nothing coordinates
-    /// their stacking order). Since this is the only Scribe surface that ever opens the theme picker
-    /// (design D6), closing it here can't strand any other Scribe view. The result callback logs to the
-    /// client log (not a chat message — this is a diagnostic for the next retest, not a player-facing
-    /// notice) so a further-recurrence pinpoints the exact <c>TextCommandResult</c> instead of another
-    /// silent "nothing happened".</para></summary>
+    /// <para>Root cause of the 2026-08-31/09-01 "button does nothing" reports (client log:
+    /// `[scribe] .ui settings -&gt; Error Sorry, you don't have the privilege to use this command`):
+    /// `ui`/`settings` never calls <c>RequiresPrivilege</c> anywhere in `Gui.dll`, so
+    /// <c>ChatCommandImpl.GetPrivilege()</c> resolves to <c>null</c> and the check falls through to
+    /// <see cref="Caller.HasPrivilege"/>, which returns <c>false</c> for a bare <c>null</c> privilege
+    /// unless <see cref="Caller.CallerPrivileges"/> grants it via the <c>"*"</c> wildcard. A genuinely
+    /// typed chat command gets that wildcard for free (`ChatCommandApi` builds its own local-input
+    /// <c>Caller</c> with <c>CallerPrivileges = new[] { "*" }</c>) — our synthetic <c>Caller</c> here
+    /// didn't, so it always failed the same check a real typed command sails past. Granting the same
+    /// wildcard here is the fix; it is not a security concern since this only ever runs in response to
+    /// the local player's own click on their own client.</para></summary>
     private void OpenLibGuiThemePicker()
     {
         TryClose();
         capi.ChatCommands.ExecuteUnparsed(".ui settings",
-            new TextCommandCallingArgs { Caller = new Caller { Player = capi.World.Player } },
+            new TextCommandCallingArgs
+            {
+                Caller = new Caller { Player = capi.World.Player, CallerPrivileges = new[] { "*" } },
+            },
             result => capi.Logger.Notification("[scribe] .ui settings -> {0} {1}", result.Status, result.StatusMessage));
     }
 
