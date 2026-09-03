@@ -624,7 +624,7 @@ public abstract partial class ScribeDialogBase
         if (!CanAddTaskUnderPolicy()) { NotifyTabletFull(); return; }
         if (focusedEditIndex is { } leaving) NormalizeRowOnCommit(leaving);
         int at = NewTaskInsertIndex();
-        if (!scratch.InsertQuestLink(at, entry.QuestCode, entry.Title, entry.Description)) return;
+        if (!scratch.InsertQuestLink(at, entry.Source, entry.QuestCode, entry.Title, entry.Description)) return;
         isDirty = true;
         SyncFocusNodesToScratch();
         pendingEnsureVisible = true;
@@ -632,12 +632,18 @@ public abstract partial class ScribeDialogBase
     }
 
     /// <summary>The Quest Link picker's catalog, read once per dialog session (add-assignment-and-quest-support
-    /// 10.1/10.2): empty — and the picker's "Quest Link" option hidden — when <c>vsquest</c> isn't installed
-    /// or its catalog is empty/unparseable. Not re-read on every footer open: the installed catalog cannot
-    /// change while the game is running, so a lazily-cached read is enough.</summary>
+    /// 10.1/10.2, extended add-progression-framework-quest-support 7.2 to merge every installed backend's
+    /// catalog into one list): empty — and the picker's "Quest Link" option hidden — when neither backend
+    /// is installed or both catalogs are empty/unparseable; with both installed, entries from each appear
+    /// together, tagged with their own <see cref="ScribeQuestCatalogEntry.Source"/>. Not re-read on every
+    /// footer open: the installed catalog cannot change while the game is running, so a lazily-cached read
+    /// is enough.</summary>
     private IReadOnlyList<ScribeQuestCatalogEntry>? questCatalogCache;
     private IReadOnlyList<ScribeQuestCatalogEntry> QuestCatalogForPicker
-        => questCatalogCache ??= ScribeQuestCatalog.ReadCatalog(capi);
+        => questCatalogCache ??= ScribeQuestCatalog.ReadCatalog(capi)
+            .Concat(ScribeProgressionFrameworkQuestCatalog.ReadCatalog(capi).Select(e => e.ToPickerEntry()))
+            .OrderBy(e => e.Title, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
     /// <summary>Moves editor focus to <paramref name="index"/> by requesting focus on that row's node
     /// (the row stays mounted — the editor uses a non-virtualized scroll container, design D2 — so its

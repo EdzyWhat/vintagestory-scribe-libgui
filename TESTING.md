@@ -708,3 +708,22 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
     open frame — do not write another speculative fix first. (Tasks 4.2/4.3 test the reverted `FromTexture`
     path + are bookkeeping, so they're not listed here.)
   ```
+
+## add-progression-framework-quest-support
+
+- [ ] `00000082` **Test PF picker under Prompt policy.** Carry two eligible Notebooks, trigger a
+      Progression Framework quest accept with Quest Accept Policy set to Prompt — confirm a
+      picker appears and the link lands on whichever Notebook you choose. *(6.5)*
+- [ ] `00000083` **Test PF accept under Always policy.** Same setup as above but Accept Policy =
+      Always with two eligible Notebooks carried — confirm a Prompt-style banner appears instead
+      of the link silently landing on one. *(6.6)*
+- [ ] `00000084` **Test PF end-to-end quest link.** With Progression Framework + Seafarer
+      installed, find an NPC offering a multi-objective delivery quest, confirm it appears in the
+      Quest Link picker, accept it in-world, and confirm auto-detect fires with progress mirroring
+      as objectives are delivered. *(8.3)*
+- [ ] `00000085` **Test vsquest + PF coexistence.** With both vsquest and Progression Framework
+      installed simultaneously, link and track one quest from each backend — confirm no
+      cross-contamination between them. *(8.4)*
+- [ ] `00000086` **Test neither-backend-installed hides quest UI.** With neither vsquest nor
+      Progression Framework installed, confirm no quest UI appears anywhere (Settings, Link
+      picker, handbook). *(8.5)*

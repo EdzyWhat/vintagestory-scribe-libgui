@@ -104,7 +104,11 @@ public sealed class ScribeSettingsDialog : GuiBase
                     scrollController: scrollController,
                     focus: numericFocus,
                     onOpenThemePicker: OpenLibGuiThemePicker,
-                    showQuestSettings: ScribeQuestCatalog.IsAvailable(capi))));
+                    // Gates on EITHER backend (add-progression-framework-quest-support 7.1) — the Quest
+                    // policy rows are backend-agnostic (ScribeQuestPolicy.cs), so either mod being
+                    // installed is enough to show them.
+                    showQuestSettings: ScribeQuestCatalog.IsAvailable(capi)
+                        || ScribeProgressionFrameworkQuestCatalog.IsAvailable(capi))));
 
     /// <summary>Runs LibGUI's own `.ui settings` client command (refine-assignment-desk-inbox-ux D6),
     /// surfacing its theme picker — otherwise reachable only by a player who already knows that hidden

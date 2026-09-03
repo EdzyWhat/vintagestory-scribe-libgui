@@ -93,7 +93,7 @@ public class ScribeDocumentCodecTests
     public void RoundTrip_PreservesQuestLinkLabelAndDescription()
     {
         var original = new ScribeDocument();
-        original.AddQuestLink("vsquest:quest-freeghost", "Free the Ghost", "Plant 8 flowers nearby.");
+        original.AddQuestLink(ScribeQuestSource.VsQuest, "vsquest:quest-freeghost", "Free the Ghost", "Plant 8 flowers nearby.");
         original.AddGuideLink("craftinginfo-knapping", "Knapping"); // v11 field must default null for other kinds
 
         byte[] bytes = ScribeDocumentCodec.Serialize(original);
@@ -104,7 +104,7 @@ public class ScribeDocumentCodecTests
 
         var questLink = restored!.Blocks[0];
         Assert.Equal(ScribeBlockKind.Link, questLink.Kind);
-        Assert.Equal("quest:vsquest:quest-freeghost", questLink.LinkTarget);
+        Assert.Equal("quest:vsquest/vsquest:quest-freeghost", questLink.LinkTarget);
         Assert.Equal("Free the Ghost", questLink.LinkLabel);
         Assert.Equal("Plant 8 flowers nearby.", questLink.LinkDescription);
 

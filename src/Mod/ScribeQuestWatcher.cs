@@ -3,8 +3,10 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using HarmonyLib;
+using Scribe.Core;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common.Entities;
+using Vintagestory.API.Datastructures;
 
 namespace Scribe;
 
@@ -32,6 +34,15 @@ namespace Scribe;
 /// (<c>ScribeModSystem.Quest.cs</c> checks the target document for an existing Link to the same quest
 /// code before appending), so a re-notification on rejoin is a harmless, disclosed limitation rather than
 /// a correctness bug.</para>
+///
+/// <para><b>Progression Framework (add-progression-framework-quest-support §3)</b>: a second,
+/// independently-gated tick path detects accept/complete/per-objective progress for player-scoped quests
+/// by reading Progression Framework's own server-synced <c>WatchedAttributes</c> tree
+/// (<see cref="PfPlayerQuestTreeKey"/>, a public const on that mod's <c>QuestSystem</c>) directly off
+/// <c>capi.World.Player.Entity</c> — no entity scan needed (the tree is keyed on the player's own entity,
+/// not an NPC's) and no reflection at all, unlike vsquest's progress-mirroring half above. Gated and
+/// fail-closed independently of the vsquest path (§3.5): a failure here disables PF detection only, for
+/// the session, and never touches vsquest's own accept/complete/progress state.</para>
 /// </summary>
 internal sealed class ScribeQuestWatcher
 {
@@ -52,6 +63,19 @@ internal sealed class ScribeQuestWatcher
     private const string QuestGuiTypeName = "VsQuest.QuestSelectGui";
     private bool dialogReflectionDisabled;
     private readonly Dictionary<string, int[]> liveProgress = new(StringComparer.Ordinal);
+
+    // ---- Progression Framework (player-scoped quests, own WatchedAttributes tree) ----
+    private const string PfPlayerQuestTreeKey = "progressionframework:questlog";
+    // Matches QuestSystem's own status strings exactly (decompiled source, confirmed 2026-09-02):
+    // AcceptQuest writes "active"; CompleteQuest/CompleteObjective write "completed" (not "complete").
+    private const string PfStatusActive = "active";
+    private const string PfStatusComplete = "completed";
+    private bool pfDetectionDisabled;
+    private IReadOnlyList<ScribeProgressionFrameworkQuestEntry>? pfCatalog;
+    private Dictionary<string, ScribeProgressionFrameworkQuestEntry>? pfCatalogByCode;
+    private readonly HashSet<string> pfAcceptedSeen = new(StringComparer.Ordinal);
+    private readonly HashSet<string> pfCompletedSeen = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Dictionary<string, string>> pfObjectiveStatus = new(StringComparer.Ordinal);
 
     public ScribeQuestWatcher(
         ICoreClientAPI capi, Action<ScribeQuestCatalogEntry> onAccepted, Action<ScribeQuestCatalogEntry> onCompleted)
@@ -84,7 +108,8 @@ internal sealed class ScribeQuestWatcher
 
     /// <summary>The static objective definitions for a cataloged quest, positionally aligned with
     /// <see cref="TryGetLiveProgress"/>'s counts (§11.3). False before the catalog has been read once
-    /// (the first tick after login) or for an uncataloged quest code.</summary>
+    /// (the first tick after login) or for an uncataloged quest code. VS Quest only — see
+    /// <see cref="TryGetPfObjectiveStatus"/> for Progression Framework's equivalent.</summary>
     public bool TryGetObjectives(string questCode, out IReadOnlyList<ScribeQuestObjectiveDef> objectives)
     {
         if (catalogByCode != null && catalogByCode.TryGetValue(questCode, out var q)) { objectives = q.Objectives; return true; }
@@ -92,25 +117,55 @@ internal sealed class ScribeQuestWatcher
         return false;
     }
 
+    /// <summary>Progression Framework's catalog objective definitions (code + required count) for a
+    /// cataloged quest (Decision 4 — matched by code, not position, against
+    /// <see cref="TryGetPfObjectiveStatus"/>). False before the PF catalog has been read once, PF isn't
+    /// installed, or the quest code isn't cataloged.</summary>
+    public bool TryGetPfObjectiveDefs(string questCode, out IReadOnlyList<ScribePfObjectiveDef> objectives)
+    {
+        if (pfCatalogByCode != null && pfCatalogByCode.TryGetValue(questCode, out var q)) { objectives = q.Objectives; return true; }
+        objectives = Array.Empty<ScribePfObjectiveDef>();
+        return false;
+    }
+
+    /// <summary>Progression Framework's live per-objective status, keyed by each objective's own stable
+    /// code (Decision 4 — no positional zip needed, unlike vsquest, since PF's own attribute tree already
+    /// correlates status to a code). False until this quest's tree has been read at least once this
+    /// session, including whenever Progression Framework isn't installed or detection has self-disabled.</summary>
+    public bool TryGetPfObjectiveStatus(string questCode, out IReadOnlyDictionary<string, string> statusByCode)
+    {
+        if (pfObjectiveStatus.TryGetValue(questCode, out var map)) { statusByCode = map; return true; }
+        statusByCode = EmptyStatusMap;
+        return false;
+    }
+
+    private static readonly Dictionary<string, string> EmptyStatusMap = new(StringComparer.Ordinal);
+
     private void OnTick(float dt)
     {
-        if (!ScribeQuestCatalog.IsAvailable(capi)) return;
-
-        catalog ??= ScribeQuestCatalog.ReadCatalog(capi);
-        if (catalog.Count == 0) return;
-        catalogByCode ??= catalog.ToDictionary(e => e.QuestCode, StringComparer.Ordinal);
-
-        string? uid = capi.World.Player?.PlayerUID;
-        if (string.IsNullOrEmpty(uid)) return;
-
-        foreach (var entity in capi.World.LoadedEntities.Values)
+        if (ScribeQuestCatalog.IsAvailable(capi))
         {
-            if (entity is not { Alive: true }) continue;
-            if (entity.GetBehavior("questgiver") is null) continue;
-            ScanGiver(entity, uid);
+            catalog ??= ScribeQuestCatalog.ReadCatalog(capi);
+            if (catalog.Count > 0)
+            {
+                catalogByCode ??= catalog.ToDictionary(e => e.QuestCode, StringComparer.Ordinal);
+
+                string? uid = capi.World.Player?.PlayerUID;
+                if (!string.IsNullOrEmpty(uid))
+                {
+                    foreach (var entity in capi.World.LoadedEntities.Values)
+                    {
+                        if (entity is not { Alive: true }) continue;
+                        if (entity.GetBehavior("questgiver") is null) continue;
+                        ScanGiver(entity, uid);
+                    }
+                }
+
+                ReadDialogProgress();
+            }
         }
 
-        ReadDialogProgress();
+        ScanProgressionFramework();
     }
 
     /// <summary>Checks every catalog quest against one quest-giver entity's synced
@@ -140,6 +195,63 @@ internal sealed class ScribeQuestWatcher
             if (!catalogByCode!.TryGetValue(id, out var q)) continue; // a quest pack we don't have cataloged
             _completedSeen.Add(id);
             onCompleted(q);
+        }
+    }
+
+    /// <summary>Progression Framework's independently-gated detection path (§3.1-3.5): reads that mod's
+    /// own <see cref="PfPlayerQuestTreeKey"/> tree directly off the player's own entity — no entity scan,
+    /// no reflection. Any failure (missing/malformed tree shape, e.g. after a PF update) permanently
+    /// disables THIS path only for the session; vsquest's detection above is read in a separate try scope
+    /// and is provably unaffected.</summary>
+    private void ScanProgressionFramework()
+    {
+        if (pfDetectionDisabled) return;
+        if (!ScribeProgressionFrameworkQuestCatalog.IsAvailable(capi)) return;
+
+        try
+        {
+            pfCatalog ??= ScribeProgressionFrameworkQuestCatalog.ReadCatalog(capi);
+            if (pfCatalog.Count == 0) return;
+            pfCatalogByCode ??= pfCatalog.ToDictionary(e => e.QuestCode, StringComparer.Ordinal);
+
+            var tree = capi.World.Player?.Entity?.WatchedAttributes?.GetTreeAttribute(PfPlayerQuestTreeKey);
+            if (tree is null) return;
+
+            foreach (var questEntry in tree)
+            {
+                string questCode = questEntry.Key;
+                if (questEntry.Value is not ITreeAttribute questTree) continue;
+                if (!pfCatalogByCode.TryGetValue(questCode, out var def)) continue; // a quest pack we don't have cataloged
+
+                string status = questTree.GetString("status") ?? "";
+                if (string.Equals(status, PfStatusActive, StringComparison.OrdinalIgnoreCase)
+                    && pfAcceptedSeen.Add(questCode))
+                {
+                    onAccepted(def.ToPickerEntry());
+                }
+                else if (string.Equals(status, PfStatusComplete, StringComparison.OrdinalIgnoreCase)
+                    && pfCompletedSeen.Add(questCode))
+                {
+                    onCompleted(def.ToPickerEntry());
+                }
+
+                if (questTree.GetTreeAttribute("objectives") is not ITreeAttribute objectivesTree) continue;
+                var statusByCode = pfObjectiveStatus.TryGetValue(questCode, out var existing)
+                    ? existing
+                    : pfObjectiveStatus[questCode] = new Dictionary<string, string>(StringComparer.Ordinal);
+                foreach (var objEntry in objectivesTree)
+                {
+                    if (objEntry.Value is not ITreeAttribute objTree) continue;
+                    statusByCode[objEntry.Key] = objTree.GetString("status") ?? "";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            pfDetectionDisabled = true;
+            capi.Logger.Notification(
+                "[scribe] Progression Framework quest detection disabled ({0}) — VS Quest detection is unaffected.",
+                ex.Message);
         }
     }
 

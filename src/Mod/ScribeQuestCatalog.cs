@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
+using Scribe.Core;
 using Vintagestory.API.Client;
 using Vintagestory.API.Config;
 
@@ -12,10 +13,17 @@ namespace Scribe;
 /// (add-assignment-and-quest-support 10.1). <see cref="QuestCode"/> is the quest's own (already
 /// domain-qualified) id, e.g. <c>"vsquest:quest-freeghost"</c> — stored verbatim after the <c>"quest:"</c>
 /// prefix (<see cref="Scribe.Core.ScribeLinkTarget.ForQuest"/>), so a Layer 2 auto-detect correlation can
-/// compare against the exact same string later without re-deriving anything.
+/// compare against the exact same string later without re-deriving anything. <see cref="Source"/> is the
+/// backend mod that owns this entry (<see cref="Scribe.Core.ScribeQuestSource"/> —
+/// add-progression-framework-quest-support Decision 1), always recorded on the created Link so later
+/// resolution never has to guess which backend a quest code came from. <see cref="Objectives"/> is
+/// vsquest-specific (positional kill/place/break tracking, §11.3) — a Progression Framework entry from
+/// <see cref="ScribeProgressionFrameworkQuestCatalog"/> always leaves it empty; its own per-objective
+/// progress is read by objective code, not by position (Decision 4), through
+/// <see cref="ScribeQuestWatcher"/>'s separate PF-specific surface.
 /// </summary>
 internal readonly record struct ScribeQuestCatalogEntry(
-    string QuestCode, string Title, string? Description,
+    string Source, string QuestCode, string Title, string? Description,
     IReadOnlyList<ScribeQuestObjectiveDef> Objectives);
 
 /// <summary>Which vsquest tracker list an objective belongs to (add-assignment-and-quest-support §11
@@ -96,6 +104,7 @@ internal static class ScribeQuestCatalog
                 .SelectMany(list => list)
                 .Where(q => !string.IsNullOrEmpty(q.Id))
                 .Select(q => new ScribeQuestCatalogEntry(
+                    ScribeQuestSource.VsQuest,
                     q.Id!,
                     Lang.Get(q.Id! + "-title"),
                     Lang.HasTranslation(q.Id + "-desc") ? Lang.Get(q.Id + "-desc") : null,

@@ -272,18 +272,20 @@ public sealed class ScribeDocument
             linkTarget: ScribeLinkTarget.ForPage(pageCode), linkLabel: label));
 
     /// <summary>Adds a <b>quest</b> Link task (a reference to an installed quest mod's catalog entry) to the
-    /// end. <paramref name="questCode"/> is the quest's own (already domain-qualified) id, stored
-    /// <c>"quest:"</c>-prefixed via <see cref="ScribeLinkTarget.ForQuest"/>; <paramref name="title"/> and
-    /// <paramref name="description"/> are captured at creation time (add-assignment-and-quest-support 10.1)
-    /// and never re-derived, so the Link still renders correctly if the quest mod is later uninstalled
-    /// (design.md Decision 10's orphan handling).</summary>
-    public bool AddQuestLink(string questCode, string? title, string? description) =>
-        InsertQuestLink(_blocks.Count, questCode, title, description);
+    /// end. <paramref name="source"/> is the backend mod that owns the quest (e.g.
+    /// <see cref="ScribeQuestSource.VsQuest"/>/<see cref="ScribeQuestSource.ProgressionFramework"/> —
+    /// add-progression-framework-quest-support Decision 1); <paramref name="questCode"/> is the quest's own
+    /// (already domain-qualified) id, stored <c>"quest:"</c>-prefixed via <see cref="ScribeLinkTarget.ForQuest"/>;
+    /// <paramref name="title"/> and <paramref name="description"/> are captured at creation time
+    /// (add-assignment-and-quest-support 10.1) and never re-derived, so the Link still renders correctly if
+    /// the quest mod is later uninstalled (design.md Decision 10's orphan handling).</summary>
+    public bool AddQuestLink(string source, string questCode, string? title, string? description) =>
+        InsertQuestLink(_blocks.Count, source, questCode, title, description);
 
     /// <summary>Inserts a quest Link at <paramref name="index"/>. Out-of-range fails safely.</summary>
-    public bool InsertQuestLink(int index, string questCode, string? title, string? description) =>
+    public bool InsertQuestLink(int index, string source, string questCode, string? title, string? description) =>
         TryInsert(index, new ScribeBlock(ScribeBlockKind.Link, "",
-            linkTarget: ScribeLinkTarget.ForQuest(questCode), linkLabel: title, linkDescription: description));
+            linkTarget: ScribeLinkTarget.ForQuest(source, questCode), linkLabel: title, linkDescription: description));
 
     bool TryInsert(int index, ScribeBlock block)
     {

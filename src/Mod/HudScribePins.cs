@@ -9,9 +9,10 @@ using Gui.Widgets.Animations;    // AnimatedOpacity, Curves
 using Gui.Widgets.Basic;         // Text, Container, VsIcon
 using Gui.Widgets.Events;        // PointerEvent
 using Gui.Widgets.Framework;     // Widget, StatelessWidget, BuildContext, Theme, ValueKey, Key
-using Gui.Widgets.Input;         // Checkbox, GestureDetector
+using Gui.Widgets.Input;         // Checkbox, GestureDetector, Dropdown, DropdownItem
 using Gui.Widgets.Inventory;     // ItemStackDisplay (Tracker/Link item icon)
 using Gui.Widgets.Layout;        // Column, Row, Expanded, Padding, CrossAxisAlignment, MainAxisAlignment
+using Gui.Widgets.Overlay;       // Tooltip
 using Gui.Widgets.Painting;      // BoxStyle
 using Gui.Core.Layout;           // MainAxisSize
 using OpenTK.Mathematics;        // Vector2, Vector4
@@ -114,6 +115,13 @@ public sealed class HudScribePins : GuiBase
     /// server removed OR that the player re-pinned is dropped (the container's own reappear-cancels-departure
     /// revives a re-pinned row mid-collapse).</summary>
     private readonly HashSet<(Guid, Guid)> awaitingRemoval = new();
+
+    /// <summary>The Quest Accept prompt banner's 2+-candidate picker state (add-progression-framework-quest-
+    /// support Decision 3) — this widget's own session state, since <see cref="HudPinsContent"/> is
+    /// Stateless. Reset whenever the pending prompt list changes (<see cref="OnQuestPromptsChanged"/>) so a
+    /// resolved/dismissed prompt never leaves a stale picker open for the next one.</summary>
+    private bool questAcceptPickerOpen;
+    private int questAcceptSelectedIndex;
 
     /// <summary>Per-pinned-Tracker LIVE "have" count, recomputed from the viewer's carried inventory on the
     /// HUD's own 250ms tick (add-tracker-link-tasks 7.10), so a pinned Tracker's counter is live even with no
@@ -511,6 +519,8 @@ public sealed class HudScribePins : GuiBase
     /// no running timer, still opens the HUD so the player actually sees it) and rebuild.</summary>
     private void OnQuestPromptsChanged()
     {
+        questAcceptPickerOpen = false;
+        questAcceptSelectedIndex = 0;
         bool hasPrompt = modSystem.PendingQuestPrompts.Count > 0;
         var rawTimer = modSystem.MyTimer;
         bool hasTimer = rawTimer is { Status: Scribe.Core.TimerStatus.Running or Scribe.Core.TimerStatus.Fired };
@@ -1130,8 +1140,34 @@ public sealed class HudScribePins : GuiBase
             onClearTimer: SendClearTimer,
             capiForTimer: capi,
             questPrompts: modSystem.PendingQuestPrompts,
-            onAcceptPrompt: modSystem.AcceptQuestPrompt,
-            onDismissPrompt: modSystem.DismissQuestPrompt);
+            onAcceptPrompt: OnAcceptQuestPrompt,
+            onDismissPrompt: modSystem.DismissQuestPrompt,
+            questAcceptCandidates: modSystem.ComputeQuestAcceptCandidates(),
+            questAcceptPickerOpen: questAcceptPickerOpen,
+            questAcceptSelectedIndex: questAcceptSelectedIndex,
+            onOpenQuestAcceptPicker: OnOpenQuestAcceptPicker,
+            onSelectQuestAcceptCandidate: OnSelectQuestAcceptCandidate);
+    }
+
+    /// <summary>Reveals the Quest Accept prompt banner's 2+-candidate picker (first tap of the two-step
+    /// Accept, mirroring the Inbox Accept control's own picker).</summary>
+    private void OnOpenQuestAcceptPicker()
+    {
+        questAcceptPickerOpen = true;
+        RebuildHudBody();
+    }
+
+    private void OnSelectQuestAcceptCandidate(int index)
+    {
+        questAcceptSelectedIndex = index;
+        RebuildHudBody();
+    }
+
+    private void OnAcceptQuestPrompt(ScribeQuestPrompt prompt, ScribeAcceptCandidate? candidate)
+    {
+        questAcceptPickerOpen = false;
+        questAcceptSelectedIndex = 0;
+        modSystem.AcceptQuestPrompt(prompt, candidate);
     }
 
     // ---------------- DEBUG: blank-checkbox diagnostics ----------------
@@ -1290,8 +1326,21 @@ internal sealed class HudPinsContent : StatelessWidget
     /// <summary>Pending Quest Accept/Completion notifications (add-assignment-and-quest-support
     /// §11.2/§11.4); only the first is rendered as a banner at a time.</summary>
     private readonly IReadOnlyList<ScribeQuestPrompt> questPrompts;
-    private readonly Action<ScribeQuestPrompt>? onAcceptPrompt;
+    /// <summary>Accept action for the banner's accept-prompt case, naming the resolved destination
+    /// (add-progression-framework-quest-support Decision 3) — the sole eligible carried Scribe document,
+    /// or the player's picker choice among 2+; null for a completion-prompt (nothing to place).</summary>
+    private readonly Action<ScribeQuestPrompt, ScribeAcceptCandidate?>? onAcceptPrompt;
     private readonly Action<ScribeQuestPrompt>? onDismissPrompt;
+    /// <summary>This player's current Accept-placement candidates for the banner's accept-prompt
+    /// (<see cref="ScribeModSystem.ComputeQuestAcceptCandidates"/>) — irrelevant for a completion-prompt.</summary>
+    private readonly IReadOnlyList<ScribeAcceptCandidate> questAcceptCandidates;
+    /// <summary>Whether the 2+-candidate picker is currently revealed (two-step tap, matching the Inbox
+    /// Accept control's own picker — <see cref="HudScribePins"/> owns this as session state since this
+    /// widget itself is Stateless).</summary>
+    private readonly bool questAcceptPickerOpen;
+    private readonly int questAcceptSelectedIndex;
+    private readonly Action? onOpenQuestAcceptPicker;
+    private readonly Action<int>? onSelectQuestAcceptCandidate;
 
     public HudPinsContent(
         IReadOnlyList<HudPinRow> rows,
@@ -1316,8 +1365,13 @@ internal sealed class HudPinsContent : StatelessWidget
         Action? onClearTimer = null,
         ICoreClientAPI? capiForTimer = null,
         IReadOnlyList<ScribeQuestPrompt>? questPrompts = null,
-        Action<ScribeQuestPrompt>? onAcceptPrompt = null,
-        Action<ScribeQuestPrompt>? onDismissPrompt = null)
+        Action<ScribeQuestPrompt, ScribeAcceptCandidate?>? onAcceptPrompt = null,
+        Action<ScribeQuestPrompt>? onDismissPrompt = null,
+        IReadOnlyList<ScribeAcceptCandidate>? questAcceptCandidates = null,
+        bool questAcceptPickerOpen = false,
+        int questAcceptSelectedIndex = 0,
+        Action? onOpenQuestAcceptPicker = null,
+        Action<int>? onSelectQuestAcceptCandidate = null)
     {
         this.rows = rows;
         this.moreCount = moreCount;
@@ -1342,6 +1396,11 @@ internal sealed class HudPinsContent : StatelessWidget
         this.capiForTimer = capiForTimer;
         this.questPrompts = questPrompts ?? Array.Empty<ScribeQuestPrompt>();
         this.onAcceptPrompt = onAcceptPrompt;
+        this.questAcceptCandidates = questAcceptCandidates ?? Array.Empty<ScribeAcceptCandidate>();
+        this.questAcceptPickerOpen = questAcceptPickerOpen;
+        this.questAcceptSelectedIndex = questAcceptSelectedIndex;
+        this.onOpenQuestAcceptPicker = onOpenQuestAcceptPicker;
+        this.onSelectQuestAcceptCandidate = onSelectQuestAcceptCandidate;
         this.onDismissPrompt = onDismissPrompt;
     }
 
@@ -1529,7 +1588,13 @@ internal sealed class HudPinsContent : StatelessWidget
     /// alone isn't an actionable way to opt in under <see cref="Scribe.Core.ScribeQuestAcceptPolicy.Prompt"/>/
     /// <see cref="Scribe.Core.ScribeQuestCompletionPolicy.Prompt"/>). Renders only the OLDEST pending prompt;
     /// a second prompt queued behind it appears once the first is Accepted/Dismissed. Deliberately plain —
-    /// no icon/animation — to keep this addition small relative to the rest of the HUD's row machinery.</summary>
+    /// no icon/animation — to keep this addition small relative to the rest of the HUD's row machinery.
+    ///
+    /// <para>An accept-prompt's Accept link follows the same 0/1/2+ destination rule as the Inbox Accept
+    /// control (add-progression-framework-quest-support Decision 3): 0 eligible carried Scribe documents
+    /// disables the link (no destination to place onto); exactly 1 accepts immediately; 2+ reveals a small
+    /// picker above the link row on the first tap, naming each candidate, before a second tap confirms. A
+    /// completion-prompt never shows a picker — marking an already-linked task done needs no destination.</para></summary>
     private Widget BuildQuestPromptBanner(ColorScheme colors, Vector4 glow)
     {
         var prompt = questPrompts[0];
@@ -1548,6 +1613,13 @@ internal sealed class HudPinsContent : StatelessWidget
             GlowWidth = GlowWidth,
             GlowColor = glow,
         };
+        var disabledLinkStyle = new TextStyle
+        {
+            FontSize = rowFontSize,
+            Color = colors.OnSurfaceVariant,
+            GlowWidth = GlowWidth,
+            GlowColor = glow,
+        };
 
         Widget LinkButton(string label, Action onTap) => new GestureDetector(
             onTap: _ => onTap(),
@@ -1556,6 +1628,49 @@ internal sealed class HudPinsContent : StatelessWidget
         string title = Lang.Get(
             prompt.IsCompletion ? "scribe:scribe-hud-questprompt-complete-title" : "scribe:scribe-hud-questprompt-accept-title",
             prompt.Title);
+
+        Widget acceptControl;
+        if (prompt.IsCompletion)
+        {
+            acceptControl = LinkButton(Lang.Get("scribe:scribe-hud-questprompt-accept-button"),
+                () => onAcceptPrompt?.Invoke(prompt, null));
+        }
+        else if (questAcceptCandidates.Count == 0)
+        {
+            acceptControl = new Tooltip(
+                child: new Text(Lang.Get("scribe:scribe-hud-questprompt-accept-button"), disabledLinkStyle),
+                content: new Padding(EdgeInsets.All(6), child: new Text(
+                    Lang.Get("scribe:scribe-assignment-no-eligible-target"),
+                    new TextStyle { FontSize = 12, Color = colors.OnSurface, SoftWrap = true })),
+                useGlobalOverlay: true);
+        }
+        else if (questAcceptCandidates.Count == 1)
+        {
+            acceptControl = LinkButton(Lang.Get("scribe:scribe-hud-questprompt-accept-button"),
+                () => onAcceptPrompt?.Invoke(prompt, questAcceptCandidates[0]));
+        }
+        else if (!questAcceptPickerOpen)
+        {
+            acceptControl = LinkButton(Lang.Get("scribe:scribe-hud-questprompt-accept-button"),
+                () => onOpenQuestAcceptPicker?.Invoke());
+        }
+        else
+        {
+            int idx = Math.Clamp(questAcceptSelectedIndex, 0, questAcceptCandidates.Count - 1);
+            acceptControl = new Column(
+                spacing: 2,
+                mainAxisSize: MainAxisSize.Min,
+                crossAxisAlignment: leftAligned ? CrossAxisAlignment.Start : CrossAxisAlignment.End,
+                children: new Widget[]
+                {
+                    new Dropdown<int>(
+                        value: idx,
+                        items: questAcceptCandidates.Select((c, i) => new DropdownItem<int> { Value = i, Label = c.Label }).ToList(),
+                        onChanged: v => onSelectQuestAcceptCandidate?.Invoke(v)),
+                    LinkButton(Lang.Get("scribe:scribe-hud-questprompt-accept-button"),
+                        () => onAcceptPrompt?.Invoke(prompt, questAcceptCandidates[idx])),
+                });
+        }
 
         return new Column(
             spacing: 2,
@@ -1569,8 +1684,7 @@ internal sealed class HudPinsContent : StatelessWidget
                     mainAxisSize: MainAxisSize.Min,
                     children: new Widget[]
                     {
-                        LinkButton(Lang.Get("scribe:scribe-hud-questprompt-accept-button"),
-                            () => onAcceptPrompt?.Invoke(prompt)),
+                        acceptControl,
                         LinkButton(Lang.Get("scribe:scribe-hud-questprompt-dismiss-button"),
                             () => onDismissPrompt?.Invoke(prompt)),
                         LinkButton(Lang.Get("scribe:scribe-hud-questprompt-settings-button"), onOpenSettings),

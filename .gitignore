@@ -108,3 +108,12 @@ reference/BackpackInvestigations/
 # Third-party quest/particle mod zips, decompiles, and cloned sources used for the
 # add-assignment-and-quest-support investigation (proprietary; scratch, never committed)
 reference/QuestsInvestigations/
+
+# Progression Framework + Seafarer (worked-example dependent) mod zips and decompiles,
+# used to investigate soft-dependency support parallel to vsquest (proprietary; scratch,
+# never committed)
+reference/ProgressionInvestigations/
+
+# The Almanac: Illuminated + Trades/Callings/Mastery mod zips and decompiles, used to check
+# for a live PF integration surface (found none; proprietary; scratch, never committed)
+reference/AlmanacInvestigations/
