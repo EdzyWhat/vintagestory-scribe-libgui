@@ -5,9 +5,7 @@
 TBD - created via spec sync from change `add-assignment-and-quest-support`. This capability
 covers the assignment lifecycle itself: its states, the transitions legal from each state and
 who may take them, and how Accept resolves a placement target.
-
 ## Requirements
-
 ### Requirement: Assignment state transitions are validated by actor and current state
 An assignment SHALL be in exactly one of six states at a time: Unaccepted, Accepted, Declined,
 Cancelled, Discarded, or Completed. The system SHALL only permit the following transitions, each
@@ -73,9 +71,12 @@ what was sent, without offering any state-change action.
 
 ### Requirement: New (unseen) is a flag on Unaccepted, not a separate state
 An Unaccepted assignment SHALL carry a Seen flag, defaulting to unseen ("New") at creation. The
-flag SHALL become seen once the Assignee opens an Inbox view showing that assignment, unless the
-Assignee immediately takes an action that moves it to another state (in which case the flag
-becomes moot). The Seen flag SHALL NOT alter which transitions are valid from Unaccepted.
+flag SHALL become seen the moment the Assignee's Inbox view for that assignment becomes the active
+view on any Inbox-capable surface — whether reached by clicking an Inbox nav button, by opening a
+surface whose Inbox view is its default or only view (the standalone Inbox block), or by any other
+path that makes the Inbox view active — not only via an explicit nav-button click, unless the
+Assignee immediately takes an action that moves it to another state (in which case the flag becomes
+moot). The Seen flag SHALL NOT alter which transitions are valid from Unaccepted.
 
 #### Scenario: A newly-sent assignment starts unseen
 - **WHEN** an Assigner sends a new assignment
@@ -85,6 +86,17 @@ becomes moot). The Seen flag SHALL NOT alter which transitions are valid from Un
 - **WHEN** the Assignee opens an Inbox view that shows a New (unseen) assignment and takes no
   further action before closing it
 - **THEN** the assignment remains Unaccepted but its Seen flag becomes true
+
+#### Scenario: Opening the standalone Inbox block marks it seen
+- **WHEN** the Assignee opens the standalone Inbox block's dialog, which lands directly on its
+  Inbox view as that block's only view, showing a New (unseen) assignment
+- **THEN** the assignment's Seen flag becomes true, the same as if the Assignee had reached the
+  Inbox view via a nav-button click on any other surface
+
+#### Scenario: Re-opening the standalone Inbox block also marks it seen
+- **WHEN** the Assignee closes and re-opens the standalone Inbox block's dialog while it still
+  shows a New (unseen) assignment
+- **THEN** the assignment's Seen flag becomes true on that re-open, the same as on first open
 
 ### Requirement: Accepted-task placement resolves held surface, then inventory, then blocks Accept
 When the Assignee accepts an assignment, the system SHALL place the resulting task on: (1) a
@@ -107,3 +119,94 @@ explanatory tooltip.
 - **WHEN** the Assignee has no Scribe document-bearing item held or in inventory
 - **THEN** the Accept control is disabled and shows an explanatory tooltip rather than allowing
   a click that fails
+
+### Requirement: A terminal assignment record can be permanently deleted by its Assigner or Assignee
+An assignment record whose state is terminal (Declined, Cancelled, Discarded, or Completed) MAY
+be deleted independently by its Assigner and by its Assignee — each deletion removes the record
+from only that party's own view (the Assigner's Sent Assignment History, or the Assignee's
+Inbox, respectively), never both. This holds even when the same player is both the Assigner and
+the Assignee of a self-assignment: the two sides are deleted independently, one request at a
+time. Deletion is distinct from every transition in the state machine: it never moves the record
+to a further state and SHALL NOT be offered or performed on a record whose state is Unaccepted or
+Accepted. Any deletion attempt by a player who is neither the record's Assigner nor its Assignee
+SHALL be rejected and the record SHALL remain unchanged. Once BOTH the Assigner and the Assignee
+have deleted their own side, the record no longer exists at all.
+
+#### Scenario: The Assignee deletes a terminal record
+- **WHEN** the Assignee of a Declined, Cancelled, Discarded, or Completed assignment requests its
+  deletion
+- **THEN** the record no longer appears in that Assignee's Inbox
+- **AND** the record still appears in the Assigner's Sent Assignment History, unchanged
+
+#### Scenario: The Assigner deletes a terminal record
+- **WHEN** the Assigner of a Declined, Cancelled, Discarded, or Completed assignment requests its
+  deletion
+- **THEN** the record no longer appears in that Assigner's Sent Assignment History
+- **AND** the record still appears in the Assignee's Inbox, unchanged
+
+#### Scenario: A self-assignment's two sides are deleted independently
+- **WHEN** a player who is both the Assigner and the Assignee of a terminal self-assignment
+  deletes it from their Inbox only
+- **THEN** the record no longer appears in that player's Inbox
+- **AND** the record still appears in that same player's Sent Assignment History, unchanged
+
+#### Scenario: A record is fully removed once both sides have deleted it
+- **WHEN** the Assignee has already deleted their own side of a terminal record and the Assigner
+  then deletes their own side too
+- **THEN** the record no longer exists in the store at all
+
+#### Scenario: Deletion is rejected on a non-terminal record
+- **WHEN** either party requests deletion of an assignment whose state is Unaccepted or Accepted
+- **THEN** the deletion is rejected and the record remains unchanged
+
+#### Scenario: Deletion is rejected for an uninvolved player
+- **WHEN** a player who is neither the Assigner nor the Assignee of a terminal assignment
+  requests its deletion
+- **THEN** the deletion is rejected and the record remains unchanged
+
+### Requirement: Accept-time placement records a destination label
+When the Assignee's Accept places the resulting task onto a resolved Scribe document (per
+the placement requirement above), the system SHALL also record a short display label
+identifying that destination item — `<Type> "<Title>"` (e.g. `Notebook "Book of Nick"`),
+falling back to the item's bare name when the document has no meaningful title — on the
+assignment record, alongside its existing accepted-date stamp. When placement does not
+occur (the Accept control's no-eligible-surface case, or a defensive no-op on an
+unresolvable/no-capacity target), no label is recorded.
+
+#### Scenario: Accept records the destination label
+- **WHEN** the Assignee accepts an assignment and it is placed into a Notebook titled
+  "Book of Nick"
+- **THEN** the assignment record's destination label is set to `Notebook "Book of Nick"`
+
+#### Scenario: An assignment titled with the default title falls back to the bare item name
+- **WHEN** the Assignee accepts an assignment and it is placed into a Notebook that still
+  carries the default (never-renamed) title
+- **THEN** the assignment record's destination label is the bare item name, not the
+  default title
+
+#### Scenario: No label when placement does not occur
+- **WHEN** an Accept request resolves to an ineligible or no-capacity target and the
+  assignment stays Accepted but unplaced
+- **THEN** no destination label is recorded for that assignment
+
+### Requirement: The accepted-assignment marker renders after the row checkbox and discloses its provenance on hover
+On every surface that renders an accepted assignment's task row with the assignment marker icon
+(Read view, Editor view, Pin Tab), the marker SHALL render immediately after the row's completion
+checkbox (i.e. to the checkbox's right, not before it), and hovering it SHALL show a two-line
+tooltip: the assigner's display name and the date the assignment was sent, and the date it was
+accepted.
+
+#### Scenario: Marker position
+- **WHEN** a task row is an accepted assignment on the Read view, Editor view, or Pin Tab
+- **THEN** the marker icon renders after the row's checkbox in reading order, not before it
+
+#### Scenario: Marker tooltip content
+- **WHEN** a player hovers the marker icon on an accepted assignment's row
+- **THEN** a tooltip appears showing the assigner's display name and the assignment's sent date on
+  its first line, and the date it was accepted on its second line
+
+#### Scenario: Tooltip matches ambient illumination
+- **WHEN** the marker tooltip is shown under a low-light ambient shade
+- **THEN** the tooltip's bubble and text are shaded the same way every other row/nav tooltip in the
+  dialog already is, rather than rendering full-bright
+

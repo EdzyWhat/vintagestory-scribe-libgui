@@ -18,6 +18,16 @@ public enum ScribeAssignmentActor : byte
     Assignee = 1,
 }
 
+public static class ScribeAssignmentStateExtensions
+{
+    /// <summary>True for the four states that accept no further transition (Declined, Cancelled,
+    /// Discarded, Completed) — the same set <see cref="ScribeAssignmentStore.TryDelete"/> restricts
+    /// deletion to.</summary>
+    public static bool IsTerminal(this ScribeAssignmentState state) => state is
+        ScribeAssignmentState.Declined or ScribeAssignmentState.Cancelled or
+        ScribeAssignmentState.Discarded or ScribeAssignmentState.Completed;
+}
+
 /// <summary>The explicitly requested assignment actions. Completed is intentionally absent:
 /// completion is derived from the task's Done flag.</summary>
 public enum ScribeAssignmentAction : byte
@@ -56,6 +66,11 @@ public sealed class ScribeAssignment
     public string? DiscardedDate { get; set; }
     public string? CompletedDate { get; set; }
 
+    /// <summary>Short destination label (e.g. <c>Notebook "Book of Nick"</c>) captured once, at
+    /// Accept-placement time, naming the Scribe item the task actually landed in. Null when the
+    /// assignment was never placed (still Unaccepted, or an Accept that failed placement).</summary>
+    public string? AcceptedIntoLabel { get; set; }
+
     /// <summary>Identifies which single send call created this record, alongside any sibling rows sent
     /// in the same batch (refine-assignment-desk-inbox-ux 12.2 root-cause fix). <see cref="AssignedDate"/>
     /// is a coarse, human-readable in-game-day string that two SEPARATE batches sent on the same day can
@@ -67,6 +82,19 @@ public sealed class ScribeAssignment
     /// most Core unit tests) — every record from one such caller lands in a single default-Id "batch",
     /// which is harmless since nothing in Core itself groups by it.</summary>
     public Guid BatchId { get; set; }
+
+    /// <summary>Whether the Assignee has deleted their own side of a terminal record
+    /// (split-assignment-delete-by-viewer) — once true, this record no longer appears in that
+    /// player's Inbox (<see cref="ScribeAssignmentStore.Received"/>), even though the Assigner's Sent
+    /// Assignment History is unaffected. The record is only actually removed from the store once
+    /// BOTH this and <see cref="HiddenFromAssigner"/> are true.</summary>
+    public bool HiddenFromAssignee { get; set; }
+
+    /// <summary>Whether the Assigner has deleted their own side of a terminal record — the mirror of
+    /// <see cref="HiddenFromAssignee"/>, hiding it from <see cref="ScribeAssignmentStore.Sent"/>
+    /// instead. A self-assignment (Assigner == Assignee) needs both flags independently settable on
+    /// the one shared record, since the same player's two views can be deleted one at a time.</summary>
+    public bool HiddenFromAssigner { get; set; }
 
     public ScribeAssignment(string assignerUid, string assignedDate,
         ScribeAssignmentState state = ScribeAssignmentState.Unaccepted, bool seen = false,
@@ -87,6 +115,9 @@ public sealed class ScribeAssignment
         CancelledDate = CancelledDate,
         DiscardedDate = DiscardedDate,
         CompletedDate = CompletedDate,
+        AcceptedIntoLabel = AcceptedIntoLabel,
+        HiddenFromAssignee = HiddenFromAssignee,
+        HiddenFromAssigner = HiddenFromAssigner,
     };
 
     /// <summary>Marks an incoming assignment as seen without changing its lifecycle state.</summary>

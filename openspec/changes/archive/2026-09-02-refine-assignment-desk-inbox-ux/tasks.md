@@ -82,9 +82,15 @@
       `capi.ChatCommands.ExecuteUnparsed(".ui settings", new TextCommandCallingArgs { Caller = ... })`.
 - [x] 6.2 Add a labeled button to the Window Appearance section of the Settings surface that invokes
       it, with localized label + helptext added to `en.json`.
-- [ ] 6.3 Manual test: click the new button and confirm LibGUI's theme-picker dialog opens, matching
+- [x] 6.3 Manual test: click the new button and confirm LibGUI's theme-picker dialog opens, matching
       typing `.ui settings` directly. Playtest verdict (2026-08-31): "the button doesn't do anything";
       root-caused + fixed by 12.3 — retest via 12.11.
+      - Confirmed 2026-09-01: real root cause was a privilege check, not dialog stacking (12.3's
+        DrawOrder theory was disproven by a clean repro — failed even with zero other dialogs open).
+        `ui`/`settings` never calls `RequiresPrivilege`, so `Caller.HasPrivilege(null)` fell through to
+        `false`; a real typed command passes only because `ChatCommandApi`'s own local-input path grants
+        `CallerPrivileges = new[] { "*" }`. Fix: grant the same wildcard on our synthetic `Caller` in
+        `ScribeSettingsDialog.OpenLibGuiThemePicker`. Playtest-confirmed working after restage.
 
 ## 7. Create Assignments form layout
 
@@ -103,8 +109,10 @@
 
 - [x] 8.1a Build + restage (`build/restage.sh Debug`) succeeded; Core test suite (614 tests) still
       green, unaffected as expected since this change touches only `src/Mod/`.
-- [ ] 8.1b In-game playtest of the full batch end-to-end per `TESTING.md`/`what-to-test` conventions
+- [x] 8.1b In-game playtest of the full batch end-to-end per `TESTING.md`/`what-to-test` conventions
       before considering this change done (covers 2.3, 3.4, 4.3, 4.4, 5.5, 6.3, 7.3 above).
+      - Confirmed 2026-09-02: each covered task has its own terminal TESTING.md verdict —
+        `00000044` (Obsolete, superseded), `00000045`-`0000004a` (all Confirmed).
 - [x] 8.2 Update `TESTING.md` with a checklist entry for this change via the `what-to-test` skill:
       added 7 in-game items (codes `00000044`-`0000004a`), retired the fully-Confirmed
       `add-assignment-and-quest-support` group to `playtest-history/TESTING-archive.md`.
@@ -260,15 +268,21 @@
 - [x] 12.8 Stamp text: playtest asked for one word, "Submitted" (accepting the known 3-line-tall visual bug
       as out of scope). Changed `scribe-assignment-stamp-imprint` from the 2-line `"Submitted to\nPlayer"`
       to `"Submitted"`.
-- [ ] 12.9 Manual test: repeat the 9.6/9.7 multi-item batch-send check (Task/Tracker/Craft/Link/Text +
+- [x] 12.9 Manual test: repeat the 9.6/9.7 multi-item batch-send check (Task/Tracker/Craft/Link/Text +
       subtasks) — confirm every kind now shows its real name/icon in the Inbox AND after Accept, subtasks
       keep their indent after Accept, and a second Accept (on a different assignment) succeeds normally.
-- [ ] 12.10 Manual test: send a couple of batches on different in-game days (or fake it by sending one now,
+      - Confirmed 2026-09-02: retest of 9.6/9.7 verified via TESTING.md `0000004b`/`0000004c`
+        (both Confirmed).
+- [x] 12.10 Manual test: send a couple of batches on different in-game days (or fake it by sending one now,
       confirming top-of-list, then sending another) — confirm the Inbox shows the newest batch at the top
       with its own rows still in original (parent-before-subtask) order.
-- [ ] 12.11 Manual test: click the (now paired) theme-picker button — confirm LibGUI's theme picker opens
+      - Confirmed 2026-09-02: retest of 12.2 verified via TESTING.md `00000056` (Confirmed;
+        `00000050` Obsolete/superseded by it).
+- [x] 12.11 Manual test: click the (now paired) theme-picker button — confirm LibGUI's theme picker opens
       and is visible (not hidden behind the Scribe Settings window); check the client log for the
       `[scribe] .ui settings -> ...` line either way.
+      - Confirmed 2026-09-01: client log showed `noprivilege`, not a stacking issue (see 6.3) — real fix
+        was `CallerPrivileges = new[] { "*" }`. Playtest-confirmed working after restage.
 
 ## 13. Create Assignments tab split, staged-list styling, Accept-placement insert policy
 
@@ -361,7 +375,8 @@
       chest, open an Inbox with an unaccepted assignment — confirm the Accept candidate picker lists only
       the hotbar/backpack items (never the chest's), and that whichever Scribe item you most recently
       opened this session is the one Accept defaults/narrows to when it's still carried.
-- [ ] 14.8 Manual test: send two SEPARATE multi-item batches to the same recipient on the same in-game day
+- [x] 14.8 Manual test: send two SEPARATE multi-item batches to the same recipient on the same in-game day
+  - Confirmed 2026-09-01: TESTING.md `00000056` "(no note)" (submission 2026-09-01T13-31-56)
       (batch A, then later batch B) — confirm the Inbox shows batch B's rows as one intact group above
       batch A's, with each batch's own parent-before-subtask order preserved (the 00000050 repro).
       Playtest verdict (2026-08-31, null): raised a DIFFERENT bug on the ACCEPT side — accepting a batch's
@@ -435,21 +450,29 @@
       own `ScribeLecternView.SentHistory` afterward and this check was never updated, so a sync arriving
       while that tab was open updated the underlying data but never repainted it; the stale chip only
       refreshed on an unrelated rebuild (navigating away and back). Added `SentHistory` to the check.
-- [ ] 15.9 Manual test: repeat 9.6/9.7/12.9's multi-item batch-send check — confirm the disabled Accept
+- [x] 15.9 Manual test: repeat 9.6/9.7/12.9's multi-item batch-send check — confirm the disabled Accept
       button now reads clearly inert (bordered/transparent, not solid amber) when no eligible target exists.
-- [ ] 15.10 Manual test: open the Sent Assignment History nav button — confirm it now shows a
+      - Confirmed 2026-09-02: retest of 15.2 verified via TESTING.md `00000059` (Confirmed).
+- [x] 15.10 Manual test: open the Sent Assignment History nav button — confirm it now shows a
       guestbook/journal-style icon instead of the scroll.
-- [ ] 15.11 Manual test: as the recipient, Accept a batch's parent task, then (without leaving the Inbox)
+      - Confirmed 2026-09-02: retest of 15.3 verified via TESTING.md `0000005a` (Confirmed) —
+        note the final icon shipped as the open-book/Link glyph, not guestbook/journal as this
+        task's text originally assumed; `0000005a`'s wording reflects the actual shipped result.
+- [x] 15.11 Manual test: as the recipient, Accept a batch's parent task, then (without leaving the Inbox)
       Accept one of its subtasks — confirm the subtask lands directly under its parent in the document, not
       detached elsewhere (the 14.8 repro). Then expand an Accepted/Completed/Discarded assignment in the
       Inbox and Sent Assignment History — confirm an "Accepted — date" line (and a Completed/Discarded one
       once it reaches that state) shows below "Assigned by".
-- [ ] 15.12 Manual test: open the Create Assignments tab and stage a Scribe item — confirm the staging slot
+      - Confirmed 2026-09-02: retest of 15.1/15.4 verified via TESTING.md `0000005d` and
+        `0000005b` (both Confirmed).
+- [x] 15.12 Manual test: open the Create Assignments tab and stage a Scribe item — confirm the staging slot
       now shows the same parchment veil + book watermark as the Scriptorium's inventory slots; with nothing
       staged, confirm the empty-list hint now reads as a 3-step numbered list.
-- [ ] 15.13 Manual test: as the ASSIGNER, open Sent Assignment History and leave it open while the recipient
+      - Confirmed 2026-09-02: retest of 15.6 verified via TESTING.md `0000005c` (Confirmed).
+- [x] 15.13 Manual test: as the ASSIGNER, open Sent Assignment History and leave it open while the recipient
       Accepts, then Completes or Discards the assignment — confirm the row's state chip updates live without
       navigating away and back (the 15.8 repro).
+      - Confirmed 2026-09-02: retest of 15.8 verified via TESTING.md `0000005e` (Confirmed).
 
 ## 16. Assigned-task stamp icon (author-supplied art)
 
@@ -467,9 +490,23 @@
       `ScribeFrozenEditorRow`, and `ScribePinnedContent`/`ScribePinRow`. `ScribeAssignedTaskIcon.Build` falls
       back to the old SVG glyph if the bitmap is null (pure-server context). No Core changes; `Mod` builds
       clean and all 625 Core tests still pass (unaffected).
-- [ ] 16.2 Manual test: open the Inbox, Editor, and Pin Tab — confirm an accepted assignment's leading icon
+- [x] 16.2 Manual test: open the Inbox, Editor, and Pin Tab — confirm an accepted assignment's leading icon
       now renders the full-color stamp art (not the old scroll glyph), at the same size/position as before,
       and reads smoothly (no pixelation) at typical window sizes.
+      - Confirmed 2026-09-02: retest of 16.1 verified via TESTING.md `00000060` (Confirmed).
 
-<!-- More refinement items may be appended below as additional numbered sections as implementation
-     proceeds — this change is an open batch, not a fixed one-shot list. -->
+## 17. Accept picker: never auto-narrow to a single choice when 2+ items are carried
+
+- [x] 17.1 `ComputeAcceptCandidates` (`ScribeDialogBase.ViewSwitching.cs`) previously let the item matching
+      `ScribeModSystem.LastOpenedScribeItemDocId` win outright and return alone whenever it was among the
+      eligible carried items — even with a second eligible item also carried, silently skipping the picker
+      (triage 2026-09-01, playtest repro: 2 Scribe items carried, Accept immediately landed on the
+      last-opened one with no picker shown). Changed to always list every eligible carried item, ordering
+      the last-opened match FIRST as a convenience default (so the picker's initial selection is usually
+      right) without ever bypassing the picker. Exactly one eligible item is unaffected (still a plain
+      Accept button — nothing to choose between).
+- [x] 17.2 Manual test: carry two (or more) eligible Scribe items where one matches your most-recently-
+  - Confirmed 2026-09-01: TESTING.md `00000072` "Works, but it looks like on the Assignment Inbox we are missing what Scribe item the task was accepted onto. I thought we'd implemented that update already..." (submission 2026-09-01T17-35-07)
+      opened — open an Inbox with an unaccepted task, tap Accept, confirm the picker now appears (not an
+      immediate accept) with the last-opened item pre-selected, and confirm choosing a different candidate
+      and confirming lands the task on that one instead.

@@ -80,6 +80,86 @@ public class ScribeAssignmentStoreTests
         Assert.Equal("recipe-sig-abc", record!.RecipeSignature);
     }
 
+    // ---- TryCreateAccepted (task-notice-item: accept-time record creation) ----
+
+    [Fact]
+    public void TryCreateAccepted_CreatesDirectlyAtAccepted_NeverUnaccepted()
+    {
+        var store = new ScribeAssignmentStore();
+        var id = Guid.NewGuid();
+        Assert.True(store.TryCreateAccepted(id, Assigner, Assignee, "Chop 10 logs",
+            "Year 1, Day 1", "Year 1, Day 1", out var record));
+        Assert.NotNull(record);
+        Assert.Equal(ScribeAssignmentState.Accepted, record!.Assignment!.State);
+        Assert.Equal("Year 1, Day 1", record.Assignment!.AcceptedDate);
+    }
+
+    [Fact]
+    public void TryCreateAccepted_StartsAlreadySeen()
+    {
+        // The Assignee just acted on the physical Task Notice directly, not via their Inbox — there is
+        // no "unseen" moment to represent.
+        var store = new ScribeAssignmentStore();
+        var id = Guid.NewGuid();
+        Assert.True(store.TryCreateAccepted(id, Assigner, Assignee, "Chop 10 logs",
+            "Year 1, Day 1", "Year 1, Day 1", out var record));
+        Assert.True(record!.Assignment!.Seen);
+    }
+
+    [Fact]
+    public void TryCreateAccepted_AppearsInReceivedAndSent_LikeAnyOtherAcceptedRecord()
+    {
+        var store = new ScribeAssignmentStore();
+        var id = Guid.NewGuid();
+        Assert.True(store.TryCreateAccepted(id, Assigner, Assignee, "Chop 10 logs",
+            "Year 1, Day 1", "Year 1, Day 1", out _));
+
+        Assert.Single(store.Sent(Assigner));
+        Assert.Single(store.Received(Assignee));
+    }
+
+    [Fact]
+    public void TryCreateAccepted_RejectsDuplicateId()
+    {
+        var store = NewStoreWithOneAssignment(out var id);
+        Assert.False(store.TryCreateAccepted(id, Assigner, Assignee, "Different text",
+            "Year 1, Day 2", "Year 1, Day 2", out var record));
+        Assert.Null(record);
+    }
+
+    [Fact]
+    public void TryCreateAccepted_RejectsBlankFields()
+    {
+        var store = new ScribeAssignmentStore();
+        Assert.False(store.TryCreateAccepted(Guid.NewGuid(), "", Assignee, "text",
+            "Year 1, Day 1", "Year 1, Day 1", out var record));
+        Assert.Null(record);
+    }
+
+    [Fact]
+    public void TryCreateAccepted_CanThenComplete_LikeAnyInRangeAssignment()
+    {
+        // Post-accept behavior is otherwise unchanged (assignment-state-machine capability): Discard is
+        // legal from Accepted exactly as it would be for a normal record.
+        var store = new ScribeAssignmentStore();
+        var id = Guid.NewGuid();
+        Assert.True(store.TryCreateAccepted(id, Assigner, Assignee, "Chop 10 logs",
+            "Year 1, Day 1", "Year 1, Day 1", out _));
+        Assert.True(store.TryApplyAction(id, Assignee, ScribeAssignmentAction.Discard));
+        Assert.Equal(ScribeAssignmentState.Discarded, store.TryGet(id)!.Assignment!.State);
+    }
+
+    [Fact]
+    public void Decline_CreatesNoRecord_NoStoreCallInvolved()
+    {
+        // Declining a Task Notice consumes the item client/server-side with no ScribeAssignmentStore
+        // interaction at all (task-notice-item capability) — there is nothing for this store to do, so
+        // this test documents the invariant: an empty store stays empty.
+        var store = new ScribeAssignmentStore();
+        Assert.Empty(store.Sent(Assigner));
+        Assert.Empty(store.Received(Assignee));
+    }
+
     // ---- Sent / Received filtering ----
 
     [Fact]
@@ -152,6 +232,103 @@ public class ScribeAssignmentStoreTests
         Assert.True(store.TryApplyAction(id, Assignee, ScribeAssignmentAction.Accept));
         Assert.True(store.TryApplyAction(id, Assignee, ScribeAssignmentAction.Discard));
         Assert.Equal(ScribeAssignmentState.Discarded, store.TryGet(id)!.Assignment!.State);
+    }
+
+    // ---- Delete (split-assignment-delete-by-viewer: per-side deletion) ----
+
+    [Fact]
+    public void TryDelete_AssigneeDeletingHidesOnlyFromReceived()
+    {
+        var store = NewStoreWithOneAssignment(out var id);
+        Assert.True(store.TryApplyAction(id, Assigner, ScribeAssignmentAction.Cancel));
+        Assert.True(store.TryDelete(id, Assignee, ScribeAssignmentActor.Assignee));
+
+        Assert.Empty(store.Received(Assignee));
+        Assert.Single(store.Sent(Assigner));
+        Assert.NotNull(store.TryGet(id)); // still exists — only one side has deleted it
+    }
+
+    [Fact]
+    public void TryDelete_AssignerDeletingHidesOnlyFromSent()
+    {
+        var store = NewStoreWithOneAssignment(out var id);
+        Assert.True(store.TryApplyAction(id, Assigner, ScribeAssignmentAction.Cancel));
+        Assert.True(store.TryDelete(id, Assigner, ScribeAssignmentActor.Assigner));
+
+        Assert.Empty(store.Sent(Assigner));
+        Assert.Single(store.Received(Assignee));
+        Assert.NotNull(store.TryGet(id));
+    }
+
+    [Fact]
+    public void TryDelete_SelfAssignment_DeletingOneSideLeavesTheOtherVisible()
+    {
+        var store = new ScribeAssignmentStore();
+        const string self = "self-uid";
+        Assert.True(store.TryCreate(Guid.NewGuid(), self, self, "Chop 10 logs", "Year 1, Day 1", out var record));
+        var id = record!.TaskId;
+        Assert.True(store.TryApplyAction(id, self, ScribeAssignmentAction.Cancel));
+
+        Assert.True(store.TryDelete(id, self, ScribeAssignmentActor.Assignee));
+
+        Assert.Empty(store.Received(self));
+        Assert.Single(store.Sent(self));
+    }
+
+    [Fact]
+    public void TryDelete_BothSidesDeleting_FullyPurgesTheRecord()
+    {
+        var store = NewStoreWithOneAssignment(out var id);
+        Assert.True(store.TryApplyAction(id, Assigner, ScribeAssignmentAction.Cancel));
+
+        Assert.True(store.TryDelete(id, Assignee, ScribeAssignmentActor.Assignee));
+        Assert.NotNull(store.TryGet(id)); // one side down, still exists for the other
+
+        Assert.True(store.TryDelete(id, Assigner, ScribeAssignmentActor.Assigner));
+        Assert.Null(store.TryGet(id)); // both sides down — fully purged
+    }
+
+    [Fact]
+    public void TryDelete_RejectedOnNonTerminalState()
+    {
+        var store = NewStoreWithOneAssignment(out var id);
+        Assert.False(store.TryDelete(id, Assignee, ScribeAssignmentActor.Assignee)); // still Unaccepted
+        Assert.NotNull(store.TryGet(id));
+
+        Assert.True(store.TryApplyAction(id, Assignee, ScribeAssignmentAction.Accept));
+        Assert.False(store.TryDelete(id, Assignee, ScribeAssignmentActor.Assignee)); // now Accepted, still not terminal
+        Assert.NotNull(store.TryGet(id));
+    }
+
+    [Fact]
+    public void TryDelete_RejectedForUninvolvedPlayer()
+    {
+        var store = NewStoreWithOneAssignment(out var id);
+        Assert.True(store.TryApplyAction(id, Assigner, ScribeAssignmentAction.Cancel));
+        Assert.False(store.TryDelete(id, "stranger-uid", ScribeAssignmentActor.Assignee));
+        Assert.False(store.TryDelete(id, "stranger-uid", ScribeAssignmentActor.Assigner));
+        Assert.NotNull(store.TryGet(id));
+    }
+
+    [Fact]
+    public void TryDelete_RejectedWhenActorDoesNotHoldTheClaimedSide()
+    {
+        var store = NewStoreWithOneAssignment(out var id);
+        Assert.True(store.TryApplyAction(id, Assigner, ScribeAssignmentAction.Cancel));
+
+        // The Assignee claims the Assigner's side — they don't hold it, so this must be rejected,
+        // not silently authorized via the "OR" logic the old single-role signature used to have.
+        Assert.False(store.TryDelete(id, Assignee, ScribeAssignmentActor.Assigner));
+        Assert.NotNull(store.TryGet(id));
+        Assert.Single(store.Sent(Assigner));
+        Assert.Single(store.Received(Assignee));
+    }
+
+    [Fact]
+    public void TryDelete_UnknownIdFails()
+    {
+        var store = new ScribeAssignmentStore();
+        Assert.False(store.TryDelete(Guid.NewGuid(), Assignee, ScribeAssignmentActor.Assignee));
     }
 
     // ---- Seen ----
@@ -326,6 +503,123 @@ public class ScribeAssignmentStoreTests
         Assert.Null(record.Assignment!.CancelledDate);
         Assert.Null(record.Assignment!.DiscardedDate);
         Assert.Null(record.Assignment!.CompletedDate);
+    }
+
+    // ---- Round-trip: v5 accepted-into label ----
+
+    [Fact]
+    public void RoundTrip_SerializeList_PreservesAcceptedIntoLabel()
+    {
+        var store = NewStoreWithOneAssignment(out var id);
+        var assignment = store.TryGet(id)!.Assignment!;
+        assignment.AcceptedIntoLabel = "Notebook \"Book of Nick\"";
+        var bytes = ScribeAssignmentStore.SerializeList(store.Received(Assignee));
+
+        Assert.True(ScribeAssignmentStore.TryDeserializeList(bytes, out var restored));
+        var record = Assert.Single(restored!);
+        Assert.Equal("Notebook \"Book of Nick\"", record.Assignment!.AcceptedIntoLabel);
+    }
+
+    [Fact]
+    public void TryDeserializeList_AcceptsAPriorVersionBlob_DefaultingAcceptedIntoLabelToNull()
+    {
+        // A v4 blob (transition timestamps present, no label field at all) predates the destination
+        // label entirely — it was simply never captured, so null is the correct default.
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write("SASN"u8.ToArray());
+            w.Write((byte)4); // v4
+            w.Write(1); // record count
+            w.Write(Guid.NewGuid().ToByteArray());
+            w.Write((byte)ScribeBlockKind.Task);
+            w.Write("Chop 10 logs");
+            w.Write(false); // no TargetItemCode
+            w.Write(1); // TargetQuantity
+            w.Write(0); // CurrentQuantity
+            w.Write(false); // no LinkTarget
+            w.Write(false); // no LinkLabel
+            w.Write(false); // no LinkDescription
+            w.Write(0); // Depth
+            w.Write(""); // RecipeSignature (v2+)
+            w.Write(Assigner);
+            w.Write(Assignee);
+            w.Write((byte)ScribeAssignmentState.Unaccepted);
+            w.Write("Year 1, Day 1");
+            w.Write(false); // Seen
+            w.Write(Guid.NewGuid().ToByteArray()); // BatchId (v3+)
+            w.Write(false); // AcceptedDate (v4+)
+            w.Write(false); // DeclinedDate (v4+)
+            w.Write(false); // CancelledDate (v4+)
+            w.Write(false); // DiscardedDate (v4+)
+            w.Write(false); // CompletedDate (v4+)
+            // NOTE: no AcceptedIntoLabel field here — this IS the v4 shape.
+        }
+
+        Assert.True(ScribeAssignmentStore.TryDeserializeList(ms.ToArray(), out var restored));
+        var record = Assert.Single(restored!);
+        Assert.Null(record.Assignment!.AcceptedIntoLabel);
+    }
+
+    // ---- Round-trip: v6 per-side hidden flags ----
+
+    [Fact]
+    public void RoundTrip_SerializeStore_PreservesHiddenFlags()
+    {
+        var store = NewStoreWithOneAssignment(out var id);
+        Assert.True(store.TryApplyAction(id, Assigner, ScribeAssignmentAction.Cancel));
+        Assert.True(store.TryDelete(id, Assignee, ScribeAssignmentActor.Assignee));
+        var bytes = store.SerializeStore();
+
+        var restored = new ScribeAssignmentStore();
+        restored.LoadFrom(bytes);
+        var record = restored.TryGet(id);
+        Assert.NotNull(record);
+        Assert.True(record!.Assignment!.HiddenFromAssignee);
+        Assert.False(record.Assignment!.HiddenFromAssigner);
+    }
+
+    [Fact]
+    public void TryDeserializeList_AcceptsAPriorVersionBlob_DefaultingHiddenFlagsToFalse()
+    {
+        // A v5 blob (AcceptedIntoLabel present, no hidden-flag bytes at all) predates per-side
+        // deletion entirely — nothing was ever hidden from either side, so false is correct.
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write("SASN"u8.ToArray());
+            w.Write((byte)5); // v5
+            w.Write(1); // record count
+            w.Write(Guid.NewGuid().ToByteArray());
+            w.Write((byte)ScribeBlockKind.Task);
+            w.Write("Chop 10 logs");
+            w.Write(false); // no TargetItemCode
+            w.Write(1); // TargetQuantity
+            w.Write(0); // CurrentQuantity
+            w.Write(false); // no LinkTarget
+            w.Write(false); // no LinkLabel
+            w.Write(false); // no LinkDescription
+            w.Write(0); // Depth
+            w.Write(""); // RecipeSignature (v2+)
+            w.Write(Assigner);
+            w.Write(Assignee);
+            w.Write((byte)ScribeAssignmentState.Unaccepted);
+            w.Write("Year 1, Day 1");
+            w.Write(false); // Seen
+            w.Write(Guid.NewGuid().ToByteArray()); // BatchId (v3+)
+            w.Write(false); // AcceptedDate (v4+)
+            w.Write(false); // DeclinedDate (v4+)
+            w.Write(false); // CancelledDate (v4+)
+            w.Write(false); // DiscardedDate (v4+)
+            w.Write(false); // CompletedDate (v4+)
+            w.Write(false); // AcceptedIntoLabel (v5+)
+            // NOTE: no HiddenFromAssignee/HiddenFromAssigner bytes here — this IS the v5 shape.
+        }
+
+        Assert.True(ScribeAssignmentStore.TryDeserializeList(ms.ToArray(), out var restored));
+        var record = Assert.Single(restored!);
+        Assert.False(record.Assignment!.HiddenFromAssignee);
+        Assert.False(record.Assignment!.HiddenFromAssigner);
     }
 
     // ---- Round-trip: whole store (savegame) ----

@@ -166,7 +166,9 @@ The Scriptorium's dialog SHALL show a nav button that switches its view to the s
 (`inbox-tab` capability). This supersedes the Scriptorium's earlier reserved plan to host its own
 Scriptorium-only Assign & History surface — that create-and-send role now belongs exclusively to
 the Assignment Desk (`assignment-desk-block`); the Scriptorium only ever gains a viewing nav
-button, never a create affordance.
+button, never a create affordance. Per `inbox-tab`'s assignment-history gating requirement, this
+nav button SHALL be shown only once the viewing player has received at least one assignment, ever;
+before that, it SHALL NOT appear.
 
 #### Scenario: Opening the Inbox from a Scriptorium
 - **WHEN** a player at a Scriptorium clicks its Inbox nav button
@@ -177,6 +179,10 @@ button, never a create affordance.
 - **WHEN** a player opens a Scriptorium's dialog
 - **THEN** no control for creating and sending a new assignment is present
 
+#### Scenario: No Inbox button before any assignment history
+- **WHEN** a player who has never received an assignment opens a Scriptorium's dialog
+- **THEN** no Inbox nav button is present
+
 ### Requirement: The Scriptorium shows the ambient unseen-assignment particle
 
 A placed Scriptorium SHALL emit the ambient particle effect defined by the `inbox-tab` capability
@@ -185,4 +191,29 @@ when the viewing player has a New (unseen) assignment and is within range.
 #### Scenario: A Scriptorium particles for a player with an unseen assignment
 - **WHEN** a player with an unseen assignment is within range of a placed Scriptorium
 - **THEN** that Scriptorium emits the ambient particle effect for that player's client
+
+### Requirement: Transcribe is the Scriptorium's first tab and its plain-right-click default
+The Scriptorium's Transcribe tab SHALL be the first nav button in its sidebar, ahead of Read,
+Edit, Pinned, Guest Book, and (when shown) Inbox and Settings. A plain right-click on a placed
+Scriptorium SHALL open the dialog on the Transcribe tab. Crouch (shift) + right-click SHALL
+continue to perform the quick-add-a-task gesture unchanged. The block's right-click
+interaction-help text SHALL read the Transcribe tab's own title ("Transcribe") instead of "Read".
+
+#### Scenario: Right-click opens Transcribe
+- **WHEN** a player plain-right-clicks a placed Scriptorium they have read access to
+- **THEN** the dialog opens on the Transcribe tab
+
+#### Scenario: Crouch+right-click still quick-adds
+- **WHEN** a player crouches and right-clicks a placed Scriptorium
+- **THEN** the editor opens with a fresh empty task inserted and focused, exactly as before this
+  change
+
+#### Scenario: Nav order
+- **WHEN** the Scriptorium dialog is open
+- **THEN** its sidebar nav buttons read, in order: Transcribe, Read, Edit, Pinned, Guest Book,
+  (Inbox, if shown), Settings
+
+#### Scenario: Interaction help text
+- **WHEN** a player looks at a placed Scriptorium
+- **THEN** its right-click interaction hint reads "Transcribe"
 

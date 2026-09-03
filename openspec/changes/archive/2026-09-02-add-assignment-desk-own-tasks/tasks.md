@@ -94,24 +94,33 @@
 
 ## 5. Tests
 
-- [ ] 5.1 Manual test: with nothing in the staging slot and no tasks on the Desk's own document, confirm
+- [x] 5.1 Manual test: with nothing in the staging slot and no tasks on the Desk's own document, confirm
+  - Confirmed 2026-09-01: TESTING.md `00000061` "(no note)" (submission 2026-09-01T13-31-56)
       the Create Assignments tab's empty state shows only the existing hint text, no button.
-- [ ] 5.2 Manual test: author a task on the Desk's own document via the new Editor tab, switch to Create
+- [x] 5.2 Manual test: author a task on the Desk's own document via the new Editor tab, switch to Create
+  - Confirmed 2026-09-01: TESTING.md `00000062` "(no note)" (submission 2026-09-01T13-31-56)
       Assignments — confirm the pull-from-Desk button now appears below the hint; click it and confirm the
       task list populates with that task, selectable and sendable exactly like a staged item's task.
-- [ ] 5.3 Manual test: with the Desk source active and populated, place an item in the staging slot —
+- [x] 5.3 Manual test: with the Desk source active and populated, place an item in the staging slot —
+  - Confirmed 2026-09-01: TESTING.md `00000063` "(no note)" (submission 2026-09-01T13-31-56)
       confirm the list immediately switches to the item's tasks. Remove the item — confirm the Desk's tasks
       reappear without re-clicking the button.
-- [ ] 5.4 Manual test: with the Desk source active, switch to the Editor tab and add/delete a task, then
+- [x] 5.4 Manual test: with the Desk source active, switch to the Editor tab and add/delete a task, then
+  - Confirmed 2026-09-01: TESTING.md `00000064` "(no note)" (submission 2026-09-01T13-31-56)
       switch back to Create Assignments — confirm the list reflects the edit without re-clicking the button.
-- [ ] 5.5 Manual test: select a parent task (with subtasks) pulled from the Desk's own document — confirm
+- [x] 5.5 Manual test: select a parent task (with subtasks) pulled from the Desk's own document — confirm
+  - Confirmed 2026-09-01: TESTING.md `00000065` "(no note)" (submission 2026-09-01T13-31-56)
       the same parent-selects-subtasks-once cascade as the staged-item flow.
-- [ ] 5.6 Manual test: with "Delete from source on send" enabled and the Desk source active, send a batch
+- [x] 5.6 Manual test: with "Delete from source on send" enabled and the Desk source active, send a batch
+  - Confirmed 2026-09-01: TESTING.md `00000066` "(no note)" (submission 2026-09-01T13-31-56)
       — confirm the sent rows are removed from the Desk's own document (visible on the Read/Editor tab)
       and the assignments arrive normally in the recipient's Inbox.
-- [ ] 5.7 Manual test: confirm the Assignment Desk's Read tab shows checkbox/pin/delete/reorder/Tracker
+- [x] 5.7 Manual test: confirm the Assignment Desk's Read tab shows checkbox/pin/delete/reorder/Tracker
+  - Confirmed 2026-09-01: TESTING.md `00000067` "(no note)" (submission 2026-09-01T13-31-56)
       affordances identical to a Notebook's Read tab, and the Editor tab requires the same server-lock
       round-trip (e.g. observe the same brief "acquiring lock" behavior another shared block shows).
-- [ ] 5.8 Manual test: confirm no Pinned nav button appears on the Assignment Desk.
-- [ ] 5.9 Restage both client and server builds together before testing (wire-message shape change, design.md
+- [x] 5.8 Manual test: confirm no Pinned nav button appears on the Assignment Desk.
+  - Confirmed 2026-09-01: TESTING.md `00000068` "(no note)" (submission 2026-09-01T13-31-56)
+- [x] 5.9 Restage both client and server builds together before testing (wire-message shape change, design.md
+  - Confirmed 2026-09-01: TESTING.md `00000069` "(no note)" (submission 2026-09-01T13-31-56)
       Migration Plan) — a mismatched pair will misread `ScribeSendAssignmentBatchMessage`.

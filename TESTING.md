@@ -27,34 +27,13 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
-## assignment-icon-and-tab-defaults
-
-- [ ] `0000006e` **Check marker position + tooltip.** As the assignee, open Read, Edit, and the Pin
-      Tab on an accepted-assignment task. Confirm the assignment marker icon sits immediately RIGHT
-      of the checkbox (not left of it) on all three surfaces, and hovering it shows a two-line
-      tooltip (assigner name + assigned date; accepted date) shaded to match the room's ambient
-      light rather than sticking out full-bright in a dark room. *(assignment-icon-and-tab-defaults
-      6.2)*
-- [ ] `0000006f` **Check Scriptorium right-click default.** Right-click a placed Scriptorium: it
-      should open directly on the Transcribe tab (not Read), Transcribe's nav button should be
-      FIRST in the sidebar (above Read/Edit/Pinned/Guest Book/Inbox/Settings), and the block's
-      Right-Click interaction-help text should read "Transcribe". *(assignment-icon-and-tab-defaults
-      6.2)*
-- [ ] `00000070` **Check Lectern right-click default.** Right-click a placed Lectern: it should open
-      directly on the Guest Book tab (not Read), Guest Book's nav button should be FIRST in the
-      sidebar (above Read/Edit/Pinned/Inbox/Settings), and the block's Right-Click interaction-help
-      text should read "Guest Book". *(assignment-icon-and-tab-defaults 6.2)*
-- [ ] `00000071` **Check crouch+right-click quick-add still works.** On both the Scriptorium and the
-      Lectern, Crouch+Right-Click should still open straight into a new blank task in the Editor
-      (unaffected by the new right-click defaults above). *(assignment-icon-and-tab-defaults 6.2)*
-
 ## assignment-lifecycle-bug-fixes
 
 > Ad-hoc correctness fixes to the `assignment-state-machine` capability, found while
 > double-checking the per-transition date chain (2026-09-01) — not tracked by any OpenSpec
 > `tasks.md`, so no task-number suffix on these items.
 
-- [ ] `0000006a` **Check stale-Discard can't resurrect Completed.** As the assignee, Accept an
+- [x] `0000006a` **Check stale-Discard can't resurrect Completed.** As the assignee, Accept an
       assignment, then in the Inbox click Discard (state becomes Discarded) WITHOUT deleting
       the physically-placed task from your document. Then check off that still-present task's
       Done box. Confirm: the task still checks off locally (fine), but the Assigner's Sent
@@ -63,6 +42,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       `NotifyAssignmentDoneChanged` gated on the placed block's own stale Assignment clone
       instead of the canonical store record, letting a discarded-but-undeleted task silently
       derive a bogus local Completed state)*
+      - **Confirmed 2026-09-01** (submission 2026-09-01T13-31-56): "(no note)"
 
 ## strengthen-harfbuzz-linux-fix
 
@@ -83,241 +63,23 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       `gui`-dependent mod (no separate HarfBuzz fix installed) on the same Linux/glibc client —
       confirm both function normally. *(strengthen-harfbuzz-linux-fix 3.3)*
 
-## add-assignment-desk-own-tasks
-
-> Adds Read/Editor nav tabs (no Pinned) to the Assignment Desk, plus a "pull tasks from
-> the Desk's own document" alternate source for the Create Assignments tab (staged item
-> in the slot still always wins). Wire-protocol change: `ScribeSendAssignmentBatchMessage`
-> gained `SourceIsDeskDocument` — **restage BOTH client and server together** before
-> testing any of this (a mismatched pair will misread the message).
-
-- [ ] `00000061` **Check empty state has no button.** With the staging slot empty and no
-      tasks on the Assignment Desk's own document, open Create Assignments — confirm the
-      empty state shows only the existing hint text, no "Pull tasks from this Desk" button.
-      *(add-assignment-desk-own-tasks 5.1)*
-- [ ] `00000062` **Check pull-from-Desk populates list.** Author a task on the Desk's own
-      document via the new Editor tab, switch to Create Assignments — confirm the pull
-      button now appears below the hint; click it and confirm the list populates with that
-      task, selectable/sendable exactly like a staged item's task. *(add-assignment-desk-own-tasks 5.2)*
-- [ ] `00000063` **Check staged item overrides Desk source.** With the Desk source active
-      and populated, place an item in the staging slot — confirm the list immediately
-      switches to the item's tasks; remove the item — confirm the Desk's tasks reappear
-      without re-clicking the button. *(add-assignment-desk-own-tasks 5.3)*
-- [ ] `00000064` **Check live-tracking via Editor.** With the Desk source active, switch to
-      the Editor tab and add/delete a task, then switch back to Create Assignments —
-      confirm the list reflects the edit without re-clicking the button.
-      *(add-assignment-desk-own-tasks 5.4)*
-- [ ] `00000065` **Check subtask cascade from Desk source.** Select a parent task (with
-      subtasks) pulled from the Desk's own document — confirm the same parent-selects-
-      subtasks-once cascade as the staged-item flow. *(add-assignment-desk-own-tasks 5.5)*
-- [ ] `00000066` **Check delete-from-Desk-source symmetry.** With "Delete from source on
-      send" enabled and the Desk source active, send a batch — confirm the sent rows are
-      removed from the Desk's own document (visible on Read/Editor) and the assignments
-      still arrive normally in the recipient's Inbox. *(add-assignment-desk-own-tasks 5.6)*
-- [ ] `00000067` **Check Read/Editor tab parity + lock.** Confirm the Assignment Desk's Read
-      tab shows checkbox/pin/delete/reorder/Tracker affordances identical to a Notebook's
-      Read tab, and the Editor tab requires the same server-lock round-trip (brief
-      "acquiring lock" behavior another shared block shows). *(add-assignment-desk-own-tasks 5.7)*
-- [ ] `00000068` **Check no Pinned tab.** Open the Assignment Desk — confirm no Pinned nav
-      button appears (six tabs: Create Assignments, Sent History, Inbox, Read, Editor,
-      Settings). *(add-assignment-desk-own-tasks 5.8)*
-- [ ] `00000069` **Restage client + server together first.** Before any of the above:
-      restage BOTH the client and server builds (this change broke
-      `ScribeSendAssignmentBatchMessage`'s wire shape) — a mismatched pair will misread the
-      message. *(add-assignment-desk-own-tasks 5.9)*
-
 ## refine-assignment-desk-inbox-ux
 
-> Playtest-driven UX refinement pass over the Assignment Desk/Inbox surface — grew from
-> the original batch of 7 items through multi-item assignment creation (group 9), the
-> submission stamp + send-button lock (group 10), a tab-layout parity fix (group 11), a
-> round-2 playtest of bug fixes/polish (group 12), a Create-Assignments tab split +
-> Accept-placement insert-policy pass (group 13), a round-3 triage of tooltip/Accept-scope/
-> ordering fixes (group 14), a round-4 triage of batch-accept ordering, disabled-button
-> styling, history stubs, copy, and staging-slot styling (group 15), and an author-supplied
-> full-color stamp-icon swap (group 16). Restaged Debug 2026-08-31.
-> `add-assignment-and-quest-support`'s own playtest group retired to
-> `playtest-history/TESTING-archive.md` (all its items reached Confirmed; its
-> particle-tuning item is explicitly superseded by 5.1-5.4 below).
+> Change archived as `2026-09-02-refine-assignment-desk-inbox-ux`; all its resolved items
+> retired to `playtest-history/TESTING-archive.md`. These two Backlogged items stay live —
+> archiving hides a change's tasks from `/what-to-test`, so unscoped feedback is parked
+> here instead so it isn't lost.
 
-- [x] `00000044` **Check chip colors.** Open the Assignment Inbox or Create Assignments tab's
-      filter-chip row — confirm New/Accepted/Cancelled/Completed each render in their own
-      distinct color and Declined+Discarded share one color, all legible against the chip's
-      light glyph text. *(refine-assignment-desk-inbox-ux 2.3)*
-      - **Obsolete 2026-08-31**: the D1 custom palette this tested read too saturated/"fancy"
-        against the rest of the GUI's muted nav-icon backgrounds — rejected outright, not tuned.
-        Replaced with a palette that directly borrows nav-icon colors (12.1); see `0000004f`.
-- [x] `00000045` **Check Inbox gate.** On a player with zero assignment history, open a
-      Lectern, Scriptorium, and Chalkboard — confirm none shows an Inbox nav button; send
-      that player an assignment and confirm the button appears on all three without
-      reopening any dialog. *(refine-assignment-desk-inbox-ux 3.4)*
-      - **Confirmed 2026-08-31**: "For Lectern/Scriptorium/Chalkboard, Inbox isn't shown to a
-        player with no assigned tasks."
-- [x] `00000046` **Check standalone Inbox seen-fix.** Send an assignment, then open the
-      standalone Inbox block directly (not via another surface's nav button) and close it
-      without acting — confirm the ambient particle and nav shimmer both clear afterward.
-      *(refine-assignment-desk-inbox-ux 4.3)*
-      - **Confirmed 2026-08-31**: "It works for both effects and in all cases."
-- [x] `00000047` **Check Decline clears particle.** Send an assignment, view it via any
-      Inbox-capable surface, then Decline it — confirm the particle clears and does not
-      resume. *(refine-assignment-desk-inbox-ux 4.4)*
-      - **Confirmed 2026-08-31**: "Works as well."
-- [x] `00000048` **Check particle range/shape.** Approach an Inbox-capable block with an
-      unseen assignment from up to 12 blocks out — confirm it triggers throughout that
-      range, spawns from around the block's mid-height (not above it), and rises a shorter
-      distance than before over the same duration. *(refine-assignment-desk-inbox-ux 5.5)*
-      - **Confirmed 2026-08-31**: "The shape and range were successfully changed and look good."
-- [ ] `00000049` **Check theme-picker button.** In Scribe Settings' Window Appearance
-      section, click "Open Theme Picker" — confirm LibGUI's own theme-picker dialog opens,
-      matching typing `.ui settings` directly. *(refine-assignment-desk-inbox-ux 6.3)*
-      - **Still broken 2026-08-31**: "It's a very big button ... the button doesn't do
-        anything." Root-caused (decompiled the shipped `Gui.dll`'s `.ui settings` handler —
-        leading theory is the picker opening BEHIND the still-open Scribe Settings window) and
-        fixed: closes Settings first, logs the result to the client log, and moved onto a row
-        with the Font picker instead of its own oversized row. Needs a retest.
-      - **Still broken 2026-08-31:** (submission 2026-08-31T20-35-02) "The resizing was done, but the button action isn't working. The "Open Theme Picker" button only closes settings, but nothing else is launched. A potential reference to look at from the game is in the Creative mode Escape menu, there is a "Command Handbook" where clicked links populate the chat."
-      - **Still broken 2026-08-31:** (submission 2026-08-31T22-17-42) "Did we implement a fix for this? Its still not working as expected, behavior still the same as last turn. Probably worth a turn discussing with me how to address this."
-- [x] `0000004a` **Check Send-to row layout.** Open Create Assignments — confirm the "Send
-      to" label, player picker, and Send button sit on one row (label and button
-      fixed-width, picker filling the space between), and stay usable at a couple different
-      Pixel Art Size settings. *(refine-assignment-desk-inbox-ux 7.3)*
-      - **Confirmed 2026-08-31**: "size is fine." A screenshot flagged the player picker's caret
-        sitting closer to its border than the Font picker's — investigated (decompiled
-        `Dropdown<T>`'s layout) and explained as expected content-length-vs-box-width variance
-        (a narrower row + a longer player name leaves less spare width before the caret), not a
-        positioning bug. No code change.
-- [ ] `0000004b` **Check multi-item batch send.** Stage a document with at least one Task,
-      Tracker, Craft, Link, plain Text, and a parent-with-subtasks; multi-select a mix
-      (confirm selecting a parent auto-selects its subtasks); Send to one recipient —
-      confirm each selected row lands as its OWN independent assignment in that
-      recipient's Inbox. *(refine-assignment-desk-inbox-ux 9.6)*
-      - **Still broken 2026-08-31**: Trackers/Links/Crafting showed blank text in the Inbox
-        (subtask indenting was correct); accepting created blank versions that also lost
-        subtask indenting. Root-caused + fixed (`ScribeInboxRowData` now resolves a
-        `DisplayName` like the read view; Accept-placement now carries every field/Depth
-        through instead of only Kind+Text). Needs a retest.
-      - **Still broken 2026-08-31 (partial retest, submission 2026-08-31T20-35-02):** "Created
-        tasks now show their text properly." Confirms the display-text half of the fix; the
-        full item (multi-select auto-subtask-select + each row landing independently) wasn't
-        exercised in this pass, so the box stays open pending a full retest.
-      - **Confirmed 2026-08-31** (submission 2026-08-31T22-17-42): "The batching/order still needs looking at (that's a different task), but the rest (multi-select auto-subtask-select + each row landing independently) are all good. Done."
-- [ ] `0000004c` **Check delete-from-source.** Repeat the batch send with "Delete from
-      source on send" checked — confirm the selected rows are gone from the staged
-      document once the send completes; repeat unchecked (the default) and confirm the
-      staged document is left untouched. *(refine-assignment-desk-inbox-ux 9.7)*
-      - **Still broken 2026-08-31**: "I can't seem to accept tasks that were deleted from
-        Source" — the two-step Accept picker appeared but the confirm tap did nothing.
-        Investigated: no Kind- or deletion-based rejection path found in the transition/
-        placement code; every silent-no-op branch already logs to the server console.
-        Leading theory is the SAME root cause as `0000004b` (a blank/malformed placed row made
-        a successful Accept look like nothing happened) — no separate fix. Needs a retest; if
-        it recurs, check the server log for the `[scribe] assignment-action ...` trace line.
-      - **Confirmed 2026-08-31** (submission 2026-08-31T22-17-42): "(no note)"
-- [x] `0000004d` **Check submit stamp + button lock.** Send a batch from Create
-      Assignments — confirm a stamp flourish plays over the staging slot, and that the Send
-      button is unclickable until the animation finishes. *(refine-assignment-desk-inbox-ux 10.5)*
-      - **Confirmed 2026-08-31**: "It stamps and sounds good." Asked for the imprint text to
-        read one word, "Submitted" (was 2 lines) — changed; a separate bug where the imprint
-        box renders 3 lines tall regardless of text was explicitly called out as not worth
-        fixing right now.
-- [x] `0000004e` **Check tab layout parity.** Open the Inbox tab on Lectern/Chalkboard/
-      Scriptorium and the Create Assignments tab on the Assignment Desk — confirm the
-      divider width and content inset now match the Read/Edit/Pinned/Guest Book/Timer
-      tabs (previously read as much wider/edge-to-edge). *(refine-assignment-desk-inbox-ux 11.4)*
-      - **Confirmed 2026-08-31**: "Layout is good!"
-- [ ] `0000004f` **Check reworked chip colors.** Open the Assignment Inbox or Create
-      Assignments tab's filter-chip row — confirm New/Accepted/Declined+Discarded/
-      Cancelled/Completed now read as muted colors borrowed from the Guest Book/Read/Edit/
-      Transcribe/Pinned Tasks nav icons respectively, consistent with the rest of the GUI's
-      palette (not the earlier, more saturated custom palette). *(refine-assignment-desk-inbox-ux 12.1)*
-      - **Confirmed 2026-08-31** (submission 2026-08-31T20-35-02): "(no note)"
-- [ ] `00000050` **Check newest-first Inbox order.** Send a couple of assignments (or a
-      couple of batches) at different times — confirm the most recently received one shows
-      at the TOP of the Inbox, and a multi-row batch's own rows stay in their original
-      (parent-before-subtask) order within that group. *(refine-assignment-desk-inbox-ux 12.2)*
-      - **Still broken 2026-08-31:** (submission 2026-08-31T20-35-02) "There's issues here, I think subtasks are getting created and inserted at the top of the list inappropriately. The way this should work is that the order of the tasks on the Inbox should be treated as a batch. What's the best way to accomplish this?"
-      - **Obsolete 2026-08-31**: root-caused (refine-assignment-desk-inbox-ux 14.3) — the previous
-        fix grouped by `AssignedDate`, a coarse date STRING that two separate same-day batches can
-        collide on, silently merging them into one run. Replaced with a real per-send-call
-        `ScribeAssignment.BatchId` and a `GroupBy(BatchId).Reverse()` helper shared by the Inbox and
-        Sent History. This exact scenario is superseded by the new same-day-two-batches retest —
-        see `00000056`.
-- [ ] `00000051` **Check Create Assignments tab split.** Open the Assignment Desk — confirm
-      Create Assignments now shows ONLY the staging slot/list/player-picker (no Sent
-      history below it), a new Sent Assignment History tab shows the pills + historical
-      list that used to live there, and the nav column reads
-      Create/History/Inbox/Settings left to right. *(refine-assignment-desk-inbox-ux 13.5)*
-      - **Confirmed 2026-08-31** (submission 2026-08-31T20-35-02): "(no note)"
-- [ ] `00000052` **Check staged-list box styling.** On the Create Assignments tab, confirm
-      the staged-row list now reads as a rounded box with a subtle recessed/inner-shadow
-      look, distinct from the plain tab background, at a couple of different Pixel Art
-      Size settings. *(refine-assignment-desk-inbox-ux 13.6)*
-      - **Confirmed 2026-08-31** (submission 2026-08-31T20-35-02): "(no note)"
-- [ ] `00000053` **Check Accept respects New Task Insert.** As the ASSIGNEE, set New Task
-      Insert to Top in Settings and Accept an assignment into a Notebook that already has
-      tasks — confirm it lands at index 0; switch to Bottom and Accept another — confirm it
-      lands at the end. *(refine-assignment-desk-inbox-ux 13.7)*
-      - **Confirmed 2026-08-31** (submission 2026-08-31T22-17-42): "Works."
-- [ ] `00000054` **Check tooltip title removed.** Look at (and pick up) a placed/carried Inbox
-      block and Assignment Desk — confirm neither tooltip shows a "Title:" line at all; a
-      Lectern/Scriptorium/Notebook nearby still shows its title line as before (regression
-      check). *(refine-assignment-desk-inbox-ux 14.6)*
-      - **Confirmed 2026-08-31** (submission 2026-08-31T22-17-42): "(no note)"
-- [ ] `00000055` **Check Accept-candidate scope.** With writeable Scribe items scattered
-      across hotbar, backpack, AND an open chest, open an Inbox with an unaccepted
-      assignment — confirm the Accept candidate picker lists only the hotbar/backpack
-      items (never the chest's), and defaults/narrows to whichever Scribe item you most
-      recently opened this session when it's still carried. *(refine-assignment-desk-inbox-ux 14.7)*
-      - **Confirmed 2026-08-31** (submission 2026-08-31T22-17-42): "(no note)"
-- [ ] `00000056` **Check same-day two-batch ordering.** Send two separate multi-item
-      batches to the same recipient on the same in-game day (batch A, then later batch B) —
-      confirm the Inbox shows batch B's rows as one intact group above batch A's, with each
-      batch's own parent-before-subtask order preserved. *(refine-assignment-desk-inbox-ux 14.8)*
-      - **Still broken 2026-08-31** (submission 2026-08-31T22-17-42): "I don't want it batched
-        the same day, can we batch it for the same acceptance session..." — raised a DIFFERENT
-        bug on the ACCEPT side: accepting a batch's rows one at a time was scattering subtasks
-        away from their parent. Root-caused + fixed (15.1: `ScribeDocument.InsertIndexForBatch`
-        co-locates a batch's Accept-placed rows). Retest via `0000005d`.
-- [ ] `00000057` **Check Sent History ordering.** Open Sent Assignment History after sending
-      a couple of batches at different times — confirm the newest batch shows at the top,
-      matching the Inbox (it previously showed raw creation order, oldest first).
-      *(refine-assignment-desk-inbox-ux 14.9)*
-      - **Confirmed 2026-08-31** (submission 2026-08-31T22-17-42): "(no note)"
-- [ ] `00000058` **Check filter pill rework.** On either the Inbox or Sent Assignment
-      History tab, check the filter-chip row — confirm it reads All / New / Accepted /
-      Declined-Cancelled-Discarded / Completed, acts as radio buttons (tapping one shows
-      only that group, deselecting the previous one), and a Discarded row's own chip color
-      is visibly distinct from a Declined row's (a red/gold blend, not plain red).
-      *(refine-assignment-desk-inbox-ux 14.10)*
-      - **Confirmed 2026-08-31** (submission 2026-08-31T22-17-42): "Mark this complete, but update color of the the combined "Declined-Cancelled-Discarded" pill to the color of Declined for both Inbox and Sent Assignment History tabs."
-- [ ] `00000059` **Check disabled Accept button styling.** Open an Inbox row with an
-      unaccepted assignment while carrying no eligible Scribe item — confirm the disabled
-      Accept button now reads clearly inert (bordered/transparent), not the previous solid
-      amber that still looked clickable. *(refine-assignment-desk-inbox-ux 15.2)*
-- [ ] `0000005a` **Check Sent History icon.** Open the Assignment Desk — confirm the Sent
-      Assignment History nav button shows a guestbook/journal-style icon rather than the
-      scroll it used before. *(refine-assignment-desk-inbox-ux 15.3)*
-- [ ] `0000005b` **Check per-transition history stubs.** Expand an assignment in the Inbox or
-      Sent Assignment History past Accepted (and separately one that reaches Completed or
-      Discarded) — confirm an "Accepted — date" line shows below "Assigned by", and a
-      Completed/Discarded line shows once it reaches that state.
-      *(refine-assignment-desk-inbox-ux 15.4)*
-- [ ] `0000005c` **Check staging-slot styling + copy.** Open the Create Assignments tab —
-      confirm the staging slot now shows the same parchment veil + book watermark as the
-      Scriptorium's inventory slots, and with nothing staged the empty-list hint reads as a
-      3-step numbered walkthrough. *(refine-assignment-desk-inbox-ux 15.6/15.7)*
-- [ ] `0000005d` **Check batch-accept adjacency.** Accept a batch's parent task, then (without
-      leaving the Inbox) accept one of its subtasks — confirm the subtask lands directly
-      under its parent in the document, not detached elsewhere (the `00000056` repro).
-      *(refine-assignment-desk-inbox-ux 15.1)*
-- [ ] `0000005e` **Check Sent History live refresh.** As the ASSIGNER, leave Sent Assignment
-      History open while the recipient Accepts, then Completes or Discards the assignment —
-      confirm the row's state chip updates live, without navigating away and back.
-      *(refine-assignment-desk-inbox-ux 15.8)*
-- [ ] `00000060` **Check assigned-task stamp art.** Open the Inbox, Editor, and Pin Tab —
-      confirm an accepted assignment's leading icon now renders the author's full-color stamp
-      art (not the old scroll glyph), at the same size/position as before, with no pixelation.
-      *(refine-assignment-desk-inbox-ux 16.1)*
+- [ ] `00000079` **Batch accepted deliveries by session, not day.** Feedback: don't group
+      accepted-task deliveries by same-calendar-day; batch by acceptance session instead (only
+      deploy once the player closes the Scribe interface or navigates away). Not yet scoped as
+      a task.
+      - **Backlogged 2026-09-01** (playtest submissions, triage note on 14.8): needs its own
+        design pass before it's a task — parking here so it isn't lost.
+- [ ] `0000007a` **Rework the Create Tasks "+" icon.** Feedback: the `scribeplus` glyph reads
+      too thick/heavy; look into a thinner replacement SVG. Not yet scoped as a task.
+      - **Backlogged 2026-09-01** (playtest submission 2026-08-31T22-17-42): deferred to a
+        future icon pass.
 
 ## reconcile-animating-surfaces
 

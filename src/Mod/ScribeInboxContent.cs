@@ -26,7 +26,8 @@ internal readonly record struct ScribeInboxRowData(
     Guid TaskId, string Text, int Depth, ScribeAssignmentState State, string AssignerUid,
     string TargetPlayerUid, string AssignedDate, bool Seen, ScribeAssignmentActor ViewerRole,
     string? DisplayName = null, string? AcceptedDate = null, string? DeclinedDate = null,
-    string? CancelledDate = null, string? DiscardedDate = null, string? CompletedDate = null)
+    string? CancelledDate = null, string? DiscardedDate = null, string? CompletedDate = null,
+    string? AcceptedIntoLabel = null)
 {
     /// <summary>What this row actually shows (playtest 2026-08-31 bug fix): a Task/Text row's own
     /// authored <see cref="Text"/> is blank by convention for a Tracker/Link/Craft row (its label lives
@@ -37,12 +38,6 @@ internal readonly record struct ScribeInboxRowData(
     /// and this falls back to <see cref="Text"/> when it's null (every Task/Text row).</summary>
     public string Label => DisplayName ?? Text;
 }
-
-/// <summary>One Accept-placement candidate (assignment-state-machine's placement requirement) — an
-/// eligible (writeable Scribe document) item's slot identity, exactly what
-/// <see cref="ScribeAssignmentActionMessage"/> needs to name the target, plus a display label for the
-/// picker shown when more than one candidate exists.</summary>
-internal readonly record struct ScribeAcceptCandidate(string InventoryId, int SlotId, string Label);
 
 /// <summary>
 /// The shared Inbox tab content (add-assignment-and-quest-support §7 / <c>inbox-tab</c> spec): a state
@@ -67,6 +62,11 @@ internal sealed class ScribeInboxContent : StatefulWidget
         string emptyHintLangKey = "scribe:scribe-gui-inbox-empty",
         Action<Guid, ScribeAcceptCandidate>? onAccept = null,
         IReadOnlyList<ScribeAcceptCandidate>? acceptCandidates = null,
+        Action<Guid>? onDelete = null,
+        ScribeAssignmentFilterGroup activeFilterGroup = ScribeAssignmentFilterGroup.All,
+        Action<ScribeAssignmentFilterGroup>? onFilterGroupChanged = null,
+        Func<Guid, bool>? isExpanded = null,
+        Action<Guid>? onToggleExpand = null,
         Gui.Widgets.Framework.Key? key = null) : base(key)
     {
         Rows = rows;
@@ -77,6 +77,11 @@ internal sealed class ScribeInboxContent : StatefulWidget
         EmptyHintLangKey = emptyHintLangKey;
         OnAccept = onAccept ?? ((_, _) => { });
         AcceptCandidates = acceptCandidates ?? Array.Empty<ScribeAcceptCandidate>();
+        OnDelete = onDelete ?? (_ => { });
+        ActiveFilterGroup = activeFilterGroup;
+        OnFilterGroupChanged = onFilterGroupChanged ?? (_ => { });
+        IsExpanded = isExpanded ?? (_ => false);
+        OnToggleExpand = onToggleExpand ?? (_ => { });
     }
 
     public IReadOnlyList<ScribeInboxRowData> Rows { get; }
@@ -101,6 +106,22 @@ internal sealed class ScribeInboxContent : StatefulWidget
     /// disables the Accept control with an explanatory tooltip; more than one shows a picker. Defaults to
     /// empty — irrelevant for a Sent-history view.</summary>
     public IReadOnlyList<ScribeAcceptCandidate> AcceptCandidates { get; }
+    /// <summary>Requests permanent deletion of a terminal-state assignment record
+    /// (manage-terminal-assignment-records). The server re-validates the terminal-state and
+    /// Assigner-or-Assignee restrictions — this is a request, not a locally-applied change; the row
+    /// disappears once the server's resync arrives. Defaults to a no-op.</summary>
+    public Action<Guid> OnDelete { get; }
+    /// <summary>Which filter-chip group is active — lifted out of this widget's own State (manage-terminal-
+    /// assignment-records) so the dialog's title-bar expand/collapse-all toggle can compute "currently
+    /// visible rows" the same way this content does. Owned and persisted by the dialog; a filter tap routes
+    /// through <see cref="OnFilterGroupChanged"/> rather than a local <c>SetState</c>.</summary>
+    public ScribeAssignmentFilterGroup ActiveFilterGroup { get; }
+    public Action<ScribeAssignmentFilterGroup> OnFilterGroupChanged { get; }
+    /// <summary>Whether the row for the given TaskId is currently expanded — lifted out of each row's own
+    /// State (manage-terminal-assignment-records) into one dialog-owned set, for the same reason as
+    /// <see cref="ActiveFilterGroup"/>: the title-bar toggle needs to read and bulk-mutate it.</summary>
+    public Func<Guid, bool> IsExpanded { get; }
+    public Action<Guid> OnToggleExpand { get; }
     public ScribeRowStyle Style { get; }
     /// <summary>Dialog-owned scroll controller — NOT disposed here, matching <see cref="ScribeReadContent"/>.</summary>
     public ScrollController ScrollController { get; }
@@ -111,13 +132,6 @@ internal sealed class ScribeInboxContent : StatefulWidget
 
 internal sealed class ScribeInboxContentState : State<ScribeInboxContent>
 {
-    /// <summary>Which single filter group is currently visible (triage 2026-08-31: "the pills should act
-    /// like radio buttons, in that only one of these views should be visible at any time" — replaces the
-    /// original independently-toggleable multi-select chip row). Defaults to <see cref="ScribeAssignmentFilterGroup.All"/>.
-    /// Lives on this State so it survives a data-only reconcile (the dialog's <c>RebuildBody</c> on an
-    /// assignment sync) rather than resetting on every server push.</summary>
-    private ScribeAssignmentFilterGroup activeFilterGroup = ScribeAssignmentFilterGroup.All;
-
     private static ScribeAssignmentFilterGroup[] AllGroups() =>
         (ScribeAssignmentFilterGroup[])Enum.GetValues(typeof(ScribeAssignmentFilterGroup));
 
@@ -126,7 +140,7 @@ internal sealed class ScribeInboxContentState : State<ScribeInboxContent>
         var colors = Theme.Of(context).ColorScheme;
         var style = Widget.Style;
 
-        var visibleStates = ScribeAssignmentFilterGroups.StatesFor(activeFilterGroup);
+        var visibleStates = ScribeAssignmentFilterGroups.StatesFor(Widget.ActiveFilterGroup);
         var visibleRows = Widget.Rows.Where(r => visibleStates.Contains(r.State)).ToList();
 
         Widget filterRow = new Wrap(
@@ -150,6 +164,9 @@ internal sealed class ScribeInboxContentState : State<ScribeInboxContent>
                             .Select(r => (Widget)new ScribeInboxRow(
                                 r, Widget.ResolvePlayerName, Widget.OnAction, style,
                                 onAccept: Widget.OnAccept, acceptCandidates: Widget.AcceptCandidates,
+                                onDelete: Widget.OnDelete,
+                                expanded: Widget.IsExpanded(r.TaskId),
+                                onToggleExpand: () => Widget.OnToggleExpand(r.TaskId),
                                 key: new ValueKey<Guid>(r.TaskId)))
                             .ToList())))
             { AutoHide = false };
@@ -176,13 +193,13 @@ internal sealed class ScribeInboxContentState : State<ScribeInboxContent>
     /// group, outlined otherwise. Tapping one selects it exclusively (triage 2026-08-31).</summary>
     private Widget BuildFilterChip(ScribeAssignmentFilterGroup group, ColorScheme colors)
     {
-        bool active = activeFilterGroup == group;
+        bool active = Widget.ActiveFilterGroup == group;
         var (labelKey, chipColor) = ScribeAssignmentFilterGroups.LabelAndColor(group);
         Vector4 bg = active ? chipColor with { W = 1f } : colors.SurfaceHigh with { W = 1f };
         Vector4 fg = active ? ScribeRowConstants.NavActiveGlyph : colors.OnSurfaceVariant;
 
         return new GestureDetector(
-            onTap: _ => SetState(() => activeFilterGroup = group),
+            onTap: _ => Widget.OnFilterGroupChanged(group),
             child: new Container(
                 style: new BoxStyle
                 {
@@ -265,15 +282,20 @@ internal static class ScribeAssignmentFilterGroups
 
 /// <summary>One Inbox row: a leading chevron (the sole expand/collapse trigger — inbox-tab), the task
 /// text, depth indent, and a compact state chip when collapsed; assigner name, in-game date, and any
-/// legal state-change action(s) additionally when expanded. Owns its own <c>expanded</c> bool (§7.1),
-/// keyed by the assignment's stable TaskId so it survives a data refresh (see
-/// <see cref="ScribeInboxContentState"/>'s remarks on reconcile).</summary>
+/// legal state-change action(s) additionally when expanded. Its expanded/collapsed state (§7.1) is lifted
+/// out of this widget's own State (manage-terminal-assignment-records) into <see cref="Expanded"/>/
+/// <see cref="OnToggleExpand"/>, owned by the dialog, so the title-bar expand/collapse-all toggle can read
+/// and bulk-mutate it. Still keyed by the assignment's stable TaskId so its OTHER State (the Accept
+/// picker) survives a data refresh (see <see cref="ScribeInboxContentState"/>'s remarks on reconcile).</summary>
 internal sealed class ScribeInboxRow : StatefulWidget
 {
     public ScribeInboxRow(ScribeInboxRowData data, Func<string, string> resolvePlayerName,
         Action<Guid, ScribeAssignmentAction> onAction, ScribeRowStyle style,
         Action<Guid, ScribeAcceptCandidate>? onAccept = null,
         IReadOnlyList<ScribeAcceptCandidate>? acceptCandidates = null,
+        Action<Guid>? onDelete = null,
+        bool expanded = false,
+        Action? onToggleExpand = null,
         Gui.Widgets.Framework.Key? key = null) : base(key)
     {
         Data = data;
@@ -282,6 +304,9 @@ internal sealed class ScribeInboxRow : StatefulWidget
         Style = style;
         OnAccept = onAccept ?? ((_, _) => { });
         AcceptCandidates = acceptCandidates ?? Array.Empty<ScribeAcceptCandidate>();
+        OnDelete = onDelete ?? (_ => { });
+        Expanded = expanded;
+        OnToggleExpand = onToggleExpand ?? (() => { });
     }
 
     public ScribeInboxRowData Data { get; }
@@ -289,6 +314,9 @@ internal sealed class ScribeInboxRow : StatefulWidget
     public Action<Guid, ScribeAssignmentAction> OnAction { get; }
     public Action<Guid, ScribeAcceptCandidate> OnAccept { get; }
     public IReadOnlyList<ScribeAcceptCandidate> AcceptCandidates { get; }
+    public Action<Guid> OnDelete { get; }
+    public bool Expanded { get; }
+    public Action OnToggleExpand { get; }
     public ScribeRowStyle Style { get; }
 
     public override State CreateState() => new ScribeInboxRowState();
@@ -296,7 +324,6 @@ internal sealed class ScribeInboxRow : StatefulWidget
 
 internal sealed class ScribeInboxRowState : State<ScribeInboxRow>
 {
-    private bool expanded;
     /// <summary>Selected index into <see cref="ScribeInboxRow.AcceptCandidates"/> when more than one
     /// exists (the placement picker). Lives on this State so it survives a data-only reconcile.</summary>
     private int selectedCandidateIndex;
@@ -316,10 +343,10 @@ internal sealed class ScribeInboxRowState : State<ScribeInboxRow>
         // row ... toggles expand/collapse"). Reuses the existing triangle glyphs registered for the
         // editor's subtask/drag affordances rather than a new asset.
         Widget chevron = new ScribeRowButton(
-            iconName: expanded ? "scribetriangledown" : "scribetriangleright",
+            iconName: Widget.Expanded ? "scribetriangledown" : "scribetriangleright",
             iconColor: colors.OnSurfaceVariant,
             size: style.ControlSize,
-            onTap: () => SetState(() => expanded = !expanded));
+            onTap: () => Widget.OnToggleExpand());
 
         var (chipLangKey, chipColor) = ScribeAssignmentChip.For(data.State, colors);
         Widget chip = new Container(
@@ -346,7 +373,7 @@ internal sealed class ScribeInboxRowState : State<ScribeInboxRow>
             });
 
         var children = new List<Widget> { collapsedRow };
-        if (expanded) children.Add(BuildExpandedDetail(context, data, colors, style));
+        if (Widget.Expanded) children.Add(BuildExpandedDetail(context, data, colors, style));
 
         return new Padding(
             EdgeInsets.Symmetric(vertical: style.RowVerticalPadding, horizontal: style.RowHorizontalPadding),
@@ -372,7 +399,9 @@ internal sealed class ScribeInboxRowState : State<ScribeInboxRow>
         // accepted, discarded, etc."). AcceptedDate can coexist with a terminal date (Accepted always
         // precedes Completed/Discarded); the four terminal dates are mutually exclusive by construction.
         if (data.AcceptedDate is { } acceptedDate)
-            metaLines.Add(new Text(Lang.Get("scribe:scribe-assignment-accepted-on", acceptedDate), metaStyle));
+            metaLines.Add(new Text(data.AcceptedIntoLabel is { } acceptedIntoLabel
+                ? Lang.Get("scribe:scribe-assignment-accepted-into-on", acceptedIntoLabel, acceptedDate)
+                : Lang.Get("scribe:scribe-assignment-accepted-on", acceptedDate), metaStyle));
         if (data.DeclinedDate is { } declinedDate)
             metaLines.Add(new Text(Lang.Get("scribe:scribe-assignment-declined-on", declinedDate), metaStyle));
         if (data.CancelledDate is { } cancelledDate)
@@ -401,6 +430,19 @@ internal sealed class ScribeInboxRowState : State<ScribeInboxRow>
         {
             actions.Add(ActionButton("scribe:scribe-assignment-action-cancel", ButtonVariant.Danger,
                 () => Widget.OnAction(data.TaskId, ScribeAssignmentAction.Cancel), colors));
+        }
+
+        // Terminal-record deletion (manage-terminal-assignment-records): the ONE control a terminal row
+        // shows when expanded, for either party (Assigner or Assignee) — never a state-change action, so
+        // it's independent of the ViewerRole/State branches above, which only ever populate Unaccepted/
+        // Accepted actions.
+        if (data.State.IsTerminal())
+        {
+            // Visible label (not an icon-only hover control) so it reads consistently with the
+            // Accept/Decline/Cancel/Discard buttons above — the row's action area always looks the same
+            // shape, just with one button instead of two/none for a terminal record.
+            actions.Add(ActionButton("scribe:scribe-assignment-remove-terminal-record", ButtonVariant.Danger,
+                () => Widget.OnDelete(data.TaskId), colors));
         }
 
         if (actions.Count > 0)

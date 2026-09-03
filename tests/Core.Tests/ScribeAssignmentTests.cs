@@ -71,14 +71,60 @@ public class ScribeAssignmentTests
         Assert.Equal(ScribeAssignmentState.Discarded, assignment.State);
     }
 
-    [Fact]
-    public void QuestLinkTargetRoundTripsAsNamespace()
+    [Theory]
+    [InlineData(ScribeAssignmentState.Unaccepted, false)]
+    [InlineData(ScribeAssignmentState.Accepted, false)]
+    [InlineData(ScribeAssignmentState.Declined, true)]
+    [InlineData(ScribeAssignmentState.Cancelled, true)]
+    [InlineData(ScribeAssignmentState.Discarded, true)]
+    [InlineData(ScribeAssignmentState.Completed, true)]
+    public void IsTerminal_ReflectsTheFourTerminalStates(ScribeAssignmentState state, bool expected)
     {
-        string target = ScribeLinkTarget.ForQuest("chapter-one");
-        Assert.Equal("quest:chapter-one", target);
+        Assert.Equal(expected, state.IsTerminal());
+    }
+
+    [Theory]
+    [InlineData(ScribeQuestSource.VsQuest, "vsquest:chapter-one")]
+    [InlineData(ScribeQuestSource.ProgressionFramework, "seafarer:dawnmarie-orchard")]
+    public void QuestLinkTargetRoundTripsBothBackends(string source, string questCode)
+    {
+        string target = ScribeLinkTarget.ForQuest(source, questCode);
+        Assert.Equal($"quest:{source}/{questCode}", target);
         Assert.True(ScribeLinkTarget.IsQuest(target));
-        Assert.Equal("chapter-one", ScribeLinkTarget.QuestCode(target));
+        Assert.Equal(source, ScribeLinkTarget.QuestSource(target));
+        Assert.Equal(questCode, ScribeLinkTarget.QuestCode(target));
         Assert.False(ScribeLinkTarget.IsQuest("page:chapter-one"));
+    }
+
+    [Fact]
+    public void QuestLinkTargetWithNoSourceSeparatorFallsBackToVsQuest()
+    {
+        // A pre-existing target saved before the backend tag existed (add-progression-framework-quest-support
+        // Decision 1) — vsquest was the only backend that could have created it.
+        const string legacyTarget = "quest:vsquest:quest-freeghost";
+        Assert.Equal(ScribeQuestSource.VsQuest, ScribeLinkTarget.QuestSource(legacyTarget));
+        Assert.Equal("vsquest:quest-freeghost", ScribeLinkTarget.QuestCode(legacyTarget));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("quest:")]
+    [InlineData("page:chapter-one")]
+    public void QuestLinkTargetNeverThrowsOnMalformedInput(string? target)
+    {
+        // None of these throw; a non-quest target (including a bare "quest:" prefix with nothing after it,
+        // which is itself IsQuest==true but has an empty legacy code) reports consistently.
+        if (!ScribeLinkTarget.IsQuest(target))
+        {
+            Assert.Null(ScribeLinkTarget.QuestSource(target));
+            Assert.Null(ScribeLinkTarget.QuestCode(target));
+        }
+        else
+        {
+            Assert.Equal(ScribeQuestSource.VsQuest, ScribeLinkTarget.QuestSource(target));
+            Assert.Equal(string.Empty, ScribeLinkTarget.QuestCode(target));
+        }
     }
 
     [Fact]

@@ -11,14 +11,20 @@ namespace Scribe.Core;
 /// own <see cref="ScribeBlock.TaskId"/>, which doubles as the wire "AssignmentId" the send/action
 /// messages reference.
 ///
-/// <b>Append-only, one canonical object.</b> A record is never removed once created; only its
-/// <see cref="ScribeAssignment.State"/> changes. The Assigner's Assignment-tab history and the
-/// Assignee's Inbox are both just filtered views (<see cref="Sent"/> / <see cref="Received"/>) over
-/// this same store, so the two sides can never desync into independently-mutated copies
-/// (locked-on-send). Accept-time placement (moving a copy of the content into the Assignee's own
-/// document — see the `assignment-state-machine` capability's placement requirement) is a SEPARATE
-/// step the Mod layer performs after a successful Accept here; this store's record keeps tracking
-/// lifecycle state regardless, so the Assigner's read-only view stays correct.
+/// <b>Append-only, one canonical object — with one deliberate exception.</b> A record is never
+/// removed once created except via <see cref="TryDelete"/> (manage-terminal-assignment-records /
+/// split-assignment-delete-by-viewer): a terminal-state record's Assigner and Assignee may each
+/// delete their OWN side independently (hiding it from only their own <see cref="Sent"/>/
+/// <see cref="Received"/> view), and the record is only actually removed from the store once both
+/// sides have done so. Every other mutation only ever changes <see cref="ScribeAssignment.State"/>
+/// (and, once terminal, the two hidden-flags) — the Assigner's Assignment-tab history and the
+/// Assignee's Inbox are both just filtered views over this same store, so the two sides can never
+/// desync into independently-MUTATED copies (locked-on-send); deletion is the one axis where each
+/// side's VISIBILITY is allowed to diverge. Accept-time placement (moving a copy of the content into
+/// the Assignee's own document — see the `assignment-state-machine` capability's placement
+/// requirement) is a SEPARATE step the Mod layer performs after a successful Accept here; this
+/// store's record keeps tracking lifecycle state regardless, so the Assigner's read-only view stays
+/// correct.
 ///
 /// Game-agnostic (pure BCL) so the state-machine wiring is unit-testable without a game install; the
 /// Mod layer owns the network push and save-game persistence, calling into this store the same way
@@ -35,13 +41,16 @@ public sealed class ScribeAssignmentStore
 
     // ---------------- Reads ----------------
 
-    /// <summary>Every assignment this player SENT (their Assignment-tab history), in creation order.</summary>
+    /// <summary>Every assignment this player SENT (their Assignment-tab history), in creation order —
+    /// excluding any record this player has deleted their own side of (split-assignment-delete-by-viewer;
+    /// <see cref="ScribeAssignment.HiddenFromAssigner"/>).</summary>
     public IReadOnlyList<ScribeBlock> Sent(string playerUid)
-        => _records.Values.Where(b => b.Assignment?.AssignerUid == playerUid).ToList();
+        => _records.Values.Where(b => b.Assignment?.AssignerUid == playerUid && !b.Assignment.HiddenFromAssigner).ToList();
 
-    /// <summary>Every assignment this player RECEIVED (their Inbox), in creation order.</summary>
+    /// <summary>Every assignment this player RECEIVED (their Inbox), in creation order — excluding any
+    /// record this player has deleted their own side of (<see cref="ScribeAssignment.HiddenFromAssignee"/>).</summary>
     public IReadOnlyList<ScribeBlock> Received(string playerUid)
-        => _records.Values.Where(b => b.Assignment?.TargetPlayerUid == playerUid).ToList();
+        => _records.Values.Where(b => b.Assignment?.TargetPlayerUid == playerUid && !b.Assignment.HiddenFromAssignee).ToList();
 
     /// <summary>Resolves a single record by its id (= its <see cref="ScribeBlock.TaskId"/>), or null if
     /// unknown.</summary>
@@ -76,6 +85,37 @@ public sealed class ScribeAssignmentStore
         ScribeBlockKind kind = ScribeBlockKind.Task, string? targetItemCode = null, int targetQuantity = 1,
         string? linkTarget = null, string? linkLabel = null, string? linkDescription = null,
         string? recipeSignature = null, int depth = 0, Guid batchId = default)
+        => TryCreateCore(assignmentId, assignerUid, targetPlayerUid, taskText, assignedDate,
+            ScribeAssignmentState.Unaccepted, seen: false, acceptedDate: null, out record,
+            kind, targetItemCode, targetQuantity, linkTarget, linkLabel, linkDescription,
+            recipeSignature, depth, batchId);
+
+    /// <summary>
+    /// Task-Notice accept-time counterpart of <see cref="TryCreate"/> (`task-notice-item` capability):
+    /// creates a record already in the <see cref="ScribeAssignmentState.Accepted"/> state, never
+    /// passing through a store-tracked Unaccepted one — the physical Task Notice item carried the
+    /// pending decision beforehand, not a store record (see the `assignment-state-machine` capability's
+    /// notice-originated-lifecycle requirement). <paramref name="acceptedDate"/> stamps
+    /// <see cref="ScribeAssignment.AcceptedDate"/> immediately, since the Mod layer's usual
+    /// post-transition stamping never runs for a transition that didn't happen through
+    /// <see cref="TryApplyAction"/>. The record starts already <see cref="ScribeAssignment.Seen"/> (the
+    /// Assignee just acted on the physical item directly, not via their Inbox).
+    /// </summary>
+    public bool TryCreateAccepted(Guid assignmentId, string assignerUid, string targetPlayerUid, string taskText,
+        string assignedDate, string acceptedDate, out ScribeBlock? record,
+        ScribeBlockKind kind = ScribeBlockKind.Task, string? targetItemCode = null, int targetQuantity = 1,
+        string? linkTarget = null, string? linkLabel = null, string? linkDescription = null,
+        string? recipeSignature = null, int depth = 0, Guid batchId = default)
+        => TryCreateCore(assignmentId, assignerUid, targetPlayerUid, taskText, assignedDate,
+            ScribeAssignmentState.Accepted, seen: true, acceptedDate, out record,
+            kind, targetItemCode, targetQuantity, linkTarget, linkLabel, linkDescription,
+            recipeSignature, depth, batchId);
+
+    private bool TryCreateCore(Guid assignmentId, string assignerUid, string targetPlayerUid, string taskText,
+        string assignedDate, ScribeAssignmentState state, bool seen, string? acceptedDate, out ScribeBlock? record,
+        ScribeBlockKind kind, string? targetItemCode, int targetQuantity,
+        string? linkTarget, string? linkLabel, string? linkDescription,
+        string? recipeSignature, int depth, Guid batchId)
     {
         record = null;
         if (string.IsNullOrWhiteSpace(assignerUid) || string.IsNullOrWhiteSpace(targetPlayerUid)) return false;
@@ -87,8 +127,10 @@ public sealed class ScribeAssignmentStore
         string text = taskText.Length > ScribeDocumentCodec.MaxTaskTextLength
             ? taskText[..ScribeDocumentCodec.MaxTaskTextLength]
             : taskText;
-        var assignment = new ScribeAssignment(assignerUid, assignedDate,
-            ScribeAssignmentState.Unaccepted, seen: false, targetPlayerUid, batchId);
+        var assignment = new ScribeAssignment(assignerUid, assignedDate, state, seen, targetPlayerUid, batchId)
+        {
+            AcceptedDate = acceptedDate,
+        };
         var block = new ScribeBlock(kind, text, depth: depth, taskId: assignmentId, assignment: assignment,
             targetItemCode: targetItemCode, targetQuantity: targetQuantity, linkTarget: linkTarget,
             linkLabel: linkLabel, recipeSignature: recipeSignature, linkDescription: linkDescription);
@@ -123,6 +165,40 @@ public sealed class ScribeAssignmentStore
         return false;
     }
 
+    /// <summary>
+    /// Deletes a terminal-state record (Declined, Cancelled, Discarded, or Completed) from the
+    /// requesting <paramref name="side"/>'s own view only (split-assignment-delete-by-viewer) — sets
+    /// <see cref="ScribeAssignment.HiddenFromAssignee"/> or <see cref="ScribeAssignment.HiddenFromAssigner"/>
+    /// so the record drops out of that side's <see cref="Received"/>/<see cref="Sent"/> list, leaving the
+    /// other side's view unaffected. <paramref name="actingPlayerUid"/> must actually hold the claimed
+    /// <paramref name="side"/> (Assignee → <see cref="ScribeAssignment.TargetPlayerUid"/>, Assigner →
+    /// <see cref="ScribeAssignment.AssignerUid"/>) — a self-assignment matches both roles but still only
+    /// ever deletes the ONE side named by <paramref name="side"/>, one request at a time. Once BOTH sides
+    /// have deleted their own view, the record is permanently removed from the store — the one deliberate
+    /// hole in its otherwise append-only contract (see class doc). Returns false — record unchanged — for
+    /// an unknown id, a non-terminal state, or a player who doesn't actually hold the claimed side.
+    /// </summary>
+    public bool TryDelete(Guid assignmentId, string actingPlayerUid, ScribeAssignmentActor side)
+    {
+        if (!_records.TryGetValue(assignmentId, out var block) || block.Assignment is not { } assignment)
+            return false;
+        if (!assignment.State.IsTerminal()) return false;
+
+        bool actorHoldsSide = side switch
+        {
+            ScribeAssignmentActor.Assignee => assignment.TargetPlayerUid == actingPlayerUid,
+            ScribeAssignmentActor.Assigner => assignment.AssignerUid == actingPlayerUid,
+            _ => false,
+        };
+        if (!actorHoldsSide) return false;
+
+        if (side == ScribeAssignmentActor.Assignee) assignment.HiddenFromAssignee = true;
+        else assignment.HiddenFromAssigner = true;
+
+        if (assignment.HiddenFromAssignee && assignment.HiddenFromAssigner) _records.Remove(assignmentId);
+        return true;
+    }
+
     /// <summary>Marks a received assignment seen — only the actual recipient may do so. No-op (returns
     /// false) for an unknown id, a non-recipient, or one already seen.</summary>
     public bool TryMarkSeen(Guid assignmentId, string viewingPlayerUid)
@@ -153,6 +229,10 @@ public sealed class ScribeAssignmentStore
     // v3 adds BatchId (refine-assignment-desk-inbox-ux 12.2 root-cause fix — see ScribeAssignment.BatchId).
     // v4 adds AcceptedDate/DeclinedDate/CancelledDate/DiscardedDate/CompletedDate (refine-assignment-
     // desk-inbox-ux triage 2026-08-31 — per-transition history stubs, see ScribeAssignment's remarks).
+    // v5 adds AcceptedIntoLabel (capture-assignment-accept-destination) — the destination Scribe item's
+    // display label, captured once at Accept-placement time.
+    // v6 adds HiddenFromAssignee/HiddenFromAssigner (split-assignment-delete-by-viewer) — each side's
+    // independent "I deleted my own view of this" flag.
     // Progressive append-only reads (matching ScribeDocumentCodec's convention): any version in
     // [MinVersion, Version] is accepted; a v1 blob simply predates Craft-kind assignments (which didn't
     // exist yet), so every one of its records is genuinely RecipeSignature-less — defaulting it to ""
@@ -161,8 +241,12 @@ public sealed class ScribeAssignmentStore
     // pre-existing multi-item batches keep grouping the same way they always displayed, without a real
     // minted id ever having existed for them. A pre-v4 blob predates every transition timestamp — those
     // genuinely never happened as far as the record can say, so defaulting all five to null on read is
-    // exactly correct, not a lossy guess.
-    private const byte Version = 4;
+    // exactly correct, not a lossy guess. A pre-v5 blob predates the destination label entirely — an
+    // assignment it already Accepted simply has no recorded destination, which is also exactly correct
+    // (the label was never captured, not lost). A pre-v6 blob predates both hidden-flags — nothing was
+    // ever deleted-by-one-side under that version, so defaulting both to false on read is exactly
+    // correct, not a lossy guess.
+    private const byte Version = 6;
     private const byte MinVersion = 1;
 
     /// <summary>Serializes a single player's view (<see cref="Sent"/> or <see cref="Received"/>) for the
@@ -281,6 +365,9 @@ public sealed class ScribeAssignmentStore
             WriteOptionalString(w, assignment.CancelledDate);  // v4+
             WriteOptionalString(w, assignment.DiscardedDate);  // v4+
             WriteOptionalString(w, assignment.CompletedDate);  // v4+
+            WriteOptionalString(w, assignment.AcceptedIntoLabel); // v5+
+            w.Write(assignment.HiddenFromAssignee); // v6+
+            w.Write(assignment.HiddenFromAssigner); // v6+
         }
     }
 
@@ -325,6 +412,11 @@ public sealed class ScribeAssignmentStore
                 CancelledDate = ReadOptionalString(r, version),
                 DiscardedDate = ReadOptionalString(r, version),
                 CompletedDate = ReadOptionalString(r, version),
+                AcceptedIntoLabel = ReadOptionalString(r, version, minVersion: 5),
+                // v1-v5 predate both hidden-flags — nothing was ever deleted-by-one-side under those
+                // versions, so false is the correct default (not lossy).
+                HiddenFromAssignee = version >= 6 && r.ReadBoolean(),
+                HiddenFromAssigner = version >= 6 && r.ReadBoolean(),
             };
 
             list.Add(new ScribeBlock(kind, text, depth: depth, taskId: taskId,
@@ -357,10 +449,11 @@ public sealed class ScribeAssignmentStore
         if (hasValue) w.Write(value!);
     }
 
-    /// <summary>Reads a v4+ <see cref="WriteOptionalString"/> value, or null when this blob predates v4
-    /// (no bytes were ever written for it).</summary>
-    private static string? ReadOptionalString(BinaryReader r, int version) =>
-        version >= 4 ? (r.ReadBoolean() ? r.ReadString() : null) : null;
+    /// <summary>Reads a <see cref="WriteOptionalString"/> value written starting at <paramref
+    /// name="minVersion"/> (default v4, the first version to use this helper), or null when this blob
+    /// predates that version (no bytes were ever written for it).</summary>
+    private static string? ReadOptionalString(BinaryReader r, int version, int minVersion = 4) =>
+        version >= minVersion ? (r.ReadBoolean() ? r.ReadString() : null) : null;
 
     private static byte[] ReadExactly(BinaryReader r, int count)
     {

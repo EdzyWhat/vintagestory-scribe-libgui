@@ -265,6 +265,43 @@ public abstract partial class ScribeDialogBase
                         child: new ScribeVsIconGlyph("scribeedit", pencilSize, chromeColor))))
             : null;
 
+        // Expand/collapse-all toggle (manage-terminal-assignment-records): only while the Inbox or Sent
+        // History view is active — never simultaneously with the pencil, which only shows in Editor view —
+        // so it never contends with the pencil for the same slot. Reuses the per-row chevron's own glyphs
+        // and direction convention (right = something to expand, down = fully open) rather than a new SVG.
+        bool allAssignmentRowsExpanded = AllVisibleAssignmentRowsExpanded();
+        Widget? expandCollapseAllSlot = viewMode is ScribeLecternView.Inbox or ScribeLecternView.SentHistory
+            ? TitleButton(
+                allAssignmentRowsExpanded ? "scribetriangledown" : "scribetriangleright",
+                allAssignmentRowsExpanded ? "scribe-assignment-collapse-all" : "scribe-assignment-expand-all",
+                chromeColor,
+                size: ScribeRowConstants.RowCheckboxSize * 1.1f,
+                onTap: ToggleAllVisibleAssignmentRows)
+            : null;
+
+        // Trailing group: pencil (editor only) · expand/collapse-all (Inbox/Sent History only) · drag-grip ·
+        // close button (refine-settings-and-window-chrome). The whole TitleBar band is the drag zone via
+        // WindowConfig.DragHandleHeight, and it signals that discoverably (players won't intuit an
+        // invisible drag band). But a press landing ON the grip used to be swallowed instead of moving the
+        // window: the tooltip wraps its child in a MouseRegion (needed for hover), which is an active hit
+        // target, so GuiBase captures the pointer-down before its band-drag check runs — and click-through
+        // can't coexist with the tooltip (an IgnorePointer would kill the MouseRegion's hover too). So the
+        // grip owns its OWN window drag via a GestureDetector nested INSIDE the tooltip: the outer
+        // MouseRegion still fires hover, and press→move→release moves the window just like the band (§8.1;
+        // see the gripDragging fields + VSAPI-NOTES.md §LibGUI). A "drag to move" tooltip labels it. Close
+        // reuses the delete SVG at 1.4× the per-row size.
+        var trailingGroup = new List<Widget>();
+        if (pencilSlot is not null) trailingGroup.Add(pencilSlot);
+        if (expandCollapseAllSlot is not null) trailingGroup.Add(expandCollapseAllSlot);
+        trailingGroup.Add(WithTooltip("scribe-gui-drag",
+            new GestureDetector(
+                onPress: OnGripDragStart,
+                onMove: OnGripDragMove,
+                onRelease: OnGripDragEnd,
+                child: new ScribeVsIconGlyph("scribegrip", ScribeRowConstants.RowCheckboxSize * 1.1f, chromeColor))));
+        trailingGroup.Add(TitleButton("scribeclose", "scribe-gui-close", colors.Error,
+            size: ScribeRowConstants.RowCheckboxSize * 1.4f, onTap: () => TryClose()));
+
         Widget titleRow = new Row(
             mainAxisAlignment: MainAxisAlignment.SpaceBetween,
             crossAxisAlignment: titleCrossAlign,
@@ -272,47 +309,11 @@ public abstract partial class ScribeDialogBase
             children: new Widget[]
             {
                 titleSlot,
-                // Trailing group: pencil (editor only) · drag-grip · close button.
-                // (refine-settings-and-window-chrome). The whole TitleBar band is the drag zone via
-                // WindowConfig.DragHandleHeight, and it signals that discoverably (players won't intuit an
-                // invisible drag band). But a press landing ON the grip used to be swallowed instead of
-                // moving the window: the tooltip wraps its child in a MouseRegion (needed for hover), which
-                // is an active hit target, so GuiBase captures the pointer-down before its band-drag check
-                // runs — and click-through can't coexist with the tooltip (an IgnorePointer would kill the
-                // MouseRegion's hover too). So the grip owns its OWN window drag via a GestureDetector nested
-                // INSIDE the tooltip: the outer MouseRegion still fires hover, and press→move→release moves
-                // the window just like the band (§8.1; see the gripDragging fields + VSAPI-NOTES.md §LibGUI).
-                // A "drag to move" tooltip labels it. Close reuses the delete SVG at 1.4× the per-row size.
                 new Row(
                     crossAxisAlignment: CrossAxisAlignment.Center,
                     mainAxisSize: MainAxisSize.Min,
                     spacing: titleBtnSpacing,
-                    children: pencilSlot is not null
-                        ? new Widget[]
-                        {
-                            pencilSlot,
-                            WithTooltip("scribe-gui-drag",
-                                new GestureDetector(
-                                    onPress: OnGripDragStart,
-                                    onMove: OnGripDragMove,
-                                    onRelease: OnGripDragEnd,
-                                    child: new ScribeVsIconGlyph("scribegrip", ScribeRowConstants.RowCheckboxSize * 1.1f,
-                                        chromeColor))),
-                            TitleButton("scribeclose", "scribe-gui-close", colors.Error,
-                                size: ScribeRowConstants.RowCheckboxSize * 1.4f, onTap: () => TryClose()),
-                        }
-                        : new Widget[]
-                        {
-                            WithTooltip("scribe-gui-drag",
-                                new GestureDetector(
-                                    onPress: OnGripDragStart,
-                                    onMove: OnGripDragMove,
-                                    onRelease: OnGripDragEnd,
-                                    child: new ScribeVsIconGlyph("scribegrip", ScribeRowConstants.RowCheckboxSize * 1.1f,
-                                        chromeColor))),
-                            TitleButton("scribeclose", "scribe-gui-close", colors.Error,
-                                size: ScribeRowConstants.RowCheckboxSize * 1.4f, onTap: () => TryClose()),
-                        }),
+                    children: trailingGroup.ToArray()),
             });
 
         return new SizedBox(
@@ -734,7 +735,7 @@ public abstract partial class ScribeDialogBase
                     // other row kind, a plain/guide-page Link, or when the watcher has nothing for this
                     // quest yet (see ScribeModSystem.TryGetQuestProgressText's doc-comment).
                     string? questProgress = ScribeLinkTarget.QuestCode(b.LinkTarget) is { } questCode
-                        ? modSystem.TryGetQuestProgressText(questCode)
+                        ? modSystem.TryGetQuestProgressText(ScribeLinkTarget.QuestSource(b.LinkTarget)!, questCode)
                         : null;
                     var (assignerName, assignedDate, acceptedDate) = ResolveAssignmentTooltipInfo(b.Assignment);
                     return new ScribeReadRowData(

@@ -41,7 +41,9 @@ public sealed partial class ScribeModSystem
         RegisterSvgIcon(api, "scribegearhud", new AssetLocation("scribe", "textures/icons/gear-hud.svg"));
         RegisterSvgIcon(api, "scribecheck", new AssetLocation("scribe", "textures/icons/check.svg"));
         RegisterSvgIcon(api, "scribeguest",   new AssetLocation("scribe", "textures/icons/guestbook.svg"));
-        RegisterSvgIcon(api, "scribehistory", new AssetLocation("scribe", "textures/icons/guestbook.svg"));
+        // Sent Assignment History nav icon (triage 2026-09-01: "correct icon, but I want the open-book
+        // glyph used for task Links instead") — same book.svg as scribebook/scribeinventory below.
+        RegisterSvgIcon(api, "scribehistory", new AssetLocation("scribe", "textures/icons/book.svg"));
         RegisterSvgIcon(api, "scribetimer",   new AssetLocation("scribe", "textures/icons/timer.svg"));
         RegisterSvgIcon(api, "scribeinfo",    new AssetLocation("scribe", "textures/icons/info.svg"));
         // Scriptorium item-storage tab (add-scriptorium-inventory): reuses the open-book glyph for now (the

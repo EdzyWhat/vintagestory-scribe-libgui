@@ -218,10 +218,12 @@ public abstract partial class ScribeDialogBase
     }
 
     /// <summary>Rebuilds the Inbox/Assignment view if either is currently active, in place (reconcile,
-    /// not <see cref="GuiBase.ForceRebuild"/>) so each row's own <c>expanded</c> state and the filter-chip
-    /// selection (both live in <see cref="ScribeInboxContent"/>'s State) survive the refresh — mirroring
-    /// how a pin/settings change reconciles the Read/Editor/Pinned views rather than remounting them.
-    /// Called on every <see cref="ScribeModSystem.MyAssignmentsChanged"/> push (§7.5).</summary>
+    /// not <see cref="GuiBase.ForceRebuild"/>) so each row's expanded state and the filter-chip selection
+    /// (both dialog-owned — <see cref="expandedAssignmentIds"/>/<see cref="assignmentFilterGroup"/> — since
+    /// manage-terminal-assignment-records lifted them out of <see cref="ScribeInboxContent"/>'s own State)
+    /// survive the refresh — mirroring how a pin/settings change reconciles the Read/Editor/Pinned views
+    /// rather than remounting them. Called on every <see cref="ScribeModSystem.MyAssignmentsChanged"/> push
+    /// (§7.5).</summary>
     private void OnMyAssignmentsChanged()
     {
         if (!IsOpened()) return;
@@ -400,7 +402,8 @@ public abstract partial class ScribeDialogBase
                 Seen: b.Assignment.Seen, ViewerRole: ScribeAssignmentActor.Assignee,
                 DisplayName: ResolveRowItem(b).Name, AcceptedDate: b.Assignment.AcceptedDate,
                 DeclinedDate: b.Assignment.DeclinedDate, CancelledDate: b.Assignment.CancelledDate,
-                DiscardedDate: b.Assignment.DiscardedDate, CompletedDate: b.Assignment.CompletedDate))
+                DiscardedDate: b.Assignment.DiscardedDate, CompletedDate: b.Assignment.CompletedDate,
+                AcceptedIntoLabel: b.Assignment.AcceptedIntoLabel))
             .ToList();
 
         return new ScribeInboxContent(
@@ -409,8 +412,97 @@ public abstract partial class ScribeDialogBase
             onAction: SendAssignmentAction,
             onAccept: AcceptAssignment,
             acceptCandidates: ComputeAcceptCandidates(),
+            onDelete: DeleteAssignmentRecord,
+            activeFilterGroup: assignmentFilterGroup,
+            onFilterGroupChanged: SetAssignmentFilterGroup,
+            isExpanded: expandedAssignmentIds.Contains,
+            onToggleExpand: ToggleAssignmentRowExpanded,
             style: RowStyle,
             scrollController: sharedScrollController);
+    }
+
+    /// <summary>Sets the shared Inbox/Sent-History filter-chip selection (lifted to the dialog — see
+    /// <see cref="assignmentFilterGroup"/>'s remarks) and reconciles the body in place so both the content
+    /// and the title-bar toggle (which reads the new filter to recompute "all visible rows expanded")
+    /// repaint together.</summary>
+    private void SetAssignmentFilterGroup(ScribeAssignmentFilterGroup group)
+    {
+        if (assignmentFilterGroup == group) return;
+        assignmentFilterGroup = group;
+        RebuildBody();
+    }
+
+    /// <summary>Toggles one assignment row's expanded state in the shared set (lifted to the dialog — see
+    /// <see cref="expandedAssignmentIds"/>'s remarks) and reconciles the body in place so the title-bar
+    /// toggle's icon/tooltip stays in sync with the individual chevron.</summary>
+    private void ToggleAssignmentRowExpanded(Guid taskId)
+    {
+        if (!expandedAssignmentIds.Remove(taskId)) expandedAssignmentIds.Add(taskId);
+        RebuildBody();
+    }
+
+    /// <summary>Every assignment TaskId currently visible in whichever of the Inbox/Sent History views is
+    /// active, after the shared filter-chip selection — the "visible rows" the title-bar expand/collapse-all
+    /// toggle operates on (manage-terminal-assignment-records). Empty (and thus inert) for any other view.</summary>
+    private List<Guid> CurrentlyVisibleAssignmentRowIds()
+    {
+        IEnumerable<ScribeBlock> source = viewMode switch
+        {
+            ScribeLecternView.Inbox => modSystem.MyReceivedAssignments,
+            ScribeLecternView.SentHistory => modSystem.MySentAssignments,
+            _ => Enumerable.Empty<ScribeBlock>(),
+        };
+        var visibleStates = ScribeAssignmentFilterGroups.StatesFor(assignmentFilterGroup);
+        return source
+            .Where(b => b.Assignment is not null && visibleStates.Contains(b.Assignment!.State))
+            .Select(b => b.TaskId)
+            .ToList();
+    }
+
+    /// <summary>Whether every currently-visible assignment row (see <see cref="CurrentlyVisibleAssignmentRowIds"/>)
+    /// is expanded right now — drives the title-bar toggle's icon direction/tooltip. False (not true) when
+    /// there are no visible rows at all, so an empty list never claims to be "all expanded."</summary>
+    private bool AllVisibleAssignmentRowsExpanded()
+    {
+        var ids = CurrentlyVisibleAssignmentRowIds();
+        return ids.Count > 0 && ids.All(expandedAssignmentIds.Contains);
+    }
+
+    /// <summary>The title-bar expand/collapse-all toggle's tap handler (manage-terminal-assignment-records):
+    /// expands every currently-visible row if any is collapsed, else collapses all of them. A no-op when
+    /// nothing is currently visible (filtered out, or an empty list).</summary>
+    private void ToggleAllVisibleAssignmentRows()
+    {
+        var ids = CurrentlyVisibleAssignmentRowIds();
+        if (ids.Count == 0) return;
+        bool allExpanded = ids.All(expandedAssignmentIds.Contains);
+        foreach (var id in ids)
+        {
+            if (allExpanded) expandedAssignmentIds.Remove(id);
+            else expandedAssignmentIds.Add(id);
+        }
+        RebuildBody();
+    }
+
+    /// <summary>Requests deletion of the CURRENT viewer's own side of a terminal-state assignment
+    /// record (manage-terminal-assignment-records / split-assignment-delete-by-viewer). The delete
+    /// control only ever renders while <see cref="viewMode"/> is <see cref="ScribeLecternView.Inbox"/> or
+    /// <see cref="ScribeLecternView.SentHistory"/>, so which side to claim is unambiguous from that alone
+    /// — Inbox is always the Assignee's view, Sent History always the Assigner's. The server
+    /// re-validates the terminal-state restriction AND that the sender actually holds that side through
+    /// <see cref="Scribe.Core.ScribeAssignmentStore.TryDelete"/> — this is a request, not a
+    /// locally-applied change; the row disappears once the resynced
+    /// <see cref="ScribeModSystem.MyAssignmentsChanged"/> arrives.</summary>
+    private void DeleteAssignmentRecord(Guid taskId)
+    {
+        var side = viewMode == ScribeLecternView.Inbox
+            ? ScribeAssignmentActor.Assignee
+            : ScribeAssignmentActor.Assigner;
+        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeDeleteAssignmentMessage
+        {
+            AssignmentId = taskId.ToByteArray(),
+            Side = (byte)side,
+        });
     }
 
     /// <summary>Newest-batch-first ordering shared by the Inbox and Sent Assignment History tabs
@@ -457,6 +549,11 @@ public abstract partial class ScribeDialogBase
     /// re-resolves the slot itself; this is a request, not a locally-applied placement.</summary>
     private void AcceptAssignment(Guid taskId, ScribeAcceptCandidate target)
     {
+        // Diagnostic for the accept-destination-remembers-a-dropped-item investigation (2026-09-01):
+        // records what the CLIENT resolved (label, inv/slot) right before sending, to compare against the
+        // server's own "assignment-action ... Accept placed onto ..." trace. Drop once concluded.
+        capi.Logger.Notification("[scribe] Accept sent for {0}: target=\"{1}\" inv={2} slot={3}",
+            taskId, target.Label, target.InventoryId, target.SlotId);
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeAssignmentActionMessage
         {
             AssignmentId = taskId.ToByteArray(),
@@ -467,65 +564,15 @@ public abstract partial class ScribeDialogBase
         });
     }
 
-    /// <summary>Computes this player's current Accept-placement candidates (assignment-state-machine's
-    /// placement requirement), scoped and prioritized the same way the Handbook's "Add to Scribe" flow
-    /// resolves a target (<see cref="ScribeModSystem.ResolveWriteableCarriedSlot"/> — triage 2026-08-31:
-    /// the old version scanned <c>InventoryManager.InventoriesOrdered</c>, which pulls in anything
-    /// currently registered — e.g. an open chest's — producing "a massive list of items in no particular
-    /// order that aren't on the player"): (1) the player's own hotbar + backpack ONLY
-    /// (<see cref="ScribeModSystem.EnumerateCarriedSlots"/> — never ground/chest/creative), filtered to
-    /// eligible (writeable) Scribe document items; (2) among those, the book whose DocId matches
-    /// <see cref="ScribeModSystem.LastOpenedScribeItemDocId"/> — the one the player was just using — wins
-    /// outright and is returned alone; (3) otherwise every eligible carried item, so the row can offer a
-    /// picker when there's more than one. An empty result means the Accept control has nothing to place
-    /// onto and renders disabled. Recomputed on each Inbox/Assignment rebuild — a stale list (inventory
-    /// changed without a rebuild trigger) is harmless, since the server re-validates the resolved slot
-    /// itself regardless.</summary>
+    /// <summary>This player's current Accept-placement candidates (assignment-state-machine's placement
+    /// requirement) — thin wrapper over the shared <see cref="ScribeAcceptCandidates.Compute"/> helper
+    /// (add-progression-framework-quest-support Decision 3, extracted so Quest auto-link's Accept flow can
+    /// reuse the exact same eligibility rule and ordering instead of diverging), preferring the last-opened
+    /// Scribe item as the picker's convenience default. Recomputed on each Inbox/Assignment rebuild — a
+    /// stale list (inventory changed without a rebuild trigger) is harmless, since the server re-validates
+    /// the resolved slot itself regardless.</summary>
     private List<ScribeAcceptCandidate> ComputeAcceptCandidates()
-    {
-        var candidates = new List<ScribeAcceptCandidate>();
-        if (capi.World.Player is not { } player) return candidates;
-
-        var eligible = ScribeModSystem.EnumerateCarriedSlots(player)
-            .Where(slot => slot.Itemstack?.Collectible is IScribeDocumentItem item && item.IsSlotWriteable(slot))
-            .ToList();
-        if (eligible.Count == 0) return candidates;
-
-        if (modSystem.LastOpenedScribeItemDocId is { } wanted)
-        {
-            var lastOpened = eligible.FirstOrDefault(slot =>
-                ScribeDocumentAttributes.TryReadFrom(slot.Itemstack!, out var doc) && doc?.DocId == wanted);
-            if (lastOpened is not null)
-            {
-                var inv = lastOpened.Inventory;
-                candidates.Add(new ScribeAcceptCandidate(inv.InventoryID, inv.GetSlotId(lastOpened), FormatCandidateLabel(lastOpened.Itemstack!)));
-                return candidates;
-            }
-        }
-
-        foreach (var slot in eligible)
-        {
-            var inv = slot.Inventory;
-            candidates.Add(new ScribeAcceptCandidate(inv.InventoryID, inv.GetSlotId(slot), FormatCandidateLabel(slot.Itemstack!)));
-        }
-        return candidates;
-    }
-
-    /// <summary>Labels an Accept-placement candidate as `<Type> "<Title>"` (playtest feedback
-    /// 2026-08-30: the bare item name alone doesn't distinguish two carried Notebooks) — e.g.
-    /// `Notebook "Book of Nick"`. Falls back to the bare item name when the stack carries no document yet
-    /// or still has the untitled default, matching <see cref="ScribeDocumentSlot.BuildSummaryCard"/>'s same
-    /// "don't imply a title that isn't there" rule.</summary>
-    private static string FormatCandidateLabel(Vintagestory.API.Common.ItemStack stack)
-    {
-        string name = stack.GetName();
-        if (ScribeDocumentAttributes.TryReadFrom(stack, out var doc) && doc is not null
-            && !string.IsNullOrWhiteSpace(doc.Title) && doc.Title != ScribeDocument.DefaultTitle)
-        {
-            return Lang.Get("scribe:scribe-assignment-candidate-label", name, doc.Title);
-        }
-        return name;
-    }
+        => ScribeAcceptCandidates.Compute(capi, modSystem.LastOpenedScribeItemDocId);
 
     /// <summary>Builds the Assignment Desk's Create Assignments tab. Only
     /// <see cref="GuiDialogScribeAssignmentDesk"/> ever routes <c>viewMode</c> here (design.md Decision 1),
@@ -585,6 +632,11 @@ public abstract partial class ScribeDialogBase
             rows: ComputeSentAssignmentRows(),
             resolvePlayerName: ResolvePlayerNameForInbox,
             onAction: SendAssignmentAction,
+            onDelete: DeleteAssignmentRecord,
+            activeFilterGroup: assignmentFilterGroup,
+            onFilterGroupChanged: SetAssignmentFilterGroup,
+            isExpanded: expandedAssignmentIds.Contains,
+            onToggleExpand: ToggleAssignmentRowExpanded,
             style: RowStyle,
             scrollController: sharedScrollController,
             emptyHintLangKey: "scribe:scribe-assignment-sent-empty");

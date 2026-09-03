@@ -89,6 +89,21 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
 
     private ScribeLecternView viewMode = ScribeLecternView.Read;
 
+    /// <summary>TaskIds of assignment rows currently expanded in the Inbox/Sent History view
+    /// (manage-terminal-assignment-records) — lifted out of each row's own <c>StatefulWidget</c> field
+    /// (<see cref="ScribeInboxRowState"/> used to own a private per-row <c>bool</c>) into one dialog-owned
+    /// set, so the title-bar expand/collapse-all toggle (built in <see cref="BuildTitleBar"/>, a different
+    /// class/build pass than the content) can read and bulk-mutate it in the same rebuild. Shared by BOTH
+    /// tabs rather than one set per view — a TaskId is globally unique, so there's no collision risk, and
+    /// carrying expand state over when switching tabs is a harmless (arguably nicer) side effect.</summary>
+    private readonly HashSet<Guid> expandedAssignmentIds = new();
+
+    /// <summary>Which Inbox/Sent-History filter-chip group is active (triage 2026-08-31) — lifted out of
+    /// <see cref="ScribeInboxContentState"/>'s own private field for the same reason as
+    /// <see cref="expandedAssignmentIds"/>: the title-bar toggle needs to know which rows currently pass the
+    /// filter to compute whether they're all expanded. Shared by both tabs, like that set.</summary>
+    private ScribeAssignmentFilterGroup assignmentFilterGroup = ScribeAssignmentFilterGroup.All;
+
     /// <summary>True when the Guestbook (Visitors) tab is the active view. Exposed so subclasses
     /// can apply the active color to their Guestbook nav button in <see cref="GetExtraNavButtons"/>.</summary>
     protected bool IsVisitorsView => viewMode == ScribeLecternView.Visitors;

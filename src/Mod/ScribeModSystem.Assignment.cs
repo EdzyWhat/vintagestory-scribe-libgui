@@ -175,6 +175,43 @@ public sealed partial class ScribeModSystem
         if (sapi.World.PlayerByUid(targetUid) is IServerPlayer assignee) PushAssignmentsTo(assignee);
     }
 
+    /// <summary>Client → server: delete the sender's own side of a terminal-state assignment record
+    /// (manage-terminal-assignment-records / split-assignment-delete-by-viewer). Re-validates through
+    /// <see cref="ScribeAssignmentStore.TryDelete"/> — an unknown id, a non-terminal state, or a sender
+    /// who doesn't actually hold the claimed side is silently ignored. On success, re-syncs both parties;
+    /// each party's own resync naturally excludes what's now hidden from THEM (the other side's view is
+    /// unaffected — this deletion is scoped to one side only, never both at once).</summary>
+    private void OnServerReceivedDeleteAssignment(IServerPlayer fromPlayer, ScribeDeleteAssignmentMessage message)
+    {
+        if (sapi is null || assignmentStore is null) return;
+        if (!TryReadGuid(message.AssignmentId, out var assignmentId))
+        {
+            Trace("delete-assignment from {0}: MALFORMED packet (assignmentId not 16 bytes) — ignored", fromPlayer.PlayerName);
+            return;
+        }
+
+        var record = assignmentStore.TryGet(assignmentId);
+        if (record?.Assignment is null)
+        {
+            Trace("delete-assignment from {0}: unknown assignment {1} — ignored", fromPlayer.PlayerName, assignmentId);
+            return;
+        }
+        // Capture both parties BEFORE deleting — TryGet can return null once the record is fully purged
+        // (both sides deleted).
+        string assignerUid = record.Assignment.AssignerUid;
+        string targetUid = record.Assignment.TargetPlayerUid;
+        var side = (ScribeAssignmentActor)message.Side;
+
+        if (!assignmentStore.TryDelete(assignmentId, fromPlayer.PlayerUID, side))
+        {
+            Trace("delete-assignment from {0}: rejected (non-terminal state or claimed side {1} not held) on {2} — ignored", fromPlayer.PlayerName, side, assignmentId);
+            return;
+        }
+
+        Trace("delete-assignment from {0}: deleted their {1} side of {2}", fromPlayer.PlayerName, side, assignmentId);
+        PushAssignmentSyncToBothParties(assignerUid, targetUid);
+    }
+
     /// <summary>Client → server: mark every one of the sender's currently-unseen received assignments as
     /// seen (design.md Decision 4), sent when the client's Inbox tab becomes the active view
     /// (<see cref="ScribeDialogBase.OnClickSwitchToInbox"/>). Only re-pushes the sender when something
@@ -217,6 +254,12 @@ public sealed partial class ScribeModSystem
             return;
         }
 
+        // Capture the destination label on the canonical store record (capture-assignment-accept-
+        // destination) — only once placement is actually going to succeed (design.md Risk mitigation:
+        // an "Accepted but unplaced" assignment, from either early-return branch above, has no
+        // destination to name and stays label-less).
+        record.Assignment!.AcceptedIntoLabel = ScribeAssignmentDestinationLabel.Format(slot.Itemstack!);
+
         // Carry every kind-specific field, not just Kind/Text (playtest 2026-08-31 bug fix): a
         // Tracker/Link/Craft assignment's real content lives on TargetItemCode/LinkTarget/RecipeSignature
         // (its own Text is blank by convention — see ScribeAssignmentStore.TryCreate's remarks), and Depth
@@ -238,6 +281,14 @@ public sealed partial class ScribeModSystem
             placed);
         ScribeDocumentAttributes.WriteTo(slot.Itemstack!, doc);
         slot.MarkDirty();
+
+        // Diagnostic for the accept-destination-remembers-a-dropped-item investigation (2026-09-01):
+        // pinpoints exactly which item/slot a placement landed on, since the only other trace lines here
+        // cover the two FAILURE branches above — a successful placement was previously silent. Drop once
+        // the investigation concludes (or demote to VerboseDebug).
+        Trace("assignment-action from {0}: Accept placed onto {1} (doc {2} \"{3}\") at inv={4} slot={5}",
+            assignee.PlayerName, slot.Itemstack!.Collectible.Code, doc.DocId, doc.Title,
+            message.TargetInventoryId, message.TargetSlotId);
 
         // Refresh an already-open dialog on this exact item, if any — mirrors the history-refresh push in
         // OnServerReceivedNotebookOpened. Best-effort; the raw stack sync alone already persists the

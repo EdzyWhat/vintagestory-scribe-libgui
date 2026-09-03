@@ -17,8 +17,10 @@
 - [x] 2.2 `ScribeEditorContent.cs`: same move in BOTH occurrences (the live row and the
       drag-collapse ghost row).
 - [x] 2.3 `ScribePinnedContent.cs`: same move below the checkbox icon-add block.
-- [ ] 2.4 Build + restage; confirm visually the marker now sits immediately right of the checkbox
+- [x] 2.4 Build + restage; confirm visually the marker now sits immediately right of the checkbox
       on all three surfaces (defer full confirmation to the manual playtest in §6).
+      - Confirmed 2026-09-02: covered by 6.2's retest, verified via TESTING.md `0000006e`
+        (Confirmed) — marker position on Read, Editor, and Pin Tab.
 
 ## 3. Mod: assignment marker tooltip
 
@@ -76,7 +78,8 @@
 ## 6. Verification
 
 - [x] 6.1 `dotnet build` clean (Core + Mod); `dotnet test tests/Core.Tests` green. (0/0 errors; 627/627 passing)
-- [ ] 6.2 Restage and manually verify: marker position + tooltip content/shading on Read, Editor,
+- [x] 6.2 Restage and manually verify: marker position + tooltip content/shading on Read, Editor,
+  - Confirmed 2026-09-01: TESTING.md `0000006e` "(no note)" (submission 2026-09-01T13-31-56)
       and Pin Tab for an accepted assignment; Scriptorium right-click opens Transcribe with correct
       nav order and help text; Lectern right-click opens Guest Book with correct nav order and help
       text; crouch+right-click still quick-adds on both blocks. Add these as `TESTING.md` items.
