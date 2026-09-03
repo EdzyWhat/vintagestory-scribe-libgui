@@ -84,6 +84,11 @@ reference/vslibgui-decompiled/
 reference/atlas/
 reference/atlas-wiki/
 
+# Seralth's independently-shipped Linux HarfBuzz fix (community corroboration for
+# ScribeHarfBuzzLoadFix.cs) -- upstream repo, not ours, kept for local diffing. Re-clone with:
+#   git clone --depth 50 https://github.com/Seralth/harfbuzzfix.git reference/harfbuzzfix
+reference/harfbuzzfix/
+
 # playtest-history/ is NOT ignored -- it's a curated, committed record of promoted
 # playtest screenshots (see vs-playtest-checklist's promote_screenshot.py).
 

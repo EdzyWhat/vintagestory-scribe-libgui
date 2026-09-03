@@ -1,7 +1,7 @@
 ---
 name: what-to-test
 description: Surface a short, concrete list of in-game conditions to test in Vintage Story, pulled from the remaining manual-test tasks in any in-progress OpenSpec change; persist/regenerate that list as TESTING.md at the repo root so it survives across sessions, with agent-recorded verdicts (or a bare hand-checked box, trusted as an implicit Confirmed) as the source of truth; and use freshly captured screenshots as evidence against it. Items carry one of four lifecycle verdicts -- Confirmed, Still broken, Backlogged, Obsolete -- and verdict-carrying (or checked) items are retained across regeneration (they don't vanish when their task is done or removed). Use when the user asks "what should I test", "what should I check in-game", "give me a testing checklist", "what's left to verify", "update the testing checklist", wants to review/process submitted playtest reports, wants an item marked completed/backlogged/obsolete, or mentions a "screenshot"/"screen"/"pic" while discussing testing, a bug, or a feature (a new capture from the game's screenshot folder to triage and check against the checklist).
-version: "1.5"
+version: "1.6"
 ---
 
 # What should I test?
@@ -15,74 +15,6 @@ registered on this machine) or the work lives in one, pass `--store <id>` on `li
 `status`. Without a store, these act on the nearest local `openspec/` root.
 
 ## Steps
-
-0. **Restage-freshness check (do this FIRST, before listing anything).** The whole point of this
-   skill is to send the user to test in-game — but the game only loads the mod DLLs at launch, from
-   the staged copy in `~/Library/Application Support/VintagestoryData/Mods/scribe/`, NOT from the
-   repo. If source changed without restaging, the user tests a stale build (this has actually
-   happened — a 4-commit-stale build was playtested as if current). Guard against it:
-
-   ```bash
-   # newest staged mod DLL mtime vs. the newest SOURCE file under src/Mod
-   stat -f %m "$HOME/Library/Application Support/VintagestoryData/Mods/scribe/Scribe.dll" 2>/dev/null
-   find <repo>/src/Mod -type f \( -name '*.cs' -o -name '*.json' \) -not -path '*/bin/*' -not -path '*/obj/*' \
-     -exec stat -f %m {} \; | sort -rn | head -1
-   ```
-   Also check for uncommitted-but-unstaged edits (`git status --porcelain src/Mod`). The staged build
-   is **stale** if the DLL mtime predates the newest `src/Mod` source-file mtime, OR there are
-   `src/Mod` changes not yet restaged.
-
-   **Compare against source-file mtimes, NOT the last commit timestamp.** An earlier version of this
-   check compared the DLL to `git log -1 --format=%ct -- src/Mod`, which assumes you always commit
-   *then* restage. This project's habit is the reverse — build+test, `restage.sh`, *then* `git commit`
-   — so the commit lands ~1min AFTER the (current) DLL and the commit-time check reported a false
-   "stale" on a build that was in fact fresh (seen repeatedly). Source-file mtime answers the real
-   question ("does the staged DLL reflect current source?") regardless of commit order, and still
-   catches the genuine gotcha: edit or commit without restaging → a source file is newer than the DLL
-   → correctly flagged.
-
-   - **If stale:** lead the whole response with a loud warning — e.g.
-     `⚠️ Staged build is STALE (staged <time> ago, but src/Mod changed since) — restage before testing or you'll be looking at old code.`
-     — and offer to restage now (`bash build/restage.sh Debug`). Do NOT bury this under the item
-     list; a stale build makes every item below meaningless. If the user is only *reviewing* results
-     (not about to go test), a one-line note is enough.
-   - **If fresh:** no need to mention it (or a terse "staged build is current" if it reassures).
-   - This check is cheap (two `stat`/`git` calls) and belongs to Vintage Story specifically; skip it
-     for non-VS projects.
-
-0b. **Config-drift check (do this SECOND, right after the restage check).** Same class of gotcha as a
-   stale build: the mod reads its client settings from an on-disk JSON at
-   `~/Library/Application Support/VintagestoryData/ModConfig/scribe-client-config.json`, and **that file
-   wins over the code defaults** — an absent key falls back to the `ScribeClientConfig.cs` default, but a
-   *present* key with a stale value silently shadows any new default (this actually happened: a pressed-
-   overlay default was changed in code from white to dark, but the old white value sat in the on-disk
-   JSON, so the tester kept seeing white and the fix looked broken). Guard against it:
-
-   ```bash
-   CFG="$HOME/Library/Application Support/VintagestoryData/ModConfig/scribe-client-config.json"
-   stat -f %m "$CFG" 2>/dev/null                                   # config file mtime
-   git -C <repo> log -1 --format=%ct -- src/Mod/ScribeClientConfig.cs  # last time a default could have changed
-   ```
-   The config is **potentially stale** if the file exists AND its mtime predates the last commit that
-   touched `ScribeClientConfig.cs` (a default may have drifted underneath it), OR there are uncommitted
-   edits to `ScribeClientConfig.cs` not yet reflected on disk.
-
-   - **If potentially stale:** warn (below the restage warning, above the item list) — e.g.
-     `⚠️ On-disk scribe-client-config.json (written <time>) predates ScribeClientConfig.cs changes — new code defaults may be shadowed by stale JSON values. Reset or reconcile before trusting the visuals.`
-     Then offer the user a choice, because the file also holds THEIR real tuning (text size, layout knobs)
-     — do NOT blind-delete:
-     1. **Reset to defaults** — back the file up first so tuning is recoverable, then remove it; the mod
-        rewrites it with current defaults on next load:
-        `mv "$CFG" "$CFG.bak-$(stamp)"` (pass a real timestamp; `Date.now()` isn't available in scripts).
-     2. **Reconcile** — read the file, and for any key whose code default changed, update just that key in
-        place (and add/rename keys for fields that were added/removed in the change), leaving the user's
-        deliberate tuning (e.g. `TextSizeScale`) untouched. Prefer this when the user has clearly tuned
-        values they want to keep.
-   - **If the file doesn't exist:** nothing to shadow — the mod will write fresh defaults on next open;
-     no warning needed.
-   - **If fresh (config newer than the code):** no need to mention it.
-   - Config changes are read when the dialog is (re)opened, so the fix takes effect on **reopening the
-     lectern** — no rebuild/restage needed for a config-only edit. VS-specific; skip for non-VS projects.
 
 1. **Find in-progress changes.**
    ```bash

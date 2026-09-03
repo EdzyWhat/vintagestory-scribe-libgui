@@ -7,8 +7,9 @@ web app writes structured `.playtest-submissions/<ts>.json` reports on submit. T
 tool closes the loop WITHOUT a model: for every pending submission item carrying a
 terminal `verdict`, it records the result deterministically --
 
-    verdict "pass" -> a **Confirmed** line under the TESTING.md item AND the matching
-                      tasks.md checkbox flipped [ ] -> [x] with a dated, sourced note
+    verdict "pass" -> a **Confirmed** line under the TESTING.md item, that item's OWN
+                      checkbox flipped [ ] -> [x], AND the matching tasks.md checkbox
+                      flipped [ ] -> [x] with a dated, sourced note
     verdict "fail" -> a **Still broken** line under the TESTING.md item (box stays [ ])
     verdict null   -> NOT written mechanically; routed to the triage inbox
 
@@ -284,6 +285,7 @@ def reconcile(repo, pending_dir, date_str, dry_run, do_archive):
 
     # Buffered edits, applied bottom-up after all decisions so indices stay valid.
     testing_inserts = []          # (insert_at, [lines])
+    testing_box_flips = []        # [item_start_idx] -- same-length glyph swap, order-independent
     tasks_edits = {}              # path -> {"lines": [...], "ops": [(box_idx, note_line)]}
     triage_appends = []           # rendered entry strings (deduped)
     triage_keys = existing_triage_keys(triage_path)
@@ -358,6 +360,12 @@ def reconcile(repo, pending_dir, date_str, dry_run, do_archive):
                     line = (f'{VERDICT_INDENT}- **Confirmed {date_str}** '
                             f'(submission {stem}): "{_oneline(note)}"')
                     testing_inserts.append((item["insert_at"], [line]))
+                # Confirmed also checks the TESTING.md item's OWN box (previously only the
+                # tasks.md box got flipped here, leaving a Confirmed item's box stuck at [ ] --
+                # harmless for the app, which keys off the annotation word, but inconsistent
+                # with this file's own documented "Confirmed -> [x]" contract).
+                if not item["checked"]:
+                    testing_box_flips.append(item["start"])
                 # tasks.md box flip + sourced note.
                 applied_box = _apply_box(repo, it["taskId"], fp, note, date_str, stem,
                                          ensure_tasks_entry, report)
@@ -400,8 +408,12 @@ def reconcile(repo, pending_dir, date_str, dry_run, do_archive):
             triage_appends.append(entry)
 
     # ---- write TESTING.md (bottom-up so buffered indices stay valid) ----
-    if testing_inserts and not dry_run:
+    if (testing_inserts or testing_box_flips) and not dry_run:
         new_lines = list(testing_lines)
+        # Box flips are same-length glyph swaps at a fixed index -- order-independent relative
+        # to the inserts below (which shift everything after their own insert point).
+        for idx in testing_box_flips:
+            new_lines[idx] = new_lines[idx].replace("- [ ]", "- [x]", 1)
         for insert_at, payload in sorted(testing_inserts, key=lambda x: x[0], reverse=True):
             new_lines[insert_at:insert_at] = payload
         testing_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")

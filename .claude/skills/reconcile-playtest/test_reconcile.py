@@ -66,6 +66,7 @@ class TestPass(ReconcileTestBase):
         testing = self.read("TESTING.md")
         self.assertIn('- **Confirmed 2026-08-21** (submission 2026-08-21T10-00-00): "Works."',
                       testing)
+        self.assertIn("- [x] `00000001`", testing)  # the TESTING.md item's OWN box also flips
         tasks = self.read("openspec/changes/demo/tasks.md")
         self.assertIn("- [x] 1.1 do the thing", tasks)
         self.assertIn('- Confirmed 2026-08-21: TESTING.md `00000001` "Works." '
@@ -84,6 +85,53 @@ class TestPass(ReconcileTestBase):
         report, _ = self.run_reconcile()
         self.assertEqual(len(report["glance"]), 1)
         self.assertIn("- [x] 1.1", self.read("openspec/changes/demo/tasks.md"))  # still applied
+
+
+class TestTestingBoxFlip(ReconcileTestBase):
+    def test_multiple_pass_items_each_flip_their_own_box_only(self):
+        # Regression guard for the box-flip's index bookkeeping: two items, only the first
+        # is winning a fresh pass this run -- the second's box must stay untouched.
+        self.make_testing(
+            "- [ ] `00000001` **A.** body *(demo 1.1)*",
+            "- [ ] `00000002` **B.** body *(demo 1.2)*")
+        self.tasks_md("demo", "- [ ] 1.1 do the thing", "- [ ] 1.2 do the other thing")
+        self.submission("2026-08-21T10-00-00", [
+            {"fingerprint": "00000001", "taskId": "demo 1.1", "verdict": "pass",
+             "note": "Works."}], "2026-08-21T10:00:00-0700")
+        self.run_reconcile()
+        testing = self.read("TESTING.md")
+        self.assertIn("- [x] `00000001`", testing)
+        self.assertIn("- [ ] `00000002`", testing)  # untouched -- no submission touched it
+
+    def test_already_checked_item_is_not_double_flipped(self):
+        # A bare-checked item (no annotation yet) getting a fresh pass shouldn't corrupt the
+        # glyph via a second, no-op replace.
+        self.make_testing("- [x] `00000001` **A.** body *(demo 1.1)*")
+        self.tasks_md("demo", "- [ ] 1.1 do the thing")
+        self.submission("2026-08-21T10-00-00", [
+            {"fingerprint": "00000001", "taskId": "demo 1.1", "verdict": "pass",
+             "note": "Works."}], "2026-08-21T10:00:00-0700")
+        self.run_reconcile()
+        testing = self.read("TESTING.md")
+        self.assertEqual(testing.count("- [x] `00000001`"), 1)
+        self.assertNotIn("- [x] [x]", testing)
+
+    def test_repairs_a_confirmed_item_whose_box_was_never_flipped(self):
+        # Simulates the exact historical bug this patch fixes: an item already carries a
+        # Confirmed annotation (from before this fix existed) but its own box is still `[ ]`.
+        # A NEW pass submission for the same fingerprint should repair the box without
+        # duplicating the annotation line.
+        self.make_testing(
+            "- [ ] `00000001` **A.** body *(demo 1.1)*\n"
+            '      - **Confirmed 2026-08-20** (submission 2026-08-20T10-00-00): "Old note."')
+        self.tasks_md("demo", "- [x] 1.1 do the thing")
+        self.submission("2026-08-21T10-00-00", [
+            {"fingerprint": "00000001", "taskId": "demo 1.1", "verdict": "pass",
+             "note": "Still works."}], "2026-08-21T10:00:00-0700")
+        self.run_reconcile()
+        testing = self.read("TESTING.md")
+        self.assertIn("- [x] `00000001`", testing)
+        self.assertEqual(testing.count("Confirmed"), 1)  # no duplicate annotation
 
 
 class TestFail(ReconcileTestBase):
