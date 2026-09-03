@@ -320,6 +320,37 @@ public abstract partial class ScribeDialogBase
         if (viewMode == ScribeLecternView.Inventory && IsOpened()) ForceRebuild();
     }
 
+    /// <summary>Switches to the Inbox Inventory tab (the standalone Inbox block's own mixed
+    /// restricted/open storage — add-inbox-inventory-tab), tearing down the editor first if active.
+    /// Scoped in effect to <see cref="GuiDialogScribeInbox"/> — no other surface has this tab — but
+    /// defined here alongside its peers (<see cref="OnClickSwitchToInventory"/>,
+    /// <see cref="OnClickSwitchToAssignment"/>) since only <c>private</c>/<c>private protected</c>
+    /// dialog-base state (the editor teardown sequence, <see cref="viewMode"/>) is reachable from this
+    /// partial class.</summary>
+    protected void OnClickSwitchToInboxInventory()
+    {
+        CommitTitleIfEditing();
+        if (isEditorMode)
+        {
+            if (focusedEditIndex is { } idx) NormalizeRowOnCommit(idx);
+            PurgeEmptyRowsFromScratch();
+            pendingEmptyRowRemoval = null;
+            FlushIfDirty();
+            SendReleaseLockPacket();
+            LeaveEditorMode();
+        }
+        viewMode = ScribeLecternView.InboxInventory;
+        if (IsOpened()) ForceRebuild();
+    }
+
+    /// <summary>Rebuilds the Inbox Inventory view if it is currently active. Called after an inventory
+    /// resync (a slot changed server-side) so a second client viewing the same Inbox block repaints its
+    /// slots — the peer of <see cref="RefreshInventoryView"/> for this tab.</summary>
+    protected internal void RefreshInboxInventoryView()
+    {
+        if (viewMode == ScribeLecternView.InboxInventory && IsOpened()) ForceRebuild();
+    }
+
     /// <summary>Switches to the Assignment tab, tearing down the editor first if active. Called from the
     /// Assignment Desk's own Assignment nav button — no other surface ever calls this (design.md
     /// Decision 1: "Only the Assignment Desk dialog ever sets viewMode to Assignment").</summary>
@@ -403,7 +434,7 @@ public abstract partial class ScribeDialogBase
                 DisplayName: ResolveRowItem(b).Name, AcceptedDate: b.Assignment.AcceptedDate,
                 DeclinedDate: b.Assignment.DeclinedDate, CancelledDate: b.Assignment.CancelledDate,
                 DiscardedDate: b.Assignment.DiscardedDate, CompletedDate: b.Assignment.CompletedDate,
-                AcceptedIntoLabel: b.Assignment.AcceptedIntoLabel))
+                AcceptedIntoLabel: b.Assignment.AcceptedIntoLabel, ReceivedDate: b.Assignment.ReceivedDate))
             .ToList();
 
         return new ScribeInboxContent(
@@ -616,7 +647,8 @@ public abstract partial class ScribeDialogBase
                 Seen: b.Assignment.Seen, ViewerRole: ScribeAssignmentActor.Assigner,
                 DisplayName: ResolveRowItem(b).Name, AcceptedDate: b.Assignment.AcceptedDate,
                 DeclinedDate: b.Assignment.DeclinedDate, CancelledDate: b.Assignment.CancelledDate,
-                DiscardedDate: b.Assignment.DiscardedDate, CompletedDate: b.Assignment.CompletedDate))
+                DiscardedDate: b.Assignment.DiscardedDate, CompletedDate: b.Assignment.CompletedDate,
+                ReceivedDate: b.Assignment.ReceivedDate))
             .ToList();
 
     /// <summary>Builds the Sent Assignment History tab (refine-assignment-desk-inbox-ux 12.2/12.3): this
@@ -645,6 +677,19 @@ public abstract partial class ScribeDialogBase
     /// returns an empty placeholder; <see cref="GuiDialogScribeScriptorium"/> overrides it to place the
     /// Scribe-item slots. Mirrors <see cref="BuildHistoryContent"/> / <see cref="BuildTimerContent"/>.</summary>
     protected virtual Widget BuildInventoryContent()
+    {
+        var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
+        float bodySize = ScribeRowConstants.BaseWindowFontSize
+            * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale);
+        var bodyStyle = new TextStyle { FontSize = bodySize, Color = colors.OnSurface };
+        return ScribeTextDefaults.Wrap(modSystem.MySettings.TaskFontFamily, bodySize,
+            new Center(child: new Text(Lang.Get("scribe:scribe-gui-inventory-empty"), bodyStyle)));
+    }
+
+    /// <summary>Builds the Inbox Inventory tab content (add-inbox-inventory-tab). Only the standalone
+    /// Inbox block exposes this tab, so the base returns an empty placeholder; <see cref="GuiDialogScribeInbox"/>
+    /// overrides it to place the 8-slot mixed restricted/open grid. Mirrors <see cref="BuildInventoryContent"/>.</summary>
+    protected virtual Widget BuildInboxInventoryContent()
     {
         var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
         float bodySize = ScribeRowConstants.BaseWindowFontSize

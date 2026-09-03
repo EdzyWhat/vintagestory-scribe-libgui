@@ -85,7 +85,7 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// <summary>The Lectern dialog's central-region view. Read and Editor are the original two views;
     /// Pinned is the Pin Tab (scribe-pin-editor) — a peer view listing the player's pins, selected from the
     /// <c>scribepin</c> nav button. <see cref="BuildCentralRegion"/> chooses the body from this.</summary>
-    private enum ScribeLecternView { Read, Editor, Pinned, Visitors, History, Timer, Inventory, Assignment, Inbox, SentHistory }
+    private enum ScribeLecternView { Read, Editor, Pinned, Visitors, History, Timer, Inventory, Assignment, Inbox, SentHistory, InboxInventory }
 
     private ScribeLecternView viewMode = ScribeLecternView.Read;
 
@@ -124,6 +124,11 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     protected bool IsAssignmentView => viewMode == ScribeLecternView.Assignment;
 
     protected bool IsInboxView => viewMode == ScribeLecternView.Inbox;
+
+    /// <summary>True when the Inbox Inventory tab is the active view (the standalone Inbox block's own
+    /// mixed restricted/open storage — add-inbox-inventory-tab). Exposed so the Inbox dialog can apply
+    /// the active color to its own Inbox Inventory nav button.</summary>
+    protected bool IsInboxInventoryView => viewMode == ScribeLecternView.InboxInventory;
 
     /// <summary>True when the Read tab is the active view. Exposed so a subclass that rebuilds its own nav
     /// column (e.g. the Assignment Desk, add-assignment-desk-own-tasks) can apply the active color to its

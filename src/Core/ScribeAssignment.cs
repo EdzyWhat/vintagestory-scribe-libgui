@@ -9,6 +9,14 @@ public enum ScribeAssignmentState : byte
     Cancelled = 3,
     Discarded = 4,
     Completed = 5,
+
+    /// <summary>Store-only pre-receipt state for a Task Notice sealed at send time (refine-task-notice-ux):
+    /// a record exists (visible to the Assigner as "Sent") before the Assignee has physically received the
+    /// notice. Never reached via <see cref="ScribeAssignmentTransitions.CanApply"/>'s normal matrix — only
+    /// <see cref="ScribeAssignmentStore.TryCreateSent"/> creates it, and only
+    /// <see cref="ScribeAssignmentStore.TryMarkReceived"/> transitions out of it (to Unaccepted), mirroring
+    /// how <see cref="ScribeAssignmentStore.TryCreateAccepted"/> already bypasses the matrix.</summary>
+    Sent = 6,
 }
 
 /// <summary>The actor requesting an assignment transition.</summary>
@@ -66,6 +74,12 @@ public sealed class ScribeAssignment
     public string? DiscardedDate { get; set; }
     public string? CompletedDate { get; set; }
 
+    /// <summary>In-game date a Task Notice's store record transitioned Sent → Unaccepted (refine-task-notice-ux):
+    /// the moment the sealed notice actually entered the Assignee's own inventory, stamped by
+    /// <see cref="ScribeAssignmentStore.TryMarkReceived"/>. Null for every assignment that never went
+    /// through the Sent state (every non-notice send, and any notice sent before this change shipped).</summary>
+    public string? ReceivedDate { get; set; }
+
     /// <summary>Short destination label (e.g. <c>Notebook "Book of Nick"</c>) captured once, at
     /// Accept-placement time, naming the Scribe item the task actually landed in. Null when the
     /// assignment was never placed (still Unaccepted, or an Accept that failed placement).</summary>
@@ -115,6 +129,7 @@ public sealed class ScribeAssignment
         CancelledDate = CancelledDate,
         DiscardedDate = DiscardedDate,
         CompletedDate = CompletedDate,
+        ReceivedDate = ReceivedDate,
         AcceptedIntoLabel = AcceptedIntoLabel,
         HiddenFromAssignee = HiddenFromAssignee,
         HiddenFromAssigner = HiddenFromAssigner,

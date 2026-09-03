@@ -175,8 +175,12 @@ public sealed partial class ScribeModSystem
     /// <summary>Enumerate the player's own hotbar and backpack slots that hold a stack (the inventories a
     /// "carried" Scribe item can live in). Skips empty slots. Used by <see cref="ResolveCarriedScribeItemSlot"/>
     /// and by the Tracker count engine (<see cref="ScribeTrackerCounter"/>), which sums matching stacks over
-    /// exactly these carried-only inventories (add-tracker-link-tasks D5 — chest/ground items are ignored).</summary>
-    internal static IEnumerable<ItemSlot> EnumerateCarriedSlots(IClientPlayer player)
+    /// exactly these carried-only inventories (add-tracker-link-tasks D5 — chest/ground items are ignored).
+    /// Typed to the base <see cref="IPlayer"/> (widened from <c>IClientPlayer</c> by refine-task-notice-ux)
+    /// since <see cref="IPlayer.InventoryManager"/>/<c>GetOwnInventory</c> resolve identically for a
+    /// server-side <c>IServerPlayer</c> — the proximity heartbeat's own-inventory scan
+    /// (<see cref="ScribeModSystem.OnTaskNoticeProximityTick"/>) reuses this exact enumeration server-side.</summary>
+    internal static IEnumerable<ItemSlot> EnumerateCarriedSlots(IPlayer player)
     {
         var invMgr = player.InventoryManager;
         foreach (var invName in new[] { GlobalConstants.hotBarInvClassName, GlobalConstants.backpackInvClassName })

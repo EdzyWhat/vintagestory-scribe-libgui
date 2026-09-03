@@ -27,6 +27,13 @@
       `IScribeDocumentItem` pattern (blank = stackable/no data, sealed = non-stackable/unique data)
 - [x] 3.2 Add the crafting recipe JSON: knife (tool) + parchment + reed → 8 blank Task Notices
 - [x] 3.3 Wire the item's model/texture to the existing placeholder scroll asset
+  - **Fix 2026-09-02:** was actually wired to `game:item/utility/schematic-glider` (a leftover
+    from early prototyping); a 2026-09-02 playtest caught it. Corrected to `game:item/lore/scroll`
+    with that shape's `lore-scroll` gui/ground/tpHand transforms (`tasknotice.json`). Also fixed a
+    second, related bug found in the same report: the Accept dialog's "who assigned it and when"
+    line called a lang key (`scribe:scribe-tasknotice-from`) that was never added to `en.json`, so
+    the raw key rendered instead of text — repointed at the existing `scribe-assignment-assigned-by`
+    key (the exact Sent History wording) and added a flavor line (`GuiDialogTaskNotice.cs`).
 - [x] 3.4 Implement the held-item right-click handler that opens the existing Scribe document
       dialog in locked/read-only mode with Accept and Decline buttons, reusing the Notebook/Tablet
       open path
@@ -65,7 +72,8 @@
 
 ## 7. Verification
 
-- [ ] 7.1 Manual playtest: Hybrid in-range send (Local Inboxes default), out-of-range send (Send a
+- [x] 7.1 Manual playtest: Hybrid in-range send (Local Inboxes default), out-of-range send (Send a
+  - Confirmed 2026-09-02: TESTING.md `00000087` "(no note)" (submission 2026-09-02T20-53-17)
       Notice default), offline-target range check, toggle override in both directions, decline-
       with-no-notification, accept-then-complete/discard syncing identically to an in-range
       assignment

@@ -13,10 +13,11 @@ SHALL detect accept, completion, and per-objective progress for player-scoped qu
 that mod's own server-synced `WatchedAttributes` tree on the player's own entity — no reflection
 is used for this backend's detection at all.
 
-Each backend is gated independently on its own `IsModEnabled` check; either, both, or neither may
-be active in a given world. The system SHALL NOT reflect into any other quest mod's dialog or
-state (including Alegacy Quest Framework), and SHALL NEVER write into either backend's own state
-— every read, for both backends, is observational only.
+Each backend is gated independently on its own `IsModEnabled` check; either or neither may be
+active in a given world (`vsquest` and `progressionframework` cannot in practice both be
+installed at once). The system SHALL NOT reflect into any other quest mod's dialog or state
+(including Alegacy Quest Framework), and SHALL NEVER write into either backend's own state —
+every read, for both backends, is observational only.
 
 #### Scenario: Accept-state is detected for VS Quest via its synced entity attributes
 - **WHEN** a player with vsquest installed accepts a quest from a quest-giver entity
@@ -27,12 +28,6 @@ state (including Alegacy Quest Framework), and SHALL NEVER write into either bac
 - **WHEN** a player with Progression Framework installed accepts a player-scoped quest
 - **THEN** the system reads that quest's status from `progressionframework:questlog` on the
   player's own entity `WatchedAttributes`, with no reflection involved
-
-#### Scenario: Both backends can be active at once without cross-contamination
-- **WHEN** a player has both vsquest and Progression Framework installed, with an active quest in
-  each
-- **THEN** each quest's accept/completion/progress detection is read from its own backend's
-  mechanism, and neither backend's detection is attempted against the other's data
 
 #### Scenario: Alegacy Quest Framework is never reflected into or read from
 - **WHEN** a player has Alegacy Quest Framework installed instead of (or alongside) either
@@ -70,8 +65,9 @@ The Quest Accept/Completion settings rows, any quest-related handbook documentat
 Quest Link option in any Link-creation picker SHALL be shown only for backends whose mod is
 actually installed and enabled. With neither `vsquest` nor `progressionframework` installed, no
 quest-related affordance SHALL be visible. With exactly one installed, the picker SHALL offer
-Quest Links from that backend's catalog only. With both installed, the picker SHALL offer entries
-from both catalogs, distinguishable by their source.
+Quest Links from that backend's catalog only. (`vsquest` and `progressionframework` cannot in
+practice both be installed at once, so the both-installed picker-merge behavior below is a
+defensive code path, not a live scenario.)
 
 #### Scenario: No quest UI with neither backend installed
 - **WHEN** a player has neither vsquest nor progressionframework installed
@@ -82,10 +78,6 @@ from both catalogs, distinguishable by their source.
 - **WHEN** a player installs either vsquest or progressionframework and starts a new session
 - **THEN** the Quest policy rows, quest handbook documentation, and the Quest Link picker option
   all become visible, scoped to that backend's catalog
-
-#### Scenario: Both backends' catalogs appear together when both are installed
-- **WHEN** a player has both vsquest and progressionframework installed
-- **THEN** the Quest Link picker offers entries from both catalogs in one list
 
 ## ADDED Requirements
 

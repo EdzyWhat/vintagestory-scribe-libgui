@@ -199,6 +199,11 @@ internal static class ScribeRowConstants
     /// button's warm gray, deliberately non-committal since it doesn't represent any one state.</summary>
     public static readonly Vector4 AssignmentChipAll = NavActiveSettings;
 
+    /// <summary>Sent state chip (refine-task-notice-ux) — a dusty amber, reading as "in transit" between
+    /// New's purple and Accepted's blue. A dedicated tuned value rather than a nav-button alias: no
+    /// existing nav button represents this pre-receipt Task Notice state.</summary>
+    public static readonly Vector4 AssignmentChipSent = new(0.62f, 0.50f, 0.24f, 1f);
+
     /// <summary>The dark-red ink color of a <see cref="ScribeStamp"/>'s "COPIED"/"IMPORTED"/"Submitted to
     /// Player" imprint text and border — promoted from a Scriptorium-private constant
     /// (refine-assignment-desk-inbox-ux 10.2) so the Assignment Desk's own stamp can't drift from the

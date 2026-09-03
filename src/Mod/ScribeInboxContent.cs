@@ -27,7 +27,7 @@ internal readonly record struct ScribeInboxRowData(
     string TargetPlayerUid, string AssignedDate, bool Seen, ScribeAssignmentActor ViewerRole,
     string? DisplayName = null, string? AcceptedDate = null, string? DeclinedDate = null,
     string? CancelledDate = null, string? DiscardedDate = null, string? CompletedDate = null,
-    string? AcceptedIntoLabel = null)
+    string? AcceptedIntoLabel = null, string? ReceivedDate = null)
 {
     /// <summary>What this row actually shows (playtest 2026-08-31 bug fix): a Task/Text row's own
     /// authored <see cref="Text"/> is blank by convention for a Tracker/Link/Craft row (its label lives
@@ -227,6 +227,7 @@ internal static class ScribeAssignmentChip
         ScribeAssignmentState.Cancelled => ("scribe:scribe-assignment-state-cancelled", ScribeRowConstants.AssignmentChipCancelled),
         ScribeAssignmentState.Discarded => ("scribe:scribe-assignment-state-discarded", ScribeRowConstants.AssignmentChipDiscarded),
         ScribeAssignmentState.Completed => ("scribe:scribe-assignment-state-completed", ScribeRowConstants.AssignmentChipCompleted),
+        ScribeAssignmentState.Sent => ("scribe:scribe-assignment-state-sent", ScribeRowConstants.AssignmentChipSent),
         _ => ("scribe:scribe-assignment-state-unaccepted", ScribeRowConstants.AssignmentChipNew),
     };
 }
@@ -395,6 +396,12 @@ internal sealed class ScribeInboxRowState : State<ScribeInboxRow>
         {
             new Text(Lang.Get("scribe:scribe-assignment-assigned-by", assignerName, data.AssignedDate), metaStyle),
         };
+        // Received stub (refine-task-notice-ux): the moment a Task Notice's Sent-state record actually
+        // reached the Assignee's inventory. Precedes AcceptedDate chronologically and can coexist with it
+        // (an Accepted/terminal row was Received first) — only absent for a non-notice assignment, which
+        // never passes through the Sent/Received states at all.
+        if (data.ReceivedDate is { } receivedDate)
+            metaLines.Add(new Text(Lang.Get("scribe:scribe-assignment-received-on", receivedDate), metaStyle));
         // Per-transition history stubs (triage 2026-08-31: "we should also see stubs for when it was
         // accepted, discarded, etc."). AcceptedDate can coexist with a terminal date (Accepted always
         // precedes Completed/Discarded); the four terminal dates are mutually exclusive by construction.

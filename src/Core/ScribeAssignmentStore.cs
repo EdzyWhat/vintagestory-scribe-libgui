@@ -48,9 +48,13 @@ public sealed class ScribeAssignmentStore
         => _records.Values.Where(b => b.Assignment?.AssignerUid == playerUid && !b.Assignment.HiddenFromAssigner).ToList();
 
     /// <summary>Every assignment this player RECEIVED (their Inbox), in creation order — excluding any
-    /// record this player has deleted their own side of (<see cref="ScribeAssignment.HiddenFromAssignee"/>).</summary>
+    /// record this player has deleted their own side of (<see cref="ScribeAssignment.HiddenFromAssignee"/>),
+    /// and excluding a <see cref="ScribeAssignmentState.Sent"/> Task Notice record that hasn't actually
+    /// reached this player's inventory yet (refine-task-notice-ux: the Inbox stays silent until
+    /// <see cref="TryMarkReceived"/> transitions it to Unaccepted).</summary>
     public IReadOnlyList<ScribeBlock> Received(string playerUid)
-        => _records.Values.Where(b => b.Assignment?.TargetPlayerUid == playerUid && !b.Assignment.HiddenFromAssignee).ToList();
+        => _records.Values.Where(b => b.Assignment?.TargetPlayerUid == playerUid && !b.Assignment.HiddenFromAssignee
+            && b.Assignment.State != ScribeAssignmentState.Sent).ToList();
 
     /// <summary>Resolves a single record by its id (= its <see cref="ScribeBlock.TaskId"/>), or null if
     /// unknown.</summary>
@@ -111,6 +115,25 @@ public sealed class ScribeAssignmentStore
             kind, targetItemCode, targetQuantity, linkTarget, linkLabel, linkDescription,
             recipeSignature, depth, batchId);
 
+    /// <summary>
+    /// Task-Notice send-time counterpart of <see cref="TryCreate"/> (refine-task-notice-ux, reversing the
+    /// earlier "no record until Accept" behavior): creates a record already in the
+    /// <see cref="ScribeAssignmentState.Sent"/> state, using the SAME <paramref name="assignmentId"/>
+    /// already embedded in the sealed notice's own document — one logical record, two carriers during the
+    /// pre-receipt window. Visible immediately in the Assigner's <see cref="Sent"/> view; excluded from the
+    /// Assignee's <see cref="Received"/> view until <see cref="TryMarkReceived"/> transitions it to
+    /// Unaccepted.
+    /// </summary>
+    public bool TryCreateSent(Guid assignmentId, string assignerUid, string targetPlayerUid, string taskText,
+        string assignedDate, out ScribeBlock? record,
+        ScribeBlockKind kind = ScribeBlockKind.Task, string? targetItemCode = null, int targetQuantity = 1,
+        string? linkTarget = null, string? linkLabel = null, string? linkDescription = null,
+        string? recipeSignature = null, int depth = 0, Guid batchId = default)
+        => TryCreateCore(assignmentId, assignerUid, targetPlayerUid, taskText, assignedDate,
+            ScribeAssignmentState.Sent, seen: false, acceptedDate: null, out record,
+            kind, targetItemCode, targetQuantity, linkTarget, linkLabel, linkDescription,
+            recipeSignature, depth, batchId);
+
     private bool TryCreateCore(Guid assignmentId, string assignerUid, string targetPlayerUid, string taskText,
         string assignedDate, ScribeAssignmentState state, bool seen, string? acceptedDate, out ScribeBlock? record,
         ScribeBlockKind kind, string? targetItemCode, int targetQuantity,
@@ -163,6 +186,23 @@ public sealed class ScribeAssignmentStore
         if (isAssigner && ScribeAssignmentTransitions.TryApply(assignment, ScribeAssignmentActor.Assigner, action))
             return true;
         return false;
+    }
+
+    /// <summary>
+    /// Transitions a <see cref="ScribeAssignmentState.Sent"/> Task Notice record to Unaccepted the moment
+    /// the sealed notice actually reaches the Assignee's own inventory (refine-task-notice-ux), stamping
+    /// <see cref="ScribeAssignment.ReceivedDate"/>. From this point the record behaves exactly like any
+    /// other Unaccepted assignment. Returns false — record unchanged — for an unknown id or a record not
+    /// currently in the Sent state (already received, or never a notice at all).
+    /// </summary>
+    public bool TryMarkReceived(Guid assignmentId, string receivedDate)
+    {
+        if (!_records.TryGetValue(assignmentId, out var block) || block.Assignment is not { } assignment)
+            return false;
+        if (assignment.State != ScribeAssignmentState.Sent) return false;
+        assignment.State = ScribeAssignmentState.Unaccepted;
+        assignment.ReceivedDate = receivedDate;
+        return true;
     }
 
     /// <summary>
@@ -233,6 +273,8 @@ public sealed class ScribeAssignmentStore
     // display label, captured once at Accept-placement time.
     // v6 adds HiddenFromAssignee/HiddenFromAssigner (split-assignment-delete-by-viewer) — each side's
     // independent "I deleted my own view of this" flag.
+    // v7 adds ReceivedDate (refine-task-notice-ux) — the date a Task Notice's Sent-state record actually
+    // reached the Assignee's inventory and transitioned to Unaccepted.
     // Progressive append-only reads (matching ScribeDocumentCodec's convention): any version in
     // [MinVersion, Version] is accepted; a v1 blob simply predates Craft-kind assignments (which didn't
     // exist yet), so every one of its records is genuinely RecipeSignature-less — defaulting it to ""
@@ -245,8 +287,10 @@ public sealed class ScribeAssignmentStore
     // assignment it already Accepted simply has no recorded destination, which is also exactly correct
     // (the label was never captured, not lost). A pre-v6 blob predates both hidden-flags — nothing was
     // ever deleted-by-one-side under that version, so defaulting both to false on read is exactly
+    // correct, not a lossy guess. A pre-v7 blob predates the Sent state entirely — no record was ever
+    // received-but-unstamped under that version, so defaulting ReceivedDate to null on read is exactly
     // correct, not a lossy guess.
-    private const byte Version = 6;
+    private const byte Version = 7;
     private const byte MinVersion = 1;
 
     /// <summary>Serializes a single player's view (<see cref="Sent"/> or <see cref="Received"/>) for the
@@ -368,6 +412,7 @@ public sealed class ScribeAssignmentStore
             WriteOptionalString(w, assignment.AcceptedIntoLabel); // v5+
             w.Write(assignment.HiddenFromAssignee); // v6+
             w.Write(assignment.HiddenFromAssigner); // v6+
+            WriteOptionalString(w, assignment.ReceivedDate); // v7+
         }
     }
 
@@ -417,6 +462,7 @@ public sealed class ScribeAssignmentStore
                 // versions, so false is the correct default (not lossy).
                 HiddenFromAssignee = version >= 6 && r.ReadBoolean(),
                 HiddenFromAssigner = version >= 6 && r.ReadBoolean(),
+                ReceivedDate = ReadOptionalString(r, version, minVersion: 7),
             };
 
             list.Add(new ScribeBlock(kind, text, depth: depth, taskId: taskId,

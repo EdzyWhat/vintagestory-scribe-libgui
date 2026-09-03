@@ -1,4 +1,7 @@
 using Vintagestory.API.Client;
+using Vintagestory.API.Common;
+using Vintagestory.API.Datastructures;
+using Vintagestory.API.Server;
 
 namespace Scribe;
 
@@ -27,4 +30,116 @@ public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
 
     protected override ScribeDialogBase CreateDialog(ICoreClientAPI capi) =>
         new GuiDialogScribeInbox(Pos, this, capi);
+
+    // ── Mixed restricted/open inventory (add-inbox-inventory-tab) ────────────
+    //
+    // The Inbox's own 8-slot inventory: slots 0-3 accept ONLY Task Notice items, slots 4-7 accept
+    // anything. Mirrors BlockEntityScriptorium's inventory verbatim — same lazy-init/persistence/
+    // packet-routing shape — just with a mixed slot factory instead of a uniform Scribe-items-only one.
+
+    /// <summary>8 slots: the first 4 (indices 0-3) are Task-Notice-only, the last 4 (4-7) are open —
+    /// see <see cref="EnsureInventory"/>'s slot factory. Internal so <see cref="GuiDialogScribeInbox"/>
+    /// can lay out the restricted/open rows without re-declaring the split.</summary>
+    internal const int SlotCount = 8;
+
+    /// <summary>Restricted slots (Task Notice only) occupy indices below this bound; open slots occupy
+    /// the rest.</summary>
+    internal const int RestrictedSlotCount = 4;
+
+    /// <summary>Tree sub-key under which the inventory persists, kept separate from the document/lock
+    /// keys so persistence is additive: an Inbox saved before this change simply lacks this sub-tree
+    /// and loads with 8 empty slots.</summary>
+    private const string InventoryTreeKey = "inboxInventory";
+
+    /// <summary>Created lazily via <see cref="EnsureInventory"/> so it exists before whichever of
+    /// <see cref="FromTreeAttributes"/> / <see cref="Initialize"/> the VS block-entity lifecycle runs
+    /// first (chunk-load runs FromTree first; a fresh place runs Initialize first).</summary>
+    private InventoryGeneric? inventory;
+
+    /// <summary>The Inbox's mixed restricted/open inventory (the Inbox Inventory tab watches this).</summary>
+    public InventoryGeneric Inventory
+    {
+        get
+        {
+            EnsureInventory();
+            return inventory!;
+        }
+    }
+
+    private void EnsureInventory()
+    {
+        inventory ??= new InventoryGeneric(SlotCount, null, null,
+            (slotId, self) => slotId < RestrictedSlotCount
+                ? new ItemSlotTaskNotice(self)
+                : new ItemSlot(self));
+    }
+
+    public override void Initialize(ICoreAPI api)
+    {
+        EnsureInventory();
+        base.Initialize(api);
+
+        // Bind the inventory to the block-entity packet channel (the network-readiness gate). Without
+        // LateInitialize + Pos, LibGUI's SlotController silently drops every slot click, logging
+        // "[gui] Skipped slot activation … not network-ready". Mirrors BlockEntityScriptorium.Initialize.
+        inventory!.LateInitialize("scribeinbox-" + Pos, api);
+        inventory.Pos = Pos;
+    }
+
+    public override void ToTreeAttributes(ITreeAttribute tree)
+    {
+        base.ToTreeAttributes(tree);
+        EnsureInventory();
+        var invTree = new TreeAttribute();
+        inventory!.ToTreeAttributes(invTree);
+        tree[InventoryTreeKey] = invTree;
+    }
+
+    public override void FromTreeAttributes(ITreeAttribute tree, IWorldAccessor worldForResolving)
+    {
+        EnsureInventory();
+        base.FromTreeAttributes(tree, worldForResolving);
+        // Additive: an Inbox saved before this change has no inventory sub-tree → slots stay empty.
+        if (tree.GetTreeAttribute(InventoryTreeKey) is { } invTree)
+        {
+            inventory!.FromTreeAttributes(invTree);
+        }
+    }
+
+    /// <summary>Standard vanilla container packet flow (mirrors <c>BlockEntityScriptorium</c>): slot
+    /// operations (packet id &lt; 1000) go to the inventory's network util; 1000/1001 open/close the
+    /// inventory for the acting player. Rides the built-in block-entity packet channel, NOT the mod's
+    /// "scribe" channel (which carries document edits — a separate concern).</summary>
+    public override void OnReceivedClientPacket(IPlayer player, int packetid, byte[] data)
+    {
+        if (packetid < 1000)
+        {
+            Inventory.InvNetworkUtil.HandleClientPacket(player, packetid, data);
+            MarkDirty(true);
+            return;
+        }
+
+        if (packetid == 1000)
+        {
+            player.InventoryManager?.OpenInventory(Inventory);
+        }
+        else if (packetid == 1001)
+        {
+            player.InventoryManager?.CloseInventory(Inventory);
+        }
+    }
+
+    /// <summary>Drop any stored items when the block is broken, so a stored Task Notice or other item is
+    /// never destroyed by breaking the block (mirrors <c>BlockEntityScriptorium.OnBlockBroken</c>).
+    /// Server-only; this BE is still alive here (VS calls it from <c>SpawnDropsAndRemoveBlock</c> before
+    /// removal). THIS block's own document is carried onto the block-item separately by
+    /// <see cref="BlockScribeWritingStation.GetDrops"/>.</summary>
+    public override void OnBlockBroken(IPlayer? byPlayer = null)
+    {
+        base.OnBlockBroken(byPlayer);
+        if (Api is ICoreServerAPI)
+        {
+            Inventory.DropAll(Pos.ToVec3d().Add(0.5, 0.5, 0.5));
+        }
+    }
 }

@@ -343,34 +343,42 @@ def reconcile(repo, pending_dir, date_str, dry_run, do_archive):
                 sub_item_terminal[stem].append(True)
                 continue
 
-            # Idempotency: this exact submission already recorded on the item.
-            if item_cites_submission(item, stem):
+            # Idempotency: this exact submission already recorded on the item's TESTING.md
+            # annotation. That write and the tasks.md box flip are separate side effects
+            # (the box flip can fail on its own, e.g. an unresolvable taskId at the time)
+            # -- so for "pass" we still retry the box flip below even when already cited,
+            # instead of treating "TESTING.md cited it" as "fully done" and never retrying.
+            already_cited = item_cites_submission(item, stem)
+            if already_cited and verdict != "pass":
                 report["applied"].append({"submission": stem, "fingerprint": fp,
                                           "verdict": verdict, "status": "already-applied"})
                 sub_item_terminal[stem].append(True)
                 continue
 
             if verdict == "pass":
-                # Flag caveat-laden passes for a human glance (never blocks the apply).
-                if CAVEAT_RE.search(note):
-                    report["glance"].append({"submission": stem, "fingerprint": fp,
-                                             "taskId": it["taskId"], "note": note})
-                # TESTING.md Confirmed line (skip if already Confirmed from another source).
-                if not item_has_verdict(item, "confirmed"):
-                    line = (f'{VERDICT_INDENT}- **Confirmed {date_str}** '
-                            f'(submission {stem}): "{_oneline(note)}"')
-                    testing_inserts.append((item["insert_at"], [line]))
-                # Confirmed also checks the TESTING.md item's OWN box (previously only the
-                # tasks.md box got flipped here, leaving a Confirmed item's box stuck at [ ] --
-                # harmless for the app, which keys off the annotation word, but inconsistent
-                # with this file's own documented "Confirmed -> [x]" contract).
-                if not item["checked"]:
-                    testing_box_flips.append(item["start"])
-                # tasks.md box flip + sourced note.
+                if not already_cited:
+                    # Flag caveat-laden passes for a human glance (never blocks the apply).
+                    if CAVEAT_RE.search(note):
+                        report["glance"].append({"submission": stem, "fingerprint": fp,
+                                                 "taskId": it["taskId"], "note": note})
+                    # TESTING.md Confirmed line (skip if already Confirmed from another source).
+                    if not item_has_verdict(item, "confirmed"):
+                        line = (f'{VERDICT_INDENT}- **Confirmed {date_str}** '
+                                f'(submission {stem}): "{_oneline(note)}"')
+                        testing_inserts.append((item["insert_at"], [line]))
+                    # Confirmed also checks the TESTING.md item's OWN box (previously only the
+                    # tasks.md box got flipped here, leaving a Confirmed item's box stuck at [ ] --
+                    # harmless for the app, which keys off the annotation word, but inconsistent
+                    # with this file's own documented "Confirmed -> [x]" contract).
+                    if not item["checked"]:
+                        testing_box_flips.append(item["start"])
+                # tasks.md box flip + sourced note -- retried every run until it succeeds,
+                # even on an already-cited item (see comment above).
                 applied_box = _apply_box(repo, it["taskId"], fp, note, date_str, stem,
                                          ensure_tasks_entry, report)
                 report["applied"].append({"submission": stem, "fingerprint": fp,
-                                          "verdict": "pass", "status": "applied",
+                                          "verdict": "pass",
+                                          "status": "applied" if not already_cited else "already-applied",
                                           "taskId": it["taskId"], "boxFlipped": applied_box})
                 sub_item_terminal[stem].append(True)
 

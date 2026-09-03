@@ -561,19 +561,9 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
 
     /// <summary>Builds one notice slot widget, matching <see cref="BuildAssignmentContent"/>'s own staging
     /// slot veil/watermark treatment but with the "tasknotice" glyph instead of the book glyph, so the two
-    /// slot families read as visually related but distinct.</summary>
-    private Widget BuildNoticeSlot(ItemSlot slot, SlotController controller, ColorScheme colors)
-    {
-        Vector4 veilColor = colors.Surface with { W = 0.66f };
-        float watermarkGlyph = SlotSize * WatermarkScale;
-        float watermarkInset = (SlotSize - watermarkGlyph) / 2f;
-        var slotStyle = ItemSlotStyle.Default with { Size = SlotSize, BackgroundColor = veilColor };
-        return new Stack(children: new Widget[]
-        {
-            new Positioned(
-                left: watermarkInset, top: watermarkInset, width: watermarkGlyph, height: watermarkGlyph,
-                child: new ScribeVsIconGlyph("scribeassignment", watermarkGlyph, colors.Primary)),
-            new ScribeDocumentSlot(slot, controller, slotStyle, colors, CurrentShade),
-        });
-    }
+    /// slot families read as visually related but distinct. Delegates to the shared
+    /// <see cref="ScribeInventorySlotStyle"/> helper (add-inbox-inventory-tab D2) so the Inbox block's own
+    /// restricted slots render identically rather than duplicating this styling a second time.</summary>
+    private Widget BuildNoticeSlot(ItemSlot slot, SlotController controller, ColorScheme colors) =>
+        ScribeInventorySlotStyle.Build(slot, controller, colors, CurrentShade, "scribeassignment");
 }

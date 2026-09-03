@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scribe Task Notice layout</title>
+<style>
+  @font-face {
+    font-family: "Caudex";
+    src: url("../../src/Mod/assets/scribe/textures/fonts/caudex-bold.ttf") format("truetype");
+    font-weight: 700;
+  }
+
+  :root { --ink:#2c2416; --paper:#f3ead8; --rule:#c9b99a; --accent:#6b4e2e; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.4 system-ui, sans-serif; color:var(--ink); background:#e7dcc6; }
+  main {
+    max-width: 1180px; margin: 0 auto; padding: 20px;
+    display: grid; grid-template-columns: 320px 1fr; gap: 22px;
+  }
+  h1 { font-size: 1.25rem; margin: 0 0 4px; }
+  p.lede { font-size: 12.5px; color: #5c5346; margin: 0 0 14px; max-width: 60ch; }
+  code { font-size: 0.92em; }
+
+  .panel { background: #fff8ec; border: 1px solid var(--rule); border-radius: 6px; padding: 14px; }
+  .group { margin-bottom: 16px; }
+  .group:last-child { margin-bottom: 0; }
+  .group h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--accent);
+    margin: 0 0 8px; border-bottom: 1px solid var(--rule); padding-bottom: 4px;
+  }
+  .knob {
+    display: grid; grid-template-columns: 112px 1fr 58px; gap: 6px; align-items: center;
+    margin-bottom: 6px; font-size: 12px;
+  }
+  .knob label { color: #4a4030; }
+  .knob input[type="range"] { width: 100%; }
+  .knob input[type="number"] { width: 58px; font-size: 12px; padding: 2px 4px; }
+  .locked-note { font-size: 11px; color: #8a7f6a; margin: -2px 0 8px; }
+
+  label.chk { font-size: 12px; display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+
+  .toolbar { display: flex; gap: 8px; margin: 12px 0 10px; flex-wrap: wrap; }
+  button {
+    background: var(--accent); color: #fff; border: 0; padding: 7px 11px; border-radius: 4px;
+    cursor: pointer; font-size: 12px;
+  }
+  button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+
+  .readout { font-size: 12px; }
+  .readout table { width: 100%; border-collapse: collapse; }
+  .readout td { padding: 3px 4px; border-bottom: 1px solid var(--rule); }
+  .readout td.k { color: #5c5346; }
+  .readout td.v { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .readout tr.warn td { color: #8a2f2f; font-weight: 600; }
+
+  .stage-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .stage-outer { position: relative; }
+  .stage {
+    position: absolute; top: 0; left: 0; transform-origin: top left;
+    background-size: 100% 100%; background-repeat: no-repeat; background-color: #cbb98f;
+    box-shadow: 0 3px 14px rgba(0,0,0,.35); overflow: hidden;
+  }
+  .zoomlabel { font-size: 11px; color: #5c5346; }
+
+  .band { position: absolute; left: 0; width: 100%; }
+  .title-band { top: 0; outline: 1px dashed rgba(120,40,20,.55); }
+  .inner-band { outline: 1px dashed rgba(20,80,40,.55); }
+  .leftover-band {
+    outline: 1px dashed rgba(160,20,20,.6);
+    background: repeating-linear-gradient(45deg, rgba(160,20,20,.14) 0 6px, transparent 6px 12px);
+  }
+  .band-tag {
+    position: absolute; top: 2px; left: 3px; font-size: 9px; letter-spacing: .02em;
+    background: rgba(255,255,255,.75); padding: 0 3px; border-radius: 2px; pointer-events: none;
+  }
+
+  .col { position: absolute; top: 0; bottom: 0; }
+  .col.side { background: rgba(20,40,140,.07); outline: 1px dotted rgba(20,40,140,.45); }
+  .col.center { outline: 1px dotted rgba(0,0,0,.25); }
+
+  .titlebox { position: absolute; }
+  .title-row {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between;
+  }
+  .title-text {
+    font-family: "Caudex", Georgia, serif; font-weight: 700; white-space: nowrap; overflow: hidden;
+    color: #3a2c18;
+  }
+  .close-btn {
+    width: 14px; height: 14px; flex: none; border-radius: 3px; background: #a22;
+    display: flex; align-items: center; justify-content: center; color: #fff; font-size: 10px; line-height: 1;
+  }
+
+  .content-col { position: absolute; display: flex; flex-direction: column; }
+  .header-block { font-size: 10.5px; line-height: 1.3; color: #4a4030; }
+  .header-block .l1 { color: #6b5f4a; }
+  .divider-line { flex: none; height: 1px; background: var(--rule); margin: 3px 0; }
+  .gap-note {
+    flex: none; font-size: 9px; color: #8a2f2f; text-align: center; border-top: 1px dashed rgba(160,20,20,.4);
+    border-bottom: 1px dashed rgba(160,20,20,.4); background: rgba(160,20,20,.06);
+  }
+  .body-block {
+    flex: 1 1 auto; min-height: 0; overflow: hidden; position: relative;
+    background: rgba(255,255,255,.35); border: 1px solid rgba(0,0,0,.15);
+  }
+  .body-row {
+    display: flex; align-items: center; gap: 4px; padding: 2px 4px; font-size: 10px;
+    border-bottom: 1px solid rgba(0,0,0,.08); white-space: nowrap; overflow: hidden;
+  }
+  .body-row .box { width: 8px; height: 8px; flex: none; border: 1px solid #8a7f6a; background: rgba(0,0,0,.06); }
+  .footer-block { flex: none; display: flex; justify-content: flex-end; gap: 5px; }
+  .pill { padding: 2px 8px; border-radius: 3px; font-size: 10px; color: #fff; }
+  .pill.decline { background: #8a2f2f; }
+  .pill.accept { background: #2f6b3d; }
+
+  pre {
+    background: #1e1a14; color: #f3ead8; padding: 12px; overflow: auto; font-size: 11px;
+    border-radius: 4px; margin: 0;
+  }
+  .out-head {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--accent);
+    margin: 18px 0 8px;
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="panel">
+    <h1>Task Notice dialog layout</h1>
+    <p class="lede">
+      Mirrors <code>ScribeLayoutProportions</code> / <code>ScribeLayout</code> (<code>IScribeDocumentHost.cs</code>)
+      as rendered by <code>GuiDialogTaskNotice</code>. Tune, watch the box tree update, then copy the
+      generated C# into the mod.
+    </p>
+
+    <div class="group">
+      <h2>Size</h2>
+      <div class="knob"><label for="k-pixelArtSize">Pixel Art Size</label>
+        <input type="range" id="k-pixelArtSize" min="400" max="1000" step="1">
+        <input type="number" id="n-pixelArtSize" min="400" max="1000" step="1"></div>
+      <div class="knob"><label for="k-sizeScale">Size Scale</label>
+        <input type="range" id="k-sizeScale" min="0.3" max="1" step="0.01">
+        <input type="number" id="n-sizeScale" min="0.3" max="1" step="0.01"></div>
+      <div class="knob"><label for="k-aspectH">Aspect H (H/W)</label>
+        <input type="range" id="k-aspectH" min="0.7" max="2" step="0.001">
+        <input type="number" id="n-aspectH" min="0.7" max="2" step="0.001"></div>
+      <div class="locked-note">Aspect H is locked to the parchment PNG's own ratio (130/105 ≈ 1.238)
+        unless you also resize <code>scribe-task-notice.png</code>.</div>
+    </div>
+
+    <div class="group">
+      <h2>ScribeLayoutProportions (exported)</h2>
+      <div class="knob"><label for="k-titleBarFrac">Title Bar Frac</label>
+        <input type="range" id="k-titleBarFrac" min="0" max="0.35" step="0.001">
+        <input type="number" id="n-titleBarFrac" min="0" max="0.35" step="0.001"></div>
+      <div class="knob"><label for="k-innerHFrac">Inner H Frac</label>
+        <input type="range" id="k-innerHFrac" min="0" max="1" step="0.001">
+        <input type="number" id="n-innerHFrac" min="0" max="1" step="0.001"></div>
+      <div class="knob"><label for="k-sideColFrac">Side Col Frac</label>
+        <input type="range" id="k-sideColFrac" min="0" max="0.35" step="0.001">
+        <input type="number" id="n-sideColFrac" min="0" max="0.35" step="0.001"></div>
+      <div class="knob"><label for="k-titleBtnsWFrac">Title Btns W Frac</label>
+        <input type="range" id="k-titleBtnsWFrac" min="0" max="1" step="0.001">
+        <input type="number" id="n-titleBtnsWFrac" min="0" max="1" step="0.001"></div>
+      <div class="knob"><label for="k-titleBtnsHFrac">Title Btns H Frac</label>
+        <input type="range" id="k-titleBtnsHFrac" min="0" max="0.2" step="0.001">
+        <input type="number" id="n-titleBtnsHFrac" min="0" max="0.2" step="0.001"></div>
+    </div>
+
+    <div class="group">
+      <h2>Inline constants (hand-edit in code)</h2>
+      <div class="knob"><label for="k-titleInsetBase">Title inset base (px)</label>
+        <input type="range" id="k-titleInsetBase" min="0" max="30" step="1">
+        <input type="number" id="n-titleInsetBase" min="0" max="30" step="1"></div>
+      <div class="knob"><label for="k-titleInsetFrac">Title inset frac (×W)</label>
+        <input type="range" id="k-titleInsetFrac" min="0" max="0.15" step="0.001">
+        <input type="number" id="n-titleInsetFrac" min="0" max="0.15" step="0.001"></div>
+      <div class="knob"><label for="k-headerGap">Header→body gap (px)</label>
+        <input type="range" id="k-headerGap" min="0" max="30" step="1">
+        <input type="number" id="n-headerGap" min="0" max="30" step="1"></div>
+      <div class="knob"><label for="k-footerGap">Body→footer gap (px)</label>
+        <input type="range" id="k-footerGap" min="0" max="30" step="1">
+        <input type="number" id="n-footerGap" min="0" max="30" step="1"></div>
+    </div>
+
+    <div class="group">
+      <h2>Reference</h2>
+      <label class="chk"><input type="checkbox" id="showLegacyDividers"> Show the old hard dividers (removed from code — for comparison only)</label>
+      <label class="chk"><input type="checkbox" id="showArt" checked> Show parchment backdrop art</label>
+      <label class="chk"><input type="checkbox" id="showGuides" checked> Show band/column guides</label>
+    </div>
+
+    <div class="toolbar">
+      <button id="copy">Copy C#</button>
+      <button class="ghost" id="reset">Reset to shipped defaults</button>
+    </div>
+
+    <div class="readout" id="readout"></div>
+  </div>
+
+  <div class="panel">
+    <div class="stage-wrap">
+      <div class="stage-outer" id="stageOuter">
+        <div class="stage" id="stage"></div>
+      </div>
+      <div class="zoomlabel" id="zoomlabel"></div>
+    </div>
+    <div class="out-head">Generated</div>
+    <pre id="out"></pre>
+  </div>
+</main>
+
+<script>
+// ---- Knob config: id -> {default, isPercent(for display only)} -----------------------------
+const KNOBS = [
+  { id: "pixelArtSize", def: 600 },
+  { id: "sizeScale",    def: 2 / 3 },
+  { id: "aspectH",      def: 130 / 105 },
+  { id: "titleBarFrac",   def: 0.13 },
+  { id: "innerHFrac",     def: 0.80 },
+  { id: "sideColFrac",    def: 0.10 },
+  { id: "titleBtnsWFrac", def: 0.80 },
+  { id: "titleBtnsHFrac", def: 0.065 },
+  { id: "titleInsetBase", def: 10 },
+  { id: "titleInsetFrac", def: 0.04 },
+  { id: "headerGap", def: 6 },
+  { id: "footerGap", def: 8 },
+];
+
+const STORE = "scribe-tasknotice-layout-v1";
+let state = Object.fromEntries(KNOBS.map(k => [k.id, k.def]));
+
+function loadSaved() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE) || "null");
+    if (saved && typeof saved === "object") state = { ...state, ...saved };
+  } catch { /* ignore */ }
+}
+
+function persist() { localStorage.setItem(STORE, JSON.stringify(state)); }
+
+function wireKnob(id) {
+  const range = document.getElementById(`k-${id}`);
+  const num = document.getElementById(`n-${id}`);
+  const sync = (v) => { range.value = v; num.value = v; };
+  sync(state[id]);
+  const onInput = (v) => {
+    state[id] = Number(v);
+    sync(state[id]);
+    persist();
+    paint();
+  };
+  range.addEventListener("input", (e) => onInput(e.target.value));
+  num.addEventListener("input", (e) => onInput(e.target.value));
+}
+
+// ---- Geometry: a straight port of ScribeLayout / ScribeLayoutProportions --------------------
+function computeLayout() {
+  const W = state.pixelArtSize * state.sizeScale;
+  const H = W * state.aspectH;
+  const titleBarH = state.titleBarFrac * H;
+  const innerH = state.innerHFrac * H;
+  const leftover = H - titleBarH - innerH;
+  const sideColW = state.sideColFrac * W;
+  const tasksColW = W - 2 * sideColW;
+  const titleBtnsW = state.titleBtnsWFrac * W;
+  const titleBtnsH = state.titleBtnsHFrac * H;
+  const titleInsetLeft = state.titleInsetBase + state.titleInsetFrac * W;
+  const titleInsetRight = state.titleInsetFrac * W;
+  return { W, H, titleBarH, innerH, leftover, sideColW, tasksColW, titleBtnsW, titleBtnsH, titleInsetLeft, titleInsetRight };
+}
+
+function el(tag, cls, attrs) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (attrs) for (const [k, v] of Object.entries(attrs)) {
+    if (k === "text") e.textContent = v; else e.setAttribute(k, v);
+  }
+  return e;
+}
+
+function px(n) { return `${n}px`; }
+
+function buildStage(layout) {
+  const stage = document.getElementById("stage");
+  stage.innerHTML = "";
+  stage.style.width = px(layout.W);
+  stage.style.height = px(layout.H);
+
+  const showArt = document.getElementById("showArt").checked;
+  stage.style.backgroundImage = showArt
+    ? "url('../../src/Mod/assets/scribe/textures/gui/scribe-task-notice.png')"
+    : "none";
+
+  const showGuides = document.getElementById("showGuides").checked;
+  const showLegacy = document.getElementById("showLegacyDividers").checked;
+
+  // Title band
+  const titleBand = el("div", "band title-band", { style: `height:${px(layout.titleBarH)};` });
+  if (showGuides) titleBand.appendChild(el("div", "band-tag", { text: `title band ${layout.titleBarH.toFixed(0)}px` }));
+  stage.appendChild(titleBand);
+
+  const titleBox = el("div", "titlebox", {
+    style: `left:${px((layout.W - layout.titleBtnsW) / 2)}; top:${px(layout.titleBarH - layout.titleBtnsH)}; width:${px(layout.titleBtnsW)}; height:${px(layout.titleBtnsH)};`,
+  });
+  const titleRow = el("div", "title-row", {
+    style: `padding-left:${px(layout.titleInsetLeft)}; padding-right:${px(layout.titleInsetRight)};`,
+  });
+  const titleFontPx = Math.max(8, layout.titleBtnsH * 0.7);
+  const titleText = el("div", "title-text", { text: "Task Notice", style: `font-size:${px(titleFontPx)};` });
+  const closeBtn = el("div", "close-btn", { text: "×" });
+  titleRow.appendChild(titleText);
+  titleRow.appendChild(closeBtn);
+  titleBox.appendChild(titleRow);
+  stage.appendChild(titleBox);
+
+  // Inner band (3-column frame)
+  const innerBand = el("div", "band inner-band", {
+    style: `top:${px(layout.titleBarH)}; height:${px(layout.innerH)};`,
+  });
+  if (showGuides) innerBand.appendChild(el("div", "band-tag", { text: `inner ${layout.innerH.toFixed(0)}px` }));
+  stage.appendChild(innerBand);
+
+  const leftSide = el("div", "col side", { style: `left:0; width:${px(layout.sideColW)}; top:${px(layout.titleBarH)}; height:${px(layout.innerH)};` });
+  const rightSide = el("div", "col side", { style: `left:${px(layout.sideColW + layout.tasksColW)}; width:${px(layout.sideColW)}; top:${px(layout.titleBarH)}; height:${px(layout.innerH)};` });
+  stage.appendChild(leftSide);
+  stage.appendChild(rightSide);
+
+  const center = el("div", "col center", { style: `left:${px(layout.sideColW)}; width:${px(layout.tasksColW)}; top:${px(layout.titleBarH)}; height:${px(layout.innerH)};` });
+  stage.appendChild(center);
+
+  // Content column: header -> body (Expanded) -> footer
+  const content = el("div", "content-col", {
+    style: `left:${px(layout.sideColW)}; top:${px(layout.titleBarH)}; width:${px(layout.tasksColW)}; height:${px(layout.innerH)};`,
+  });
+
+  const header = el("div", "header-block", { style: `margin-bottom:${px(state.headerGap)};` });
+  header.appendChild(el("div", "l1", { text: "Assigned by PlayerName, 12 Ravenmont 1523" }));
+  header.appendChild(el("div", null, { text: "Do you accept this assignment?" }));
+  content.appendChild(header);
+
+  if (showLegacy) content.appendChild(el("div", "divider-line"));
+  else content.appendChild(el("div", "gap-note", { text: `${state.headerGap}px gap (no divider)`, style: `height:${Math.max(9, state.headerGap)}px; line-height:${Math.max(9, state.headerGap)}px;` }));
+
+  const body = el("div", "body-block");
+  const rows = ["Chop 10 logs", "Deliver 4 ingots to the Smithy", "Fetch water (2/5)", "Mend the north fence", "Report back to the Steward"];
+  for (const r of rows) {
+    const row = el("div", "body-row");
+    row.appendChild(el("div", "box"));
+    row.appendChild(el("span", null, { text: r }));
+    body.appendChild(row);
+  }
+  content.appendChild(body);
+
+  if (showLegacy) content.appendChild(el("div", "divider-line"));
+  else content.appendChild(el("div", "gap-note", { text: `${state.footerGap}px gap (no divider)`, style: `height:${Math.max(9, state.footerGap)}px; line-height:${Math.max(9, state.footerGap)}px;` }));
+
+  const footer = el("div", "footer-block", { style: `margin-top:${showLegacy ? 0 : 0}px;` });
+  footer.appendChild(el("div", "pill decline", { text: "Decline" }));
+  footer.appendChild(el("div", "pill accept", { text: "Accept" }));
+  content.appendChild(footer);
+
+  stage.appendChild(content);
+
+  // Leftover margin below the inner box (blank art showing through)
+  if (layout.leftover > 0.5) {
+    const leftoverBand = el("div", "band leftover-band", {
+      style: `top:${px(layout.titleBarH + layout.innerH)}; height:${px(layout.leftover)};`,
+    });
+    if (showGuides) leftoverBand.appendChild(el("div", "band-tag", { text: `unused ${layout.leftover.toFixed(0)}px` }));
+    stage.appendChild(leftoverBand);
+  }
+}
+
+function fmt(n, d = 1) { return Number(n).toFixed(d); }
+
+function buildReadout(layout) {
+  const rows = [
+    ["W", `${fmt(layout.W)}px`],
+    ["H", `${fmt(layout.H)}px`],
+    ["Title bar H", `${fmt(layout.titleBarH)}px (${fmt(state.titleBarFrac * 100)}%)`],
+    ["Inner H", `${fmt(layout.innerH)}px (${fmt(state.innerHFrac * 100)}%)`],
+    ["Unused margin below content", `${fmt(layout.leftover)}px (${fmt(100 - state.titleBarFrac * 100 - state.innerHFrac * 100)}%)`, layout.leftover > layout.H * 0.05],
+    ["Side col W (each)", `${fmt(layout.sideColW)}px (${fmt(state.sideColFrac * 100)}%)`],
+    ["Tasks (center) col W", `${fmt(layout.tasksColW)}px (${fmt(100 - 2 * state.sideColFrac * 100)}%)`],
+    ["Title btns W × H", `${fmt(layout.titleBtnsW)} × ${fmt(layout.titleBtnsH)}px`],
+    ["Title inset L / R", `${fmt(layout.titleInsetLeft)} / ${fmt(layout.titleInsetRight)}px`],
+  ];
+  const host = document.getElementById("readout");
+  host.innerHTML = "";
+  const table = el("table");
+  for (const [k, v, warn] of rows) {
+    const tr = el("tr", warn ? "warn" : null);
+    tr.appendChild(el("td", "k", { text: k }));
+    tr.appendChild(el("td", "v", { text: v }));
+    table.appendChild(tr);
+  }
+  host.appendChild(table);
+}
+
+function csharp(layout) {
+  return `private static readonly ScribeLayoutProportions NoticeProportions = ScribeLayoutProportions.Default with
+{
+    TitleBarFrac = ${fmt(state.titleBarFrac, 3)}f,
+    InnerHFrac = ${fmt(state.innerHFrac, 3)}f,
+    SideColFrac = ${fmt(state.sideColFrac, 3)}f,
+    TitleBtnsWFrac = ${fmt(state.titleBtnsWFrac, 3)}f,
+    TitleBtnsHFrac = ${fmt(state.titleBtnsHFrac, 3)}f,
+};
+
+private const float SizeScale = ${fmt(state.sizeScale, 3)}f; // currently 2f / 3f
+
+private ScribeLayout ComputeLayout()
+{
+    float w = modSystem.MySettings.PixelArtSize * SizeScale;
+    return new ScribeLayout(w, NoticeAspectH, NoticeProportions);
+}
+
+// -- Inline constants below are NOT part of ScribeLayoutProportions; hand-edit these lines --
+
+// BuildTitleBar's padding:
+//   EdgeInsets.Only(left: 10 + 0.04f * layout.W, right: 0.04f * layout.W)
+// becomes:
+//   EdgeInsets.Only(left: ${fmt(state.titleInsetBase, 1)}f + ${fmt(state.titleInsetFrac, 3)}f * layout.W, right: ${fmt(state.titleInsetFrac, 3)}f * layout.W)
+
+// Build()'s centerColumn header/footer wrapping Paddings:
+//   new Padding(EdgeInsets.Only(bottom: ${fmt(state.headerGap, 1)}f), child: /* header lines */ ...)
+//   new Padding(EdgeInsets.Only(top: ${fmt(state.footerGap, 1)}f), child: BuildActionSection(colors, theme))`;
+}
+
+function paint() {
+  const layout = computeLayout();
+  buildStage(layout);
+  buildReadout(layout);
+  document.getElementById("out").textContent = csharp(layout);
+
+  const maxDisplay = 460;
+  const zoom = Math.min(1, maxDisplay / layout.W);
+  const stage = document.getElementById("stage");
+  const outer = document.getElementById("stageOuter");
+  stage.style.transform = `scale(${zoom})`;
+  outer.style.width = px(layout.W * zoom);
+  outer.style.height = px(layout.H * zoom);
+  document.getElementById("zoomlabel").textContent =
+    `${layout.W.toFixed(0)} × ${layout.H.toFixed(0)}px, shown at ${(zoom * 100).toFixed(0)}%`;
+}
+
+loadSaved();
+for (const k of KNOBS) wireKnob(k.id);
+
+document.getElementById("showLegacyDividers").addEventListener("change", paint);
+document.getElementById("showArt").addEventListener("change", paint);
+document.getElementById("showGuides").addEventListener("change", paint);
+
+document.getElementById("copy").addEventListener("click", async () => {
+  await navigator.clipboard.writeText(csharp(computeLayout()));
+  const btn = document.getElementById("copy");
+  btn.textContent = "Copied";
+  setTimeout(() => btn.textContent = "Copy C#", 1200);
+});
+
+document.getElementById("reset").addEventListener("click", () => {
+  state = Object.fromEntries(KNOBS.map(k => [k.id, k.def]));
+  for (const k of KNOBS) {
+    document.getElementById(`k-${k.id}`).value = state[k.id];
+    document.getElementById(`n-${k.id}`).value = state[k.id];
+  }
+  persist();
+  paint();
+});
+
+paint();
+</script>
+</body>
+</html>

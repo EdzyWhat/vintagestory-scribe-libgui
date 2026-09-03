@@ -91,6 +91,11 @@ internal static class ScribeRowControlNudge
         return centered + style.FontSize * ItemControlOpticalNudgeEm;
     }
 
+    /// <summary>Opacity multiplier applied to a muted/disabled checkbox's tick, border, and background
+    /// (refine-task-notice-ux 3.5) — matches the 45%-opacity dim <see cref="ScribeInboxRow.BuildAcceptControl"/>
+    /// already uses for a disabled Accept button's label, the existing "can't tap this" convention.</summary>
+    private const float DisabledCheckboxOpacity = 0.45f;
+
     /// <summary>Build a task-row completion checkbox, applying the row style's optional tick-color override
     /// (<see cref="ScribeRowStyle.CheckTickColor"/>, refine-chalkboard §11). When it is null (every surface
     /// except the chalkboard) the ambient theme's <c>CheckboxStyle</c> is used unchanged, so the tick keeps
@@ -98,16 +103,41 @@ internal static class ScribeRowControlNudge
     /// border, and focus behavior all stay the resolved theme defaults (we copy <c>Theme.Of(context)</c>'s
     /// style and change one field), so the chalkboard's completed-task tick reads chalk-white to match its
     /// row text without hardcoding white in this shared widget. Used by the read, editor, and pinned rows so
-    /// their ticks can't drift. A null <paramref name="onChanged"/> yields an inert (frozen) checkbox.</summary>
+    /// their ticks can't drift.
+    ///
+    /// <para>A null <paramref name="onChanged"/> already yields an inert (frozen) checkbox — <c>onChanged</c>
+    /// is null — but its VISUAL affordance used to be identical to a live one (refine-task-notice-ux: the
+    /// Task Notice's read-only rows looked clickable when they weren't). That case now mutes the tick,
+    /// border, and background to <see cref="DisabledCheckboxOpacity"/> so "can't click this" is visible
+    /// instead of inferred, taking priority over <see cref="ScribeRowStyle.CheckTickColor"/> (a live-only
+    /// concern — the two never apply to the same row).</para></summary>
     public static Checkbox BuildTaskCheckbox(
         BuildContext context, ScribeRowStyle style, bool value, Action<bool>? onChanged)
-        => new Checkbox(
+    {
+        CheckboxStyle? resolvedStyle;
+        if (onChanged is null)
+        {
+            var baseStyle = Theme.Of(context).CheckboxStyle;
+            resolvedStyle = baseStyle with
+            {
+                CheckColor = baseStyle.CheckColor with { W = baseStyle.CheckColor.W * DisabledCheckboxOpacity },
+                BorderColor = baseStyle.BorderColor with { W = baseStyle.BorderColor.W * DisabledCheckboxOpacity },
+                BackgroundColor = baseStyle.BackgroundColor with { W = baseStyle.BackgroundColor.W * DisabledCheckboxOpacity },
+            };
+        }
+        else
+        {
+            resolvedStyle = style.CheckTickColor is { } tick
+                ? Theme.Of(context).CheckboxStyle with { CheckColor = tick }
+                : null;
+        }
+
+        return new Checkbox(
             value: value,
             onChanged: onChanged,
             size: style.CheckboxSize,
-            style: style.CheckTickColor is { } tick
-                ? Theme.Of(context).CheckboxStyle with { CheckColor = tick }
-                : null);
+            style: resolvedStyle);
+    }
 
     /// <summary>The grip glyph's insets in a row: the vertical centering top-nudge (kept, same as the
     /// checkbox), plus a NEGATIVE right inset that cancels the Row's <see cref="ScribeRowStyle.CheckboxTextGap"/>
@@ -160,6 +190,45 @@ internal sealed class ScribeVsIconGlyph : StatelessWidget
     }
 
     public override Widget Build(BuildContext context) => new VsIcon(iconName, size, color);
+}
+
+/// <summary>Shared inventory-slot styling for a Scribe writing-station's Task-Notice-flavored slots
+/// (add-inbox-inventory-tab D2) — extracted from <see cref="GuiDialogScribeAssignmentDesk.BuildNoticeSlot"/>
+/// so the Assignment Desk's supply/output slots and the Inbox block's own restricted slots render
+/// identically (same size, border, background veil, and watermark technique) without duplicating the
+/// magic numbers in a third place. The watermark (a <see cref="ScribeVsIconGlyph"/> painted UNDER the
+/// slot, muted by the slot's own semi-opaque veil fill on top — see <see cref="GuiDialogScribeScriptorium.BuildWatermarkedSlot"/>
+/// for why under-layering beats over-layering) is optional: passing <c>null</c> for
+/// <paramref name="watermarkIcon"/> renders the same size/border/background with no glyph at all, for a
+/// fully-open slot.</summary>
+internal static class ScribeInventorySlotStyle
+{
+    /// <summary>Slot edge length in pixels — matches <see cref="GuiDialogScribeAssignmentDesk.SlotSize"/>
+    /// (and, transitively, the Scriptorium's own inventory slots).</summary>
+    public const float SlotSize = 48f;
+
+    /// <summary>The watermark glyph's size as a fraction of <see cref="SlotSize"/> — matches
+    /// <see cref="GuiDialogScribeAssignmentDesk.WatermarkScale"/>.</summary>
+    private const float WatermarkScale = 0.66f;
+
+    public static Widget Build(ItemSlot slot, SlotController controller, ColorScheme colors,
+        ScribeAmbientLightSampler.Shade shade, string? watermarkIcon)
+    {
+        Vector4 veilColor = colors.Surface with { W = 0.66f };
+        var slotStyle = ItemSlotStyle.Default with { Size = SlotSize, BackgroundColor = veilColor };
+        Widget slotWidget = new ScribeDocumentSlot(slot, controller, slotStyle, colors, shade);
+        if (watermarkIcon is null) return slotWidget;
+
+        float watermarkGlyph = SlotSize * WatermarkScale;
+        float watermarkInset = (SlotSize - watermarkGlyph) / 2f;
+        return new Stack(children: new Widget[]
+        {
+            new Positioned(
+                left: watermarkInset, top: watermarkInset, width: watermarkGlyph, height: watermarkGlyph,
+                child: new ScribeVsIconGlyph(watermarkIcon, watermarkGlyph, colors.Primary)),
+            slotWidget,
+        });
+    }
 }
 
 /// <summary>The assignment marker icon for an accepted player-to-player assignment

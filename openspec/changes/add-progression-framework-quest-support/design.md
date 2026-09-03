@@ -44,8 +44,10 @@ removed for exactly this reason). Both quest backends should share the fixed beh
 - Add Progression Framework as a second, independently-gated Quest Link backend, matching the
   existing vsquest integration's soft-dependency shape (no compiled reference, `IsModEnabled`
   gate, catalog + auto-detect layers).
-- Support both backends installed simultaneously without cross-contamination — a given Quest
-  Link always resolves against the one backend it actually came from.
+- Support either backend independently, with a given Quest Link always resolving against the
+  one backend it actually came from. (In practice `vsquest` and `progressionframework` cannot
+  both be installed at once, so per-record backend attribution is a defensive invariant verified
+  at the unit level — see task 1.3 — not a live dual-backend scenario.)
 - Surface per-objective progress for Progression Framework quests with multiple delivery
   objectives (common in real Seafarer data — 6 of 11 sampled quests have 2–17 objectives),
   reusing the existing progress-text rendering path.

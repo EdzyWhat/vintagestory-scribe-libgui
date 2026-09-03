@@ -160,6 +160,188 @@ public class ScribeAssignmentStoreTests
         Assert.Empty(store.Received(Assignee));
     }
 
+    // ---- TryCreateSent / TryMarkReceived (refine-task-notice-ux: Sent-at-creation, Received-on-inventory-entry) ----
+
+    [Fact]
+    public void TryCreateSent_CreatesDirectlyAtSent_NotUnaccepted()
+    {
+        var store = new ScribeAssignmentStore();
+        var id = Guid.NewGuid();
+        Assert.True(store.TryCreateSent(id, Assigner, Assignee, "Chop 10 logs", "Year 1, Day 1", out var record));
+        Assert.NotNull(record);
+        Assert.Equal(ScribeAssignmentState.Sent, record!.Assignment!.State);
+        Assert.False(record.Assignment!.Seen);
+        Assert.Null(record.Assignment!.ReceivedDate);
+    }
+
+    [Fact]
+    public void TryCreateSent_AppearsInSent_ButNotInReceived_UntilMarkedReceived()
+    {
+        var store = new ScribeAssignmentStore();
+        var id = Guid.NewGuid();
+        Assert.True(store.TryCreateSent(id, Assigner, Assignee, "Chop 10 logs", "Year 1, Day 1", out _));
+
+        Assert.Single(store.Sent(Assigner));
+        Assert.Empty(store.Received(Assignee));
+    }
+
+    [Fact]
+    public void TryCreateSent_RejectsDuplicateId()
+    {
+        var store = NewStoreWithOneAssignment(out var id);
+        Assert.False(store.TryCreateSent(id, Assigner, Assignee, "Different text", "Year 1, Day 2", out var record));
+        Assert.Null(record);
+    }
+
+    [Fact]
+    public void TryMarkReceived_TransitionsSentToUnaccepted_AndStampsReceivedDate()
+    {
+        var store = new ScribeAssignmentStore();
+        var id = Guid.NewGuid();
+        Assert.True(store.TryCreateSent(id, Assigner, Assignee, "Chop 10 logs", "Year 1, Day 1", out _));
+
+        Assert.True(store.TryMarkReceived(id, "Year 1, Day 2"));
+
+        var assignment = store.TryGet(id)!.Assignment!;
+        Assert.Equal(ScribeAssignmentState.Unaccepted, assignment.State);
+        Assert.Equal("Year 1, Day 2", assignment.ReceivedDate);
+        Assert.Single(store.Received(Assignee)); // now visible in the Inbox
+    }
+
+    [Fact]
+    public void TryMarkReceived_RejectsNonSentState()
+    {
+        // Already Unaccepted (never went through Sent) — not a legal TryMarkReceived source state.
+        var store = NewStoreWithOneAssignment(out var id);
+        Assert.False(store.TryMarkReceived(id, "Year 1, Day 2"));
+        Assert.Null(store.TryGet(id)!.Assignment!.ReceivedDate);
+    }
+
+    [Fact]
+    public void TryMarkReceived_RejectsAlreadyReceivedRecord()
+    {
+        var store = new ScribeAssignmentStore();
+        var id = Guid.NewGuid();
+        Assert.True(store.TryCreateSent(id, Assigner, Assignee, "Chop 10 logs", "Year 1, Day 1", out _));
+        Assert.True(store.TryMarkReceived(id, "Year 1, Day 2"));
+
+        Assert.False(store.TryMarkReceived(id, "Year 1, Day 3")); // already Unaccepted — no-op
+        Assert.Equal("Year 1, Day 2", store.TryGet(id)!.Assignment!.ReceivedDate);
+    }
+
+    [Fact]
+    public void TryMarkReceived_UnknownIdFails()
+    {
+        var store = new ScribeAssignmentStore();
+        Assert.False(store.TryMarkReceived(Guid.NewGuid(), "Year 1, Day 2"));
+    }
+
+    [Fact]
+    public void TryMarkReceived_ThenAccept_BehavesLikeAnyOrdinaryUnacceptedAssignment()
+    {
+        var store = new ScribeAssignmentStore();
+        var id = Guid.NewGuid();
+        Assert.True(store.TryCreateSent(id, Assigner, Assignee, "Chop 10 logs", "Year 1, Day 1", out _));
+        Assert.True(store.TryMarkReceived(id, "Year 1, Day 2"));
+
+        Assert.True(store.TryApplyAction(id, Assignee, ScribeAssignmentAction.Accept));
+        Assert.Equal(ScribeAssignmentState.Accepted, store.TryGet(id)!.Assignment!.State);
+    }
+
+    [Fact]
+    public void TryMarkReceived_ThenDecline_BehavesLikeAnyOrdinaryUnacceptedAssignment()
+    {
+        var store = new ScribeAssignmentStore();
+        var id = Guid.NewGuid();
+        Assert.True(store.TryCreateSent(id, Assigner, Assignee, "Chop 10 logs", "Year 1, Day 1", out _));
+        Assert.True(store.TryMarkReceived(id, "Year 1, Day 2"));
+
+        Assert.True(store.TryApplyAction(id, Assignee, ScribeAssignmentAction.Decline));
+        Assert.Equal(ScribeAssignmentState.Declined, store.TryGet(id)!.Assignment!.State);
+    }
+
+    [Fact]
+    public void FullTaskNoticeLifecycle_SentThenReceivedThenAccepted()
+    {
+        // End-to-end (refine-task-notice-ux 2.5): sent -> visible in Sent History as Sent, invisible in the
+        // Inbox -> a synthetic inventory move marks it Received (now visible in the Inbox) -> Accept
+        // transitions it exactly like any in-range assignment would.
+        var store = new ScribeAssignmentStore();
+        var id = Guid.NewGuid();
+
+        Assert.True(store.TryCreateSent(id, Assigner, Assignee, "Chop 10 logs", "Year 1, Day 1", out _));
+        Assert.Single(store.Sent(Assigner));
+        Assert.Empty(store.Received(Assignee));
+
+        Assert.True(store.TryMarkReceived(id, "Year 1, Day 2"));
+        Assert.Single(store.Received(Assignee));
+        Assert.Equal(ScribeAssignmentState.Unaccepted, store.TryGet(id)!.Assignment!.State);
+
+        Assert.True(store.TryApplyAction(id, Assignee, ScribeAssignmentAction.Accept));
+        Assert.Equal(ScribeAssignmentState.Accepted, store.TryGet(id)!.Assignment!.State);
+        Assert.Single(store.Sent(Assigner)); // Assigner's history still shows it, now Accepted
+    }
+
+    // ---- Round-trip: v7 ReceivedDate ----
+
+    [Fact]
+    public void RoundTrip_SerializeStore_PreservesReceivedDate()
+    {
+        var store = new ScribeAssignmentStore();
+        var id = Guid.NewGuid();
+        Assert.True(store.TryCreateSent(id, Assigner, Assignee, "Chop 10 logs", "Year 1, Day 1", out _));
+        Assert.True(store.TryMarkReceived(id, "Year 1, Day 2"));
+        var bytes = store.SerializeStore();
+
+        var restored = new ScribeAssignmentStore();
+        restored.LoadFrom(bytes);
+        Assert.Equal("Year 1, Day 2", restored.TryGet(id)!.Assignment!.ReceivedDate);
+    }
+
+    [Fact]
+    public void TryDeserializeList_AcceptsAPriorVersionBlob_DefaultingReceivedDateToNull()
+    {
+        // A v6 blob (hidden-flags present, no ReceivedDate field at all) predates the Sent state entirely —
+        // nothing was ever received-but-unstamped under that version, so null is the correct default.
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write("SASN"u8.ToArray());
+            w.Write((byte)6); // v6
+            w.Write(1); // record count
+            w.Write(Guid.NewGuid().ToByteArray());
+            w.Write((byte)ScribeBlockKind.Task);
+            w.Write("Chop 10 logs");
+            w.Write(false); // no TargetItemCode
+            w.Write(1); // TargetQuantity
+            w.Write(0); // CurrentQuantity
+            w.Write(false); // no LinkTarget
+            w.Write(false); // no LinkLabel
+            w.Write(false); // no LinkDescription
+            w.Write(0); // Depth
+            w.Write(""); // RecipeSignature (v2+)
+            w.Write(Assigner);
+            w.Write(Assignee);
+            w.Write((byte)ScribeAssignmentState.Unaccepted);
+            w.Write("Year 1, Day 1");
+            w.Write(false); // Seen
+            w.Write(Guid.NewGuid().ToByteArray()); // BatchId (v3+)
+            w.Write(false); // AcceptedDate (v4+)
+            w.Write(false); // DeclinedDate (v4+)
+            w.Write(false); // CancelledDate (v4+)
+            w.Write(false); // DiscardedDate (v4+)
+            w.Write(false); // CompletedDate (v4+)
+            w.Write(false); // AcceptedIntoLabel (v5+)
+            w.Write(false); // HiddenFromAssignee (v6+)
+            w.Write(false); // HiddenFromAssigner (v6+)
+            // NOTE: no ReceivedDate byte here — this IS the v6 shape.
+        }
+
+        Assert.True(ScribeAssignmentStore.TryDeserializeList(ms.ToArray(), out var restored));
+        var record = Assert.Single(restored!);
+        Assert.Null(record.Assignment!.ReceivedDate);
+    }
+
     // ---- Sent / Received filtering ----
 
     [Fact]

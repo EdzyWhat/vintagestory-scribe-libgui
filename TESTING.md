@@ -43,8 +43,16 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       instead of the canonical store record, letting a discarded-but-undeleted task silently
       derive a bogus local Completed state)*
       - **Confirmed 2026-09-01** (submission 2026-09-01T13-31-56): "(no note)"
-
-## strengthen-harfbuzz-linux-fix
+- [ ] `0000008e` **Check self-assign one-side delete stays one-sided.** Send an assignment to
+      yourself, bring it to a terminal state (Complete or Discard), then delete the record from
+      ONLY the Assignment Inbox (or ONLY the Sent Assignment History) — confirm it disappears
+      from that view but the record is still visible in the other view. A 2026-09-01 playtest
+      report said deleting from one side deleted both; `ScribeAssignmentStore.TryDelete` sets
+      only the flag for the side you deleted from and is unit-tested against exactly this
+      self-assign case (`TryDelete_SelfAssignment_DeletingOneSideLeavesTheOtherVisible`), so if
+      this reproduces the bug is most likely in the client-side UI refresh (both tabs rebuilding
+      off a stale/shared list), not the store — note which tab visually updates wrong if it
+      still reproduces.
 
 > Replaced the Linux HarfBuzz crash fix's dlopen-race mechanism with a deterministic Harmony patch
 > on `Gui.NativeLibraryLoader.Register()` (`src/Mod/ScribeHarfBuzzLoadFix.cs`) — inspired by a
@@ -475,20 +483,27 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 
 - [ ] `00000082` **Test PF picker under Prompt policy.** Carry two eligible Notebooks, trigger a
       Progression Framework quest accept with Quest Accept Policy set to Prompt — confirm a
-      picker appears and the link lands on whichever Notebook you choose. *(6.5)*
+      picker appears and the link lands on whichever Notebook you choose. *(add-progression-framework-quest-support 6.5)*
 - [ ] `00000083` **Test PF accept under Always policy.** Same setup as above but Accept Policy =
       Always with two eligible Notebooks carried — confirm a Prompt-style banner appears instead
-      of the link silently landing on one. *(6.6)*
+      of the link silently landing on one. *(add-progression-framework-quest-support 6.6)*
 - [ ] `00000084` **Test PF end-to-end quest link.** With Progression Framework + Seafarer
       installed, find an NPC offering a multi-objective delivery quest, confirm it appears in the
       Quest Link picker, accept it in-world, and confirm auto-detect fires with progress mirroring
-      as objectives are delivered. *(8.3)*
+      as objectives are delivered. *(add-progression-framework-quest-support 8.3)*
 - [ ] `00000085` **Test vsquest + PF coexistence.** With both vsquest and Progression Framework
       installed simultaneously, link and track one quest from each backend — confirm no
-      cross-contamination between them. *(8.4)*
-- [ ] `00000086` **Test neither-backend-installed hides quest UI.** With neither vsquest nor
+      cross-contamination between them. *(add-progression-framework-quest-support 8.4)*
+      - **Obsolete 2026-09-02** (playtest submission 2026-09-02T20-53-17): tester found `vsquest`
+        and `progressionframework` can't actually be installed together, so this scenario is
+        unreachable in practice. The design doc's "both backends simultaneously" goal was wrong
+        and has been corrected (design.md, quest-auto-detect spec.md) — the mod supports either
+        backend independently; per-record attribution stays as a defensive invariant verified by
+        1.3's unit tests, not a live dual-backend test.
+- [x] `00000086` **Test neither-backend-installed hides quest UI.** With neither vsquest nor
       Progression Framework installed, confirm no quest UI appears anywhere (Settings, Link
-      picker, handbook). *(8.5)*
+      picker, handbook). *(add-progression-framework-quest-support 8.5)*
+      - **Confirmed 2026-09-02** (submission 2026-09-02T20-53-17): "(no note)"
 
 ## add-assignment-physical-delivery-mode
 
@@ -499,31 +514,38 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > Set `scribeDeliveryMode` via `/worldconfig scribeDeliveryMode <instant|physical|hybrid>`
 > (default `hybrid`) to reach each scenario below.
 
-- [ ] `00000087` **Hybrid in-range send.** With `scribeDeliveryMode` = `hybrid`, target a player
+- [ ] `0000008f` **Scroll model + Accept-dialog text fixed.** Craft a blank Task Notice and
+      confirm it renders as a scroll (not a schematic) in inventory/hand/ground. Seal one, have
+      the recipient right-click it — confirm the top line reads "Assigned by \<name\> — \<date\>"
+      (not the raw key "scribe:scribe-tasknotice-from") followed by "Do you accept these tasks?".
+      *(add-assignment-physical-delivery-mode 3.3)*
+- [x] `00000087` **Hybrid in-range send.** With `scribeDeliveryMode` = `hybrid`, target a player
       standing within `scribeDeliveryRadius` (default 200 blocks) of the Assignment Desk — confirm
       "Local Inboxes" is pre-selected, no notice slots appear, and sending places the assignment
-      directly into the target's Inbox with no physical item involved. *(7.1)*
+      directly into the target's Inbox with no physical item involved. *(add-assignment-physical-delivery-mode 7.1)*
+      - **Confirmed 2026-09-02** (submission 2026-09-02T20-53-17): "(no note)"
 - [ ] `00000088` **Hybrid out-of-range send.** Same setup, but target a player farther than the
       radius — confirm "Send a Notice" is pre-selected instead, the blank-notice supply/output
       slots appear, and sending consumes one blank Task Notice and seals it into the output slot
       (no `ScribeAssignmentStore` record exists yet — the Assigner's Sent History shows nothing
-      for it). *(7.1)*
+      for it). *(add-assignment-physical-delivery-mode 7.1)*
 - [ ] `00000089` **Offline-target range check.** Target a currently-offline player who has
       logged out before (has a last-known position) — confirm the toggle pre-selects based on
       that stored position; then target one who has NEVER logged in / has no last-known position
-      at all — confirm it defaults to "Send a Notice" (safer out-of-range default). *(7.1)*
-- [ ] `0000008a` **Toggle override both directions.** For an in-range target, manually tap "Send a
+      at all — confirm it defaults to "Send a Notice" (safer out-of-range default). *(add-assignment-physical-delivery-mode 7.1)*
+- [x] `0000008a` **Toggle override both directions.** For an in-range target, manually tap "Send a
       Notice" — confirm it's freely selectable with no grey/blocked state, and sending seals a
       notice despite being in range. For an out-of-range target, manually tap "Local Inboxes" —
-      confirm it sends instantly despite being out of range. *(7.1)*
+      confirm it sends instantly despite being out of range. *(add-assignment-physical-delivery-mode 7.1)*
+      - **Confirmed 2026-09-02** (submission 2026-09-02T20-53-17): "(no note)"
 - [ ] `0000008b` **Decline leaves no trace.** As the addressed recipient, right-click a sealed Task
       Notice and press Decline — confirm the notice item is consumed, no record appears in your
-      Inbox, and the Assigner's Sent History shows nothing (no notification either way). *(7.1)*
+      Inbox, and the Assigner's Sent History shows nothing (no notification either way). *(add-assignment-physical-delivery-mode 7.1)*
 - [ ] `0000008c` **Accept syncs like an in-range assignment.** Right-click a sealed Task Notice and
       press Accept, placing it into an eligible Scribe item — confirm the row appears already
       Accepted, and Complete/Discard on it syncs to the Assigner exactly like a normal in-range
-      assignment (same Sent History behavior, same instant sync regardless of distance). *(7.1)*
+      assignment (same Sent History behavior, same instant sync regardless of distance). *(add-assignment-physical-delivery-mode 7.1)*
 - [ ] `0000008d` **Proximity scan spawns the discovery effect.** With an outstanding sealed Task
       Notice addressed to you sitting in a nearby chest (or dropped on the ground) within ~12
       blocks, walk into a new chunk near it — confirm the existing ambient particle effect spawns
-      at the notice's position after the scan tick, client-local to you only. *(7.1)*
+      at the notice's position after the scan tick, client-local to you only. *(add-assignment-physical-delivery-mode 7.1)*

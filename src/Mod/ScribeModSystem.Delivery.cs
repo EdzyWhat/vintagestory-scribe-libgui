@@ -133,13 +133,25 @@ public sealed partial class ScribeModSystem
         return slot?.Itemstack?.Collectible is ItemScribeTaskNotice ? slot : null;
     }
 
-    /// <summary>Client → server: Accept or Decline a sealed Task Notice (`task-notice-item` capability,
-    /// tasks.md 3.4/2.2/2.3). Decline consumes the notice with no store record and no notification to the
-    /// Assigner (Core 2.3); Accept creates one <see cref="ScribeAssignmentStore"/> record PER row directly
-    /// in the Accepted state (Core 2.2, via <see cref="ScribeAssignmentStore.TryCreateAccepted"/> — never
-    /// Unaccepted, since the notice itself already stood in for that stage) and places each onto the
-    /// resolved target document, mirroring <c>TryPlaceAcceptedAssignment</c>'s own placement shape.</summary>
+    /// <summary>Client → server: Accept or Decline a sealed Task Notice. Thin network shell — see
+    /// <see cref="ApplyTaskNoticeAction"/> for the actual logic, which this delegates to unchanged.</summary>
     private void OnServerReceivedTaskNoticeAction(IServerPlayer fromPlayer, ScribeTaskNoticeActionMessage message)
+        => ApplyTaskNoticeAction(fromPlayer, message);
+
+    /// <summary>Accept or Decline a sealed Task Notice (`task-notice-item` capability, refine-task-notice-ux
+    /// Decision 2). Each row's <see cref="ScribeAssignmentStore"/> record already exists from send time
+    /// (<see cref="ScribeAssignmentStore.TryCreateSent"/>) — holding a sealed notice IS physical receipt,
+    /// so this first ensures every row has transitioned out of <see cref="ScribeAssignmentState.Sent"/> via
+    /// <see cref="ScribeAssignmentStore.TryMarkReceived"/> (a no-op if the proximity heartbeat already
+    /// caught up — see <see cref="OnTaskNoticeProximityTick"/>), then applies Accept/Decline through the
+    /// SAME <see cref="ScribeAssignmentStore.TryApplyAction"/> path a local-inbox assignment uses, instead
+    /// of creating a fresh record. Accept then places each row onto the resolved target document,
+    /// mirroring <c>TryPlaceAcceptedAssignment</c>'s own placement shape.
+    ///
+    /// <para>Public — matches the <see cref="ScribeModSystem.PinOperations"/>-file precedent
+    /// (<c>SetPinForPlayer</c>/<c>CompleteTaskForPlayer</c>) of a domain-named method the network handler
+    /// delegates to and the integration suite drives directly (refine-task-notice-ux 2.5).</para></summary>
+    public void ApplyTaskNoticeAction(IServerPlayer fromPlayer, ScribeTaskNoticeActionMessage message)
     {
         if (sapi is null || assignmentStore is null) return;
 
@@ -160,13 +172,35 @@ public sealed partial class ScribeModSystem
             return;
         }
 
+        string date = NotebookHost.FormatDate(sapi);
+        // Holding the sealed notice at all already proves physical receipt — ensure every row's store
+        // record is out of Sent regardless of whether the proximity heartbeat's own inventory scan has
+        // caught up yet (its per-chunk-crossing gate can lag a same-chunk pickup-then-immediate-Accept).
+        foreach (var block in noticeDoc.Blocks)
+            assignmentStore.TryMarkReceived(block.TaskId, date);
+
         var action = (ScribeAssignmentAction)message.Action;
         if (action == ScribeAssignmentAction.Decline)
         {
+            var declineAssignerUids = new HashSet<string>();
+            foreach (var block in noticeDoc.Blocks)
+            {
+                if (!assignmentStore.TryApplyAction(block.TaskId, fromPlayer.PlayerUID, ScribeAssignmentAction.Decline))
+                    continue;
+                declineAssignerUids.Add(block.Assignment!.AssignerUid);
+                StampTransitionDate(assignmentStore.TryGet(block.TaskId)!.Assignment!, date);
+            }
+
             noticeSlot.Itemstack = null;
             noticeSlot.MarkDirty();
             AdjustOutstandingNoticeCount(fromPlayer.PlayerUID, -1);
             Trace("tasknotice-action from {0}: declined and consumed a {1}-row notice", fromPlayer.PlayerName, noticeDoc.Blocks.Count);
+
+            // Passive resync only (design.md: "no active notification, no toast, no highlight") — the
+            // Assigner's next Sent History view simply reflects Declined, exactly like a local-inbox decline.
+            PushAssignmentsTo(fromPlayer);
+            foreach (var assignerUid in declineAssignerUids)
+                if (sapi.World.PlayerByUid(assignerUid) is IServerPlayer assigner) PushAssignmentsTo(assigner);
             return;
         }
         if (action != ScribeAssignmentAction.Accept) return;
@@ -188,7 +222,6 @@ public sealed partial class ScribeModSystem
             return;
         }
 
-        string date = NotebookHost.FormatDate(sapi);
         string destinationLabel = ScribeAssignmentDestinationLabel.Format(placementSlot.Itemstack!);
         var assignerUids = new HashSet<string>();
 
@@ -197,17 +230,19 @@ public sealed partial class ScribeModSystem
             var sourceAssignment = block.Assignment!;
             assignerUids.Add(sourceAssignment.AssignerUid);
 
-            if (!assignmentStore.TryCreateAccepted(block.TaskId, sourceAssignment.AssignerUid, fromPlayer.PlayerUID,
-                    block.Text, sourceAssignment.AssignedDate, date, out var record,
-                    kind: block.Kind, targetItemCode: block.TargetItemCode, targetQuantity: block.TargetQuantity,
-                    linkTarget: block.LinkTarget, linkLabel: block.LinkLabel, linkDescription: block.LinkDescription,
-                    recipeSignature: block.RecipeSignature, depth: block.Depth, batchId: sourceAssignment.BatchId))
+            // The record already exists (Unaccepted, from the TryMarkReceived pass above) — transition it
+            // through the same actor-validated path a local-inbox Accept uses, instead of creating a fresh
+            // one (refine-task-notice-ux).
+            if (!assignmentStore.TryApplyAction(block.TaskId, fromPlayer.PlayerUID, ScribeAssignmentAction.Accept))
             {
-                Trace("tasknotice-action from {0}: row {1} rejected (duplicate id or store full) — skipped", fromPlayer.PlayerName, block.TaskId);
+                Trace("tasknotice-action from {0}: row {1} rejected (illegal transition or unknown id) — skipped", fromPlayer.PlayerName, block.TaskId);
                 continue;
             }
+            var record = assignmentStore.TryGet(block.TaskId);
+            if (record?.Assignment is null) continue; // defensive — TryApplyAction just succeeded above
 
-            record!.Assignment!.AcceptedIntoLabel = destinationLabel;
+            StampTransitionDate(record.Assignment, date);
+            record.Assignment!.AcceptedIntoLabel = destinationLabel;
             var placed = new ScribeBlock(record.Kind, record.Text, depth: record.Depth, taskId: record.TaskId,
                 targetItemCode: record.TargetItemCode, targetQuantity: record.TargetQuantity,
                 currentQuantity: record.CurrentQuantity, linkTarget: record.LinkTarget, linkLabel: record.LinkLabel,
@@ -261,11 +296,14 @@ public sealed partial class ScribeModSystem
     private const double NoticeScanRadius = 12.0;
 
     /// <summary>The <c>OnStormTick</c>-style heartbeat for Task Notice proximity discovery
-    /// (task-notice-proximity-signal tasks.md 5.1-5.3): for every online player with at least one
-    /// outstanding sealed notice addressed to them (the cheap <see cref="outstandingNoticeCountByTargetUid"/>
-    /// gate), gated by the chunk-boundary movement check (5.2), scans nearby dropped items and
-    /// block-entity containers (5.3) for a matching stack and pings that one client to spawn the
-    /// ambient discovery effect (5.4). Registered alongside <c>OnStormTick</c> in <c>StartServerSide</c>.</summary>
+    /// (task-notice-proximity-signal tasks.md 5.1-5.3) AND Sent → Received detection (refine-task-notice-ux
+    /// Decision 2): for every online player with at least one outstanding sealed notice addressed to them
+    /// (the cheap <see cref="outstandingNoticeCountByTargetUid"/> gate), first checks their OWN inventory
+    /// for a carried notice (cheap slot iteration, run every tick — not gated by the chunk-boundary check
+    /// below, which exists only to bound the more expensive nearby-scan), then — gated by the chunk-boundary
+    /// movement check (5.2) — scans nearby dropped items and block-entity containers (5.3) for a matching
+    /// stack and pings that one client to spawn the ambient discovery effect (5.4). Registered alongside
+    /// <c>OnStormTick</c> in <c>StartServerSide</c>.</summary>
     private void OnTaskNoticeProximityTick(float _)
     {
         if (sapi is null || outstandingNoticeCountByTargetUid.Count == 0) return;
@@ -273,6 +311,9 @@ public sealed partial class ScribeModSystem
         foreach (var player in sapi.World.AllOnlinePlayers.OfType<IServerPlayer>())
         {
             if (outstandingNoticeCountByTargetUid.GetValueOrDefault(player.PlayerUID) <= 0) continue;
+
+            if (assignmentStore is not null) MarkReceivedForCarriedNotices(player);
+
             if (player.Entity is null) continue;
 
             var pos = player.Entity.Pos;
@@ -293,6 +334,37 @@ public sealed partial class ScribeModSystem
                 }, player);
             }
         }
+    }
+
+    /// <summary>Own-inventory half of Sent → Received detection (refine-task-notice-ux Decision 2): scans
+    /// <paramref name="player"/>'s own hotbar + backpack (the same carried-only inventories
+    /// <see cref="ScribeModSystem.EnumerateCarriedSlots"/> already defines for the Accept-placement picker)
+    /// for a sealed Task Notice addressed to them, and calls <see cref="ScribeAssignmentStore.TryMarkReceived"/>
+    /// for every row it carries — a no-op for any row not currently in the Sent state, so re-running this
+    /// every tick for a player who still has the notice carried is harmless. Pushes a fresh Inbox sync only
+    /// if anything actually transitioned, sparing an idle re-sync on every tick.
+    ///
+    /// <para>Public — the same "network-driven, but also directly integration-suite-drivable" seam as
+    /// <see cref="SendAssignmentBatch"/>/<see cref="ApplyTaskNoticeAction"/>: a test stands in for the
+    /// proximity heartbeat's own-inventory scan by moving a notice into a player's inventory and calling
+    /// this directly, rather than waiting on <see cref="OnTaskNoticeProximityTick"/>'s real tick cadence
+    /// (refine-task-notice-ux 2.5).</para></summary>
+    public void MarkReceivedForCarriedNotices(IServerPlayer player)
+    {
+        string date = NotebookHost.FormatDate(sapi!);
+        bool anyReceived = false;
+        foreach (var slot in ScribeModSystem.EnumerateCarriedSlots(player))
+        {
+            if (slot.Itemstack?.Collectible is not ItemScribeTaskNotice) continue;
+            if (!ScribeDocumentAttributes.TryReadFrom(slot.Itemstack, out var doc) || doc is null) continue;
+
+            foreach (var block in doc.Blocks)
+            {
+                if (block.Assignment?.TargetPlayerUid != player.PlayerUID) continue;
+                if (assignmentStore!.TryMarkReceived(block.TaskId, date)) anyReceived = true;
+            }
+        }
+        if (anyReceived) PushAssignmentsTo(player);
     }
 
     /// <summary>The scan itself (tasks.md 5.3): dropped/thrown notices via

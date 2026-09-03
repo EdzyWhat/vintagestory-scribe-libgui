@@ -376,6 +376,10 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
         // client viewing the same block sees the moved item. A no-op for the non-inventory views and for the
         // Lectern/Notebook/Tablet dialogs, which never enter the inventory view (add-scriptorium-inventory).
         dialog?.RefreshInventoryView();
+
+        // Same resync for the Inbox block's own Inbox Inventory tab (add-inbox-inventory-tab) — a no-op
+        // for every other dialog, which never enters that view.
+        dialog?.RefreshInboxInventoryView();
     }
 
     /// <summary>Restores a document carried on a placed item stack (break→re-place), so the same

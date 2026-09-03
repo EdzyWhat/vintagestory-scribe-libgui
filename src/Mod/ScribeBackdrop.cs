@@ -63,6 +63,13 @@ internal static class ScribeBackdrops
     public static readonly ScribeBackdropSpec ClockmakerPage =
         new(new AssetLocation("scribe", "textures/gui/scribe-clockmakers-notebook.png"));
 
+    /// <summary>The Task Notice's Accept dialog backdrop (refine-task-notice-ux 3.1): its own 105×130 art
+    /// (aspect 130/105 ≈ 1.238 — a taller-than-wide scroll, deliberately distinct from the notebook/lectern
+    /// family's near-square 128×145 art), consumed directly by <see cref="GuiDialogTaskNotice"/>, which has
+    /// no <see cref="IScribeDocumentHost"/> to route this through.</summary>
+    public static readonly ScribeBackdropSpec TaskNoticePage =
+        new(new AssetLocation("scribe", "textures/gui/scribe-task-notice.png"));
+
     // ---- Clay tablet backdrops (add-tablet-clay-type-backdrops, add-tablet-firing-mechanic) -----------
     // Each clay type has authored full-page 1024×1160 backdrops (same shape as the pages above, so they
     // take the identical stretch-to-fill path — NO tiling/renderer change). Art exists per drying STATE:

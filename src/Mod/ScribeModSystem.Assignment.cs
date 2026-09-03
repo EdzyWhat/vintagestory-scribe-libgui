@@ -18,10 +18,16 @@ public sealed partial class ScribeModSystem
     // ── Assignment ───────────────────────────────────────────────────────────────────────────────
 
     /// <summary>Client → server: send a multi-item assignment batch from the Create Assignments tab's
-    /// staging slot (assignment-multi-item-creation, design.md D8-D13). Creates one independent
-    /// assignment per row via the D12-broadened <see cref="ScribeAssignmentStore.TryCreate"/> — a
-    /// malformed or store-rejected row is skipped, not fatal to the rest of the batch (matches "each row
-    /// behaves exactly like any other assignment" — one bad row shouldn't sink the others). When
+    /// staging slot. Thin network shell — see <see cref="SendAssignmentBatch"/> for the actual logic,
+    /// which this delegates to unchanged.</summary>
+    private void OnServerReceivedSendAssignmentBatch(IServerPlayer fromPlayer, ScribeSendAssignmentBatchMessage message)
+        => SendAssignmentBatch(fromPlayer, message);
+
+    /// <summary>Send a multi-item assignment batch from the Create Assignments tab's staging slot
+    /// (assignment-multi-item-creation, design.md D8-D13). Creates one independent assignment per row via
+    /// the D12-broadened <see cref="ScribeAssignmentStore.TryCreate"/> — a malformed or store-rejected row
+    /// is skipped, not fatal to the rest of the batch (matches "each row behaves exactly like any other
+    /// assignment" — one bad row shouldn't sink the others). When
     /// <see cref="ScribeSendAssignmentBatchMessage.DeleteFromSource"/> is set, every successfully-created
     /// row is also removed from the staged document afterward via <see cref="TryRemoveStagedRows"/>.
     ///
@@ -32,8 +38,12 @@ public sealed partial class ScribeModSystem
     /// <see cref="ScribeAssignmentStore"/> record is created for any row yet — the notice item itself is
     /// the pending record until Accept (Core 2.2/2.3) — instead every row is sealed as one
     /// <see cref="ScribeBlock"/> (each carrying its own Unaccepted <see cref="ScribeAssignment"/>) onto a
-    /// fresh notice consumed from the supply slot and placed in the output slot.</para></summary>
-    private void OnServerReceivedSendAssignmentBatch(IServerPlayer fromPlayer, ScribeSendAssignmentBatchMessage message)
+    /// fresh notice consumed from the supply slot and placed in the output slot.</para>
+    ///
+    /// <para>Public — matches the <see cref="ScribeModSystem.PinOperations"/>-file precedent
+    /// (<c>SetPinForPlayer</c>/<c>CompleteTaskForPlayer</c>) of a domain-named method the network handler
+    /// delegates to and the integration suite drives directly (refine-task-notice-ux 2.5).</para></summary>
+    public void SendAssignmentBatch(IServerPlayer fromPlayer, ScribeSendAssignmentBatchMessage message)
     {
         if (sapi is null || assignmentStore is null) return;
 
@@ -119,6 +129,7 @@ public sealed partial class ScribeModSystem
     private int SendBatchViaNotice(IServerPlayer fromPlayer, ScribeSendAssignmentBatchMessage message,
         List<ScribeAssignmentBatchRow> rows, string targetUid, string date, Guid batchId)
     {
+        if (assignmentStore is null) return 0;
         var pos = new Vintagestory.API.MathTools.BlockPos(message.X, message.Y, message.Z);
         if (sapi!.World.BlockAccessor.GetBlockEntity(pos) is not BlockEntityAssignmentDesk desk)
         {
@@ -160,6 +171,15 @@ public sealed partial class ScribeModSystem
                 linkTarget: row.LinkTarget, linkLabel: row.LinkLabel, recipeSignature: row.RecipeSignature,
                 linkDescription: row.LinkDescription, assignment: assignment));
 
+            // A parallel Sent-state store record, same assignmentId as the block just sealed above
+            // (refine-task-notice-ux — reverses the earlier "no record until Accept" behavior): visible to
+            // the Assigner as "Sent" immediately, hidden from the Assignee's Inbox until the notice
+            // physically reaches their inventory (OnTaskNoticeProximityTick -> TryMarkReceived).
+            assignmentStore.TryCreateSent(assignmentId, fromPlayer.PlayerUID, targetUid, row.Text ?? "", date, out _,
+                kind: (ScribeBlockKind)row.Kind, targetItemCode: row.TargetItemCode, targetQuantity: row.TargetQuantity,
+                linkTarget: row.LinkTarget, linkLabel: row.LinkLabel, linkDescription: row.LinkDescription,
+                recipeSignature: row.RecipeSignature, depth: row.Depth, batchId: batchId);
+
             createdCount++;
             if (message.DeleteFromSource && TryReadGuid(row.SourceTaskId, out var sourceTaskId))
                 sentSourceTaskIds.Add(sourceTaskId);
@@ -182,6 +202,10 @@ public sealed partial class ScribeModSystem
         // The proximity heartbeat's cheap "does this player have anything to scan for" gate
         // (task-notice-proximity-signal 5.1) — one notice sealed, regardless of how many rows it carries.
         AdjustOutstandingNoticeCount(targetUid, +1);
+        // Refresh the Assigner's own Sent Assignment History so the just-created Sent-state rows show up
+        // immediately (refine-task-notice-ux) — the Assignee gets no push here, since their Inbox stays
+        // silent until receipt.
+        PushAssignmentsTo(fromPlayer);
         return createdCount;
     }
 
@@ -410,34 +434,46 @@ public sealed partial class ScribeModSystem
     /// own completion flag, never a manual transition"). Called after any server-side Done→true toggle on a
     /// completable block (<see cref="ScribeModSystem.CompleteTaskForPlayer"/> and
     /// <see cref="ScribeModSystem.CompleteUnpinnedTaskAtSource"/> — the two choke points every completion
-    /// trigger, Read/Editor/Pinned/HUD alike, funnels through); a no-op unless the block carries an Accepted
-    /// assignment. Marks the canonical <see cref="ScribeAssignmentStore"/> record (found by the shared
-    /// TaskId — see <see cref="TryPlaceAcceptedAssignment"/>) Completed and mirrors it onto the placed
-    /// block's own (cloned) Assignment object, then pushes a fresh sync to both parties so the Assigner's
-    /// read-only Sent view reflects it too.
+    /// trigger, Read/Editor/Pinned/HUD alike, funnels through), called UNCONDITIONALLY regardless of
+    /// whether the caller could resolve the task's owning document — the canonical
+    /// <see cref="ScribeAssignmentStore"/> record is addressed by <paramref name="taskId"/> alone and never
+    /// needed the document (fix-assignment-completion-doc-resolution: a Notebook not currently in the
+    /// completing player's inventory used to make this derivation silently never run).
     ///
-    /// Gates on the CANONICAL store record's state, not just <paramref name="assignmentOnBlock"/>'s own —
-    /// the placed block's clone can go stale: the Inbox's manual Discard action (legal from Accepted,
-    /// <see cref="OnServerReceivedAssignmentAction"/>) transitions only the store record, since the task it
+    /// Gates on the CANONICAL store record's state, not <paramref name="assignmentOnBlock"/>'s — the block
+    /// can be stale in either direction: the Inbox's manual Discard action (legal from Accepted, <see
+    /// cref="OnServerReceivedAssignmentAction"/>) transitions only the store record, since the task it
     /// discards is deliberately left in place rather than deleted (that's <see
-    /// cref="NotifyAssignmentDiscardOnDelete"/>'s job). Without this check, checking off that
-    /// already-discarded task would still derive a bogus local Completed on the placed clone while the
-    /// canonical record stayed Discarded forever — a permanent divergence invisible only because no current
-    /// UI renders the placed clone's own Assignment state.</summary>
+    /// cref="NotifyAssignmentDiscardOnDelete"/>'s job) — gating on the store means checking off that
+    /// already-discarded task correctly stays a no-op. When <paramref name="assignmentOnBlock"/> IS
+    /// available and itself Accepted, it is additionally mirrored to Completed in place — this is the only
+    /// thing that keeps a resolved block's own embedded Assignment object in sync (the server's actual
+    /// Done-toggle path, <see cref="Scribe.Core.ScribeCompletion.ApplyLeaf"/>, sets only <c>Done</c> and
+    /// never touches <c>Assignment</c> itself).</summary>
     public void NotifyAssignmentDoneChanged(Guid taskId, bool nowDone, ScribeAssignment? assignmentOnBlock)
     {
-        if (!nowDone || sapi is null || assignmentStore is null) return;
-        if (assignmentOnBlock is not { State: ScribeAssignmentState.Accepted } assignment) return;
-        if (assignmentStore.TryGet(taskId)?.Assignment is not { State: ScribeAssignmentState.Accepted } storeAssignment)
+        if (!nowDone) return; // ordinary uncheck — not an assignment concern, nothing to trace
+        if (sapi is null || assignmentStore is null)
+        {
+            Trace("  assignment-done: task {0} — server not ready (sapi/store null), derivation skipped", taskId);
             return;
+        }
+        if (assignmentStore.TryGet(taskId)?.Assignment is not { State: ScribeAssignmentState.Accepted } storeAssignment)
+        {
+            Trace("  assignment-done: task {0} has no Accepted canonical record — nothing to derive", taskId);
+            return;
+        }
 
         string date = NotebookHost.FormatDate(sapi);
-        ScribeAssignmentTransitions.TryMarkCompleted(assignment, true);
-        StampTransitionDate(assignment, date);
+        if (assignmentOnBlock is { State: ScribeAssignmentState.Accepted } assignment)
+        {
+            ScribeAssignmentTransitions.TryMarkCompleted(assignment, true);
+            StampTransitionDate(assignment, date);
+        }
         ScribeAssignmentTransitions.TryMarkCompleted(storeAssignment, true);
         StampTransitionDate(storeAssignment, date);
 
-        PushAssignmentSyncToBothParties(assignment.AssignerUid, assignment.TargetPlayerUid);
+        PushAssignmentSyncToBothParties(storeAssignment.AssignerUid, storeAssignment.TargetPlayerUid);
     }
 
     /// <summary>Delete-on-Accepted hook (assignment-state-machine: "Deleting an Accepted assigned task

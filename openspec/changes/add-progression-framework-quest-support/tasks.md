@@ -129,10 +129,14 @@
       offering a multi-objective delivery quest, confirm catalog entry appears in the Quest Link
       picker, accept it in-world, confirm auto-detect fires and progress mirrors as objectives
       are delivered.
-- [ ] 8.4 Manual playtest: both vsquest and Progression Framework installed simultaneously,
-      confirm one quest from each backend can be linked and tracked without cross-contamination
-      (spec's coexistence scenario).
-- [ ] 8.5 Manual playtest: neither backend installed — confirm no quest UI appears anywhere
+- [x] 8.4 ~~Manual playtest: both vsquest and Progression Framework installed simultaneously~~ —
+      not testable: the two mods cannot in practice both be installed at once, so this scenario
+      was dropped from the spec (design.md Goals, quest-auto-detect spec.md) in favor of the
+      per-record backend-attribution invariant already covered by 1.3's unit tests.
+  - Obsolete 2026-09-02: TESTING.md `00000085` (playtest submission 2026-09-02T20-53-17) — see
+    design.md correction.
+- [x] 8.5 Manual playtest: neither backend installed — confirm no quest UI appears anywhere
+  - Confirmed 2026-09-02: TESTING.md `00000086` "(no note)" (submission 2026-09-02T20-53-17)
       (Settings, Link picker, handbook).
 
 ## 9. Quest Link follow-to-ledger (Progression Framework only)

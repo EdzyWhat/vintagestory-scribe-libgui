@@ -128,6 +128,19 @@ public class ScribeAssignmentTests
     }
 
     [Fact]
+    public void Clone_RoundTripsReceivedDate()
+    {
+        // refine-task-notice-ux: ReceivedDate mirrors AcceptedDate/CompletedDate's pattern, so Clone()
+        // must carry it forward exactly like those (see TryPlaceAcceptedAssignment's use of Clone()).
+        var assignment = new ScribeAssignment("assigner", "Day 1", ScribeAssignmentState.Unaccepted)
+        {
+            ReceivedDate = "Day 2",
+        };
+        var clone = assignment.Clone();
+        Assert.Equal("Day 2", clone.ReceivedDate);
+    }
+
+    [Fact]
     public void BinaryCodecRoundTripsAssignmentAndAbsentAssignment()
     {
         var original = new ScribeDocument();

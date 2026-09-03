@@ -158,9 +158,17 @@ public sealed partial class ScribeModSystem
                     changed |= pinStore.SetPinDone(player.PlayerUID, docId, id, nowDone);
             }
         }
-        else if (ScribeCompletion.Decide(nowDone, policy).ShouldRemovePin)
+        else
         {
-            changed |= pinStore.RemovePin(player.PlayerUID, docId, taskId);
+            // The document is unresolvable right now (e.g. the Notebook isn't in this player's
+            // inventory) — there's no block to mutate or write through to, but the canonical
+            // assignment-store derivation (fix-assignment-completion-doc-resolution) is addressed by
+            // taskId alone and does not need it, so it still runs here.
+            Trace("  complete: doc {0} unresolvable for task {1} — deriving assignment completion from the store only", docId, taskId);
+            NotifyAssignmentDoneChanged(taskId, nowDone, null);
+
+            if (ScribeCompletion.Decide(nowDone, policy).ShouldRemovePin)
+                changed |= pinStore.RemovePin(player.PlayerUID, docId, taskId);
         }
 
         if (changed) PushPinsTo(player);

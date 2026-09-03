@@ -602,6 +602,7 @@ public abstract partial class ScribeDialogBase
         ScribeLecternView.Assignment => BuildAssignmentContent(),
         ScribeLecternView.Inbox     => BuildInboxContent(),
         ScribeLecternView.SentHistory => BuildSentAssignmentHistoryContent(),
+        ScribeLecternView.InboxInventory => BuildInboxInventoryContent(),
         _                          => BuildReadContent(),
     };
 
