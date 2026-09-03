@@ -1,0 +1,14 @@
+[
+	{
+		ingredientPattern: "KPR",
+		ingredients: {
+			"K": { type: "item", tags: ["tool-knife"], isTool: true },
+			"P": { type: "item", code: "game:paper-parchment" },
+			"R": { type: "item", code: "game:cattailtops", quantity: 2 }
+		},
+		width: 3,
+		height: 1,
+		name: "scribe:tasknotice",
+		output: { type: "item", code: "scribe:tasknotice", quantity: 8 }
+	}
+]

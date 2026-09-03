@@ -7,6 +7,22 @@
 			"dataType": "bool",
 			"default": "true",
 			"onCustomizeScreen": false
+		},
+		{
+			"category": "scribe",
+			"code": "scribeDeliveryMode",
+			"dataType": "dropdown",
+			"values": ["instant", "physical", "hybrid"],
+			"names": ["Always Instant", "Always Physical", "Hybrid"],
+			"default": "hybrid",
+			"onCustomizeScreen": false
+		},
+		{
+			"category": "scribe",
+			"code": "scribeDeliveryRadius",
+			"dataType": "intinput",
+			"default": "200",
+			"onCustomizeScreen": false
 		}
 	]
 }

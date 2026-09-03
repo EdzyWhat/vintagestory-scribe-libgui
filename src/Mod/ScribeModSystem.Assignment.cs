@@ -23,7 +23,16 @@ public sealed partial class ScribeModSystem
     /// malformed or store-rejected row is skipped, not fatal to the rest of the batch (matches "each row
     /// behaves exactly like any other assignment" — one bad row shouldn't sink the others). When
     /// <see cref="ScribeSendAssignmentBatchMessage.DeleteFromSource"/> is set, every successfully-created
-    /// row is also removed from the staged document afterward via <see cref="TryRemoveStagedRows"/>.</summary>
+    /// row is also removed from the staged document afterward via <see cref="TryRemoveStagedRows"/>.
+    ///
+    /// <para>Delivery-mode branch (add-assignment-physical-delivery-mode, tasks.md 4.5): the server
+    /// re-derives whether a Task Notice is required from its OWN current `DeliveryMode`
+    /// (<see cref="ScribeDeliveryPolicy.RequiresNotice"/>), never trusting <see
+    /// cref="ScribeSendAssignmentBatchMessage.DeliveryChoice"/> alone. When required, NO
+    /// <see cref="ScribeAssignmentStore"/> record is created for any row yet — the notice item itself is
+    /// the pending record until Accept (Core 2.2/2.3) — instead every row is sealed as one
+    /// <see cref="ScribeBlock"/> (each carrying its own Unaccepted <see cref="ScribeAssignment"/>) onto a
+    /// fresh notice consumed from the supply slot and placed in the output slot.</para></summary>
     private void OnServerReceivedSendAssignmentBatch(IServerPlayer fromPlayer, ScribeSendAssignmentBatchMessage message)
     {
         if (sapi is null || assignmentStore is null) return;
@@ -47,6 +56,26 @@ public sealed partial class ScribeModSystem
         // 12.2 root-cause fix) — see ScribeAssignment.BatchId's remarks on why `date` alone isn't a safe
         // batch-grouping key (two separate sends on the same in-game day would collide on it).
         var batchId = Guid.NewGuid();
+
+        var deliveryMode = ScribeDeliveryConfig.ReadMode(sapi);
+        var deliveryChoice = (ScribeDeliveryChoice)message.DeliveryChoice;
+        bool viaNotice = ScribeDeliveryPolicy.RequiresNotice(deliveryMode, deliveryChoice);
+
+        int createdCount = viaNotice
+            ? SendBatchViaNotice(fromPlayer, message, rows, targetUid, date, batchId)
+            : SendBatchViaLocalInboxes(fromPlayer, message, rows, targetUid, date, batchId);
+
+        if (createdCount == 0) return;
+        Trace("send-assignment-batch from {0}: created {1} row(s) -> {2} (via {3})",
+            fromPlayer.PlayerName, createdCount, targetUid, viaNotice ? "notice" : "local inbox");
+    }
+
+    /// <summary>The pre-existing Local Inboxes path: creates one <see cref="ScribeAssignmentStore"/> record
+    /// per row directly (Unaccepted), then pushes both parties' Inbox/Sent views.</summary>
+    private int SendBatchViaLocalInboxes(IServerPlayer fromPlayer, ScribeSendAssignmentBatchMessage message,
+        List<ScribeAssignmentBatchRow> rows, string targetUid, string date, Guid batchId)
+    {
+        if (assignmentStore is null) return 0;
         var sentSourceTaskIds = new List<Guid>();
         int createdCount = 0;
 
@@ -72,21 +101,98 @@ public sealed partial class ScribeModSystem
                 sentSourceTaskIds.Add(sourceTaskId);
         }
 
-        if (createdCount == 0) return;
+        if (createdCount == 0) return 0;
+        RemoveSentSourceRows(message, sentSourceTaskIds);
 
-        if (message.DeleteFromSource && sentSourceTaskIds.Count > 0)
+        PushAssignmentsTo(fromPlayer);
+        if (sapi!.World.PlayerByUid(targetUid) is IServerPlayer targetPlayer) PushAssignmentsTo(targetPlayer);
+        return createdCount;
+    }
+
+    /// <summary>The physical-delivery path (`task-notice-item` capability): seals every row into ONE
+    /// notice document (no store record yet — see the caller's remarks), consumed from
+    /// <see cref="BlockEntityAssignmentDesk.NoticeSupplySlotIndex"/> and placed into
+    /// <see cref="BlockEntityAssignmentDesk.NoticeOutputSlotIndex"/>. Refuses the whole batch (rather than
+    /// partially sealing it) if the Desk can't be resolved, the supply slot has no blank notice, or the
+    /// output slot is already occupied — mirroring the client-side gate (task 4.5) but re-validated here as
+    /// the actual authority.</summary>
+    private int SendBatchViaNotice(IServerPlayer fromPlayer, ScribeSendAssignmentBatchMessage message,
+        List<ScribeAssignmentBatchRow> rows, string targetUid, string date, Guid batchId)
+    {
+        var pos = new Vintagestory.API.MathTools.BlockPos(message.X, message.Y, message.Z);
+        if (sapi!.World.BlockAccessor.GetBlockEntity(pos) is not BlockEntityAssignmentDesk desk)
         {
-            // add-assignment-desk-own-tasks design.md D6: the client tells us which document the batch was
-            // drawn from, since there's no ItemStack to mutate when the source was the Desk's own document.
-            if (message.SourceIsDeskDocument)
-                TryRemoveDeskOwnRows(message.X, message.Y, message.Z, sentSourceTaskIds);
-            else
-                TryRemoveStagedRows(message.X, message.Y, message.Z, message.StagingSlot, sentSourceTaskIds);
+            Trace("send-assignment-batch from {0}: no Assignment Desk at {1} for notice delivery — ignored", fromPlayer.PlayerName, pos);
+            return 0;
         }
 
-        Trace("send-assignment-batch from {0}: created {1} assignment(s) -> {2}", fromPlayer.PlayerName, createdCount, targetUid);
-        PushAssignmentsTo(fromPlayer);
-        if (sapi.World.PlayerByUid(targetUid) is IServerPlayer targetPlayer) PushAssignmentsTo(targetPlayer);
+        var supplySlot = desk.Inventory[BlockEntityAssignmentDesk.NoticeSupplySlotIndex];
+        var outputSlot = desk.Inventory[BlockEntityAssignmentDesk.NoticeOutputSlotIndex];
+        if (supplySlot.Itemstack?.Collectible is not ItemScribeTaskNotice)
+        {
+            Trace("send-assignment-batch from {0}: no blank Task Notice loaded — ignored", fromPlayer.PlayerName);
+            return 0;
+        }
+        if (outputSlot.Itemstack is not null)
+        {
+            Trace("send-assignment-batch from {0}: notice output slot already occupied — ignored", fromPlayer.PlayerName);
+            return 0;
+        }
+
+        var sealedDoc = new ScribeDocument();
+        var sentSourceTaskIds = new List<Guid>();
+        int createdCount = 0;
+
+        foreach (var row in rows)
+        {
+            if (!TryReadGuid(row.AssignmentId, out var assignmentId))
+            {
+                Trace("send-assignment-batch from {0}: MALFORMED row (assignmentId not 16 bytes) — skipped", fromPlayer.PlayerName);
+                continue;
+            }
+            bool isItemKind = (ScribeBlockKind)row.Kind is ScribeBlockKind.Tracker or ScribeBlockKind.Link or ScribeBlockKind.Craft;
+            if (!isItemKind && string.IsNullOrWhiteSpace(row.Text)) continue;
+
+            var assignment = new ScribeAssignment(fromPlayer.PlayerUID, date, ScribeAssignmentState.Unaccepted,
+                seen: false, targetPlayerUid: targetUid, batchId: batchId);
+            sealedDoc.AppendAssignedBlock(new ScribeBlock((ScribeBlockKind)row.Kind, row.Text ?? "", depth: row.Depth,
+                taskId: assignmentId, targetItemCode: row.TargetItemCode, targetQuantity: row.TargetQuantity,
+                linkTarget: row.LinkTarget, linkLabel: row.LinkLabel, recipeSignature: row.RecipeSignature,
+                linkDescription: row.LinkDescription, assignment: assignment));
+
+            createdCount++;
+            if (message.DeleteFromSource && TryReadGuid(row.SourceTaskId, out var sourceTaskId))
+                sentSourceTaskIds.Add(sourceTaskId);
+        }
+
+        if (createdCount == 0) return 0;
+        RemoveSentSourceRows(message, sentSourceTaskIds);
+
+        // Consume one blank notice, seal a fresh single-stack notice with the batch's document, and place
+        // it in the output slot for the sender to collect and hand-deliver. Capture the collectible BEFORE
+        // TakeOut, which nulls the slot's Itemstack once its count reaches zero.
+        var noticeCollectible = supplySlot.Itemstack!.Collectible;
+        supplySlot.TakeOut(1);
+        supplySlot.MarkDirty();
+        var notice = new ItemStack(noticeCollectible, 1);
+        ScribeDocumentAttributes.WriteTo(notice, sealedDoc);
+        outputSlot.Itemstack = notice;
+        outputSlot.MarkDirty();
+        desk.MarkDirty(true);
+        // The proximity heartbeat's cheap "does this player have anything to scan for" gate
+        // (task-notice-proximity-signal 5.1) — one notice sealed, regardless of how many rows it carries.
+        AdjustOutstandingNoticeCount(targetUid, +1);
+        return createdCount;
+    }
+
+    /// <summary>"Delete from source on send" routing shared by both delivery paths (design.md D13/D6).</summary>
+    private void RemoveSentSourceRows(ScribeSendAssignmentBatchMessage message, List<Guid> sentSourceTaskIds)
+    {
+        if (!message.DeleteFromSource || sentSourceTaskIds.Count == 0) return;
+        if (message.SourceIsDeskDocument)
+            TryRemoveDeskOwnRows(message.X, message.Y, message.Z, sentSourceTaskIds);
+        else
+            TryRemoveStagedRows(message.X, message.Y, message.Z, message.StagingSlot, sentSourceTaskIds);
     }
 
     /// <summary>"Delete from source on send" (design.md D13): removes the sent rows (matched by their

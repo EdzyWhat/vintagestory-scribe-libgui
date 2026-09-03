@@ -1014,6 +1014,48 @@ presence, verified in `GuiScreenWorldCustomize`:
   (via `Lang.Get` / `Lang.GetIfExists`). With `onCustomizeScreen: false` these are never rendered,
   so they're not needed — don't ship dead keys.
 
+### `scribeDeliveryMode` / `scribeDeliveryRadius` — Assignment physical-delivery setting
+
+Two admin-only (`onCustomizeScreen: false`) attributes added for `add-assignment-physical-
+delivery-mode`, read fresh both client- and server-side via `api.World.Config.GetString`/`GetInt`
+(never cached) — see `ScribeDeliveryConfig.ReadMode`/`ReadRadius`:
+
+- **`scribeDeliveryMode`** (`dropdown`, values `instant`/`physical`/`hybrid`, **default `hybrid`**):
+  gates the Create Assignments tab's "Local Inboxes" / "Send a Notice" toggle and the Task Notice
+  supply/output slots. `instant` = today's shipped in-range-only behavior, toggle never shows.
+  `physical` = every send requires a Task Notice, toggle never shows. `hybrid` = the toggle shows,
+  pre-selected by a one-time server-authoritative range check (`ScribeDeliveryPolicy.IsInRange`)
+  against the target's live position (online) or last-known position (offline, captured on
+  `PlayerDisconnect`), but always player-overridable in either direction with no blocked state.
+- **`scribeDeliveryRadius`** (`intinput`, **default `200`** blocks): the Hybrid range check's cutoff.
+  Set via `/worldconfig scribeDeliveryRadius <n>` (operator-only, same as any `onCustomizeScreen:
+  false` key — see above).
+- Change on an existing world takes effect immediately (no migration): `DeliveryMode` defaults to
+  `hybrid` on upgrade, so an admin wanting zero behavior change must set `instant` explicitly.
+
+### Task Notice proximity scan — API primitives (task-notice-proximity-signal, 2026-09-02)
+
+Confirmed via direct source read (not decompiled — all in the open `vsapi` clone) while building the
+`OnStormTick`-style heartbeat that finds an at-rest Task Notice near its addressed recipient:
+
+- **`IWorldChunk.BlockEntities`** is a plain `Dictionary<BlockPos, BlockEntity>` — sparse, only
+  populated positions, safe to walk directly.
+- **`IBlockEntityContainer`** (`Vintagestory.API.Common`) is the generic "does this block entity
+  have an inventory" interface: `IInventory Inventory { get; }`. Check `blockEntity is
+  IBlockEntityContainer bec` — works for ANY container block (chest, barrel, shelf, a future
+  Mailbox) with zero per-block-type coupling.
+- **`IBlockAccessor.GetChunk(int chunkX, int chunkY, int chunkZ)`** retrieves a chunk by CHUNK
+  coordinate (divide block coords by `GlobalConstants.ChunkSize`), distinct from
+  `GetChunkAtBlockPos(BlockPos)` — the chunk-coordinate overload is what you want when walking a
+  bounding box of chunks around a scan radius, since it avoids constructing a `BlockPos` per chunk.
+- **`IWorldAccessor.GetEntitiesAround(Vec3d position, float horRange, float vertRange,
+  ActionConsumable<Entity>? matches = null)`** — the dropped-item half of the scan;
+  `EntityItem.Itemstack` (`WatchedAttributes.GetItemstack("itemstack")`) is a direct property, no
+  reflection needed.
+- **`BlockPos.DistanceTo(double x, double y, double z)`** and **`BlockPos.ToVec3d()`** both exist
+  directly on `BlockPos` (`Math/BlockPos.cs`) — no need to round-trip through `Vec3d` first for a
+  simple distance check.
+
 ## BlockEntity tree sync vs. save, and transient session state (editor lock)
 
 **Symptom that sent us here: a "transient" single-editor lock on the Scribe lectern behaved as a
@@ -3240,6 +3282,58 @@ not just decompiling), which is a straight-up better ground truth than a third-p
 session after the first shape mismatch — (1) is entirely unaffected if (2) breaks, since they are
 independent code paths reading independent data sources. Field/attribute-key names are private
 implementation details and may change between vsquest versions.
+
+## `ChatCommands.ExecuteUnparsed` needs an explicit `Caller.CallerPrivileges` wildcard — `Caller.Player` alone isn't enough (2026-09-01)
+
+**Symptom: a button-triggered `capi.ChatCommands.ExecuteUnparsed(".some command", ...)` call fails
+with `TextCommandResult.Status = Error`, `StatusMessage = "Sorry, you don't have the privilege to
+use this command"` — even though typing the exact same command into chat manually works fine, and
+the target command has no obvious admin/OP gate.**
+
+Root cause has nothing to do with dialog stacking, DrawOrder, or z-order (a DrawOrder-based theory
+was tried and disproven first via a clean repro: the failure reproduces even with ZERO other dialogs
+open). It's privilege plumbing: decompiling `ChatCommandImpl.CallHandler` (`VintagestoryLib.dll`)
+shows the check is `!callargs.Caller.HasPrivilege(GetPrivilege())`, and `Caller.HasPrivilege`
+(`VintagestoryAPI.dll`) only returns true via `Player.HasPrivilege(code)` (checks the player's
+actual granted-privileges list — usually correctly `false` for a client-only UI command that was
+never given a real privilege name) OR via `CallerPrivileges.Contains(code) || CallerPrivileges.Contains("*")`.
+Many client-only commands (confirmed for LibGUI's own `ui`/`ui settings`, `Gui.dll`'s
+`GuiModSystem`) never call `.RequiresPrivilege(...)` at all, so `GetPrivilege()` genuinely resolves
+to `null` — and `Player.HasPrivilege(null)` is `false`, not "no privilege required." A REAL typed
+chat message never hits this wall because `ChatCommandApi`'s own local-input path builds its
+`Caller` with `CallerPrivileges = new[] { "*" }` (confirmed in `ChatCommandApi`, the constructor
+used for genuinely-typed input) — a blanket "you typed this yourself" grant our own synthetic
+`Caller` never got.
+
+**Fix:** add the same wildcard when building the `Caller` for `ExecuteUnparsed`:
+```csharp
+new Caller { Player = capi.World.Player, CallerPrivileges = new[] { "*" } }
+```
+Not a security concern — this only ever runs in response to the local player's own click, on their
+own client, for a client-only command; it's granting exactly the trust level they'd already have by
+typing it themselves. See `ScribeSettingsDialog.OpenLibGuiThemePicker`.
+
+## Small API gotchas found building `add-assignment-physical-delivery-mode` (2026-09-02)
+
+Four small facts, each cost a build-error round-trip; recording so they're not re-derived:
+
+- **`Entity.ServerPos` is obsolete** (`CS0618`) — use `Entity.Pos` instead, both client- and
+  server-side. `Pos` is the live position on the base `Entity` class, not `EntityPlayer`-specific.
+- **`TextStyle` (`Gui.Rendering.Text`) has no `MaxWidth` property.** Its full field list is
+  `FontFamily, FontSize, Color, Weight, Align, Overflow, OutlineWidth, OutlineColor, GlowWidth,
+  GlowColor, Boldness, SoftWrap, Decoration, MaxLines`. To bound a text block's width, wrap it in
+  `new SizedBox(width: <n>, child: ...)` instead (see `GuiDialogClockmakerNotebook.cs`,
+  `GuiDialogScribeScriptorium.cs` for existing call sites).
+- **`ScribeBlock` has no `IsItemKind` computed property** — only `ScribeReadRowData` does. A
+  standalone dialog building its own rows from `ScribeBlock`s directly (not going through
+  `ScribeReadRowData`) needs to inline the check itself: `b.Kind is ScribeBlockKind.Tracker or
+  ScribeBlockKind.Link or ScribeBlockKind.Craft`.
+- **The established info-button pattern is `WithTooltip`/`Tooltip` (short hover hint) + `onTap:
+  ToggleHandbookPage("craftinginfo-scribe-<name>")` (the long-form explanation), not a long tooltip
+  body.** `ToggleHandbookPage` is `protected` on `ScribeDialogBase`; pages are registered via
+  `assets/scribe/config/handbook/*.json` (`{ pageCode, title, text }`, title/text pointing at lang
+  keys), consumed by `ScribeGuidePageHandbookPatch.cs`. See `GuiDialogScribeScriptorium.cs` for the
+  precedent this was matched against.
 
 ## Entry template
 

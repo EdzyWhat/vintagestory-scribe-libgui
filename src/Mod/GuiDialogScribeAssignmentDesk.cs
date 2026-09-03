@@ -63,6 +63,23 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
     /// re-deriving the source-priority decision <see cref="BuildAssignmentContent"/> already made.</summary>
     private bool sourceIsDeskDocument;
 
+    /// <summary>Dialog-owned target selection, lifted out of <see cref="ScribeAssignmentFormContent"/>'s
+    /// own State (add-assignment-physical-delivery-mode) so a selection CHANGE can fire the Hybrid range
+    /// check and reset any manual delivery-toggle override. UI-only session state, like
+    /// <see cref="deleteFromSource"/> — never persisted.</summary>
+    private string? selectedTargetUid;
+
+    /// <summary>The Hybrid range check's last-received result for <see cref="selectedTargetUid"/>
+    /// (tasks.md 4.2) — <c>null</c> while a request is pending/not yet sent, treated as out-of-range
+    /// (the safer default, matching the server's own offline-target fallback in
+    /// <see cref="ScribeModSystem.OnServerReceivedDeliveryRangeCheckRequest"/>).</summary>
+    private bool? rangeCheckInRange;
+
+    /// <summary>Set once the player taps either half of the Local Inboxes / Send a Notice toggle for the
+    /// CURRENT target selection (task 4.2: freely overridable). Reset to null whenever the target
+    /// selection changes, so a fresh target starts from the recomputed range-check default again.</summary>
+    private ScribeDeliveryChoice? deliveryChoiceOverride;
+
     /// <summary>The staged document's raw blocks from the last build, keyed by TaskId — the source of
     /// truth <see cref="OnSendAssignmentBatch"/> reads to build the wire message (a
     /// <see cref="ScribeReadRowData"/> is a display-only projection that drops the raw
@@ -109,6 +126,7 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
         // and it does so as its DEFAULT view, not merely a reachable one. Safe here: TryOpen's first
         // Build() runs after this ctor returns.
         DefaultToAssignmentView();
+        modSystem.DeliveryRangeCheckReplied += OnDeliveryRangeCheckReplied;
     }
 
     /// <summary>The Assignment Desk is a shared placed block: editor access requires a server lock
@@ -272,8 +290,35 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
             });
         }
 
+        // Delivery-mode target selection (add-assignment-physical-delivery-mode task 4.2) — same
+        // direct-field-mutation fallback the picker's own State used to do, now living here since the
+        // selection moved to this dialog: seed a default and fire the ONE-time range check the moment
+        // there's a real target to check, without needing a rebuild to react to its own seeding.
+        var targetPlayers = ComputeAssignmentTargetPlayers();
+        if (selectedTargetUid is null || !targetPlayers.Any(p => p.Uid == selectedTargetUid))
+        {
+            selectedTargetUid = targetPlayers.Count > 0 ? targetPlayers[0].Uid : null;
+            deliveryChoiceOverride = null;
+            rangeCheckInRange = null;
+            if (selectedTargetUid is not null && ScribeDeliveryConfig.ReadMode(capi) == ScribeDeliveryMode.Hybrid)
+                modSystem.RequestDeliveryRangeCheck(assignmentDesk.Pos, selectedTargetUid);
+        }
+
+        var deliveryMode = ScribeDeliveryConfig.ReadMode(capi);
+        var deliveryChoice = EffectiveDeliveryChoice(deliveryMode);
+
+        Widget? noticeSupplySlot = null;
+        Widget? noticeOutputSlot = null;
+        if (ScribeDeliveryPolicy.RequiresNotice(deliveryMode, deliveryChoice))
+        {
+            noticeSupplySlot = BuildNoticeSlot(assignmentDesk.Inventory[BlockEntityAssignmentDesk.NoticeSupplySlotIndex], controller, colors);
+            noticeOutputSlot = BuildNoticeSlot(assignmentDesk.Inventory[BlockEntityAssignmentDesk.NoticeOutputSlotIndex], controller, colors);
+        }
+
         return new ScribeAssignmentFormContent(
-            targetPlayers: ComputeAssignmentTargetPlayers(),
+            targetPlayers: targetPlayers,
+            selectedTargetUid: selectedTargetUid,
+            onTargetSelected: OnTargetSelected,
             stagingSlot: stagingSlot,
             stagedRows: stagedRowsCache,
             selectedTaskIds: selectedTaskIds,
@@ -285,7 +330,13 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
             canPullFromDesk: canPullFromDesk,
             onPullFromDesk: OnPullFromDesk,
             style: RowStyle,
-            scrollController: sharedScrollController);
+            scrollController: sharedScrollController,
+            deliveryMode: deliveryMode,
+            deliveryChoice: deliveryChoice,
+            onDeliveryChoiceChanged: OnDeliveryChoiceChanged,
+            noticeSupplySlot: noticeSupplySlot,
+            noticeOutputSlot: noticeOutputSlot,
+            onOpenDeliveryInfo: () => ToggleHandbookPage("craftinginfo-scribe-delivery"));
     }
 
     /// <summary>The Desk's own persisted document's rows eligible to pull into the Create Assignments tab
@@ -378,9 +429,25 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
     /// a fresh <c>AssignmentId</c> per row client-side, carries each row's full raw block shape (read from
     /// <see cref="stagedBlocksCache"/>, NOT the display-only <see cref="stagedRowsCache"/>) so the server can
     /// reconstruct a Task/Tracker/Link/Craft assignment with no per-kind special-casing, and clears the
-    /// selection + resets the delete-from-source flag on send (D13 — never a saved preference).</summary>
-    private void OnSendAssignmentBatch(string targetUid)
+    /// selection + resets the delete-from-source flag on send (D13 — never a saved preference). Reads
+    /// <see cref="selectedTargetUid"/> directly rather than taking a parameter, since that's now
+    /// dialog-owned (task 4.2's lift).</summary>
+    private void OnSendAssignmentBatch()
     {
+        string? targetUid = selectedTargetUid;
+        if (targetUid is null) return;
+
+        // Delivery-mode gate (tasks.md 4.5): a send that needs a notice but has no blank one loaded is
+        // refused with a clear message rather than silently doing nothing or crafting a bad request.
+        var deliveryMode = ScribeDeliveryConfig.ReadMode(capi);
+        var deliveryChoice = EffectiveDeliveryChoice(deliveryMode);
+        bool requiresNotice = ScribeDeliveryPolicy.RequiresNotice(deliveryMode, deliveryChoice);
+        if (requiresNotice && assignmentDesk.Inventory[BlockEntityAssignmentDesk.NoticeSupplySlotIndex].Itemstack is null)
+        {
+            capi.TriggerIngameError(this, "no-blank-notice", Lang.Get("scribe:scribe-delivery-no-blank-notice"));
+            return;
+        }
+
         var rows = stagedBlocksCache
             .Where(b => selectedTaskIds.Contains(b.TaskId))
             .Select(b => new ScribeAssignmentBatchRow
@@ -411,6 +478,7 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
             DeleteFromSource = deleteFromSource,
             SourceIsDeskDocument = sourceIsDeskDocument,
             Rows = rows,
+            DeliveryChoice = (byte)deliveryChoice,
         });
 
         selectedTaskIds.Clear();
@@ -449,5 +517,63 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
         }
         stampRegistry.Dispose();
         stampActive = false;
+        modSystem.DeliveryRangeCheckReplied -= OnDeliveryRangeCheckReplied;
+    }
+
+    // ── Physical delivery (add-assignment-physical-delivery-mode) ────────────
+
+    /// <summary>Target-picker selection changed (task 4.2): reset any manual toggle override and fire a
+    /// fresh Hybrid range check for the new target. A non-Hybrid mode never reads
+    /// <see cref="rangeCheckInRange"/> at all (<see cref="ScribeDeliveryPolicy.ResolveDefault"/> ignores it
+    /// outside Hybrid), so the request is skipped for those modes to spare a needless round-trip.</summary>
+    private void OnTargetSelected(string uid)
+    {
+        selectedTargetUid = uid;
+        deliveryChoiceOverride = null;
+        rangeCheckInRange = null;
+        if (ScribeDeliveryConfig.ReadMode(capi) == ScribeDeliveryMode.Hybrid)
+            modSystem.RequestDeliveryRangeCheck(assignmentDesk.Pos, uid);
+        RebuildBody();
+    }
+
+    /// <summary>A range-check reply arrived (task 4.2) — apply it only if it still matches the CURRENTLY
+    /// selected target; a reply for a since-superseded selection (the player picked someone else before
+    /// this arrived) is stale and ignored.</summary>
+    private void OnDeliveryRangeCheckReplied(ScribeDeliveryRangeCheckReplyMessage message)
+    {
+        if (message.TargetPlayerUid != selectedTargetUid) return;
+        rangeCheckInRange = message.InRange;
+        if (IsOpened()) RebuildBody();
+    }
+
+    /// <summary>The toggle's tap handler (task 4.2: "freely overridable with no blocked/grayed state").</summary>
+    private void OnDeliveryChoiceChanged(ScribeDeliveryChoice choice)
+    {
+        deliveryChoiceOverride = choice;
+        RebuildBody();
+    }
+
+    /// <summary>The effective delivery choice for this build: a manual override if the player already set
+    /// one for the current target, otherwise the Core-computed default from the current mode + the last
+    /// range-check result (pending/unknown treated as out-of-range, the safer default).</summary>
+    private ScribeDeliveryChoice EffectiveDeliveryChoice(ScribeDeliveryMode mode) =>
+        deliveryChoiceOverride ?? ScribeDeliveryPolicy.ResolveDefault(mode, rangeCheckInRange == true);
+
+    /// <summary>Builds one notice slot widget, matching <see cref="BuildAssignmentContent"/>'s own staging
+    /// slot veil/watermark treatment but with the "tasknotice" glyph instead of the book glyph, so the two
+    /// slot families read as visually related but distinct.</summary>
+    private Widget BuildNoticeSlot(ItemSlot slot, SlotController controller, ColorScheme colors)
+    {
+        Vector4 veilColor = colors.Surface with { W = 0.66f };
+        float watermarkGlyph = SlotSize * WatermarkScale;
+        float watermarkInset = (SlotSize - watermarkGlyph) / 2f;
+        var slotStyle = ItemSlotStyle.Default with { Size = SlotSize, BackgroundColor = veilColor };
+        return new Stack(children: new Widget[]
+        {
+            new Positioned(
+                left: watermarkInset, top: watermarkInset, width: watermarkGlyph, height: watermarkGlyph,
+                child: new ScribeVsIconGlyph("scribeassignment", watermarkGlyph, colors.Primary)),
+            new ScribeDocumentSlot(slot, controller, slotStyle, colors, CurrentShade),
+        });
     }
 }

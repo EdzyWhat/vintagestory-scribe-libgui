@@ -99,4 +99,14 @@ public sealed class ScribeSendAssignmentBatchMessage
     /// <c>TryRemoveDeskOwnRows</c> path. Ignored entirely when <see cref="DeleteFromSource"/> is false.</summary>
     [ProtoMember(8)]
     public bool SourceIsDeskDocument { get; set; }
+
+    /// <summary>The delivery-mode toggle's position at send time (`assignment-delivery-mode` /
+    /// `assignment-desk-block` capabilities): <see cref="Scribe.Core.ScribeDeliveryChoice.LocalInboxes"/>
+    /// (0, default) or <see cref="Scribe.Core.ScribeDeliveryChoice.SendNotice"/> (1). The server never
+    /// trusts this alone — it re-derives whether a notice is actually required via
+    /// <see cref="Scribe.Core.ScribeDeliveryPolicy.RequiresNotice"/> against its OWN current
+    /// `DeliveryMode`, so a stale/spoofed client value can't bypass an `AlwaysPhysical` server or force a
+    /// notice on an `AlwaysInstant` one.</summary>
+    [ProtoMember(9)]
+    public byte DeliveryChoice { get; set; }
 }

@@ -489,3 +489,41 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [ ] `00000086` **Test neither-backend-installed hides quest UI.** With neither vsquest nor
       Progression Framework installed, confirm no quest UI appears anywhere (Settings, Link
       picker, handbook). *(8.5)*
+
+## add-assignment-physical-delivery-mode
+
+> Physical/postal delivery path for Assignments: a server `scribeDeliveryMode` setting
+> (AlwaysInstant/AlwaysPhysical/Hybrid), a Hybrid range-check-backed "Local Inboxes"/"Send a
+> Notice" toggle on the Create Assignments tab, a craftable Task Notice item that physically
+> carries an assignment until Accept, and a proximity-scan ambient signal for notice recipients.
+> Set `scribeDeliveryMode` via `/worldconfig scribeDeliveryMode <instant|physical|hybrid>`
+> (default `hybrid`) to reach each scenario below.
+
+- [ ] `00000087` **Hybrid in-range send.** With `scribeDeliveryMode` = `hybrid`, target a player
+      standing within `scribeDeliveryRadius` (default 200 blocks) of the Assignment Desk — confirm
+      "Local Inboxes" is pre-selected, no notice slots appear, and sending places the assignment
+      directly into the target's Inbox with no physical item involved. *(7.1)*
+- [ ] `00000088` **Hybrid out-of-range send.** Same setup, but target a player farther than the
+      radius — confirm "Send a Notice" is pre-selected instead, the blank-notice supply/output
+      slots appear, and sending consumes one blank Task Notice and seals it into the output slot
+      (no `ScribeAssignmentStore` record exists yet — the Assigner's Sent History shows nothing
+      for it). *(7.1)*
+- [ ] `00000089` **Offline-target range check.** Target a currently-offline player who has
+      logged out before (has a last-known position) — confirm the toggle pre-selects based on
+      that stored position; then target one who has NEVER logged in / has no last-known position
+      at all — confirm it defaults to "Send a Notice" (safer out-of-range default). *(7.1)*
+- [ ] `0000008a` **Toggle override both directions.** For an in-range target, manually tap "Send a
+      Notice" — confirm it's freely selectable with no grey/blocked state, and sending seals a
+      notice despite being in range. For an out-of-range target, manually tap "Local Inboxes" —
+      confirm it sends instantly despite being out of range. *(7.1)*
+- [ ] `0000008b` **Decline leaves no trace.** As the addressed recipient, right-click a sealed Task
+      Notice and press Decline — confirm the notice item is consumed, no record appears in your
+      Inbox, and the Assigner's Sent History shows nothing (no notification either way). *(7.1)*
+- [ ] `0000008c` **Accept syncs like an in-range assignment.** Right-click a sealed Task Notice and
+      press Accept, placing it into an eligible Scribe item — confirm the row appears already
+      Accepted, and Complete/Discard on it syncs to the Assigner exactly like a normal in-range
+      assignment (same Sent History behavior, same instant sync regardless of distance). *(7.1)*
+- [ ] `0000008d` **Proximity scan spawns the discovery effect.** With an outstanding sealed Task
+      Notice addressed to you sitting in a nearby chest (or dropped on the ground) within ~12
+      blocks, walk into a new chunk near it — confirm the existing ambient particle effect spawns
+      at the notice's position after the scan tick, client-local to you only. *(7.1)*

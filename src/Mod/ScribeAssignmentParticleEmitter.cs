@@ -80,15 +80,29 @@ internal static class ScribeAssignmentParticleEmitter
     /// steady-state density (playtest feedback 2026-08-31).</summary>
     public static void SpawnAt(ICoreClientAPI capi, BlockPos pos, bool seedBurst = false)
     {
+        var minPos = new Vec3d(pos.X + 0.2, pos.Y + 0.35, pos.Z + 0.2);
+        var maxPos = new Vec3d(pos.X + 0.8, pos.Y + 0.65, pos.Z + 0.8);
+        SpawnBatch(capi, minPos, maxPos, seedBurst);
+    }
+
+    /// <summary>Same field, centered on an arbitrary world position rather than a block's own cell —
+    /// used by the Task Notice proximity ping (tasks.md 5.4), whose found position may be a dropped
+    /// <c>EntityItem</c>'s fractional coordinates rather than a block-aligned one.</summary>
+    public static void SpawnAt(ICoreClientAPI capi, Vec3d center, bool seedBurst = false)
+    {
+        var minPos = new Vec3d(center.X - 0.3, center.Y, center.Z - 0.3);
+        var maxPos = new Vec3d(center.X + 0.3, center.Y + 0.3, center.Z + 0.3);
+        SpawnBatch(capi, minPos, maxPos, seedBurst);
+    }
+
+    private static void SpawnBatch(ICoreClientAPI capi, Vec3d minPos, Vec3d maxPos, bool seedBurst)
+    {
         // 1-3 sparse motes per tick (design.md: "low spawn quantity — sparse motes, not a fountain"),
         // scaled by CountMultiplier and, on entry, SeedBurstMultiplier.
         float scale = CountMultiplier * (seedBurst ? SeedBurstMultiplier : 1f);
         int total = (int)MathF.Round((1 + Rand.Next(3)) * scale);
         int rainbowCount = (int)MathF.Round(total * RainbowRatio);
         int baseCount = total - rainbowCount;
-
-        var minPos = new Vec3d(pos.X + 0.2, pos.Y + 0.35, pos.Z + 0.2);
-        var maxPos = new Vec3d(pos.X + 0.8, pos.Y + 0.65, pos.Z + 0.8);
 
         if (baseCount > 0)
             capi.World.SpawnParticles(BuildBatch(minPos, maxPos, baseCount,

@@ -39,11 +39,20 @@ public sealed class BlockEntityAssignmentDesk : BlockEntityScribeWritingStation
     // selection and batch-send. Mirrors BlockEntityScriptorium's inventory verbatim — same slot type,
     // same lazy-init/persistence/packet-routing shape — just with one slot instead of three.
 
-    /// <summary>One staging slot. Growing this later (e.g. a second slot) would be additive for
-    /// persistence, matching the Scriptorium's own 2→3 growth precedent.</summary>
-    private const int SlotCount = 1;
+    /// <summary>Staging + Task Notice supply/output slots (`assignment-delivery-mode` capability's
+    /// "Send a Notice" mode — tasks.md 4.4). Growing 1→3 here is additive for persistence, matching the
+    /// Scriptorium's own 2→3 growth precedent.</summary>
+    private const int SlotCount = 3;
 
     public const int StagingSlotIndex = 0;
+
+    /// <summary>Stacking blank-notice supply slot: the player drops blank Task Notices here before
+    /// sending in "Send a Notice" mode; one is consumed per notice-delivered row on Send.</summary>
+    public const int NoticeSupplySlotIndex = 1;
+
+    /// <summary>Non-stacking sealed-notice output slot: the Send handler places the freshly-sealed
+    /// notice here for the sender to collect and hand-deliver.</summary>
+    public const int NoticeOutputSlotIndex = 2;
 
     /// <summary>Tree sub-key the inventory persists under, kept separate from the document/lock keys so
     /// persistence is additive: an Assignment Desk saved before this change simply lacks this sub-tree
@@ -68,7 +77,9 @@ public sealed class BlockEntityAssignmentDesk : BlockEntityScribeWritingStation
     private void EnsureInventory()
     {
         inventory ??= new InventoryGeneric(SlotCount, null, null,
-            (slotId, self) => new ItemSlotScribeDocument(self));
+            (slotId, self) => slotId == StagingSlotIndex
+                ? new ItemSlotScribeDocument(self)
+                : new ItemSlotTaskNotice(self));
     }
 
     public override void Initialize(ICoreAPI api)

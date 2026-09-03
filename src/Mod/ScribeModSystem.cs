@@ -296,6 +296,7 @@ public sealed partial class ScribeModSystem : ModSystem
         api.RegisterItemClass("ItemScribeNotebook", typeof(ItemScribeNotebook));
         api.RegisterItemClass("ItemClockmakerNotebook", typeof(ItemClockmakerNotebook));
         api.RegisterItemClass("ItemScribeTablet", typeof(ItemScribeTablet));
+        api.RegisterItemClass("ItemScribeTaskNotice", typeof(ItemScribeTaskNotice));
 
         // All message types must be registered in this same order on both sides. The original four
         // read/edit/lock messages come first (order frozen); the identity-addressed pin layer is
@@ -329,10 +330,15 @@ public sealed partial class ScribeModSystem : ModSystem
             .RegisterMessageType<ScribeSetHistoryEntryTextMessage>()
             .RegisterMessageType<ScribeDeleteHistoryEntryMessage>()
             .RegisterMessageType<ScribeAssignmentActionMessage>()
+            .RegisterMessageType<ScribeDeleteAssignmentMessage>()
             .RegisterMessageType<ScribeAssignmentSyncMessage>()
             .RegisterMessageType<ScribeMarkAssignmentsSeenMessage>()
             .RegisterMessageType<ScribeAutoLinkQuestMessage>()
-            .RegisterMessageType<ScribeSendAssignmentBatchMessage>();
+            .RegisterMessageType<ScribeSendAssignmentBatchMessage>()
+            .RegisterMessageType<ScribeDeliveryRangeCheckRequestMessage>()
+            .RegisterMessageType<ScribeDeliveryRangeCheckReplyMessage>()
+            .RegisterMessageType<ScribeTaskNoticeActionMessage>()
+            .RegisterMessageType<ScribeTaskNoticeProximityPingMessage>();
     }
 
     /// <summary>Server-side accessor for the pin store, so the block entity can register/orphan its
@@ -376,7 +382,9 @@ public sealed partial class ScribeModSystem : ModSystem
             .SetMessageHandler<ScribeNotebookSaveMessage>(OnClientReceivedNotebookSave)
             .SetMessageHandler<ScribeTimerStateMessage>(OnClientReceivedTimerState)
             .SetMessageHandler<ScribeTranscribeStampMessage>(OnClientReceivedTranscribeStamp)
-            .SetMessageHandler<ScribeAssignmentSyncMessage>(OnClientReceivedAssignmentSync);
+            .SetMessageHandler<ScribeAssignmentSyncMessage>(OnClientReceivedAssignmentSync)
+            .SetMessageHandler<ScribeDeliveryRangeCheckReplyMessage>(OnClientReceivedDeliveryRangeCheckReply)
+            .SetMessageHandler<ScribeTaskNoticeProximityPingMessage>(OnClientReceivedTaskNoticeProximityPing);
 
         // The pinned-task HUD self-shows once the player's pin set arrives (it subscribes to
         // MyPinsChanged in its ctor), so it can be constructed here regardless of current pin count —
@@ -438,6 +446,7 @@ public sealed partial class ScribeModSystem : ModSystem
         sapi = api;
         pinStore = new ScribePinStore();
         assignmentStore = new ScribeAssignmentStore();
+        playerLocationStore = new ScribePlayerLocationStore();
         carryOnBridge = new CarryOnBridge(api);
 
         var channel = api.Network.GetChannel(NetworkChannelName);
@@ -462,9 +471,12 @@ public sealed partial class ScribeModSystem : ModSystem
         channel.SetMessageHandler<ScribeSetHistoryEntryTextMessage>(OnServerReceivedSetHistoryEntryText);
         channel.SetMessageHandler<ScribeDeleteHistoryEntryMessage>(OnServerReceivedDeleteHistoryEntry);
         channel.SetMessageHandler<ScribeAssignmentActionMessage>(OnServerReceivedAssignmentAction);
+        channel.SetMessageHandler<ScribeDeleteAssignmentMessage>(OnServerReceivedDeleteAssignment);
         channel.SetMessageHandler<ScribeMarkAssignmentsSeenMessage>(OnServerReceivedMarkAssignmentsSeen);
         channel.SetMessageHandler<ScribeAutoLinkQuestMessage>(OnServerReceivedAutoLinkQuest);
         channel.SetMessageHandler<ScribeSendAssignmentBatchMessage>(OnServerReceivedSendAssignmentBatch);
+        channel.SetMessageHandler<ScribeDeliveryRangeCheckRequestMessage>(OnServerReceivedDeliveryRangeCheckRequest);
+        channel.SetMessageHandler<ScribeTaskNoticeActionMessage>(OnServerReceivedTaskNoticeAction);
 
         // Persist/load the pin + settings stores with the save game (the WaypointMapLayer pattern).
         api.Event.SaveGameLoaded += OnSaveGameLoaded;
@@ -472,10 +484,16 @@ public sealed partial class ScribeModSystem : ModSystem
 
         // Initial per-player push once a player is fully in-world, and legacy-pin drain.
         api.Event.PlayerNowPlaying += OnPlayerNowPlaying;
+        // Last-known-position capture for the Hybrid range check's offline-target case (Core 1.5).
+        api.Event.PlayerDisconnect += OnScribePlayerDisconnect;
 
         // History chronicle hooks.
         api.Event.OnEntityDeath += OnEntityDeath;
         api.World.RegisterGameTickListener(OnStormTick, 5000);
+
+        // Task Notice proximity discovery heartbeat (task-notice-proximity-signal tasks.md 5.1),
+        // mirroring OnStormTick's own idiom/interval.
+        api.World.RegisterGameTickListener(OnTaskNoticeProximityTick, 5000);
 
         // Timer countdown: 1 s tick for all running/fired player timers.
         timerStores = new Dictionary<string, TimerStore>();
