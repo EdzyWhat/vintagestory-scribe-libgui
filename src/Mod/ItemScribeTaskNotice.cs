@@ -25,6 +25,11 @@ namespace Scribe;
 /// </summary>
 public sealed class ItemScribeTaskNotice : Item, IScribeDocumentItem
 {
+    private const string BlankMeshCacheKey = "scribeTaskNoticeBlankMeshRef";
+    private const string FilledMeshCacheKey = "scribeTaskNoticeFilledMeshRef";
+    private static readonly AssetLocation BlankShapeLoc = new("scribe", "item/tasknotice/blank");
+    private static readonly AssetLocation FilledShapeLoc = new("scribe", "item/tasknotice/filled");
+
     private WorldInteraction[] _interactions = System.Array.Empty<WorldInteraction>();
 
     public override void OnLoaded(ICoreAPI api)
@@ -40,6 +45,38 @@ public sealed class ItemScribeTaskNotice : Item, IScribeDocumentItem
             },
         });
     }
+
+    /// <summary>Swaps the rendered mesh between the blank and filled/sealed shapes based on
+    /// <see cref="IsSealed"/>, so a stack's model updates the instant its document is populated or
+    /// cleared. Each variant's mesh is tesselated once and cached (see
+    /// <c>CollectibleBehaviorCustomTongedShape</c> for the precedent this follows).</summary>
+    public override void OnBeforeRender(ICoreClientAPI capi, ItemStack itemstack, EnumItemRenderTarget target,
+        ref ItemRenderInfo renderinfo)
+    {
+        bool sealedNotice = IsSealed(itemstack);
+        string cacheKey = sealedNotice ? FilledMeshCacheKey : BlankMeshCacheKey;
+        renderinfo.ModelRef = ObjectCacheUtil.GetOrCreate(capi, cacheKey,
+            () => TesselateVariant(capi, sealedNotice ? FilledShapeLoc : BlankShapeLoc));
+        base.OnBeforeRender(capi, itemstack, target, ref renderinfo);
+    }
+
+    private MultiTextureMeshRef TesselateVariant(ICoreClientAPI capi, AssetLocation shapeLoc)
+    {
+        var shapeAssetLoc = shapeLoc.Clone().WithPathPrefixOnce("shapes/").WithPathAppendixOnce(".json");
+        var shape = capi.Assets.TryGet(shapeAssetLoc).ToObject<Shape>();
+        capi.Tesselator.TesselateShape(this, shape, out var meshdata);
+        return capi.Render.UploadMultiTextureMesh(meshdata);
+    }
+
+    public override void OnUnloaded(ICoreAPI api)
+    {
+        DisposeCachedMeshRef(api, BlankMeshCacheKey);
+        DisposeCachedMeshRef(api, FilledMeshCacheKey);
+        base.OnUnloaded(api);
+    }
+
+    private static void DisposeCachedMeshRef(ICoreAPI api, string cacheKey) =>
+        ObjectCacheUtil.TryGet<MultiTextureMeshRef>(api, cacheKey)?.Dispose();
 
     public override WorldInteraction[] GetHeldInteractionHelp(ItemSlot inSlot)
         => IsSealed(inSlot.Itemstack) ? _interactions.Append(base.GetHeldInteractionHelp(inSlot)) : base.GetHeldInteractionHelp(inSlot);

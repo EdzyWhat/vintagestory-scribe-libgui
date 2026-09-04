@@ -19,7 +19,7 @@
 			]
 		}
 	},
-	"shape": { "base": "scribe:item/tasknotice" },
+	"shape": { "base": "scribe:item/tasknotice/blank" },
 	"creativeinventory": { "general": ["*"], "items": ["*"] },
 	"guiTransform": {
 		"translation": { "x": 0, "y": 0, "z": 0 },

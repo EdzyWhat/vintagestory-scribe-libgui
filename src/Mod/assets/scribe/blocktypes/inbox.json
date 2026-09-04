@@ -3,11 +3,25 @@
 	class: "BlockInbox",
 	entityclass: "Inbox",
 
-	// PLACEHOLDER MODEL (add-assignment-and-quest-support §13.2, 2026-08-30 direction): reuses the
-	// Lectern's own shape wholesale ahead of the Inbox's own dedicated art — see assignmentdesk.json's
-	// identical note (both blocks used to clone the Scriptorium's shape; the Lectern's desk/stand shape
-	// reads as a closer fit for a mail-tray block). No textures override needed; the shape self-resolves.
-	shape: { base: "scribe:block/lectern/lectern" },
+	// PLACEHOLDER MODEL (add-custom-models-tasknotice-desk-inbox, 2026-09-03 direction): now a locally-
+	// owned shape, cloned unmodified from the Scriptorium's own shape + Blockbench source (`.bbmodel`)
+	// — see assignmentdesk.json's identical note. Renders identical to the Scriptorium until a real art
+	// pass diverges it. A JSON-only swap will retarget this once real art exists; no code change needed.
+	shape: { base: "scribe:block/inbox/inbox" },
+
+	// The cloned shape pulls texture keys from this dict at render time (mirrors scriptorium.json's own
+	// — a shape's own embedded `textures` are editor-only for blocks).
+	textures: {
+		"charred": { base: "scribe:block/inbox/charred" },
+		"ebony": { base: "scribe:block/inbox/ebony" },
+		"ebony-ornate": { base: "scribe:block/inbox/ebony-ornate" },
+		"opened-normal": { base: "scribe:block/inbox/opened-normal" },
+		"normal-orangebrown": { base: "scribe:block/inbox/normal-orangebrown" },
+		"feather": { base: "scribe:block/inbox/feather" },
+		"bituminous": { base: "scribe:block/inbox/bituminous" },
+		"quartz": { base: "scribe:block/inbox/quartz" },
+		"brass": { base: "scribe:block/inbox/brass" }
+	},
 
 	creativeinventory: { "general": ["*"], "decorative": ["*"] },
 

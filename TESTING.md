@@ -514,11 +514,12 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > Set `scribeDeliveryMode` via `/worldconfig scribeDeliveryMode <instant|physical|hybrid>`
 > (default `hybrid`) to reach each scenario below.
 
-- [ ] `0000008f` **Scroll model + Accept-dialog text fixed.** Craft a blank Task Notice and
+- [x] `0000008f` **Scroll model + Accept-dialog text fixed.** Craft a blank Task Notice and
       confirm it renders as a scroll (not a schematic) in inventory/hand/ground. Seal one, have
       the recipient right-click it — confirm the top line reads "Assigned by \<name\> — \<date\>"
       (not the raw key "scribe:scribe-tasknotice-from") followed by "Do you accept these tasks?".
       *(add-assignment-physical-delivery-mode 3.3)*
+      - **Confirmed 2026-09-03** (submission 2026-09-03T20-42-20): "(no note)"
 - [x] `00000087` **Hybrid in-range send.** With `scribeDeliveryMode` = `hybrid`, target a player
       standing within `scribeDeliveryRadius` (default 200 blocks) of the Assignment Desk — confirm
       "Local Inboxes" is pre-selected, no notice slots appear, and sending places the assignment
@@ -541,11 +542,49 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [ ] `0000008b` **Decline leaves no trace.** As the addressed recipient, right-click a sealed Task
       Notice and press Decline — confirm the notice item is consumed, no record appears in your
       Inbox, and the Assigner's Sent History shows nothing (no notification either way). *(add-assignment-physical-delivery-mode 7.1)*
+      - **Obsolete 2026-09-03:** superseded by `refine-task-notice-ux`'s MODIFIED "Decline
+        consumes a Task Notice..." requirement — a Decline now intentionally transitions the
+        existing Sent/Unaccepted record to Declined (visible passively in both the Assigner's
+        Sent History and, per the playtest note, the Assignee's Inbox), rather than leaving no
+        trace. Confirmed working as newly specced (submission 2026-09-03T20-42-20): "it looks
+        like it does [leave a trace], both on the Sent Assignment History and the Assignment
+        Inbox side." Re-verification now belongs to `refine-task-notice-ux` tasks.md 4.2.
 - [ ] `0000008c` **Accept syncs like an in-range assignment.** Right-click a sealed Task Notice and
       press Accept, placing it into an eligible Scribe item — confirm the row appears already
       Accepted, and Complete/Discard on it syncs to the Assigner exactly like a normal in-range
       assignment (same Sent History behavior, same instant sync regardless of distance). *(add-assignment-physical-delivery-mode 7.1)*
+      - **Still broken 2026-09-03:** (submission 2026-09-03T20-42-20) "Not working. In the recent playtest, I accepted a "Sesfase" Task via Task Notice, and it didn't update to "Completed" on the Sender or Reciever Inbox tabs."
 - [ ] `0000008d` **Proximity scan spawns the discovery effect.** With an outstanding sealed Task
       Notice addressed to you sitting in a nearby chest (or dropped on the ground) within ~12
       blocks, walk into a new chunk near it — confirm the existing ambient particle effect spawns
       at the notice's position after the scan tick, client-local to you only. *(add-assignment-physical-delivery-mode 7.1)*
+      - **Still broken 2026-09-03:** (submission 2026-09-03T20-42-20) "I cannot see the particle effect at all for assigned Task Notices as the assignee. Perhaps the issue is that I'm the assigner and the assignee, and I've touched the Task Notice. Regardless, I'd like to still see the particle effect."
+
+## add-custom-models-tasknotice-desk-inbox
+
+> Assignment Desk and Inbox each got a locally-owned shape + `.bbmodel` + textures cloned from the
+> Scriptorium (repointed `shape.base` + a matching `textures` override), so they'll look identical
+> to the Scriptorium block until a later art pass diverges them — that's expected, not a bug. The
+> Task Notice's shared shape was split into `item/tasknotice/blank.json` + a new `filled.json` (a
+> small raised wax-seal cube on the tie), with a per-stack `OnBeforeRender` mesh swap keyed off the
+> existing `IsSealed` check. **Fully quit and relaunch the client first** so the new assets load.
+
+- [ ] `00000090` **Check Desk model.** Place an Assignment Desk and look it over from a few
+      angles — confirm it renders fully textured, matching the Scriptorium's look (no
+      pink/missing-texture faces). *(add-custom-models-tasknotice-desk-inbox 1.4)*
+- [ ] `00000091` **Check Inbox model.** Place a standalone Inbox block — same check: fully
+      textured, matches the Scriptorium's look. *(add-custom-models-tasknotice-desk-inbox 2.4)*
+- [ ] `00000092` **Check notice log clean.** View a Task Notice in creative inventory, in hand, and
+      dropped on the ground — check the client log for any missing-texture/missing-asset warnings
+      from the relocated blank shape or the new filled shape.
+      *(add-custom-models-tasknotice-desk-inbox 3.1, 3.2, 3.3)*
+- [ ] `00000093` **Test seal swap.** Hold a blank Task Notice (confirm it shows the plain blank
+      model), then send an assignment via "Send a Notice" — confirm the sealed notice sitting in
+      the Create Assignments output slot now shows the filled model with its wax-seal blob.
+      *(add-custom-models-tasknotice-desk-inbox 4.1)*
+- [ ] `00000094` **Test reload stability.** With a Task Notice in inventory, leave and rejoin the
+      world twice in a row — confirm no error/exception appears in the client log either time.
+      *(add-custom-models-tasknotice-desk-inbox 4.2)*
+- [ ] `00000095` **Run full pass.** Craft a blank notice, seal one via "Send a Notice," and place a
+      Desk + Inbox in one sitting — confirm all four models look right together as a final sanity
+      pass. *(add-custom-models-tasknotice-desk-inbox 5.2)*

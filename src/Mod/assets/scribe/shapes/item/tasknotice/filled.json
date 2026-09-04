@@ -8,8 +8,8 @@
 	"textureSizes": {
 	},
 	"textures": {
-		"tasknotice-tie": "item/tasknotice-tie",
-		"tasknotice": "item/tasknotice"
+		"tasknotice-tie": "item/tasknotice/filled-tie",
+		"tasknotice": "item/tasknotice/filled"
 	},
 	"elements": [
 		{
@@ -94,7 +94,23 @@
 								"west": { "texture": "#tasknotice", "uv": [ 13.0, 1.5, 15.0, 3.5 ], "glow": 64 },
 								"up": { "texture": "#tasknotice-tie", "uv": [ 12.5, 1.5, 13.5, 3.5 ], "glow": 64 },
 								"down": { "texture": "#tasknotice-tie", "uv": [ 12.0, 2.0, 13.0, 4.0 ], "glow": 64 }
-							}
+							},
+							"children": [
+								{
+									"name": "seal",
+									"from": [ 4.7, 1.6, 0.1 ],
+									"to": [ 6.3, 2.2, 0.9 ],
+									"rotationOrigin": [ 5.5, 1.9, 0.5 ],
+									"faces": {
+										"north": { "texture": "#tasknotice-tie", "uv": [ 13.0, 1.0, 14.0, 3.0 ], "glow": 128 },
+										"south": { "texture": "#tasknotice-tie", "uv": [ 13.5, 0.0, 14.5, 2.0 ], "glow": 128 },
+										"east": { "texture": "#tasknotice-tie", "uv": [ 12.5, 1.5, 13.5, 3.5 ], "glow": 128 },
+										"west": { "texture": "#tasknotice-tie", "uv": [ 12.0, 2.0, 13.0, 4.0 ], "glow": 128 },
+										"up": { "texture": "#tasknotice-tie", "uv": [ 12.5, 1.5, 13.5, 3.5 ], "glow": 128 },
+										"down": { "texture": "#tasknotice-tie", "uv": [ 12.0, 2.0, 13.0, 4.0 ], "glow": 128 }
+									}
+								}
+							]
 						}
 					]
 				}
