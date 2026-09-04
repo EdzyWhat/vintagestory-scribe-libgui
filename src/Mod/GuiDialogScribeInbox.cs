@@ -81,7 +81,8 @@ public sealed class GuiDialogScribeInbox : ScribeDialogBase
             activeColor: IsInboxView ? ScribeRowConstants.NavActiveGuestbook : null);
         Widget inboxInventoryBtn = TitleButton("scribeinventory", "scribe-tab-inbox-inventory", navColor,
             size: size, onTap: OnClickSwitchToInboxInventory, boxShadows: NavButtonShadow,
-            activeColor: IsInboxInventoryView ? ScribeRowConstants.NavActiveTranscribe : null);
+            activeColor: IsInboxInventoryView ? ScribeRowConstants.NavActiveTranscribe : null,
+            shimmer: ShowInboxInventoryShimmer());
         Widget settingsBtn = TitleButton("scribegear", "scribe-gui-nav-settings", navColor,
             size: size, onTap: modSystem.OpenSettings, boxShadows: NavButtonShadow,
             activeColor: modSystem.IsSettingsOpen ? ScribeRowConstants.NavActiveSettings : null);
@@ -104,15 +105,22 @@ public sealed class GuiDialogScribeInbox : ScribeDialogBase
     /// slot uses the shared <see cref="ScribeInventorySlotStyle"/> helper so it matches the Assignment
     /// Desk's own slots exactly; only the restricted row passes a watermark icon, using the Scriptorium's
     /// generic "scribebook" glyph (not "scribeassignment") since the restriction is no longer Task-Notice-
-    /// specific.</summary>
+    /// specific. A restricted slot holding an undiscovered notice addressed to the local player
+    /// additionally wraps in <see cref="ScribeShimmerWrap"/> (signal-tasknotice-inbox-presence).</summary>
     protected override Widget BuildInboxInventoryContent()
     {
         var controller = EnsureSlotController();
         var colors = ResolveTheme(modSystem.MySettings.PixelArtDisplay).ColorScheme;
         var inv = inbox.Inventory;
+        string? localUid = capi.World.Player?.PlayerUID;
 
         Widget[] restrictedSlots = Enumerable.Range(0, BlockEntityInbox.RestrictedSlotCount)
-            .Select(i => ScribeInventorySlotStyle.Build(inv[i], controller, colors, CurrentShade, "scribebook"))
+            .Select(i =>
+            {
+                Widget slotWidget = ScribeInventorySlotStyle.Build(inv[i], controller, colors, CurrentShade, "scribebook");
+                bool shimmer = localUid is not null && BlockEntityInbox.HoldsUndiscoveredNoticeFor(inv[i], localUid);
+                return (Widget)new ScribeShimmerWrap(shimmer, ScribeInventorySlotStyle.SlotSize, slotWidget);
+            })
             .ToArray();
         Widget[] openSlots = Enumerable.Range(BlockEntityInbox.RestrictedSlotCount,
                 BlockEntityInbox.SlotCount - BlockEntityInbox.RestrictedSlotCount)
@@ -128,6 +136,21 @@ public sealed class GuiDialogScribeInbox : ScribeDialogBase
                 new Row(spacing: SlotSpacing, mainAxisSize: MainAxisSize.Min, children: restrictedSlots),
                 new Row(spacing: SlotSpacing, mainAxisSize: MainAxisSize.Min, children: openSlots),
             }));
+    }
+
+    /// <summary>True when the local player has an undiscovered notice sitting in ANY of this Inbox's
+    /// restricted slots — the Inbox Inventory nav tab's shimmer trigger (signal-tasknotice-inbox-
+    /// presence), distinct from the coarser <see cref="ScribeDialogBase.ShowInboxShimmer"/> the four
+    /// cross-surface nav buttons use. Shares <see cref="BlockEntityInbox.HoldsUndiscoveredNoticeFor"/>
+    /// with the per-slot shimmer above and the block's own particle tick, so all three agree on exactly
+    /// what "undiscovered" means.</summary>
+    private bool ShowInboxInventoryShimmer()
+    {
+        string? uid = capi.World.Player?.PlayerUID;
+        if (uid is null) return false;
+        var inv = inbox.Inventory;
+        return Enumerable.Range(0, BlockEntityInbox.RestrictedSlotCount)
+            .Any(i => BlockEntityInbox.HoldsUndiscoveredNoticeFor(inv[i], uid));
     }
 
     /// <summary>Gap between the two slot rows, matching <see cref="SlotSpacing"/> (the gap between slots

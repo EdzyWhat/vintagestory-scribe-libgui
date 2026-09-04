@@ -49,31 +49,36 @@ missing its assignment data) falls through to the existing generic path unchange
   precedent in this codebase favors the smallest clear branch over a speculative extension point.
 
 ### Decision 2: The Inbox-instance signal's trigger reuses the assignment's own state, not a new "discovered" flag
-"Not yet discovered" for a notice sitting in an Inbox slot is exactly the same condition that
-already gates the generic nearby-scan ping and the notice's own Sent→Received transition
-(`refine-task-notice-ux`): the notice is addressed to the local player and its embedded
-assignment is not yet Accepted or Declined (still Sent or Unaccepted). Read the embedded
-`ScribeBlock.Assignment` state directly off each restricted slot's stack in
-`GuiDialogScribeInbox` (client-side, no new server data needed — the notice's document already
-carries this) rather than introducing a separate "seen" bit: Accept/Decline already ends the
-signal for free (the notice leaves the slot), so there is no separate off-switch to design.
-- **Open question**: whether to also suppress the signal once the player has simply *opened* the
-  notice once (right-clicked to view it) without yet Accepting/Declining — the broader
-  `HasUnseenAssignment`/`Assignment.Seen` flag exists for exactly this kind of "acknowledged but
-  not yet resolved" state elsewhere. Deferred to task 1 below: read how `Seen` is set/read for a
-  Task-Notice-embedded assignment before Accept, and use it if it's already meaningful in that
-  state, else keep it simple (signal ends only on Accept/Decline/removal) for a first pass.
+"Not yet discovered" for a notice sitting in an Inbox slot needs no new state at all: a slot
+either holds a sealed, addressed Task Notice, or it doesn't. Accept/Decline consumes the physical
+notice item, so the moment it's gone this predicate is naturally false again — no explicit "off"
+transition to design or write.
+- **Resolved (was an open question): `ScribeAssignment.Seen` is NOT used.** Read on
+  implementation: `Seen` flips true via `ScribeDialogBase.MarkInboxSeenIfNeeded`, sent
+  unconditionally by every path that makes ANY Inbox view active — opening a completely
+  different Inbox block, or even the Assignment Desk's Inbox tab, marks it true well before the
+  physical notice sitting in THIS Inbox is actually Accepted/Declined. Using it would turn the
+  signal off prematurely. The simple "slot holds a sealed, addressed notice" check (implemented
+  as `BlockEntityInbox.HoldsUndiscoveredNoticeFor`) is both simpler and correct.
 
-### Decision 3: Trigger computation lives in `GuiDialogScribeInbox`, not the block entity
-The block entity (`BlockEntityInbox`) stays a plain data holder; the client-only "does this
-matter to ME, the locally-viewing player" check (comparing `TargetPlayerUid` to the local
-player) is a dialog-side concern, matching how `ShowInboxShimmer` and the existing proximity
-ping are both resolved client-side already. The block-attached particle emission needs a
-per-tick check independent of whether the dialog is open (a player should see the Inbox glowing
-from across the room), so that half lives alongside the existing `OnTaskNoticeProximityTick`
-family in `ScribeModSystem.Delivery.cs` — checked once per tick per online player with an
-outstanding notice (reusing the existing `outstandingNoticeCountByTargetUid` gate to avoid
-scanning every Inbox on every tick for every player).
+### Decision 3: Trigger computation lives in `BlockEntityInbox` itself, as a client-side tick — not a server round-trip
+Investigating the existing ambient "unseen assignment" field
+(`BlockEntityScribeWritingStation.OnAssignmentParticleTick`, registered via the base class's own
+`Initialize`) found it is **entirely client-side already**: each block entity runs its own
+`RegisterGameTickListener`-driven check against the client's locally-synced state and calls
+`ScribeAssignmentParticleEmitter.SpawnAt` directly — no server tick, no ping message. Since a
+placed Inbox's inventory contents already replicate to every client with that chunk loaded (the
+same vanilla block-entity sync every Scribe surface uses), `BlockEntityInbox` can run the exact
+same pattern against its OWN inventory with no new network plumbing: a second
+`RegisterGameTickListener` call in `BlockEntityInbox.Initialize` (additive to the base class's
+existing one, not replacing it), checking `HoldsUndiscoveredNoticeFor` against the local
+player's UID for each of its own restricted slots. This supersedes this decision's original text
+(a server-side scan in `ScribeModSystem.Delivery.cs` mirroring `OnTaskNoticeProximityTick`,
+pushing a ping to the client) — task 3.1 explicitly invited "whichever is cheaper," and this is
+simpler (no new message type, no per-tick server-side chunk/inventory scan across all online
+players) and more consistent with the codebase's existing ambient-particle precedent.
+`GuiDialogScribeInbox` (tasks 4.1/4.2) reuses the same `HoldsUndiscoveredNoticeFor` predicate for
+its tab/slot shimmer checks, so all three signals share one trigger definition.
 
 ## Risks / Trade-offs
 

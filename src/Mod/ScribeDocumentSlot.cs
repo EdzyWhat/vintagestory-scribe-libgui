@@ -113,7 +113,7 @@ internal sealed class ScribeDocumentSlot : StatelessWidget
         // the raw card.
         return ScribeGlobalTint.ShadedTooltip(
             child: gesture,
-            content: BuildSummaryCard(stack!, colors),
+            content: BuildSummaryCard(stack!, colors, controller.World),
             baseTheme: Theme.Of(context),
             shade: shade,
             waitDuration: CardDelay);
@@ -155,10 +155,17 @@ internal sealed class ScribeDocumentSlot : StatelessWidget
     /// opened-but-untouched item carries no bytes and is indistinguishable from a never-opened one; "No contents"
     /// is the honest label for both. Also NOT a title placeholder + all-zero counts, which would imply an
     /// opened-but-empty document.</item>
-    /// <item><b>Has a document</b>: item name, the document title (untitled placeholder when it is the model
-    /// default), and one line per present block kind with its count.</item>
+    /// <item><b>Sealed Task Notice</b> (signal-tasknotice-inbox-presence): a Task Notice's document is
+    /// blocks-only and never carries a custom title, so the generic Title + per-kind-count lines below
+    /// would be meaningless. Shown instead: who assigned it and who it's addressed to, mirroring
+    /// <see cref="ItemScribeTaskNotice.GetHeldItemInfo"/>'s own "Addressed to" line and
+    /// <see cref="GuiDialogTaskNotice"/>'s "Assigned by" line — same lang keys, same formatting. A blank
+    /// Task Notice carries no document and falls through to the "No document" case above like any other
+    /// Scribe item.</item>
+    /// <item><b>Has a document</b> (any other Scribe item): item name, the document title (untitled
+    /// placeholder when it is the model default), and one line per present block kind with its count.</item>
     /// </list></summary>
-    internal static Widget BuildSummaryCard(ItemStack stack, ColorScheme colors)
+    internal static Widget BuildSummaryCard(ItemStack stack, ColorScheme colors, IWorldAccessor world)
     {
         var name = stack.GetName();
         var lines = new List<Widget>
@@ -166,9 +173,15 @@ internal sealed class ScribeDocumentSlot : StatelessWidget
             new Text(name, new TextStyle { FontSize = 14, Color = colors.OnBackground }),
         };
 
-        if (ScribeDocumentAttributes.TryReadFrom(stack, out var doc) && doc is not null)
+        bool hasDoc = ScribeDocumentAttributes.TryReadFrom(stack, out var doc) && doc is not null;
+
+        if (stack.Collectible is ItemScribeTaskNotice && ItemScribeTaskNotice.IsSealed(stack))
         {
-            lines.Add(new Text(ScribeTooltip.FormatTitleLine(doc.Title),
+            AppendTaskNoticeLines(lines, doc!, colors, world);
+        }
+        else if (hasDoc)
+        {
+            lines.Add(new Text(ScribeTooltip.FormatTitleLine(doc!.Title),
                 new TextStyle { FontSize = 13, Color = colors.OnBackground }));
 
             AppendCountLines(lines, doc, colors);
@@ -186,6 +199,23 @@ internal sealed class ScribeDocumentSlot : StatelessWidget
                 crossAxisAlignment: CrossAxisAlignment.Start,
                 mainAxisSize: MainAxisSize.Min,
                 children: lines));
+    }
+
+    /// <summary>Appends the "Assigned by …" and "Addressed to …" lines for a sealed Task Notice, in place
+    /// of the generic Title/count lines — see <see cref="BuildSummaryCard"/>'s remarks. Falls back to
+    /// nothing extra if the notice's first block somehow carries no assignment (defensive; shouldn't
+    /// happen for a notice <see cref="ItemScribeTaskNotice.IsSealed"/> already confirmed sealed).</summary>
+    private static void AppendTaskNoticeLines(List<Widget> lines, ScribeDocument doc, ColorScheme colors, IWorldAccessor world)
+    {
+        var assignment = doc.Blocks.Count > 0 ? doc.Blocks[0].Assignment : null;
+        if (assignment is null) return;
+
+        var lineStyle = new TextStyle { FontSize = 13, Color = colors.OnBackground };
+        string assignerName = world.PlayerByUid(assignment.AssignerUid)?.PlayerName ?? assignment.AssignerUid;
+        string recipientName = world.PlayerByUid(assignment.TargetPlayerUid)?.PlayerName ?? assignment.TargetPlayerUid;
+
+        lines.Add(new Text(Lang.Get("scribe:scribe-assignment-assigned-by", assignerName, assignment.AssignedDate), lineStyle));
+        lines.Add(new Text(Lang.Get("scribe:scribe-tasknotice-addressed-to", recipientName), lineStyle));
     }
 
     /// <summary>Append one "&lt;label&gt;: &lt;count&gt;" line per block kind that is present in the document

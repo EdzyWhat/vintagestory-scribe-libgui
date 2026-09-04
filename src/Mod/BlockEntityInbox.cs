@@ -1,3 +1,5 @@
+using System.Linq;
+using Scribe.Core;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Datastructures;
@@ -85,6 +87,66 @@ public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
         // "[gui] Skipped slot activation … not network-ready". Mirrors BlockEntityScriptorium.Initialize.
         inventory!.LateInitialize("scribeinbox-" + Pos, api);
         inventory.Pos = Pos;
+
+        // Inbox-instance presence signal (signal-tasknotice-inbox-presence) — additional to, not a
+        // replacement of, the base class's own OnAssignmentParticleTick (already registered by
+        // base.Initialize above, for the coarse "any unseen assignment" field every writing station gets).
+        if (api is ICoreClientAPI)
+        {
+            RegisterGameTickListener(OnInboxNoticeParticleTick, InboxNoticeParticleTickIntervalMs);
+        }
+    }
+
+    /// <summary>Matches the base class's own <c>AssignmentParticleTickIntervalMs</c> (§8.4) for visual
+    /// consistency between the two ambient fields a writing station (here, specifically an Inbox) can
+    /// show at once.</summary>
+    private const int InboxNoticeParticleTickIntervalMs = 1500;
+
+    /// <summary>True when <paramref name="slot"/> holds a sealed Task Notice addressed to
+    /// <paramref name="targetUid"/> — the presence-signal trigger shared by this block's own particle
+    /// tick and <see cref="GuiDialogScribeInbox"/>'s tab/slot shimmer (signal-tasknotice-inbox-presence).
+    /// No separate "discovered"/seen flag is needed or used: <see cref="ScribeAssignment.Seen"/> is NOT a
+    /// fit here (design.md Decision 2) — it flips true the moment the player opens ANY Inbox view
+    /// (<c>ScribeDialogBase.MarkInboxSeenIfNeeded</c>), well before the physical notice itself is
+    /// actually resolved. Accept/Decline consumes the notice item, so the moment it's gone this predicate
+    /// is naturally false again — no explicit "off" transition to write.</summary>
+    internal static bool HoldsUndiscoveredNoticeFor(ItemSlot slot, string targetUid) =>
+        slot.Itemstack?.Collectible is ItemScribeTaskNotice
+        && ItemScribeTaskNotice.IsSealed(slot.Itemstack)
+        && ScribeDocumentAttributes.TryReadFrom(slot.Itemstack, out var doc) && doc is not null
+        && doc.Blocks.Any(b => b.Assignment?.TargetPlayerUid == targetUid);
+
+    /// <summary>Tracks the previous tick's active state so a fresh entry requests a seed burst, mirroring
+    /// <see cref="BlockEntityScribeWritingStation"/>'s own field of the same shape.</summary>
+    private bool inboxNoticeParticlesWereActive;
+
+    /// <summary>Client-side periodic check: if one of THIS Inbox's own restricted slots holds a sealed
+    /// notice addressed to the local player, and the player is within
+    /// <see cref="ScribeAssignmentParticleEmitter.DetectionRadius"/>, spawn this tick's mote batch —
+    /// exactly the base class's own <c>OnAssignmentParticleTick</c> pattern, but keyed off this specific
+    /// block's inventory contents rather than the player-wide <c>HasUnseenAssignment</c> flag.</summary>
+    private void OnInboxNoticeParticleTick(float dt)
+    {
+        if (Api is not ICoreClientAPI capi) return;
+
+        string? uid = capi.World.Player?.PlayerUID;
+        bool active = uid is not null
+            && Enumerable.Range(0, RestrictedSlotCount).Any(i => HoldsUndiscoveredNoticeFor(Inventory[i], uid));
+        if (active)
+        {
+            var player = capi.World.Player?.Entity;
+            active = player is not null
+                && Pos.DistanceTo(player.Pos.X, player.Pos.Y, player.Pos.Z) <= ScribeAssignmentParticleEmitter.DetectionRadius;
+        }
+
+        if (!active)
+        {
+            inboxNoticeParticlesWereActive = false;
+            return;
+        }
+
+        ScribeAssignmentParticleEmitter.SpawnAt(capi, Pos, seedBurst: !inboxNoticeParticlesWereActive);
+        inboxNoticeParticlesWereActive = true;
     }
 
     public override void ToTreeAttributes(ITreeAttribute tree)

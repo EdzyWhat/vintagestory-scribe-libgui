@@ -1,6 +1,6 @@
 ## 1. Hover card fix: Task Notice special case
 
-- [ ] 1.1 In `src/Mod/ScribeDocumentSlot.cs`'s `BuildSummaryCard`, add a branch for
+- [x] 1.1 In `src/Mod/ScribeDocumentSlot.cs`'s `BuildSummaryCard`, add a branch for
   `stack.Collectible is ItemScribeTaskNotice` carrying an assignment (reuse or expose
   `ItemScribeTaskNotice`'s existing `IsSealed`-equivalent check rather than re-deriving it):
   render the item name, then a line formatted via `Lang.Get("scribe:scribe-assignment-assigned-
@@ -16,7 +16,7 @@
 
 ## 2. Read how `Assignment.Seen` behaves for a not-yet-Accepted Task-Notice-embedded assignment
 
-- [ ] 2.1 Read `ScribeAssignment.Seen`'s current read/write sites (Core + Mod) to determine
+- [x] 2.1 Read `ScribeAssignment.Seen`'s current read/write sites (Core + Mod) to determine
   whether it is already meaningfully set/read for an assignment still embedded in a Sent/
   Unaccepted Task Notice's document (as opposed to only after Accept, when it becomes a normal
   tracked row). Record the finding as a one-line comment at the new trigger-check call site (task
@@ -24,30 +24,37 @@
   that state, use design.md Decision 2's fallback: the signal is gated purely on the assignment
   still being Sent/Unaccepted (ends only on Accept/Decline/removal from the slot), with no
   separate "opened but not resolved" suppression for a first pass.
+  - Finding: `Seen` is set by `ScribeDialogBase.MarkInboxSeenIfNeeded`, sent unconditionally by
+    every path that makes ANY Inbox view active — it would flip true from opening a different
+    Inbox or the Assignment Desk's Inbox tab, well before the physical notice in THIS Inbox is
+    resolved. Not used; see design.md Decision 2 (updated) and
+    `BlockEntityInbox.HoldsUndiscoveredNoticeFor`'s doc comment.
 
 ## 3. Inbox-instance presence signal: block particles
 
-- [ ] 3.1 In `src/Mod/ScribeModSystem.Delivery.cs`, extend the existing
-  `OnTaskNoticeProximityTick`/`outstandingNoticeCountByTargetUid`-gated tick: for each online
-  player with a nonzero outstanding-notice count, additionally scan that player's own known
-  Inbox blocks' restricted slots (or all loaded Inbox block entities within particle-visible
-  range — pick whichever is cheaper given how Inbox positions are already tracked elsewhere in
-  this file) for a sealed notice addressed to them per task 2's trigger condition, and call
-  `ScribeAssignmentParticleEmitter.SpawnAt(capi, blockPos)` for each matching Inbox, every tick
-  the condition holds (mirroring how the existing ambient "unseen assignment" field re-spawns
-  every tick rather than once). Verify by build; manual confirmation is task 5.1.
+- [x] 3.1 Implemented as a client-side `RegisterGameTickListener` in `BlockEntityInbox.Initialize`
+  (`OnInboxNoticeParticleTick`), additive to the base class's existing unseen-assignment tick —
+  see design.md Decision 3 (updated during implementation: the existing ambient-particle pattern
+  turned out to be entirely client-side already, via the block entity's own tick, not a server
+  scan/ping; no new network message needed). Checks the Inbox's own restricted slots via the new
+  `BlockEntityInbox.HoldsUndiscoveredNoticeFor(slot, targetUid)` predicate (shared with tasks
+  4.1/4.2 below) and calls `ScribeAssignmentParticleEmitter.SpawnAt(capi, Pos, seedBurst)` within
+  `DetectionRadius`, mirroring `BlockEntityScribeWritingStation.OnAssignmentParticleTick` exactly.
+  Verified by build; manual confirmation is task 5.1.
 
 ## 4. Inbox-instance presence signal: tab + slot shimmer
 
-- [ ] 4.1 In `src/Mod/GuiDialogScribeInbox.cs`, compute a per-open-dialog bool (does THIS Inbox's
+- [x] 4.1 In `src/Mod/GuiDialogScribeInbox.cs`, compute a per-open-dialog bool (does THIS Inbox's
   inventory currently hold, in a restricted slot, a sealed notice addressed to the local player
   per task 2's trigger) and pass it as the `shimmer:` argument to the existing Inbox Inventory nav
   `TitleButton` call (distinct from `ShowInboxShimmer`, which stays wired to the four
-  cross-surface nav buttons unchanged). Verify by build; manual confirmation is task 5.2.
-- [ ] 4.2 In the same file's `BuildInboxInventoryContent`, wrap the specific matching slot's
+  cross-surface nav buttons unchanged). Implemented as `ShowInboxInventoryShimmer()`, reusing
+  `BlockEntityInbox.HoldsUndiscoveredNoticeFor`. Verified by build; manual confirmation is task
+  5.2.
+- [x] 4.2 In the same file's `BuildInboxInventoryContent`, wrap the specific matching slot's
   widget (from task 4.1's per-slot check, not the whole row) in `ScribeShimmerWrap` the same way
-  `TitleButton` does, so only that slot's icon shimmers among the others. Verify by build; manual
-  confirmation is task 5.2.
+  `TitleButton` does, so only that slot's icon shimmers among the others. Verified by build;
+  manual confirmation is task 5.2.
 
 ## 5. Manual verification
 
