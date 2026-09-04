@@ -33,17 +33,18 @@ public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
 
     // ── Mixed restricted/open inventory (add-inbox-inventory-tab) ────────────
     //
-    // The Inbox's own 8-slot inventory: slots 0-3 accept ONLY Task Notice items, slots 4-7 accept
+    // The Inbox's own 8-slot inventory: slots 0-3 accept only Scribe items, slots 4-7 accept
     // anything. Mirrors BlockEntityScriptorium's inventory verbatim — same lazy-init/persistence/
-    // packet-routing shape — just with a mixed slot factory instead of a uniform Scribe-items-only one.
+    // packet-routing shape AND the same Scribe-items-only slot restriction (ItemSlotScribeDocument)
+    // for the first row, just with a mixed slot factory instead of a uniform one.
 
-    /// <summary>8 slots: the first 4 (indices 0-3) are Task-Notice-only, the last 4 (4-7) are open —
+    /// <summary>8 slots: the first 4 (indices 0-3) are Scribe-items-only, the last 4 (4-7) are open —
     /// see <see cref="EnsureInventory"/>'s slot factory. Internal so <see cref="GuiDialogScribeInbox"/>
     /// can lay out the restricted/open rows without re-declaring the split.</summary>
     internal const int SlotCount = 8;
 
-    /// <summary>Restricted slots (Task Notice only) occupy indices below this bound; open slots occupy
-    /// the rest.</summary>
+    /// <summary>Restricted slots (any Scribe item — see <see cref="ItemSlotScribeDocument"/>) occupy
+    /// indices below this bound; open slots occupy the rest.</summary>
     internal const int RestrictedSlotCount = 4;
 
     /// <summary>Tree sub-key under which the inventory persists, kept separate from the document/lock
@@ -70,7 +71,7 @@ public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
     {
         inventory ??= new InventoryGeneric(SlotCount, null, null,
             (slotId, self) => slotId < RestrictedSlotCount
-                ? new ItemSlotTaskNotice(self)
+                ? new ItemSlotScribeDocument(self)
                 : new ItemSlot(self));
     }
 

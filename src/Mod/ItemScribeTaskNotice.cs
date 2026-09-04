@@ -47,12 +47,18 @@ public sealed class ItemScribeTaskNotice : Item, IScribeDocumentItem
     private static bool IsSealed(ItemStack? stack) =>
         stack is not null && ScribeDocumentAttributes.TryReadFrom(stack, out var doc) && doc is not null && doc.Blocks.Count > 0;
 
-    /// <summary>Append the sealed notice's recipient (and task preview) to the held/inventory tooltip. A
-    /// blank notice gets no extra line — it carries no document yet.</summary>
+    /// <summary>Append the notice's status to the held/inventory tooltip: a blank notice gets an explicit
+    /// "unassigned" indicator (it's otherwise indistinguishable from a sealed one at a glance in a
+    /// stack/slot), a sealed notice gets its recipient.</summary>
     public override void GetHeldItemInfo(ItemSlot inSlot, StringBuilder dsc, IWorldAccessor world, bool withDebugInfo)
     {
         base.GetHeldItemInfo(inSlot, dsc, world, withDebugInfo);
-        if (inSlot.Itemstack is not { } stack || !IsSealed(stack)) return;
+        if (inSlot.Itemstack is not { } stack) return;
+        if (!IsSealed(stack))
+        {
+            dsc.AppendLine(Lang.Get("scribe:scribe-tasknotice-blank"));
+            return;
+        }
         if (!ScribeDocumentAttributes.TryReadFrom(stack, out var doc) || doc?.Blocks.Count is not > 0) return;
 
         var assignment = doc!.Blocks[0].Assignment;

@@ -97,11 +97,14 @@ public sealed class GuiDialogScribeInbox : ScribeDialogBase
             children: new Widget[] { inboxBtn, inboxInventoryBtn, settingsBtn });
     }
 
-    /// <summary>Builds the Inbox Inventory tab: 8 slots — the first row (indices 0-3) Task-Notice-only,
-    /// the second row (4-7) open — laid out 2 rows of 4 and centered both horizontally and vertically in
-    /// the tab's content region (add-inbox-inventory-tab). Each slot uses the shared
-    /// <see cref="ScribeInventorySlotStyle"/> helper so it matches the Assignment Desk's own slots
-    /// exactly; only the restricted row passes a watermark icon.</summary>
+    /// <summary>Builds the Inbox Inventory tab: 8 slots — the first row (indices 0-3) Scribe-items-only
+    /// (any <c>IScribeDocumentItem</c>, including blank and sealed Task Notices, matching the
+    /// Scriptorium's own restriction), the second row (4-7) open — laid out 2 rows of 4 and centered
+    /// both horizontally and vertically in the tab's content region (add-inbox-inventory-tab). Each
+    /// slot uses the shared <see cref="ScribeInventorySlotStyle"/> helper so it matches the Assignment
+    /// Desk's own slots exactly; only the restricted row passes a watermark icon, using the Scriptorium's
+    /// generic "scribebook" glyph (not "scribeassignment") since the restriction is no longer Task-Notice-
+    /// specific.</summary>
     protected override Widget BuildInboxInventoryContent()
     {
         var controller = EnsureSlotController();
@@ -109,7 +112,7 @@ public sealed class GuiDialogScribeInbox : ScribeDialogBase
         var inv = inbox.Inventory;
 
         Widget[] restrictedSlots = Enumerable.Range(0, BlockEntityInbox.RestrictedSlotCount)
-            .Select(i => ScribeInventorySlotStyle.Build(inv[i], controller, colors, CurrentShade, "scribeassignment"))
+            .Select(i => ScribeInventorySlotStyle.Build(inv[i], controller, colors, CurrentShade, "scribebook"))
             .ToArray();
         Widget[] openSlots = Enumerable.Range(BlockEntityInbox.RestrictedSlotCount,
                 BlockEntityInbox.SlotCount - BlockEntityInbox.RestrictedSlotCount)

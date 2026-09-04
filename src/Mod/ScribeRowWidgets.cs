@@ -192,7 +192,7 @@ internal sealed class ScribeVsIconGlyph : StatelessWidget
     public override Widget Build(BuildContext context) => new VsIcon(iconName, size, color);
 }
 
-/// <summary>Shared inventory-slot styling for a Scribe writing-station's Task-Notice-flavored slots
+/// <summary>Shared inventory-slot styling for a Scribe writing-station's watermarked/restricted slots
 /// (add-inbox-inventory-tab D2) — extracted from <see cref="GuiDialogScribeAssignmentDesk.BuildNoticeSlot"/>
 /// so the Assignment Desk's supply/output slots and the Inbox block's own restricted slots render
 /// identically (same size, border, background veil, and watermark technique) without duplicating the

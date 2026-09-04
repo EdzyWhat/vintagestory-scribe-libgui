@@ -1,7 +1,7 @@
 # inbox-inventory Specification
 
 ## Purpose
-The standalone Inbox block's own inventory: eight slots split between Task-Notice-only storage
+The standalone Inbox block's own inventory: eight slots split between Scribe-items-only storage
 and general open storage, so the block can hold physically-delivered assignments and incidental
 items without leaving the player's assignment workflow.
 
@@ -9,19 +9,21 @@ items without leaving the player's assignment workflow.
 
 ### Requirement: The Inbox provides a mixed restricted/open inventory
 The Inbox block SHALL own an inventory of exactly 8 slots, arranged as 2 rows of 4. Of these, 4
-slots (the first row) SHALL accept ONLY Task Notice items (`ItemScribeTaskNotice`) and SHALL
-reject any other item at the slot without storing it. The remaining 4 slots (the second row)
-SHALL accept any item with no restriction. The inventory belongs to the Inbox block only; no
-other Scribe surface SHALL gain it.
+slots (the first row) SHALL accept ONLY Scribe items (any item implementing `IScribeDocumentItem`,
+including a Task Notice in either its blank or sealed state, matching the Scriptorium's own
+Scribe-items-only slot restriction) and SHALL reject any other item at the slot without storing
+it. The remaining 4 slots (the second row) SHALL accept any item with no restriction. The
+inventory belongs to the Inbox block only; no other Scribe surface SHALL gain it.
 
 #### Scenario: A Task Notice is accepted into a restricted slot
-- **WHEN** the player places a Task Notice item into one of the 4 restricted slots
+- **WHEN** the player places a Task Notice item, blank or sealed, into one of the 4 restricted
+  slots
 - **THEN** the item is stored in that slot and remains the same ItemStack, its document and all
   attributes preserved unchanged
 
-#### Scenario: A non-Task-Notice item is rejected from a restricted slot
-- **WHEN** the player attempts to place any item other than a Task Notice (including another
-  Scribe item, such as a Notebook) into one of the 4 restricted slots
+#### Scenario: A non-Scribe item is rejected from a restricted slot
+- **WHEN** the player attempts to place any item that is not a Scribe item (does not implement
+  `IScribeDocumentItem`) into one of the 4 restricted slots
 - **THEN** the slot refuses the item and nothing is stored
 
 #### Scenario: Any item is accepted into an open slot
@@ -49,15 +51,16 @@ on the standalone Inbox block, not on any other Scribe surface.
 
 ### Requirement: Inventory slots visually match the Assignment Desk's slot styling
 All 8 Inbox Inventory slots SHALL use the same slot size, border color, and background color as
-the Assignment Desk's inventory slots. The 4 restricted (Task-Notice-only) slots SHALL
-additionally show the same background-image hint the Assignment Desk uses on its own Task
-Notice slots to indicate the expected item type. The 4 open slots SHALL NOT show that
-background image.
+the Assignment Desk's inventory slots. The 4 restricted (Scribe-items-only) slots SHALL
+additionally show a background-image hint indicating the expected item type, matching the
+Scriptorium's generic Scribe-items-only watermark (not the Assignment Desk's Task-Notice-specific
+one, since the Inbox's restriction is not Task-Notice-specific). The 4 open slots SHALL NOT show
+that background image.
 
-#### Scenario: Restricted slots show the Task Notice hint image
+#### Scenario: Restricted slots show the Scribe-item hint image
 - **WHEN** the Inbox Inventory tab renders an empty restricted slot
-- **THEN** the slot shows the same size, border color, background color, and background-image
-  hint as an empty Task Notice slot on the Assignment Desk
+- **THEN** the slot shows the same size, border color, and background color as an empty slot on
+  the Assignment Desk, with the Scriptorium's generic Scribe-item background-image hint
 
 #### Scenario: Open slots show no hint image
 - **WHEN** the Inbox Inventory tab renders an empty open slot
