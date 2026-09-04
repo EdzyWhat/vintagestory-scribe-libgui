@@ -6,6 +6,42 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.0-rc.3] - 2026-09-03
+
+Early, testing-focused release candidate — the main ask is Progression Framework (Seafarer and
+other dependent mods) compatibility, alongside the Assignment/Inbox additions below. **This
+release candidate is specifically to gather Progression Framework testing help** — see the Mod DB
+or GitHub release notes for what to check.
+
+### Added
+- **Progression Framework Quest Link support.** Scribe's Quest Link feature, previously VS Quest
+  only, now also recognizes Progression Framework (the quest/training framework behind Seafarer
+  and similar mods): its quest catalog appears in the Quest Link picker, accept/completion
+  auto-detect fires from the framework's own per-player quest log, and progress mirrors
+  per-objective (e.g. "3 of 12 delivered") for multi-objective delivery quests. Following a
+  Progression Framework Quest Link to its own ledger dialog is not yet wired up in this build —
+  clicking one is still a no-op, same as today.
+- **Fixed a silent quest-link mis-assignment.** Accepting a quest with 2+ eligible Scribe
+  documents carried at once now asks which one should receive the auto-linked Quest Link
+  (matching the Assignment system's existing multi-candidate picker), instead of silently
+  attaching to whichever was last opened. Applies to both VS Quest and Progression Framework.
+- **Physical/postal delivery mode for Assignments.** A server admin `DeliveryMode` setting
+  (`AlwaysInstant`/`AlwaysPhysical`/`Hybrid`, default `Hybrid`) and a new Task Notice item let an
+  Assignment reach an out-of-range or offline player as a physically-carried, hand-delivered
+  item instead of syncing instantly, matching the "note left for someone" fiction on
+  faction/kingdom-style servers. In `Hybrid` mode, sending shows a "Local Inboxes" / "Send a
+  Notice" toggle pre-selected by a one-time range check but always freely switchable.
+- **Inbox Inventory tab.** The standalone Inbox block gains a second tab with 8 general-purpose
+  storage slots (4 restricted to Scribe items, 4 fully open), for holding a delivered Task Notice
+  or other Scribe items without leaving the block's own dialog.
+- Task Notice hover text now flags a blank/unassigned notice explicitly, and its stack size is
+  64 (was 16).
+
+### Fixed
+- Assignment lifecycle polish: per-side deletion, accept-destination capture, icon/tab cleanup.
+- A latent bug in the Task Notice tooltip (a missing localization key silently dropped the
+  "Addressed to: ..." line for a sealed notice) — found and fixed alongside the work above.
+
 ## [1.4.0-rc.2] - 2026-09-02
 
 ### Fixed
