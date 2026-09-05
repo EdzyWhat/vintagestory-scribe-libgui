@@ -22,7 +22,11 @@
 		"feather": { base: "scribe:block/assignmentdesk/feather" },
 		"bituminous": { base: "scribe:block/assignmentdesk/bituminous" },
 		"quartz": { base: "scribe:block/assignmentdesk/quartz" },
-		"brass": { base: "scribe:block/assignmentdesk/brass" }
+		"brass": { base: "scribe:block/assignmentdesk/brass" },
+		"blank": { base: "scribe:item/tasknotice/blank" },
+		"blank-tie": { base: "scribe:item/tasknotice/blank-tie" },
+		"filled": { base: "scribe:item/tasknotice/filled" },
+		"filled-tie": { base: "scribe:item/tasknotice/filled-tie" }
 	},
 
 	creativeinventory: { "general": ["*"], "decorative": ["*"] },
@@ -35,8 +39,8 @@
 	replaceable: 500,
 	resistance: 2,
 
-	collisionbox: { x1: 0.1817, y1: 0, z1: 0.1875, x2: 0.8188, y2: 1.2563, z2: 0.8125 },
-	selectionbox: { x1: 0.1817, y1: 0, z1: 0.1875, x2: 0.8188, y2: 1.2563, z2: 0.8125 },
+	collisionbox: { x1: 0.15, y1: 0, z1: 0.15, x2: 0.85, y2: 1.0, z2: 0.85 },
+	selectionbox: { x1: 0.15, y1: 0, z1: 0.15, x2: 0.85, y2: 1.0, z2: 0.85 },
 
 	sounds: {
 		place: "block/planks",

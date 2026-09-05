@@ -274,6 +274,22 @@ public sealed partial class ScribeModSystem
             docHost!.SetTrackerCurrentQuantityFromReader(taskId, quantity);
     }
 
+    /// <summary>
+    /// Server-side write-through of a QuestObjective's live <c>CurrentQuantity</c> by identity, driven by
+    /// the client-side quest watcher's <see cref="ScribeSetQuestObjectiveProgressMessage"/>
+    /// (add-progression-framework-quest-objective-subtasks). Mirrors <see cref="SetTrackerQuantityForPlayer"/>
+    /// exactly, but through the dedicated <see cref="IScribeDocumentHost.SetQuestObjectiveProgressFromReader"/>
+    /// path so it never shares a gate with the Tracker/Craft carried-inventory engine. A best-effort no-op
+    /// when the source is unresolvable, the task is gone, or it isn't a QuestObjective. No pin involvement.
+    /// Public so the integration suite can drive the exact production path.
+    /// </summary>
+    public void SetQuestObjectiveProgressForPlayer(IServerPlayer player, Guid docId, Guid taskId, int quantity)
+    {
+        if (sapi is null) return;
+        if (TryResolveDocHost(docId, out var docHost, player))
+            docHost!.SetQuestObjectiveProgressFromReader(taskId, quantity);
+    }
+
     /// <summary>Collapses a completion policy to <see cref="ScribeCompletionPolicy.Unpin"/> when the target
     /// document is a read-only (hard/fired) tablet (zero-point-three-fixes §7.5 / D8). A read-only source can
     /// neither be reordered (<c>Sink</c>/<c>UnpinSink</c>) nor have tasks removed (<c>Delete</c>), and firing

@@ -427,6 +427,6 @@ public sealed partial class ScribeModSystem
     private void OnClientReceivedTaskNoticeProximityPing(ScribeTaskNoticeProximityPingMessage message)
     {
         if (capi is null) return;
-        ScribeAssignmentParticleEmitter.SpawnAt(capi, new Vec3d(message.X, message.Y, message.Z), seedBurst: true);
+        ParticleEmitter.SpawnAt(capi, new Vec3d(message.X, message.Y, message.Z), seedBurst: true);
     }
 }

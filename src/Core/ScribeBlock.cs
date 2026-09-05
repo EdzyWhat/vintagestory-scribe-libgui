@@ -30,6 +30,22 @@ public enum ScribeBlockKind : byte
     /// subtask (at <see cref="ScribeBlock.Depth"/> 1) per recipe ingredient. Still a checkbox task
     /// (has a Done flag).</summary>
     Craft = 4,
+
+    /// <summary>A depth-1 subtask representing one Progression Framework quest objective, generated
+    /// under its parent Quest Link (a <see cref="Link"/> whose <see cref="ScribeBlock.LinkTarget"/> is a
+    /// quest target) and reconciled in place as the backend reports progress
+    /// (<c>add-progression-framework-quest-objective-subtasks</c>). Field reuse, distinct from every
+    /// other kind: <see cref="ScribeBlock.LinkTarget"/> holds the objective's own stable code (the
+    /// reconcile MATCH KEY — never a clickable target, unlike a Link's); <see cref="ScribeBlock.LinkLabel"/>
+    /// holds a captured display label, used only when the objective has no resolvable item;
+    /// <see cref="ScribeBlock.TargetItemCode"/> is set only when the objective resolves to exactly one
+    /// concrete item (a delivery-type objective with no alternates), giving it a real item icon like a
+    /// Tracker. Carries <see cref="ScribeBlock.TargetQuantity"/> (the objective's required count) and
+    /// <see cref="ScribeBlock.CurrentQuantity"/> (the backend's own reported progress) like a Tracker, but
+    /// is explicitly excluded from <see cref="IsCarriedCountTracked"/> — its count is driven exclusively by
+    /// the backend's own state, never by what the viewer happens to be carrying. Also excluded from
+    /// <see cref="IsCompletable"/> — it has no Done flag semantics and renders with no checkbox.</summary>
+    QuestObjective = 5,
 }
 
 /// <summary>
@@ -177,11 +193,18 @@ public sealed class ScribeBlock
     public bool IsTask => Kind == ScribeBlockKind.Task;
 
     /// <summary>True for any block that carries a meaningful <see cref="Done"/> flag — Task, Tracker,
-    /// and Link (everything except a free-text section). This is the single predicate every
-    /// completion, pin, sink, and delete-from-reader path gates on, so a Tracker or Link completes and
-    /// pins exactly like a plain Task. Text-EDITING paths still gate on <see cref="IsTask"/> instead
+    /// Link, and Craft (everything except a free-text section and a <see cref="ScribeBlockKind.QuestObjective"/>).
+    /// This is the single predicate every completion, pin, sink, and delete-from-reader path gates on, so a
+    /// Tracker or Link completes and pins exactly like a plain Task. A QuestObjective is excluded — its
+    /// progress is backend-driven, not player-toggled, so it renders with no checkbox
+    /// (add-progression-framework-quest-objective-subtasks). Its standalone row delete still works: the
+    /// editor's delete gesture (<c>ScribeCompletion.ApplyDelete</c>) addresses a row by index/TaskId directly
+    /// and does not gate on this predicate. Text-EDITING paths still gate on <see cref="IsTask"/> instead
     /// (a Tracker/Link has no player-editable text — its label comes from the referenced item).</summary>
-    public bool IsCompletable => Kind != ScribeBlockKind.Text;
+    public bool IsCompletable => Kind is not ScribeBlockKind.Text and not ScribeBlockKind.QuestObjective;
+
+    /// <summary>True for a <see cref="ScribeBlockKind.QuestObjective"/> block.</summary>
+    public bool IsQuestObjective => Kind == ScribeBlockKind.QuestObjective;
 
     /// <summary>True for a <see cref="ScribeBlockKind.Tracker"/> block.</summary>
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;

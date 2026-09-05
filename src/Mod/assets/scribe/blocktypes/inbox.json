@@ -3,13 +3,33 @@
 	class: "BlockInbox",
 	entityclass: "Inbox",
 
-	// PLACEHOLDER MODEL (add-custom-models-tasknotice-desk-inbox, 2026-09-03 direction): now a locally-
-	// owned shape, cloned unmodified from the Scriptorium's own shape + Blockbench source (`.bbmodel`)
-	// — see assignmentdesk.json's identical note. Renders identical to the Scriptorium until a real art
-	// pass diverges it. A JSON-only swap will retarget this once real art exists; no code change needed.
-	shape: { base: "scribe:block/inbox/inbox" },
+	// Dual placement mode (redesign-inbox-block-placement-and-capacity): "up" (ground, as before) plus
+	// the four horizontal wall directions, following the vanilla wood torch's exact convention
+	// (assets/survival/blocktypes/wood/torch.json) — loadFromProperties pulls in north/east/south/west
+	// from the shared "abstract/horizontalorientation" world property (already used, same way, by
+	// chalkboard.json's own `side` variant group). BlockInbox.TryPlaceBlock resolves which state a
+	// placement becomes; the engine does not do this automatically for this class hierarchy (confirmed
+	// by reading Block.TryPlaceBlock — see design.md Decision 1 / tasks.md 3.3).
+	variantgroups: [
+		{ code: "orientation", states: ["up"], loadFromProperties: "abstract/horizontalorientation" }
+	],
 
-	// The cloned shape pulls texture keys from this dict at render time (mirrors scriptorium.json's own
+	// PLACEHOLDER MODELS (add-custom-models-tasknotice-desk-inbox, 2026-09-03 direction / redesign-inbox-
+	// block-placement-and-capacity): the ground ("-up") shape is the locally-owned Scriptorium clone
+	// unchanged; the wall shape (inbox-wall.json) is a first-pass, structurally-present-but-not-art-final
+	// clone of the same shape with a -90° rotationX tip on its root element (untextured/unfitted for a
+	// wall face — a real art pass is expected to redo its geometry, not just its transform), matching the
+	// torch's "one wall shape, rotateY per direction" pattern. A JSON-only swap will retarget either shape
+	// once real art exists; no code change needed.
+	shapebytype: {
+		"*-up": { base: "scribe:block/inbox/inbox" },
+		"*-north": { base: "scribe:block/inbox/inbox-wall", rotateY: 0 },
+		"*-east": { base: "scribe:block/inbox/inbox-wall", rotateY: 270 },
+		"*-south": { base: "scribe:block/inbox/inbox-wall", rotateY: 180 },
+		"*-west": { base: "scribe:block/inbox/inbox-wall", rotateY: 90 }
+	},
+
+	// The cloned shapes pull texture keys from this dict at render time (mirrors scriptorium.json's own
 	// — a shape's own embedded `textures` are editor-only for blocks).
 	textures: {
 		"charred": { base: "scribe:block/inbox/charred" },
@@ -20,10 +40,16 @@
 		"feather": { base: "scribe:block/inbox/feather" },
 		"bituminous": { base: "scribe:block/inbox/bituminous" },
 		"quartz": { base: "scribe:block/inbox/quartz" },
-		"brass": { base: "scribe:block/inbox/brass" }
+		"brass": { base: "scribe:block/inbox/brass" },
+		"blank": { base: "scribe:item/tasknotice/blank" },
+		"blank-tie": { base: "scribe:item/tasknotice/blank-tie" },
+		"filled": { base: "scribe:item/tasknotice/filled" },
+		"filled-tie": { base: "scribe:item/tasknotice/filled-tie" }
 	},
 
-	creativeinventory: { "general": ["*"], "decorative": ["*"] },
+	// Only the ground ("-up") variant is craftable/creative-obtainable, matching the torch's own
+	// "*-up" restriction — the wall variants are only ever reached via placement (BlockInbox.TryPlaceBlock).
+	creativeinventory: { "general": ["*-up"], "decorative": ["*-up"] },
 
 	blockmaterial: "Wood",
 	lightAbsorption: 0,
@@ -33,8 +59,10 @@
 	replaceable: 500,
 	resistance: 2,
 
-	collisionbox: { x1: 0.1817, y1: 0, z1: 0.1875, x2: 0.8188, y2: 1.2563, z2: 0.8125 },
-	selectionbox: { x1: 0.1817, y1: 0, z1: 0.1875, x2: 0.8188, y2: 1.2563, z2: 0.8125 },
+	// Same box for every orientation for now — the wall shape is still a placeholder (see the comment
+	// above), so a separate wall-specific box isn't worth tuning until that art is final.
+	collisionbox: { x1: 0.3, y1: 0, z1: 0.3, x2: 0.7, y2: 1.3, z2: 0.7 },
+	selectionbox: { x1: 0.3, y1: 0, z1: 0.3, x2: 0.7, y2: 1.3, z2: 0.7 },
 
 	sounds: {
 		place: "block/planks",

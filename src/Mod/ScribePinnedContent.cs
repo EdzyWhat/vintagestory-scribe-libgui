@@ -42,9 +42,11 @@ internal readonly record struct ScribePinRowData(
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
     public bool IsLink => Kind == ScribeBlockKind.Link;
     public bool IsCraft => Kind == ScribeBlockKind.Craft;
-    /// <summary>A Tracker/Link/Craft renders an item icon + name instead of an editable text field; a plain
-    /// Task keeps the directly-editable field. A Craft parent shows its recipe output (add-crafting-tasks 9.1).</summary>
-    public bool IsItemKind => IsTracker || IsLink || IsCraft;
+    public bool IsQuestObjective => Kind == ScribeBlockKind.QuestObjective;
+    /// <summary>A Tracker/Link/Craft/QuestObjective renders an item icon + name instead of an editable text
+    /// field; a plain Task keeps the directly-editable field. A Craft parent shows its recipe output
+    /// (add-crafting-tasks 9.1).</summary>
+    public bool IsItemKind => IsTracker || IsLink || IsCraft || IsQuestObjective;
     /// <summary>Kinds whose row carries a live have/need counter: Tracker and the Craft parent (both count the
     /// viewer's carried inventory). Mirrors <see cref="ScribeBlock.IsCarriedCountTracked"/>.</summary>
     public bool IsCarriedCountTracked => IsTracker || IsCraft;
@@ -594,14 +596,17 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
 
         // Completion checkbox — completes with NO undo delay (the send fires immediately; see the dialog's
         // OnPinCompleteTask). Flips optimistically in its own State; the server re-push reconciles it.
-        // A pinned note has no Done: the checkbox unpins instead (Pin Tab is how you drop a HUD note).
+        // A pinned note has no Done: the checkbox unpins instead (Pin Tab is how you drop a HUD note). A
+        // pinned QuestObjective is the same case — it isn't player-completable (mirrors
+        // ScribeBlock.IsCompletable), so tapping it unpins rather than sending a completion toggle the
+        // server would silently no-op.
         children.Add(new Opacity(contentOpacity, child: new Padding(
             EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style, data.IsItemKind)),
             child: ScribeRowControlNudge.BuildTaskCheckbox(
                 context, style, done,
                 _ =>
                 {
-                    if (data.Kind == ScribeBlockKind.Text)
+                    if (data.Kind is ScribeBlockKind.Text or ScribeBlockKind.QuestObjective)
                     {
                         Widget.OnUnpin(data.DocId, data.TaskId);
                         return;

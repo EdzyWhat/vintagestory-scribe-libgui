@@ -716,6 +716,11 @@ face-the-player fix; decompiled `VintagestoryAPI.dll` + `VSSurvivalMod.dll` 2026
   the exported `.json` in Blockbench** to preview EXACTLY what the game renders (Blockbench reads
   `rotationX/Y/Z` correctly on import — the author's tightest iteration loop); (2) grep the `.json` for
   `rotationX`/`Y`/`Z` on the element you expect to move.
+- **A Blockbench GROUP reliably exports only ONE non-zero rotation axis — for a multi-axis rotation, nest
+  one group per axis.** E.g. to get `(-90,45,15)` on an element (or sub-tree), wrap it in three nested
+  groups: outermost `(-90,0,0)`, middle `(0,45,0)`, innermost `(0,0,15)` (order = outside-in application,
+  matching the tesselator's pushed-matrix parent→child composition noted above). Setting all three axes
+  non-zero on a single group does not export/apply correctly — only single-axis groups are trustworthy.
 - **A Blockbench element rotation set in the `.bbmodel` is DEAD until you re-export the VS shape `.json`**
   (add-chalkboard-block, 2026-08-19). The game loads the exported `shapes/.../*.json`, not the `.bbmodel`;
   a rotation added in Blockbench and saved only to the `.bbmodel` never reaches the game (symptom: "the model
@@ -2584,6 +2589,35 @@ CROSS-axis size is always just `Math.Max` of its children's actual measured cros
 (`LayoutFixedChild`'s return value), never inflated to the incoming constraint, so it doesn't have this
 failure mode. (`LayoutBuilder` itself is innocent here — `RenderLayoutBuilder.Size = child.Size` always,
 it just passes constraints through.)
+
+**Fact (2026-09-05): the stock `Button` widget's hover growth is centered — a SEPARATE, non-overridable
+hover shadow is what makes it read as "growing downward."** User-reported: our quest-prompt buttons
+(`ScribeQuestPromptActions.AccentButton`, built on the stock `Gui.Widgets.Basic.Button`) appeared to
+grow downward on hover instead of from center. Decompiled the actually-shipped `gui@3.1.0` `Gui.dll`
+(the local `reference/vslibgui/` clone is stuck at 2.0.0 and its `Button.cs` has no hover-scale logic
+at all — version skew, don't trust it here). Two separate effects are stacked in `ButtonState.Build`:
+(1) `AnimatedScale(scale, ..., Alignment.Center, child)` for the 1.03×/0.96× hover/press grow — this
+IS mathematically centered: `RenderTransform._UpdateEffectiveMatrix` composes
+`translate(-pivot) → scale → translate(+pivot)` via `Alignment.CalculateOffset`, and
+`Alignment.Center.CalculateOffset(size, Vector2.Zero)` = `(size.X/2, size.Y/2)` — textbook symmetric
+pivot, confirmed reading the decompiled IL directly, not a bug. (2) `ButtonState.BuildShadows` adds a
+`BoxShadow` **only when hovered and not pressed**, with `Offset = new Vector2(0f, 3f)` — a fixed
+3px-downward shadow, no upward counterpart, and **no field on `ButtonStyle`/`ButtonVariantStyle`
+exposes or overrides it** (both are closed `readonly struct`s with only color/border/corner-
+radius/padding fields — confirmed via `ilspycmd -t` on both types). On a large flat full-width button
+(e.g. the Read view's "Task Editor" button) this shadow exists too but is visually negligible; on a
+small colored pill button it reads as the whole button growing downward. The shadow is private logic
+inside `ButtonState` with no public override, so the only clean fix is to stop using the stock
+`Button` and build a custom `StatefulWidget`/`State<T>` pair directly from public primitives
+(`MouseRegion` + `GestureDetector` + `AnimatedScale` + `AnimatedContainer` + `Padding`) reproducing
+the same scale/color-transition/click-sound-on-press feel with no shadow — **tried exactly this
+(`ScribeAccentButton`) and it did not fix the symptom in playtest** (still read as broken), and was
+reverted; not worth maintaining a duplicate of library button logic for one button anyway. Also
+confirmed a `Clip`-from-outside alternative isn't viable: `RenderClip.Paint` fixes its clip mask in
+device space before painting descendants, so clipping the stock `Button` to its resting bounds
+removes the shadow but also visibly truncates the hover-grow effect's own edges — there's no
+external-wrapping trick that removes only the shadow. **Current status: accepted as a stock-LibGUI
+quirk, unfixed** — `AccentButton` uses the stock `Button` as-is.
 
 ## Held-item dialog flickers closed on FIRST open of a not-yet-crafted item (2026-08-06)
 

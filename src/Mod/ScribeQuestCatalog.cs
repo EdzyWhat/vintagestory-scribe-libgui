@@ -50,10 +50,10 @@ internal readonly record struct ScribeQuestObjectiveDef(
 /// <see cref="IsAvailable"/> (<c>IsModEnabled</c>), the same pattern <c>ConfigLib</c> and
 /// <see cref="CarryOnBridge"/> use for their own soft dependencies.
 ///
-/// <para>Scoped to the <c>vsquest</c> domain's own catalog only — a third-party datapack contributing
-/// quests under its own mod domain (mirroring how <c>VsQuest.QuestSystem.AssetsLoaded</c> itself scans
-/// every installed mod's domain) is a disclosed, out-of-scope edge case (add-assignment-and-quest-support
-/// 10.1's note in tasks.md).</para>
+/// <para>Searches every installed mod's domain, not just <c>vsquest</c>'s own, mirroring how
+/// <c>VsQuest.QuestSystem.AssetsLoaded</c> itself scans every installed mod's domain — real quest content is
+/// always contributed by a separate dependent mod under its own domain (e.g. VS Village)
+/// (fix-quest-catalog-domain-scoping).</para>
 ///
 /// <para>Title/description are resolved via <c>Lang.Get(id + "-title"/"-desc")</c> — the catalog JSON
 /// carries no display text of its own (confirmed by decompiling <c>VsQuest.QuestSelectGui</c>). Captured
@@ -99,7 +99,7 @@ internal static class ScribeQuestCatalog
         if (!IsAvailable(capi)) return Array.Empty<ScribeQuestCatalogEntry>();
         try
         {
-            var byLocation = capi.Assets.GetMany<List<RawQuest>>(capi.Logger, "config/quests", VsQuestModId);
+            var byLocation = capi.Assets.GetMany<List<RawQuest>>(capi.Logger, "config/quests", null);
             return byLocation.Values
                 .SelectMany(list => list)
                 .Where(q => !string.IsNullOrEmpty(q.Id))

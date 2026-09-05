@@ -13,9 +13,9 @@ namespace Scribe.Core;
 /// <c>x,y,z,icon,color</c> is the worked example), never in new columns — so the table stays narrow and
 /// stable and old/new exports stay mutually loadable. Columns:</para>
 /// <list type="bullet">
-/// <item><b>Type</b> — the kind token (<c>title</c>/<c>note</c>/<c>task</c>/<c>tracker</c>/<c>link</c>/<c>craft</c>;
-/// see <see cref="ScribeBlockKindToken"/>). <c>title</c> is a reserved ROW type, not a block: it carries the
-/// document title (in Text) as a leading row and produces no block.</item>
+/// <item><b>Type</b> — the kind token (<c>title</c>/<c>note</c>/<c>task</c>/<c>tracker</c>/<c>link</c>/<c>craft</c>/
+/// <c>questobjective</c>; see <see cref="ScribeBlockKindToken"/>). <c>title</c> is a reserved ROW type, not a
+/// block: it carries the document title (in Text) as a leading row and produces no block.</item>
 /// <item><b>Done</b> — <c>x</c> / blank. Ignored for note/title.</item>
 /// <item><b>Text</b> — the row's human-readable label: the task text, a guide-link's title, or the document
 /// title on a title row.</item>
@@ -68,9 +68,13 @@ public static class ScribeDocumentTsvCodec
                 // codec's "richness lives in Special, never new columns" rule): the output item code
                 // and, when present, the grid-recipe signature. Both are comma-free by construction.
                 ScribeBlockKind.Craft => CraftSpecial(block),
+                // A QuestObjective's item code (when it resolves to one), Tracker-shaped — like LinkDescription,
+                // its own stable objective code (LinkTarget, the reconcile match key) is JSON-only and does not
+                // round-trip through this fixed-width lane (see TextFor's remarks on the same tradeoff).
+                ScribeBlockKind.QuestObjective => block.TargetItemCode ?? "",
                 _ => "",
             };
-            string count = block.Kind is ScribeBlockKind.Tracker or ScribeBlockKind.Craft
+            string count = block.Kind is ScribeBlockKind.Tracker or ScribeBlockKind.Craft or ScribeBlockKind.QuestObjective
                 ? block.TargetQuantity.ToString(System.Globalization.CultureInfo.InvariantCulture)
                 : "";
             string depth = block.Depth.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -157,6 +161,11 @@ public static class ScribeDocumentTsvCodec
             && (ScribeLinkTarget.IsGuidePage(block.LinkTarget) || ScribeLinkTarget.IsQuest(block.LinkTarget))
             && !string.IsNullOrEmpty(block.LinkLabel))
             return block.LinkLabel!;
+        // A label-only QuestObjective (no resolvable item) keeps its captured display text in LinkLabel,
+        // mirroring a guide-page Link's degrade above.
+        if (block.Kind == ScribeBlockKind.QuestObjective
+            && string.IsNullOrEmpty(block.TargetItemCode) && !string.IsNullOrEmpty(block.LinkLabel))
+            return block.LinkLabel!;
         return block.Text;
     }
 
@@ -182,6 +191,16 @@ public static class ScribeDocumentTsvCodec
                 SplitCraftSpecial(special, out string? craftCode, out string craftSignature);
                 return new ScribeBlock(kind, text, done: done, depth: depth,
                     targetItemCode: craftCode, targetQuantity: count, recipeSignature: craftSignature);
+
+            case ScribeBlockKind.QuestObjective:
+                // Tracker-shaped: an item code in Special resolves a real icon; otherwise Text is the
+                // captured fallback label (see TextFor). The objective's own match code (LinkTarget) is
+                // JSON-only and does not round-trip here — an imported row is a standalone reference, not
+                // reconciled against a live quest.
+                string? questItemCode = NullIfBlank(special);
+                string? questLabel = questItemCode is null ? NullIfBlank(text) : null;
+                return new ScribeBlock(kind, "", done: done, depth: depth,
+                    targetItemCode: questItemCode, targetQuantity: count, linkLabel: questLabel);
 
             default: // Task, Text, and any future/unknown kind degraded to Task
                 return new ScribeBlock(kind, text, done: done, depth: depth);

@@ -75,8 +75,10 @@ public static class ScribeDocumentJsonCodec
                 Done = block.Done,
                 Depth = block.Depth,
                 TargetItemCode = block.TargetItemCode,
-                // A Tracker and a Craft both carry a meaningful target quantity; omit it elsewhere to keep the JSON legible.
-                TargetQuantity = block.Kind is ScribeBlockKind.Tracker or ScribeBlockKind.Craft ? block.TargetQuantity : null,
+                // A Tracker, a Craft, and a QuestObjective all carry a meaningful target quantity; omit it
+                // elsewhere to keep the JSON legible.
+                TargetQuantity = block.Kind is ScribeBlockKind.Tracker or ScribeBlockKind.Craft or ScribeBlockKind.QuestObjective
+                    ? block.TargetQuantity : null,
                 LinkTarget = block.LinkTarget,
                 LinkLabel = block.LinkLabel,
                 LinkDescription = block.LinkDescription,

@@ -43,16 +43,21 @@ internal readonly record struct ScribeEditRowData(
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
     public bool IsLink => Kind == ScribeBlockKind.Link;
     public bool IsCraft => Kind == ScribeBlockKind.Craft;
-    /// <summary>Kinds that render as an item icon + name (their own Text is empty): Tracker, Link, and the
-    /// Craft parent (which shows its recipe output — add-crafting-tasks 9.1).</summary>
-    public bool IsItemKind => IsTracker || IsLink || IsCraft;
+    public bool IsQuestObjective => Kind == ScribeBlockKind.QuestObjective;
+    /// <summary>Kinds that render as an item icon + name (their own Text is empty): Tracker, Link, the
+    /// Craft parent (which shows its recipe output — add-crafting-tasks 9.1), and a QuestObjective (item-
+    /// backed or a generic-icon label fallback — no stepper, since <see cref="IsCarriedCountTracked"/>
+    /// stays false for it — add-progression-framework-quest-objective-subtasks 7.3).</summary>
+    public bool IsItemKind => IsTracker || IsLink || IsCraft || IsQuestObjective;
     /// <summary>Kinds whose row carries a live have/need counter + inline target stepper: Tracker and the
-    /// Craft parent (both count the viewer's carried inventory — add-crafting-tasks 9.2). Mirrors
-    /// <see cref="ScribeBlock.IsCarriedCountTracked"/>.</summary>
+    /// Craft parent (both count the viewer's carried inventory — add-crafting-tasks 9.2). Deliberately
+    /// excludes QuestObjective — its numbers are watcher-driven, not player-editable (design.md Non-Goals).
+    /// Mirrors <see cref="ScribeBlock.IsCarriedCountTracked"/>.</summary>
     public bool IsCarriedCountTracked => IsTracker || IsCraft;
     /// <summary>Task, Tracker, Link, and Craft all carry a Done flag, so they get a completion checkbox;
-    /// a freeform Text section doesn't. Pin is offered on every kind (including notes).</summary>
-    public bool Completable => Kind != ScribeBlockKind.Text;
+    /// a freeform Text section and a QuestObjective (not player-completable) don't. Pin is offered on every
+    /// other kind (including notes). Mirrors <see cref="ScribeBlock.IsCompletable"/>.</summary>
+    public bool Completable => Kind is not ScribeBlockKind.Text and not ScribeBlockKind.QuestObjective;
     /// <summary>The row's display label: a Craft parent frames its output name ("Craft Iron Ingot"), a
     /// Tracker/Link shows its resolved item name (its own Text is empty), a Task/Text shows its authored
     /// text.</summary>

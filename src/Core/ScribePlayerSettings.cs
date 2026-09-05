@@ -25,7 +25,7 @@ public sealed class ScribePlayerSettings
     public ScribeCompletionPolicy CompletionPolicy { get; set; } = ScribeCompletionPolicy.Sink;
 
     /// <summary>Policy for automatically linking quests detected by the optional VS Quest integration.</summary>
-    public ScribeQuestAcceptPolicy QuestAcceptPolicy { get; set; } = ScribeQuestAcceptPolicy.Prompt;
+    public ScribeQuestAcceptPolicy QuestAcceptPolicy { get; set; } = ScribeQuestAcceptPolicy.PromptHud;
 
     /// <summary>Policy for automatically completing tasks linked to quests detected by the optional VS Quest integration.</summary>
     public ScribeQuestCompletionPolicy QuestCompletionPolicy { get; set; } = ScribeQuestCompletionPolicy.Prompt;
@@ -386,7 +386,7 @@ public sealed class ScribePlayerSettings
         Enum.IsDefined(typeof(ScribeCompletionPolicy), value) ? value : ScribeCompletionPolicy.Sink;
 
     public static ScribeQuestAcceptPolicy NormalizeQuestAcceptPolicy(ScribeQuestAcceptPolicy value) =>
-        Enum.IsDefined(typeof(ScribeQuestAcceptPolicy), value) ? value : ScribeQuestAcceptPolicy.Prompt;
+        Enum.IsDefined(typeof(ScribeQuestAcceptPolicy), value) ? value : ScribeQuestAcceptPolicy.PromptHud;
 
     public static ScribeQuestCompletionPolicy NormalizeQuestCompletionPolicy(ScribeQuestCompletionPolicy value) =>
         Enum.IsDefined(typeof(ScribeQuestCompletionPolicy), value) ? value : ScribeQuestCompletionPolicy.Prompt;

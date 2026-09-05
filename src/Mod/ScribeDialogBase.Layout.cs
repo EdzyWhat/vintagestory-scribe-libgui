@@ -691,6 +691,18 @@ public abstract partial class ScribeDialogBase
     /// (assignment-multi-item-creation design.md D10).</summary>
     protected (ItemStack? Stack, string? Name) ResolveRowItem(ScribeBlock b)
     {
+        if (b.IsQuestObjective)
+        {
+            // An objective's own match code lives in LinkTarget (a raw key, never a "page:"/"quest:"-scheme
+            // Link target — add-progression-framework-quest-objective-subtasks 1.3), so it never routes
+            // through ResolveDisplay's scheme dispatch below. Item-backed (TargetItemCode set) resolves
+            // exactly like a Tracker; label-only has no item to draw and falls back to the captured
+            // LinkLabel (or, failing that, the raw match code) with a generic icon (rendered by the caller
+            // from a null Stack, mirroring the guide-page-Link fallback).
+            return b.TargetItemCode is { } objItemCode
+                ? ScribeItemRef.ResolveDisplay(capi.World, objItemCode, null)
+                : (null, b.LinkLabel ?? b.LinkTarget);
+        }
         if (!b.IsTracker && !b.IsLink && !b.IsCraft) return (null, null);
         // A Link resolves its LinkTarget; a Tracker AND a Craft parent both resolve the item they count —
         // the Craft parent's TargetItemCode is its recipe OUTPUT (add-crafting-tasks 9.1), so it shows the
@@ -703,14 +715,17 @@ public abstract partial class ScribeDialogBase
     /// view and (where <see cref="EditorRowsOpenLinks"/> is on) the editor view, so Link/Tracker/Craft resolve
     /// identically on every path. A Link opens its <see cref="ScribeBlock.LinkTarget"/>; a Tracker AND a Craft
     /// parent open their <see cref="ScribeBlock.TargetItemCode"/> (the Craft parent's is its recipe OUTPUT — see
-    /// <see cref="ResolveRowItem"/>). Keyed by TaskId off the live document, so it works regardless of which view
+    /// <see cref="ResolveRowItem"/>). An item-backed QuestObjective opens its own <see cref="ScribeBlock.TargetItemCode"/>
+    /// the same way; a label-only QuestObjective has no page to open and falls through to the no-op below (task
+    /// add-progression-framework-quest-objective-subtasks 7.2 — not an exception, the intended fallthrough).
+    /// Keyed by TaskId off the live document, so it works regardless of which view
     /// dispatched it and mirrors the Pin-tab dispatch (<see cref="OnPinOpenLink"/>). A plain Task/Note has no
     /// item code, so it no-ops here (and its editor label is never wrapped in the gesture — see BuildItemEditorContent).</summary>
     private void OpenRowLink(Guid taskId)
     {
         var block = host.Document.FindByTaskId(taskId);
         if (block?.IsLink == true) ScribeItemRef.OpenHandbookPage(capi, block.LinkTarget);
-        else if (block?.IsTracker == true || block?.IsCraft == true)
+        else if (block?.IsTracker == true || block?.IsCraft == true || block?.IsQuestObjective == true)
             ScribeItemRef.OpenHandbookPage(capi, block.TargetItemCode);
     }
 
@@ -739,10 +754,20 @@ public abstract partial class ScribeDialogBase
                         ? modSystem.TryGetQuestProgressText(ScribeLinkTarget.QuestSource(b.LinkTarget)!, questCode)
                         : null;
                     var (assignerName, assignedDate, acceptedDate) = ResolveAssignmentTooltipInfo(b.Assignment);
+                    // A label-only QuestObjective (no resolved item — ResolveRowItem's stack came back null)
+                    // draws the generic book glyph rather than a blank ItemStackDisplay: the row widget's icon
+                    // dispatch (ScribeLinkIcon) keys off a "page:"/"quest:"-scheme LinkTarget, and a
+                    // QuestObjective's real LinkTarget is a bare match code (never scheme-prefixed — 1.3), so a
+                    // synthetic guide-page-scheme string is substituted here purely to route the SAME icon
+                    // fallback a guide-page Link already uses. This is display-only: OpenRowLink re-reads the
+                    // LIVE block by TaskId rather than this snapshot, so it's never mistaken for a real page.
+                    string? iconLinkTarget = b.IsQuestObjective && stack is null
+                        ? ScribeLinkTarget.ForPage(b.LinkTarget ?? "")
+                        : b.LinkTarget;
                     return new ScribeReadRowData(
                         Index: i, Kind: b.Kind, Done: b.Done, Pinned: IsPinnedForMe(b.TaskId), TaskId: b.TaskId,
                         Text: b.Text, DisplayStack: stack, DisplayName: name,
-                        TargetQuantity: b.TargetQuantity, CurrentQuantity: b.CurrentQuantity, LinkTarget: b.LinkTarget,
+                        TargetQuantity: b.TargetQuantity, CurrentQuantity: b.CurrentQuantity, LinkTarget: iconLinkTarget,
                         Depth: b.Depth,
                         IsAcceptedAssignment: b.Assignment?.State == ScribeAssignmentState.Accepted,
                         QuestProgressText: questProgress,
@@ -800,10 +825,16 @@ public abstract partial class ScribeDialogBase
                 // Tab/Enter row-navigation experience. Deferred as a disclosed follow-up (see tasks.md 9.3).
                 bool isAcceptedAssignment = b.Assignment?.State == ScribeAssignmentState.Accepted;
                 var (assignerName, assignedDate, acceptedDate) = ResolveAssignmentTooltipInfo(b.Assignment);
+                // Same synthetic guide-page-scheme substitution as the read view's row construction (see
+                // BuildReadContent) — routes a label-only QuestObjective's icon through the existing
+                // book-glyph fallback rather than a blank ItemStackDisplay. Display-only.
+                string? iconLinkTarget = b.IsQuestObjective && stack is null
+                    ? ScribeLinkTarget.ForPage(b.LinkTarget ?? "")
+                    : b.LinkTarget;
                 return new ScribeEditRowData(
                     Index: i, Kind: b.Kind, Done: b.Done, Pinned: IsPinnedForMe(b.TaskId), TaskId: b.TaskId,
                     Text: b.Text, DisplayStack: stack, DisplayName: name,
-                    TargetQuantity: b.TargetQuantity, CurrentQuantity: b.CurrentQuantity, LinkTarget: b.LinkTarget,
+                    TargetQuantity: b.TargetQuantity, CurrentQuantity: b.CurrentQuantity, LinkTarget: iconLinkTarget,
                     Depth: b.Depth, IsAcceptedAssignment: isAcceptedAssignment,
                     AssignerName: assignerName, AssignedDate: assignedDate, AcceptedDate: acceptedDate);
             })

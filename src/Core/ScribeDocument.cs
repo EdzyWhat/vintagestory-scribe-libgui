@@ -495,6 +495,99 @@ public sealed class ScribeDocument
         => ReconcileCraftIngredients(craftTaskId, ingredients, notes, craftsNeeded, createMissing: false);
 
     /// <summary>
+    /// Loosely self-heals the <see cref="ScribeBlockKind.QuestObjective"/> subtasks of the quest Link
+    /// identified by <paramref name="questLinkTaskId"/> (add-progression-framework-quest-objective-subtasks),
+    /// mirroring <see cref="ReconcileCraftIngredients"/>'s owned-run shape but matching by the objective's own
+    /// stable <c>Code</c> (via <see cref="ScribeBlock.LinkTarget"/>) rather than an item code, since two
+    /// objectives could share one. The parent must be a Link whose <see cref="ScribeBlock.LinkTarget"/> is a
+    /// quest target (<see cref="ScribeLinkTarget.IsQuest"/>) — a plain item/guide-page Link never owns
+    /// QuestObjective children. For each <paramref name="objectives"/> entry: a matched existing child has its
+    /// <see cref="ScribeBlock.TargetQuantity"/> rescaled to <c>Required</c> in place (id + live
+    /// <see cref="ScribeBlock.CurrentQuantity"/> preserved); when <paramref name="createMissing"/> is true and
+    /// no match exists, a new child is appended to the end of the owned run carrying <c>ItemCode</c> (a real
+    /// item icon, when the objective resolves to exactly one) and <c>Label</c> (the captured fallback display
+    /// text, used when it doesn't). Never deletes a row (a player who removed an objective subtask keeps that
+    /// choice) and never touches anything below depth 1. Returns false (document unchanged) when no matching
+    /// quest Link exists. Pure data; no VS API.
+    /// </summary>
+    public bool ReconcileQuestObjectives(Guid questLinkTaskId,
+        IReadOnlyList<(string Code, string? ItemCode, string? Label, int Required)> objectives,
+        bool createMissing = true)
+    {
+        int parentIndex = -1;
+        for (int i = 0; i < _blocks.Count; i++)
+        {
+            if (_blocks[i].TaskId == questLinkTaskId && _blocks[i].IsLink
+                && ScribeLinkTarget.IsQuest(_blocks[i].LinkTarget))
+            {
+                parentIndex = i;
+                break;
+            }
+        }
+        if (parentIndex < 0) return false;
+
+        var (runStart, runEnd) = OwnedRun(parentIndex);
+        var claimed = new HashSet<int>(); // rows already matched this pass, so a duplicate code can't double-claim
+
+        foreach (var obj in objectives)
+        {
+            int required = obj.Required < 1 ? 1 : obj.Required;
+
+            int matchIdx = -1;
+            for (int i = runStart; i < runEnd; i++)
+            {
+                if (claimed.Contains(i)) continue;
+                if (_blocks[i].IsQuestObjective
+                    && string.Equals(_blocks[i].LinkTarget, obj.Code, StringComparison.Ordinal))
+                {
+                    matchIdx = i;
+                    break;
+                }
+            }
+
+            if (matchIdx >= 0)
+            {
+                claimed.Add(matchIdx);
+                _blocks[matchIdx].TargetQuantity = required; // rescale in place; keep id + CurrentQuantity
+            }
+            else if (createMissing)
+            {
+                _blocks.Insert(runEnd, new ScribeBlock(ScribeBlockKind.QuestObjective, "",
+                    depth: 1, targetItemCode: obj.ItemCode, targetQuantity: required,
+                    linkTarget: obj.Code, linkLabel: obj.Label));
+                runEnd++;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Sets the live backend-reported progress (<see cref="ScribeBlock.CurrentQuantity"/>) of the
+    /// <see cref="ScribeBlockKind.QuestObjective"/> with the given stable <see cref="ScribeBlock.TaskId"/> —
+    /// the identity-addressed op the quest watcher uses to push an updated count without knowing the block's
+    /// index (add-progression-framework-quest-objective-subtasks). Deliberately gated on
+    /// <see cref="ScribeBlock.IsQuestObjective"/>, NOT the shared <see cref="ScribeBlock.IsCarriedCountTracked"/>-gated
+    /// <see cref="SetTrackerCurrentQuantity"/> — a QuestObjective's count is never carried-inventory-driven.
+    /// Unlike a Tracker's overflow-visible current count, an objective's progress cannot exceed its required
+    /// count in Progression Framework's own model, so <paramref name="currentQuantity"/> is clamped into
+    /// <c>[0, TargetQuantity]</c> here (tighter than the block's own ≥ 0-only setter). Returns false (document
+    /// unchanged) when no block has that id or the id belongs to a non-QuestObjective block. Pure data; no VS API.
+    /// </summary>
+    public bool SetQuestObjectiveProgress(Guid taskId, int currentQuantity)
+    {
+        for (int i = 0; i < _blocks.Count; i++)
+        {
+            if (_blocks[i].TaskId == taskId && _blocks[i].IsQuestObjective)
+            {
+                _blocks[i].CurrentQuantity = Math.Clamp(currentQuantity, 0, _blocks[i].TargetQuantity);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Changes a block's text. Both Task and Text blocks may be set to any value, including
     /// empty/whitespace-only — the text is stored verbatim and the model does NOT trim surrounding
     /// whitespace or reject blank task text. This lets a task go transiently empty while the player

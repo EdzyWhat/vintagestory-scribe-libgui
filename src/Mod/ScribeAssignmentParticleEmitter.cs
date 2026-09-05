@@ -22,12 +22,13 @@ namespace Scribe;
 /// mote count is split into two separate <see cref="IWorldAccessor.SpawnParticles(IParticlePropertiesProvider,IPlayer)"/>
 /// calls sharing every other property — one amber-band batch, one full-hue accent batch.</para>
 /// </summary>
-internal static class ScribeAssignmentParticleEmitter
+public sealed class ScribeAssignmentParticleEmitter
 {
     /// <summary>How close (blocks) the player must be to a block entity for its indicator to consider
     /// spawning. Widened 6 → 12 (playtest feedback 2026-08-31: the old range felt too short to notice
-    /// the indicator before walking right up to the block) — still playtest-tunable, not final.</summary>
-    public const double DetectionRadius = 12.0;
+    /// the indicator before walking right up to the block) — author-tunable via
+    /// <see cref="ScribeVisualTuning"/> (add-configkit-visual-tuning).</summary>
+    public readonly double DetectionRadius;
 
     // Base (amber/gold) HSV band, 0-255 scale matching VS's own range (design.md Decision 9).
     private const float BaseHue = 32f, BaseHueVar = 8f;
@@ -37,14 +38,14 @@ internal static class ScribeAssignmentParticleEmitter
 
     /// <summary>Fraction of each tick's spawned motes that get a randomized full-range hue instead of
     /// the base amber band. Started at ~1-in-5 (0.2); playtest feedback (2026-08-31) settled on a flat
-    /// 50/50 split after discussion, still tunable.</summary>
-    private const float RainbowRatio = 0.5f;
+    /// 50/50 split after discussion. Author-tunable via <see cref="ScribeVisualTuning"/>.</summary>
+    private readonly float RainbowRatio;
 
     /// <summary>Scales the base 1-3-per-tick mote count. Playtest feedback (2026-08-31) tried +30%
     /// (1.3), settled back on the original count (1.0), then — after living with the widened detection
-    /// radius and lower spawn origin — asked for a sparser field overall: 1.0 → 0.6. Kept as a named
-    /// multiplier (rather than folded away) since it's an active tuning knob.</summary>
-    private const float CountMultiplier = 0.6f;
+    /// radius and lower spawn origin — asked for a sparser field overall: 1.0 → 0.6. Author-tunable via
+    /// <see cref="ScribeVisualTuning"/>.</summary>
+    private readonly float CountMultiplier;
 
     /// <summary>One-time multiplier applied on the tick a player's proximity+unseen-assignment trigger
     /// first turns true this session (see <see cref="BlockEntityScribeWritingStation"/>'s tick
@@ -52,8 +53,16 @@ internal static class ScribeAssignmentParticleEmitter
     /// block instead of visibly accruing over the first several ticks (playtest feedback 2026-08-31).
     /// Sized to roughly fill the steady-state population in one shot: steady-state count is
     /// approximately (mean per-tick spawn) × (mean lifetime ÷ tick interval) ≈ 2.6 × (2s ÷ 1.5s) ≈ 3.5×
-    /// a single tick's spawn.</summary>
-    public const float SeedBurstMultiplier = 3.5f;
+    /// a single tick's spawn. Author-tunable via <see cref="ScribeVisualTuning"/>.</summary>
+    public readonly float SeedBurstMultiplier;
+
+    public ScribeAssignmentParticleEmitter(ScribeVisualTuning tuning)
+    {
+        DetectionRadius = tuning.DetectionRadius;
+        RainbowRatio = tuning.RainbowRatio;
+        CountMultiplier = tuning.CountMultiplier;
+        SeedBurstMultiplier = tuning.SeedBurstMultiplier;
+    }
 
     private const float LifeLengthAvg = 2f, LifeLengthVar = 0.5f;
     private const float SizeAvg = 0.12f, SizeVar = 0.04f;
@@ -78,7 +87,7 @@ internal static class ScribeAssignmentParticleEmitter
     /// it fires. <paramref name="seedBurst"/> is set on the first tick after the trigger turns true,
     /// spawning a larger one-time batch so the field doesn't need several ticks to build up to its
     /// steady-state density (playtest feedback 2026-08-31).</summary>
-    public static void SpawnAt(ICoreClientAPI capi, BlockPos pos, bool seedBurst = false)
+    public void SpawnAt(ICoreClientAPI capi, BlockPos pos, bool seedBurst = false)
     {
         var minPos = new Vec3d(pos.X + 0.2, pos.Y + 0.35, pos.Z + 0.2);
         var maxPos = new Vec3d(pos.X + 0.8, pos.Y + 0.65, pos.Z + 0.8);
@@ -88,14 +97,14 @@ internal static class ScribeAssignmentParticleEmitter
     /// <summary>Same field, centered on an arbitrary world position rather than a block's own cell —
     /// used by the Task Notice proximity ping (tasks.md 5.4), whose found position may be a dropped
     /// <c>EntityItem</c>'s fractional coordinates rather than a block-aligned one.</summary>
-    public static void SpawnAt(ICoreClientAPI capi, Vec3d center, bool seedBurst = false)
+    public void SpawnAt(ICoreClientAPI capi, Vec3d center, bool seedBurst = false)
     {
         var minPos = new Vec3d(center.X - 0.3, center.Y, center.Z - 0.3);
         var maxPos = new Vec3d(center.X + 0.3, center.Y + 0.3, center.Z + 0.3);
         SpawnBatch(capi, minPos, maxPos, seedBurst);
     }
 
-    private static void SpawnBatch(ICoreClientAPI capi, Vec3d minPos, Vec3d maxPos, bool seedBurst)
+    private void SpawnBatch(ICoreClientAPI capi, Vec3d minPos, Vec3d maxPos, bool seedBurst)
     {
         // 1-3 sparse motes per tick (design.md: "low spawn quantity — sparse motes, not a fountain"),
         // scaled by CountMultiplier and, on entry, SeedBurstMultiplier.

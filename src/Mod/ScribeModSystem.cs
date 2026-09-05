@@ -51,6 +51,12 @@ public sealed partial class ScribeModSystem : ModSystem
     /// tool when the layout is finalized.</summary>
     public const string GearTuningConfigFileName = "scribe-gear-tuning.json";
 
+    /// <summary>Client-local JSON holding the author-facing visual-tuning knobs
+    /// (<see cref="ScribeVisualTuning"/>) for the ambient light sampler and unseen-assignment particle
+    /// effect — optionally editable via a config-library mod's GUI reading the shared
+    /// <c>configlib-patches.json</c> manifest (add-configkit-visual-tuning). Not a player preference file.</summary>
+    public const string VisualTuningConfigFileName = "scribe-visual-tuning.json";
+
     private ICoreClientAPI? capi;
     private ICoreServerAPI? sapi;
 
@@ -147,6 +153,13 @@ public sealed partial class ScribeModSystem : ModSystem
     /// own event/tick lifetime, disposed in <see cref="Dispose"/>.</summary>
     private HudScribePins? pinHud;
 
+    /// <summary>The center-screen quest-accept-prompt modal (rework-quest-accept-notification-styles) —
+    /// the <see cref="Scribe.Core.ScribeQuestAcceptPolicy.PromptPopup"/> presentation style, an
+    /// alternative to <see cref="pinHud"/>'s banner. Constructed once in <see cref="StartClientSide"/>
+    /// (null on a pure server); it self-manages its own open/close, mirroring <see cref="pinHud"/>.
+    /// Disposed in <see cref="Dispose"/>.</summary>
+    private GuiDialogScribeQuestPrompt? questPromptModal;
+
     /// <summary>The single standalone Scribe settings window (scribe-themed-toggle).
     /// There is now ONE settings surface, opened via <see cref="OpenSettings"/> from BOTH the HUD gear and
     /// the Lectern gear (the former in-Lectern settings view was removed). Lazily constructed on first
@@ -164,6 +177,18 @@ public sealed partial class ScribeModSystem : ModSystem
     /// <see cref="GearTuningConfigFileName"/> and loaded in <see cref="StartClientSide"/>. Lazily defaulted
     /// so it is never null (mirrors <see cref="mySettings"/>).</summary>
     private ScribeGearTuning? gearTuning;
+
+    /// <summary>Author-facing visual-tuning knobs (<see cref="ScribeVisualTuning"/>) for the ambient light
+    /// sampler and unseen-assignment particle effect, persisted to
+    /// <see cref="VisualTuningConfigFileName"/> and loaded in <see cref="StartClientSide"/>. Lazily
+    /// defaulted so it is never null (mirrors <see cref="mySettings"/>/<see cref="gearTuning"/>).</summary>
+    private ScribeVisualTuning? visualTuning;
+
+    /// <summary>The single shared <see cref="ScribeAssignmentParticleEmitter"/> instance (built once from
+    /// <see cref="visualTuning"/> in <see cref="StartClientSide"/>), passed to every Inbox-capable block
+    /// entity's ambient-particle tick and the Task Notice proximity ping. Null until
+    /// <see cref="StartClientSide"/> runs, and on a pure server.</summary>
+    private ScribeAssignmentParticleEmitter? particleEmitter;
 
     /// <summary>The single DEV gearworks-tuning window (<c>.geartune</c>), lazily built + reused; disposed
     /// in <see cref="Dispose"/>. Null until first opened, and on a pure server.</summary>
@@ -338,7 +363,8 @@ public sealed partial class ScribeModSystem : ModSystem
             .RegisterMessageType<ScribeDeliveryRangeCheckRequestMessage>()
             .RegisterMessageType<ScribeDeliveryRangeCheckReplyMessage>()
             .RegisterMessageType<ScribeTaskNoticeActionMessage>()
-            .RegisterMessageType<ScribeTaskNoticeProximityPingMessage>();
+            .RegisterMessageType<ScribeTaskNoticeProximityPingMessage>()
+            .RegisterMessageType<ScribeSetQuestObjectiveProgressMessage>();
     }
 
     /// <summary>Server-side accessor for the pin store, so the block entity can register/orphan its
@@ -365,8 +391,14 @@ public sealed partial class ScribeModSystem : ModSystem
         // DEV: live gearworks-layout tuning (a never-touched file loads as the current baked-in defaults).
         gearTuning = (api.LoadModConfig<ScribeGearTuning>(GearTuningConfigFileName) ?? new ScribeGearTuning()).Normalized();
         RegisterGearTuneCommand(api);
+
+        // Author-facing visual tuning for the ambient light sampler + particle emitter (a never-touched
+        // file loads as today's hardcoded defaults). See ScribeVisualTuning's remarks.
+        visualTuning = api.LoadModConfig<ScribeVisualTuning>(VisualTuningConfigFileName) ?? new ScribeVisualTuning();
+        particleEmitter = new ScribeAssignmentParticleEmitter(visualTuning);
         RegisterScribeLightCommand(api);
         RegisterScribeProbeCommand(api);
+        RegisterScribeGuardCommand(api);
 
         RegisterCustomIcons(api);
         RegisterCustomFonts(api);
@@ -390,6 +422,12 @@ public sealed partial class ScribeModSystem : ModSystem
         // MyPinsChanged in its ctor), so it can be constructed here regardless of current pin count —
         // it stays closed until there is ≥1 pin. It owns its own subscription + tick; we dispose it.
         pinHud = new HudScribePins(api, this);
+
+        // The center-modal quest-accept-prompt presentation style (rework-quest-accept-notification-styles),
+        // constructed unconditionally like pinHud — it self-manages its own open/close off the pending
+        // prompt set + Quest Accept Policy + the vanilla-dialog guard, so it must exist even while nothing
+        // is currently pending.
+        questPromptModal = new GuiDialogScribeQuestPrompt(api, this);
 
         // Quest soft auto-detect (Layer 2, add-assignment-and-quest-support §11): a no-op tick listener
         // when vsquest isn't installed (ScribeQuestWatcher checks IsAvailable itself each tick).
@@ -419,6 +457,8 @@ public sealed partial class ScribeModSystem : ModSystem
         DisposeHandbookPatch();
         pinHud?.Dispose();
         pinHud = null;
+        questPromptModal?.Dispose();
+        questPromptModal = null;
         DisposeQuestWatcher();
         if (timerDisplayTickId != 0 && capi is not null)
         {
@@ -477,6 +517,7 @@ public sealed partial class ScribeModSystem : ModSystem
         channel.SetMessageHandler<ScribeSendAssignmentBatchMessage>(OnServerReceivedSendAssignmentBatch);
         channel.SetMessageHandler<ScribeDeliveryRangeCheckRequestMessage>(OnServerReceivedDeliveryRangeCheckRequest);
         channel.SetMessageHandler<ScribeTaskNoticeActionMessage>(OnServerReceivedTaskNoticeAction);
+        channel.SetMessageHandler<ScribeSetQuestObjectiveProgressMessage>(OnServerReceivedSetQuestObjectiveProgress);
 
         // Persist/load the pin + settings stores with the save game (the WaypointMapLayer pattern).
         api.Event.SaveGameLoaded += OnSaveGameLoaded;

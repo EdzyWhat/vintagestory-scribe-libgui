@@ -124,6 +124,16 @@ public sealed partial class ScribeModSystem
         SetTrackerQuantityForPlayer(fromPlayer, docId, taskId, message.Quantity);
     }
 
+    private void OnServerReceivedSetQuestObjectiveProgress(IServerPlayer fromPlayer, ScribeSetQuestObjectiveProgressMessage message)
+    {
+        if (!TryReadGuid(message.DocId, out var docId) || !TryReadGuid(message.TaskId, out var taskId))
+        {
+            Trace("set-questobjective-progress from {0}: MALFORMED packet (docId/taskId not 16 bytes) — ignored", fromPlayer.PlayerName);
+            return;
+        }
+        SetQuestObjectiveProgressForPlayer(fromPlayer, docId, taskId, message.Quantity);
+    }
+
     private void OnServerReceivedReorderPins(IServerPlayer fromPlayer, ScribeReorderPinsMessage message)
     {
         // Validate the parallel id lists: both present, equal length, and bounded so a hostile/oversized

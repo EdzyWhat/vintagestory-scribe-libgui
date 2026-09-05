@@ -1,3 +1,5 @@
+using Vintagestory.API.Common;
+
 namespace Scribe;
 
 /// <summary>
@@ -19,7 +21,7 @@ public sealed class BlockScribeChalkboard : BlockScribeWritingStation
     protected override string EditHintLangCode => "scribe:blockhelp-scribechalkboard-edit";
 
     /// <summary>Wall-mounted: no floor cell required (HorizontalAttachable checks the wall instead).</summary>
-    protected override bool RequiresSolidGround => false;
+    protected override bool RequiresSolidGround(BlockSelection blockSel) => false;
 
     /// <summary>Wall-mounted: facing comes from the `side` variant + shape rotateYByType, not a stored
     /// per-instance mesh angle.</summary>

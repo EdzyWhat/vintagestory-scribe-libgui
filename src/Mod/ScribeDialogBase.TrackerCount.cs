@@ -64,13 +64,18 @@ public abstract partial class ScribeDialogBase
             SendBlockEntityPacket(1000);
         }
 
-        trackerPollListenerId ??= capi.Event.RegisterGameTickListener(_ => RecomputeTrackers(), 1000);
+        trackerPollListenerId ??= capi.Event.RegisterGameTickListener(_ =>
+        {
+            RecomputeTrackers();
+            RecomputeQuestObjectiveProgress();
+        }, 1000);
         foreach (var inv in EnumerateTrackerWatchInventories())
         {
             inv.SlotModified += OnTrackerSlotModified;
             trackerWatchedInventories.Add(inv);
         }
         RecomputeTrackers();
+        RecomputeQuestObjectiveProgress();
     }
 
     /// <summary>Tear down the count engine (called from <see cref="OnGuiClosed"/>): unregister the poll +

@@ -180,6 +180,7 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     bool IScribeDocumentHost.MoveTaskToBottomFromReader(Guid taskId) => MoveTaskToBottomFromReader(taskId);
     bool IScribeDocumentHost.SetTaskTextFromReader(Guid taskId, string text) => SetTaskTextFromReader(taskId, text);
     bool IScribeDocumentHost.SetTrackerCurrentQuantityFromReader(Guid taskId, int qty) => SetTrackerCurrentQuantityFromReader(taskId, qty);
+    bool IScribeDocumentHost.SetQuestObjectiveProgressFromReader(Guid taskId, int qty) => SetQuestObjectiveProgressFromReader(taskId, qty);
 
     /// <summary>Client-side: the single LibGUI dialog serving BOTH views (migrate-editor-view-libgui).
     /// Read and editor are internal view states of this one dialog, so switching between them is a
@@ -253,12 +254,13 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     {
         if (Api is not ICoreClientAPI capi) return;
 
-        bool active = ModSystem is { HasUnseenAssignment: true };
+        var emitter = ModSystem?.ParticleEmitter;
+        bool active = emitter is not null && ModSystem is { HasUnseenAssignment: true };
         if (active)
         {
             var player = capi.World.Player?.Entity;
             active = player is not null
-                && Pos.DistanceTo(player.Pos.X, player.Pos.Y, player.Pos.Z) <= ScribeAssignmentParticleEmitter.DetectionRadius;
+                && Pos.DistanceTo(player.Pos.X, player.Pos.Y, player.Pos.Z) <= emitter!.DetectionRadius;
         }
 
         if (!active)
@@ -267,7 +269,7 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
             return;
         }
 
-        ScribeAssignmentParticleEmitter.SpawnAt(capi, Pos, seedBurst: !assignmentParticlesWereActive);
+        emitter!.SpawnAt(capi, Pos, seedBurst: !assignmentParticlesWereActive);
         assignmentParticlesWereActive = true;
     }
 
@@ -433,7 +435,7 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     /// server side started).</summary>
     private ScribePinStore? PinStore => ModSystem?.PinStore;
 
-    private ScribeModSystem? ModSystem => Api?.ModLoader.GetModSystem<ScribeModSystem>();
+    protected ScribeModSystem? ModSystem => Api?.ModLoader.GetModSystem<ScribeModSystem>();
 
     /// <summary>
     /// Called from <see cref="BlockScribeWritingStation.OnBlockInteractStart"/> on whichever side is
@@ -600,6 +602,29 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
         if (block.CurrentQuantity == Math.Max(0, qty)) return false;
 
         if (!Document.SetTrackerCurrentQuantity(taskId, qty)) return false;
+        MarkDirty(redrawOnClient: true);
+        return true;
+    }
+
+    /// <summary>
+    /// Server-side: set a QuestObjective's live <see cref="ScribeBlock.CurrentQuantity"/> on the
+    /// authoritative document by its stable <see cref="ScribeBlock.TaskId"/> — the write-through for the
+    /// client-side quest watcher (add-progression-framework-quest-objective-subtasks). Lock-free like
+    /// <see cref="SetTrackerCurrentQuantityFromReader"/>, but gated on <see cref="ScribeBlock.IsQuestObjective"/>
+    /// rather than <c>IsTracker</c>, and routed through <see cref="ScribeDocument.SetQuestObjectiveProgress"/>
+    /// (clamps into <c>[0, TargetQuantity]</c> — never overflow-visible like a Tracker's count). A no-op, an
+    /// unknown TaskId, or a non-QuestObjective block is left unwritten. Does NOT touch pins.
+    /// </summary>
+    public bool SetQuestObjectiveProgressFromReader(Guid taskId, int qty)
+    {
+        if (Api is not ICoreServerAPI) return false;
+
+        var block = Document.FindByTaskId(taskId);
+        if (block is null || !block.IsQuestObjective) return false;
+        int clamped = Math.Clamp(qty, 0, block.TargetQuantity);
+        if (block.CurrentQuantity == clamped) return false;
+
+        if (!Document.SetQuestObjectiveProgress(taskId, qty)) return false;
         MarkDirty(redrawOnClient: true);
         return true;
     }

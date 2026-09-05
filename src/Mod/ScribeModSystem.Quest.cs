@@ -9,9 +9,12 @@ using Vintagestory.API.Server;
 namespace Scribe;
 
 /// <summary>One pending Quest Accept/Completion notification awaiting the player's decision under
-/// <see cref="ScribeQuestAcceptPolicy.Prompt"/>/<see cref="ScribeQuestCompletionPolicy.Prompt"/>
-/// (add-assignment-and-quest-support §11.2/§11.4). Rendered as a small banner on the pinned-task HUD
-/// (<c>HudPinsContent</c>) with Accept/Dismiss + a Settings shortcut. <see cref="IsCompletion"/>
+/// <see cref="ScribeQuestAcceptPolicy.PromptHud"/>/<see cref="ScribeQuestAcceptPolicy.PromptPopup"/>/
+/// <see cref="ScribeQuestCompletionPolicy.Prompt"/> (add-assignment-and-quest-support §11.2/§11.4).
+/// Rendered as a small banner on the pinned-task HUD (<c>HudPinsContent</c>) or, for a
+/// <see cref="ScribeQuestAcceptPolicy.PromptPopup"/> accept-prompt, a center-screen modal
+/// (<c>GuiDialogScribeQuestPrompt</c>) — both offer Accept/Dismiss + a Settings shortcut
+/// (rework-quest-accept-notification-styles). <see cref="IsCompletion"/>
 /// distinguishes an accept-prompt (accepting creates a Quest Link) from a completion-prompt (accepting
 /// marks the already-linked task done) so the HUD can word the banner correctly; both resolve through
 /// <see cref="ScribeModSystem.AcceptQuestPrompt"/>. <see cref="Source"/> records which backend detected
@@ -56,6 +59,28 @@ public sealed partial class ScribeModSystem
         return ScribeQuestCatalog.FormatProgress(objectives, counts);
     }
 
+    /// <summary>Progression Framework's catalog objective definitions for a cataloged quest (Decision 4),
+    /// exposed for the manual Quest Link picker (<c>OnClickAddQuestLink</c>) and the accept-time auto-link
+    /// send (<see cref="SendAutoLinkQuest"/>) to seed a Quest Link's QuestObjective children
+    /// (add-progression-framework-quest-objective-subtasks 5.3). False when the watcher hasn't started, PF
+    /// isn't installed, or the quest code isn't cataloged.</summary>
+    internal bool TryGetPfObjectiveDefs(string questCode, out IReadOnlyList<ScribePfObjectiveDef> objectives)
+    {
+        if (questWatcher is null) { objectives = Array.Empty<ScribePfObjectiveDef>(); return false; }
+        return questWatcher.TryGetPfObjectiveDefs(questCode, out objectives);
+    }
+
+    /// <summary>Progression Framework's live per-objective numeric progress for a cataloged quest, exposed
+    /// for the accept-time auto-link send (<see cref="SendAutoLinkQuest"/>) to seed each newly-created
+    /// QuestObjective child's <c>CurrentQuantity</c> from whatever is already cached (0 if nothing yet).</summary>
+    internal bool TryGetPfObjectiveProgress(string questCode, out IReadOnlyDictionary<string, int> progressByCode)
+    {
+        if (questWatcher is null) { progressByCode = EmptyPfProgress; return false; }
+        return questWatcher.TryGetPfObjectiveProgress(questCode, out progressByCode);
+    }
+
+    private static readonly Dictionary<string, int> EmptyPfProgress = new(StringComparer.Ordinal);
+
     private void StartQuestWatcher(ICoreClientAPI api)
         => questWatcher = new ScribeQuestWatcher(api, OnQuestAccepted, OnQuestCompleted);
 
@@ -76,9 +101,10 @@ public sealed partial class ScribeModSystem
     /// chat notification — Scribe watching quest state at all is not obvious, so every policy gets one —
     /// then branches on <see cref="ScribePlayerSettings.QuestAcceptPolicy"/>: Always sends the auto-link
     /// request immediately UNLESS 2+ eligible destinations are carried, in which case it falls back to a
-    /// Prompt-style banner instead of silently guessing among them (Decision 3's alternative-considered
-    /// resolution — add-progression-framework-quest-support); Never does nothing further; Prompt queues a
-    /// HUD banner instead of acting.</summary>
+    /// Prompt-style queue instead of silently guessing among them (Decision 3's alternative-considered
+    /// resolution — add-progression-framework-quest-support); Never does nothing further; PromptHud/
+    /// PromptPopup both queue the prompt instead of acting — which of the two presentation styles renders
+    /// it is decided at render time, not here (rework-quest-accept-notification-styles).</summary>
     private void OnQuestAccepted(ScribeQuestCatalogEntry quest)
     {
         if (capi is null) return;
@@ -100,7 +126,8 @@ public sealed partial class ScribeModSystem
             case ScribeQuestAcceptPolicy.Never:
                 capi.ShowChatMessage(Lang.Get("scribe:scribe-quest-accepted-never", quest.Title));
                 break;
-            default: // Prompt
+            default: // PromptHud / PromptPopup — queuing is identical; the render style is chosen at
+                     // HUD/modal render time (rework-quest-accept-notification-styles), not here.
                 capi.ShowChatMessage(Lang.Get("scribe:scribe-quest-accepted-prompt", quest.Title));
                 QueuePrompt(new ScribeQuestPrompt(quest.Source, quest.QuestCode, quest.Title, IsCompletion: false));
                 break;
@@ -189,10 +216,30 @@ public sealed partial class ScribeModSystem
     /// <summary>Sends the auto-link request, naming the resolved destination (assignment-state-machine's
     /// placement requirement, extended to Quest auto-link — Decision 3). <paramref name="candidate"/> null
     /// is the defensive/legacy path: the server falls back to <c>FindNotebookInInventory</c> (task 6.4),
-    /// matching this message's pre-picker behavior.</summary>
+    /// matching this message's pre-picker behavior. For a Progression Framework quest, also attaches the
+    /// watcher's cached catalog objective defs (+ whatever live progress it has cached) so the server can
+    /// seed the new Quest Link's QuestObjective children immediately after adding it
+    /// (add-progression-framework-quest-objective-subtasks 5.3) — null/empty for a VS Quest link or when
+    /// nothing is cached yet (the quest's own catalog read hasn't completed this session).</summary>
     private void SendAutoLinkQuest(ScribeQuestCatalogEntry quest, ScribeAcceptCandidate? candidate)
     {
         if (capi is null) return;
+
+        List<ScribeAutoLinkObjectiveWire>? objectives = null;
+        if (quest.Source == ScribeQuestSource.ProgressionFramework
+            && TryGetPfObjectiveDefs(quest.QuestCode, out var pfObjectives) && pfObjectives.Count > 0)
+        {
+            TryGetPfObjectiveProgress(quest.QuestCode, out var progressByCode);
+            objectives = pfObjectives.Select(o => new ScribeAutoLinkObjectiveWire
+            {
+                Code = o.Code,
+                ItemCode = o.ItemCode,
+                Label = o.Label,
+                Required = o.Required,
+                CurrentProgress = progressByCode.TryGetValue(o.Code, out int p) ? p : 0,
+            }).ToList();
+        }
+
         capi.Network.GetChannel(NetworkChannelName).SendPacket(new ScribeAutoLinkQuestMessage
         {
             Source = quest.Source,
@@ -201,6 +248,7 @@ public sealed partial class ScribeModSystem
             Description = quest.Description,
             TargetInventoryId = candidate?.InventoryId,
             TargetSlotId = candidate?.SlotId ?? -1,
+            Objectives = objectives,
         });
     }
 
@@ -256,6 +304,20 @@ public sealed partial class ScribeModSystem
         }
 
         doc.AddQuestLink(source, questCode, message.Title, message.Description);
+        if (message.Objectives is { Count: > 0 } objectives)
+        {
+            var parentTaskId = doc.Blocks[^1].TaskId;
+            doc.ReconcileQuestObjectives(parentTaskId, objectives
+                .Where(o => o.Code is not null)
+                .Select(o => (o.Code!, o.ItemCode, o.Label, o.Required))
+                .ToList(), createMissing: true);
+            foreach (var wire in objectives)
+            {
+                var child = doc.Blocks.FirstOrDefault(b => b.IsQuestObjective
+                    && string.Equals(b.LinkTarget, wire.Code, StringComparison.Ordinal));
+                if (child is not null) doc.SetQuestObjectiveProgress(child.TaskId, wire.CurrentProgress);
+            }
+        }
         host.Flush();
         Trace("auto-link-quest from {0}: linked {1}/{2}", fromPlayer.PlayerName, source, questCode);
     }

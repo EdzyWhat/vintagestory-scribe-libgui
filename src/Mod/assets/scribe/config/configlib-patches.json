@@ -1,0 +1,80 @@
+{
+	"version": 1,
+	"file": "scribe-visual-tuning.json",
+
+	"formatting": [
+		{ "type": "separator", "title": "Scribe: Ambient GUI light", "weight": 1.0 },
+		{ "type": "separator", "title": "Scribe: Unseen-assignment particle effect", "weight": 2.0 }
+	],
+
+	"settings": {
+		"integer": {
+			"BrightnessSteps": {
+				"ingui": "Brightness quantization steps",
+				"weight": 1.1,
+				"default": 32,
+				"comment": "Number of brightness buckets the ambient GUI tint snaps to.",
+				"clientSide": true,
+				"range": { "min": 4, "max": 64, "step": 1 }
+			},
+			"HueSteps": {
+				"ingui": "Hue quantization steps",
+				"weight": 1.2,
+				"default": 16,
+				"comment": "Number of hue buckets (per channel) the ambient GUI tint snaps to.",
+				"clientSide": true,
+				"range": { "min": 4, "max": 64, "step": 1 }
+			}
+		},
+		"float": {
+			"TintStrength": {
+				"ingui": "Tint strength",
+				"weight": 1.3,
+				"default": 0.6667,
+				"comment": "How much of the ambient light's hue skew is kept (0 = neutral, 1 = full skew).",
+				"clientSide": true,
+				"range": { "min": 0.0, "max": 1.0, "step": 0.05 }
+			},
+			"SmoothingTau": {
+				"ingui": "Brightness/tint smoothing (seconds)",
+				"weight": 1.4,
+				"default": 0.2,
+				"comment": "Exponential smoothing time-constant for the ambient GUI tint transition.",
+				"clientSide": true,
+				"range": { "min": 0.0, "max": 2.0, "step": 0.05 }
+			},
+			"DetectionRadius": {
+				"ingui": "Particle detection radius (blocks)",
+				"weight": 2.1,
+				"default": 12.0,
+				"comment": "How close the player must be to an Inbox-capable block for the unseen-assignment particle effect to consider spawning.",
+				"clientSide": true,
+				"range": { "min": 1.0, "max": 48.0, "step": 1.0 }
+			},
+			"RainbowRatio": {
+				"ingui": "Rainbow-accent ratio",
+				"weight": 2.2,
+				"default": 0.5,
+				"comment": "Fraction of each tick's spawned motes that get a randomized full-range hue instead of the base amber band.",
+				"clientSide": true,
+				"range": { "min": 0.0, "max": 1.0, "step": 0.05 }
+			},
+			"CountMultiplier": {
+				"ingui": "Particle density multiplier",
+				"weight": 2.3,
+				"default": 0.6,
+				"comment": "Scales the base per-tick mote count.",
+				"clientSide": true,
+				"range": { "min": 0.0, "max": 3.0, "step": 0.1 }
+			},
+			"SeedBurstMultiplier": {
+				"ingui": "Seed-burst multiplier",
+				"weight": 2.4,
+				"default": 3.5,
+				"comment": "One-time multiplier applied on the tick the particle trigger first turns true, so the field looks already-established.",
+				"clientSide": true,
+				"range": { "min": 1.0, "max": 10.0, "step": 0.5 }
+			}
+		}
+	}
+}

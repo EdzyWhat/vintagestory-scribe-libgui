@@ -364,4 +364,31 @@ public class ScribePlayerSettingsTests
         var s = new ScribePlayerSettings { IlluminationFloor = stored }.Normalized();
         Assert.Equal(expected, s.IlluminationFloor, 4);
     }
+
+    // ---- Quest Accept Policy (rework-quest-accept-notification-styles) ----
+
+    [Fact]
+    public void Default_QuestAcceptPolicy_IsPromptHud()
+    {
+        // A fresh profile (no saved preference) prompts via the HUD banner, not the more intrusive popup.
+        Assert.Equal(ScribeQuestAcceptPolicy.PromptHud, new ScribePlayerSettings().QuestAcceptPolicy);
+        Assert.Equal(ScribeQuestAcceptPolicy.PromptHud, new ScribePlayerSettings().Normalized().QuestAcceptPolicy);
+    }
+
+    [Theory]
+    [InlineData(ScribeQuestAcceptPolicy.Always)]
+    [InlineData(ScribeQuestAcceptPolicy.Never)]
+    [InlineData(ScribeQuestAcceptPolicy.PromptHud)]
+    [InlineData(ScribeQuestAcceptPolicy.PromptPopup)]
+    public void NormalizeQuestAcceptPolicy_AcceptsAllFourValues(ScribeQuestAcceptPolicy value)
+    {
+        Assert.Equal(value, ScribePlayerSettings.NormalizeQuestAcceptPolicy(value));
+    }
+
+    [Fact]
+    public void NormalizeQuestAcceptPolicy_OutOfRangeByte_FallsBackToPromptHud()
+    {
+        var outOfRange = (ScribeQuestAcceptPolicy)200;
+        Assert.Equal(ScribeQuestAcceptPolicy.PromptHud, ScribePlayerSettings.NormalizeQuestAcceptPolicy(outOfRange));
+    }
 }

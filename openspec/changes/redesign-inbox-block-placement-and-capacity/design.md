@@ -44,6 +44,19 @@ face-detection logic.
   is the closer fit for two fixed models with no per-placement customization.
 - Only ONE wall orientation state is visually needed to start (a single wall shape rotated 4
   ways), matching the torch's `*-north/east/south/west` sharing one wall shape.
+- **Implementation note (confirmed during apply, tasks.md 3.3):** the torch's automatic
+  face→variant resolution lives in its base class, `BlockGroundAndSideAttachable` (confirmed by
+  reading both it and vanilla `Block.TryPlaceBlock`/`DoPlaceBlock`) — it is NOT a generic engine
+  behavior every variant-grouped block gets for free. `BlockInbox` inherits `BlockScribeWritingStation
+  : Block` instead (for the shared document/lock/tooltip machinery), so it needed its own
+  `TryPlaceBlock` override mirroring `BlockGroundAndSideAttachable.TryAttachTo`. This also required
+  generalizing `BlockScribeWritingStation.RequiresSolidGround` from a fixed per-class `bool` to a
+  `bool RequiresSolidGround(BlockSelection)` method (Chalkboard's override updated to match), since
+  the Inbox — unlike every ground-only or wall-only writing station — needs the floor check to vary
+  per placement attempt, not per block class. Additionally added `BlockInbox.GetDrops`/`OnPickBlock`
+  overrides (not anticipated by the original task text) to satisfy this change's own `inbox-block`
+  spec delta — "Picking the block from either placement mode SHALL yield the same Inbox item" —
+  since the base class's existing drop/pick logic would otherwise drop whichever variant is placed.
 
 ### Decision 2: Capacity change is two constants + a chunked-row layout, not a new inventory class
 `BlockEntityInbox.SlotCount` (8→12) and `RestrictedSlotCount` (4→8) are the only Core-adjacent

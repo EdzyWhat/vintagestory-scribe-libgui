@@ -57,32 +57,34 @@ internal sealed class ScribeAmbientLightSampler
     private readonly ICoreClientAPI capi;
     private readonly ScribePlayerSettings settings;
 
-    /// <summary>Brightness quantization: snap the 0..1 curve output to 1/32 steps (~32 buckets). The engine's
-    /// own sun-brightness is a 0..32 grid lookup, so this loses little real fidelity while keeping the paint
-    /// cache stable frame-to-frame.</summary>
-    private const int BrightnessSteps = 32;
+    /// <summary>Brightness quantization: snap the 0..1 curve output to 1/N steps (default 32 buckets). The
+    /// engine's own sun-brightness is a 0..32 grid lookup, so the default loses little real fidelity while
+    /// keeping the paint cache stable frame-to-frame. Author-tunable via <see cref="ScribeVisualTuning"/>
+    /// (add-configkit-visual-tuning).</summary>
+    private readonly int BrightnessSteps;
 
-    /// <summary>Hue quantization: snap each tint channel to 1/16 steps (16 buckets/channel). Coarse enough
-    /// that a torch flicker's steady-state or a slow day/night sky shift only re-records the picture a handful
-    /// of times across the whole transition, fine enough that the warm/neutral/cool distinction still reads.</summary>
-    private const int HueSteps = 16;
+    /// <summary>Hue quantization: snap each tint channel to 1/N steps (default 16 buckets/channel). Coarse
+    /// enough that a torch flicker's steady-state or a slow day/night sky shift only re-records the picture a
+    /// handful of times across the whole transition, fine enough that the warm/neutral/cool distinction still
+    /// reads. Author-tunable via <see cref="ScribeVisualTuning"/>.</summary>
+    private readonly int HueSteps;
 
-    /// <summary>How much of the raw hue skew to keep (the rest is pulled back to neutral). At <c>2/3</c> the
-    /// color/temperature effect is reduced by one third from the physical tint — warm light still reads warm,
-    /// just less aggressively (author tuning).</summary>
-    private const float TintStrength = 2f / 3f;
+    /// <summary>How much of the raw hue skew to keep (the rest is pulled back to neutral). At the default
+    /// <c>2/3</c> the color/temperature effect is reduced by one third from the physical tint — warm light
+    /// still reads warm, just less aggressively (author tuning, now via <see cref="ScribeVisualTuning"/>).</summary>
+    private readonly float TintStrength;
 
     /// <summary>Exponential smoothing time-constant (seconds) for the brightness + tint transition. The GUI eases
     /// toward the newly-sampled target instead of snapping between quantization buckets as the player walks
-    /// through changing light (author request: smooth the V change, stretched to ~400ms). With <c>τ = 0.2</c> the
-    /// value reaches ~86% of a step in 400ms and ~95% in 600ms — a soft glide, not a visible jump. Because this is
-    /// a first-order ease toward the CURRENT target each frame (not a fixed-duration tween), it stays continuous
-    /// even while the target keeps moving — walking into ever-brighter/darker light just keeps chasing the moving
-    /// value with no restart or velocity snap; the only cost of the longer τ is a longer lag/"tail" behind abrupt
-    /// changes. A light transition re-records the paint cache for the frames it takes to settle (a bounded,
-    /// deliberate relaxation of D3's "only on change"); a STATIC scene still settles and then holds, so the cache
-    /// stays valid at rest.</summary>
-    private const float SmoothingTau = 0.2f;
+    /// through changing light (author request: smooth the V change, stretched to ~400ms by default). With the
+    /// default <c>τ = 0.2</c> the value reaches ~86% of a step in 400ms and ~95% in 600ms — a soft glide, not a
+    /// visible jump. Because this is a first-order ease toward the CURRENT target each frame (not a fixed-duration
+    /// tween), it stays continuous even while the target keeps moving — walking into ever-brighter/darker light
+    /// just keeps chasing the moving value with no restart or velocity snap; the only cost of a longer τ is a
+    /// longer lag/"tail" behind abrupt changes. A light transition re-records the paint cache for the frames it
+    /// takes to settle (a bounded, deliberate relaxation of D3's "only on change"); a STATIC scene still settles
+    /// and then holds, so the cache stays valid at rest. Author-tunable via <see cref="ScribeVisualTuning"/>.</summary>
+    private readonly float SmoothingTau;
 
     /// <summary>Mod id of Immersive Lanterns (from its <c>modinfo.json</c>). When it is installed it Harmony-
     /// Postfixes <c>CollectibleObject.GetLightHsv</c> to FLICKER a held torch/lantern/lamp's brightness index V
@@ -109,10 +111,14 @@ internal sealed class ScribeAmbientLightSampler
     private int lastBrightnessQ;
     private int lastRQ, lastGQ, lastBQ;
 
-    public ScribeAmbientLightSampler(ICoreClientAPI capi, ScribePlayerSettings settings)
+    public ScribeAmbientLightSampler(ICoreClientAPI capi, ScribePlayerSettings settings, ScribeVisualTuning tuning)
     {
         this.capi = capi;
         this.settings = settings;
+        BrightnessSteps = tuning.BrightnessSteps;
+        HueSteps = tuning.HueSteps;
+        TintStrength = tuning.TintStrength;
+        SmoothingTau = tuning.SmoothingTau;
     }
 
     /// <summary>The quantized shade to render this frame: a brightness multiplier (0..1, already through the

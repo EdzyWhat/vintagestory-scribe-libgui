@@ -288,16 +288,19 @@ internal static class ScribeItemRef
         return null;
     }
 
-    /// <summary>Open the Handbook page a Link/Tracker points at, via the survival mod's registered
-    /// <c>"handbook"</c> link protocol (add-tracker-link-tasks 5.3/5.5/7.6). Three flavors of
-    /// <paramref name="code"/>: a <c>"page:"</c>-prefixed <b>guide-page</b> code opens that raw Handbook page
-    /// directly (no item to resolve); a <c>"quest:"</c>-prefixed <b>quest</b> code is a Layer-1 no-op (there
-    /// is no Handbook page or live navigation target for a manually-linked quest — see
-    /// add-assignment-and-quest-support 10.1's disclosed scope; the row still renders correctly via
-    /// <see cref="ResolveDisplay"/>, it simply doesn't open anything on click); anything else is an
-    /// item/attribute-encoded code, resolved to a stack whose Handbook page is opened. No-op when the code is
-    /// empty/doesn't resolve, or the survival mod (and thus the protocol) isn't loaded — never toggles any
-    /// completion state.
+    /// <summary>Open the Handbook page (or, for a Progression Framework Quest Link, that backend's own Quest
+    /// Log dialog) a Link/Tracker points at (add-tracker-link-tasks 5.3/5.5/7.6,
+    /// add-progression-framework-quest-link-open). Four flavors of <paramref name="code"/>: a <c>"page:"</c>-
+    /// prefixed <b>guide-page</b> code opens that raw Handbook page directly (no item to resolve); a
+    /// <c>"quest:"</c>-prefixed <b>Progression Framework quest</b> code opens that backend's Quest Log dialog
+    /// via <see cref="ScribeProgressionFrameworkQuestCatalog.TryOpenQuestLog"/> instead of any Handbook page —
+    /// a quest has no Handbook page; a <c>"quest:"</c>-prefixed <b>VS Quest</b> code remains a Layer-1 no-op
+    /// (there is no Handbook page or live navigation target for a manually-linked VS Quest — see
+    /// add-assignment-and-quest-support 10.1's disclosed scope and design.md's Non-Goals for why VS Quest's
+    /// equivalent isn't pursued here; the row still renders correctly via <see cref="ResolveDisplay"/>, it
+    /// simply doesn't open anything on click); anything else is an item/attribute-encoded code, resolved to a
+    /// stack whose Handbook page is opened. No-op when the code is empty/doesn't resolve, or the relevant mod
+    /// isn't loaded — never toggles any completion state.
     ///
     /// <para>The page code prefers the collectible's own <see cref="IHandBookPageCodeProvider"/> when it
     /// implements one (e.g. <c>BlockMeal</c> maps every meal-with-ingredients to one shared page), falling
@@ -312,7 +315,12 @@ internal static class ScribeItemRef
             OpenHandbookByPageCode(capi, ScribeLinkTarget.PageCode(code));
             return;
         }
-        if (ScribeLinkTarget.IsQuest(code)) return;
+        if (ScribeLinkTarget.IsQuest(code))
+        {
+            if (ScribeLinkTarget.QuestSource(code) == ScribeQuestSource.ProgressionFramework)
+                ScribeProgressionFrameworkQuestCatalog.TryOpenQuestLog(capi);
+            return;
+        }
         var stack = ResolveStack(capi.World, code);
         if (stack is null) return;
 

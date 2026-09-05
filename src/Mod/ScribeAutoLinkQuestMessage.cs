@@ -1,6 +1,42 @@
+using System.Collections.Generic;
 using ProtoBuf;
 
 namespace Scribe;
+
+/// <summary>One Progression Framework quest objective's catalog definition, captured client-side (the
+/// catalog is a client-only asset read — the server has no other way to know it, same reason
+/// <see cref="ScribeAutoLinkQuestMessage.Title"/>/<see cref="ScribeAutoLinkQuestMessage.Description"/>
+/// already travel this way) so the server can seed the Quest Link's QuestObjective children immediately
+/// after adding it (add-progression-framework-quest-objective-subtasks 5.3). Trusted-but-client input,
+/// same trust model as every other field on the carrying message.</summary>
+[ProtoContract]
+public sealed class ScribeAutoLinkObjectiveWire
+{
+    /// <summary>The objective's own stable code (the reconcile match key — <see cref="Scribe.Core.ScribePfObjectiveDef.Code"/>).</summary>
+    [ProtoMember(1)]
+    public string? Code { get; set; }
+
+    /// <summary>The objective's resolved single-item code, or null for a non-item/multi-item objective
+    /// (<see cref="Scribe.Core.ScribePfObjectiveDef.ItemCode"/>).</summary>
+    [ProtoMember(2)]
+    public string? ItemCode { get; set; }
+
+    /// <summary>The objective's captured display label, used when <see cref="ItemCode"/> is null
+    /// (<see cref="Scribe.Core.ScribePfObjectiveDef.Label"/>).</summary>
+    [ProtoMember(3)]
+    public string? Label { get; set; }
+
+    /// <summary>The objective's required count (<see cref="Scribe.Core.ScribePfObjectiveDef.Required"/>).</summary>
+    [ProtoMember(4)]
+    public int Required { get; set; }
+
+    /// <summary>The backend's currently-reported progress for this objective, cached client-side by the
+    /// quest watcher at the moment of accept (0 if nothing cached yet — the next tick's progress push
+    /// corrects it). Seeds the newly-created child's <c>CurrentQuantity</c> so an already-partly-progressed
+    /// objective doesn't render as 0/N for one tick after linking.</summary>
+    [ProtoMember(5)]
+    public int CurrentProgress { get; set; }
+}
 
 /// <summary>
 /// Client → server: create a Quest Link for a quest the client's <see cref="ScribeQuestWatcher"/> just
@@ -51,4 +87,12 @@ public sealed class ScribeAutoLinkQuestMessage
     /// absent value never aliases slot 0.</summary>
     [ProtoMember(6)]
     public int TargetSlotId { get; set; } = -1;
+
+    /// <summary>The quest's catalog objective definitions, captured client-side (see
+    /// <see cref="ScribeAutoLinkObjectiveWire"/>'s remarks) — null/empty for a VS Quest link (which has no
+    /// QuestObjective subtask model) or when the quest watcher had nothing cached for this quest yet.
+    /// The server reconciles these into QuestObjective children immediately after adding the Link
+    /// (add-progression-framework-quest-objective-subtasks 5.3).</summary>
+    [ProtoMember(7)]
+    public List<ScribeAutoLinkObjectiveWire>? Objectives { get; set; }
 }

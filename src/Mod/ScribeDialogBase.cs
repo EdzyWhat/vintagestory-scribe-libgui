@@ -466,7 +466,7 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
 
         // Light sampler for the ambient-illumination shade (respect-local-illumination). Bound to the live
         // MySettings so a floor change is picked up on the next frame's sample; only read on the render thread.
-        lightSampler = new ScribeAmbientLightSampler(capi, modSystem.MySettings);
+        lightSampler = new ScribeAmbientLightSampler(capi, modSystem.MySettings, modSystem.VisualTuning);
 
         // Prime the shade from the light at the player RIGHT NOW, before TryOpen inflates the widget tree
         // (GuiBase.TryOpen calls Build() before OnGuiOpened runs — see GuiDialogScribeTablet's scratch seed).

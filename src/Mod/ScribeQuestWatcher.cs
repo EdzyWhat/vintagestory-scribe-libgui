@@ -2,9 +2,11 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using HarmonyLib;
 using Scribe.Core;
 using Vintagestory.API.Client;
+using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
 using Vintagestory.API.Datastructures;
 
@@ -43,6 +45,19 @@ namespace Scribe;
 /// not an NPC's) and no reflection at all, unlike vsquest's progress-mirroring half above. Gated and
 /// fail-closed independently of the vsquest path (§3.5): a failure here disables PF detection only, for
 /// the session, and never touches vsquest's own accept/complete/progress state.</para>
+///
+/// <para><b>Progression Framework server-scoped quests (add-progression-framework-server-quest-tracking)</b>:
+/// a THIRD, independently-gated tick path detects the same accept/complete/per-objective signals for
+/// server-scoped quests — one shared quest instance every player on the world contributes to together, with
+/// no per-player state of its own. Unlike the player-scoped tree above, this shared state has no
+/// <c>WatchedAttributes</c> equivalent to read: Progression Framework syncs it to clients over its own
+/// private network channel into a private field (<c>QuestSystem.clientServerQuestState</c>) with no public
+/// accessor. This path reads that ONE field via reflection (<see cref="AccessTools.Field"/>, cached after
+/// first success) — the only reflective hop; everything read off the resulting dictionary's values
+/// (<see cref="Vintagestory.API.Datastructures.TreeAttribute"/>, a real vanilla-API type) is a normal,
+/// non-reflective call, exactly like every other tree read in this class. Fail-closed independently of both
+/// paths above: a failure here (missing type, missing field, unexpected field type — e.g. after a
+/// Progression Framework update) permanently disables only server-scoped detection for the session.</para>
 /// </summary>
 internal sealed class ScribeQuestWatcher
 {
@@ -76,6 +91,18 @@ internal sealed class ScribeQuestWatcher
     private readonly HashSet<string> pfAcceptedSeen = new(StringComparer.Ordinal);
     private readonly HashSet<string> pfCompletedSeen = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Dictionary<string, string>> pfObjectiveStatus = new(StringComparer.Ordinal);
+    // Parallel to pfObjectiveStatus (same questCode -> objCode keying), added for
+    // add-progression-framework-quest-objective-subtasks: PF's numeric "progress" int per objective, read
+    // alongside "status" but never conflated with it — a malformed/missing progress value must disable only
+    // this objective's live count (quest-auto-detect's fail-safe scenario), never accept/complete detection.
+    private readonly Dictionary<string, Dictionary<string, int>> pfObjectiveProgress = new(StringComparer.Ordinal);
+
+    // ---- Progression Framework server-scoped quests (reflected shared state, no WatchedAttributes) ----
+    private const string PfQuestSystemTypeName = "ProgressionFramework.Quests.QuestSystem";
+    private const string PfClientServerQuestStateFieldName = "clientServerQuestState";
+    private bool serverQuestDetectionDisabled;
+    private ModSystem? pfServerQuestSystem;
+    private FieldInfo? pfServerQuestStateField;
 
     public ScribeQuestWatcher(
         ICoreClientAPI capi, Action<ScribeQuestCatalogEntry> onAccepted, Action<ScribeQuestCatalogEntry> onCompleted)
@@ -139,7 +166,19 @@ internal sealed class ScribeQuestWatcher
         return false;
     }
 
+    /// <summary>Progression Framework's live per-objective NUMERIC progress, keyed by each objective's own
+    /// stable code — the count add-progression-framework-quest-objective-subtasks drives a QuestObjective
+    /// subtask's <c>CurrentQuantity</c> from. False until this quest's tree has been read at least once this
+    /// session, including whenever Progression Framework isn't installed or detection has self-disabled.</summary>
+    public bool TryGetPfObjectiveProgress(string questCode, out IReadOnlyDictionary<string, int> progressByCode)
+    {
+        if (pfObjectiveProgress.TryGetValue(questCode, out var map)) { progressByCode = map; return true; }
+        progressByCode = EmptyProgressMap;
+        return false;
+    }
+
     private static readonly Dictionary<string, string> EmptyStatusMap = new(StringComparer.Ordinal);
+    private static readonly Dictionary<string, int> EmptyProgressMap = new(StringComparer.Ordinal);
 
     private void OnTick(float dt)
     {
@@ -166,6 +205,7 @@ internal sealed class ScribeQuestWatcher
         }
 
         ScanProgressionFramework();
+        ScanProgressionFrameworkServerQuests();
     }
 
     /// <summary>Checks every catalog quest against one quest-giver entity's synced
@@ -239,10 +279,18 @@ internal sealed class ScribeQuestWatcher
                 var statusByCode = pfObjectiveStatus.TryGetValue(questCode, out var existing)
                     ? existing
                     : pfObjectiveStatus[questCode] = new Dictionary<string, string>(StringComparer.Ordinal);
+                var progressByCode = pfObjectiveProgress.TryGetValue(questCode, out var existingProgress)
+                    ? existingProgress
+                    : pfObjectiveProgress[questCode] = new Dictionary<string, int>(StringComparer.Ordinal);
                 foreach (var objEntry in objectivesTree)
                 {
                     if (objEntry.Value is not ITreeAttribute objTree) continue;
                     statusByCode[objEntry.Key] = objTree.GetString("status") ?? "";
+                    // A missing "progress" key leaves the last-cached value alone (quest-auto-detect's
+                    // fail-safe scenario: a malformed/absent count never overwrites with a spurious 0, and
+                    // never affects the status read above).
+                    if (objTree.HasAttribute("progress"))
+                        progressByCode[objEntry.Key] = objTree.GetInt("progress", 0);
                 }
             }
         }
@@ -251,6 +299,73 @@ internal sealed class ScribeQuestWatcher
             pfDetectionDisabled = true;
             capi.Logger.Notification(
                 "[scribe] Progression Framework quest detection disabled ({0}) — VS Quest detection is unaffected.",
+                ex.Message);
+        }
+    }
+
+    /// <summary>Progression Framework server-scoped quests' independently-gated detection path (see class
+    /// doc-comment): reads the mod's shared server-quest state via one reflected field access, then walks it
+    /// exactly like <see cref="ScanProgressionFramework"/> walks the player-scoped tree — same catalog, same
+    /// <see cref="pfAcceptedSeen"/>/<see cref="pfCompletedSeen"/>/<see cref="pfObjectiveStatus"/> dictionaries,
+    /// same <see cref="onAccepted"/>/<see cref="onCompleted"/> callbacks, so a server-scoped quest's
+    /// activation/completion is indistinguishable to the rest of the system from a player-scoped one. Any
+    /// failure (missing type, missing field, unexpected field shape — e.g. after a Progression Framework
+    /// update) permanently disables only this path for the session; player-scoped detection above is read in
+    /// a separate try scope and is provably unaffected.</summary>
+    private void ScanProgressionFrameworkServerQuests()
+    {
+        if (serverQuestDetectionDisabled) return;
+        if (!ScribeProgressionFrameworkQuestCatalog.IsAvailable(capi)) return;
+
+        try
+        {
+            pfCatalog ??= ScribeProgressionFrameworkQuestCatalog.ReadCatalog(capi);
+            if (pfCatalog.Count == 0) return;
+            pfCatalogByCode ??= pfCatalog.ToDictionary(e => e.QuestCode, StringComparer.Ordinal);
+
+            pfServerQuestSystem ??= capi.ModLoader.GetModSystem(PfQuestSystemTypeName);
+            if (pfServerQuestSystem is null) return;
+
+            pfServerQuestStateField ??= AccessTools.Field(pfServerQuestSystem.GetType(), PfClientServerQuestStateFieldName);
+            if (pfServerQuestStateField?.GetValue(pfServerQuestSystem) is not Dictionary<string, TreeAttribute> stateByCode) return;
+
+            foreach (var (questCode, questTree) in stateByCode)
+            {
+                if (!pfCatalogByCode.TryGetValue(questCode, out var def) || !def.IsServerScoped) continue;
+
+                string status = questTree.GetString("status") ?? "";
+                if (string.Equals(status, PfStatusActive, StringComparison.OrdinalIgnoreCase)
+                    && pfAcceptedSeen.Add(questCode))
+                {
+                    onAccepted(def.ToPickerEntry());
+                }
+                else if (string.Equals(status, PfStatusComplete, StringComparison.OrdinalIgnoreCase)
+                    && pfCompletedSeen.Add(questCode))
+                {
+                    onCompleted(def.ToPickerEntry());
+                }
+
+                if (questTree.GetTreeAttribute("objectives") is not ITreeAttribute objectivesTree) continue;
+                var statusByObjCode = pfObjectiveStatus.TryGetValue(questCode, out var existing)
+                    ? existing
+                    : pfObjectiveStatus[questCode] = new Dictionary<string, string>(StringComparer.Ordinal);
+                var progressByObjCode = pfObjectiveProgress.TryGetValue(questCode, out var existingProgress)
+                    ? existingProgress
+                    : pfObjectiveProgress[questCode] = new Dictionary<string, int>(StringComparer.Ordinal);
+                foreach (var objEntry in objectivesTree)
+                {
+                    if (objEntry.Value is not ITreeAttribute objTree) continue;
+                    statusByObjCode[objEntry.Key] = objTree.GetString("status") ?? "";
+                    if (objTree.HasAttribute("progress"))
+                        progressByObjCode[objEntry.Key] = objTree.GetInt("progress", 0);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            serverQuestDetectionDisabled = true;
+            capi.Logger.Notification(
+                "[scribe] Progression Framework server-scoped quest detection disabled ({0}) — player-scoped detection is unaffected.",
                 ex.Message);
         }
     }

@@ -61,11 +61,16 @@ public abstract partial class ScribeDialogBase
                 // the pin snapshot carries its own assignment provenance directly (no source document to
                 // read from — assignment-icon-and-tab-defaults), so only the assigner's uid needs resolving.
                 string? assignerName = p.IsAcceptedAssignment ? ResolvePlayerNameForInbox(p.AssignerUid) : null;
+                // Same synthetic guide-page-scheme substitution as the read/editor row construction — routes
+                // a label-only QuestObjective's icon through the existing book-glyph fallback. Display-only.
+                string? iconLinkTarget = p.Kind == ScribeBlockKind.QuestObjective && stack is null
+                    ? ScribeLinkTarget.ForPage(p.LinkTarget ?? "")
+                    : p.LinkTarget;
                 return new ScribePinRowData(
                     p.OwnerDocId, p.TaskId, p.LastKnownDone,
                     pinEditBuffer.TryGetValue(p.TaskId, out var buffered) ? buffered : p.LastKnownText,
                     Kind: p.Kind, DisplayStack: stack, DisplayName: name,
-                    TargetQuantity: p.TargetQuantity, CurrentQuantity: p.CurrentQuantity, LinkTarget: p.LinkTarget,
+                    TargetQuantity: p.TargetQuantity, CurrentQuantity: p.CurrentQuantity, LinkTarget: iconLinkTarget,
                     Depth: p.Depth, IsAcceptedAssignment: p.IsAcceptedAssignment,
                     AssignerName: assignerName, AssignedDate: p.IsAcceptedAssignment ? p.AssignedDate : null,
                     AcceptedDate: p.IsAcceptedAssignment ? p.AcceptedDate : null);
@@ -116,6 +121,15 @@ public abstract partial class ScribeDialogBase
     /// (add-tracker-link-tasks 7.8).</summary>
     private (ItemStack? Stack, string? Name) ResolvePinItem(ScribePinnedRef p)
     {
+        if (p.Kind == ScribeBlockKind.QuestObjective)
+        {
+            // Mirrors ResolveRowItem's QuestObjective branch (ScribeDialogBase.Layout.cs) — the objective's
+            // own match code lives in LinkTarget (never a "page:"/"quest:"-scheme target — 1.3), so it never
+            // routes through ResolveDisplay's scheme dispatch below.
+            return p.TargetItemCode is { } objItemCode
+                ? ScribeItemRef.ResolveDisplay(capi.World, objItemCode, null)
+                : (null, p.LinkLabel ?? p.LinkTarget);
+        }
         string? code = p.Kind switch
         {
             // A Craft parent renders its recipe OUTPUT item, carried in the same TargetItemCode slot a
@@ -137,7 +151,7 @@ public abstract partial class ScribeDialogBase
         if (pin is null) return;
         string? code = pin.Kind switch
         {
-            ScribeBlockKind.Tracker or ScribeBlockKind.Craft => pin.TargetItemCode,
+            ScribeBlockKind.Tracker or ScribeBlockKind.Craft or ScribeBlockKind.QuestObjective => pin.TargetItemCode,
             ScribeBlockKind.Link => pin.LinkTarget,
             _ => null,
         };

@@ -459,7 +459,7 @@ public sealed class HudScribePins : GuiBase
         var rawTimer = modSystem.MyTimer;
         bool hasTimer = rawTimer is { Status: Scribe.Core.TimerStatus.Running or Scribe.Core.TimerStatus.Fired };
         bool hasPins = modSystem.MyPins.Count > 0;
-        bool hasPrompt = modSystem.PendingQuestPrompts.Count > 0;
+        bool hasPrompt = HasBannerEligibleQuestPrompt;
         if ((hasPins || hasTimer || hasPrompt) && !IsOpened())
         {
             TryOpen(); // withFocus defaults false via base; a HUD never steals focus anyway
@@ -503,9 +503,9 @@ public sealed class HudScribePins : GuiBase
         }
 
         bool hasTimer = status is Scribe.Core.TimerStatus.Running or Scribe.Core.TimerStatus.Fired;
-        if (hasTimer && !IsOpened() && modSystem.MyPins.Count == 0 && modSystem.PendingQuestPrompts.Count == 0)
+        if (hasTimer && !IsOpened() && modSystem.MyPins.Count == 0 && !HasBannerEligibleQuestPrompt)
             TryOpen();
-        else if (!hasTimer && !modSystem.MyPins.Any() && modSystem.PendingQuestPrompts.Count == 0 && IsOpened())
+        else if (!hasTimer && !modSystem.MyPins.Any() && !HasBannerEligibleQuestPrompt && IsOpened())
             TryClose();
         // Only rebuild here on a genuine status transition (start/fire/clear). The routine per-second
         // running push does NOT rebuild — TimerDisplayTick owns the steady countdown repaint, so the HUD
@@ -516,12 +516,15 @@ public sealed class HudScribePins : GuiBase
 
     /// <summary>A Quest Accept/Completion prompt was queued or resolved (add-assignment-and-quest-support
     /// §11.2/§11.4): apply the same self-open/close rule as pins/timer (a prompt alone, with zero pins and
-    /// no running timer, still opens the HUD so the player actually sees it) and rebuild.</summary>
+    /// no running timer, still opens the HUD so the player actually sees it) and rebuild. Uses
+    /// <see cref="HasBannerEligibleQuestPrompt"/> rather than the raw pending count so a
+    /// PromptPopup-only accept-prompt — rendered by the center modal instead
+    /// (rework-quest-accept-notification-styles) — doesn't pop the HUD open with nothing to show in it.</summary>
     private void OnQuestPromptsChanged()
     {
         questAcceptPickerOpen = false;
         questAcceptSelectedIndex = 0;
-        bool hasPrompt = modSystem.PendingQuestPrompts.Count > 0;
+        bool hasPrompt = HasBannerEligibleQuestPrompt;
         var rawTimer = modSystem.MyTimer;
         bool hasTimer = rawTimer is { Status: Scribe.Core.TimerStatus.Running or Scribe.Core.TimerStatus.Fired };
         bool hasPins = modSystem.MyPins.Count > 0;
@@ -533,6 +536,25 @@ public sealed class HudScribePins : GuiBase
         else if (IsOpened())
             RebuildHudBody();
     }
+
+    /// <summary>Whether a pending prompt renders as the HUD BANNER (not the center modal) —
+    /// a completion-prompt always does; an accept-prompt does unless the player's Quest Accept Policy is
+    /// <see cref="Scribe.Core.ScribeQuestAcceptPolicy.PromptPopup"/>, in which case
+    /// <see cref="GuiDialogScribeQuestPrompt"/> shows it instead (rework-quest-accept-notification-styles:
+    /// routing happens at render time, off the live policy — no style tag on the queued prompt).</summary>
+    private bool BannerEligible(ScribeQuestPrompt p)
+        => p.IsCompletion || modSystem.MySettings.QuestAcceptPolicy != Scribe.Core.ScribeQuestAcceptPolicy.PromptPopup;
+
+    /// <summary>Whether ANY pending prompt is currently banner-eligible (see <see cref="BannerEligible"/>) —
+    /// drives the HUD's self-open/close rule so a PromptPopup-only accept-prompt (shown by the modal
+    /// instead) doesn't pop an otherwise-empty HUD open.</summary>
+    private bool HasBannerEligibleQuestPrompt => modSystem.PendingQuestPrompts.Any(BannerEligible);
+
+    /// <summary>The pending prompts eligible to render on the HUD banner right now (see
+    /// <see cref="BannerEligible"/>), oldest first — what <see cref="BuildHudTree"/> hands to
+    /// <see cref="HudPinsContent"/> instead of the raw pending set.</summary>
+    private List<ScribeQuestPrompt> BannerEligibleQuestPrompts()
+        => modSystem.PendingQuestPrompts.Where(BannerEligible).ToList();
 
     /// <summary>Clear each optimistic override that the latest snapshot already agrees with, so the row
     /// falls back to the authoritative snapshot; keep the rest (still-in-flight clicks).</summary>
@@ -1031,9 +1053,15 @@ public sealed class HudScribePins : GuiBase
                 // item-shaped, mirroring the Pin Tab / read view (add-tracker-link-tasks 7.8). A plain
                 // Task resolves to (null, null) and keeps its text.
                 var (stack, name) = ResolveHudPinItem(p);
+                // Same synthetic guide-page-scheme substitution as the dialog surfaces (ScribeDialogBase.
+                // Layout.cs / PinTab.cs) — routes a label-only QuestObjective's icon through the existing
+                // book-glyph fallback rather than a blank ItemStackDisplay. Display-only.
+                string? iconLinkTarget = p.Kind == ScribeBlockKind.QuestObjective && stack is null
+                    ? ScribeLinkTarget.ForPage(p.LinkTarget ?? "")
+                    : p.LinkTarget;
                 return new HudPinRow(
                     p.OwnerDocId, p.TaskId, p.LastKnownText, DisplayedDone(p), SunkVisual(p),
-                    FadingOut: IsFadingOut(p), Kind: p.Kind, LinkTarget: p.LinkTarget,
+                    FadingOut: IsFadingOut(p), Kind: p.Kind, LinkTarget: iconLinkTarget,
                     DisplayStack: stack, DisplayName: name,
                     // Live carried count if the HUD's own engine has one, else the snapshot (7.10).
                     TargetQuantity: p.TargetQuantity, CurrentQuantity: HudTrackerHave(p),
@@ -1049,6 +1077,14 @@ public sealed class HudScribePins : GuiBase
     /// (add-tracker-link-tasks 7.8).</summary>
     private (ItemStack? Stack, string? Name) ResolveHudPinItem(ScribePinnedRef p)
     {
+        if (capi is null) return (null, null);
+        if (p.Kind == ScribeBlockKind.QuestObjective)
+        {
+            // Mirrors ResolveRowItem's QuestObjective branch (ScribeDialogBase.Layout.cs).
+            return p.TargetItemCode is { } objItemCode
+                ? ScribeItemRef.ResolveDisplay(capi.World, objItemCode, null)
+                : (null, p.LinkLabel ?? p.LinkTarget);
+        }
         string? code = p.Kind switch
         {
             // A Craft parent shows its recipe OUTPUT, carried in the same TargetItemCode slot (9.1).
@@ -1056,7 +1092,7 @@ public sealed class HudScribePins : GuiBase
             ScribeBlockKind.Link => p.LinkTarget,
             _ => null,
         };
-        if (code is null || capi is null) return (null, null);
+        if (code is null) return (null, null);
         return ScribeItemRef.ResolveDisplay(capi.World, code, p.LinkLabel);
     }
 
@@ -1139,7 +1175,7 @@ public sealed class HudScribePins : GuiBase
             timerData: timerSnapshot,
             onClearTimer: SendClearTimer,
             capiForTimer: capi,
-            questPrompts: modSystem.PendingQuestPrompts,
+            questPrompts: BannerEligibleQuestPrompts(),
             onAcceptPrompt: OnAcceptQuestPrompt,
             onDismissPrompt: modSystem.DismissQuestPrompt,
             questAcceptCandidates: modSystem.ComputeQuestAcceptCandidates(),
@@ -1262,12 +1298,16 @@ internal readonly record struct HudPinRow(
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
     public bool IsLink => Kind == ScribeBlockKind.Link;
     public bool IsCraft => Kind == ScribeBlockKind.Craft;
-    /// <summary>A Tracker/Link/Craft renders as an item row (icon + name), not the editable-text shape.
-    /// A Craft parent renders exactly like a Tracker — its recipe output icon + a have/need counter —
-    /// differing only in the "Craft {0}" label framing below (add-crafting-tasks 9.1).</summary>
-    public bool IsItemKind => IsTracker || IsLink || IsCraft;
-    /// <summary>Kinds whose HUD row carries a have/need counter: Tracker and the Craft parent.</summary>
-    public bool IsCarriedCountTracked => IsTracker || IsCraft;
+    public bool IsQuestObjective => Kind == ScribeBlockKind.QuestObjective;
+    /// <summary>A Tracker/Link/Craft/QuestObjective renders as an item row (icon + name), not the
+    /// editable-text shape. A Craft parent renders exactly like a Tracker — its recipe output icon + a
+    /// have/need counter — differing only in the "Craft {0}" label framing below (add-crafting-tasks 9.1).</summary>
+    public bool IsItemKind => IsTracker || IsLink || IsCraft || IsQuestObjective;
+    /// <summary>Kinds whose HUD row DISPLAYS a have/need counter: Tracker, the Craft parent, and a
+    /// QuestObjective — the latter's counter is fed by Progression Framework's own reported progress, never
+    /// carried inventory (unlike the other two), so this is a display-shape predicate only, deliberately NOT
+    /// the same as <see cref="ScribeBlock.IsCarriedCountTracked"/>.</summary>
+    public bool HasCounterRow => IsTracker || IsCraft || IsQuestObjective;
     /// <summary>The label to show: the "Craft {0}" framing for a Craft parent, the plain resolved item
     /// name for a Tracker/Link, else the task text.</summary>
     public string Label => IsCraft
@@ -1424,8 +1464,23 @@ internal sealed class HudPinsContent : StatelessWidget
 
         // Quest Accept/Completion prompt banner (add-assignment-and-quest-support §11.2/§11.4): shown
         // regardless of collapse state — a player who collapsed the HUD before a prompt arrived should
-        // still see it, not have to expand to notice.
-        if (questPrompts.Count > 0) children.Add(BuildQuestPromptBanner(colors, glow));
+        // still see it, not have to expand to notice. Wrapped in the same entry-slide infrastructure the
+        // pin list's row insertions use (rework-quest-accept-notification-styles 2.1), keyed by the
+        // banner's OWN prompt identity (distinct from any row's TaskId key, so it can't collide in the
+        // shared collapseRegistry): a genuinely NEW banner prompt mounts a fresh element and slides in;
+        // the SAME prompt across repeat rebuilds (ticks, corruption, tracker recompute, …) reconciles
+        // onto the same element and stays settled rather than re-animating every rebuild.
+        if (questPrompts.Count > 0)
+        {
+            var bannerPrompt = questPrompts[0];
+            string entryId = "questprompt:" + bannerPrompt.Source + ":" + bannerPrompt.QuestCode + ":" + bannerPrompt.IsCompletion;
+            children.Add(new ScribeSlideIn(
+                id: entryId,
+                animating: true,
+                registry: collapseRegistry,
+                child: BuildQuestPromptBanner(colors, glow),
+                key: new ValueKey<string>(entryId)));
+        }
 
         if (!collapsed)
         {
@@ -1584,13 +1639,18 @@ internal sealed class HudPinsContent : StatelessWidget
     }
 
     /// <summary>The Quest Accept/Completion prompt banner (add-assignment-and-quest-support §11.2/§11.4,
-    /// user-directed design: an interactive Accept/Dismiss + a Settings shortcut, since a plain chat line
-    /// alone isn't an actionable way to opt in under <see cref="Scribe.Core.ScribeQuestAcceptPolicy.Prompt"/>/
-    /// <see cref="Scribe.Core.ScribeQuestCompletionPolicy.Prompt"/>). Renders only the OLDEST pending prompt;
-    /// a second prompt queued behind it appears once the first is Accepted/Dismissed. Deliberately plain —
-    /// no icon/animation — to keep this addition small relative to the rest of the HUD's row machinery.
+    /// user-directed design: an interactive Link/Dismiss + a Settings shortcut, since a plain chat line
+    /// alone isn't an actionable way to opt in under <see cref="Scribe.Core.ScribeQuestAcceptPolicy.PromptHud"/>/
+    /// <see cref="Scribe.Core.ScribeQuestCompletionPolicy.Prompt"/>). Renders only the OLDEST banner-eligible
+    /// prompt (<c>questPrompts[0]</c> — a completion-prompt, or an accept-prompt when the policy isn't
+    /// <see cref="Scribe.Core.ScribeQuestAcceptPolicy.PromptPopup"/>, per <c>BuildHudTree</c>'s filter); a
+    /// second prompt queued behind it appears once the first is resolved. Plays a brief on-appear
+    /// draw-attention animation and renders Link/Dismiss/Settings as bordered, color-coded buttons
+    /// (rework-quest-accept-notification-styles) via the shared <see cref="ScribeQuestPromptActions"/>
+    /// helper — the same one the center-modal presentation style (<see cref="GuiDialogScribeQuestPrompt"/>)
+    /// uses, so the two styles' button colors/behavior can't drift apart.
     ///
-    /// <para>An accept-prompt's Accept link follows the same 0/1/2+ destination rule as the Inbox Accept
+    /// <para>An accept-prompt's Link action follows the same 0/1/2+ destination rule as the Inbox Accept
     /// control (add-progression-framework-quest-support Decision 3): 0 eligible carried Scribe documents
     /// disables the link (no destination to place onto); exactly 1 accepts immediately; 2+ reveals a small
     /// picker above the link row on the first tap, naming each candidate, before a second tap confirms. A
@@ -1598,98 +1658,80 @@ internal sealed class HudPinsContent : StatelessWidget
     private Widget BuildQuestPromptBanner(ColorScheme colors, Vector4 glow)
     {
         var prompt = questPrompts[0];
-        var messageStyle = new TextStyle
+        var titleLabelStyle = new TextStyle
         {
             FontSize = rowFontSize,
-            Color = new Vector4(1f, 0.92f, 0.65f, 1f), // warm pale-gold — distinct from ordinary row text
+            Color = ScribeRowConstants.QuestPromptTitleColor, // warm gold — distinct from ordinary row text
             GlowWidth = GlowWidth,
             GlowColor = glow,
             SoftWrap = true,
         };
-        var linkStyle = new TextStyle
+        // The quest name itself renders as ordinary HUD text (off-white), on its own line below the gold
+        // label — distinguishing "this is a prompt" (label) from "this is the quest's own name" (data).
+        var titleNameStyle = new TextStyle
         {
             FontSize = rowFontSize,
-            Color = colors.Primary,
+            Color = ScribeRowConstants.HudStandardTextColor,
             GlowWidth = GlowWidth,
             GlowColor = glow,
-        };
-        var disabledLinkStyle = new TextStyle
-        {
-            FontSize = rowFontSize,
-            Color = colors.OnSurfaceVariant,
-            GlowWidth = GlowWidth,
-            GlowColor = glow,
+            SoftWrap = true,
         };
 
-        Widget LinkButton(string label, Action onTap) => new GestureDetector(
-            onTap: _ => onTap(),
-            child: new Text(label, linkStyle));
+        string titleLabel = Lang.Get(
+            prompt.IsCompletion ? "scribe:scribe-hud-questprompt-complete-title" : "scribe:scribe-hud-questprompt-accept-title");
+        string titleSuffix = Lang.Get(
+            prompt.IsCompletion ? "scribe:scribe-hud-questprompt-complete-title-suffix" : "scribe:scribe-hud-questprompt-accept-title-suffix");
+        string titleName = prompt.Title + titleSuffix;
 
-        string title = Lang.Get(
-            prompt.IsCompletion ? "scribe:scribe-hud-questprompt-complete-title" : "scribe:scribe-hud-questprompt-accept-title",
-            prompt.Title);
-
-        Widget acceptControl;
-        if (prompt.IsCompletion)
-        {
-            acceptControl = LinkButton(Lang.Get("scribe:scribe-hud-questprompt-accept-button"),
-                () => onAcceptPrompt?.Invoke(prompt, null));
-        }
-        else if (questAcceptCandidates.Count == 0)
-        {
-            acceptControl = new Tooltip(
-                child: new Text(Lang.Get("scribe:scribe-hud-questprompt-accept-button"), disabledLinkStyle),
-                content: new Padding(EdgeInsets.All(6), child: new Text(
-                    Lang.Get("scribe:scribe-assignment-no-eligible-target"),
-                    new TextStyle { FontSize = 12, Color = colors.OnSurface, SoftWrap = true })),
-                useGlobalOverlay: true);
-        }
-        else if (questAcceptCandidates.Count == 1)
-        {
-            acceptControl = LinkButton(Lang.Get("scribe:scribe-hud-questprompt-accept-button"),
-                () => onAcceptPrompt?.Invoke(prompt, questAcceptCandidates[0]));
-        }
-        else if (!questAcceptPickerOpen)
-        {
-            acceptControl = LinkButton(Lang.Get("scribe:scribe-hud-questprompt-accept-button"),
-                () => onOpenQuestAcceptPicker?.Invoke());
-        }
-        else
-        {
-            int idx = Math.Clamp(questAcceptSelectedIndex, 0, questAcceptCandidates.Count - 1);
-            acceptControl = new Column(
-                spacing: 2,
-                mainAxisSize: MainAxisSize.Min,
-                crossAxisAlignment: leftAligned ? CrossAxisAlignment.Start : CrossAxisAlignment.End,
-                children: new Widget[]
-                {
-                    new Dropdown<int>(
-                        value: idx,
-                        items: questAcceptCandidates.Select((c, i) => new DropdownItem<int> { Value = i, Label = c.Label }).ToList(),
-                        onChanged: v => onSelectQuestAcceptCandidate?.Invoke(v)),
-                    LinkButton(Lang.Get("scribe:scribe-hud-questprompt-accept-button"),
-                        () => onAcceptPrompt?.Invoke(prompt, questAcceptCandidates[idx])),
-                });
-        }
-
-        return new Column(
-            spacing: 2,
+        Widget titleBlock = new Column(
+            spacing: 0,
             mainAxisSize: MainAxisSize.Min,
             crossAxisAlignment: leftAligned ? CrossAxisAlignment.Start : CrossAxisAlignment.End,
-            children: new Widget[]
-            {
-                new Text(title, messageStyle),
-                new Row(
-                    spacing: 10,
-                    mainAxisSize: MainAxisSize.Min,
-                    children: new Widget[]
-                    {
-                        acceptControl,
-                        LinkButton(Lang.Get("scribe:scribe-hud-questprompt-dismiss-button"),
-                            () => onDismissPrompt?.Invoke(prompt)),
-                        LinkButton(Lang.Get("scribe:scribe-hud-questprompt-settings-button"), onOpenSettings),
-                    }),
-            });
+            children: new Widget[] { new Text(titleLabel, titleLabelStyle), new Text(titleName, titleNameStyle) });
+
+        // "Track Quest"/"Not Now"/Settings render as bordered, color-coded buttons — accept green,
+        // dismiss red, Settings near-white/neutral (rework-quest-accept-notification-styles) — via the
+        // shared helper the center-modal presentation style also uses, so the two can never drift apart.
+        // The accept/dismiss labels render in the HUD's own standard near-white row-text color (plus its
+        // glow), decoupled from their own accent color, so the label reads as ordinary HUD text sitting
+        // atop the colored button fill (user direction) rather than either the accent color or pure white
+        // (which would hit the TextStyle.Merge landmine — see ScribeRowConstants.HudStandardTextColor).
+        Vector4 promptActionTextColor = ScribeRowConstants.HudStandardTextColor;
+        var (picker, linkButton) = ScribeQuestPromptActions.BuildLinkControl(
+            prompt, questAcceptCandidates, questAcceptPickerOpen, questAcceptSelectedIndex,
+            fontSize: rowFontSize,
+            linkAccent: ScribeRowConstants.QuestPromptLinkColor,
+            disabledTextColor: colors.OnSurfaceVariant,
+            tooltipTextColor: colors.OnSurface,
+            onAccept: (p, c) => onAcceptPrompt?.Invoke(p, c),
+            onOpenPicker: () => onOpenQuestAcceptPicker?.Invoke(),
+            onSelectCandidate: v => onSelectQuestAcceptCandidate?.Invoke(v),
+            textColor: promptActionTextColor, glowWidth: GlowWidth, glowColor: glow);
+
+        Widget dismissButton = ScribeQuestPromptActions.AccentButton(
+            Lang.Get("scribe:scribe-hud-questprompt-dismiss-button"), ScribeRowConstants.QuestPromptDismissColor,
+            rowFontSize, () => onDismissPrompt?.Invoke(prompt),
+            textColor: promptActionTextColor, glowWidth: GlowWidth, glowColor: glow);
+
+        Widget settingsButton = ScribeQuestPromptActions.AccentButton(
+            Lang.Get("scribe:scribe-hud-questprompt-settings-button"), ScribeRowConstants.QuestPromptSettingsColor,
+            rowFontSize, onOpenSettings);
+
+        Widget buttonsRow = new Row(
+            spacing: 6,
+            mainAxisSize: MainAxisSize.Min,
+            crossAxisAlignment: CrossAxisAlignment.Center,
+            children: new Widget[] { linkButton, dismissButton, settingsButton });
+
+        var children = new List<Widget> { titleBlock };
+        if (picker is not null) children.Add(picker);
+        children.Add(buttonsRow);
+
+        return new Column(
+            spacing: 4,
+            mainAxisSize: MainAxisSize.Min,
+            crossAxisAlignment: leftAligned ? CrossAxisAlignment.Start : CrossAxisAlignment.End,
+            children: children);
     }
 
     /// <summary>Full duration of the destructive-pending (Unpin/Delete) text fade, matched to the HUD pin
@@ -1717,7 +1759,7 @@ internal sealed class HudPinsContent : StatelessWidget
             FontSize = rowFontSize,
             Color = row.Sunk
                 ? new Vector4(0.70f, 0.70f, 0.70f, 1f)   // sunk: muted light grey
-                : new Vector4(0.93f, 0.93f, 0.93f, 1f),   // active: near-white
+                : ScribeRowConstants.HudStandardTextColor, // active: near-white
             GlowWidth = GlowWidth,
             GlowColor = glow,
             SoftWrap = true,
@@ -1743,6 +1785,16 @@ internal sealed class HudPinsContent : StatelessWidget
                 mainAxisSize: MainAxisSize.Max,
                 crossAxisAlignment: CrossAxisAlignment.Start,
                 children: new Widget[] { new Expanded(child: text) });
+        }
+        else if (row.IsQuestObjective)
+        {
+            // Not player-completable (mirrors ScribeBlock.IsCompletable) — render the item icon/name/counter
+            // shape with NO checkbox, matching the read/editor/Pin-Tab surfaces' QuestObjective rendering.
+            rowBody = new Row(
+                spacing: 6,
+                mainAxisSize: MainAxisSize.Max,
+                crossAxisAlignment: CrossAxisAlignment.Center,
+                children: new Widget[] { BuildHudItemContent(row, textStyle, interactive: true) });
         }
         else
         {
@@ -1872,7 +1924,7 @@ internal sealed class HudPinsContent : StatelessWidget
         }
 
         var children = new List<Widget>();
-        if (row.IsCarriedCountTracked)
+        if (row.HasCounterRow)
         {
             // A "have / need" counter on the LEFT (future Crafting tasks inherit this). Emphasis INVERTED
             // (7.11g): an in-progress count reads STRONG (the row's bright near-white, bold — still collecting);
@@ -1927,7 +1979,7 @@ internal sealed class HudPinsContent : StatelessWidget
             : new Expanded(child: new Opacity(0f, new Text(rowText, textStyle)));
 
         var ghostChildren = new List<Widget>();
-        if (row.Kind != ScribeBlockKind.Text)
+        if (row.Kind is not ScribeBlockKind.Text and not ScribeBlockKind.QuestObjective)
         {
             ghostChildren.Add(new Checkbox(
                 value: row.Done,

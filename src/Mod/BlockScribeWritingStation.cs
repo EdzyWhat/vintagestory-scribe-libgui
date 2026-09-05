@@ -28,11 +28,14 @@ public abstract class BlockScribeWritingStation : Block
     /// <summary>Lang code for the shift+right-click "edit/quick-add" hint.</summary>
     protected abstract string EditHintLangCode { get; }
 
-    /// <summary>Whether this block is standing furniture that requires a solid ground cell below it
-    /// (the Lectern/Scriptorium default). A wall-mounted variant (the chalkboard) overrides this to
+    /// <summary>Whether the placement described by <paramref name="blockSel"/> is standing furniture that
+    /// requires a solid ground cell below it (the Lectern/Scriptorium/Assignment Desk default, true for
+    /// every placement). A wall-mounted-only variant (the Chalkboard) overrides this to always
     /// <c>false</c> so <see cref="CanPlaceBlock"/> skips the below-floor test and lets a wall-attach
-    /// behavior (vanilla <c>HorizontalAttachable</c>) place it against a vertical face instead.</summary>
-    protected virtual bool RequiresSolidGround => true;
+    /// behavior (vanilla <c>HorizontalAttachable</c>) place it against a vertical face instead. Takes the
+    /// selection (rather than being a fixed per-class bool) because a dual-mode block (the Inbox) needs
+    /// this to vary per placement attempt, not per block class — see <see cref="BlockInbox"/>.</summary>
+    protected virtual bool RequiresSolidGround(BlockSelection blockSel) => true;
 
     /// <summary>Whether placing this block rotates it to face the player via
     /// <see cref="BlockEntityScribeWritingStation.MeshAngleRad"/> (the Lectern/Scriptorium default). A
@@ -142,8 +145,10 @@ public abstract class BlockScribeWritingStation : Block
         if (!base.CanPlaceBlock(world, byPlayer, blockSel, ref failureCode)) return false;
 
         // A wall-mounted variant (chalkboard) opts out of the floor requirement: its attach-to-wall
-        // check is handled by the HorizontalAttachable behavior instead (add-chalkboard-block D6).
-        if (!RequiresSolidGround) return true;
+        // check is handled by the HorizontalAttachable behavior instead (add-chalkboard-block D6). A
+        // dual-mode block (the Inbox) opts out only for a horizontal-face placement, since it still needs
+        // this exact floor check for its own ground mode (redesign-inbox-block-placement-and-capacity).
+        if (!RequiresSolidGround(blockSel)) return true;
 
         var posBelow = blockSel.Position.DownCopy();
         var blockBelow = world.BlockAccessor.GetBlock(posBelow);

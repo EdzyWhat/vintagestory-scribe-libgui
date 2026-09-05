@@ -44,15 +44,15 @@
 		]
 	},
 	"textures": {
-		"charred": "charred",
-		"feather": "feather",
-		"bituminous": "bituminous",
-		"quartz": "quartz",
-		"brass": "brass",
-		"ebony": "ebony",
-		"ebony-ornate": "ebony-ornate",
-		"opened-normal": "opened-normal",
-		"normal-orangebrown": "normal-orangebrown"
+		"charred": "block/scriptorium/charred",
+		"feather": "block/scriptorium/feather",
+		"bituminous": "block/scriptorium/bituminous",
+		"quartz": "block/scriptorium/quartz",
+		"brass": "block/scriptorium/brass",
+		"ebony": "block/scriptorium/ebony",
+		"ebony-ornate": "block/scriptorium/ebony-ornate",
+		"opened-normal": "block/scriptorium/opened-normal",
+		"normal-orangebrown": "block/scriptorium/normal-orangebrown"
 	},
 	"elements": [
 		{

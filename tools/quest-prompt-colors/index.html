@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scribe quest-prompt colors</title>
+<style>
+  :root {
+    --panel-bg: #1c1f26;
+    --panel-ink: #e7e7e7;
+    --panel-rule: #33384433;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 15px/1.45 system-ui, sans-serif;
+    color: var(--panel-ink);
+    background: #10121a;
+  }
+  main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px 20px 64px;
+  }
+  h1 { font-size: 1.3rem; margin: 0 0 0.35rem; }
+  p.lede { margin: 0 0 1.25rem; max-width: 76ch; color: #b9bcc4; }
+  code { font-size: 0.9em; background: #00000055; padding: 1px 5px; border-radius: 3px; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--panel-bg);
+    border: 1px solid #ffffff14;
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .panel + .panel { margin-top: 16px; }
+  .panel h2 { font-size: 1rem; margin: 0 0 10px; color: #cfd2da; }
+
+  .swatch-row {
+    display: grid;
+    grid-template-columns: 92px 44px 1fr 64px;
+    gap: 8px;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--panel-rule);
+  }
+  .swatch-row:last-child { border-bottom: none; }
+  .swatch-row label { font-size: 0.85rem; color: #cfd2da; }
+  .swatch-row input[type=color] {
+    width: 40px; height: 28px; border: none; padding: 0; background: none; border-radius: 4px; cursor: pointer;
+  }
+  .swatch-row input[type=range] { width: 100%; }
+  .swatch-row .alpha-val { font-size: 0.78rem; color: #9aa0ab; text-align: right; }
+
+  .unsync-row {
+    display: flex; align-items: center; gap: 6px; padding: 4px 0 2px;
+    font-size: 0.8rem; color: #9aa0ab;
+  }
+  .unsync-row input[type=checkbox] { cursor: pointer; }
+  .text-color-row { display: none; }
+  .text-color-row.shown { display: grid; }
+  .accent-group { padding-bottom: 8px; margin-bottom: 4px; border-bottom: 1px solid var(--panel-rule); }
+  .accent-group:last-child { border-bottom: none; margin-bottom: 0; }
+  .accent-group .swatch-row { border-bottom: none; padding-bottom: 0; }
+
+  .backdrop-controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .backdrop-controls button, .backdrop-controls label.filebtn {
+    background: #2a2f3a; color: #e7e7e7; border: 1px solid #ffffff22; border-radius: 6px;
+    padding: 6px 12px; font-size: 0.82rem; cursor: pointer;
+  }
+  .backdrop-controls button.active { background: #465481; border-color: #6f80b8; }
+  .backdrop-controls input[type=file] { display: none; }
+
+  .stage {
+    position: relative;
+    height: 460px;
+    border-radius: 8px;
+    overflow: hidden;
+    background-size: cover;
+    background-position: center;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+  }
+  .stage.sky {
+    background: linear-gradient(to bottom, #4a90e2 0%, #7ab8ec 28%, #b9dcf4 55%, #dcecf7 78%, #eef6fb 100%);
+  }
+  .stage .hud {
+    margin: 22px;
+    max-width: 340px;
+    text-align: right;
+  }
+  .stage .title-text {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    white-space: normal;
+  }
+  .stage .btn-row { display: flex; gap: 6px; justify-content: flex-end; }
+  .stage .qbtn {
+    font-size: 15px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    border-width: 1.25px;
+    border-style: solid;
+    background: transparent;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  .state-toggle { display: flex; gap: 6px; margin-top: 14px; }
+  .state-toggle button {
+    flex: 1; background: #2a2f3a; color: #cfd2da; border: 1px solid #ffffff22; border-radius: 6px;
+    padding: 6px 8px; font-size: 0.8rem; cursor: pointer;
+  }
+  .state-toggle button.active { background: #465481; border-color: #6f80b8; color: #fff; }
+
+  textarea#snippet {
+    width: 100%; min-height: 190px; background: #0d0f14; color: #a9e08a; border: 1px solid #ffffff22;
+    border-radius: 6px; font: 12.5px/1.5 ui-monospace, monospace; padding: 10px; resize: vertical;
+  }
+  .copy-row { display: flex; justify-content: flex-end; margin-top: 8px; }
+  .copy-row button {
+    background: #3a5f3a; color: #d9ffd0; border: 1px solid #6ea86e; border-radius: 6px;
+    padding: 5px 12px; font-size: 0.82rem; cursor: pointer;
+  }
+  .hint { font-size: 0.78rem; color: #8a8f99; margin-top: 6px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Scribe quest-prompt colors</h1>
+  <p class="lede">
+    Tunes the three quest-prompt action buttons (<code>ScribeQuestPromptActions.AccentButton</code>) and the
+    banner title text, rendered against a blue-sky backdrop — the brightest, lowest-contrast case the HUD has
+    to survive, and also the most common outdoor sky color. Drop in a real screenshot for a sanity check once
+    you've settled on values. Current defaults come from <code>ScribeRowConstants.cs</code>.
+  </p>
+
+  <div class="layout">
+    <div>
+      <div class="panel">
+        <h2>Button accents</h2>
+        <p class="hint" style="margin-top:0;">The accent drives the fill + border. Text matches the accent unless unsynced below.</p>
+
+        <div class="accent-group">
+          <div class="swatch-row">
+            <label for="linkColor">Link</label>
+            <input type="color" id="linkColor" value="#6b8257">
+            <input type="range" id="linkAlpha" min="0" max="100" value="100">
+            <span class="alpha-val" id="linkAlphaVal">100%</span>
+          </div>
+          <label class="unsync-row"><input type="checkbox" id="linkTextUnsync"> Unsync text color</label>
+          <div class="swatch-row text-color-row" id="linkTextRow">
+            <label for="linkTextColor">↳ Text</label>
+            <input type="color" id="linkTextColor" value="#ffffff">
+            <input type="range" id="linkTextAlpha" min="0" max="100" value="100">
+            <span class="alpha-val" id="linkTextAlphaVal">100%</span>
+          </div>
+        </div>
+
+        <div class="accent-group">
+          <div class="swatch-row">
+            <label for="dismissColor">Dismiss</label>
+            <input type="color" id="dismissColor" value="#cf9d2e">
+            <input type="range" id="dismissAlpha" min="0" max="100" value="100">
+            <span class="alpha-val" id="dismissAlphaVal">100%</span>
+          </div>
+          <label class="unsync-row"><input type="checkbox" id="dismissTextUnsync"> Unsync text color</label>
+          <div class="swatch-row text-color-row" id="dismissTextRow">
+            <label for="dismissTextColor">↳ Text</label>
+            <input type="color" id="dismissTextColor" value="#ffffff">
+            <input type="range" id="dismissTextAlpha" min="0" max="100" value="100">
+            <span class="alpha-val" id="dismissTextAlphaVal">100%</span>
+          </div>
+        </div>
+
+        <div class="accent-group">
+          <div class="swatch-row">
+            <label for="settingsColor">Settings</label>
+            <input type="color" id="settingsColor" value="#e6e6e6">
+            <input type="range" id="settingsAlpha" min="0" max="100" value="100">
+            <span class="alpha-val" id="settingsAlphaVal">100%</span>
+          </div>
+          <label class="unsync-row"><input type="checkbox" id="settingsTextUnsync"> Unsync text color</label>
+          <div class="swatch-row text-color-row" id="settingsTextRow">
+            <label for="settingsTextColor">↳ Text</label>
+            <input type="color" id="settingsTextColor" value="#ffffff">
+            <input type="range" id="settingsTextAlpha" min="0" max="100" value="100">
+            <span class="alpha-val" id="settingsTextAlphaVal">100%</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Title text + glow</h2>
+        <div class="swatch-row">
+          <label for="titleColor">Title</label>
+          <input type="color" id="titleColor" value="#ffeba6">
+          <input type="range" id="titleAlpha" min="0" max="100" value="100">
+          <span class="alpha-val" id="titleAlphaVal">100%</span>
+        </div>
+        <div class="swatch-row">
+          <label for="glowColor">Glow</label>
+          <input type="color" id="glowColor" value="#000000">
+          <input type="range" id="glowAlpha" min="0" max="100" value="100">
+          <span class="alpha-val" id="glowAlphaVal">100%</span>
+        </div>
+        <div class="swatch-row">
+          <label for="glowWidth">Glow width</label>
+          <span></span>
+          <input type="range" id="glowWidth" min="0" max="150" value="45">
+          <span class="alpha-val" id="glowWidthVal">0.45</span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Button fill state</h2>
+        <p class="hint" style="margin-top:0;">Fill alpha per state, as a fraction of each button's accent alpha (defaults: 0.16 / 0.28 / 0.38). Preview shows whichever state is selected below.</p>
+        <div class="swatch-row" style="grid-template-columns: 92px 1fr 44px;">
+          <label for="fillNormal">Normal</label>
+          <input type="range" id="fillNormal" min="0" max="100" value="16">
+          <span class="alpha-val" id="fillNormalVal">0.16</span>
+        </div>
+        <div class="swatch-row" style="grid-template-columns: 92px 1fr 44px;">
+          <label for="fillHover">Hover</label>
+          <input type="range" id="fillHover" min="0" max="100" value="28">
+          <span class="alpha-val" id="fillHoverVal">0.28</span>
+        </div>
+        <div class="swatch-row" style="grid-template-columns: 92px 1fr 44px;">
+          <label for="fillPress">Press</label>
+          <input type="range" id="fillPress" min="0" max="100" value="38">
+          <span class="alpha-val" id="fillPressVal">0.38</span>
+        </div>
+        <div class="state-toggle">
+          <button data-state="normal" class="active">Preview: Normal</button>
+          <button data-state="hover">Preview: Hover</button>
+          <button data-state="press">Preview: Press</button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <h2>Preview</h2>
+        <div class="backdrop-controls">
+          <button id="bgSky" class="active">Blue sky (default)</button>
+          <label class="filebtn">Load screenshot… <input type="file" id="bgFile" accept="image/*"></label>
+        </div>
+        <div class="stage sky" id="stage">
+          <div class="hud">
+            <div class="title-text" id="previewTitle">Accept quest: "Gather Copper Ore"?</div>
+            <div class="btn-row">
+              <button class="qbtn" id="btnLink">Link</button>
+              <button class="qbtn" id="btnDismiss">Dismiss</button>
+              <button class="qbtn" id="btnSettings">⚙</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>C# snippet</h2>
+        <p class="hint" style="margin-top:0;">Paste the changed lines into <code>src/Mod/ScribeRowConstants.cs</code>.</p>
+        <textarea id="snippet" readonly></textarea>
+        <div class="copy-row"><button id="copyBtn">Copy</button></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+function hexToRgb01(hex) {
+  const v = hex.replace('#', '');
+  return [
+    parseInt(v.slice(0, 2), 16) / 255,
+    parseInt(v.slice(2, 4), 16) / 255,
+    parseInt(v.slice(4, 6), 16) / 255,
+  ];
+}
+function rgba(hex, alphaPct) {
+  const [r, g, b] = hexToRgb01(hex);
+  const a = alphaPct / 100;
+  return `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a})`;
+}
+function vec4Literal(hex, alphaPct = 100) {
+  const [r, g, b] = hexToRgb01(hex);
+  const a = alphaPct / 100;
+  const fmt = n => n.toFixed(4).replace(/0+$/, '').replace(/\.$/, '.0');
+  return `new(${fmt(r)}f, ${fmt(g)}f, ${fmt(b)}f, ${fmt(a)}f)`;
+}
+
+let currentState = 'normal';
+const BUTTON_PREFIXES = ['link', 'dismiss', 'settings'];
+
+function el(id) { return document.getElementById(id); }
+
+function fillAlphaFor(state) {
+  return Number(el(`fill${state[0].toUpperCase()}${state.slice(1)}`).value) / 100;
+}
+
+function currentAccent(prefix) {
+  return { hex: el(`${prefix}Color`).value, alpha: Number(el(`${prefix}Alpha`).value) };
+}
+
+function isTextUnsynced(prefix) {
+  return el(`${prefix}TextUnsync`).checked;
+}
+
+function currentTextColor(prefix) {
+  if (!isTextUnsynced(prefix)) return currentAccent(prefix);
+  return { hex: el(`${prefix}TextColor`).value, alpha: Number(el(`${prefix}TextAlpha`).value) };
+}
+
+function applyButton(btnEl, prefix) {
+  const { hex, alpha } = currentAccent(prefix);
+  const text = currentTextColor(prefix);
+  const fillAlpha = fillAlphaFor(currentState) * alpha / 100;
+  btnEl.style.background = rgba(hex, fillAlpha * 100);
+  btnEl.style.borderColor = rgba(hex, Math.min(90, alpha));
+  btnEl.style.color = rgba(text.hex, text.alpha);
+}
+
+function render() {
+  applyButton(el('btnLink'), 'link');
+  applyButton(el('btnDismiss'), 'dismiss');
+  applyButton(el('btnSettings'), 'settings');
+
+  for (const state of ['normal', 'hover', 'press']) {
+    const capId = `fill${state[0].toUpperCase()}${state.slice(1)}`;
+    el(`${capId}Val`).textContent = fillAlphaFor(state).toFixed(2);
+  }
+
+  for (const prefix of BUTTON_PREFIXES) {
+    el(`${prefix}TextRow`).classList.toggle('shown', isTextUnsynced(prefix));
+    el(`${prefix}TextAlphaVal`).textContent = `${Number(el(`${prefix}TextAlpha`).value)}%`;
+  }
+
+  const title = currentAccent('title');
+  const glow = currentAccent('glow');
+  const glowWidthPx = Number(el('glowWidth').value) / 100 * 8; // rough px mapping for CSS preview
+  const titleEl = el('previewTitle');
+  titleEl.style.color = rgba(title.hex, title.alpha);
+  titleEl.style.textShadow = glowWidthPx > 0
+    ? `0 0 ${glowWidthPx}px ${rgba(glow.hex, glow.alpha)}, 0 0 ${glowWidthPx * 2}px ${rgba(glow.hex, glow.alpha)}`
+    : 'none';
+
+  for (const prefix of ['link', 'dismiss', 'settings', 'title', 'glow']) {
+    const a = Number(el(`${prefix}Alpha`).value);
+    el(`${prefix}AlphaVal`).textContent = `${a}%`;
+  }
+  el('glowWidthVal').textContent = (Number(el('glowWidth').value) / 100).toFixed(2);
+
+  updateSnippet();
+}
+
+function updateSnippet() {
+  const title = currentAccent('title');
+  const glow = currentAccent('glow');
+  const glowWidth = (Number(el('glowWidth').value) / 100).toFixed(2);
+  const fills = ['normal', 'hover', 'press'].map(fillAlphaFor);
+  const anyUnsynced = BUTTON_PREFIXES.some(isTextUnsynced);
+  const anyFillChanged = fills[0] !== 0.16 || fills[1] !== 0.28 || fills[2] !== 0.38;
+
+  const lines = [
+    `// ScribeRowConstants.cs — accent colors (drive fill + border, and text unless unsynced below):`,
+    ...BUTTON_PREFIXES.map(p => {
+      const a = currentAccent(p);
+      const constName = { link: 'QuestPromptLinkColor', dismiss: 'QuestPromptDismissColor', settings: 'QuestPromptSettingsColor' }[p];
+      return `public static readonly Vector4 ${constName} = ${vec4Literal(a.hex, a.alpha)};`;
+    }),
+    ``,
+    `// Banner title text (HudScribePins.BuildQuestPromptBanner):`,
+    `Color = ${vec4Literal(title.hex, title.alpha)},`,
+    ``,
+    `// Glow (HudScribePins.GlowWidth / TextStyle.GlowColor):`,
+    `GlowWidth = ${glowWidth}f,`,
+    `GlowColor = ${vec4Literal(glow.hex, glow.alpha)},`,
+  ];
+
+  if (anyFillChanged) {
+    lines.push(
+      ``,
+      `// ScribeQuestPromptActions.AccentButton — fill alpha per state (was 0.16f/0.28f/0.38f):`,
+      `BackgroundColor = accent with { W = enabled ? ${fills[0].toFixed(2)}f : 0.05f },`,
+      `HoverBackgroundColor = accent with { W = enabled ? ${fills[1].toFixed(2)}f : 0.05f },`,
+      `PressBackgroundColor = accent with { W = enabled ? ${fills[2].toFixed(2)}f : 0.05f },`,
+    );
+  }
+
+  if (anyUnsynced) {
+    lines.push(
+      ``,
+      `// ScribeQuestPromptActions.AccentButton — text color unsynced from accent for: ${BUTTON_PREFIXES.filter(isTextUnsynced).join(', ')}`,
+      `// (the Text child's TextStyle.Color would need its own param separate from 'accent')`,
+    );
+    for (const p of BUTTON_PREFIXES.filter(isTextUnsynced)) {
+      const t = currentTextColor(p);
+      lines.push(`// ${p} text: ${vec4Literal(t.hex, t.alpha)}`);
+    }
+  }
+
+  el('snippet').value = lines.join('\n');
+}
+
+for (const prefix of ['link', 'dismiss', 'settings', 'title', 'glow']) {
+  el(`${prefix}Color`).addEventListener('input', render);
+  el(`${prefix}Alpha`).addEventListener('input', render);
+}
+for (const prefix of BUTTON_PREFIXES) {
+  el(`${prefix}TextUnsync`).addEventListener('change', render);
+  el(`${prefix}TextColor`).addEventListener('input', render);
+  el(`${prefix}TextAlpha`).addEventListener('input', render);
+}
+for (const id of ['fillNormal', 'fillHover', 'fillPress', 'glowWidth']) {
+  el(id).addEventListener('input', render);
+}
+
+document.querySelectorAll('.state-toggle button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.state-toggle button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentState = btn.dataset.state;
+    render();
+  });
+});
+
+const stage = el('stage');
+el('bgSky').addEventListener('click', () => {
+  stage.classList.add('sky');
+  stage.style.backgroundImage = 'none';
+  el('bgSky').classList.add('active');
+});
+el('bgFile').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  stage.classList.remove('sky');
+  stage.style.backgroundImage = `url(${url})`;
+  el('bgSky').classList.remove('active');
+});
+
+el('copyBtn').addEventListener('click', () => {
+  el('snippet').select();
+  document.execCommand('copy');
+  el('copyBtn').textContent = 'Copied!';
+  setTimeout(() => { el('copyBtn').textContent = 'Copy'; }, 1200);
+});
+
+render();
+</script>
+</body>
+</html>

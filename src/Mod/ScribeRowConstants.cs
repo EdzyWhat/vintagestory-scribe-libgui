@@ -209,6 +209,52 @@ internal static class ScribeRowConstants
     /// (refine-assignment-desk-inbox-ux 10.2) so the Assignment Desk's own stamp can't drift from the
     /// Scriptorium's tuned color.</summary>
     public static readonly Vector4 StampImprintInk = new(0.66f, 0.18f, 0.16f, 1f);
+
+    // ── Quest-prompt action button colors (rework-quest-accept-notification-styles) ────────────────
+    // ColorScheme has no Success/Warning semantic role to borrow (only Primary/Secondary/Error), so per
+    // the design's own fallback guidance these alias the closest EXISTING app colors rather than invent
+    // new tuned values — kept as a single chokepoint so the HUD banner and the center-modal presentation
+    // style (ScribeQuestPromptActions) can never drift apart.
+
+    /// <summary>Quest-prompt "Track Quest" action color — a dedicated, hand-tuned dark green
+    /// (post-ship retune via <c>tools/quest-prompt-colors/index.html</c>), reading as the
+    /// positive/commit action. No longer aliases <see cref="NavActivePinned"/> — the higher
+    /// per-state fill alpha (<see cref="ScribeQuestPromptActions.AccentButton"/>) needed a deeper,
+    /// more saturated green to keep reading as green rather than washing out pale.</summary>
+    public static readonly Vector4 QuestPromptLinkColor = new(0.0471f, 0.4f, 0.0392f, 1f);
+
+    /// <summary>Quest-prompt "Not Now" (dismiss) action color — a dedicated, hand-tuned red (post-ship
+    /// retune). No longer aliases <see cref="NavActiveTranscribe"/>'s amber/orange — playtest feedback
+    /// found orange read ambiguously next to the accept button's green, where red reads unambiguously
+    /// as the non-committal/negative action.</summary>
+    public static readonly Vector4 QuestPromptDismissColor = new(0.6863f, 0.098f, 0.0314f, 1f);
+
+    /// <summary>Quest-prompt "Settings" action color — near-white/neutral (not a themed color, since
+    /// opening Settings is neither a commit nor a discard action), matching the HUD header's own pure
+    /// white ink (feedback 2026-08-16). Retuned slightly (post-ship) alongside the other two prompt
+    /// colors, still functionally near-white.</summary>
+    public static readonly Vector4 QuestPromptSettingsColor = new(0.902f, 0.902f, 0.902f, 1f);
+
+    /// <summary>The quest-prompt HUD banner's title LABEL line color — warm gold, distinct from ordinary
+    /// row text (retuned twice post-ship via <c>tools/quest-prompt-colors/index.html</c>; was
+    /// `(1, 0.92, 0.65)`, then `(1, 0.8471, 0.5804)`, now a bit more yellow). Only the HUD banner's label
+    /// line (<see cref="HudScribePins.BuildQuestPromptBanner"/>) uses this — the quest name itself
+    /// renders on its own line below in <see cref="HudStandardTextColor"/>, not this color, and the
+    /// center modal (<see cref="GuiDialogScribeQuestPrompt"/>) titles its prompt with the active theme's
+    /// <c>ColorScheme.Primary</c> instead, so this constant does not apply there.</summary>
+    public static readonly Vector4 QuestPromptTitleColor = new(1f, 0.9529f, 0.6392f, 1f);
+
+    /// <summary>The HUD's standard near-white row-text color (formerly a literal duplicated at each of
+    /// <see cref="HudScribePins"/>'s several row/label builders) — deliberately NOT pure white
+    /// (<c>Vector4.One</c>): the HUD always renders over the live game world, so near-white
+    /// (<c>0.93</c>) reads brighter/more legible there than the theme's own surface ink
+    /// (v1-playtest-fixes), while also side-stepping the LibGUI 3.1.0 <c>TextStyle.Merge</c> "unset"
+    /// sentinel, which is exactly <c>Vector4.One</c> (see the landmine note on
+    /// <see cref="ScribeQuestPromptActions.AccentButton"/>) — a literal pure-white color would silently
+    /// fail to override an ancestor <c>DefaultTextStyle</c>, where this near-white value does not.
+    /// Used by the quest-prompt banner's action-button labels so they read as "standard HUD text"
+    /// rendered atop their colored button fill, per user direction.</summary>
+    public static readonly Vector4 HudStandardTextColor = new(0.93f, 0.93f, 0.93f, 1f);
 }
 
 /// <summary>Maps the player's task-font preference (<c>ScribePlayerSettings.TaskFontFamily</c>) to the

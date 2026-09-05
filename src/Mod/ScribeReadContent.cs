@@ -46,15 +46,21 @@ internal readonly record struct ScribeReadRowData(
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
     public bool IsLink => Kind == ScribeBlockKind.Link;
     public bool IsCraft => Kind == ScribeBlockKind.Craft;
-    /// <summary>Kinds rendered as an item icon + name (their own Text is empty): Tracker, Link, and the Craft
-    /// parent (which shows its recipe output — add-crafting-tasks 9.1).</summary>
-    public bool IsItemKind => IsTracker || IsLink || IsCraft;
-    /// <summary>Kinds whose row carries a live have/need counter: Tracker and the Craft parent (both count the
-    /// viewer's carried inventory — add-crafting-tasks 9.2). Mirrors <see cref="ScribeBlock.IsCarriedCountTracked"/>.</summary>
+    public bool IsQuestObjective => Kind == ScribeBlockKind.QuestObjective;
+    /// <summary>Kinds rendered as an item icon + name (their own Text is empty): Tracker, Link, the Craft
+    /// parent (which shows its recipe output — add-crafting-tasks 9.1), and a QuestObjective (item-backed or
+    /// a generic-icon label fallback — add-progression-framework-quest-objective-subtasks 7.1/7.3).</summary>
+    public bool IsItemKind => IsTracker || IsLink || IsCraft || IsQuestObjective;
+    /// <summary>Kinds whose row carries a live have/need counter driven from the viewer's carried inventory:
+    /// Tracker and the Craft parent (add-crafting-tasks 9.2). Deliberately excludes QuestObjective — its
+    /// counter (rendered via the shared !IsLink branch below since it's still <see cref="IsItemKind"/>) is
+    /// driven by Progression Framework's own reported progress instead, never carried inventory. Mirrors
+    /// <see cref="ScribeBlock.IsCarriedCountTracked"/>.</summary>
     public bool IsCarriedCountTracked => IsTracker || IsCraft;
-    /// <summary>Task, Tracker, and Link all carry a Done flag, so all three get a completion checkbox; only a
-    /// freeform Text section doesn't (add-tracker-link-tasks — see <see cref="ScribeBlock.Done"/>).</summary>
-    public bool Completable => Kind != ScribeBlockKind.Text;
+    /// <summary>Task, Tracker, and Link all carry a Done flag, so all three get a completion checkbox; a
+    /// freeform Text section and a QuestObjective (not player-completable — add-progression-framework-quest-
+    /// objective-subtasks 1.3) don't. Mirrors <see cref="ScribeBlock.IsCompletable"/>.</summary>
+    public bool Completable => Kind is not ScribeBlockKind.Text and not ScribeBlockKind.QuestObjective;
     /// <summary>The row's display label: a Craft parent frames its output name ("Craft Iron Ingot"), a
     /// Tracker/Link shows its resolved item name (its own Text is empty), while a Task/Text shows its authored
     /// text. Used by the collapsing ghost so a removed item row doesn't collapse as a blank row.</summary>
@@ -401,7 +407,10 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
             rowChildren.Add(icon);
             rowChildren.Add(nameLink);
         }
-        else // Tracker or Craft parent: a live "have / need" counter on the LEFT, then the item icon + name.
+        else // Tracker, Craft parent, or QuestObjective: a live "have / need" counter on the LEFT, then the
+             // item icon + name — a QuestObjective's counter is fed by Progression Framework's own reported
+             // progress rather than carried inventory (see IsCarriedCountTracked's doc-comment), but the
+             // rendering is identical.
         {
             bool satisfied = Widget.Data.CurrentQuantity >= Widget.Data.TargetQuantity;
             // Counter on the LEFT (feedback: "the tracked number on the left of the Tracker task"; future

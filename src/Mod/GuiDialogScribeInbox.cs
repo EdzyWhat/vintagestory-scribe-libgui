@@ -98,13 +98,15 @@ public sealed class GuiDialogScribeInbox : ScribeDialogBase
             children: new Widget[] { inboxBtn, inboxInventoryBtn, settingsBtn });
     }
 
-    /// <summary>Builds the Inbox Inventory tab: 8 slots — the first row (indices 0-3) Scribe-items-only
-    /// (any <c>IScribeDocumentItem</c>, including blank and sealed Task Notices, matching the
-    /// Scriptorium's own restriction), the second row (4-7) open — laid out 2 rows of 4 and centered
-    /// both horizontally and vertically in the tab's content region (add-inbox-inventory-tab). Each
-    /// slot uses the shared <see cref="ScribeInventorySlotStyle"/> helper so it matches the Assignment
-    /// Desk's own slots exactly; only the restricted row passes a watermark icon, using the Scriptorium's
-    /// generic "scribebook" glyph (not "scribeassignment") since the restriction is no longer Task-Notice-
+    /// <summary>Builds the Inbox Inventory tab: 12 slots — the first two rows (indices 0-3, 4-7)
+    /// Scribe-items-only (any <c>IScribeDocumentItem</c>, including blank and sealed Task Notices,
+    /// matching the Scriptorium's own restriction), the third row (8-11) open — laid out 3 rows of 4 and
+    /// centered both horizontally and vertically in the tab's content region
+    /// (add-inbox-inventory-tab; grew from 2 rows/8 slots via
+    /// redesign-inbox-block-placement-and-capacity). Each slot uses the shared
+    /// <see cref="ScribeInventorySlotStyle"/> helper so it matches the Assignment Desk's own slots
+    /// exactly; only the restricted rows pass a watermark icon, using the Scriptorium's generic
+    /// "scribebook" glyph (not "scribeassignment") since the restriction is no longer Task-Notice-
     /// specific. A restricted slot holding an undiscovered notice addressed to the local player
     /// additionally wraps in <see cref="ScribeShimmerWrap"/> (signal-tasknotice-inbox-presence).</summary>
     protected override Widget BuildInboxInventoryContent()
@@ -114,14 +116,15 @@ public sealed class GuiDialogScribeInbox : ScribeDialogBase
         var inv = inbox.Inventory;
         string? localUid = capi.World.Player?.PlayerUID;
 
-        Widget[] restrictedSlots = Enumerable.Range(0, BlockEntityInbox.RestrictedSlotCount)
-            .Select(i =>
-            {
-                Widget slotWidget = ScribeInventorySlotStyle.Build(inv[i], controller, colors, CurrentShade, "scribebook");
-                bool shimmer = localUid is not null && BlockEntityInbox.HoldsUndiscoveredNoticeFor(inv[i], localUid);
-                return (Widget)new ScribeShimmerWrap(shimmer, ScribeInventorySlotStyle.SlotSize, slotWidget);
-            })
-            .ToArray();
+        Widget BuildRestrictedSlot(int i)
+        {
+            Widget slotWidget = ScribeInventorySlotStyle.Build(inv[i], controller, colors, CurrentShade, "scribebook");
+            bool shimmer = localUid is not null && BlockEntityInbox.HoldsUndiscoveredNoticeFor(inv[i], localUid);
+            return new ScribeShimmerWrap(shimmer, ScribeInventorySlotStyle.SlotSize, slotWidget);
+        }
+
+        Widget[] restrictedRow1 = Enumerable.Range(0, 4).Select(BuildRestrictedSlot).ToArray();
+        Widget[] restrictedRow2 = Enumerable.Range(4, 4).Select(BuildRestrictedSlot).ToArray();
         Widget[] openSlots = Enumerable.Range(BlockEntityInbox.RestrictedSlotCount,
                 BlockEntityInbox.SlotCount - BlockEntityInbox.RestrictedSlotCount)
             .Select(i => ScribeInventorySlotStyle.Build(inv[i], controller, colors, CurrentShade, null))
@@ -133,7 +136,8 @@ public sealed class GuiDialogScribeInbox : ScribeDialogBase
             crossAxisAlignment: CrossAxisAlignment.Center,
             children: new Widget[]
             {
-                new Row(spacing: SlotSpacing, mainAxisSize: MainAxisSize.Min, children: restrictedSlots),
+                new Row(spacing: SlotSpacing, mainAxisSize: MainAxisSize.Min, children: restrictedRow1),
+                new Row(spacing: SlotSpacing, mainAxisSize: MainAxisSize.Min, children: restrictedRow2),
                 new Row(spacing: SlotSpacing, mainAxisSize: MainAxisSize.Min, children: openSlots),
             }));
     }

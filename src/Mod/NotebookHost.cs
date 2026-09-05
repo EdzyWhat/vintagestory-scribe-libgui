@@ -160,6 +160,24 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
         return true;
     }
 
+    /// <summary>Set a QuestObjective's live <see cref="ScribeBlock.CurrentQuantity"/> by stable TaskId — the
+    /// item-surface write-through for the client-side quest watcher
+    /// (add-progression-framework-quest-objective-subtasks), mirroring
+    /// <see cref="SetTrackerCurrentQuantityFromReader"/> but gated on <c>IsQuestObjective</c> and clamped
+    /// into <c>[0, TargetQuantity]</c> via <see cref="ScribeDocument.SetQuestObjectiveProgress"/> — never
+    /// overflow-visible like a Tracker's count. A no-op / unknown id / non-QuestObjective returns false
+    /// without flushing.</summary>
+    public bool SetQuestObjectiveProgressFromReader(Guid taskId, int qty)
+    {
+        var block = _document.FindByTaskId(taskId);
+        if (block is null || !block.IsQuestObjective) return false;
+        int clamped = Math.Clamp(qty, 0, block.TargetQuantity);
+        if (block.CurrentQuantity == clamped) return false;
+        if (!_document.SetQuestObjectiveProgress(taskId, qty)) return false;
+        Flush();
+        return true;
+    }
+
     /// <summary>Writes the document AND history store back to the ItemStack, marks the slot dirty, and
     /// pushes a full sync to the player's client. Public so server-side tools (e.g. the demo seeder)
     /// can persist seeded content through the normal flow — mirrors the already-public

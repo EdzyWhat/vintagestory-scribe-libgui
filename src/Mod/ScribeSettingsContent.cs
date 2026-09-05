@@ -193,9 +193,10 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                         value: settings.QuestAcceptPolicy,
                         items: new List<DropdownItem<ScribeQuestAcceptPolicy>>
                         {
-                            new() { Value = ScribeQuestAcceptPolicy.Always, Label = Lang.Get("scribe:scribe-questpolicy-always") },
-                            new() { Value = ScribeQuestAcceptPolicy.Never,  Label = Lang.Get("scribe:scribe-questpolicy-never") },
-                            new() { Value = ScribeQuestAcceptPolicy.Prompt, Label = Lang.Get("scribe:scribe-questpolicy-prompt") },
+                            new() { Value = ScribeQuestAcceptPolicy.Always,      Label = Lang.Get("scribe:scribe-questpolicy-always") },
+                            new() { Value = ScribeQuestAcceptPolicy.Never,       Label = Lang.Get("scribe:scribe-questpolicy-never") },
+                            new() { Value = ScribeQuestAcceptPolicy.PromptHud,   Label = Lang.Get("scribe:scribe-questpolicy-prompthud") },
+                            new() { Value = ScribeQuestAcceptPolicy.PromptPopup, Label = Lang.Get("scribe:scribe-questpolicy-promptpopup") },
                         },
                         onChanged: v => onMutate(s => s.QuestAcceptPolicy = v))),
                 LabeledControl(

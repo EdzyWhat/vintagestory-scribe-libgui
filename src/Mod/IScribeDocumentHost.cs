@@ -133,4 +133,15 @@ public interface IScribeDocumentHost
     /// No-op for a non-Tracker or unknown TaskId. For block hosts: marks dirty and resyncs. For item hosts:
     /// writes to the ItemStack.</summary>
     bool SetTrackerCurrentQuantityFromReader(Guid taskId, int currentQuantity);
+
+    /// <summary>Server-side: set a QuestObjective's live backend-reported progress by stable TaskId, clamped
+    /// into <c>[0, TargetQuantity]</c> by the Core model (add-progression-framework-quest-objective-subtasks
+    /// — unlike a Tracker's overflow-visible count, an objective's progress cannot exceed its required count
+    /// in Progression Framework's own model). Returns true if it changed. The client-side quest watcher
+    /// drives this from the backend's own reported state, never from carried inventory, so the count is
+    /// server-persisted and multiplayer viewers converge — exactly like a Tracker's
+    /// <see cref="SetTrackerCurrentQuantityFromReader"/>, but gated on <c>IsQuestObjective</c> rather than
+    /// <c>IsTracker</c>/the shared carried-count predicate. No-op for a non-QuestObjective or unknown TaskId.
+    /// For block hosts: marks dirty and resyncs. For item hosts: writes to the ItemStack.</summary>
+    bool SetQuestObjectiveProgressFromReader(Guid taskId, int currentQuantity);
 }

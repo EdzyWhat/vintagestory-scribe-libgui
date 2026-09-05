@@ -89,6 +89,11 @@ reference/atlas-wiki/
 #   git clone --depth 50 https://github.com/Seralth/harfbuzzfix.git reference/harfbuzzfix
 reference/harfbuzzfix/
 
+# ConfigKit (dizzyd) local reference clone -- researching it as a possible replacement for
+# ConfigLib's optional soft-dep settings pattern. Upstream repo, not ours -- re-clone with:
+#   git clone --depth 1 https://github.com/dizzyd/configkit.git reference/configkit
+reference/configkit/
+
 # playtest-history/ is NOT ignored -- it's a curated, committed record of promoted
 # playtest screenshots (see vs-playtest-checklist's promote_screenshot.py).
 
@@ -122,3 +127,8 @@ reference/ProgressionInvestigations/
 # The Almanac: Illuminated + Trades/Callings/Mastery mod zips and decompiles, used to check
 # for a live PF integration surface (found none; proprietary; scratch, never committed)
 reference/AlmanacInvestigations/
+
+# Unpacked ConfigKit 1.2.0 mod zip, used alongside reference/configkit/ (source) to check the
+# shipped binary against the source when evaluating it as a ConfigLib alternative (proprietary;
+# scratch, never committed)
+reference/ConfigKitInvestigations/

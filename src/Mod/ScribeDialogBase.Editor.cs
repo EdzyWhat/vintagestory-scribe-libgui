@@ -625,6 +625,22 @@ public abstract partial class ScribeDialogBase
         if (focusedEditIndex is { } leaving) NormalizeRowOnCommit(leaving);
         int at = NewTaskInsertIndex();
         if (!scratch.InsertQuestLink(at, entry.Source, entry.QuestCode, entry.Title, entry.Description)) return;
+        if (entry.Source == ScribeQuestSource.ProgressionFramework
+            && modSystem.TryGetPfObjectiveDefs(entry.QuestCode, out var pfObjectives) && pfObjectives.Count > 0)
+        {
+            var parentTaskId = scratch.Blocks[at].TaskId;
+            modSystem.TryGetPfObjectiveProgress(entry.QuestCode, out var progressByCode);
+            scratch.ReconcileQuestObjectives(parentTaskId, pfObjectives
+                .Select(o => (o.Code, o.ItemCode, (string?)o.Label, o.Required))
+                .ToList(), createMissing: true);
+            foreach (var obj in pfObjectives)
+            {
+                if (!progressByCode.TryGetValue(obj.Code, out int progress)) continue;
+                var child = scratch.Blocks.FirstOrDefault(b => b.IsQuestObjective
+                    && string.Equals(b.LinkTarget, obj.Code, StringComparison.Ordinal));
+                if (child is not null) scratch.SetQuestObjectiveProgress(child.TaskId, progress);
+            }
+        }
         isDirty = true;
         SyncFocusNodesToScratch();
         pendingEnsureVisible = true;

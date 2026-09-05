@@ -104,6 +104,19 @@ public sealed partial class ScribeModSystem
             });
     }
 
+    /// <summary>DEV: register the client-side <c>.scribeguard</c> command — a one-shot readout of
+    /// <see cref="ScribeVanillaDialogGuard.IsAnyVanillaDialogOpen"/> (fix-libgui-click-draw-order-mismatch
+    /// 2.3-2.5 — measure-don't-theorize, mirroring <c>.scribelight</c>/<c>.scribeprobe</c>). Client
+    /// command, dot-prefix; reads only the live dialog list (no state change).</summary>
+    private void RegisterScribeGuardCommand(ICoreClientAPI api)
+    {
+        api.ChatCommands.Create("scribeguard")
+            .WithDescription("[scribe dev] Print whether a vanilla (non-LibGUI) dialog is currently open.")
+            .HandleWith(_ =>
+                Vintagestory.API.Common.TextCommandResult.Success(
+                    $"[scribe] IsAnyVanillaDialogOpen: {ScribeVanillaDialogGuard.IsAnyVanillaDialogOpen(api)}"));
+    }
+
     /// <summary>Client-side: whether THIS player has pinned the given task — the optimistic overlay
     /// (<see cref="optimisticPinOverlay"/>) if a pin/unpin for this task is still in flight, else the
     /// server-pushed cache. The lectern GUI drives its resting pin tint / pin-glyph accent off this.
@@ -290,6 +303,15 @@ public sealed partial class ScribeModSystem
     /// <see cref="StartClientSide"/> loads the config). The HUD reads these directly. Falls back to a
     /// fresh default instance if queried before load (e.g. server side), so it is never null.</summary>
     public ScribePlayerSettings MySettings => mySettings ??= new ScribePlayerSettings();
+
+    /// <summary>Author-facing visual-tuning knobs (client-local; defaults until <see cref="StartClientSide"/>
+    /// loads the config). Falls back to a fresh default instance if queried before load, so it is never null.</summary>
+    public ScribeVisualTuning VisualTuning => visualTuning ??= new ScribeVisualTuning();
+
+    /// <summary>The shared ambient-particle emitter, built once in <see cref="StartClientSide"/> from
+    /// <see cref="VisualTuning"/>. Falls back to a fresh instance (default tuning) if queried before load.</summary>
+    public ScribeAssignmentParticleEmitter ParticleEmitter =>
+        particleEmitter ??= new ScribeAssignmentParticleEmitter(VisualTuning);
 
     /// <summary>Client-side: mutate this player's preferences and persist them to the client-local JSON
     /// config. The HUD/lectern refresh off <see cref="MyPinsChanged"/>, which this fires so an open HUD

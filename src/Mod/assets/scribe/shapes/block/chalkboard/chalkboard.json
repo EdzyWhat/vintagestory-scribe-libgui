@@ -24,10 +24,10 @@
 		]
 	},
 	"textures": {
-		"chalk": "chalk",
-		"slate": "slate",
-		"wood-h": "wood-h",
-		"wood-v": "wood-v"
+		"chalk": "block/blackboard/chalk",
+		"slate": "block/blackboard/slate",
+		"wood-h": "block/blackboard/wood-h",
+		"wood-v": "block/blackboard/wood-v"
 	},
 	"elements": [
 		{

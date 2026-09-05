@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using Scribe.Core;
 using Vintagestory.API.Client;
@@ -33,6 +34,40 @@ public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
     protected override ScribeDialogBase CreateDialog(ICoreClientAPI capi) =>
         new GuiDialogScribeInbox(Pos, this, capi);
 
+    /// <summary>
+    /// Wall-mounted facing, mirroring <see cref="BlockEntityScribeChalkboard.WallMountAngleRad"/>: without
+    /// this override the base's <c>WallMountAngleRad</c> stays null for every variant, so
+    /// <c>MeshAngleRad</c> is never set for a wall placement and the mesh always renders at its
+    /// as-authored angle regardless of which wall it's on. Null for the ground ("-up") variant, which
+    /// keeps the base's free player-facing angle from <see cref="BlockScribeWritingStation.TryPlaceBlock"/>.
+    ///
+    /// <para>Unlike the Chalkboard's <c>side</c> variant (named for the wall's OWN direction, via
+    /// <c>HorizontalAttachable</c>), <see cref="BlockInbox.TryPlaceBlock"/> names the "orientation" variant
+    /// after the CLICKED face (<c>blockSel.Face.Code</c>) — the face pointing AWAY from the wall, into the
+    /// room where the Inbox is placed. So an inbox variant of "south" means the wall is to the NORTH: the
+    /// inverse of the Chalkboard's variant meaning. The angles below are the Chalkboard's own
+    /// north/east/south/west→degree mapping with north/south and east/west swapped to account for that
+    /// inversion — a first-pass guess pending an in-game visual check, same as the collision box tuning.</para>
+    /// </summary>
+    protected override float? WallMountAngleRad
+    {
+        get
+        {
+            string? orientation = Block?.Variant["orientation"];
+            if (orientation is null or "up") return null;
+
+            float deg = orientation switch
+            {
+                "north" => 180f,
+                "east"  => 90f,
+                "south" => 0f,
+                "west"  => 270f,
+                _       => 0f,
+            };
+            return deg * ((float)Math.PI / 180f);
+        }
+    }
+
     // ── Mixed restricted/open inventory (add-inbox-inventory-tab) ────────────
     //
     // The Inbox's own 8-slot inventory: slots 0-3 accept only Scribe items, slots 4-7 accept
@@ -40,14 +75,18 @@ public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
     // packet-routing shape AND the same Scribe-items-only slot restriction (ItemSlotScribeDocument)
     // for the first row, just with a mixed slot factory instead of a uniform one.
 
-    /// <summary>8 slots: the first 4 (indices 0-3) are Scribe-items-only, the last 4 (4-7) are open —
-    /// see <see cref="EnsureInventory"/>'s slot factory. Internal so <see cref="GuiDialogScribeInbox"/>
-    /// can lay out the restricted/open rows without re-declaring the split.</summary>
-    internal const int SlotCount = 8;
+    /// <summary>12 slots: the first 8 (indices 0-7) are Scribe-items-only, the last 4 (8-11) are open —
+    /// see <see cref="EnsureInventory"/>'s slot factory. Public (like
+    /// <see cref="BlockEntityAssignmentDesk"/>'s slot-index constants) so both
+    /// <see cref="GuiDialogScribeInbox"/> and the Atlas integration tests can reference the split
+    /// without re-declaring it. Grew from 8→12 (redesign-inbox-block-placement-and-capacity); a block
+    /// saved under the old 8-slot count loads via the same additive tree round-trip below with no
+    /// migration code.</summary>
+    public const int SlotCount = 12;
 
     /// <summary>Restricted slots (any Scribe item — see <see cref="ItemSlotScribeDocument"/>) occupy
-    /// indices below this bound; open slots occupy the rest.</summary>
-    internal const int RestrictedSlotCount = 4;
+    /// indices below this bound; open slots occupy the rest. Grew from 4→8 alongside <see cref="SlotCount"/>.</summary>
+    public const int RestrictedSlotCount = 8;
 
     /// <summary>Tree sub-key under which the inventory persists, kept separate from the document/lock
     /// keys so persistence is additive: an Inbox saved before this change simply lacks this sub-tree
@@ -129,14 +168,16 @@ public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
     {
         if (Api is not ICoreClientAPI capi) return;
 
+        var emitter = ModSystem?.ParticleEmitter;
+
         string? uid = capi.World.Player?.PlayerUID;
-        bool active = uid is not null
+        bool active = emitter is not null && uid is not null
             && Enumerable.Range(0, RestrictedSlotCount).Any(i => HoldsUndiscoveredNoticeFor(Inventory[i], uid));
         if (active)
         {
             var player = capi.World.Player?.Entity;
             active = player is not null
-                && Pos.DistanceTo(player.Pos.X, player.Pos.Y, player.Pos.Z) <= ScribeAssignmentParticleEmitter.DetectionRadius;
+                && Pos.DistanceTo(player.Pos.X, player.Pos.Y, player.Pos.Z) <= emitter!.DetectionRadius;
         }
 
         if (!active)
@@ -145,7 +186,7 @@ public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
             return;
         }
 
-        ScribeAssignmentParticleEmitter.SpawnAt(capi, Pos, seedBurst: !inboxNoticeParticlesWereActive);
+        emitter!.SpawnAt(capi, Pos, seedBurst: !inboxNoticeParticlesWereActive);
         inboxNoticeParticlesWereActive = true;
     }
 
