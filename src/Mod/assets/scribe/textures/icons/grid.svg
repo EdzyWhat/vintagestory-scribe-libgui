@@ -1,18 +1,18 @@
 <svg width="779" height="777" viewBox="0 0 779 777" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect x="429" y="428" width="60" height="349" fill="black"/>
-<rect x="779" y="777" width="60" height="349" transform="rotate(-180 779 777)" fill="black"/>
-<rect x="779" y="428" width="60" height="349" transform="rotate(90 779 428)" fill="black"/>
-<rect x="430" y="777" width="60" height="349" transform="rotate(-90 430 777)" fill="black"/>
-<rect y="428" width="60" height="349" fill="black"/>
-<rect x="350" y="777" width="60" height="349" transform="rotate(-180 350 777)" fill="black"/>
-<rect x="350" y="428" width="60" height="349" transform="rotate(90 350 428)" fill="black"/>
-<rect x="1" y="777" width="60" height="349" transform="rotate(-90 1 777)" fill="black"/>
-<rect width="60" height="349" fill="black"/>
-<rect x="350" y="349" width="60" height="349" transform="rotate(-180 350 349)" fill="black"/>
-<rect x="350" width="60" height="349" transform="rotate(90 350 0)" fill="black"/>
-<rect x="1" y="349" width="60" height="349" transform="rotate(-90 1 349)" fill="black"/>
-<rect x="429" width="60" height="349" fill="black"/>
-<rect x="779" y="349" width="60" height="349" transform="rotate(-180 779 349)" fill="black"/>
-<rect x="779" width="60" height="349" transform="rotate(90 779 0)" fill="black"/>
-<rect x="430" y="349" width="60" height="349" transform="rotate(-90 430 349)" fill="black"/>
+<rect x="429" y="428" width="80" height="349" fill="black"/>
+<rect x="779" y="777" width="80" height="349" transform="rotate(-180 779 777)" fill="black"/>
+<rect x="779" y="428" width="80" height="349" transform="rotate(90 779 428)" fill="black"/>
+<rect x="430" y="777" width="80" height="349" transform="rotate(-90 430 777)" fill="black"/>
+<rect y="428" width="80" height="349" fill="black"/>
+<rect x="350" y="777" width="80" height="349" transform="rotate(-180 350 777)" fill="black"/>
+<rect x="350" y="428" width="80" height="349" transform="rotate(90 350 428)" fill="black"/>
+<rect x="1" y="777" width="80" height="349" transform="rotate(-90 1 777)" fill="black"/>
+<rect width="80" height="349" fill="black"/>
+<rect x="350" y="349" width="80" height="349" transform="rotate(-180 350 349)" fill="black"/>
+<rect x="350" width="80" height="349" transform="rotate(90 350 0)" fill="black"/>
+<rect x="1" y="349" width="80" height="349" transform="rotate(-90 1 349)" fill="black"/>
+<rect x="429" width="80" height="349" fill="black"/>
+<rect x="779" y="349" width="80" height="349" transform="rotate(-180 779 349)" fill="black"/>
+<rect x="779" width="80" height="349" transform="rotate(90 779 0)" fill="black"/>
+<rect x="430" y="349" width="80" height="349" transform="rotate(-90 430 349)" fill="black"/>
 </svg>

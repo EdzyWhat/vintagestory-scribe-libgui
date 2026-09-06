@@ -46,10 +46,9 @@ public sealed partial class ScribeModSystem
         RegisterSvgIcon(api, "scribehistory", new AssetLocation("scribe", "textures/icons/book.svg"));
         RegisterSvgIcon(api, "scribetimer",   new AssetLocation("scribe", "textures/icons/timer.svg"));
         RegisterSvgIcon(api, "scribeinfo",    new AssetLocation("scribe", "textures/icons/info.svg"));
-        // Scriptorium item-storage tab (add-scriptorium-inventory): reuses the open-book glyph for now (the
-        // storage holds Notebook/Tablet items). Aliased so a dedicated icon can be swapped in later without
-        // touching the dialog, exactly like scribehistory reusing guestbook.svg above.
-        RegisterSvgIcon(api, "scribeinventory", new AssetLocation("scribe", "textures/icons/book.svg"));
+        // Item-storage tabs (Scriptorium's add-scriptorium-inventory, and the Inbox Inventory tab): a 2x2
+        // grid of outlined squares, replacing the borrowed open-book glyph placeholder (feedback 2026-09-06).
+        RegisterSvgIcon(api, "scribeinventory", new AssetLocation("scribe", "textures/icons/grid.svg"));
         // Guide-page Link icon (add-tracker-link-tasks 7.6): a guide/explainer page has no item to draw, so
         // its Link row shows this generic open-book glyph instead of an ItemStackDisplay.
         RegisterSvgIcon(api, "scribebook",    new AssetLocation("scribe", "textures/icons/book.svg"));
