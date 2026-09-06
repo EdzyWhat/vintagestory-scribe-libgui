@@ -146,7 +146,10 @@ internal sealed class ScribeInboxContentState : State<ScribeInboxContent>
         Widget filterRow = new Wrap(
             spacing: 6f,
             runSpacing: 6f,
-            children: AllGroups().Select(g => BuildFilterChip(g, colors)).ToList());
+            children: AllGroups()
+                .Select(g => BuildFilterChip(g, colors,
+                    Widget.Rows.Count(r => ScribeAssignmentFilterGroups.StatesFor(g).Contains(r.State))))
+                .ToList());
 
         Widget list = visibleRows.Count == 0
             ? new Center(child: new Text(
@@ -191,12 +194,16 @@ internal sealed class ScribeInboxContentState : State<ScribeInboxContent>
     /// <summary>One radio-button-style pill per filter group (inbox-tab: "the active/inactive state of
     /// every chip is visible without opening any additional control") — filled when it's the sole active
     /// group, outlined otherwise. Tapping one selects it exclusively (triage 2026-08-31).</summary>
-    private Widget BuildFilterChip(ScribeAssignmentFilterGroup group, ColorScheme colors)
+    private Widget BuildFilterChip(ScribeAssignmentFilterGroup group, ColorScheme colors, int count)
     {
         bool active = Widget.ActiveFilterGroup == group;
         var (labelKey, chipColor) = ScribeAssignmentFilterGroups.LabelAndColor(group);
         Vector4 bg = active ? chipColor with { W = 1f } : colors.SurfaceHigh with { W = 1f };
         Vector4 fg = active ? ScribeRowConstants.NavActiveGlyph : colors.OnSurfaceVariant;
+
+        string label = group == ScribeAssignmentFilterGroup.All || count == 0
+            ? Lang.Get(labelKey)
+            : Lang.Get("scribe:scribe-assignment-filter-count", Lang.Get(labelKey), count);
 
         return new GestureDetector(
             onTap: _ => Widget.OnFilterGroupChanged(group),
@@ -209,7 +216,7 @@ internal sealed class ScribeInboxContentState : State<ScribeInboxContent>
                     BorderColor = colors.Border,
                     Padding = EdgeInsets.Symmetric(horizontal: 10f, vertical: 4f),
                 },
-                child: new Text(Lang.Get(labelKey), new TextStyle { FontSize = 12f, Color = fg })));
+                child: new Text(label, new TextStyle { FontSize = 12f, Color = fg })));
     }
 }
 

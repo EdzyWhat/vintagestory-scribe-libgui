@@ -97,6 +97,7 @@
 	"scribe-assignment-state-sent": "Sent",
 	"scribe-assignment-filter-all": "All",
 	"scribe-assignment-filter-rejected-group": "Cancelled",
+	"scribe-assignment-filter-count": "{0} ({1})",
 	"scribe-assignment-assigned-by": "Assigned by {0} — {1}",
 	"scribe-assignment-received-on": "Received — {0}",
 	"scribe-assignment-accepted-on": "Accepted — {0}",
