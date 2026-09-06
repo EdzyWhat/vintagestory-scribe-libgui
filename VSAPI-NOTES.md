@@ -3435,6 +3435,44 @@ EVERY texture code used by EVERY manually-swapped shape variant, not just the de
 only `blank`'s codes were declared/auto-merged, so the filled/sealed variant always rendered
 untextured — TESTING.md `00000093`).
 
+## A ProtoBuf `[ProtoMember]` int field with a non-zero C# property-initializer "unset" sentinel (e.g. `= -1`) silently reverts a legitimate value of 0 back to that sentinel — the initializer alone does NOT protect it (2026-09-06)
+
+**Symptom: a network message field meant to carry "slot index, or -1 if unresolved" arrives at the
+receiver as -1 even though the sender's own diagnostic log proves it sent 0 — every downstream
+consumer that then falls back to some other resolution path (active-hand item, first candidate,
+etc.) on an unresolved (-1) target silently acts on the WRONG target instead of throwing or
+no-oping. Here: accepting a Task Notice onto the first slot of a two-slot hotbar (`slot=0`) always
+"succeeded" client-side (dialog closed) but placed nothing — the server logged
+`Accept placement target unresolvable/read-only ... slot=-1`, while the client's own send-time log
+for the same action showed `slot=0`.**
+
+Root cause: protobuf-net's default wire behavior (matching proto2/3 "implicit field presence")
+OMITS a scalar field from the wire entirely whenever its CLR value equals that type's CLR default
+(`0` for `int`, unless told otherwise) — it cannot distinguish "value is 0" from "value was never
+set." A C# property initializer like `public int TargetSlotId { get; set; } = -1;` only affects
+what a FRESHLY CONSTRUCTED message object holds before deserialization runs; it does nothing to
+protobuf-net's own notion of "default," which is still the CLR zero. So: a real value of exactly 0
+gets skipped on the wire (indistinguishable to protobuf-net from "unset"), and the receiver's own
+`= -1` initializer — never overwritten, since the wire carried nothing for that field — is what the
+handler actually reads. This is the mirror-image of the intended safety: the code was written to
+make "-1 means unset, so a real 0 is never confused with it," but instead a real 0 is EXACTLY what
+gets confused with unset. Confirmed by decompiling `ProtoBuf.Meta.MetaType`/`ValueMember`
+(`protobuf-net.dll`, ships in `Vintage Story.app/Lib/`): attribute-based model building reads
+`System.ComponentModel.DefaultValueAttribute` off the member (if present) to seed `ValueMember`'s
+own skip-check value; absent that attribute, the skip-check falls back to the CLR default.
+
+**Fix pattern:** whenever a `[ProtoMember]` int/byte/etc. field uses a non-zero sentinel as its C#
+initializer specifically so 0 stays a distinguishable real value, ALSO add
+`[System.ComponentModel.DefaultValue(<thatSentinel>)]` on the same property — this repoints
+protobuf-net's own skip-check at the sentinel instead of the CLR default, so a real 0 is always
+written and only the sentinel itself is ever omitted (harmlessly, since the receiver's own
+initializer already produces it). Fixed on the four live "-1 means unresolved slot" fields:
+`ScribeAssignmentActionMessage.TargetSlotId`, `ScribeAutoLinkQuestMessage.TargetSlotId`,
+`ScribeTaskNoticeActionMessage.SourceSlotId`/`TargetSlotId`. `ScribeSendAssignmentBatchMessage
+.TargetQuantity` (initializer `= 1`, so the danger value is 0) has the same latent shape but
+`ScribeBlock` already clamps every row's `TargetQuantity` to ≥ 1 before it's ever set, so 0 is
+believed unreachable there today — worth the same attribute if that guarantee ever changes.
+
 ## Entry template
 
 ```

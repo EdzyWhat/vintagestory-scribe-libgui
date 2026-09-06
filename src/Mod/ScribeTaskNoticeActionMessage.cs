@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using ProtoBuf;
 
 namespace Scribe;
@@ -15,7 +16,12 @@ public sealed class ScribeTaskNoticeActionMessage
     [ProtoMember(1)]
     public string? SourceInventoryId { get; set; }
 
+    /// <summary>See <see cref="ScribeAssignmentActionMessage.TargetSlotId"/>'s remarks: the
+    /// <see cref="DefaultValue"/> attribute is load-bearing — without it protobuf-net's implicit-default
+    /// wire skip makes a legitimate slot 0 indistinguishable from "unset" and it silently reverts to -1 on
+    /// the receiving end.</summary>
     [ProtoMember(2)]
+    [DefaultValue(-1)]
     public int SourceSlotId { get; set; } = -1;
 
     /// <summary>Only <see cref="Scribe.Core.ScribeAssignmentAction.Accept"/> or
@@ -28,8 +34,10 @@ public sealed class ScribeTaskNoticeActionMessage
     [ProtoMember(4)]
     public string? TargetInventoryId { get; set; }
 
-    /// <summary>Ignored for Decline. Defaults to -1 (unresolved).</summary>
+    /// <summary>Ignored for Decline. Defaults to -1 (unresolved); see <see cref="SourceSlotId"/>'s remarks
+    /// on why <see cref="DefaultValue"/> is load-bearing here too.</summary>
     [ProtoMember(5)]
+    [DefaultValue(-1)]
     public int TargetSlotId { get; set; } = -1;
 
     /// <summary>The accepting player's own New Task Insert preference (mirrors

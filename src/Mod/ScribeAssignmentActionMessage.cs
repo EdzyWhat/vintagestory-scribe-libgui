@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using ProtoBuf;
 using Scribe.Core;
 
@@ -32,8 +33,14 @@ public sealed class ScribeAssignmentActionMessage
     public string? TargetInventoryId { get; set; }
 
     /// <summary>Slot index within <see cref="TargetInventoryId"/>. Ignored for every action other than
-    /// Accept. Defaults to -1 (unresolved) so an absent value never aliases slot 0.</summary>
+    /// Accept. Defaults to -1 (unresolved) so an absent value never aliases slot 0. <see cref="DefaultValue"/>
+    /// is load-bearing here, not decorative: protobuf-net's default wire-format behavior omits a scalar
+    /// field whenever its value equals the CLR default (0 for <see cref="int"/>) — without this attribute a
+    /// legitimate slot 0 is indistinguishable from "never set" and silently reverts to -1 on the receiving
+    /// end, which is exactly backwards from this property's own doc comment (notice-accept-placement-
+    /// silently-fails-in-slot-0 investigation, 2026-09-06).</summary>
     [ProtoMember(4)]
+    [DefaultValue(-1)]
     public int TargetSlotId { get; set; } = -1;
 
     /// <summary>The accepting player's own New Task Insert preference (<c>ScribePlayerSettings.NewTaskInsert</c>,

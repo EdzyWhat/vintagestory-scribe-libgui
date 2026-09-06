@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.ComponentModel;
 using ProtoBuf;
 
 namespace Scribe;
@@ -84,8 +85,10 @@ public sealed class ScribeAutoLinkQuestMessage
     public string? TargetInventoryId { get; set; }
 
     /// <summary>Slot index within <see cref="TargetInventoryId"/>. Defaults to -1 (unresolved) so an
-    /// absent value never aliases slot 0.</summary>
+    /// absent value never aliases slot 0 — see <see cref="ScribeAssignmentActionMessage.TargetSlotId"/>'s
+    /// remarks on why the <see cref="DefaultValue"/> attribute is load-bearing, not decorative, for this.</summary>
     [ProtoMember(6)]
+    [DefaultValue(-1)]
     public int TargetSlotId { get; set; } = -1;
 
     /// <summary>The quest's catalog objective definitions, captured client-side (see
