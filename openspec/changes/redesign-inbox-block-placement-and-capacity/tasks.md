@@ -62,6 +62,13 @@
     against a wall face is left for a real art pass, per design.md's accepted Risk.
   - Missing-texture/asset-warning confirmation in the client log is folded into manual playtest
     4.1 (requires opening the game).
+  - STALE AS OF 2026-09-05: both files have since been replaced with real, block-specific
+    geometry (see design.md's Non-Goals update) — `inbox-wall.json` is no longer a bare rotated
+    clone of `inbox.json` (it reorganizes the same board/cubby geometry under its own top-level
+    groups), and this bullet's "no missing-texture risk" claim no longer holds: both files now
+    have the same 35-element/72-face untextured-face bug (VSAPI-NOTES.md's Blockbench-export
+    note). Re-verify once that's fixed — folded into playtest 4.1 as originally planned, not a
+    new task.
 - [x] 3.3 Confirm (reading `BlockInbox.cs`/base class behavior, no code change expected if the
   engine's variant-group + face-placement convention already resolves this generically the way
   it does for the vanilla torch) that placing against a floor yields the `up` variant and placing

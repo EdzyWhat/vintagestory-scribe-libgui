@@ -24,6 +24,12 @@ placeholder).
 - No new art for either placement mode's model in this change (both may still be the
   Scriptorium-cloned placeholder, same as today) — this is plumbing, like
   `add-custom-models-tasknotice-desk-inbox` before it.
+  **Update (2026-09-05, superseded)**: both `inbox.json` (ground) and `inbox-wall.json` have
+  since received real, matching board/cubby geometry, replacing the Scriptorium-cloned
+  placeholder this bullet describes — see `add-custom-models-tasknotice-desk-inbox`'s
+  proposal.md for the equivalent Assignment Desk update. Both files currently share the same
+  blocking bug (35 elements / 72 untextured faces each — see that change's tasks.md 2.4 and
+  VSAPI-NOTES.md's Blockbench-export note), so neither variant renders in-game yet.
 - No change to the Inbox tab (assignment row list) or to any assignment-state behavior.
 - No change to the Assignment Desk or Scriptorium.
 

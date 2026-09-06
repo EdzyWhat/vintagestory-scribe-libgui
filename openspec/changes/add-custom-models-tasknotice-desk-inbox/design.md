@@ -141,12 +141,15 @@ starting point pending real art, rather than removing the comment outright.
   of which are Desk/Inbox-specific. → Mitigation: this is intentional per the updated scope (an
   editable starting point, not final geometry); any stripping/reshaping of unused Scriptorium
   elements happens in the later real art pass, not this change.
-- **[Trade-off]** Assignment Desk, Inbox, and Scriptorium will render as three visually
-  identical blocks until the later art pass diverges them — a direct consequence of starting
-  both new models from a clone of the Scriptorium's shape. Accepted trade-off: the benefit (an
-  editable `.bbmodel` source ready to modify directly, versus reworking a bare Lectern JSON
-  with no editable source) outweighs the temporary visual duplication, and this is asset
-  plumbing only — no player-facing release ships in this state.
+- **[Trade-off, superseded 2026-09-05]** ~~Assignment Desk, Inbox, and Scriptorium will render as
+  three visually identical blocks until the later art pass diverges them~~ — held true only
+  briefly. Both blocks have since received real, block-specific geometry directly in
+  `assignmentdesk.bbmodel`/`inbox.bbmodel` (a desk with drawers/tabletop/quill; an inbox with
+  board/cubby geometry), no longer visually matching the Scriptorium. The original trade-off's
+  premise (an editable `.bbmodel` source beats reworking bare Lectern JSON) is exactly what let
+  this happen faster than planned — not a regression, just an update to a since-stale
+  prediction. See VSAPI-NOTES.md's Blockbench-export note ("A Blockbench face with no assigned
+  texture exports as `texture: null`...") for a real bug this divergence surfaced.
 - **[Trade-off]** The filled Task Notice's placeholder shape is intentionally minimal (a small
   structural difference, not real art), so testers/players will see a rough "is this sealed?"
   visual cue rather than a finished look during this window. Acceptable given proposal.md's

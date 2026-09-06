@@ -873,6 +873,7 @@
 									]
 								},
 								"east": {
+									"texture": "#ebony",
 									"uv": [
 										12,
 										5,
@@ -890,6 +891,7 @@
 									]
 								},
 								"west": {
+									"texture": "#ebony",
 									"uv": [
 										15,
 										16,

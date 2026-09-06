@@ -18,8 +18,18 @@
   Scriptorium-derived starting point (not a direct reference to the Scriptorium's or Lectern's
   files, and not final art).
 - [ ] 1.4 Build (`dotnet build -c Debug`) and restage per `build/restage.sh Debug`, then manually
-  verify in-game: placing and viewing an Assignment Desk renders fully textured, matching the
-  Scriptorium's appearance (no missing-texture/pink-checkerboard faces).
+  verify in-game: placing and viewing an Assignment Desk renders fully textured (no missing-
+  texture/pink-checkerboard faces or the engine's unknown-asset "?" placeholder). STALE WORDING
+  NOTE (2026-09-05): this task originally expected the result to match the Scriptorium's
+  appearance — no longer accurate, since `assignmentdesk.bbmodel` has since received its own
+  real geometry (see proposal.md's 2026-09-05 update); verify texture completeness, not visual
+  identity to the Scriptorium. BLOCKED as of 2026-09-05: the current shape fails to parse at all
+  (client log: "Failed parsing shape model scribe:shapes/block/assignmentdesk/assignmentdesk.json"
+  / "Exception has been thrown by the target of an invocation.") — 36 elements / 68 faces have
+  `"texture": null` (looks fine in Blockbench since these are faces hidden from the default
+  camera angle, but the engine crashes the whole shape's parse on any enabled face with a null
+  texture; see VSAPI-NOTES.md's new Blockbench-export note). Needs a Blockbench pass assigning a
+  texture to (or disabling) all 68 faces before this task can pass.
 
 ## 2. Inbox: local model
 
@@ -32,7 +42,11 @@
   `scribe:block/inbox/<key>`, and update its PLACEHOLDER MODEL comment the same way as the
   Desk's.
 - [ ] 2.4 Restage and manually verify in-game: placing and viewing the standalone Inbox block
-  renders fully textured, matching the Scriptorium's appearance.
+  renders fully textured (no missing-texture faces or the engine's unknown-asset "?"
+  placeholder). Same stale-wording note as 1.4 — `inbox.bbmodel` has since received its own real
+  geometry, no longer expected to match the Scriptorium. BLOCKED as of 2026-09-05 by the same
+  class of bug as 1.4: 35 elements / 72 faces in `inbox.json` have `"texture": null`. Needs the
+  same Blockbench fix.
 
 ## 3. Task Notice: split blank/filled model files
 

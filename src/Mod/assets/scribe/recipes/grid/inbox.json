@@ -1,0 +1,20 @@
+[
+	{
+		// Clone of the base game's chest recipe (assets/survival/recipes/grid/chest.json) — same 8-plank
+		// ring + 1 nail pattern and metal-variant nail set, just retargeted to the Inbox block's "-up"
+		// (ground-placed) state, the only state that's craftable/creative-obtainable (see
+		// blocktypes/inbox.json's creativeinventory restriction to "*-up").
+		ingredientPattern: "WWW,WNW,WWW",
+		ingredients: {
+			"W": { type: "item", code: "game:plank-*" },
+			"N": { type: "item", code: "game:metalnailsandstrips-{metal}" }
+		},
+		allowedVariants: {
+			metal: ["copper", "blackbronze", "tinbronze", "bismuthbronze", "iron", "silver", "gold", "meteoriciron", "steel", "electrum"]
+		},
+		width: 3,
+		height: 3,
+		name: "scribe:scribeinbox",
+		output: { type: "block", code: "scribe:scribeinbox-up", quantity: 1 }
+	}
+]

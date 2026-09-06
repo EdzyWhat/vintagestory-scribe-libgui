@@ -463,8 +463,8 @@
 											"uv": [
 												0,
 												11,
-												9.6,
-												13
+												20,
+												15
 											],
 											"snapUv": false,
 											"autoUv": false
@@ -1198,10 +1198,10 @@
 														"north": {
 															"texture": "#charred",
 															"uv": [
-																22,
-																22,
-																26,
-																30
+																10,
+																8,
+																14,
+																24
 															],
 															"rotation": 90
 														},
@@ -1218,10 +1218,10 @@
 														"south": {
 															"texture": "#charred",
 															"uv": [
-																20,
-																14,
-																24,
-																22
+																8,
+																4,
+																4,
+																20
 															],
 															"rotation": 90
 														},
@@ -1243,7 +1243,6 @@
 																29,
 																3
 															],
-															"enabled": false,
 															"snapUv": false,
 															"autoUv": false
 														},
@@ -1253,7 +1252,7 @@
 																8,
 																21,
 																24,
-																23
+																25
 															]
 														}
 													}
@@ -1279,10 +1278,10 @@
 														"north": {
 															"texture": "#charred",
 															"uv": [
-																22,
-																22,
-																26,
-																32
+																27,
+																2,
+																31,
+																18
 															],
 															"rotation": 90
 														},
@@ -1299,10 +1298,10 @@
 														"south": {
 															"texture": "#charred",
 															"uv": [
-																20,
-																14,
-																24,
-																24
+																12,
+																11,
+																16,
+																27
 															],
 															"rotation": 90
 														},
@@ -1324,12 +1323,11 @@
 																25,
 																23
 															],
-															"enabled": false,
 															"snapUv": false,
 															"autoUv": false
 														},
 														"down": {
-															"texture": "#charred",
+															"texture": "#ebony",
 															"uv": [
 																0,
 																6,

@@ -38,8 +38,16 @@ Explicitly out of scope: sculpting real final geometry or painting real final te
 Desk, Inbox, or the new filled Task Notice state. The filled Task Notice stays only
 minimally/structurally distinct from blank; the Desk and Inbox swap from a Lectern-derived
 placeholder to a Scriptorium-derived one (see above), but neither gets bespoke final geometry
-or textures in this change — a separate art pass happens later in Blockbench, and in the
-meantime the Desk and Inbox will render visually identical to the Scriptorium block.
+or textures in this change — a separate art pass happens later in Blockbench.
+
+**Update (2026-09-05): that separate art pass has already begun, ahead of this change's own
+schedule.** Both `assignmentdesk.bbmodel`/`.json` and `inbox.bbmodel`/`.json` now carry real,
+block-specific geometry (a desk with drawers/tabletop book/quill; an inbox with front/back/side
+boards and letter-slot cubbies) diverging from the Scriptorium clone described above — this
+change's own plumbing (local shape/texture ownership per block) is exactly what made that
+possible, but the resulting art is tracked as its own effort, not retroactively folded into this
+change's scope. Tasks 1.4/2.4's "matching the Scriptorium's appearance" verification wording is
+now stale as a result — see tasks.md.
 
 ## Capabilities
 

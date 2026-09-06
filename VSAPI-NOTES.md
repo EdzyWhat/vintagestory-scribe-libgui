@@ -3369,6 +3369,39 @@ Four small facts, each cost a build-error round-trip; recording so they're not r
   keys), consumed by `ScribeGuidePageHandbookPatch.cs`. See `GuiDialogScribeScriptorium.cs` for the
   precedent this was matched against.
 
+## A Blockbench face with no assigned texture exports as `"texture": null` and crashes the VS shape parser entirely — even though it renders fine in Blockbench (2026-09-05)
+
+**Symptom: a custom `.bbmodel`-sourced block shows as the engine's unknown-asset "?" placeholder
+cube everywhere (world, GUI icon, Handbook, Creative Inventory) — even though the `.bbmodel` looks
+completely normal, fully textured, when opened in Blockbench.**
+
+Root cause: `Shape.TrimTextureNamesAndResolveFaces()` (an `[OnDeserialized]` callback, invoked via
+Newtonsoft's own reflection — which is why the client log shows only the generic
+"Failed parsing shape model ..." / "Exception has been thrown by the target of an invocation.",
+with no further detail) does `value.Texture = value.Texture.Substring(1).DeDuplicate();` for every
+`Enabled` face, with no null check. Any enabled face whose `"texture"` field is `null` throws a
+`NullReferenceException` there, which fails parsing the ENTIRE shape, not just that one face — the
+`Shape` object never successfully constructs, so every render path (world mesh, GUI icon, handbook
+icon) falls back to the same generic "unknown asset" cube+`?` placeholder. Confirmed by decompiling
+(`ilspycmd -t Vintagestory.API.Common.ShapeElement VintagestoryAPI.dll`).
+
+Blockbench never surfaces this while modeling: a face only gets `"texture": null` on export when it
+was never explicitly assigned to one of the model's defined Texture slots. Blockbench's own
+viewport doesn't require every face to have an assigned texture to render something reasonable-
+looking — an unassigned face is usually one that's occluded from the default camera angle anyway
+(flush against another cube, facing the floor/an interior, etc.), so it never visually reads as
+broken while modeling. The mismatch is real: Blockbench tolerates an unassigned face silently; the
+VS engine does not, for the whole shape, not just that face.
+
+**Fix pattern**: before exporting, every enabled face needs either (a) an assigned texture (even a
+throwaway one, if it's genuinely never visible), or (b) to be explicitly disabled (Blockbench:
+select the face, disable it) so it's excluded from rendering rather than exported with a null
+texture. Don't trust the Blockbench viewport alone to catch this — check the exported JSON
+directly: walk every element's `faces` dict and flag any `"texture": null`. Caught this way in
+`assignmentdesk.json` (36 elements / 68 faces) and `inbox.json` (35 elements / 72 faces), both
+freshly custom-modeled beyond their original Scriptorium-clone starting point
+(`add-custom-models-tasknotice-desk-inbox`).
+
 ## Entry template
 
 ```

@@ -1,0 +1,30 @@
+[
+	{
+		// Clone of scriptorium.json's own recipe (see that file's comment) — same ingredient set and
+		// pattern, just retargeted to the Assignment Desk block. Placeholder pending its own art/economy
+		// pass; revisit once the Assignment Desk's real model/identity diverges from the Scriptorium.
+		//   FRL   feather   parchment  leather
+		//   BPP   ink bowl  2 planks   2 planks
+		//   NPP   1 nails   2 planks   2 planks
+		ingredientPattern: "FRL,BPP,NPP",
+		ingredients: {
+			"F": { type: "item", code: "game:feather" },
+			"R": { type: "item", code: "game:paper-parchment" },
+			"L": { type: "item", code: "game:leather-normal-plain" },
+			"B": { type: "block", code: "game:bowl-*-fired" },
+			"P": { type: "item", code: "game:plank-*", quantity: 2 },
+			"N": { type: "item", code: "game:metalnailsandstrips-*" }
+		},
+		width: 3,
+		height: 3,
+		attributes: {
+			liquidContainerProps: {
+				requiresContent: { type: "item", code: "game:dye-black" },
+				requiresLitres: 1,
+				consumeContainer: true
+			}
+		},
+		name: "scribe:scribeassignmentdesk",
+		output: { type: "block", code: "scribe:scribeassignmentdesk", quantity: 1 }
+	}
+]
