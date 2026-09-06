@@ -674,6 +674,15 @@ public abstract partial class ScribeDialogBase
     /// §7.4). Null on the Lectern/Notebook and on a wet tablet, where a text tap is not a blocked edit.</summary>
     private protected virtual Action<Guid>? ReadViewTextEditRefused => null;
 
+    /// <summary>Whether this dialog's Read View renders the filter-pill row (<c>read-view-filter-pills</c>)
+    /// and any subtask-group collapse toggles (<c>read-view-subtask-collapse</c>) — one flag gates both
+    /// features together, since they are excluded from the same surfaces as a unit (scribe-dialog-base).
+    /// Defaults to <c>true</c> so every existing subclass (Lectern, Notebook, Clockmaker's Notebook,
+    /// Chalkboard, Scriptorium, Assignment Desk, Inbox) gets both features with no per-subclass change.
+    /// Only <see cref="GuiDialogScribeTablet"/> overrides this to <c>false</c> (tablet-dialog), keeping its
+    /// pared-down read-view intentional rather than an oversight.</summary>
+    private protected virtual bool SupportsFilterPills => true;
+
     /// <summary>Whether this surface's EDITOR rows opt into the read view's click-to-open-Handbook affordance
     /// on their Link/Tracker/Craft name label (enable-tablet-row-links). Default false: every surface with a
     /// distinct read view (Lectern/Notebook/Scriptorium) activates links there, so its editor names stay plain
@@ -804,7 +813,14 @@ public abstract partial class ScribeDialogBase
             readOnly: ReadViewIsReadOnly,
             completionAndPinLive: ReadViewCompletionAndPinLive,
             onTextEditRefused: ReadViewTextEditRefused,
-            assignedStampBitmap: modSystem.GetGuiTextureBitmap(ScribeAssignedTaskIcon.Asset));
+            assignedStampBitmap: modSystem.GetGuiTextureBitmap(ScribeAssignedTaskIcon.Asset),
+            // Filter-pill row + subtask-collapse toggles (read-view-filter-and-collapse), gated as ONE
+            // unit on the capability flag (scribe-dialog-base) — false only on the Tablet.
+            supportsFilterPills: SupportsFilterPills,
+            activeFilterCategory: readViewFilterCategory,
+            onFilterCategoryChanged: OnReadViewFilterCategoryChanged,
+            isGroupCollapsed: collapsedReadViewGroupIds.Contains,
+            onToggleGroupCollapsed: OnReadViewToggleGroupCollapsed);
 
     /// <summary>The editable task list for the current scratch document. Promoted from <c>private</c> to
     /// <c>protected</c> so a subclass may reuse the inherited editor rather than fork it — the tablet

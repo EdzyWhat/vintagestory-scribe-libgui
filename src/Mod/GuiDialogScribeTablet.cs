@@ -99,6 +99,12 @@ public class GuiDialogScribeTablet : ScribeDialogBase
     /// checkbox/pin inert — see <see cref="ReadViewCompletionAndPinLive"/> (zero-point-three-fixes §7.3).</summary>
     private protected override bool ReadViewIsReadOnly => !IsEditable;
 
+    /// <summary>The Tablet never shows the Read View filter-pill row or subtask-collapse toggles
+    /// (tablet-dialog), keeping its pared-down read-view intentional rather than an oversight — it renders
+    /// through the exact same <see cref="ScribeReadContent"/> every other surface does, so this single flag
+    /// (scribe-dialog-base) is the only thing distinguishing it.</summary>
+    private protected override bool SupportsFilterPills => false;
+
     // TitleMaxLines is no longer overridden here: two-line title wrapping is now the shared base default
     // (wrap-titles-all-surfaces), so BOTH the cuneiform title (BuildTitleDisplay/BuildTitleField, unchanged)
     // and the cuneiform-OFF readable RichText fallback wrap to two lines. Previously this override forced the

@@ -134,6 +134,27 @@ public sealed partial class ScribeModSystem
         SetQuestObjectiveProgressForPlayer(fromPlayer, docId, taskId, message.Quantity);
     }
 
+    /// <summary>Client → server: persist a Read View filter pill + subtask-group collapse change
+    /// (read-view-filter-and-collapse), addressed by DocId. A malformed DocId is a silent no-op; each
+    /// malformed collapsed-group id is simply dropped rather than rejecting the whole packet.</summary>
+    private void OnServerReceivedSetReadViewState(IServerPlayer fromPlayer, ScribeSetReadViewStateMessage message)
+    {
+        if (!TryReadGuid(message.DocId, out var docId))
+        {
+            Trace("set-read-view-state from {0}: MALFORMED packet (docId not 16 bytes) — ignored", fromPlayer.PlayerName);
+            return;
+        }
+        var collapsedIds = new List<Guid>();
+        if (message.CollapsedGroupIds is not null)
+        {
+            foreach (var idBytes in message.CollapsedGroupIds)
+            {
+                if (TryReadGuid(idBytes, out var id)) collapsedIds.Add(id);
+            }
+        }
+        SetReadViewStateForPlayer(fromPlayer, docId, message.FilterCategory, collapsedIds);
+    }
+
     private void OnServerReceivedReorderPins(IServerPlayer fromPlayer, ScribeReorderPinsMessage message)
     {
         // Validate the parallel id lists: both present, equal length, and bounded so a hostile/oversized

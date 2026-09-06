@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Scribe.Core;
 
 namespace Scribe;
@@ -144,4 +145,22 @@ public interface IScribeDocumentHost
     /// <c>IsTracker</c>/the shared carried-count predicate. No-op for a non-QuestObjective or unknown TaskId.
     /// For block hosts: marks dirty and resyncs. For item hosts: writes to the ItemStack.</summary>
     bool SetQuestObjectiveProgressFromReader(Guid taskId, int currentQuantity);
+
+    // ── Read View filter-pill + subtask-collapse persisted state (read-view-filter-and-collapse) ──
+
+    /// <summary>The last-selected Read View filter pill for THIS Scribe item/block instance (a
+    /// <see cref="ReadViewFilterCategory"/> cast to byte), defaulting to <c>0</c> (All) when never set.
+    /// Per-instance, not per-player — mirrors the block entity's <c>accessMode</c> persistence shape.</summary>
+    byte ReadViewFilterCategory { get; }
+
+    /// <summary>The TaskIds of subtask-group parents currently collapsed in this instance's Read View.
+    /// Empty (fully expanded) when never set.</summary>
+    IReadOnlyCollection<Guid> CollapsedGroupIds { get; }
+
+    /// <summary>Server-side: overwrite both persisted pieces of Read View state at once (they always ride
+    /// the same client packet — see <see cref="ScribeSetReadViewStateMessage"/>) and persist/resync. A
+    /// lock-free, always-allowed viewer preference, exactly like <see cref="SetTaskDoneFromReader"/> — not
+    /// a document edit. For block hosts: marks dirty and resyncs. For item hosts: writes to the
+    /// ItemStack.</summary>
+    void SetReadViewStateFromReader(byte filterCategory, IReadOnlyCollection<Guid> collapsedGroupIds);
 }

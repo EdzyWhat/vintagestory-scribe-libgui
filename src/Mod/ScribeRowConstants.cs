@@ -244,6 +244,29 @@ internal static class ScribeRowConstants
     /// <c>ColorScheme.Primary</c> instead, so this constant does not apply there.</summary>
     public static readonly Vector4 QuestPromptTitleColor = new(1f, 0.9529f, 0.6392f, 1f);
 
+    // ── Read View filter-pill colors (read-view-filter-and-collapse) ─────────────────────────────
+    // A distinct alias mapping from the Assignment chips above (e.g. blue means Accepted there,
+    // Completed here) — the two pill rows never appear together in the same view, so each reads
+    // consistently on its own. Aliases, not tuned values, per the same 2026-08-31 lesson: a bespoke
+    // palette read as too saturated next to the rest of the GUI's muted nav-icon backgrounds.
+
+    /// <summary>The Read View "All" pill's neutral swatch — borrows the Settings nav button's warm
+    /// gray, same "no filter" meaning as <see cref="AssignmentChipAll"/>.</summary>
+    public static readonly Vector4 ReadFilterAll = NavActiveSettings;
+
+    /// <summary>The Read View "Completed" pill — borrows the Read nav button's blue.</summary>
+    public static readonly Vector4 ReadFilterCompleted = NavActiveRead;
+
+    /// <summary>The Read View "Active" pill — borrows the Pinned Tasks nav button's green.</summary>
+    public static readonly Vector4 ReadFilterActive = NavActivePinned;
+
+    /// <summary>The Read View "Pinned" pill — borrows the Transcribe nav button's gold.</summary>
+    public static readonly Vector4 ReadFilterPinned = NavActiveTranscribe;
+
+    /// <summary>The Read View "Other" pill (freeform Text + Quest objectives) — borrows the Guest
+    /// Book nav button's purple.</summary>
+    public static readonly Vector4 ReadFilterOther = NavActiveGuestbook;
+
     /// <summary>The HUD's standard near-white row-text color (formerly a literal duplicated at each of
     /// <see cref="HudScribePins"/>'s several row/label builders) — deliberately NOT pure white
     /// (<c>Vector4.One</c>): the HUD always renders over the live game world, so near-white

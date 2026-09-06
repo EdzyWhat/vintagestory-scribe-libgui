@@ -104,6 +104,18 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// filter to compute whether they're all expanded. Shared by both tabs, like that set.</summary>
     private ScribeAssignmentFilterGroup assignmentFilterGroup = ScribeAssignmentFilterGroup.All;
 
+    /// <summary>Read View's active filter pill (read-view-filter-and-collapse) — dialog-owned, mirroring
+    /// <see cref="assignmentFilterGroup"/>'s reasoning, and seeded from/written back through
+    /// <see cref="host"/>'s per-instance persisted state (<see cref="IScribeDocumentHost.ReadViewFilterCategory"/>)
+    /// rather than staying purely in-memory. Irrelevant on a surface where <see cref="SupportsFilterPills"/>
+    /// is false (no pill row is ever built to change it).</summary>
+    private ReadViewFilterCategory readViewFilterCategory;
+
+    /// <summary>TaskIds of Read View subtask-group PARENTS currently collapsed (read-view-filter-and-
+    /// collapse), the collapse-toggle counterpart of <see cref="readViewFilterCategory"/> — same
+    /// persistence source, same seeding/write-back path.</summary>
+    private readonly HashSet<Guid> collapsedReadViewGroupIds = new();
+
     /// <summary>True when the Guestbook (Visitors) tab is the active view. Exposed so subclasses
     /// can apply the active color to their Guestbook nav button in <see cref="GetExtraNavButtons"/>.</summary>
     protected bool IsVisitorsView => viewMode == ScribeLecternView.Visitors;
@@ -463,6 +475,12 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     {
         this.host = host;
         modSystem = capi.ModLoader.GetModSystem<ScribeModSystem>();
+
+        // Seed the Read View filter pill + collapsed-group set from this instance's persisted state
+        // (read-view-filter-and-collapse task 4.3/7.2) — defaults to All / fully expanded when the host
+        // has never had either set.
+        readViewFilterCategory = (ReadViewFilterCategory)host.ReadViewFilterCategory;
+        collapsedReadViewGroupIds.UnionWith(host.CollapsedGroupIds);
 
         // Light sampler for the ambient-illumination shade (respect-local-illumination). Bound to the live
         // MySettings so a floor change is picked up on the next frame's sample; only read on the render thread.

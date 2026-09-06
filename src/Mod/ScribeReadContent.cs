@@ -93,7 +93,12 @@ internal sealed class ScribeReadContent : StatefulWidget
         bool readOnly = false,
         bool completionAndPinLive = false,
         Action<Guid>? onTextEditRefused = null,
-        SKBitmap? assignedStampBitmap = null)
+        SKBitmap? assignedStampBitmap = null,
+        bool supportsFilterPills = true,
+        ReadViewFilterCategory activeFilterCategory = ReadViewFilterCategory.All,
+        Action<ReadViewFilterCategory>? onFilterCategoryChanged = null,
+        System.Func<Guid, bool>? isGroupCollapsed = null,
+        Action<Guid>? onToggleGroupCollapsed = null)
     {
         Blocks = blocks;
         OnToggleTask = onToggleTask;
@@ -111,6 +116,11 @@ internal sealed class ScribeReadContent : StatefulWidget
         CompletionAndPinLive = completionAndPinLive;
         OnTextEditRefused = onTextEditRefused;
         AssignedStampBitmap = assignedStampBitmap;
+        SupportsFilterPills = supportsFilterPills;
+        ActiveFilterCategory = activeFilterCategory;
+        OnFilterCategoryChanged = onFilterCategoryChanged ?? (_ => { });
+        IsGroupCollapsed = isGroupCollapsed ?? (_ => false);
+        OnToggleGroupCollapsed = onToggleGroupCollapsed ?? (_ => { });
     }
 
     public IReadOnlyList<ScribeReadRowData> Blocks { get; }
@@ -169,6 +179,19 @@ internal sealed class ScribeReadContent : StatefulWidget
     /// widget stays API-free. Null on a pure server (no client bitmap to resolve) — the icon falls back
     /// to the plain SVG glyph in that case.</summary>
     public SKBitmap? AssignedStampBitmap { get; }
+    /// <summary>Whether to render the filter-pill row and any subtask-group collapse toggles
+    /// (scribe-dialog-base's capability flag) — false only for the Tablet (tablet-dialog). When false,
+    /// every row renders exactly as before this feature: unfiltered, full opacity, no toggle.</summary>
+    public bool SupportsFilterPills { get; }
+    /// <summary>The currently-selected filter pill (read-view-filter-pills), owned/persisted by the dialog.</summary>
+    public ReadViewFilterCategory ActiveFilterCategory { get; }
+    /// <summary>Requests a different pill become active.</summary>
+    public Action<ReadViewFilterCategory> OnFilterCategoryChanged { get; }
+    /// <summary>Whether the subtask group whose parent is the given TaskId is currently collapsed
+    /// (read-view-subtask-collapse), owned/persisted by the dialog.</summary>
+    public System.Func<Guid, bool> IsGroupCollapsed { get; }
+    /// <summary>Requests a subtask group's collapsed state be flipped, by its parent's TaskId.</summary>
+    public Action<Guid> OnToggleGroupCollapsed { get; }
 
     public override State CreateState() => new ScribeReadContentState();
 }
@@ -219,10 +242,41 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
         // the optimistic mutation (§5.4d), so no row is ever removed on that surface — the plain-Text ghost
         // (which does not render cuneiform strokes) is therefore only ever used on the readable Lectern/
         // Notebook, where it matches the live row exactly.
-        var items = Widget.Blocks
+        // Filter-pill row + subtask-group collapse (read-view-filter-and-collapse), gated on the ONE
+        // capability flag — false only for the Tablet, which renders every row exactly as before this
+        // feature (no filtering, no shadow opacity, no collapse toggle).
+        IReadOnlyDictionary<Guid, ReadRowVisibility>? visibility = Widget.SupportsFilterPills
+            ? ScribeReadViewFilter.ComputeVisibility(Widget.Blocks, Widget.ActiveFilterCategory, Widget.IsGroupCollapsed)
+            : null;
+
+        // Every depth-0 row with a non-empty owned run gets a collapse toggle (5.2) — computed once here
+        // over the FULL block list (before any filter hides rows), since a group's shape is structural,
+        // not filter-dependent.
+        HashSet<Guid>? groupParentsWithRun = null;
+        if (Widget.SupportsFilterPills)
+        {
+            groupParentsWithRun = new HashSet<Guid>();
+            for (int i = 0; i < Widget.Blocks.Count; i++)
+            {
+                if (Widget.Blocks[i].Depth != 0) continue;
+                var (start, end) = ScribeReadViewFilter.OwnedRun(Widget.Blocks, i);
+                if (end > start) groupParentsWithRun.Add(Widget.Blocks[i].TaskId);
+            }
+        }
+
+        var visibleBlocks = visibility is null
+            ? Widget.Blocks
+            : Widget.Blocks.Where(b => visibility[b.TaskId] != ReadRowVisibility.Hidden).ToList();
+
+        var items = visibleBlocks
             .Select(b => new ScribeAnimatedListItem(
                 Id: b.TaskId,
-                Child: new ScribeReadRow(b, Widget.OnToggleTask, Widget.OnTogglePinned, Widget.OnOpenLink, style, Widget.ReadOnly, Widget.CompletionAndPinLive, Widget.OnTextEditRefused, assignedStampBitmap: Widget.AssignedStampBitmap, currentShade: Widget.CurrentShade, key: new ValueKey<Guid>(b.TaskId)),
+                Child: new ScribeReadRow(b, Widget.OnToggleTask, Widget.OnTogglePinned, Widget.OnOpenLink, style, Widget.ReadOnly, Widget.CompletionAndPinLive, Widget.OnTextEditRefused, assignedStampBitmap: Widget.AssignedStampBitmap, currentShade: Widget.CurrentShade,
+                    shadow: visibility is not null && visibility[b.TaskId] == ReadRowVisibility.Shadow,
+                    showCollapseToggle: groupParentsWithRun is not null && groupParentsWithRun.Contains(b.TaskId),
+                    collapsed: Widget.IsGroupCollapsed(b.TaskId),
+                    onToggleCollapse: () => Widget.OnToggleGroupCollapsed(b.TaskId),
+                    key: new ValueKey<Guid>(b.TaskId)),
                 Ghost: new ScribeFrozenEditorRow(
                     new ScribeEditRowData(
                         Index: b.Index, Kind: b.Kind, Done: b.Done, Pinned: b.Pinned, TaskId: b.TaskId, Text: b.Text,
@@ -263,16 +317,21 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
         // read-only surface (hard/fired tablet — tablet-firing) omits it entirely so there is no path back
         // into the editor; the tabbed Lectern/Notebook keep it. Built as a list so the whole footer slot
         // (Padding + Button) drops out cleanly rather than rendering an empty gap.
-        var children = new List<Widget>
+        var children = new List<Widget>();
+        // Filter-pill row (3.2), above everything else — omitted entirely on a surface where
+        // SupportsFilterPills is false (the Tablet), so its Read View is byte-identical to before.
+        if (Widget.SupportsFilterPills)
         {
+            children.Add(new Padding(EdgeInsets.Only(bottom: 8f), child: BuildFilterPillRow(colors)));
+        }
+        children.Add(
             // A straight edge directly above the scroll region, matching the editor and pinned
             // views (scribe-lectern-view-consistency §1). Reuses the theme-border Divider the
             // settings form uses; inherits the Column's spacing gap below it. Dropped on the
             // cuneiform tablet path (add-tablet-clay-type-themes 8.1) — the hard rule reads wrong
             // against the clay backdrop; the readable Lectern/Notebook view keeps it.
-            Widget.Style.UseCuneiform ? new SizedBox() : new Divider(),
-            new Expanded(child: rowList),
-        };
+            Widget.Style.UseCuneiform ? new SizedBox() : new Divider());
+        children.Add(new Expanded(child: rowList));
         if (!Widget.ReadOnly)
         {
             children.Add(new Padding(Widget.FooterButtonPadding, child: new Button(
@@ -292,6 +351,45 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
                 mainAxisSize: MainAxisSize.Max,
                 children: children)));
     }
+
+    /// <summary>The All/Active/Completed/Pinned/Other pill row (read-view-filter-pills 3.2), same visual
+    /// shape as the Assignment Inbox's <c>BuildFilterChip</c> (radio-select, bracketed count only when
+    /// > 0) but this feature's own category set/colors.</summary>
+    private Widget BuildFilterPillRow(ColorScheme colors)
+    {
+        return new Wrap(
+            spacing: 6f,
+            runSpacing: 6f,
+            children: ScribeReadViewFilter.AllPills
+                .Select(category => BuildFilterPill(category, colors))
+                .ToList());
+    }
+
+    private Widget BuildFilterPill(ReadViewFilterCategory category, ColorScheme colors)
+    {
+        bool active = Widget.ActiveFilterCategory == category;
+        var (labelKey, chipColor) = ScribeReadViewFilter.LabelAndColor(category);
+        Vector4 bg = active ? chipColor with { W = 1f } : colors.SurfaceHigh with { W = 1f };
+        Vector4 fg = active ? ScribeRowConstants.NavActiveGlyph : colors.OnSurfaceVariant;
+
+        int count = ScribeReadViewFilter.CountFor(Widget.Blocks, category);
+        string label = category == ReadViewFilterCategory.All || count == 0
+            ? Lang.Get(labelKey)
+            : Lang.Get("scribe:scribe-assignment-filter-count", Lang.Get(labelKey), count);
+
+        return new GestureDetector(
+            onTap: _ => Widget.OnFilterCategoryChanged(category),
+            child: new Container(
+                style: new BoxStyle
+                {
+                    Color = bg,
+                    CornerRadius = new Vector4(10f),
+                    BorderThickness = 1f,
+                    BorderColor = colors.Border,
+                    Padding = EdgeInsets.Symmetric(horizontal: 10f, vertical: 4f),
+                },
+                child: new Text(label, new TextStyle { FontSize = 12f, Color = fg })));
+    }
 }
 
 /// <summary>
@@ -300,7 +398,7 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
 /// </summary>
 internal sealed class ScribeReadRow : StatefulWidget
 {
-    public ScribeReadRow(ScribeReadRowData data, Action<Guid> onToggleTask, Action<Guid> onTogglePinned, Action<Guid> onOpenLink, ScribeRowStyle style, bool readOnly = false, bool completionAndPinLive = false, Action<Guid>? onTextEditRefused = null, SKBitmap? assignedStampBitmap = null, ScribeAmbientLightSampler.Shade currentShade = default, Gui.Widgets.Framework.Key? key = null)
+    public ScribeReadRow(ScribeReadRowData data, Action<Guid> onToggleTask, Action<Guid> onTogglePinned, Action<Guid> onOpenLink, ScribeRowStyle style, bool readOnly = false, bool completionAndPinLive = false, Action<Guid>? onTextEditRefused = null, SKBitmap? assignedStampBitmap = null, ScribeAmbientLightSampler.Shade currentShade = default, bool shadow = false, bool showCollapseToggle = false, bool collapsed = false, Action? onToggleCollapse = null, Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
         Data = data;
@@ -313,6 +411,10 @@ internal sealed class ScribeReadRow : StatefulWidget
         OnTextEditRefused = onTextEditRefused;
         AssignedStampBitmap = assignedStampBitmap;
         CurrentShade = currentShade;
+        Shadow = shadow;
+        ShowCollapseToggle = showCollapseToggle;
+        Collapsed = collapsed;
+        OnToggleCollapse = onToggleCollapse ?? (() => { });
     }
 
     public ScribeReadRowData Data { get; }
@@ -339,6 +441,18 @@ internal sealed class ScribeReadRow : StatefulWidget
     /// <summary>The live ambient-illumination shade, threaded down so the assignment marker's hover
     /// tooltip can match the body's shading (see <see cref="ScribeReadContent.CurrentShade"/>).</summary>
     public ScribeAmbientLightSampler.Shade CurrentShade { get; }
+    /// <summary>True when this row renders at reduced ("shadow", read-view-subtask-collapse) opacity: it
+    /// is showing only because it shares a subtask group with a row that matches the active filter pill,
+    /// not because it matches itself. Purely visual — the row stays fully interactive.</summary>
+    public bool Shadow { get; }
+    /// <summary>True when this row is a subtask-group parent with a non-empty owned run, so it shows the
+    /// collapse/expand toggle (read-view-subtask-collapse 5.2).</summary>
+    public bool ShowCollapseToggle { get; }
+    /// <summary>Whether this row's owned run is currently collapsed (hidden). Only meaningful when
+    /// <see cref="ShowCollapseToggle"/> is true.</summary>
+    public bool Collapsed { get; }
+    /// <summary>Flips this row's owned-run collapse state.</summary>
+    public Action OnToggleCollapse { get; }
     /// <summary>Whether this row's checkbox and pin should behave as interactive: true on any editable read
     /// view (<see cref="ReadOnly"/> = false) OR on a read-only surface that keeps completion/pin live
     /// (<see cref="CompletionAndPinLive"/>). Consolidates the two so the checkbox/pin render off one predicate.</summary>
@@ -491,6 +605,21 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                 opacity: 0f,
                 child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant))));
 
+        // Subtask-group collapse toggle (read-view-subtask-collapse 5.2), shown only on a depth-0 row
+        // with a non-empty owned run (a Quest Link with objectives, a Craft parent with generated
+        // Trackers). Sits between the reserved grip spacer and the checkbox; absent on every other row,
+        // so a plain Task/Text/Tracker/Link keeps its existing column layout unchanged.
+        if (Widget.ShowCollapseToggle)
+        {
+            children.Add(new Padding(
+                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style, Widget.Data.IsItemKind)),
+                child: new ScribeRowButton(
+                    iconName: Widget.Collapsed ? "scribetriangleright" : "scribetriangledown",
+                    iconColor: colors.OnSurfaceVariant,
+                    size: style.ControlSize,
+                    onTap: () => Widget.OnToggleCollapse())));
+        }
+
         // Task, Tracker, AND Link all carry a Done flag, so all three show a completion checkbox (only a
         // freeform Text section doesn't — Completable). A Tracker's checkbox also flips automatically when its
         // count fills up under the Complete policy (the count engine issues the same toggle); a Link's is an
@@ -623,10 +752,15 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                     iconScale: 1.15f))); // pin glyph +15%, matching the editor (§10.2)
         }
 
-        return new MouseRegion(
+        Widget row = new MouseRegion(
             onEnter: _ => { if (!hovered) SetState(() => hovered = true); },
             onExit: _ => { if (hovered) SetState(() => hovered = false); },
             child: new Stack(stackChildren));
+
+        // Shadow opacity (read-view-subtask-collapse): a row shown only for its group's context, not
+        // because it matches the active filter itself, renders deemphasized. Opacity is paint-only — it
+        // does not intercept hit-testing, so the row's checkbox/pin/text stay fully interactive.
+        return Widget.Shadow ? new Opacity(opacity: 0.5f, child: row) : row;
     }
 }
 

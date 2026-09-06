@@ -303,6 +303,21 @@ public sealed partial class ScribeModSystem
             docHost!.SetQuestObjectiveProgressFromReader(taskId, quantity);
     }
 
+    /// <summary>
+    /// Server-side write-through of a Read View filter pill + collapsed-group set (read-view-filter-and-
+    /// collapse), driven by a client's <see cref="ScribeSetReadViewStateMessage"/>. Resolves the owning
+    /// document exactly like <see cref="SetTrackerQuantityForPlayer"/> (registry, or by scanning the acting
+    /// player's inventory for an item host) and writes lock-free via
+    /// <see cref="IScribeDocumentHost.SetReadViewStateFromReader"/>. A best-effort no-op when the source is
+    /// unresolvable. Public so the integration suite can drive the exact production path.
+    /// </summary>
+    public void SetReadViewStateForPlayer(IServerPlayer player, Guid docId, byte filterCategory, IReadOnlyCollection<Guid> collapsedGroupIds)
+    {
+        if (sapi is null) return;
+        if (TryResolveDocHost(docId, out var docHost, player))
+            docHost!.SetReadViewStateFromReader(filterCategory, collapsedGroupIds);
+    }
+
     /// <summary>Collapses a completion policy to <see cref="ScribeCompletionPolicy.Unpin"/> when the target
     /// document is a read-only (hard/fired) tablet (zero-point-three-fixes §7.5 / D8). A read-only source can
     /// neither be reordered (<c>Sink</c>/<c>UnpinSink</c>) nor have tasks removed (<c>Delete</c>), and firing

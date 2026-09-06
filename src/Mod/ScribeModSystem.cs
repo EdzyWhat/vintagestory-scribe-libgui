@@ -380,7 +380,8 @@ public sealed partial class ScribeModSystem : ModSystem
             .RegisterMessageType<ScribeTaskNoticeProximityPingMessage>()
             .RegisterMessageType<ScribeSetQuestObjectiveProgressMessage>()
             .RegisterMessageType<ScribeDismissQuestPromptMessage>()
-            .RegisterMessageType<ScribeQuestDecisionSetMessage>();
+            .RegisterMessageType<ScribeQuestDecisionSetMessage>()
+            .RegisterMessageType<ScribeSetReadViewStateMessage>();
     }
 
     /// <summary>Server-side accessor for the pin store, so the block entity can register/orphan its
@@ -537,6 +538,7 @@ public sealed partial class ScribeModSystem : ModSystem
         channel.SetMessageHandler<ScribeTaskNoticeActionMessage>(OnServerReceivedTaskNoticeAction);
         channel.SetMessageHandler<ScribeSetQuestObjectiveProgressMessage>(OnServerReceivedSetQuestObjectiveProgress);
         channel.SetMessageHandler<ScribeDismissQuestPromptMessage>(OnServerReceivedDismissQuestPrompt);
+        channel.SetMessageHandler<ScribeSetReadViewStateMessage>(OnServerReceivedSetReadViewState);
 
         // Persist/load the pin + settings stores with the save game (the WaypointMapLayer pattern).
         api.Event.SaveGameLoaded += OnSaveGameLoaded;

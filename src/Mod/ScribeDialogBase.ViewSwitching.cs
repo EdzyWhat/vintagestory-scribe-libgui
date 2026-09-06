@@ -838,8 +838,51 @@ public abstract partial class ScribeDialogBase
     /// next autosave <c>ApplyEdit</c> flush no longer reverts the external completion — closing the
     /// last-write-wins data-loss window for the completion case (sync-editor-view-on-external-completion).
     /// </summary>
+    /// <summary>Read View filter-pill tap handler (read-view-filter-pills 3.3/4.3): updates the
+    /// dialog-owned selection, persists it to the host's per-instance state, and rebuilds so
+    /// <see cref="BuildReadContent"/> re-filters immediately. A no-op tap on the already-active pill
+    /// skips the round-trip.</summary>
+    private void OnReadViewFilterCategoryChanged(ReadViewFilterCategory category)
+    {
+        if (readViewFilterCategory == category) return;
+        readViewFilterCategory = category;
+        PersistReadViewState();
+        if (IsOpened()) ForceRebuild();
+    }
+
+    /// <summary>Read View subtask-group collapse toggle (read-view-subtask-collapse 5.3/7.1): flips the
+    /// given group's (identified by its parent row's stable TaskId) collapsed state and persists it the
+    /// same way as the filter pill.</summary>
+    private void OnReadViewToggleGroupCollapsed(Guid groupParentTaskId)
+    {
+        if (!collapsedReadViewGroupIds.Remove(groupParentTaskId)) collapsedReadViewGroupIds.Add(groupParentTaskId);
+        PersistReadViewState();
+        if (IsOpened()) ForceRebuild();
+    }
+
+    /// <summary>Sends the current filter pill + collapsed-group set to the server so the host's persisted
+    /// per-instance state (read-view-filter-pills / read-view-subtask-collapse) stays in sync — lock-free,
+    /// mirroring the Tracker-quantity write-through (a viewer preference, not a document edit).</summary>
+    private void PersistReadViewState()
+    {
+        capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeSetReadViewStateMessage
+        {
+            DocId = host.Document.DocId.ToByteArray(),
+            FilterCategory = (byte)readViewFilterCategory,
+            CollapsedGroupIds = collapsedReadViewGroupIds.Select(g => g.ToByteArray()).ToList(),
+        });
+    }
+
     public void RefreshReadView()
     {
+        // Re-derive the dialog's Read View filter/collapse fields from the host's now-current persisted
+        // state on EVERY resync (read-view-filter-and-collapse) — cheap, and mirrors how the whole
+        // Document itself is fully replaced each resync: keeps this dialog converged with a change made
+        // by this same client's own request echo, another client's edit, or a save/load round trip.
+        readViewFilterCategory = (ReadViewFilterCategory)host.ReadViewFilterCategory;
+        collapsedReadViewGroupIds.Clear();
+        collapsedReadViewGroupIds.UnionWith(host.CollapsedGroupIds);
+
         if (!isEditorMode)
         {
             if (!IsOpened()) return;

@@ -24,6 +24,8 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
     private HistoryStore _history;
     private ICoreServerAPI? _sapi;
     private IServerPlayer? _player;
+    private byte _readViewFilterCategory;
+    private HashSet<Guid> _collapsedGroupIds;
 
     /// <param name="backdrop">The dialog backdrop this host reports via <see cref="BackdropSpec"/>.
     /// Defaults to <see cref="ScribeBackdrops.NotebookPage"/> (the plain Notebook's art); the Clockmaker's
@@ -41,6 +43,11 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
         }
         _document = doc;
         _history = HistoryStore.Deserialize(stack.Attributes.GetBytes("scribeHistory"));
+        // Read View filter pill + subtask-group collapse state (read-view-filter-and-collapse), the
+        // item-hosted counterpart of the block entity's tree-attribute fields. Absent attributes (a
+        // never-opened item) default to All / fully-expanded via GetInt/GetBytes's own defaults.
+        _readViewFilterCategory = (byte)stack.Attributes.GetInt("scribeReadViewFilter", 0);
+        _collapsedGroupIds = ScribeReadViewFilter.DeserializeGuidSet(stack.Attributes.GetBytes("scribeReadViewCollapsed"));
     }
 
     /// <summary>Attach server context so write-through operations can push the updated document
@@ -130,6 +137,25 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
     }
 
     public void PersistFromReader() => Flush();
+
+    public byte ReadViewFilterCategory => _readViewFilterCategory;
+    public IReadOnlyCollection<Guid> CollapsedGroupIds => _collapsedGroupIds;
+
+    /// <summary>Overwrites this item's persisted Read View filter pill + collapsed-group set
+    /// (read-view-filter-and-collapse), driven by <see cref="ScribeSetReadViewStateMessage"/>. Writes
+    /// straight to the ItemStack and marks the slot dirty; unlike <see cref="Flush"/> this does not push a
+    /// <see cref="ScribeNotebookSaveMessage"/> back — the sending client already applied the change
+    /// optimistically to its own open dialog, and a Notebook/Tablet has exactly one viewer (the holder),
+    /// so there is no other client to converge.</summary>
+    public void SetReadViewStateFromReader(byte filterCategory, IReadOnlyCollection<Guid> collapsedGroupIds)
+    {
+        _readViewFilterCategory = filterCategory;
+        _collapsedGroupIds = new HashSet<Guid>(collapsedGroupIds);
+        if (_slot.Itemstack is not { } stack) return;
+        stack.Attributes.SetInt("scribeReadViewFilter", filterCategory);
+        stack.Attributes.SetBytes("scribeReadViewCollapsed", ScribeReadViewFilter.SerializeGuidSet(_collapsedGroupIds));
+        _slot.MarkDirty();
+    }
 
     public bool MoveTaskToBottomFromReader(Guid taskId)
     {

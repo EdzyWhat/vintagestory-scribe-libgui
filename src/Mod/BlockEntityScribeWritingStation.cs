@@ -160,6 +160,14 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
 
     private GuestbookStore _guestbook = new();
 
+    /// <summary>Per-instance persisted Read View filter pill (read-view-filter-and-collapse), a
+    /// <see cref="ReadViewFilterCategory"/> cast to byte. Defaults to All (0).</summary>
+    private byte readViewFilterCategory;
+
+    /// <summary>Per-instance persisted set of collapsed subtask-group parent TaskIds
+    /// (read-view-filter-and-collapse). Empty (fully expanded) by default.</summary>
+    private HashSet<Guid> collapsedGroupIds = new();
+
     /// <summary>Sample interval (ms) for the particle indicator's periodic check, mirroring
     /// <see cref="ScribeAmbientLightSampler"/>'s periodic-sample precedent rather than a per-frame
     /// check (design.md Decision 9) — playtest-tunable, not final.</summary>
@@ -181,6 +189,10 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     bool IScribeDocumentHost.SetTaskTextFromReader(Guid taskId, string text) => SetTaskTextFromReader(taskId, text);
     bool IScribeDocumentHost.SetTrackerCurrentQuantityFromReader(Guid taskId, int qty) => SetTrackerCurrentQuantityFromReader(taskId, qty);
     bool IScribeDocumentHost.SetQuestObjectiveProgressFromReader(Guid taskId, int qty) => SetQuestObjectiveProgressFromReader(taskId, qty);
+    byte IScribeDocumentHost.ReadViewFilterCategory => readViewFilterCategory;
+    IReadOnlyCollection<Guid> IScribeDocumentHost.CollapsedGroupIds => collapsedGroupIds;
+    void IScribeDocumentHost.SetReadViewStateFromReader(byte filterCategory, IReadOnlyCollection<Guid> collapsedIds) =>
+        SetReadViewStateFromReader(filterCategory, collapsedIds);
 
     /// <summary>Client-side: the single LibGUI dialog serving BOTH views (migrate-editor-view-libgui).
     /// Read and editor are internal view states of this one dialog, so switching between them is a
@@ -315,6 +327,11 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
         // save-format change. Stored as the underlying byte.
         tree.SetInt("accessMode", (byte)accessMode);
         tree.SetBytes("guestbook", _guestbook.Serialize());
+        // Read View filter pill + subtask-group collapse state (read-view-filter-and-collapse): purely
+        // additive, per-instance viewer-preference state — absent on a pre-existing save, which defaults
+        // both back to All/fully-expanded on load (no migration needed).
+        tree.SetInt("readViewFilter", readViewFilterCategory);
+        tree.SetBytes("readViewCollapsed", ScribeReadViewFilter.SerializeGuidSet(collapsedGroupIds));
     }
 
     public override void FromTreeAttributes(ITreeAttribute tree, IWorldAccessor worldForResolving)
@@ -345,6 +362,11 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
         var mode = (ScribeAccessMode)(byte)tree.GetInt("accessMode", (int)ScribeAccessMode.Public);
         accessMode = mode;
         syncedAccessMode = mode;
+
+        // Read View filter pill + subtask-group collapse state (read-view-filter-and-collapse). Absent key
+        // (pre-existing saves) → All / empty (fully expanded), via GetInt/GetBytes's own defaults.
+        readViewFilterCategory = (byte)tree.GetInt("readViewFilter", 0);
+        collapsedGroupIds = ScribeReadViewFilter.DeserializeGuidSet(tree.GetBytes("readViewCollapsed"));
 
         var bytes = tree.GetBytes(DocumentAttributeKey);
         needsV5Resave = ScribeDocumentCodec.IsPriorVersion(bytes);
@@ -649,6 +671,21 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
             }
         }
         return false;
+    }
+
+    /// <summary>
+    /// Server-side: overwrite this instance's persisted Read View filter pill + collapsed-group set
+    /// (read-view-filter-and-collapse), driven by <see cref="ScribeSetReadViewStateMessage"/>. Lock-free
+    /// like <see cref="SetTaskDoneFromReader"/> — a viewer preference, not a document edit — and, like the
+    /// other per-instance state on this block, shared by every viewer rather than per-player.
+    /// </summary>
+    public void SetReadViewStateFromReader(byte filterCategory, IReadOnlyCollection<Guid> collapsedGroupIds)
+    {
+        if (Api is not ICoreServerAPI) return;
+
+        readViewFilterCategory = filterCategory;
+        this.collapsedGroupIds = new HashSet<Guid>(collapsedGroupIds);
+        MarkDirty(redrawOnClient: true);
     }
 
     /// <summary>Server-side: persist after a Core mutation already applied to <see cref="Document"/>.</summary>
