@@ -40,6 +40,15 @@ internal static class ScribeTheme
     /// legible against light parchment, where the dark theme's bright gold would wash out.</summary>
     private static readonly Vector4 Accent = new(0.58f, 0.40f, 0.13f, 1.0f);
 
+    /// <summary>The default Quest Link accent (quest-link-icon-and-color): a steel-blue,
+    /// <c>rgb(66,107,183)</c>, chosen specifically because the parchment/Light palette has ZERO blue
+    /// anywhere else — every other role above is warm (ochre/tan/cream/red) — so it reads as a clean,
+    /// deliberate "this points at a quest" accent rather than clashing. Used directly as the Light theme's
+    /// default (via <c>ScribeRowStyle.QuestLinkColor ?? QuestLinkAccent</c> at each render call site) and as
+    /// the base the chalkboard/tablet variants below are derived from. A starting default, not a final
+    /// value — see design.md D4; finalize exact per-surface values via in-game playtest.</summary>
+    internal static readonly Vector4 QuestLinkAccent = new(0.259f, 0.420f, 0.718f, 1.0f);
+
     /// <summary>The net-new light parchment theme: dark ink on warm light paper. Authored role-by-role
     /// (see the class remarks for the two semantic — not mechanical — inversions).</summary>
     internal static readonly ThemeData Light = new(new ColorScheme
@@ -108,6 +117,13 @@ internal static class ScribeTheme
     /// distinct, tappable colored link that is clearly not the chalk-white body text. Only the chalkboard uses
     /// it; every other surface keeps <c>Primary</c> for links (its accent is dark-on-light, legible for free).</summary>
     internal static readonly Vector4 ChalkboardLinkText = new(0.52f, 0.80f, 0.58f, 1.0f);
+
+    /// <summary>The chalkboard's Quest Link accent (quest-link-icon-and-color): a lightened variant of
+    /// <see cref="QuestLinkAccent"/>, for the same reason <see cref="ChalkboardLinkText"/> lightens the dark
+    /// forest-green <see cref="ChalkAccent"/> — a mid-value color doesn't read as small text on the dark
+    /// slate surface. A pale sky-blue, distinct from both the chalkboard's own green Primary/link colors and
+    /// its chalk-white body text. A starting default — finalize via in-game playtest (design.md D4).</summary>
+    internal static readonly Vector4 ChalkboardQuestLinkText = new(0.55f, 0.68f, 0.85f, 1.0f);
 
     /// <summary>Resting tint for the INACTIVE right-column nav glyphs on the chalkboard (<c>#645c52</c>, a
     /// dark slate-brown). The theme's <c>OnSurfaceVariant</c> (a pale chalk-gray) reads as almost-active on
@@ -403,4 +419,31 @@ internal static class ScribeTheme
     /// color.</para></summary>
     public static Vector4 ForTabletLink(string? material, TabletState state) =>
         TabletReadability.For(material, state).LinkInk;
+
+    /// <summary>Darkened/more-saturated variant of <see cref="QuestLinkAccent"/> for the fire/red/wax clay
+    /// grounds — the same reasoning <see cref="ForTabletLink"/> documents for why <c>Primary</c> needs
+    /// darkening on these light-mid clay surfaces (a mid-value color fails AA as small text there). Shared
+    /// across fire/red/wax rather than authored per-material, since all three are similarly light-mid
+    /// grounds; split them apart if playtest shows otherwise (design.md D4).</summary>
+    private static readonly Vector4 TabletQuestLinkDark = new(0.16f, 0.28f, 0.50f, 1.0f);
+
+    /// <summary>The Blue-clay tablet's Quest Link accent: a distinct warm amber/gold, deliberately NOT a
+    /// blue. That tablet's own <c>Primary</c> (<see cref="BlueColors"/>'s Accent, <c>rgb(66,107,133)</c>) is
+    /// already essentially the same hue as <see cref="QuestLinkAccent"/> — a quest-blue there would blend
+    /// into the tablet's normal link color instead of standing apart, so this surface needs its own
+    /// alternate rather than a lightened/darkened variant of the shared blue identity.</summary>
+    private static readonly Vector4 BlueClayQuestLinkGold = new(0.62f, 0.46f, 0.14f, 1.0f);
+
+    /// <summary>The tablet Quest Link accent per clay <paramref name="material"/> (quest-link-icon-and-color) —
+    /// mirrors <see cref="ForTabletLink"/>'s per-material decoupling, but keyed only on material (not
+    /// <paramref name="state"/>, unlike <see cref="ForTabletLink"/>'s per-state ink lookup) since these are
+    /// starting-default placeholders, not yet state-tuned; revisit if playtest shows a state-driven backdrop
+    /// needs its own variant (design.md D4). <c>clay-blue</c> gets the distinct <see cref="BlueClayQuestLinkGold"/>
+    /// alternate (see its own doc-comment); every other material (including unrecognized ones, matching
+    /// <see cref="ClayColorsFor"/>'s fallback) gets the shared darkened <see cref="TabletQuestLinkDark"/>.</summary>
+    public static Vector4 ForTabletQuestLink(string? material, TabletState state) => material switch
+    {
+        "clay-blue" => BlueClayQuestLinkGold,
+        _ => TabletQuestLinkDark,
+    };
 }

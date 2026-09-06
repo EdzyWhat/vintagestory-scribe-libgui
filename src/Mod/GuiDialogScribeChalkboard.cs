@@ -46,7 +46,7 @@ public sealed class GuiDialogScribeChalkboard : ScribeDialogBase
     /// Display is on (the chalkboard theme is active); otherwise leave the global-theme link color untouched.</summary>
     private protected override ScribeRowStyle DecorateRowStyle(ScribeRowStyle style) =>
         modSystem.MySettings.PixelArtDisplay
-            ? style with { LinkColor = ScribeTheme.ChalkboardLinkText }
+            ? style with { LinkColor = ScribeTheme.ChalkboardLinkText, QuestLinkColor = ScribeTheme.ChalkboardQuestLinkText }
             : base.DecorateRowStyle(style);
 
     /// <summary>Darken the inactive nav glyphs to a slate-brown (<see cref="ScribeTheme.ChalkboardNavIcon"/>):

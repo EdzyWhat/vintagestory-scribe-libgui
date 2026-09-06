@@ -9,6 +9,7 @@ using Gui.Widgets.Scroll;        // Scrollbar, SingleChildScrollView
 using Gui.Widgets.Gestures;      // ScrollController
 using Gui.Core.Layout;           // MainAxisSize
 using OpenTK.Mathematics;        // Vector4
+using Scribe.Core;                // ScribeLinkTarget
 using Vintagestory.API.Config;   // Lang
 
 namespace Scribe;
@@ -47,9 +48,18 @@ internal sealed class ScribeAssignmentStageRow : StatelessWidget
     {
         float iconSize = ScribeRowConstants.ItemIconSize * (style.ControlSize / ScribeRowConstants.RowCheckboxSize);
         float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
+        // This row's leading-slot checkbox is a SELECTION control (design.md D1a), not a completion toggle —
+        // unlike the other four surfaces, that slot isn't available for the quest-marker icon here, so a
+        // Quest Link instead shows the quest-marker icon INLINE, replacing the generic book-glyph
+        // ScribeLinkIcon.Build would otherwise render (quest-link-icon-and-color).
+        bool isQuestLink = ScribeLinkTarget.IsQuest(Data.LinkTarget);
         float bandHeight = ScribeLinkIcon.VisualSize(iconSize, Data.LinkTarget);
-        Vector4 linkColor = style.LinkColor ?? colors.Primary;
-        Widget icon = ScribeLinkIcon.Build(Data.DisplayStack, Data.LinkTarget, iconSize, linkColor, lineHeight, heightNeutral: false);
+        Vector4 linkColor = isQuestLink
+            ? style.QuestLinkColor ?? ScribeTheme.QuestLinkAccent
+            : style.LinkColor ?? colors.Primary;
+        Widget icon = isQuestLink
+            ? new ScribeVsIconGlyph("scribequest", ScribeLinkIcon.VisualSize(iconSize, Data.LinkTarget), linkColor)
+            : ScribeLinkIcon.Build(Data.DisplayStack, Data.LinkTarget, iconSize, linkColor, lineHeight, heightNeutral: false);
         Widget nameLabel = new Expanded(child: ScribeCenterIfShort.Name(
             ScribeItemLabel.Build(Data.Label, linkColor, style), style, bandHeight));
 

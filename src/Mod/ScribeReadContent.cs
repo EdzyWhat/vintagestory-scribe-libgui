@@ -384,12 +384,18 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         float iconSize = ScribeRowConstants.ItemIconSize
             * (style.ControlSize / ScribeRowConstants.RowCheckboxSize);
         float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
-        float bandHeight = ScribeLinkIcon.VisualSize(iconSize, Widget.Data.LinkTarget);
+        // A Quest Link's icon renders in the row's leading slot instead (quest-link-icon-and-color), so this
+        // inline slot has no icon for it and the name's band height falls back to a plain text line.
+        bool isQuestLink = ScribeLinkTarget.IsQuest(Widget.Data.LinkTarget);
+        float bandHeight = isQuestLink ? lineHeight : ScribeLinkIcon.VisualSize(iconSize, Widget.Data.LinkTarget);
         // Link accent: the theme's Primary on light surfaces (a dark accent that reads as a colored link),
         // or a row-supplied override where Primary would be illegible as text (the Chalkboard's dark slate —
         // see ScribeRowStyle.LinkColor). The guide-page book glyph renders in it (not the near-black
-        // OnSurface) so it reads against the surface (feedback 7.11d); the item icon ignores the color.
-        Vector4 linkColor = style.LinkColor ?? colors.Primary;
+        // OnSurface) so it reads against the surface (feedback 7.11d); the item icon ignores the color. A
+        // Quest Link uses the separate QuestLinkColor seam instead, so it reads distinct from a plain Link.
+        Vector4 linkColor = isQuestLink
+            ? style.QuestLinkColor ?? ScribeTheme.QuestLinkAccent
+            : style.LinkColor ?? colors.Primary;
         Widget icon = ScribeLinkIcon.Build(Widget.Data.DisplayStack, Widget.Data.LinkTarget, iconSize, linkColor, lineHeight, heightNeutral: false);
 
         // The name is a hyperlink that opens the referenced item's Handbook page and never touches completion
@@ -404,7 +410,9 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
 
         if (Widget.Data.IsLink)
         {
-            rowChildren.Add(icon);
+            // A Quest Link's icon already renders in the row's leading slot (quest-link-icon-and-color) — no
+            // second icon here.
+            if (!isQuestLink) rowChildren.Add(icon);
             rowChildren.Add(nameLink);
         }
         else // Tracker, Craft parent, or QuestObjective: a live "have / need" counter on the LEFT, then the
@@ -495,9 +503,11 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                 // on a hard/fired tablet, which keeps completion live so a pinned task can still be
                 // completed/unpinned (zero-point-three-fixes §7.3). A null onChanged (only when toggles
                 // are NOT live — not currently reached, but the safe inert fallback) reflects Done and
-                // ignores taps. Tick color routes through the row style's CheckTickColor seam (§11).
-                child: ScribeRowControlNudge.BuildTaskCheckbox(
-                    context, style, done,
+                // ignores taps. Tick color routes through the row style's CheckTickColor seam (§11). A Quest
+                // Link's checkbox is misleading (toggling it doesn't affect the quest), so its slot renders
+                // the quest-marker icon instead (quest-link-icon-and-color) via BuildLeadingControl.
+                child: ScribeRowControlNudge.BuildLeadingControl(
+                    context, style, Widget.Data.LinkTarget, done,
                     !Widget.TogglesLive ? null : _ =>
                     {
                         SetState(() => done = !done);

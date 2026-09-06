@@ -213,7 +213,11 @@ public class GuiDialogScribeTablet : ScribeDialogBase
         // (the readability problem is the clay ground, not the font).
         if (modSystem.MySettings.PixelArtDisplay)
         {
-            style = style with { LinkColor = ScribeTheme.ForTabletLink(_material, _state) };
+            style = style with
+            {
+                LinkColor = ScribeTheme.ForTabletLink(_material, _state),
+                QuestLinkColor = ScribeTheme.ForTabletQuestLink(_material, _state),
+            };
         }
 
         if (ActiveCuneiformBundle is not { } bundle)

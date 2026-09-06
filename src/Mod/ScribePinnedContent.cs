@@ -513,11 +513,17 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
         float iconSize = ScribeRowConstants.ItemIconSize
             * (style.ControlSize / ScribeRowConstants.RowCheckboxSize);
         float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
-        float bandHeight = ScribeLinkIcon.VisualSize(iconSize, data.LinkTarget);
+        // A Quest Link's icon renders in the row's leading slot instead (quest-link-icon-and-color), so this
+        // inline slot has no icon for it and the name's band height falls back to a plain text line.
+        bool isQuestLink = ScribeLinkTarget.IsQuest(data.LinkTarget);
+        float bandHeight = isQuestLink ? lineHeight : ScribeLinkIcon.VisualSize(iconSize, data.LinkTarget);
         // Link accent: Primary on light surfaces, or the row's override where Primary is illegible as text on
         // a dark surface (the Chalkboard slate — ScribeRowStyle.LinkColor). Guide-page book glyph (7.11d),
-        // item icon grown + row-height-neutral (7.11e/7.11f).
-        Vector4 linkColor = style.LinkColor ?? colors.Primary;
+        // item icon grown + row-height-neutral (7.11e/7.11f). A Quest Link uses the separate QuestLinkColor
+        // seam instead, so it reads distinct from a plain Link.
+        Vector4 linkColor = isQuestLink
+            ? style.QuestLinkColor ?? ScribeTheme.QuestLinkAccent
+            : style.LinkColor ?? colors.Primary;
         Widget icon = ScribeLinkIcon.Build(data.DisplayStack, data.LinkTarget, iconSize, linkColor, lineHeight, heightNeutral: false);
 
         Widget nameLink = new Expanded(child: new GestureDetector(
@@ -528,7 +534,9 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
         var rowChildren = new List<Widget>();
         if (data.IsLink)
         {
-            rowChildren.Add(icon);
+            // A Quest Link's icon already renders in the row's leading slot (quest-link-icon-and-color) — no
+            // second icon here.
+            if (!isQuestLink) rowChildren.Add(icon);
             rowChildren.Add(nameLink);
         }
         else // Tracker or Craft parent: a "have / need" counter on the LEFT, then the item icon + name.
@@ -602,8 +610,10 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
         // server would silently no-op.
         children.Add(new Opacity(contentOpacity, child: new Padding(
             EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style, data.IsItemKind)),
-            child: ScribeRowControlNudge.BuildTaskCheckbox(
-                context, style, done,
+            // A Quest Link's checkbox is misleading (toggling it doesn't affect the quest), so its slot
+            // renders the quest-marker icon instead (quest-link-icon-and-color).
+            child: ScribeRowControlNudge.BuildLeadingControl(
+                context, style, data.LinkTarget, done,
                 _ =>
                 {
                     if (data.Kind is ScribeBlockKind.Text or ScribeBlockKind.QuestObjective)

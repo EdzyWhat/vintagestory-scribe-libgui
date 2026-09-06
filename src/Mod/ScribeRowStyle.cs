@@ -90,6 +90,16 @@ internal readonly record struct ScribeRowStyle(
     /// add-on so <see cref="FromSettings"/> and existing constructions stay valid.</summary>
     public Vector4? LinkColor { get; init; }
 
+    /// <summary>Optional override for the accent color of a QUEST Link row's marker icon and name — separate
+    /// from <see cref="LinkColor"/> so a quest Link reads as visually distinct from a plain Link on the same
+    /// surface (quest-link-icon-and-color). Null → the row uses <c>ScribeTheme.QuestLinkAccent</c> as the
+    /// default (the parchment/Light theme's steel-blue). Mirrors <see cref="LinkColor"/>'s pattern exactly:
+    /// the tablet and chalkboard bake this to their own material-appropriate value via
+    /// <c>DecorateRowStyle</c> (<c>ScribeTheme.ForTabletQuestLink</c> / <c>ScribeTheme.ChalkboardQuestLinkText</c>)
+    /// wherever they already bake <see cref="LinkColor"/>. An <c>init</c>-only add-on so existing constructions
+    /// stay valid.</summary>
+    public Vector4? QuestLinkColor { get; init; }
+
     /// <summary>Optional override for an editable row field's FOCUSED border color. Null → the field uses the
     /// theme's <c>Primary</c> accent (every light theme: a legible accent outline on focus). The Chalkboard
     /// sets this to a chalk-white (<c>ScribeTheme.ChalkboardInputFocusBorder</c>) because its <c>Primary</c> is

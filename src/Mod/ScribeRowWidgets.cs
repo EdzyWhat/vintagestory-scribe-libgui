@@ -139,6 +139,28 @@ internal static class ScribeRowControlNudge
             style: resolvedStyle);
     }
 
+    /// <summary>The row's leading-slot control (quest-link-icon-and-color): the quest-marker icon for a Quest
+    /// Link row, or the ordinary completion checkbox (<see cref="BuildTaskCheckbox"/>, unchanged) for every
+    /// other row. A Quest Link's checkbox is misleading — toggling it has no effect on the referenced quest —
+    /// so its row shows the quest-marker icon in the checkbox's slot instead, sized to the same
+    /// <see cref="ScribeRowStyle.CheckboxSize"/> footprint so the row's leading column doesn't reflow. Colored
+    /// via <see cref="ScribeRowStyle.QuestLinkColor"/> (falling back to <see cref="ScribeTheme.QuestLinkAccent"/>),
+    /// mirroring how a plain Link's icon resolves <see cref="ScribeRowStyle.LinkColor"/>. Used by every surface
+    /// with a real completion checkbox (Read, Editor, Pinned, HUD) so the quest-vs-plain branch lives in exactly
+    /// one place; the Assignment-stage row's checkbox is a row-SELECTION control, not completion, so it does not
+    /// route through this helper (design.md D1a).</summary>
+    public static Widget BuildLeadingControl(
+        BuildContext context, ScribeRowStyle style, string? linkTarget, bool value, Action<bool>? onChanged)
+    {
+        if (ScribeLinkTarget.IsQuest(linkTarget))
+        {
+            Vector4 questColor = style.QuestLinkColor ?? ScribeTheme.QuestLinkAccent;
+            return new ScribeVsIconGlyph("scribequest", style.CheckboxSize, questColor);
+        }
+
+        return BuildTaskCheckbox(context, style, value, onChanged);
+    }
+
     /// <summary>The grip glyph's insets in a row: the vertical centering top-nudge (kept, same as the
     /// checkbox), plus a NEGATIVE right inset that cancels the Row's <see cref="ScribeRowStyle.CheckboxTextGap"/>
     /// which would otherwise sit as a trailing margin between the grip and the next control (§10.4). With

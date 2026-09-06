@@ -1822,13 +1822,22 @@ internal sealed class HudPinsContent : StatelessWidget
             // A pinned Tracker/Link renders the referenced item's icon + name (+ a have/need counter on the
             // LEFT for a Tracker) instead of the editable-text shape, mirroring the Pin Tab / read view
             // (add-tracker-link-tasks 7.8). The name is a Handbook hyperlink; the counter is not.
+            //
+            // A Quest Link's checkbox is misleading (toggling it doesn't affect the quest), so its slot
+            // renders the quest-marker icon instead (quest-link-icon-and-color). Swapped inline here, not
+            // via ScribeRowControlNudge.BuildLeadingControl, because the HUD's checkbox above is a bespoke
+            // grayscale style rather than BuildTaskCheckbox's theme-derived default — routing a non-quest row
+            // through the shared helper would silently replace that grayscale style.
+            Widget leadingControl = ScribeLinkTarget.IsQuest(row.LinkTarget)
+                ? new ScribeVsIconGlyph("scribequest", checkboxSize, ScribeTheme.QuestLinkAccent)
+                : checkbox;
             rowBody = new Row(
                 spacing: 6,
                 mainAxisSize: MainAxisSize.Max,
                 crossAxisAlignment: CrossAxisAlignment.Center,
                 children: new Widget[]
                 {
-                    checkbox,
+                    leadingControl,
                     new Expanded(child: BuildHudItemContent(row, textStyle, interactive: true)),
                 });
         }
@@ -1901,9 +1910,15 @@ internal sealed class HudPinsContent : StatelessWidget
         // rows drop the item icon / book glyph and read as text-only, for a leaner HUD.
         float iconSize = rowFontSize * 1.4f;
         float lineHeight = ScribeRowControlNudge.TextLineHeight(rowFontSize);
-        Widget? icon = showIcons
+        // A Quest Link's icon renders in the row's leading slot instead (quest-link-icon-and-color), and its
+        // name uses the distinct quest accent rather than the ambient textStyle.Color — the HUD has no
+        // per-material theme seam (it's theme-independent, per the doc-comment above), so it reads
+        // ScribeTheme.QuestLinkAccent directly rather than a ScribeRowStyle override.
+        bool isQuestLink = ScribeLinkTarget.IsQuest(row.LinkTarget);
+        Widget? icon = showIcons && !isQuestLink
             ? ScribeLinkIcon.Build(row.DisplayStack, row.LinkTarget, iconSize, textStyle.Color, lineHeight)
             : (Widget?)null;
+        if (isQuestLink) textStyle = textStyle with { Color = ScribeTheme.QuestLinkAccent };
 
         // Name (corrupted like every HUD string). A Handbook hyperlink when interactive: tapping opens the
         // item's page and NEVER toggles the checkbox (design D3c) — same open path as the live Link row. The

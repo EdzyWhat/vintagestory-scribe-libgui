@@ -946,7 +946,11 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
     {
         float iconSize = ScribeRowConstants.ItemIconSize
             * (style.ControlSize / ScribeRowConstants.RowCheckboxSize);
-        float iconVisual = ScribeLinkIcon.VisualSize(iconSize, Widget.Data.LinkTarget);
+        float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
+        // A Quest Link's icon renders in the row's leading slot instead (quest-link-icon-and-color), so this
+        // inline slot has no icon for it and the name's band height falls back to a plain text line.
+        bool isQuestLink = ScribeLinkTarget.IsQuest(Widget.Data.LinkTarget);
+        float iconVisual = isQuestLink ? lineHeight : ScribeLinkIcon.VisualSize(iconSize, Widget.Data.LinkTarget);
         float stepperHeight = Widget.Data.IsCarriedCountTracked ? style.ControlSize * 1.15f : 0f;
         float bandHeight = MathF.Max(iconVisual, stepperHeight);
         var rowChildren = new List<Widget>();
@@ -982,11 +986,17 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         // Guide-page book glyph tinted with the link accent (feedback 7.11d) — Primary on light surfaces, or
         // the row's override where Primary is illegible on a dark surface (Chalkboard slate; see
         // ScribeRowStyle.LinkColor). Row-height-neutral (7.11e/7.11f); the item icon ignores the color. The
-        // Tracker's stepper still drives this editor row's height by design.
-        float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
-        rowChildren.Add(ScribeCenterIfShort.InBand(
-            ScribeLinkIcon.Build(Widget.Data.DisplayStack, Widget.Data.LinkTarget, iconSize, style.LinkColor ?? colors.Primary, lineHeight, heightNeutral: false),
-            bandHeight));
+        // Tracker's stepper still drives this editor row's height by design. A Quest Link's icon already
+        // renders in the row's leading slot (quest-link-icon-and-color) — no second icon here.
+        Vector4 linkColor = isQuestLink
+            ? style.QuestLinkColor ?? ScribeTheme.QuestLinkAccent
+            : style.LinkColor ?? colors.Primary;
+        if (!isQuestLink)
+        {
+            rowChildren.Add(ScribeCenterIfShort.InBand(
+                ScribeLinkIcon.Build(Widget.Data.DisplayStack, Widget.Data.LinkTarget, iconSize, linkColor, lineHeight, heightNeutral: false),
+                bandHeight));
+        }
 
         // The item name is a hyperlink ONLY where the surface opts its editor rows into link activation (the
         // tablet — enable-tablet-row-links, which has no read view). Wrap it in the same GestureDetector shape the
@@ -999,7 +1009,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         Widget nameLabel = Widget.OnOpenLink is { } openLink
             ? new GestureDetector(
                 onPress: e => { e.Handled = true; openLink(Widget.Data.TaskId); },
-                child: ScribeItemLabel.Build(Widget.Data.Label, style.LinkColor ?? colors.Primary, style))
+                child: ScribeItemLabel.Build(Widget.Data.Label, linkColor, style))
             : ScribeItemLabel.Build(Widget.Data.Label, colors.OnSurface, style);
         rowChildren.Add(new Expanded(child: ScribeCenterIfShort.Name(nameLabel, style, bandHeight)));
 
@@ -1095,8 +1105,10 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         {
             children.Add(new Opacity(contentOpacity, child: new Padding(
                 EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style, Widget.Data.IsItemKind)),
-                child: ScribeRowControlNudge.BuildTaskCheckbox(
-                    context, style, done,
+                // A Quest Link's checkbox is misleading (toggling it doesn't affect the quest), so its slot
+                // renders the quest-marker icon instead (quest-link-icon-and-color).
+                child: ScribeRowControlNudge.BuildLeadingControl(
+                    context, style, Widget.Data.LinkTarget, done,
                     _ =>
                     {
                         SetState(() => done = !done);
