@@ -656,13 +656,13 @@
 											"glow": 128
 										},
 										"down": {
-											"texture": "#filled",
 											"uv": [
 												25,
 												28,
 												27,
 												32
 											],
+											"enabled": false,
 											"glow": 128
 										}
 									}
