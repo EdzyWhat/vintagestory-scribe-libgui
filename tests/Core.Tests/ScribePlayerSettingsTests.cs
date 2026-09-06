@@ -36,6 +36,17 @@ public class ScribePlayerSettingsTests
     }
 
     [Fact]
+    public void Default_AutoPinOnQuestAccept_IsOn()
+    {
+        // fix-quest-prompt-persistence-and-auto-pin: a fresh profile (and, since it's a plain new property,
+        // an old config JSON predating this field — the deserializer just leaves the initializer's default
+        // in place) auto-pins on quest accept; Normalized() leaves a plain bool untouched.
+        Assert.True(new ScribePlayerSettings().AutoPinOnQuestAccept);
+        Assert.True(new ScribePlayerSettings().Normalized().AutoPinOnQuestAccept);
+        Assert.False(new ScribePlayerSettings { AutoPinOnQuestAccept = false }.Normalized().AutoPinOnQuestAccept);
+    }
+
+    [Fact]
     public void Default_MuteUiSounds_IsOff()
     {
         // A fresh profile (no saved preference) has Scribe's own UI click sounds ON (mute off);

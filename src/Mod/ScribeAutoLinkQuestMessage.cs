@@ -95,4 +95,19 @@ public sealed class ScribeAutoLinkQuestMessage
     /// (add-progression-framework-quest-objective-subtasks 5.3).</summary>
     [ProtoMember(7)]
     public List<ScribeAutoLinkObjectiveWire>? Objectives { get; set; }
+
+    /// <summary>The client's <see cref="Scribe.Core.ScribePlayerSettings.AutoPinOnQuestAccept"/> preference
+    /// at send time (fix-quest-prompt-persistence-and-auto-pin Decision 5). When true, the server pins the
+    /// newly-created Link's task right after adding it, through the same pin-add path a manual pin uses.
+    /// Defaults to false for an old client that never sets it (today's behavior: link but don't pin).</summary>
+    [ProtoMember(8)]
+    public bool AutoPin { get; set; }
+
+    /// <summary>The client's <see cref="Scribe.Core.ScribePlayerSettings.PinInsert"/> preference (as a
+    /// byte), read only when <see cref="AutoPin"/> is true — where the newly-pinned task lands in the pin
+    /// list, mirroring <c>ScribeSetPinMessage.PinInsert</c>'s own convention exactly (the player-pins
+    /// requirement that an auto-pin follow "the same insertion rules" as a manual pin). Defaults to 0
+    /// (<see cref="Scribe.Core.ScribePinInsert.Bottom"/>) for an old client.</summary>
+    [ProtoMember(9)]
+    public byte PinInsert { get; set; }
 }

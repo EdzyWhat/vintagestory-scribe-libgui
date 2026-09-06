@@ -210,6 +210,13 @@ internal sealed class ScribeSettingsContent : StatelessWidget
                             new() { Value = ScribeQuestCompletionPolicy.Prompt, Label = Lang.Get("scribe:scribe-questpolicy-prompt") },
                         },
                         onChanged: v => onMutate(s => s.QuestCompletionPolicy = v)))));
+
+            // fix-quest-prompt-persistence-and-auto-pin: whether accepting a quest also pins the resulting
+            // linked task. Same visibility gate as the two policy rows above.
+            children.Add(HuggingCheckbox(
+                "settings-autopinonquestaccept", colors, scale,
+                value: settings.AutoPinOnQuestAccept,
+                onChanged: v => onMutate(s => s.AutoPinOnQuestAccept = v)));
         }
 
         return new Column(

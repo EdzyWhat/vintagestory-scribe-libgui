@@ -298,6 +298,8 @@
 	"settings-questacceptpolicy-help": "When Scribe notices you've accepted a quest from an installed quest mod, what to do about it. Always adds a Quest Link to your notebook automatically. Never leaves it alone. Prompt via Scribe HUD asks first via a HUD banner. Prompt via Popup asks first via a center-screen window (deferred while another window, like the Handbook, is open, and shown automatically once it closes). Only shown when a supported quest mod is installed.",
 	"settings-questcompletionpolicy": "Quest Completion Policy",
 	"settings-questcompletionpolicy-help": "When Scribe notices you've completed a quest that has a pinned Quest Link, what to do about it. Always marks the linked task done automatically. Never leaves it alone. Prompt asks first via a HUD banner. Only shown when a supported quest mod is installed.",
+	"settings-autopinonquestaccept": "Auto-pin accepted quests",
+	"settings-autopinonquestaccept-help": "When you accept a quest's accept-prompt, automatically pin the resulting linked task so it shows on the HUD right away. Turn off to link the quest without pinning it. Only shown when a supported quest mod is installed.",
 	"scribe-questpolicy-always": "Always",
 	"scribe-questpolicy-never": "Never",
 	"scribe-questpolicy-prompt": "Prompt",

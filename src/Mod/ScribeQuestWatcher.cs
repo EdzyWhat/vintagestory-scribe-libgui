@@ -64,7 +64,7 @@ internal sealed class ScribeQuestWatcher
     private const int TickIntervalMs = 1000;
 
     private readonly ICoreClientAPI capi;
-    private readonly Action<ScribeQuestCatalogEntry> onAccepted;
+    private readonly Action<ScribeQuestCatalogEntry, bool> onAccepted;
     private readonly Action<ScribeQuestCatalogEntry> onCompleted;
 
     private long tickListenerId;
@@ -73,6 +73,13 @@ internal sealed class ScribeQuestWatcher
 
     private readonly HashSet<string> _acceptedSeen = new(StringComparer.Ordinal);
     private readonly HashSet<string> _completedSeen = new(StringComparer.Ordinal);
+
+    /// <summary>Per-quest last-observed <c>lastaccepted-*</c> value (vsquest stamps the in-game DAY it was
+    /// accepted — confirmed in vsquest's own source, <c>QuestSystem.SetDouble(key, World.Calendar.TotalDays)</c>
+    /// — a genuine re-accept of a repeatable quest overwrites it with a LARGER value). A value increasing
+    /// mid-session (never the first read this session, which only means "already accepted before login")
+    /// is the fresh-reaccept signal Decision 4's reset-clear consumes (fix-quest-prompt-persistence-and-auto-pin).</summary>
+    private readonly Dictionary<string, double> _acceptedFingerprint = new(StringComparer.Ordinal);
 
     // ---- best-effort dialog reflection (progress mirroring only) ----
     private const string QuestGuiTypeName = "VsQuest.QuestSelectGui";
@@ -90,6 +97,11 @@ internal sealed class ScribeQuestWatcher
     private Dictionary<string, ScribeProgressionFrameworkQuestEntry>? pfCatalogByCode;
     private readonly HashSet<string> pfAcceptedSeen = new(StringComparer.Ordinal);
     private readonly HashSet<string> pfCompletedSeen = new(StringComparer.Ordinal);
+    /// <summary>Per-quest last-observed PF "status" string, the same fresh-reaccept fingerprint idea as
+    /// <see cref="_acceptedFingerprint"/> but for PF's status field rather than vsquest's timestamp: a
+    /// mid-session flip AWAY from then back TO "active" (never the first read this session) is the fresh
+    /// re-accept signal.</summary>
+    private readonly Dictionary<string, string> pfStatusFingerprint = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Dictionary<string, string>> pfObjectiveStatus = new(StringComparer.Ordinal);
     // Parallel to pfObjectiveStatus (same questCode -> objCode keying), added for
     // add-progression-framework-quest-objective-subtasks: PF's numeric "progress" int per objective, read
@@ -105,7 +117,7 @@ internal sealed class ScribeQuestWatcher
     private FieldInfo? pfServerQuestStateField;
 
     public ScribeQuestWatcher(
-        ICoreClientAPI capi, Action<ScribeQuestCatalogEntry> onAccepted, Action<ScribeQuestCatalogEntry> onCompleted)
+        ICoreClientAPI capi, Action<ScribeQuestCatalogEntry, bool> onAccepted, Action<ScribeQuestCatalogEntry> onCompleted)
     {
         this.capi = capi;
         this.onAccepted = onAccepted;
@@ -218,12 +230,24 @@ internal sealed class ScribeQuestWatcher
 
         foreach (var q in catalog!)
         {
-            if (!_acceptedSeen.Contains(q.QuestCode)
-                && (wa.HasAttribute("lastaccepted-" + q.QuestCode + "-" + uid)
-                    || wa.HasAttribute("lastaccepted-" + q.QuestCode)))
+            string perPlayerKey = "lastaccepted-" + q.QuestCode + "-" + uid;
+            string sharedKey = "lastaccepted-" + q.QuestCode;
+            bool hasPerPlayer = wa.HasAttribute(perPlayerKey);
+            bool hasShared = !hasPerPlayer && wa.HasAttribute(sharedKey);
+            if (!hasPerPlayer && !hasShared) continue;
+
+            double value = wa.GetDouble(hasPerPlayer ? perPlayerKey : sharedKey);
+            bool freshTransition = false;
+            if (_acceptedFingerprint.TryGetValue(q.QuestCode, out double prevValue) && value > prevValue)
             {
-                _acceptedSeen.Add(q.QuestCode);
-                onAccepted(q);
+                freshTransition = true;
+                _acceptedSeen.Remove(q.QuestCode); // force a refire below — a genuine re-accept, not a stale read
+            }
+            _acceptedFingerprint[q.QuestCode] = value;
+
+            if (_acceptedSeen.Add(q.QuestCode))
+            {
+                onAccepted(q, freshTransition);
             }
         }
 
@@ -264,10 +288,20 @@ internal sealed class ScribeQuestWatcher
                 if (!pfCatalogByCode.TryGetValue(questCode, out var def)) continue; // a quest pack we don't have cataloged
 
                 string status = questTree.GetString("status") ?? "";
+                bool freshTransition = false;
+                if (pfStatusFingerprint.TryGetValue(questCode, out var prevStatus)
+                    && !string.Equals(prevStatus, PfStatusActive, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(status, PfStatusActive, StringComparison.OrdinalIgnoreCase))
+                {
+                    freshTransition = true;
+                    pfAcceptedSeen.Remove(questCode); // force a refire below — a genuine re-accept
+                }
+                pfStatusFingerprint[questCode] = status;
+
                 if (string.Equals(status, PfStatusActive, StringComparison.OrdinalIgnoreCase)
                     && pfAcceptedSeen.Add(questCode))
                 {
-                    onAccepted(def.ToPickerEntry());
+                    onAccepted(def.ToPickerEntry(), freshTransition);
                 }
                 else if (string.Equals(status, PfStatusComplete, StringComparison.OrdinalIgnoreCase)
                     && pfCompletedSeen.Add(questCode))
@@ -334,10 +368,20 @@ internal sealed class ScribeQuestWatcher
                 if (!pfCatalogByCode.TryGetValue(questCode, out var def) || !def.IsServerScoped) continue;
 
                 string status = questTree.GetString("status") ?? "";
+                bool freshTransition = false;
+                if (pfStatusFingerprint.TryGetValue(questCode, out var prevStatus)
+                    && !string.Equals(prevStatus, PfStatusActive, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(status, PfStatusActive, StringComparison.OrdinalIgnoreCase))
+                {
+                    freshTransition = true;
+                    pfAcceptedSeen.Remove(questCode); // force a refire below — a genuine re-accept
+                }
+                pfStatusFingerprint[questCode] = status;
+
                 if (string.Equals(status, PfStatusActive, StringComparison.OrdinalIgnoreCase)
                     && pfAcceptedSeen.Add(questCode))
                 {
-                    onAccepted(def.ToPickerEntry());
+                    onAccepted(def.ToPickerEntry(), freshTransition);
                 }
                 else if (string.Equals(status, PfStatusComplete, StringComparison.OrdinalIgnoreCase)
                     && pfCompletedSeen.Add(questCode))

@@ -84,6 +84,16 @@ public sealed partial class ScribeModSystem
     private void StartQuestWatcher(ICoreClientAPI api)
         => questWatcher = new ScribeQuestWatcher(api, OnQuestAccepted, OnQuestCompleted);
 
+    /// <summary>Client-side handler for the server's push of this player's own synced quest-decision
+    /// ledger (fix-quest-prompt-persistence-and-auto-pin). Replaces the cached set wholesale — the server
+    /// always sends the player's complete ledger, never a delta.</summary>
+    private void OnClientReceivedQuestDecisionSet(ScribeQuestDecisionSetMessage message)
+    {
+        myQuestDecisions.Clear();
+        if (!ScribeQuestDecisionCodec.TryDeserializeList(message.DecisionSetBytes, out var entries) || entries is null) return;
+        foreach (var e in entries) myQuestDecisions.Set(e.Source, e.QuestCode, e.IsCompletion, e.Decision);
+    }
+
     private void DisposeQuestWatcher()
     {
         questWatcher?.Dispose();
@@ -97,17 +107,28 @@ public sealed partial class ScribeModSystem
     internal List<ScribeAcceptCandidate> ComputeQuestAcceptCandidates()
         => capi is null ? new List<ScribeAcceptCandidate>() : ScribeAcceptCandidates.Compute(capi, LastOpenedScribeItemDocId);
 
-    /// <summary>A quest was just detected as accepted (<see cref="ScribeQuestWatcher"/>). ALWAYS posts a
-    /// chat notification — Scribe watching quest state at all is not obvious, so every policy gets one —
-    /// then branches on <see cref="ScribePlayerSettings.QuestAcceptPolicy"/>: Always sends the auto-link
-    /// request immediately UNLESS 2+ eligible destinations are carried, in which case it falls back to a
-    /// Prompt-style queue instead of silently guessing among them (Decision 3's alternative-considered
-    /// resolution — add-progression-framework-quest-support); Never does nothing further; PromptHud/
-    /// PromptPopup both queue the prompt instead of acting — which of the two presentation styles renders
-    /// it is decided at render time, not here (rework-quest-accept-notification-styles).</summary>
-    private void OnQuestAccepted(ScribeQuestCatalogEntry quest)
+    /// <summary>A quest was just detected as accepted (<see cref="ScribeQuestWatcher"/>). First consults the
+    /// player's synced quest-decision ledger (fix-quest-prompt-persistence-and-auto-pin Decisions 2/4): if
+    /// this exact accept-prompt was already decided (accepted-via-Scribe or dismissed) in an EARLIER session
+    /// and isn't a genuine fresh re-accept of a now-unlinked quest, it's a stale re-detection (the underlying
+    /// attribute never goes away — see <see cref="ScribeQuestWatcher"/>'s doc-comment) and is silently
+    /// dropped — no chat message, no queue, no Always-policy auto-link. Otherwise ALWAYS posts a chat
+    /// notification — Scribe watching quest state at all is not obvious, so every policy gets one — then
+    /// branches on <see cref="ScribePlayerSettings.QuestAcceptPolicy"/>: Always sends the auto-link request
+    /// immediately UNLESS 2+ eligible destinations are carried, in which case it falls back to a Prompt-style
+    /// queue instead of silently guessing among them (Decision 3's alternative-considered resolution —
+    /// add-progression-framework-quest-support); Never does nothing further; PromptHud/PromptPopup both
+    /// queue the prompt instead of acting — which of the two presentation styles renders it is decided at
+    /// render time, not here (rework-quest-accept-notification-styles).</summary>
+    private void OnQuestAccepted(ScribeQuestCatalogEntry quest, bool freshTransition)
     {
         if (capi is null) return;
+
+        var existingDecision = myQuestDecisions.Lookup(quest.Source, quest.QuestCode, isCompletion: false);
+        bool hasLiveLink = FindPinnedQuestLinks(quest.Source, quest.QuestCode).Count > 0;
+        if (ScribeQuestPromptGate.ShouldSuppressPrompt(existingDecision, isCompletion: false, freshTransition, hasLiveLink))
+            return;
+
         switch (MySettings.QuestAcceptPolicy)
         {
             case ScribeQuestAcceptPolicy.Always:
@@ -134,15 +155,23 @@ public sealed partial class ScribeModSystem
         }
     }
 
-    /// <summary>A quest was just detected as completed. Only an ALREADY-PINNED Quest Link for this exact
-    /// (source, quest code) counts as "linked" (mirrors the HUD Tracker engine's own scope: acted on
-    /// visible/live state, not every unloaded document) — a Link that exists but isn't pinned is a
-    /// disclosed gap. Matching by source too (not just code) means a code collision between backends can
-    /// never mark the wrong Link's pin done. The chat notification always fires regardless of whether a
-    /// match was found.</summary>
+    /// <summary>A quest was just detected as completed. First consults the player's synced quest-decision
+    /// ledger for this exact completion-prompt (fix-quest-prompt-persistence-and-auto-pin) — Decision 4's
+    /// reset-clear does not apply to completion-prompts (no equivalent fresh-transition signal exists), so
+    /// once decided it stays suppressed for the life of the ledger entry. Otherwise, only an ALREADY-PINNED
+    /// Quest Link for this exact (source, quest code) counts as "linked" (mirrors the HUD Tracker engine's
+    /// own scope: acted on visible/live state, not every unloaded document) — a Link that exists but isn't
+    /// pinned is a disclosed gap. Matching by source too (not just code) means a code collision between
+    /// backends can never mark the wrong Link's pin done. The chat notification always fires regardless of
+    /// whether a match was found.</summary>
     private void OnQuestCompleted(ScribeQuestCatalogEntry quest)
     {
         if (capi is null) return;
+
+        var existingDecision = myQuestDecisions.Lookup(quest.Source, quest.QuestCode, isCompletion: true);
+        if (ScribeQuestPromptGate.ShouldSuppressPrompt(existingDecision, isCompletion: true, freshAcceptTransition: false, hasLiveQuestLink: false))
+            return;
+
         var matches = FindPinnedQuestLinks(quest.Source, quest.QuestCode);
 
         switch (MySettings.QuestCompletionPolicy)
@@ -161,6 +190,34 @@ public sealed partial class ScribeModSystem
                 if (matches.Count > 0) QueuePrompt(new ScribeQuestPrompt(quest.Source, quest.QuestCode, quest.Title, IsCompletion: true));
                 break;
         }
+    }
+
+    /// <summary>Re-push a single player their own full quest-decision ledger (server → client). Called on
+    /// join and after any change to that player's ledger. Mirrors <see cref="PushPinsTo(IServerPlayer)"/>.</summary>
+    public void PushQuestDecisionsTo(IServerPlayer player)
+    {
+        if (sapi is null || questDecisionStore is null) return;
+        var bytes = questDecisionStore.SerializeList(player.PlayerUID);
+        sapi.Network.GetChannel(NetworkChannelName).SendPacket(new ScribeQuestDecisionSetMessage { DecisionSetBytes = bytes }, player);
+    }
+
+    /// <summary>Server-side: records the player's decision on a quest prompt and re-pushes their ledger if
+    /// it actually changed (fix-quest-prompt-persistence-and-auto-pin Decision 3).</summary>
+    private void RecordQuestDecision(IServerPlayer player, string source, string questCode, bool isCompletion, ScribeQuestDecision decision)
+    {
+        if (questDecisionStore is null) return;
+        if (questDecisionStore.Set(player.PlayerUID, source, questCode, isCompletion, decision))
+            PushQuestDecisionsTo(player);
+    }
+
+    /// <summary>Server-side handler for <see cref="ScribeDismissQuestPromptMessage"/> — a genuine Dismiss
+    /// action on a pending accept/completion prompt. Records a <see cref="ScribeQuestDecision.Dismissed"/>
+    /// decision so the same prompt never re-raises across a relog.</summary>
+    private void OnServerReceivedDismissQuestPrompt(IServerPlayer fromPlayer, ScribeDismissQuestPromptMessage message)
+    {
+        string source = string.IsNullOrWhiteSpace(message.Source) ? ScribeQuestSource.VsQuest : message.Source!;
+        if (string.IsNullOrWhiteSpace(message.QuestCode)) return;
+        RecordQuestDecision(fromPlayer, source, message.QuestCode!, message.IsCompletion, ScribeQuestDecision.Dismissed);
     }
 
     private List<ScribePinnedRef> FindPinnedQuestLinks(string source, string questCode)
@@ -191,12 +248,33 @@ public sealed partial class ScribeModSystem
         {
             SendAutoLinkQuest(new ScribeQuestCatalogEntry(prompt.Source, prompt.QuestCode, prompt.Title, null, Array.Empty<ScribeQuestObjectiveDef>()), candidate);
         }
-        DismissQuestPrompt(prompt);
+        // Local-only removal — NOT the public DismissQuestPrompt below: accepting already records its own
+        // Accepted decision (via the AutoLinkQuest/CompleteTask round trip this just triggered), so sending
+        // a Dismissed decision here too would incorrectly overwrite it.
+        RemovePendingPrompt(prompt);
     }
 
-    /// <summary>The HUD banner's Dismiss action (or Accept's own cleanup): drop the prompt with no
-    /// further action. Session-only — the watcher's own dedup means dismissing doesn't re-arm anything.</summary>
+    /// <summary>The HUD banner's / center-modal's Dismiss action: drop the prompt with no further action,
+    /// AND record the dismissal server-side (fix-quest-prompt-persistence-and-auto-pin Decision 3) so the
+    /// same prompt never re-raises across a relog. NOT used by <see cref="AcceptQuestPrompt"/>'s own
+    /// cleanup — see <see cref="RemovePendingPrompt"/>.</summary>
     public void DismissQuestPrompt(ScribeQuestPrompt prompt)
+    {
+        RemovePendingPrompt(prompt);
+        if (capi is null) return;
+        capi.Network.GetChannel(NetworkChannelName).SendPacket(new ScribeDismissQuestPromptMessage
+        {
+            Source = prompt.Source,
+            QuestCode = prompt.QuestCode,
+            IsCompletion = prompt.IsCompletion,
+        });
+    }
+
+    /// <summary>Drops the pending prompt locally with no network effect — session-only, since the
+    /// watcher's own dedup means dismissing doesn't re-arm anything on THIS client this session. Shared by
+    /// the genuine Dismiss action (<see cref="DismissQuestPrompt"/>, which also sends the decision) and
+    /// Accept's own cleanup (which records its decision through a different round trip).</summary>
+    private void RemovePendingPrompt(ScribeQuestPrompt prompt)
     {
         if (pendingQuestPrompts.Remove(prompt)) QuestPromptsChanged?.Invoke();
     }
@@ -249,6 +327,8 @@ public sealed partial class ScribeModSystem
             TargetInventoryId = candidate?.InventoryId,
             TargetSlotId = candidate?.SlotId ?? -1,
             Objectives = objectives,
+            AutoPin = MySettings.AutoPinOnQuestAccept,
+            PinInsert = (byte)MySettings.PinInsert,
         });
     }
 
@@ -304,10 +384,10 @@ public sealed partial class ScribeModSystem
         }
 
         doc.AddQuestLink(source, questCode, message.Title, message.Description);
+        var newTaskId = doc.Blocks[^1].TaskId;
         if (message.Objectives is { Count: > 0 } objectives)
         {
-            var parentTaskId = doc.Blocks[^1].TaskId;
-            doc.ReconcileQuestObjectives(parentTaskId, objectives
+            doc.ReconcileQuestObjectives(newTaskId, objectives
                 .Where(o => o.Code is not null)
                 .Select(o => (o.Code!, o.ItemCode, o.Label, o.Required))
                 .ToList(), createMissing: true);
@@ -319,6 +399,20 @@ public sealed partial class ScribeModSystem
             }
         }
         host.Flush();
+
+        // Decision 3: accept already round-trips through this handler, so it also records the ledger
+        // entry — no separate message needed for accept, unlike dismiss.
+        RecordQuestDecision(fromPlayer, source, questCode, isCompletion: false, ScribeQuestDecision.Accepted);
+
+        // Decision 5: auto-pin reuses the just-created TaskId, through the same server-side pin-add path
+        // the manual Pin control's network handler uses. The quest is accepted/linked regardless of
+        // whether this follow-on pin-add succeeds (SetPinForPlayer no-ops safely on any failure).
+        if (message.AutoPin)
+        {
+            var insertEdge = ScribePlayerSettings.NormalizePinInsert((ScribePinInsert)message.PinInsert);
+            SetPinForPlayer(fromPlayer, doc.DocId, newTaskId, pinned: true, insertEdge: insertEdge);
+        }
+
         Trace("auto-link-quest from {0}: linked {1}/{2}", fromPlayer.PlayerName, source, questCode);
     }
 }

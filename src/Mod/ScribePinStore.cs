@@ -45,6 +45,13 @@ public sealed class ScribePinStore
     public bool IsPinned(string playerUid, Guid docId, Guid taskId)
         => Find(playerUid, docId, taskId) is not null;
 
+    /// <summary>The player's pin for this task, or null if they have none — exposes the pin's snapshot
+    /// (Kind/LinkTarget etc.) to callers that need it without a block resolution (e.g. detecting a
+    /// completed pin is a Quest Link even when its source document is unresolvable —
+    /// fix-quest-prompt-persistence-and-auto-pin 3.3).</summary>
+    public ScribePinnedRef? GetPin(string playerUid, Guid docId, Guid taskId)
+        => Find(playerUid, docId, taskId);
+
     /// <summary>The uids of every player who has at least one pin referencing this document. Used to
     /// fan a snapshot/orphan update out to exactly the affected players.</summary>
     public IReadOnlyList<string> PlayersPinning(Guid docId)

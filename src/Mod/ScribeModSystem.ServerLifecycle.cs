@@ -56,6 +56,7 @@ public sealed partial class ScribeModSystem
         pinStore.LoadFrom(pinBytes);
 
         assignmentStore?.LoadFrom(sapi.WorldManager.SaveGame.GetData(AssignmentStoreSaveKey));
+        questDecisionStore?.LoadFrom(sapi.WorldManager.SaveGame.GetData(QuestDecisionStoreSaveKey));
         playerLocationStore?.LoadFrom(sapi.WorldManager.SaveGame.GetData(PlayerLocationStoreSaveKey));
 
         if (timerStores is not null)
@@ -99,6 +100,9 @@ public sealed partial class ScribeModSystem
         if (assignmentStore is not null)
             sapi.WorldManager.SaveGame.StoreData(AssignmentStoreSaveKey, assignmentStore.SerializeStore());
 
+        if (questDecisionStore is not null)
+            sapi.WorldManager.SaveGame.StoreData(QuestDecisionStoreSaveKey, questDecisionStore.SerializeStore());
+
         if (playerLocationStore is not null)
             sapi.WorldManager.SaveGame.StoreData(PlayerLocationStoreSaveKey, playerLocationStore.Serialize());
 
@@ -140,6 +144,7 @@ public sealed partial class ScribeModSystem
         PushPinsTo(player);
         PushTimerTo(player);
         PushAssignmentsTo(player);
+        PushQuestDecisionsTo(player);
     }
 
 }

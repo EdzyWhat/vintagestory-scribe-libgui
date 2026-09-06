@@ -128,6 +128,19 @@ public sealed partial class ScribeModSystem
         }
         bool nowDone = !current.Value;
 
+        // Decision 3 (fix-quest-prompt-persistence-and-auto-pin): a completion-prompt's "accept" is
+        // marking the linked task done. Captured from the pin's OWN snapshot (not the source document) so
+        // it works even when the source is unresolvable, mirroring every other snapshot read in this
+        // method. Only a transition INTO done counts — unchecking a completed quest task never re-records.
+        if (nowDone && pinStore.GetPin(player.PlayerUID, docId, taskId) is { Kind: ScribeBlockKind.Link } questPin
+            && ScribeLinkTarget.IsQuest(questPin.LinkTarget))
+        {
+            string questSource = ScribeLinkTarget.QuestSource(questPin.LinkTarget) ?? ScribeQuestSource.VsQuest;
+            string? questCode = ScribeLinkTarget.QuestCode(questPin.LinkTarget);
+            if (questCode is not null)
+                RecordQuestDecision(player, questSource, questCode, isCompletion: true, ScribeQuestDecision.Accepted);
+        }
+
         bool changed = pinStore.SetPinDone(player.PlayerUID, docId, taskId, nowDone);
         Trace("  complete: {0}'s pin on task {1} done {2} -> {3}", player.PlayerName, taskId, current.Value, nowDone);
 

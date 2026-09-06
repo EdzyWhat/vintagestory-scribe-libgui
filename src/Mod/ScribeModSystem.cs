@@ -37,6 +37,10 @@ public sealed partial class ScribeModSystem : ModSystem
     /// <summary>Savegame key for the persisted assignment store (<see cref="ScribeAssignmentStore"/>).</summary>
     private const string AssignmentStoreSaveKey = "scribe:assignments:v1";
 
+    /// <summary>Savegame key for the persisted per-player quest-decision ledger
+    /// (<see cref="ScribeQuestDecisionStore"/>).</summary>
+    private const string QuestDecisionStoreSaveKey = "scribe:questdecisions:v1";
+
     /// <summary>Client-local JSON file holding ALL of this player's Scribe preferences — completion
     /// policy, HUD rows/anchor/offsets/width/collapse, and the HUD/window font-size scales — per-player,
     /// cross-world, never server-synced. As of add-settings-tab this is the SINGLE client-local
@@ -70,6 +74,16 @@ public sealed partial class ScribeModSystem : ModSystem
 
     /// <summary>Server-side player-to-player assignment store. Null on a pure client.</summary>
     private ScribeAssignmentStore? assignmentStore;
+
+    /// <summary>Server-side per-player quest-decision ledger. Null on a pure client
+    /// (fix-quest-prompt-persistence-and-auto-pin).</summary>
+    private ScribeQuestDecisionStore? questDecisionStore;
+
+    /// <summary>Client-side cache of THIS player's own synced quest-decision ledger, populated by the
+    /// server push (<see cref="ScribeQuestDecisionSetMessage"/>) on join and on any change — consulted by
+    /// <see cref="OnQuestAccepted"/>/<see cref="OnQuestCompleted"/> so the prompt-suppress check never needs
+    /// a round trip. Never another player's.</summary>
+    private readonly ScribeQuestDecisionSet myQuestDecisions = new();
 
     /// <summary>Server-side reflection bridge to the CarryOn mod family, so Notebooks/Tablets inside
     /// a CarryOn-carried container also participate in history recording. Null on a pure client.
@@ -364,7 +378,9 @@ public sealed partial class ScribeModSystem : ModSystem
             .RegisterMessageType<ScribeDeliveryRangeCheckReplyMessage>()
             .RegisterMessageType<ScribeTaskNoticeActionMessage>()
             .RegisterMessageType<ScribeTaskNoticeProximityPingMessage>()
-            .RegisterMessageType<ScribeSetQuestObjectiveProgressMessage>();
+            .RegisterMessageType<ScribeSetQuestObjectiveProgressMessage>()
+            .RegisterMessageType<ScribeDismissQuestPromptMessage>()
+            .RegisterMessageType<ScribeQuestDecisionSetMessage>();
     }
 
     /// <summary>Server-side accessor for the pin store, so the block entity can register/orphan its
@@ -416,7 +432,8 @@ public sealed partial class ScribeModSystem : ModSystem
             .SetMessageHandler<ScribeTranscribeStampMessage>(OnClientReceivedTranscribeStamp)
             .SetMessageHandler<ScribeAssignmentSyncMessage>(OnClientReceivedAssignmentSync)
             .SetMessageHandler<ScribeDeliveryRangeCheckReplyMessage>(OnClientReceivedDeliveryRangeCheckReply)
-            .SetMessageHandler<ScribeTaskNoticeProximityPingMessage>(OnClientReceivedTaskNoticeProximityPing);
+            .SetMessageHandler<ScribeTaskNoticeProximityPingMessage>(OnClientReceivedTaskNoticeProximityPing)
+            .SetMessageHandler<ScribeQuestDecisionSetMessage>(OnClientReceivedQuestDecisionSet);
 
         // The pinned-task HUD self-shows once the player's pin set arrives (it subscribes to
         // MyPinsChanged in its ctor), so it can be constructed here regardless of current pin count —
@@ -486,6 +503,7 @@ public sealed partial class ScribeModSystem : ModSystem
         sapi = api;
         pinStore = new ScribePinStore();
         assignmentStore = new ScribeAssignmentStore();
+        questDecisionStore = new ScribeQuestDecisionStore();
         playerLocationStore = new ScribePlayerLocationStore();
         carryOnBridge = new CarryOnBridge(api);
 
@@ -518,6 +536,7 @@ public sealed partial class ScribeModSystem : ModSystem
         channel.SetMessageHandler<ScribeDeliveryRangeCheckRequestMessage>(OnServerReceivedDeliveryRangeCheckRequest);
         channel.SetMessageHandler<ScribeTaskNoticeActionMessage>(OnServerReceivedTaskNoticeAction);
         channel.SetMessageHandler<ScribeSetQuestObjectiveProgressMessage>(OnServerReceivedSetQuestObjectiveProgress);
+        channel.SetMessageHandler<ScribeDismissQuestPromptMessage>(OnServerReceivedDismissQuestPrompt);
 
         // Persist/load the pin + settings stores with the save game (the WaypointMapLayer pattern).
         api.Event.SaveGameLoaded += OnSaveGameLoaded;

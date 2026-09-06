@@ -30,6 +30,15 @@ public sealed class ScribePlayerSettings
     /// <summary>Policy for automatically completing tasks linked to quests detected by the optional VS Quest integration.</summary>
     public ScribeQuestCompletionPolicy QuestCompletionPolicy { get; set; } = ScribeQuestCompletionPolicy.Prompt;
 
+    /// <summary>Whether accepting a quest's accept-prompt (HUD banner or center-screen modal) also pins
+    /// the resulting linked task, through the same pin-add operation a manual pin uses. Default
+    /// <c>true</c> — accepting is the clearest "track this" signal a player can give
+    /// (fix-quest-prompt-persistence-and-auto-pin). A per-player, client-local preference: never
+    /// server-synced (the client sends it with the accept request, mirroring how
+    /// <see cref="CompletionPolicy"/> travels with a completion request). A plain bool, so
+    /// <see cref="Normalized"/> leaves it untouched.</summary>
+    public bool AutoPinOnQuestAccept { get; set; } = true;
+
     /// <summary>What a Tracker task does when its carried-inventory count reaches its target
     /// (add-tracker-link-tasks D6): <see cref="ScribeTrackerCompletion.Complete"/> (default — mark it
     /// done, the same edit as ticking its checkbox), <see cref="ScribeTrackerCompletion.Delete"/>
