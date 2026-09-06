@@ -3402,6 +3402,39 @@ directly: walk every element's `faces` dict and flag any `"texture": null`. Caug
 freshly custom-modeled beyond their original Scriptorium-clone starting point
 (`add-custom-models-tasknotice-desk-inbox`).
 
+## An item's manually-swapped alternate shape (`OnBeforeRender` mesh-swap) renders with the engine's flat "unknown texture" placeholder, not a crash cube — its texture codes were never baked into the atlas (2026-09-06)
+
+**Symptom: an item that swaps between two custom shapes at render time (e.g. blank ↔ filled/sealed,
+via `ObjectCacheUtil.GetOrCreate` + manual `ITesselatorAPI.TesselateShape(CollectibleObject, Shape,
+...)` in `OnBeforeRender`, the `CollectibleBehaviorCustomTongedShape` idiom) shows correctly for the
+DEFAULT variant but the OTHER variant renders as a flat, untextured placeholder ("standard blank
+texture" / "mystery block") — not the "?"-cube unknown-*asset* placeholder from a shape-parse
+failure (see the entry above this one), a different failure mode entirely.**
+
+Root cause: `TesselateShape(CollectibleObject, Shape, ...)` resolves every `#code` in the shape's
+faces via a `TextureSource` built from **`Item.Textures`** (`ShapeTesselator.cs`
+`TesselateShape(CollectibleObject collObj, ...)` → `new TextureSource(game, atlasSize, collObj as
+Item)`), and `TextureSource`'s indexer falls back to `atlasMgr.UnknownTexturePos` — a flat
+placeholder texture, not a shape-load failure — for any code missing from that dict (logging
+`"Missing mapping for texture code #X ... using shape <item.Shape.Base>"`, confirmed in
+`TextureSource.cs`). `Item.Textures` only ever gets populated from (a) an explicit top-level
+`"textures"` block in the item's `itemtypes/*.json`, plus (b) an automatic merge of whichever ONE
+shape is named in that json's own `"shape": { "base": ... }` field — done once, engine-side, in
+`ItemTextureAtlasManager.CollectTextures`/`ResolveTextureCodes` at asset-load time (confirmed via
+decompile). A shape loaded manually later, purely for a render-time mesh swap and never referenced
+by `itemtypes.json`'s `"shape"` field, is invisible to that merge — its own embedded `"textures"`
+dict (top of the shape `.json`) is never read by this path at all, and its PNGs never even get
+baked into the item texture atlas. Any `#code` unique to that alternate shape resolves to nothing.
+
+**Fix pattern:** add an explicit `"textures"` block to the item's `itemtypes/*.json` declaring
+EVERY texture code used by EVERY manually-swapped shape variant, not just the default one — e.g.
+`"textures": { "blank": {"base": "..."}, "blank-tie": {...}, "filled": {...}, "filled-tie": {...}
+}`. This is the same `"textures": { "code": {"base": "domain:path"} }` shape used in
+`scribenotebook.json` for its own extra-texture-code case. Fixed in `tasknotice.json`
+(`ItemScribeTaskNotice.OnBeforeRender` swaps `item/tasknotice/blank` ↔ `item/tasknotice/filled`;
+only `blank`'s codes were declared/auto-merged, so the filled/sealed variant always rendered
+untextured — TESTING.md `00000093`).
+
 ## Entry template
 
 ```

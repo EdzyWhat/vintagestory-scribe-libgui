@@ -20,12 +20,18 @@
 		}
 	},
 	"shape": { "base": "scribe:item/tasknotice/blank" },
+	"textures": {
+		"tasknotice": { "base": "scribe:item/tasknotice/blank" },
+		"tasknotice-tie": { "base": "scribe:item/tasknotice/blank-tie" },
+		"filled": { "base": "scribe:item/tasknotice/filled" },
+		"filled-tie": { "base": "scribe:item/tasknotice/filled-tie" }
+	},
 	"creativeinventory": { "general": ["*"], "items": ["*"] },
 	"guiTransform": {
-		"translation": { "x": 0, "y": 0, "z": 0 },
-		"rotation": { "x": -19, "y": -59, "z": 20 },
+		"translation": { "x": 2, "y": 0, "z": -0 },
+		"rotation": { "x": 154, "y": 60, "z": -15 },
 		"origin": { "x": 0.48, "y": 0.05, "z": 0.52 },
-		"scale": 2.4
+		"scale": 2.45
 	},
 	"groundTransform": {
 		"translation": { "x": 0, "y": 0, "z": 0 },

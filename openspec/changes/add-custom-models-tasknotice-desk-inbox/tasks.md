@@ -73,7 +73,7 @@
 
 ## 4. Task Notice: per-stack render swap
 
-- [ ] 4.1 In `src/Mod/ItemScribeTaskNotice.cs`, add `OnBeforeRender(ICoreClientAPI, ItemStack,
+- [x] 4.1 In `src/Mod/ItemScribeTaskNotice.cs`, add `OnBeforeRender(ICoreClientAPI, ItemStack,
   EnumItemRenderTarget, ref ItemRenderInfo)`: pick between two fixed `ObjectCacheUtil`-cached
   `MultiTextureMeshRef`s (one for `scribe:item/tasknotice/blank`, one for
   `scribe:item/tasknotice/filled`) based on the existing `IsSealed(ItemStack)` check, tesselating

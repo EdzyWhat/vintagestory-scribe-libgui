@@ -633,11 +633,12 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       from the relocated blank shape or the new filled shape (covers 3.1's relocation, 3.2's new
       filled shape, and 3.3's shape.base rename together). *(add-custom-models-tasknotice-desk-inbox 3.1)*
       - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"
-- [ ] `00000093` **Test seal swap.** Hold a blank Task Notice (confirm it shows the plain blank
+- [x] `00000093` **Test seal swap.** Hold a blank Task Notice (confirm it shows the plain blank
       model), then send an assignment via "Send a Notice" — confirm the sealed notice sitting in
       the Create Assignments output slot now shows the filled model with its wax-seal blob.
       *(add-custom-models-tasknotice-desk-inbox 4.1)*
       - **Still broken 2026-09-05:** (submission 2026-09-05T22-19-48) "It's currently a broken mystery block, so I think one of the faces needs fixing. Can you help me identify which one?"
+      - **Confirmed 2026-09-06:** root cause was a missing `textures` block in `itemtypes/tasknotice.json` (the filled shape's `#filled`/`#filled-tie` codes were never registered in the item texture atlas); fixed and verified in-game.
 - [x] `00000094` **Test reload stability.** With a Task Notice in inventory, leave and rejoin the
       world twice in a row — confirm no error/exception appears in the client log either time.
       *(add-custom-models-tasknotice-desk-inbox 4.2)*
@@ -646,3 +647,20 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       Desk + Inbox in one sitting — confirm all four models look right together as a final sanity
       pass. *(add-custom-models-tasknotice-desk-inbox 5.2)*
       - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"
+
+## signal-tasknotice-inbox-presence
+
+> Block-attached ambient particles + Inbox Inventory tab/slot shimmer for a sealed, addressed
+> Task Notice sitting undiscovered in an Inbox's restricted slots are already confirmed working
+> (2026-09-06) — see `tasks.md` 5.1/5.2. The two items below are what's left: the hover-card
+> special case (section 1) and a read-only sanity check (5.3).
+
+- [ ] `0000009e` **Check hover summary card.** Hover a sealed, addressed Task Notice while it sits
+      in a Scriptorium slot, an Assignment Desk slot, and an Inbox restricted slot — confirm each
+      shows "assigned by"/"addressed to" lines instead of `Title: (Untitled)`. Then hover a blank
+      Task Notice in the same three slot types — confirm its card is unchanged (generic "never
+      opened"). *(signal-tasknotice-inbox-presence 1.2)*
+- [ ] `0000009f` **Check presence signals are read-only.** With an addressed notice sitting in an
+      Inbox slot (particles/tab shimmer/slot shimmer all active) and the hover card open — confirm
+      none of it mutates anything: the assignment's state and the Inbox's inventory contents are
+      identical before and after observing. *(signal-tasknotice-inbox-presence 5.3)*
