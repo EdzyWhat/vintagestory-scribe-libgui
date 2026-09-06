@@ -81,6 +81,12 @@ public sealed partial class ScribeModSystem
 
     private static readonly Dictionary<string, int> EmptyPfProgress = new(StringComparer.Ordinal);
 
+    /// <summary>Whether the player has been observed to start (accept or complete) the given quest code this
+    /// session, per whichever backend it belongs to (filter-quest-link-picker) — exposed for the manual Quest
+    /// Link picker to filter its candidate list down to quests actually engaged with. False whenever the
+    /// watcher hasn't started (neither backend installed).</summary>
+    internal bool HasStartedQuest(string questCode) => questWatcher?.HasStarted(questCode) ?? false;
+
     private void StartQuestWatcher(ICoreClientAPI api)
         => questWatcher = new ScribeQuestWatcher(api, OnQuestAccepted, OnQuestCompleted);
 

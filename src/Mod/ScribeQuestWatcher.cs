@@ -192,6 +192,19 @@ internal sealed class ScribeQuestWatcher
     private static readonly Dictionary<string, string> EmptyStatusMap = new(StringComparer.Ordinal);
     private static readonly Dictionary<string, int> EmptyProgressMap = new(StringComparer.Ordinal);
 
+    /// <summary>Whether the player has been observed to start (accept or complete) the given quest code
+    /// this client session, per whichever backend it belongs to — a pure read of the session-cached sets
+    /// each backend's tick path above already maintains for auto-detect (filter-quest-link-picker design.md
+    /// Decision 1). For vsquest, "started" requires the quest's giver to have been scanned this session
+    /// (<see cref="ScanGiver"/>); for Progression Framework, any recorded status (active or completed) for
+    /// the code counts, from either the player-scoped or server-scoped tick path (both write
+    /// <see cref="pfStatusFingerprint"/>). Used only to filter the "Add Quest Link" picker's candidate list —
+    /// no other consumer.</summary>
+    public bool HasStarted(string questCode)
+        => _acceptedSeen.Contains(questCode)
+            || _completedSeen.Contains(questCode)
+            || pfStatusFingerprint.ContainsKey(questCode);
+
     private void OnTick(float dt)
     {
         if (ScribeQuestCatalog.IsAvailable(capi))

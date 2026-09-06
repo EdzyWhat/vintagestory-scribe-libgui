@@ -17,7 +17,8 @@
   update its PLACEHOLDER MODEL comment to note the model is now a locally-owned,
   Scriptorium-derived starting point (not a direct reference to the Scriptorium's or Lectern's
   files, and not final art).
-- [ ] 1.4 Build (`dotnet build -c Debug`) and restage per `build/restage.sh Debug`, then manually
+- [x] 1.4 Build (`dotnet build -c Debug`) and restage per `build/restage.sh Debug`, then manually
+  - Confirmed 2026-09-05: TESTING.md `00000090` "It looks like the new model, not the Scriptorium (which was a placeholder model). The appearance is correct, we may need to change the spec." (submission 2026-09-05T22-19-48)
   verify in-game: placing and viewing an Assignment Desk renders fully textured (no missing-
   texture/pink-checkerboard faces or the engine's unknown-asset "?" placeholder). STALE WORDING
   NOTE (2026-09-05): this task originally expected the result to match the Scriptorium's
@@ -41,7 +42,8 @@
   `"scribe:block/inbox/inbox"`, add the matching nine-key `textures` override block pointing at
   `scribe:block/inbox/<key>`, and update its PLACEHOLDER MODEL comment the same way as the
   Desk's.
-- [ ] 2.4 Restage and manually verify in-game: placing and viewing the standalone Inbox block
+- [x] 2.4 Restage and manually verify in-game: placing and viewing the standalone Inbox block
+  - Confirmed 2026-09-05: TESTING.md `00000091` "Once again, the look is what I want - but different than the Scriptorium (which was used as a placeholder model)." (submission 2026-09-05T22-19-48)
   renders fully textured (no missing-texture faces or the engine's unknown-asset "?"
   placeholder). Same stale-wording note as 1.4 — `inbox.bbmodel` has since received its own real
   geometry, no longer expected to match the Scriptorium. BLOCKED as of 2026-09-05 by the same
@@ -50,7 +52,8 @@
 
 ## 3. Task Notice: split blank/filled model files
 
-- [ ] 3.1 Move `src/Mod/assets/scribe/shapes/item/tasknotice.json` to
+- [x] 3.1 Move `src/Mod/assets/scribe/shapes/item/tasknotice.json` to
+  - Confirmed 2026-09-05: TESTING.md `00000092` "(no note)" (submission 2026-09-05T22-19-48)
   `src/Mod/assets/scribe/shapes/item/tasknotice/blank.json` (new folder), and move its two
   textures (`tasknotice.png`, `tasknotice-tie.png`) from
   `src/Mod/assets/scribe/textures/item/` into `src/Mod/assets/scribe/textures/item/tasknotice/`
@@ -79,7 +82,8 @@
   hand shows the blank model; sealing one (send an assignment via "Send a Notice" mode) makes the
   now-sealed notice in the output slot show the filled model, with no change to a stack already
   held elsewhere until it's re-rendered (should be immediate, since the check runs every frame).
-- [ ] 4.2 Add an `OnUnloaded(ICoreAPI)` override that disposes both cached mesh refs (mirroring
+- [x] 4.2 Add an `OnUnloaded(ICoreAPI)` override that disposes both cached mesh refs (mirroring
+  - Confirmed 2026-09-05: TESTING.md `00000094` "(no note)" (submission 2026-09-05T22-19-48)
   `CollectibleBehaviorCustomTongedShape.OnUnloaded`). Verify by leaving and rejoining a world
   twice in a row with a Task Notice present in inventory and confirming no error/exception in the
   client log on either transition.
@@ -88,7 +92,8 @@
 
 - [x] 5.1 Run `dotnet test` for `tests/Core.Tests` and confirm all tests still pass (no Core
   changes expected in this work, but confirm the suite is unaffected).
-- [ ] 5.2 Manual playtest: craft a blank Task Notice, confirm its appearance in inventory/hand
+- [x] 5.2 Manual playtest: craft a blank Task Notice, confirm its appearance in inventory/hand
+  - Confirmed 2026-09-05: TESTING.md `00000095` "(no note)" (submission 2026-09-05T22-19-48)
   matches the (relocated, otherwise unchanged) blank model; send an assignment via "Send a
   Notice" to seal one, confirm the sealed notice in the Create Assignments tab's output slot
   shows the new filled model; place an Assignment Desk and a standalone Inbox and confirm both

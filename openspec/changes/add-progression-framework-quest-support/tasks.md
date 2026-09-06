@@ -103,9 +103,11 @@
       re-validates it (writeable, has capacity) exactly like `TryPlaceAcceptedAssignment` does —
       never trusts the client's choice as proof of eligibility; falls back to
       `FindNotebookInInventory` only when no target was sent (defensive compatibility path).
-- [ ] 6.5 Manual test: carry two eligible Notebooks, trigger a VS Quest accept under Prompt policy
+- [x] 6.5 Manual test: carry two eligible Notebooks, trigger a VS Quest accept under Prompt policy
+  - Confirmed 2026-09-05: TESTING.md `00000082` "(no note)" (submission 2026-09-05T22-19-48)
       — confirm the picker appears and the link lands on the chosen one.
-- [ ] 6.6 Manual test: same as 6.5 but Accept Policy = Always — confirm a Prompt-style banner
+- [x] 6.6 Manual test: same as 6.5 but Accept Policy = Always — confirm a Prompt-style banner
+  - Confirmed 2026-09-05: TESTING.md `00000083` "(no note)" (submission 2026-09-05T22-19-48)
       appears instead of a silent pick.
 
 ## 7. Settings/UI generalization
@@ -125,7 +127,8 @@
 - [x] 8.2 `./build/verify.sh` green (Core + Atlas) before any push. Ran
       `./build/verify.sh Debug --no-restage` (restage skipped — deferred to the user, since it
       tears the DLL if the client is running): build ✓, Core 651/651 ✓, Atlas 25/25 ✓.
-- [ ] 8.3 Manual playtest: install Progression Framework + Seafarer, place an NPC quest-giver
+- [x] 8.3 Manual playtest: install Progression Framework + Seafarer, place an NPC quest-giver
+  - Confirmed 2026-09-05: TESTING.md `00000084` "(no note)" (submission 2026-09-05T22-19-48)
       offering a multi-objective delivery quest, confirm catalog entry appears in the Quest Link
       picker, accept it in-world, confirm auto-detect fires and progress mirrors as objectives
       are delivered.

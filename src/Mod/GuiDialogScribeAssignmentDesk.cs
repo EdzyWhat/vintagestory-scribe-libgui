@@ -19,10 +19,10 @@ namespace Scribe;
 /// view state, build methods, lock orchestration, autosave, title editing, and scroll management live
 /// in the base class; this dialog's own real work is the Create Assignments tab's staging-and-select
 /// flow (assignment-multi-item-creation, design.md D8-D13) plus its right-column nav, which replaces the
-/// base's default Read/Editor/Pinned trio with its own six-tab layout: Create Assignments, Sent
-/// Assignment History, Inbox, Read, Editor, Settings (add-assignment-desk-own-tasks design.md D1/D2) —
-/// still no Pinned tab (the Desk's own document isn't a personal pin target). Defaults to the Assignment
-/// tab on open.
+/// base's default Read/Editor/Pinned trio with its own five-tab layout: Create Assignments, Sent
+/// Assignment History, Inbox, Editor, Settings (add-assignment-desk-own-tasks design.md D1/D2; Read
+/// dropped by remove-assignment-desk-read-tab) — still no Pinned tab (the Desk's own document isn't a
+/// personal pin target). Defaults to the Assignment tab on open.
 /// </summary>
 public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
 {
@@ -138,24 +138,33 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
     /// <summary>A plain access grant, the ordinary reply every right-click on the block gets, must leave
     /// whichever tab is already selected alone rather than being force-switched to some default view —
     /// matching the base's own doc-comment reasoning for every Read/Editor-capable surface, just applied
-    /// to this dialog's six-tab set (Assignment/Sent-History/Inbox/Read/Editor all count as "already
-    /// selected and legitimate"; only <see cref="DefaultToAssignmentView"/> in the ctor picks Create
-    /// Assignments as the FIRST-open default). Overriding the base's <c>EnterReadMode()</c> default this
-    /// way remains necessary even now that a Read tab exists here, because Create Assignments — not
-    /// Read — is this dialog's intended landing tab.</summary>
+    /// to this dialog's five-tab set (Assignment/Sent-History/Inbox/Editor all count as "already selected
+    /// and legitimate"; only <see cref="DefaultToAssignmentView"/> in the ctor picks Create Assignments as
+    /// the FIRST-open default). Overriding the base's <c>EnterReadMode()</c> default this way remains
+    /// necessary even with no Read tab here, because Create Assignments — not Read — is this dialog's
+    /// intended landing tab.</summary>
     public override void EnterGrantedView()
     {
         LeaveEditorIfActive();
         if (IsOpened()) ForceRebuild();
     }
 
+    /// <summary>The Desk has no Read view (remove-assignment-desk-read-tab), so the editor footer's "Done
+    /// editing" button — kept visible and clickable, unlike <see cref="GuiDialogScribeTablet"/>'s always-edit
+    /// case — must not land on the base's default `isEditorMode`-false-branch destination (Read, a tab this
+    /// dialog's nav column no longer has a button for). Every path that tears down the editor (that button,
+    /// and the incidental teardown inside <see cref="ScribeDialogBase.LeaveEditorIfActive"/>) funnels through
+    /// this one hook, so redirecting it back to Create Assignments — matching this dialog's own default-open
+    /// landing tab — covers both without needing to special-case either caller.</summary>
+    protected override void OnLeftEditorMode() => DefaultToAssignmentView();
+
     /// <summary>Replaces the base's default Read/Editor/Pinned/Settings column with this dialog's own
-    /// six-tab layout — Create Assignments, Sent Assignment History, Inbox, Read, Editor, Settings, in
-    /// that nav order (add-assignment-desk-own-tasks design.md D1/D2) — still no Pinned tab (the Desk's
-    /// own document isn't a personal pin target). The Read/Editor buttons wire straight to the base's own
-    /// entry points (<see cref="ScribeDialogBase.EnterReadMode"/> / <see cref="ScribeDialogBase.TryEnterEditor"/>)
-    /// and reuse its exact icon codes/tooltip keys/active-color/dimming conventions
-    /// (<see cref="ScribeDialogBase.IsReadView"/>/<see cref="ScribeDialogBase.IsEditorView"/>/
+    /// five-tab layout — Create Assignments, Sent Assignment History, Inbox, Editor, Settings, in that nav
+    /// order (add-assignment-desk-own-tasks design.md D1/D2; Read dropped by
+    /// remove-assignment-desk-read-tab) — still no Pinned tab (the Desk's own document isn't a personal pin
+    /// target). The Editor button wires straight to the base's own entry point
+    /// (<see cref="ScribeDialogBase.TryEnterEditor"/>) and reuses its exact icon codes/tooltip
+    /// keys/active-color/dimming conventions (<see cref="ScribeDialogBase.IsEditorView"/>/
     /// <see cref="ScribeDialogBase.EditLockedByOther"/>) — no new view code, per D1. Mirrors
     /// <see cref="GuiDialogScribeTablet"/>'s precedent for replacing this seam wholesale rather than
     /// layering onto <see cref="GetExtraNavButtons"/>, which is reserved for surfaces that keep the base
@@ -184,12 +193,9 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
             size: size, onTap: OnClickSwitchToInbox, boxShadows: NavButtonShadow,
             activeColor: IsInboxView ? ScribeRowConstants.NavActiveGuestbook : null,
             shimmer: ShowInboxShimmer);
-        // Read/Editor (add-assignment-desk-own-tasks D1) — same icon codes/tooltip keys/active-color as the
+        // Editor (add-assignment-desk-own-tasks D1) — same icon codes/tooltip keys/active-color as the
         // base's own default BuildRightColNav, just rebuilt here since this dialog replaces that seam
         // wholesale rather than extending it.
-        Widget readBtn = TitleButton("scribecheck", "scribe-gui-nav-read", navColor,
-            size: size, onTap: EnterReadMode, boxShadows: NavButtonShadow,
-            activeColor: IsReadView ? ScribeRowConstants.NavActiveRead : null);
         Widget editorBtn = TitleButton("scribeedit", "scribe-gui-nav-edit",
             EditLockedByOther ? navColor with { W = 0.4f } : navColor,
             size: size, onTap: TryEnterEditor, boxShadows: NavButtonShadow,
@@ -206,7 +212,7 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
             mainAxisAlignment: MainAxisAlignment.Start,
             crossAxisAlignment: NavButtonAlignment(sideColW, navBoxW),
             mainAxisSize: MainAxisSize.Max,
-            children: new Widget[] { assignmentBtn, sentHistoryBtn, inboxBtn, readBtn, editorBtn, settingsBtn });
+            children: new Widget[] { assignmentBtn, sentHistoryBtn, inboxBtn, editorBtn, settingsBtn });
     }
 
     /// <summary>The Create Assignments tab (assignment-multi-item-creation design.md D8-D13, split down to

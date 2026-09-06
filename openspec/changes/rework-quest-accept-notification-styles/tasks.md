@@ -54,18 +54,23 @@
 
 - [x] 5.1 `dotnet test` (Core) green.
 - [x] 5.2 `./build/verify.sh Debug --no-restage` green (Core + Atlas) before any push.
-- [ ] 5.3 Manual playtest: set Quest Accept Policy to Prompt via Scribe HUD, trigger a quest accept —
+- [x] 5.3 Manual playtest: set Quest Accept Policy to Prompt via Scribe HUD, trigger a quest accept —
+  - Confirmed 2026-09-05: TESTING.md `00000096` "(no note)" (submission 2026-09-05T22-19-48)
       confirm the banner animates in and its three actions read as distinct colored/bordered buttons.
-- [ ] 5.4 Manual playtest: set Quest Accept Policy to Prompt via Popup with no vanilla dialog open,
+- [x] 5.4 Manual playtest: set Quest Accept Policy to Prompt via Popup with no vanilla dialog open,
+  - Confirmed 2026-09-05: TESTING.md `00000097` "This worked, and should be the default. Change this setting to be the default in Scribe Settings." (submission 2026-09-05T22-19-48)
       trigger a quest accept — confirm the modal opens immediately with the correct copy and buttons.
-- [ ] 5.5 Manual playtest: set Quest Accept Policy to Prompt via Popup, open the base-game Handbook
+- [x] 5.5 Manual playtest: set Quest Accept Policy to Prompt via Popup, open the base-game Handbook
+  - Confirmed 2026-09-05: TESTING.md `00000098` "(no note)" (submission 2026-09-05T22-19-48)
       (or Progression Framework's Ledger), then trigger a quest accept — confirm the modal does NOT
       open while the vanilla dialog is open, and opens automatically once it's closed.
 - [ ] 5.6 Manual playtest: trigger a quest completion (any Quest Accept Policy setting) — confirm it
       always renders as the polished HUD banner, never the modal.
-- [ ] 5.7 Manual playtest: from the modal, click Settings — confirm Scribe Settings opens and the
+- [x] 5.7 Manual playtest: from the modal, click Settings — confirm Scribe Settings opens and the
+  - Confirmed 2026-09-05: TESTING.md `0000009a` "(no note)" (submission 2026-09-05T22-19-48)
       modal dismisses without also accepting or discarding the quest.
-- [ ] 5.8 Regression check: with a supported quest backend NOT installed, confirm neither Quest
+- [x] 5.8 Regression check: with a supported quest backend NOT installed, confirm neither Quest
+  - Confirmed 2026-09-05: TESTING.md `0000009b` "(no note)" (submission 2026-09-05T22-19-48)
       policy row appears in Settings (unchanged gating).
 
 ## 6. Post-ship wording & color revision
@@ -125,7 +130,8 @@
       unchanged from 6.4a on this axis. The center modal (`GuiDialogScribeQuestPrompt`) renders the
       quest name via its own `shownPrompt.Title` Text, not these lang keys, and never had button-label
       glow — unaffected by this task either way. `dotnet build src/Mod` succeeds.
-- [ ] 6.5 Manual playtest: trigger an accept-prompt under both `PromptHud` and `PromptPopup` —
+- [x] 6.5 Manual playtest: trigger an accept-prompt under both `PromptHud` and `PromptPopup` —
+  - Confirmed 2026-09-05: TESTING.md `0000009c` "I have modified the en.json file a bit. I am comfortable with how it reads, but if this test is accurate, we may need to update the spec." (submission 2026-09-05T22-19-48)
       confirm the buttons read "Track Quest" / "Not Now" / "Settings", accept is green, dismiss
       is red, both labels render as legible near-white text with glow (matching standard HUD text)
       against their fill, and the HUD banner's title renders as two lines: a gold "Add quest to

@@ -871,9 +871,10 @@ public abstract partial class ScribeDialogBase
             onReorderBlock: (from, to) => ReorderEditorBlock(from, to),
             onAdd: OnClickAdd,
             // Quest Link picker (add-assignment-and-quest-support 10.1/10.2): an empty catalog hides the
-            // option entirely (vsquest not installed, or installed with no quests) — the footer never shows
-            // a Quest Link tile that would do nothing.
-            questCatalog: QuestCatalogForPicker,
+            // option entirely (vsquest not installed, installed with no quests, or — filter-quest-link-picker —
+            // the player hasn't started any cataloged quest yet this session) — the footer never shows a
+            // Quest Link tile that would do nothing.
+            questCatalog: StartedQuestCatalogForPicker,
             onAddQuestLink: OnClickAddQuestLink,
             onSwitchToRead: OnClickSwitchToRead,
             onOpenEditorReference: ToggleEditorReferenceHandbook,

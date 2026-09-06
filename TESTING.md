@@ -27,6 +27,51 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## rework-quest-accept-notification-styles
+
+> Covers `fix-libgui-click-draw-order-mismatch` too: that change's own manual checks
+> (2.3-2.5, an isolated "call the guard from a debug command" test) are superseded here —
+> `ScribeVanillaDialogGuard` has no consumer except this change's popup modal, so `00000098`/
+> `00000097` below exercise the same guard end-to-end through real gameplay instead of a
+> synthetic debug hook. No separate group needed for that change.
+
+- [x] `00000096` **Check HUD banner styling.** Set Quest Accept Policy to "Prompt via Scribe
+      HUD," trigger a quest accept — confirm the banner animates in with distinct
+      colored/bordered "Track Quest"/"Not Now"/Settings buttons. *(rework-quest-accept-notification-styles 5.3)*
+      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"
+- [x] `00000097` **Check popup opens clear.** Set Quest Accept Policy to "Prompt via Popup"
+      with no vanilla dialog open, trigger a quest accept — confirm the modal opens
+      immediately with the correct copy and buttons (also confirms the vanilla-dialog guard
+      reports false with nothing blocking). *(rework-quest-accept-notification-styles 5.4)*
+      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "This worked, and should be the default. Change this setting to be the default in Scribe Settings."
+- [x] `00000098` **Check popup waits for vanilla dialog.** Set Policy to Popup, open the
+      base-game Handbook (or Progression Framework's Ledger), then trigger a quest accept —
+      confirm the modal does NOT open while the vanilla dialog is open, and opens
+      automatically once you close it (also confirms the vanilla-dialog guard reports true and
+      gates the auto-open). *(rework-quest-accept-notification-styles 5.5)*
+      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"
+- [ ] `00000099` **Check completion always uses HUD.** Trigger a quest completion under any
+      Accept Policy setting — confirm it always renders as the HUD banner, never the popup
+      modal. *(rework-quest-accept-notification-styles 5.6)*
+- [x] `0000009a` **Check Settings button from popup.** From the popup modal, click Settings —
+      confirm Scribe Settings opens and the modal dismisses without also accepting or
+      discarding the quest. *(rework-quest-accept-notification-styles 5.7)*
+      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"
+- [x] `0000009b` **Check gating with no quest backend.** With neither vsquest nor Progression
+      Framework installed, confirm neither Quest Accept nor Quest Completion policy row
+      appears in Settings. *(rework-quest-accept-notification-styles 5.8)*
+      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"
+- [x] `0000009c` **Check retuned accept-prompt colors/labels.** Trigger an accept-prompt under
+      both Popup and HUD policies — confirm buttons read "Track Quest"/"Not Now"/"Settings,"
+      accept is green, dismiss is red, labels are legible near-white with glow, and the HUD
+      banner shows a two-line title (gold "Add quest to Scribe?:" then the off-white quest
+      name below). *(rework-quest-accept-notification-styles 6.5)*
+      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "I have modified the en.json file a bit. I am comfortable with how it reads, but if this test is accurate, we may need to update the spec."
+- [ ] `0000009d` **Check retuned completion-prompt colors/labels.** Trigger a completion-prompt
+      — confirm the same retuned colors/labels/glow treatment as the accept banner, with its
+      own two-line title ("Mark quest done:" in gold, then the off-white quest name plus "?").
+      *(rework-quest-accept-notification-styles 6.6)*
+
 ## assignment-lifecycle-bug-fixes
 
 > Ad-hoc correctness fixes to the `assignment-state-machine` capability, found while
@@ -67,9 +112,13 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       change (e.g. a debug build that makes `Register` unresolvable) — confirm Scribe logs the
       fail-closed warning and the client still starts normally instead of crashing.
       *(strengthen-harfbuzz-linux-fix 3.2)*
-- [ ] `0000006d` **Check coexistence with another libgui mod.** Install Scribe alongside another
+      - **Obsolete 2026-09-05** (submission 2026-09-05T22-19-48): "This is a silly test. Make it
+        obsolete so it can go away." — deliberately breaking the `gui` patch target isn't worth
+        the effort to simulate; dropped per direct user call.
+- [x] `0000006d` **Check coexistence with another libgui mod.** Install Scribe alongside another
       `gui`-dependent mod (no separate HarfBuzz fix installed) on the same Linux/glibc client —
       confirm both function normally. *(strengthen-harfbuzz-linux-fix 3.3)*
+      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"
 
 ## refine-assignment-desk-inbox-ux
 
@@ -481,16 +530,19 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 
 ## add-progression-framework-quest-support
 
-- [ ] `00000082` **Test PF picker under Prompt policy.** Carry two eligible Notebooks, trigger a
+- [x] `00000082` **Test PF picker under Prompt policy.** Carry two eligible Notebooks, trigger a
       Progression Framework quest accept with Quest Accept Policy set to Prompt — confirm a
       picker appears and the link lands on whichever Notebook you choose. *(add-progression-framework-quest-support 6.5)*
-- [ ] `00000083` **Test PF accept under Always policy.** Same setup as above but Accept Policy =
+      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"
+- [x] `00000083` **Test PF accept under Always policy.** Same setup as above but Accept Policy =
       Always with two eligible Notebooks carried — confirm a Prompt-style banner appears instead
       of the link silently landing on one. *(add-progression-framework-quest-support 6.6)*
-- [ ] `00000084` **Test PF end-to-end quest link.** With Progression Framework + Seafarer
+      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"
+- [x] `00000084` **Test PF end-to-end quest link.** With Progression Framework + Seafarer
       installed, find an NPC offering a multi-objective delivery quest, confirm it appears in the
       Quest Link picker, accept it in-world, and confirm auto-detect fires with progress mirroring
       as objectives are delivered. *(add-progression-framework-quest-support 8.3)*
+      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"
 - [ ] `00000085` **Test vsquest + PF coexistence.** With both vsquest and Progression Framework
       installed simultaneously, link and track one quest from each backend — confirm no
       cross-contamination between them. *(add-progression-framework-quest-support 8.4)*
@@ -569,22 +621,28 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > small raised wax-seal cube on the tie), with a per-stack `OnBeforeRender` mesh swap keyed off the
 > existing `IsSealed` check. **Fully quit and relaunch the client first** so the new assets load.
 
-- [ ] `00000090` **Check Desk model.** Place an Assignment Desk and look it over from a few
+- [x] `00000090` **Check Desk model.** Place an Assignment Desk and look it over from a few
       angles — confirm it renders fully textured, matching the Scriptorium's look (no
       pink/missing-texture faces). *(add-custom-models-tasknotice-desk-inbox 1.4)*
-- [ ] `00000091` **Check Inbox model.** Place a standalone Inbox block — same check: fully
+      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "It looks like the new model, not the Scriptorium (which was a placeholder model). The appearance is correct, we may need to change the spec."
+- [x] `00000091` **Check Inbox model.** Place a standalone Inbox block — same check: fully
       textured, matches the Scriptorium's look. *(add-custom-models-tasknotice-desk-inbox 2.4)*
-- [ ] `00000092` **Check notice log clean.** View a Task Notice in creative inventory, in hand, and
+      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "Once again, the look is what I want - but different than the Scriptorium (which was used as a placeholder model)."
+- [x] `00000092` **Check notice log clean.** View a Task Notice in creative inventory, in hand, and
       dropped on the ground — check the client log for any missing-texture/missing-asset warnings
-      from the relocated blank shape or the new filled shape.
-      *(add-custom-models-tasknotice-desk-inbox 3.1, 3.2, 3.3)*
+      from the relocated blank shape or the new filled shape (covers 3.1's relocation, 3.2's new
+      filled shape, and 3.3's shape.base rename together). *(add-custom-models-tasknotice-desk-inbox 3.1)*
+      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"
 - [ ] `00000093` **Test seal swap.** Hold a blank Task Notice (confirm it shows the plain blank
       model), then send an assignment via "Send a Notice" — confirm the sealed notice sitting in
       the Create Assignments output slot now shows the filled model with its wax-seal blob.
       *(add-custom-models-tasknotice-desk-inbox 4.1)*
-- [ ] `00000094` **Test reload stability.** With a Task Notice in inventory, leave and rejoin the
+      - **Still broken 2026-09-05:** (submission 2026-09-05T22-19-48) "It's currently a broken mystery block, so I think one of the faces needs fixing. Can you help me identify which one?"
+- [x] `00000094` **Test reload stability.** With a Task Notice in inventory, leave and rejoin the
       world twice in a row — confirm no error/exception appears in the client log either time.
       *(add-custom-models-tasknotice-desk-inbox 4.2)*
-- [ ] `00000095` **Run full pass.** Craft a blank notice, seal one via "Send a Notice," and place a
+      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"
+- [x] `00000095` **Run full pass.** Craft a blank notice, seal one via "Send a Notice," and place a
       Desk + Inbox in one sitting — confirm all four models look right together as a final sanity
       pass. *(add-custom-models-tasknotice-desk-inbox 5.2)*
+      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"

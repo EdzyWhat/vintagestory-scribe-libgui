@@ -56,7 +56,8 @@
       finding `Register()`) to simulate a future `gui` signature change — confirm Scribe logs the
       fail-closed warning and the client still starts normally (falls back to `gui`'s original,
       unisolated loader) rather than crashing.
-- [ ] 3.3 Manual test: install Scribe alongside another `gui`-dependent mod (no separate HarfBuzz fix
+- [x] 3.3 Manual test: install Scribe alongside another `gui`-dependent mod (no separate HarfBuzz fix
+  - Confirmed 2026-09-05: TESTING.md `0000006d` "(no note)" (submission 2026-09-05T22-19-48)
       installed) on the same Linux/glibc client — confirm both function normally, matching the
       original fix's cross-mod protection intent.
 

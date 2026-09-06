@@ -661,6 +661,13 @@ public abstract partial class ScribeDialogBase
             .OrderBy(e => e.Title, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+    /// <summary>The picker's actual candidate list (filter-quest-link-picker): <see cref="QuestCatalogForPicker"/>
+    /// narrowed to quests the player has been observed to start this session, re-filtered fresh on every read
+    /// (design.md Decision 2) so a quest accepted mid-session appears the next time the footer's Quest Link
+    /// option is opened — the cache above stays the full static catalog, unfiltered.</summary>
+    private IReadOnlyList<ScribeQuestCatalogEntry> StartedQuestCatalogForPicker
+        => QuestCatalogForPicker.Where(e => modSystem.HasStartedQuest(e.QuestCode)).ToList();
+
     /// <summary>Moves editor focus to <paramref name="index"/> by requesting focus on that row's node
     /// (the row stays mounted — the editor uses a non-virtualized scroll container, design D2 — so its
     /// node is always live) and scheduling a scroll-into-view.</summary>

@@ -733,7 +733,8 @@ public abstract partial class ScribeDialogBase
     private void LeaveEditorMode()
     {
         StopAutosaveTick();
-        isEditorMode = false;
+        isEditorMode = false; // lands on Read by default (the isEditorMode setter's false branch)
+        OnLeftEditorMode();
         scratch = null;
         isDirty = false;
         focusedEditIndex = null;
@@ -743,6 +744,15 @@ public abstract partial class ScribeDialogBase
         optimisticEditorEntry = false;
         DisposeFocusNodes();
     }
+
+    /// <summary>Fires every time the editor is torn down (the footer's "Done editing" button, and the
+    /// incidental teardown inside <see cref="LeaveEditorIfActive"/>) — the one choke point both paths share.
+    /// The default is a no-op: <see cref="isEditorMode"/>'s setter already landed <see cref="viewMode"/> on
+    /// Read just above, matching every Read/Editor-capable surface (Lectern/Notebook/Scriptorium/Chalkboard).
+    /// The Assignment Desk has no Read view (remove-assignment-desk-read-tab) and overrides this to land back
+    /// on Create Assignments instead, so leaving the editor never strands the dialog on a tab with no nav
+    /// button to show it.</summary>
+    protected virtual void OnLeftEditorMode() { }
 
     /// <summary>
     /// Called by <see cref="BlockEntityScribeLectern.HandleServerReply"/> when an autosave was rejected
