@@ -769,7 +769,7 @@ public class ScribeDocumentTests
 
     // --- BlockCount (the tier-cap measure: "N of anything", refine-chalkboard §12) ---
     // Every kind counts equally — tasks, notes, trackers, links, craft parents — so a finite tier
-    // (Tablet, Chalkboard: MaxBlocks = 10) is full at 10 blocks of ANY mix and refuses an 11th of any kind.
+    // (Tablet, Chalkboard: MaxBlocks = 15) is full at 15 blocks of ANY mix and refuses a 16th of any kind.
 
     [Fact]
     public void BlockCount_CountsEveryKind()
@@ -791,11 +791,11 @@ public class ScribeDocumentTests
     }
 
     [Fact]
-    public void FiniteCap_CountsMixedKinds_RefusesEleventhOfAnyKind()
+    public void FiniteCap_CountsMixedKinds_RefusesSixteenthOfAnyKind()
     {
-        // A finite tier caps at 10 blocks of ANY kind. Fill to 10 with a deliberate mix, then confirm
-        // the policy (fed BlockCount) refuses the 11th regardless of what kind it would be.
-        var policy = ScribeDocumentPolicy.Tablet; // MaxBlocks = 10
+        // A finite tier caps at 15 blocks of ANY kind. Fill to 15 with a deliberate mix, then confirm
+        // the policy (fed BlockCount) refuses the 16th regardless of what kind it would be.
+        var policy = ScribeDocumentPolicy.Tablet; // MaxBlocks = 15
         var doc = new ScribeDocument();
         doc.AddTask("t1");
         doc.AddTextSection("n1");
@@ -807,10 +807,15 @@ public class ScribeDocumentTests
         doc.AddLink("game:stick");
         doc.AddTextSection("n3");
         doc.AddTracker("game:plank", 4);
+        doc.AddTask("t4");
+        doc.AddTextSection("n4");
+        doc.AddTracker("game:log-oak", 6);
+        doc.AddLink("game:nugget-gold");
+        doc.AddTask("t5");
 
-        Assert.Equal(10, doc.BlockCount);
-        Assert.False(policy.CanAdd(doc.BlockCount)); // full: an 11th of ANY kind is refused
-        Assert.True(policy.CanHold(doc.BlockCount));  // exactly 10 is a legal Transcribe destination
+        Assert.Equal(15, doc.BlockCount);
+        Assert.False(policy.CanAdd(doc.BlockCount)); // full: a 16th of ANY kind is refused
+        Assert.True(policy.CanHold(doc.BlockCount));  // exactly 15 is a legal Transcribe destination
     }
 
     // --- CloneWithNewIdentity (Transcribe copy primitive) ---

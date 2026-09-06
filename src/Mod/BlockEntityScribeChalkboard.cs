@@ -22,13 +22,15 @@ public sealed class BlockEntityScribeChalkboard : BlockEntityScribeWritingStatio
 
     protected override string MeshCacheKeyPrefix => "scribechalkboardmesh";
 
-    /// <summary>Cap the chalkboard at 10 task blocks (refine-chalkboard), enforced through the shared
-    /// <see cref="ScribeDocumentPolicy.CanAdd"/> path the wax tablet already uses. Deliberately NOT the
-    /// <see cref="ScribeDocumentPolicy.Tablet"/> preset: that also caps pins at 1, but the chalkboard is a
-    /// shared placed block whose pins are per-player, so it leaves <c>MaxPins</c> null (uncapped) and caps
-    /// tasks only. Notes/text are not task blocks and so are uncapped. The dialog surfaces the refusal via
-    /// the <c>scribe:chalkboard-full</c> notice (see <c>GuiDialogScribeChalkboard.TaskCapReachedLangKey</c>).</summary>
-    protected override ScribeDocumentPolicy HostPolicy => new() { MaxBlocks = 10 };
+    /// <summary>Cap the chalkboard at <see cref="ScribeDocumentPolicy.StandardMaxBlocks"/> task blocks
+    /// (refine-chalkboard), enforced through the shared <see cref="ScribeDocumentPolicy.CanAdd"/> path the
+    /// wax tablet already uses. Deliberately NOT the <see cref="ScribeDocumentPolicy.Tablet"/> preset: that
+    /// also caps pins at 1, but the chalkboard is a shared placed block whose pins are per-player, so it
+    /// leaves <c>MaxPins</c> null (uncapped) and caps tasks only — the block cap itself is shared via the
+    /// same constant so raising it moves both surfaces together. Notes/text are not task blocks and so are
+    /// uncapped. The dialog surfaces the refusal via the <c>scribe:chalkboard-full</c> notice (see
+    /// <c>GuiDialogScribeChalkboard.TaskCapReachedLangKey</c>).</summary>
+    protected override ScribeDocumentPolicy HostPolicy => new() { MaxBlocks = ScribeDocumentPolicy.StandardMaxBlocks };
 
     protected override ScribeDialogBase CreateDialog(ICoreClientAPI capi) =>
         new GuiDialogScribeChalkboard(Pos, this, capi);

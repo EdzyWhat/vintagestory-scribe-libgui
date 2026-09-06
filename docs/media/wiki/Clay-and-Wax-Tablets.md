@@ -2,7 +2,7 @@
 
 Tablets are Scribe's **earliest** writing surface — cheap, handheld, and craftable long before you have the leather, parchment, and fired ink bowl a [Notebook](The-Notebook) or [Lectern](Using-the-Lectern) needs. They're grounded in the real archaeology of writing: scratch a short list into wet clay, let it dry, and fire it to keep it forever.
 
-A Tablet is deliberately limited: **up to 10 tasks and one pinned task**. It's a quick scratchpad, not a full journal — when you outgrow it, step up to a Notebook.
+A Tablet is deliberately limited: **up to 15 tasks and one pinned task**. It's a quick scratchpad, not a full journal — when you outgrow it, step up to a Notebook.
 
 ## The clay life-cycle
 
@@ -23,7 +23,7 @@ So the natural flow is: **write while wet → let it harden → either re-wet to
 
 ## The Wax Tablet
 
-The Wax Tablet is a small step up from clay: a wooden frame filled with beeswax. It **never dries or fires**, so it can always be rewritten — no life-cycle to manage. It shares the same limits as the clay Tablet (10 tasks, one pin).
+The Wax Tablet is a small step up from clay: a wooden frame filled with beeswax. It **never dries or fires**, so it can always be rewritten — no life-cycle to manage. It shares the same limits as the clay Tablet (15 tasks, one pin).
 
 ## Opening and writing
 

@@ -39,7 +39,7 @@ An open Scribe page now dims and warms to the real light around you; you can add
 A dedicated shared writing station with **Transcribe** (copy/append between Scribe items) and clipboard **import/export** (JSON and TSV). Two new handbook-created task types: **Item Trackers** (live have/need of items you are carrying) and **Links** (jump to a Handbook page).
 
 **v1.3 — Crafting Tasks & Chalkboard** *(released, v1.3.0)*
-**Crafting Tasks** bind a grid recipe from an item's Handbook page and build an ingredient shopping list underneath. The **Chalkboard** is a wall-mounted Lectern — same shared document, hung like a painting, capped at 10 tasks. Tablet cuneiform is readable in every drying state.
+**Crafting Tasks** bind a grid recipe from an item's Handbook page and build an ingredient shopping list underneath. The **Chalkboard** is a wall-mounted Lectern — same shared document, hung like a painting, capped at 15 tasks. Tablet cuneiform is readable in every drying state.
 
 **Later — assignment**
 Assign & History / Inbox on the Scriptorium cluster. Not a numbered 1.4.

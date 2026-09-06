@@ -8,9 +8,9 @@ Like the Lectern it stays put, is readable by everyone, guards editing with a on
 
 **See also:** [Items](Items), [Crafting](Crafting-the-Lectern), [Using the Lectern](Using-the-Lectern) (same views)
 
-## 10-task cap
+## 15-task cap
 
-The slate reads as a small, finite board. It holds **at most 10 tasks** — the same kind of cap as a wax Tablet. Freeform notes are not counted and stay uncapped. Pins are per-player and are **not** capped (unlike a Tablet's single pin).
+The slate reads as a small, finite board. It holds **at most 15 tasks** — the same kind of cap as a wax Tablet. Freeform notes are not counted and stay uncapped. Pins are per-player and are **not** capped (unlike a Tablet's single pin).
 
 When the board is full, the add-task affordance is disabled and an in-game notice explains the limit.
 

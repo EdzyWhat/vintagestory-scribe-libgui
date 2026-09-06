@@ -35,20 +35,20 @@ public class ScribeDocumentPolicyTests
         Assert.Null(ScribeDocumentPolicy.Unlimited.MaxPins);
     }
 
-    // --- Tablet preset: 10 blocks of ANY kind, 1 pin ---
+    // --- Tablet preset: 15 blocks of ANY kind, 1 pin ---
     // The count fed to CanAdd/CanHold is the document's total BlockCount (refine-chalkboard §12), so
-    // "CanAdd(9)" means "9 blocks of any mix present". The policy math below is kind-agnostic; the
+    // "CanAdd(14)" means "14 blocks of any mix present". The policy math below is kind-agnostic; the
     // "…Tasks" method names are historical (see ScribeDocumentTests.FiniteCap_CountsMixedKinds_… for the
     // mixed-kind behavior).
 
     [Fact]
-    public void Tablet_CapsAtTenTasks()
+    public void Tablet_CapsAtFifteenTasks()
     {
         var policy = ScribeDocumentPolicy.Tablet;
 
-        Assert.True(policy.CanAdd(9));   // 9 present → a 10th is allowed
-        Assert.False(policy.CanAdd(10)); // 10 present → an 11th is refused
-        Assert.False(policy.CanAdd(11)); // over the cap (defensive) stays refused
+        Assert.True(policy.CanAdd(14));  // 14 present → a 15th is allowed
+        Assert.False(policy.CanAdd(15)); // 15 present → a 16th is refused
+        Assert.False(policy.CanAdd(16)); // over the cap (defensive) stays refused
     }
 
     [Fact]
@@ -65,9 +65,9 @@ public class ScribeDocumentPolicyTests
     {
         var policy = ScribeDocumentPolicy.Tablet;
 
-        for (int present = 0; present < 10; present++)
+        for (int present = 0; present < 15; present++)
             Assert.True(policy.CanAdd(present));
-        Assert.False(policy.CanAdd(10));
+        Assert.False(policy.CanAdd(15));
     }
 
     // --- Boundary/robustness ---
@@ -135,9 +135,9 @@ public class ScribeDocumentPolicyTests
         var policy = ScribeDocumentPolicy.Tablet;
 
         Assert.True(policy.CanHold(0));
-        Assert.True(policy.CanHold(9));
-        Assert.True(policy.CanHold(10));  // exactly the cap fits (inclusive, unlike CanAdd)
-        Assert.False(policy.CanHold(11)); // one over the cap does not
+        Assert.True(policy.CanHold(14));
+        Assert.True(policy.CanHold(15));  // exactly the cap fits (inclusive, unlike CanAdd)
+        Assert.False(policy.CanHold(16)); // one over the cap does not
     }
 
     [Fact]

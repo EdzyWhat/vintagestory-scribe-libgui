@@ -28,7 +28,7 @@ Crafted like a more-expensive Lectern: the same writing kit, twice the planks.
 
 The Lectern in a different frame: the same **shared, placed** writing surface, hung on a wall like a painting instead of stood on the floor. Point at a wall and place it to mount it facing outward. Right-click to open it in Read view; Shift+right-click quick-adds a fresh task at the top.
 
-It keeps a Guest Book of its visitors and the same one-at-a-time editor lock. The slate is a short board — **10 tasks**, no pin cap. This is **not** a drawable chalkboard; you write tasks on it the same way you write on a Lectern.
+It keeps a Guest Book of its visitors and the same one-at-a-time editor lock. The slate is a short board — **15 tasks**, no pin cap. This is **not** a drawable chalkboard; you write tasks on it the same way you write on a Lectern.
 
 **See also:** [Chalkboard](Chalkboard), [Crafting](Crafting-the-Lectern)
 
@@ -48,7 +48,7 @@ The Notebook's advanced sibling. It has everything the Notebook does — tasks, 
 
 ## Clay & Wax Tablets
 
-The earliest, cheapest writing surface — handheld tablets you can craft in the very early game, long before a Notebook or Lectern. A Tablet holds a short list (up to 10 tasks, one pin) and is meant as a quick scratchpad.
+The earliest, cheapest writing surface — handheld tablets you can craft in the very early game, long before a Notebook or Lectern. A Tablet holds a short list (up to 15 tasks, one pin) and is meant as a quick scratchpad.
 
 Clay Tablets have a life-cycle: fresh ones are **wet** and editable, dry **hard** over about two in-game days (locking the writing), and can then be **re-wet** in water to revise or **fired** in a fire pit to make the writing permanent. Clay comes in red, blue, and fire-clay colours. The **Wax Tablet** is a reusable step up that never dries or fires. Tablet text is written in a cuneiform script by default (toggleable in Settings).
 

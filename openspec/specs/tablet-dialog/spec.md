@@ -35,10 +35,10 @@ path SHALL render no nav column.
 The tablet dialog's central region SHALL retain the editable task list inherited from
 `ScribeDialogBase` (the same editor Proposal B exposed through the interim dialog), presented without
 tab navigation. Adding, editing, checking off, and pinning tasks SHALL continue to work under the
-tablet document policy (10-entry / 1-pin caps). This change SHALL NOT remove task-editing capability
+tablet document policy (15-entry / 1-pin caps). This change SHALL NOT remove task-editing capability
 that the tablet has today.
 
-When an add is refused because the tablet already holds the maximum number of entries of any kind (10),
+When an add is refused because the tablet already holds the maximum number of entries of any kind (15),
 the dialog SHALL surface a standard in-game error through the game's transient-error path rather than
 silently doing nothing, so the player learns why no row appeared. The refusal SHALL be reported at
 every add gesture that the cap governs (the footer add-task control and the keyboard insert-below
@@ -47,12 +47,12 @@ gesture), and the add-task control MAY additionally remain visually disabled at 
 #### Scenario: Tasks remain editable on the tablet
 
 - **WHEN** a player opens a tablet and adds, edits, checks, or pins a task
-- **THEN** the edit is applied and saved exactly as before, subject to the tablet's 10-entry / 1-pin
+- **THEN** the edit is applied and saved exactly as before, subject to the tablet's 15-entry / 1-pin
   policy, with no tab navigation shown
 
-#### Scenario: Adding an 11th entry shows an in-game error
+#### Scenario: Adding a 16th entry shows an in-game error
 
-- **WHEN** a player attempts to add an entry of any kind to a wet tablet that already holds 10 entries
+- **WHEN** a player attempts to add an entry of any kind to a wet tablet that already holds 15 entries
   (via the add-task control or the keyboard insert gesture)
 - **THEN** no entry is added and a standard in-game error message tells the player the tablet is full
 

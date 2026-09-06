@@ -10,11 +10,16 @@ namespace Scribe.Core;
 ///
 /// <para>A <c>null</c> limit means "uncapped": <see cref="Unlimited"/> is the default every existing
 /// host reports, so notebook and lectern behavior is unchanged. The tablet tier reports
-/// <see cref="Tablet"/> (at most 10 task blocks, 1 pin). This type has no dependency on the Vintage
-/// Story API and is unit-tested in <c>Core.Tests</c>.</para>
+/// <see cref="Tablet"/> (at most <see cref="StandardMaxBlocks"/> task blocks, 1 pin). This type has no
+/// dependency on the Vintage Story API and is unit-tested in <c>Core.Tests</c>.</para>
 /// </summary>
 public readonly record struct ScribeDocumentPolicy
 {
+    /// <summary>The shared block cap for the capped surfaces (tablet, chalkboard). A single source of
+    /// truth so raising the cap moves both together, even though the two hosts otherwise report distinct
+    /// policies (the tablet also caps pins; the chalkboard doesn't).</summary>
+    public const int StandardMaxBlocks = 15;
+
     /// <summary>Maximum number of task blocks the document may hold, or <c>null</c> for uncapped.
     /// Counts TASK blocks specifically (the user's "10 tasks"), not freeform text sections — a future
     /// text-block cap would be a separate limit so the two never get conflated.</summary>
@@ -33,9 +38,10 @@ public readonly record struct ScribeDocumentPolicy
     /// those tiers stay behaviorally unchanged: no block cap, no pin cap, editable.</summary>
     public static readonly ScribeDocumentPolicy Unlimited = new();
 
-    /// <summary>The scratch-tier tablet cap: at most 10 task blocks and 1 pin. Editable. Applies to a WET
-    /// clay/wax tablet only; a hardened or fired tablet reports <see cref="UneditableTablet"/> instead.</summary>
-    public static readonly ScribeDocumentPolicy Tablet = new() { MaxBlocks = 10, MaxPins = 1 };
+    /// <summary>The scratch-tier tablet cap: at most <see cref="StandardMaxBlocks"/> task blocks and 1 pin.
+    /// Editable. Applies to a WET clay/wax tablet only; a hardened or fired tablet reports
+    /// <see cref="UneditableTablet"/> instead.</summary>
+    public static readonly ScribeDocumentPolicy Tablet = new() { MaxBlocks = StandardMaxBlocks, MaxPins = 1 };
 
     /// <summary>The read-only preset a non-editable tablet (hardened or fired — tablet-firing) reports:
     /// <see cref="CanAdd"/> and <see cref="CanPin"/> always deny, so no task can be added and no task can be

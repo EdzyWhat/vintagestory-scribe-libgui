@@ -87,7 +87,8 @@ public sealed class GuiDialogScribeChalkboard : ScribeDialogBase
         navBoxW > sideColW ? CrossAxisAlignment.End : CrossAxisAlignment.Center;
 
     /// <summary>Word the task-cap-reached notice for a chalkboard rather than a tablet (refine-chalkboard):
-    /// the chalkboard caps tasks at 10 (<see cref="BlockEntityScribeChalkboard.HostPolicy"/>), and the base's
+    /// the chalkboard caps tasks at <see cref="Scribe.Core.ScribeDocumentPolicy.StandardMaxBlocks"/>
+    /// (<see cref="BlockEntityScribeChalkboard.HostPolicy"/>), and the base's
     /// default notice says "A tablet holds…", which is wrong on a board. Route it to
     /// <c>scribe:chalkboard-full</c>. Not gated on Pixel-Art Display — the cap and its notice apply regardless
     /// of theme.</summary>

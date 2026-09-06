@@ -40,7 +40,7 @@ The README status line, `docs/media/mod-page.txt`, `docs/media/mod-page.html`, `
 - **THEN** v1.2 is shipped, v1.3 is this cut, and assignment is listed as later — not as the 1.3 headline
 
 ### Requirement: Wiki drafts describe the 1.3 surfaces
-`docs/media/wiki/` SHALL be updated so Home, Items, and Crafting cover the Scriptorium and Chalkboard, with dedicated `Scriptorium.md` and `Chalkboard.md` pages. The Chalkboard page SHALL state the 10-task cap, wall-mount placement, and that it is not the drawable v6 board. Publishing those drafts to the GitHub wiki remains a manual post-cut step.
+`docs/media/wiki/` SHALL be updated so Home, Items, and Crafting cover the Scriptorium and Chalkboard, with dedicated `Scriptorium.md` and `Chalkboard.md` pages. The Chalkboard page SHALL state the 15-task cap, wall-mount placement, and that it is not the drawable v6 board. Publishing those drafts to the GitHub wiki remains a manual post-cut step.
 
 #### Scenario: Wiki Home nav and roadmap include 1.3
 - **WHEN** a reader opens `docs/media/wiki/Home.md`

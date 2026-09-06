@@ -367,7 +367,7 @@ public class GuiDialogScribeTablet : ScribeDialogBase
     /// rejected it as a redundant second copy of the title bar). The editor is REUSED, not forked
     /// (add-tablet-dialog D2/D4); its rows type in live cuneiform via <see cref="DecorateRowStyle"/>, and the
     /// title itself renders in cuneiform through the base title bar. Task add/edit/check/pin keep working
-    /// under the tablet's 10-task / 1-pin policy.</summary>
+    /// under the tablet's 15-task / 1-pin policy.</summary>
     protected override Widget BuildCentralRegion() =>
         IsEditable ? BuildEditorContent() : BuildReadContent();
 
