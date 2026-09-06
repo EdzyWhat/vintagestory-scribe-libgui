@@ -58,13 +58,19 @@
 
 ## 5. Manual verification
 
-- [ ] 5.1 Manual playtest: send a Task Notice to a recipient, have them place the sealed notice
+- [x] 5.1 Manual playtest: send a Task Notice to a recipient, have them place the sealed notice
   into one of their Inbox's restricted slots while online — confirm that Inbox block starts
   emitting the ambient particle effect, visible only to them; Accept or Decline it — confirm the
   particles stop.
-- [ ] 5.2 Manual playtest: with the same setup, open the Inbox — confirm the Inbox Inventory nav
+  - Confirmed 2026-09-06 (self-addressed singleplayer test): particle emission works — a debug
+    trace added during investigation confirmed the trigger (`HoldsUndiscoveredNoticeFor`) and
+    the tick were firing correctly the whole time; the initial "no particles" report traced to
+    `/time stop` being active in the test world, which suppresses the particle system engine-wide
+    (unrelated to this change's code). Diagnostic logging removed after confirming.
+- [x] 5.2 Manual playtest: with the same setup, open the Inbox — confirm the Inbox Inventory nav
   tab button shimmers and the specific slot holding the notice also shimmers, while other filled
   slots do not; Accept or Decline the notice — confirm both shimmers stop.
+  - Confirmed 2026-09-06: tab shimmer and per-slot shimmer both confirmed working.
 - [ ] 5.3 Manual playtest: confirm none of the above (particles, tab shimmer, slot shimmer, or
   the hover card change from section 1) alter the notice's document, assignment state, or any
   Inbox inventory contents — purely observe, then check the assignment's state and the Inbox's
