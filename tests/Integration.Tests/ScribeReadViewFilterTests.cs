@@ -199,4 +199,61 @@ public class ScribeReadViewFilterTests
         Assert.Empty(ScribeReadViewFilter.DeserializeGuidSet(null));
         Assert.Empty(ScribeReadViewFilter.DeserializeGuidSet(Array.Empty<byte>()));
     }
+
+    // ── read-view-collapse-affordance-fixes 1.1/1.2: pending-until-confirmed refresh guard ──────────
+
+    [Fact]
+    public void With_no_pending_pick_the_host_mirror_is_always_accepted()
+    {
+        Assert.True(ScribeReadViewFilter.ShouldAcceptHostFilterCategory(null, ReadViewFilterCategory.Completed));
+    }
+
+    [Fact]
+    public void A_pending_pick_rejects_a_still_stale_host_mirror()
+    {
+        // Simulates the bug: the player just selected Completed, but a row mutation's synchronous
+        // RefreshReadView lands before the server's echo — the host mirror is still whatever it was before
+        // (e.g. All) — so the pending pick must NOT be overwritten by that stale value.
+        bool accept = ScribeReadViewFilter.ShouldAcceptHostFilterCategory(ReadViewFilterCategory.Completed, ReadViewFilterCategory.All);
+
+        Assert.False(accept);
+    }
+
+    [Fact]
+    public void A_pending_pick_is_accepted_once_the_host_mirror_catches_up()
+    {
+        bool accept = ScribeReadViewFilter.ShouldAcceptHostFilterCategory(ReadViewFilterCategory.Completed, ReadViewFilterCategory.Completed);
+
+        Assert.True(accept);
+    }
+
+    [Fact]
+    public void With_no_pending_collapse_snapshot_the_host_mirror_is_always_accepted()
+    {
+        Assert.True(ScribeReadViewFilter.ShouldAcceptHostCollapsedGroupIds(null, new[] { Guid.NewGuid() }));
+    }
+
+    [Fact]
+    public void A_pending_collapse_snapshot_rejects_a_still_stale_host_mirror()
+    {
+        var pending = new HashSet<Guid> { Guid.NewGuid() };
+        var staleHostMirror = Array.Empty<Guid>();
+
+        bool accept = ScribeReadViewFilter.ShouldAcceptHostCollapsedGroupIds(pending, staleHostMirror);
+
+        Assert.False(accept);
+    }
+
+    [Fact]
+    public void A_pending_collapse_snapshot_is_accepted_once_the_host_mirror_matches_by_membership_not_order()
+    {
+        var idA = Guid.NewGuid();
+        var idB = Guid.NewGuid();
+        var pending = new HashSet<Guid> { idA, idB };
+        var hostMirror = new[] { idB, idA }; // same members, different order
+
+        bool accept = ScribeReadViewFilter.ShouldAcceptHostCollapsedGroupIds(pending, hostMirror);
+
+        Assert.True(accept);
+    }
 }

@@ -197,4 +197,23 @@ internal static class ScribeReadViewFilter
         }
         return result;
     }
+
+    /// <summary>Whether a Read View refresh should accept the host's persisted filter-pill mirror
+    /// (read-view-collapse-affordance-fixes' pending-until-confirmed guard). <paramref name="pending"/> is
+    /// the category the local player just selected but hasn't yet seen echoed back by the server, or
+    /// <c>null</c> if no local selection is in flight. The mirror is accepted whenever nothing is pending
+    /// (an ordinary resync — e.g. another player's change) or once it catches up to exactly the pending
+    /// value (this player's own round trip landing); it is rejected while a pending pick is still stale, so
+    /// a row mutation's synchronous refresh (e.g. completing a task) can never stomp a just-made pill
+    /// selection back to an older mirror value.</summary>
+    public static bool ShouldAcceptHostFilterCategory(ReadViewFilterCategory? pending, ReadViewFilterCategory hostValue) =>
+        pending is null || pending.Value == hostValue;
+
+    /// <summary>The collapse-set counterpart of <see cref="ShouldAcceptHostFilterCategory"/>: whether a
+    /// Read View refresh should accept the host's persisted collapsed-group mirror, given
+    /// <paramref name="pending"/> — a snapshot of the local collapse set taken right after the player's
+    /// last toggle, or <c>null</c> if none is in flight — compared against the host's current mirror
+    /// <paramref name="hostValue"/> by set membership, not reference or order.</summary>
+    public static bool ShouldAcceptHostCollapsedGroupIds(IReadOnlySet<Guid>? pending, IReadOnlyCollection<Guid> hostValue) =>
+        pending is null || pending.SetEquals(hostValue);
 }

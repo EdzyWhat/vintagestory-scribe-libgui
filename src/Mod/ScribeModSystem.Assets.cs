@@ -42,15 +42,17 @@ public sealed partial class ScribeModSystem
         RegisterSvgIcon(api, "scribecheck", new AssetLocation("scribe", "textures/icons/check.svg"));
         RegisterSvgIcon(api, "scribeguest",   new AssetLocation("scribe", "textures/icons/guestbook.svg"));
         // Sent Assignment History nav icon (triage 2026-09-01: "correct icon, but I want the open-book
-        // glyph used for task Links instead") — same book.svg as scribebook/scribeinventory below.
+        // glyph used for task Links instead") — same book.svg as scribebook below.
         RegisterSvgIcon(api, "scribehistory", new AssetLocation("scribe", "textures/icons/book.svg"));
         RegisterSvgIcon(api, "scribetimer",   new AssetLocation("scribe", "textures/icons/timer.svg"));
         RegisterSvgIcon(api, "scribeinfo",    new AssetLocation("scribe", "textures/icons/info.svg"));
-        // Item-storage tabs (Scriptorium's add-scriptorium-inventory, and the Inbox Inventory tab): a 2x2
-        // grid of outlined squares, replacing the borrowed open-book glyph placeholder (feedback 2026-09-06).
+        // Inbox Inventory tab only (feedback 2026-09-06): a 2x2 grid of outlined squares, replacing the
+        // borrowed open-book glyph placeholder. The Scriptorium's Transcribe tab keeps scribebook below
+        // (2026-09-06 fix: an earlier pass here accidentally swapped it to this grid icon too).
         RegisterSvgIcon(api, "scribeinventory", new AssetLocation("scribe", "textures/icons/grid.svg"));
         // Guide-page Link icon (add-tracker-link-tasks 7.6): a guide/explainer page has no item to draw, so
-        // its Link row shows this generic open-book glyph instead of an ItemStackDisplay.
+        // its Link row shows this generic open-book glyph instead of an ItemStackDisplay. Also the
+        // Scriptorium's Transcribe tab icon (see scribeinventory comment above).
         RegisterSvgIcon(api, "scribebook",    new AssetLocation("scribe", "textures/icons/book.svg"));
         // Quest Link marker (quest-link-icon-and-color): an exclamation mark in a circle, distinct from the
         // book glyph a guide-page Link shows — a rotated derivative of info.svg (see quest.svg).
@@ -72,7 +74,9 @@ public sealed partial class ScribeModSystem
         RegisterSvgIcon(api, "scribeinboxarrow", new AssetLocation("scribe", "textures/icons/inbox-arrow.svg"));
         // Assignment Desk's Create Assignments nav button (refine-assignment-desk-inbox-ux 1.3/1.4): a
         // plus glyph, replacing the borrowed "scribeassignment" (scroll) icon on that one nav button.
-        RegisterSvgIcon(api, "scribeplus", new AssetLocation("scribe", "textures/icons/plus.svg"));
+        // Swapped to a thinner stroke (TESTING.md 0000007a feedback 2026-09-01: the original read too
+        // thick/heavy).
+        RegisterSvgIcon(api, "scribeplus", new AssetLocation("scribe", "textures/icons/plus-thin.svg"));
     }
 
     /// <summary>

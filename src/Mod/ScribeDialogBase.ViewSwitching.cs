@@ -846,6 +846,10 @@ public abstract partial class ScribeDialogBase
     {
         if (readViewFilterCategory == category) return;
         readViewFilterCategory = category;
+        // Mark this pill pick pending until the server's echo lands (read-view-collapse-affordance-fixes):
+        // RefreshReadView() must not stomp it back to the still-stale host mirror if a row mutation (e.g.
+        // completing a task) synchronously refreshes before the round trip below completes.
+        pendingReadViewFilterCategory = category;
         PersistReadViewState();
         if (IsOpened()) ForceRebuild();
     }
@@ -856,6 +860,9 @@ public abstract partial class ScribeDialogBase
     private void OnReadViewToggleGroupCollapsed(Guid groupParentTaskId)
     {
         if (!collapsedReadViewGroupIds.Remove(groupParentTaskId)) collapsedReadViewGroupIds.Add(groupParentTaskId);
+        // Same pending-until-confirmed guard as the filter pill above, against the identical stale-mirror
+        // race in RefreshReadView().
+        pendingCollapsedReadViewGroupIds = new HashSet<Guid>(collapsedReadViewGroupIds);
         PersistReadViewState();
         if (IsOpened()) ForceRebuild();
     }
@@ -879,9 +886,24 @@ public abstract partial class ScribeDialogBase
         // state on EVERY resync (read-view-filter-and-collapse) — cheap, and mirrors how the whole
         // Document itself is fully replaced each resync: keeps this dialog converged with a change made
         // by this same client's own request echo, another client's edit, or a save/load round trip.
-        readViewFilterCategory = (ReadViewFilterCategory)host.ReadViewFilterCategory;
-        collapsedReadViewGroupIds.Clear();
-        collapsedReadViewGroupIds.UnionWith(host.CollapsedGroupIds);
+        // Only accept the host mirror's pill/collapse state when this client has no local selection still
+        // in flight, or the mirror has caught up to exactly that selection (read-view-collapse-affordance-
+        // fixes) — otherwise a row mutation's synchronous refresh (e.g. completing a task) would land
+        // between a just-made local pick and the server's echo, and stomp the pick back to the stale
+        // mirror. Multiplayer/concurrent changes from OTHER clients still flow in on every refresh once
+        // this client's own pending pick (if any) is confirmed.
+        var hostFilterCategory = (ReadViewFilterCategory)host.ReadViewFilterCategory;
+        if (ScribeReadViewFilter.ShouldAcceptHostFilterCategory(pendingReadViewFilterCategory, hostFilterCategory))
+        {
+            readViewFilterCategory = hostFilterCategory;
+            pendingReadViewFilterCategory = null;
+        }
+        if (ScribeReadViewFilter.ShouldAcceptHostCollapsedGroupIds(pendingCollapsedReadViewGroupIds, host.CollapsedGroupIds))
+        {
+            collapsedReadViewGroupIds.Clear();
+            collapsedReadViewGroupIds.UnionWith(host.CollapsedGroupIds);
+            pendingCollapsedReadViewGroupIds = null;
+        }
 
         if (!isEditorMode)
         {

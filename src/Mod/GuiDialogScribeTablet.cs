@@ -309,7 +309,9 @@ public class GuiDialogScribeTablet : ScribeDialogBase
                 // Per-material, per-state glow so the resting title lifts off the clay backdrop like the rows do.
                 glow: CuneiformGlowTable.For(_material, _state),
                 // Same per-view stroke-weight scale as the rows so the resting title firms up with the state.
-                strokeWeightScale: Readability.StrokeWeightScale));
+                strokeWeightScale: Readability.StrokeWeightScale,
+                glyphDrawScale: CuneiformMetrics.GlyphDrawScale,
+                caretHeightScale: CuneiformMetrics.CaretHeightScale));
     }
 
     /// <summary>Editing title: a live single-line cuneiform input bound to the SAME title controller/focus

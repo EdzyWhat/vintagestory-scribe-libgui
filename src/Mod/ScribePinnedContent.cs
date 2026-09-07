@@ -514,9 +514,10 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
             * (style.ControlSize / ScribeRowConstants.RowCheckboxSize);
         float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
         // A Quest Link's icon renders in the row's leading slot instead (quest-link-icon-and-color), so this
-        // inline slot has no icon for it and the name's band height falls back to a plain text line.
+        // inline slot has no icon for it and the name's band height falls back to ItemNameLineHeight
+        // (cuneiform-aware on the tablet — task 8.3b: the plain Latin lineHeight left the icon riding high).
         bool isQuestLink = ScribeLinkTarget.IsQuest(data.LinkTarget);
-        float bandHeight = isQuestLink ? lineHeight : ScribeLinkIcon.VisualSize(iconSize, data.LinkTarget);
+        float bandHeight = isQuestLink ? ScribeRowControlNudge.ItemNameLineHeight(style) : ScribeLinkIcon.VisualSize(iconSize, data.LinkTarget);
         // Link accent: Primary on light surfaces, or the row's override where Primary is illegible as text on
         // a dark surface (the Chalkboard slate — ScribeRowStyle.LinkColor). Guide-page book glyph (7.11d),
         // item icon grown + row-height-neutral (7.11e/7.11f). A Quest Link uses the separate QuestLinkColor
@@ -591,7 +592,7 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
             : new ScribeVsIconGlyph("scribegrip", style.ControlSize, gripColor);
 
         children.Add(new Padding(
-            ScribeRowControlNudge.GripInsets(style, Widget.Data.IsItemKind),
+            ScribeRowControlNudge.GripInsets(style, Widget.Data.IsItemKind, Widget.Data.LinkTarget),
             child: new GestureDetector(
                 onPress: _ => Widget.OnDragStart(Widget.Index),
                 onRelease: _ => Widget.OnDragEnd(),
@@ -609,7 +610,7 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
         // ScribeBlock.IsCompletable), so tapping it unpins rather than sending a completion toggle the
         // server would silently no-op.
         children.Add(new Opacity(contentOpacity, child: new Padding(
-            EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style, data.IsItemKind)),
+            EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style, data.IsItemKind, data.LinkTarget)),
             // A Quest Link's checkbox is misleading (toggling it doesn't affect the quest), so its slot
             // renders the quest-marker icon instead (quest-link-icon-and-color).
             child: ScribeRowControlNudge.BuildLeadingControl(

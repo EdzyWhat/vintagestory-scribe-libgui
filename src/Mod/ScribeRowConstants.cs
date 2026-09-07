@@ -72,7 +72,8 @@ internal static class ScribeRowConstants
 
     /// <summary>Checkbox widget size (pixels), shared by both views; scaled. Former
     /// <c>ScribeClientConfig.RowCheckboxSize</c>.</summary>
-    public const float RowCheckboxSize = 22f;
+    // TEMPORARY EXPERIMENT (Option 2, tools/row-leading-slot-alignment): was 22f.
+    public const float RowCheckboxSize = 18f;
 
     /// <summary>The editor field's internal horizontal padding (pixels); scaled. The read row insets its
     /// text by the same amount so the text's left edge lines up across a view switch. Former

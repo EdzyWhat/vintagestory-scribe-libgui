@@ -30,9 +30,24 @@ puts it in click contention with vanilla dialogs it will never out-paint.
   4's Popup notification is a HUD-driven surface, not a dialog subclass, so this can't live inside
   `ScribeDialogBase` itself).
 
+- **Added 2026-09-07, second consumer.** `ScribeDialogBase.ShouldReceiveMouseEvents` now overrides to
+  `false` whenever the guard reports a vanilla dialog open — this addresses the concrete complaint that
+  clicking a Quest Link/Handbook link inside a Scribe dialog opens a vanilla window on top, but a
+  SUBSEQUENT click meant for that vanilla window still lands on Scribe underneath. `GuiManager.OnMouseDown`
+  skips any dialog whose `ShouldReceiveMouseEvents()` is false before it runs that dialog's own
+  hit-testing, so this guarantees Scribe stops contesting clicks the moment a vanilla dialog is open,
+  regardless of `LoadedGuis` order or dialog focus. See design.md's "Second consumer" section for why an
+  "unfocus Scribe on link-open" approach (the originally proposed idea) was investigated and rejected —
+  VS's own `RequestFocus` already unfocuses Scribe for free when the vanilla dialog opens, so a stale
+  focus flag was never the actual mechanism; the real failure is the same pipeline-ordering mismatch this
+  change's Why section already diagnoses.
+
 ## Impact
 
 - New small static helper (e.g. `ScribeVanillaDialogGuard`, `src/Mod/`): the guard check.
 - Used by `rework-quest-accept-notification-styles` (Change 4, this session) for its Popup
   notification style — this change's guard is a prerequisite for that one, not the other way around.
+- `src/Mod/ScribeDialogBase.cs` — `ShouldReceiveMouseEvents` override (added 2026-09-07), the guard's
+  second consumer, fixing link-open click pass-through across every `ScribeDialogBase` surface
+  (Notebook, Lectern, Tablet, Chalkboard, Task Notice, Assignment Desk).
 - No `src/Core/` changes.

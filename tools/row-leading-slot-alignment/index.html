@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scribe row leading-slot alignment</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Unicase:wght@400;700&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  @font-face { font-family: "Caudex"; src: url("../../src/Mod/assets/scribe/textures/fonts/caudex-bold.ttf") format("truetype"); font-weight: 700; }
+  @font-face { font-family: "Scapholene"; src: url("../../src/Mod/assets/scribe/textures/fonts/scapholene-regular.ttf") format("truetype"); }
+  @font-face { font-family: "La Belle Aurore"; src: url("../../src/Mod/assets/scribe/textures/fonts/labelleaurore-regular.ttf") format("truetype"); }
+  @font-face { font-family: "Noto Sans"; src: url("../../src/Mod/assets/scribe/textures/fonts/notosans-regular.ttf") format("truetype"); }
+  @font-face { font-family: "Noto Serif"; src: url("../../src/Mod/assets/scribe/textures/fonts/notoserif-regular.ttf") format("truetype"); }
+
+  :root {
+    --ink: #2c2416; --paper: #e8d3a8; --paper-alt: #dfc796; --rule: #c9b99a; --accent: #6b4e2e;
+    --hud-bg: #14110c; --hud-ink: #e9e2d0; --steelblue: #426bb7; --hudblue: #acccff;
+    --clay: #c9a876; --clay-ink: #3a2a1a; --clay-quest: #1f3a5f;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 13px/1.4 system-ui, sans-serif; color: var(--ink); background: #efe6d3; }
+  main { margin: 0; padding: 20px 24px 80px; }
+  .layout { display: grid; grid-template-columns: 420px 1fr; gap: 24px; align-items: start; }
+  .col-left { position: sticky; top: 20px; display: flex; flex-direction: column; gap: 4px; }
+  .col-left .panel { grid-template-columns: 1fr; }
+  .col-right { min-width: 0; }
+  h1 { font-size: 1.3rem; margin: 0 0 4px; }
+  h2 { font-size: 1rem; margin: 1.6rem 0 0.5rem; border-bottom: 1px solid var(--rule); padding-bottom: 4px; }
+  p.lede { margin: 0 0 1rem; max-width: 90ch; color: #4a4231; }
+  code { font-size: 0.92em; background: #00000010; padding: 1px 4px; border-radius: 3px; }
+
+  .panel {
+    background: #f6efdd; border: 1px solid var(--rule); border-radius: 6px; padding: 14px 16px;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px 22px;
+    margin-bottom: 8px;
+  }
+  .panel .group { display: flex; flex-direction: column; gap: 6px; }
+  .panel .group > label.title { font-weight: 650; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--accent); margin-bottom: 2px; }
+  .knob { display: grid; grid-template-columns: 1fr 56px; align-items: center; gap: 6px; font-size: 12px; }
+  .knob input[type="range"] { width: 100%; grid-column: 1 / 3; }
+  .knob input[type="number"] { width: 56px; font-size: 11px; }
+  .knob .label { grid-column: 1 / 3; color: #4a4231; }
+  .knob-reset { border: 0; background: none; color: var(--accent); cursor: pointer; font-size: 12px; padding: 0 0 0 5px; opacity: 0.7; }
+  .knob-reset:hover { opacity: 1; text-decoration: underline; }
+  .radio-row { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; }
+  .radio-row label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+  .checkline { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  select, input[type="text"] { font-size: 12px; padding: 3px 5px; }
+
+  .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+  button { background: var(--accent); color: #fff; border: 0; padding: 7px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+  button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  pre#out { background: #1e1a14; color: #f3ead8; padding: 14px; overflow: auto; font-size: 11.5px; border-radius: 4px; max-height: 340px; }
+
+  .surface-tabs { display: flex; gap: 6px; margin: 4px 0 12px; }
+  .surface-tabs .tab { background: transparent; color: var(--accent); border: 1px solid var(--rule); border-radius: 4px 4px 0 0; padding: 6px 14px; cursor: pointer; font-size: 12px; font-weight: 600; }
+  .surface-tabs .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .cardbody { padding: 10px; }
+  .cardbody [data-surface] { display: none; }
+  .cardbody [data-surface].active-surface { display: block; }
+  .card { border: 1px solid var(--rule); border-radius: 6px; background: #fbf6e9; overflow: hidden; }
+  .card > .cardhead { padding: 6px 10px; font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.03em; color: var(--accent); border-bottom: 1px solid var(--rule); display: flex; justify-content: space-between; align-items: center; }
+  .card > .cardhead .tag { font-size: 10px; text-transform: none; color: #8a7c5e; font-weight: 500; }
+
+  .stage { position: relative; overflow: hidden; }
+  .stage.notebook { background: repeating-linear-gradient(180deg, var(--paper) 0 39px, var(--paper-alt) 39px 39px); }
+  .stage.hud { background: var(--hud-bg); }
+  .stage.tablet { background: var(--clay); }
+  .stage.tablet .checkbox-box { border-color: #2c4a63; background: rgba(255,255,255,0.15); }
+  .caret-bar { position: absolute; width: 2px; background: currentColor; }
+  .grip-el { opacity: 0.45; }
+  .cl-grip { border-color: #7a4fc9; }
+
+  .row-el { position: absolute; }
+  .leading { display: flex; align-items: center; justify-content: center; }
+  .checkbox-box { border: 1.4px solid #5a4322; border-radius: 2px; background: rgba(255,255,255,0.35); }
+  .stage.hud .checkbox-box { border-color: #9a9a9a; background: rgba(255,255,255,0.06); }
+  .checkbox-box svg { display: block; }
+  .icon-svg { display: block; }
+  .name-text { position: absolute; white-space: normal; overflow: visible; }
+  .counter-text { position: absolute; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+  .centerline { position: absolute; left: 0; right: 0; height: 0; border-top: 1.5px solid; pointer-events: none; }
+  .centerline.geo { border-top-style: solid; }
+  .centerline.visual { border-top-style: dashed; }
+  .cl-leading { border-color: #1c8a3a; }
+  .cl-text { border-color: #c22; }
+  .cl-icon { border-color: #d98a12; }
+
+  .readout { font-size: 11px; padding: 6px 10px; border-top: 1px solid var(--rule); background: #f6efdd; display: flex; gap: 14px; flex-wrap: wrap; }
+  .readout b { font-variant-numeric: tabular-nums; }
+  .readout .ok { color: #1c8a3a; }
+  .readout .bad { color: #c22; }
+  .legend { font-size: 11px; color: #4a4231; display: flex; gap: 16px; flex-wrap: wrap; margin: 6px 0 4px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .legend i { width: 16px; height: 0; border-top: 1.5px solid; display: inline-block; }
+  .note { font-size: 12px; color: #5c5346; max-width: 90ch; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Row leading-slot alignment</h1>
+  <p class="lede">
+    Every row's leading control (checkbox / Quest icon) and its name text are positioned by
+    <strong>separate formulas</strong> today, on the Notebook surface (Read/Editor/Pinned share one path).
+    They agree by luck, not by construction &mdash; this tool makes both formulas' outputs visible and
+    tunable at once, plus the HUD's structurally-different (native-centered) path for comparison.
+    Solid green/red/orange lines are where each element's <em>geometric box</em> centers per the formula;
+    dashed lines are the <em>actual rendered glyph/box</em> center (fonts have asymmetric ascender/descender
+    space, so these two don't automatically match even when the formulas agree numerically).
+  </p>
+  <p class="note">Browser text metrics ≠ Skia. This is for finding the right formula/constants, not final pixel truth &mdash; confirm in-game after.</p>
+  <p class="note"><strong>Tablet stage (added 2026-09-07):</strong> models the tablet's cuneiform LAYOUT math exactly
+  (<code>CuneiformMetrics.LineHeightRatio</code>/<code>GlyphDrawScale</code>/<code>CaretHeightScale</code>/<code>FieldPadYScale</code>,
+  the checkbox/control-size decoupling from <code>GuiDialogScribeTablet.DecorateRowStyle</code>, and the quest-aware
+  <code>CheckboxAndGripTop</code>/<code>ItemNameLineHeight</code>/<code>GripInsets</code> fix) &mdash; it does <strong>not</strong>
+  render actual cuneiform glyph strokes (uppercase placeholder text stands in for the glyph line instead). Uses it for band-height/
+  checkbox-overflow/caret/padding math, not for glyph shape or spacing checks; confirm those in-game.</p>
+  <p class="note">Name text always wraps naturally at the row-width knob below (no synthetic line-count guess) &mdash; every band/height calc is driven off the browser's own measured wrapped-text height, so shrinking the row width is how you induce and inspect real multi-line growth on any row kind. Notebook's default is the real in-game value: <code>ScribeLayout.TasksColW</code> at the default <code>PixelArtSize</code> of 600 (0.8&times;600 = 480px; ranges ~320&ndash;800px across the 400&ndash;1000 PixelArtSize setting). HUD's real in-game default is <code>ScribePlayerSettings.HudRowWidth</code> = 250px, but this knob defaults to 400px purely as this tool's preview starting point (nothing in the mod changed) &mdash; drop it to 250px to see real default-width HUD behavior, where most rows wrap.</p>
+
+<div class="layout">
+<div class="col-left">
+  <h2>Global knobs</h2>
+  <div class="panel">
+    <div class="group">
+      <label class="title">Scale &amp; font</label>
+      <div class="knob">
+        <span class="label">UI scale (WindowFontScale) &mdash; <b id="v-uiScale"></b></span>
+        <input type="range" id="uiScale" min="0.6" max="2" step="0.01" value="1">
+      </div>
+      <div class="knob">
+        <span class="label">Notebook font family (HUD stays fixed &mdash; Q3)</span>
+        <select id="fontFamily" style="grid-column:1/3">
+          <option value="Default">Default (sans-serif)</option>
+          <option value="Caudex">Caudex</option>
+          <option value="Scapholene">Scapholene</option>
+          <option value="La Belle Aurore">La Belle Aurore</option>
+          <option value="Noto Sans">Noto Sans</option>
+          <option value="Noto Serif">Noto Serif</option>
+          <option value="Playfair Display">Playfair Display</option>
+          <option value="Cormorant Unicase">Cormorant Unicase</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="group">
+      <label class="title">Leading-slot technique</label>
+      <div class="radio-row">
+        <label><input type="radio" name="technique" value="A"> A: today's Padding-offset</label>
+        <label><input type="radio" name="technique" value="B" checked> B: HeightNeutral (HUD-style)</label>
+      </div>
+      <div class="checkline" id="unifyRow">
+        <input type="checkbox" id="unifyBand"> <label for="unifyBand">Unify icon band with text band (smallest fix within A)</label>
+      </div>
+    </div>
+
+    <div class="group">
+      <label class="title">Padding / band constants</label>
+      <div class="knob">
+        <span class="label">FieldPadY (px @ 1×) &mdash; <b id="v-fieldPadY"></b></span>
+        <input type="range" id="fieldPadY" min="-6" max="16" step="0.5" value="6">
+      </div>
+      <div class="knob">
+        <span class="label">CheckboxSize / ControlSize (px @ 1×) &mdash; <b id="v-checkboxSize"></b></span>
+        <input type="range" id="checkboxSize" min="12" max="34" step="1" value="18">
+      </div>
+      <div class="knob">
+        <span class="label">ItemIconSize base (px @ 1×) &mdash; <b id="v-itemIconSize"></b></span>
+        <input type="range" id="itemIconSize" min="14" max="40" step="1" value="28">
+      </div>
+    </div>
+
+    <div class="group">
+      <label class="title">Icon scale factors</label>
+      <div class="knob">
+        <span class="label">ItemIconScale (Tracker/Craft icon) &mdash; <b id="v-itemIconScale"></b></span>
+        <input type="range" id="itemIconScale" min="0.5" max="2" step="0.01" value="1.1">
+      </div>
+      <div class="knob">
+        <span class="label">BookGlyphScale (Link icon) &mdash; <b id="v-bookGlyphScale"></b></span>
+        <input type="range" id="bookGlyphScale" min="0.3" max="1.5" step="0.01" value="0.65">
+      </div>
+    </div>
+
+    <div class="group">
+      <label class="title">Optical nudges (ems of FontSize)</label>
+      <div class="knob">
+        <span class="label">ItemControlOpticalNudgeEm &mdash; <b id="v-itemNudge"></b></span>
+        <input type="range" id="itemNudge" min="-0.5" max="0.5" step="0.01" value="0">
+      </div>
+      <div class="knob">
+        <span class="label">TaskControlOpticalNudgeEm &mdash; <b id="v-taskNudge"></b></span>
+        <input type="range" id="taskNudge" min="-0.5" max="0.5" step="0.01" value="0">
+      </div>
+    </div>
+
+    <div class="group">
+      <label class="title">Tablet / cuneiform layout math (glyph shapes NOT rendered — see note)</label>
+      <div class="knob">
+        <span class="label">GlyphDrawScale (tablet-cuneiform-glyph-scale) &mdash; <b id="v-glyphDrawScale"></b></span>
+        <input type="range" id="glyphDrawScale" min="0.5" max="1.2" step="0.01" value="0.95">
+      </div>
+      <div class="knob">
+        <span class="label">CaretHeightScale &mdash; <b id="v-caretHeightScale"></b></span>
+        <input type="range" id="caretHeightScale" min="0.5" max="1.2" step="0.001" value="0.9167">
+      </div>
+      <div class="knob">
+        <span class="label">FieldPadYScale &mdash; <b id="v-fieldPadYScale"></b></span>
+        <input type="range" id="fieldPadYScale" min="0.2" max="1.5" step="0.001" value="0.6667">
+      </div>
+      <div class="knob">
+        <span class="label">CuneiformMetrics.LineHeightRatio &mdash; <b id="v-lineHeightRatio"></b></span>
+        <input type="range" id="lineHeightRatio" min="1.2" max="2.4" step="0.001" value="1.848">
+      </div>
+    </div>
+
+    <div class="group">
+      <label class="title">Wrap behavior</label>
+      <div class="knob">
+        <span class="label">Row width &mdash; Notebook (px @ 1&times;) &mdash; <b id="v-notebookWidth"></b></span>
+        <input type="range" id="notebookWidth" min="140" max="800" step="4" value="480">
+      </div>
+      <div class="knob">
+        <span class="label">Row width &mdash; HUD (px @ 1&times;) &mdash; <b id="v-hudWidth"></b></span>
+        <input type="range" id="hudWidth" min="120" max="480" step="4" value="400">
+      </div>
+      <div class="knob">
+        <span class="label">Wrap threshold ratio (× one-line height) &mdash; <b id="v-wrapRatio"></b></span>
+        <input type="range" id="wrapRatio" min="1.0" max="2.2" step="0.05" value="1.4">
+      </div>
+      <div class="checkline">
+        <input type="checkbox" id="leadingFollowsWrap"> <label for="leadingFollowsWrap">Leading control tracks first-line center when wrapped (proposed fix)</label>
+      </div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <button type="button" id="copy">Copy C# snippet</button>
+    <button type="button" class="ghost" id="reset">Reset all to shipped defaults</button>
+  </div>
+
+  <div class="legend">
+    <span><i class="cl-leading" style="border-top-style:solid"></i> <strong style="color:#1c8a3a">Green</strong> &mdash; leading control (checkbox / Quest icon) center, geometric</span>
+    <span><i class="cl-icon" style="border-top-style:solid"></i> <strong style="color:#d98a12">Orange</strong> &mdash; inline icon (book/item, next to the name) center, geometric</span>
+    <span><i class="cl-text" style="border-top-style:solid"></i> <strong style="color:#c22">Red (solid)</strong> &mdash; name/counter text's geometric band center (what the code's formula targets)</span>
+    <span><i class="cl-text" style="border-top-style:dashed"></i> <strong style="color:#c22">Red (dashed)</strong> &mdash; name text's actual rendered glyph center (what your eye sees; fonts have asymmetric ascender/descender space, so this rarely matches the solid red line exactly even when the formulas agree)</span>
+    <span>Tablet stage: the thin vertical bar next to the name is the synthetic caret, drawn at <code>CaretHeightScale</code> &times; the cuneiform line height, centered in its band &mdash; matching <code>ScribeCuneiformFieldRender.PaintInternal</code>.</span>
+    <span><i class="cl-grip" style="border-top-style:solid"></i> <strong style="color:#7a4fc9">Purple</strong> &mdash; grip glyph center, geometric (Notebook/Tablet only, no HUD equivalent)</span>
+    <span>Grip glyph: its own reserved column, flush left of the checkbox &mdash; shown at visible opacity here for tuning even though a Read-view row renders it at opacity 0 by default (Editor/Pinned rows show a real interactive one). Shares the checkbox's exact top offset by construction (<code>GripInsets</code> now threads <code>linkTarget</code> through the same <code>CheckboxAndGripTop</code> call) &mdash; the purple and green lines should always coincide; if they don't, that itself is a bug worth flagging.</span>
+  </div>
+</div>
+
+<div class="col-right">
+  <h2>Previews</h2>
+  <div class="surface-tabs" id="surfaceTabs">
+    <button type="button" class="tab" data-surface="notebook">Notebook</button>
+    <button type="button" class="tab" data-surface="hud">HUD</button>
+    <button type="button" class="tab" data-surface="tablet">Tablet</button>
+  </div>
+  <div id="cards"></div>
+
+  <h2>Generated</h2>
+  <pre id="out"></pre>
+</div>
+</div>
+</main>
+
+<script>
+/* ---------- SVG source (inlined from src/Mod/assets/scribe/textures/icons/) ---------- */
+const SVG_QUEST = `<svg viewBox="0 0 45.999 45.999" xmlns="http://www.w3.org/2000/svg"><g transform="rotate(180 22.9995 22.9995)"><path fill="currentColor" d="M39.264,6.736c-8.982-8.981-23.545-8.982-32.528,0c-8.982,8.982-8.981,23.545,0,32.528c8.982,8.98,23.545,8.981,32.528,0 C48.245,30.281,48.244,15.719,39.264,6.736z M25.999,33c0,1.657-1.343,3-3,3s-3-1.343-3-3V21c0-1.657,1.343-3,3-3s3,1.343,3,3V33z M22.946,15.872c-1.728,0-2.88-1.224-2.844-2.735c-0.036-1.584,1.116-2.771,2.879-2.771c1.764,0,2.88,1.188,2.917,2.771 C25.897,14.648,24.746,15.872,22.946,15.872z"/></g></svg>`;
+const SVG_BOOK = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M11.2 6.5 C8.5 4.8, 4.5 4.3, 2.2 5.2 C2.07 5.25, 2 5.38, 2 5.5 L2 18.2 C2 18.4, 2.2 18.55, 2.4 18.5 C4.6 17.9, 8.3 18.4, 11.2 20 Z"/><path fill="currentColor" d="M12.8 6.5 C15.5 4.8, 19.5 4.3, 21.8 5.2 C21.93 5.25, 22 5.38, 22 5.5 L22 18.2 C22 18.4, 21.8 18.55, 21.6 18.5 C19.4 17.9, 15.7 18.4, 12.8 20 Z"/></svg>`;
+const SVG_ITEM = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2" fill="currentColor" opacity="0.85"/><rect x="7" y="7" width="10" height="10" rx="1" fill="#0000" stroke="currentColor" stroke-width="1.4"/></svg>`;
+const SVG_CHECK = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M4 12.5 L9.5 18 L20 5"/></svg>`;
+// Stand-in for the real "scribeassignment" rolled-scroll glyph/stamp raster (ScribeAssignedTaskIcon) --
+// shape doesn't matter here, only that it's a ControlSize-square rendered at the SAME CheckboxAndGripTop
+// offset as the checkbox, immediately to its right.
+const SVG_STAMP = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M6.5 9.5h11M6.5 13h7"/></svg>`;
+// Stand-in for "scribegrip" (drag-handle glyph): a 2x3 dot grid, matching the in-game screenshot's look.
+const SVG_GRIP = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">${[6,12,18].flatMap(cy => [7,17].map(cx => `<circle cx="${cx}" cy="${cy}" r="2.1" fill="currentColor"/>`)).join("")}</svg>`;
+
+/* ---------- Per-font paint-only tuning, mirrored verbatim from ScribeRowConstants.cs OffsetEmOf/OpticalScaleOf ---------- */
+const FONT_META = {
+  "Default":            { css: "sans-serif",          weight: 400, offsetEm: 0.00, optical: 0.92 },
+  "Caudex":             { css: '"Caudex"',             weight: 700, offsetEm: 0.00, optical: 1.00 },
+  "Scapholene":         { css: '"Scapholene"',         weight: 400, offsetEm: 0.05, optical: 0.96 },
+  "La Belle Aurore":    { css: '"La Belle Aurore"',    weight: 400, offsetEm: 0.18, optical: 2.00 },
+  "Noto Sans":          { css: '"Noto Sans"',          weight: 400, offsetEm: 0.00, optical: 1.02 },
+  "Noto Serif":         { css: '"Noto Serif"',         weight: 400, offsetEm: 0.00, optical: 1.01 },
+  "Playfair Display":   { css: '"Playfair Display"',  weight: 400, offsetEm: -0.03, optical: 1.10 },
+  "Cormorant Unicase":  { css: '"Cormorant Unicase"',  weight: 400, offsetEm: -0.02, optical: 1.08 },
+};
+const REFERENCE_FAMILY = '"Caudex"'; // ScribeTaskFont.LineHeight always pegs to Caudex ("Ag"), never the selected family.
+
+function measure(cssFamily, px, weight, text) {
+  const ctx = measure._ctx || (measure._ctx = document.createElement("canvas").getContext("2d"));
+  ctx.font = `${weight} ${px}px ${cssFamily}`;
+  const m = ctx.measureText(text);
+  return {
+    fbAscent: m.fontBoundingBoxAscent ?? px * 0.8,
+    fbDescent: m.fontBoundingBoxDescent ?? px * 0.2,
+    abAscent: m.actualBoundingBoxAscent ?? px * 0.7,
+    abDescent: m.actualBoundingBoxDescent ?? px * 0.05,
+    width: m.width,
+  };
+}
+
+/* ---------- Row-kind definitions ---------- */
+const ROW_KINDS = [
+  { id: "quest-single", label: "Quest Link — single-line",
+    itemRow: true, isQuest: true, inlineIcon: null, counter: false,
+    name: "The Crimson Rose" },
+  { id: "link-single", label: "Link Task (book icon) — single-line",
+    itemRow: true, isQuest: false, inlineIcon: "book", counter: false,
+    name: "Crafting Mechanic: Charcoal burning" },
+  { id: "link-multi", label: "Link Task (book icon) — multi-line",
+    itemRow: true, isQuest: false, inlineIcon: "book", counter: false,
+    name: "Crafting Mechanic: A Very Long Recipe Name That Wraps Across Two Lines" },
+  { id: "task-multi", label: "Plain Task/Note — multi-line (placebo)",
+    itemRow: false, isQuest: false, inlineIcon: null, counter: false,
+    name: "Gather twelve flax fibers from the riverbank before nightfall, then return to camp." },
+  { id: "tracker-single", label: "Tracker / QuestObjective — counter row",
+    itemRow: true, isQuest: false, inlineIcon: "item", counter: true,
+    name: "Charcoal", counterText: "3 / 5" },
+  { id: "task-single", label: "Plain Task/Note — single-line",
+    itemRow: false, isQuest: false, inlineIcon: null, counter: false,
+    name: "Feed the chickens" },
+  { id: "tracker-multi", label: "Tracker/Craft — multi-line name + counter",
+    itemRow: true, isQuest: false, inlineIcon: "item", counter: true,
+    name: "Charcoal Burning: Advanced Kiln Construction Materials", counterText: "3 / 5" },
+  { id: "assignment-stamp", label: "Assignment-stamped row (Read/Editor/Pin only, no HUD stamp)",
+    itemRow: false, isQuest: false, inlineIcon: null, counter: false,
+    name: "Deliver the sealed letter", assignmentStamp: true },
+];
+
+/* ---------- State ---------- */
+const STORE = "scribe-row-alignment-v2";
+// Option 2 (HeightNeutral / Technique B) is now the shipped base -- confirmed good in-game
+// 2026-09-06, applied to ScribeRowConstants.cs / ScribeRowWidgets.cs as a temporary local edit.
+const DEFAULTS = {
+  uiScale: 1, fontFamily: "Default", technique: "B", unifyBand: false,
+  fieldPadY: 6, checkboxSize: 18, itemIconSize: 28, itemIconScale: 1.1, bookGlyphScale: 0.65,
+  itemNudge: 0, taskNudge: 0, wrapRatio: 1.4, leadingFollowsWrap: false,
+  notebookWidth: 480, hudWidth: 400,
+  // Tablet / cuneiform layout math (tablet-cuneiform-glyph-scale, quest-link-icon-and-color 8.3b's
+  // 2026-09-07 tablet correction) -- shipped defaults, mirrored from CuneiformMetrics.cs.
+  glyphDrawScale: 0.95, caretHeightScale: 44 / 48, fieldPadYScale: 6 / 9, lineHeightRatio: 1.848,
+  surface: "notebook", // which preview tab is active -- not a formula input, just UI state
+};
+let S = { ...DEFAULTS };
+try { Object.assign(S, JSON.parse(localStorage.getItem(STORE) || "{}")); } catch {}
+
+function persist() { localStorage.setItem(STORE, JSON.stringify(S)); }
+
+/* ---------- Core formulas (mirrors ScribeRowWidgets.cs / ScribeReadContent.cs / HudScribePins.cs) ---------- */
+function lineHeightPx(fontSizePx) {
+  const m = measure(REFERENCE_FAMILY, fontSizePx, 700, "Ag");
+  const h = m.fbAscent + m.fbDescent;
+  return h > 0 ? h : fontSizePx * 1.2;
+}
+
+// Notebook (Read/Editor/Pinned) leading-slot top-offset, Technique A: today's shipped formula (bug included),
+// with the "unify" checkbox available as the smallest in-place fix.
+function checkboxAndGripTopA(fontSize, fieldPadY, checkboxSize, itemRow, isQuest, bands, unify) {
+  const lh = lineHeightPx(fontSize);
+  const singleLineInputHeight = lh + fieldPadY * 2;
+  if (!itemRow) {
+    return Math.max(0, (singleLineInputHeight - checkboxSize) / 2) + fontSize * S.taskNudge;
+  }
+  if (isQuest) {
+    const band = unify ? lh : singleLineInputHeight; // shipped bug: uses singleLineInputHeight; text band is lh-only
+    return Math.max(0, (band - checkboxSize) / 2) + fontSize * S.itemNudge;
+  }
+  // Shipped CheckboxAndGripTop ALWAYS assumes ItemIconScale for every non-quest item row, regardless of
+  // which icon (item vs book-glyph) that row actually shows -- it has no linkTarget branch at all. The
+  // text's own band (ScribeLinkIcon.VisualSize) DOES branch per icon kind. "unify" = give the checkbox
+  // that same per-kind knowledge instead of hardcoding ItemIconScale (the smallest in-place fix).
+  const band = unify ? bands.textBand : bands.checkboxBand;
+  return Math.max(0, (band - checkboxSize) / 2) + fontSize * S.itemNudge;
+}
+
+// Technique B: HeightNeutral. Leading element's OWN visual size centers directly against the SAME
+// band its row's icon/counter/name actually center on (bandHeightForText in paintNotebook) -- no
+// manual iconBand guess, but also no longer bare lineHeight for item rows (confirmed real in-game
+// drift, Option 2 playtest 2026-09-06: a Tracker/Link row's icon band is taller than one text line,
+// so centering the checkbox on bare lineHeight left it riding high above the icon/counter/name).
+function heightNeutralTopB(band, visualSize) {
+  return (band - visualSize) / 2; // may be negative -- element extends above/below the band, by design
+}
+
+function inlineIconBandPx(itemIconSize, scaleFactor) {
+  return itemIconSize * scaleFactor; // ScribeRowWidgets.cs: ItemIconSize * (ControlSize/RowCheckboxSize) * scale; ratio is 1 here since both use CheckboxSize
+}
+
+/* ---------- Rendering ---------- */
+function paintTextVisualCenter(cssFamily, weight, drawPx, offsetEmPx, sampleText, bandTop, bandHeight, refLineHeight) {
+  // Text widget lays out at drawPx with the Caudex-reference line box, vertically centered in bandHeight
+  // (ScribeCenterIfShort), then OffsetWrap shifts paint by offsetEmPx (translate only).
+  const refBox = measure(REFERENCE_FAMILY, drawPx, 700, "Ag");
+  const boxTop = bandTop + Math.max(0, (bandHeight - refLineHeight) / 2);
+  const baselineY = boxTop + refBox.fbAscent + offsetEmPx;
+  const g = measure(cssFamily, drawPx, weight, sampleText);
+  return { top: baselineY - g.abAscent, bottom: baselineY + g.abDescent, boxTop, boxHeight: refLineHeight };
+}
+
+function el(tag, cls, html) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html != null) e.innerHTML = html;
+  return e;
+}
+
+function buildCard(kind) {
+  const card = el("div", "card");
+  card.appendChild(el("div", "cardhead", `<span>${kind.label}</span><span class="tag">(${kind.id})</span>`));
+  const body = el("div", "cardbody");
+  const nb = buildStage(kind, "notebook");
+  const hud = buildStage(kind, "hud");
+  const tablet = buildStage(kind, "tablet");
+  nb.wrap.dataset.surface = "notebook";
+  hud.wrap.dataset.surface = "hud";
+  tablet.wrap.dataset.surface = "tablet";
+  body.appendChild(nb.wrap);
+  body.appendChild(hud.wrap);
+  body.appendChild(tablet.wrap);
+  card.appendChild(body);
+  return { card, notebook: nb, hud: hud, tablet: tablet };
+}
+
+function applySurfaceTab() {
+  document.querySelectorAll(".cardbody [data-surface]").forEach(w => {
+    w.classList.toggle("active-surface", w.dataset.surface === S.surface);
+  });
+  document.querySelectorAll("#surfaceTabs .tab").forEach(b => {
+    b.classList.toggle("active", b.dataset.surface === S.surface);
+  });
+}
+
+function sizeForFont(family, nominal) {
+  const meta = FONT_META[family];
+  const fam = meta.css;
+  const ref = measure(REFERENCE_FAMILY, nominal, 700, "Ag");
+  const own = measure(fam, nominal, meta.weight, "Ag");
+  const refY = ref.fbAscent + ref.fbDescent;
+  const ownY = own.fbAscent + own.fbDescent;
+  const autoScale = (fam === REFERENCE_FAMILY || ownY <= 0) ? 1 : refY / ownY;
+  return nominal * autoScale * meta.optical;
+}
+
+const SURFACE_LABEL = { notebook: "Notebook (Read/Editor/Pinned)", hud: "HUD", tablet: "Tablet (cuneiform, layout math only)" };
+function buildStage(kind, surface) {
+  const wrap = el("div");
+  const label = el("div", "", SURFACE_LABEL[surface]);
+  label.style.fontSize = "10px"; label.style.color = "#8a7c5e"; label.style.marginBottom = "3px";
+  wrap.appendChild(label);
+  const stage = el("div", `stage ${surface}`);
+  stage.style.height = kind.forceMultiHeight || "64px";
+  wrap.appendChild(stage);
+  const readout = el("div", "readout");
+  wrap.appendChild(readout);
+  return { wrap, stage, readout };
+}
+
+let CARDS = [];
+function buildAllCards() {
+  const host = document.getElementById("cards");
+  host.innerHTML = "";
+  CARDS = ROW_KINDS.map(kind => {
+    const c = buildCard(kind);
+    host.appendChild(c.card);
+    return { kind, ...c };
+  });
+}
+
+function centerlineEl(y, cls, dashed) {
+  const l = el("div", `centerline ${dashed ? "visual" : "geo"} ${cls}`);
+  l.style.top = `${y}px`;
+  return l;
+}
+
+function paintNotebook(kind, stage, readout) {
+  stage.innerHTML = "";
+  stage.style.width = `${S.notebookWidth * S.uiScale}px`;
+  const fontSize = 15 * S.uiScale;
+  const fieldPadY = S.fieldPadY * S.uiScale;
+  const checkboxSize = S.checkboxSize * S.uiScale;
+  const itemIconSize = S.itemIconSize * S.uiScale;
+  const gap = 4 * S.uiScale; // CheckboxTextGap
+  const padLeft = 8 * S.uiScale;
+  const meta = FONT_META[S.fontFamily];
+  const drawPx = sizeForFont(S.fontFamily, fontSize);
+  const offsetEmPx = meta.offsetEm * fontSize;
+  const refLineHeight = lineHeightPx(fontSize);
+
+  // The row's TEXT band (ScribeLinkIcon.VisualSize) uses the icon-kind-specific scale: BookGlyphScale
+  // for a book-glyph Link, ItemIconScale for a real item icon (Tracker/Craft). The CHECKBOX's band
+  // (CheckboxAndGripTop, shipped) has NO such branch -- it always assumes ItemIconScale, full stop.
+  // These are computed as two independent values on purpose, so the drift is visible when they differ.
+  const rowIconScale = kind.inlineIcon === "book" ? S.bookGlyphScale : S.itemIconScale;
+  const textBand = inlineIconBandPx(itemIconSize, rowIconScale);       // what the text actually centers on
+  const checkboxBand = inlineIconBandPx(itemIconSize, S.itemIconScale); // what the checkbox ALWAYS assumes (shipped)
+  const iconVisualPx = itemIconSize * rowIconScale; // rendered SVG size for the inline icon (fills its box, no internal pad)
+
+  // Leading-slot element (checkbox, or quest icon which is drawn at CheckboxSize directly).
+  let bandHeightForText; // the band the NAME/COUNTER text centers in (ScribeCenterIfShort)
+  if (kind.isQuest) {
+    bandHeightForText = refLineHeight; // ScribeReadContent.cs: bandHeight = isQuestLink ? lineHeight : VisualSize(...)
+  } else if (kind.itemRow) {
+    bandHeightForText = textBand; // VisualSize(iconSize, linkTarget) for Tracker/Craft/Link alike, scaled per icon kind
+  } else {
+    bandHeightForText = 0; // plain Task/Note: SingleLineInputHeight path, handled by the !itemRow branch below
+  }
+
+  // Grip column (GripInsets, §10.4): its own reserved ControlSize-square slot, flush against the
+  // checkbox (GripInsets cancels the trailing CheckboxTextGap with a negative right inset) -- so the
+  // checkbox starts a full gripSize to the right of padLeft, not AT padLeft.
+  const gripSize = checkboxSize;
+  const rowTop = 8; // visual breathing room only; formulas below are relative to this
+  let contentLeft = padLeft + gripSize + checkboxSize + gap;
+  if (kind.assignmentStamp) contentLeft += checkboxSize + gap; // ScribeAssignedTaskIcon: ControlSize-square, right after the checkbox
+  if (kind.inlineIcon) contentLeft += iconVisualPx + gap;
+
+  // Real wrapped height: build the actual text element at its real width (row width minus everything
+  // to its left, minus trailing padding) with normal white-space, drop it on the stage, and read its
+  // OWN rendered height back from the DOM. No lineCount guess -- the browser's wrap decision IS the input.
+  const trailingPad = 8 * S.uiScale;
+  const counterGap = 8 * S.uiScale;
+  const counterWidth = kind.counter ? measure(meta.css, drawPx * 0.9, meta.weight, kind.counterText).width : 0;
+  const counterReserve = kind.counter ? counterWidth + counterGap : 0;
+  const textWidth = Math.max(50, S.notebookWidth * S.uiScale - contentLeft - trailingPad - counterReserve);
+  const textEl = el("div", "name-text");
+  textEl.style.left = `${contentLeft}px`;
+  textEl.style.width = `${textWidth}px`;
+  textEl.style.fontFamily = meta.css;
+  textEl.style.fontWeight = meta.weight;
+  textEl.style.fontSize = `${drawPx}px`;
+  textEl.style.lineHeight = `${refLineHeight}px`;
+  textEl.style.transform = `translateY(${offsetEmPx}px)`;
+  textEl.style.color = kind.isQuest ? "#426bb7" : "#4a3618";
+  textEl.textContent = kind.name;
+  stage.appendChild(textEl);
+  const textActualHeight = textEl.offsetHeight; // real, browser-measured wrapped block height
+
+  const wrapRatioPx = refLineHeight * S.wrapRatio;
+  const wrapped = textActualHeight > wrapRatioPx;
+
+  let stageHeight;
+  if (kind.itemRow && !kind.isQuest) {
+    // ScribeCenterIfShortRender: top-aligns once wrapped past threshold, else centers in bandHeightForText.
+    stageHeight = Math.max(bandHeightForText, textActualHeight, checkboxSize) + 16;
+  } else if (kind.isQuest) {
+    stageHeight = Math.max(bandHeightForText, checkboxSize) + 16;
+  } else {
+    // ScribeMultilineFieldRender: box height = lines*lineHeight + PadY*2, always (multi-line included).
+    stageHeight = textActualHeight + fieldPadY * 2 + 16;
+  }
+  stage.style.height = `${stageHeight}px`;
+
+  let leadingTop;
+  if (S.technique === "A") {
+    if (!kind.itemRow) {
+      leadingTop = rowTop + checkboxAndGripTopA(fontSize, fieldPadY, checkboxSize, false, false, null, S.unifyBand);
+    } else if (kind.isQuest) {
+      leadingTop = rowTop + checkboxAndGripTopA(fontSize, fieldPadY, checkboxSize, true, true, null, S.unifyBand);
+    } else {
+      leadingTop = rowTop + checkboxAndGripTopA(fontSize, fieldPadY, checkboxSize, true, false, { textBand, checkboxBand }, S.unifyBand);
+    }
+  } else {
+    const nudgeEm = kind.itemRow ? S.itemNudge : S.taskNudge;
+    const bandB = kind.itemRow ? bandHeightForText : (refLineHeight + fieldPadY * 2);
+    leadingTop = rowTop + heightNeutralTopB(bandB, checkboxSize) + fontSize * nudgeEm;
+  }
+
+  // Optional proposed fix: leading control tracks first-line center when text has wrapped.
+  if (S.leadingFollowsWrap && wrapped) {
+    leadingTop = rowTop + (refLineHeight - checkboxSize) / 2 + fontSize * (kind.isQuest || kind.itemRow ? S.itemNudge : S.taskNudge);
+  }
+
+  // Grip glyph -- GripInsets threads the SAME linkTarget/itemRow through the SAME CheckboxAndGripTop
+  // call as the checkbox above, so it shares leadingTop exactly, by construction (quest-link-icon-and-
+  // color's 2026-09-07 second correction). Shown at visible opacity here for tuning; a Read-view row
+  // renders it at real opacity 0 by default.
+  const gripEl = el("div", "row-el leading grip-el");
+  gripEl.style.left = `${padLeft}px`;
+  gripEl.style.top = `${leadingTop}px`;
+  gripEl.style.width = gripEl.style.height = `${gripSize}px`;
+  gripEl.innerHTML = SVG_GRIP;
+  gripEl.querySelector("svg").style.color = "#4a3618";
+  gripEl.querySelector("svg").style.width = gripEl.querySelector("svg").style.height = `${gripSize}px`;
+  stage.appendChild(gripEl);
+  stage.appendChild(centerlineEl(leadingTop + gripSize / 2, "cl-grip", false));
+
+  // Build leading element.
+  const leadEl = el("div", "row-el leading");
+  leadEl.style.left = `${padLeft + gripSize}px`;
+  leadEl.style.top = `${leadingTop}px`;
+  leadEl.style.width = `${checkboxSize}px`;
+  leadEl.style.height = `${checkboxSize}px`;
+  if (kind.isQuest) {
+    leadEl.innerHTML = SVG_QUEST;
+    leadEl.querySelector("svg").style.color = "#426bb7";
+    leadEl.querySelector("svg").style.width = leadEl.querySelector("svg").style.height = `${checkboxSize}px`;
+  } else {
+    const box = el("div", "checkbox-box");
+    box.style.width = box.style.height = `${checkboxSize}px`;
+    box.style.display = "flex"; box.style.alignItems = "center"; box.style.justifyContent = "center";
+    box.innerHTML = ""; // unchecked, empty box (matches screenshot state)
+    leadEl.appendChild(box);
+  }
+  stage.appendChild(leadEl);
+  stage.appendChild(centerlineEl(leadingTop + checkboxSize / 2, "cl-leading", false));
+
+  // ScribeAssignedTaskIcon: a second ControlSize-square icon, right after the checkbox, sharing the
+  // SAME CheckboxAndGripTop offset (so it's always exactly checkbox-aligned by construction, never a
+  // second formula to keep in sync) -- Read/Editor/Pin Tab only, HUD has no equivalent.
+  if (kind.assignmentStamp) {
+    const stampEl = el("div", "row-el");
+    stampEl.style.left = `${padLeft + gripSize + checkboxSize + gap}px`;
+    stampEl.style.top = `${leadingTop}px`;
+    stampEl.style.width = stampEl.style.height = `${checkboxSize}px`;
+    stampEl.innerHTML = SVG_STAMP;
+    const stampSvg = stampEl.querySelector("svg");
+    stampSvg.style.width = stampSvg.style.height = `${checkboxSize}px`;
+    stampSvg.style.color = "#6b4e2e";
+    stage.appendChild(stampEl);
+  }
+
+  let iconTop = null;
+  if (kind.inlineIcon) {
+    // Inline book/item icon sits inside BuildItemContent's Row alongside the name (ScribeLinkIcon.Build,
+    // heightNeutral:false on Notebook) -- centers on bandHeightForText same as the text does.
+    const iconLeft = padLeft + gripSize + checkboxSize + gap + (kind.assignmentStamp ? checkboxSize + gap : 0);
+    iconTop = rowTop + Math.max(0, (bandHeightForText - iconVisualPx) / 2);
+    const iconEl = el("div", "row-el");
+    iconEl.style.left = `${iconLeft}px`;
+    iconEl.style.top = `${iconTop}px`;
+    iconEl.style.width = iconEl.style.height = `${iconVisualPx}px`;
+    iconEl.innerHTML = kind.inlineIcon === "book" ? SVG_BOOK : SVG_ITEM;
+    const svg = iconEl.querySelector("svg");
+    svg.style.width = svg.style.height = `${iconVisualPx}px`;
+    svg.style.color = "#6b4e2e";
+    stage.appendChild(iconEl);
+    stage.appendChild(centerlineEl(iconTop + iconVisualPx / 2, "cl-icon", false));
+  }
+
+  // Name text -- textEl was already built above (against its real available width) so its
+  // rendered height could be measured before any of the band/height math ran; just place it now.
+  let textTop, textHeight;
+  if (kind.isQuest) {
+    textTop = rowTop; textHeight = bandHeightForText;
+  } else if (kind.itemRow) {
+    // ScribeCenterIfShortRender: center while short, top-align (Y=0) once wrapped past ratio.
+    textTop = rowTop + (wrapped ? 0 : Math.max(0, (bandHeightForText - textActualHeight) / 2));
+    textHeight = Math.max(bandHeightForText, textActualHeight);
+  } else {
+    // ScribeMultilineFieldRender: text baseline sits PadY down from the field's own top, every line
+    // (not just the first) -- confirmed via real in-game drift, Option 2 playtest 2026-09-06.
+    textTop = rowTop + fieldPadY; textHeight = textActualHeight;
+  }
+  textEl.style.top = `${textTop}px`;
+
+  const vis = paintTextVisualCenter(meta.css, meta.weight, drawPx, offsetEmPx, kind.name.split(" ")[0], textTop, textHeight, refLineHeight);
+  const textGeoCenter = textTop + textHeight / 2;
+  const textVisCenter = (vis.top + vis.bottom) / 2;
+  stage.appendChild(centerlineEl(textGeoCenter, "cl-text", false));
+  stage.appendChild(centerlineEl(textVisCenter, "cl-text", true));
+
+  // Counter (Tracker/QuestObjective) -- shares the same InBand centering as the name (ScribeCenterIfShort.InBand).
+  let counterGeoCenter = null;
+  if (kind.counter) {
+    const counterEl = el("div", "counter-text");
+    const counterTop = rowTop + Math.max(0, (bandHeightForText - refLineHeight) / 2);
+    counterEl.style.left = `${contentLeft + textWidth + counterGap}px`;
+    counterEl.style.top = `${counterTop}px`;
+    counterEl.style.fontFamily = meta.css;
+    counterEl.style.fontSize = `${drawPx * 0.9}px`;
+    counterEl.style.color = "#6b4e2e";
+    counterEl.textContent = kind.counterText;
+    stage.appendChild(counterEl);
+    counterGeoCenter = counterTop + refLineHeight / 2;
+  }
+
+  const leadingCenter = leadingTop + checkboxSize / 2;
+  const deltaGeo = leadingCenter - textGeoCenter;
+  const deltaVis = leadingCenter - textVisCenter;
+  const deltaIcon = iconTop != null ? leadingCenter - (iconTop + iconVisualPx / 2) : null;
+  const impliedLines = Math.max(1, Math.round(textActualHeight / refLineHeight));
+
+  readout.innerHTML = `
+    <span>leading vs text (geo): <b class="${Math.abs(deltaGeo) < 1 ? "ok" : "bad"}">${deltaGeo.toFixed(1)}px</b></span>
+    <span>leading vs text (visual): <b class="${Math.abs(deltaVis) < 1 ? "ok" : "bad"}">${deltaVis.toFixed(1)}px</b></span>
+    ${deltaIcon != null ? `<span>leading vs inline icon: <b class="${Math.abs(deltaIcon) < 1 ? "ok" : "bad"}">${deltaIcon.toFixed(1)}px</b></span>` : ""}
+    <span>text height: <b>${textActualHeight.toFixed(1)}px</b> (~${impliedLines} line${impliedLines === 1 ? "" : "s"})</span>
+    <span style="color:#8a7c5e">grip: same top offset as checkbox, by construction</span>
+    ${wrapped ? `<span style="color:#c22">wrapped — top-align jump active</span>` : ""}
+  `;
+}
+
+function paintHud(kind, stage, readout) {
+  stage.innerHTML = "";
+  stage.style.width = `${S.hudWidth * S.uiScale}px`;
+  const rowFontSize = 16 * S.uiScale; // BaseHudFontSize, HudFontScale not exposed separately (Q: shared uiScale)
+  const checkboxSize = 20 * S.uiScale; // BaseHudCheckboxSize
+  const iconSize = rowFontSize * 1.4;
+  const lineHeight = lineHeightPx(rowFontSize); // approximation; HUD uses its own TextLineHeight(rowFontSize) call, same helper
+  const gap = 6 * S.uiScale; // Row `spacing: 6` (HudScribePins.cs ~1861)
+  const padLeft = 2 * S.uiScale; // EdgeInsets.All(2) around the whole HUD block (HudScribePins.cs:1559), not per-row padding
+
+  let contentLeft = padLeft + checkboxSize + gap;
+  if (kind.inlineIcon) contentLeft += iconSize + gap;
+
+  // Real wrapped height, same approach as the Notebook stage: measure the browser's own wrap
+  // decision at the real available width, instead of guessing a line count.
+  const trailingPad = 2 * S.uiScale; // EdgeInsets.All(2), right side
+  const counterGap = 6 * S.uiScale;
+  const counterWidth = kind.counter ? measure("sans-serif", rowFontSize * 0.9, 400, kind.counterText).width : 0;
+  const counterReserve = kind.counter ? counterWidth + counterGap : 0;
+  const textWidth = Math.max(40, S.hudWidth * S.uiScale - contentLeft - trailingPad - counterReserve);
+  const textEl = el("div", "name-text");
+  textEl.style.left = `${contentLeft}px`;
+  textEl.style.top = "8px";
+  textEl.style.width = `${textWidth}px`;
+  textEl.style.fontFamily = "sans-serif"; // HUD ignores TaskFontFamily entirely (Q3 / research §6)
+  textEl.style.fontSize = `${rowFontSize}px`;
+  textEl.style.lineHeight = `${lineHeight}px`;
+  textEl.style.color = kind.isQuest ? "#acccff" : "#e9e2d0";
+  textEl.textContent = kind.name;
+  stage.appendChild(textEl);
+  const textActualHeight = textEl.offsetHeight;
+
+  const wrapRatioPx = lineHeight * S.wrapRatio;
+  const wrapped = textActualHeight > wrapRatioPx;
+
+  const rowHeight = Math.max(checkboxSize, iconSize, textActualHeight) + 16;
+  stage.style.height = `${rowHeight}px`;
+
+  // HUD: no manual offset math -- native CrossAxisAlignment.Center across the whole row (item rows);
+  // Start-aligned for plain Task rows (per research §2).
+  const centerY = kind.itemRow ? rowHeight / 2 : 8 + checkboxSize / 2;
+
+  const leadEl = el("div", "row-el leading");
+  leadEl.style.left = `${padLeft}px`;
+  leadEl.style.width = leadEl.style.height = `${checkboxSize}px`;
+  if (kind.isQuest) {
+    leadEl.innerHTML = SVG_QUEST;
+    leadEl.querySelector("svg").style.color = "#acccff";
+    leadEl.querySelector("svg").style.width = leadEl.querySelector("svg").style.height = `${checkboxSize}px`;
+    leadEl.style.top = `${centerY - checkboxSize / 2}px`;
+  } else {
+    const box = el("div", "checkbox-box");
+    box.style.width = box.style.height = `${checkboxSize}px`;
+    leadEl.appendChild(box);
+    leadEl.style.top = `${(kind.itemRow ? centerY - checkboxSize / 2 : 8)}px`;
+  }
+  stage.appendChild(leadEl);
+  const leadingCenter = kind.itemRow ? centerY : 8 + checkboxSize / 2;
+  stage.appendChild(centerlineEl(leadingCenter, "cl-leading", false));
+
+  let iconCenter = null;
+  if (kind.inlineIcon) {
+    // HeightNeutral: icon's own visual box centers directly on lineHeight, Positioned in a Stack.
+    const iconLeft = padLeft + checkboxSize + gap;
+    const iconTop = (lineHeight - iconSize) / 2; // may be negative -- icon taller than one text line, by design
+    const stackTop = 8 + Math.max(0, (textActualHeight - lineHeight) / 2) + iconTop;
+    const iconEl = el("div", "row-el");
+    iconEl.style.left = `${iconLeft}px`;
+    iconEl.style.top = `${stackTop}px`;
+    iconEl.style.width = iconEl.style.height = `${iconSize}px`;
+    iconEl.innerHTML = kind.inlineIcon === "book" ? SVG_BOOK : SVG_ITEM;
+    const svg = iconEl.querySelector("svg");
+    svg.style.width = svg.style.height = `${iconSize}px`;
+    svg.style.color = "#e9e2d0";
+    stage.appendChild(iconEl);
+    iconCenter = stackTop + iconSize / 2;
+    stage.appendChild(centerlineEl(iconCenter, "cl-icon", false));
+  }
+
+  const textGeoCenter = 8 + textActualHeight / 2;
+  stage.appendChild(centerlineEl(textGeoCenter, "cl-text", false));
+
+  if (kind.counter) {
+    const counterEl = el("div", "counter-text");
+    counterEl.style.left = `${contentLeft + textWidth + counterGap}px`;
+    counterEl.style.top = "8px";
+    counterEl.style.fontSize = `${rowFontSize * 0.9}px`;
+    counterEl.style.color = "#c9b99a";
+    counterEl.textContent = kind.counterText;
+    stage.appendChild(counterEl);
+  }
+
+  const deltaGeo = leadingCenter - textGeoCenter;
+  const deltaIcon = iconCenter != null ? leadingCenter - iconCenter : null;
+  const impliedLines = Math.max(1, Math.round(textActualHeight / lineHeight));
+  readout.innerHTML = `
+    <span>leading vs text: <b class="${Math.abs(deltaGeo) < 1 ? "ok" : "bad"}">${deltaGeo.toFixed(1)}px</b></span>
+    ${deltaIcon != null ? `<span>leading vs inline icon: <b class="${Math.abs(deltaIcon) < 1 ? "ok" : "bad"}">${deltaIcon.toFixed(1)}px</b></span>` : ""}
+    <span>text height: <b>${textActualHeight.toFixed(1)}px</b> (~${impliedLines} line${impliedLines === 1 ? "" : "s"})</span>
+    ${wrapped ? `<span style="color:#c22">wrapped</span>` : ""}
+    <span style="color:#8a7c5e">HUD: native centering, no manual offset math</span>
+    ${kind.assignmentStamp ? `<span style="color:#8a7c5e">no assignment stamp on HUD (Read/Editor/Pin only)</span>` : ""}
+  `;
+}
+
+// Tablet stage (added 2026-09-07): models the tablet's cuneiform LAYOUT math exactly (band heights,
+// checkbox/control-size decoupling, caret height, field padding) -- does NOT render actual cuneiform
+// glyph strokes (uppercase placeholder text stands in). Mirrors, in order:
+//   GuiDialogScribeTablet.DecorateRowStyle    -- CheckboxSize/ControlSize = FontSize * LineHeightRatio
+//                                                 (deliberately NOT scaled by GlyphDrawScale)
+//   CuneiformTextRender/ScribeCuneiformFieldRender.PerformLayout
+//                                              -- lineHeightPx = FontSize * LineHeightRatio * GlyphDrawScale
+//   ScribeRowControlNudge.ItemNameLineHeight   -- cuneiform branch = the same lineHeightPx above
+//   ScribeRowControlNudge.CheckboxAndGripTop   -- quest branch now routes through ItemNameLineHeight
+//                                                 (quest-link-icon-and-color 8.3b's 2026-09-07 fix);
+//                                                 the plain (!itemRow) branch is left UNFIXED/faithful
+//                                                 to shipped code (still Latin TextLineHeight) so any
+//                                                 latent drift there shows up in the readout, not hidden.
+//   ScribeCuneiformFieldRender.PaintInternal   -- caret height = lineHeightPx * CaretHeightScale, centered
+//   ScribeMultilineField/ScribeReadContent     -- cuneiform-branch padY = FieldPadY * FieldPadYScale
+function paintTablet(kind, stage, readout) {
+  stage.innerHTML = "";
+  stage.style.width = `${S.notebookWidth * S.uiScale}px`;
+  const fontSize = 15 * S.uiScale;
+  const latinLineHeight = lineHeightPx(fontSize); // TextLineHeight(fontSize) -- Caudex "Ag" box, unchanged by cuneiform
+  const cuneiformLineHeight = fontSize * S.lineHeightRatio * S.glyphDrawScale; // ItemNameLineHeight's cuneiform branch
+  const checkboxSizeTablet = fontSize * S.lineHeightRatio; // DecorateRowStyle -- deliberately NOT * glyphDrawScale
+  const fieldPadYTablet = S.fieldPadY * S.uiScale * S.fieldPadYScale;
+  const gap = 4 * S.uiScale;
+  const padLeft = 8 * S.uiScale;
+
+  const rowIconScale = kind.inlineIcon === "book" ? S.bookGlyphScale : S.itemIconScale;
+  const itemIconSize = S.itemIconSize * S.uiScale;
+  const textBand = inlineIconBandPx(itemIconSize, rowIconScale); // ScribeLinkIcon.VisualSize -- unaffected by cuneiform
+  const iconVisualPx = itemIconSize * rowIconScale;
+
+  let bandHeightForText;
+  if (kind.isQuest) bandHeightForText = cuneiformLineHeight; // FIXED 2026-09-07: was Latin TextLineHeight
+  else if (kind.itemRow) bandHeightForText = textBand;
+  else bandHeightForText = 0; // plain Task/Note: field-height path below
+
+  // Grip column (GripInsets, same tablet call site as the checkbox below): its own reserved
+  // checkboxSizeTablet-square slot, flush against the checkbox.
+  const gripSizeTablet = checkboxSizeTablet;
+  const rowTop = 8;
+  let contentLeft = padLeft + gripSizeTablet + checkboxSizeTablet + gap;
+  if (kind.assignmentStamp) contentLeft += checkboxSizeTablet + gap;
+  if (kind.inlineIcon) contentLeft += iconVisualPx + gap;
+
+  const trailingPad = 8 * S.uiScale;
+  const counterGap = 8 * S.uiScale;
+  const counterWidth = kind.counter ? measure("sans-serif", cuneiformLineHeight * 0.55, 700, kind.counterText).width : 0;
+  const counterReserve = kind.counter ? counterWidth + counterGap : 0;
+  const textWidth = Math.max(50, S.notebookWidth * S.uiScale - contentLeft - trailingPad - counterReserve);
+  const textEl = el("div", "name-text");
+  textEl.style.left = `${contentLeft}px`;
+  textEl.style.width = `${textWidth}px`;
+  textEl.style.fontFamily = "sans-serif";
+  textEl.style.fontWeight = "700";
+  textEl.style.fontSize = `${cuneiformLineHeight * 0.6}px`;
+  textEl.style.lineHeight = `${cuneiformLineHeight}px`;
+  textEl.style.letterSpacing = "0.03em";
+  textEl.style.textTransform = "uppercase"; // stand-in for glyph strokes, not a real rendering claim
+  textEl.style.color = kind.isQuest ? "var(--clay-quest)" : "var(--clay-ink)";
+  textEl.textContent = kind.name;
+  stage.appendChild(textEl);
+  const textActualHeight = textEl.offsetHeight;
+
+  const wrapRatioPx = cuneiformLineHeight * S.wrapRatio;
+  const wrapped = textActualHeight > wrapRatioPx;
+
+  let stageHeight;
+  if (kind.itemRow && !kind.isQuest) {
+    stageHeight = Math.max(bandHeightForText, textActualHeight, checkboxSizeTablet) + 16;
+  } else if (kind.isQuest) {
+    stageHeight = Math.max(bandHeightForText, checkboxSizeTablet) + 16;
+  } else {
+    stageHeight = textActualHeight + fieldPadYTablet * 2 + 16;
+  }
+  stage.style.height = `${stageHeight}px`;
+
+  // CheckboxAndGripTop, tablet checkbox size -- quest branch fixed (cuneiform-aware band); !itemRow
+  // branch left faithful to shipped code (still the Latin band), so a real drift there is visible below.
+  let leadingTop;
+  if (!kind.itemRow) {
+    const singleLineInputHeightTablet_shipped = latinLineHeight + (S.fieldPadY * S.uiScale) * 2;
+    leadingTop = rowTop + Math.max(-checkboxSizeTablet, (singleLineInputHeightTablet_shipped - checkboxSizeTablet) / 2) + fontSize * S.taskNudge;
+  } else {
+    const band = kind.isQuest ? cuneiformLineHeight : textBand;
+    leadingTop = rowTop + (band - checkboxSizeTablet) / 2 + fontSize * S.itemNudge;
+  }
+
+  // Grip glyph -- same leadingTop as the checkbox, by construction (see the notebook stage's identical
+  // comment above `gripEl`).
+  const gripElTablet = el("div", "row-el leading grip-el");
+  gripElTablet.style.left = `${padLeft}px`;
+  gripElTablet.style.top = `${leadingTop}px`;
+  gripElTablet.style.width = gripElTablet.style.height = `${gripSizeTablet}px`;
+  gripElTablet.innerHTML = SVG_GRIP;
+  gripElTablet.querySelector("svg").style.color = "var(--clay-ink)";
+  gripElTablet.querySelector("svg").style.width = gripElTablet.querySelector("svg").style.height = `${gripSizeTablet}px`;
+  stage.appendChild(gripElTablet);
+  stage.appendChild(centerlineEl(leadingTop + gripSizeTablet / 2, "cl-grip", false));
+
+  const leadEl = el("div", "row-el leading");
+  leadEl.style.left = `${padLeft + gripSizeTablet}px`;
+  leadEl.style.top = `${leadingTop}px`;
+  leadEl.style.width = `${checkboxSizeTablet}px`;
+  leadEl.style.height = `${checkboxSizeTablet}px`;
+  if (kind.isQuest) {
+    leadEl.innerHTML = SVG_QUEST;
+    leadEl.querySelector("svg").style.color = "var(--clay-quest)";
+    leadEl.querySelector("svg").style.width = leadEl.querySelector("svg").style.height = `${checkboxSizeTablet}px`;
+  } else {
+    const box = el("div", "checkbox-box");
+    box.style.width = box.style.height = `${checkboxSizeTablet}px`;
+    leadEl.appendChild(box);
+  }
+  stage.appendChild(leadEl);
+  stage.appendChild(centerlineEl(leadingTop + checkboxSizeTablet / 2, "cl-leading", false));
+
+  if (kind.assignmentStamp) {
+    const stampEl = el("div", "row-el");
+    stampEl.style.left = `${padLeft + gripSizeTablet + checkboxSizeTablet + gap}px`;
+    stampEl.style.top = `${leadingTop}px`;
+    stampEl.style.width = stampEl.style.height = `${checkboxSizeTablet}px`;
+    stampEl.innerHTML = SVG_STAMP;
+    const stampSvg = stampEl.querySelector("svg");
+    stampSvg.style.width = stampSvg.style.height = `${checkboxSizeTablet}px`;
+    stampSvg.style.color = "var(--clay-ink)";
+    stage.appendChild(stampEl);
+  }
+
+  let iconTop = null;
+  if (kind.inlineIcon) {
+    const iconLeft = padLeft + gripSizeTablet + checkboxSizeTablet + gap + (kind.assignmentStamp ? checkboxSizeTablet + gap : 0);
+    iconTop = rowTop + Math.max(0, (bandHeightForText - iconVisualPx) / 2);
+    const iconEl = el("div", "row-el");
+    iconEl.style.left = `${iconLeft}px`;
+    iconEl.style.top = `${iconTop}px`;
+    iconEl.style.width = iconEl.style.height = `${iconVisualPx}px`;
+    iconEl.innerHTML = kind.inlineIcon === "book" ? SVG_BOOK : SVG_ITEM;
+    const svg = iconEl.querySelector("svg");
+    svg.style.width = svg.style.height = `${iconVisualPx}px`;
+    svg.style.color = "var(--clay-ink)";
+    stage.appendChild(iconEl);
+    stage.appendChild(centerlineEl(iconTop + iconVisualPx / 2, "cl-icon", false));
+  }
+
+  let textTop, textHeight;
+  if (kind.isQuest) {
+    textTop = rowTop; textHeight = bandHeightForText;
+  } else if (kind.itemRow) {
+    textTop = rowTop + (wrapped ? 0 : Math.max(0, (bandHeightForText - textActualHeight) / 2));
+    textHeight = Math.max(bandHeightForText, textActualHeight);
+  } else {
+    textTop = rowTop + fieldPadYTablet; textHeight = textActualHeight;
+  }
+  textEl.style.top = `${textTop}px`;
+
+  const textGeoCenter = textTop + textHeight / 2;
+  stage.appendChild(centerlineEl(textGeoCenter, "cl-text", false));
+
+  // Synthetic caret (ScribeCuneiformFieldRender.PaintInternal): CaretHeightScale * the line's own
+  // cuneiformLineHeight, vertically centered within that same line band -- drawn just before the text.
+  const caretHeight = cuneiformLineHeight * S.caretHeightScale;
+  const caretLineTop = kind.isQuest || kind.itemRow ? textTop : rowTop + fieldPadYTablet;
+  const caretTop = caretLineTop + (cuneiformLineHeight - caretHeight) / 2;
+  const caretEl = el("div", "caret-bar");
+  caretEl.style.left = `${contentLeft - 6 * S.uiScale}px`;
+  caretEl.style.top = `${caretTop}px`;
+  caretEl.style.height = `${caretHeight}px`;
+  caretEl.style.color = kind.isQuest ? "var(--clay-quest)" : "var(--clay-ink)";
+  stage.appendChild(caretEl);
+
+  let counterGeoCenter = null;
+  if (kind.counter) {
+    const counterEl = el("div", "counter-text");
+    const counterTop = rowTop + Math.max(0, (bandHeightForText - cuneiformLineHeight) / 2);
+    counterEl.style.left = `${contentLeft + textWidth + counterGap}px`;
+    counterEl.style.top = `${counterTop}px`;
+    counterEl.style.fontFamily = "sans-serif";
+    counterEl.style.fontWeight = "700";
+    counterEl.style.fontSize = `${cuneiformLineHeight * 0.55}px`;
+    counterEl.style.color = "var(--clay-ink)";
+    counterEl.textContent = kind.counterText;
+    stage.appendChild(counterEl);
+    counterGeoCenter = counterTop + cuneiformLineHeight / 2;
+  }
+
+  const leadingCenter = leadingTop + checkboxSizeTablet / 2;
+  const deltaGeo = leadingCenter - textGeoCenter;
+  const deltaIcon = iconTop != null ? leadingCenter - (iconTop + iconVisualPx / 2) : null;
+  const checkboxOverflow = checkboxSizeTablet - bandHeightForText; // >0: checkbox taller than its band, by design (D7)
+  const impliedLines = Math.max(1, Math.round(textActualHeight / cuneiformLineHeight));
+
+  readout.innerHTML = `
+    <span>leading vs text (geo): <b class="${Math.abs(deltaGeo) < 1 ? "ok" : "bad"}">${deltaGeo.toFixed(1)}px</b></span>
+    ${deltaIcon != null ? `<span>leading vs inline icon: <b class="${Math.abs(deltaIcon) < 1 ? "ok" : "bad"}">${deltaIcon.toFixed(1)}px</b></span>` : ""}
+    <span>text height: <b>${textActualHeight.toFixed(1)}px</b> (~${impliedLines} line${impliedLines === 1 ? "" : "s"})</span>
+    ${kind.itemRow ? `<span>checkbox vs. cuneiform band: <b style="color:#8a7c5e">${checkboxOverflow >= 0 ? "+" : ""}${checkboxOverflow.toFixed(1)}px (expected overflow, D7)</b></span>` : ""}
+    <span>caret height: <b>${caretHeight.toFixed(1)}px</b> of ${cuneiformLineHeight.toFixed(1)}px line</span>
+    <span style="color:#8a7c5e">grip: same top offset as checkbox, by construction</span>
+    ${wrapped ? `<span style="color:#c22">wrapped — top-align jump active</span>` : ""}
+  `;
+}
+
+function repaint() {
+  for (const k of Object.keys(DEFAULTS)) {
+    const el2 = document.getElementById(k);
+    if (!el2) continue;
+    if (el2.type === "checkbox") el2.checked = S[k];
+    else if (el2.tagName === "SELECT") el2.value = S[k];
+    else if (el2.type === "range" || el2.type === "number") el2.value = S[k];
+  }
+  document.querySelectorAll('input[name="technique"]').forEach(r => r.checked = r.value === S.technique);
+  document.getElementById("unifyRow").style.opacity = S.technique === "A" ? "1" : "0.4";
+  document.getElementById("unifyBand").disabled = S.technique !== "A";
+
+  for (const id of ["uiScale","fieldPadY","checkboxSize","itemIconSize","itemIconScale","bookGlyphScale","itemNudge","taskNudge","wrapRatio"]) {
+    document.getElementById(`v-${id}`).textContent = Number(S[id]).toFixed(2);
+  }
+  for (const id of ["notebookWidth","hudWidth"]) {
+    document.getElementById(`v-${id}`).textContent = Number(S[id]).toFixed(0);
+  }
+  for (const id of ["glyphDrawScale","caretHeightScale","fieldPadYScale","lineHeightRatio"]) {
+    document.getElementById(`v-${id}`).textContent = Number(S[id]).toFixed(3);
+  }
+
+  for (const c of CARDS) {
+    paintNotebook(c.kind, c.notebook.stage, c.notebook.readout);
+    paintHud(c.kind, c.hud.stage, c.hud.readout);
+    paintTablet(c.kind, c.tablet.stage, c.tablet.readout);
+  }
+  applySurfaceTab();
+  document.getElementById("out").textContent = generateCSharp();
+  persist();
+}
+
+function generateCSharp() {
+  const lines = [];
+  lines.push(`// Generated by tools/row-leading-slot-alignment — technique ${S.technique}${S.unifyBand ? " (unified band)" : ""}`);
+  lines.push(`private const float FieldInnerPaddingY = ${S.fieldPadY.toFixed(2)}f; // was 6f`);
+  lines.push(`private const float RowCheckboxSize = ${S.checkboxSize.toFixed(2)}f; // was 22f`);
+  lines.push(`private const float ItemIconSize = ${S.itemIconSize.toFixed(2)}f; // was 28f`);
+  lines.push(`private const float ItemIconScale = ${S.itemIconScale.toFixed(3)}f; // was 1.1f`);
+  lines.push(`private const float BookGlyphScale = ${S.bookGlyphScale.toFixed(3)}f; // was 0.8f`);
+  lines.push(`internal const float ItemControlOpticalNudgeEm = ${S.itemNudge.toFixed(3)}f; // was 0.1f`);
+  lines.push(`internal const float TaskControlOpticalNudgeEm = ${S.taskNudge.toFixed(3)}f; // was 0f`);
+  lines.push("");
+  if (S.technique === "A") {
+    lines.push("// Technique A (Padding-offset), " + (S.unifyBand ? "UNIFIED band:" : "as shipped (drift bug present):"));
+    lines.push(`public static float CheckboxAndGripTop(ScribeRowStyle style, bool itemRow = false, string? linkTarget = null)`);
+    lines.push(`{`);
+    lines.push(`    if (!itemRow) { ... same as today ... }`);
+    lines.push(`    // quest branch: ${S.unifyBand ? "now uses plain lineHeight, matching the text band exactly" : "still uses SingleLineInputHeight (bug)"}`);
+    lines.push(`    // non-quest item branch: ${S.unifyBand ? "now reads the SAME per-linkTarget scale (ItemIconScale/BookGlyphScale) the text uses via ScribeLinkIcon.VisualSize, instead of always assuming ItemIconScale" : "still always assumes ItemIconScale (bug for book-glyph Links)"}`);
+    lines.push(`}`);
+  } else {
+    lines.push("// Technique B (HeightNeutral) — architecture change, not a constant tweak:");
+    lines.push(`// Route the leading-slot checkbox/quest-icon through the SAME HeightNeutral Stack/Positioned`);
+    lines.push(`// pattern ScribeLinkIcon already uses for HUD's inline icon (ScribeRowWidgets.cs ~:373-389):`);
+    lines.push(`//   top = (TextLineHeight(style.FontSize) - element.VisualSize) / 2;`);
+    lines.push(`// This ties the leading element directly to the SAME lineHeight the text centers on --`);
+    lines.push(`// no FieldPadY term, no iconBand guess, nothing to keep in sync by hand.`);
+  }
+  lines.push("");
+  lines.push(`// Wrap threshold ratio tried: ${S.wrapRatio.toFixed(2)}× one-line height` + (S.leadingFollowsWrap ? " (leading control re-centers on first line once wrapped)" : ""));
+  lines.push("");
+  lines.push("// Tablet / cuneiform (CuneiformMetrics.cs, tablet-cuneiform-glyph-scale + quest-link-icon-and-color 8.3b):");
+  lines.push(`public const float LineHeightRatio = ${S.lineHeightRatio.toFixed(3)}f;`);
+  lines.push(`public const float GlyphDrawScale = ${S.glyphDrawScale.toFixed(3)}f;`);
+  lines.push(`public const float CaretHeightScale = ${S.caretHeightScale.toFixed(4)}f;`);
+  lines.push(`public const float FieldPadYScale = ${S.fieldPadYScale.toFixed(4)}f;`);
+  lines.push("// GuiDialogScribeTablet.DecorateRowStyle -- deliberately NOT * GlyphDrawScale (checkbox/control");
+  lines.push("// stays decoupled from the shrunk cuneiform row band; CheckboxAndGripTop's quest branch and");
+  lines.push("// GripInsets both route through ItemNameLineHeight so the checkbox/grip/quest-icon/text agree.");
+  return lines.join("\n");
+}
+
+/* ---------- Wire up ---------- */
+function bindRange(id, isFloat = true) {
+  const input = document.getElementById(id);
+  input.addEventListener("input", () => { S[id] = isFloat ? Number(input.value) : input.value; repaint(); });
+  const valueEl = document.getElementById(`v-${id}`);
+  const resetBtn = el("button", "knob-reset", "reset");
+  resetBtn.type = "button";
+  resetBtn.title = `Reset to default (${DEFAULTS[id]})`;
+  resetBtn.addEventListener("click", () => { S[id] = DEFAULTS[id]; repaint(); });
+  valueEl.insertAdjacentElement("afterend", resetBtn);
+}
+["uiScale","fieldPadY","checkboxSize","itemIconSize","itemIconScale","bookGlyphScale","itemNudge","taskNudge","wrapRatio","notebookWidth","hudWidth","glyphDrawScale","caretHeightScale","fieldPadYScale","lineHeightRatio"].forEach(id => bindRange(id));
+document.getElementById("fontFamily").addEventListener("change", e => { S.fontFamily = e.target.value; repaint(); });
+document.querySelectorAll('input[name="technique"]').forEach(r => r.addEventListener("change", e => { if (e.target.checked) { S.technique = e.target.value; repaint(); } }));
+document.getElementById("unifyBand").addEventListener("change", e => { S.unifyBand = e.target.checked; repaint(); });
+document.getElementById("leadingFollowsWrap").addEventListener("change", e => { S.leadingFollowsWrap = e.target.checked; repaint(); });
+document.getElementById("copy").addEventListener("click", async () => {
+  await navigator.clipboard.writeText(generateCSharp());
+  const b = document.getElementById("copy");
+  b.textContent = "Copied"; setTimeout(() => b.textContent = "Copy C# snippet", 1200);
+});
+document.getElementById("reset").addEventListener("click", () => { S = { ...DEFAULTS }; repaint(); });
+document.querySelectorAll("#surfaceTabs .tab").forEach(b => b.addEventListener("click", () => { S.surface = b.dataset.surface; repaint(); }));
+
+buildAllCards();
+
+async function waitFonts() {
+  const faces = ['700 15px "Caudex"','400 15px "Scapholene"','400 15px "La Belle Aurore"','400 15px "Noto Sans"','400 15px "Noto Serif"','400 15px "Playfair Display"','400 15px "Cormorant Unicase"'];
+  await Promise.all(faces.map(f => document.fonts.load(f).catch(() => {})));
+  await document.fonts.ready;
+  repaint();
+}
+repaint();
+waitFonts();
+</script>
+</body>
+</html>

@@ -27,6 +27,39 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## tablet-cuneiform-glyph-scale
+
+> Revised twice before any in-game test ran. Final mechanism: tablet cuneiform title/row/label text
+> now shrinks its own LAYOUT height (`CuneiformMetrics.GlyphDrawScale = 0.95`), deliberately decoupled
+> from the tablet's checkbox/control sizing (left untouched) — so the row/title band is now physically
+> shorter than the checkbox, absorbed by `CheckboxAndGripTop`'s existing overflow support. Also adds a
+> shorter, centered synthetic caret (`CaretHeightScale = 44/48`) and tighter field top/bottom padding
+> (`FieldPadYScale = 6/9`). **Fully quit and restage/relaunch the client first** so the rebuilt DLL
+> loads.
+
+- [ ] `000000af` **Check row/title band shrinks with the glyphs.** Open a tablet — confirm title bar
+      and row text render visibly smaller (~95%) than before, AND the row/title band itself is
+      physically shorter (not just smaller ink in an unchanged box). Checkbox/control/icon sizes stay
+      pixel-identical to before, so the checkbox will likely now overflow above/below the shorter
+      row — that mismatch is expected, not a bug. *(tablet-cuneiform-glyph-scale 4.1)*
+- [ ] `000000b1` **Check editable field unaffected at any length.** Type a full row's worth of text
+      into a tablet row/title — confirm the caret position and any text selection track the actual
+      glyphs exactly at every character count: no caret drift growing with character count, no
+      mis-hit selection, no growing/shrinking margin at the start of the line as you type.
+      *(tablet-cuneiform-glyph-scale 4.2)*
+- [ ] `000000b2` **Check glow tracks shrunk ink.** On at least one wet and one fired tablet clay
+      view, confirm the per-material glow still tracks the ink correctly — no doubled or offset
+      halo. *(tablet-cuneiform-glyph-scale 4.3)*
+- [ ] `000000b3` **Check non-tablet cuneiform unchanged.** Run the `.cuneiform` dev harness (and any
+      other non-tablet cuneiform surface) — confirm it still renders at full size
+      (`GlyphDrawScale = 1`), visually unchanged. *(tablet-cuneiform-glyph-scale 4.4)*
+- [ ] `000000b6` **Check caret height + field padding.** In a tablet row/title's editor, confirm the
+      caret renders visibly shorter than the full text line, centered rather than top/bottom-anchored,
+      and the field's box is visibly tighter top-to-bottom around the text/caret — with Read and
+      Editor row heights still matching each other. Typing/caret/selection should still behave
+      correctly at any buffer length (no regression of the caret-drift fix above).
+      *(tablet-cuneiform-glyph-scale 5.7)*
+
 ## rework-quest-accept-notification-styles
 
 > Covers `fix-libgui-click-draw-order-mismatch` too: that change's own manual checks
@@ -53,6 +86,9 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [ ] `00000099` **Check completion always uses HUD.** Trigger a quest completion under any
       Accept Policy setting — confirm it always renders as the HUD banner, never the popup
       modal. *(rework-quest-accept-notification-styles 5.6)*
+      - **Obsolete 2026-09-06** (submission 2026-09-06T17-13-03): "Obsolete - we removed Quest
+        checkboxes." — `quest-link-icon-and-color` removed the completion checkbox from Quest
+        Link rows; dropped per direct user call.
 - [x] `0000009a` **Check Settings button from popup.** From the popup modal, click Settings —
       confirm Scribe Settings opens and the modal dismisses without also accepting or
       discarding the quest. *(rework-quest-accept-notification-styles 5.7)*
@@ -71,6 +107,31 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       — confirm the same retuned colors/labels/glow treatment as the accept banner, with its
       own two-line title ("Mark quest done:" in gold, then the off-white quest name plus "?").
       *(rework-quest-accept-notification-styles 6.6)*
+      - **Obsolete 2026-09-06** (submission 2026-09-06T17-13-03): "Obsolete - we removed Quest
+        checkboxes." — `quest-link-icon-and-color` removed the completion checkbox from Quest
+        Link rows; dropped per direct user call.
+
+## fix-libgui-click-draw-order-mismatch (second consumer, added 2026-09-07, revised same day)
+
+> `ScribeDialogBase.OnMouseDown` now declines a click that lands inside a vanilla dialog's own bounds
+> (Handbook, Progression Framework's Ledger), so Scribe can no longer swallow a click meant for a
+> vanilla window opened on top of it via a Link/Quest Link click. **Revised same day:** the first
+> version gated on `ShouldReceiveMouseEvents()` (no click position, so it blocked ALL clicks on Scribe
+> while any vanilla dialog was open anywhere on screen — Scribe was unclickable until the vanilla
+> dialog closed). Now point-specific: a click outside the vanilla dialog's bounds reaches Scribe and
+> regains its focus normally, even while the vanilla dialog stays open.
+
+- [ ] `000000b4` **Check Handbook link doesn't pass through, and Scribe stays clickable.** Open a
+      Notebook/Lectern/Tablet dialog, click a Handbook link so the base-game Handbook opens on top of
+      it, then click somewhere inside the Handbook that visually overlaps where the Scribe dialog sits
+      underneath — confirm the click reaches the Handbook (not swallowed by the Scribe row underneath).
+      Then, WITHOUT closing the Handbook, click directly on the Scribe dialog itself — confirm it
+      responds immediately and regains focus (this is the corrected behavior; the first landing of this
+      fix failed this specific check). *(fix-libgui-click-draw-order-mismatch 3.2/3.4/3.5)*
+- [ ] `000000b5` **Check Quest Link doesn't pass through.** Same as above, but click a Quest Link so
+      Progression Framework's Ledger (Quest Log tab) opens on top instead — confirm clicks inside the
+      Ledger reach it rather than the Scribe dialog underneath. *(fix-libgui-click-draw-order-mismatch
+      3.3)*
 
 ## assignment-lifecycle-bug-fixes
 
@@ -133,10 +194,14 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       a task.
       - **Backlogged 2026-09-01** (playtest submissions, triage note on 14.8): needs its own
         design pass before it's a task — parking here so it isn't lost.
-- [ ] `0000007a` **Rework the Create Tasks "+" icon.** Feedback: the `scribeplus` glyph reads
+- [x] `0000007a` **Rework the Create Tasks "+" icon.** Feedback: the `scribeplus` glyph reads
       too thick/heavy; look into a thinner replacement SVG. Not yet scoped as a task.
       - **Backlogged 2026-09-01** (playtest submission 2026-08-31T22-17-42): deferred to a
         future icon pass.
+      - **Confirmed 2026-09-06**: swapped `scribeplus` to a user-supplied `plus-thin.svg`
+        (thin stroke, no rounded caps merge) in place of the old thick-stroke `plus.svg`,
+        which is now deleted (was otherwise unused). Checked in-game on the Assignment
+        Desk's Create Assignments nav button — looks good.
 
 ## reconcile-animating-surfaces
 
@@ -655,50 +720,96 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > (2026-09-06) — see `tasks.md` 5.1/5.2. The two items below are what's left: the hover-card
 > special case (section 1) and a read-only sanity check (5.3).
 
-- [ ] `0000009e` **Check hover summary card.** Hover a sealed, addressed Task Notice while it sits
+- [x] `0000009e` **Check hover summary card.** Hover a sealed, addressed Task Notice while it sits
       in a Scriptorium slot, an Assignment Desk slot, and an Inbox restricted slot — confirm each
       shows "assigned by"/"addressed to" lines instead of `Title: (Untitled)`. Then hover a blank
       Task Notice in the same three slot types — confirm its card is unchanged (generic "never
       opened"). *(signal-tasknotice-inbox-presence 1.2)*
-- [ ] `0000009f` **Check presence signals are read-only.** With an addressed notice sitting in an
+      - **Confirmed 2026-09-06** (submission 2026-09-06T17-13-03): "(no note)"
+- [x] `0000009f` **Check presence signals are read-only.** With an addressed notice sitting in an
       Inbox slot (particles/tab shimmer/slot shimmer all active) and the hover card open — confirm
       none of it mutates anything: the assignment's state and the Inbox's inventory contents are
       identical before and after observing. *(signal-tasknotice-inbox-presence 5.3)*
+      - **Confirmed 2026-09-06** (submission 2026-09-06T17-13-03): "(no note)"
 
-## read-view-filter-and-collapse
+## read-view-collapse-affordance-fixes
 
-> Read View gains a five-pill filter row (All/Active/Completed/Pinned/Other) and a
-> collapse/expand toggle on subtask-group parents (Quest Link + objectives, Craft +
-> Trackers), both persisted per Scribe item/block instance. Tablet is explicitly excluded
-> from both. Code + all automated (Core.Tests/Integration.Tests) coverage is done; these
-> items are the in-game-only verification that remains (tasks 3.2/3.3, 4.3, 5.2/5.3,
-> 6.2-6.4, 7.2, 8.1).
+> Two bug/affordance fixes found in the 2026-09-06 `read-view-filter-and-collapse` playtest
+> (that change is now archived — see `playtest-history/TESTING-archive.md`).
 
-- [ ] `000000a0` **Test filter pills.** Open a supporting surface (Lectern/Notebook/etc.) — confirm
-      all five pills (All/Active/Completed/Pinned/Other) show with exactly one active. Tap each
-      non-active pill in turn — confirm the row list narrows to exactly the rows that category
-      should include each time. *(read-view-filter-and-collapse 3.2/3.3)*
-- [ ] `000000a1` **Test filter persistence.** On one instance, select a non-All pill, close the
-      dialog, then reopen it (and relog) — confirm it resumes on that same pill. Set a DIFFERENT
-      pill on a second instance — confirm each instance remembers its own pill independently.
-      *(read-view-filter-and-collapse 4.3)*
-- [ ] `000000a2` **Test collapse toggle.** Confirm the collapse toggle appears only on a Quest Link
-      (with objectives) or Craft parent (with generated Trackers) row — never on a plain Task/Text
-      row, and never on a Tablet. Collapse one — its owned-run rows disappear, parent row stays.
-      Expand it — the children return in their original order. *(read-view-filter-and-collapse 5.2/5.3)*
-- [ ] `000000a3` **Test shadow opacity.** Under a non-All filter, on a group where only some members
-      match, confirm the non-matching members render visibly dimmed (~50%) while the matching
-      member(s) stay full-opacity — and confirm a dimmed row's checkbox/pin/edit still all work.
-      Switch to All — confirm nothing is dimmed anymore. *(read-view-filter-and-collapse 6.2/6.4)*
-- [ ] `000000a4` **Test collapsed group surfaces via hidden match.** Collapse a group where one of
-      its (now-hidden) children matches the active filter but the parent itself doesn't — confirm
-      the parent row still renders (dimmed), instead of the whole group vanishing.
-      *(read-view-filter-and-collapse 6.3)*
-- [ ] `000000a5` **Test collapse persistence.** Collapse one group (leave others expanded), close and
-      reopen the document — confirm that same group reopens collapsed while the others stay
-      expanded. Then reorder blocks so the collapsed group's parent moves to a different position —
-      confirm it's still shown collapsed at its new spot. *(read-view-filter-and-collapse 7.2)*
-- [ ] `000000a6` **Test every surface + Tablet exclusion.** Confirm both the pill row and collapse
-      toggles work on Lectern, Notebook, Clockmaker's Notebook, Chalkboard, Scriptorium, Assignment
-      Desk, and Inbox — then open a Tablet and confirm it shows NEITHER the pill row nor any
-      collapse toggle, regardless of its contents. *(read-view-filter-and-collapse 8.1)*
+- [x] `000000a7` **Check Completed pill doesn't reset.** Select the Completed filter pill, then
+      uncheck a Task row rendering under it — confirm the Completed pill stays active (row
+      hides/shadow-renders per `read-view-subtask-collapse`'s rules) instead of resetting to All.
+      *(read-view-collapse-affordance-fixes 1.3)*
+      - **Confirmed 2026-09-06** (submission 2026-09-06T18-08-19): "(no note)"
+- [x] `000000a8` **Check caret-only collapse toggle.** On a Quest Link/Craft parent row, confirm
+      the collapse toggle in the left column renders as a bare caret (no border/background) and
+      still collapses/expands on click; rows without an owned run show nothing there.
+      *(read-view-collapse-affordance-fixes 2.2)*
+      - **Confirmed 2026-09-06** (submission 2026-09-06T18-08-19): "(no note)"
+
+## quest-link-icon-and-color
+
+> Quest Link rows get a dedicated exclamation-in-a-circle marker icon + accent color in place
+> of the completion checkbox (Quest Links can't be manually completed). Extended after a
+> 2026-09-06 playtest to fix icon/text vertical misalignment and finalize the HUD's own blue.
+
+- [x] `000000a9` **Check quest icon/checkbox swap + color.** On the parchment theme, view a
+      Quest Link row on Read, Editor, Pinned, and the Assignment-stage picker alongside a plain
+      Link row — confirm the quest row shows the exclamation-in-a-circle icon in place of the
+      completion checkbox (or alongside the still-functioning selection checkbox on
+      Assignment-stage), and reads in steel-blue. *(quest-link-icon-and-color 8.3)*
+      - **Confirmed 2026-09-06** (submission 2026-09-06T18-08-19): "(no note)" — narrowed same day
+        to this icon/checkbox/color scope; the item originally also claimed the alignment check
+        below, which was never actually verified. Split out as `000000ae` per direct user
+        correction.
+- [ ] `000000ae` **Check quest icon/text vertical alignment.** On Read, Editor, Pinned, and the
+      Assignment-stage picker, confirm a Quest Link row's icon and item name are vertically
+      centered together (not text riding noticeably higher than the icon).
+      *(quest-link-icon-and-color 8.3b)*
+      - **Backlogged 2026-09-06:** blocked on tasks 3.2 (the `CheckboxAndGripTop` quest-aware
+        branch) and its 4.4/5.4/6.4 call-site wiring, none of which are implemented yet.
+      - **Fix landed 2026-09-06, AWAITING RETEST:** added the quest-aware branch to
+        `CheckboxAndGripTop` (centers on the plain one-line band instead of the tall icon-band
+        formula) and threaded `LinkTarget` through it at the Read/Editor/Pinned leading-slot call
+        sites (3.2/4.4/5.4/6.4). Needs an in-game retest before this can go green. (Assignment-stage
+        uses a separate inline-icon swap per design D2/7.2, not this call site — unaffected either
+        way.)
+      - **Still broken 2026-09-07 (tablet-only):** a fresh screenshot showed the quest icon still
+        pinned to the row's top edge on the tablet specifically — Notebook/Lectern were fine. Root
+        cause: the 2026-09-06 fix used `TextLineHeight` (plain Latin line height) for the quest
+        branch, which undershoots the tablet's real cuneiform text line.
+      - **Fix landed 2026-09-07, AWAITING RETEST:** routed `CheckboxAndGripTop`'s quest branch and
+        the Read/Editor/Pinned `bandHeight`/`iconVisual` quest case through `ItemNameLineHeight`
+        (already cuneiform-aware) instead of `TextLineHeight`, and added the missing
+        `GlyphDrawScale` factor to `ItemNameLineHeight` itself. Needs an in-game retest on the
+        tablet specifically, in addition to the original four-surface retest above.
+      - **Still broken 2026-09-07 (second screenshot):** icon/text now align, but the grip handle
+        (the drag-dots to the left of the checkbox) still sits noticeably higher than both.
+        `GripInsets` was calling `CheckboxAndGripTop` without a `linkTarget`, so it always fell into
+        the tall generic icon-band formula even on a Quest Link row, while the checkbox's own call
+        (right next to it) had already been fixed.
+      - **Fix landed 2026-09-07, AWAITING RETEST:** `GripInsets` now takes an optional `linkTarget`
+        and passes it through to `CheckboxAndGripTop`, threaded at all four call sites (Read, Pinned,
+        Editor's live row, Editor's frozen/collapsing ghost row) — grip and checkbox now share the
+        exact same top offset by construction. Needs an in-game retest alongside the above.
+- [x] `000000aa` **Check HUD quest link uses finalized blue.** Pin a Quest Link to the HUD — confirm
+      it renders at the finalized `rgb(172,207,255)` blue, distinct from the shared steel-blue
+      accent used on Read/Editor/Pinned/Assignment-stage. *(quest-link-icon-and-color 7.3/8.3a)*
+      - **Still broken 2026-09-06:** (submission 2026-09-06T18-08-19) "HUD links are still rendering rgb(66,107,183) when they should be using the new color. I'd actually like that theme color for the Quest Links on the HUD to be rgb(122,176,255)"
+      - **Fix landed 2026-09-06, AWAITING RETEST:** the first landing attempt for this task never
+        actually shipped (both `HudScribePins.cs` reads were still on the shared `QuestLinkAccent`).
+        Added `ScribeTheme.HudQuestLinkAccent` at `rgb(122,176,255)` and swapped both reads.
+      - **Value brightened again 2026-09-06, AWAITING RETEST:** third pass, changed to
+        `rgb(172,207,255)` per direct request before the second value was ever retested.
+      - **Confirmed 2026-09-06** via in-game retest: "the new HUD color is good."
+- [x] `000000ab` **Check quest color across chalkboard + tablet variants.** Repeat the glance-check
+      on the chalkboard and all four tablet clay variants (clay-fire, clay-red, clay-blue, wax) —
+      confirm the quest color is legible on each backdrop, and on blue-clay specifically is
+      visibly distinct from that tablet's own blue Primary/link color. *(quest-link-icon-and-color 8.4)*
+      - **Confirmed 2026-09-06** (submission 2026-09-06T18-08-19): "(no note)"
+- [x] `000000ac` **Check completion count/round-trip unaffected.** Confirm a document containing a
+      Quest Link still reports the same "N of M tasks done" total as before, and its Done value
+      round-trips through the existing completion path (e.g. TSV export/import) even with no
+      checkbox shown. *(quest-link-icon-and-color 8.5)*
+      - **Confirmed 2026-09-06** (submission 2026-09-06T18-08-19): "(no note)"

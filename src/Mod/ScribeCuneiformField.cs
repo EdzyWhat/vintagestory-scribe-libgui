@@ -86,6 +86,14 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     // Per-view multiplier on each stroke's authored weight (adopt-glyph-forge-tablet-themes). 1 = the exact
     // Core weight (every non-tablet field). The tablet firms the strokes up as the clay dries (wet<hard<fired).
     private float strokeWeightScale = 1f;
+    // Paint-time-only shrink/grow on the grid-to-pixel scale (tablet-cuneiform-glyph-scale). 1 = today's
+    // behavior exactly; applied only in DrawStrokePass's stroke-corner-to-pixel conversion, which also
+    // re-centers the smaller glyph per line — never in PerformLayout, caret, selection, or hit-testing.
+    private float glyphDrawScale = 1f;
+    // Paint-time-only shrink on the synthetic caret bar's drawn height, relative to its lineHeightPx band
+    // (tablet-cuneiform-glyph-scale). 1 = today's full-band caret exactly; never touches layout, hit-
+    // testing, or the caret's X — only how tall the drawn bar is and how far it insets from the band top.
+    private float caretHeightScale = 1f;
     // Per-letter stroke-progression reveal (add-cuneiform-handwriting-feel). When active, strokes appear over
     // time: characters below the baseline are already fully pressed; characters at/after it press in on the
     // schedule as elapsed advances. Inactive (the default) paints every stroke immediately, as today.
@@ -152,6 +160,18 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     /// exact Core weight. A paint-time transform applied at fill only — it never touches layout, caret,
     /// selection, or hit-testing (those read the un-scaled advance metrics). Repaint only.</summary>
     public float StrokeWeightScale { get => strokeWeightScale; set => SetProperty(ref strokeWeightScale, value <= 0f ? 1f : value, repaint: true); }
+    /// <summary>Multiplier on the em height fed into `PerformLayout`'s line-height formula
+    /// (tablet-cuneiform-glyph-scale, corrected 2026-09-07). A non-positive value is treated as 1
+    /// (matching <see cref="StrokeWeightScale"/>'s guard). Relayouts — this shrinks `lineHeightPx`/`scale`
+    /// so the tablet's editable row/title can sit shorter than a checkbox/control sized off the SAME
+    /// `FontSize` with this factor left out; caret/selection/hit-testing read that same shrunk `scale` so
+    /// they stay exactly in sync with the (now smaller) drawn ink — no separate paint-only multiplier.</summary>
+    public float GlyphDrawScale { get => glyphDrawScale; set => SetProperty(ref glyphDrawScale, value <= 0f ? 1f : value, relayout: true); }
+    /// <summary>Multiplier on the synthetic caret bar's drawn height, relative to its `lineHeightPx` band
+    /// (tablet-cuneiform-glyph-scale). A non-positive value is treated as 1 (matching
+    /// <see cref="StrokeWeightScale"/>'s guard). Repaint only — the caret shrinks toward the vertical
+    /// center of its band; layout, hit-testing, and the caret's X position are unaffected.</summary>
+    public float CaretHeightScale { get => caretHeightScale; set => SetProperty(ref caretHeightScale, value <= 0f ? 1f : value, repaint: true); }
     /// <summary>Whether the stroke-progression reveal is active. When false (the default), every stroke is
     /// painted immediately (today's behaviour). Repaint only.</summary>
     public bool RevealActive { get => revealActive; set => SetProperty(ref revealActive, value, repaint: true); }
@@ -167,9 +187,12 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
 
         // Match the rendered cuneiform height to adjacent readable text's line-height, not its raw em, so
         // the tablet's live rows/title read at the same height as normal text (D7 — same global ratio the
-        // display CuneiformText uses). One em of grid maps to this boosted height; use the fixed default
-        // grid size for the scale so it is stable and independent of the (circular) laid-out line height.
-        lineHeightPx = fontSizeEm * CuneiformMetrics.LineHeightRatio;
+        // display CuneiformText uses), then apply the tablet's glyph-draw-scale on top (tablet-cuneiform-
+        // glyph-scale) so cuneiform rows can read shorter than a checkbox/control sized off the same
+        // FontSize without this factor. One em of grid maps to this boosted-then-scaled height; use the
+        // fixed default grid size for the scale so it is stable and independent of the (circular) laid-out
+        // line height.
+        lineHeightPx = fontSizeEm * CuneiformMetrics.LineHeightRatio * glyphDrawScale;
         scale = (float)(lineHeightPx / CuneiformLineLayout.DefaultGridSize);
 
         float availWidth = float.IsPositiveInfinity(Constraints.MaxWidth) ? 300f : Constraints.MaxWidth;
@@ -309,14 +332,17 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
         paint.MaskFilter = null;   // defensive: never leave a blur mask on the shared paint.
 
         // Synthetic caret: cuneiform has no native caret, so draw a thin bar at the current character
-        // boundary on its wrapped line (same DrawBox the normal field uses for its caret).
+        // boundary on its wrapped line (same DrawBox the normal field uses for its caret). The drawn bar
+        // is CaretHeightScale of the full lineHeightPx band, centered vertically within it (paint-time
+        // only — CaretToLineLocal/CaretXAt/lineHeightPx driving its position are untouched).
         if (hasFocus && caretVisible && lines.Count > 0)
         {
             (int lineIndex, int localIndex) = CaretToLineLocal(caret);
             double caretXGrid = lines[lineIndex].CaretXAt(localIndex);
             float caretX = padX + (float)(caretXGrid * scale);
-            float caretY = padY + lineIndex * lineHeightPx;
-            context.DrawBox(new Vector2(caretX, caretY), new Vector2(2f, lineHeightPx), caretColor, Vector4.Zero, 0f, Vector4.Zero);
+            float caretHeight = lineHeightPx * caretHeightScale;
+            float caretY = padY + lineIndex * lineHeightPx + (lineHeightPx - caretHeight) / 2f;
+            context.DrawBox(new Vector2(caretX, caretY), new Vector2(2f, caretHeight), caretColor, Vector4.Zero, 0f, Vector4.Zero);
         }
     }
 
@@ -387,6 +413,12 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
                     drawStroke = new GlyphStroke(drawStroke.Start, drawStroke.End, drawStroke.Weight * strokeWeightScale);
                 }
                 Scribe.Core.Cuneiform.Vec2[] corners = drawStroke.Corners();
+
+                // GlyphDrawScale (tablet-cuneiform-glyph-scale) now lives entirely in PerformLayout's
+                // lineHeightPx/scale — it is NOT re-applied here. `scale` already carries the shrink, so
+                // this is the same plain grid→pixel conversion as before that change ever existed; caret,
+                // selection, and hit-testing read that same shrunk `scale`/`lineHeightPx` and stay exactly
+                // in sync with the drawn ink, with no separate paint-only multiplier to keep in agreement.
                 path.Reset();
                 path.MoveTo(originX + (float)(corners[0].X * scale), originY + (float)(corners[0].Y * scale));
                 path.LineTo(originX + (float)(corners[1].X * scale), originY + (float)(corners[1].Y * scale));
@@ -484,9 +516,9 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
         return Math.Clamp(lines[targetLine].SourceStart + targetLocal, 0, text.Length);
     }
 
-    /// <summary>Caret vertical extent in LOCAL space (top + line height), matching the bar
-    /// <see cref="PaintInternal"/> draws (<c>padY + lineIndex * lineHeightPx</c>). Returns false before
-    /// layout has produced a line height. scroll-follow-caret-in-editor.</summary>
+    /// <summary>Caret vertical extent in LOCAL space (top + height), matching the (possibly shrunk) bar
+    /// <see cref="PaintInternal"/> draws. Returns false before layout has produced a line height.
+    /// scroll-follow-caret-in-editor.</summary>
     public bool TryGetCaretRect(out float localTop, out float height)
     {
         if (lineHeightPx <= 0f)
@@ -501,8 +533,8 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
         {
             (lineIndex, _) = CaretToLineLocal(caret);
         }
-        localTop = padY + lineIndex * lineHeightPx;
-        height = lineHeightPx;
+        height = lineHeightPx * caretHeightScale;
+        localTop = padY + lineIndex * lineHeightPx + (lineHeightPx - height) / 2f;
         return true;
     }
 }
@@ -518,7 +550,7 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
         Vector4 boxColor, Vector4 borderColor, float borderThickness, Vector4 cornerRadii,
         bool singleLine = false, bool caretVisible = true,
         float jitterStrength = 0f, int jitterSeed = 0, float rotationDegrees = 0f, CuneiformGlow glow = default,
-        float strokeWeightScale = 1f,
+        float strokeWeightScale = 1f, float glyphDrawScale = 1f, float caretHeightScale = 1f,
         bool revealActive = false, int revealBaselineChars = 0, double revealElapsedMs = 0)
     {
         Text = text;
@@ -543,6 +575,8 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
         RotationDegrees = rotationDegrees;
         Glow = glow;
         StrokeWeightScale = strokeWeightScale;
+        GlyphDrawScale = glyphDrawScale;
+        CaretHeightScale = caretHeightScale;
         RevealActive = revealActive;
         RevealBaselineChars = revealBaselineChars;
         RevealElapsedMs = revealElapsedMs;
@@ -570,6 +604,8 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
     public float RotationDegrees { get; }
     public CuneiformGlow Glow { get; }
     public float StrokeWeightScale { get; }
+    public float GlyphDrawScale { get; }
+    public float CaretHeightScale { get; }
     public bool RevealActive { get; }
     public int RevealBaselineChars { get; }
     public double RevealElapsedMs { get; }
@@ -601,6 +637,8 @@ internal sealed class ScribeCuneiformFieldRenderWidget : RenderObjectWidget
         ro.RotationDegrees = RotationDegrees;
         ro.Glow = Glow;
         ro.StrokeWeightScale = StrokeWeightScale;
+        ro.GlyphDrawScale = GlyphDrawScale;
+        ro.CaretHeightScale = CaretHeightScale;
         ro.RevealActive = RevealActive;
         ro.RevealBaselineChars = RevealBaselineChars;
         ro.RevealElapsedMs = RevealElapsedMs;

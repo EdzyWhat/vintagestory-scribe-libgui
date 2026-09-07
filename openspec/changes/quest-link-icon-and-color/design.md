@@ -98,8 +98,11 @@ Resolve it at each render call site the same way `LinkColor` is resolved today
 explicit override wherever a surface already bakes `LinkColor` (tablet's `DecorateRowStyle` via a
 new `ScribeTheme.ForTabletQuestLink(material, state)`; chalkboard's `DecorateRowStyle` via a new
 `ScribeTheme.ChalkboardQuestLinkText`) — anywhere `LinkColor` is left null (Lectern/Notebook,
-Pinned, HUD, Assignment-stage on the plain Light theme) `QuestLinkColor` is also left null and
-falls through to the new `ScribeTheme.QuestLinkAccent` default.
+Pinned, Assignment-stage on the plain Light theme) `QuestLinkColor` is also left null and
+falls through to the new `ScribeTheme.QuestLinkAccent` default. **Revised by D6 below**: the HUD
+does not participate in this fallback at all — it never reads `ScribeRowStyle`/`QuestLinkColor`
+(the HUD is theme-independent and doesn't use the tablet/chalkboard `DecorateRowStyle` machinery),
+so it gets its own dedicated constant instead.
 
 **Alternative considered**: repurpose `ColorScheme.Secondary` — rejected per prior discussion with
 the user (recolors the pinned-row wash and every Secondary-variant button on every theme, unrelated
@@ -118,8 +121,9 @@ New constants in `ScribeTheme.cs`, following the exact naming/placement pattern 
 | Chalkboard | `ChalkboardQuestLinkText` | a **lightened** variant of `QuestLinkAccent` | Mirrors why `ChalkboardLinkText` lightens the dark green `ChalkAccent`: a mid-value color doesn't read as small text on dark slate. |
 | Fire/Red/Wax clay | `ForTabletQuestLink` (shared branch) | a **darkened/more-saturated** variant of `QuestLinkAccent` | Mirrors why `TabletReadability.LinkInk` darkens `Primary` for these light-mid clay grounds. |
 | Blue clay | `ForTabletQuestLink` (`clay-blue` branch) | a distinct **warm amber/gold**, NOT a blue | The blue clay's own `Primary` (`rgb(66,107,133)`) is already essentially this hue — a quest-blue there would blend into its normal link color instead of standing apart. |
+| HUD (world overlay) | `HudQuestLinkAccent` (D6) | `rgb(91,157,255)` — **finalized in-game 2026-09-06**, not a placeholder | Playtester-specified; the HUD renders over the live game world rather than any of the above backdrops, and the shared `QuestLinkAccent` read too under-saturated there. |
 
-Every value above is a starting default, not a final answer — tasks.md includes an explicit
+Every value above except the HUD's (finalized per D6) is a starting default, not a final answer — tasks.md includes an explicit
 in-game glance-check per surface (the same "Finalized in-game" practice `ScribeTheme.cs` already
 follows for its other per-material colors) to confirm legibility and adjust if any reads poorly.
 
@@ -128,7 +132,88 @@ Register the already-drawn `quest.svg` in `ScribeModSystem.Assets.cs` as `"scrib
 the existing `RegisterSvgIcon` calls (e.g. alongside `"scribebook"`), following the exact same
 call shape as every other icon there.
 
+### D6: HUD gets its own explicit quest-color override (finalized in-game 2026-09-06, corrected twice same day)
+Unlike every other surface, the world-overlay HUD (`HudScribePins.cs`) does NOT share the fallback
+default with Lectern/Notebook/Pinned/Assignment-stage. Add `ScribeTheme.HudQuestLinkAccent`
+(`rgb(172,207,255)` — went through two same-day corrections: an initial `rgb(91,157,255)` was never
+actually landed in code (caught by retest), then re-specified as `rgb(122,176,255)` when the fix
+landed, then brightened once more to this final value on a third pass), named and placed the same
+way as `ChalkboardQuestLinkText`/
+`ForTabletQuestLink`, and read it directly at both `HudScribePins.cs` call sites (the leading-slot
+icon glyph and `BuildHudItemContent`'s `textStyle.Color` override) in place of the shared
+`ScribeTheme.QuestLinkAccent`. This is a deliberate exception to D3's "falls through to the shared
+default" rule: the HUD renders theme-independently over the live game world (not any parchment/
+clay/chalk backdrop), so it has different contrast needs than the surfaces D3/D4 already cover, and
+a playtester found the shared default under-saturated against the world backdrop specifically.
+Read View, Editor, Pinned, and the Assignment-stage picker are unaffected — they keep resolving
+`style.QuestLinkColor ?? ScribeTheme.QuestLinkAccent` exactly as D3 specifies.
+
+**Alternative considered**: change the shared `QuestLinkAccent` constant itself. Rejected — the
+playtester confirmed this value change is HUD-specific; the other four surfaces' current value was
+not reported as a problem, and changing the shared constant would silently recolor all of them too.
+
+### D7: `CheckboxAndGripTop`'s leading-icon nudge must be quest-aware too (revises the Risks
+mitigation below)
+Tasks 4.3/5.3/6.3 re-derived the quest row's TEXT band (`bandHeight` fed to
+`ScribeCenterIfShort.Name`) down to a plain single-line `lineHeight`, since a quest row has no
+inline item icon feeding a taller band. But `ScribeRowControlNudge.CheckboxAndGripTop(style,
+itemRow: true)` — which computes the top padding for the *leading-slot* control (the quest-marker
+icon itself, per D1/D2) — was left unchanged: it unconditionally computes its centering against
+`iconBand` (a tall `ItemIconSize`-derived height), per its own comment "item rows always show the
+item icon." A quest row is the one `IsItemKind` case where that premise is false. The result: the
+leading icon is nudged/centered against a band the row no longer has, while the text next to it
+uses the correct short band — so the two end up misaligned relative to each other and to the row's
+true vertical center (confirmed in-game via a Read View screenshot, 2026-09-06).
+
+Fix: give `CheckboxAndGripTop` a third state — quest rows compute `centered` against the same
+plain `SingleLineInputHeight`-derived band the text uses (i.e. the non-`itemRow` branch's formula),
+not the `iconBand` formula, while still applying the item-row optical nudge
+(`ItemControlOpticalNudgeEm`) rather than the task-row one, since a quest row's icon sits beside an
+item name, not a task label. Callers pass this new state via `ScribeLinkTarget.IsQuest(linkTarget)`
+at each of the three affected call sites (Read/Editor/Pinned — the HUD does not use
+`CheckboxAndGripTop` at all, per its own bespoke inline layout, and is unaffected by this bug).
+
+**Correction (2026-09-07, tablet-only): the "plain `SingleLineInputHeight`-derived band" above was
+never actually right for the tablet.** The 3.2/4.4/5.4/6.4 landing used `TextLineHeight(style.FontSize)`
+— the bare Latin "Ag" line — for the quest branch, matching the non-`itemRow` case's SHAPE but not
+its actual value on a cuneiform surface. On Lectern/Notebook (`UseCuneiform = false`) that's correct
+and reads fine. On the tablet (`UseCuneiform = true`), the row's real text line height is
+`FontSize * CuneiformMetrics.LineHeightRatio * CuneiformMetrics.GlyphDrawScale` (see
+`tablet-cuneiform-glyph-scale`) — nearly double the Latin value — so the quest icon's band came out
+far shorter than the row's actual cuneiform text line, and the icon rendered pinned against the top
+of the row instead of centered (confirmed via screenshot, 2026-09-07; this is task 8.3b's actual
+tablet-specific failure mode, not just a leftover retest). Fixed by routing the Quest branch through
+the existing `ItemNameLineHeight(style)` helper instead of `TextLineHeight(style.FontSize)` directly
+— that helper already branches on `style.UseCuneiform` for exactly this "one line of an item-row
+name" concept, so the icon's band and the text's own band are now the SAME value by construction
+(single source of truth, not two formulas that have to be kept in sync by hand). `ItemNameLineHeight`
+itself was also missing the `GlyphDrawScale` factor (it predates that constant) — added there too, so
+both stay correct together as `GlyphDrawScale` is retuned in the future. Applied at all three
+Read/Editor/Pinned `bandHeight`/`iconVisual` call sites (each previously used the same Latin-only
+`lineHeight` for the quest case) and at `CheckboxAndGripTop`'s Quest branch itself.
+
+**Second correction (2026-09-07, same day, a fresh screenshot after the fix above landed): the drag
+grip still rode high, even though the icon/text now aligned correctly with each other.**
+`ScribeRowControlNudge.GripInsets(style, itemRow)` calls `CheckboxAndGripTop` too — it's the grip
+spacer's own top-offset, sharing the exact same leading column as the checkbox/quest-icon — but its
+call never passed `linkTarget` at all (default `null`), so it always fell into the generic tall
+`iconBand` branch regardless of row kind, even after the checkbox's own call (right next to it) had
+already been fixed to route quest rows through `ItemNameLineHeight`. The checkbox and grip therefore
+disagreed on their top offset for the first time (previously they always matched, since neither had a
+`linkTarget`-aware branch). Fixed by giving `GripInsets` its own optional `linkTarget` parameter,
+passed straight through to `CheckboxAndGripTop`, and threading `Widget.Data.LinkTarget`/`data.LinkTarget`
+through at all four `GripInsets` call sites (Read, Pinned, Editor's live row, Editor's frozen/collapsing
+ghost row) — the grip and checkbox now always share the identical offset by construction, the same
+guarantee that already held before this whole investigation started.
+
 ## Risks / Trade-offs
+
+> **Revision (2026-09-06 playtest)**: the "[Risk] Skipping the inline icon for a quest row removes
+> the height basis..." entry below was only half-mitigated: the *text*-side band was re-derived
+> (tasks 4.3/5.3/6.3) but the leading *icon*'s own top-offset (`CheckboxAndGripTop`) was not, which
+> is the actual cause of the vertical-misalignment bug a playtest confirmed on Read View. D7 above
+> is the concrete fix; new tasks 4.4/5.4/6.4 implement it, superseding 4.3/5.3/6.3's "verify in-game
+> (Task 8)" as the mitigation's only remaining action.
 
 - **[Risk]** Doubling the number of per-surface link-adjacent color functions in `ScribeTheme.cs`
   (one set for `LinkColor`, a parallel set for `QuestLinkColor`) could drift out of sync over time.

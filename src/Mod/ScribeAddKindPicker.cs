@@ -232,7 +232,8 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
                 fontSizeEm: labelStyle.FontSize,
                 inkColor: labelStyle.Color,
                 bundle: bundle,
-                glow: default);
+                glow: default,
+                glyphDrawScale: CuneiformMetrics.GlyphDrawScale);
         }
         return new Text(label, labelStyle);
     }

@@ -9,7 +9,8 @@
   through to the existing generic path unchanged. Verify by building and checking the card in
   code review against `ItemScribeTaskNotice.GetHeldItemInfo`'s existing formatting for
   consistency.
-- [ ] 1.2 Manual playtest: hover a sealed, addressed Task Notice in a Scriptorium slot, an
+- [x] 1.2 Manual playtest: hover a sealed, addressed Task Notice in a Scriptorium slot, an
+  - Confirmed 2026-09-06: TESTING.md `0000009e` "(no note)" (submission 2026-09-06T17-13-03)
   Assignment Desk slot, and an Inbox restricted slot — confirm all three show the new
   assigner/addressee lines instead of `Title: (Untitled)`. Hover a blank Task Notice in the same
   slot types and confirm the card is unchanged ("never opened").
@@ -71,7 +72,8 @@
   tab button shimmers and the specific slot holding the notice also shimmers, while other filled
   slots do not; Accept or Decline the notice — confirm both shimmers stop.
   - Confirmed 2026-09-06: tab shimmer and per-slot shimmer both confirmed working.
-- [ ] 5.3 Manual playtest: confirm none of the above (particles, tab shimmer, slot shimmer, or
+- [x] 5.3 Manual playtest: confirm none of the above (particles, tab shimmer, slot shimmer, or
+  - Confirmed 2026-09-06: TESTING.md `0000009f` "(no note)" (submission 2026-09-06T17-13-03)
   the hover card change from section 1) alter the notice's document, assignment state, or any
   Inbox inventory contents — purely observe, then check the assignment's state and the Inbox's
   contents are exactly as they were before observing.

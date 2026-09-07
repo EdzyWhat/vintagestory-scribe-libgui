@@ -1829,7 +1829,7 @@ internal sealed class HudPinsContent : StatelessWidget
             // grayscale style rather than BuildTaskCheckbox's theme-derived default — routing a non-quest row
             // through the shared helper would silently replace that grayscale style.
             Widget leadingControl = ScribeLinkTarget.IsQuest(row.LinkTarget)
-                ? new ScribeVsIconGlyph("scribequest", checkboxSize, ScribeTheme.QuestLinkAccent)
+                ? new ScribeVsIconGlyph("scribequest", checkboxSize, ScribeTheme.HudQuestLinkAccent)
                 : checkbox;
             rowBody = new Row(
                 spacing: 6,
@@ -1911,14 +1911,14 @@ internal sealed class HudPinsContent : StatelessWidget
         float iconSize = rowFontSize * 1.4f;
         float lineHeight = ScribeRowControlNudge.TextLineHeight(rowFontSize);
         // A Quest Link's icon renders in the row's leading slot instead (quest-link-icon-and-color), and its
-        // name uses the distinct quest accent rather than the ambient textStyle.Color — the HUD has no
-        // per-material theme seam (it's theme-independent, per the doc-comment above), so it reads
-        // ScribeTheme.QuestLinkAccent directly rather than a ScribeRowStyle override.
+        // name uses the distinct HUD-only quest accent (design D6) rather than the ambient textStyle.Color —
+        // the HUD has no per-material theme seam (it's theme-independent, per the doc-comment above), so it
+        // reads ScribeTheme.HudQuestLinkAccent directly rather than a ScribeRowStyle override.
         bool isQuestLink = ScribeLinkTarget.IsQuest(row.LinkTarget);
         Widget? icon = showIcons && !isQuestLink
             ? ScribeLinkIcon.Build(row.DisplayStack, row.LinkTarget, iconSize, textStyle.Color, lineHeight)
             : (Widget?)null;
-        if (isQuestLink) textStyle = textStyle with { Color = ScribeTheme.QuestLinkAccent };
+        if (isQuestLink) textStyle = textStyle with { Color = ScribeTheme.HudQuestLinkAccent };
 
         // Name (corrupted like every HUD string). A Handbook hyperlink when interactive: tapping opens the
         // item's page and NEVER toggles the checkbox (design D3c) — same open path as the live Link row. The

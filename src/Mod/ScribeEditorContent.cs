@@ -98,7 +98,7 @@ internal sealed class ScribeFrozenEditorRow : StatelessWidget
             // Grip-column spacer (invisible, uninteractable), matching the editor row's far-left grip (same
             // GripInsets, §10.4) so the ghost's columns line up with its neighbors as it collapses.
             new Padding(
-                ScribeRowControlNudge.GripInsets(style, data.IsItemKind),
+                ScribeRowControlNudge.GripInsets(style, data.IsItemKind, data.LinkTarget),
                 child: new Opacity(
                     opacity: 0f,
                     child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant))),
@@ -603,7 +603,8 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                 // No glow on button labels (add-tablet-clay-type-themes 8.2): the halo muddies the label
                 // against the solid Primary-filled button rather than lifting it. The rows/title keep the
                 // per-material glow; only the footer labels render crisp.
-                glow: default);
+                glow: default,
+                glyphDrawScale: CuneiformMetrics.GlyphDrawScale);
         }
         return new Text(label, labelStyle);
     }
@@ -948,9 +949,10 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             * (style.ControlSize / ScribeRowConstants.RowCheckboxSize);
         float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
         // A Quest Link's icon renders in the row's leading slot instead (quest-link-icon-and-color), so this
-        // inline slot has no icon for it and the name's band height falls back to a plain text line.
+        // inline slot has no icon for it and the name's band height falls back to ItemNameLineHeight
+        // (cuneiform-aware on the tablet — task 8.3b: the plain Latin lineHeight left the icon riding high).
         bool isQuestLink = ScribeLinkTarget.IsQuest(Widget.Data.LinkTarget);
-        float iconVisual = isQuestLink ? lineHeight : ScribeLinkIcon.VisualSize(iconSize, Widget.Data.LinkTarget);
+        float iconVisual = isQuestLink ? ScribeRowControlNudge.ItemNameLineHeight(style) : ScribeLinkIcon.VisualSize(iconSize, Widget.Data.LinkTarget);
         float stepperHeight = Widget.Data.IsCarriedCountTracked ? style.ControlSize * 1.15f : 0f;
         float bandHeight = MathF.Max(iconVisual, stepperHeight);
         var rowChildren = new List<Widget>();
@@ -1016,8 +1018,12 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         // No left FieldPadX: a Task row's field BOX starts immediately after the checkbox gap, and the
         // Tracker stepper must line up with that edge (playtest: FieldPadX indented the numeric box).
         // Keep the right inset so wrapped names don't run into the hover pin/delete.
+        // A Link/Quest-Link row has no stepper, so that rationale doesn't apply to it -- give it back
+        // the SAME 4px left inset the Read/Pinned views already use for every item row (2026-09-06
+        // playtest: the editor's Link icon sat visibly closer to the checkbox than the read view's).
+        float leftInset = Widget.Data.IsCarriedCountTracked ? 0f : 4f;
         return new Padding(
-            EdgeInsets.Only(right: style.FieldPadX),
+            EdgeInsets.Only(left: leftInset, right: style.FieldPadX),
             child: new Row(
                 spacing: style.CheckboxTextGap,
                 crossAxisAlignment: CrossAxisAlignment.Start,
@@ -1059,7 +1065,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             : new ScribeVsIconGlyph("scribegrip", style.ControlSize, gripColor);
 
         children.Add(new Padding(
-            ScribeRowControlNudge.GripInsets(style, Widget.Data.IsItemKind),
+            ScribeRowControlNudge.GripInsets(style, Widget.Data.IsItemKind, Widget.Data.LinkTarget),
             child: new GestureDetector(
                 onPress: e =>
                 {
@@ -1104,7 +1110,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         if (Widget.Data.Completable)
         {
             children.Add(new Opacity(contentOpacity, child: new Padding(
-                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style, Widget.Data.IsItemKind)),
+                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style, Widget.Data.IsItemKind, Widget.Data.LinkTarget)),
                 // A Quest Link's checkbox is misleading (toggling it doesn't affect the quest), so its slot
                 // renders the quest-marker icon instead (quest-link-icon-and-color).
                 child: ScribeRowControlNudge.BuildLeadingControl(

@@ -56,7 +56,7 @@ internal static class ScribeRowControlNudge
     /// on the icon without centering a wrapped block (which would lift the first line above the icon).</summary>
     public static float ItemNameLineHeight(ScribeRowStyle style)
         => style.UseCuneiform
-            ? style.FontSize * CuneiformMetrics.LineHeightRatio
+            ? style.FontSize * CuneiformMetrics.LineHeightRatio * CuneiformMetrics.GlyphDrawScale
             : TextLineHeight(style.FontSize);
 
     /// <summary>Extra downward optical offset for item-row checkbox/grip, in ems of
@@ -64,7 +64,8 @@ internal static class ScribeRowControlNudge
     /// tracks text size (≈1.5px at 15pt, ≈2.8px on a tablet cuneiform line) instead of a fixed pixel
     /// nudge. Raise/lower this one constant to tune; Task/Note rows stay at geometric center of the
     /// one-line field (set <see cref="TaskControlOpticalNudgeEm"/> if those also read high).</summary>
-    internal const float ItemControlOpticalNudgeEm = 0.1f;
+    // TEMPORARY EXPERIMENT (Option 2, tools/row-leading-slot-alignment): was 0.1f.
+    internal const float ItemControlOpticalNudgeEm = 0f;
 
     /// <summary>Same optical-offset knob as <see cref="ItemControlOpticalNudgeEm"/>, for Task/Note
     /// rows. 0 keeps them geometrically centered on the one-line field.</summary>
@@ -74,21 +75,56 @@ internal static class ScribeRowControlNudge
     /// tall). On a Task/Note row this centers them on a one-line text field. On an item row the name/stepper
     /// sit in the (taller) icon band, so the same Latin-field formula leaves the controls a smidge high —
     /// center on that icon band instead, then add a font-relative optical offset. Both paths scale with
-    /// <see cref="ScribeRowStyle.FontSize"/> (<see cref="ScribeRowStyle.ControlSize"/> / icon size track it).</summary>
-    public static float CheckboxAndGripTop(ScribeRowStyle style, bool itemRow = false)
+    /// <see cref="ScribeRowStyle.FontSize"/> (<see cref="ScribeRowStyle.ControlSize"/> / icon size track it).
+    /// <para>A Quest Link row is the one item-row exception (quest-link-icon-and-color D7): its leading slot
+    /// holds the quest-marker icon, not the item icon that feeds the tall <c>iconBand</c> formula below, and
+    /// its name already centers on <see cref="ItemNameLineHeight"/> (the read/editor/pinned views each
+    /// re-derive their <c>bandHeight</c> for a quest row via that same helper, D7's text-side fix). So a
+    /// Quest Link's <paramref name="linkTarget"/> routes the icon's own band onto that SAME
+    /// <see cref="ItemNameLineHeight"/> value the text uses — cuneiform-aware on the tablet, not the plain
+    /// Latin line — while it still gets the item-row's <see cref="ItemControlOpticalNudgeEm"/> nudge (not the
+    /// task-row one). Using the Latin-only <see cref="TextLineHeight"/> here instead (the original,
+    /// tablet-only bug — quest-link-icon-and-color task 8.3b) left the icon's band shorter than the tablet's
+    /// actual cuneiform text line, reading as riding high against the row's top edge.</para></summary>
+    // TEMPORARY EXPERIMENT (Option 2 / Technique B / HeightNeutral, tools/row-leading-slot-alignment):
+    // overrides the doc comment above. The leading control always centers on the SAME band its row's
+    // icon/counter/name actually center on (BuildItemContent/BuildItemEditorContent's `bandHeight`),
+    // no manual iconBand guess -- matching HUD's ScribeLinkIcon.HeightNeutral philosophy while staying
+    // correct per row kind:
+    //  - Plain Task/Note: ScribeMultilineFieldRender PadY-insets the text, so the band is the padded
+    //    field height (SingleLineInputHeight), not bare line height (confirmed drift, Option 2 in-game
+    //    playtest 2026-09-06).
+    //  - Quest Link: its band is ItemNameLineHeight (cuneiform-aware on the tablet) -- its icon renders
+    //    in this SAME leading slot, not inline, so there's no separate icon band to match, and it must
+    //    agree with the text's own band rather than the plain Latin TextLineHeight (tablet-only bug,
+    //    quest-link-icon-and-color task 8.3b: the icon rode high above the shorter cuneiform text line).
+    //  - Tracker/Craft/Link: the inline icon/counter/name center on ScribeLinkIcon.VisualSize (the
+    //    REAL per-icon-kind visual band, item vs book-glyph) -- centering the checkbox on bare
+    //    TextLineHeight instead left it riding high above the (taller) icon band (confirmed drift,
+    //    same playtest, item rows this time). This also fixes the ORIGINAL Technique-A bug noted
+    //    above: VisualSize already branches per icon kind, so a book-glyph Link's checkbox is no
+    //    longer wrongly sized off the item icon's scale.
+    // Can go negative when CheckboxSize exceeds its band; that's by design (control overflows
+    // above/below the line rather than growing the row).
+    public static float CheckboxAndGripTop(ScribeRowStyle style, bool itemRow = false, string? linkTarget = null)
     {
-        float centered;
+        float band;
         if (!itemRow)
         {
-            centered = MathF.Max(0f, (SingleLineInputHeight(style) - style.CheckboxSize) / 2f);
-            return centered + style.FontSize * TaskControlOpticalNudgeEm;
+            band = SingleLineInputHeight(style);
         }
-
-        float iconBand = ScribeRowConstants.ItemIconSize
-            * (style.ControlSize / ScribeRowConstants.RowCheckboxSize)
-            * 1.1f; // ScribeLinkIcon.ItemIconScale — item rows always show the item icon
-        centered = MathF.Max(0f, (iconBand - style.CheckboxSize) / 2f);
-        return centered + style.FontSize * ItemControlOpticalNudgeEm;
+        else if (ScribeLinkTarget.IsQuest(linkTarget))
+        {
+            band = ItemNameLineHeight(style);
+        }
+        else
+        {
+            float iconSize = ScribeRowConstants.ItemIconSize * (style.ControlSize / ScribeRowConstants.RowCheckboxSize);
+            band = ScribeLinkIcon.VisualSize(iconSize, linkTarget);
+        }
+        float centered = (band - style.CheckboxSize) / 2f;
+        float nudgeEm = itemRow ? ItemControlOpticalNudgeEm : TaskControlOpticalNudgeEm;
+        return centered + style.FontSize * nudgeEm;
     }
 
     /// <summary>Opacity multiplier applied to a muted/disabled checkbox's tick, border, and background
@@ -166,9 +202,15 @@ internal static class ScribeRowControlNudge
     /// which would otherwise sit as a trailing margin between the grip and the next control (§10.4). With
     /// the trailing gap zeroed the grip sits flush against the checkbox and the text column reclaims that
     /// width. Used identically for the editor/pin grips AND the read/frozen grip-column spacers so read and
-    /// editor rows stay column-aligned across a view switch.</summary>
-    public static EdgeInsets GripInsets(ScribeRowStyle style, bool itemRow = false)
-        => EdgeInsets.Only(top: CheckboxAndGripTop(style, itemRow), right: -style.CheckboxTextGap);
+    /// editor rows stay column-aligned across a view switch.
+    /// <para>Threads <paramref name="linkTarget"/> into <see cref="CheckboxAndGripTop"/> the same way the
+    /// leading-slot control itself does (quest-link-icon-and-color task 8.3b's tablet correction) — the grip
+    /// sits in the SAME leading column as the checkbox/quest-icon, so it must center on the same band or it
+    /// visibly drifts from the icon/text on a Quest Link row (confirmed via screenshot, 2026-09-07: the grip
+    /// was still centering on the tall generic icon band while the quest icon/text had already been fixed
+    /// onto the short cuneiform-aware one).</para></summary>
+    public static EdgeInsets GripInsets(ScribeRowStyle style, bool itemRow = false, string? linkTarget = null)
+        => EdgeInsets.Only(top: CheckboxAndGripTop(style, itemRow, linkTarget), right: -style.CheckboxTextGap);
 
     /// <summary>Absolute top offset (from the row's top edge) that centers a floating pin/delete button's
     /// DRAWN box on the one-line input. The button box is <see cref="ScribeRowButton.BoxShrink"/> px
@@ -333,7 +375,8 @@ internal static class ScribeLinkIcon
 
     /// <summary>Guide-page book-glyph shrink (7.11e): the <c>scribebook</c> glyph was visually heavy at the
     /// full control size, so it renders smaller than the item icon.</summary>
-    private const float BookGlyphScale = 0.8f;
+    // TEMPORARY EXPERIMENT (Option 2, tools/row-leading-slot-alignment): was 0.8f.
+    private const float BookGlyphScale = 0.65f;
 
     /// <summary>True for a Link whose row has no item to draw an <see cref="ItemStackDisplay"/> for — a
     /// guide-page or quest Link — so it renders the shared book glyph instead (add-assignment-and-quest-support
@@ -495,7 +538,9 @@ internal static class ScribeItemLabel
                 jitterSeed: label.GetHashCode(),
                 rotationDegrees: style.CuneiformRotation,
                 glow: style.CuneiformGlow,
-                strokeWeightScale: style.CuneiformStrokeWeightScale);
+                strokeWeightScale: style.CuneiformStrokeWeightScale,
+                glyphDrawScale: CuneiformMetrics.GlyphDrawScale,
+                caretHeightScale: CuneiformMetrics.CaretHeightScale);
         }
         return ScribeTaskFont.OffsetWrap(style.TaskFontFamily, style.FontSize,
             new Text(label, new TextStyle { Color = color, SoftWrap = true }));
@@ -538,7 +583,8 @@ internal static class ScribeTrackerCounterText
                 jitterStrength: cs.CuneiformJitter,
                 rotationDegrees: cs.CuneiformRotation,
                 glow: cs.CuneiformGlow,
-                strokeWeightScale: cs.CuneiformStrokeWeightScale);
+                strokeWeightScale: cs.CuneiformStrokeWeightScale,
+                glyphDrawScale: CuneiformMetrics.GlyphDrawScale);
         }
         else
         {

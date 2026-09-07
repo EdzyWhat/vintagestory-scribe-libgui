@@ -501,7 +501,10 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         // A Quest Link's icon renders in the row's leading slot instead (quest-link-icon-and-color), so this
         // inline slot has no icon for it and the name's band height falls back to a plain text line.
         bool isQuestLink = ScribeLinkTarget.IsQuest(Widget.Data.LinkTarget);
-        float bandHeight = isQuestLink ? lineHeight : ScribeLinkIcon.VisualSize(iconSize, Widget.Data.LinkTarget);
+        // Cuneiform-aware on the tablet (quest-link-icon-and-color task 8.3b): the plain Latin lineHeight
+        // used here previously left the quest icon's CheckboxAndGripTop band shorter than the tablet's
+        // actual cuneiform text line, so the icon rode high against the row's top edge.
+        float bandHeight = isQuestLink ? ScribeRowControlNudge.ItemNameLineHeight(style) : ScribeLinkIcon.VisualSize(iconSize, Widget.Data.LinkTarget);
         // Link accent: the theme's Primary on light surfaces (a dark accent that reads as a colored link),
         // or a row-supplied override where Primary would be illegible as text (the Chalkboard's dark slate —
         // see ScribeRowStyle.LinkColor). The guide-page book glyph renders in it (not the near-black
@@ -592,33 +595,29 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
 
         var children = new List<Widget>();
 
-        // Reserve the same far-left grip column the editor row draws (f07783f7), so read and edit rows
-        // are column-identical and align seamlessly across a view switch. It's the actual grip glyph
-        // (keeps the reserved width in lockstep with the editor's grip if ControlSize changes) but drawn
-        // at zero opacity and with NO gesture wrapper -- purely a spacer, uninteractable and invisible.
-        // The read view exposes no reorder (dragging is a lock-gated authoring action, design D4). Uses the
-        // SAME GripInsets as the editor grip (top nudge + the -CheckboxTextGap trailing cancel, §10.4) so
-        // the reserved column — and thus the text's left edge — stays aligned row-for-row across a switch.
+        // The far-left grip column the editor row draws (f07783f7) — one slot, so read and edit rows stay
+        // column-identical and align seamlessly across a view switch. A depth-0 row with a non-empty owned
+        // run (a Quest Link with objectives, a Craft parent with generated Trackers) shows a subtask-group
+        // collapse toggle here (read-view-subtask-collapse 5.2) as a bare caret glyph — no button chrome,
+        // clickable via a bare GestureDetector wrapper (read-view-collapse-affordance-fixes), matching the
+        // title bar's own drag-grip glyph precedent (ScribeDialogBase.Layout.cs's BuildTitleBar). Every
+        // other row shows the same invisible grip glyph as before: zero opacity, no gesture wrapper —
+        // purely a spacer, uninteractable and invisible (the read view exposes no reorder; dragging is a
+        // lock-gated authoring action, design D4). Uses the SAME GripInsets in both cases (top nudge + the
+        // -CheckboxTextGap trailing cancel, §10.4) so the reserved column — and thus the text's left edge —
+        // stays aligned row-for-row across a switch, and identical whether or not a toggle is shown.
         children.Add(new Padding(
-            ScribeRowControlNudge.GripInsets(style, Widget.Data.IsItemKind),
-            child: new Opacity(
-                opacity: 0f,
-                child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant))));
-
-        // Subtask-group collapse toggle (read-view-subtask-collapse 5.2), shown only on a depth-0 row
-        // with a non-empty owned run (a Quest Link with objectives, a Craft parent with generated
-        // Trackers). Sits between the reserved grip spacer and the checkbox; absent on every other row,
-        // so a plain Task/Text/Tracker/Link keeps its existing column layout unchanged.
-        if (Widget.ShowCollapseToggle)
-        {
-            children.Add(new Padding(
-                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style, Widget.Data.IsItemKind)),
-                child: new ScribeRowButton(
-                    iconName: Widget.Collapsed ? "scribetriangleright" : "scribetriangledown",
-                    iconColor: colors.OnSurfaceVariant,
-                    size: style.ControlSize,
-                    onTap: () => Widget.OnToggleCollapse())));
-        }
+            ScribeRowControlNudge.GripInsets(style, Widget.Data.IsItemKind, Widget.Data.LinkTarget),
+            child: Widget.ShowCollapseToggle
+                ? new GestureDetector(
+                    onTap: _ => Widget.OnToggleCollapse(),
+                    child: new ScribeVsIconGlyph(
+                        Widget.Collapsed ? "scribetriangleright" : "scribetriangledown",
+                        style.ControlSize,
+                        colors.OnSurfaceVariant))
+                : new Opacity(
+                    opacity: 0f,
+                    child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant))));
 
         // Task, Tracker, AND Link all carry a Done flag, so all three show a completion checkbox (only a
         // freeform Text section doesn't — Completable). A Tracker's checkbox also flips automatically when its
@@ -627,7 +626,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         if (Widget.Data.Completable)
         {
             children.Add(new Padding(
-                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style, Widget.Data.IsItemKind)),
+                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style, Widget.Data.IsItemKind, Widget.Data.LinkTarget)),
                 // The checkbox stays interactive whenever toggles are live: on any editable read view AND
                 // on a hard/fired tablet, which keeps completion live so a pinned task can still be
                 // completed/unpinned (zero-point-three-fixes §7.3). A null onChanged (only when toggles
@@ -676,7 +675,9 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                 selectionColor: Vector4.Zero,
                 bundle: style.CuneiformBundle,
                 padX: style.FieldPadX,
-                padY: style.FieldPadY,
+                // Matches the editor row's cuneiform-only inset reduction (ScribeMultilineField.cs) so a
+                // row's box height agrees between Read and Editor (tablet-cuneiform-glyph-scale).
+                padY: style.FieldPadY * CuneiformMetrics.FieldPadYScale,
                 // Resting (unfocused) box is transparent, exactly like a resting editable cuneiform row.
                 boxColor: Vector4.Zero,
                 borderColor: Vector4.Zero,
@@ -687,7 +688,9 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                 jitterSeed: Widget.Data.TaskId.GetHashCode(),
                 rotationDegrees: style.CuneiformRotation,
                 glow: style.CuneiformGlow,
-                strokeWeightScale: style.CuneiformStrokeWeightScale)
+                strokeWeightScale: style.CuneiformStrokeWeightScale,
+                glyphDrawScale: CuneiformMetrics.GlyphDrawScale,
+                caretHeightScale: CuneiformMetrics.CaretHeightScale)
             : ScribeTaskTextDisplay.Build(Widget.Data.Text, style, colors.OnSurface);
 
         // On a read-only tablet, tapping the row TEXT is the "I want to edit this" gesture — there is no text

@@ -111,10 +111,25 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// is false (no pill row is ever built to change it).</summary>
     private ReadViewFilterCategory readViewFilterCategory;
 
+    /// <summary>Set by <see cref="OnReadViewFilterCategoryChanged"/> to the just-locally-selected pill,
+    /// and cleared once <see cref="RefreshReadView"/> observes the host mirror catch up to that same
+    /// value (read-view-collapse-affordance-fixes). While set, <see cref="RefreshReadView"/> must NOT
+    /// overwrite <see cref="readViewFilterCategory"/> from the (still-stale) host mirror — otherwise a
+    /// row mutation's synchronous refresh (e.g. completing a task) lands between the local pill pick and
+    /// the server's echo, and stomps the just-picked pill back to whatever the mirror still holds.</summary>
+    private ReadViewFilterCategory? pendingReadViewFilterCategory;
+
     /// <summary>TaskIds of Read View subtask-group PARENTS currently collapsed (read-view-filter-and-
     /// collapse), the collapse-toggle counterpart of <see cref="readViewFilterCategory"/> — same
     /// persistence source, same seeding/write-back path.</summary>
     private readonly HashSet<Guid> collapsedReadViewGroupIds = new();
+
+    /// <summary>Snapshot of <see cref="collapsedReadViewGroupIds"/> taken by
+    /// <see cref="OnReadViewToggleGroupCollapsed"/> right after a local toggle, and cleared once
+    /// <see cref="RefreshReadView"/> observes the host mirror catch up to that same set — the
+    /// collapse-state counterpart of <see cref="pendingReadViewFilterCategory"/>, guarding against the
+    /// identical stale-mirror-stomp race.</summary>
+    private HashSet<Guid>? pendingCollapsedReadViewGroupIds;
 
     /// <summary>True when the Guestbook (Visitors) tab is the active view. Exposed so subclasses
     /// can apply the active color to their Guestbook nav button in <see cref="GetExtraNavButtons"/>.</summary>
@@ -843,6 +858,44 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// GuiManager) and is a deliberately parked, harder fix — see the DrawOrder notes in VSAPI-NOTES.md.
     /// </summary>
     public override double DrawOrder => 0.2;
+
+    /// <summary>
+    /// Decline a click that lands inside a vanilla Cairo/GL dialog's own bounds
+    /// (<see cref="ScribeVanillaDialogGuard.IsVanillaDialogAt"/>, fix-libgui-click-draw-order-mismatch) —
+    /// a new consumer of that change's guard. Opening a Quest Link or Handbook link from a Scribe row
+    /// pushes exactly this kind of vanilla dialog on top of Scribe's own window; per the <c>DrawOrder</c>
+    /// doc above, that overlap is a pipeline-ordering mismatch (vanilla always paints on top; click
+    /// dispatch does not follow paint order) with no real z-order fix available. Returning early here
+    /// (leaving <c>args.Handled</c> false) means <c>GuiManager.OnMouseDown</c>'s loop keeps walking
+    /// <c>LoadedGuis</c> past Scribe to whatever vanilla dialog actually owns that point, instead of Scribe
+    /// swallowing the click.
+    ///
+    /// <para><b>Revision (2026-09-07):</b> the first version of this fix overrode
+    /// <see cref="Vintagestory.API.Client.GuiDialog.ShouldReceiveMouseEvents"/> to return false whenever ANY
+    /// vanilla dialog was open ANYWHERE on screen — a blanket check with no click position at all (that
+    /// method takes none). This made Scribe's own window impossible to click back into focus for as long as
+    /// the vanilla dialog stayed open, even for a click that landed squarely on Scribe and nowhere near the
+    /// vanilla dialog — the opposite of what was wanted. Moving the check into <c>OnMouseDown</c> (which DOES
+    /// receive <paramref name="args"/>'s <c>X</c>/<c>Y</c>) makes it point-specific: a click outside every
+    /// open vanilla dialog's bounds falls through to <c>base.OnMouseDown</c> normally, hits Scribe's own
+    /// composer, and lets <c>GuiManager</c> call <c>RequestFocus</c> on Scribe exactly as before this change
+    /// existed — so clicking back on Scribe regains focus/interactivity immediately, vanilla dialog or not.</para>
+    ///
+    /// <para>Considered and rejected: relying on <c>GuiBase</c>'s own private <c>IsBlockedByFrontDialog</c>
+    /// (which yields to another FOCUSED LibGUI-visible dialog at the click point) instead of a dedicated
+    /// check. That method is inaccessible outside `Gui.dll`, and per this project's own confirmed finding
+    /// (`VSAPI-NOTES.md`, also documented at <c>DrawOrder</c> above) it was never confirmed reliable across
+    /// the vanilla-Cairo/GL-vs-LibGUI/Skia pipeline boundary in the first place. This override also does NOT
+    /// require the vanilla dialog to be "focused" the way that method would — per the same finding, a
+    /// vanilla dialog ALWAYS paints over LibGUI wherever they overlap regardless of focus, so bounds alone
+    /// (not focus) are enough to decide "Scribe is visually underneath here."</para>
+    /// </summary>
+    public override void OnMouseDown(MouseEvent args)
+    {
+        if (args.Handled) return;
+        if (ScribeVanillaDialogGuard.IsVanillaDialogAt(capi, args.X, args.Y)) return;
+        base.OnMouseDown(args);
+    }
 
     // ---------------- Input capture + macOS caret translation ----------------
 

@@ -1342,7 +1342,10 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 selectionColor: colors.Primary with { W = 0.35f },
                 bundle: Widget.CuneiformBundle,
                 padX: Widget.PadX,
-                padY: Widget.PadY,
+                // Cuneiform-only top/bottom inset reduction (tablet-cuneiform-glyph-scale) — the normal
+                // (non-cuneiform) branch below keeps Widget.PadY unscaled; only this cuneiform branch
+                // reads tighter to match the smaller synthetic caret.
+                padY: Widget.PadY * CuneiformMetrics.FieldPadYScale,
                 // Focus box on the cuneiform (tablet) path, scoped to the INPUT — mirrors the normal path
                 // just below (scope-focus-affordance-to-input). At rest the fill+border are transparent so a
                 // resting cuneiform row shows no box over the clay; on focus they light to SurfaceHigh +
@@ -1360,6 +1363,8 @@ internal sealed class ScribeMultilineFieldState : State<ScribeMultilineField>, I
                 rotationDegrees: Widget.CuneiformRotation,
                 glow: Widget.CuneiformGlow,
                 strokeWeightScale: Widget.CuneiformStrokeWeightScale,
+                glyphDrawScale: CuneiformMetrics.GlyphDrawScale,
+                caretHeightScale: CuneiformMetrics.CaretHeightScale,
                 revealActive: revealActive,
                 revealBaselineChars: revealBaselineChars,
                 revealElapsedMs: revealController is not null

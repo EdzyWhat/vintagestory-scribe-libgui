@@ -49,6 +49,13 @@ internal static class ScribeTheme
     /// value — see design.md D4; finalize exact per-surface values via in-game playtest.</summary>
     internal static readonly Vector4 QuestLinkAccent = new(0.259f, 0.420f, 0.718f, 1.0f);
 
+    /// <summary>HUD-only Quest Link accent (quest-link-icon-and-color D6): unlike every other surface, the
+    /// world-overlay HUD renders theme-independently over the live game world rather than any parchment/
+    /// clay/chalk backdrop, so a playtester found the shared <see cref="QuestLinkAccent"/> under-saturated
+    /// there specifically. This value is HUD-only and already finalized in-game (2026-09-06, third and
+    /// final pass, <c>rgb(172,207,255)</c>) — not a placeholder like the other constants above.</summary>
+    internal static readonly Vector4 HudQuestLinkAccent = new(0.675f, 0.812f, 1.0f, 1.0f);
+
     /// <summary>The net-new light parchment theme: dark ink on warm light paper. Authored role-by-role
     /// (see the class remarks for the two semantic — not mechanical — inversions).</summary>
     internal static readonly ThemeData Light = new(new ColorScheme

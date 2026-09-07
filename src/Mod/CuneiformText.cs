@@ -47,6 +47,39 @@ internal static class CuneiformMetrics
     /// height-match. Applied globally (rows, title, labels) so every surface scales together; tuned in-game.</summary>
     public const float LineHeightRatio = 1.848f;
 
+    /// <summary>Multiplier applied to the em height BEFORE the <see cref="LineHeightRatio"/> line-height
+    /// formula, for the tablet's cuneiform title/row/label text only (tablet-cuneiform-glyph-scale,
+    /// corrected 2026-09-07 — an earlier paint-time-only version that left layout `Size` untouched was
+    /// rejected once in-game testing showed the row itself needed to shrink, not just the drawn ink). This
+    /// DOES shrink the cuneiform render widgets' reserved `Size`/`scale` — deliberately decoupled from
+    /// <see cref="GuiDialogScribeTablet"/>'s `CheckboxSize`/`ControlSize`, which stay derived from
+    /// `FontSize * LineHeightRatio` with this factor left OUT, so the checkbox/control column keeps its
+    /// current size while the cuneiform row/title band sits shorter (an intentional mismatch — see
+    /// `ScribeRowControlNudge.CheckboxAndGripTop`'s existing "control can overflow its band" support).
+    /// 1.0 (the property's own default) reproduces today's behavior exactly; every non-tablet cuneiform
+    /// consumer stays at that default. Expect to re-tune the checkbox/icon/counter alignment nudges
+    /// alongside this value — that's the point of decoupling it from checkbox sizing. Revised 0.85 → 0.95
+    /// 2026-09-07 once the row-height mechanism above landed — 0.85 read too aggressive once the row
+    /// itself (not just the ink) was actually shrinking.</summary>
+    public const float GlyphDrawScale = 0.95f;
+
+    /// <summary>Multiplier on <see cref="ScribeCuneiformFieldRender"/>'s synthetic caret bar's drawn height,
+    /// relative to its line-height band (tablet-cuneiform-glyph-scale, added 2026-09-07). Paint-time only —
+    /// the caret shrinks toward the vertical center of its band, never touching layout, hit-testing, or the
+    /// caret's X position. Measured from a screenshot: the caret rendered 48px tall against a 29px-tall
+    /// glyph; the ask was to bring it to 44px, i.e. this exact ratio (independent of GUI scale/`FontSize`,
+    /// since it is relative to the line-height band, not an absolute pixel count). 1.0 reproduces the
+    /// un-shrunk full-band caret.</summary>
+    public const float CaretHeightScale = 44f / 48f;
+
+    /// <summary>Multiplier on the tablet cuneiform editable/read field's top+bottom inner padding
+    /// (<c>ScribeRowStyle.FieldPadY</c>), applied only where that padding is passed into a
+    /// <see cref="ScribeCuneiformFieldRenderWidget"/> for a real row (not the title bands, whose padding is
+    /// already 0 — see design.md). Measured from the same screenshot: 9px top+bottom padding, asked down to
+    /// 6px — this exact ratio, independent of GUI scale (relative to `FieldPadY`, not an absolute pixel
+    /// count). 1.0 reproduces today's padding exactly.</summary>
+    public const float FieldPadYScale = 6f / 9f;
+
     /// <summary>Default hand-written jitter strength (add-cuneiform-handwriting-feel) applied to cuneiform
     /// text until the client config knob (task 6) overrides it. Reads as a hand-pressed wobble without
     /// hurting legibility; 0 reproduces today's crisp geometry exactly. Tuned in-game across the 2026-08-03
@@ -110,6 +143,10 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
     // Per-view stroke-weight scale (adopt-glyph-forge-tablet-themes). 1 = the Core-authored weight exactly;
     // the tablet firms strokes up (fired) or thins them (wet). Paint-time only — never touches layout metrics.
     private float strokeWeightScale = 1f;
+    // Paint-time-only shrink/grow on the grid-to-pixel scale (tablet-cuneiform-glyph-scale). 1 = today's
+    // behavior exactly; never touches PerformLayout's `scale`/`Size` — only the stroke-corner-to-pixel
+    // conversion in BuildStrokePath, which also re-centers the smaller glyph in its unchanged box.
+    private float glyphDrawScale = 1f;
 
     // Cached from the last PerformLayout, reused by PaintInternal so layout and paint agree.
     private CuneiformLine? line;
@@ -173,10 +210,25 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
         set => SetProperty(ref strokeWeightScale, value <= 0f ? 1f : value, repaint: true);
     }
 
+    /// <summary>Multiplier on the em height fed into the D7 line-height formula (tablet-cuneiform-glyph-scale,
+    /// corrected 2026-09-07). A non-positive value is treated as 1 (matching <see cref="StrokeWeightScale"/>'s
+    /// guard). Relayouts — this now shrinks the widget's reserved `Size` (and, since paint reuses the same
+    /// `scale` derived from that `Size`, the drawn ink too) so the tablet's cuneiform row/title band can sit
+    /// shorter than a checkbox/control sized off the SAME `FontSize` with this factor left out. See
+    /// design.md's Decisions for why an earlier paint-time-only version (leaving `Size` untouched) was
+    /// rejected: the user wanted the row itself shorter, not just smaller ink in an unchanged box.</summary>
+    public float GlyphDrawScale
+    {
+        get => glyphDrawScale;
+        set => SetProperty(ref glyphDrawScale, value <= 0f ? 1f : value, relayout: true);
+    }
+
     protected override void PerformLayout()
     {
-        // Match the rendered cuneiform height to adjacent readable text's line-height, not its raw em (D7).
-        float renderedHeight = fontSizeEm * CuneiformMetrics.LineHeightRatio;
+        // Match the rendered cuneiform height to adjacent readable text's line-height, not its raw em (D7),
+        // then apply the tablet's glyph-draw-scale on top (tablet-cuneiform-glyph-scale) so cuneiform rows can
+        // read shorter than a checkbox/control sized off the same FontSize without this factor.
+        float renderedHeight = fontSizeEm * CuneiformMetrics.LineHeightRatio * glyphDrawScale;
 
         if (bundle is null)
         {
@@ -305,6 +357,11 @@ internal sealed class CuneiformTextRender : Gui.Core.Framework.RenderBox
         }
         Scribe.Core.Cuneiform.Vec2[] corners = stroke.Corners();
 
+        // GlyphDrawScale (tablet-cuneiform-glyph-scale) now lives entirely in PerformLayout's
+        // renderedHeight/scale — it is NOT re-applied here. `scale` already carries the shrink, so this is
+        // the same plain grid→pixel conversion as before that change ever existed; layout, paint, and (for
+        // the editable field) caret/selection/hit-testing all read the one shrunk `scale` and stay in
+        // lockstep, with no separate paint-only multiplier to keep in sync.
         path.Reset();
         path.MoveTo((float)(corners[0].X * scale), (float)(corners[0].Y * scale));
         path.LineTo((float)(corners[1].X * scale), (float)(corners[1].Y * scale));
@@ -336,7 +393,7 @@ internal sealed class CuneiformTextRenderWidget : RenderObjectWidget
     public CuneiformTextRenderWidget(
         string text, float fontSizeEm, Vector4 inkColor, GlyphBundle? bundle, float revealFraction,
         float jitterStrength = 0f, int jitterSeed = 0, float rotationDegrees = 0f, CuneiformGlow glow = default,
-        float strokeWeightScale = 1f)
+        float strokeWeightScale = 1f, float glyphDrawScale = 1f)
     {
         Text = text;
         FontSizeEm = fontSizeEm;
@@ -348,6 +405,7 @@ internal sealed class CuneiformTextRenderWidget : RenderObjectWidget
         RotationDegrees = rotationDegrees;
         Glow = glow;
         StrokeWeightScale = strokeWeightScale;
+        GlyphDrawScale = glyphDrawScale;
     }
 
     public string Text { get; }
@@ -360,6 +418,7 @@ internal sealed class CuneiformTextRenderWidget : RenderObjectWidget
     public float RotationDegrees { get; }
     public CuneiformGlow Glow { get; }
     public float StrokeWeightScale { get; }
+    public float GlyphDrawScale { get; }
 
     public override RenderObject CreateRenderObject() => new CuneiformTextRender();
 
@@ -376,6 +435,7 @@ internal sealed class CuneiformTextRenderWidget : RenderObjectWidget
         ro.RotationDegrees = RotationDegrees;
         ro.Glow = Glow;
         ro.StrokeWeightScale = StrokeWeightScale;
+        ro.GlyphDrawScale = GlyphDrawScale;
     }
 }
 
@@ -399,6 +459,7 @@ public sealed class CuneiformText : StatefulWidget
         float? rotationDegrees = null,
         CuneiformGlow glow = default,
         float strokeWeightScale = 1f,
+        float glyphDrawScale = 1f,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
@@ -412,6 +473,7 @@ public sealed class CuneiformText : StatefulWidget
         RotationDegrees = rotationDegrees ?? CuneiformMetrics.DefaultRotationDegrees;
         Glow = glow;
         StrokeWeightScale = strokeWeightScale;
+        GlyphDrawScale = glyphDrawScale;
     }
 
     /// <summary>The line of text to render.</summary>
@@ -450,6 +512,11 @@ public sealed class CuneiformText : StatefulWidget
     /// the Core-authored weight exactly; the tablet passes its per-state scale so display text firms up or
     /// thins with the drying state. Non-tablet display text leaves it at 1 and is pixel-identical.</summary>
     public float StrokeWeightScale { get; }
+
+    /// <summary>Paint-time-only shrink/grow on rendered stroke geometry (tablet-cuneiform-glyph-scale).
+    /// Defaults to 1 = today's behavior exactly; the tablet passes <see cref="CuneiformMetrics.GlyphDrawScale"/>
+    /// for its title/row/label text. Non-tablet display text leaves it at 1 and is pixel-identical.</summary>
+    public float GlyphDrawScale { get; }
 
     public override State CreateState() => new CuneiformTextState();
 }
@@ -507,5 +574,6 @@ internal sealed class CuneiformTextState : State<CuneiformText>
         jitterSeed: CuneiformMetrics.SeedFromString(Widget.Text),
         rotationDegrees: Widget.RotationDegrees,
         glow: Widget.Glow,
-        strokeWeightScale: Widget.StrokeWeightScale);
+        strokeWeightScale: Widget.StrokeWeightScale,
+        glyphDrawScale: Widget.GlyphDrawScale);
 }

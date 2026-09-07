@@ -6,6 +6,50 @@ Obsolete). The playtest app does NOT read this file -- it exists only so the liv
 `TESTING.md` stays lean while nothing is lost (the verdicts also survive in each change's
 archived `tasks.md`).
 
+## read-view-filter-and-collapse
+
+> Read View gains a five-pill filter row (All/Active/Completed/Pinned/Other) and a
+> collapse/expand toggle on subtask-group parents (Quest Link + objectives, Craft +
+> Trackers), both persisted per Scribe item/block instance. Tablet is explicitly excluded
+> from both. Archived 2026-09-06 as `2026-09-06-read-view-filter-and-collapse`; two
+> follow-up bug reports from this playtest became `read-view-collapse-affordance-fixes`.
+
+- [x] `000000a0` **Test filter pills.** Open a supporting surface (Lectern/Notebook/etc.) — confirm
+      all five pills (All/Active/Completed/Pinned/Other) show with exactly one active. Tap each
+      non-active pill in turn — confirm the row list narrows to exactly the rows that category
+      should include each time. *(read-view-filter-and-collapse 3.2/3.3)*
+      - **Confirmed 2026-09-06** (submission 2026-09-06T16-48-19): "(no note)"
+- [x] `000000a1` **Test filter persistence.** On one instance, select a non-All pill, close the
+      dialog, then reopen it (and relog) — confirm it resumes on that same pill. Set a DIFFERENT
+      pill on a second instance — confirm each instance remembers its own pill independently.
+      *(read-view-filter-and-collapse 4.3)*
+      - **Confirmed 2026-09-06** (submission 2026-09-06T16-48-19): "(no note)"
+- [x] `000000a2` **Test collapse toggle.** Confirm the collapse toggle appears only on a Quest Link
+      (with objectives) or Craft parent (with generated Trackers) row — never on a plain Task/Text
+      row, and never on a Tablet. Collapse one — its owned-run rows disappear, parent row stays.
+      Expand it — the children return in their original order. *(read-view-filter-and-collapse 5.2/5.3)*
+      - **Confirmed 2026-09-06** (submission 2026-09-06T16-48-19): "(no note)"
+- [x] `000000a3` **Test shadow opacity.** Under a non-All filter, on a group where only some members
+      match, confirm the non-matching members render visibly dimmed (~50%) while the matching
+      member(s) stay full-opacity — and confirm a dimmed row's checkbox/pin/edit still all work.
+      Switch to All — confirm nothing is dimmed anymore. *(read-view-filter-and-collapse 6.2/6.4)*
+      - **Confirmed 2026-09-06** (submission 2026-09-06T16-48-19): "(no note)"
+- [x] `000000a4` **Test collapsed group surfaces via hidden match.** Collapse a group where one of
+      its (now-hidden) children matches the active filter but the parent itself doesn't — confirm
+      the parent row still renders (dimmed), instead of the whole group vanishing.
+      *(read-view-filter-and-collapse 6.3)*
+      - **Confirmed 2026-09-06** (submission 2026-09-06T16-48-19): "(no note)"
+- [x] `000000a5` **Test collapse persistence.** Collapse one group (leave others expanded), close and
+      reopen the document — confirm that same group reopens collapsed while the others stay
+      expanded. Then reorder blocks so the collapsed group's parent moves to a different position —
+      confirm it's still shown collapsed at its new spot. *(read-view-filter-and-collapse 7.2)*
+      - **Confirmed 2026-09-06** (submission 2026-09-06T16-48-19): "(no note)"
+- [x] `000000a6` **Test every surface + Tablet exclusion.** Confirm both the pill row and collapse
+      toggles work on Lectern, Notebook, Clockmaker's Notebook, Chalkboard, Scriptorium, Assignment
+      Desk, and Inbox — then open a Tablet and confirm it shows NEITHER the pill row nor any
+      collapse toggle, regardless of its contents. *(read-view-filter-and-collapse 8.1)*
+      - **Confirmed 2026-09-06** (submission 2026-09-06T16-48-19): "(no note)"
+
 ## restore-row-affordance-columns
 
 > Per-row delete/pin (hover-conditional) + drag-handle grip restored to the EDITOR view on the

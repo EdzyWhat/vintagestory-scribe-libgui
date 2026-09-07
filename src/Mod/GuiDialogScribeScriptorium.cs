@@ -122,7 +122,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
     {
         var colors = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
         yield return TitleButton(
-            "scribeinventory",
+            "scribebook",
             "scribe-tab-transcribe",
             colors.OnSurfaceVariant,
             NavButtonSize,

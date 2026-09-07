@@ -363,6 +363,8 @@ internal sealed class ScribeCuneiformTitleFieldState : State<ScribeCuneiformTitl
                 rotationDegrees: Widget.RotationDegrees,
                 glow: Widget.Glow,
                 strokeWeightScale: Widget.StrokeWeightScale,
+                glyphDrawScale: CuneiformMetrics.GlyphDrawScale,
+                caretHeightScale: CuneiformMetrics.CaretHeightScale,
                 revealActive: revealActive,
                 revealBaselineChars: revealBaselineChars,
                 revealElapsedMs: revealController is not null

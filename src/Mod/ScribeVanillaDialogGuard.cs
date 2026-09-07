@@ -22,4 +22,29 @@ public static class ScribeVanillaDialogGuard
     /// foreign mod's own dialog.</summary>
     public static bool IsAnyVanillaDialogOpen(ICoreClientAPI capi) =>
         capi.Gui.OpenedGuis.Any(dialog => dialog.DialogType != EnumDialogType.HUD && dialog is not GuiBase);
+
+    /// <summary>True when a vanilla (non-LibGUI, non-HUD) dialog's own composer bounds contain the given
+    /// raw screen point — the position-aware sibling of <see cref="IsAnyVanillaDialogOpen"/>, added
+    /// 2026-09-07 for <c>ScribeDialogBase.OnMouseDown</c>. Checks EVERY open vanilla dialog regardless of
+    /// which one (if any) is currently focused: per this project's own confirmed finding (`VSAPI-NOTES.md`,
+    /// also documented at <c>ScribeDialogBase.DrawOrder</c>), a vanilla Cairo/GL dialog always paints on top
+    /// of a LibGUI/Skia surface wherever they overlap, regardless of focus or `DrawOrder` — so bounds alone,
+    /// not focus, decide whether Scribe would be visually underneath at this point. Deliberately NOT gated
+    /// on <see cref="IsAnyVanillaDialogOpen"/>'s blanket global check — that check disabled Scribe's mouse
+    /// events entirely while ANY vanilla dialog was open anywhere on screen, even one nowhere near the
+    /// click, which made a Scribe dialog impossible to click back into focus. This checks the actual click
+    /// point instead, so a click that lands on Scribe itself (not inside any vanilla dialog's bounds) is
+    /// still accepted and can restore Scribe's focus normally.</summary>
+    public static bool IsVanillaDialogAt(ICoreClientAPI capi, int x, int y)
+    {
+        foreach (var dialog in capi.Gui.OpenedGuis)
+        {
+            if (dialog.DialogType == EnumDialogType.HUD || dialog is GuiBase) continue;
+            foreach (var composer in dialog.Composers.Values)
+            {
+                if (composer.Bounds.PointInside(x, y)) return true;
+            }
+        }
+        return false;
+    }
 }
