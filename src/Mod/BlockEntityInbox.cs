@@ -68,6 +68,18 @@ public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
         }
     }
 
+    /// <summary>Resolves which of the 2 Inbox box-tuning targets this placed instance reads from
+    /// (add-scribe-block-box-tuning), via the exact same ground-vs-wall variant check as
+    /// <see cref="WallMountAngleRad"/> above.</summary>
+    protected override ScribeBoxTuningTarget? TuningTarget
+    {
+        get
+        {
+            string? orientation = Block?.Variant["orientation"];
+            return orientation is null or "up" ? ScribeBoxTuningTarget.Inbox : ScribeBoxTuningTarget.InboxWall;
+        }
+    }
+
     // ── Mixed restricted/open inventory (add-inbox-inventory-tab) ────────────
     //
     // The Inbox's own 8-slot inventory: slots 0-3 accept only Scribe items, slots 4-7 accept

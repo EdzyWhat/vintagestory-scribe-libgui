@@ -136,7 +136,7 @@
       is red, both labels render as legible near-white text with glow (matching standard HUD text)
       against their fill, and the HUD banner's title renders as two lines: a gold "Add quest to
       Scribe?:" label followed by the off-white quest name on its own line below.
-- [ ] 6.6 Manual playtest: trigger a completion-prompt — confirm its HUD banner shows the same
+- [x] 6.6 Manual playtest: trigger a completion-prompt — confirm its HUD banner shows the same
       retuned colors, labels, and near-white-with-glow button text treatment as the accept-prompt
       banner (no accept-only special-casing), with its own two-line title ("Mark quest done:" in
       gold, then the off-white quest name followed by "?").

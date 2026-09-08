@@ -15,6 +15,10 @@
 				{
 					"title": "scribe:handbook-tasknotice-about-title",
 					"text": "scribe:handbook-tasknotice-about-text"
+				},
+				{
+					"title": "scribe:handbook-tasknotice-receiving-title",
+					"text": "scribe:handbook-tasknotice-receiving-text"
 				}
 			]
 		}

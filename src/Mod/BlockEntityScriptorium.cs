@@ -29,6 +29,8 @@ public sealed class BlockEntityScriptorium : BlockEntityScribeWritingStation
 
     protected override string MeshCacheKeyPrefix => "scribescriptoriummesh";
 
+    protected override ScribeBoxTuningTarget? TuningTarget => ScribeBoxTuningTarget.Scriptorium;
+
     protected override ScribeDialogBase CreateDialog(ICoreClientAPI capi) =>
         new GuiDialogScribeScriptorium(Pos, this, capi);
 

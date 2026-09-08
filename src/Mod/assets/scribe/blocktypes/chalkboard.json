@@ -56,10 +56,10 @@
 	// Painting-style: no collision (walk-through), and a thin selection SLAB bounded to the board instead of
 	// a full-cell cube. This box is authored for the angle-0 (north) facing — board against the −Z wall — and
 	// the block-entity rotates it to the placed facing via MeshAngleRad (BlockEntityScribeWritingStation.
-	// RotatedSelectionBox), so it needs NO rotateYByType (that would double-rotate). Depth 0..0.2 covers the
-	// frame + chalk tray; full width/height so the whole board face is clickable.
+	// RotatedSelectionBox), so it needs NO rotateYByType (that would double-rotate). Baked in from a
+	// .boxtune session (2026-09-07): margins trim the slab to the board's frame instead of the full cell.
 	collisionbox: null,
-	selectionbox: { x1: 0, y1: 0, z1: 0, x2: 1, y2: 1, z2: 0.2 },
+	selectionbox: { x1: 0.125, y1: 0.05, z1: 0, x2: 0.875, y2: 0.925, z2: 0.06 },
 
 	sounds: {
 		place: "block/planks",

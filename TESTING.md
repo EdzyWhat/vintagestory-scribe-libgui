@@ -27,6 +27,32 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## add-scribe-block-box-tuning
+
+> DEV-only live-tuning window (`.boxtune`) for the Inbox (ground + wall-mounted), Scriptorium,
+> Assignment Desk, and Chalkboard (selection-only) collision/selection boxes, mirroring the
+> existing `.geartune` pattern. Client-only; a dedicated server never loads tuning and falls back
+> to defaults (documented Non-Goal, not a bug). All 5 targets have now passed a `.boxtune` session
+> and had their tuned values baked into both `ScribeBoxTuning.cs`'s defaults and each blocktype
+> JSON (2026-09-07) — this change is fully implemented and verified.
+
+- [x] `000000bd` **Check Chalkboard default + no collision.** Place a Chalkboard and confirm its
+      hitbox is unchanged from before (walk-through, thin selection slab); run `.boxtune` and
+      confirm the new Chalkboard group shows the shipped defaults.
+      *(add-scribe-block-box-tuning 5.5)*
+      - **Confirmed 2026-09-07** via `tasks.md` 5.5 checked off by the author's own in-game check.
+- [x] `000000be` **Check Chalkboard tunes selection only.** Nudge a Chalkboard value in `.boxtune`,
+      including a full-cell value (all axes to 0/1) — confirm the placed Chalkboard's selection box
+      changes live but it stays walk-through (no collision) at every value.
+      *(add-scribe-block-box-tuning 5.6)*
+      - **Confirmed 2026-09-07** via `tasks.md` 5.6 checked off; tuned values
+        (`0.125,0.05,0,0.875,0.925,0.06`) baked into `ScribeBoxTuning.cs` defaults and
+        `chalkboard.json`'s `selectionbox`.
+- [x] `000000bf` **Check Chalkboard tuning persists.** Tune a Chalkboard value, fully quit and
+      relaunch the client, rejoin the same world — confirm the tuned selection box is still in
+      effect and still shows in `.boxtune`'s fields. *(add-scribe-block-box-tuning 5.7)*
+      - **Confirmed 2026-09-07** via `tasks.md` 5.7 checked off by the author's own in-game check.
+
 ## tablet-cuneiform-glyph-scale
 
 > Revised twice before any in-game test ran. Final mechanism: tablet cuneiform title/row/label text

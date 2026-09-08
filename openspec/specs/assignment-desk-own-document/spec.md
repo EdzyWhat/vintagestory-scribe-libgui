@@ -3,28 +3,28 @@
 ## Purpose
 TBD - created by archiving change add-assignment-desk-own-tasks. Update Purpose after archive.
 ## Requirements
-### Requirement: Assignment Desk exposes its own document via Read and Editor tabs
+### Requirement: Assignment Desk exposes its own document via an Editor tab
 The Assignment Desk's block entity already owns a full `ScribeDocument` (inherited from the
-writing-station base every Notebook/Lectern/Tablet uses). The system SHALL expose it through
-Read and Editor nav tabs on the Assignment Desk's dialog, with the same affordances as any other
-writing station's Read/Editor views (completion checkbox, pin, delete, reorder, Tracker/Link/Craft
-rows) and the same server-lock-gated editor access every shared placed block already requires. The
-Assignment Desk SHALL NOT expose a Pinned tab.
-
-#### Scenario: Reading the Desk's own document
-- **WHEN** a player switches to the Assignment Desk's Read tab
-- **THEN** the Desk's own document renders with the same row affordances (checkbox, pin, delete,
-  reorder, Tracker/Link/Craft display) as any other surface's Read view
+writing-station base every Notebook/Lectern/Tablet uses). The system SHALL expose it through an
+Editor nav tab on the Assignment Desk's dialog, with the same affordances as any other writing
+station's Editor view (completion checkbox, pin, delete, reorder, Tracker/Link/Craft rows) and the
+same server-lock-gated editor access every shared placed block already requires. The Assignment
+Desk SHALL NOT expose a Read tab or a Pinned tab.
 
 #### Scenario: Editing the Desk's own document requires the shared lock
 - **WHEN** a player switches to the Assignment Desk's Editor tab
 - **THEN** the dialog requests the same server-authoritative edit lock every other shared writing
   station requires, and the Editor view opens once granted
 
+#### Scenario: No Read tab on the Assignment Desk
+- **WHEN** a player views the Assignment Desk's nav column
+- **THEN** no Read tab button is present, alongside Create Assignments, Sent Assignment History,
+  Inbox, Editor, and Settings
+
 #### Scenario: No Pinned tab on the Assignment Desk
 - **WHEN** a player views the Assignment Desk's nav column
 - **THEN** no Pinned tab button is present, alongside Create Assignments, Sent Assignment History,
-  Inbox, Read, Editor, and Settings
+  Inbox, Editor, and Settings
 
 ### Requirement: Create Assignments tab can pull tasks from the Desk's own document
 When the staging slot is empty and the Desk's own document has at least one eligible row, the

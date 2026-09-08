@@ -302,12 +302,13 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
             ? BuildQuestTiles(labelStyle, tileButtonStyle)
             : BuildKindTiles(labelStyle, tileButtonStyle, colors);
 
-        // Transparent panel (user preference): no SurfaceHigh fill behind the kind buttons — the floating
-        // menu is just the stack of Primary "add" buttons over the scroll content, with a thin border for
-        // grouping. The ScribeDropUpMenu wrapper plays the grow-up entry animation. ScribeGlobalTint
-        // re-applies the dialog's illumination shade: the menu lives in the Overlay layer, outside the dialog
-        // body's own ScribeGlobalTint wrap, so without this the menu would stay full-brightness while the
-        // rest of the window is shaded by light/dark exposure (user-reported).
+        // Opaque panel, matching the theme's input/writing-surface tone (SurfaceHigh): the floating menu
+        // needs a solid backing so the stacked "add" buttons read as a distinct surface over the scroll
+        // content, not just a faint outline floating over whatever is behind it. The ScribeDropUpMenu
+        // wrapper plays the grow-up entry animation. ScribeGlobalTint re-applies the dialog's illumination
+        // shade: the menu lives in the Overlay layer, outside the dialog body's own ScribeGlobalTint wrap,
+        // so without this the menu would stay full-brightness while the rest of the window is shaded by
+        // light/dark exposure (user-reported).
         var shade = Widget.CurrentShade;
         return new SizedBox(
             width: width,
@@ -315,8 +316,7 @@ internal sealed class ScribeAddKindPickerState : State<ScribeAddKindPicker>
                 new ScribeDropUpMenu(new Container(
                     style: new BoxStyle
                     {
-                        // Faint border (25% of the theme Border's opacity): just enough to group the floating
-                        // kind buttons over the transparent panel without a hard outline.
+                        Color = colors.SurfaceHigh with { W = 1f },
                         BorderColor = colors.Border with { W = colors.Border.W * 0.25f },
                         BorderThickness = 1f,
                         CornerRadius = new Vector4(4f),

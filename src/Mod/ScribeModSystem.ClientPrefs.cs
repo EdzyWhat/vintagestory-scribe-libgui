@@ -70,6 +70,50 @@ public sealed partial class ScribeModSystem
             });
     }
 
+    // ── DEV block-box live-tuning (.boxtune) ────────────────────────────────────────────────────────
+
+    /// <summary>DEV: this player's live block-box tuning knobs (<see cref="ScribeBoxTuning"/>). Falls back
+    /// to a fresh default instance if queried before load / on a server, so it is never null — mirrors
+    /// <see cref="GearTuning"/>. The server-side fallback is load-bearing: a dedicated server never calls
+    /// <see cref="StartClientSide"/>, so it always resolves the untouched default box (design.md Decision
+    /// 3's "never null-refs" note).</summary>
+    public ScribeBoxTuning BoxTuning => boxTuning ??= new ScribeBoxTuning();
+
+    /// <summary>DEV: mutate the box tuning, persist it, and raise <see cref="BoxTuningChanged"/> so an open
+    /// <c>.boxtune</c> window re-seeds its fields (mirrors <see cref="UpdateGearTuning"/>). Client-only.</summary>
+    public void UpdateBoxTuning(Action<ScribeBoxTuning> mutate)
+    {
+        if (capi is null) return; // client-only
+        var t = BoxTuning;
+        mutate(t);
+        t.Normalized();
+        capi.StoreModConfig(t, BoxTuningConfigFileName);
+        BoxTuningChanged?.Invoke();
+    }
+
+    /// <summary>DEV: toggle the box-tuning window open/closed (opened by the <c>.boxtune</c> command).
+    /// Lazily builds + reuses the dialog, mirroring <see cref="OpenGearTuning"/>.</summary>
+    public void OpenBoxTuning()
+    {
+        if (capi is null) return; // client-only
+        boxTuningDialog ??= new ScribeBoxTuningDialog(capi, this);
+        if (boxTuningDialog.IsOpened()) boxTuningDialog.TryClose();
+        else boxTuningDialog.TryOpen();
+    }
+
+    /// <summary>DEV: register the client-side <c>.boxtune</c> command that opens the live block-box tuning
+    /// window, mirroring <see cref="RegisterGearTuneCommand"/>.</summary>
+    private void RegisterBoxTuneCommand(ICoreClientAPI api)
+    {
+        api.ChatCommands.Create("boxtune")
+            .WithDescription("[scribe dev] Open the Inbox/Scriptorium/Assignment Desk collision-box live-tuning window.")
+            .HandleWith(_ =>
+            {
+                OpenBoxTuning();
+                return Vintagestory.API.Common.TextCommandResult.Success();
+            });
+    }
+
     /// <summary>DEV: register the client-side <c>.scribelight</c> command — a one-shot readout of the ambient
     /// illumination the GUI shade is derived from at the player's current position (raw light in, held light,
     /// curve output). Used to calibrate <see cref="ScribeBrightnessCurve"/> anchors against real in-game values

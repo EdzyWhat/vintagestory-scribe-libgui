@@ -32,6 +32,8 @@ public sealed class BlockEntityAssignmentDesk : BlockEntityScribeWritingStation
     protected override ScribeDialogBase CreateDialog(ICoreClientAPI capi) =>
         new GuiDialogScribeAssignmentDesk(Pos, this, capi);
 
+    protected override ScribeBoxTuningTarget? TuningTarget => ScribeBoxTuningTarget.AssignmentDesk;
+
     // ── Staging slot (assignment-multi-item-creation design.md D8) ───────────
     //
     // A single Scribe-items-only slot the Create Assignments tab uses to stage an existing document

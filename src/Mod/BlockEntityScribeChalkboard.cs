@@ -20,6 +20,12 @@ public sealed class BlockEntityScribeChalkboard : BlockEntityScribeWritingStatio
 
     protected override string DefaultDocumentTitleKey => "scribe:doctitle-chalkboard";
 
+    /// <summary>Selection-only box-tuning target (add-scribe-block-box-tuning): <see cref="
+    /// ScribeBoxTuning.HasCollisionBox"/> excludes <see cref="ScribeBoxTuningTarget.Chalkboard"/>, so
+    /// this only makes <c>RotatedSelectionBox</c> live-tunable — the board's collision stays fixed at
+    /// <c>null</c> (walk-through) regardless of the tuned selection slab.</summary>
+    protected override ScribeBoxTuningTarget? TuningTarget => ScribeBoxTuningTarget.Chalkboard;
+
     protected override string MeshCacheKeyPrefix => "scribechalkboardmesh";
 
     /// <summary>Cap the chalkboard at <see cref="ScribeDocumentPolicy.StandardMaxBlocks"/> task blocks

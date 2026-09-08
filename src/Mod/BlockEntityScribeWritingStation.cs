@@ -52,6 +52,14 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     /// rotates ONLY by <see cref="MeshAngleRad"/>, which is 0 for a wall block until we set it here.</summary>
     protected virtual float? WallMountAngleRad => null;
 
+    /// <summary>Optional box-tuning target (add-scribe-block-box-tuning): which of the 5 live-tunable
+    /// <see cref="ScribeBoxTuning"/> targets this placed instance's collision/selection box reads from, if
+    /// any. Null (default) keeps the untouched behavior of reading the static, registration-time-baked
+    /// <c>Block.CollisionBoxes[0]</c>/<c>SelectionBoxes[0]</c> — the Lectern never overrides this, so it
+    /// is byte-for-byte unaffected by this capability. Overridden on the Scriptorium, Assignment Desk,
+    /// Chalkboard, and (variant-resolved) Inbox.</summary>
+    protected virtual ScribeBoxTuningTarget? TuningTarget => null;
+
     /// <summary>Lang key for the document's fallback title when the player clears the title and saves
     /// (e.g. <c>"scribe:doctitle-lectern"</c>).</summary>
     protected abstract string DefaultDocumentTitleKey { get; }
@@ -88,17 +96,37 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     private float meshAngleRad;
 
     /// <summary>The block's COLLISION box rotated to <see cref="MeshAngleRad"/>, surfaced by the block's
-    /// <c>GetCollisionBoxes</c> so the solid hitbox tracks the mesh. Null when the block has no collision
-    /// box (e.g. the walk-through wall Chalkboard) — the block then falls back to its un-rotated JSON box
-    /// (which for the Chalkboard is none).</summary>
-    public Cuboidf[]? RotatedBox { get; private set; }
+    /// <c>GetCollisionBoxes</c> so the solid hitbox tracks the mesh. Computed live on every read (not
+    /// cached at <see cref="MeshAngleRad"/>-set time) so a live <see cref="ScribeBoxTuning"/> change is
+    /// reflected on the very next call with no restart (add-scribe-block-box-tuning design.md Decision 1).
+    /// Sourced from <see cref="ScribeBoxTuning.CollisionBoxFor"/> when <see cref="TuningTarget"/> is set
+    /// AND <see cref="ScribeBoxTuning.HasCollisionBox"/> is true for it, else <c>Block.CollisionBoxes[0]</c>
+    /// exactly as before. Null when the block has no collision box (e.g. the walk-through wall
+    /// Chalkboard, whose <see cref="TuningTarget"/> IS set but is excluded by <c>HasCollisionBox</c>) —
+    /// the block then falls back to its un-rotated JSON box (which for the Chalkboard is none).</summary>
+    public Cuboidf[]? RotatedBox => Rotated(TuningTarget is { } t && ScribeBoxTuning.HasCollisionBox(t)
+        ? ModSystem?.BoxTuning.CollisionBoxFor(t)
+        : (Block?.CollisionBoxes is { Length: > 0 } c ? c[0] : null));
 
     /// <summary>The block's SELECTION box rotated to <see cref="MeshAngleRad"/>, surfaced by
     /// <c>GetSelectionBoxes</c>. Tracked separately from <see cref="RotatedBox"/> so a painting-style block
     /// can have a thin selection slab WITHOUT a collision box: the floor stations set both to the same box
     /// (selection defaults to collision in their JSON), while the Chalkboard rotates only its slab
-    /// selection box and leaves collision null (walk-through). Null falls back to the un-rotated JSON box.</summary>
-    public Cuboidf[]? RotatedSelectionBox { get; private set; }
+    /// selection box and leaves collision null (walk-through). Computed live, same rationale as
+    /// <see cref="RotatedBox"/>; a tuned target uses the SAME box for both collision and selection (design.md
+    /// Non-Goals). Null falls back to the un-rotated JSON box.</summary>
+    public Cuboidf[]? RotatedSelectionBox => Rotated(TuningTarget is { } t
+        ? ModSystem?.BoxTuning.CollisionBoxFor(t)
+        : (Block?.SelectionBoxes is { Length: > 0 } s ? s[0] : null));
+
+    /// <summary>Rotates a source box to <see cref="MeshAngleRad"/>, shared by <see cref="RotatedBox"/>/
+    /// <see cref="RotatedSelectionBox"/>. Null in, null out.</summary>
+    private Cuboidf[]? Rotated(Cuboidf? source)
+    {
+        if (source is null) return null;
+        float deg = meshAngleRad * (180f / (float)Math.PI);
+        return new[] { source.RotatedCopy(0f, deg, 0f, new Vec3d(0.5, 0.5, 0.5)) };
+    }
 
     public float MeshAngleRad
     {
@@ -107,15 +135,6 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
         {
             bool changed = meshAngleRad != value;
             meshAngleRad = value;
-            float deg = value * (180f / (float)Math.PI);
-            if (Block?.CollisionBoxes is { Length: > 0 } cboxes)
-            {
-                RotatedBox = new[] { cboxes[0].RotatedCopy(0f, deg, 0f, new Vec3d(0.5, 0.5, 0.5)) };
-            }
-            if (Block?.SelectionBoxes is { Length: > 0 } sboxes)
-            {
-                RotatedSelectionBox = new[] { sboxes[0].RotatedCopy(0f, deg, 0f, new Vec3d(0.5, 0.5, 0.5)) };
-            }
             if (changed) MarkDirty(true);
         }
     }

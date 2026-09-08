@@ -55,6 +55,12 @@ public sealed partial class ScribeModSystem : ModSystem
     /// tool when the layout is finalized.</summary>
     public const string GearTuningConfigFileName = "scribe-gear-tuning.json";
 
+    /// <summary>DEV-ONLY client-local JSON holding the live block-box tuning knobs
+    /// (<see cref="ScribeBoxTuning"/>), opened via the <c>.boxtune</c> command. Separate from the real
+    /// preference file so this throwaway hitbox-tuning aid never touches player settings; delete alongside
+    /// the tool once the tuned numbers are baked back into the blocktype JSON files.</summary>
+    public const string BoxTuningConfigFileName = "scribe-box-tuning.json";
+
     /// <summary>Client-local JSON holding the author-facing visual-tuning knobs
     /// (<see cref="ScribeVisualTuning"/>) for the ambient light sampler and unseen-assignment particle
     /// effect — optionally editable via a config-library mod's GUI reading the shared
@@ -208,6 +214,15 @@ public sealed partial class ScribeModSystem : ModSystem
     /// in <see cref="Dispose"/>. Null until first opened, and on a pure server.</summary>
     private ScribeGearTuningDialog? gearTuningDialog;
 
+    /// <summary>DEV-ONLY live block-box tuning (<see cref="ScribeBoxTuning"/>), persisted to
+    /// <see cref="BoxTuningConfigFileName"/> and loaded in <see cref="StartClientSide"/>. Lazily defaulted
+    /// so it is never null (mirrors <see cref="gearTuning"/>).</summary>
+    private ScribeBoxTuning? boxTuning;
+
+    /// <summary>The single DEV box-tuning window (<c>.boxtune</c>), lazily built + reused; disposed in
+    /// <see cref="Dispose"/>. Null until first opened, and on a pure server.</summary>
+    private ScribeBoxTuningDialog? boxTuningDialog;
+
     /// <summary>The currently playing Clockmaker Notebook alarm sound, if any. Created when the timer
     /// transitions to Fired; kept alive until it self-reports <see cref="ScribeAlarmSound.IsDone"/> (the
     /// object manages its own fade lifecycle). Disposed and nulled in <see cref="Dispose"/>.</summary>
@@ -314,6 +329,12 @@ public sealed partial class ScribeModSystem : ModSystem
     /// open Clockmaker's Notebook Timer tab rebuilds its gearworks live off the new values.</summary>
     public event Action? GearTuningChanged;
 
+    /// <summary>DEV: raised whenever a box-tuning knob changes in the <c>.boxtune</c> window. The world
+    /// hitbox already reads <see cref="BoxTuning"/> live on every collision/selection call (design.md
+    /// Decision 1), so this event's only job is letting an OPEN dialog re-seed its own displayed fields
+    /// onto the clamped/persisted value.</summary>
+    public event Action? BoxTuningChanged;
+
     public override void Start(ICoreAPI api)
     {
         base.Start(api);
@@ -409,6 +430,11 @@ public sealed partial class ScribeModSystem : ModSystem
         gearTuning = (api.LoadModConfig<ScribeGearTuning>(GearTuningConfigFileName) ?? new ScribeGearTuning()).Normalized();
         RegisterGearTuneCommand(api);
 
+        // DEV: live block-box tuning for the Inbox/Inbox-Wall/Scriptorium/Assignment Desk collision +
+        // selection boxes (a never-touched file loads as today's shipped blocktype-JSON defaults).
+        boxTuning = (api.LoadModConfig<ScribeBoxTuning>(BoxTuningConfigFileName) ?? new ScribeBoxTuning()).Normalized();
+        RegisterBoxTuneCommand(api);
+
         // Author-facing visual tuning for the ambient light sampler + particle emitter (a never-touched
         // file loads as today's hardcoded defaults). See ScribeVisualTuning's remarks.
         visualTuning = api.LoadModConfig<ScribeVisualTuning>(VisualTuningConfigFileName) ?? new ScribeVisualTuning();
@@ -489,6 +515,8 @@ public sealed partial class ScribeModSystem : ModSystem
         settingsDialog = null;
         gearTuningDialog?.Dispose();
         gearTuningDialog = null;
+        boxTuningDialog?.Dispose();
+        boxTuningDialog = null;
         if (backdropCache is not null)
         {
             foreach (var bmp in backdropCache.Values) bmp?.Dispose();

@@ -53,7 +53,7 @@
 - [x] 3.1 `dotnet test` (Core) green — this fix touches Mod-layer files only, no Core change
       expected; confirm the suite is unaffected.
 - [x] 3.2 `./build/verify.sh Debug --no-restage` green (Core + Atlas) before any push.
-- [ ] 3.3 Manual playtest: with Progression Framework + Seafarer installed, spawn a Seafarer
+- [x] 3.3 Manual playtest: with Progression Framework + Seafarer installed, spawn a Seafarer
       quest-giver NPC, accept a quest — confirm the catalog entry now appears in the Quest Link
       picker and the HUD accept prompt fires (the exact scenario that failed in the original
       playtest report). Use a PLAYER-scoped quest (e.g. `celeste-bearhunter`, `celeste-crimsonrose`,
@@ -67,6 +67,6 @@
       villager quest-giver, accept a quest — confirm the catalog entry appears in the Quest Link
       picker and the HUD accept prompt fires (VS Quest's real dependent-mod case, never previously
       manually tested against anything but vsquest's own bundled example content).
-- [ ] 3.5 Regression check: with only a framework mod installed and no dependent content mod (e.g.
+- [x] 3.5 Regression check: with only a framework mod installed and no dependent content mod (e.g.
       Progression Framework alone, no Seafarer), confirm the catalog is empty and no quest UI
       errors or crashes — an empty result stays a valid, silent outcome.
