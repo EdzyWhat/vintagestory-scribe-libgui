@@ -49,8 +49,14 @@
 
 ## 3. Validate and document compatibility evidence
 
-- [ ] 3.1 Add or update build-safe tests for platform gating, outcome classification,
+- [x] 3.1 Add or update build-safe tests for platform gating, outcome classification,
       and bounded diagnostics without referencing the Vintage Story API from `src/Core/`.
+      Extracted `ScribeHarfBuzzLoadFix.ClassifyPlatform` (NotLinux/UnsupportedLibc/GlibcLinux)
+      and parameterized `GetLinuxRid(Architecture)` as `internal static`, pure, VS-API-free
+      methods; added `ScribeHarfBuzzLoadFixTests` (plain xUnit facts, no Atlas world boot) in
+      `Integration.Tests` covering both. The remaining native dlopen/Harmony-patch behavior stays
+      inherently host-dependent and is left to the manual Linux verification in 3.3-3.5. Confirmed
+      2026-09-07: 8/8 new facts pass in ~10ms; full verify.sh (Core 753 + Atlas 59) green.
 - [x] 3.2 Run the Core test suite and a macOS/client build smoke check. The smoke check is
       what SURFACED the 2.6 regression (a macOS crash on every Scribe interaction); after
       restaging with the 2.6 fix, **confirmed in-game 2026-08-31**: Tablet opens normally

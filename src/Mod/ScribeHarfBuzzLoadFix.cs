@@ -10,6 +10,26 @@ using Vintagestory.API.Common;
 
 namespace Scribe;
 
+/// <summary>Bounded classification of the current process's ability to attempt the glibc
+/// <c>RTLD_DEEPBIND</c> isolation (broaden-linux-harfbuzz-fix design.md's "platform gating,"
+/// tested independently of the actual native/Harmony machinery in
+/// <c>ScribeHarfBuzzLoadFixTests</c>).</summary>
+internal enum HarfBuzzPlatformSupport
+{
+    /// <summary>Not Linux (macOS, Windows) — the symbol-interposition bug this fix targets doesn't
+    /// apply; always a silent no-op.</summary>
+    NotLinux,
+
+    /// <summary>Linux, but not glibc — <c>RTLD_DEEPBIND</c> is a glibc extension, so isolation is
+    /// skipped and logged as unavailable rather than silently claiming protection.</summary>
+    UnsupportedLibc,
+
+    /// <summary>Linux + glibc — isolation is attempted (its own success/failure is determined later,
+    /// when the Harmony patch is applied and, at first HarfBuzz call, when the native library is
+    /// actually resolved).</summary>
+    GlibcLinux,
+}
+
 /// <summary>
 /// Harmony-patches LibGUI's own <c>Gui.NativeLibraryLoader.Register()</c> to install an
 /// <c>RTLD_DEEPBIND</c>-isolated resolver for the bundled HarfBuzzSharp native library, instead of
@@ -77,14 +97,15 @@ public sealed class ScribeHarfBuzzLoadFix : ModSystem
         base.StartPre(api);
         patchApi = api;
 
-        if (!OperatingSystem.IsLinux())
+        var support = ClassifyPlatform(OperatingSystem.IsLinux(), PlatformConfiguration.IsGlibc);
+        if (support == HarfBuzzPlatformSupport.NotLinux)
         {
             // This bug is glibc + a system HarfBuzz already loaded process-wide; not a cross-platform
             // concern. No-op elsewhere, including macOS/Windows.
             return;
         }
 
-        if (!PlatformConfiguration.IsGlibc)
+        if (support == HarfBuzzPlatformSupport.UnsupportedLibc)
         {
             api.Logger.Notification(
                 "[scribe] non-glibc Linux detected; skipping HarfBuzz native-load isolation " +
@@ -133,6 +154,13 @@ public sealed class ScribeHarfBuzzLoadFix : ModSystem
         harmony = null;
         base.Dispose();
     }
+
+    /// <summary>Pure platform-gating decision, taking the two live checks as parameters so it's
+    /// testable without an actual glibc/non-glibc Linux host.</summary>
+    internal static HarfBuzzPlatformSupport ClassifyPlatform(bool isLinux, bool isGlibc) =>
+        !isLinux ? HarfBuzzPlatformSupport.NotLinux
+        : !isGlibc ? HarfBuzzPlatformSupport.UnsupportedLibc
+        : HarfBuzzPlatformSupport.GlibcLinux;
 
     /// <summary>Harmony prefix for <c>Gui.NativeLibraryLoader.Register()</c>. Returning <c>false</c>
     /// skips gui's original (unisolated) body entirely; returning <c>true</c> lets it run normally as
@@ -195,7 +223,7 @@ public sealed class ScribeHarfBuzzLoadFix : ModSystem
         string? assemblyDir = Path.GetDirectoryName(assembly.Location);
         if (string.IsNullOrEmpty(assemblyDir)) return null;
 
-        string rid = GetLinuxRid();
+        string rid = GetLinuxRid(RuntimeInformation.ProcessArchitecture);
         string nativeDir = Path.Combine(assemblyDir, "native", rid, "native");
         return Directory.Exists(nativeDir) && File.Exists(Path.Combine(nativeDir, "libHarfBuzzSharp.so"))
             ? nativeDir
@@ -209,7 +237,7 @@ public sealed class ScribeHarfBuzzLoadFix : ModSystem
     /// independently-shipped <c>harfbuzzfix</c> does the same. <c>RuntimeIdentifier</c> can return a
     /// longer, distro-qualified RID that doesn't match the flat folder name the native asset actually
     /// ships under — this mirrors the known-correct mapping rather than that fragile API.</summary>
-    private static string GetLinuxRid() => RuntimeInformation.ProcessArchitecture switch
+    internal static string GetLinuxRid(Architecture architecture) => architecture switch
     {
         Architecture.Arm => "linux-arm",
         Architecture.Arm64 => "linux-arm64",
