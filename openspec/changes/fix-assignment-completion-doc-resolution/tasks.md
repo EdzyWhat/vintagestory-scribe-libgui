@@ -35,15 +35,20 @@
 
 ## 3. Regression coverage
 
-- [ ] 3.1 Add or extend a Mod-layer/integration test (see `tests/Integration.Tests/`) covering:
+- [x] 3.1 Add or extend a Mod-layer/integration test (see `tests/Integration.Tests/`) covering:
   complete a pinned Accepted-assignment task whose Notebook is not in the completing player's
   inventory, and assert the canonical assignment record becomes Completed and both parties'
   synced views reflect it. Verify: the new/updated test passes.
-- [ ] 3.2 Run the full Core suite as a regression sanity check (`src/Core/` is untouched by this
-  change). Verify: `dotnet test tests/Core.Tests` passes.
+  `AssignmentCompletionDocResolutionScenarios.Completing_a_pinned_assignment_derives_completed_even_when_notebook_is_absent`
+  covers exactly this via the real `CompleteTaskForPlayer` path; confirmed passing 2026-09-07
+  (Atlas suite, 51/51 green).
+- [x] 3.2 Run the full Core suite as a regression sanity check (`src/Core/` is untouched by this
+  change). Verify: `dotnet test tests/Core.Tests` passes. Confirmed 2026-09-07: 753/753 green.
 
 ## 4. Spec sync and verification
 
-- [ ] 4.1 Confirm `specs/assignment-state-machine/spec.md`'s new scenario ("Completing a pinned
+- [x] 4.1 Confirm `specs/assignment-state-machine/spec.md`'s new scenario ("Completing a pinned
   assignment task whose document is not currently resolvable") matches the implemented behavior.
-  Verify: `openspec validate fix-assignment-completion-doc-resolution --strict` passes.
+  Verify: `openspec validate fix-assignment-completion-doc-resolution --strict` passes. Confirmed
+  2026-09-07 — scenario matches `NotifyAssignmentDoneChanged`/`CompleteTaskForPlayer` and is
+  exercised by the 3.1 integration test.
