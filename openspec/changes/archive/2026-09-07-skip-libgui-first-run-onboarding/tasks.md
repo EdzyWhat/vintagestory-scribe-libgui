@@ -24,7 +24,8 @@
 
 ## 3. Merge
 
-- [ ] 3.1 Merge the `skip-libgui-first-run-onboarding` branch into `main` once the other terminal's
+- [x] 3.1 Merge the `skip-libgui-first-run-onboarding` branch into `main` once the other terminal's
       concurrent `add-assignment-and-quest-support` work is in a safe state to merge alongside (avoid
       disrupting its in-progress uncommitted changes) — coordinate before merging, don't just push.
-- [ ] 3.2 Remove the worktree at `/tmp/scribe-onboarding-worktree` after a successful merge.
+      Landed on `main` as commit `3745fba`, 2026-08-30.
+- [x] 3.2 Remove the worktree at `/tmp/scribe-onboarding-worktree` after a successful merge.
