@@ -37,7 +37,8 @@ internal readonly record struct ScribeEditRowData(
     ItemStack? DisplayStack = null, string? DisplayName = null,
     int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null, int Depth = 0,
     bool ReadOnly = false, bool CompletionAndPinLive = true, bool IsAcceptedAssignment = false,
-    string? AssignerName = null, string? AssignedDate = null, string? AcceptedDate = null)
+    string? AssignerName = null, string? AssignedDate = null, string? AcceptedDate = null,
+    bool IsStaticVsQuestObjective = false)
 {
     public bool IsTask => Kind == ScribeBlockKind.Task;
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
@@ -953,6 +954,8 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         // (cuneiform-aware on the tablet — task 8.3b: the plain Latin lineHeight left the icon riding high).
         bool isQuestLink = ScribeLinkTarget.IsQuest(Widget.Data.LinkTarget);
         float iconVisual = isQuestLink ? ScribeRowControlNudge.ItemNameLineHeight(style) : ScribeLinkIcon.VisualSize(iconSize, Widget.Data.LinkTarget);
+        if (Widget.Data.IsStaticVsQuestObjective)
+            iconVisual = ScribeLinkIcon.ObjectiveVisualSize(iconSize, Widget.Data.DisplayStack);
         float stepperHeight = Widget.Data.IsCarriedCountTracked ? style.ControlSize * 1.15f : 0f;
         float bandHeight = MathF.Max(iconVisual, stepperHeight);
         var rowChildren = new List<Widget>();
@@ -990,13 +993,19 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         // ScribeRowStyle.LinkColor). Row-height-neutral (7.11e/7.11f); the item icon ignores the color. The
         // Tracker's stepper still drives this editor row's height by design. A Quest Link's icon already
         // renders in the row's leading slot (quest-link-icon-and-color) — no second icon here.
-        Vector4 linkColor = isQuestLink
+        Vector4 linkColor = Widget.Data.IsStaticVsQuestObjective
+            ? colors.OnSurface
+            : isQuestLink
             ? style.QuestLinkColor ?? ScribeTheme.QuestLinkAccent
             : style.LinkColor ?? colors.Primary;
         if (!isQuestLink)
         {
             rowChildren.Add(ScribeCenterIfShort.InBand(
-                ScribeLinkIcon.Build(Widget.Data.DisplayStack, Widget.Data.LinkTarget, iconSize, linkColor, lineHeight, heightNeutral: false),
+                Widget.Data.IsStaticVsQuestObjective
+                    ? ScribeLinkIcon.BuildObjective(Widget.Data.DisplayStack, iconSize, colors.OnSurfaceVariant,
+                        lineHeight, heightNeutral: false)
+                    : ScribeLinkIcon.Build(Widget.Data.DisplayStack, Widget.Data.LinkTarget, iconSize,
+                        linkColor, lineHeight, heightNeutral: false),
                 bandHeight));
         }
 
@@ -1008,7 +1017,8 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         // number reaches the field, clicking the name reaches this gesture. When OnOpenLink is null (every non-tablet
         // editor), the label is a plain OnSurface region and this row renders byte-identical to before. Only item-kind
         // rows (Link/Tracker/Craft) reach this method, so a plain Task/Note's editable text is never wrapped.
-        Widget nameLabel = Widget.OnOpenLink is { } openLink
+        bool canOpen = !Widget.Data.IsStaticVsQuestObjective || Widget.Data.DisplayStack is not null;
+        Widget nameLabel = Widget.OnOpenLink is { } openLink && canOpen
             ? new GestureDetector(
                 onPress: e => { e.Handled = true; openLink(Widget.Data.TaskId); },
                 child: ScribeItemLabel.Build(Widget.Data.Label, linkColor, style))
@@ -1264,7 +1274,7 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             // (see ScribeRowControlNudge.FloatingButtonTop), which now vertically centers the button box
             // on the one-line input at any font scale rather than the old font-15 constant.
             float btnRight = gap + 1f;
-            float btnTop = ScribeRowControlNudge.FloatingButtonTop(style);
+            float btnTop = ScribeRowControlNudge.FloatingButtonTop(style, Widget.Data.IsItemKind);
             // delete: right-most; pin: to its left (every kind, including notes).
             stackChildren.Add(new Positioned(
                 right: btnRight, top: btnTop,

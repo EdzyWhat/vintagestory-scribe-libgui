@@ -63,7 +63,10 @@ public abstract partial class ScribeDialogBase
                 string? assignerName = p.IsAcceptedAssignment ? ResolvePlayerNameForInbox(p.AssignerUid) : null;
                 // Same synthetic guide-page-scheme substitution as the read/editor row construction — routes
                 // a label-only QuestObjective's icon through the existing book-glyph fallback. Display-only.
+                bool isStaticVsQuestObjective = p.Kind == ScribeBlockKind.QuestObjective
+                    && ScribeQuestCatalog.IsStaticObjectiveCode(p.LinkTarget);
                 string? iconLinkTarget = p.Kind == ScribeBlockKind.QuestObjective && stack is null
+                    && !isStaticVsQuestObjective
                     ? ScribeLinkTarget.ForPage(p.LinkTarget ?? "")
                     : p.LinkTarget;
                 return new ScribePinRowData(
@@ -73,7 +76,8 @@ public abstract partial class ScribeDialogBase
                     TargetQuantity: p.TargetQuantity, CurrentQuantity: p.CurrentQuantity, LinkTarget: iconLinkTarget,
                     Depth: p.Depth, IsAcceptedAssignment: p.IsAcceptedAssignment,
                     AssignerName: assignerName, AssignedDate: p.IsAcceptedAssignment ? p.AssignedDate : null,
-                    AcceptedDate: p.IsAcceptedAssignment ? p.AcceptedDate : null);
+                    AcceptedDate: p.IsAcceptedAssignment ? p.AcceptedDate : null,
+                    IsStaticVsQuestObjective: isStaticVsQuestObjective);
             })
             .ToList();
 

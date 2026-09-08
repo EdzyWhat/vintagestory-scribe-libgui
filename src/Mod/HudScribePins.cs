@@ -1056,7 +1056,10 @@ public sealed class HudScribePins : GuiBase
                 // Same synthetic guide-page-scheme substitution as the dialog surfaces (ScribeDialogBase.
                 // Layout.cs / PinTab.cs) — routes a label-only QuestObjective's icon through the existing
                 // book-glyph fallback rather than a blank ItemStackDisplay. Display-only.
+                bool isStaticVsQuestObjective = p.Kind == ScribeBlockKind.QuestObjective
+                    && ScribeQuestCatalog.IsStaticObjectiveCode(p.LinkTarget);
                 string? iconLinkTarget = p.Kind == ScribeBlockKind.QuestObjective && stack is null
+                    && !isStaticVsQuestObjective
                     ? ScribeLinkTarget.ForPage(p.LinkTarget ?? "")
                     : p.LinkTarget;
                 return new HudPinRow(
@@ -1066,7 +1069,7 @@ public sealed class HudScribePins : GuiBase
                     // Live carried count if the HUD's own engine has one, else the snapshot (7.10).
                     TargetQuantity: p.TargetQuantity, CurrentQuantity: HudTrackerHave(p),
                     // Subtask depth, so a pinned subtask indents like the other surfaces (task-subtasks 5.1).
-                    Depth: p.Depth);
+                    Depth: p.Depth, IsStaticVsQuestObjective: isStaticVsQuestObjective);
             })
             .ToList();
     }
@@ -1293,7 +1296,8 @@ internal readonly record struct HudPinRow(
     // resolved client-side in BuildOrderedRows), plus a Tracker's have/need counts, so the HUD row can
     // render the item icon + name instead of the (empty) task text (add-tracker-link-tasks 7.8).
     ItemStack? DisplayStack = null, string? DisplayName = null,
-    int TargetQuantity = 1, int CurrentQuantity = 0, int Depth = 0)
+    int TargetQuantity = 1, int CurrentQuantity = 0, int Depth = 0,
+    bool IsStaticVsQuestObjective = false)
 {
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
     public bool IsLink => Kind == ScribeBlockKind.Link;
@@ -1915,9 +1919,11 @@ internal sealed class HudPinsContent : StatelessWidget
         // the HUD has no per-material theme seam (it's theme-independent, per the doc-comment above), so it
         // reads ScribeTheme.HudQuestLinkAccent directly rather than a ScribeRowStyle override.
         bool isQuestLink = ScribeLinkTarget.IsQuest(row.LinkTarget);
-        Widget? icon = showIcons && !isQuestLink
-            ? ScribeLinkIcon.Build(row.DisplayStack, row.LinkTarget, iconSize, textStyle.Color, lineHeight)
-            : (Widget?)null;
+        Widget? icon = showIcons && row.IsStaticVsQuestObjective
+            ? ScribeLinkIcon.BuildObjective(row.DisplayStack, iconSize, textStyle.Color, lineHeight)
+            : showIcons && !isQuestLink
+                ? ScribeLinkIcon.Build(row.DisplayStack, row.LinkTarget, iconSize, textStyle.Color, lineHeight)
+                : (Widget?)null;
         if (isQuestLink) textStyle = textStyle with { Color = ScribeTheme.HudQuestLinkAccent };
 
         // Name (corrupted like every HUD string). A Handbook hyperlink when interactive: tapping opens the
@@ -1929,7 +1935,8 @@ internal sealed class HudPinsContent : StatelessWidget
         // page (support-attribute-encoded-items).
         string nameText = Corrupt(row.Label, seedOffset: row.TaskId.GetHashCode());
         Widget name = new Text(nameText, textStyle);
-        if (interactive)
+        bool canOpen = !row.IsStaticVsQuestObjective || row.DisplayStack is not null;
+        if (interactive && canOpen)
         {
             string? code = row.IsLink ? row.LinkTarget
                 : row.DisplayStack is { } ds ? ScribeItemRef.Encode(ds) : null;

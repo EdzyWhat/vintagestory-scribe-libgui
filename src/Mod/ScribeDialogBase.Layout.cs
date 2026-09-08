@@ -770,7 +770,9 @@ public abstract partial class ScribeDialogBase
                     // synthetic guide-page-scheme string is substituted here purely to route the SAME icon
                     // fallback a guide-page Link already uses. This is display-only: OpenRowLink re-reads the
                     // LIVE block by TaskId rather than this snapshot, so it's never mistaken for a real page.
-                    string? iconLinkTarget = b.IsQuestObjective && stack is null
+                    bool isStaticVsQuestObjective = b.IsQuestObjective
+                        && ScribeQuestCatalog.IsStaticObjectiveCode(b.LinkTarget);
+                    string? iconLinkTarget = b.IsQuestObjective && stack is null && !isStaticVsQuestObjective
                         ? ScribeLinkTarget.ForPage(b.LinkTarget ?? "")
                         : b.LinkTarget;
                     return new ScribeReadRowData(
@@ -780,7 +782,8 @@ public abstract partial class ScribeDialogBase
                         Depth: b.Depth,
                         IsAcceptedAssignment: b.Assignment?.State == ScribeAssignmentState.Accepted,
                         QuestProgressText: questProgress,
-                        AssignerName: assignerName, AssignedDate: assignedDate, AcceptedDate: acceptedDate);
+                        AssignerName: assignerName, AssignedDate: assignedDate, AcceptedDate: acceptedDate,
+                        IsStaticVsQuestObjective: isStaticVsQuestObjective);
                 })
                 // Drop only an empty-text Task (a stray blank checkbox — belt-and-suspenders, see below).
                 // A Text note may be legitimately empty, and a Tracker/Link has no text of its own (it renders
@@ -844,7 +847,9 @@ public abstract partial class ScribeDialogBase
                 // Same synthetic guide-page-scheme substitution as the read view's row construction (see
                 // BuildReadContent) — routes a label-only QuestObjective's icon through the existing
                 // book-glyph fallback rather than a blank ItemStackDisplay. Display-only.
-                string? iconLinkTarget = b.IsQuestObjective && stack is null
+                bool isStaticVsQuestObjective = b.IsQuestObjective
+                    && ScribeQuestCatalog.IsStaticObjectiveCode(b.LinkTarget);
+                string? iconLinkTarget = b.IsQuestObjective && stack is null && !isStaticVsQuestObjective
                     ? ScribeLinkTarget.ForPage(b.LinkTarget ?? "")
                     : b.LinkTarget;
                 return new ScribeEditRowData(
@@ -852,7 +857,8 @@ public abstract partial class ScribeDialogBase
                     Text: b.Text, DisplayStack: stack, DisplayName: name,
                     TargetQuantity: b.TargetQuantity, CurrentQuantity: b.CurrentQuantity, LinkTarget: iconLinkTarget,
                     Depth: b.Depth, IsAcceptedAssignment: isAcceptedAssignment,
-                    AssignerName: assignerName, AssignedDate: assignedDate, AcceptedDate: acceptedDate);
+                    AssignerName: assignerName, AssignedDate: assignedDate, AcceptedDate: acceptedDate,
+                    IsStaticVsQuestObjective: isStaticVsQuestObjective);
             })
             .ToList();
 

@@ -274,6 +274,7 @@
 	"scribe-quest-completed-never": "Scribe noticed you completed \"{0}\". Quest Completion is set to Never, so nothing changed. Change this in Scribe Settings if you'd like it marked automatically.",
 	"scribe-quest-completed-prompt": "Scribe noticed you completed \"{0}\". Check your pinned tasks HUD to mark it done, or change this in Scribe Settings.",
 	"scribe-questobjective-kill": "Kills",
+	"scribe-questobjective-gather": "Items gathered",
 	"scribe-questobjective-blockplace": "Blocks placed",
 	"scribe-questobjective-blockbreak": "Blocks broken",
 	"scribe-questobjective-pf-status": "{0}",

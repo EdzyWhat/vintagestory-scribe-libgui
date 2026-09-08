@@ -641,6 +641,12 @@ public abstract partial class ScribeDialogBase
                 if (child is not null) scratch.SetQuestObjectiveProgress(child.TaskId, progress);
             }
         }
+        else if (entry.Source == ScribeQuestSource.VsQuest && entry.Objectives.Count > 0)
+        {
+            var parentTaskId = scratch.Blocks[at].TaskId;
+            var staticObjectives = ScribeQuestCatalog.BuildStaticObjectives(capi, entry.Objectives);
+            scratch.ReconcileQuestObjectives(parentTaskId, staticObjectives, createMissing: true);
+        }
         isDirty = true;
         SyncFocusNodesToScratch();
         pendingEnsureVisible = true;

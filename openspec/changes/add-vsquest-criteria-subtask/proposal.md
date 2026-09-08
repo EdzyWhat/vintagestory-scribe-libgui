@@ -32,10 +32,10 @@ attempting a workaround.
 - These subtasks are generated once, at creation, and never reconciled or updated afterward — VS
   Quest has no live per-objective signal outside an open quest dialog, so this is explicitly a
   static snapshot, not a tracker. The player can freely edit or delete them like any other subtask.
-- Reuse the existing `QuestObjective` block kind/rendering (`quest-objective-task`) rather than
-  introducing a new block kind, since the target-count/label/generic-icon/no-carried-tracking shape
-  already fits; `CurrentQuantity` is left at 0 (or omitted from display) since there is nothing live
-  to report.
+- Reuse the existing `QuestObjective` block kind and target-count model (`quest-objective-task`),
+  while rendering VS Quest's static children as ordinary task text with a dedicated objective icon
+  rather than Quest Link styling. A resolved concrete item keeps its inventory icon and acts as a
+  Handbook link. `CurrentQuantity` is left at 0 since there is nothing live to report.
 - **Non-Goal (confirmed, not attempted):** making a VS Quest Quest Link's "follow"/activate action
   open anything. No such surface exists in vsquest outside an active quest-giver interaction (see
   Why above). `link-task`'s existing requirement ("no resolvable target does nothing rather than
@@ -60,4 +60,10 @@ attempting a workaround.
 - `src/Mod/ScribeDialogBase.Editor.cs` (`OnClickAddQuestLink`): add a VS Quest branch alongside the
   existing Progression Framework branch, generating static `QuestObjective` children once via
   `ScribeDocument.ReconcileQuestObjectives(createMissing: true)` (no follow-up progress calls).
-  No `src/Core/` changes are anticipated beyond what `quest-objective-task` already supports.
+- `src/Mod/ScribeModSystem.Quest.cs` and `ScribeAutoLinkQuestMessage.cs`: carry the same static VS
+  Quest criteria through accept-time auto-linking, while keeping progress writes gated to Progression
+  Framework.
+- Quest-objective row rendering: distinguish a static VS Quest child from a live Progression
+  Framework child through its parent Quest Link, use normal task coloring plus a dedicated objective
+  marker for the static child, and route resolved item activation to the Handbook.
+  No persisted data-format change is anticipated.

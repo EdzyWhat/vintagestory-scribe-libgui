@@ -40,7 +40,8 @@ internal readonly record struct ScribeReadRowData(
     ItemStack? DisplayStack = null, string? DisplayName = null,
     int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null, int Depth = 0,
     bool IsAcceptedAssignment = false, string? QuestProgressText = null,
-    string? AssignerName = null, string? AssignedDate = null, string? AcceptedDate = null)
+    string? AssignerName = null, string? AssignedDate = null, string? AcceptedDate = null,
+    bool IsStaticVsQuestObjective = false)
 {
     public bool IsTask => Kind == ScribeBlockKind.Task;
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
@@ -281,7 +282,8 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
                     new ScribeEditRowData(
                         Index: b.Index, Kind: b.Kind, Done: b.Done, Pinned: b.Pinned, TaskId: b.TaskId, Text: b.Text,
                         DisplayStack: b.DisplayStack, DisplayName: b.DisplayName,
-                        TargetQuantity: b.TargetQuantity, CurrentQuantity: b.CurrentQuantity, LinkTarget: b.LinkTarget),
+                        TargetQuantity: b.TargetQuantity, CurrentQuantity: b.CurrentQuantity, LinkTarget: b.LinkTarget,
+                        IsStaticVsQuestObjective: b.IsStaticVsQuestObjective),
                     style, Widget.AssignedStampBitmap)))
             .ToList();
 
@@ -505,23 +507,35 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         // used here previously left the quest icon's CheckboxAndGripTop band shorter than the tablet's
         // actual cuneiform text line, so the icon rode high against the row's top edge.
         float bandHeight = isQuestLink ? ScribeRowControlNudge.ItemNameLineHeight(style) : ScribeLinkIcon.VisualSize(iconSize, Widget.Data.LinkTarget);
+        if (Widget.Data.IsStaticVsQuestObjective)
+            bandHeight = ScribeLinkIcon.ObjectiveVisualSize(iconSize, Widget.Data.DisplayStack);
         // Link accent: the theme's Primary on light surfaces (a dark accent that reads as a colored link),
         // or a row-supplied override where Primary would be illegible as text (the Chalkboard's dark slate —
         // see ScribeRowStyle.LinkColor). The guide-page book glyph renders in it (not the near-black
         // OnSurface) so it reads against the surface (feedback 7.11d); the item icon ignores the color. A
         // Quest Link uses the separate QuestLinkColor seam instead, so it reads distinct from a plain Link.
-        Vector4 linkColor = isQuestLink
+        Vector4 linkColor = Widget.Data.IsStaticVsQuestObjective
+            ? colors.OnSurface
+            : isQuestLink
             ? style.QuestLinkColor ?? ScribeTheme.QuestLinkAccent
             : style.LinkColor ?? colors.Primary;
-        Widget icon = ScribeLinkIcon.Build(Widget.Data.DisplayStack, Widget.Data.LinkTarget, iconSize, linkColor, lineHeight, heightNeutral: false);
+        Widget icon = Widget.Data.IsStaticVsQuestObjective
+            ? ScribeLinkIcon.BuildObjective(Widget.Data.DisplayStack, iconSize, colors.OnSurfaceVariant,
+                lineHeight, heightNeutral: false)
+            : ScribeLinkIcon.Build(Widget.Data.DisplayStack, Widget.Data.LinkTarget, iconSize, linkColor,
+                lineHeight, heightNeutral: false);
 
         // The name is a hyperlink that opens the referenced item's Handbook page and never touches completion
         // (feedback 6.5 — the Tracker, like a Link, "should also open the notebook entry"). Accent-colored to
         // read as tappable. Shared by both kinds so future Crafting tasks inherit the same affordance.
-        Widget nameLink = new Expanded(child: new GestureDetector(
-            onPress: e => { e.Handled = true; Widget.OnOpenLink(Widget.Data.TaskId); },
-            child: ScribeCenterIfShort.Name(
-                ScribeItemLabel.Build(Widget.Data.Label, linkColor, style), style, bandHeight)));
+        Widget name = ScribeCenterIfShort.Name(
+            ScribeItemLabel.Build(Widget.Data.Label, linkColor, style), style, bandHeight);
+        bool canOpen = !Widget.Data.IsStaticVsQuestObjective || Widget.Data.DisplayStack is not null;
+        Widget nameLink = new Expanded(child: canOpen
+            ? new GestureDetector(
+                onPress: e => { e.Handled = true; Widget.OnOpenLink(Widget.Data.TaskId); },
+                child: name)
+            : name);
 
         var rowChildren = new List<Widget>();
 
@@ -746,7 +760,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         if (hovered && Widget.TogglesLive)
         {
             stackChildren.Add(new Positioned(
-                right: 5f, top: ScribeRowControlNudge.FloatingButtonTop(style),
+                right: 5f, top: ScribeRowControlNudge.FloatingButtonTop(style, Widget.Data.IsItemKind),
                 child: new ScribeRowButton(
                     iconName: "scribepin",
                     iconColor: Widget.Data.Pinned ? colors.Primary : colors.OnSurfaceVariant,

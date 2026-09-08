@@ -4,12 +4,13 @@ using ProtoBuf;
 
 namespace Scribe;
 
-/// <summary>One Progression Framework quest objective's catalog definition, captured client-side (the
-/// catalog is a client-only asset read — the server has no other way to know it, same reason
+/// <summary>One quest objective's catalog definition, captured client-side (the catalog is a client-only
+/// asset read — the server has no other way to know it, same reason
 /// <see cref="ScribeAutoLinkQuestMessage.Title"/>/<see cref="ScribeAutoLinkQuestMessage.Description"/>
 /// already travel this way) so the server can seed the Quest Link's QuestObjective children immediately
-/// after adding it (add-progression-framework-quest-objective-subtasks 5.3). Trusted-but-client input,
-/// same trust model as every other field on the carrying message.</summary>
+/// after adding it. Progression Framework supplies live progress; VS Quest supplies a one-shot static
+/// criteria snapshot (add-vsquest-criteria-subtask). Trusted-but-client input, like every other field on
+/// the carrying message.</summary>
 [ProtoContract]
 public sealed class ScribeAutoLinkObjectiveWire
 {
@@ -31,10 +32,8 @@ public sealed class ScribeAutoLinkObjectiveWire
     [ProtoMember(4)]
     public int Required { get; set; }
 
-    /// <summary>The backend's currently-reported progress for this objective, cached client-side by the
-    /// quest watcher at the moment of accept (0 if nothing cached yet — the next tick's progress push
-    /// corrects it). Seeds the newly-created child's <c>CurrentQuantity</c> so an already-partly-progressed
-    /// objective doesn't render as 0/N for one tick after linking.</summary>
+    /// <summary>Progression Framework's currently-reported progress at accept time. Ignored for VS Quest,
+    /// whose criteria children remain static at zero.</summary>
     [ProtoMember(5)]
     public int CurrentProgress { get; set; }
 }
@@ -92,10 +91,9 @@ public sealed class ScribeAutoLinkQuestMessage
     public int TargetSlotId { get; set; } = -1;
 
     /// <summary>The quest's catalog objective definitions, captured client-side (see
-    /// <see cref="ScribeAutoLinkObjectiveWire"/>'s remarks) — null/empty for a VS Quest link (which has no
-    /// QuestObjective subtask model) or when the quest watcher had nothing cached for this quest yet.
-    /// The server reconciles these into QuestObjective children immediately after adding the Link
-    /// (add-progression-framework-quest-objective-subtasks 5.3).</summary>
+    /// <see cref="ScribeAutoLinkObjectiveWire"/>'s remarks). The server reconciles these into
+    /// QuestObjective children immediately after adding the Link. Null/empty when the watcher has no
+    /// catalog entry for the quest.</summary>
     [ProtoMember(7)]
     public List<ScribeAutoLinkObjectiveWire>? Objectives { get; set; }
 

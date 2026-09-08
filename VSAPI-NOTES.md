@@ -3095,6 +3095,31 @@ We already depend on Atlas (the headless-server integration suite, `tests/Integr
 these are 0.11.0 capabilities we do NOT yet use but should adopt as the suite grows (source +
 wiki cloned to `reference/atlas` / `reference/atlas-wiki`, gitignored):
 
+### Atlas reports every test as missing `VintagestoryAPI` when `VINTAGE_STORY` is absent
+
+**Symptom:** `./build/verify.sh Debug --no-restage` builds the Mod and passes Core, then Atlas
+immediately fails most or all tests with `FileNotFoundException: Could not load file or assembly
+'VintagestoryAPI'`. No server scenario reaches its body. The test output correctly contains no
+`VintagestoryAPI.dll` because `Integration.Tests.csproj` sets that reference's `Private=false`.
+
+**Cause:** `Directory.Build.props` has a macOS fallback to `/Applications/Vintage Story.app`, so
+MSBuild can compile while the shell's `VINTAGE_STORY` environment variable is unset. Atlas 0.11's
+runtime resolver reads `VINTAGE_STORY` itself; it does not inherit the MSBuild property fallback.
+The install is already mounted/readable. This is an environment-export problem, not a missing game
+installation or a reason to copy the API DLL into the test output.
+
+**Fix / Codex invocation:** prefix the gate so the spawned VSTest and Atlas processes inherit the
+game path:
+
+```sh
+VINTAGE_STORY="/Applications/Vintage Story.app" ./build/verify.sh Debug --no-restage
+```
+
+Before diagnosing Atlas code, check `[[ -n "${VINTAGE_STORY:-}" ]]` and verify
+`$VINTAGE_STORY/VintagestoryAPI.dll` exists. Keep `Private=false`: copying the API assembly into
+the output can shadow Atlas's install-time resolution and requires the matching PDB, creating a
+different class of startup failure.
+
 - **`ExecuteCommand` result assertions** — drive and assert on in-game chat/server commands from a
   scenario (not just block/entity state). Worth adopting to test the completion/pin flow through a
   command surface, and any future admin/debug command the mod adds, end-to-end.

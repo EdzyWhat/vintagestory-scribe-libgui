@@ -63,28 +63,61 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > (`FieldPadYScale = 6/9`). **Fully quit and restage/relaunch the client first** so the rebuilt DLL
 > loads.
 
-- [ ] `000000af` **Check row/title band shrinks with the glyphs.** Open a tablet — confirm title bar
+- [x] `000000af` **Check row/title band shrinks with the glyphs.** Open a tablet — confirm title bar
       and row text render visibly smaller (~95%) than before, AND the row/title band itself is
       physically shorter (not just smaller ink in an unchanged box). Checkbox/control/icon sizes stay
       pixel-identical to before, so the checkbox will likely now overflow above/below the shorter
       row — that mismatch is expected, not a bug. *(tablet-cuneiform-glyph-scale 4.1)*
-- [ ] `000000b1` **Check editable field unaffected at any length.** Type a full row's worth of text
+      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
+- [x] `000000b1` **Check editable field unaffected at any length.** Type a full row's worth of text
       into a tablet row/title — confirm the caret position and any text selection track the actual
       glyphs exactly at every character count: no caret drift growing with character count, no
       mis-hit selection, no growing/shrinking margin at the start of the line as you type.
       *(tablet-cuneiform-glyph-scale 4.2)*
-- [ ] `000000b2` **Check glow tracks shrunk ink.** On at least one wet and one fired tablet clay
+      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
+- [x] `000000b2` **Check glow tracks shrunk ink.** On at least one wet and one fired tablet clay
       view, confirm the per-material glow still tracks the ink correctly — no doubled or offset
       halo. *(tablet-cuneiform-glyph-scale 4.3)*
-- [ ] `000000b3` **Check non-tablet cuneiform unchanged.** Run the `.cuneiform` dev harness (and any
+      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
+- [x] `000000b3` **Check non-tablet cuneiform unchanged.** Run the `.cuneiform` dev harness (and any
       other non-tablet cuneiform surface) — confirm it still renders at full size
       (`GlyphDrawScale = 1`), visually unchanged. *(tablet-cuneiform-glyph-scale 4.4)*
-- [ ] `000000b6` **Check caret height + field padding.** In a tablet row/title's editor, confirm the
+      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
+- [x] `000000b6` **Check caret height + field padding.** In a tablet row/title's editor, confirm the
       caret renders visibly shorter than the full text line, centered rather than top/bottom-anchored,
       and the field's box is visibly tighter top-to-bottom around the text/caret — with Read and
       Editor row heights still matching each other. Typing/caret/selection should still behave
       correctly at any buffer length (no regression of the caret-drift fix above).
       *(tablet-cuneiform-glyph-scale 5.7)*
+      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
+
+## add-vsquest-criteria-subtask
+
+> VS Quest links now capture their cataloged kill, gather, block-place, and block-break criteria as
+> static depth-1 subtasks. The same snapshot is created from the editor picker and from accept-time
+> auto-linking. These checks require vsquest + VS Village; fully restage and relaunch first.
+
+- [x] `000000b0` **Check VS Village kill criteria.** Accept “Shivers from another world” and let
+      Scribe link it through the configured automatic/prompt route — confirm the destination document
+      gets one depth-1 objective showing `0/50` and `Kills 50`. Kill a qualifying Drifter and reopen
+      the document; confirm this static snapshot remains `0/50`. Repeat through the editor’s Add Quest
+      Link picker when practical and confirm the same child appears. *(add-vsquest-criteria-subtask 3.3)*
+      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
+- [x] `000000b7` **Check gather criteria.** Create a VS Village Quest Link for a quest with a gather
+      objective — confirm a depth-1 static objective appears with the required count even though
+      vsquest exposes no live gather counter. *(add-vsquest-criteria-subtask 3.4)*
+      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
+- [ ] `000000b8` **Check item Handbook link.** Create a VS Quest link whose gather objective names one
+      exact item code; confirm the child shows that item's inventory icon and localized name, then
+      activate the name and confirm its Handbook entry opens. *(add-vsquest-criteria-subtask 3.5)*
+      - **Still broken 2026-09-08:** (submission 2026-09-08T08-55-42) "These both appear, but this should count as a link to the handbook! Can we update that?"
+- [ ] `000000b9` **Check PF live objectives.** Create a Progression Framework Quest Link, make progress
+      on one objective, and confirm its generated child still updates live; VS Quest’s new static path
+      must not affect PF reconciliation. *(add-vsquest-criteria-subtask 3.6)*
+- [ ] `000000ba` **Check static objective styling.** View “Shivers from another world” on Read,
+      Editor, Pinned, and HUD surfaces; confirm its multi-code child uses normal task color with the
+      bullseye marker, never the link color or book icon, and does nothing when activated.
+      *(add-vsquest-criteria-subtask 3.7)*
 
 ## rework-quest-accept-notification-styles
 
@@ -147,17 +180,19 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > dialog closed). Now point-specific: a click outside the vanilla dialog's bounds reaches Scribe and
 > regains its focus normally, even while the vanilla dialog stays open.
 
-- [ ] `000000b4` **Check Handbook link doesn't pass through, and Scribe stays clickable.** Open a
+- [x] `000000b4` **Check Handbook link doesn't pass through, and Scribe stays clickable.** Open a
       Notebook/Lectern/Tablet dialog, click a Handbook link so the base-game Handbook opens on top of
       it, then click somewhere inside the Handbook that visually overlaps where the Scribe dialog sits
       underneath — confirm the click reaches the Handbook (not swallowed by the Scribe row underneath).
       Then, WITHOUT closing the Handbook, click directly on the Scribe dialog itself — confirm it
       responds immediately and regains focus (this is the corrected behavior; the first landing of this
       fix failed this specific check). *(fix-libgui-click-draw-order-mismatch 3.2/3.4/3.5)*
-- [ ] `000000b5` **Check Quest Link doesn't pass through.** Same as above, but click a Quest Link so
+      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
+- [x] `000000b5` **Check Quest Link doesn't pass through.** Same as above, but click a Quest Link so
       Progression Framework's Ledger (Quest Log tab) opens on top instead — confirm clicks inside the
       Ledger reach it rather than the Scribe dialog underneath. *(fix-libgui-click-draw-order-mismatch
       3.3)*
+      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
 
 ## assignment-lifecycle-bug-fixes
 
@@ -789,7 +824,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         to this icon/checkbox/color scope; the item originally also claimed the alignment check
         below, which was never actually verified. Split out as `000000ae` per direct user
         correction.
-- [ ] `000000ae` **Check quest icon/text vertical alignment.** On Read, Editor, Pinned, and the
+- [x] `000000ae` **Check quest icon/text vertical alignment.** On Read, Editor, Pinned, and the
       Assignment-stage picker, confirm a Quest Link row's icon and item name are vertically
       centered together (not text riding noticeably higher than the icon).
       *(quest-link-icon-and-color 8.3b)*
@@ -819,6 +854,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         and passes it through to `CheckboxAndGripTop`, threaded at all four call sites (Read, Pinned,
         Editor's live row, Editor's frozen/collapsing ghost row) — grip and checkbox now share the
         exact same top offset by construction. Needs an in-game retest alongside the above.
+      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
 - [x] `000000aa` **Check HUD quest link uses finalized blue.** Pin a Quest Link to the HUD — confirm
       it renders at the finalized `rgb(172,207,255)` blue, distinct from the shared steel-blue
       accent used on Read/Editor/Pinned/Assignment-stage. *(quest-link-icon-and-color 7.3/8.3a)*

@@ -37,7 +37,8 @@ internal readonly record struct ScribePinRowData(
     ItemStack? DisplayStack = null, string? DisplayName = null,
     int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null, int Depth = 0,
     bool IsAcceptedAssignment = false,
-    string? AssignerName = null, string? AssignedDate = null, string? AcceptedDate = null)
+    string? AssignerName = null, string? AssignedDate = null, string? AcceptedDate = null,
+    bool IsStaticVsQuestObjective = false)
 {
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
     public bool IsLink => Kind == ScribeBlockKind.Link;
@@ -261,7 +262,8 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                         Text: r.Text, DisplayStack: r.DisplayStack, DisplayName: r.DisplayName,
                         TargetQuantity: r.TargetQuantity, CurrentQuantity: r.CurrentQuantity, LinkTarget: r.LinkTarget,
                         Depth: r.Depth, IsAcceptedAssignment: r.IsAcceptedAssignment,
-                        AssignerName: r.AssignerName, AssignedDate: r.AssignedDate, AcceptedDate: r.AcceptedDate),
+                        AssignerName: r.AssignerName, AssignedDate: r.AssignedDate, AcceptedDate: r.AcceptedDate,
+                        IsStaticVsQuestObjective: r.IsStaticVsQuestObjective),
                     Widget.Style, Widget.AssignedStampBitmap)))
             .ToList();
 
@@ -518,19 +520,31 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
         // (cuneiform-aware on the tablet — task 8.3b: the plain Latin lineHeight left the icon riding high).
         bool isQuestLink = ScribeLinkTarget.IsQuest(data.LinkTarget);
         float bandHeight = isQuestLink ? ScribeRowControlNudge.ItemNameLineHeight(style) : ScribeLinkIcon.VisualSize(iconSize, data.LinkTarget);
+        if (data.IsStaticVsQuestObjective)
+            bandHeight = ScribeLinkIcon.ObjectiveVisualSize(iconSize, data.DisplayStack);
         // Link accent: Primary on light surfaces, or the row's override where Primary is illegible as text on
         // a dark surface (the Chalkboard slate — ScribeRowStyle.LinkColor). Guide-page book glyph (7.11d),
         // item icon grown + row-height-neutral (7.11e/7.11f). A Quest Link uses the separate QuestLinkColor
         // seam instead, so it reads distinct from a plain Link.
-        Vector4 linkColor = isQuestLink
+        Vector4 linkColor = data.IsStaticVsQuestObjective
+            ? colors.OnSurface
+            : isQuestLink
             ? style.QuestLinkColor ?? ScribeTheme.QuestLinkAccent
             : style.LinkColor ?? colors.Primary;
-        Widget icon = ScribeLinkIcon.Build(data.DisplayStack, data.LinkTarget, iconSize, linkColor, lineHeight, heightNeutral: false);
+        Widget icon = data.IsStaticVsQuestObjective
+            ? ScribeLinkIcon.BuildObjective(data.DisplayStack, iconSize, colors.OnSurfaceVariant,
+                lineHeight, heightNeutral: false)
+            : ScribeLinkIcon.Build(data.DisplayStack, data.LinkTarget, iconSize, linkColor,
+                lineHeight, heightNeutral: false);
 
-        Widget nameLink = new Expanded(child: new GestureDetector(
-            onPress: e => { e.Handled = true; Widget.OnOpenLink(data.TaskId); },
-            child: ScribeCenterIfShort.Name(
-                ScribeItemLabel.Build(data.Label, linkColor, style), style, bandHeight)));
+        Widget name = ScribeCenterIfShort.Name(
+            ScribeItemLabel.Build(data.Label, linkColor, style), style, bandHeight);
+        bool canOpen = !data.IsStaticVsQuestObjective || data.DisplayStack is not null;
+        Widget nameLink = new Expanded(child: canOpen
+            ? new GestureDetector(
+                onPress: e => { e.Handled = true; Widget.OnOpenLink(data.TaskId); },
+                child: name)
+            : name);
 
         var rowChildren = new List<Widget>();
         if (data.IsLink)
@@ -706,7 +720,7 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
             float gap = 4f;
             float boxW = btn - ScribeRowButton.BoxShrink;
             float btnRight = gap + 1f;
-            float btnTop = ScribeRowControlNudge.FloatingButtonTop(style);
+            float btnTop = ScribeRowControlNudge.FloatingButtonTop(style, data.IsItemKind);
             stackChildren.Add(new Positioned(
                 right: btnRight, top: btnTop,
                 child: new ScribeRowButton(

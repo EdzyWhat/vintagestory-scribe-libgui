@@ -27,6 +27,8 @@ arg count risks a malformed/garbled string, not just a missing icon.
 **Goals:**
 - Show a one-time, non-live acceptance-criteria hint for VS Quest Quest Links, covering all four
   static objective types (kill, gather, block-place, block-break).
+- Make the static hint visually read as an objective indicator, while allowing an exact item to
+  retain the useful Handbook-link behavior associated with its inventory icon.
 - Reuse `quest-objective-task`'s existing model/rendering unchanged for Progression Framework.
 
 **Non-Goals:**
@@ -63,12 +65,24 @@ in the codebase; a lookup miss only ever degrades to the generic label, never a 
 
 **D3 — Generation is one-shot, gated by source, and never reconciled again.**
 `OnClickAddQuestLink` adds a VS Quest branch calling `ReconcileQuestObjectives(...,
-createMissing: true)` once at creation, exactly like the Progression Framework branch's first call
-— but with no follow-up `SetQuestObjectiveProgress` calls, since there is nothing to report.
+createMissing: true)` once at creation, exactly like the Progression Framework branch's first call.
+Accept-time auto-linking carries the same static definitions through the existing objective wire
+payload and reconciles them server-side when creating the Link. Both routes omit follow-up
+`SetQuestObjectiveProgress` calls, since there is nothing to report.
 `CurrentQuantity` is left at its default (0) on every generated child. This is intentionally
 inert afterward: nothing else in the codebase ever calls `ReconcileQuestObjectives` for a
 VS-Quest-sourced parent, so "no live updates" falls out of simply never wiring a call site, not a
 new guard.
+
+**D4 — Presentation and activation derive from the generated objective's stable source key.**
+The persisted child remains a `QuestObjective`. VS Quest generation already assigns its children
+stable keys in the reserved `vsquest-objective-` namespace, while Progression Framework retains the
+backend's own objective codes. A shared predicate classifies the static variant from that key on
+live document rows and pin snapshots alike, including when the source document is unloaded. Static
+generic objectives use ordinary task text color and a dedicated bullseye marker. When `ItemCode`
+resolves, the existing item icon remains and activating the row opens that item's Handbook entry. A
+generic static objective has no activation target. Progression Framework objective presentation and
+live behavior stay unchanged.
 
 ## Risks / Trade-offs
 
@@ -81,6 +95,9 @@ new guard.
   way item resolution does (Tracker only ever resolves items). → **Mitigation:** low severity by
   construction — a resolution miss falls back to the already-required generic label, never blocks
   child creation or throws.
+- **[Risk]** A source-key convention can drift between creation and rendering. → **Mitigation:** own
+  the prefix and predicate together in `ScribeQuestCatalog`, and use the predicate from every row
+  snapshot builder rather than repeating string checks.
 
 ## Migration Plan
 

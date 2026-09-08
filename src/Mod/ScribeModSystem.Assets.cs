@@ -57,6 +57,9 @@ public sealed partial class ScribeModSystem
         // Quest Link marker (quest-link-icon-and-color): an exclamation mark in a circle, distinct from the
         // book glyph a guide-page Link shows — a rotated derivative of info.svg (see quest.svg).
         RegisterSvgIcon(api, "scribequest",   new AssetLocation("scribe", "textures/icons/quest.svg"));
+        // Static VS Quest objective marker: a bullseye communicates a target/criterion without implying
+        // that the row opens the quest dialog or a guide page.
+        RegisterSvgIcon(api, "scribeobjective", new AssetLocation("scribe", "textures/icons/bullseye.svg"));
         // Drag-reorder feedback glyphs (replace-drag-wash-with-grip-arrows): the grabbed row's grip
         // becomes ◀ and the prospective drop row's grip becomes ▶, replacing the old row-background washes.
         RegisterSvgIcon(api, "scribetriangleleft",  new AssetLocation("scribe", "textures/icons/triangle-left.svg"));

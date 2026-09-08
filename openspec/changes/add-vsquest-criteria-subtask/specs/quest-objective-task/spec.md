@@ -6,8 +6,12 @@ objective in the quest's static catalog definition (kill, gather, block-place, a
 objectives alike), placed contiguously at depth 1 directly below the parent, exactly like
 Progression Framework's objective-subtask generation. Each generated child's `TargetQuantity`
 SHALL be the objective's required count, and its captured label SHALL be a human-readable
-description resolved from the objective's matching codes (falling back to the raw code list if no
-display name resolves). Unlike Progression Framework's objectives, these children SHALL NOT be
+description resolved from the objective's single exact matching code. Wildcard, multi-code, and
+unresolved objectives SHALL use a localized `"{KindLabel} {demand}"` label. A static VS Quest child
+SHALL use ordinary task text color and a dedicated objective marker rather than Quest Link color or
+the Quest Link book marker. When the child resolves to one concrete item, it SHALL show that item's
+inventory icon and activation SHALL open the item's Handbook entry. A generic child SHALL remain
+non-interactive. Unlike Progression Framework's objectives, these children SHALL NOT be
 reconciled or updated again after creation — VS Quest exposes no live per-objective signal outside
 an open quest-selection dialog, so this is a one-time snapshot of the acceptance criteria, not a
 progress tracker. The player MAY freely edit or delete a generated child; no later action ever
@@ -35,3 +39,13 @@ recreates, resurrects, or overwrites it.
 - **WHEN** a VS Quest Quest Link is created for a quest whose catalog definition has no kill,
   gather, block-place, or block-break objectives
 - **THEN** no `QuestObjective` children are generated for it
+
+#### Scenario: A resolved item objective opens its Handbook entry
+- **WHEN** a generated VS Quest objective child resolves to one concrete item and the player
+  activates that child
+- **THEN** the item's Handbook entry opens
+
+#### Scenario: A generic static objective reads as an indicator rather than a link
+- **WHEN** a VS Quest objective uses wildcard, multi-code, or unresolved matching codes
+- **THEN** its generated child uses ordinary task text color and a dedicated objective marker
+- **AND** activating the child performs no action

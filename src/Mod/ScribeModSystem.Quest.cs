@@ -302,9 +302,9 @@ public sealed partial class ScribeModSystem
     /// is the defensive/legacy path: the server falls back to <c>FindNotebookInInventory</c> (task 6.4),
     /// matching this message's pre-picker behavior. For a Progression Framework quest, also attaches the
     /// watcher's cached catalog objective defs (+ whatever live progress it has cached) so the server can
-    /// seed the new Quest Link's QuestObjective children immediately after adding it
-    /// (add-progression-framework-quest-objective-subtasks 5.3) — null/empty for a VS Quest link or when
-    /// nothing is cached yet (the quest's own catalog read hasn't completed this session).</summary>
+    /// seed the new Quest Link's QuestObjective children immediately after adding it. VS Quest entries
+    /// attach the one-shot static criteria snapshot from their catalog; Progression Framework entries
+    /// also include cached live progress. Null/empty when the relevant catalog read has not completed.</summary>
     private void SendAutoLinkQuest(ScribeQuestCatalogEntry quest, ScribeAcceptCandidate? candidate)
     {
         if (capi is null) return;
@@ -322,6 +322,25 @@ public sealed partial class ScribeModSystem
                 Required = o.Required,
                 CurrentProgress = progressByCode.TryGetValue(o.Code, out int p) ? p : 0,
             }).ToList();
+        }
+        else if (quest.Source == ScribeQuestSource.VsQuest)
+        {
+            IReadOnlyList<ScribeQuestObjectiveDef> vsObjectives = quest.Objectives;
+            if (vsObjectives.Count == 0
+                && questWatcher?.TryGetObjectives(quest.QuestCode, out var cachedObjectives) == true)
+            {
+                vsObjectives = cachedObjectives;
+            }
+
+            objectives = ScribeQuestCatalog.BuildStaticObjectives(capi, vsObjectives)
+                .Select(o => new ScribeAutoLinkObjectiveWire
+                {
+                    Code = o.Code,
+                    ItemCode = o.ItemCode,
+                    Label = o.Label,
+                    Required = o.Required,
+                    CurrentProgress = 0,
+                }).ToList();
         }
 
         capi.Network.GetChannel(NetworkChannelName).SendPacket(new ScribeAutoLinkQuestMessage
@@ -397,11 +416,14 @@ public sealed partial class ScribeModSystem
                 .Where(o => o.Code is not null)
                 .Select(o => (o.Code!, o.ItemCode, o.Label, o.Required))
                 .ToList(), createMissing: true);
-            foreach (var wire in objectives)
+            if (source == ScribeQuestSource.ProgressionFramework)
             {
-                var child = doc.Blocks.FirstOrDefault(b => b.IsQuestObjective
-                    && string.Equals(b.LinkTarget, wire.Code, StringComparison.Ordinal));
-                if (child is not null) doc.SetQuestObjectiveProgress(child.TaskId, wire.CurrentProgress);
+                foreach (var wire in objectives)
+                {
+                    var child = doc.Blocks.FirstOrDefault(b => b.IsQuestObjective
+                        && string.Equals(b.LinkTarget, wire.Code, StringComparison.Ordinal));
+                    if (child is not null) doc.SetQuestObjectiveProgress(child.TaskId, wire.CurrentProgress);
+                }
             }
         }
         host.Flush();

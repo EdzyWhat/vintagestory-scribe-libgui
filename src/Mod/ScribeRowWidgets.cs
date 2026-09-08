@@ -213,15 +213,22 @@ internal static class ScribeRowControlNudge
         => EdgeInsets.Only(top: CheckboxAndGripTop(style, itemRow, linkTarget), right: -style.CheckboxTextGap);
 
     /// <summary>Absolute top offset (from the row's top edge) that centers a floating pin/delete button's
-    /// DRAWN box on the one-line input. The button box is <see cref="ScribeRowButton.BoxShrink"/> px
-    /// shorter than <see cref="ScribeRowStyle.ControlSize"/>; the input sits <c>RowVerticalPadding</c>
-    /// below the row top (the row's own vertical padding), so the button's box centers on the input's
-    /// vertical midpoint. Computed so it tracks the font scale.</summary>
-    public static float FloatingButtonTop(ScribeRowStyle style)
+    /// DRAWN box on the row's first rendered text line. The button box is <see cref="ScribeRowButton.BoxShrink"/>
+    /// px shorter than <see cref="ScribeRowStyle.ControlSize"/>; that line sits <c>RowVerticalPadding</c>
+    /// below the row top (the row's own vertical padding), so the button's box centers on the line's vertical
+    /// midpoint. Computed so it tracks the font scale.
+    /// <para>A plain Task/Note row's first line is the padded one-line input field
+    /// (<see cref="SingleLineInputHeight"/>, matching <see cref="CheckboxAndGripTop"/>'s Task/Note band). An
+    /// item row's (<paramref name="itemRow"/>) first line is its NAME, which uses the shared cuneiform-aware
+    /// <see cref="ItemNameLineHeight"/> — the same band that already centers quest markers and grips on a
+    /// cuneiform tablet — so a floating Pin/Delete/Unpin button follows the row's real text line instead of
+    /// a Latin-only measurement (align-row-hover-action-buttons).</para></summary>
+    public static float FloatingButtonTop(ScribeRowStyle style, bool itemRow = false)
     {
         float boxHeight = style.ControlSize - ScribeRowButton.BoxShrink;
-        float inputCenter = style.RowVerticalPadding + SingleLineInputHeight(style) / 2f;
-        return MathF.Max(0f, inputCenter - boxHeight / 2f);
+        float band = itemRow ? ItemNameLineHeight(style) : SingleLineInputHeight(style);
+        float lineCenter = style.RowVerticalPadding + band / 2f;
+        return MathF.Max(0f, lineCenter - boxHeight / 2f);
     }
 }
 
@@ -378,6 +385,10 @@ internal static class ScribeLinkIcon
     // TEMPORARY EXPERIMENT (Option 2, tools/row-leading-slot-alignment): was 0.8f.
     private const float BookGlyphScale = 0.65f;
 
+    /// <summary>Static VS Quest criterion marker scale. The bullseye has a dense outer ring, so it uses
+    /// the same compact footprint as the guide-page book glyph.</summary>
+    private const float ObjectiveGlyphScale = 0.65f;
+
     /// <summary>True for a Link whose row has no item to draw an <see cref="ItemStackDisplay"/> for — a
     /// guide-page or quest Link — so it renders the shared book glyph instead (add-assignment-and-quest-support
     /// 10.1: a quest Link is exactly as item-less as a guide-page Link).</summary>
@@ -386,6 +397,9 @@ internal static class ScribeLinkIcon
 
     public static float VisualSize(float iconSize, string? linkTarget)
         => iconSize * (IsBookGlyph(linkTarget) ? BookGlyphScale : ItemIconScale);
+
+    public static float ObjectiveVisualSize(float iconSize, ItemStack? stack)
+        => iconSize * (stack is null ? ObjectiveGlyphScale : ItemIconScale);
 
     public static Widget Build(ItemStack? stack, string? linkTarget, float iconSize, Vector4 bookColor,
         float lineHeight, bool heightNeutral = true)
@@ -398,6 +412,18 @@ internal static class ScribeLinkIcon
         // Window item rows top-align the icon with the stepper/name, so the icon must occupy its
         // real visual height in layout (otherwise HeightNeutral overflows above the row). HUD still
         // uses the height-neutral wrap so a pin row matches a single text line.
+        return heightNeutral ? HeightNeutral(art, visual, lineHeight) : art;
+    }
+
+    /// <summary>Build a static VS Quest objective icon: its resolved inventory item when available,
+    /// otherwise the dedicated bullseye marker. The marker avoids the guide-page book metaphor.</summary>
+    public static Widget BuildObjective(ItemStack? stack, float iconSize, Vector4 markerColor,
+        float lineHeight, bool heightNeutral = true)
+    {
+        float visual = ObjectiveVisualSize(iconSize, stack);
+        Widget art = stack is null
+            ? new ScribeVsIconGlyph("scribeobjective", visual, markerColor)
+            : new ItemStackDisplay(stack, width: visual, height: visual, renderSize: 48);
         return heightNeutral ? HeightNeutral(art, visual, lineHeight) : art;
     }
 
@@ -739,4 +765,3 @@ internal sealed class ScribeRowButtonState : State<ScribeRowButton>
                 child: new VsIcon(Widget.IconName, glyph, glyphColor)));
     }
 }
-
