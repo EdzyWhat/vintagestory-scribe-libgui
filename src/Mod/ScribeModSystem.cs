@@ -41,6 +41,10 @@ public sealed partial class ScribeModSystem : ModSystem
     /// (<see cref="ScribeQuestDecisionStore"/>).</summary>
     private const string QuestDecisionStoreSaveKey = "scribe:questdecisions:v1";
 
+    /// <summary>Savegame key for the persisted pending-history-entry store
+    /// (<see cref="PendingHistoryStore"/>) — see fix-death-history-inventory-race.</summary>
+    private const string PendingHistoryStoreSaveKey = "scribe:pendinghistory:v1";
+
     /// <summary>Client-local JSON file holding ALL of this player's Scribe preferences — completion
     /// policy, HUD rows/anchor/offsets/width/collapse, and the HUD/window font-size scales — per-player,
     /// cross-world, never server-synced. As of add-settings-tab this is the SINGLE client-local
@@ -95,6 +99,17 @@ public sealed partial class ScribeModSystem : ModSystem
     /// a CarryOn-carried container also participate in history recording. Null on a pure client.
     /// See <see cref="CarryOnBridge"/>.</summary>
     private CarryOnBridge? carryOnBridge;
+
+    /// <summary>Server-side store of Death entries queued against a document that was evicted from
+    /// the dying player's inventory by something else during the same death dispatch (e.g. another
+    /// mod's own corpse-creating <c>OnEntityDeath</c> handler) — see fix-death-history-inventory-race.
+    /// Flushed by <see cref="OnHistoryScanTick"/> the next time the target document is seen in a live
+    /// carried slot. Null on a pure client.</summary>
+    private PendingHistoryStore? pendingHistoryStore;
+
+    /// <summary>Test/tooling accessor for <see cref="pendingHistoryStore"/>, mirroring the existing
+    /// <see cref="PinStore"/>/<see cref="AssignmentStore"/> public accessors.</summary>
+    public PendingHistoryStore? PendingHistoryStore => pendingHistoryStore;
 
     /// <summary>Server-side per-player timer store. Keyed by PlayerUID. Null on a pure client.</summary>
     private Dictionary<string, TimerStore>? timerStores;
@@ -534,6 +549,7 @@ public sealed partial class ScribeModSystem : ModSystem
         assignmentStore = new ScribeAssignmentStore();
         questDecisionStore = new ScribeQuestDecisionStore();
         playerLocationStore = new ScribePlayerLocationStore();
+        pendingHistoryStore = new PendingHistoryStore();
         carryOnBridge = new CarryOnBridge(api);
 
         var channel = api.Network.GetChannel(NetworkChannelName);
@@ -577,12 +593,14 @@ public sealed partial class ScribeModSystem : ModSystem
         // Last-known-position capture for the Hybrid range check's offline-target case (Core 1.5).
         api.Event.PlayerDisconnect += OnScribePlayerDisconnect;
 
-        // History chronicle hooks.
+        // History chronicle hooks. OnHistoryScanTick (formerly storm-only OnStormTick, widened from 5s
+        // to 10s) now also refreshes the carried-document snapshot and flushes queued Death entries —
+        // see fix-death-history-inventory-race design.md.
         api.Event.OnEntityDeath += OnEntityDeath;
-        api.World.RegisterGameTickListener(OnStormTick, 5000);
+        api.World.RegisterGameTickListener(OnHistoryScanTick, 10000);
 
         // Task Notice proximity discovery heartbeat (task-notice-proximity-signal tasks.md 5.1),
-        // mirroring OnStormTick's own idiom/interval.
+        // mirroring OnHistoryScanTick's own idiom/interval.
         api.World.RegisterGameTickListener(OnTaskNoticeProximityTick, 5000);
 
         // Timer countdown: 1 s tick for all running/fired player timers.

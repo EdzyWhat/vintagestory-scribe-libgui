@@ -340,6 +340,126 @@ public class HistoryStoreTests
         Assert.Equal(Guid.Empty, store.Entries[0].EntryId);
     }
 
+    // ---- v2 -> v3 migration (synthetic timestamps) ----
+
+    [Fact]
+    public void Deserialize_V2Payload_MigratesWithNegativeTimestampsPreservingOrder()
+    {
+        // Hand-build a v2 payload: magic, version=2, count=3, three entries with the OLD field
+        // layout (EntryId present, no InGameTimestamp bytes at all).
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write("SHST"u8.ToArray());
+            w.Write((byte)2); // v2
+            w.Write(3);       // entryCount
+            foreach (string detail in new[] { "first", "second", "third" })
+            {
+                w.Write((byte)HistoryEventKind.Death);
+                w.Write("Alice");
+                w.Write(detail);
+                w.Write("Year 1, Day 1");
+                w.Write(Guid.Empty.ToByteArray());
+                // no InGameTimestamp bytes in v2
+            }
+        }
+
+        var store = HistoryStore.Deserialize(ms.ToArray());
+
+        Assert.Equal(3, store.Entries.Count);
+        // Original relative order preserved...
+        Assert.Equal("first",  store.Entries[0].Detail);
+        Assert.Equal("second", store.Entries[1].Detail);
+        Assert.Equal("third",  store.Entries[2].Detail);
+        // ...via a strictly-increasing negative sequence, so every migrated entry sorts before any
+        // timestamp a freshly-recorded (post-migration) entry can carry.
+        Assert.True(store.Entries[0].InGameTimestamp < store.Entries[1].InGameTimestamp);
+        Assert.True(store.Entries[1].InGameTimestamp < store.Entries[2].InGameTimestamp);
+        Assert.True(store.Entries[2].InGameTimestamp < 0);
+    }
+
+    [Fact]
+    public void Deserialize_V1Payload_MigratesWithNegativeTimestampsToo()
+    {
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write("SHST"u8.ToArray());
+            w.Write((byte)1); // v1
+            w.Write(1);       // entryCount
+            w.Write((byte)HistoryEventKind.Death);
+            w.Write("Alice");
+            w.Write("Alice fell to her death.");
+            w.Write("Year 1, Day 1");
+            // no EntryId, no InGameTimestamp bytes in v1
+        }
+
+        var store = HistoryStore.Deserialize(ms.ToArray());
+        Assert.Single(store.Entries);
+        Assert.Equal(Guid.Empty, store.Entries[0].EntryId);
+        Assert.True(store.Entries[0].InGameTimestamp < 0);
+    }
+
+    // ---- Chronological (not call-order) insertion ----
+
+    [Fact]
+    public void TryAddEntry_InsertsAtCorrectChronologicalPosition_NotCallOrder()
+    {
+        var store = new HistoryStore();
+        store.TryAddEntry(new HistoryEntry { Kind = HistoryEventKind.Death, Detail = "late", InGameDate = "d", InGameTimestamp = 10 });
+        store.TryAddEntry(new HistoryEntry { Kind = HistoryEventKind.Death, Detail = "early", InGameDate = "d", InGameTimestamp = 1 });
+        store.TryAddEntry(new HistoryEntry { Kind = HistoryEventKind.Death, Detail = "middle", InGameDate = "d", InGameTimestamp = 5 });
+
+        Assert.Equal(new[] { "early", "middle", "late" }, store.Entries.Select(e => e.Detail));
+    }
+
+    [Fact]
+    public void TryAddEntry_TiesBreakByWriteOrder()
+    {
+        var store = new HistoryStore();
+        store.TryAddEntry(new HistoryEntry { Kind = HistoryEventKind.Manual, Detail = "one", InGameDate = "d", InGameTimestamp = 5, EntryId = Guid.NewGuid() });
+        store.TryAddEntry(new HistoryEntry { Kind = HistoryEventKind.Manual, Detail = "two", InGameDate = "d", InGameTimestamp = 5, EntryId = Guid.NewGuid() });
+
+        Assert.Equal(new[] { "one", "two" }, store.Entries.Select(e => e.Detail));
+    }
+
+    [Fact]
+    public void Death_SlidingWindowAtCap_DropsChronologicallyOldest_NotMostRecentlyAdded()
+    {
+        var store = new HistoryStore();
+        // Add MaxDeaths entries out of call order — timestamps 1..MaxDeaths, added in reverse.
+        for (int i = HistoryStore.MaxDeaths; i >= 1; i--)
+            store.TryAddEntry(new HistoryEntry { Kind = HistoryEventKind.Death, Detail = $"death {i}", InGameDate = "d", InGameTimestamp = i });
+
+        // The chronologically oldest (timestamp 1) was added LAST (call order), not first.
+        store.TryAddEntry(new HistoryEntry { Kind = HistoryEventKind.Death, Detail = "death new", InGameDate = "d", InGameTimestamp = HistoryStore.MaxDeaths + 1 });
+
+        var deaths = store.Entries.Where(e => e.Kind == HistoryEventKind.Death).ToList();
+        Assert.Equal(HistoryStore.MaxDeaths, deaths.Count);
+        Assert.DoesNotContain(deaths, e => e.Detail == "death 1");
+        Assert.Contains(deaths, e => e.Detail == "death new");
+    }
+
+    [Fact]
+    public void Death_SlidingWindowAtCap_DropsOldest_WhenNewEntryLandsInTheMiddle()
+    {
+        var store = new HistoryStore();
+        // Fill the cap with timestamps 2..MaxDeaths+1 (oldest = timestamp 2).
+        for (int i = 2; i <= HistoryStore.MaxDeaths + 1; i++)
+            store.TryAddEntry(new HistoryEntry { Kind = HistoryEventKind.Death, Detail = $"death {i}", InGameDate = "d", InGameTimestamp = i });
+
+        // The new entry's timestamp (1.5) is NOT the largest of its kind — it inserts near the
+        // front, not appended at the end — but the true chronological oldest (timestamp 2) is still
+        // the one that must be dropped, not whatever sits at index 0 pre-drop.
+        store.TryAddEntry(new HistoryEntry { Kind = HistoryEventKind.Death, Detail = "death middle", InGameDate = "d", InGameTimestamp = 1.5 });
+
+        var deaths = store.Entries.Where(e => e.Kind == HistoryEventKind.Death).ToList();
+        Assert.Equal(HistoryStore.MaxDeaths, deaths.Count);
+        Assert.DoesNotContain(deaths, e => e.Detail == "death 2");
+        Assert.Contains(deaths, e => e.Detail == "death middle");
+        Assert.Equal("death middle", deaths[0].Detail); // sorts before everything else
+    }
+
     // ---- Mixed kinds don't interfere with each other's caps ----
 
     [Fact]

@@ -30,7 +30,7 @@
 			"HueSteps": {
 				"ingui": "Hue quantization steps",
 				"weight": 1.2,
-				"default": 16,
+				"default": 32,
 				"comment": "Number of hue buckets (per channel) the ambient GUI tint snaps to.",
 				"clientSide": true,
 				"range": { "min": 4, "max": 64, "step": 1 }

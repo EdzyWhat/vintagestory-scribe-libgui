@@ -38,7 +38,14 @@ from the current state) SHALL be rejected.
 An Accepted assignment SHALL automatically become Completed when its underlying task's completed
 flag becomes true, and SHALL NOT offer Completed as a manually-selectable state-change action.
 Uncompleting the underlying task while its assignment is Completed is out of scope for this
-change (Completed is treated as terminal per the transition requirement above).
+change (Completed is treated as terminal per the transition requirement above). This derivation
+SHALL occur whenever the task's completed flag is set true by any completion path (read view,
+editor view, pinned view, or HUD), regardless of whether the task's owning document happens to be
+resolvable at that moment — the canonical assignment record is addressed by the task's own stable
+id, not by locating the document. This SHALL hold even when the completion travels to the server
+only as part of a whole-document save (the Editor view's own checkbox, including on a surface —
+such as a Tablet — whose dialog offers no other tab through which the same task could instead be
+completed).
 
 #### Scenario: Checking off the task completes the assignment
 - **WHEN** the Assignee marks an Accepted assigned task's completion checkbox true
@@ -48,6 +55,21 @@ change (Completed is treated as terminal per the transition requirement above).
 - **WHEN** an assignment is in any state
 - **THEN** no available state-change action is labeled or behaves as a direct transition to
   Completed
+
+#### Scenario: Completing a pinned assignment task whose document is not currently resolvable
+- **WHEN** the Assignee completes an Accepted assigned task from the HUD or Pin Tab at a moment
+  when the task's owning document (e.g. a Notebook not currently in the Assignee's inventory)
+  cannot be resolved
+- **THEN** the assignment's state still becomes Completed, and both the Assignee's Inbox and the
+  Assigner's Sent Assignment History reflect Completed
+
+#### Scenario: Completing an assigned task from a Tablet, whose dialog has only an Editor tab
+- **WHEN** the Assignee checks off an Accepted assigned task's completion checkbox from a
+  Tablet's Editor view — the only tab that surface offers, so the completion reaches the server
+  purely as part of a whole-document save rather than a dedicated completion message
+- **THEN** the assignment's state still becomes Completed, and both the Assignee's Inbox and the
+  Assigner's Sent Assignment History reflect Completed without either party needing to close and
+  reopen anything
 
 ### Requirement: Deleting an Accepted assigned task performs the Discard transition
 Using the normal task-delete affordance on an assigned task that is in the Accepted state SHALL

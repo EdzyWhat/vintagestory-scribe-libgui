@@ -295,7 +295,7 @@ public sealed partial class ScribeModSystem
     /// ~10-15 block scan").</summary>
     private const double NoticeScanRadius = 12.0;
 
-    /// <summary>The <c>OnStormTick</c>-style heartbeat for Task Notice proximity discovery
+    /// <summary>The <c>OnHistoryScanTick</c>-style heartbeat for Task Notice proximity discovery
     /// (task-notice-proximity-signal tasks.md 5.1-5.3) AND Sent → Received detection (refine-task-notice-ux
     /// Decision 2): for every online player with at least one outstanding sealed notice addressed to them
     /// (the cheap <see cref="outstandingNoticeCountByTargetUid"/> gate), first checks their OWN inventory
@@ -303,7 +303,7 @@ public sealed partial class ScribeModSystem
     /// below, which exists only to bound the more expensive nearby-scan), then — gated by the chunk-boundary
     /// movement check (5.2) — scans nearby dropped items and block-entity containers (5.3) for a matching
     /// stack and pings that one client to spawn the ambient discovery effect (5.4). Registered alongside
-    /// <c>OnStormTick</c> in <c>StartServerSide</c>.</summary>
+    /// <c>OnHistoryScanTick</c> in <c>StartServerSide</c>.</summary>
     private void OnTaskNoticeProximityTick(float _)
     {
         if (sapi is null || outstandingNoticeCountByTargetUid.Count == 0) return;

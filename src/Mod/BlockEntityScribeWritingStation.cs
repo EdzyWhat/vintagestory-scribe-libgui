@@ -555,6 +555,9 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
             MarkDirty(redrawOnClient: true);
             // Only the editing player's own pins reconcile to their edit (grief-proof, player-owned).
             ReconcileActorPins(fromPlayer.PlayerUID);
+            // fix-editor-assignment-completion-sync: the Editor's own checkbox has no dedicated completion
+            // message — it relies on this whole-document flush to persist Done, so derive Completed here too.
+            ModSystem?.NotifyDoneAssignmentsInDocument(doc);
         }
 
         return true;

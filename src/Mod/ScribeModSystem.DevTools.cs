@@ -263,18 +263,19 @@ public sealed partial class ScribeModSystem
     {
         if (sapi is null) return;
         string date(int daysAgo) => NotebookHost.FormatDateDaysAgo(sapi, daysAgo);
+        double timestamp(int daysAgo) => NotebookHost.CalendarTotalDaysAgo(sapi, daysAgo);
 
         history.TryAddEntry(new Scribe.Core.HistoryEntry
         {
-            Kind = Scribe.Core.HistoryEventKind.Crafted, InGameDate = date(14),
+            Kind = Scribe.Core.HistoryEventKind.Crafted, InGameDate = date(14), InGameTimestamp = timestamp(14),
         });
         history.TryAddEntry(new Scribe.Core.HistoryEntry
         {
-            Kind = Scribe.Core.HistoryEventKind.PickedUp, ActorName = "Alrik", InGameDate = date(14),
+            Kind = Scribe.Core.HistoryEventKind.PickedUp, ActorName = "Alrik", InGameDate = date(14), InGameTimestamp = timestamp(14),
         });
         history.TryAddEntry(new Scribe.Core.HistoryEntry
         {
-            Kind = Scribe.Core.HistoryEventKind.TemporalStorm, Detail = "Medium", InGameDate = date(11),
+            Kind = Scribe.Core.HistoryEventKind.TemporalStorm, Detail = "Medium", InGameDate = date(11), InGameTimestamp = timestamp(11),
         });
         // Every combat entry carries its whole sentence in Detail (ActorName empty) so the History
         // row does not prepend "Name — " and print the name twice — same convention as BossKill and
@@ -284,31 +285,31 @@ public sealed partial class ScribeModSystem
         history.TryAddEntry(new Scribe.Core.HistoryEntry
         {
             Kind = Scribe.Core.HistoryEventKind.Death,
-            Detail = SeedMobDeathMessage(victim: "Alrik", creatureCode: "drifter-nightmare"), InGameDate = date(12),
+            Detail = SeedMobDeathMessage(victim: "Alrik", creatureCode: "drifter-nightmare"), InGameDate = date(12), InGameTimestamp = timestamp(12),
         });
         history.TryAddEntry(new Scribe.Core.HistoryEntry
         {
             Kind = Scribe.Core.HistoryEventKind.Death,
-            Detail = SeedPvpDeathMessage(killer: "Gorm", weaponTool: "bow", victim: "Alrik"), InGameDate = date(9),
+            Detail = SeedPvpDeathMessage(killer: "Gorm", weaponTool: "bow", victim: "Alrik"), InGameDate = date(9), InGameTimestamp = timestamp(9),
         });
         history.TryAddEntry(new Scribe.Core.HistoryEntry
         {
             Kind = Scribe.Core.HistoryEventKind.Death,
-            Detail = SeedMobDeathMessage(victim: "Alrik", creatureCode: "bear-brown-adult-male"), InGameDate = date(7),
+            Detail = SeedMobDeathMessage(victim: "Alrik", creatureCode: "bear-brown-adult-male"), InGameDate = date(7), InGameTimestamp = timestamp(7),
         });
         history.TryAddEntry(new Scribe.Core.HistoryEntry
         {
             Kind = Scribe.Core.HistoryEventKind.BossKill,
-            Detail = Lang.Get("scribe:scribe-history-boss-eidolon", "Alrik"), InGameDate = date(6),
+            Detail = Lang.Get("scribe:scribe-history-boss-eidolon", "Alrik"), InGameDate = date(6), InGameTimestamp = timestamp(6),
         });
         history.TryAddEntry(new Scribe.Core.HistoryEntry
         {
-            Kind = Scribe.Core.HistoryEventKind.TemporalStorm, Detail = "Heavy", InGameDate = date(4),
+            Kind = Scribe.Core.HistoryEventKind.TemporalStorm, Detail = "Heavy", InGameDate = date(4), InGameTimestamp = timestamp(4),
         });
         history.TryAddEntry(new Scribe.Core.HistoryEntry
         {
             Kind = Scribe.Core.HistoryEventKind.PvpKill,
-            Detail = SeedPvpKillMessage(killer: "Alrik", weaponTool: "sword", victim: "Gorm"), InGameDate = date(2),
+            Detail = SeedPvpKillMessage(killer: "Alrik", weaponTool: "sword", victim: "Gorm"), InGameDate = date(2), InGameTimestamp = timestamp(2),
         });
     }
 
@@ -334,15 +335,15 @@ public sealed partial class ScribeModSystem
     }
 
     /// <summary>Builds a seeded mob-death message from the same <c>scribe:scribe-mob-death-N</c> pool
-    /// the live <see cref="BuildDeathMessage"/> path uses. The creature is named from vanilla's own
-    /// <c>prefixandcreature-&lt;code&gt;</c> key (matching <c>Entity.GetPrefixAndCreatureName()</c>),
-    /// so the seed reads with the correct variant ("a nightmare drifter", "a brown bear") without a
-    /// live entity. The pool index is derived from the creature code so the demo is stable per run.</summary>
-    private static string SeedMobDeathMessage(string victim, string creatureCode)
+    /// the live <see cref="BuildDeathMessage"/> path uses, via the shared <see cref="GetMobDeathPoolSize"/>
+    /// helper. The creature is named from vanilla's own <c>prefixandcreature-&lt;code&gt;</c> key
+    /// (matching <c>Entity.GetPrefixAndCreatureName()</c>), so the seed reads with the correct variant
+    /// ("a nightmare drifter", "a brown bear") without a live entity. The pool index is derived from
+    /// the creature code so the demo is stable per run.</summary>
+    private string SeedMobDeathMessage(string victim, string creatureCode)
     {
         string creature = Lang.GetMatching($"game:prefixandcreature-{creatureCode}");
-        int poolSize = 0;
-        while (Lang.Get($"scribe:scribe-mob-death-{poolSize}") != $"scribe:scribe-mob-death-{poolSize}") poolSize++;
+        int poolSize = GetMobDeathPoolSize();
         int idx = poolSize > 0 ? Math.Abs(creatureCode.GetHashCode()) % poolSize : 0;
         return Lang.Get($"scribe:scribe-mob-death-{idx}", victim, creature);
     }

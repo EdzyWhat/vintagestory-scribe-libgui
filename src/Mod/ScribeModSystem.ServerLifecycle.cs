@@ -58,6 +58,7 @@ public sealed partial class ScribeModSystem
         assignmentStore?.LoadFrom(sapi.WorldManager.SaveGame.GetData(AssignmentStoreSaveKey));
         questDecisionStore?.LoadFrom(sapi.WorldManager.SaveGame.GetData(QuestDecisionStoreSaveKey));
         playerLocationStore?.LoadFrom(sapi.WorldManager.SaveGame.GetData(PlayerLocationStoreSaveKey));
+        pendingHistoryStore?.LoadFrom(sapi.WorldManager.SaveGame.GetData(PendingHistoryStoreSaveKey));
 
         if (timerStores is not null)
         {
@@ -105,6 +106,9 @@ public sealed partial class ScribeModSystem
 
         if (playerLocationStore is not null)
             sapi.WorldManager.SaveGame.StoreData(PlayerLocationStoreSaveKey, playerLocationStore.Serialize());
+
+        if (pendingHistoryStore is not null)
+            sapi.WorldManager.SaveGame.StoreData(PendingHistoryStoreSaveKey, pendingHistoryStore.SerializeStore());
 
         if (timerStores is not null)
         {

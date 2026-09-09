@@ -12,22 +12,28 @@ namespace Scribe.Core;
 /// entries use the same sliding-window policy. PickedUp and Crafted use identity deduplication
 /// instead.
 ///
-/// Accepted-version window:
-///   Current : v2 — adds a per-entry <c>EntryId</c> (16-byte Guid), used only by Manual entries
-///   Prior   : v1 — migrated by <see cref="ApplyV1ToV2Migrations"/> (fills EntryId = Guid.Empty)
+/// Accepted-version window (progressive reads — see docs/CODEC-MIGRATION.md):
+///   Current : v3 — adds a per-entry sortable <c>InGameTimestamp</c> (8-byte double)
+///   v2      : adds a per-entry <c>EntryId</c> (16-byte Guid), used only by Manual entries
+///   Min     : v1 — no EntryId, no InGameTimestamp
 ///   Older   : rejected
 ///
-/// Serialized format (SHST v2, little-endian via <see cref="BinaryWriter"/>):
+/// A v1 or v2 payload has no recorded timestamp, so <see cref="ApplyV2ToV3Migrations"/> assigns
+/// every entry a synthetic one from a strictly-increasing negative sequence in its existing list
+/// order — preserving relative order while sorting before anything recorded after this change.
+///
+/// Serialized format (SHST v3, little-endian via <see cref="BinaryWriter"/>):
 ///   [4 bytes magic "SHST"][1 byte version][int entryCount]
-///   [per entry: byte kind, string actorName, string detail, string inGameDate, 16 bytes entryId]
+///   [per entry: byte kind, string actorName, string detail, string inGameDate, 16 bytes entryId,
+///    8 bytes inGameTimestamp]
 ///
 /// See docs/CODEC-MIGRATION.md for the version-bump pattern.
 /// </summary>
 public sealed class HistoryStore
 {
     private static readonly byte[] Magic = "SHST"u8.ToArray();
-    private const byte Version      = 2;
-    private const byte PriorVersion = 1;
+    private const byte Version    = 3;
+    private const byte MinVersion = 1;
 
     public const int MaxDeaths    = 30;
     public const int MaxStorms    = 10;
@@ -40,7 +46,8 @@ public sealed class HistoryStore
 
     private readonly List<HistoryEntry> _entries = new();
 
-    /// <summary>All entries in insertion order (oldest first). The display layer reverses for newest-first.</summary>
+    /// <summary>All entries in chronological order by <see cref="HistoryEntry.InGameTimestamp"/>
+    /// (oldest first; ties broken by write order). The display layer reverses for newest-first.</summary>
     public IReadOnlyList<HistoryEntry> Entries => _entries;
 
     /// <summary>
@@ -90,14 +97,30 @@ public sealed class HistoryStore
             // LoreDiscovery and any future kinds: append unconditionally.
         }
 
-        _entries.Add(entry);
+        InsertSorted(entry);
         return true;
+    }
+
+    /// <summary>Inserts <paramref name="entry"/> at its correct position by
+    /// <see cref="HistoryEntry.InGameTimestamp"/> — before the first existing entry with a strictly
+    /// greater timestamp, so entries with an equal timestamp keep write order (the tie-break the
+    /// requirement calls for).</summary>
+    private void InsertSorted(HistoryEntry entry)
+    {
+        int idx = _entries.Count;
+        for (int i = 0; i < _entries.Count; i++)
+        {
+            if (_entries[i].InGameTimestamp > entry.InGameTimestamp) { idx = i; break; }
+        }
+        _entries.Insert(idx, entry);
     }
 
     private void DropOldestOfKindIfAtCap(HistoryEventKind kind, int cap)
     {
         int count = _entries.Count(e => e.Kind == kind);
         if (count < cap) return;
+        // _entries is globally sorted by timestamp, so the first match of this kind is also the
+        // chronologically oldest one of that kind.
         int idx = _entries.FindIndex(e => e.Kind == kind);
         if (idx >= 0) _entries.RemoveAt(idx);
     }
@@ -152,6 +175,7 @@ public sealed class HistoryStore
                 w.Write(e.Detail);
                 w.Write(e.InGameDate);
                 w.Write(e.EntryId.ToByteArray());
+                w.Write(e.InGameTimestamp);
             }
         }
         return ms.ToArray();
@@ -172,7 +196,7 @@ public sealed class HistoryStore
             if (!magic.AsSpan().SequenceEqual(Magic)) return store;
 
             byte version = r.ReadByte();
-            if (version != Version && version != PriorVersion) return store;
+            if (version < MinVersion || version > Version) return store;
 
             int count = r.ReadInt32();
             if (count < 0 || count > bytes.Length) return store;
@@ -186,11 +210,14 @@ public sealed class HistoryStore
                     Detail     = r.ReadString(),
                     InGameDate = r.ReadString(),
                 };
-                if (version == Version) entry.EntryId = new Guid(r.ReadBytes(16));
+                // v1 has neither field — its C# defaults (Guid.Empty / 0.0) apply until overwritten
+                // below by the migration step for anything older than the current version.
+                if (version >= 2) entry.EntryId = new Guid(r.ReadBytes(16));
+                if (version >= 3) entry.InGameTimestamp = r.ReadDouble();
                 store._entries.Add(entry);
             }
 
-            if (version == PriorVersion) ApplyV1ToV2Migrations(store._entries);
+            if (version < Version) ApplyV2ToV3Migrations(store._entries);
         }
         catch (Exception ex) when (ex is EndOfStreamException or IOException or FormatException)
         {
@@ -200,13 +227,16 @@ public sealed class HistoryStore
         return store;
     }
 
-    /// <summary>v1 → v2 migration: v1 had no per-entry <c>EntryId</c> field, so every entry read from
-    /// a v1 payload already defaulted to <see cref="Guid.Empty"/> (the property's own default) —
-    /// nothing to actually transform. v1 also predates <see cref="HistoryEventKind.Manual"/>, so no
-    /// v1 entry can be one anyway. Kept as an explicit named step per docs/CODEC-MIGRATION.md rather
-    /// than silently relying on the default, so a future v3 migration has a clear precedent to follow.</summary>
-    private static void ApplyV1ToV2Migrations(List<HistoryEntry> entries)
+    /// <summary>v1/v2 → v3 migration: neither prior version recorded a sortable timestamp, so every
+    /// entry read from one is assigned a synthetic timestamp from a strictly-increasing negative
+    /// sequence in its existing list order — preserving that order exactly (a plain numeric sort)
+    /// while guaranteeing every migrated entry sorts before any timestamp a freshly-recorded entry
+    /// can carry (<c>Calendar.TotalDays</c> is never negative). A v1 payload also has no per-entry
+    /// <c>EntryId</c>, but that already defaults to <see cref="Guid.Empty"/> — nothing to transform
+    /// there.</summary>
+    private static void ApplyV2ToV3Migrations(List<HistoryEntry> entries)
     {
-        // No-op: HistoryEntry.EntryId already defaults to Guid.Empty.
+        for (int i = 0; i < entries.Count; i++)
+            entries[i].InGameTimestamp = i - entries.Count;
     }
 }

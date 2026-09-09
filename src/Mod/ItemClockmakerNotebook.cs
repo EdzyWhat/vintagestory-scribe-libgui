@@ -115,9 +115,10 @@ public class ItemClockmakerNotebook : Item, IScribeDocumentItem
         var history = HistoryStore.Deserialize(outputSlot.Itemstack.Attributes.GetBytes("scribeHistory"));
         history.TryAddEntry(new HistoryEntry
         {
-            Kind       = HistoryEventKind.Crafted,
-            ActorName  = playerName,
-            InGameDate = date,
+            Kind            = HistoryEventKind.Crafted,
+            ActorName       = playerName,
+            InGameDate      = date,
+            InGameTimestamp = sapi.World.Calendar.TotalDays,
         });
         outputSlot.Itemstack.Attributes.SetBytes("scribeHistory", history.Serialize());
     }

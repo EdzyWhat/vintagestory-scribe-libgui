@@ -476,6 +476,26 @@ public sealed partial class ScribeModSystem
         PushAssignmentSyncToBothParties(storeAssignment.AssignerUid, storeAssignment.TargetPlayerUid);
     }
 
+    /// <summary>Whole-document-flush hook (fix-editor-assignment-completion-sync): the Editor view's own
+    /// checkbox mutates a block's <c>Done</c> locally and relies on the ordinary whole-document autosave to
+    /// persist it, rather than sending a dedicated completion message — so the two whole-document flush
+    /// handlers (<see cref="BlockEntityScribeWritingStation.ApplyEdit"/> for a Lectern,
+    /// <see cref="OnServerReceivedNotebookSave"/> for a held Notebook/Tablet) call this after writing the new
+    /// document, to give every completed+assigned task the same derivation the HUD/Pin/Read paths already
+    /// get via <see cref="NotifyAssignmentDoneChanged"/>.
+    ///
+    /// <para>Walks the SAVED document unconditionally — no diff against a prior document — because
+    /// <see cref="NotifyAssignmentDoneChanged"/> already gates on the canonical store record's current state
+    /// (must be Accepted) and is a cheap no-op otherwise; see design.md for why diffing was rejected.</para></summary>
+    public void NotifyDoneAssignmentsInDocument(ScribeDocument doc)
+    {
+        foreach (var block in doc.Blocks)
+        {
+            if (block.IsCompletable && block.Done && block.Assignment is { } assignment)
+                NotifyAssignmentDoneChanged(block.TaskId, true, assignment);
+        }
+    }
+
     /// <summary>Delete-on-Accepted hook (assignment-state-machine: "Deleting an Accepted assigned task
     /// performs the Discard transition"). Called after a document Delete removes a block that carried an
     /// Accepted assignment; applies Discard to the canonical store record through the same actor-validated

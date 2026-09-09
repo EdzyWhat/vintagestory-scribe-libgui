@@ -63,10 +63,12 @@ internal sealed class ScribeAmbientLightSampler
     /// (add-configkit-visual-tuning).</summary>
     private readonly int BrightnessSteps;
 
-    /// <summary>Hue quantization: snap each tint channel to 1/N steps (default 16 buckets/channel). Coarse
-    /// enough that a torch flicker's steady-state or a slow day/night sky shift only re-records the picture a
-    /// handful of times across the whole transition, fine enough that the warm/neutral/cool distinction still
-    /// reads. Author-tunable via <see cref="ScribeVisualTuning"/>.</summary>
+    /// <summary>Hue quantization: snap each tint channel to 1/N steps (default 32 buckets/channel, raised from
+    /// 16 — the coarser step was visibly banding near-white tints, where a uniform step size reads as a bigger
+    /// jump than the same step does against a warm/dark tint). Coarse enough that a torch flicker's steady-state
+    /// or a slow day/night sky shift only re-records the picture a handful of times across the whole transition,
+    /// fine enough that the warm/neutral/cool distinction still reads. Author-tunable via
+    /// <see cref="ScribeVisualTuning"/>.</summary>
     private readonly int HueSteps;
 
     /// <summary>How much of the raw hue skew to keep (the rest is pulled back to neutral). At the default

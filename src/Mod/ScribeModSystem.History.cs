@@ -18,6 +18,20 @@ public sealed partial class ScribeModSystem
 
     private bool _stormWasActive;
 
+    /// <summary>Per-player snapshot of the Notebook/Tablet document ids carried ON-PERSON (via
+    /// <see cref="FindCarriedNotebooks"/> — never the CarryOn-inclusive
+    /// <see cref="FindAllCarriedNotebookRecords"/>) as of the last <see cref="OnHistoryScanTick"/>
+    /// firing. Populated ONLY by that tick, on its own cadence, so its value going into any given
+    /// death is fixed before that death's own event dispatch begins — it cannot be invalidated by a
+    /// sibling <c>OnEntityDeath</c> subscriber that runs earlier in the same dispatch (see
+    /// fix-death-history-inventory-race design.md, "A periodic snapshot, not a live re-check").
+    /// Consulted by the Death branch of <see cref="OnEntityDeath"/> to detect a document that was
+    /// evicted by something else during the same death dispatch. <c>internal</c> (not
+    /// <c>private</c>) solely so the integration suite can seed a snapshot directly rather than
+    /// waiting out a real tick, via the project's own <c>InternalsVisibleTo("Integration.Tests")</c>.
+    /// </summary>
+    internal readonly Dictionary<string, HashSet<Guid>> _lastKnownCarriedDocIds = new();
+
     /// <summary>Known boss entity code prefixes and the lang key of the narrative line recorded for the
     /// BossKill event. Checked via entity.Code.Path.StartsWith so variant suffixes (-pristine, -corrupted,
     /// etc.) match. The lang string takes the slayer's name as {0} and becomes the entry's Detail (the
@@ -113,6 +127,33 @@ public sealed partial class ScribeModSystem
         }
     }
 
+    /// <summary>Lazily-discovered, cached size of the <c>scribe-mob-death-N</c> flavor pool — shared by
+    /// <see cref="BuildDeathMessage"/> and the dev seeder's <c>SeedMobDeathMessage</c> so the discovery
+    /// logic exists in exactly one place. The pool is static shipped content, so the count never
+    /// changes mid-session and is safe to cache for the life of the running server.</summary>
+    private int? _mobDeathPoolSize;
+
+    /// <summary>Discovers and caches the size of the <c>scribe-mob-death-N</c> flavor pool by probing
+    /// upward from index 0 with <see cref="Lang.HasTranslation"/> — NOT <see cref="Lang.Get"/>. Every
+    /// pool entry contains <c>{0}</c>/<c>{1}</c> placeholders, so a zero-arg <c>Lang.Get</c> probe
+    /// would format the template with no arguments and throw inside <c>TryFormat</c> on every probe
+    /// (caught internally by the engine, but logged as an [Error]+[Warning] pair every time). Use
+    /// <c>HasTranslation</c> here for any future existence-probed key too — it resolves to a plain
+    /// cache lookup and never calls <c>Format</c>, so it cannot reach that exception/warning path
+    /// regardless of how many placeholders the target template has.
+    /// <c>findWildcarded: false</c> matches the exact-key intent of the probe; <c>logErrors: false</c>
+    /// avoids a "Lang key not found" debug line firing on the one expected miss that ends the loop.
+    /// </summary>
+    private int GetMobDeathPoolSize()
+    {
+        if (_mobDeathPoolSize is int cached) return cached;
+        int poolSize = 0;
+        while (Lang.HasTranslation($"scribe:scribe-mob-death-{poolSize}", findWildcarded: false, logErrors: false))
+            poolSize++;
+        _mobDeathPoolSize = poolSize;
+        return poolSize;
+    }
+
     private void OnEntityDeath(Vintagestory.API.Common.Entities.Entity entity, Vintagestory.API.Common.DamageSource dmg)
     {
         if (sapi is null) return;
@@ -133,9 +174,10 @@ public sealed partial class ScribeModSystem
                     // shows Detail alone when ActorName is empty, so no "Name — " prefix is prepended.
                     host.History.TryAddEntry(new Scribe.Core.HistoryEntry
                     {
-                        Kind       = Scribe.Core.HistoryEventKind.BossKill,
-                        Detail     = Lang.Get(langKey, player.PlayerName),
-                        InGameDate = NotebookHost.FormatDate(sapi),
+                        Kind            = Scribe.Core.HistoryEventKind.BossKill,
+                        Detail          = Lang.Get(langKey, player.PlayerName),
+                        InGameDate      = NotebookHost.FormatDate(sapi),
+                        InGameTimestamp = sapi.World.Calendar.TotalDays,
                     });
                     host.FlushHistory();
                 }
@@ -161,6 +203,23 @@ public sealed partial class ScribeModSystem
             killer      = k;
             killerHosts = FindAllCarriedNotebookRecords(k).ToList();
         }
+
+        // Materialize the victim's carried-notebook list up front too (mirroring killerHosts above),
+        // so we can gate ALL message construction below on "does anyone relevant carry a Notebook"
+        // before doing any of that work, and reuse this same list for the write loop further down —
+        // mirroring the pattern the BossKill branch already uses (its Lang.Get lives inside the
+        // per-notebook loop). A document present in the victim's last-known snapshot (fix-death-
+        // history-inventory-race) ALSO counts as "relevant" even when the live scan comes up empty —
+        // that empty-live-scan case is exactly the race this fallback exists to catch, so it must not
+        // be treated the same as "nobody ever had a notebook".
+        List<IHistoryRecordable> victimHosts = FindAllCarriedNotebookRecords(sp).ToList();
+        bool victimHasSnapshot = _lastKnownCarriedDocIds.TryGetValue(sp.PlayerUID, out var lastKnownDocIds)
+            && lastKnownDocIds.Count > 0;
+        if (victimHosts.Count == 0 && killerHosts.Count == 0 && !victimHasSnapshot) return;
+
+        // Captured once, at the actual moment of death, so a queued fallback entry (flushed later)
+        // sorts into its true chronological position rather than wherever the flush happens to land.
+        double deathTimestamp = sapi.World.Calendar.TotalDays;
 
         // A PvP death names the killer with a weapon-aware verb; any other death reconstructs a
         // full narrated sentence (mob-death flavor pool, else vanilla environmental deathmsg). Every
@@ -190,27 +249,55 @@ public sealed partial class ScribeModSystem
         }
 
         // Record the Death on EVERY notebook the victim carries, not just the first found.
-        foreach (var nbHost in FindAllCarriedNotebookRecords(sp))
+        foreach (var nbHost in victimHosts)
         {
             nbHost.History.TryAddEntry(new Scribe.Core.HistoryEntry
             {
-                Kind       = Scribe.Core.HistoryEventKind.Death,
-                Detail     = deathMsg,
-                InGameDate = NotebookHost.FormatDate(sapi),
+                Kind            = Scribe.Core.HistoryEventKind.Death,
+                Detail          = deathMsg,
+                InGameDate      = NotebookHost.FormatDate(sapi),
+                InGameTimestamp = deathTimestamp,
             });
             nbHost.FlushHistory();
         }
 
+        // A document that was in the victim's last-known on-person snapshot but was NOT among the
+        // documents the live scan above just wrote to has been evicted by something else during this
+        // same death dispatch (e.g. another mod's own OnEntityDeath handler moving it into a corpse
+        // before this one ran) — queue its Death entry instead of losing it. Never queue a document
+        // the live scan DID find (it was already written above; queuing it too would double-write).
+        // Scoped to on-person documents only (NotebookHost, not the CarryOn-sourced
+        // CarryOnBridge.CarriedNotebookRef) — the snapshot itself is on-person-only, per design.md.
+        if (victimHasSnapshot)
+        {
+            var liveOnPersonDocIds = new HashSet<Guid>(
+                victimHosts.OfType<NotebookHost>().Select(h => h.Document.DocId));
+            foreach (var docId in lastKnownDocIds!)
+            {
+                if (liveOnPersonDocIds.Contains(docId)) continue;
+                pendingHistoryStore?.Enqueue(docId, new Scribe.Core.HistoryEntry
+                {
+                    Kind            = Scribe.Core.HistoryEventKind.Death,
+                    Detail          = deathMsg,
+                    InGameDate      = NotebookHost.FormatDate(sapi),
+                    InGameTimestamp = deathTimestamp,
+                });
+            }
+        }
+
         // ── PvP kill — record the killer-first message on every notebook the killer carries ──
+        // Victim-only fallback: nothing evicts the KILLER's inventory during their own kill (they are
+        // not the one dying), so there is no race to guard here — this stays live-scan-only.
         if (killer is not null && killMsg is not null)
         {
             foreach (var killerHost in killerHosts)
             {
                 killerHost.History.TryAddEntry(new Scribe.Core.HistoryEntry
                 {
-                    Kind       = Scribe.Core.HistoryEventKind.PvpKill,
-                    Detail     = killMsg,
-                    InGameDate = NotebookHost.FormatDate(sapi),
+                    Kind            = Scribe.Core.HistoryEventKind.PvpKill,
+                    Detail          = killMsg,
+                    InGameDate      = NotebookHost.FormatDate(sapi),
+                    InGameTimestamp = deathTimestamp,
                 });
                 killerHost.FlushHistory();
             }
@@ -277,39 +364,78 @@ public sealed partial class ScribeModSystem
         return value != key;
     }
 
-    private void OnStormTick(float _)
+    /// <summary>
+    /// Dual-purpose periodic sweep (10s — widened from the original storm-only tick's 5s,
+    /// fix-death-history-inventory-race): (1) the original storm rising-edge detection/write,
+    /// completely unchanged in scope (still walks <see cref="FindAllCarriedNotebookRecords"/>, so a
+    /// CarryOn-carried notebook keeps recording storms exactly as it always has); and (2) a shared
+    /// carried-document snapshot + pending-entry flush, added by this change. (2) is scoped to
+    /// <see cref="FindCarriedNotebooks"/> (on-person only) — the corpse-mod race this fallback exists
+    /// for can only evict on-person slots (see design.md), so there is no reason to also poll the
+    /// reflection-based CarryOn bridge here for every online player every firing. Renamed from
+    /// <c>OnStormTick</c> to reflect that it is no longer storm-only. <c>internal</c> (not
+    /// <c>private</c>) solely so the integration suite can fire it directly rather than waiting out
+    /// the real 10s interval, via the project's own <c>InternalsVisibleTo("Integration.Tests")</c>.
+    /// </summary>
+    internal void OnHistoryScanTick(float _)
     {
         if (sapi is null) return;
+
+        // ── (1) Storm rising-edge detection — unchanged responsibility, unchanged scope ──
         var stormSys = sapi.ModLoader.GetModSystem<Vintagestory.GameContent.SystemTemporalStability>();
-        if (stormSys is null) return;
+        bool rising = false;
+        string strength = "";
+        string date = "";
+        if (stormSys is not null)
+        {
+            bool nowActive = stormSys.StormData.nowStormActive;
+            rising = nowActive && !_stormWasActive;
+            _stormWasActive = nowActive;
 
-        bool nowActive = stormSys.StormData.nowStormActive;
-        bool rising    = nowActive && !_stormWasActive;
-        _stormWasActive = nowActive;
-
-        if (!rising) return;
-
-        // Localize the strength word (Light/Medium/Heavy) via a per-value key; the raw enum name is a
-        // developer token, not player prose. An unknown future value echoes its own name as a fallback.
-        string strengthName = stormSys.StormData.nextStormStrength.ToString();
-        string strengthKey  = "scribe:storm-strength-" + strengthName.ToLowerInvariant();
-        string strength     = Lang.Get(strengthKey);
-        if (strength == strengthKey) strength = strengthName; // key-echo miss → fall back to the raw name
-        string date         = NotebookHost.FormatDate(sapi);
+            if (rising)
+            {
+                // Localize the strength word (Light/Medium/Heavy) via a per-value key; the raw enum
+                // name is a developer token, not player prose. An unknown future value echoes its own
+                // name as a fallback.
+                string strengthName = stormSys.StormData.nextStormStrength.ToString();
+                string strengthKey  = "scribe:storm-strength-" + strengthName.ToLowerInvariant();
+                strength = Lang.Get(strengthKey);
+                if (strength == strengthKey) strength = strengthName; // key-echo miss → raw name
+                date = NotebookHost.FormatDate(sapi);
+            }
+        }
 
         foreach (var player in sapi.World.AllOnlinePlayers.OfType<IServerPlayer>())
         {
-            // Record on EVERY notebook the player carries, not just the first found.
-            foreach (var host in FindAllCarriedNotebookRecords(player))
+            if (rising)
             {
-                host.History.TryAddEntry(new Scribe.Core.HistoryEntry
+                // Record on EVERY notebook the player carries, not just the first found.
+                foreach (var host in FindAllCarriedNotebookRecords(player))
                 {
-                    Kind       = Scribe.Core.HistoryEventKind.TemporalStorm,
-                    Detail     = strength,
-                    InGameDate = date,
-                });
+                    host.History.TryAddEntry(new Scribe.Core.HistoryEntry
+                    {
+                        Kind            = Scribe.Core.HistoryEventKind.TemporalStorm,
+                        Detail          = strength,
+                        InGameDate      = date,
+                        InGameTimestamp = sapi.World.Calendar.TotalDays,
+                    });
+                    host.FlushHistory();
+                }
+            }
+
+            // ── (2) Carried-document snapshot + pending-entry flush (on-person only) ──
+            var carriedDocIds = new HashSet<Guid>();
+            foreach (var host in FindCarriedNotebooks(player))
+            {
+                carriedDocIds.Add(host.Document.DocId);
+
+                if (pendingHistoryStore is null) continue;
+                var queued = pendingHistoryStore.TakeAll(host.Document.DocId);
+                if (queued.Count == 0) continue;
+                foreach (var entry in queued) host.History.TryAddEntry(entry);
                 host.FlushHistory();
             }
+            _lastKnownCarriedDocIds[player.PlayerUID] = carriedDocIds;
         }
     }
 
@@ -335,8 +461,7 @@ public sealed partial class ScribeModSystem
             // Creature kill — flavored line from our pool + the creature's own display name, so every
             // variant reads correctly (vanilla ships bespoke deathmsg keys for almost no creatures).
             string creature = causeEntity.GetPrefixAndCreatureName();
-            int poolSize = 0;
-            while (Lang.Get($"scribe:scribe-mob-death-{poolSize}") != $"scribe:scribe-mob-death-{poolSize}") poolSize++;
+            int poolSize = GetMobDeathPoolSize();
             if (poolSize > 0)
             {
                 int idx = sapi!.World.Rand.Next(poolSize);

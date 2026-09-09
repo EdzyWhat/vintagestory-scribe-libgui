@@ -431,7 +431,11 @@ public sealed partial class ScribeModSystem
         return slot?.Itemstack?.Collectible is IScribeDocumentItem ? slot : null;
     }
 
-    private void OnServerReceivedNotebookSave(IServerPlayer fromPlayer, ScribeNotebookSaveMessage message)
+    /// <summary><c>internal</c> (not <c>private</c>) solely so the integration suite can simulate a
+    /// Notebook/Tablet Editor tab's whole-document autosave flush directly, rather than round-tripping a
+    /// real network packet, via the project's own <c>InternalsVisibleTo("Integration.Tests")</c> — matching
+    /// the same pattern <see cref="OnHistoryScanTick"/> already uses.</summary>
+    internal void OnServerReceivedNotebookSave(IServerPlayer fromPlayer, ScribeNotebookSaveMessage message)
     {
         if (sapi is null || !TryReadGuid(message.DocIdBytes, out var docId)) return;
         // Write to the EXACT slot the client dialog was editing (its stamped identity), not the active hand:
@@ -462,6 +466,10 @@ public sealed partial class ScribeModSystem
             // Reconcile actor pins so pin snapshots stay fresh after a notebook edit.
             if (pinStore is { } store)
                 PushPinsTo(store.ReconcileSnapshotsForActor(fromPlayer.PlayerUID, doc.DocId, doc));
+            // fix-editor-assignment-completion-sync: the Editor's own checkbox has no dedicated completion
+            // message — it relies on this whole-document flush to persist Done, so derive Completed here too.
+            // Covers both a Notebook and a Tablet, since both item classes flush through this handler.
+            NotifyDoneAssignmentsInDocument(doc);
         }
 
         // Echo back so the dialog's HandleServerReply can update the client's authoritative copy.

@@ -254,11 +254,12 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
     {
         var added = _history.TryAddEntry(new HistoryEntry
         {
-            Kind       = HistoryEventKind.Manual,
-            ActorName  = player.PlayerName,
-            Detail     = text,
-            InGameDate = FormatDate(sapi),
-            EntryId    = entryId,
+            Kind            = HistoryEventKind.Manual,
+            ActorName       = player.PlayerName,
+            Detail          = text,
+            InGameDate      = FormatDate(sapi),
+            InGameTimestamp = sapi.World.Calendar.TotalDays,
+            EntryId         = entryId,
         });
         if (added) FlushHistory();
     }
@@ -292,9 +293,10 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
 
         var added = _history.TryAddEntry(new HistoryEntry
         {
-            Kind       = HistoryEventKind.PickedUp,
-            ActorName  = player.PlayerName,
-            InGameDate = FormatDate(sapi),
+            Kind            = HistoryEventKind.PickedUp,
+            ActorName       = player.PlayerName,
+            InGameDate      = FormatDate(sapi),
+            InGameTimestamp = sapi.World.Calendar.TotalDays,
         });
         if (added) Flush();
     }
@@ -321,9 +323,10 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
 
         bool added = history.TryAddEntry(new HistoryEntry
         {
-            Kind       = HistoryEventKind.PickedUp,
-            ActorName  = player.PlayerName,
-            InGameDate = FormatDate(sapi),
+            Kind            = HistoryEventKind.PickedUp,
+            ActorName       = player.PlayerName,
+            InGameDate      = FormatDate(sapi),
+            InGameTimestamp = sapi.World.Calendar.TotalDays,
         });
         if (!added) return null;
 
@@ -360,7 +363,7 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
     internal static string FormatDateDaysAgo(ICoreServerAPI sapi, int daysAgo)
     {
         var cal = sapi.World.Calendar;
-        double totalDays = Math.Max(0, cal.TotalDays - daysAgo);
+        double totalDays = CalendarTotalDaysAgo(sapi, daysAgo);
         int monthsPerYear = Math.Max(1, cal.DaysPerYear / cal.DaysPerMonth);
         int dayOfMonth = (int)(totalDays % cal.DaysPerMonth) + 1;
         int monthIndex = (int)(totalDays / cal.DaysPerMonth) % monthsPerYear + 1;
@@ -368,4 +371,12 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
         var monthName = (EnumMonth)monthIndex;
         return FormatCalendarDate(dayOfMonth, monthName, year);
     }
+
+    /// <summary>The raw <c>Calendar.TotalDays</c> value <paramref name="daysAgo"/> in-game days
+    /// before now (clamped at 0), i.e. the sortable-timestamp counterpart of
+    /// <see cref="FormatDateDaysAgo"/> — used by the demo seeder so a seeded <see cref="HistoryEntry"/>
+    /// carries a real <see cref="HistoryEntry.InGameTimestamp"/> matching its displayed date, instead
+    /// of defaulting to 0 and sorting as if it happened "now".</summary>
+    internal static double CalendarTotalDaysAgo(ICoreServerAPI sapi, int daysAgo)
+        => Math.Max(0, sapi.World.Calendar.TotalDays - daysAgo);
 }

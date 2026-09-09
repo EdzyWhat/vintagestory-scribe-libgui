@@ -60,7 +60,7 @@ public sealed class ScribeVisualTuning
 
     // Defaults = the exact values each constant held before add-configkit-visual-tuning.
     public const int DefaultBrightnessSteps = 32;
-    public const int DefaultHueSteps = 16;
+    public const int DefaultHueSteps = 32;
     public const float DefaultTintStrength = 2f / 3f;
     public const float DefaultSmoothingTau = 0.2f;
     public const double DefaultDetectionRadius = 12.0;

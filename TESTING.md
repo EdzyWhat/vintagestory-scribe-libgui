@@ -27,6 +27,45 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
+## fix-death-history-inventory-race
+
+> Chronological History insertion (sortable `InGameTimestamp`) + a pending-entry store that
+> queues a Death entry when a carried Notebook is evicted from inventory before Scribe's live
+> scan sees it (e.g. by a corpse/keep-inventory mod), flushing it once the document is next seen
+> carried by the shared 10s tick.
+
+- [ ] `000000e3` **Check normal death still writes immediately.** With no competing
+      inventory-altering mod installed, die while carrying a Notebook — confirm the Death
+      entry appears in its History immediately, exactly as before this change.
+      *(fix-death-history-inventory-race 6.2)*
+- [ ] `000000e4` **Check multi-day chronological ordering.** Trigger several history events
+      (a couple of deaths, a manual entry, a storm) spread across more than one in-game day
+      on the same Notebook — confirm the History tab lists them newest-first in true
+      chronological order, including any pair recorded on the same displayed day.
+      *(fix-death-history-inventory-race 6.3)*
+- [ ] `000000e5` **Check corpse-mod death fallback (if practical).** With a corpse/keep-
+      inventory-style mod installed alongside Scribe (e.g. PlayerCorpse), die while carrying
+      a Notebook — confirm no Death entry appears immediately — then recover/relocate the
+      Notebook and confirm the Death entry appears within about one tick interval (~10s) of
+      it next being carried, landing in its correct chronological position.
+      *(fix-death-history-inventory-race 6.4)*
+
+## fix-mob-death-message-probe-and-notebook-gate
+
+- [x] `000000e2` **Die to 3+ creatures.** While carrying a Notebook, die to at least 3 different
+      creature types. Confirm the History tab shows varied, correctly-substituted flavor lines
+      each time (e.g. "X was slain by a wolf.", not the generic "X died." fallback), and check the
+      server log for NO "Translation string format exception" warnings during any of the deaths.
+      *(4.2)*
+      - **Confirmed 2026-09-09** by the user, accepted at reduced scope (one creature, polar bear,
+        not three): `client-chat.log` shows the death at 08:50:26 on the current dev build (with
+        the fix); `client-main.log`/`server-main.log` for that session carry no "Translation string
+        format exception" warning anywhere. A direct A/B confirmed the mechanism: swapping in the
+        prior release `v1.4.0-rc.2` (pre-fix) and repeating the same polar-bear death at 08:56:43
+        logged the exact `[Error]`+`[Warning]` pair 21 times (once per `scribe-mob-death-N` pool
+        entry) in `client-main.log`; the dev build was restored afterward. The History-tab
+        line-content check was not separately confirmed by the user.
+
 ## unify-tab-header-layout
 
 > Every non-tablet dialog tab (Read, Edit, Pinned, Notebook History, Guest Book, Inbox, Sent

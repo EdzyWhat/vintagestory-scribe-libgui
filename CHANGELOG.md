@@ -6,6 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.0-rc.5] - 2026-09-09
+
+Small fix-only release candidate — quiets a log-spam warning some server admins mistook for a
+crash.
+
+### Fixed
+- **A creature killing a Notebook-carrying player logged a scary but harmless warning on every
+  death.** Discovering how many flavored "was slain by ..." lines exist was probing the count by
+  formatting each templated line with zero arguments, which the engine can't do and reports as an
+  `[Error]` + `[Warning]` pair to the log every time — server-wide, on every creature kill. The
+  probe now checks each line's existence without formatting it, so the flavor pool's size is
+  discovered silently; the flavored death lines themselves are unchanged. Death/PvP-kill message
+  construction is now also skipped entirely when neither the victim nor (for a PvP kill) the killer
+  carries a Notebook, instead of doing that work with nowhere to record the result.
+
 ## [1.4.0-rc.4] - 2026-09-08
 
 Another testing-focused release candidate ahead of the real 1.4.0 — rolls up everything since
