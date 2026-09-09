@@ -287,20 +287,18 @@ public abstract partial class ScribeDialogBase
         // press→move→release moves the window just like the band (§8.1; see the gripDragging fields +
         // VSAPI-NOTES.md §LibGUI). This is a REPOSITION of that exact mechanism, not a new one — the
         // GestureDetector/Tooltip/glyph are unchanged. A "drag to move" tooltip labels it.
-        // Row.crossAxisAlignment centers by BOUNDING BOX, but the title text's box reserves descent+leading
-        // space below its own baseline that the icon glyph's tight box doesn't — so a naive box-center left
-        // the grip visibly LOWER than the title's visual (cap-height) center (2026-09-08 playtest feedback).
-        // Nudge the grip UP by half that reserved space, computed from the title's own font metrics so it
-        // tracks any future title-size change, via the "add bottom padding to a centered child" trick: Center
-        // alignment splits an enlarged box's extra height evenly above/below, so bottom-only padding of X
-        // shifts the glyph itself up by X/2 relative to an unpadded center.
-        // 2026-09-09 playtest feedback: the full descent+leading nudge overshot — the grip read as sitting
-        // too HIGH relative to the title's visual center. Halved so the up-shift is milder (a quarter of
-        // descent+leading rather than half).
+        // Chrome (grip + trailing buttons) is anchored to a FIXED top offset — the same one the title
+        // itself sits at — rather than centered/bottom-anchored against the title's own box (see the
+        // 2026-09-09 title-wrap-vertical-position investigation: Center-vs-End cross-alignment made a
+        // wrapped 2-line title's top position drift relative to a 1-line title, dragging this chrome
+        // down with it). A small top pad nudges the chrome down off that flush top edge for breathing
+        // room, independent of the title, scaled by WindowFontScale so it tracks a live font-scale
+        // change the same way the title font does.
+        const float ChromeTopPadBase = 3f;
         var titleFontMetrics = TextLayoutHelper.GetFont(titleStyle.FontFamily, titleStyle.FontSize, titleStyle.Weight).Metrics;
-        float titleReservedBelowBaseline = (titleFontMetrics.Descent + titleFontMetrics.Leading) / 2f;
+        float chromeTopPad = ChromeTopPadBase * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale);
         Widget gripSlot = new Padding(
-            EdgeInsets.Only(bottom: titleReservedBelowBaseline),
+            EdgeInsets.Only(top: chromeTopPad),
             child: WithTooltip("scribe-gui-drag",
                 new GestureDetector(
                     onPress: OnGripDragStart,
@@ -316,10 +314,9 @@ public abstract partial class ScribeDialogBase
         trailingGroup.Add(TitleButton("scribeclose", "scribe-gui-close", colors.Error,
             size: ScribeRowConstants.RowCheckboxSize * 1.4f, onTap: () => TryClose()));
 
-        // Only used below to pick a COSMETIC cross-alignment (End vs Center) for the title row — the
-        // actual band/content SIZING no longer depends on this estimate at all (see the return statement's
-        // comment), so an occasional off-by-one-character guess here just risks the wrong alignment choice,
-        // never a wrong size.
+        // Only used below to estimate how many lines the title wraps to, which drives how much the band
+        // grows (see the return statement's comment) — an occasional off-by-one-character guess here just
+        // risks growing the band a line early/late, never a wrong cross-alignment (that's now fixed, below).
         float gripWidth = ScribeRowConstants.RowCheckboxSize * 1.1f;
         float trailingWidth = titleBtnSpacing * (trailingGroup.Count - 1);
         if (pencilSlot is not null) trailingWidth += titleBtnSpacing * 1.5f + pencilSize;
@@ -332,23 +329,28 @@ public abstract partial class ScribeDialogBase
         string titleForWrap = _isTitleEditing ? "" : displayTitle;
         int actualTitleLines = CountWrappedLines(
             titleForWrap, titleStyle.FontFamily, titleStyle.FontSize, titleStyle.Weight, titleAvailableW, titleMaxLines);
-        // Bottom-anchor the title + chrome so the grip/close/pencil track the wrapped title's LAST line;
-        // single-line keeps the original centered layout.
-        CrossAxisAlignment titleCrossAlign = actualTitleLines <= 1 ? CrossAxisAlignment.Center : CrossAxisAlignment.End;
 
+        // Explicit fixed top-anchor (Start) for every child, always — regardless of line count. The
+        // title's top position is then invariant across 1-line and wrapped 2-line titles (the content
+        // box's top edge itself never moves; see contentBoxH/bandH below), which was the actual bug: the
+        // previous Center-for-1-line/End-for-2-lines split gave a wrapped title HALF its slack above vs.
+        // ALL its slack above, bumping it down. Chrome no longer tracks the title's own box height at
+        // all — it gets its own independent chromeTopPad (above) instead.
         Widget titleRow = new Row(
             mainAxisAlignment: MainAxisAlignment.SpaceBetween,
-            crossAxisAlignment: titleCrossAlign,
+            crossAxisAlignment: CrossAxisAlignment.Start,
             mainAxisSize: MainAxisSize.Max,
             children: new Widget[]
             {
                 gripSlot,
                 titleSlot,
-                new Row(
-                    crossAxisAlignment: CrossAxisAlignment.Center,
-                    mainAxisSize: MainAxisSize.Min,
-                    spacing: titleBtnSpacing,
-                    children: trailingGroup.ToArray()),
+                new Padding(
+                    EdgeInsets.Only(top: chromeTopPad),
+                    child: new Row(
+                        crossAxisAlignment: CrossAxisAlignment.Center,
+                        mainAxisSize: MainAxisSize.Min,
+                        spacing: titleBtnSpacing,
+                        children: trailingGroup.ToArray())),
             });
 
         // 2026-09-10 (3rd/4th playtest passes — REVERTED): both the self-sizing ConstrainedBox rewrite
