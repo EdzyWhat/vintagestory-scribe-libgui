@@ -6,64 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [1.4.0-rc.3] - 2026-09-03
+## [1.4.0-rc.4] - 2026-09-08
 
-Early, testing-focused release candidate — the main ask is Progression Framework (Seafarer and
-other dependent mods) compatibility, alongside the Assignment/Inbox additions below. **This
-release candidate is specifically to gather Progression Framework testing help** — see the Mod DB
-or GitHub release notes for what to check.
-
-### Added
-- **Progression Framework Quest Link support.** Scribe's Quest Link feature, previously VS Quest
-  only, now also recognizes Progression Framework (the quest/training framework behind Seafarer
-  and similar mods): its quest catalog appears in the Quest Link picker, accept/completion
-  auto-detect fires from the framework's own per-player quest log, and progress mirrors
-  per-objective (e.g. "3 of 12 delivered") for multi-objective delivery quests. Following a
-  Progression Framework Quest Link to its own ledger dialog is not yet wired up in this build —
-  clicking one is still a no-op, same as today.
-- **Fixed a silent quest-link mis-assignment.** Accepting a quest with 2+ eligible Scribe
-  documents carried at once now asks which one should receive the auto-linked Quest Link
-  (matching the Assignment system's existing multi-candidate picker), instead of silently
-  attaching to whichever was last opened. Applies to both VS Quest and Progression Framework.
-- **Physical/postal delivery mode for Assignments.** A server admin `DeliveryMode` setting
-  (`AlwaysInstant`/`AlwaysPhysical`/`Hybrid`, default `Hybrid`) and a new Task Notice item let an
-  Assignment reach an out-of-range or offline player as a physically-carried, hand-delivered
-  item instead of syncing instantly, matching the "note left for someone" fiction on
-  faction/kingdom-style servers. In `Hybrid` mode, sending shows a "Local Inboxes" / "Send a
-  Notice" toggle pre-selected by a one-time range check but always freely switchable.
-- **Inbox Inventory tab.** The standalone Inbox block gains a second tab with 8 general-purpose
-  storage slots (4 restricted to Scribe items, 4 fully open), for holding a delivered Task Notice
-  or other Scribe items without leaving the block's own dialog.
-- Task Notice hover text now flags a blank/unassigned notice explicitly, and its stack size is
-  64 (was 16).
-
-### Fixed
-- Assignment lifecycle polish: per-side deletion, accept-destination capture, icon/tab cleanup.
-- A latent bug in the Task Notice tooltip (a missing localization key silently dropped the
-  "Addressed to: ..." line for a sealed notice) — found and fixed alongside the work above.
-
-## [1.4.0-rc.2] - 2026-09-02
-
-### Fixed
-- **Linux HarfBuzz fix from `1.4.0-rc.1`, corrected further.** That release candidate's
-  font-shaping crash fix (a Harmony patch isolating Scribe's bundled HarfBuzz copy from a system
-  one already resident in the process) regressed for a Linux tester after initially working in an
-  earlier build. Root-caused by decompiling `gui`'s own native-library loader and comparing it
-  against ours: our fix located its bundled library's folder using .NET's
-  `RuntimeInformation.RuntimeIdentifier`, which can return a longer, distro-qualified string that
-  doesn't match the flat folder name (`linux-x64`, `linux-arm64`, etc.) the native asset actually
-  ships under on some systems. When that lookup fails, the isolation silently falls back to `gui`'s
-  original, unisolated loader — reintroducing the exact crash the fix exists to prevent. Corrected
-  to resolve that folder name the same way `gui`'s own loader does (a manual mapping off CPU
-  architecture, not the fragile distro-qualified API), matching the approach an independently-shipped
-  community fix (Seralth's `harfbuzzfix`) already takes for the same reason. Re-tested on a VM
-  matching the affected tester's desktop/distro: 3 clean runs in a row, versus the prior code
-  crashing in 3 of 4 runs under the same conditions.
-
-## [1.4.0-rc.1] - 2026-09-01
-
-Early release candidate — includes the new Assignment Desk/Inbox and Quest Links features below
-alongside the Linux HarfBuzz durability fix, ahead of the next real release.
+Another testing-focused release candidate ahead of the real 1.4.0 — rolls up everything since
+`1.4.0-rc.3` into one build: Assignment Desk/Inbox is now craftable at the grid, VS Quest Quest
+Links gain static criteria subtasks, every non-Tablet dialog tab shares a new consistent header
+style, Read View gains filter pills and subtask collapsing, and the quest-catalog domain-scoping
+bug that hid real third-party quest content (Seafarer, VS Village) behind both backends is fixed.
+Fully save-compatible with 1.0–1.3.x worlds — existing documents open unchanged. New writes use
+document codec v11 (an assignment's target-player id, a quest Link's captured description) and
+pin codec v7; a pre-1.4.0 client cannot read a save from this build.
 
 ### Added
 - **Assignment Desk and Inbox.** A new Assignment Desk block lets you write a task and send it
@@ -71,26 +23,95 @@ alongside the Linux HarfBuzz durability fix, ahead of the next real release.
   Lectern, Scriptorium, and Chalkboard) is where you receive one. Accept, Decline, or Cancel before
   it's accepted; once accepted it's yours to check off (which completes the assignment
   automatically) or Discard. An unseen assignment glows softly on the nearby block until you open
-  its Inbox. **Not yet obtainable via survival crafting in this build** — the grid recipes are
-  pending final art/balancing; use creative mode or `/giveblock` to place one for testing.
-- **Quest Links**, for players who also have an optional supported quest mod installed (currently
-  VS Quest): add a Quest Link from the footer's New Task menu to keep one of that mod's quests
-  listed next to your other goals. Scribe also notices when you accept or complete a quest near its
-  giver and always says so in chat; a new Quest Accept Policy and Quest Completion Policy in
-  Settings (Always/Never/Prompt, default Prompt) choose what happens next — automatically link/mark
-  it done, do nothing, or ask via a small HUD banner. While a quest's own window is open, its Quest
-  Link row shows live kill/place/break progress underneath it.
+  its Inbox, and the Inbox's own Inventory tab/slot shimmer the same way for an undiscovered
+  addressed notice sitting inside. Both blocks are now craftable at the grid (Assignment Desk from
+  the Scriptorium's own recipe; Inbox from the vanilla chest recipe). The Assignment Desk's own
+  Create Assignments tab gets an always-available **Create Tasks to Assign** button in its
+  empty-task-list state, opening the Desk's own Editor directly instead of sending you elsewhere to
+  write tasks first; the existing "Pull existing tasks from this Desk" button still appears once
+  there's something to pull. Declined/Cancelled/Discarded/Completed records can now be deleted
+  per-side (deleting your view of a closed assignment doesn't affect the other party's), and an
+  Accept now records which Scribe item it actually landed on, shown as an "Accepted into ..." line.
+  The Inbox/Sent History filter chips show each category's row count (e.g. "New (1)") and the
+  rejected-group filter reads "Cancelled".
+- **Task Notice.** A craftable item that physically carries an assignment as a locked, read-only
+  document until Accept or Decline — for reaching an out-of-range or offline player instead of
+  syncing instantly. A server admin `DeliveryMode` setting (`AlwaysInstant`/`AlwaysPhysical`/
+  `Hybrid`, default `Hybrid`, with a configurable radius) controls when this applies; in `Hybrid`
+  mode, sending an assignment shows a "Local Inboxes" / "Send a Notice" toggle pre-selected by a
+  one-time range check but always freely switchable. A held notice's hover text now names its
+  assigner and addressee (or flags an unaddressed one explicitly) and its stack size is 64 (was
+  16). An ambient discovery-particle effect plays near whoever is holding an unopened notice.
+- **VS Quest and Progression Framework support.** Quest Links (from the footer's New Task menu)
+  keep one of a supported quest mod's quests listed next to your other goals; Scribe notices when
+  you accept or complete a quest near its giver and says so in chat, with a Quest Accept Policy and
+  Quest Completion Policy in Settings (Always/Never/Prompt) choosing what happens automatically.
+  This now covers **two backends**: VS Quest, and Progression Framework (the framework behind
+  Seafarer and similar mods), sharing one Accept-candidate picker between them. A Quest Link row
+  now renders with its own dedicated marker icon and accent color instead of looking like a plain
+  guide-page Link. A VS Quest Quest Link now generates static criteria subtasks at creation —
+  showing required counts for kill/gather/place/break objectives pulled from the quest's own
+  catalog entry — closing most of the "what do I actually need to do" gap VS Quest itself never
+  exposes live (following one to open a dialog isn't possible for VS Quest; Progression Framework
+  Quest Links already mirror live per-objective progress). Accepting a quest with 2+ eligible
+  Scribe documents carried at once now asks which one should receive the auto-linked Quest Link,
+  instead of silently attaching to whichever was last opened. Quest accept/dismiss decisions now
+  persist server-side and no longer re-raise their prompt on relog, and a new AutoPinOnQuestAccept
+  setting pins a linked task's HUD entry immediately on accept. The "Add Quest Link" picker only
+  offers quests you've actually started.
+- **A new, consistent header on every dialog tab.** The nine non-Tablet tabs (Read, Edit, Pinned,
+  Notebook History, Guest Book, Inbox, Sent Assignment History, Create Assignments, Scriptorium
+  Transcribe) — which had each grown their own ad hoc header/divider spacing over several releases
+  — now share one anatomy: the title bar, a persistent small-caps subtitle naming the tab (e.g.
+  "GUEST BOOK: who has visited"), each tab's own controls where it has any, and one divider in a
+  consistent position separating that header from the tab's content. The title bar's drag-grip has
+  moved to sit beside the title rather than off in the trailing corner. A `ShowSubtitleRow` toggle
+  in a ConfigKit-managed config file (default on) can turn the new subtitle line back off. The
+  Tablet is unchanged — it keeps its own chrome, with no subtitle row.
+- **Read View filtering and collapsing.** A five-category filter-pill row (All/Active/Completed/
+  Pinned/Other) and a collapse/expand toggle for subtask-group parents (a Quest Link and its
+  objectives, a Crafting Task and its Trackers) on every Read View surface except the Tablet; both
+  choices persist per Scribe item/block.
+- **Full Linux support: the LibGUI HarfBuzz crash class is fixed.** Some Linux desktops crashed on
+  opening a Scribe dialog because Scribe's bundled HarfBuzzSharp collided with a system
+  `libharfbuzz` already resident in the process. The fix isolates Scribe's bundled copy via a
+  Harmony patch on `gui`'s own native-library registration (not a load-order-dependent `dlopen`
+  race), matching an independently-shipped community fix (Seralth's `harfbuzzfix`) validated
+  against the same root cause, and a follow-up correction fixed a RID-lookup bug in that isolation
+  (.NET's distro-qualified `RuntimeIdentifier` didn't match the flat native-asset folder name on
+  some systems, silently falling back to the crash-prone path). Alongside this, the HUD's collapse
+  chevron and LibGUI's stock Dropdown chevron — both tofu on Linux, since no bundled or system font
+  reliably carries their triangle glyphs there — now render correctly (the HUD's via a bundled SVG
+  icon, the Dropdown's via triangle glyphs spliced into Scribe's own bundled fonts).
+
+### Changed
+- Tablet and Chalkboard's block cap raised from 10 to 15 tasks, per playtest feedback that 10 was
+  too tight for a working scratchpad.
+- Scribe skips LibGUI's first-run theme-picker dialog on first launch — a confusing first
+  impression unrelated to anything Scribe itself does, since Scribe hard-depends on LibGUI.
+- The Scriptorium/Inbox Inventory tab's icon switched from a borrowed open-book glyph to a
+  dedicated grid icon.
 
 ### Fixed
-- **Linux/glibc HarfBuzz crash, hardened further.** The font-shaping crash affecting some Linux
-  desktops (bundled HarfBuzzSharp colliding with a system `libharfbuzz` already resident in the
-  process) is now isolated via a Harmony patch on `gui`'s own native-library registration, replacing
-  the previous startup-order-dependent `dlopen` race. This mechanism doesn't depend on mod load
-  order, matches an independently-shipped community fix (Seralth's `harfbuzzfix`) validated against
-  the same root cause, and fails closed (falls back to today's behavior) if it can't apply. **This
-  release candidate is specifically to gather confirmation from Linux users** that the fix holds
-  across different desktop/toolkit environments (KDE, GTK, Qt) — reports welcome via Mod DB
-  comments, Discord, or GitHub.
+- **Quest catalogs were scoped to the wrong mod domain.** Both the VS Quest and Progression
+  Framework catalog readers only searched their own framework mod's assets for quest content —
+  but real quests always ship under a separate dependent mod's domain (e.g. Seafarer, VS Village).
+  This meant the Quest Link picker and accept/completion auto-detect silently found nothing against
+  any real installation; both readers now search every installed mod's domain, matching each
+  framework's own loader. A related Progression Framework deserialization bug that silently
+  dropped every "delivery"-type quest (so only one quest ever appeared to exist) is fixed alongside
+  it.
+- Completing an assigned task now marks the assignment complete even when its backing document
+  (e.g. a Notebook not currently in your inventory) can't be resolved at that moment.
+- Fixed Assignment/Task Notice Accept silently doing nothing when the target document sat in slot
+  0 of its inventory (a wire-format quirk misread a real slot 0 as "unset" and fell back to an
+  invalid target).
+- Fixed the Task Notice's filled/sealed shape rendering as the engine's blank placeholder texture
+  (a missing `textures` declaration kept it out of the item texture atlas), and disabled a stray
+  unused face on that shape.
+- Fixed the Assignment Desk, Inbox (ground), and Inbox (wall) rendering as the engine's "?"
+  unknown-asset placeholder in-game, the Handbook, and Creative Inventory, caused by an exporter gap
+  in their custom model files.
 
 ## [1.3.3] - 2026-08-30
 
