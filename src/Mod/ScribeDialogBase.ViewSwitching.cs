@@ -434,7 +434,8 @@ public abstract partial class ScribeDialogBase
                 DisplayName: ResolveRowItem(b).Name, AcceptedDate: b.Assignment.AcceptedDate,
                 DeclinedDate: b.Assignment.DeclinedDate, CancelledDate: b.Assignment.CancelledDate,
                 DiscardedDate: b.Assignment.DiscardedDate, CompletedDate: b.Assignment.CompletedDate,
-                AcceptedIntoLabel: b.Assignment.AcceptedIntoLabel, ReceivedDate: b.Assignment.ReceivedDate))
+                AcceptedIntoLabel: b.Assignment.AcceptedIntoLabel, ReceivedDate: b.Assignment.ReceivedDate,
+                RedirectedFromUid: b.Assignment.RedirectedFromUid, RedirectedDate: b.Assignment.RedirectedDate))
             .ToList();
 
         return new ScribeInboxContent(
@@ -651,7 +652,8 @@ public abstract partial class ScribeDialogBase
                 DisplayName: ResolveRowItem(b).Name, AcceptedDate: b.Assignment.AcceptedDate,
                 DeclinedDate: b.Assignment.DeclinedDate, CancelledDate: b.Assignment.CancelledDate,
                 DiscardedDate: b.Assignment.DiscardedDate, CompletedDate: b.Assignment.CompletedDate,
-                ReceivedDate: b.Assignment.ReceivedDate))
+                ReceivedDate: b.Assignment.ReceivedDate,
+                RedirectedFromUid: b.Assignment.RedirectedFromUid, RedirectedDate: b.Assignment.RedirectedDate))
             .ToList();
 
     /// <summary>Builds the Sent Assignment History tab (refine-assignment-desk-inbox-ux 12.2/12.3): this

@@ -350,8 +350,24 @@ public sealed class GuiDialogTaskNotice : GuiBase
                 new TextStyle { FontSize = 12, Color = colors.OnSurface, SoftWrap = true })),
             useGlobalOverlay: true);
 
+    /// <summary>If the acting player isn't the notice's recorded recipient, warns them via
+    /// <see cref="GuiDialogTaskNoticeRedirectConfirm"/> before sending anything — confirming redirects
+    /// the assignment to them (design D3); Cancel leaves the notice untouched. The recipient-matches
+    /// path sends immediately, exactly as before this change.</summary>
     private void AcceptOnto(ScribeAcceptCandidate candidate)
     {
+        var recordedRecipientUid = document.Blocks.FirstOrDefault()?.Assignment?.TargetPlayerUid;
+        if (recordedRecipientUid is not null && recordedRecipientUid != capi.World.Player.PlayerUID)
+        {
+            var confirm = new GuiDialogTaskNoticeRedirectConfirm(capi, ResolvePlayerName(recordedRecipientUid), () =>
+            {
+                modSystem.SendTaskNoticeAction(slot, ScribeAssignmentAction.Accept, candidate);
+                TryClose();
+            });
+            confirm.TryOpen();
+            return;
+        }
+
         modSystem.SendTaskNoticeAction(slot, ScribeAssignmentAction.Accept, candidate);
         TryClose();
     }

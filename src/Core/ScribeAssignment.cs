@@ -80,6 +80,16 @@ public sealed class ScribeAssignment
     /// through the Sent state (every non-notice send, and any notice sent before this change shipped).</summary>
     public string? ReceivedDate { get; set; }
 
+    /// <summary>UID of the player this assignment was originally addressed to, before a non-recipient
+    /// holder of a Task Notice accepted it instead (add-task-notice-redirect-confirm). Stamped by
+    /// <see cref="ScribeAssignmentStore.TryRedirectTarget"/> from the current <see cref="TargetPlayerUid"/>
+    /// right before that field is overwritten with the new target. Null unless a redirect happened.</summary>
+    public string? RedirectedFromUid { get; set; }
+
+    /// <summary>In-game date <see cref="RedirectedFromUid"/> was stamped. Null unless a redirect
+    /// happened.</summary>
+    public string? RedirectedDate { get; set; }
+
     /// <summary>Short destination label (e.g. <c>Notebook "Book of Nick"</c>) captured once, at
     /// Accept-placement time, naming the Scribe item the task actually landed in. Null when the
     /// assignment was never placed (still Unaccepted, or an Accept that failed placement).</summary>
@@ -130,6 +140,8 @@ public sealed class ScribeAssignment
         DiscardedDate = DiscardedDate,
         CompletedDate = CompletedDate,
         ReceivedDate = ReceivedDate,
+        RedirectedFromUid = RedirectedFromUid,
+        RedirectedDate = RedirectedDate,
         AcceptedIntoLabel = AcceptedIntoLabel,
         HiddenFromAssignee = HiddenFromAssignee,
         HiddenFromAssigner = HiddenFromAssigner,

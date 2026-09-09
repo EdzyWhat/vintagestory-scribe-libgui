@@ -141,6 +141,27 @@ public class ScribeAssignmentTests
     }
 
     [Fact]
+    public void RedirectFields_DefaultToNull()
+    {
+        var assignment = new ScribeAssignment("assigner", "Day 1");
+        Assert.Null(assignment.RedirectedFromUid);
+        Assert.Null(assignment.RedirectedDate);
+    }
+
+    [Fact]
+    public void Clone_RoundTripsRedirectFields()
+    {
+        var assignment = new ScribeAssignment("assigner", "Day 1", ScribeAssignmentState.Unaccepted)
+        {
+            RedirectedFromUid = "original-recipient-uid",
+            RedirectedDate = "Day 2",
+        };
+        var clone = assignment.Clone();
+        Assert.Equal("original-recipient-uid", clone.RedirectedFromUid);
+        Assert.Equal("Day 2", clone.RedirectedDate);
+    }
+
+    [Fact]
     public void BinaryCodecRoundTripsAssignmentAndAbsentAssignment()
     {
         var original = new ScribeDocument();

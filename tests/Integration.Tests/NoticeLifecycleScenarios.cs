@@ -98,6 +98,8 @@ public class NoticeLifecycleScenarios : AtlasScenarioBase
         Assert.Null(assigneeHotbar[0]!.Itemstack); // the sealed notice was consumed on Accept
         Assert.True(ScribeDocumentAttributes.TryReadFrom(notebookSlot.Itemstack!, out var placedDoc));
         Assert.Contains(placedDoc!.Blocks, b => b.TaskId == assignmentId && b.Text == "Chop 10 logs");
+        // add-task-notice-redirect-confirm 2.3: the recipient-matches-already path leaves no redirect trace.
+        Assert.Null(store.TryGet(assignmentId)!.Assignment!.RedirectedFromUid);
     }
 
     [AtlasScenario(RollbackWorld = true)]
@@ -155,5 +157,132 @@ public class NoticeLifecycleScenarios : AtlasScenarioBase
         Assert.Equal(ScribeAssignmentState.Declined, store.TryGet(assignmentId)!.Assignment!.State);
         Assert.Null(assigneeHotbar[0]!.Itemstack); // the notice was consumed on Decline
         Assert.Single(store.Sent(assigner.Player.PlayerUID)); // Assigner's history still shows it, now Declined
+    }
+
+    /// <summary>add-task-notice-redirect-confirm 2.1: Decline keeps today's non-recipient rejection
+    /// exactly as it was — a physical holder who isn't the recorded recipient still can't decline it
+    /// away from them.</summary>
+    [AtlasScenario(RollbackWorld = true)]
+    public async Task NonRecipientDecline_StillSilentlyIgnored()
+    {
+        var pos = World.Spawn.Offset(4, 0, 0);
+        World.SetBlock("scribe:scribeassignmentdesk", pos);
+        await World.Ticks(2);
+
+        var assigner = await World.JoinPlayer("RdrDeclAssigner");
+        var recipient = await World.JoinPlayer("RdrDeclRecipient");
+        var holder = await World.JoinPlayer("RdrDeclHolder");
+
+        var desk = World.BlockEntityAt<BlockEntityAssignmentDesk>(pos);
+        Assert.NotNull(desk);
+        desk!.Inventory[BlockEntityAssignmentDesk.NoticeSupplySlotIndex].Itemstack = BlankNotice();
+        desk.Inventory[BlockEntityAssignmentDesk.NoticeSupplySlotIndex].MarkDirty();
+
+        var assignmentId = Guid.NewGuid();
+        Mod.SendAssignmentBatch(assigner.Player, new ScribeSendAssignmentBatchMessage
+        {
+            X = pos.X,
+            Y = pos.Y,
+            Z = pos.Z,
+            StagingSlot = BlockEntityAssignmentDesk.StagingSlotIndex,
+            TargetPlayerUid = recipient.Player.PlayerUID,
+            DeliveryChoice = (byte)ScribeDeliveryChoice.SendNotice,
+            Rows = new List<ScribeAssignmentBatchRow>
+            {
+                new() { AssignmentId = assignmentId.ToByteArray(), Kind = (byte)ScribeBlockKind.Task, Text = "Chop 10 logs" },
+            },
+        });
+
+        var store = Mod.AssignmentStore!;
+        var outputSlot = desk.Inventory[BlockEntityAssignmentDesk.NoticeOutputSlotIndex];
+        var sealedNotice = outputSlot.Itemstack;
+        outputSlot.Itemstack = null;
+        outputSlot.MarkDirty();
+
+        // Hand it to a THIRD player instead of the recipient — a dropped/traded notice changing hands.
+        // (The own-inventory proximity scan only marks a notice Received for its actual recipient, so a
+        // non-recipient holder's own Accept/Decline call is the thing that proves physical receipt here.)
+        var holderHotbar = holder.Player.InventoryManager.GetHotbarInventory();
+        holderHotbar[0]!.Itemstack = sealedNotice!;
+        holderHotbar[0]!.MarkDirty();
+
+        Mod.ApplyTaskNoticeAction(holder.Player, new ScribeTaskNoticeActionMessage
+        {
+            SourceInventoryId = holderHotbar.InventoryID,
+            SourceSlotId = 0,
+            Action = (byte)ScribeAssignmentAction.Decline,
+        });
+
+        Assert.Equal(ScribeAssignmentState.Unaccepted, store.TryGet(assignmentId)!.Assignment!.State); // ignored
+        Assert.NotNull(holderHotbar[0]!.Itemstack); // notice was NOT consumed
+        Assert.Null(store.TryGet(assignmentId)!.Assignment!.RedirectedFromUid);
+    }
+
+    /// <summary>add-task-notice-redirect-confirm 2.2: a non-recipient holder's confirmed Accept succeeds,
+    /// redirecting the assignment's target to them and stamping RedirectedFromUid with the original
+    /// recipient.</summary>
+    [AtlasScenario(RollbackWorld = true)]
+    public async Task NonRecipientAccept_RedirectsTargetAndSucceeds()
+    {
+        var pos = World.Spawn.Offset(4, 0, 0);
+        World.SetBlock("scribe:scribeassignmentdesk", pos);
+        await World.Ticks(2);
+
+        var assigner = await World.JoinPlayer("RdrAccAssigner");
+        var recipient = await World.JoinPlayer("RdrAccRecipient");
+        var holder = await World.JoinPlayer("RdrAccHolder");
+
+        var desk = World.BlockEntityAt<BlockEntityAssignmentDesk>(pos);
+        Assert.NotNull(desk);
+        desk!.Inventory[BlockEntityAssignmentDesk.NoticeSupplySlotIndex].Itemstack = BlankNotice();
+        desk.Inventory[BlockEntityAssignmentDesk.NoticeSupplySlotIndex].MarkDirty();
+
+        var assignmentId = Guid.NewGuid();
+        Mod.SendAssignmentBatch(assigner.Player, new ScribeSendAssignmentBatchMessage
+        {
+            X = pos.X,
+            Y = pos.Y,
+            Z = pos.Z,
+            StagingSlot = BlockEntityAssignmentDesk.StagingSlotIndex,
+            TargetPlayerUid = recipient.Player.PlayerUID,
+            DeliveryChoice = (byte)ScribeDeliveryChoice.SendNotice,
+            Rows = new List<ScribeAssignmentBatchRow>
+            {
+                new() { AssignmentId = assignmentId.ToByteArray(), Kind = (byte)ScribeBlockKind.Task, Text = "Chop 10 logs" },
+            },
+        });
+
+        var store = Mod.AssignmentStore!;
+        var outputSlot = desk.Inventory[BlockEntityAssignmentDesk.NoticeOutputSlotIndex];
+        var sealedNotice = outputSlot.Itemstack;
+        outputSlot.Itemstack = null;
+        outputSlot.MarkDirty();
+
+        var holderHotbar = holder.Player.InventoryManager.GetHotbarInventory();
+        holderHotbar[0]!.Itemstack = sealedNotice!;
+        holderHotbar[0]!.MarkDirty();
+        Mod.MarkReceivedForCarriedNotices(holder.Player);
+
+        var notebookSlot = holderHotbar[1];
+        notebookSlot!.Itemstack = new ItemStack(World.Api.World.GetItem(new AssetLocation("scribe", "scribenotebook"))!, 1);
+        notebookSlot.MarkDirty();
+
+        Mod.ApplyTaskNoticeAction(holder.Player, new ScribeTaskNoticeActionMessage
+        {
+            SourceInventoryId = holderHotbar.InventoryID,
+            SourceSlotId = 0,
+            Action = (byte)ScribeAssignmentAction.Accept,
+            TargetInventoryId = holderHotbar.InventoryID,
+            TargetSlotId = 1,
+            NewTaskInsert = (byte)ScribeNewTaskInsert.Top,
+        });
+
+        var assignment = store.TryGet(assignmentId)!.Assignment!;
+        Assert.Equal(ScribeAssignmentState.Accepted, assignment.State);
+        Assert.Equal(holder.Player.PlayerUID, assignment.TargetPlayerUid); // redirected to the accepting player
+        Assert.Equal(recipient.Player.PlayerUID, assignment.RedirectedFromUid); // original recipient preserved
+        Assert.Null(holderHotbar[0]!.Itemstack); // the sealed notice was consumed on Accept
+        Assert.True(ScribeDocumentAttributes.TryReadFrom(notebookSlot.Itemstack!, out var placedDoc));
+        Assert.Contains(placedDoc!.Blocks, b => b.TaskId == assignmentId && b.Text == "Chop 10 logs");
     }
 }

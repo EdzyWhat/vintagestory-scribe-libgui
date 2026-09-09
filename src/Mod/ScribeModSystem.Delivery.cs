@@ -164,11 +164,11 @@ public sealed partial class ScribeModSystem
             return;
         }
 
-        // Only the addressed recipient may Accept/Decline — a physical item can change hands, but the
-        // assignment it carries is still addressed to a specific player.
-        if (noticeDoc.Blocks.Any(b => b.Assignment is null || b.Assignment.TargetPlayerUid != fromPlayer.PlayerUID))
+        // A physical item can change hands, but the assignment it carries is still addressed to a
+        // specific player. Defensive: every row from a genuine send always carries an Assignment.
+        if (noticeDoc.Blocks.Any(b => b.Assignment is null))
         {
-            Trace("tasknotice-action from {0}: notice is not addressed to them — ignored", fromPlayer.PlayerName);
+            Trace("tasknotice-action from {0}: notice row missing its assignment — ignored", fromPlayer.PlayerName);
             return;
         }
 
@@ -182,6 +182,15 @@ public sealed partial class ScribeModSystem
         var action = (ScribeAssignmentAction)message.Action;
         if (action == ScribeAssignmentAction.Decline)
         {
+            // Unlike Accept, Decline is not redirectable — only the addressed recipient may decline a
+            // notice that isn't theirs (add-task-notice-redirect-confirm design D2: today's identity gate,
+            // preserved exactly, now scoped to just this branch).
+            if (noticeDoc.Blocks.Any(b => b.Assignment!.TargetPlayerUid != fromPlayer.PlayerUID))
+            {
+                Trace("tasknotice-action from {0}: notice is not addressed to them — ignored", fromPlayer.PlayerName);
+                return;
+            }
+
             var declineAssignerUids = new HashSet<string>();
             foreach (var block in noticeDoc.Blocks)
             {
@@ -229,6 +238,13 @@ public sealed partial class ScribeModSystem
         {
             var sourceAssignment = block.Assignment!;
             assignerUids.Add(sourceAssignment.AssignerUid);
+
+            // A non-recipient holder confirmed the redirect warning client-side (design D3) before this
+            // packet was ever sent — redirect the store record's target to them now, so the Accept below
+            // legally resolves them as Assignee instead of being rejected as an uninvolved player
+            // (add-task-notice-redirect-confirm design D2).
+            if (sourceAssignment.TargetPlayerUid != fromPlayer.PlayerUID)
+                assignmentStore.TryRedirectTarget(block.TaskId, fromPlayer.PlayerUID, date);
 
             // The record already exists (Unaccepted, from the TryMarkReceived pass above) — transition it
             // through the same actor-validated path a local-inbox Accept uses, instead of creating a fresh

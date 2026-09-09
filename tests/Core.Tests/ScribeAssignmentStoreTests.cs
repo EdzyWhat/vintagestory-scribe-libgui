@@ -416,6 +416,132 @@ public class ScribeAssignmentStoreTests
         Assert.Equal(ScribeAssignmentState.Discarded, store.TryGet(id)!.Assignment!.State);
     }
 
+    // ---- TryRedirectTarget (add-task-notice-redirect-confirm: non-recipient Accept) ----
+
+    [Fact]
+    public void TryRedirectTarget_RewritesTargetAndStampsRedirectFields()
+    {
+        var store = NewStoreWithOneAssignment(out var id);
+        const string newTarget = "new-target-uid";
+
+        Assert.True(store.TryRedirectTarget(id, newTarget, "Year 1, Day 2"));
+
+        var assignment = store.TryGet(id)!.Assignment!;
+        Assert.Equal(newTarget, assignment.TargetPlayerUid);
+        Assert.Equal(Assignee, assignment.RedirectedFromUid);
+        Assert.Equal("Year 1, Day 2", assignment.RedirectedDate);
+    }
+
+    [Fact]
+    public void TryRedirectTarget_NoOpsWhenNewTargetAlreadyMatches()
+    {
+        var store = NewStoreWithOneAssignment(out var id);
+
+        Assert.False(store.TryRedirectTarget(id, Assignee, "Year 1, Day 2"));
+
+        var assignment = store.TryGet(id)!.Assignment!;
+        Assert.Equal(Assignee, assignment.TargetPlayerUid);
+        Assert.Null(assignment.RedirectedFromUid);
+        Assert.Null(assignment.RedirectedDate);
+    }
+
+    [Fact]
+    public void TryRedirectTarget_FailsOnNonUnacceptedState()
+    {
+        var store = NewStoreWithOneAssignment(out var id);
+        Assert.True(store.TryApplyAction(id, Assignee, ScribeAssignmentAction.Accept));
+
+        Assert.False(store.TryRedirectTarget(id, "new-target-uid", "Year 1, Day 2"));
+        Assert.Equal(Assignee, store.TryGet(id)!.Assignment!.TargetPlayerUid);
+    }
+
+    [Fact]
+    public void TryRedirectTarget_UnknownIdFails()
+    {
+        var store = new ScribeAssignmentStore();
+        Assert.False(store.TryRedirectTarget(Guid.NewGuid(), "new-target-uid", "Year 1, Day 2"));
+    }
+
+    [Fact]
+    public void TryRedirectTarget_ThenAccept_LegallySucceeds_ProvingTheTransitionMatrixNeedsNoChanges()
+    {
+        // design D1/Goals: redirect is target-identity resolution ahead of the existing Accept
+        // transition, not a new transition — TryApplyAction needs no changes to legally accept from
+        // the new target immediately after a redirect.
+        var store = NewStoreWithOneAssignment(out var id);
+        const string newTarget = "new-target-uid";
+        Assert.True(store.TryRedirectTarget(id, newTarget, "Year 1, Day 2"));
+
+        Assert.True(store.TryApplyAction(id, newTarget, ScribeAssignmentAction.Accept));
+
+        var assignment = store.TryGet(id)!.Assignment!;
+        Assert.Equal(ScribeAssignmentState.Accepted, assignment.State);
+        Assert.Equal(Assignee, assignment.RedirectedFromUid);
+    }
+
+    // ---- Round-trip: v8 redirect fields ----
+
+    [Fact]
+    public void RoundTrip_SerializeStore_PreservesRedirectFields()
+    {
+        var store = NewStoreWithOneAssignment(out var id);
+        Assert.True(store.TryRedirectTarget(id, "new-target-uid", "Year 1, Day 2"));
+        var bytes = store.SerializeStore();
+
+        var restored = new ScribeAssignmentStore();
+        restored.LoadFrom(bytes);
+        var assignment = restored.TryGet(id)!.Assignment!;
+        Assert.Equal("new-target-uid", assignment.TargetPlayerUid);
+        Assert.Equal(Assignee, assignment.RedirectedFromUid);
+        Assert.Equal("Year 1, Day 2", assignment.RedirectedDate);
+    }
+
+    [Fact]
+    public void TryDeserializeList_AcceptsAPriorVersionBlob_DefaultingRedirectFieldsToNull()
+    {
+        // A v7 blob (ReceivedDate present, no redirect fields at all) predates redirect entirely — no
+        // record was ever redirected under that version, so null is the correct default.
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write("SASN"u8.ToArray());
+            w.Write((byte)7); // v7
+            w.Write(1); // record count
+            w.Write(Guid.NewGuid().ToByteArray());
+            w.Write((byte)ScribeBlockKind.Task);
+            w.Write("Chop 10 logs");
+            w.Write(false); // no TargetItemCode
+            w.Write(1); // TargetQuantity
+            w.Write(0); // CurrentQuantity
+            w.Write(false); // no LinkTarget
+            w.Write(false); // no LinkLabel
+            w.Write(false); // no LinkDescription
+            w.Write(0); // Depth
+            w.Write(""); // RecipeSignature (v2+)
+            w.Write(Assigner);
+            w.Write(Assignee);
+            w.Write((byte)ScribeAssignmentState.Unaccepted);
+            w.Write("Year 1, Day 1");
+            w.Write(false); // Seen
+            w.Write(Guid.NewGuid().ToByteArray()); // BatchId (v3+)
+            w.Write(false); // AcceptedDate (v4+)
+            w.Write(false); // DeclinedDate (v4+)
+            w.Write(false); // CancelledDate (v4+)
+            w.Write(false); // DiscardedDate (v4+)
+            w.Write(false); // CompletedDate (v4+)
+            w.Write(false); // AcceptedIntoLabel (v5+)
+            w.Write(false); // HiddenFromAssignee (v6+)
+            w.Write(false); // HiddenFromAssigner (v6+)
+            w.Write(false); // ReceivedDate (v7+)
+            // NOTE: no RedirectedFromUid/RedirectedDate bytes here — this IS the v7 shape.
+        }
+
+        Assert.True(ScribeAssignmentStore.TryDeserializeList(ms.ToArray(), out var restored));
+        var record = Assert.Single(restored!);
+        Assert.Null(record.Assignment!.RedirectedFromUid);
+        Assert.Null(record.Assignment!.RedirectedDate);
+    }
+
     // ---- Delete (split-assignment-delete-by-viewer: per-side deletion) ----
 
     [Fact]

@@ -27,7 +27,8 @@ internal readonly record struct ScribeInboxRowData(
     string TargetPlayerUid, string AssignedDate, bool Seen, ScribeAssignmentActor ViewerRole,
     string? DisplayName = null, string? AcceptedDate = null, string? DeclinedDate = null,
     string? CancelledDate = null, string? DiscardedDate = null, string? CompletedDate = null,
-    string? AcceptedIntoLabel = null, string? ReceivedDate = null)
+    string? AcceptedIntoLabel = null, string? ReceivedDate = null,
+    string? RedirectedFromUid = null, string? RedirectedDate = null)
 {
     /// <summary>What this row actually shows (playtest 2026-08-31 bug fix): a Task/Text row's own
     /// authored <see cref="Text"/> is blank by convention for a Tracker/Link/Craft row (its label lives
@@ -447,6 +448,13 @@ internal sealed class ScribeInboxRowState : State<ScribeInboxRow>
             metaLines.Add(new Text(Lang.Get("scribe:scribe-assignment-discarded-on", discardedDate), metaStyle));
         if (data.CompletedDate is { } completedDate)
             metaLines.Add(new Text(Lang.Get("scribe:scribe-assignment-completed-on", completedDate), metaStyle));
+        // Redirect trace (add-task-notice-redirect-confirm design D5): a non-recipient holder's confirmed
+        // Accept redirected this record's target — not gated by ViewerRole, so it also shows (harmlessly)
+        // in the redirected-to player's own Inbox view of the same record.
+        if (data.RedirectedFromUid is { } redirectedFromUid && data.RedirectedDate is { } redirectedDate)
+            metaLines.Add(new Text(Lang.Get("scribe:scribe-assignment-redirected-on",
+                Widget.ResolvePlayerName(redirectedFromUid), Widget.ResolvePlayerName(data.TargetPlayerUid),
+                redirectedDate), metaStyle));
 
         var actions = new List<Widget>();
         if (data.ViewerRole == ScribeAssignmentActor.Assignee)

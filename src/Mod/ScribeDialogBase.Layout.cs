@@ -12,7 +12,7 @@ using Gui.Widgets.Input;         // Checkbox, FocusNode, GestureDetector, MouseR
 using Gui.Widgets.Gestures;      // ScrollController
 using Gui.Widgets.Layout;        // Column, Row, Expanded, Padding, SizedBox, Center, Align, Alignment, CrossAxisAlignment, MainAxisAlignment
 using Gui.Widgets.Overlay;       // Tooltip
-using Gui.Widgets.Painting;      // BoxStyle
+using Gui.Widgets.Painting;      // BoxStyle, Transform
 using Gui.Widgets.Scroll;        // ListView, SingleChildScrollView, Scrollable, Scrollbar
 using Gui.Widgets.Spans;         // TextSpan
 using Gui.Core.Layout;           // MainAxisSize
@@ -175,15 +175,35 @@ public abstract partial class ScribeDialogBase
     /// <summary>The OuterArtBox's contents: a vertical stack of the draggable TitleBar band and the
     /// three-column SectionInnerBox, framed by the notebook art (scribe-notebook-frame). The ~7% of H below
     /// the inner box is bottom margin (the Column is top-aligned by default).</summary>
-    private Widget BuildOuterArtBox(ScribeLayout layout) =>
-        new Column(
+    private Widget BuildOuterArtBox(ScribeLayout layout)
+    {
+        // The title/subtitle gap (2026-09-09 playtest feedback: "reduce by 35%", then "another 10%" —
+        // 45% total): the title's content box (layout.TitleBtnsH) is taller than the title's actual
+        // single-line text (TitleLineHeight) — that leftover slack is what currently separates the title's
+        // own bottom from the subtitle immediately below it in SectionInnerBox, since BuildTitleBar's title
+        // now sits flush at the TOP of its content box (CrossAxisAlignment.Start, fixed top-anchor fix
+        // above) rather than centered, leaving ALL of that slack below the text instead of half. This gap
+        // is the SAME regardless of title line count (a wrapped 2-line title's box grows by exactly the
+        // same delta as the text within it — see BuildTitleBar's contentBoxH/bandH comment), so it's safe
+        // to compute once here without knowing how many lines the title currently wraps to. Closed by 45%
+        // via a paint-only upward nudge on the whole SectionInnerBox (subtitle + content + nav), not a
+        // Padding change — Padding didn't visibly move things in-game for this exact class of nudge (see
+        // chromeTopNudge above).
+        const float TitleSubtitleGapReduction = 0.45f;
+        // Clamped to ≥ 0: at a small dialog width + the max WindowFontScale, the title's line height can
+        // approach or exceed TitleBtnsH, leaving no slack to close — never nudge the WRONG direction.
+        float titleSubtitleGap = MathF.Max(0f, layout.TitleBtnsH - TitleLineHeight);
+        float sectionUpNudge = TitleSubtitleGapReduction * titleSubtitleGap;
+
+        return new Column(
             crossAxisAlignment: CrossAxisAlignment.Center,
             mainAxisSize: MainAxisSize.Max,
             children: new Widget[]
             {
                 BuildTitleBar(layout),
-                BuildSectionInnerBox(layout),
+                Transform.Translate(BuildSectionInnerBox(layout), new Vector2(0f, -sectionUpNudge)),
             });
+    }
 
     /// <summary>When Pixel-Art Display is OFF (no notebook art backdrop), wrap <paramref name="child"/> in a
     /// solid theme-surface panel so the title row and central content read as opaque panels rather than
@@ -199,6 +219,26 @@ public abstract partial class ScribeDialogBase
             child: child);
     }
 
+    /// <summary>The title's live font size — 1.5× the window body text size ("50% larger", v1-playtest-fixes
+    /// 5.1), WindowFontScale-aware. Shared by <see cref="BuildTitleBar"/> (the title's own <see cref="TextStyle"/>)
+    /// and <see cref="TitleLineHeight"/> below, so the two can never drift apart.</summary>
+    private float TitleFontSize => ScribeRowConstants.BaseWindowFontSize
+        * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale) * 1.5f;
+
+    /// <summary>The title font's own line height (descent − ascent + leading) at <see cref="TitleFontSize"/>.
+    /// Used by <see cref="BuildTitleBar"/> for its wrapped-line band-growth math, and by
+    /// <see cref="BuildOuterArtBox"/> to size the title/subtitle gap nudge — both need the IDENTICAL value,
+    /// since <see cref="BuildOuterArtBox"/>'s gap math (<c>layout.TitleBtnsH − TitleLineHeight</c>) only holds
+    /// if it matches the line height <see cref="BuildTitleBar"/> actually laid the title out with.</summary>
+    private float TitleLineHeight
+    {
+        get
+        {
+            var metrics = TextLayoutHelper.GetFont(ScribeRowControlNudge.TitleFontFamily, TitleFontSize, FontWeight.Bold).Metrics;
+            return metrics.Descent - metrics.Ascent + metrics.Leading;
+        }
+    }
+
     /// <summary>The TitleBar band (<c>W × 0.13H</c>) — the window's drag zone (see
     /// <see cref="WindowConfig.DragHandleHeight"/>). It holds a bottom-anchored, centered TitleTextButtons row
     /// (<c>0.75W × 0.065H</c>): the dialog title on the left (window text ×1.1) and a right-aligned group of
@@ -209,8 +249,7 @@ public abstract partial class ScribeDialogBase
         var colors = ResolveTheme(modSystem.MySettings.PixelArtDisplay).ColorScheme;
         // Title is 1.5× the window body text size — "50% larger" (v1-playtest-fixes 5.1). The body size is
         // BaseWindowFontSize × the player's WindowFontScale, so the title tracks a live font-scale change too.
-        float titleFont = ScribeRowConstants.BaseWindowFontSize
-            * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale) * 1.5f;
+        float titleFont = TitleFontSize;
 
         var titleStyle = new TextStyle { FontSize = titleFont, FontFamily = ScribeRowControlNudge.TitleFontFamily, Weight = FontWeight.Bold, Color = colors.OnSurface };
         var rawTitle = _isTitleEditing ? null : (scratch?.Title ?? host.Document.Title);
@@ -291,20 +330,24 @@ public abstract partial class ScribeDialogBase
         // itself sits at — rather than centered/bottom-anchored against the title's own box (see the
         // 2026-09-09 title-wrap-vertical-position investigation: Center-vs-End cross-alignment made a
         // wrapped 2-line title's top position drift relative to a 1-line title, dragging this chrome
-        // down with it). A small top pad nudges the chrome down off that flush top edge for breathing
-        // room, independent of the title, scaled by WindowFontScale so it tracks a live font-scale
-        // change the same way the title font does.
-        const float ChromeTopPadBase = 3f;
-        var titleFontMetrics = TextLayoutHelper.GetFont(titleStyle.FontFamily, titleStyle.FontSize, titleStyle.Weight).Metrics;
-        float chromeTopPad = ChromeTopPadBase * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale);
-        Widget gripSlot = new Padding(
-            EdgeInsets.Only(top: chromeTopPad),
-            child: WithTooltip("scribe-gui-drag",
+        // down with it). A small nudge shifts the chrome down off that flush top edge, centering it on
+        // the title's FIRST line, independent of how many lines the title wraps to. This is a
+        // Transform.Translate (paint-only), NOT Padding — Padding didn't visibly move the glyph in-game
+        // (verified via the title-wrap-vertical-position mockup), matching the existing paint-only-nudge
+        // convention used for this exact class of problem elsewhere (ScribeGearTuning's trim-box-Y,
+        // ScribeRowConstants' OpticalScale nudge). Scaled by WindowFontScale so it tracks a live
+        // font-scale change the same way the title font does; 6px at the default 1.0 scale was the
+        // playtest-picked value (2026-09-09) against the mockup's ~24px title font.
+        const float ChromeTopNudgeBase = 6f;
+        float chromeTopNudge = ChromeTopNudgeBase * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale);
+        Widget gripSlot = Transform.Translate(
+            WithTooltip("scribe-gui-drag",
                 new GestureDetector(
                     onPress: OnGripDragStart,
                     onMove: OnGripDragMove,
                     onRelease: OnGripDragEnd,
-                    child: new ScribeVsIconGlyph("scribegrip", ScribeRowConstants.RowCheckboxSize * 1.1f, chromeColor))));
+                    child: new ScribeVsIconGlyph("scribegrip", ScribeRowConstants.RowCheckboxSize * 1.1f, chromeColor))),
+            new Vector2(0f, chromeTopNudge));
 
         // Trailing group: pencil (editor only) · expand/collapse-all (Inbox/Sent History only) · close
         // button (refine-settings-and-window-chrome). Close reuses the delete SVG at 1.4× the per-row size.
@@ -335,7 +378,7 @@ public abstract partial class ScribeDialogBase
         // box's top edge itself never moves; see contentBoxH/bandH below), which was the actual bug: the
         // previous Center-for-1-line/End-for-2-lines split gave a wrapped title HALF its slack above vs.
         // ALL its slack above, bumping it down. Chrome no longer tracks the title's own box height at
-        // all — it gets its own independent chromeTopPad (above) instead.
+        // all — it gets its own independent chromeTopNudge (above) instead.
         Widget titleRow = new Row(
             mainAxisAlignment: MainAxisAlignment.SpaceBetween,
             crossAxisAlignment: CrossAxisAlignment.Start,
@@ -344,13 +387,13 @@ public abstract partial class ScribeDialogBase
             {
                 gripSlot,
                 titleSlot,
-                new Padding(
-                    EdgeInsets.Only(top: chromeTopPad),
-                    child: new Row(
+                Transform.Translate(
+                    new Row(
                         crossAxisAlignment: CrossAxisAlignment.Center,
                         mainAxisSize: MainAxisSize.Min,
                         spacing: titleBtnSpacing,
-                        children: trailingGroup.ToArray())),
+                        children: trailingGroup.ToArray()),
+                    new Vector2(0f, chromeTopNudge)),
             });
 
         // 2026-09-10 (3rd/4th playtest passes — REVERTED): both the self-sizing ConstrainedBox rewrite
@@ -373,12 +416,21 @@ public abstract partial class ScribeDialogBase
         // only the bottom extends. Round 5/6's actual titleLineH bug (using CuneiformMetrics.LineHeightRatio,
         // tuned for the Tablet's cuneiform glyphs, as a stand-in for ordinary Latin/Caudex RichText line
         // height — the real cause of the "discrete downward jump" that motivated Round 6's rewrite) is fixed
-        // here directly: titleLineH now uses the title's own real font metrics (titleFontMetrics, already
-        // computed above for the grip-baseline nudge) instead of the mismatched cuneiform ratio.
-        float titleLineH = titleFontMetrics.Descent - titleFontMetrics.Ascent + titleFontMetrics.Leading;
+        // here directly: titleLineH now uses the title's own real font metrics (TitleLineHeight, shared
+        // with BuildOuterArtBox's title/subtitle gap nudge) instead of the mismatched cuneiform ratio.
+        float titleLineH = TitleLineHeight;
         int extraLines = actualTitleLines - 1;
         float contentBoxH = layout.TitleBtnsH + extraLines * titleLineH;
         float bandH = layout.TitleBarH + extraLines * titleLineH;
+
+        // Paint-only downward nudge for the WHOLE title section (background panel + grip + title +
+        // chrome) — a fixed 1.2% of the full pixel-art display's height (2026-09-09 playtest feedback:
+        // 0.4%, then "another 0.2%" (0.6% total), then moved to 1.2%). Transform.Translate, not
+        // Padding/EdgeInsets, for the same reason as chromeTopNudge above: it doesn't touch
+        // bandH/contentBoxH, so the band's own sizing (and Row 2/3 below it) is unaffected — only where
+        // this content PAINTS moves.
+        const float TitleSectionDownNudgeFrac = 0.012f;
+        float titleSectionDownNudge = TitleSectionDownNudgeFrac * layout.H;
 
         return new SizedBox(
             width: layout.W,
@@ -394,9 +446,11 @@ public abstract partial class ScribeDialogBase
                     // (2026-09-08 playtest feedback: still too much space left of the grip+title after the
                     // earlier flat-10px removal), now that the leading grip (plus its own spacing from the
                     // title) occupies that space instead.
-                    child: FlatPanel(new Padding(
-                        EdgeInsets.Only(left: 0.02f * layout.W, right: 0.04f * layout.W),
-                        child: titleRow)))));
+                    child: Transform.Translate(
+                        FlatPanel(new Padding(
+                            EdgeInsets.Only(left: 0.02f * layout.W, right: 0.04f * layout.W),
+                            child: titleRow)),
+                        new Vector2(0f, titleSectionDownNudge)))));
     }
 
     /// <summary>Greedy word-wrap line count for a single-paragraph title against <paramref name="maxWidth"/>,

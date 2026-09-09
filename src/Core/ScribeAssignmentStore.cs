@@ -206,6 +206,29 @@ public sealed class ScribeAssignmentStore
     }
 
     /// <summary>
+    /// Rewrites an Unaccepted record's <see cref="ScribeAssignment.TargetPlayerUid"/> to a different
+    /// player (add-task-notice-redirect-confirm, design D1) — used when a non-recipient holder of a
+    /// sealed Task Notice confirms accepting it anyway, right before the normal
+    /// <see cref="TryApplyAction"/> Accept call that follows. Stamps
+    /// <see cref="ScribeAssignment.RedirectedFromUid"/> from the current target and
+    /// <see cref="ScribeAssignment.RedirectedDate"/>. No-ops (returns false, record unchanged) if
+    /// <paramref name="newTargetPlayerUid"/> already equals the current target, the record is unknown,
+    /// or it isn't currently Unaccepted (a redirect only ever precedes an Accept).
+    /// </summary>
+    public bool TryRedirectTarget(Guid assignmentId, string newTargetPlayerUid, string redirectedDate)
+    {
+        if (!_records.TryGetValue(assignmentId, out var block) || block.Assignment is not { } assignment)
+            return false;
+        if (assignment.State != ScribeAssignmentState.Unaccepted) return false;
+        if (assignment.TargetPlayerUid == newTargetPlayerUid) return false;
+
+        assignment.RedirectedFromUid = assignment.TargetPlayerUid;
+        assignment.TargetPlayerUid = newTargetPlayerUid;
+        assignment.RedirectedDate = redirectedDate;
+        return true;
+    }
+
+    /// <summary>
     /// Deletes a terminal-state record (Declined, Cancelled, Discarded, or Completed) from the
     /// requesting <paramref name="side"/>'s own view only (split-assignment-delete-by-viewer) — sets
     /// <see cref="ScribeAssignment.HiddenFromAssignee"/> or <see cref="ScribeAssignment.HiddenFromAssigner"/>
@@ -275,6 +298,8 @@ public sealed class ScribeAssignmentStore
     // independent "I deleted my own view of this" flag.
     // v7 adds ReceivedDate (refine-task-notice-ux) — the date a Task Notice's Sent-state record actually
     // reached the Assignee's inventory and transitioned to Unaccepted.
+    // v8 adds RedirectedFromUid/RedirectedDate (add-task-notice-redirect-confirm) — who a Task Notice
+    // was originally addressed to and when a non-recipient holder's confirmed Accept redirected it.
     // Progressive append-only reads (matching ScribeDocumentCodec's convention): any version in
     // [MinVersion, Version] is accepted; a v1 blob simply predates Craft-kind assignments (which didn't
     // exist yet), so every one of its records is genuinely RecipeSignature-less — defaulting it to ""
@@ -289,8 +314,10 @@ public sealed class ScribeAssignmentStore
     // ever deleted-by-one-side under that version, so defaulting both to false on read is exactly
     // correct, not a lossy guess. A pre-v7 blob predates the Sent state entirely — no record was ever
     // received-but-unstamped under that version, so defaulting ReceivedDate to null on read is exactly
-    // correct, not a lossy guess.
-    private const byte Version = 7;
+    // correct, not a lossy guess. A pre-v8 blob predates redirect entirely — no record was ever
+    // redirected under that version, so defaulting both new fields to null on read is exactly correct,
+    // not a lossy guess.
+    private const byte Version = 8;
     private const byte MinVersion = 1;
 
     /// <summary>Serializes a single player's view (<see cref="Sent"/> or <see cref="Received"/>) for the
@@ -413,6 +440,8 @@ public sealed class ScribeAssignmentStore
             w.Write(assignment.HiddenFromAssignee); // v6+
             w.Write(assignment.HiddenFromAssigner); // v6+
             WriteOptionalString(w, assignment.ReceivedDate); // v7+
+            WriteOptionalString(w, assignment.RedirectedFromUid); // v8+
+            WriteOptionalString(w, assignment.RedirectedDate);    // v8+
         }
     }
 
@@ -463,6 +492,8 @@ public sealed class ScribeAssignmentStore
                 HiddenFromAssignee = version >= 6 && r.ReadBoolean(),
                 HiddenFromAssigner = version >= 6 && r.ReadBoolean(),
                 ReceivedDate = ReadOptionalString(r, version, minVersion: 7),
+                RedirectedFromUid = ReadOptionalString(r, version, minVersion: 8),
+                RedirectedDate = ReadOptionalString(r, version, minVersion: 8),
             };
 
             list.Add(new ScribeBlock(kind, text, depth: depth, taskId: taskId,
