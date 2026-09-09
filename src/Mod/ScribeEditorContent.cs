@@ -99,7 +99,8 @@ internal sealed class ScribeFrozenEditorRow : StatelessWidget
             // Grip-column spacer (invisible, uninteractable), matching the editor row's far-left grip (same
             // GripInsets, §10.4) so the ghost's columns line up with its neighbors as it collapses.
             new Padding(
-                ScribeRowControlNudge.GripInsets(style, data.IsItemKind, data.LinkTarget),
+                ScribeRowControlNudge.GripInsets(style, data.IsItemKind, data.LinkTarget,
+                    data.IsStaticVsQuestObjective, data.DisplayStack),
                 child: new Opacity(
                     opacity: 0f,
                     child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant))),
@@ -110,7 +111,9 @@ internal sealed class ScribeFrozenEditorRow : StatelessWidget
             // be toggled while it collapses. Task, Tracker, and Link all carry a Done flag (Completable).
             // Tick color routes through the row style's CheckTickColor seam (§11) so it matches the live rows.
             children.Add(new Padding(
-                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style, data.IsItemKind)),
+                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(
+                    style, data.IsItemKind, data.LinkTarget,
+                    data.IsStaticVsQuestObjective, data.DisplayStack)),
                 child: ScribeRowControlNudge.BuildTaskCheckbox(context, style, data.Done, onChanged: null)));
         }
 
@@ -193,6 +196,8 @@ internal sealed class ScribeEditorContent : StatefulWidget
         bool addTaskEnabled = true,
         bool showSwitchToRead = true,
         System.Action<Guid>? onOpenLink = null,
+        bool supportsTabHeader = true,
+        bool showSubtitleRow = true,
         SKBitmap? assignedStampBitmap = null)
     {
         Blocks = blocks;
@@ -230,6 +235,8 @@ internal sealed class ScribeEditorContent : StatefulWidget
         AddTaskEnabled = addTaskEnabled;
         ShowSwitchToRead = showSwitchToRead;
         OnOpenLink = onOpenLink;
+        SupportsTabHeader = supportsTabHeader;
+        ShowSubtitleRow = showSubtitleRow;
         AssignedStampBitmap = assignedStampBitmap;
     }
 
@@ -340,6 +347,16 @@ internal sealed class ScribeEditorContent : StatefulWidget
     /// link activation (the tablet, which has no read view — see <see cref="ScribeDialogBase.EditorRowsOpenLinks"/>).
     /// Null on every other surface, so their editor names stay plain editable regions and render byte-identical.</summary>
     public System.Action<Guid>? OnOpenLink { get; }
+    /// <summary>Whether this surface renders the shared Row 2 subtitle / tab header at all
+    /// (unify-tab-header-layout) — false only for the Tablet, which keeps its own pared-down title-bar
+    /// chrome instead. When false, <see cref="ScribeTabHeader.Build"/> is never called and the durable
+    /// divider it would have drawn is omitted too.</summary>
+    public bool SupportsTabHeader { get; }
+    /// <summary>Whether <see cref="ScribeTabHeader.Build"/> renders its Row 2 subtitle line, read from
+    /// <c>modSystem.VisualTuning.ShowSubtitleRow</c> (add-subtitle-row-configkit-toggle). Has no effect
+    /// when <see cref="SupportsTabHeader"/> is false (the Tablet, which never calls into
+    /// <see cref="ScribeTabHeader.Build"/> at all).</summary>
+    public bool ShowSubtitleRow { get; }
     /// <summary>The full-color assigned-task stamp raster (see <see cref="ScribeAssignedTaskIcon"/>),
     /// resolved once by the dialog and passed down so this row widget stays API-free. Null falls back to
     /// the plain SVG glyph.</summary>
@@ -533,16 +550,21 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                     new TextStyle { Color = colors.OnSurfaceVariant, SoftWrap = true, Align = TextAlignment.Center }))
                 : new Scrollbar(
                     controller: Widget.ScrollController,
+                    // 8-unit top padding lives INSIDE the scroll region (unify-tab-header-layout §7,
+                    // doubled from 4 per 2026-09-09 playtest feedback) so the durable divider above sits
+                    // flush against the viewport and this breathing room scrolls away with the content,
+                    // instead of the old fixed gap outside the scroll region. Skipped on the Tablet (no
+                    // header, so no divider to sit flush against).
                     child: new SingleChildScrollView(
                         controller: Widget.ScrollController,
-                        child: new Column(
+                        child: new Padding(EdgeInsets.Only(top: Widget.SupportsTabHeader ? 8f : 0f), child: new Column(
                             // spacing 0: all inter-row separation lives in each row's own vertical padding, so
                             // the editor Column matches the read ListView (which adds no inter-row gap) and rows
                             // stay pixel-aligned across a view switch.
                             spacing: 0,
                             crossAxisAlignment: CrossAxisAlignment.Stretch,
                             mainAxisSize: MainAxisSize.Min,
-                            children: rows)))
+                            children: rows))))
                 { AutoHide = false });
 
         // Root the tab subtree in the player's Task Text Font + window-scaled base size, so the empty
@@ -550,23 +572,35 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
         // editable rows use ScribeMultilineField, a custom RenderBox that does NOT read DefaultTextStyle,
         // so it keeps its own explicit fontFamily/fontSize (a deliberate survivor). The footer buttons
         // keep their explicit Caudex button font.
+        // Shared Row 2 subtitle + durable divider (unify-tab-header-layout 2.2) — the Editor view has no
+        // Row 3 controls of its own, so the divider follows directly after the subtitle. Replaces the old
+        // uniform Column(spacing: 8) gap. The Tablet renders neither (design.md Non-Goals; its own
+        // title-bar chrome is the whole header), so the call is skipped entirely rather than passed empty.
+        var bodyChildren = new List<Widget>();
+        if (Widget.SupportsTabHeader)
+        {
+            bodyChildren.Add(ScribeTabHeader.Build(colors, Widget.Style,
+                "scribe:scribe-gui-nav-edit", "scribe:scribe-gui-subtitle-edit", Widget.ShowSubtitleRow));
+        }
+        // The scroll body keeps its exact height regardless of the add-kind picker: the picker's kind menu
+        // is a FLOATING drop-up that grows OVER this scroll body (see ScribeAddKindPicker), so nothing here
+        // reflows when it opens.
+        bodyChildren.Add(new Expanded(child: scrollBody));
+
+        // Top inset reduced from 10 to 4 (2026-09-08 playtest feedback: 6px less gap between the title bar
+        // and the Row 2 subtitle); left/right/bottom stay 10 like every other tab. The Tablet has no Row 2
+        // to close the gap against, so it keeps the original full 10 top inset.
         return ScribeTextDefaults.Wrap(Widget.Style.TaskFontFamily, Widget.Style.FontSize, new Padding(
-            EdgeInsets.All(10),
+            EdgeInsets.Ltrb(10, Widget.SupportsTabHeader ? 4 : 10, 10, 10),
             child: new Column(
-                spacing: 8,
+                spacing: 0,
                 crossAxisAlignment: CrossAxisAlignment.Stretch,
                 mainAxisSize: MainAxisSize.Max,
-                children: new Widget[]
+                children: bodyChildren.Concat(new Widget[]
                 {
-                    // Straight edge above the scroll region (scribe-lectern-view-consistency §1).
-                    // Dropped on the cuneiform tablet path (add-tablet-clay-type-themes 8.1) — the hard
-                    // rule reads wrong against the clay backdrop; the readable path keeps it.
-                    Widget.Style.UseCuneiform ? new SizedBox() : new Divider(),
-                    // The scroll body keeps its exact height regardless of the add-kind picker: the picker's
-                    // kind menu is a FLOATING drop-up that grows OVER this scroll body (see
-                    // ScribeAddKindPicker), so nothing here reflows when it opens.
-                    new Expanded(child: scrollBody),
-                    new Padding(Widget.FooterButtonPadding, child: new Row(
+                    new Padding(
+                        EdgeInsets.Ltrb(Widget.FooterButtonPadding.Left, 8f, Widget.FooterButtonPadding.Right, Widget.FooterButtonPadding.Bottom),
+                        child: new Row(
                         spacing: 8,
                         // Center so the (non-Expanded) info Button sits vertically centered against the two
                         // labelled buttons. NOT Stretch: stretch gives the icon button an unbounded axis that a
@@ -575,7 +609,7 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                         crossAxisAlignment: CrossAxisAlignment.Center,
                         mainAxisSize: MainAxisSize.Max,
                         children: BuildFooterButtons(buttonTextStyle, colors, context))),
-                })));
+                }).ToList())));
     }
 
     /// <summary>A footer button's label: cuneiform strokes under the single tablet cuneiform branch
@@ -953,9 +987,8 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         // inline slot has no icon for it and the name's band height falls back to ItemNameLineHeight
         // (cuneiform-aware on the tablet — task 8.3b: the plain Latin lineHeight left the icon riding high).
         bool isQuestLink = ScribeLinkTarget.IsQuest(Widget.Data.LinkTarget);
-        float iconVisual = isQuestLink ? ScribeRowControlNudge.ItemNameLineHeight(style) : ScribeLinkIcon.VisualSize(iconSize, Widget.Data.LinkTarget);
-        if (Widget.Data.IsStaticVsQuestObjective)
-            iconVisual = ScribeLinkIcon.ObjectiveVisualSize(iconSize, Widget.Data.DisplayStack);
+        float iconVisual = ScribeRowControlNudge.ItemVisualBandHeight(
+            style, Widget.Data.LinkTarget, Widget.Data.IsStaticVsQuestObjective, Widget.Data.DisplayStack);
         float stepperHeight = Widget.Data.IsCarriedCountTracked ? style.ControlSize * 1.15f : 0f;
         float bandHeight = MathF.Max(iconVisual, stepperHeight);
         var rowChildren = new List<Widget>();
@@ -1075,7 +1108,8 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             : new ScribeVsIconGlyph("scribegrip", style.ControlSize, gripColor);
 
         children.Add(new Padding(
-            ScribeRowControlNudge.GripInsets(style, Widget.Data.IsItemKind, Widget.Data.LinkTarget),
+            ScribeRowControlNudge.GripInsets(style, Widget.Data.IsItemKind, Widget.Data.LinkTarget,
+                Widget.Data.IsStaticVsQuestObjective, Widget.Data.DisplayStack),
             child: new GestureDetector(
                 onPress: e =>
                 {
@@ -1120,7 +1154,9 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         if (Widget.Data.Completable)
         {
             children.Add(new Opacity(contentOpacity, child: new Padding(
-                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style, Widget.Data.IsItemKind, Widget.Data.LinkTarget)),
+                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(
+                    style, Widget.Data.IsItemKind, Widget.Data.LinkTarget,
+                    Widget.Data.IsStaticVsQuestObjective, Widget.Data.DisplayStack)),
                 // A Quest Link's checkbox is misleading (toggling it doesn't affect the quest), so its slot
                 // renders the quest-marker icon instead (quest-link-icon-and-color).
                 child: ScribeRowControlNudge.BuildLeadingControl(
@@ -1235,8 +1271,10 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
         // ambiguous whole-row fill (scope-focus-affordance-to-input, playtest fail f640f9ab). The Container
         // is still ALWAYS present with transparent defaults so the widget type never swaps and the field's
         // live caret/text survive the repaint.
-        Vector4 rowFill =
-            Widget.Data.Completable && Widget.Data.Pinned ? ScribeRowConstants.PinnedTint(colors) : Vector4.Zero;
+        Vector4 rowFill = Widget.Data.Pinned
+            && (Widget.Data.Completable || Widget.Data.IsStaticVsQuestObjective)
+                ? ScribeRowConstants.PinnedTint(colors)
+                : Vector4.Zero;
 
         rowBody = new Container(
             style: new BoxStyle

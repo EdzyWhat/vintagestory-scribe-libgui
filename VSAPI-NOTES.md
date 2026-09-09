@@ -2423,6 +2423,15 @@ Two LibGUI facts from tuning the Tracker/Link row icons + counter:
   their max. There is **no `OverflowBox`/`UnconstrainedBox`** in this LibGUI build — this Stack trick is the way.
   Caveat: the overflow paints into neighbors' space, so keep the excess modest and vertically centered.
 
+**Fact (add-vsquest-criteria-subtask follow-up, 2026-09-08): row controls must center against the
+same visual band as the inline icon.** A generic static quest objective paints a compact bullseye
+(`ObjectiveGlyphScale`), while ordinary item rows use the taller item-icon band. Reusing the ordinary
+item band's `CheckboxAndGripTop` calculation moved the Editor grip off the bullseye/text center even
+though the inline icon and label agreed with each other. Keep one shared band-height helper that branches
+on the rendered icon variant, and pass the row's static-objective flag plus resolved stack into both the
+content and leading-control calculations. A visually distinct icon can change alignment even when its
+layout code otherwise matches an item row.
+
 **Fact: `GuiBase` does NOT override `DrawOrder`, and matching vanilla's 0.2 band is not enough
 to stack above Handbook/Inventory.** Hit-testing follows `OpenedGuis`/`LoadedGuis`; LibGUI pixels
 do not. `PostSkiaPipeline` (RenderOrder 1.0) inserts *before* `GuiManager` (also 1.0) and flushes
@@ -3497,6 +3506,33 @@ initializer already produces it). Fixed on the four live "-1 means unresolved sl
 .TargetQuantity` (initializer `= 1`, so the danger value is 0) has the same latent shape but
 `ScribeBlock` already clamps every row's `TargetQuantity` to ≥ 1 before it's ever set, so 0 is
 believed unreachable there today — worth the same attribute if that guarantee ever changes.
+
+## `TextField`'s `TextFieldStyle` has no `Padding` field — its vertical size is fixed by `Height` (default 40) and its horizontal text inset is a hardcoded, unconfigurable `10f` inside `RenderTextField.PaintInternal` (2026-09-09)
+
+**Symptom: swapping a display `Text`/`RichText` for a `TextField` on the same spot (e.g. tapping an
+edit-pencil to start editing a title) visibly GROWS that row/band the instant editing starts, even
+with `BorderThickness = 0` and a transparent `FillColor` already set.**
+
+`Gui.Widgets.Framework.TextFieldStyle` (decompiled from the shipped `Gui.dll` —
+`ilspycmd -t Gui.Widgets.Framework.TextFieldStyle`) is a `readonly struct` with `FillColor`/
+`BorderColor`/`BorderThickness`/`Height`/`CornerRadius`/`TextStyle`/etc., but **no `Padding`
+property at all.** Its parameterless constructor seeds every field from `ColorScheme.Default()`,
+including `Height = 40f` — so constructing one via `new TextFieldStyle { ... }` and only
+overriding a few fields (the common pattern) leaves `Height` at that fixed 40, regardless of the
+actual font size in play. `TextFieldState.Build` then sets `MinHeight = MaxHeight = Style.Height`
+on the render object — a hard box-height constraint, not an auto-fit — so a small-font title field
+still renders a fixed 40px-tall box. Separately, `RenderTextField.PaintInternal` bakes in a literal
+`float num = 10f;` as the text's horizontal inset from both edges of the box; this is NOT exposed
+on `TextFieldStyle` or anywhere else, so it cannot be zeroed without forking `gui`.
+
+**Fix pattern:** explicitly set `Height` on the `TextFieldStyle` to the target font's own natural
+line height (`TextLayoutHelper.GetFont(family, size, weight).Metrics`, `Descent - Ascent +
+Leading`) rather than leaving the struct's 40px default — this is what actually stops the visible
+growth. The horizontal `10f` inset has no such lever; accept it (it reads as minor next to a
+dialog's own outer insets) or replace `TextField` with a custom `RenderObjectWidget` like the
+Tablet's cuneiform title field (`ScribeCuneiformFieldRenderWidget`, which exposes `padX`/`padY`/
+`borderThickness` as real constructor params) if true zero-padding is required. Applied to
+`ScribeDialogBase.BuildTitleField` (unify-tab-header-layout Round 3).
 
 ## Entry template
 

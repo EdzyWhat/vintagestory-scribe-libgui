@@ -19,8 +19,12 @@ public readonly record struct ScribeLayoutProportions
 
     public ScribeLayoutProportions()
     {
-        TitleBarFrac   = 0.13f;
-        InnerHFrac     = 0.80f;
+        // TitleBarFrac tightened / InnerHFrac grown by the same 0.015 (unify-tab-header-layout 1.3): Row 1
+        // gives back a sliver of height to the tab content area, to help offset the new Row 2 subtitle
+        // every tab now renders. The two fracs' SUM is unchanged (0.93), so the ~7% bottom margin below the
+        // inner box is unaffected — only the title/content SPLIT shifts.
+        TitleBarFrac   = 0.115f;
+        InnerHFrac     = 0.815f;
         SideColFrac    = 0.10f;
         TitleBtnsWFrac = 0.80f;
         TitleBtnsHFrac = 0.065f;

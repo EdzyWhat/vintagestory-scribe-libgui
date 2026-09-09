@@ -63,7 +63,8 @@
       `WatchedAttributes` equivalent to auto-detect against), so they will never trigger detection
       even with everything else working correctly. That attempt is also what surfaced 2.3's
       deserialization bug, now fixed.
-- [ ] 3.4 Manual playtest: with VS Quest + VS Village installed, interact with a VS Village
+- [x] 3.4 Manual playtest: with VS Quest + VS Village installed, interact with a VS Village
+  - Confirmed 2026-09-08: TESTING.md `000000bc` "(no note)" (submission 2026-09-08T10-23-43)
       villager quest-giver, accept a quest — confirm the catalog entry appears in the Quest Link
       picker and the HUD accept prompt fires (VS Quest's real dependent-mod case, never previously
       manually tested against anything but vsquest's own bundled example content).

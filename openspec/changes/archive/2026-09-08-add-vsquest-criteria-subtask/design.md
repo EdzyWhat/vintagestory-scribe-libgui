@@ -82,7 +82,9 @@ live document rows and pin snapshots alike, including when the source document i
 generic objectives use ordinary task text color and a dedicated bullseye marker. When `ItemCode`
 resolves, the existing item icon remains and activating the row opens that item's Handbook entry. A
 generic static objective has no activation target. Progression Framework objective presentation and
-live behavior stay unchanged.
+live behavior stay unchanged. Editor layout SHALL treat the bullseye as part of the same centered
+item-row geometry as the drag handle and label. Static-objective classification SHALL affect the
+marker and activation behavior without bypassing the ordinary task row's pinned-highlight path.
 
 ## Risks / Trade-offs
 

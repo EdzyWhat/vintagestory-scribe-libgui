@@ -12,7 +12,8 @@
 
 - [x] 2.1 Run `VINTAGE_STORY="/Applications/Vintage Story.app" ./build/verify.sh Debug --no-restage`
   and confirm the build, Core suite, and Atlas suite pass.
-- [ ] 2.2 Restage Debug and manually inspect ordinary task, Latin item, and cuneiform tablet item rows
+- [x] 2.2 Restage Debug and manually inspect ordinary task, Latin item, and cuneiform tablet item rows
+  - Confirmed 2026-09-08: TESTING.md `000000bb` "(no note)" (submission 2026-09-08T10-23-43)
   in Read, Editor, and Pinned views. Confirm the visible Pin, Unpin, and Delete button boxes align with
   the first text line while retaining their prior size, horizontal placement, hover visibility, and
   actions.

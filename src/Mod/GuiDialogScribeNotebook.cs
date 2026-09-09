@@ -223,14 +223,18 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
 
         // A pending draft counts as "not empty" so the compose row never flashes under the empty-state
         // prompt (add-custom-history-entries 4.7).
+        // 8-unit top padding lives INSIDE the scroll region (unify-tab-header-layout §7, doubled from 4
+        // per 2026-09-09 playtest feedback) so the durable divider above sits flush against the viewport
+        // and this breathing room scrolls away with the content, instead of the old fixed gap outside the
+        // scroll region.
         Widget body = rows.Count == 0
             ? new Center(child: new Text(Lang.Get("scribe:scribe-gui-history-empty"), bodyStyle))
             : new Scrollbar(controller: sharedScrollController,
                 child: new SingleChildScrollView(controller: sharedScrollController,
-                    child: new Column(
+                    child: new Padding(EdgeInsets.Only(top: 8f), child: new Column(
                         children: rows.ToArray(),
                         mainAxisSize: MainAxisSize.Min,
-                        crossAxisAlignment: CrossAxisAlignment.Stretch)))
+                        crossAxisAlignment: CrossAxisAlignment.Stretch))))
               { AutoHide = false };
 
         // "Add Entry" button: same size/layout as the Read view's "Task Editor" footer button
@@ -246,18 +250,34 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
                 new TextStyle { FontSize = 14, FontFamily = ScribeTaskFont.ButtonFamily, Color = colors.OnPrimary }),
             onTap: _ => StartNewManualEntryDraft());
         Widget addEntryRow = new Padding(
-            EdgeInsets.Symmetric(horizontal: 0.04f * host.GetLayout(modSystem.MySettings.PixelArtSize).W),
+            EdgeInsets.Only(top: 8f,
+                left: 0.04f * host.GetLayout(modSystem.MySettings.PixelArtSize).W,
+                right: 0.04f * host.GetLayout(modSystem.MySettings.PixelArtSize).W),
             child: addEntryButton);
+
+        // Shared Row 2 subtitle + durable divider (unify-tab-header-layout 2.4) — the History tab has no
+        // Row 3 controls of its own, so the divider follows directly after the subtitle. Replaces the old
+        // bare leading Divider + uniform Column(spacing: 8) gap.
+        Widget header = ScribeTabHeader.Build(colors, RowStyle,
+            "scribe:scribe-gui-nav-history", "scribe:scribe-gui-subtitle-history",
+            modSystem.VisualTuning.ShowSubtitleRow);
 
         // Root the History tab subtree in the player's Task Text Font + window-scaled base size
         // (adopt-libgui-31-improvements). Body/kind/date Text widgets all inherit the family from here.
+        // Top inset reduced from 10 to 4 (2026-09-08 playtest feedback: 6px less gap between the title bar
+        // and the Row 2 subtitle); left/right/bottom stay 10 like every other tab.
         return ScribeTextDefaults.Wrap(modSystem.MySettings.TaskFontFamily, bodySize, new Padding(
-            EdgeInsets.All(10),
+            EdgeInsets.Ltrb(10, 4, 10, 10),
             new Column(
-                spacing: 8,
+                spacing: 0,
                 crossAxisAlignment: CrossAxisAlignment.Stretch,
                 mainAxisSize: MainAxisSize.Max,
-                children: new Widget[] { new Divider(), new Expanded(body), addEntryRow })));
+                children: new Widget[]
+                {
+                    header,
+                    new Expanded(child: body),
+                    addEntryRow,
+                })));
     }
 
     /// <summary>Keeps <see cref="_manualFocusNodes"/> (and its paired live/last-sent text dictionaries)

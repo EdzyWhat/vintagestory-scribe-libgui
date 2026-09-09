@@ -59,6 +59,8 @@ internal sealed class ScribeInboxContent : StatefulWidget
         Action<Guid, ScribeAssignmentAction> onAction,
         ScribeRowStyle style,
         ScrollController scrollController,
+        string labelLangKey,
+        string descriptorLangKey,
         string emptyHintLangKey = "scribe:scribe-gui-inbox-empty",
         Action<Guid, ScribeAcceptCandidate>? onAccept = null,
         IReadOnlyList<ScribeAcceptCandidate>? acceptCandidates = null,
@@ -67,6 +69,7 @@ internal sealed class ScribeInboxContent : StatefulWidget
         Action<ScribeAssignmentFilterGroup>? onFilterGroupChanged = null,
         Func<Guid, bool>? isExpanded = null,
         Action<Guid>? onToggleExpand = null,
+        bool showSubtitleRow = true,
         Gui.Widgets.Framework.Key? key = null) : base(key)
     {
         Rows = rows;
@@ -74,6 +77,8 @@ internal sealed class ScribeInboxContent : StatefulWidget
         OnAction = onAction;
         Style = style;
         ScrollController = scrollController;
+        LabelLangKey = labelLangKey;
+        DescriptorLangKey = descriptorLangKey;
         EmptyHintLangKey = emptyHintLangKey;
         OnAccept = onAccept ?? ((_, _) => { });
         AcceptCandidates = acceptCandidates ?? Array.Empty<ScribeAcceptCandidate>();
@@ -82,6 +87,7 @@ internal sealed class ScribeInboxContent : StatefulWidget
         OnFilterGroupChanged = onFilterGroupChanged ?? (_ => { });
         IsExpanded = isExpanded ?? (_ => false);
         OnToggleExpand = onToggleExpand ?? (_ => { });
+        ShowSubtitleRow = showSubtitleRow;
     }
 
     public IReadOnlyList<ScribeInboxRowData> Rows { get; }
@@ -125,7 +131,16 @@ internal sealed class ScribeInboxContent : StatefulWidget
     public ScribeRowStyle Style { get; }
     /// <summary>Dialog-owned scroll controller — NOT disposed here, matching <see cref="ScribeReadContent"/>.</summary>
     public ScrollController ScrollController { get; }
+    /// <summary>Row 2 subtitle label/descriptor lang keys (unify-tab-header-layout 2.5) — this class renders
+    /// both the shared Inbox tab AND the Sent Assignment History tab, which are otherwise byte-identical
+    /// (same filter-pill row, same list layout), so the caller supplies distinct text for each rather than
+    /// this widget guessing which role it's playing.</summary>
+    public string LabelLangKey { get; }
+    public string DescriptorLangKey { get; }
     public string EmptyHintLangKey { get; }
+    /// <summary>Whether <see cref="ScribeTabHeader.Build"/> renders its Row 2 subtitle line, read from
+    /// <c>modSystem.VisualTuning.ShowSubtitleRow</c> (add-subtitle-row-configkit-toggle).</summary>
+    public bool ShowSubtitleRow { get; }
 
     public override State CreateState() => new ScribeInboxContentState();
 }
@@ -155,11 +170,15 @@ internal sealed class ScribeInboxContentState : State<ScribeInboxContent>
             ? new Center(child: new Text(
                 Lang.Get(Widget.EmptyHintLangKey),
                 new TextStyle { Color = colors.OnSurfaceVariant, SoftWrap = true, Align = TextAlignment.Center }))
+            // 8-unit top padding lives INSIDE the scroll region (unify-tab-header-layout §7, doubled from
+            // 4 per 2026-09-09 playtest feedback) so the durable divider above sits flush against the
+            // viewport and this breathing room scrolls away with the content, instead of the old fixed gap
+            // outside the scroll region.
             : new Scrollbar(
                 controller: Widget.ScrollController,
                 child: new SingleChildScrollView(
                     controller: Widget.ScrollController,
-                    child: new Column(
+                    child: new Padding(EdgeInsets.Only(top: 8f), child: new Column(
                         spacing: 4f,
                         crossAxisAlignment: CrossAxisAlignment.Stretch,
                         mainAxisSize: MainAxisSize.Min,
@@ -171,23 +190,27 @@ internal sealed class ScribeInboxContentState : State<ScribeInboxContent>
                                 expanded: Widget.IsExpanded(r.TaskId),
                                 onToggleExpand: () => Widget.OnToggleExpand(r.TaskId),
                                 key: new ValueKey<Guid>(r.TaskId)))
-                            .ToList())))
+                            .ToList()))))
             { AutoHide = false };
 
-        // Rooted in the same Task Text Font + EdgeInsets.All(10) inset every other tab uses
-        // (ScribeReadContent/ScribePinnedContent/the Guestbook/the Timer tab) — this tab used to return its
-        // Column bare, so its Divider spanned edge-to-edge instead of sitting inset like theirs (refine-
-        // assignment-desk-inbox-ux 11.1).
+        // Shared Row 2 subtitle + Row 3 (the filter-pill row, already on the target divider spacing) + the
+        // durable divider (unify-tab-header-layout 2.5).
+        Widget header = ScribeTabHeader.Build(colors, style, Widget.LabelLangKey, Widget.DescriptorLangKey, Widget.ShowSubtitleRow, filterRow);
+
+        // Rooted in the same Task Text Font + inset every other tab uses (ScribeReadContent/
+        // ScribePinnedContent/the Guestbook/the Timer tab) — this tab used to return its Column bare, so
+        // its Divider spanned edge-to-edge instead of sitting inset like theirs (refine-assignment-desk-
+        // inbox-ux 11.1). Top inset reduced from 10 to 4 (2026-09-08 playtest feedback: 6px less gap
+        // between the title bar and the Row 2 subtitle); left/right/bottom stay 10 like every other tab.
         return ScribeTextDefaults.Wrap(style.TaskFontFamily, style.FontSize, new Padding(
-            EdgeInsets.All(10),
+            EdgeInsets.Ltrb(10, 4, 10, 10),
             child: new Column(
                 crossAxisAlignment: CrossAxisAlignment.Stretch,
                 mainAxisSize: MainAxisSize.Max,
                 children: new Widget[]
                 {
-                    new Padding(EdgeInsets.Only(bottom: 8f), child: filterRow),
-                    new Divider(),
-                    new Expanded(child: new Padding(EdgeInsets.Only(top: 4f), child: list)),
+                    header,
+                    new Expanded(child: list),
                 })));
     }
 

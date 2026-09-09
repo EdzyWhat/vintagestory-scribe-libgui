@@ -35,7 +35,9 @@ attempting a workaround.
 - Reuse the existing `QuestObjective` block kind and target-count model (`quest-objective-task`),
   while rendering VS Quest's static children as ordinary task text with a dedicated objective icon
   rather than Quest Link styling. A resolved concrete item keeps its inventory icon and acts as a
-  Handbook link. `CurrentQuantity` is left at 0 since there is nothing live to report.
+  Handbook link. Generic objective rows keep their drag handle, marker, and text vertically aligned,
+  and retain the ordinary pinned-row highlight in Editor view. `CurrentQuantity` is left at 0 since
+  there is nothing live to report.
 - **Non-Goal (confirmed, not attempted):** making a VS Quest Quest Link's "follow"/activate action
   open anything. No such surface exists in vsquest outside an active quest-giver interaction (see
   Why above). `link-task`'s existing requirement ("no resolvable target does nothing rather than
@@ -65,5 +67,6 @@ attempting a workaround.
   Framework.
 - Quest-objective row rendering: distinguish a static VS Quest child from a live Progression
   Framework child through its parent Quest Link, use normal task coloring plus a dedicated objective
-  marker for the static child, and route resolved item activation to the Handbook.
+  marker for the static child, preserve centered Editor row controls and pinned highlighting, and
+  route resolved item activation to the Handbook.
   No persisted data-format change is anticipated.

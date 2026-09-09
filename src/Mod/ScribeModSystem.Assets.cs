@@ -105,22 +105,28 @@ public sealed partial class ScribeModSystem
     {
         var loader = new SkiaAssetLoader(api);
         // AssetLocation is lowercased by LoadFont (path.ToLower()), so the asset filename must be lowercase.
-        // We ship ONLY the bold cut: Caudex has a single consumer — the lectern dialog title, which requests
-        // FontWeight.Bold — so there is no regular Caudex text to preserve. Loading a real regular alongside
-        // it (registered under Normal) turned out to render REGULAR for the Bold title in-game: the shipped
-        // `gui` mod's font resolution effectively picked the Normal-weight face despite the Bold request
-        // (loading was confirmed fine — both faces distinct, weight 400 vs 700 — so the mismatch is in the
-        // resolver, not the assets). Registering the ONE bold face under EVERY weight sidesteps that
-        // ambiguity entirely: whatever weight the resolver lands on, it returns the bold cut. This mirrors
-        // the earlier all-weights registration (commit 8b1fb14) but with the real bold TTF instead of the
-        // regular. If a future surface needs regular Caudex, ship the regular under its own family name (or
-        // a distinct alias) rather than reintroducing a Normal-weight registration here.
+        // Originally shipped ONLY the bold cut, registered under every weight slot: Caudex's one consumer
+        // (the lectern dialog title) requests FontWeight.Bold, and loading a real regular face alongside it
+        // (registered under Normal) once rendered REGULAR for the Bold title in-game — the resolver picked
+        // the Normal-weight face despite the Bold request (both faces loaded fine; the mismatch was in the
+        // resolver, not the assets). Registering the ONE bold face under every weight sidestepped that by
+        // construction: whatever weight the resolver landed on, it got the bold cut back. That all-one-face
+        // choice also doubled as the deliberate heavier-Caudex-everywhere look, on top of the original
+        // storage-size reasoning (now moot — see below).
+        //
+        // The Italic slot now diverges from that: a genuinely italic, lighter-weight cut
+        // (unify-tab-header-layout's subtitle descriptor wants a real slant, not upright bold at an angle).
+        // This reintroduces the same shape of risk the Normal-vs-Bold bug above was about — two distinct
+        // real faces on two weight slots of the same family — so if the title ever renders in the wrong
+        // face after this change, that resolver quirk (not a missing/corrupt asset) is the first suspect;
+        // verify the title stays bold and the subtitle descriptor renders slanted after restaging.
         // Tracks which bundled families actually registered, in preference order, so the
         // "sans-serif" alias below (fix-linux-sans-serif-font-crash) can pick a real fallback
         // instead of a family that itself failed to load.
         var registeredFamilies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         var bold = loader.LoadFont("scribe", "textures/fonts/caudex-bold.ttf");
+        var italic = loader.LoadFont("scribe", "textures/fonts/caudex-italic.ttf");
         bool caudexRegistered = bold is not null;
         if (bold is null)
         {
@@ -131,14 +137,20 @@ public sealed partial class ScribeModSystem
         else
         {
             // FontRegistry.GetCustomTypeface is keyed by (family, weight) and returns null on a miss — a weight
-            // with no registration falls through to a system font. Register the bold cut under all four weights
-            // so every lookup resolves to it.
-            foreach (var weight in new[] { FontWeight.Normal, FontWeight.SemiBold, FontWeight.Bold, FontWeight.Italic })
+            // with no registration falls through to a system font. Bold face covers Normal/SemiBold/Bold (no
+            // consumer requests plain Normal Caudex); Italic gets the real italic cut when it loaded, else
+            // falls back to the bold face too rather than leaving that slot unregistered.
+            foreach (var weight in new[] { FontWeight.Normal, FontWeight.SemiBold, FontWeight.Bold })
             {
                 FontRegistry.RegisterCustomFont("Caudex", weight, bold);
             }
+            FontRegistry.RegisterCustomFont("Caudex", FontWeight.Italic, italic ?? bold);
             registeredFamilies.Add("Caudex");
-            api.Logger.Notification("[scribe] bundled font 'Caudex' (bold cut) registered under all weights for the lectern dialog title");
+            api.Logger.Notification("[scribe] bundled font 'Caudex' registered (bold cut for Normal/SemiBold/Bold, italic cut for Italic)");
+        }
+        if (italic is null)
+        {
+            api.Logger.Warning("[scribe] bundled font 'Caudex' italic cut failed to load; italic text falls back to the bold cut");
         }
 
         // Task-text font selector faces (v1-release-checklist §6): the player picks one of these for the

@@ -192,17 +192,24 @@ public sealed class GuiDialogClockmakerNotebook : GuiDialogScribeNotebook
             mainAxisSize: MainAxisSize.Max,
             children: new Widget[] { new ScribeGearworks(capi, modSystem, gearScale, status, _engageStartMs, _fireLockMs) }));
 
+        // Shared Row 2 subtitle + durable divider (unify-tab-header-layout §6.3), replacing the tab's old
+        // bare Divider — no Row 3, mirroring the Editor/History tabs (which also have none).
+        Widget header = ScribeTabHeader.Build(colors, RowStyle, "scribe:scribe-gui-nav-timer", "scribe:scribe-gui-subtitle-timer",
+            modSystem.VisualTuning.ShowSubtitleRow);
+
         // Root the tab subtree in the player's Task Text Font + window-scaled base size
         // (adopt-libgui-31-improvements). big/label/small Text widgets inherit the family from here;
         // bodyStyle keeps its explicit family for the non-inheriting label field + numeric steppers; the
         // Stop/Start buttons keep their explicit Caudex button font. The mode radios take the task font.
+        // Top inset reduced from 10 to 4 (2026-09-08 playtest feedback: 6px less gap between the title bar
+        // and the Row 2 subtitle); left/right/bottom stay 10 like every other tab.
         return ScribeTextDefaults.Wrap(modSystem.MySettings.TaskFontFamily, body, new Padding(
-            EdgeInsets.All(10),
+            EdgeInsets.Ltrb(10, 4, 10, 10),
             new Column(
                 spacing: 8,
                 crossAxisAlignment: CrossAxisAlignment.Stretch,
                 mainAxisSize: MainAxisSize.Max,
-                children: new Widget[] { new Divider(), gearworks, new Expanded(new Center(child: content)) })));
+                children: new Widget[] { header, gearworks, new Expanded(new Center(child: content)) })));
     }
 
     private Widget BuildSetTimerForm(ColorScheme colors, TextStyle bodyStyle, TextStyle smallStyle, float scale)

@@ -441,6 +441,8 @@ public abstract partial class ScribeDialogBase
             rows: rows,
             resolvePlayerName: ResolvePlayerNameForInbox,
             onAction: SendAssignmentAction,
+            labelLangKey: "scribe:scribe-tab-inbox",
+            descriptorLangKey: "scribe:scribe-tab-subtitle-inbox",
             onAccept: AcceptAssignment,
             acceptCandidates: ComputeAcceptCandidates(),
             onDelete: DeleteAssignmentRecord,
@@ -449,7 +451,8 @@ public abstract partial class ScribeDialogBase
             isExpanded: expandedAssignmentIds.Contains,
             onToggleExpand: ToggleAssignmentRowExpanded,
             style: RowStyle,
-            scrollController: sharedScrollController);
+            scrollController: sharedScrollController,
+            showSubtitleRow: modSystem.VisualTuning.ShowSubtitleRow);
     }
 
     /// <summary>Sets the shared Inbox/Sent-History filter-chip selection (lifted to the dialog — see
@@ -664,6 +667,8 @@ public abstract partial class ScribeDialogBase
             rows: ComputeSentAssignmentRows(),
             resolvePlayerName: ResolvePlayerNameForInbox,
             onAction: SendAssignmentAction,
+            labelLangKey: "scribe:scribe-tab-senthistory",
+            descriptorLangKey: "scribe:scribe-tab-subtitle-senthistory",
             onDelete: DeleteAssignmentRecord,
             activeFilterGroup: assignmentFilterGroup,
             onFilterGroupChanged: SetAssignmentFilterGroup,
@@ -671,6 +676,7 @@ public abstract partial class ScribeDialogBase
             onToggleExpand: ToggleAssignmentRowExpanded,
             style: RowStyle,
             scrollController: sharedScrollController,
+            showSubtitleRow: modSystem.VisualTuning.ShowSubtitleRow,
             emptyHintLangKey: "scribe:scribe-assignment-sent-empty");
 
     /// <summary>Builds the Inventory tab content. Only the Scriptorium exposes this tab, so the base

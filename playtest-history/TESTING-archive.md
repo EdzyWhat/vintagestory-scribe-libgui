@@ -5319,3 +5319,305 @@ regression checks specific to this change's scoped-to-the-input approach.
       `ScribeSendAssignmentBatchMessage`'s wire shape) — a mismatched pair will misread the
       message. *(add-assignment-desk-own-tasks 5.9)*
       - **Confirmed 2026-09-01** (submission 2026-09-01T13-31-56): "(no note)"
+## add-scribe-block-box-tuning
+
+> DEV-only live-tuning window (`.boxtune`) for the Inbox (ground + wall-mounted), Scriptorium,
+> Assignment Desk, and Chalkboard (selection-only) collision/selection boxes, mirroring the
+> existing `.geartune` pattern. Client-only; a dedicated server never loads tuning and falls back
+> to defaults (documented Non-Goal, not a bug). All 5 targets have now passed a `.boxtune` session
+> and had their tuned values baked into both `ScribeBoxTuning.cs`'s defaults and each blocktype
+> JSON (2026-09-07) — this change is fully implemented and verified.
+
+- [x] `000000bd` **Check Chalkboard default + no collision.** Place a Chalkboard and confirm its
+      hitbox is unchanged from before (walk-through, thin selection slab); run `.boxtune` and
+      confirm the new Chalkboard group shows the shipped defaults.
+      *(add-scribe-block-box-tuning 5.5)*
+      - **Confirmed 2026-09-07** via `tasks.md` 5.5 checked off by the author's own in-game check.
+- [x] `000000be` **Check Chalkboard tunes selection only.** Nudge a Chalkboard value in `.boxtune`,
+      including a full-cell value (all axes to 0/1) — confirm the placed Chalkboard's selection box
+      changes live but it stays walk-through (no collision) at every value.
+      *(add-scribe-block-box-tuning 5.6)*
+      - **Confirmed 2026-09-07** via `tasks.md` 5.6 checked off; tuned values
+        (`0.125,0.05,0,0.875,0.925,0.06`) baked into `ScribeBoxTuning.cs` defaults and
+        `chalkboard.json`'s `selectionbox`.
+- [x] `000000bf` **Check Chalkboard tuning persists.** Tune a Chalkboard value, fully quit and
+      relaunch the client, rejoin the same world — confirm the tuned selection box is still in
+      effect and still shows in `.boxtune`'s fields. *(add-scribe-block-box-tuning 5.7)*
+      - **Confirmed 2026-09-07** via `tasks.md` 5.7 checked off by the author's own in-game check.
+
+## tablet-cuneiform-glyph-scale
+
+> Revised twice before any in-game test ran. Final mechanism: tablet cuneiform title/row/label text
+> now shrinks its own LAYOUT height (`CuneiformMetrics.GlyphDrawScale = 0.95`), deliberately decoupled
+> from the tablet's checkbox/control sizing (left untouched) — so the row/title band is now physically
+> shorter than the checkbox, absorbed by `CheckboxAndGripTop`'s existing overflow support. Also adds a
+> shorter, centered synthetic caret (`CaretHeightScale = 44/48`) and tighter field top/bottom padding
+> (`FieldPadYScale = 6/9`). **Fully quit and restage/relaunch the client first** so the rebuilt DLL
+> loads.
+
+- [x] `000000af` **Check row/title band shrinks with the glyphs.** Open a tablet — confirm title bar
+      and row text render visibly smaller (~95%) than before, AND the row/title band itself is
+      physically shorter (not just smaller ink in an unchanged box). Checkbox/control/icon sizes stay
+      pixel-identical to before, so the checkbox will likely now overflow above/below the shorter
+      row — that mismatch is expected, not a bug. *(tablet-cuneiform-glyph-scale 4.1)*
+      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
+- [x] `000000b1` **Check editable field unaffected at any length.** Type a full row's worth of text
+      into a tablet row/title — confirm the caret position and any text selection track the actual
+      glyphs exactly at every character count: no caret drift growing with character count, no
+      mis-hit selection, no growing/shrinking margin at the start of the line as you type.
+      *(tablet-cuneiform-glyph-scale 4.2)*
+      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
+- [x] `000000b2` **Check glow tracks shrunk ink.** On at least one wet and one fired tablet clay
+      view, confirm the per-material glow still tracks the ink correctly — no doubled or offset
+      halo. *(tablet-cuneiform-glyph-scale 4.3)*
+      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
+- [x] `000000b3` **Check non-tablet cuneiform unchanged.** Run the `.cuneiform` dev harness (and any
+      other non-tablet cuneiform surface) — confirm it still renders at full size
+      (`GlyphDrawScale = 1`), visually unchanged. *(tablet-cuneiform-glyph-scale 4.4)*
+      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
+- [x] `000000b6` **Check caret height + field padding.** In a tablet row/title's editor, confirm the
+      caret renders visibly shorter than the full text line, centered rather than top/bottom-anchored,
+      and the field's box is visibly tighter top-to-bottom around the text/caret — with Read and
+      Editor row heights still matching each other. Typing/caret/selection should still behave
+      correctly at any buffer length (no regression of the caret-drift fix above).
+      *(tablet-cuneiform-glyph-scale 5.7)*
+      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
+
+## fix-libgui-click-draw-order-mismatch (second consumer, added 2026-09-07, revised same day)
+
+> `ScribeDialogBase.OnMouseDown` now declines a click that lands inside a vanilla dialog's own bounds
+> (Handbook, Progression Framework's Ledger), so Scribe can no longer swallow a click meant for a
+> vanilla window opened on top of it via a Link/Quest Link click. **Revised same day:** the first
+> version gated on `ShouldReceiveMouseEvents()` (no click position, so it blocked ALL clicks on Scribe
+> while any vanilla dialog was open anywhere on screen — Scribe was unclickable until the vanilla
+> dialog closed). Now point-specific: a click outside the vanilla dialog's bounds reaches Scribe and
+> regains its focus normally, even while the vanilla dialog stays open.
+
+- [x] `000000b4` **Check Handbook link doesn't pass through, and Scribe stays clickable.** Open a
+      Notebook/Lectern/Tablet dialog, click a Handbook link so the base-game Handbook opens on top of
+      it, then click somewhere inside the Handbook that visually overlaps where the Scribe dialog sits
+      underneath — confirm the click reaches the Handbook (not swallowed by the Scribe row underneath).
+      Then, WITHOUT closing the Handbook, click directly on the Scribe dialog itself — confirm it
+      responds immediately and regains focus (this is the corrected behavior; the first landing of this
+      fix failed this specific check). *(fix-libgui-click-draw-order-mismatch 3.2/3.4/3.5)*
+      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
+- [x] `000000b5` **Check Quest Link doesn't pass through.** Same as above, but click a Quest Link so
+      Progression Framework's Ledger (Quest Log tab) opens on top instead — confirm clicks inside the
+      Ledger reach it rather than the Scribe dialog underneath. *(fix-libgui-click-draw-order-mismatch
+      3.3)*
+      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
+
+## add-progression-framework-quest-support
+
+- [x] `00000082` **Test PF picker under Prompt policy.** Carry two eligible Notebooks, trigger a
+      Progression Framework quest accept with Quest Accept Policy set to Prompt — confirm a
+      picker appears and the link lands on whichever Notebook you choose. *(add-progression-framework-quest-support 6.5)*
+      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"
+- [x] `00000083` **Test PF accept under Always policy.** Same setup as above but Accept Policy =
+      Always with two eligible Notebooks carried — confirm a Prompt-style banner appears instead
+      of the link silently landing on one. *(add-progression-framework-quest-support 6.6)*
+      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"
+- [x] `00000084` **Test PF end-to-end quest link.** With Progression Framework + Seafarer
+      installed, find an NPC offering a multi-objective delivery quest, confirm it appears in the
+      Quest Link picker, accept it in-world, and confirm auto-detect fires with progress mirroring
+      as objectives are delivered. *(add-progression-framework-quest-support 8.3)*
+      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"
+- [ ] `00000085` **Test vsquest + PF coexistence.** With both vsquest and Progression Framework
+      installed simultaneously, link and track one quest from each backend — confirm no
+      cross-contamination between them. *(add-progression-framework-quest-support 8.4)*
+      - **Obsolete 2026-09-02** (playtest submission 2026-09-02T20-53-17): tester found `vsquest`
+        and `progressionframework` can't actually be installed together, so this scenario is
+        unreachable in practice. The design doc's "both backends simultaneously" goal was wrong
+        and has been corrected (design.md, quest-auto-detect spec.md) — the mod supports either
+        backend independently; per-record attribution stays as a defensive invariant verified by
+        1.3's unit tests, not a live dual-backend test.
+- [x] `00000086` **Test neither-backend-installed hides quest UI.** With neither vsquest nor
+      Progression Framework installed, confirm no quest UI appears anywhere (Settings, Link
+      picker, handbook). *(add-progression-framework-quest-support 8.5)*
+      - **Confirmed 2026-09-02** (submission 2026-09-02T20-53-17): "(no note)"
+
+## add-custom-models-tasknotice-desk-inbox
+
+> Assignment Desk and Inbox each got a locally-owned shape + `.bbmodel` + textures cloned from the
+> Scriptorium (repointed `shape.base` + a matching `textures` override), so they'll look identical
+> to the Scriptorium block until a later art pass diverges them — that's expected, not a bug. The
+> Task Notice's shared shape was split into `item/tasknotice/blank.json` + a new `filled.json` (a
+> small raised wax-seal cube on the tie), with a per-stack `OnBeforeRender` mesh swap keyed off the
+> existing `IsSealed` check. **Fully quit and relaunch the client first** so the new assets load.
+
+- [x] `00000090` **Check Desk model.** Place an Assignment Desk and look it over from a few
+      angles — confirm it renders fully textured, matching the Scriptorium's look (no
+      pink/missing-texture faces). *(add-custom-models-tasknotice-desk-inbox 1.4)*
+      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "It looks like the new model, not the Scriptorium (which was a placeholder model). The appearance is correct, we may need to change the spec."
+- [x] `00000091` **Check Inbox model.** Place a standalone Inbox block — same check: fully
+      textured, matches the Scriptorium's look. *(add-custom-models-tasknotice-desk-inbox 2.4)*
+      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "Once again, the look is what I want - but different than the Scriptorium (which was used as a placeholder model)."
+- [x] `00000092` **Check notice log clean.** View a Task Notice in creative inventory, in hand, and
+      dropped on the ground — check the client log for any missing-texture/missing-asset warnings
+      from the relocated blank shape or the new filled shape (covers 3.1's relocation, 3.2's new
+      filled shape, and 3.3's shape.base rename together). *(add-custom-models-tasknotice-desk-inbox 3.1)*
+      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"
+- [x] `00000093` **Test seal swap.** Hold a blank Task Notice (confirm it shows the plain blank
+      model), then send an assignment via "Send a Notice" — confirm the sealed notice sitting in
+      the Create Assignments output slot now shows the filled model with its wax-seal blob.
+      *(add-custom-models-tasknotice-desk-inbox 4.1)*
+      - **Still broken 2026-09-05:** (submission 2026-09-05T22-19-48) "It's currently a broken mystery block, so I think one of the faces needs fixing. Can you help me identify which one?"
+      - **Confirmed 2026-09-06:** root cause was a missing `textures` block in `itemtypes/tasknotice.json` (the filled shape's `#filled`/`#filled-tie` codes were never registered in the item texture atlas); fixed and verified in-game.
+- [x] `00000094` **Test reload stability.** With a Task Notice in inventory, leave and rejoin the
+      world twice in a row — confirm no error/exception appears in the client log either time.
+      *(add-custom-models-tasknotice-desk-inbox 4.2)*
+      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"
+- [x] `00000095` **Run full pass.** Craft a blank notice, seal one via "Send a Notice," and place a
+      Desk + Inbox in one sitting — confirm all four models look right together as a final sanity
+      pass. *(add-custom-models-tasknotice-desk-inbox 5.2)*
+      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"
+
+## signal-tasknotice-inbox-presence
+
+> Block-attached ambient particles + Inbox Inventory tab/slot shimmer for a sealed, addressed
+> Task Notice sitting undiscovered in an Inbox's restricted slots are already confirmed working
+> (2026-09-06) — see `tasks.md` 5.1/5.2. The two items below are what's left: the hover-card
+> special case (section 1) and a read-only sanity check (5.3).
+
+- [x] `0000009e` **Check hover summary card.** Hover a sealed, addressed Task Notice while it sits
+      in a Scriptorium slot, an Assignment Desk slot, and an Inbox restricted slot — confirm each
+      shows "assigned by"/"addressed to" lines instead of `Title: (Untitled)`. Then hover a blank
+      Task Notice in the same three slot types — confirm its card is unchanged (generic "never
+      opened"). *(signal-tasknotice-inbox-presence 1.2)*
+      - **Confirmed 2026-09-06** (submission 2026-09-06T17-13-03): "(no note)"
+- [x] `0000009f` **Check presence signals are read-only.** With an addressed notice sitting in an
+      Inbox slot (particles/tab shimmer/slot shimmer all active) and the hover card open — confirm
+      none of it mutates anything: the assignment's state and the Inbox's inventory contents are
+      identical before and after observing. *(signal-tasknotice-inbox-presence 5.3)*
+      - **Confirmed 2026-09-06** (submission 2026-09-06T17-13-03): "(no note)"
+
+## read-view-collapse-affordance-fixes
+
+> Two bug/affordance fixes found in the 2026-09-06 `read-view-filter-and-collapse` playtest
+> (that change is now archived — see `playtest-history/TESTING-archive.md`).
+
+- [x] `000000a7` **Check Completed pill doesn't reset.** Select the Completed filter pill, then
+      uncheck a Task row rendering under it — confirm the Completed pill stays active (row
+      hides/shadow-renders per `read-view-subtask-collapse`'s rules) instead of resetting to All.
+      *(read-view-collapse-affordance-fixes 1.3)*
+      - **Confirmed 2026-09-06** (submission 2026-09-06T18-08-19): "(no note)"
+- [x] `000000a8` **Check caret-only collapse toggle.** On a Quest Link/Craft parent row, confirm
+      the collapse toggle in the left column renders as a bare caret (no border/background) and
+      still collapses/expands on click; rows without an owned run show nothing there.
+      *(read-view-collapse-affordance-fixes 2.2)*
+      - **Confirmed 2026-09-06** (submission 2026-09-06T18-08-19): "(no note)"
+## quest-link-icon-and-color
+
+> Quest Link rows get a dedicated exclamation-in-a-circle marker icon + accent color in place
+> of the completion checkbox (Quest Links can't be manually completed). Extended after a
+> 2026-09-06 playtest to fix icon/text vertical misalignment and finalize the HUD's own blue.
+
+- [x] `000000a9` **Check quest icon/checkbox swap + color.** On the parchment theme, view a
+      Quest Link row on Read, Editor, Pinned, and the Assignment-stage picker alongside a plain
+      Link row — confirm the quest row shows the exclamation-in-a-circle icon in place of the
+      completion checkbox (or alongside the still-functioning selection checkbox on
+      Assignment-stage), and reads in steel-blue. *(quest-link-icon-and-color 8.3)*
+      - **Confirmed 2026-09-06** (submission 2026-09-06T18-08-19): "(no note)" — narrowed same day
+        to this icon/checkbox/color scope; the item originally also claimed the alignment check
+        below, which was never actually verified. Split out as `000000ae` per direct user
+        correction.
+- [x] `000000ae` **Check quest icon/text vertical alignment.** On Read, Editor, Pinned, and the
+      Assignment-stage picker, confirm a Quest Link row's icon and item name are vertically
+      centered together (not text riding noticeably higher than the icon).
+      *(quest-link-icon-and-color 8.3b)*
+      - **Backlogged 2026-09-06:** blocked on tasks 3.2 (the `CheckboxAndGripTop` quest-aware
+        branch) and its 4.4/5.4/6.4 call-site wiring, none of which are implemented yet.
+      - **Fix landed 2026-09-06, AWAITING RETEST:** added the quest-aware branch to
+        `CheckboxAndGripTop` (centers on the plain one-line band instead of the tall icon-band
+        formula) and threaded `LinkTarget` through it at the Read/Editor/Pinned leading-slot call
+        sites (3.2/4.4/5.4/6.4). Needs an in-game retest before this can go green. (Assignment-stage
+        uses a separate inline-icon swap per design D2/7.2, not this call site — unaffected either
+        way.)
+      - **Still broken 2026-09-07 (tablet-only):** a fresh screenshot showed the quest icon still
+        pinned to the row's top edge on the tablet specifically — Notebook/Lectern were fine. Root
+        cause: the 2026-09-06 fix used `TextLineHeight` (plain Latin line height) for the quest
+        branch, which undershoots the tablet's real cuneiform text line.
+      - **Fix landed 2026-09-07, AWAITING RETEST:** routed `CheckboxAndGripTop`'s quest branch and
+        the Read/Editor/Pinned `bandHeight`/`iconVisual` quest case through `ItemNameLineHeight`
+        (already cuneiform-aware) instead of `TextLineHeight`, and added the missing
+        `GlyphDrawScale` factor to `ItemNameLineHeight` itself. Needs an in-game retest on the
+        tablet specifically, in addition to the original four-surface retest above.
+      - **Still broken 2026-09-07 (second screenshot):** icon/text now align, but the grip handle
+        (the drag-dots to the left of the checkbox) still sits noticeably higher than both.
+        `GripInsets` was calling `CheckboxAndGripTop` without a `linkTarget`, so it always fell into
+        the tall generic icon-band formula even on a Quest Link row, while the checkbox's own call
+        (right next to it) had already been fixed.
+      - **Fix landed 2026-09-07, AWAITING RETEST:** `GripInsets` now takes an optional `linkTarget`
+        and passes it through to `CheckboxAndGripTop`, threaded at all four call sites (Read, Pinned,
+        Editor's live row, Editor's frozen/collapsing ghost row) — grip and checkbox now share the
+        exact same top offset by construction. Needs an in-game retest alongside the above.
+      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
+- [x] `000000aa` **Check HUD quest link uses finalized blue.** Pin a Quest Link to the HUD — confirm
+      it renders at the finalized `rgb(172,207,255)` blue, distinct from the shared steel-blue
+      accent used on Read/Editor/Pinned/Assignment-stage. *(quest-link-icon-and-color 7.3/8.3a)*
+      - **Still broken 2026-09-06:** (submission 2026-09-06T18-08-19) "HUD links are still rendering rgb(66,107,183) when they should be using the new color. I'd actually like that theme color for the Quest Links on the HUD to be rgb(122,176,255)"
+      - **Fix landed 2026-09-06, AWAITING RETEST:** the first landing attempt for this task never
+        actually shipped (both `HudScribePins.cs` reads were still on the shared `QuestLinkAccent`).
+        Added `ScribeTheme.HudQuestLinkAccent` at `rgb(122,176,255)` and swapped both reads.
+      - **Value brightened again 2026-09-06, AWAITING RETEST:** third pass, changed to
+        `rgb(172,207,255)` per direct request before the second value was ever retested.
+      - **Confirmed 2026-09-06** via in-game retest: "the new HUD color is good."
+- [x] `000000ab` **Check quest color across chalkboard + tablet variants.** Repeat the glance-check
+      on the chalkboard and all four tablet clay variants (clay-fire, clay-red, clay-blue, wax) —
+      confirm the quest color is legible on each backdrop, and on blue-clay specifically is
+      visibly distinct from that tablet's own blue Primary/link color. *(quest-link-icon-and-color 8.4)*
+      - **Confirmed 2026-09-06** (submission 2026-09-06T18-08-19): "(no note)"
+- [x] `000000ac` **Check completion count/round-trip unaffected.** Confirm a document containing a
+      Quest Link still reports the same "N of M tasks done" total as before, and its Done value
+      round-trips through the existing completion path (e.g. TSV export/import) even with no
+      checkbox shown. *(quest-link-icon-and-color 8.5)*
+      - **Confirmed 2026-09-06** (submission 2026-09-06T18-08-19): "(no note)"
+
+## fix-quest-catalog-domain-scoping
+
+> Fixed the VS Quest and Progression Framework catalog readers, which were scoping their
+> `Assets.GetMany` search to their own mod domain instead of `null` (all domains) — the same
+> bug family that made the Quest Link picker only ever offer PF's "Rust Hunter". VS Quest's
+> own dependent-mod case (a content pack like VS Village, not vsquest's bundled example
+> content) has never actually been manually tested.
+
+- [x] `000000bc` **Check VS Quest content-pack catalog.** With VS Quest + VS Village
+      installed, interact with a VS Village villager quest-giver and accept a quest — confirm
+      the catalog entry appears in the Quest Link picker and the HUD accept prompt fires.
+      *(fix-quest-catalog-domain-scoping 3.4)*
+      - **Confirmed 2026-09-08** (submission 2026-09-08T10-23-43): "(no note)"
+
+## add-vsquest-criteria-subtask
+
+> VS Quest links now capture their cataloged kill, gather, block-place, and block-break criteria as
+> static depth-1 subtasks. The same snapshot is created from the editor picker and from accept-time
+> auto-linking. These checks require vsquest + VS Village; fully restage and relaunch first.
+
+- [x] `000000b0` **Check VS Village kill criteria.** Accept “Shivers from another world” and let
+      Scribe link it through the configured automatic/prompt route — confirm the destination document
+      gets one depth-1 objective showing `0/50` and `Kills 50`. Kill a qualifying Drifter and reopen
+      the document; confirm this static snapshot remains `0/50`. Repeat through the editor’s Add Quest
+      Link picker when practical and confirm the same child appears. *(add-vsquest-criteria-subtask 3.3)*
+      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
+- [x] `000000b7` **Check gather criteria.** Create a VS Village Quest Link for a quest with a gather
+      objective — confirm a depth-1 static objective appears with the required count even though
+      vsquest exposes no live gather counter. *(add-vsquest-criteria-subtask 3.4)*
+      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
+- [x] `000000b8` **Check item Handbook link.** Create a VS Quest link whose gather objective names one
+      exact item code; confirm the child shows that item's inventory icon and localized name, then
+      activate the name and confirm its Handbook entry opens. *(add-vsquest-criteria-subtask 3.5)*
+      - **Still broken 2026-09-08:** (submission 2026-09-08T08-55-42) "These both appear, but this should count as a link to the handbook! Can we update that?"
+      - **Confirmed 2026-09-08** (submission 2026-09-08T10-23-43): "(no note)"
+- [x] `000000b9` **Check PF live objectives.** Create a Progression Framework Quest Link, make progress
+      on one objective, and confirm its generated child still updates live; VS Quest’s new static path
+      must not affect PF reconciliation. *(add-vsquest-criteria-subtask 3.6)*
+      - **Confirmed 2026-09-08** (submission 2026-09-08T11-20-24): "(no note)"
+- [x] `000000ba` **Check static objective styling.** View “Shivers from another world” on Read,
+      Editor, Pinned, and HUD surfaces; confirm its multi-code child uses normal task color with the
+      bullseye marker, never the link color or book icon, and does nothing when activated. In Editor,
+      confirm the drag handle aligns with the bullseye and label; pin the child and confirm its row
+      gains the ordinary pinned highlight while the child also appears on the Pinned tab.
+      *(add-vsquest-criteria-subtask 3.7)*
+      - **Still broken 2026-09-08:** The multicode child's drag handle is vertically misaligned with
+        its bullseye and text, and its pinned row lacks the pinned highlight in Editor view.
+      - **Confirmed 2026-09-08** (submission 2026-09-08T11-20-24): "(no note)"

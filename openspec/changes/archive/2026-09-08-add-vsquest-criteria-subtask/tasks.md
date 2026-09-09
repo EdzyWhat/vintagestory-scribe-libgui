@@ -45,6 +45,13 @@
   and activate the item's Handbook entry. Generic static objectives remain non-interactive;
   Progression Framework rendering and activation remain unchanged. Verify with a build and focused
   renderer/click-path inspection.
+- [x] 2.6 Align a generic static VS Quest objective's Editor drag handle with its bullseye marker and
+  label using the ordinary item-row vertical geometry. Verify with a build and focused inspection
+  that the content and grip consume the same static-objective visual band; task 3.7 owns the in-game
+  appearance check.
+- [x] 2.7 Preserve the ordinary pinned-row highlight for generic static VS Quest objectives in Editor
+  view. Verify with a build and focused inspection that the Editor row-fill condition includes the
+  static-objective variant; task 3.7 owns the in-game pin/highlight check.
 
 ## 3. Verification
 
@@ -59,15 +66,20 @@
   - Confirmed 2026-09-08: TESTING.md `000000b7` "(no note)" (submission 2026-09-08T08-55-42)
   static subtask appears for it too (previously impossible, since gather has no live tracking at
   all).
-- [ ] 3.5 Manual playtest: create a Quest Link for a quest whose objective resolves to a single
+- [x] 3.5 Manual playtest: create a Quest Link for a quest whose objective resolves to a single
+  - Confirmed 2026-09-08: TESTING.md `000000b8` "(no note)" (submission 2026-09-08T10-23-43)
   concrete item (e.g. a specific gather item) — confirm the subtask shows the real item icon and
   name, and activating it opens that item's Handbook entry.
-- [ ] 3.6 Regression check: create a Progression Framework Quest Link — confirm its objective
+- [x] 3.6 Regression check: create a Progression Framework Quest Link — confirm its objective
+  - Confirmed 2026-09-08: TESTING.md `000000b9` "(no note)" (submission 2026-09-08T11-20-24)
   subtasks still generate and still live-update exactly as before (this change adds a new branch,
   it does not touch the PF branch).
-- [ ] 3.7 Manual playtest: inspect a wildcard or multi-code VS Quest objective on Read, Editor,
+- [x] 3.7 Manual playtest: inspect a wildcard or multi-code VS Quest objective on Read, Editor,
+  - Confirmed 2026-09-08: TESTING.md `000000ba` "(no note)" (submission 2026-09-08T11-20-24)
   Pinned, and HUD views — confirm it uses normal task coloring and the dedicated objective marker,
-  does not look like a Quest Link, and performs no action when activated.
+  does not look like a Quest Link, and performs no action when activated. In Editor view, confirm
+  the drag handle aligns vertically with the bullseye and label, then pin the child and confirm the
+  ordinary pinned-row highlight remains visible while the child also appears on the Pinned tab.
 
 ## 4. Spec sync and verification
 

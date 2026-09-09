@@ -27,97 +27,181 @@ mouse while its window is expanded, so click-and-drag on the game's scrollbar wo
 while it's open. **Collapse the ImGui window first**, then test dragging. (Slider values you
 set stay applied while it's collapsed — you only need it expanded to *move* a slider.)
 
-## add-scribe-block-box-tuning
+## unify-tab-header-layout
 
-> DEV-only live-tuning window (`.boxtune`) for the Inbox (ground + wall-mounted), Scriptorium,
-> Assignment Desk, and Chalkboard (selection-only) collision/selection boxes, mirroring the
-> existing `.geartune` pattern. Client-only; a dedicated server never loads tuning and falls back
-> to defaults (documented Non-Goal, not a bug). All 5 targets have now passed a `.boxtune` session
-> and had their tuned values baked into both `ScribeBoxTuning.cs`'s defaults and each blocktype
-> JSON (2026-09-07) — this change is fully implemented and verified.
+> Every non-tablet dialog tab (Read, Edit, Pinned, Notebook History, Guest Book, Inbox, Sent
+> Assignment History, Create Assignments, Scriptorium Transcribe, Inbox Inventory, Timer) shares
+> one header anatomy: title bar, then a Row 2 subtitle (per-word small-caps label + italic
+> descriptor, baseline-aligned), then the tab's own Row 3 controls (if any), then exactly one
+> durable divider flush against the scrollable content (Guest Book alone gets a second, leading
+> divider above its column headers). The Tablet is explicitly excluded — no Row 2, no Row 3. A
+> 2026-09-08 playtest pass fixed the subtitle's baseline alignment and per-word caps, tightened
+> the Row 1-to-Row 2 gap by 6px, moved the drag-grip to the left of the title (aligned to its
+> baseline), and reversed an earlier decision that let the Tablet inherit Row 2. A 2026-09-09
+> follow-up pass rearranged Create Assignments (Row 3 down to just the send-to row), moved the
+> Inbox Inventory divider to sit under its subtitle, enlarged the small-caps size, re-tuned the
+> grip's vertical alignment, doubled the scroll-content top padding, and stopped the title-edit
+> field from growing the title band. A 2026-09-10 follow-up pass pulled the small-caps size back
+> down slightly, changed Row 1's multi-line growth to push content down (only when a title
+> genuinely wraps) instead of a static always-reserved band, resized Create Assignments' delivery-
+> info button to match the buttons beside it, and repositioned that tab's notice slots and
+> delete-checkbox. A same-day 2nd follow-up pass then trimmed the info button 1px smaller per side,
+> split the delete-checkbox back onto its own line at the top of the content section, and fixed a
+> bug in the first pass's Row 1 fix (the band wasn't actually growing, so wrapping still visibly
+> slid the title upward). A same-day 3rd follow-up pass replaced Row 1's whole precomputed-estimate
+> approach to sizing with genuine self-sizing (`ConstrainedBox`, borrowing the Tablet's own
+> intrinsic-measurement mechanism) after the 2nd pass's fix traded the upward slide for a discrete
+> downward jump on wrap. Restage Debug and fully quit/relaunch the client before testing
+> (lang/assets load once at boot).
 
-- [x] `000000bd` **Check Chalkboard default + no collision.** Place a Chalkboard and confirm its
-      hitbox is unchanged from before (walk-through, thin selection slab); run `.boxtune` and
-      confirm the new Chalkboard group shows the shipped defaults.
-      *(add-scribe-block-box-tuning 5.5)*
-      - **Confirmed 2026-09-07** via `tasks.md` 5.5 checked off by the author's own in-game check.
-- [x] `000000be` **Check Chalkboard tunes selection only.** Nudge a Chalkboard value in `.boxtune`,
-      including a full-cell value (all axes to 0/1) — confirm the placed Chalkboard's selection box
-      changes live but it stays walk-through (no collision) at every value.
-      *(add-scribe-block-box-tuning 5.6)*
-      - **Confirmed 2026-09-07** via `tasks.md` 5.6 checked off; tuned values
-        (`0.125,0.05,0,0.875,0.925,0.06`) baked into `ScribeBoxTuning.cs` defaults and
-        `chalkboard.json`'s `selectionbox`.
-- [x] `000000bf` **Check Chalkboard tuning persists.** Tune a Chalkboard value, fully quit and
-      relaunch the client, rejoin the same world — confirm the tuned selection box is still in
-      effect and still shows in `.boxtune`'s fields. *(add-scribe-block-box-tuning 5.7)*
-      - **Confirmed 2026-09-07** via `tasks.md` 5.7 checked off by the author's own in-game check.
+- [ ] `000000cc` **Check subtitle typography.** Open Read, Edit, Pinned, or Guest Book (any
+      two-word label like "Read View"); confirm EACH word's first letter renders full-size caps
+      with the rest of that word smaller (not just the label's first word), the whole subtitle
+      sits evenly on one baseline (no run floating above the line), and the descriptor after the
+      colon renders genuinely italic/slanted (not upright bold) while the title bar above it still
+      renders bold. *(unify-tab-header-layout 5.2, 5.3)*
+- [ ] `000000cd` **Check Inbox Inventory tab header.** Open the Inbox block's own Inbox Inventory
+      tab; confirm the subtitle appears above the 12-slot grid with exactly one durable divider
+      directly UNDER the subtitle (not after the slot grid at the tab's bottom).
+      *(unify-tab-header-layout 6.2, 13.1)*
+- [ ] `000000ce` **Check Timer tab header.** Open the Clockmaker's Notebook Timer tab in Idle,
+      Running, and Fired states; confirm the subtitle + divider appear and the
+      gearworks/countdown/form content still functions in all three. *(unify-tab-header-layout
+      6.3)*
+- [ ] `000000cf` **Check flush dividers.** Across several tabs (Read, Edit, Pinned, Guest Book),
+      confirm each durable divider sits flush against the top of the scroll viewport at rest (no
+      gap), and scrolling down reveals a small breathing-room gap above the first row that scrolls
+      away with the content. *(unify-tab-header-layout 7.2)*
+- [ ] `000000d0` **Check Row 1 grip position + alignment.** Open any dialog; confirm the drag-grip
+      sits to the LEFT of the title text with tight, roughly symmetric padding on both sides of
+      the title row, and that the grip icon is vertically aligned with the title text's baseline
+      (not sitting visibly lower). *(unify-tab-header-layout 8.2, 8.4)*
+- [ ] `000000d1` **Check grip drag still works.** Drag the window via the new left-side grip, via
+      the title band elsewhere, and via hovering the grip's tooltip — confirm all three behave as
+      before the move, including on a dialog with a two-line-wrapped title.
+      *(unify-tab-header-layout 8.3)*
+- [ ] `000000d2` **Check Row1-row2 gap tightened.** Open any tab with a Row 2 subtitle; confirm the
+      gap between the title bar and the subtitle line reads visibly tighter than before (an
+      additional ~6px reduction on top of the divider-flush change). *(unify-tab-header-layout
+      9.1)*
+- [ ] `000000d3` **Check Tablet has no Row 2/Row 3.** Open a Tablet's Read View and Editor; confirm
+      NEITHER a subtitle line NOR a second divider appears below the title bar — only the
+      Tablet's own title-bar chrome, matching its behavior before this change touched it.
+      *(unify-tab-header-layout 10.1-10.3)*
+- [ ] `000000d4` **Check Create Assignments' rearranged layout.** Open Create Assignments; confirm
+      Row 3 (right below the subtitle, above the divider) shows ONLY the Send-to picker + button,
+      while the staging hint, delete-checkbox, delivery toggle, and notice slots all sit below the
+      divider in the scrollable content, and the old "Assign Tasks" heading is gone.
+      *(unify-tab-header-layout 12.1, 12.2)*
+- [ ] `000000d5` **Check Local Inboxes position + notice slot names.** On a Hybrid-delivery server,
+      confirm the "Local Inboxes"/"Send a Notice" toggle sits BELOW the scrollable stage tray, and
+      the two notice slots read "Task Notice" and "Assigned Notice"; then draft, stage, and send an
+      assignment via both delivery choices end to end. *(unify-tab-header-layout 12.3, 12.4)*
+- [ ] `000000d6` **Check Inbox Inventory's divider position.** Open the Inbox block's Inbox
+      Inventory tab; confirm the durable divider sits directly under the subtitle, not after the
+      12-slot grid at the tab's bottom. *(unify-tab-header-layout 13.1)*
+- [ ] `000000d7` **Check small-caps size + grip height + content padding.** Open any subtitle-
+      bearing tab; confirm the small-caps letters read noticeably bigger than before (closer to
+      the cap letter), the drag-grip no longer sits too high relative to the title, and the gap
+      above the first row of scrollable content reads roomier (doubled).
+      *(unify-tab-header-layout 13.2, 13.3, 13.4)*
+- [ ] `000000d8` **Check title-edit no longer grows.** On the Edit tab, click the title's
+      edit-pencil; confirm the title band does NOT visibly grow/jump in height when the input
+      field appears. *(unify-tab-header-layout 13.5)*
+- [ ] `000000d9` **Check small-caps size pulled back.** Open any subtitle-bearing tab; confirm the
+      small-caps letters now read with more contrast against the full cap letter than the previous
+      pass (still bigger than the original small size, but no longer nearly cap-sized).
+      *(unify-tab-header-layout 16.1)*
+- [x] `000000da` **Check the whole dialog renders normally, title row is centered, AND Row 1 grows
+      smoothly on wrap.** First confirm both regressions are gone: open any Scribe dialog and
+      confirm (1) the title bar, Row 2, Row 3, and the scrollable content all render in their
+      normal positions (NOT collapsed against the bottom of the window), and (2) the
+      grip/title/close-button group is horizontally CENTERED within the title band (not flush
+      against the left edge). Then: rename a document to a short title (fits one line) and confirm
+      the title bar/Row 2 position looks unchanged from before this pass; rename it to a long title
+      that wraps to 2 lines and confirm Row 2 and the rest of the tab's content shift smoothly DOWN
+      with no upward jump AND no discrete downward "pop" of the grip/title/close button (try titles
+      right at and just past the wrap boundary, one character at a time, to catch a jump at the
+      exact transition).
+      *(unify-tab-header-layout 16.2, 17.3, 18.1, 19.1, 20.1)*
+      - **Still broken 2026-09-10:** user reported after restaging that Round 6's
+        `Align(BottomCenter)` fix collapsed the ENTIRE Scribe interface against the bottom of the
+        window — not just the title band growing. Fixed in 19.1 (dropped `Align`, replaced with a
+        fixed top `Padding` + a single min-only `ConstrainedBox`).
+      - **Still broken 2026-09-10 (2nd regression):** user reported after restaging that 19.1's
+        `Align` removal also broke horizontal centering — the whole grip/title/close-button group
+        shifted flush against the left edge ("ruined the orientation left and right"), since
+        `Align(BottomCenter)` was the only step centering it. Fixed in 20.1 by reverting Round 6 +
+        its correction wholesale back to Round 5's two-nested-`SizedBox`-plus-`Align` structure
+        (with `titleLineH` corrected to use real font metrics instead of the mismatched cuneiform
+        ratio).
+      - **Confirmed 2026-09-10:** user restaged the 20.1 revert themselves and reported the dialog
+        "looks good" — the whole-dialog collapse and the left-edge orientation regression are both
+        gone.
+- [ ] `000000db` **Check Create Assignments' info button size.** On a Hybrid-delivery server, open
+      Create Assignments; confirm the delivery-info button (the "i" icon next to Local
+      Inboxes/Send a Notice) now visually matches the height of those two buttons, with its icon
+      only slightly bigger than before (not proportionally huge). *(unify-tab-header-layout 16.3)*
+      - **Obsolete 2026-09-10** superseded by Round 5 (17.1): the info button is now
+        DELIBERATELY 1px-per-side smaller than the two buttons beside it, not an exact height
+        match — see `000000df`.
+- [ ] `000000dc` **Check notice slots + delete-checkbox reposition.** On a Hybrid-delivery server,
+      confirm the two notice slots now sit directly above the Local Inboxes/Send a Notice group,
+      and the delete-from-source checkbox+label now appear on the SAME row as that group, to its
+      right. *(unify-tab-header-layout 16.4)*
+      - **Obsolete 2026-09-10** superseded by Round 5 (17.2): the checkbox no longer shares a row
+        with the delivery toggle at all — see `000000e0`. The notice-slots half of this item is
+        still current and re-derived as `000000de`.
+- [ ] `000000dd` **Check delete-checkbox fallback on non-Hybrid.** On an AlwaysPhysical or
+      AlwaysInstant delivery-mode server (no Local Inboxes/Send a Notice toggle), confirm the
+      delete-from-source checkbox still renders on its own line rather than being dropped.
+      *(unify-tab-header-layout 16.4)*
+      - **Obsolete 2026-09-10** superseded by Round 5 (17.2): the checkbox always stands alone
+        now (Hybrid or not), so there is no longer a separate fallback case to test — see
+        `000000e0`, which now covers both delivery modes.
+- [ ] `000000de` **Check notice slots sit above the delivery toggle.** On a Hybrid-delivery server,
+      open Create Assignments; confirm the two notice slots sit directly above the Local
+      Inboxes/Send a Notice button group. *(unify-tab-header-layout 16.4)*
+- [ ] `000000df` **Check info button reads slightly smaller.** On a Hybrid-delivery server, open
+      Create Assignments; confirm the delivery-info button now reads a touch SMALLER than the two
+      buttons beside it (not an exact height match), with the icon itself unchanged from the
+      previous pass. *(unify-tab-header-layout 17.1)*
+- [ ] `000000e0` **Check delete-checkbox own line at top.** Open Create Assignments on both a
+      Hybrid-delivery and a non-Hybrid-delivery server; confirm the delete-from-source
+      checkbox+label render on their own full-width line at the very TOP of the content section
+      (above the staging slot) in both cases. *(unify-tab-header-layout 17.2)*
 
-## tablet-cuneiform-glyph-scale
+## add-assignment-desk-create-tasks-button
 
-> Revised twice before any in-game test ran. Final mechanism: tablet cuneiform title/row/label text
-> now shrinks its own LAYOUT height (`CuneiformMetrics.GlyphDrawScale = 0.95`), deliberately decoupled
-> from the tablet's checkbox/control sizing (left untouched) — so the row/title band is now physically
-> shorter than the checkbox, absorbed by `CheckboxAndGripTop`'s existing overflow support. Also adds a
-> shorter, centered synthetic caret (`CaretHeightScale = 44/48`) and tighter field top/bottom padding
-> (`FieldPadYScale = 6/9`). **Fully quit and restage/relaunch the client first** so the rebuilt DLL
-> loads.
+> The empty Assignment Desk task list now offers a direct, lock-aware route to its local Editor.
+> Restage Debug and relaunch before testing the Assignment Desk.
 
-- [x] `000000af` **Check row/title band shrinks with the glyphs.** Open a tablet — confirm title bar
-      and row text render visibly smaller (~95%) than before, AND the row/title band itself is
-      physically shorter (not just smaller ink in an unchanged box). Checkbox/control/icon sizes stay
-      pixel-identical to before, so the checkbox will likely now overflow above/below the shorter
-      row — that mismatch is expected, not a bug. *(tablet-cuneiform-glyph-scale 4.1)*
-      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
-- [x] `000000b1` **Check editable field unaffected at any length.** Type a full row's worth of text
-      into a tablet row/title — confirm the caret position and any text selection track the actual
-      glyphs exactly at every character count: no caret drift growing with character count, no
-      mis-hit selection, no growing/shrinking margin at the start of the line as you type.
-      *(tablet-cuneiform-glyph-scale 4.2)*
-      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
-- [x] `000000b2` **Check glow tracks shrunk ink.** On at least one wet and one fired tablet clay
-      view, confirm the per-material glow still tracks the ink correctly — no doubled or offset
-      halo. *(tablet-cuneiform-glyph-scale 4.3)*
-      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
-- [x] `000000b3` **Check non-tablet cuneiform unchanged.** Run the `.cuneiform` dev harness (and any
-      other non-tablet cuneiform surface) — confirm it still renders at full size
-      (`GlyphDrawScale = 1`), visually unchanged. *(tablet-cuneiform-glyph-scale 4.4)*
-      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
-- [x] `000000b6` **Check caret height + field padding.** In a tablet row/title's editor, confirm the
-      caret renders visibly shorter than the full text line, centered rather than top/bottom-anchored,
-      and the field's box is visibly tighter top-to-bottom around the text/caret — with Read and
-      Editor row heights still matching each other. Typing/caret/selection should still behave
-      correctly at any buffer length (no regression of the caret-drift fix above).
-      *(tablet-cuneiform-glyph-scale 5.7)*
-      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
+- [x] `000000c1` **Create Desk tasks.** Open an Assignment Desk's Create Assignments tab with no
+      staged item and no local tasks; confirm “Create Tasks to Assign” appears and opens the local
+      Editor. Create and commit a task, return to Create Assignments, and confirm the create button
+      remains visible before “Pull existing tasks from this Desk.”
+      *(add-assignment-desk-create-tasks-button 2.3)*
+      - **Confirmed 2026-09-08** via direct in-game report: the button appears and its Editor route works.
+- [ ] `000000c2` **Check locked Desk feedback.** In multiplayer, have another client hold the Desk's
+      Editor lock, then activate “Create Tasks to Assign”; confirm the standard locked-editor
+      feedback appears and Create Assignments stays open.
+      *(add-assignment-desk-create-tasks-button 2.4)*
 
-## add-vsquest-criteria-subtask
+## align-row-hover-action-buttons
 
-> VS Quest links now capture their cataloged kill, gather, block-place, and block-break criteria as
-> static depth-1 subtasks. The same snapshot is created from the editor picker and from accept-time
-> auto-linking. These checks require vsquest + VS Village; fully restage and relaunch first.
+> Floating Pin/Delete/Unpin hover buttons now center on the row's actual first text line
+> instead of a Latin-only input-height calculation, via `ScribeRowControlNudge.FloatingButtonTop(style, itemRow)`.
+> Ordinary task/note rows are unaffected; item rows (Tracker/Link/Craft/Quest Link) — most
+> visibly cuneiform tablet item rows — get the cuneiform-aware `ItemNameLineHeight` band.
+> Restage Debug and relaunch first.
 
-- [x] `000000b0` **Check VS Village kill criteria.** Accept “Shivers from another world” and let
-      Scribe link it through the configured automatic/prompt route — confirm the destination document
-      gets one depth-1 objective showing `0/50` and `Kills 50`. Kill a qualifying Drifter and reopen
-      the document; confirm this static snapshot remains `0/50`. Repeat through the editor’s Add Quest
-      Link picker when practical and confirm the same child appears. *(add-vsquest-criteria-subtask 3.3)*
-      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
-- [x] `000000b7` **Check gather criteria.** Create a VS Village Quest Link for a quest with a gather
-      objective — confirm a depth-1 static objective appears with the required count even though
-      vsquest exposes no live gather counter. *(add-vsquest-criteria-subtask 3.4)*
-      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
-- [ ] `000000b8` **Check item Handbook link.** Create a VS Quest link whose gather objective names one
-      exact item code; confirm the child shows that item's inventory icon and localized name, then
-      activate the name and confirm its Handbook entry opens. *(add-vsquest-criteria-subtask 3.5)*
-      - **Still broken 2026-09-08:** (submission 2026-09-08T08-55-42) "These both appear, but this should count as a link to the handbook! Can we update that?"
-- [ ] `000000b9` **Check PF live objectives.** Create a Progression Framework Quest Link, make progress
-      on one objective, and confirm its generated child still updates live; VS Quest’s new static path
-      must not affect PF reconciliation. *(add-vsquest-criteria-subtask 3.6)*
-- [ ] `000000ba` **Check static objective styling.** View “Shivers from another world” on Read,
-      Editor, Pinned, and HUD surfaces; confirm its multi-code child uses normal task color with the
-      bullseye marker, never the link color or book icon, and does nothing when activated.
-      *(add-vsquest-criteria-subtask 3.7)*
+- [x] `000000bb` **Check hover buttons align to text.** Hover an ordinary task row, a Latin
+      item row, and a cuneiform tablet item row in Read (Pin), Editor (Delete/Pin), and the
+      Pinned tab (Delete/Unpin) — confirm each button box is vertically centered on the row's
+      first text line (not riding high/low), especially on the tablet. Confirm size,
+      horizontal placement, hover visibility, and the Pin/Delete/Unpin action itself are all
+      unchanged from before. *(align-row-hover-action-buttons 2.2)*
+      - **Confirmed 2026-09-08** (submission 2026-09-08T10-23-43): "(no note)"
 
 ## rework-quest-accept-notification-styles
 
@@ -170,29 +254,18 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         checkboxes." — `quest-link-icon-and-color` removed the completion checkbox from Quest
         Link rows; dropped per direct user call.
 
-## fix-libgui-click-draw-order-mismatch (second consumer, added 2026-09-07, revised same day)
+## fix-assignment-completion-doc-resolution
 
-> `ScribeDialogBase.OnMouseDown` now declines a click that lands inside a vanilla dialog's own bounds
-> (Handbook, Progression Framework's Ledger), so Scribe can no longer swallow a click meant for a
-> vanilla window opened on top of it via a Link/Quest Link click. **Revised same day:** the first
-> version gated on `ShouldReceiveMouseEvents()` (no click position, so it blocked ALL clicks on Scribe
-> while any vanilla dialog was open anywhere on screen — Scribe was unclickable until the vanilla
-> dialog closed). Now point-specific: a click outside the vanilla dialog's bounds reaches Scribe and
-> regains its focus normally, even while the vanilla dialog stays open.
+> `NotifyAssignmentDoneChanged` now derives assignment completion from the canonical
+> `ScribeAssignmentStore` record instead of gating on the placed block's own (possibly
+> unresolved) Assignment clone, so completing a pinned assignment task still propagates even
+> when its Notebook isn't currently reachable. Needs two players.
 
-- [x] `000000b4` **Check Handbook link doesn't pass through, and Scribe stays clickable.** Open a
-      Notebook/Lectern/Tablet dialog, click a Handbook link so the base-game Handbook opens on top of
-      it, then click somewhere inside the Handbook that visually overlaps where the Scribe dialog sits
-      underneath — confirm the click reaches the Handbook (not swallowed by the Scribe row underneath).
-      Then, WITHOUT closing the Handbook, click directly on the Scribe dialog itself — confirm it
-      responds immediately and regains focus (this is the corrected behavior; the first landing of this
-      fix failed this specific check). *(fix-libgui-click-draw-order-mismatch 3.2/3.4/3.5)*
-      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
-- [x] `000000b5` **Check Quest Link doesn't pass through.** Same as above, but click a Quest Link so
-      Progression Framework's Ledger (Quest Log tab) opens on top instead — confirm clicks inside the
-      Ledger reach it rather than the Scribe dialog underneath. *(fix-libgui-click-draw-order-mismatch
-      3.3)*
-      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
+- [ ] `000000c0` **Check completion with an unresolved Notebook.** As Player A, send an
+      assignment to Player B; have B accept it and pin the resulting task; move B's Notebook
+      out of B's inventory (e.g. into a chest); as B, complete the pinned task from the HUD or
+      Pin Tab — confirm both B's Inbox and A's Sent Assignment History show Completed.
+      *(fix-assignment-completion-doc-resolution 1.4)*
 
 ## assignment-lifecycle-bug-fixes
 
@@ -449,8 +522,6 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
     recurred before via new triggers, so kept on record rather than closed).
   ```
 
-
-
 ## add-transcribe-copy-paste
 
 > v1.2 Transcribe tab on the Scriptorium: a two-slot, server-authoritative document COPY (Copy from →
@@ -625,8 +696,6 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
   - **Confirmed 2026-08-18** — verified during round-6 development: instant pop, Caudex font, tight border, subtle lean.
   ```
 
-
-
 ## fix-dialog-open-white-flash
 
 > The one-frame white flash on opening a backdropped Scribe surface, split out of reconcile §3.11
@@ -653,35 +722,6 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
     open frame — do not write another speculative fix first. (Tasks 4.2/4.3 test the reverted `FromTexture`
     path + are bookkeeping, so they're not listed here.)
   ```
-
-## add-progression-framework-quest-support
-
-- [x] `00000082` **Test PF picker under Prompt policy.** Carry two eligible Notebooks, trigger a
-      Progression Framework quest accept with Quest Accept Policy set to Prompt — confirm a
-      picker appears and the link lands on whichever Notebook you choose. *(add-progression-framework-quest-support 6.5)*
-      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"
-- [x] `00000083` **Test PF accept under Always policy.** Same setup as above but Accept Policy =
-      Always with two eligible Notebooks carried — confirm a Prompt-style banner appears instead
-      of the link silently landing on one. *(add-progression-framework-quest-support 6.6)*
-      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"
-- [x] `00000084` **Test PF end-to-end quest link.** With Progression Framework + Seafarer
-      installed, find an NPC offering a multi-objective delivery quest, confirm it appears in the
-      Quest Link picker, accept it in-world, and confirm auto-detect fires with progress mirroring
-      as objectives are delivered. *(add-progression-framework-quest-support 8.3)*
-      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"
-- [ ] `00000085` **Test vsquest + PF coexistence.** With both vsquest and Progression Framework
-      installed simultaneously, link and track one quest from each backend — confirm no
-      cross-contamination between them. *(add-progression-framework-quest-support 8.4)*
-      - **Obsolete 2026-09-02** (playtest submission 2026-09-02T20-53-17): tester found `vsquest`
-        and `progressionframework` can't actually be installed together, so this scenario is
-        unreachable in practice. The design doc's "both backends simultaneously" goal was wrong
-        and has been corrected (design.md, quest-auto-detect spec.md) — the mod supports either
-        backend independently; per-record attribution stays as a defensive invariant verified by
-        1.3's unit tests, not a live dual-backend test.
-- [x] `00000086` **Test neither-backend-installed hides quest UI.** With neither vsquest nor
-      Progression Framework installed, confirm no quest UI appears anywhere (Settings, Link
-      picker, handbook). *(add-progression-framework-quest-support 8.5)*
-      - **Confirmed 2026-09-02** (submission 2026-09-02T20-53-17): "(no note)"
 
 ## add-assignment-physical-delivery-mode
 
@@ -737,141 +777,3 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       blocks, walk into a new chunk near it — confirm the existing ambient particle effect spawns
       at the notice's position after the scan tick, client-local to you only. *(add-assignment-physical-delivery-mode 7.1)*
       - **Still broken 2026-09-03:** (submission 2026-09-03T20-42-20) "I cannot see the particle effect at all for assigned Task Notices as the assignee. Perhaps the issue is that I'm the assigner and the assignee, and I've touched the Task Notice. Regardless, I'd like to still see the particle effect."
-
-## add-custom-models-tasknotice-desk-inbox
-
-> Assignment Desk and Inbox each got a locally-owned shape + `.bbmodel` + textures cloned from the
-> Scriptorium (repointed `shape.base` + a matching `textures` override), so they'll look identical
-> to the Scriptorium block until a later art pass diverges them — that's expected, not a bug. The
-> Task Notice's shared shape was split into `item/tasknotice/blank.json` + a new `filled.json` (a
-> small raised wax-seal cube on the tie), with a per-stack `OnBeforeRender` mesh swap keyed off the
-> existing `IsSealed` check. **Fully quit and relaunch the client first** so the new assets load.
-
-- [x] `00000090` **Check Desk model.** Place an Assignment Desk and look it over from a few
-      angles — confirm it renders fully textured, matching the Scriptorium's look (no
-      pink/missing-texture faces). *(add-custom-models-tasknotice-desk-inbox 1.4)*
-      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "It looks like the new model, not the Scriptorium (which was a placeholder model). The appearance is correct, we may need to change the spec."
-- [x] `00000091` **Check Inbox model.** Place a standalone Inbox block — same check: fully
-      textured, matches the Scriptorium's look. *(add-custom-models-tasknotice-desk-inbox 2.4)*
-      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "Once again, the look is what I want - but different than the Scriptorium (which was used as a placeholder model)."
-- [x] `00000092` **Check notice log clean.** View a Task Notice in creative inventory, in hand, and
-      dropped on the ground — check the client log for any missing-texture/missing-asset warnings
-      from the relocated blank shape or the new filled shape (covers 3.1's relocation, 3.2's new
-      filled shape, and 3.3's shape.base rename together). *(add-custom-models-tasknotice-desk-inbox 3.1)*
-      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"
-- [x] `00000093` **Test seal swap.** Hold a blank Task Notice (confirm it shows the plain blank
-      model), then send an assignment via "Send a Notice" — confirm the sealed notice sitting in
-      the Create Assignments output slot now shows the filled model with its wax-seal blob.
-      *(add-custom-models-tasknotice-desk-inbox 4.1)*
-      - **Still broken 2026-09-05:** (submission 2026-09-05T22-19-48) "It's currently a broken mystery block, so I think one of the faces needs fixing. Can you help me identify which one?"
-      - **Confirmed 2026-09-06:** root cause was a missing `textures` block in `itemtypes/tasknotice.json` (the filled shape's `#filled`/`#filled-tie` codes were never registered in the item texture atlas); fixed and verified in-game.
-- [x] `00000094` **Test reload stability.** With a Task Notice in inventory, leave and rejoin the
-      world twice in a row — confirm no error/exception appears in the client log either time.
-      *(add-custom-models-tasknotice-desk-inbox 4.2)*
-      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"
-- [x] `00000095` **Run full pass.** Craft a blank notice, seal one via "Send a Notice," and place a
-      Desk + Inbox in one sitting — confirm all four models look right together as a final sanity
-      pass. *(add-custom-models-tasknotice-desk-inbox 5.2)*
-      - **Confirmed 2026-09-05** (submission 2026-09-05T22-19-48): "(no note)"
-
-## signal-tasknotice-inbox-presence
-
-> Block-attached ambient particles + Inbox Inventory tab/slot shimmer for a sealed, addressed
-> Task Notice sitting undiscovered in an Inbox's restricted slots are already confirmed working
-> (2026-09-06) — see `tasks.md` 5.1/5.2. The two items below are what's left: the hover-card
-> special case (section 1) and a read-only sanity check (5.3).
-
-- [x] `0000009e` **Check hover summary card.** Hover a sealed, addressed Task Notice while it sits
-      in a Scriptorium slot, an Assignment Desk slot, and an Inbox restricted slot — confirm each
-      shows "assigned by"/"addressed to" lines instead of `Title: (Untitled)`. Then hover a blank
-      Task Notice in the same three slot types — confirm its card is unchanged (generic "never
-      opened"). *(signal-tasknotice-inbox-presence 1.2)*
-      - **Confirmed 2026-09-06** (submission 2026-09-06T17-13-03): "(no note)"
-- [x] `0000009f` **Check presence signals are read-only.** With an addressed notice sitting in an
-      Inbox slot (particles/tab shimmer/slot shimmer all active) and the hover card open — confirm
-      none of it mutates anything: the assignment's state and the Inbox's inventory contents are
-      identical before and after observing. *(signal-tasknotice-inbox-presence 5.3)*
-      - **Confirmed 2026-09-06** (submission 2026-09-06T17-13-03): "(no note)"
-
-## read-view-collapse-affordance-fixes
-
-> Two bug/affordance fixes found in the 2026-09-06 `read-view-filter-and-collapse` playtest
-> (that change is now archived — see `playtest-history/TESTING-archive.md`).
-
-- [x] `000000a7` **Check Completed pill doesn't reset.** Select the Completed filter pill, then
-      uncheck a Task row rendering under it — confirm the Completed pill stays active (row
-      hides/shadow-renders per `read-view-subtask-collapse`'s rules) instead of resetting to All.
-      *(read-view-collapse-affordance-fixes 1.3)*
-      - **Confirmed 2026-09-06** (submission 2026-09-06T18-08-19): "(no note)"
-- [x] `000000a8` **Check caret-only collapse toggle.** On a Quest Link/Craft parent row, confirm
-      the collapse toggle in the left column renders as a bare caret (no border/background) and
-      still collapses/expands on click; rows without an owned run show nothing there.
-      *(read-view-collapse-affordance-fixes 2.2)*
-      - **Confirmed 2026-09-06** (submission 2026-09-06T18-08-19): "(no note)"
-
-## quest-link-icon-and-color
-
-> Quest Link rows get a dedicated exclamation-in-a-circle marker icon + accent color in place
-> of the completion checkbox (Quest Links can't be manually completed). Extended after a
-> 2026-09-06 playtest to fix icon/text vertical misalignment and finalize the HUD's own blue.
-
-- [x] `000000a9` **Check quest icon/checkbox swap + color.** On the parchment theme, view a
-      Quest Link row on Read, Editor, Pinned, and the Assignment-stage picker alongside a plain
-      Link row — confirm the quest row shows the exclamation-in-a-circle icon in place of the
-      completion checkbox (or alongside the still-functioning selection checkbox on
-      Assignment-stage), and reads in steel-blue. *(quest-link-icon-and-color 8.3)*
-      - **Confirmed 2026-09-06** (submission 2026-09-06T18-08-19): "(no note)" — narrowed same day
-        to this icon/checkbox/color scope; the item originally also claimed the alignment check
-        below, which was never actually verified. Split out as `000000ae` per direct user
-        correction.
-- [x] `000000ae` **Check quest icon/text vertical alignment.** On Read, Editor, Pinned, and the
-      Assignment-stage picker, confirm a Quest Link row's icon and item name are vertically
-      centered together (not text riding noticeably higher than the icon).
-      *(quest-link-icon-and-color 8.3b)*
-      - **Backlogged 2026-09-06:** blocked on tasks 3.2 (the `CheckboxAndGripTop` quest-aware
-        branch) and its 4.4/5.4/6.4 call-site wiring, none of which are implemented yet.
-      - **Fix landed 2026-09-06, AWAITING RETEST:** added the quest-aware branch to
-        `CheckboxAndGripTop` (centers on the plain one-line band instead of the tall icon-band
-        formula) and threaded `LinkTarget` through it at the Read/Editor/Pinned leading-slot call
-        sites (3.2/4.4/5.4/6.4). Needs an in-game retest before this can go green. (Assignment-stage
-        uses a separate inline-icon swap per design D2/7.2, not this call site — unaffected either
-        way.)
-      - **Still broken 2026-09-07 (tablet-only):** a fresh screenshot showed the quest icon still
-        pinned to the row's top edge on the tablet specifically — Notebook/Lectern were fine. Root
-        cause: the 2026-09-06 fix used `TextLineHeight` (plain Latin line height) for the quest
-        branch, which undershoots the tablet's real cuneiform text line.
-      - **Fix landed 2026-09-07, AWAITING RETEST:** routed `CheckboxAndGripTop`'s quest branch and
-        the Read/Editor/Pinned `bandHeight`/`iconVisual` quest case through `ItemNameLineHeight`
-        (already cuneiform-aware) instead of `TextLineHeight`, and added the missing
-        `GlyphDrawScale` factor to `ItemNameLineHeight` itself. Needs an in-game retest on the
-        tablet specifically, in addition to the original four-surface retest above.
-      - **Still broken 2026-09-07 (second screenshot):** icon/text now align, but the grip handle
-        (the drag-dots to the left of the checkbox) still sits noticeably higher than both.
-        `GripInsets` was calling `CheckboxAndGripTop` without a `linkTarget`, so it always fell into
-        the tall generic icon-band formula even on a Quest Link row, while the checkbox's own call
-        (right next to it) had already been fixed.
-      - **Fix landed 2026-09-07, AWAITING RETEST:** `GripInsets` now takes an optional `linkTarget`
-        and passes it through to `CheckboxAndGripTop`, threaded at all four call sites (Read, Pinned,
-        Editor's live row, Editor's frozen/collapsing ghost row) — grip and checkbox now share the
-        exact same top offset by construction. Needs an in-game retest alongside the above.
-      - **Confirmed 2026-09-08** (submission 2026-09-08T08-55-42): "(no note)"
-- [x] `000000aa` **Check HUD quest link uses finalized blue.** Pin a Quest Link to the HUD — confirm
-      it renders at the finalized `rgb(172,207,255)` blue, distinct from the shared steel-blue
-      accent used on Read/Editor/Pinned/Assignment-stage. *(quest-link-icon-and-color 7.3/8.3a)*
-      - **Still broken 2026-09-06:** (submission 2026-09-06T18-08-19) "HUD links are still rendering rgb(66,107,183) when they should be using the new color. I'd actually like that theme color for the Quest Links on the HUD to be rgb(122,176,255)"
-      - **Fix landed 2026-09-06, AWAITING RETEST:** the first landing attempt for this task never
-        actually shipped (both `HudScribePins.cs` reads were still on the shared `QuestLinkAccent`).
-        Added `ScribeTheme.HudQuestLinkAccent` at `rgb(122,176,255)` and swapped both reads.
-      - **Value brightened again 2026-09-06, AWAITING RETEST:** third pass, changed to
-        `rgb(172,207,255)` per direct request before the second value was ever retested.
-      - **Confirmed 2026-09-06** via in-game retest: "the new HUD color is good."
-- [x] `000000ab` **Check quest color across chalkboard + tablet variants.** Repeat the glance-check
-      on the chalkboard and all four tablet clay variants (clay-fire, clay-red, clay-blue, wax) —
-      confirm the quest color is legible on each backdrop, and on blue-clay specifically is
-      visibly distinct from that tablet's own blue Primary/link color. *(quest-link-icon-and-color 8.4)*
-      - **Confirmed 2026-09-06** (submission 2026-09-06T18-08-19): "(no note)"
-- [x] `000000ac` **Check completion count/round-trip unaffected.** Confirm a document containing a
-      Quest Link still reports the same "N of M tasks done" total as before, and its Done value
-      round-trips through the existing completion path (e.g. TSV export/import) even with no
-      checkbox shown. *(quest-link-icon-and-color 8.5)*
-      - **Confirmed 2026-09-06** (submission 2026-09-06T18-08-19): "(no note)"

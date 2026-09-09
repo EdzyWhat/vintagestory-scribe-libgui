@@ -1,4 +1,5 @@
 using System.Linq;
+using Gui.Rendering;             // EdgeInsets
 using Gui.Widgets.Framework;     // Widget
 using Gui.Widgets.Inventory;     // SlotController
 using Gui.Widgets.Layout;        // Column, Row, CrossAxisAlignment, MainAxisAlignment, Center
@@ -130,7 +131,9 @@ public sealed class GuiDialogScribeInbox : ScribeDialogBase
             .Select(i => ScribeInventorySlotStyle.Build(inv[i], controller, colors, CurrentShade, null))
             .ToArray();
 
-        return new Center(child: new Column(
+        // 8-unit top padding (unify-tab-header-layout §7, doubled from 4 per 2026-09-09 playtest feedback)
+        // so the durable divider below sits flush against it.
+        Widget slotGrid = new Center(child: new Padding(EdgeInsets.Only(top: 8f), child: new Column(
             spacing: SlotRowSpacing,
             mainAxisSize: MainAxisSize.Min,
             crossAxisAlignment: CrossAxisAlignment.Center,
@@ -139,7 +142,27 @@ public sealed class GuiDialogScribeInbox : ScribeDialogBase
                 new Row(spacing: SlotSpacing, mainAxisSize: MainAxisSize.Min, children: restrictedRow1),
                 new Row(spacing: SlotSpacing, mainAxisSize: MainAxisSize.Min, children: restrictedRow2),
                 new Row(spacing: SlotSpacing, mainAxisSize: MainAxisSize.Min, children: openSlots),
-            }));
+            })));
+
+        // Shared Row 2 subtitle + durable divider (unify-tab-header-layout §6.2/§10-refinement). The slot
+        // grid is this tab's general CONTENT, not Row 3 controls — passing it as row3Content previously put
+        // the divider below it instead of directly under the subtitle (2026-09-09 playtest feedback: every
+        // tab sharing the Row 1/Row 2 header anatomy should show its divider right there, matching the
+        // Editor/History tabs' no-Row-3 pattern). This tab was missed by the original nine-tab sweep since
+        // it wasn't added until add-inbox-inventory-tab, after that pass had already landed. Wrapped in the
+        // same inset every other tab uses (top reduced from 10 to 4 per the 2026-09-08 playtest row1-row2
+        // gap fix) — this tab used to return the header bare, with none of that inset.
+        Widget header = ScribeTabHeader.Build(colors, RowStyle,
+            "scribe:scribe-tab-inbox-inventory", "scribe:scribe-tab-subtitle-inbox-inventory",
+            modSystem.VisualTuning.ShowSubtitleRow);
+
+        return new Padding(
+            EdgeInsets.Ltrb(10, 4, 10, 10),
+            child: new Column(
+                spacing: 0,
+                crossAxisAlignment: CrossAxisAlignment.Stretch,
+                mainAxisSize: MainAxisSize.Max,
+                children: new Widget[] { header, new Expanded(child: slotGrid) }));
     }
 
     /// <summary>True when the local player has an undiscovered notice sitting in ANY of this Inbox's

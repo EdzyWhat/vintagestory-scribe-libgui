@@ -59,6 +59,24 @@ internal static class ScribeRowControlNudge
             ? style.FontSize * CuneiformMetrics.LineHeightRatio * CuneiformMetrics.GlyphDrawScale
             : TextLineHeight(style.FontSize);
 
+    /// <summary>The visual band shared by an item row's icon, short label, and leading controls.
+    /// Static VS Quest objectives use their bullseye/item-specific footprint instead of the ordinary
+    /// item-icon footprint, keeping every caller centered against the art that is actually rendered.</summary>
+    public static float ItemVisualBandHeight(
+        ScribeRowStyle style, string? linkTarget = null,
+        bool isStaticVsQuestObjective = false, ItemStack? displayStack = null)
+    {
+        float iconSize = ScribeRowConstants.ItemIconSize
+            * (style.ControlSize / ScribeRowConstants.RowCheckboxSize);
+        if (isStaticVsQuestObjective)
+            return MathF.Max(
+                ItemNameLineHeight(style),
+                ScribeLinkIcon.ObjectiveVisualSize(iconSize, displayStack));
+        return ScribeLinkTarget.IsQuest(linkTarget)
+            ? ItemNameLineHeight(style)
+            : ScribeLinkIcon.VisualSize(iconSize, linkTarget);
+    }
+
     /// <summary>Extra downward optical offset for item-row checkbox/grip, in ems of
     /// <see cref="ScribeRowStyle.FontSize"/>. Applied after centering on the icon band so a "smidge"
     /// tracks text size (≈1.5px at 15pt, ≈2.8px on a tablet cuneiform line) instead of a fixed pixel
@@ -106,21 +124,18 @@ internal static class ScribeRowControlNudge
     //    longer wrongly sized off the item icon's scale.
     // Can go negative when CheckboxSize exceeds its band; that's by design (control overflows
     // above/below the line rather than growing the row).
-    public static float CheckboxAndGripTop(ScribeRowStyle style, bool itemRow = false, string? linkTarget = null)
+    public static float CheckboxAndGripTop(
+        ScribeRowStyle style, bool itemRow = false, string? linkTarget = null,
+        bool isStaticVsQuestObjective = false, ItemStack? displayStack = null)
     {
         float band;
         if (!itemRow)
         {
             band = SingleLineInputHeight(style);
         }
-        else if (ScribeLinkTarget.IsQuest(linkTarget))
-        {
-            band = ItemNameLineHeight(style);
-        }
         else
         {
-            float iconSize = ScribeRowConstants.ItemIconSize * (style.ControlSize / ScribeRowConstants.RowCheckboxSize);
-            band = ScribeLinkIcon.VisualSize(iconSize, linkTarget);
+            band = ItemVisualBandHeight(style, linkTarget, isStaticVsQuestObjective, displayStack);
         }
         float centered = (band - style.CheckboxSize) / 2f;
         float nudgeEm = itemRow ? ItemControlOpticalNudgeEm : TaskControlOpticalNudgeEm;
@@ -209,8 +224,12 @@ internal static class ScribeRowControlNudge
     /// visibly drifts from the icon/text on a Quest Link row (confirmed via screenshot, 2026-09-07: the grip
     /// was still centering on the tall generic icon band while the quest icon/text had already been fixed
     /// onto the short cuneiform-aware one).</para></summary>
-    public static EdgeInsets GripInsets(ScribeRowStyle style, bool itemRow = false, string? linkTarget = null)
-        => EdgeInsets.Only(top: CheckboxAndGripTop(style, itemRow, linkTarget), right: -style.CheckboxTextGap);
+    public static EdgeInsets GripInsets(
+        ScribeRowStyle style, bool itemRow = false, string? linkTarget = null,
+        bool isStaticVsQuestObjective = false, ItemStack? displayStack = null)
+        => EdgeInsets.Only(
+            top: CheckboxAndGripTop(style, itemRow, linkTarget, isStaticVsQuestObjective, displayStack),
+            right: -style.CheckboxTextGap);
 
     /// <summary>Absolute top offset (from the row's top edge) that centers a floating pin/delete button's
     /// DRAWN box on the row's first rendered text line. The button box is <see cref="ScribeRowButton.BoxShrink"/>

@@ -222,28 +222,24 @@ public abstract partial class ScribeDialogBase
         // semi-transparent dark material ink so the strokes read as engraved (add-tablet-clay-type-themes 8.5).
         Vector4 chromeColor = TitleChromeGlyphColor(colors);
 
-        // Title band height: grown to TitleMaxLines lines on every surface (wrap-titles-all-surfaces; two by
-        // default). The extra line(s) grow UPWARD into the band's existing slack — the band (TitleBarH) is taller
-        // than the bottom-anchored content row (TitleBtnsH) — capped at the band so a two-line title never overruns
-        // the top. A title that fits on one line leaves every value below unchanged, so single-line titles are
-        // byte-identical to the old layout.
         int titleMaxLines = TitleMaxLines;
-        float titleLineH = titleFont * CuneiformMetrics.LineHeightRatio;
-        float contentBoxH = titleMaxLines <= 1
-            ? layout.TitleBtnsH
-            : System.Math.Min(layout.TitleBarH, layout.TitleBtnsH + (titleMaxLines - 1) * titleLineH);
-        // Bottom-anchor the title + chrome in the (possibly taller) box so the grip/close/pencil stay at the
-        // band bottom where they are today and only the wrapped title's first line grows upward; single-line
-        // keeps the original centered layout exactly.
-        CrossAxisAlignment titleCrossAlign = titleMaxLines <= 1 ? CrossAxisAlignment.Center : CrossAxisAlignment.End;
 
         const float titleBtnSpacing = 6f;
-        Widget titleSlot = new Expanded(_isTitleEditing
-            ? BuildTitleField(titleStyle)
-            : BuildTitleDisplay(displayTitle, titleStyle));
+        // Left-padded so the leading grip (below) has visible breathing room from the title text — mirrors
+        // the pencil's own left margin in the trailing group. Halved from titleBtnSpacing*1.5 (2026-09-08
+        // playtest feedback: too much space between the grip and the title).
+        Widget titleSlot = new Expanded(child: new Padding(
+            EdgeInsets.Only(left: titleBtnSpacing * 0.75f),
+            child: _isTitleEditing
+                ? BuildTitleField(titleStyle)
+                : BuildTitleDisplay(displayTitle, titleStyle)));
 
         // Pencil — icon-only (no chrome), same visual weight as the grip glyph.
-        // Only shown in editor view (scratch is non-null); hidden in read and pin views.
+        // Shown ONLY on the Edit tab (2026-09-10 3rd playtest pass, explicit ask) — `scratch` is non-null
+        // exactly while `viewMode == Editor` on every tabbed dialog (LeaveEditorMode nulls it and lands
+        // viewMode back on Read the instant any OTHER tab is selected — see ViewSwitching.cs), so this
+        // single check already IS the Edit-tab gate; hidden on every other tab. The always-edit Tablet has
+        // no separate tabs at all, so its one view counts as "the Edit tab" and keeps the pencil throughout.
         // Left margin = 1.5× the inter-button spacing, to separate it visually from the title text.
         float pencilSize = ScribeRowConstants.RowCheckboxSize * 1.1f * 0.75f;
         Widget? pencilSlot = scratch is not null
@@ -279,28 +275,66 @@ public abstract partial class ScribeDialogBase
                 onTap: ToggleAllVisibleAssignmentRows)
             : null;
 
-        // Trailing group: pencil (editor only) · expand/collapse-all (Inbox/Sent History only) · drag-grip ·
-        // close button (refine-settings-and-window-chrome). The whole TitleBar band is the drag zone via
-        // WindowConfig.DragHandleHeight, and it signals that discoverably (players won't intuit an
-        // invisible drag band). But a press landing ON the grip used to be swallowed instead of moving the
-        // window: the tooltip wraps its child in a MouseRegion (needed for hover), which is an active hit
-        // target, so GuiBase captures the pointer-down before its band-drag check runs — and click-through
-        // can't coexist with the tooltip (an IgnorePointer would kill the MouseRegion's hover too). So the
-        // grip owns its OWN window drag via a GestureDetector nested INSIDE the tooltip: the outer
-        // MouseRegion still fires hover, and press→move→release moves the window just like the band (§8.1;
-        // see the gripDragging fields + VSAPI-NOTES.md §LibGUI). A "drag to move" tooltip labels it. Close
-        // reuses the delete SVG at 1.4× the per-row size.
+        // Leading drag-grip (unify-tab-header-layout §8) — moved out of the trailing group to sit to the
+        // LEFT of the title, matching the original exploration mockup. The whole TitleBar band is already
+        // the drag zone via WindowConfig.DragHandleHeight; the grip is a discoverability affordance on top
+        // of that, not the only way to drag the window. A press landing ON the grip used to be (and still
+        // is) swallowed instead of moving the window if left to band-drag alone: the tooltip wraps its
+        // child in a MouseRegion (needed for hover), which is an active hit target, so GuiBase captures the
+        // pointer-down before its band-drag check runs — and click-through can't coexist with the tooltip
+        // (an IgnorePointer would kill the MouseRegion's hover too). So the grip owns its OWN window drag
+        // via a GestureDetector nested INSIDE the tooltip: the outer MouseRegion still fires hover, and
+        // press→move→release moves the window just like the band (§8.1; see the gripDragging fields +
+        // VSAPI-NOTES.md §LibGUI). This is a REPOSITION of that exact mechanism, not a new one — the
+        // GestureDetector/Tooltip/glyph are unchanged. A "drag to move" tooltip labels it.
+        // Row.crossAxisAlignment centers by BOUNDING BOX, but the title text's box reserves descent+leading
+        // space below its own baseline that the icon glyph's tight box doesn't — so a naive box-center left
+        // the grip visibly LOWER than the title's visual (cap-height) center (2026-09-08 playtest feedback).
+        // Nudge the grip UP by half that reserved space, computed from the title's own font metrics so it
+        // tracks any future title-size change, via the "add bottom padding to a centered child" trick: Center
+        // alignment splits an enlarged box's extra height evenly above/below, so bottom-only padding of X
+        // shifts the glyph itself up by X/2 relative to an unpadded center.
+        // 2026-09-09 playtest feedback: the full descent+leading nudge overshot — the grip read as sitting
+        // too HIGH relative to the title's visual center. Halved so the up-shift is milder (a quarter of
+        // descent+leading rather than half).
+        var titleFontMetrics = TextLayoutHelper.GetFont(titleStyle.FontFamily, titleStyle.FontSize, titleStyle.Weight).Metrics;
+        float titleReservedBelowBaseline = (titleFontMetrics.Descent + titleFontMetrics.Leading) / 2f;
+        Widget gripSlot = new Padding(
+            EdgeInsets.Only(bottom: titleReservedBelowBaseline),
+            child: WithTooltip("scribe-gui-drag",
+                new GestureDetector(
+                    onPress: OnGripDragStart,
+                    onMove: OnGripDragMove,
+                    onRelease: OnGripDragEnd,
+                    child: new ScribeVsIconGlyph("scribegrip", ScribeRowConstants.RowCheckboxSize * 1.1f, chromeColor))));
+
+        // Trailing group: pencil (editor only) · expand/collapse-all (Inbox/Sent History only) · close
+        // button (refine-settings-and-window-chrome). Close reuses the delete SVG at 1.4× the per-row size.
         var trailingGroup = new List<Widget>();
         if (pencilSlot is not null) trailingGroup.Add(pencilSlot);
         if (expandCollapseAllSlot is not null) trailingGroup.Add(expandCollapseAllSlot);
-        trailingGroup.Add(WithTooltip("scribe-gui-drag",
-            new GestureDetector(
-                onPress: OnGripDragStart,
-                onMove: OnGripDragMove,
-                onRelease: OnGripDragEnd,
-                child: new ScribeVsIconGlyph("scribegrip", ScribeRowConstants.RowCheckboxSize * 1.1f, chromeColor))));
         trailingGroup.Add(TitleButton("scribeclose", "scribe-gui-close", colors.Error,
             size: ScribeRowConstants.RowCheckboxSize * 1.4f, onTap: () => TryClose()));
+
+        // Only used below to pick a COSMETIC cross-alignment (End vs Center) for the title row — the
+        // actual band/content SIZING no longer depends on this estimate at all (see the return statement's
+        // comment), so an occasional off-by-one-character guess here just risks the wrong alignment choice,
+        // never a wrong size.
+        float gripWidth = ScribeRowConstants.RowCheckboxSize * 1.1f;
+        float trailingWidth = titleBtnSpacing * (trailingGroup.Count - 1);
+        if (pencilSlot is not null) trailingWidth += titleBtnSpacing * 1.5f + pencilSize;
+        if (expandCollapseAllSlot is not null) trailingWidth += ScribeRowConstants.RowCheckboxSize * 1.1f;
+        trailingWidth += ScribeRowConstants.RowCheckboxSize * 1.4f; // close button, always present
+        float titleAvailableW = layout.TitleBtnsW - 0.02f * layout.W - 0.04f * layout.W
+            - gripWidth - titleBtnSpacing * 0.75f - trailingWidth;
+        // BuildTitleField's TextField can't wrap (no multiline support on LibGUI's TextFieldStyle), so it's
+        // always 1 line while editing regardless of what CountWrappedLines would estimate for the same text.
+        string titleForWrap = _isTitleEditing ? "" : displayTitle;
+        int actualTitleLines = CountWrappedLines(
+            titleForWrap, titleStyle.FontFamily, titleStyle.FontSize, titleStyle.Weight, titleAvailableW, titleMaxLines);
+        // Bottom-anchor the title + chrome so the grip/close/pencil track the wrapped title's LAST line;
+        // single-line keeps the original centered layout.
+        CrossAxisAlignment titleCrossAlign = actualTitleLines <= 1 ? CrossAxisAlignment.Center : CrossAxisAlignment.End;
 
         Widget titleRow = new Row(
             mainAxisAlignment: MainAxisAlignment.SpaceBetween,
@@ -308,6 +342,7 @@ public abstract partial class ScribeDialogBase
             mainAxisSize: MainAxisSize.Max,
             children: new Widget[]
             {
+                gripSlot,
                 titleSlot,
                 new Row(
                     crossAxisAlignment: CrossAxisAlignment.Center,
@@ -316,21 +351,80 @@ public abstract partial class ScribeDialogBase
                     children: trailingGroup.ToArray()),
             });
 
+        // 2026-09-10 (3rd/4th playtest passes — REVERTED): both the self-sizing ConstrainedBox rewrite
+        // (Round 6) and its Align-removal correction (Round 6 correction) are reverted here. Round 6's
+        // rewrite dropped BOTH the outer fixed-size SizedBox AND the Align(BottomCenter) that horizontally
+        // CENTERS the fixed-width (TitleBtnsW) inner box within the full-width (W) outer band — without
+        // Align, a plain Padding/ConstrainedBox chain has no horizontal-centering step at all, so the whole
+        // grip+title+buttons group collapsed against the LEFT edge instead of sitting centered with a
+        // symmetric margin (2026-09-10, 5th playtest pass: "ruined the orientation left and right"). The
+        // Round 6 correction's fix for the OTHER regression (Align filling the whole dialog height because
+        // the outer box's max-height was unbounded) is no longer needed once the outer box is back to an
+        // EXPLICIT, bounded height (bandH below) rather than a minimum-only ConstrainedBox with an
+        // unbounded max — Align only fills to whatever ambient max it's handed, and a fixed-height SizedBox
+        // hands it exactly bandH, not the dialog's total H.
+        //
+        // Back to Round 5's structure: two nested, EXACTLY-sized SizedBoxes (not self-sizing) — an outer
+        // W × bandH band, and an inner TitleBtnsW × contentBoxH box centered/bottom-anchored within it via
+        // Align(BottomCenter). Both grow from their single-line baselines by the SAME delta
+        // (extraLines * titleLineH) so the inner box's top edge — and thus Row 2/3 below it — never moves;
+        // only the bottom extends. Round 5/6's actual titleLineH bug (using CuneiformMetrics.LineHeightRatio,
+        // tuned for the Tablet's cuneiform glyphs, as a stand-in for ordinary Latin/Caudex RichText line
+        // height — the real cause of the "discrete downward jump" that motivated Round 6's rewrite) is fixed
+        // here directly: titleLineH now uses the title's own real font metrics (titleFontMetrics, already
+        // computed above for the grip-baseline nudge) instead of the mismatched cuneiform ratio.
+        float titleLineH = titleFontMetrics.Descent - titleFontMetrics.Ascent + titleFontMetrics.Leading;
+        int extraLines = actualTitleLines - 1;
+        float contentBoxH = layout.TitleBtnsH + extraLines * titleLineH;
+        float bandH = layout.TitleBarH + extraLines * titleLineH;
+
         return new SizedBox(
             width: layout.W,
-            height: layout.TitleBarH,
+            height: bandH,
             child: new Align(
                 Alignment.BottomCenter,
                 child: new SizedBox(
                     width: layout.TitleBtnsW,
                     height: contentBoxH,
                     // Panel behind the title row when Pixel-Art is OFF (no art backdrop) so it isn't
-                    // transparent onto the world; unchanged when ON (the art is the background). The row's
-                    // content is inset symmetrically by 0.04·W on each side (plus the original 10px of
-                    // left breathing room) so the title + close/grip group sit clear of the panel edges.
+                    // transparent onto the world; unchanged when ON (the art is the background). Right inset
+                    // stays 0.04·W (unify-tab-header-layout §8); the left inset is HALVED to 0.02·W
+                    // (2026-09-08 playtest feedback: still too much space left of the grip+title after the
+                    // earlier flat-10px removal), now that the leading grip (plus its own spacing from the
+                    // title) occupies that space instead.
                     child: FlatPanel(new Padding(
-                        EdgeInsets.Only(left: 10 + 0.04f * layout.W, right: 0.04f * layout.W),
+                        EdgeInsets.Only(left: 0.02f * layout.W, right: 0.04f * layout.W),
                         child: titleRow)))));
+    }
+
+    /// <summary>Greedy word-wrap line count for a single-paragraph title against <paramref name="maxWidth"/>,
+    /// mirroring the wrap algorithm <see cref="ScribeMultilineField"/> uses for its own caret math (LibGUI's
+    /// own break-into-lines is internal). Used only to decide how tall <see cref="BuildTitleBar"/>'s band needs
+    /// to be THIS frame — not to render text — so <paramref name="maxWidth"/> is an estimate of the title
+    /// slot's available width, not an exact layout measurement.</summary>
+    private static int CountWrappedLines(string text, string fontFamily, float fontSize, FontWeight weight, float maxWidth, int cap)
+    {
+        if (string.IsNullOrEmpty(text) || maxWidth <= 0f || cap <= 1) return 1;
+        int lines = 1;
+        var current = new System.Text.StringBuilder();
+        foreach (var word in text.Split(' '))
+        {
+            string candidate = current.Length == 0 ? word : current + " " + word;
+            float w = TextLayoutHelper.MeasureText(candidate, fontFamily, fontSize, weight).X;
+            if (w <= maxWidth || current.Length == 0)
+            {
+                current.Clear();
+                current.Append(candidate);
+            }
+            else
+            {
+                lines++;
+                if (lines >= cap) return cap;
+                current.Clear();
+                current.Append(word);
+            }
+        }
+        return lines;
     }
 
     /// <summary>The resting (non-editing) title widget, sized to fill the title slot's Expanded. Default is a
@@ -358,12 +452,23 @@ public abstract partial class ScribeDialogBase
     /// overrides this to a single-line cuneiform input driven by the SAME controller/focus node, so its
     /// <see cref="_isTitleEditing"/> / <see cref="_pendingTitleEditRebuild"/> / <see cref="_pendingTitleFocus"/>
     /// deferral all still apply (add-tablet-cuneiform-chrome D2).</summary>
-    private protected virtual Widget BuildTitleField(TextStyle titleStyle) =>
-        new TextField(
+    private protected virtual Widget BuildTitleField(TextStyle titleStyle)
+    {
+        // Height explicitly matched to the title's own line height (2026-09-09 playtest feedback) instead
+        // of TextFieldStyle's default fixed 40px, which visibly grew the title band the instant editing
+        // started. Mirrors how the Tablet's cuneiform title field already renders with zero padding/border
+        // via its own custom renderer (ScribeCuneiformFieldRenderWidget's padX/padY/borderThickness all 0).
+        // BorderThickness is already 0 here. The stock TextField's horizontal text inset (a fixed 10px baked
+        // into RenderTextField.PaintInternal, not exposed on TextFieldStyle) can't be zeroed without forking
+        // `gui` — left as-is; it's dwarfed by the title row's own leading/trailing insets.
+        var metrics = TextLayoutHelper.GetFont(titleStyle.FontFamily, titleStyle.FontSize, titleStyle.Weight).Metrics;
+        float lineHeight = metrics.Descent - metrics.Ascent + metrics.Leading;
+        return new TextField(
             _titleController!,
             _titleFocusNode!,
-            new TextFieldStyle { FillColor = new Vector4(0, 0, 0, 0), BorderThickness = 0, TextStyle = titleStyle },
+            new TextFieldStyle { FillColor = new Vector4(0, 0, 0, 0), BorderThickness = 0, Height = lineHeight, TextStyle = titleStyle },
             onKeyDown: OnTitleFieldKeyDown);
+    }
 
     /// <summary>Shared title-input key handling for both the default <see cref="TextField"/> and a subclass's
     /// cuneiform title input: block typing past <see cref="ScribeDocument.MaxTitleLength"/> (letting the
@@ -683,6 +788,14 @@ public abstract partial class ScribeDialogBase
     /// pared-down read-view intentional rather than an oversight.</summary>
     private protected virtual bool SupportsFilterPills => true;
 
+    /// <summary>Whether this dialog's Read View / Editor renders the shared Row 2 subtitle + Row 3 tab
+    /// header at all (unify-tab-header-layout). Defaults to <c>true</c> for every tabbed dialog. Only
+    /// <see cref="GuiDialogScribeTablet"/> overrides this to <c>false</c>: an earlier pass let the tablet
+    /// inherit the subtitle purely because it reuses these same shared content widgets, which read as the
+    /// unification going further than intended — the tablet keeps its pared-down header with neither row
+    /// (reversed 2026-09-08 playtest feedback; design.md Non-Goals).</summary>
+    private protected virtual bool SupportsTabHeader => true;
+
     /// <summary>Whether this surface's EDITOR rows opt into the read view's click-to-open-Handbook affordance
     /// on their Link/Tracker/Craft name label (enable-tablet-row-links). Default false: every surface with a
     /// distinct read view (Lectern/Notebook/Scriptorium) activates links there, so its editor names stay plain
@@ -820,6 +933,8 @@ public abstract partial class ScribeDialogBase
             // Filter-pill row + subtask-collapse toggles (read-view-filter-and-collapse), gated as ONE
             // unit on the capability flag (scribe-dialog-base) — false only on the Tablet.
             supportsFilterPills: SupportsFilterPills,
+            supportsTabHeader: SupportsTabHeader,
+            showSubtitleRow: modSystem.VisualTuning.ShowSubtitleRow,
             activeFilterCategory: readViewFilterCategory,
             onFilterCategoryChanged: OnReadViewFilterCategoryChanged,
             isGroupCollapsed: collapsedReadViewGroupIds.Contains,
@@ -929,6 +1044,8 @@ public abstract partial class ScribeDialogBase
             // only where EditorRowsOpenLinks is on (the tablet, which has no read view). Every other surface
             // passes null, so its editor names stay plain editable regions and render byte-identical to before.
             onOpenLink: EditorRowsOpenLinks ? OpenRowLink : null,
+            supportsTabHeader: SupportsTabHeader,
+            showSubtitleRow: modSystem.VisualTuning.ShowSubtitleRow,
             assignedStampBitmap: modSystem.GetGuiTextureBitmap(ScribeAssignedTaskIcon.Asset));
     }
 
@@ -1040,4 +1157,144 @@ public abstract partial class ScribeDialogBase
         // Tier cap (scribe-document-policy): honor the tablet's 1-pin cap on the read view too, with the
         // same seamless swap as the editor — pinning a new task at the cap releases the older pin.
         => TogglePinWithPolicy(taskId);
+}
+
+/// <summary>The shared Row 2 (subtitle) + Row 3 (per-tab controls) + durable-divider header anatomy every
+/// non-tablet <see cref="ScribeDialogBase"/> tab renders above its scrollable/general content
+/// (unify-tab-header-layout). One helper enforces the fixed 8-units-above/4-below divider spacing
+/// structurally instead of it being copy-pasted (and drifting) across nine call sites — the root cause of
+/// the pre-unification inconsistency. A <c>static</c> class (not a member of <see cref="ScribeDialogBase"/>
+/// itself) because several callers (<see cref="ScribeReadContent"/>, <see cref="ScribeEditorContent"/>,
+/// <see cref="ScribePinnedContent"/>, <see cref="ScribeInboxContent"/>) are plain widgets, not dialog
+/// subclasses.</summary>
+internal static class ScribeTabHeader
+{
+    /// <summary>Builds Row 2 + optional Row 3 + the durable divider. <paramref name="row3Content"/> is the
+    /// tab's own existing controls (filter pills, the policy picker, column-header labels, or an entire
+    /// drafting form for the two form-shaped tabs) — omitted entirely when a tab has none (the Editor view,
+    /// Notebook History). <paramref name="hasLeadingDivider"/> is the Guest Book's one exception: an extra
+    /// divider directly above <paramref name="row3Content"/>, immediately below the subtitle.
+    ///
+    /// <para>The durable divider sits flush against the caller's following content — this helper's own
+    /// column ends right after it, with no trailing gap. The caller owns the 4-unit breathing-room padding
+    /// instead, and MUST place it INSIDE its own scrollable content (e.g. wrapping the <c>Column</c> living
+    /// inside a <c>SingleChildScrollView</c>, not the <c>Scrollbar</c>/scroll-view widget from outside — see
+    /// <see cref="ScribeReadContent"/> for the established idiom) so it scrolls away with the content
+    /// (unify-tab-header-layout §7) rather than sitting as permanent chrome under the divider.</para>
+    ///
+    /// <para>Small-caps isn't a supported <see cref="TextStyle"/> feature on this LibGUI version (no
+    /// font-feature/letter-casing field exists), so it's approximated with two uppercase runs sharing one
+    /// family/weight/color: EACH WORD's first letter at the full cap size, that word's remaining letters at
+    /// a reduced size — the classic small-caps look (a bigger capital leading smaller capitals per word),
+    /// not a uniform ALL-CAPS block.</para>
+    ///
+    /// <para><c>RenderRichText</c> does NOT baseline-align mixed-size runs sharing one line — every run
+    /// draws at <c>y = line.Y - run's own font.Metrics.Ascent</c> (confirmed against the shipped 3.1.0
+    /// <c>Gui.dll</c>, not just the 2.0.0 reference clone), which TOP-aligns each run to the line regardless
+    /// of its own size, not baseline-aligns them (2026-09-08 playtest feedback: the small-caps tail floated
+    /// above the baseline instead of sitting on it). Every text run here is therefore wrapped in a
+    /// <see cref="WidgetSpan"/> whose box is forced to the tallest run's own natural line-height, with just
+    /// enough top padding pushing its OWN baseline down to that shared reference baseline — see the local
+    /// <c>BaselineRun</c> function. A plain space between words needs no such wrapping (no visible glyph to
+    /// misalign).</para>
+    ///
+    /// <para>The descriptor renders in a genuinely italic face: <see cref="ScribeModSystem"/>'s
+    /// <c>RegisterCustomFonts</c> registers a real (lighter-weight) italic cut of Caudex under the
+    /// "Caudex" family's <see cref="FontWeight.Italic"/> slot, distinct from the bold cut every other
+    /// weight slot resolves to.</para>
+    ///
+    /// <para>The durable divider (and the leading one, if requested) drop to an invisible <see cref="SizedBox"/>
+    /// under <see cref="ScribeRowStyle.UseCuneiform"/>, mirroring the pre-existing per-tab divider-hiding
+    /// rule (a hard rule reads wrong against the tablet's clay/wax backdrop) rather than inventing a new
+    /// tablet-specific gate.</para>
+    ///
+    /// <para>The Tablet host renders NEITHER Row 2 nor Row 3 at all (design.md Non-Goals; reversed
+    /// 2026-09-08 — an earlier pass let the Tablet inherit the subtitle since it reuses these same shared
+    /// content widgets, which read as unification going further than intended). Callers gate the ENTIRE
+    /// call to this method on their own <c>SupportsTabHeader</c>-equivalent flag rather than this method
+    /// gating itself, since only <see cref="ScribeReadContent"/>/<see cref="ScribeEditorContent"/> are ever
+    /// reachable from the Tablet (it has no Pinned/Inbox/Guestbook/History/etc. tabs).</para></summary>
+    internal static Widget Build(
+        ColorScheme colors,
+        ScribeRowStyle style,
+        string labelLangKey,
+        string descriptorLangKey,
+        bool showSubtitleRow,
+        Widget? row3Content = null,
+        bool hasLeadingDivider = false)
+    {
+        var capStyle = new TextStyle
+        {
+            FontFamily = ScribeRowControlNudge.TitleFontFamily,
+            FontSize = style.FontSize * 0.82f,
+            Weight = FontWeight.Bold,
+            Color = colors.OnSurfaceVariant,
+        };
+        // ~82.5% of the cap size (2026-09-10 playtest feedback: 87.5% read as too close to the cap size —
+        // pulled back down, still above the original 75%) — reads as small caps (bigger capital, smaller
+        // capitals) rather than a second full-size letter.
+        var smallCapStyle = capStyle with { FontSize = capStyle.FontSize * 0.825f };
+        var descriptorStyle = new TextStyle
+        {
+            FontFamily = ScribeRowControlNudge.TitleFontFamily,
+            FontSize = style.FontSize * 0.95f,
+            Weight = FontWeight.Italic,
+            Color = colors.OnSurfaceVariant,
+        };
+
+        var capFont = TextLayoutHelper.GetFont(capStyle.FontFamily, capStyle.FontSize, capStyle.Weight);
+        var smallCapFont = TextLayoutHelper.GetFont(smallCapStyle.FontFamily, smallCapStyle.FontSize, smallCapStyle.Weight);
+        var descriptorFont = TextLayoutHelper.GetFont(descriptorStyle.FontFamily, descriptorStyle.FontSize, descriptorStyle.Weight);
+
+        static float Ascent(SkiaSharp.SKFont font) => -font.Metrics.Ascent;
+        static float LineHeight(SkiaSharp.SKFont font) => font.Metrics.Descent - font.Metrics.Ascent + font.Metrics.Leading;
+
+        float refAscent = System.Math.Max(Ascent(capFont), System.Math.Max(Ascent(smallCapFont), Ascent(descriptorFont)));
+        float refLineHeight = System.Math.Max(LineHeight(capFont), System.Math.Max(LineHeight(smallCapFont), LineHeight(descriptorFont)));
+
+        // Forces every run's box to refLineHeight (so the outer WidgetSpan positioning trivially places it
+        // at the line's top regardless of alignment mode) and top-pads its own text by exactly enough to
+        // land its baseline at refAscent from that top — the shared reference baseline every run aligns to.
+        InlineSpan BaselineRun(string text, TextStyle textStyle, SkiaSharp.SKFont font) =>
+            new WidgetSpan(new SizedBox(height: refLineHeight, child: new Padding(
+                EdgeInsets.Only(top: refAscent - Ascent(font)),
+                child: new Text(text, textStyle))));
+
+        var spaceStyle = new SpanStyle
+        {
+            FontFamily = capStyle.FontFamily, FontSize = capStyle.FontSize, Weight = capStyle.Weight, Color = capStyle.Color,
+        };
+
+        string label = Lang.Get(labelLangKey).ToUpperInvariant();
+        var labelSpans = new List<InlineSpan>();
+        var words = label.Split(' ');
+        for (int i = 0; i < words.Length; i++)
+        {
+            string word = words[i];
+            if (word.Length == 0) continue;
+            if (labelSpans.Count > 0) labelSpans.Add(new TextSpan(" ", spaceStyle));
+            labelSpans.Add(BaselineRun(word[..1], capStyle, capFont));
+            if (word.Length > 1) labelSpans.Add(BaselineRun(word[1..], smallCapStyle, smallCapFont));
+        }
+        labelSpans.Add(BaselineRun(":  ", smallCapStyle, smallCapFont));
+        labelSpans.Add(BaselineRun(Lang.Get(descriptorLangKey), descriptorStyle, descriptorFont));
+
+        Widget subtitle = new RichText(new TextSpan(children: labelSpans.ToArray()));
+
+        Widget NewDivider() => style.UseCuneiform ? new SizedBox() : new Divider();
+
+        var children = new List<Widget>();
+        if (showSubtitleRow) children.Add(subtitle);
+        if (hasLeadingDivider)
+            children.Add(new Padding(EdgeInsets.Only(top: 8f), child: NewDivider()));
+        if (row3Content is not null)
+            children.Add(new Padding(EdgeInsets.Only(top: 8f), child: row3Content));
+        children.Add(new Padding(EdgeInsets.Only(top: 8f), child: NewDivider()));
+
+        return new Column(
+            spacing: 0,
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Min,
+            children: children);
+    }
 }

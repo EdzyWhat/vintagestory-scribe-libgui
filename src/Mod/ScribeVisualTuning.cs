@@ -2,11 +2,13 @@ namespace Scribe;
 
 /// <summary>
 /// Author-facing client-local tuning knobs for two purely-cosmetic rendering subsystems that have been
-/// hand-tuned repeatedly across playtests: <see cref="ScribeAmbientLightSampler"/>'s quantization/smoothing
+/// hand-tuned repeatedly across playtests, plus one layout toggle:
+/// <see cref="ScribeAmbientLightSampler"/>'s quantization/smoothing
 /// (<see cref="BrightnessSteps"/>, <see cref="HueSteps"/>, <see cref="TintStrength"/>,
-/// <see cref="SmoothingTau"/>) and <see cref="ScribeAssignmentParticleEmitter"/>'s detection/color/density
+/// <see cref="SmoothingTau"/>), <see cref="ScribeAssignmentParticleEmitter"/>'s detection/color/density
 /// knobs (<see cref="DetectionRadius"/>, <see cref="RainbowRatio"/>, <see cref="CountMultiplier"/>,
-/// <see cref="SeedBurstMultiplier"/>). Persisted to
+/// <see cref="SeedBurstMultiplier"/>), and whether a dialog tab's header renders its Row 2 subtitle line
+/// (<see cref="ShowSubtitleRow"/>). Persisted to
 /// <see cref="ScribeModSystem.VisualTuningConfigFileName"/> via the engine's own
 /// <c>LoadModConfig&lt;T&gt;</c>/<c>StoreModConfig</c> (the same mechanism already used for
 /// <see cref="ScribeGearTuning"/>/<see cref="Scribe.Core.ScribePlayerSettings"/>), so a config-library mod
@@ -52,6 +54,10 @@ public sealed class ScribeVisualTuning
     /// player's proximity+unseen-assignment trigger first turns true.</summary>
     public float SeedBurstMultiplier { get; set; } = DefaultSeedBurstMultiplier;
 
+    /// <summary>Whether a dialog tab's header renders its Row 2 subtitle line (see
+    /// <c>ScribeTabHeader.Build</c>). Off hides the subtitle uniformly across every tab.</summary>
+    public bool ShowSubtitleRow { get; set; } = DefaultShowSubtitleRow;
+
     // Defaults = the exact values each constant held before add-configkit-visual-tuning.
     public const int DefaultBrightnessSteps = 32;
     public const int DefaultHueSteps = 16;
@@ -61,4 +67,5 @@ public sealed class ScribeVisualTuning
     public const float DefaultRainbowRatio = 0.5f;
     public const float DefaultCountMultiplier = 0.6f;
     public const float DefaultSeedBurstMultiplier = 3.5f;
+    public const bool DefaultShowSubtitleRow = true;
 }

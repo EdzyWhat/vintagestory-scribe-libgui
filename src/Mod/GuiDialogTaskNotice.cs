@@ -161,7 +161,8 @@ public sealed class GuiDialogTaskNotice : GuiBase
             onDepartureSettled: () => { },
             currentShade: default,
             readOnly: true,
-            completionAndPinLive: false);
+            completionAndPinLive: false,
+            showSubtitleRow: modSystem.VisualTuning.ShowSubtitleRow);
 
         Widget centerColumn = new Column(
             crossAxisAlignment: CrossAxisAlignment.Stretch,

@@ -4,10 +4,20 @@
 
 	"formatting": [
 		{ "type": "separator", "title": "Scribe: Ambient GUI light", "weight": 1.0 },
-		{ "type": "separator", "title": "Scribe: Unseen-assignment particle effect", "weight": 2.0 }
+		{ "type": "separator", "title": "Scribe: Unseen-assignment particle effect", "weight": 2.0 },
+		{ "type": "separator", "title": "Scribe: Dialog layout", "weight": 3.0 }
 	],
 
 	"settings": {
+		"boolean": {
+			"ShowSubtitleRow": {
+				"ingui": "Show subtitle row",
+				"weight": 3.1,
+				"default": true,
+				"comment": "Controls the Row 2 subtitle line under each dialog tab's title.",
+				"clientSide": true
+			}
+		},
 		"integer": {
 			"BrightnessSteps": {
 				"ingui": "Brightness quantization steps",

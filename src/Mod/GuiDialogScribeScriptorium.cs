@@ -220,7 +220,10 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
         // divide the fixed central region (given height InnerH by the SectionInnerBox's stretched Row), so the
         // split is exact and needs no scroll — this fixed layout supersedes task 3.4's scroll mitigation now
         // that the button sits below the slots and the content fits the region at every supported size.
-        var topZone = new Center(child: new Column(
+        // 8-unit top padding lives with this zone's own content (unify-tab-header-layout §7, doubled from
+        // 4 per 2026-09-09 playtest feedback) so the durable divider above sits flush against it, instead
+        // of the old fixed gap outside.
+        var topZone = new Center(child: new Padding(EdgeInsets.Only(top: 8f), child: new Column(
             spacing: 10,
             crossAxisAlignment: CrossAxisAlignment.Center,
             mainAxisSize: MainAxisSize.Min,
@@ -230,7 +233,7 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
                 BuildCopySection(controller, colors, bookColor, veilColor),
                 BuildSealButton(colors),   // the Copy button sits BELOW the slot pair (refinement #4)
                 BuildCopyModeRadio(colors),// Overwrite / Append behavior radio, directly under the Copy button
-            }));
+            })));
 
         var bottomZone = new Center(child: new Column(
             spacing: 10,
@@ -242,16 +245,23 @@ public sealed class GuiDialogScribeScriptorium : ScribeDialogBase
                 BuildImportExportSection(controller, colors, bookColor, veilColor),
             }));
 
-        // A theme-border Divider as the FIRST element, right under the dialog title bar — the same
-        // separator the read view puts atop its scrolling section (ScribeReadContent), so the Transcribe
-        // tab's title reads as distinct from its two content sections (refinement round 3). A second Divider
-        // still splits the copy zone from the import/export zone below.
-        var content = new Padding(EdgeInsets.All(10f), new Column(
+        // Shared Row 2 subtitle + durable divider (unify-tab-header-layout 4.2) — the Transcribe tab treats
+        // both zones as scrollable/general content (neither is Row 3), so the divider now sits directly
+        // after the subtitle instead of directly after the title bar. The existing Divider between the
+        // Copy/Seal zone and the Import/Export zone is KEPT as an internal content separator, not the
+        // header-closing divider (design.md's one exception for the two form-shaped tabs).
+        Widget header = ScribeTabHeader.Build(colors, RowStyle,
+            "scribe:scribe-tab-transcribe", "scribe:scribe-tab-subtitle-transcribe",
+            modSystem.VisualTuning.ShowSubtitleRow);
+        // Top inset reduced from 10 to 4 (2026-09-08 playtest feedback: 6px less gap between the title bar
+        // and the Row 2 subtitle); left/right/bottom stay 10 like every other tab.
+        var content = new Padding(EdgeInsets.Ltrb(10f, 4f, 10f, 10f), new Column(
+            spacing: 0,
             crossAxisAlignment: CrossAxisAlignment.Stretch,
             mainAxisSize: MainAxisSize.Max,
             children: new Widget[]
             {
-                new Divider(),
+                header,
                 new Expanded(child: topZone),
                 new Divider(),
                 new Expanded(child: bottomZone),

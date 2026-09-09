@@ -102,6 +102,7 @@ public abstract partial class ScribeDialogBase
             policyPickerPadding: EdgeInsets.Only(left: 10 + 0.04f * layoutW, right: 0.04f * layoutW),
             style: RowStyle,
             scrollController: sharedScrollController,
+            showSubtitleRow: modSystem.VisualTuning.ShowSubtitleRow,
             // Host-owned collapse registry (extract-animated-task-list): a removed pin's row collapses out
             // via ScribeAnimatedList instead of snapping. Lives on the dialog so the motion survives the
             // resync reconcile, and so OnRenderGUI can read AnyAnimating to pin the scroll + refresh hover.

@@ -96,6 +96,8 @@ internal sealed class ScribeReadContent : StatefulWidget
         Action<Guid>? onTextEditRefused = null,
         SKBitmap? assignedStampBitmap = null,
         bool supportsFilterPills = true,
+        bool supportsTabHeader = true,
+        bool showSubtitleRow = true,
         ReadViewFilterCategory activeFilterCategory = ReadViewFilterCategory.All,
         Action<ReadViewFilterCategory>? onFilterCategoryChanged = null,
         System.Func<Guid, bool>? isGroupCollapsed = null,
@@ -118,6 +120,8 @@ internal sealed class ScribeReadContent : StatefulWidget
         OnTextEditRefused = onTextEditRefused;
         AssignedStampBitmap = assignedStampBitmap;
         SupportsFilterPills = supportsFilterPills;
+        SupportsTabHeader = supportsTabHeader;
+        ShowSubtitleRow = showSubtitleRow;
         ActiveFilterCategory = activeFilterCategory;
         OnFilterCategoryChanged = onFilterCategoryChanged ?? (_ => { });
         IsGroupCollapsed = isGroupCollapsed ?? (_ => false);
@@ -184,6 +188,16 @@ internal sealed class ScribeReadContent : StatefulWidget
     /// (scribe-dialog-base's capability flag) — false only for the Tablet (tablet-dialog). When false,
     /// every row renders exactly as before this feature: unfiltered, full opacity, no toggle.</summary>
     public bool SupportsFilterPills { get; }
+    /// <summary>Whether this surface renders the shared Row 2 subtitle / Row 3 tab header at all
+    /// (unify-tab-header-layout) — false only for the Tablet, which keeps its own pared-down title-bar
+    /// chrome instead. When false, <see cref="ScribeTabHeader.Build"/> is never called and the durable
+    /// divider it would have drawn is omitted too.</summary>
+    public bool SupportsTabHeader { get; }
+    /// <summary>Whether <see cref="ScribeTabHeader.Build"/> renders its Row 2 subtitle line, read from
+    /// <c>modSystem.VisualTuning.ShowSubtitleRow</c> (add-subtitle-row-configkit-toggle). Has no effect
+    /// when <see cref="SupportsTabHeader"/> is false (the Tablet, which never calls into
+    /// <see cref="ScribeTabHeader.Build"/> at all).</summary>
+    public bool ShowSubtitleRow { get; }
     /// <summary>The currently-selected filter pill (read-view-filter-pills), owned/persisted by the dialog.</summary>
     public ReadViewFilterCategory ActiveFilterCategory { get; }
     /// <summary>Requests a different pill become active.</summary>
@@ -306,49 +320,60 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
                     new TextStyle { Color = colors.OnSurfaceVariant, SoftWrap = true, Align = TextAlignment.Center }))
                 : new Scrollbar(
                     controller: Widget.ScrollController,
+                    // 8-unit top padding lives INSIDE the scroll region (unify-tab-header-layout §7,
+                    // doubled from 4 per 2026-09-09 playtest feedback) so the durable divider above sits
+                    // flush against the viewport and this breathing room scrolls away with the content,
+                    // instead of the old fixed gap outside the scroll region. Skipped on the Tablet (no
+                    // header, so no divider to sit flush against).
                     child: new SingleChildScrollView(
                         controller: Widget.ScrollController,
-                        child: new Column(
+                        child: new Padding(EdgeInsets.Only(top: Widget.SupportsTabHeader ? 8f : 0f), child: new Column(
                             spacing: 0,
                             crossAxisAlignment: CrossAxisAlignment.Stretch,
                             mainAxisSize: MainAxisSize.Min,
-                            children: rows)))
+                            children: rows))))
                 { AutoHide = false });
 
         // The "switch to editor" footer button — the read view's only edit affordance. A permanently
         // read-only surface (hard/fired tablet — tablet-firing) omits it entirely so there is no path back
         // into the editor; the tabbed Lectern/Notebook keep it. Built as a list so the whole footer slot
         // (Padding + Button) drops out cleanly rather than rendering an empty gap.
+        // Shared Row 2 subtitle + Row 3 (the filter-pill row, omitted entirely on a surface where
+        // SupportsFilterPills is false — the Tablet, so its Read View keeps its pared-down header) + the
+        // durable divider (unify-tab-header-layout 2.1) — replaces the old uniform Column(spacing: 8) gap,
+        // which let the divider drift away from the pills it was supposed to sit against.
+        Widget? row3 = Widget.SupportsFilterPills ? BuildFilterPillRow(colors) : null;
+
+        // The Tablet renders neither Row 2 nor Row 3 at all (unify-tab-header-layout design.md Non-Goals) —
+        // its own title-bar chrome is the whole header, so the call to ScribeTabHeader.Build is skipped
+        // entirely rather than passed empty content.
         var children = new List<Widget>();
-        // Filter-pill row (3.2), above everything else — omitted entirely on a surface where
-        // SupportsFilterPills is false (the Tablet), so its Read View is byte-identical to before.
-        if (Widget.SupportsFilterPills)
+        if (Widget.SupportsTabHeader)
         {
-            children.Add(new Padding(EdgeInsets.Only(bottom: 8f), child: BuildFilterPillRow(colors)));
+            children.Add(ScribeTabHeader.Build(colors, style,
+                "scribe:scribe-gui-nav-read", "scribe:scribe-gui-subtitle-read", Widget.ShowSubtitleRow, row3));
         }
-        children.Add(
-            // A straight edge directly above the scroll region, matching the editor and pinned
-            // views (scribe-lectern-view-consistency §1). Reuses the theme-border Divider the
-            // settings form uses; inherits the Column's spacing gap below it. Dropped on the
-            // cuneiform tablet path (add-tablet-clay-type-themes 8.1) — the hard rule reads wrong
-            // against the clay backdrop; the readable Lectern/Notebook view keeps it.
-            Widget.Style.UseCuneiform ? new SizedBox() : new Divider());
         children.Add(new Expanded(child: rowList));
         if (!Widget.ReadOnly)
         {
-            children.Add(new Padding(Widget.FooterButtonPadding, child: new Button(
-                child: new Text(Lang.Get("scribe:scribe-gui-switch-to-editor"), switchTextStyle),
-                onTap: _ => Widget.OnSwitchToEditor())));
+            children.Add(new Padding(
+                EdgeInsets.Ltrb(Widget.FooterButtonPadding.Left, 8f, Widget.FooterButtonPadding.Right, Widget.FooterButtonPadding.Bottom),
+                child: new Button(
+                    child: new Text(Lang.Get("scribe:scribe-gui-switch-to-editor"), switchTextStyle),
+                    onTap: _ => Widget.OnSwitchToEditor())));
         }
 
         // Root the whole tab subtree in the player's Task Text Font + window-scaled base size, so the
         // row text and empty hint inherit them (adopt-libgui-31-improvements). The row widgets live in
         // the ListView below, which is a descendant of this ancestor. The switch/Edit button keeps its
         // own explicit Caudex button font (a deliberate non-task face), so it is unaffected.
+        // Top inset reduced from 10 to 4 (2026-09-08 playtest feedback: 6px less gap between the title bar
+        // and the Row 2 subtitle); left/right/bottom stay 10 like every other tab. The Tablet has no Row 2
+        // to close the gap against, so it keeps the original full 10 top inset.
         return ScribeTextDefaults.Wrap(Widget.Style.TaskFontFamily, Widget.Style.FontSize, new Padding(
-            EdgeInsets.All(10),
+            EdgeInsets.Ltrb(10, Widget.SupportsTabHeader ? 4 : 10, 10, 10),
             child: new Column(
-                spacing: 8,
+                spacing: 0,
                 crossAxisAlignment: CrossAxisAlignment.Stretch,
                 mainAxisSize: MainAxisSize.Max,
                 children: children)));
@@ -506,9 +531,8 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         // Cuneiform-aware on the tablet (quest-link-icon-and-color task 8.3b): the plain Latin lineHeight
         // used here previously left the quest icon's CheckboxAndGripTop band shorter than the tablet's
         // actual cuneiform text line, so the icon rode high against the row's top edge.
-        float bandHeight = isQuestLink ? ScribeRowControlNudge.ItemNameLineHeight(style) : ScribeLinkIcon.VisualSize(iconSize, Widget.Data.LinkTarget);
-        if (Widget.Data.IsStaticVsQuestObjective)
-            bandHeight = ScribeLinkIcon.ObjectiveVisualSize(iconSize, Widget.Data.DisplayStack);
+        float bandHeight = ScribeRowControlNudge.ItemVisualBandHeight(
+            style, Widget.Data.LinkTarget, Widget.Data.IsStaticVsQuestObjective, Widget.Data.DisplayStack);
         // Link accent: the theme's Primary on light surfaces (a dark accent that reads as a colored link),
         // or a row-supplied override where Primary would be illegible as text (the Chalkboard's dark slate —
         // see ScribeRowStyle.LinkColor). The guide-page book glyph renders in it (not the near-black
@@ -524,6 +548,8 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                 lineHeight, heightNeutral: false)
             : ScribeLinkIcon.Build(Widget.Data.DisplayStack, Widget.Data.LinkTarget, iconSize, linkColor,
                 lineHeight, heightNeutral: false);
+        if (Widget.Data.IsStaticVsQuestObjective)
+            icon = ScribeCenterIfShort.InBand(icon, bandHeight);
 
         // The name is a hyperlink that opens the referenced item's Handbook page and never touches completion
         // (feedback 6.5 — the Tracker, like a Link, "should also open the notebook entry"). Accent-colored to
@@ -621,7 +647,8 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         // -CheckboxTextGap trailing cancel, §10.4) so the reserved column — and thus the text's left edge —
         // stays aligned row-for-row across a switch, and identical whether or not a toggle is shown.
         children.Add(new Padding(
-            ScribeRowControlNudge.GripInsets(style, Widget.Data.IsItemKind, Widget.Data.LinkTarget),
+            ScribeRowControlNudge.GripInsets(style, Widget.Data.IsItemKind, Widget.Data.LinkTarget,
+                Widget.Data.IsStaticVsQuestObjective, Widget.Data.DisplayStack),
             child: Widget.ShowCollapseToggle
                 ? new GestureDetector(
                     onTap: _ => Widget.OnToggleCollapse(),
@@ -640,7 +667,9 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         if (Widget.Data.Completable)
         {
             children.Add(new Padding(
-                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style, Widget.Data.IsItemKind, Widget.Data.LinkTarget)),
+                EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(
+                    style, Widget.Data.IsItemKind, Widget.Data.LinkTarget,
+                    Widget.Data.IsStaticVsQuestObjective, Widget.Data.DisplayStack)),
                 // The checkbox stays interactive whenever toggles are live: on any editable read view AND
                 // on a hard/fired tablet, which keeps completion live so a pinned task can still be
                 // completed/unpinned (zero-point-three-fixes §7.3). A null onChanged (only when toggles

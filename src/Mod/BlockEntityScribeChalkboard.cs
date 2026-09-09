@@ -82,8 +82,11 @@ public sealed class BlockEntityScribeChalkboard : BlockEntityScribeWritingStatio
     /// to reshape ONLY the Chalkboard dialog. See <see cref="ScribeLayout"/> for what each fraction drives.</summary>
     protected override ScribeLayoutProportions? LayoutProportions => ScribeLayoutProportions.Default with
     {
-        TitleBarFrac   = 0.15f,   // top drag band height, as a fraction of window height
-        InnerHFrac     = 0.75f,   // content region height (title band + tasks), fraction of window height
+        // TitleBarFrac/InnerHFrac shifted by the same 0.015 as the shared Default (unify-tab-header-layout
+        // 1.3 — see its remarks), keeping the Chalkboard's Read/Edit/Pinned tabs visually consistent with
+        // every other surface now that they all render the new Row 2 subtitle. Sum unchanged (0.90).
+        TitleBarFrac   = 0.135f,  // top drag band height, as a fraction of window height
+        InnerHFrac     = 0.765f,  // content region height (title band + tasks), fraction of window height
         SideColFrac    = 0.078f,  // EACH side margin/nav column width, fraction of window width
         TitleBtnsWFrac = 0.82f,   // bottom title+buttons bar width, fraction of window width
         TitleBtnsHFrac = 0.065f,  // bottom title+buttons bar height, fraction of window height

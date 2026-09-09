@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Gui.Rendering;             // EdgeInsets
-using Gui.Rendering.Text;        // TextStyle, FontWeight
+using Gui.Rendering.Text;        // TextStyle
 using Gui.Widgets.Basic;         // Text, Button, ButtonVariant, Container
 using Gui.Widgets.Framework;     // Widget, StatefulWidget, State, Theme, ColorScheme
 using Gui.Widgets.Gestures;      // ScrollController
@@ -45,6 +45,7 @@ internal sealed class ScribeAssignmentFormContent : StatefulWidget
         Action onSendBatch,
         bool sending,
         bool canPullFromDesk,
+        Action onCreateTasks,
         Action onPullFromDesk,
         ScribeRowStyle style,
         ScrollController scrollController,
@@ -54,6 +55,7 @@ internal sealed class ScribeAssignmentFormContent : StatefulWidget
         Widget? noticeSupplySlot,
         Widget? noticeOutputSlot,
         Action onOpenDeliveryInfo,
+        bool showSubtitleRow = true,
         Gui.Widgets.Framework.Key? key = null) : base(key)
     {
         TargetPlayers = targetPlayers;
@@ -68,6 +70,7 @@ internal sealed class ScribeAssignmentFormContent : StatefulWidget
         OnSendBatch = onSendBatch;
         Sending = sending;
         CanPullFromDesk = canPullFromDesk;
+        OnCreateTasks = onCreateTasks;
         OnPullFromDesk = onPullFromDesk;
         Style = style;
         ScrollController = scrollController;
@@ -77,6 +80,7 @@ internal sealed class ScribeAssignmentFormContent : StatefulWidget
         NoticeSupplySlot = noticeSupplySlot;
         NoticeOutputSlot = noticeOutputSlot;
         OnOpenDeliveryInfo = onOpenDeliveryInfo;
+        ShowSubtitleRow = showSubtitleRow;
     }
 
     /// <summary>Every other online player, as (uid, display name) — the target-player picker's options.
@@ -111,6 +115,8 @@ internal sealed class ScribeAssignmentFormContent : StatefulWidget
     /// <summary>Whether the Desk's own document has an eligible task to pull in (add-assignment-desk-own-
     /// tasks design.md D3) — gates the empty-state's "pull from Desk" button.</summary>
     public bool CanPullFromDesk { get; }
+    /// <summary>Enters the Desk's local Editor through the dialog-owned lock-aware path.</summary>
+    public Action OnCreateTasks { get; }
     /// <summary>Activates the Desk's own document as this tab's task source (design.md D3).</summary>
     public Action OnPullFromDesk { get; }
     public ScribeRowStyle Style { get; }
@@ -137,6 +143,9 @@ internal sealed class ScribeAssignmentFormContent : StatefulWidget
     /// a dialog-owned callback since <c>ToggleHandbookPage</c> is <c>protected</c> on
     /// <see cref="ScribeDialogBase"/> and unreachable from this plain widget.</summary>
     public Action OnOpenDeliveryInfo { get; }
+    /// <summary>Whether <see cref="ScribeTabHeader.Build"/> renders its Row 2 subtitle line, read from
+    /// <c>modSystem.VisualTuning.ShowSubtitleRow</c> (add-subtitle-row-configkit-toggle).</summary>
+    public bool ShowSubtitleRow { get; }
 
     public override State CreateState() => new ScribeAssignmentFormContentState();
 }
@@ -234,36 +243,45 @@ internal sealed class ScribeAssignmentFormContentState : State<ScribeAssignmentF
                 selectedTaskIds: Widget.SelectedTaskIds,
                 onToggleSelected: Widget.OnToggleSelected,
                 canPullFromDesk: Widget.CanPullFromDesk,
+                onCreateTasks: Widget.OnCreateTasks,
                 onPullFromDesk: Widget.OnPullFromDesk,
                 style: style,
                 scrollController: Widget.ScrollController));
 
-        var bodyChildren = new List<Widget>
-        {
-            new Text(Lang.Get("scribe:scribe-assignment-form-heading"),
-                new TextStyle { FontSize = style.FontSize * 1.1f, Weight = FontWeight.Bold, Color = colors.OnSurface }),
-            stagingArea,
-            new Expanded(child: stageBox),
-            deleteFromSourceRow,
-        };
-        // Delivery toggle + notice slots (add-assignment-physical-delivery-mode) sit between the existing
-        // controls and the Send row — Hybrid-only toggle, notice slots whenever the resolved choice needs
-        // one (tasks.md 4.1/4.4/4.6).
-        if (deliveryRow is not null) bodyChildren.Add(deliveryRow);
-        if (noticeSlotsRow is not null) bodyChildren.Add(noticeSlotsRow);
-        bodyChildren.Add(sendToRow);
+        // Row 3 = ONLY the send-to controls (2026-09-09 playtest feedback: the rest of the drafting form
+        // read as too much header chrome above the divider). Everything else — the staging-slot hint,
+        // delete-checkbox, delivery toggle, and notice slots — moves back down into the scrollable/general
+        // content below the divider, where a form-shaped tab's non-header controls belong.
+        Widget header = ScribeTabHeader.Build(colors, style,
+            "scribe:scribe-tab-assignment", "scribe:scribe-tab-subtitle-assignment", Widget.ShowSubtitleRow, sendToRow);
 
-        var body = new Column(
+        // Content below the divider: the delete-checkbox gets its own line at the very TOP of the content
+        // section (2026-09-10 2nd playtest feedback: reverses the earlier merge into the delivery-toggle
+        // row — it read as too easy to miss sharing a line with the toggle buttons). Then the staging hint,
+        // the scrollable stage tray, and — when shown — the notice slots sitting directly above the Local
+        // Inboxes/Send a Notice group (2026-09-10 playtest feedback). The 8-unit top padding
+        // (unify-tab-header-layout §7, doubled from 4 per 2026-09-09 playtest feedback) sits on this
+        // content block as a whole, so the durable divider above stays flush against it.
+        var contentChildren = new List<Widget> { deleteFromSourceRow, stagingArea, new Expanded(child: stageBox) };
+        if (noticeSlotsRow is not null) contentChildren.Add(noticeSlotsRow);
+        if (deliveryRow is not null) contentChildren.Add(deliveryRow);
+
+        Widget content = new Padding(EdgeInsets.Only(top: 8f), child: new Column(
+            spacing: 8f,
             crossAxisAlignment: CrossAxisAlignment.Stretch,
             mainAxisSize: MainAxisSize.Max,
-            spacing: 8f,
-            children: bodyChildren);
+            children: contentChildren));
 
-        // Rooted in the same Task Text Font + EdgeInsets.All(10) inset every other tab uses
-        // (ScribeReadContent/ScribePinnedContent/the Guestbook/the Timer tab) — this tab used to return its
-        // Column bare, so its Divider spanned edge-to-edge instead of sitting inset like theirs (refine-
-        // assignment-desk-inbox-ux 11.1).
-        return ScribeTextDefaults.Wrap(style.TaskFontFamily, style.FontSize, new Padding(EdgeInsets.All(10), child: body));
+        // Rooted in the same Task Text Font + inset every other tab uses (ScribeReadContent/
+        // ScribePinnedContent/the Guestbook/the Timer tab) — this tab used to return its Column bare, so its
+        // Divider spanned edge-to-edge instead of sitting inset like theirs (refine-assignment-desk-inbox-ux
+        // 11.1). Top inset reduced from 10 to 4 (2026-09-08 playtest feedback: 6px less gap between the
+        // title bar and the Row 2 subtitle); left/right/bottom stay 10.
+        return ScribeTextDefaults.Wrap(style.TaskFontFamily, style.FontSize, new Padding(EdgeInsets.Ltrb(10, 4, 10, 10), child: new Column(
+            spacing: 0,
+            crossAxisAlignment: CrossAxisAlignment.Stretch,
+            mainAxisSize: MainAxisSize.Max,
+            children: new Widget[] { header, new Expanded(child: content) })));
     }
 
     /// <summary>The "Local Inboxes" / "Send a Notice" toggle + its info button (`assignment-delivery-mode`
@@ -290,9 +308,33 @@ internal sealed class ScribeAssignmentFormContentState : State<ScribeAssignmentF
         // A short hover hint plus a click-through to the full Handbook explanation (task 4.3), mirroring
         // GuiDialogScribeScriptorium's info-button precedent (a Tooltip wrapping a Button that opens a
         // "craftinginfo-scribe-X" page) rather than cramming the long-form text into the tooltip itself.
+        //
+        // Sized to match the two Buttons beside it (2026-09-10 playtest feedback: it read visibly smaller)
+        // — computed from the buttons' own font metrics + Gui's stock Button padding/border (6+6 vertical,
+        // ~1+1 border; ButtonStyle.Default) rather than hardcoded, so it tracks any future font/theme
+        // change. ScribeRowButton's box AND glyph both scale with Size by the same proportion, so growing
+        // Size alone would grow the icon just as much as the padding around it — IconScale is pulled down
+        // to counter that, landing the icon only slightly bigger than its old style.ControlSize rendering
+        // while the surrounding padding (box minus glyph) does most of the growth, per the user's ask.
+        const float buttonFontSize = 12.5f;
+        var buttonFontMetrics = TextLayoutHelper.GetFont(ScribeTaskFont.ButtonFamily, buttonFontSize, FontWeight.Normal).Metrics;
+        float buttonLineH = buttonFontMetrics.Descent - buttonFontMetrics.Ascent + buttonFontMetrics.Leading;
+        float buttonTotalH = buttonLineH + 12f /* ButtonStyle.Default vertical padding, 6+6 */ + 2f /* ~1px border each side */;
+        // -2f (2026-09-10 2nd playtest feedback: 1px less internal padding on every side, to read a touch
+        // smaller than the two Buttons beside it rather than dead-on matching their height). Below, the
+        // icon's target size (oldGlyph * 1.15f) stays untouched — infoIconScale is re-solved against this
+        // smaller infoSize, so the 2px comes entirely out of ScribeRowButton's own padding, not the glyph.
+        float infoSize = buttonTotalH + ScribeRowButton.BoxShrink - 2f; // so the drawn box == buttonTotalH - 2
+
+        float oldPad = MathF.Max(3f, style.ControlSize * 0.18f);
+        float oldGlyph = (style.ControlSize - oldPad * 2f) * 1f;
+        float newPad = MathF.Max(3f, infoSize * 0.18f);
+        float rawGlyphAtScale1 = infoSize - newPad * 2f;
+        float infoIconScale = rawGlyphAtScale1 > 0f ? oldGlyph * 1.15f / rawGlyphAtScale1 : 1f;
+
         Widget infoButton = new Tooltip(
-            child: new ScribeRowButton(iconName: "scribeinfo", iconColor: colors.OnSurfaceVariant, size: style.ControlSize,
-                onTap: () => Widget.OnOpenDeliveryInfo()),
+            child: new ScribeRowButton(iconName: "scribeinfo", iconColor: colors.OnSurfaceVariant, size: infoSize,
+                iconScale: infoIconScale, onTap: () => Widget.OnOpenDeliveryInfo()),
             content: new Padding(EdgeInsets.All(6), child: new Text(
                 Lang.Get("scribe:scribe-delivery-tooltip"),
                 new TextStyle { FontSize = 12, Color = colors.OnSurface, SoftWrap = true })),

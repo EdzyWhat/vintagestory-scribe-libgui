@@ -334,6 +334,7 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
             onSendBatch: OnSendAssignmentBatch,
             sending: stampActive,
             canPullFromDesk: canPullFromDesk,
+            onCreateTasks: TryEnterEditor,
             onPullFromDesk: OnPullFromDesk,
             style: RowStyle,
             scrollController: sharedScrollController,
@@ -342,7 +343,8 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
             onDeliveryChoiceChanged: OnDeliveryChoiceChanged,
             noticeSupplySlot: noticeSupplySlot,
             noticeOutputSlot: noticeOutputSlot,
-            onOpenDeliveryInfo: () => ToggleHandbookPage("craftinginfo-scribe-delivery"));
+            onOpenDeliveryInfo: () => ToggleHandbookPage("craftinginfo-scribe-delivery"),
+            showSubtitleRow: modSystem.VisualTuning.ShowSubtitleRow);
     }
 
     /// <summary>The Desk's own persisted document's rows eligible to pull into the Create Assignments tab

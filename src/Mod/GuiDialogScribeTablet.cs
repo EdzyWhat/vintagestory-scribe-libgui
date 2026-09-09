@@ -105,6 +105,11 @@ public class GuiDialogScribeTablet : ScribeDialogBase
     /// (scribe-dialog-base) is the only thing distinguishing it.</summary>
     private protected override bool SupportsFilterPills => false;
 
+    /// <summary>The Tablet renders neither the shared Row 2 subtitle nor Row 3 tab header
+    /// (unify-tab-header-layout design.md Non-Goals) — its title bar's own cuneiform/readable chrome is
+    /// the whole header.</summary>
+    private protected override bool SupportsTabHeader => false;
+
     // TitleMaxLines is no longer overridden here: two-line title wrapping is now the shared base default
     // (wrap-titles-all-surfaces), so BOTH the cuneiform title (BuildTitleDisplay/BuildTitleField, unchanged)
     // and the cuneiform-OFF readable RichText fallback wrap to two lines. Previously this override forced the

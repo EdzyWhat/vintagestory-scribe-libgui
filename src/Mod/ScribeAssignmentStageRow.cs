@@ -131,7 +131,8 @@ internal sealed class ScribeAssignmentStageRow : StatelessWidget
 internal sealed class ScribeAssignmentStageContent : StatelessWidget
 {
     public ScribeAssignmentStageContent(IReadOnlyList<ScribeReadRowData> rows, ISet<System.Guid> selectedTaskIds,
-        System.Action<System.Guid> onToggleSelected, bool canPullFromDesk, System.Action onPullFromDesk,
+        System.Action<System.Guid> onToggleSelected, bool canPullFromDesk, System.Action onCreateTasks,
+        System.Action onPullFromDesk,
         ScribeRowStyle style, ScrollController scrollController,
         Gui.Widgets.Framework.Key? key = null) : base(key)
     {
@@ -139,6 +140,7 @@ internal sealed class ScribeAssignmentStageContent : StatelessWidget
         SelectedTaskIds = selectedTaskIds;
         OnToggleSelected = onToggleSelected;
         CanPullFromDesk = canPullFromDesk;
+        OnCreateTasks = onCreateTasks;
         OnPullFromDesk = onPullFromDesk;
         Style = style;
         ScrollController = scrollController;
@@ -150,6 +152,8 @@ internal sealed class ScribeAssignmentStageContent : StatelessWidget
     /// <summary>Whether the Desk's own document has an eligible task to pull in (add-assignment-desk-own-
     /// tasks design.md D3) — gates the empty-state's "pull from Desk" button below.</summary>
     public bool CanPullFromDesk { get; }
+    /// <summary>Enters the Desk's local Editor through the dialog-owned lock-aware path.</summary>
+    public System.Action OnCreateTasks { get; }
     public System.Action OnPullFromDesk { get; }
     public ScribeRowStyle Style { get; }
     public ScrollController ScrollController { get; }
@@ -159,14 +163,18 @@ internal sealed class ScribeAssignmentStageContent : StatelessWidget
         var colors = Theme.Of(context).ColorScheme;
         if (Rows.Count == 0)
         {
-            // "Pull from Desk" button (add-assignment-desk-own-tasks design.md D3/D7): shown below the
-            // existing hint only when the Desk's own document actually has something to offer and the
-            // dialog hasn't already activated it as this tab's source.
+            // The always-present Editor route precedes the conditional "Pull from Desk" action. The
+            // dialog owns both callbacks, keeping this empty-state widget free of view/lock concerns.
             var emptyChildren = new List<Widget>
             {
                 new Text(
                     Lang.Get("scribe:scribe-assignment-stage-empty"),
                     new TextStyle { Color = colors.OnSurfaceVariant, SoftWrap = true, Align = TextAlignment.Center }),
+                new Button(
+                    child: new Text(Lang.Get("scribe:scribe-assignment-create-tasks"),
+                        new TextStyle { FontSize = 14, Color = colors.OnPrimary, FontFamily = ScribeTaskFont.ButtonFamily }),
+                    variant: ButtonVariant.Primary,
+                    onTap: _ => OnCreateTasks()),
             };
             if (CanPullFromDesk)
             {

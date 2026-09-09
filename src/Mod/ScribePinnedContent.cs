@@ -88,6 +88,7 @@ internal sealed class ScribePinnedContent : StatefulWidget
         Action onDepartureSettled,
         ScribeAmbientLightSampler.Shade currentShade,
         System.Func<DropdownStyle, DropdownStyle>? decoratePolicyDropdownStyle = null,
+        bool showSubtitleRow = true,
         SKBitmap? assignedStampBitmap = null)
     {
         Rows = rows;
@@ -109,6 +110,7 @@ internal sealed class ScribePinnedContent : StatefulWidget
         OnDepartureSettled = onDepartureSettled;
         CurrentShade = currentShade;
         DecoratePolicyDropdownStyle = decoratePolicyDropdownStyle;
+        ShowSubtitleRow = showSubtitleRow;
         AssignedStampBitmap = assignedStampBitmap;
     }
 
@@ -150,6 +152,9 @@ internal sealed class ScribePinnedContent : StatefulWidget
     /// chalkboard supplies one to make its open menu's SELECTED row legible (fully-opaque accent fill +
     /// <c>OnPrimary</c> label) — see the seam's doc-comment (refine-chalkboard).</summary>
     public System.Func<DropdownStyle, DropdownStyle>? DecoratePolicyDropdownStyle { get; }
+    /// <summary>Whether <see cref="ScribeTabHeader.Build"/> renders its Row 2 subtitle line, read from
+    /// <c>modSystem.VisualTuning.ShowSubtitleRow</c> (add-subtitle-row-configkit-toggle).</summary>
+    public bool ShowSubtitleRow { get; }
     /// <summary>The full-color assigned-task stamp raster (see <see cref="ScribeAssignedTaskIcon"/>),
     /// resolved once by the dialog and passed down so this row widget stays API-free. Null falls back to
     /// the plain SVG glyph.</summary>
@@ -282,15 +287,19 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                     child: new Text(
                         Lang.Get("scribe:scribe-gui-pintab-empty"),
                         new TextStyle { FontSize = 14, Color = colors.OnSurfaceVariant, SoftWrap = true }))
+                // 8-unit top padding lives INSIDE the scroll region (unify-tab-header-layout §7, doubled
+                // from 4 per 2026-09-09 playtest feedback) so the durable divider above sits flush against
+                // the viewport and this breathing room scrolls away with the content, instead of the old
+                // fixed gap outside the scroll region.
                 : new Scrollbar(
                     controller: Widget.ScrollController,
                     child: new SingleChildScrollView(
                         controller: Widget.ScrollController,
-                        child: new Column(
+                        child: new Padding(EdgeInsets.Only(top: 8f), child: new Column(
                             spacing: 0,
                             crossAxisAlignment: CrossAxisAlignment.Stretch,
                             mainAxisSize: MainAxisSize.Min,
-                            children: rows)))
+                            children: rows))))
                 { AutoHide = false });
 
         // Completion-policy picker: the same control the Settings window offers, editing the one shared
@@ -369,22 +378,24 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
         // state and the policy caption inherit them (adopt-libgui-31-improvements). Survivors that render
         // outside this subtree keep explicit fonts: the policy tooltip + dropdown menu (global overlay,
         // task 3.1) and the pin rows' ScribeMultilineField (custom RenderBox that doesn't inherit).
+        // Shared Row 2 subtitle + Row 3 (the policy picker, inset to match the title row's padding) + the
+        // durable divider (unify-tab-header-layout 2.3) — replaces the old uniform Column(spacing: 8) gap.
+        Widget header = ScribeTabHeader.Build(colors, Widget.Style,
+            "scribe:scribe-gui-nav-pinned", "scribe:scribe-gui-subtitle-pinned",
+            Widget.ShowSubtitleRow,
+            new Padding(Widget.PolicyPickerPadding, child: policyPicker));
+
+        // Top inset reduced from 10 to 4 (2026-09-08 playtest feedback: 6px less gap between the title bar
+        // and the Row 2 subtitle); left/right/bottom stay 10 like every other tab.
         return ScribeTextDefaults.Wrap(Widget.Style.TaskFontFamily, Widget.Style.FontSize, new Padding(
-            EdgeInsets.All(10),
+            EdgeInsets.Ltrb(10, 4, 10, 10),
             child: new Column(
-                spacing: 8,
+                spacing: 0,
                 crossAxisAlignment: CrossAxisAlignment.Stretch,
                 mainAxisSize: MainAxisSize.Max,
                 children: new Widget[]
                 {
-                    // Header: policy picker, then a divider straight-edge above the scroll region
-                    // (scribe-lectern-view-consistency §1 + §3). Expanded keeps the list filling the rest.
-                    // The picker is inset horizontally to match the title row's padding (added on request);
-                    // the divider + list keep the outer EdgeInsets.All(10) so only the picker shifts in.
-                    new Padding(Widget.PolicyPickerPadding, child: policyPicker),
-                    // Dropped on the cuneiform tablet path (add-tablet-clay-type-themes 8.1) — the hard
-                    // rule reads wrong against the clay backdrop; the readable path keeps it.
-                    Widget.Style.UseCuneiform ? new SizedBox() : new Divider(),
+                    header,
                     new Expanded(child: scrollBody),
                 })));
     }
@@ -519,9 +530,8 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
         // inline slot has no icon for it and the name's band height falls back to ItemNameLineHeight
         // (cuneiform-aware on the tablet — task 8.3b: the plain Latin lineHeight left the icon riding high).
         bool isQuestLink = ScribeLinkTarget.IsQuest(data.LinkTarget);
-        float bandHeight = isQuestLink ? ScribeRowControlNudge.ItemNameLineHeight(style) : ScribeLinkIcon.VisualSize(iconSize, data.LinkTarget);
-        if (data.IsStaticVsQuestObjective)
-            bandHeight = ScribeLinkIcon.ObjectiveVisualSize(iconSize, data.DisplayStack);
+        float bandHeight = ScribeRowControlNudge.ItemVisualBandHeight(
+            style, data.LinkTarget, data.IsStaticVsQuestObjective, data.DisplayStack);
         // Link accent: Primary on light surfaces, or the row's override where Primary is illegible as text on
         // a dark surface (the Chalkboard slate — ScribeRowStyle.LinkColor). Guide-page book glyph (7.11d),
         // item icon grown + row-height-neutral (7.11e/7.11f). A Quest Link uses the separate QuestLinkColor
@@ -536,6 +546,8 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
                 lineHeight, heightNeutral: false)
             : ScribeLinkIcon.Build(data.DisplayStack, data.LinkTarget, iconSize, linkColor,
                 lineHeight, heightNeutral: false);
+        if (data.IsStaticVsQuestObjective)
+            icon = ScribeCenterIfShort.InBand(icon, bandHeight);
 
         Widget name = ScribeCenterIfShort.Name(
             ScribeItemLabel.Build(data.Label, linkColor, style), style, bandHeight);
@@ -606,7 +618,8 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
             : new ScribeVsIconGlyph("scribegrip", style.ControlSize, gripColor);
 
         children.Add(new Padding(
-            ScribeRowControlNudge.GripInsets(style, Widget.Data.IsItemKind, Widget.Data.LinkTarget),
+            ScribeRowControlNudge.GripInsets(style, Widget.Data.IsItemKind, Widget.Data.LinkTarget,
+                Widget.Data.IsStaticVsQuestObjective, Widget.Data.DisplayStack),
             child: new GestureDetector(
                 onPress: _ => Widget.OnDragStart(Widget.Index),
                 onRelease: _ => Widget.OnDragEnd(),
@@ -624,7 +637,9 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
         // ScribeBlock.IsCompletable), so tapping it unpins rather than sending a completion toggle the
         // server would silently no-op.
         children.Add(new Opacity(contentOpacity, child: new Padding(
-            EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style, data.IsItemKind, data.LinkTarget)),
+            EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(
+                style, data.IsItemKind, data.LinkTarget,
+                data.IsStaticVsQuestObjective, data.DisplayStack)),
             // A Quest Link's checkbox is misleading (toggling it doesn't affect the quest), so its slot
             // renders the quest-marker icon instead (quest-link-icon-and-color).
             child: ScribeRowControlNudge.BuildLeadingControl(
