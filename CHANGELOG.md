@@ -13,8 +13,9 @@ reach an offline or out-of-range player with a physical Task Notice item, and li
 Quest or Progression Framework quests. Also ships full Linux support (the LibGUI HarfBuzz crash
 class is fixed), a new consistent header on every dialog tab, and Read View filtering/collapsing.
 Fully save-compatible with 1.0–1.3.x worlds — existing documents open unchanged. New writes use
-document codec v11 (an assignment's target-player id, a quest Link's captured description) and
-pin codec v7; a pre-1.4.0 client cannot read a save from this build.
+document codec v11 (an assignment's target-player id, a quest Link's captured description), pin
+codec v7, and a History codec bump (`SHST v2` → `v3`, for timestamp-sorted entries, migrated
+automatically); a pre-1.4.0 client cannot read a save from this build.
 
 ### Added
 - **Assignment Desk and Inbox.** A new Assignment Desk block lets you write a task and send it
@@ -23,16 +24,25 @@ pin codec v7; a pre-1.4.0 client cannot read a save from this build.
   it's accepted; once accepted it's yours to check off (which completes the assignment
   automatically) or Discard. An unseen assignment glows softly on the nearby block until you open
   its Inbox, and the Inbox's own Inventory tab/slot shimmer the same way for an undiscovered
-  addressed notice sitting inside. Both blocks are now craftable at the grid (Assignment Desk from
-  the Scriptorium's own recipe; Inbox from the vanilla chest recipe). The Assignment Desk's own
-  Create Assignments tab gets an always-available **Create Tasks to Assign** button in its
-  empty-task-list state, opening the Desk's own Editor directly instead of sending you elsewhere to
-  write tasks first; the existing "Pull existing tasks from this Desk" button still appears once
-  there's something to pull. Declined/Cancelled/Discarded/Completed records can now be deleted
-  per-side (deleting your view of a closed assignment doesn't affect the other party's), and an
-  Accept now records which Scribe item it actually landed on, shown as an "Accepted into ..." line.
-  The Inbox/Sent History filter chips show each category's row count (e.g. "New (1)") and the
-  rejected-group filter reads "Cancelled".
+  addressed notice sitting inside; the Lectern/Scriptorium/Chalkboard's Inbox nav button itself only
+  appears once you've ever received an assignment. Both blocks are now craftable at the grid
+  (Assignment Desk from the Scriptorium's own recipe; Inbox from the vanilla chest recipe). The
+  Assignment Desk's **Create Assignments** tab works by staging a Scribe document in a slot
+  (mirroring the Scriptorium's Transcribe copy-slot) and multi-selecting any of its rows — Task,
+  Tracker, Craft, Link, Text, or a parent with subtasks — to send to one recipient as independent
+  assignments, with a stamp-flourish animation on send and an optional "Delete from source on send"
+  checkbox (move vs. copy, unchecked by default); its empty-task-list state gets an always-available
+  **Create Tasks to Assign** button that opens the Desk's own Editor directly instead of sending you
+  elsewhere to write tasks first, and the existing "Pull existing tasks from this Desk" button stages
+  that same document once there's something to pull. **Sent Assignment History** is its own tab now
+  (previously combined with Create Assignments). Declined/Cancelled/Discarded/Completed records can
+  now be deleted per-side (deleting your view of a closed assignment doesn't affect the other
+  party's), and an Accept now records which Scribe item it actually landed on, shown as an "Accepted
+  into ..." line. The six assignment states each get their own distinct chip color (most previously
+  rendered as the same flat gray), and an accepted assignment's leading marker icon now shows a
+  hover tooltip naming who assigned it and when, plus when it was accepted. The Inbox/Sent History
+  filter chips show each category's row count (e.g. "New (1)") and the rejected-group filter reads
+  "Cancelled".
 - **Task Notice.** A craftable item that physically carries an assignment as a locked, read-only
   document until Accept or Decline — for reaching an out-of-range or offline player instead of
   syncing instantly. A server admin `DeliveryMode` setting (`AlwaysInstant`/`AlwaysPhysical`/
@@ -92,11 +102,39 @@ pin codec v7; a pre-1.4.0 client cannot read a save from this build.
 - Tablet and Chalkboard's block cap raised from 10 to 15 tasks, per playtest feedback that 10 was
   too tight for a working scratchpad.
 - Scribe skips LibGUI's first-run theme-picker dialog on first launch — a confusing first
-  impression unrelated to anything Scribe itself does, since Scribe hard-depends on LibGUI.
+  impression unrelated to anything Scribe itself does, since Scribe hard-depends on LibGUI. Scribe
+  Settings also gains a button that opens that same theme picker on demand, previously reachable
+  only via the hidden `.ui settings` client command.
 - The Scriptorium/Inbox Inventory tab's icon switched from a borrowed open-book glyph to a
   dedicated grid icon.
+- The Scriptorium now defaults to its Transcribe tab and the Lectern to its Guest Book tab, both as
+  the first nav tab and the right-click-to-open target (previously Read for both); Read is still
+  reachable via its own nav button on each. The Assignment Desk's redundant Read tab is removed —
+  its own document has no separate read view worth a nav slot.
+- The quest-accept HUD banner's title is now a gold label line over an off-white quest-name line,
+  with retuned title/button colors and fill alpha.
 
 ### Fixed
+- **A creature-triggered death could silently lose its Notebook History entry.** A third-party mod
+  that also reacts to player death (e.g. one that empties the inventory into a corpse) can run its
+  own handler before Scribe's own live carried-notebook scan, evicting the Notebook first — the
+  Death entry was previously dropped with no trace. A queued fallback now catches this: if a
+  notebook that was carried moments earlier isn't found in the live scan, its Death entry queues
+  and flushes into that same document the next time it's seen in any carried slot, persisted across
+  restarts. `HistoryStore` also now inserts entries in real chronological order instead of pure
+  append order, so multiple events on the same in-game day keep their true relative order.
+- The unseen-assignment particle effect didn't clear on Decline (only via the Assignment Desk
+  specifically) and had a very short trigger range; it now clears from any Inbox-capable surface
+  and its detection radius grew from 6 to 12 blocks (with a slower, shorter rise).
+- The Accept-candidate picker (shown when 2+ eligible Scribe items are carried) could silently
+  auto-narrow to a single guess with no picker at all; it now always shows every eligible
+  choice — scoped to hotbar/backpack only, matching the Handbook's own "Add to Scribe" scope, with
+  the last-opened item pre-selected as a convenience default — and each candidate now reads
+  `<Type> "<Title>"` instead of a bare item name.
+- Delete/Pin/Unpin row-hover action buttons sat vertically out of line with row text on some
+  surfaces, most visibly cuneiform Tablet rows; they now center on the row's real first text line.
+- Fixed the Chalkboard shape logging six "texture not found" warnings for unused leftover aliases,
+  and a copy-paste miss where the chalk tray's bottom face used the wrong material.
 - **Quest catalogs were scoped to the wrong mod domain.** Both the VS Quest and Progression
   Framework catalog readers only searched their own framework mod's assets for quest content —
   but real quests always ship under a separate dependent mod's domain (e.g. Seafarer, VS Village).
