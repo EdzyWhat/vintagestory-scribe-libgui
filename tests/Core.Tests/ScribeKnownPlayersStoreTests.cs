@@ -64,4 +64,14 @@ public class ScribeKnownPlayersStoreTests
         store.LoadFrom(new byte[] { 9, 9, 9 });
         Assert.Empty(store.Snapshot());
     }
+
+    [Fact]
+    public void Contains_ReturnsTrueAfterUpsert_FalseForUnknownUid()
+    {
+        var store = new ScribeKnownPlayersStore();
+        store.Upsert("player-1", "RaptorKhan");
+
+        Assert.True(store.Contains("player-1"));
+        Assert.False(store.Contains("player-2"));
+    }
 }

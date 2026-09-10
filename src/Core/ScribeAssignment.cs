@@ -149,6 +149,15 @@ public sealed class ScribeAssignment
 
     /// <summary>Marks an incoming assignment as seen without changing its lifecycle state.</summary>
     public void MarkSeen() => Seen = true;
+
+    /// <summary>True when this assignment still warrants the ambient "unseen assignment" block particle
+    /// (fix-offline-assignment-send-validation): unseen, AND never delivered as a physical Task Notice that
+    /// has already reached the recipient's inventory. A notice-delivered assignment gives the player an
+    /// in-hand signal the moment <see cref="ReceivedDate"/> is stamped, so the world-space particle nudge
+    /// becomes redundant for it even while it's still otherwise unseen. Local-Inboxes assignments never
+    /// stamp <see cref="ReceivedDate"/>, so this stays true for them for as long as <see cref="Seen"/> is
+    /// false — unchanged from the pre-existing particle trigger.</summary>
+    public bool NeedsAmbientParticle => !Seen && ReceivedDate is null;
 }
 
 /// <summary>Validates the assignment transition matrix without any game/API dependencies.</summary>

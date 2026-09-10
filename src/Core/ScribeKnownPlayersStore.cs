@@ -33,6 +33,10 @@ public sealed class ScribeKnownPlayersStore
     public List<(string Uid, string Name)> Snapshot() =>
         _knownPlayers.Select(kv => (kv.Key, kv.Value)).ToList();
 
+    /// <summary>O(1) membership check against the backing dictionary — for a per-send validation guard
+    /// that doesn't need (and shouldn't allocate) a full <see cref="Snapshot"/>.</summary>
+    public bool Contains(string uid) => _knownPlayers.ContainsKey(uid);
+
     // ---------------- Persistence ----------------
 
     private static readonly byte[] Magic = "SKPS"u8.ToArray();

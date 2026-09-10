@@ -286,7 +286,7 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
         if (Api is not ICoreClientAPI capi) return;
 
         var emitter = ModSystem?.ParticleEmitter;
-        bool active = emitter is not null && ModSystem is { HasUnseenAssignment: true };
+        bool active = emitter is not null && ModSystem is { HasUnseenUndeliveredAssignment: true };
         if (active)
         {
             var player = capi.World.Player?.Entity;

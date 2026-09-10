@@ -286,6 +286,25 @@ public class NoticeLifecycleScenarios : AtlasScenarioBase
         Assert.Contains(placedDoc!.Blocks, b => b.TaskId == assignmentId && b.Text == "Chop 10 logs");
     }
 
+    /// <summary>fix-offline-assignment-send-validation §5/§6: locks in the server-side data precondition
+    /// the new <see cref="ScribeAssignment.NeedsAmbientParticle"/> predicate depends on — once a Task Notice
+    /// physically reaches the recipient's inventory, the resulting record has <c>ReceivedDate</c> stamped
+    /// while <c>Seen</c> is still false (it hasn't been opened in an Inbox yet). Actual particle rendering
+    /// is client-only and out of reach of a headless Atlas scenario; this proves the data shape instead.</summary>
+    [AtlasScenario(RollbackWorld = true)]
+    public async Task ReceivedNotice_StampsReceivedDate_WhileStillUnseen()
+    {
+        var deskPos = World.Spawn.Offset(4, 0, 0);
+        var assigner = await World.JoinPlayer("RecvDateAssigner");
+        var assignee = await World.JoinPlayer("RecvDateAssignee");
+        var (assignmentId, _) = await SeedReceivedNotice(assigner, assignee, deskPos, deskPos);
+
+        var assignment = Mod.AssignmentStore!.TryGet(assignmentId)!.Assignment!;
+        Assert.NotNull(assignment.ReceivedDate);
+        Assert.False(assignment.Seen);
+        Assert.False(assignment.NeedsAmbientParticle);
+    }
+
     /// <summary>Sends one notice row to <paramref name="assignee"/> and receives it into their hotbar slot
     /// 0 (transitioning the store record Sent -> Unaccepted), leaving a Notebook in hotbar slot 1 for
     /// Accept-time placement. Positions <paramref name="assignee"/>'s entity at a fixed, known point so

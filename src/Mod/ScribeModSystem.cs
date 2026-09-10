@@ -175,6 +175,17 @@ public sealed partial class ScribeModSystem : ModSystem
     /// push (infrequent relative to how often this is polled).</summary>
     public bool HasUnseenAssignment => myReceivedAssignments.Any(b => b.Assignment is { Seen: false });
 
+    /// <summary>Whether this player has at least one unseen assignment that ALSO hasn't already been
+    /// delivered as a physical Task Notice item into their inventory (fix-offline-assignment-send-
+    /// validation) — the narrower trigger for the world-space ambient block particle (§8.4) only. Unlike
+    /// <see cref="HasUnseenAssignment"/> (which stays untouched for the Inbox nav-button shimmer, §8.5),
+    /// this excludes a notice-delivered assignment once <see cref="ScribeAssignment.ReceivedDate"/> is
+    /// stamped — the player already has an in-hand signal for it and doesn't need the block particle too.
+    /// Delegates to <see cref="ScribeAssignment.NeedsAmbientParticle"/> so the actual predicate is
+    /// unit-tested in Core.</summary>
+    public bool HasUnseenUndeliveredAssignment =>
+        myReceivedAssignments.Any(b => b.Assignment is { } a && a.NeedsAmbientParticle);
+
     /// <summary>Raised on the client whenever a fresh assignment sync push arrives, so an open
     /// Assignment Desk/Inbox dialog can repaint its rows.</summary>
     public event Action? MyAssignmentsChanged;

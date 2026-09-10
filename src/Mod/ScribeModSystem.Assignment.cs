@@ -47,8 +47,13 @@ public sealed partial class ScribeModSystem
     {
         if (sapi is null || assignmentStore is null) return;
 
+        // Accept an online (or session-connected) target via the cheap PlayerByUid check first; a miss
+        // there falls back to the persisted known-players registry so a currently-offline but previously-
+        // known target (persist-known-players-for-assignment) isn't wrongly rejected — see proposal.md's
+        // root-cause: this guard predates offline targeting and never learned about that registry.
         string? targetUid = message.TargetPlayerUid;
-        if (string.IsNullOrWhiteSpace(targetUid) || sapi.World.PlayerByUid(targetUid) is null)
+        if (string.IsNullOrWhiteSpace(targetUid)
+            || (sapi.World.PlayerByUid(targetUid) is null && !(knownPlayersStore?.Contains(targetUid) ?? false)))
         {
             Trace("send-assignment-batch from {0}: unknown target player uid — ignored", fromPlayer.PlayerName);
             return;

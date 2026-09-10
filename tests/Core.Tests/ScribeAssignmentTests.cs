@@ -162,6 +162,34 @@ public class ScribeAssignmentTests
     }
 
     [Fact]
+    public void NeedsAmbientParticle_TrueWhenUnseenAndNeverReceivedAsNotice()
+    {
+        var assignment = new ScribeAssignment("assigner", "Day 1");
+        Assert.False(assignment.Seen);
+        Assert.Null(assignment.ReceivedDate);
+        Assert.True(assignment.NeedsAmbientParticle);
+    }
+
+    [Fact]
+    public void NeedsAmbientParticle_FalseOnceSeen()
+    {
+        var assignment = new ScribeAssignment("assigner", "Day 1");
+        assignment.MarkSeen();
+        Assert.False(assignment.NeedsAmbientParticle);
+    }
+
+    [Fact]
+    public void NeedsAmbientParticle_FalseOnceReceivedAsNotice_EvenIfStillUnseen()
+    {
+        var assignment = new ScribeAssignment("assigner", "Day 1")
+        {
+            ReceivedDate = "Day 2",
+        };
+        Assert.False(assignment.Seen);
+        Assert.False(assignment.NeedsAmbientParticle);
+    }
+
+    [Fact]
     public void BinaryCodecRoundTripsAssignmentAndAbsentAssignment()
     {
         var original = new ScribeDocument();
