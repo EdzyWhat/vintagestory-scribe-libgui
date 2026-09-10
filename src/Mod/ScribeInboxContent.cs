@@ -238,7 +238,7 @@ internal sealed class ScribeInboxContentState : State<ScribeInboxContent>
                     BorderColor = colors.Border,
                     Padding = EdgeInsets.Symmetric(horizontal: 10f, vertical: 4f),
                 },
-                child: new Text(label, new TextStyle { FontSize = 12f, Color = fg })));
+                child: new Text(label, new TextStyle { FontSize = 12f, Color = fg, FontFamily = ScribeTaskFont.ButtonFamily })));
     }
 }
 

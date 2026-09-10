@@ -159,14 +159,22 @@ internal sealed class ScribeAssignmentFormContentState : State<ScribeAssignmentF
         var players = Widget.TargetPlayers;
         string? selectedTargetUid = Widget.SelectedTargetUid;
 
+        // Row 3 (the send-to controls) renders entirely in Caudex, matching the title/subtitle rows above
+        // it — unlike the tab's general content below the divider, which follows the player's Task Text
+        // Font. The picker's popup menu renders in a global overlay outside the tab subtree the ambient
+        // DefaultTextStyle ancestor covers anyway, so its font must be set explicitly regardless (same
+        // reasoning as ScribePinnedContent's policy-picker dropdown).
+        var targetDropdownStyle = Theme.Of(context).DropdownStyle;
+        targetDropdownStyle = targetDropdownStyle with { TextStyle = targetDropdownStyle.TextStyle with { FontFamily = ScribeTaskFont.ButtonFamily } };
+
         Widget playerPicker = players.Count == 0
             ? new Text(Lang.Get("scribe:scribe-assignment-no-players"),
-                new TextStyle { FontSize = style.FontSize, Color = colors.OnSurfaceVariant })
+                new TextStyle { FontSize = style.FontSize, Color = colors.OnSurfaceVariant, FontFamily = ScribeTaskFont.ButtonFamily })
             : new Dropdown<string>(
                 value: selectedTargetUid ?? players[0].Uid,
                 items: players.Select(p => new DropdownItem<string> { Value = p.Uid, Label = p.Name }).ToList(),
                 onChanged: v => Widget.OnTargetSelected(v),
-                style: Theme.Of(context).DropdownStyle);
+                style: targetDropdownStyle);
 
         bool canSend = !Widget.Sending && selectedTargetUid is not null && Widget.SelectedTaskIds.Count > 0;
 
@@ -186,7 +194,7 @@ internal sealed class ScribeAssignmentFormContentState : State<ScribeAssignmentF
             children: new Widget[]
             {
                 new Text(Lang.Get("scribe:scribe-assignment-target-label"),
-                    new TextStyle { FontSize = style.FontSize * 0.85f, Color = colors.OnSurfaceVariant }),
+                    new TextStyle { FontSize = style.FontSize * 0.85f, Color = colors.OnSurfaceVariant, FontFamily = ScribeTaskFont.ButtonFamily }),
                 new Expanded(flex: 1, child: playerPicker),
                 sendButton,
             });

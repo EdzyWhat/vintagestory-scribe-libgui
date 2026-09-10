@@ -312,13 +312,15 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
         // caption/help and the dropdown's own text follow the player's chosen Task Text Font.
         float scale = Widget.Style.FontSize / ScribeRowConstants.BaseWindowFontSize;
         string taskFont = ScribeTaskFont.Resolve(Widget.Style.TaskFontFamily);
-        // Caption font family inherited from the tab's DefaultTextStyle ancestor; the smaller 13*scale
-        // size is a deliberate delta and stays explicit.
+        // Caption renders in Caudex like the rest of Row 3 (the policy picker) — explicit rather than
+        // inherited from the tab's DefaultTextStyle ancestor, matching the title/subtitle rows above it.
+        // The smaller 13*scale size is a deliberate delta and stays explicit too.
         Widget policyCaption = new Text(Lang.Get("scribe:settings-completionpolicy"),
             new TextStyle
             {
                 FontSize = ScribeTaskFont.LayoutSize(Widget.Style.TaskFontFamily, 13 * scale),
                 Color = colors.OnSurfaceVariant,
+                FontFamily = ScribeTaskFont.ButtonFamily,
             });
         policyCaption = ScribeGlobalTint.ShadedTooltip(
             child: policyCaption,
@@ -340,12 +342,13 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
             baseTheme: Theme.Of(context),
             shade: Widget.CurrentShade);
 
-        // Start from the theme's dropdown style and swap in the task font on its shared TextStyle (used
-        // for both the trigger button label and the menu items). Kept explicit (not inherited): the
+        // Start from the theme's dropdown style and swap in Caudex on its shared TextStyle (used for both
+        // the trigger button label and the menu items) — Row 3 renders in Caudex like the title/subtitle
+        // rows above it, not the player's task font. Kept explicit (not inherited) regardless: the
         // dropdown's popup menu renders in a global overlay, outside the tab subtree the DefaultTextStyle
         // ancestor covers (task 3.1) — and Dropdown takes a DropdownStyle, not a plain Text anyway.
         var dropdownStyle = Theme.Of(context).DropdownStyle;
-        dropdownStyle = dropdownStyle with { TextStyle = dropdownStyle.TextStyle with { FontFamily = taskFont } };
+        dropdownStyle = dropdownStyle with { TextStyle = dropdownStyle.TextStyle with { FontFamily = ScribeTaskFont.ButtonFamily } };
         // Let the owning dialog restyle the picker per its theme (refine-chalkboard): the chalkboard fixes its
         // unreadable selected-row colors here. Applied AFTER the font tweak so the surface override composes on
         // top; null (every other surface) leaves the theme default untouched.
