@@ -6,28 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [1.4.0-rc.5] - 2026-09-09
+## [1.4.0] - 2026-09-09
 
-Small fix-only release candidate — quiets a log-spam warning some server admins mistook for a
-crash.
-
-### Fixed
-- **A creature killing a Notebook-carrying player logged a scary but harmless warning on every
-  death.** Discovering how many flavored "was slain by ..." lines exist was probing the count by
-  formatting each templated line with zero arguments, which the engine can't do and reports as an
-  `[Error]` + `[Warning]` pair to the log every time — server-wide, on every creature kill. The
-  probe now checks each line's existence without formatting it, so the flavor pool's size is
-  discovered silently; the flavored death lines themselves are unchanged. Death/PvP-kill message
-  construction is now also skipped entirely when neither the victim nor (for a PvP kill) the killer
-  carries a Notebook, instead of doing that work with nowhere to record the result.
-
-## [1.4.0-rc.4] - 2026-09-08
-
-Another testing-focused release candidate ahead of the real 1.4.0 — rolls up everything since
-`1.4.0-rc.3` into one build: Assignment Desk/Inbox is now craftable at the grid, VS Quest Quest
-Links gain static criteria subtasks, every non-Tablet dialog tab shares a new consistent header
-style, Read View gains filter pills and subtask collapsing, and the quest-catalog domain-scoping
-bug that hid real third-party quest content (Seafarer, VS Village) behind both backends is fixed.
+The Assignment tier: send a task directly to another player via a new Assignment Desk and Inbox,
+reach an offline or out-of-range player with a physical Task Notice item, and link tasks to VS
+Quest or Progression Framework quests. Also ships full Linux support (the LibGUI HarfBuzz crash
+class is fixed), a new consistent header on every dialog tab, and Read View filtering/collapsing.
 Fully save-compatible with 1.0–1.3.x worlds — existing documents open unchanged. New writes use
 document codec v11 (an assignment's target-player id, a quest Link's captured description) and
 pin codec v7; a pre-1.4.0 client cannot read a save from this build.
@@ -56,7 +40,12 @@ pin codec v7; a pre-1.4.0 client cannot read a save from this build.
   mode, sending an assignment shows a "Local Inboxes" / "Send a Notice" toggle pre-selected by a
   one-time range check but always freely switchable. A held notice's hover text now names its
   assigner and addressee (or flags an unaddressed one explicitly) and its stack size is 64 (was
-  16). An ambient discovery-particle effect plays near whoever is holding an unopened notice.
+  16). An ambient discovery-particle effect plays near whoever is holding an unopened notice. A
+  non-recipient holding a sealed notice can now Accept it too, after confirming a warning naming
+  the original recipient — the assignment redirects to them, leaving a trace in the Assigner's
+  Sent History; Decline remains recipient-only. Resolving an assignment through any Inbox tab (not
+  just the notice's own dialog) now also finds and consumes a matching sealed notice lying nearby,
+  instead of leaving a stale physical copy behind.
 - **VS Quest and Progression Framework support.** Quest Links (from the footer's New Task menu)
   keep one of a supported quest mod's quests listed next to your other goals; Scribe notices when
   you accept or complete a quest near its giver and says so in chat, with a Quest Accept Policy and
@@ -127,6 +116,16 @@ pin codec v7; a pre-1.4.0 client cannot read a save from this build.
 - Fixed the Assignment Desk, Inbox (ground), and Inbox (wall) rendering as the engine's "?"
   unknown-asset placeholder in-game, the Handbook, and Creative Inventory, caused by an exporter gap
   in their custom model files.
+- **A creature killing a Notebook-carrying player logged a scary but harmless warning on every
+  death.** Discovering how many flavored "was slain by ..." lines exist was probing the count by
+  formatting each templated line with zero arguments, which the engine can't do and reports as an
+  `[Error]` + `[Warning]` pair to the log every time — server-wide, on every creature kill. The
+  probe now checks each line's existence without formatting it, so the flavor pool's size is
+  discovered silently; the flavored death lines themselves are unchanged. Death/PvP-kill message
+  construction is now also skipped entirely when neither the victim nor (for a PvP kill) the killer
+  carries a Notebook, instead of doing that work with nowhere to record the result.
+- Fixed the Chalkboard's Guest Book tab always rendering in the parchment palette instead of its
+  own dark-slate/chalk theme, making the header and row text hard to read.
 
 ## [1.3.3] - 2026-08-30
 

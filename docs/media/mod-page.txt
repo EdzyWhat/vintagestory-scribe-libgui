@@ -47,6 +47,7 @@ Note-taking tools grow with your tech tree — scratchy clay in the stone age, c
 	•	✅ v1.1 — Interim polish — light-aware pages, plain notes alongside tasks, shelf storage for Notebooks and Tablets, typed arrows, smooth list animations, and a batch of editor and HUD fixes (released)
 	•	✅ v1.2 — Scriptorium + Tracker/Link + Transcribe — a shared writing station, item-bound task types, and copy/import/export (released)
 	•	✅ v1.3.0 — Crafting Tasks + Chalkboard — recipe-bound shopping lists and a wall-hung Lectern (released)
+	•	✅ v1.4.0 — Assignment Desk, Inbox & Task Notice — send a task directly to another player, reach an offline/out-of-range one with a physical notice, and link tasks to VS Quest or Progression Framework quests (released)
 	•	⬜ Later — Bulletin Board — a shared, public board for multiplayer
 
 📚 You might also like
