@@ -211,8 +211,9 @@ internal sealed class ScribeDocumentSlot : StatelessWidget
         if (assignment is null) return;
 
         var lineStyle = new TextStyle { FontSize = 13, Color = colors.OnBackground };
-        string assignerName = world.PlayerByUid(assignment.AssignerUid)?.PlayerName ?? assignment.AssignerUid;
-        string recipientName = world.PlayerByUid(assignment.TargetPlayerUid)?.PlayerName ?? assignment.TargetPlayerUid;
+        var modSystem = world.Api.ModLoader.GetModSystem<ScribeModSystem>();
+        string assignerName = modSystem.ResolvePlayerName(assignment.AssignerUid);
+        string recipientName = modSystem.ResolvePlayerName(assignment.TargetPlayerUid);
 
         lines.Add(new Text(Lang.Get("scribe:scribe-assignment-assigned-by", assignerName, assignment.AssignedDate), lineStyle));
         lines.Add(new Text(Lang.Get("scribe:scribe-tasknotice-addressed-to", recipientName), lineStyle));

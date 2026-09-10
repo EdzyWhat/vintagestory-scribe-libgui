@@ -561,9 +561,10 @@ public abstract partial class ScribeDialogBase
     private static IEnumerable<ScribeBlock> NewestBatchFirst(IEnumerable<ScribeBlock> blocks) =>
         blocks.GroupBy(b => b.Assignment!.BatchId).Reverse().SelectMany(g => g);
 
-    /// <summary>UID→display-name lookup for the Inbox tab's "Assigned by" line — see
-    /// <see cref="ScribeInboxContent.ResolvePlayerName"/>'s remarks on why this has no dedicated cache.</summary>
-    private protected string ResolvePlayerNameForInbox(string uid) => capi.World.PlayerByUid(uid)?.PlayerName ?? uid;
+    /// <summary>UID→display-name lookup for the Inbox tab's "Assigned by" line — delegates to
+    /// <see cref="ScribeModSystem.ResolvePlayerName"/> so an offline-but-known assigner still resolves to
+    /// a real name instead of their raw uid.</summary>
+    private protected string ResolvePlayerNameForInbox(string uid) => modSystem.ResolvePlayerName(uid);
 
     /// <summary>Resolves the (assigner name, assigned date, accepted date) triple for the assignment
     /// marker's hover tooltip on Read/Editor rows — null for a task that isn't an accepted assignment.

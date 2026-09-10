@@ -67,4 +67,22 @@ public sealed partial class ScribeModSystem
         myKnownPlayers = store.Snapshot();
         KnownPlayersChanged?.Invoke();
     }
+
+    /// <summary>Client-side UID→display-name resolution, the one place every dialog/tooltip that shows a
+    /// player name for a uid should go through. Prefers the currently-online player's live name; a target
+    /// who isn't online this session (the exact "sent a Task Notice to an offline player" case
+    /// fix-offline-assignment-send-validation unblocked server-side) falls back to this client's synced
+    /// <see cref="MyKnownPlayers"/> snapshot instead of degrading straight to the raw uid — every prior
+    /// call site (<c>GuiDialogTaskNotice.ResolvePlayerName</c>, <c>ScribeDialogBase.
+    /// ResolvePlayerNameForInbox</c>, and the inline lookups in <c>ItemScribeTaskNotice</c>/
+    /// <c>ScribeDocumentSlot</c>) only checked the online case and showed the bare uid otherwise — the
+    /// "confirmation message full of random letters" bug. Only degrades to the raw uid for a target this
+    /// client has truly never seen (never online, never synced as known).</summary>
+    public string ResolvePlayerName(string uid)
+    {
+        if (capi?.World.PlayerByUid(uid)?.PlayerName is { } online) return online;
+        foreach (var (knownUid, name) in myKnownPlayers)
+            if (knownUid == uid) return name;
+        return uid;
+    }
 }

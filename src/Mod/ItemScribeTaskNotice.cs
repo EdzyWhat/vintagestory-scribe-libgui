@@ -103,8 +103,7 @@ public sealed class ItemScribeTaskNotice : Item, IScribeDocumentItem
 
         var assignment = doc!.Blocks[0].Assignment;
         if (assignment is null) return;
-        string recipientName = world.PlayerByUid(assignment.TargetPlayerUid)?.PlayerName
-            ?? assignment.TargetPlayerUid;
+        string recipientName = world.Api.ModLoader.GetModSystem<ScribeModSystem>().ResolvePlayerName(assignment.TargetPlayerUid);
         dsc.AppendLine(Lang.Get("scribe:scribe-tasknotice-addressed-to", recipientName));
     }
 

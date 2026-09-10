@@ -278,7 +278,7 @@ public sealed class GuiDialogTaskNotice : GuiBase
                     new SizedBox(width: layout.SideColW),
                 }));
 
-    private string ResolvePlayerName(string uid) => capi.World.PlayerByUid(uid)?.PlayerName ?? uid;
+    private string ResolvePlayerName(string uid) => modSystem.ResolvePlayerName(uid);
 
     /// <summary>Decline + Accept, restructured (refine-task-notice-ux 3.4) so the multi-candidate picker —
     /// when shown — renders as its OWN full-width row ABOVE the Decline/Accept row, instead of stacked

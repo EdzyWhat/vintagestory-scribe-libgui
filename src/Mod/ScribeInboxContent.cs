@@ -93,11 +93,9 @@ internal sealed class ScribeInboxContent : StatefulWidget
 
     public IReadOnlyList<ScribeInboxRowData> Rows { get; }
     /// <summary>Resolves an assigner/assignee UID to a display name for the expanded row's "Assigned by"
-    /// line. Client-side UID→name resolution has no dedicated cache in this mod (unlike the Guestbook,
-    /// which stores the name directly at write time) — the dialog passes
-    /// <c>capi.World.PlayerByUid(uid)?.PlayerName ?? uid</c>, which resolves correctly for any player the
-    /// client has already seen (always true in singleplayer; true in multiplayer once that player has
-    /// been online this session) and degrades to the raw UID otherwise rather than showing nothing.</summary>
+    /// line. The dialog passes <see cref="ScribeModSystem.ResolvePlayerName"/>, which prefers the live
+    /// online name and falls back to the synced known-players snapshot for an offline-but-previously-known
+    /// player, only degrading to the raw UID for a target this client has truly never seen.</summary>
     public Func<string, string> ResolvePlayerName { get; }
     /// <summary>Requests a Decline/Cancel/Discard transition for the given assignment (Accept goes through
     /// <see cref="OnAccept"/> instead — it needs a placement target). The server re-validates the
