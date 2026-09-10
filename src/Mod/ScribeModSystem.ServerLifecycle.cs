@@ -59,6 +59,7 @@ public sealed partial class ScribeModSystem
         questDecisionStore?.LoadFrom(sapi.WorldManager.SaveGame.GetData(QuestDecisionStoreSaveKey));
         playerLocationStore?.LoadFrom(sapi.WorldManager.SaveGame.GetData(PlayerLocationStoreSaveKey));
         pendingHistoryStore?.LoadFrom(sapi.WorldManager.SaveGame.GetData(PendingHistoryStoreSaveKey));
+        knownPlayersStore?.LoadFrom(sapi.WorldManager.SaveGame.GetData(KnownPlayersStoreSaveKey));
 
         if (timerStores is not null)
         {
@@ -110,6 +111,9 @@ public sealed partial class ScribeModSystem
         if (pendingHistoryStore is not null)
             sapi.WorldManager.SaveGame.StoreData(PendingHistoryStoreSaveKey, pendingHistoryStore.SerializeStore());
 
+        if (knownPlayersStore is not null)
+            sapi.WorldManager.SaveGame.StoreData(KnownPlayersStoreSaveKey, knownPlayersStore.Serialize());
+
         if (timerStores is not null)
         {
             // Persist Running AND fired-but-undismissed timers. A fired timer is a notification the player
@@ -149,6 +153,7 @@ public sealed partial class ScribeModSystem
         PushTimerTo(player);
         PushAssignmentsTo(player);
         PushQuestDecisionsTo(player);
+        UpsertKnownPlayerAndBroadcast(player);
     }
 
 }

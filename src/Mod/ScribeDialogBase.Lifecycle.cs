@@ -373,6 +373,7 @@ public abstract partial class ScribeDialogBase
         modSystem.MyPinsChanged -= OnMyPinsChanged;
         modSystem.SettingsVisibilityChanged -= OnSettingsVisibilityChanged;
         modSystem.MyAssignmentsChanged -= OnMyAssignmentsChanged;
+        modSystem.KnownPlayersChanged -= OnKnownPlayersChanged;
         DisposePinState();
 #if DEBUG
         sharedScrollController.OnChanged -= OnScrollControllerChanged;

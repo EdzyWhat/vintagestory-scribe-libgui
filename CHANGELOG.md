@@ -164,6 +164,14 @@ automatically); a pre-1.4.0 client cannot read a save from this build.
   carries a Notebook, instead of doing that work with nowhere to record the result.
 - Fixed the Chalkboard's Guest Book tab always rendering in the parchment palette instead of its
   own dark-slate/chalk theme, making the header and row text hard to read.
+- **The Assignment Desk's target-player picker forgot anyone who wasn't currently online.** A
+  player who had joined and left (even in the same session, e.g. a LAN host testing with a second
+  client) vanished from the picker the next time the world was opened, since it only ever listed
+  `AllOnlinePlayers`. A new server-side known-players registry now remembers every uid/name it's
+  ever seen join, persists it in the savegame, and syncs it to clients so the picker lists anyone
+  ever seen even while offline (online names always win on conflict). The picker also now sorts
+  alphabetically by name (previously online-list order) and defaults its selection to whoever you
+  last successfully sent an assignment to, remembered per-player.
 
 ## [1.3.3] - 2026-08-30
 

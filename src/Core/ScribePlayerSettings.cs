@@ -180,6 +180,16 @@ public sealed class ScribePlayerSettings
     /// to the default on load (<see cref="NormalizeTimerMode"/>).</summary>
     public TimerMode PreferredTimerMode { get; set; } = TimerMode.RealTime;
 
+    /// <summary>The player UID this Assigner most recently sent an assignment to, successfully, from any
+    /// Assignment Desk — the Create Assignments tab's target-player picker default
+    /// (persist-known-players-for-assignment). Empty string (the default) means no prior send, or a prior
+    /// target no longer present in the current list; either way the picker falls back to the first entry
+    /// in its alphabetically-ordered list. Set optimistically on the client the moment a send succeeds. A
+    /// per-player, client-local preference: never server-synced. A plain string, so <see cref="Normalized"/>
+    /// leaves it untouched — an unresolvable uid is handled by the picker's own fallback, not by clamping
+    /// here.</summary>
+    public string LastAssignmentTargetUid { get; set; } = "";
+
     /// <summary>Maximum number of pinned tasks the HUD shows at once (default 3); pins beyond this
     /// are summarized ("+N more"). A per-player display preference; the Mod layer owns the HUD and
     /// clamps this to a sane range on read (see <see cref="ScribePinCodec"/>).</summary>

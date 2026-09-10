@@ -299,11 +299,17 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
         // Delivery-mode target selection (add-assignment-physical-delivery-mode task 4.2) — same
         // direct-field-mutation fallback the picker's own State used to do, now living here since the
         // selection moved to this dialog: seed a default and fire the ONE-time range check the moment
-        // there's a real target to check, without needing a rebuild to react to its own seeding.
+        // there's a real target to check, without needing a rebuild to react to its own seeding. The
+        // default prefers this Assigner's last-successfully-assigned target
+        // (persist-known-players-for-assignment) when it's still present in the current list, falling
+        // back to the first (alphabetically-ordered, per ComputeAssignmentTargetPlayers) entry otherwise.
         var targetPlayers = ComputeAssignmentTargetPlayers();
         if (selectedTargetUid is null || !targetPlayers.Any(p => p.Uid == selectedTargetUid))
         {
-            selectedTargetUid = targetPlayers.Count > 0 ? targetPlayers[0].Uid : null;
+            string lastTarget = modSystem.MySettings.LastAssignmentTargetUid;
+            selectedTargetUid = !string.IsNullOrEmpty(lastTarget) && targetPlayers.Any(p => p.Uid == lastTarget)
+                ? lastTarget
+                : targetPlayers.Count > 0 ? targetPlayers[0].Uid : null;
             deliveryChoiceOverride = null;
             rangeCheckInRange = null;
             if (selectedTargetUid is not null && ScribeDeliveryConfig.ReadMode(capi) == ScribeDeliveryMode.Hybrid)
@@ -488,6 +494,11 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
             Rows = rows,
             DeliveryChoice = (byte)deliveryChoice,
         });
+
+        // Set optimistically the moment the send fires (persist-known-players-for-assignment design.md
+        // Decision 5) — the picker's default for this Assigner's NEXT visit becomes this target, without
+        // waiting on a server round-trip (matching the stamp flourish below, which also plays optimistically).
+        modSystem.UpdateMySettings(s => s.LastAssignmentTargetUid = targetUid);
 
         selectedTaskIds.Clear();
         deleteFromSource = false;

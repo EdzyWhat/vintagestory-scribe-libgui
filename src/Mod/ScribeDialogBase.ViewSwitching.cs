@@ -236,6 +236,16 @@ public abstract partial class ScribeDialogBase
             RebuildBody();
     }
 
+    /// <summary>Rebuilds the Create Assignments tab if it is currently active, so its target picker
+    /// reflects a just-arrived known-players sync without needing a reopen (persist-known-players-for-
+    /// assignment spec: "A brand-new player is assignable immediately upon joining"). Only the Assignment
+    /// Desk ever has this tab, so this is inert on every other surface — mirrors
+    /// <see cref="OnMyAssignmentsChanged"/>'s own view-gated shape.</summary>
+    private void OnKnownPlayersChanged()
+    {
+        if (IsOpened() && IsAssignmentView) RebuildBody();
+    }
+
     /// <summary>Rebuilds the History view if it is currently active. Called after a history sync.</summary>
     protected internal void RefreshHistoryView()
     {
@@ -623,19 +633,30 @@ public abstract partial class ScribeDialogBase
             new TextStyle { Color = colors.OnSurfaceVariant }));
     }
 
-    /// <summary>Every other online player, as (uid, display name) — the target-player picker's options,
-    /// shared by the Create Assignments form. Self-assignment is deliberately allowed
+    /// <summary>Every player who has ever connected to this world, unioned with anyone currently online,
+    /// as (uid, display name) — the target-player picker's options, shared by the Create Assignments
+    /// form (persist-known-players-for-assignment). Self-assignment is deliberately allowed
     /// (<c>ScribeAssignmentStore.TryApplyAction</c> already resolves it correctly — a self-assignment
     /// matches both the Assigner and Assignee role checks) so the list is never empty in singleplayer,
     /// where the local player is the only "online" player; their own entry is labeled distinctly so it
-    /// doesn't read as a stray duplicate.</summary>
+    /// doesn't read as a stray duplicate. Sorted case-insensitively by each entry's underlying player
+    /// name, computed BEFORE the self label substitution so the local player's distinctly-labeled entry
+    /// still sorts by their own real name rather than pinning first/last. An online player's live name
+    /// wins over a possibly-stale cached one for the same uid, since <c>AllOnlinePlayers</c> is always
+    /// fresher than the last-synced <see cref="ScribeModSystem.MyKnownPlayers"/> snapshot.</summary>
     private protected List<(string Uid, string Name)> ComputeAssignmentTargetPlayers()
     {
         var localUid = capi.World.Player.PlayerUID;
-        return capi.World.AllOnlinePlayers
-            .Select(p => (p.PlayerUID, p.PlayerUID == localUid
-                ? Lang.Get("scribe:scribe-assignment-target-self", p.PlayerName)
-                : p.PlayerName))
+
+        var byUid = new Dictionary<string, string>();
+        foreach (var (uid, name) in modSystem.MyKnownPlayers) byUid[uid] = name;
+        foreach (var p in capi.World.AllOnlinePlayers) byUid[p.PlayerUID] = p.PlayerName;
+
+        return byUid
+            .OrderBy(kv => kv.Value, StringComparer.OrdinalIgnoreCase)
+            .Select(kv => (kv.Key, kv.Key == localUid
+                ? Lang.Get("scribe:scribe-assignment-target-self", kv.Value)
+                : kv.Value))
             .ToList();
     }
 

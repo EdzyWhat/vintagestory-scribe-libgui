@@ -57,6 +57,17 @@ public class ScribePlayerSettingsTests
     }
 
     [Fact]
+    public void Default_LastAssignmentTargetUid_IsEmpty()
+    {
+        // persist-known-players-for-assignment: an old config JSON missing the key defaults to "" (no
+        // prior send), and Normalized() leaves the plain string untouched.
+        Assert.Equal("", new ScribePlayerSettings().LastAssignmentTargetUid);
+        Assert.Equal("", new ScribePlayerSettings().Normalized().LastAssignmentTargetUid);
+        Assert.Equal("player-1",
+            new ScribePlayerSettings { LastAssignmentTargetUid = "player-1" }.Normalized().LastAssignmentTargetUid);
+    }
+
+    [Fact]
     public void Default_TimerAutoDisappear_IsOn()
     {
         // A fresh profile (no saved preference) keeps the original behavior: a fired timer disappears

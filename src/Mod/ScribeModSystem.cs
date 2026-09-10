@@ -417,7 +417,8 @@ public sealed partial class ScribeModSystem : ModSystem
             .RegisterMessageType<ScribeSetQuestObjectiveProgressMessage>()
             .RegisterMessageType<ScribeDismissQuestPromptMessage>()
             .RegisterMessageType<ScribeQuestDecisionSetMessage>()
-            .RegisterMessageType<ScribeSetReadViewStateMessage>();
+            .RegisterMessageType<ScribeSetReadViewStateMessage>()
+            .RegisterMessageType<ScribeKnownPlayersSyncMessage>();
     }
 
     /// <summary>Server-side accessor for the pin store, so the block entity can register/orphan its
@@ -475,7 +476,8 @@ public sealed partial class ScribeModSystem : ModSystem
             .SetMessageHandler<ScribeAssignmentSyncMessage>(OnClientReceivedAssignmentSync)
             .SetMessageHandler<ScribeDeliveryRangeCheckReplyMessage>(OnClientReceivedDeliveryRangeCheckReply)
             .SetMessageHandler<ScribeTaskNoticeProximityPingMessage>(OnClientReceivedTaskNoticeProximityPing)
-            .SetMessageHandler<ScribeQuestDecisionSetMessage>(OnClientReceivedQuestDecisionSet);
+            .SetMessageHandler<ScribeQuestDecisionSetMessage>(OnClientReceivedQuestDecisionSet)
+            .SetMessageHandler<ScribeKnownPlayersSyncMessage>(OnClientReceivedKnownPlayersSync);
 
         // The pinned-task HUD self-shows once the player's pin set arrives (it subscribes to
         // MyPinsChanged in its ctor), so it can be constructed here regardless of current pin count —
@@ -549,6 +551,7 @@ public sealed partial class ScribeModSystem : ModSystem
         assignmentStore = new ScribeAssignmentStore();
         questDecisionStore = new ScribeQuestDecisionStore();
         playerLocationStore = new ScribePlayerLocationStore();
+        knownPlayersStore = new ScribeKnownPlayersStore();
         pendingHistoryStore = new PendingHistoryStore();
         carryOnBridge = new CarryOnBridge(api);
 

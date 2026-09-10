@@ -531,6 +531,11 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
         // state transition, or a brand-new assignment arrives. Unsubscribed in OnGuiClosed.
         modSystem.MyAssignmentsChanged += OnMyAssignmentsChanged;
 
+        // Refresh an open Create Assignments tab when a fresh known-players sync arrives
+        // (persist-known-players-for-assignment) — e.g. another player just joined — so the target
+        // picker reflects it without needing a reopen. Unsubscribed in OnGuiClosed.
+        modSystem.KnownPlayersChanged += OnKnownPlayersChanged;
+
         // Restrict Tab / Shift+Tab to this dialog's own editable text fields (exclude-checkboxes-from-tab-focus).
         // gui@3.1.0 made every checkbox focusable AND made GuiBase.OnKeyDown drive Tab through
         // FocusManager.TraversalPolicy, so the stock ReadingOrderTraversalPolicy began stopping Tab on each
