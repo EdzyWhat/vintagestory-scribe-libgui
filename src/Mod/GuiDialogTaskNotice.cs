@@ -162,7 +162,8 @@ public sealed class GuiDialogTaskNotice : GuiBase
             currentShade: default,
             readOnly: true,
             completionAndPinLive: false,
-            showSubtitleRow: modSystem.VisualTuning.ShowSubtitleRow);
+            supportsFilterPills: false,
+            supportsTabHeader: false);
 
         Widget centerColumn = new Column(
             crossAxisAlignment: CrossAxisAlignment.Stretch,

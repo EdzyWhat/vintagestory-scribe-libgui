@@ -34,21 +34,24 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > scan sees it (e.g. by a corpse/keep-inventory mod), flushing it once the document is next seen
 > carried by the shared 10s tick.
 
-- [ ] `000000e3` **Check normal death still writes immediately.** With no competing
+- [x] `000000e3` **Check normal death still writes immediately.** With no competing
       inventory-altering mod installed, die while carrying a Notebook — confirm the Death
       entry appears in its History immediately, exactly as before this change.
       *(fix-death-history-inventory-race 6.2)*
-- [ ] `000000e4` **Check multi-day chronological ordering.** Trigger several history events
+      - **Confirmed 2026-09-09** (submission 2026-09-09T16-38-55): "(no note)"
+- [x] `000000e4` **Check multi-day chronological ordering.** Trigger several history events
       (a couple of deaths, a manual entry, a storm) spread across more than one in-game day
       on the same Notebook — confirm the History tab lists them newest-first in true
       chronological order, including any pair recorded on the same displayed day.
       *(fix-death-history-inventory-race 6.3)*
-- [ ] `000000e5` **Check corpse-mod death fallback (if practical).** With a corpse/keep-
+      - **Confirmed 2026-09-09** (submission 2026-09-09T16-38-55): "(no note)"
+- [x] `000000e5` **Check corpse-mod death fallback (if practical).** With a corpse/keep-
       inventory-style mod installed alongside Scribe (e.g. PlayerCorpse), die while carrying
       a Notebook — confirm no Death entry appears immediately — then recover/relocate the
       Notebook and confirm the Death entry appears within about one tick interval (~10s) of
       it next being carried, landing in its correct chronological position.
       *(fix-death-history-inventory-race 6.4)*
+      - **Confirmed 2026-09-09** (submission 2026-09-09T16-38-55): "(no note)"
 
 ## fix-mob-death-message-probe-and-notebook-gate
 
@@ -93,64 +96,78 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > downward jump on wrap. Restage Debug and fully quit/relaunch the client before testing
 > (lang/assets load once at boot).
 
-- [ ] `000000cc` **Check subtitle typography.** Open Read, Edit, Pinned, or Guest Book (any
+- [x] `000000cc` **Check subtitle typography.** Open Read, Edit, Pinned, or Guest Book (any
       two-word label like "Read View"); confirm EACH word's first letter renders full-size caps
       with the rest of that word smaller (not just the label's first word), the whole subtitle
       sits evenly on one baseline (no run floating above the line), and the descriptor after the
       colon renders genuinely italic/slanted (not upright bold) while the title bar above it still
       renders bold. *(unify-tab-header-layout 5.2, 5.3)*
-- [ ] `000000cd` **Check Inbox Inventory tab header.** Open the Inbox block's own Inbox Inventory
+      - **Confirmed 2026-09-09** (submission 2026-09-09T16-38-55): "(no note)"
+- [x] `000000cd` **Check Inbox Inventory tab header.** Open the Inbox block's own Inbox Inventory
       tab; confirm the subtitle appears above the 12-slot grid with exactly one durable divider
       directly UNDER the subtitle (not after the slot grid at the tab's bottom).
       *(unify-tab-header-layout 6.2, 13.1)*
-- [ ] `000000ce` **Check Timer tab header.** Open the Clockmaker's Notebook Timer tab in Idle,
+      - **Confirmed 2026-09-09** (submission 2026-09-09T16-38-55): "(no note)"
+- [x] `000000ce` **Check Timer tab header.** Open the Clockmaker's Notebook Timer tab in Idle,
       Running, and Fired states; confirm the subtitle + divider appear and the
       gearworks/countdown/form content still functions in all three. *(unify-tab-header-layout
       6.3)*
-- [ ] `000000cf` **Check flush dividers.** Across several tabs (Read, Edit, Pinned, Guest Book),
+      - **Confirmed 2026-09-09** (submission 2026-09-09T16-38-55): "(no note)"
+- [x] `000000cf` **Check flush dividers.** Across several tabs (Read, Edit, Pinned, Guest Book),
       confirm each durable divider sits flush against the top of the scroll viewport at rest (no
       gap), and scrolling down reveals a small breathing-room gap above the first row that scrolls
       away with the content. *(unify-tab-header-layout 7.2)*
-- [ ] `000000d0` **Check Row 1 grip position + alignment.** Open any dialog; confirm the drag-grip
+      - **Confirmed 2026-09-09** (submission 2026-09-09T16-38-55): "(no note)"
+- [x] `000000d0` **Check Row 1 grip position + alignment.** Open any dialog; confirm the drag-grip
       sits to the LEFT of the title text with tight, roughly symmetric padding on both sides of
       the title row, and that the grip icon is vertically aligned with the title text's baseline
       (not sitting visibly lower). *(unify-tab-header-layout 8.2, 8.4)*
-- [ ] `000000d1` **Check grip drag still works.** Drag the window via the new left-side grip, via
+      - **Confirmed 2026-09-09** (submission 2026-09-09T16-38-55): "(no note)"
+- [x] `000000d1` **Check grip drag still works.** Drag the window via the new left-side grip, via
       the title band elsewhere, and via hovering the grip's tooltip — confirm all three behave as
       before the move, including on a dialog with a two-line-wrapped title.
       *(unify-tab-header-layout 8.3)*
-- [ ] `000000d2` **Check Row1-row2 gap tightened.** Open any tab with a Row 2 subtitle; confirm the
+      - **Confirmed 2026-09-09** (submission 2026-09-09T16-38-55): "(no note)"
+- [x] `000000d2` **Check Row1-row2 gap tightened.** Open any tab with a Row 2 subtitle; confirm the
       gap between the title bar and the subtitle line reads visibly tighter than before (an
       additional ~6px reduction on top of the divider-flush change). *(unify-tab-header-layout
       9.1)*
-- [ ] `000000d3` **Check Tablet has no Row 2/Row 3.** Open a Tablet's Read View and Editor; confirm
+      - **Confirmed 2026-09-09** (submission 2026-09-09T16-38-55): "(no note)"
+- [x] `000000d3` **Check Tablet has no Row 2/Row 3.** Open a Tablet's Read View and Editor; confirm
       NEITHER a subtitle line NOR a second divider appears below the title bar — only the
       Tablet's own title-bar chrome, matching its behavior before this change touched it.
       *(unify-tab-header-layout 10.1-10.3)*
-- [ ] `000000d4` **Check Create Assignments' rearranged layout.** Open Create Assignments; confirm
+      - **Confirmed 2026-09-09** (submission 2026-09-09T16-38-55): "(no note)"
+- [x] `000000d4` **Check Create Assignments' rearranged layout.** Open Create Assignments; confirm
       Row 3 (right below the subtitle, above the divider) shows ONLY the Send-to picker + button,
       while the staging hint, delete-checkbox, delivery toggle, and notice slots all sit below the
       divider in the scrollable content, and the old "Assign Tasks" heading is gone.
       *(unify-tab-header-layout 12.1, 12.2)*
-- [ ] `000000d5` **Check Local Inboxes position + notice slot names.** On a Hybrid-delivery server,
+      - **Confirmed 2026-09-09** (submission 2026-09-09T16-38-55): "(no note)"
+- [x] `000000d5` **Check Local Inboxes position + notice slot names.** On a Hybrid-delivery server,
       confirm the "Local Inboxes"/"Send a Notice" toggle sits BELOW the scrollable stage tray, and
       the two notice slots read "Task Notice" and "Assigned Notice"; then draft, stage, and send an
       assignment via both delivery choices end to end. *(unify-tab-header-layout 12.3, 12.4)*
-- [ ] `000000d6` **Check Inbox Inventory's divider position.** Open the Inbox block's Inbox
+      - **Confirmed 2026-09-09** (submission 2026-09-09T16-38-55): "(no note)"
+- [x] `000000d6` **Check Inbox Inventory's divider position.** Open the Inbox block's Inbox
       Inventory tab; confirm the durable divider sits directly under the subtitle, not after the
       12-slot grid at the tab's bottom. *(unify-tab-header-layout 13.1)*
-- [ ] `000000d7` **Check small-caps size + grip height + content padding.** Open any subtitle-
+      - **Confirmed 2026-09-09** (submission 2026-09-09T16-38-55): "(no note)"
+- [x] `000000d7` **Check small-caps size + grip height + content padding.** Open any subtitle-
       bearing tab; confirm the small-caps letters read noticeably bigger than before (closer to
       the cap letter), the drag-grip no longer sits too high relative to the title, and the gap
       above the first row of scrollable content reads roomier (doubled).
       *(unify-tab-header-layout 13.2, 13.3, 13.4)*
-- [ ] `000000d8` **Check title-edit no longer grows.** On the Edit tab, click the title's
+      - **Confirmed 2026-09-09** (submission 2026-09-09T16-38-55): "(no note)"
+- [x] `000000d8` **Check title-edit no longer grows.** On the Edit tab, click the title's
       edit-pencil; confirm the title band does NOT visibly grow/jump in height when the input
       field appears. *(unify-tab-header-layout 13.5)*
-- [ ] `000000d9` **Check small-caps size pulled back.** Open any subtitle-bearing tab; confirm the
+      - **Confirmed 2026-09-09** (submission 2026-09-09T16-38-55): "(no note)"
+- [x] `000000d9` **Check small-caps size pulled back.** Open any subtitle-bearing tab; confirm the
       small-caps letters now read with more contrast against the full cap letter than the previous
       pass (still bigger than the original small size, but no longer nearly cap-sized).
       *(unify-tab-header-layout 16.1)*
+      - **Confirmed 2026-09-09** (submission 2026-09-09T16-38-55): "(no note)"
 - [x] `000000da` **Check the whole dialog renders normally, title row is centered, AND Row 1 grows
       smoothly on wrap.** First confirm both regressions are gone: open any Scribe dialog and
       confirm (1) the title bar, Row 2, Row 3, and the scrollable content all render in their
@@ -198,17 +215,20 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       - **Obsolete 2026-09-10** superseded by Round 5 (17.2): the checkbox always stands alone
         now (Hybrid or not), so there is no longer a separate fallback case to test — see
         `000000e0`, which now covers both delivery modes.
-- [ ] `000000de` **Check notice slots sit above the delivery toggle.** On a Hybrid-delivery server,
+- [x] `000000de` **Check notice slots sit above the delivery toggle.** On a Hybrid-delivery server,
       open Create Assignments; confirm the two notice slots sit directly above the Local
       Inboxes/Send a Notice button group. *(unify-tab-header-layout 16.4)*
-- [ ] `000000df` **Check info button reads slightly smaller.** On a Hybrid-delivery server, open
+      - **Confirmed 2026-09-09** (submission 2026-09-09T16-38-55): "(no note)"
+- [x] `000000df` **Check info button reads slightly smaller.** On a Hybrid-delivery server, open
       Create Assignments; confirm the delivery-info button now reads a touch SMALLER than the two
       buttons beside it (not an exact height match), with the icon itself unchanged from the
       previous pass. *(unify-tab-header-layout 17.1)*
-- [ ] `000000e0` **Check delete-checkbox own line at top.** Open Create Assignments on both a
+      - **Confirmed 2026-09-09** (submission 2026-09-09T16-38-55): "(no note)"
+- [x] `000000e0` **Check delete-checkbox own line at top.** Open Create Assignments on both a
       Hybrid-delivery and a non-Hybrid-delivery server; confirm the delete-from-source
       checkbox+label render on their own full-width line at the very TOP of the content section
       (above the staging slot) in both cases. *(unify-tab-header-layout 17.2)*
+      - **Confirmed 2026-09-09** (submission 2026-09-09T16-38-55): "(no note)"
 
 ## add-assignment-desk-create-tasks-button
 
@@ -221,10 +241,11 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       remains visible before “Pull existing tasks from this Desk.”
       *(add-assignment-desk-create-tasks-button 2.3)*
       - **Confirmed 2026-09-08** via direct in-game report: the button appears and its Editor route works.
-- [ ] `000000c2` **Check locked Desk feedback.** In multiplayer, have another client hold the Desk's
+- [x] `000000c2` **Check locked Desk feedback.** In multiplayer, have another client hold the Desk's
       Editor lock, then activate “Create Tasks to Assign”; confirm the standard locked-editor
       feedback appears and Create Assignments stays open.
       *(add-assignment-desk-create-tasks-button 2.4)*
+      - **Confirmed 2026-09-09** (submission 2026-09-09T17-15-17): "(no note)"
 
 ## align-row-hover-action-buttons
 
@@ -322,7 +343,7 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       instead of the canonical store record, letting a discarded-but-undeleted task silently
       derive a bogus local Completed state)*
       - **Confirmed 2026-09-01** (submission 2026-09-01T13-31-56): "(no note)"
-- [ ] `0000008e` **Check self-assign one-side delete stays one-sided.** Send an assignment to
+- [x] `0000008e` **Check self-assign one-side delete stays one-sided.** Send an assignment to
       yourself, bring it to a terminal state (Complete or Discard), then delete the record from
       ONLY the Assignment Inbox (or ONLY the Sent Assignment History) — confirm it disappears
       from that view but the record is still visible in the other view. A 2026-09-01 playtest
@@ -337,11 +358,13 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 > on `Gui.NativeLibraryLoader.Register()` (`src/Mod/ScribeHarfBuzzLoadFix.cs`) — inspired by a
 > community mod (Seralth's HarfBuzzFix). **Requires a real Linux/glibc box; cannot be smoke-tested
 > on macOS/Windows.**
+      - **Confirmed 2026-09-09** (submission 2026-09-09T17-15-17): "(no note)"
 
-- [ ] `0000006b` **Check no crash on Linux/glibc.** Install this build, join a world, and open every
+- [x] `0000006b` **Check no crash on Linux/glibc.** Install this build, join a world, and open every
       Scribe dialog that triggers font shaping (matches the original coredumpctl crash repro) —
       confirm no crash, and the client log shows "patched Gui.NativeLibraryLoader.Register" instead
       of the old dlopen-race notification. *(strengthen-harfbuzz-linux-fix 3.1)*
+      - **Confirmed 2026-09-09** (submission 2026-09-09T17-15-17): "(no note)"
 - [ ] `0000006c` **Check fail-closed on a broken patch target.** Simulate a future `gui` signature
       change (e.g. a debug build that makes `Register` unresolvable) — confirm Scribe logs the
       fail-closed warning and the client still starts normally instead of crashing.
@@ -782,15 +805,17 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       "Local Inboxes" is pre-selected, no notice slots appear, and sending places the assignment
       directly into the target's Inbox with no physical item involved. *(add-assignment-physical-delivery-mode 7.1)*
       - **Confirmed 2026-09-02** (submission 2026-09-02T20-53-17): "(no note)"
-- [ ] `00000088` **Hybrid out-of-range send.** Same setup, but target a player farther than the
+- [x] `00000088` **Hybrid out-of-range send.** Same setup, but target a player farther than the
       radius — confirm "Send a Notice" is pre-selected instead, the blank-notice supply/output
       slots appear, and sending consumes one blank Task Notice and seals it into the output slot
       (no `ScribeAssignmentStore` record exists yet — the Assigner's Sent History shows nothing
       for it). *(add-assignment-physical-delivery-mode 7.1)*
+      - **Confirmed 2026-09-09** (submission 2026-09-09T17-15-17): "(no note)"
 - [ ] `00000089` **Offline-target range check.** Target a currently-offline player who has
       logged out before (has a last-known position) — confirm the toggle pre-selects based on
       that stored position; then target one who has NEVER logged in / has no last-known position
       at all — confirm it defaults to "Send a Notice" (safer out-of-range default). *(add-assignment-physical-delivery-mode 7.1)*
+      - **Still broken 2026-09-09:** (submission 2026-09-09T17-15-17) "If I'm on LAN, there's no list of players who have previously joined."
 - [x] `0000008a` **Toggle override both directions.** For an in-range target, manually tap "Send a
       Notice" — confirm it's freely selectable with no grey/blocked state, and sending seals a
       notice despite being in range. For an out-of-range target, manually tap "Local Inboxes" —
@@ -806,13 +831,15 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
         trace. Confirmed working as newly specced (submission 2026-09-03T20-42-20): "it looks
         like it does [leave a trace], both on the Sent Assignment History and the Assignment
         Inbox side." Re-verification now belongs to `refine-task-notice-ux` tasks.md 4.2.
-- [ ] `0000008c` **Accept syncs like an in-range assignment.** Right-click a sealed Task Notice and
+- [x] `0000008c` **Accept syncs like an in-range assignment.** Right-click a sealed Task Notice and
       press Accept, placing it into an eligible Scribe item — confirm the row appears already
       Accepted, and Complete/Discard on it syncs to the Assigner exactly like a normal in-range
       assignment (same Sent History behavior, same instant sync regardless of distance). *(add-assignment-physical-delivery-mode 7.1)*
       - **Still broken 2026-09-03:** (submission 2026-09-03T20-42-20) "Not working. In the recent playtest, I accepted a "Sesfase" Task via Task Notice, and it didn't update to "Completed" on the Sender or Reciever Inbox tabs."
-- [ ] `0000008d` **Proximity scan spawns the discovery effect.** With an outstanding sealed Task
+      - **Confirmed 2026-09-09** (submission 2026-09-09T17-15-17): "(no note)"
+- [x] `0000008d` **Proximity scan spawns the discovery effect.** With an outstanding sealed Task
       Notice addressed to you sitting in a nearby chest (or dropped on the ground) within ~12
       blocks, walk into a new chunk near it — confirm the existing ambient particle effect spawns
       at the notice's position after the scan tick, client-local to you only. *(add-assignment-physical-delivery-mode 7.1)*
       - **Still broken 2026-09-03:** (submission 2026-09-03T20-42-20) "I cannot see the particle effect at all for assigned Task Notices as the assignee. Perhaps the issue is that I'm the assigner and the assignee, and I've touched the Task Notice. Regardless, I'd like to still see the particle effect."
+      - **Confirmed 2026-09-09** (submission 2026-09-09T17-15-17): "(no note)"

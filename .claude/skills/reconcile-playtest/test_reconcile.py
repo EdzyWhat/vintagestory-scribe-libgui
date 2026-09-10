@@ -134,6 +134,61 @@ class TestTestingBoxFlip(ReconcileTestBase):
         self.assertEqual(testing.count("Confirmed"), 1)  # no duplicate annotation
 
 
+class TestMultiTaskSpec(ReconcileTestBase):
+    def test_parse_task_spec_comma_list(self):
+        self.assertEqual(reconcile.parse_task_spec("5.2, 5.3"), ["5.2", "5.3"])
+
+    def test_parse_task_spec_same_major_range_expands(self):
+        self.assertEqual(reconcile.parse_task_spec("10.1-10.3"), ["10.1", "10.2", "10.3"])
+
+    def test_parse_task_spec_mixed_majors_list(self):
+        self.assertEqual(reconcile.parse_task_spec("16.2, 17.3, 18.1"),
+                         ["16.2", "17.3", "18.1"])
+
+    def test_parse_task_spec_cross_major_range_not_expanded(self):
+        # Different majors -> not a same-section range; passed through so lookup fails loudly.
+        self.assertEqual(reconcile.parse_task_spec("5.9-6.1"), ["5.9-6.1"])
+
+    def test_comma_taskid_flips_every_listed_box(self):
+        self.make_testing("- [ ] `00000001` **A.** body *(demo 5.2, 5.3)*")
+        self.tasks_md("demo", "- [ ] 5.2 do thing one", "- [ ] 5.3 do thing two")
+        self.submission("2026-08-21T10-00-00", [
+            {"fingerprint": "00000001", "taskId": "demo 5.2, 5.3", "verdict": "pass",
+             "note": "Both work."}], "2026-08-21T10:00:00-0700")
+        report, _ = self.run_reconcile()
+        tasks = self.read("openspec/changes/demo/tasks.md")
+        self.assertIn("- [x] 5.2 do thing one", tasks)
+        self.assertIn("- [x] 5.3 do thing two", tasks)
+        applied = [a for a in report["applied"] if a["status"] == "applied"]
+        self.assertTrue(applied[0]["boxFlipped"])
+        self.assertEqual(report["errors"], [])
+        self.assertEqual(report["movedToReviewed"], ["2026-08-21T10-00-00"])
+
+    def test_range_taskid_flips_every_box_in_range(self):
+        self.make_testing("- [ ] `00000001` **A.** body *(demo 10.1-10.3)*")
+        self.tasks_md("demo", "- [ ] 10.1 a", "- [ ] 10.2 b", "- [ ] 10.3 c")
+        self.submission("2026-08-21T10-00-00", [
+            {"fingerprint": "00000001", "taskId": "demo 10.1-10.3", "verdict": "pass",
+             "note": "All three work."}], "2026-08-21T10:00:00-0700")
+        self.run_reconcile()
+        tasks = self.read("openspec/changes/demo/tasks.md")
+        self.assertIn("- [x] 10.1 a", tasks)
+        self.assertIn("- [x] 10.2 b", tasks)
+        self.assertIn("- [x] 10.3 c", tasks)
+
+    def test_partially_resolvable_spec_flips_what_it_can_and_errors_on_rest(self):
+        self.make_testing("- [ ] `00000001` **A.** body *(demo 5.2, 5.9)*")
+        self.tasks_md("demo", "- [ ] 5.2 do thing one")  # 5.9 doesn't exist
+        self.submission("2026-08-21T10-00-00", [
+            {"fingerprint": "00000001", "taskId": "demo 5.2, 5.9", "verdict": "pass",
+             "note": "Mixed."}], "2026-08-21T10:00:00-0700")
+        report, _ = self.run_reconcile()
+        self.assertIn("- [x] 5.2 do thing one", self.read("openspec/changes/demo/tasks.md"))
+        self.assertEqual(len(report["errors"]), 1)
+        self.assertIn("5.9 not found", report["errors"][0]["error"])
+        self.assertEqual(report["movedToReviewed"], [])  # unresolved number -> stays pending
+
+
 class TestFail(ReconcileTestBase):
     def test_fail_records_line_but_leaves_box_unchecked(self):
         self.make_testing("- [ ] `00000002` **B.** body *(demo 1.2)*")

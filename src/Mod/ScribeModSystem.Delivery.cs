@@ -44,6 +44,13 @@ public sealed partial class ScribeModSystem
         else outstandingNoticeCountByTargetUid[targetUid] = next;
     }
 
+    /// <summary>Test-support accessor for <see cref="outstandingNoticeCountByTargetUid"/>
+    /// (consume-tasknotice-on-inbox-accept tasks.md 3.2) — mirrors the <see cref="AssignmentStore"/>/
+    /// <see cref="PinStore"/> precedent of exposing otherwise-private server state for the integration
+    /// suite to assert against directly.</summary>
+    public int OutstandingNoticeCount(string targetPlayerUid) =>
+        outstandingNoticeCountByTargetUid.GetValueOrDefault(targetPlayerUid);
+
     /// <summary>Client → server: "is this target in range of my Assignment Desk?" (Hybrid mode). Resolves
     /// the target's position from their live entity if online, or their last-known position if not; a
     /// target this server has NEVER seen (no last-known position at all) reports out-of-range, since there
@@ -339,7 +346,8 @@ public sealed partial class ScribeModSystem
                 continue;
             lastScannedChunkByPlayerUid[player.PlayerUID] = chunk;
 
-            var found = FindAddressedNoticePosition(player.PlayerUID, pos.XYZ);
+            var found = FindAddressedNoticePosition(pos.XYZ,
+                doc => doc.Blocks.Any(b => b.Assignment?.TargetPlayerUid == player.PlayerUID));
             if (found is not null)
             {
                 sapi.Network.GetChannel(NetworkChannelName).SendPacket(new ScribeTaskNoticeProximityPingMessage
@@ -383,22 +391,67 @@ public sealed partial class ScribeModSystem
         if (anyReceived) PushAssignmentsTo(player);
     }
 
-    /// <summary>The scan itself (tasks.md 5.3): dropped/thrown notices via
-    /// <see cref="IWorldAccessor.GetEntitiesAround"/>, then notices sitting inside any block entity
-    /// exposing an <see cref="IBlockEntityContainer"/> inventory, walked chunk-by-chunk
-    /// (<see cref="IWorldChunk.BlockEntities"/>) across the scan radius's bounding box — a generic
-    /// at-rest scan with no coupling to any specific container type (design.md). Returns the first
-    /// match's world position, or null.</summary>
-    private Vec3d? FindAddressedNoticePosition(string targetUid, Vec3d center)
+    /// <summary>Locate-only entry point used by the discovery ping (tasks.md 5.3): the nearby (dropped +
+    /// container) half of the shared traversal below, generalized (consume-tasknotice-on-inbox-accept
+    /// tasks.md 1.1) to take a match predicate instead of a hardcoded target-uid comparison, so this same
+    /// scan also backs the proactive-consume path with an exact-<c>TaskId</c> predicate instead.</summary>
+    private Vec3d? FindAddressedNoticePosition(Vec3d center, System.Func<ScribeDocument, bool> predicate)
+        => FindOrConsumeNearbyNotice(center, predicate, consume: false, out _);
+
+    /// <summary>Proactive-consume half of the shared traversal (consume-tasknotice-on-inbox-accept tasks.md
+    /// 1.2): searches <paramref name="targetPlayer"/>'s own carried slots first (a notice they're literally
+    /// holding — the discovery ping never needs this half, since <see cref="MarkReceivedForCarriedNotices"/>
+    /// already covers a carried notice's own state transition), then falls back to the same nearby
+    /// dropped-item/container scan <see cref="FindAddressedNoticePosition"/> uses for the ping — but with
+    /// the terminal action changed from "return this position" to "clear/despawn the match." Returns
+    /// whether anything was actually removed.</summary>
+    private bool TryConsumeAddressedNotice(IServerPlayer targetPlayer, System.Func<ScribeDocument, bool> predicate)
     {
+        if (targetPlayer.Entity is null) return false;
+
+        foreach (var slot in ScribeModSystem.EnumerateCarriedSlots(targetPlayer))
+        {
+            if (slot.Itemstack is not { } stack || !NoticeMatches(stack, predicate)) continue;
+            slot.Itemstack = null;
+            slot.MarkDirty();
+            return true;
+        }
+
+        FindOrConsumeNearbyNotice(targetPlayer.Entity.Pos.XYZ, predicate, consume: true, out var removed);
+        return removed;
+    }
+
+    /// <summary>The scan itself (tasks.md 5.3), generalized (consume-tasknotice-on-inbox-accept tasks.md
+    /// 1.1/1.2) to take a match predicate and an optional consume side effect: dropped/thrown notices via
+    /// <see cref="IWorldAccessor.GetEntitiesAround"/>, then notices sitting inside any block entity exposing
+    /// an <see cref="IBlockEntityContainer"/> inventory, walked chunk-by-chunk
+    /// (<see cref="IWorldChunk.BlockEntities"/>) across the scan radius's bounding box — a generic at-rest
+    /// scan with no coupling to any specific container type (design.md). Returns the first match's world
+    /// position, or null. When <paramref name="consume"/> is true, that match is removed in place (a
+    /// dropped <see cref="EntityItem"/> is despawned via <c>Die(EnumDespawnReason.Removed)</c>, the same way
+    /// a normal item pickup removes it; a container slot is cleared via
+    /// <c>slot.Itemstack = null; slot.MarkDirty()</c>) and <paramref name="removed"/> reports whether
+    /// anything was actually removed.</summary>
+    private Vec3d? FindOrConsumeNearbyNotice(Vec3d center, System.Func<ScribeDocument, bool> predicate, bool consume,
+        out bool removed)
+    {
+        removed = false;
         if (sapi is null) return null;
 
         var itemEntities = sapi.World.GetEntitiesAround(center, (float)NoticeScanRadius, (float)NoticeScanRadius,
             e => e is EntityItem);
         foreach (var entity in itemEntities)
         {
-            if (entity is EntityItem { Itemstack: { } stack } && NoticeAddressedTo(stack, targetUid))
-                return entity.Pos.XYZ;
+            if (entity is EntityItem { Itemstack: { } stack } && NoticeMatches(stack, predicate))
+            {
+                var pos = entity.Pos.XYZ;
+                if (consume)
+                {
+                    entity.Die(EnumDespawnReason.Removed);
+                    removed = true;
+                }
+                return pos;
+            }
         }
 
         int minCx = (int)Math.Floor((center.X - NoticeScanRadius) / GlobalConstants.ChunkSize);
@@ -422,8 +475,17 @@ public sealed partial class ScribeModSystem
 
                 foreach (var slot in container.Inventory)
                 {
-                    if (slot.Itemstack is { } candidate && NoticeAddressedTo(candidate, targetUid))
-                        return blockPos.ToVec3d().Add(0.5, 0.5, 0.5);
+                    if (slot.Itemstack is { } candidate && NoticeMatches(candidate, predicate))
+                    {
+                        var pos = blockPos.ToVec3d().Add(0.5, 0.5, 0.5);
+                        if (consume)
+                        {
+                            slot.Itemstack = null;
+                            slot.MarkDirty();
+                            removed = true;
+                        }
+                        return pos;
+                    }
                 }
             }
         }
@@ -431,10 +493,38 @@ public sealed partial class ScribeModSystem
         return null;
     }
 
-    private static bool NoticeAddressedTo(ItemStack stack, string targetUid)
+    private static bool NoticeMatches(ItemStack stack, System.Func<ScribeDocument, bool> predicate)
         => stack.Collectible is ItemScribeTaskNotice
             && ScribeDocumentAttributes.TryReadFrom(stack, out var doc) && doc is not null
-            && doc.Blocks.Any(b => b.Assignment?.TargetPlayerUid == targetUid);
+            && predicate(doc);
+
+    /// <summary>Proactive Task Notice consumption for the generic assignment-action path
+    /// (consume-tasknotice-on-inbox-accept): after an Accept/Decline/Cancel/Discard transition succeeds
+    /// through <see cref="ScribeModSystem.ApplyAssignmentAction"/> rather than the notice's own
+    /// dialog, best-effort locates and consumes any sealed Task Notice still carrying <paramref
+    /// name="taskId"/>, anchored on <paramref name="targetPlayerUid"/> (the Assignee — the only party who
+    /// could ever be physically carrying it, regardless of which party triggered the transition) and
+    /// scoped to the exact same carried+nearby search the discovery ping already uses. A no-op if that
+    /// player is offline (no live position to scan around, matching the proximity signal's own online-only
+    /// bound).
+    ///
+    /// <para><b>Multi-row gating</b> (design.md "Multi-row notices"): a sealed notice carrying more than one
+    /// row is only actually removed once EVERY row it carries has itself resolved out of Sent/Unaccepted —
+    /// otherwise it's still a live carrier for an unresolved row and must stay put.</para></summary>
+    private void ConsumeMatchingTaskNotice(Guid taskId, string targetPlayerUid)
+    {
+        if (sapi is null || assignmentStore is null) return;
+        if (sapi.World.PlayerByUid(targetPlayerUid) is not IServerPlayer { ConnectionState: EnumClientState.Playing } targetPlayer)
+            return;
+
+        bool AllRowsResolved(ScribeDocument doc) =>
+            doc.Blocks.Any(b => b.TaskId == taskId) &&
+            doc.Blocks.All(b => assignmentStore.TryGet(b.TaskId)?.Assignment?.State is not
+                (ScribeAssignmentState.Sent or ScribeAssignmentState.Unaccepted));
+
+        if (TryConsumeAddressedNotice(targetPlayer, AllRowsResolved))
+            AdjustOutstandingNoticeCount(targetPlayerUid, -1);
+    }
 
     /// <summary>Server → client: spawns the existing ambient discovery effect at the found notice's
     /// position, client-local to the one player this ping was addressed to (tasks.md 5.4). Reuses

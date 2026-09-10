@@ -264,13 +264,26 @@ public sealed partial class ScribeModSystem
             desk.DeleteTaskFromReader(taskId);
     }
 
-    /// <summary>Client → server: request an Accept/Decline/Cancel/Discard transition. The server
-    /// derives the actor from the authenticated sender and re-validates the transition through
-    /// <see cref="ScribeAssignmentStore.TryApplyAction"/> — the action byte on the wire is never
-    /// trusted as proof of authorization. On a successful Accept, also resolves Accept-time placement
-    /// (<see cref="TryPlaceAcceptedAssignment"/>) — moving the assigned content into the Assignee's own
-    /// document, per the `assignment-state-machine` capability's placement requirement.</summary>
+    /// <summary>Client → server: request an Accept/Decline/Cancel/Discard transition. Thin network shell —
+    /// see <see cref="ApplyAssignmentAction"/> for the actual logic, which this delegates to unchanged.</summary>
     private void OnServerReceivedAssignmentAction(IServerPlayer fromPlayer, ScribeAssignmentActionMessage message)
+        => ApplyAssignmentAction(fromPlayer, message);
+
+    /// <summary>The generic Accept/Decline/Cancel/Discard transition path — the Inbox tab's action buttons
+    /// on any surface (Assignment Desk, Lectern, or Inbox block) hit this, as opposed to a Task Notice's own
+    /// dialog (<see cref="ApplyTaskNoticeAction"/>). The server derives the actor from the authenticated
+    /// sender and re-validates the transition through <see cref="ScribeAssignmentStore.TryApplyAction"/> —
+    /// the action byte on the wire is never trusted as proof of authorization. On a successful Accept, also
+    /// resolves Accept-time placement (<see cref="TryPlaceAcceptedAssignment"/>) — moving the assigned
+    /// content into the Assignee's own document, per the `assignment-state-machine` capability's placement
+    /// requirement.
+    ///
+    /// <para>Public — matches the <see cref="ScribeModSystem.PinOperations"/>-file precedent
+    /// (<c>SetPinForPlayer</c>/<c>CompleteTaskForPlayer</c>) of a domain-named method the network handler
+    /// delegates to and the integration suite drives directly (consume-tasknotice-on-inbox-accept tasks.md
+    /// 4.1 — exercising this path is the only way to distinguish it from <see
+    /// cref="ApplyTaskNoticeAction"/>, since Atlas does not round-trip real network packets).</para></summary>
+    public void ApplyAssignmentAction(IServerPlayer fromPlayer, ScribeAssignmentActionMessage message)
     {
         if (sapi is null || assignmentStore is null) return;
         if (!TryReadGuid(message.AssignmentId, out var assignmentId))
@@ -299,6 +312,11 @@ public sealed partial class ScribeModSystem
         StampTransitionDate(record.Assignment, NotebookHost.FormatDate(sapi));
 
         if (action == ScribeAssignmentAction.Accept) TryPlaceAcceptedAssignment(fromPlayer, record, message);
+
+        // The Inbox tab (and any other surface hitting this generic path) has no notion of "this record
+        // arrived as a physical notice" — proactively find and consume one if it's still lying around
+        // (consume-tasknotice-on-inbox-accept), rather than leaving it stale and falsely-interactive.
+        ConsumeMatchingTaskNotice(assignmentId, targetUid);
 
         Trace("assignment-action from {0}: {1} on {2} -> {3}", fromPlayer.PlayerName, action, assignmentId, record.Assignment.State);
         if (sapi.World.PlayerByUid(assignerUid) is IServerPlayer assigner) PushAssignmentsTo(assigner);
@@ -442,7 +460,7 @@ public sealed partial class ScribeModSystem
     ///
     /// Gates on the CANONICAL store record's state, not <paramref name="assignmentOnBlock"/>'s — the block
     /// can be stale in either direction: the Inbox's manual Discard action (legal from Accepted, <see
-    /// cref="OnServerReceivedAssignmentAction"/>) transitions only the store record, since the task it
+    /// cref="ApplyAssignmentAction"/>) transitions only the store record, since the task it
     /// discards is deliberately left in place rather than deleted (that's <see
     /// cref="NotifyAssignmentDiscardOnDelete"/>'s job) — gating on the store means checking off that
     /// already-discarded task correctly stays a no-op. When <paramref name="assignmentOnBlock"/> IS

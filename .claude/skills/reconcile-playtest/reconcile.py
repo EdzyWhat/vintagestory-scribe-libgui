@@ -62,8 +62,32 @@ TASK_BOX_RE = re.compile(r"^(\s*)- \[( |x)\] (\d+(?:\.\d+)+)\b(.*)$")
 # Any `- [ ]`/`- [x]` line in a tasks.md, used only for the "fully checked?" scan.
 ANY_BOX_RE = re.compile(r"^\s*- \[( |x)\] ")
 
-# taskId in a submission is "<change> <N.M>" -- change name, a space, then the number.
-TASK_ID_RE = re.compile(r"^(.+?)\s+(\d+(?:\.\d+)+)$")
+# taskId in a submission is "<change> <spec>" -- change name, a space, then either a single
+# N.M number, a comma-separated list of them, or an N.M-N.M' range sharing a major component
+# (TESTING.md legitimately tags one item against several tasks, e.g. "5.2, 5.3" or "10.1-10.3").
+TASK_ID_RE = re.compile(r"^(.+?)\s+(\d+(?:\.\d+)+(?:\s*[,-]\s*\d+(?:\.\d+)+)*)$")
+
+
+def parse_task_spec(spec):
+    """Expand a taskId's number spec into individual "N.M" task numbers. A "-" range only
+    expands when both sides share the same major component (e.g. "10.1-10.3" -> ["10.1",
+    "10.2", "10.3"]); anything else is passed through unexpanded so lookup fails loudly
+    rather than guessing."""
+    numbers = []
+    for tok in spec.split(","):
+        tok = tok.strip()
+        if not tok:
+            continue
+        if "-" in tok:
+            left, right = (p.strip() for p in tok.split("-", 1))
+            lm = re.match(r"^(\d+)\.(\d+)$", left)
+            rm = re.match(r"^(\d+)\.(\d+)$", right)
+            if lm and rm and lm.group(1) == rm.group(1) and int(lm.group(2)) <= int(rm.group(2)):
+                major = lm.group(1)
+                numbers.extend(f"{major}.{n}" for n in range(int(lm.group(2)), int(rm.group(2)) + 1))
+                continue
+        numbers.append(tok)
+    return numbers
 
 # Caveat markers that flag a `pass` note for a human glance (never blocks auto-apply).
 CAVEAT_RE = re.compile(r"\b(but|doesn'?t|except|todo|however|caveat|almost)\b", re.IGNORECASE)
@@ -374,13 +398,17 @@ def reconcile(repo, pending_dir, date_str, dry_run, do_archive):
                         testing_box_flips.append(item["start"])
                 # tasks.md box flip + sourced note -- retried every run until it succeeds,
                 # even on an already-cited item (see comment above).
-                applied_box = _apply_box(repo, it["taskId"], fp, note, date_str, stem,
-                                         ensure_tasks_entry, report)
+                applied_box, box_fully_resolved = _apply_box(
+                    repo, it["taskId"], fp, note, date_str, stem, ensure_tasks_entry, report)
                 report["applied"].append({"submission": stem, "fingerprint": fp,
                                           "verdict": "pass",
                                           "status": "applied" if not already_cited else "already-applied",
                                           "taskId": it["taskId"], "boxFlipped": applied_box})
-                sub_item_terminal[stem].append(True)
+                # An unresolved box (bad taskId, missing tasks.md, or a number not found)
+                # is NOT terminal -- the submission must stay pending so a re-run (after the
+                # taskId or tasks.md is fixed) can retry the flip instead of it being stranded
+                # in reviewed/ where load_submissions never looks again.
+                sub_item_terminal[stem].append(box_fully_resolved)
 
             else:  # fail
                 if item_has_verdict(item, "confirmed") and item["checked"]:
@@ -486,39 +514,51 @@ def _oneline(text):
 
 
 def _apply_box(repo, task_id, fp, note, date_str, stem, ensure_tasks_entry, report):
-    """Flip the tasks.md box for task_id (if resolvable & currently unchecked). Returns
-    True if a flip was buffered, False otherwise. Records errors for unresolvable keys."""
+    """Flip the tasks.md box(es) for task_id (each resolvable & currently unchecked number
+    in its spec). Returns (any_flipped, fully_resolved): any_flipped is True if at least one
+    flip was buffered; fully_resolved is False if any number in the spec couldn't be found
+    (records one error per submission covering every unresolvable number, never guessing)."""
     if not task_id:
         report["errors"].append({"submission": stem, "fingerprint": fp,
                                  "error": "pass item has no taskId; TESTING.md updated "
                                           "but no tasks.md box to flip"})
-        return False
+        return False, False
     m = TASK_ID_RE.match(task_id.strip())
     if not m:
         report["errors"].append({"submission": stem, "fingerprint": fp,
                                  "error": f"unparseable taskId {task_id!r}"})
-        return False
-    change, num = m.group(1), m.group(2)
-    path, lines, idx = resolve_task_box(repo, change, num)
-    if lines is None:
+        return False, False
+    change, spec = m.group(1), m.group(2)
+    numbers = parse_task_spec(spec)
+    if not numbers:
+        report["errors"].append({"submission": stem, "fingerprint": fp,
+                                 "error": f"unparseable taskId {task_id!r}"})
+        return False, False
+    any_flipped = False
+    unresolved = []
+    for num in numbers:
+        path, lines, idx = resolve_task_box(repo, change, num)
+        if lines is None:
+            unresolved.append(f"tasks.md not found for change {change!r}")
+            continue
+        if idx is None:
+            unresolved.append(f"task {num} not found in {change}/tasks.md")
+            continue
+        edit = ensure_tasks_entry(path, lines)
+        # Already [x]? Idempotent no-op (but not an error).
+        if "- [ ]" not in lines[idx]:
+            continue
+        # Don't double-buffer the same box.
+        if any(op[0] == idx for op in edit["ops"]):
+            continue
+        note_line = (f'{TASK_NOTE_INDENT}- Confirmed {date_str}: TESTING.md `{fp}` '
+                     f'"{_oneline(note)}" (submission {stem})')
+        edit["ops"].append((idx, note_line))
+        any_flipped = True
+    if unresolved:
         report["errors"].append({"submission": stem, "fingerprint": fp, "taskId": task_id,
-                                 "error": f"tasks.md not found for change {change!r}"})
-        return False
-    if idx is None:
-        report["errors"].append({"submission": stem, "fingerprint": fp, "taskId": task_id,
-                                 "error": f"task {num} not found in {change}/tasks.md"})
-        return False
-    edit = ensure_tasks_entry(path, lines)
-    # Already [x]? Idempotent no-op (but not an error).
-    if "- [ ]" not in lines[idx]:
-        return False
-    # Don't double-buffer the same box.
-    if any(op[0] == idx for op in edit["ops"]):
-        return False
-    note_line = (f'{TASK_NOTE_INDENT}- Confirmed {date_str}: TESTING.md `{fp}` '
-                 f'"{_oneline(note)}" (submission {stem})')
-    edit["ops"].append((idx, note_line))
-    return True
+                                 "error": "; ".join(unresolved)})
+    return any_flipped, not unresolved
 
 
 def detect_ready_to_archive(repo, modified_tasks):
