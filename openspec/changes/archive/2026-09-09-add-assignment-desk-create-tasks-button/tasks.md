@@ -9,6 +9,7 @@
 
 - [x] 2.1 Run `dotnet build src/Mod/Mod.csproj --configuration Debug --no-restore` and confirm zero errors.
 - [x] 2.2 Run `VINTAGE_STORY="/Applications/Vintage Story.app" ./build/verify.sh Debug --no-restage` and confirm Core plus Atlas pass.
-- [ ] 2.3 Manually test an empty Assignment Desk: with no staged item and no Desk-local tasks, confirm “Create Tasks to Assign” is visible and opens the local Editor; create and commit a task, return to Create Assignments, and confirm the create button appears before “Pull existing tasks from this Desk.”
-- [ ] 2.4 In multiplayer, hold the Desk’s Editor lock from another client, activate “Create Tasks to Assign,” and confirm the standard locked-editor feedback appears and the current view stays open.
+- [x] 2.3 Manually test an empty Assignment Desk: with no staged item and no Desk-local tasks, confirm “Create Tasks to Assign” is visible and opens the local Editor; create and commit a task, return to Create Assignments, and confirm the create button appears before “Pull existing tasks from this Desk.”
+- [x] 2.4 In multiplayer, hold the Desk’s Editor lock from another client, activate “Create Tasks to Assign,” and confirm the standard locked-editor feedback appears and the current view stays open.
+  - Confirmed 2026-09-09: TESTING.md `000000c2` "(no note)" (submission 2026-09-09T17-15-17)
 - [x] 2.5 Run `openspec validate add-assignment-desk-create-tasks-button --strict` and confirm the change is valid.

@@ -17,5 +17,5 @@
   in Read, Editor, and Pinned views. Confirm the visible Pin, Unpin, and Delete button boxes align with
   the first text line while retaining their prior size, horizontal placement, hover visibility, and
   actions.
-- [ ] 2.3 Run `openspec validate align-row-hover-action-buttons --strict` and confirm the change
+- [x] 2.3 Run `openspec validate align-row-hover-action-buttons --strict` and confirm the change
   artifacts pass strict validation.

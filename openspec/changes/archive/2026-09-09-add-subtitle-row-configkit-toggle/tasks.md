@@ -48,12 +48,12 @@
 
 ## 6. Manual in-game verification
 
-- [ ] 6.1 With no `scribe-visual-tuning.json` present (or `ShowSubtitleRow` absent from it), confirm
+- [x] 6.1 With no `scribe-visual-tuning.json` present (or `ShowSubtitleRow` absent from it), confirm
   every dialog tab renders its Row 2 subtitle exactly as before (default-on, no regression).
-- [ ] 6.2 Set `ShowSubtitleRow: false` in `scribe-visual-tuning.json`, relaunch the client, and
+- [x] 6.2 Set `ShowSubtitleRow: false` in `scribe-visual-tuning.json`, relaunch the client, and
   confirm Row 2 is absent on a representative sample of tabs (Read, Editor, Guest Book, Inbox,
   Create Assignments) while Row 3 (where present) and the trailing divider still render directly
   under the title bar.
-- [ ] 6.3 If a ConfigKit build is available for manual testing, confirm the "Show subtitle row"
+- [x] 6.3 If a ConfigKit build is available for manual testing, confirm the "Show subtitle row"
   toggle appears in its settings screen for Scribe and edits the same `scribe-visual-tuning.json`
   key; otherwise record this as untested (ConfigKit is optional and not a mod dependency).

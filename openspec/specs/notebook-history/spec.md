@@ -4,15 +4,24 @@
 TBD - created by archiving change notebook-history-tab. Update Purpose after archive.
 ## Requirements
 ### Requirement: History store persists seven event kinds in the ItemStack
-The system SHALL maintain a `HistoryStore` per Notebook, serialized as `SHST v2` binary in
+The system SHALL maintain a `HistoryStore` per Notebook, serialized as `SHST v3` binary in
 `ItemStack.Attributes["scribeHistory"]`. The store SHALL record entries of the following kinds:
 `Crafted`, `PickedUp`, `Death`, `PvpKill`, `BossKill`, `TemporalStorm`, `LoreDiscovery`, and
 `Manual`. Each entry SHALL carry a kind, an actor name (player name or empty for world events), a
-detail string, a formatted in-game calendar date, and a stable per-entry identifier (a `Guid`,
-meaningful only for `Manual` entries; empty for every other kind). The store SHALL be versioned
-with `PriorVersion` and `ApplyMigrations` scaffolding following the `ScribeDocumentCodec` pattern; a
-`v1` payload (no per-entry identifier field) migrates by filling an empty identifier for every
-entry.
+detail string, a formatted in-game calendar date, a stable per-entry identifier (a `Guid`,
+meaningful only for `Manual` entries; empty for every other kind), and a sortable in-game
+timestamp captured at the moment the entry is recorded — distinct from the formatted date string,
+which remains display-only and unchanged in format. The store SHALL maintain its entries in
+chronological order by this timestamp (ties broken by write order) rather than by raw
+write/insertion order, so an entry recorded later in real time for an earlier in-game moment (for
+example, a Death entry whose recording was delayed) is placed in its correct chronological
+position rather than always at the end. The store SHALL be versioned with `PriorVersion` and
+`ApplyMigrations` scaffolding following the `ScribeDocumentCodec` pattern; a `v2` payload (no
+timestamp field) migrates by assigning each of its entries a synthetic timestamp that preserves
+the payload's existing relative order and sorts before every timestamp any entry recorded after
+this change can produce; a `v1` payload (no per-entry identifier field, and also no timestamp)
+migrates by first filling an empty identifier for every entry, then applying the same synthetic
+timestamp treatment.
 
 #### Scenario: Fresh notebook has an empty history store
 - **WHEN** a player obtains a new Notebook with no `scribeHistory` attribute
@@ -29,32 +38,50 @@ entry.
   player held it
 
 #### Scenario: A v1 payload migrates cleanly
-- **WHEN** a `scribeHistory` attribute written before this change (`SHST v1`, no per-entry
-  identifier) is deserialized
-- **THEN** every entry loads correctly with an empty identifier, and no error occurs
+- **WHEN** a `scribeHistory` attribute written before the identifier field existed (`SHST v1`) is
+  deserialized
+- **THEN** every entry loads correctly with an empty identifier, no error occurs, and the entries'
+  existing relative order is preserved via the same synthetic-timestamp treatment as a v2 payload
+
+#### Scenario: A v2 payload migrates cleanly, preserving existing order
+- **WHEN** a `scribeHistory` attribute written before this change (`SHST v2`, no sortable
+  timestamp) is deserialized
+- **THEN** every entry loads correctly, each is assigned a synthetic timestamp that reproduces the
+  payload's original relative order exactly, and every one of those synthetic timestamps sorts
+  before any timestamp a newly-recorded (post-migration) entry can carry — matching the fact that
+  they really were recorded before this change shipped
+
+#### Scenario: Two entries recorded on the same in-game day keep their real relative order
+- **WHEN** two entries are recorded for the same displayed in-game calendar date but at different
+  real moments (for example, a player dies twice in the same in-game day)
+- **THEN** they appear in the order they actually occurred, not merely the order their identical
+  displayed dates happen to sort by insertion
 
 ### Requirement: Per-kind caps enforce a rolling window
-The system SHALL enforce the following per-kind caps, dropping the oldest entry when the
-cap is reached for sliding-window kinds:
+The system SHALL enforce the following per-kind caps, dropping the chronologically oldest entry of
+that kind (by the store's own ordering, per the requirement above) when the cap is reached for
+sliding-window kinds:
 
 | Kind          | Cap | Policy        |
 |---------------|-----|---------------|
 | Crafted       | 1   | never replaced (only ever written once) |
 | PickedUp      | unlimited | deduped by ActorName (one entry per player ever) |
-| Death         | 30  | sliding window (oldest dropped) |
+| Death         | 30  | sliding window (chronologically oldest dropped) |
 | PvpKill       | 30  | sliding window |
 | BossKill      | 20  | sliding window |
 | TemporalStorm | 10  | sliding window |
-| Manual        | 30  | sliding window (oldest Manual entry dropped) |
+| Manual        | 30  | sliding window (chronologically oldest Manual entry dropped) |
 
 #### Scenario: Death cap drops oldest
 - **WHEN** a notebook already has 30 Death entries and the holder dies again
-- **THEN** the oldest Death entry is removed and the new one is appended, keeping exactly 30
+- **THEN** the chronologically oldest Death entry is removed and the new one is inserted in its
+  correct chronological position, keeping exactly 30
 
 #### Scenario: TemporalStorm cap drops oldest
 - **WHEN** a notebook already has 10 TemporalStorm entries and another storm begins while its
   holder is online
-- **THEN** the oldest TemporalStorm entry is removed and the new one is appended, keeping exactly 10
+- **THEN** the chronologically oldest TemporalStorm entry is removed and the new one is inserted in
+  its correct chronological position, keeping exactly 10
 
 #### Scenario: PickedUp deduplication
 - **WHEN** a player who already has a PickedUp entry for their name opens the notebook again
@@ -62,8 +89,8 @@ cap is reached for sliding-window kinds:
 
 #### Scenario: Manual cap drops the oldest manual entry
 - **WHEN** a notebook already has 30 Manual entries and its holder successfully adds another
-- **THEN** the oldest Manual entry (regardless of which player authored it) is removed and the new
-  one is appended, keeping exactly 30
+- **THEN** the chronologically oldest Manual entry (regardless of which player authored it) is
+  removed and the new one is inserted in its correct chronological position, keeping exactly 30
 
 ### Requirement: Crafted event recorded at notebook creation
 The system SHALL record a `Crafted` entry on the server when the Notebook item exits a
@@ -185,9 +212,64 @@ sentence already names the victim, so the entry SHALL leave `ActorName` empty (t
   damage-type mapping is available, a generic kill verb is used with no immediate repeat across
   successive kills recorded on the same notebook
 
+Because a live scan of the dying player's inventory can race against another mod's own death
+handling (e.g. one that moves the player's items into a corpse), the system SHALL also maintain a
+periodically-refreshed, per-player record of which Notebook/Tablet documents (by their own document
+id) were carried on that player's person as of the last refresh. If, at the moment of death, a
+document that was present in that record is no longer found by the live scan, the system SHALL
+queue the Death entry — including the in-game timestamp captured at the actual moment of death —
+against that document's own id rather than dropping it. A queued entry SHALL be written into its
+target document the next time that specific document is observed in any live carried slot,
+regardless of who is currently carrying it — never redirected to a different document, including
+one newly crafted or received afterward by the same player. Because the queued entry carries its
+original death-time timestamp, it SHALL be inserted into its correct chronological position when
+flushed (per the store-ordering requirement above), exactly as if it had been written at the moment
+of death, even if other entries were added to that same notebook during the delay. A queued entry
+SHALL persist across a server restart. Queued entries SHALL NOT be pruned by age or count. This
+fallback applies only to the Death entry of the player who died; it does not extend to the killer's
+side of a PvP kill (see the PvpKill requirement), since nothing evicts the killer's inventory when
+they are not the one dying.
+
 #### Scenario: Death without notebook records nothing
-- **WHEN** a player dies while NOT holding a Notebook
-- **THEN** no Death entry is added to any Notebook
+- **WHEN** a player dies while NOT holding a Notebook, and no Notebook was on their person as of
+  the last periodic snapshot either
+- **THEN** no Death entry is added to any Notebook, live or queued
+
+#### Scenario: A notebook evicted by a competing mod's death handling still records, on a delay
+- **WHEN** a player was carrying a Notebook as of the last periodic snapshot, but by the time
+  Scribe's own death handling runs, another mod's own `OnEntityDeath` handler has already moved
+  that Notebook out of the player's inventory (e.g. into a corpse), so Scribe's live scan finds
+  nothing
+- **THEN** the Death entry is queued against that specific Notebook's document id instead of being
+  dropped, and is written into it the next time that document is observed in any live carried
+  slot — whether the original player reclaims it or someone else picks it up
+
+#### Scenario: A queued entry never lands on the wrong notebook
+- **WHEN** a player has a Death entry queued against a specific document, and before that document
+  is ever seen again, the same player crafts a brand-new Notebook or receives one from another
+  player
+- **THEN** the new or received notebook does NOT gain the queued entry — it is written only to the
+  exact document it was queued against, never substituted for a different one
+
+#### Scenario: A flushed entry inserts into its correct chronological position
+- **WHEN** a queued Death entry is flushed into its notebook after that notebook has already
+  gained other entries, recorded at real in-game moments both before and after the actual death,
+  during the gap
+- **THEN** the queued entry is inserted at the chronological position matching the actual moment of
+  death, not appended after everything already present — it displays exactly where it would have
+  if it had been written immediately
+
+#### Scenario: A queued entry survives a server restart
+- **WHEN** a Death entry is queued against a document, and the server restarts before that
+  document is next seen in a live carried slot
+- **THEN** the queued entry is still present and is written into the document once it is next
+  observed after the restart
+
+#### Scenario: A queued entry is never pruned
+- **WHEN** a document a Death entry was queued against is never seen again for an extended period
+  (or ever again)
+- **THEN** the queued entry remains stored indefinitely — it is not dropped by age or by any count
+  limit
 
 ### Requirement: PvpKill event recorded when holder kills another player
 The system SHALL record a `PvpKill` entry on the server, on EVERY Notebook the killer is carrying on
@@ -410,3 +492,52 @@ no error.
 - **THEN** the CarryOn detection path logs a failure once (not once per event) and is treated as
   inactive for the rest of the session — it SHALL NOT throw an unhandled exception that disrupts
   the player-death, PvP-kill, or storm-tick handlers
+
+### Requirement: Mob-death flavor pool size discovery does not trigger translation-format warnings
+The system SHALL discover the size of the `scribe-mob-death-N` flavor pool without formatting any
+pool template against zero arguments. Discovering the pool's size SHALL NOT trigger the
+translation service's own error/warning logging, regardless of how many entries the pool contains
+or how many placeholders its templates use. The flavor pool's existing per-death behavior — a
+randomly-selected, variant-correct, fully-substituted line naming the killing creature — SHALL be
+unaffected: the same pool, the same random selection, the same final message text as before this
+change.
+
+#### Scenario: Creature kill selects a flavored line with no warning logged
+- **WHEN** a player carrying a Notebook is killed by a creature
+- **THEN** the Death entry's message is a fully-substituted line from the `scribe-mob-death-N` pool
+  naming the creature, and no translation-format warning is logged as a side effect of selecting it
+
+#### Scenario: Pool size reflects all shipped entries
+- **WHEN** the mob-death flavor pool contains N contiguous entries (`scribe-mob-death-0` through
+  `scribe-mob-death-(N-1)`)
+- **THEN** every one of those N entries remains reachable as a possible selection, identical to
+  before this change
+
+### Requirement: Death and PvpKill message construction is skipped when no relevant Notebook exists
+Before constructing any Death or PvpKill message text (mob-death flavor pool selection, PvP verb
+resolution, or vanilla environmental-message reconstruction), the system SHALL check whether at
+least one relevant party carries a Notebook: for a non-PvP death, the dying player; for a PvP kill,
+the dying player OR the killing player. When neither relevant party carries a Notebook, the system
+SHALL skip message construction entirely and record nothing, avoiding wasted computation on a death
+event with no Notebook anywhere to record it. When at least one relevant party carries a Notebook,
+message construction proceeds exactly as it does today and is written to every Notebook the
+relevant party carries.
+
+#### Scenario: Non-PvP death with no notebook constructs no message
+- **WHEN** a player who carries no Notebook dies to a creature or environmental cause
+- **THEN** no Death message is constructed and no history entry is written anywhere
+
+#### Scenario: PvP kill with neither party carrying a notebook constructs no message
+- **WHEN** a player who carries no Notebook is killed by another player who also carries no
+  Notebook
+- **THEN** no Death or PvpKill message is constructed and no history entry is written anywhere
+
+#### Scenario: PvP kill where only the killer carries a notebook still constructs the message
+- **WHEN** a player carrying no Notebook is killed by a player who does carry a Notebook
+- **THEN** the shared PvP message is constructed, a PvpKill entry is written to the killer's
+  notebook(s), and no Death entry is written for the victim
+
+#### Scenario: PvP kill where only the victim carries a notebook still constructs the message
+- **WHEN** a player carrying a Notebook is killed by a player who carries no Notebook
+- **THEN** the shared PvP message is constructed, a Death entry is written to the victim's
+  notebook(s), and no PvpKill entry is written for the killer

@@ -67,7 +67,8 @@
   full-cap-size first-letter span and a ~75%-size remaining-letters span (both uppercase, same
   family/weight/color) instead of a uniform ALL-CAPS block, for a genuine small-caps look. Verify
   `dotnet build` succeeds.
-- [ ] 5.2 `ScribeModSystem.Assets.cs` (`RegisterCustomFonts`) — bundle Caudex's real italic cut
+- [x] 5.2 `ScribeModSystem.Assets.cs` (`RegisterCustomFonts`) — bundle Caudex's real italic cut
+  - Confirmed 2026-09-09: TESTING.md `000000cc` "(no note)" (submission 2026-09-09T16-38-55)
   (`textures/fonts/caudex-italic.ttf`) and register it under the "Caudex" family's `Italic` weight
   slot only, leaving Normal/SemiBold/Bold on the existing bold cut. `dotnet build` verified; still
   needs the in-game check — after restaging, confirm the lectern title still renders bold (the
@@ -85,11 +86,13 @@
   `scribe-tab-inbox-inventory` / `scribe-gui-nav-timer` as labels), following the existing
   `scribe-tab-subtitle-*` / `scribe-gui-subtitle-*` naming convention. `en.json` verified to still
   parse as valid JSON.
-- [ ] 6.2 `GuiDialogScribeInbox.cs` (`BuildInboxInventoryContent`) — call `ScribeTabHeader.Build`
+- [x] 6.2 `GuiDialogScribeInbox.cs` (`BuildInboxInventoryContent`) — call `ScribeTabHeader.Build`
+  - Confirmed 2026-09-09: TESTING.md `000000cd` "(no note)" (submission 2026-09-09T16-38-55)
   with the new subtitle, treating the existing 3-row slot grid as Row 3. `dotnet build` verified;
   still needs the in-game check — after restaging, confirm the Inbox Inventory tab shows its
   subtitle above the slot grid and exactly one durable divider below it.
-- [ ] 6.3 `GuiDialogClockmakerNotebook.cs` (`BuildTimerContent`) — call `ScribeTabHeader.Build`
+- [x] 6.3 `GuiDialogClockmakerNotebook.cs` (`BuildTimerContent`) — call `ScribeTabHeader.Build`
+  - Confirmed 2026-09-09: TESTING.md `000000ce` "(no note)" (submission 2026-09-09T16-38-55)
   with the new subtitle and no Row 3, replacing the existing bare `new Divider()`. `dotnet build`
   verified; still needs the in-game check — after restaging, confirm the Timer tab shows its
   subtitle above the divider and the gearworks/countdown/form content below still function in all
@@ -104,7 +107,8 @@
   `ScribeInboxContent.cs`, `ScribeDialogBase.Guestbook.cs`, `GuiDialogScribeScriptorium.cs`,
   `GuiDialogScribeNotebook.cs` (History), `ScribeAssignmentFormContent.cs`,
   `GuiDialogClockmakerNotebook.cs` (Timer, added new in §6.3) — every non-tablet tab.
-- [ ] 7.2 For each call site found in 7.1, remove that outer padding and add the equivalent 4-unit
+- [x] 7.2 For each call site found in 7.1, remove that outer padding and add the equivalent 4-unit
+  - Confirmed 2026-09-09: TESTING.md `000000cf` "(no note)" (submission 2026-09-09T16-38-55)
   top padding to the `Column`/content living inside the tab's `SingleChildScrollView` instead (or
   the equivalent non-scrolling content wrapper for the two form-shaped tabs). `dotnet build`
   verified; still needs the in-game check — after restaging, confirm each affected tab shows the
@@ -118,17 +122,20 @@
   removing it from the trailing group. Keep its existing `OnGripDragStart`/`OnGripDragMove`/
   `OnGripDragEnd` wiring and tooltip text unchanged — this is a reposition, not a new drag
   mechanism.
-- [ ] 8.2 Reduce the title row's left inset from `10 + 0.04·W` to `0.04·W`, matching the right
+- [x] 8.2 Reduce the title row's left inset from `10 + 0.04·W` to `0.04·W`, matching the right
+  - Confirmed 2026-09-09: TESTING.md `000000d0` "(no note)" (submission 2026-09-09T16-38-55)
   inset, now that the grip itself (plus its own spacing) occupies the leading space. `dotnet
   build` verified; still needs the in-game check — after restaging, confirm the title text still
   isn't clipped and the grip glyph has visible spacing from both the panel edge and the title text
   at default and narrow window sizes.
-- [ ] 8.4 (2026-09-08 playtest) Halve both the title's own inner left padding
+- [x] 8.4 (2026-09-08 playtest) Halve both the title's own inner left padding
+  - Confirmed 2026-09-09: TESTING.md `000000d0` "(no note)" (submission 2026-09-09T16-38-55)
   (`titleBtnSpacing * 1.5f` → `* 0.75f`) and the outer left inset a second time (`0.04·W` →
   `0.02·W`, right inset unchanged), and vertically align the grip to the title's baseline via a
   bottom-`Padding` computed from the title font's own `descent + leading` metrics. `dotnet build`
   verified; still needs the in-game check.
-- [ ] 8.3 Verify by dragging the window from the new grip position, from elsewhere in the title
+- [x] 8.3 Verify by dragging the window from the new grip position, from elsewhere in the title
+  - Confirmed 2026-09-09: TESTING.md `000000d1` "(no note)" (submission 2026-09-09T16-38-55)
   band (unaffected band-drag), and from the tooltip's hover state — all three still behave exactly
   as before the move — on at least one dialog with a two-line-wrapped title (bottom-anchored Row 1)
   to confirm the grip still aligns sensibly there too.
@@ -210,7 +217,7 @@
 
 ## 14. Verification
 
-- [ ] 14.1 Rebuild the mod (`build/restage.sh Debug`, client not running) and manually open every
+- [x] 14.1 Rebuild the mod (`build/restage.sh Debug`, client not running) and manually open every
   affected tab in-game — Read, Edit, Pinned, History, Guest Book, Inbox, Sent Assignment History,
   Create Assignments, Transcribe, Inbox Inventory, Timer — confirming each shows a distinct,
   correctly-styled (per-word small-caps label, italic descriptor, baseline-aligned) subtitle and
@@ -219,7 +226,7 @@
   the left of every dialog's title and aligns with the title baseline, and that the Row1-row2 gap
   reads visibly tighter than before. Also confirm the Tablet's Read View/Editor show NEITHER Row 2
   nor Row 3 — no subtitle line, no extra divider beyond its own title-bar chrome.
-- [ ] 14.2 Manually verify the Round 3 items in-game: Create Assignments' new layout (Row 3 = only
+- [x] 14.2 Manually verify the Round 3 items in-game: Create Assignments' new layout (Row 3 = only
   send-to; hint/checkbox/notice-slots/delivery-toggle all below the divider, delivery toggle below
   the scrollable stage tray) end to end for both delivery choices; Inbox Inventory's divider now
   sits under its subtitle; the small-caps size reads bigger; the grip no longer sits too high; the

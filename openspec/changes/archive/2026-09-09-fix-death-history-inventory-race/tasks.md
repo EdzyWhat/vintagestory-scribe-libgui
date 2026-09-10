@@ -106,13 +106,16 @@
 
 - [x] 6.1 Run the full Atlas suite locally (per `build/install-hooks.sh`'s pre-push gate) with
       `VINTAGE_STORY` pointed at the local install, and confirm all new and existing tests pass.
-- [ ] 6.2 Manually play-test in-game: die while carrying a Notebook under normal conditions (no
+- [x] 6.2 Manually play-test in-game: die while carrying a Notebook under normal conditions (no
+  - Confirmed 2026-09-09: TESTING.md `000000e3` "(no note)" (submission 2026-09-09T16-38-55)
       competing mod installed) and confirm the Death entry still appears immediately, exactly as
       before — no regression to the common path.
-- [ ] 6.3 Manually play-test: trigger several history events (a couple of deaths, a manual entry,
+- [x] 6.3 Manually play-test: trigger several history events (a couple of deaths, a manual entry,
+  - Confirmed 2026-09-09: TESTING.md `000000e4` "(no note)" (submission 2026-09-09T16-38-55)
       a storm) across more than one in-game day on the same notebook and confirm the History tab
       still shows them newest-first in the correct real order, including any same-day pair.
-- [ ] 6.4 If practical, manually play-test with a corpse/keep-inventory-style mod installed
+- [x] 6.4 If practical, manually play-test with a corpse/keep-inventory-style mod installed
+  - Confirmed 2026-09-09: TESTING.md `000000e5` "(no note)" (submission 2026-09-09T16-38-55)
       alongside Scribe (e.g. the PlayerCorpse mod used during investigation): die while carrying a
       Notebook, confirm no entry appears immediately, then recover or relocate the Notebook and
       confirm the Death entry appears within one tick interval (~10s) of it next being carried, in

@@ -48,11 +48,12 @@
 
 ## 3. Manual verification (Linux/glibc required — cannot be smoke-tested on macOS/Windows)
 
-- [ ] 3.1 Manual test on a Linux/glibc desktop (the same class of environment the original
+- [x] 3.1 Manual test on a Linux/glibc desktop (the same class of environment the original
+  - Confirmed 2026-09-09: TESTING.md `0000006b` "(no note)" (submission 2026-09-09T17-15-17)
       `coredumpctl` crash was confirmed on): install Scribe with this change, join a world, and open
       every Scribe dialog that triggers font shaping (matches the original crash repro) — confirm no
       crash and the client log shows the new isolation-applied notification instead of the old one.
-- [ ] 3.2 Manual test: temporarily rename/break the patch target (e.g. via a debug build that skips
+- [x] 3.2 Manual test: temporarily rename/break the patch target (e.g. via a debug build that skips
       finding `Register()`) to simulate a future `gui` signature change — confirm Scribe logs the
       fail-closed warning and the client still starts normally (falls back to `gui`'s original,
       unisolated loader) rather than crashing.

@@ -61,9 +61,9 @@
       what SURFACED the 2.6 regression (a macOS crash on every Scribe interaction); after
       restaging with the 2.6 fix, **confirmed in-game 2026-08-31**: Tablet opens normally
       on macOS again. Core suite (619 tests) green throughout.
-- [ ] 3.3 Publish a diagnostic build for community testing on glibc/Qt, glibc/GTK,
+- [x] 3.3 Publish a diagnostic build for community testing on glibc/Qt, glibc/GTK,
       and non-glibc environments.
-- [ ] 3.4 Record each report's desktop/toolkit, libc, library-load outcome, and native
+- [x] 3.4 Record each report's desktop/toolkit, libc, library-load outcome, and native
       backtrace when available; classify unproven failures as unknown.
-- [ ] 3.5 Update the upstream LibGUI issue with the cross-desktop evidence and clarify
+- [x] 3.5 Update the upstream LibGUI issue with the cross-desktop evidence and clarify
       that the durable fix belongs in native-library packaging/loading.
