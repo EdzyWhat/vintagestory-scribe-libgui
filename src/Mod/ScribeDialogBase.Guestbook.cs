@@ -31,7 +31,7 @@ public abstract partial class ScribeDialogBase
     /// <see cref="IScribeDocumentHost.Guestbook"/> and needs no override for standard blocks.</summary>
     protected virtual Widget BuildVisitorsContent()
     {
-        var colors      = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay).ColorScheme;
+        var colors      = ResolveTheme(modSystem.MySettings.PixelArtDisplay).ColorScheme;
         float bodySize  = ScribeRowConstants.BaseWindowFontSize
             * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale);
         float dateSize  = bodySize * 0.7f;
