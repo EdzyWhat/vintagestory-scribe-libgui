@@ -6,6 +6,38 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-09-11
+
+### Fixed
+- **Notebooks and Tablets could silently lose an in-progress edit.** Type a task, close the
+  dialog, reopen it, and the task was gone (a pinned copy of it survived, which made it look at
+  first like a pin-vs-document bug). Root cause: opening a fresh, documentless Notebook or Tablet
+  minted a random `DocId` and wrote it straight to the item, and the server's own ambient history
+  sweep (firing every ~10s for every carried Scribe item) could do the same thing independently —
+  whichever side stamped the item first "won," and the loser's client kept proposing edits under a
+  `DocId` the server never adopted, so every save silently failed with no error shown to the
+  player. This showed up reliably on long-running servers with natural read-then-type pacing, but
+  rarely in quick manual testing. Both stamp paths are now closed: the server's save handler is the
+  only place a fresh `DocId` is ever written to a previously-documentless item.
+- **The Assignment Desk target picker forgot players who weren't currently online.** A player who
+  joined and left, even within the same session, vanished from the picker since it only listed
+  currently-connected players. The server now also persists a known-players registry (synced to
+  clients) that the picker unions with the live online list, sorted alphabetically and defaulting
+  to the last player you successfully sent an assignment to.
+- **Sending an assignment to a previously-known but currently-offline player silently failed.**
+  Target validation only recognized players who had connected since the current server process
+  started; it now also accepts anyone found in the persisted known-players registry. Also fixed a
+  stray "unseen assignment" particle that kept glowing on the source block even after the
+  assignment had already been delivered as a physical Task Notice item.
+- **Offline players' names showed as raw account UIDs** instead of their player name in the
+  redirect-confirm dialog, notice tooltips, and Inbox "Assigned by" lines. These now resolve
+  through the same known-players registry before falling back to a bare UID.
+- **Title-header Row 3 controls** (Read/Inbox filter pills, the Assignment Desk's target
+  label/picker, the Pin tab's completion-policy caption/picker) rendered in the player's chosen
+  task font instead of Caudex, inconsistent with the rest of the header chrome.
+- **The Task Types handbook page showed its raw lang key as its title** instead of the intended
+  heading text.
+
 ## [1.4.0] - 2026-09-09
 
 The Assignment tier: send a task directly to another player via a new Assignment Desk and Inbox,

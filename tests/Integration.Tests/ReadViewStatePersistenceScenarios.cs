@@ -72,10 +72,12 @@ public class ReadViewStatePersistenceScenarios : AtlasScenarioBase
         slot.Itemstack = new ItemStack(World.Api.World.GetItem(new AssetLocation("scribe", "scribenotebook"))!, 1);
         slot.MarkDirty();
 
-        // Seed a document (and its DocId) on the stack the way opening the dialog would — the
-        // server-side inventory scan (TryResolveDocHost) can only match a DocId that already exists
-        // on the stack's attributes.
+        // Seed a real, persisted document (and its DocId) on the stack the way a first save would —
+        // the server-side inventory scan (TryResolveDocHost) can only match a DocId that already
+        // exists on the stack's attributes. Constructing a NotebookHost alone no longer persists
+        // anything (fix-tablet-notebook-docid-stamp-race), so this needs an explicit Flush.
         var seedHost = new NotebookHost(slot);
+        seedHost.Flush();
         var docId = seedHost.Document.DocId;
 
         var groupId = Guid.NewGuid();

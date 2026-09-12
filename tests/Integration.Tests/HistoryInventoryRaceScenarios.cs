@@ -50,7 +50,9 @@ public class HistoryInventoryRaceScenarios : AtlasScenarioBase
         var player = await World.JoinPlayer("FlushOwner");
         await player.GiveItem(NotebookCode);
         var slot = player.Player.InventoryManager.ActiveHotbarSlot;
-        var docId = new NotebookHost(slot).Document.DocId;
+        var seed = new NotebookHost(slot);
+        seed.Flush(); // persist a real document so its DocId is stable across later re-reads (fix-tablet-notebook-docid-stamp-race: construction alone no longer stamps one)
+        var docId = seed.Document.DocId;
 
         var mod = Mod;
         mod.PendingHistoryStore!.Enqueue(docId, new HistoryEntry
@@ -146,7 +148,9 @@ public class HistoryInventoryRaceScenarios : AtlasScenarioBase
         var original = await World.JoinPlayer("OriginalHolder");
         await original.GiveItem(NotebookCode);
         var originalSlot = original.Player.InventoryManager.ActiveHotbarSlot;
-        var docId = new NotebookHost(originalSlot).Document.DocId;
+        var seed = new NotebookHost(originalSlot);
+        seed.Flush(); // persist a real document so its DocId is stable across later re-reads (fix-tablet-notebook-docid-stamp-race: construction alone no longer stamps one)
+        var docId = seed.Document.DocId;
         var stack = originalSlot.Itemstack!;
         originalSlot.Itemstack = null;
         originalSlot.MarkDirty();
@@ -194,6 +198,7 @@ public class HistoryInventoryRaceScenarios : AtlasScenarioBase
         await victim.GiveItem(NotebookCode);
         var slot = victim.Player.InventoryManager.ActiveHotbarSlot;
         var host = new NotebookHost(slot);
+        host.Flush(); // persist a real document so its DocId is stable across later re-reads (fix-tablet-notebook-docid-stamp-race: construction alone no longer stamps one)
         var docId = host.Document.DocId;
 
         // Entries recorded (directly, for determinism) both chronologically before and after the

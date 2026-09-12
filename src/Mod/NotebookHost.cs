@@ -36,12 +36,15 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
         _slot = slot;
         _backdrop = backdrop ?? ScribeBackdrops.NotebookPage;
         var stack = slot.Itemstack!;
-        if (!ScribeDocumentAttributes.TryReadFrom(stack, out var doc) || doc is null)
-        {
-            doc = new ScribeDocument();
-            ScribeDocumentAttributes.WriteTo(stack, doc);
-        }
-        _document = doc;
+        // A documentless stack gets an in-memory placeholder only — NOT written back here. Writing it
+        // here would race the ambient OnHistoryScanTick sweep (and any other host construction) for
+        // who gets to mint the stack's real DocId first; the two sides can disagree and leave the
+        // player's own client permanently proposing a DocId the server never adopted (task-loss-on-
+        // tablet-close). OnServerReceivedNotebookSave's own bootstrap branch is the only place a fresh
+        // DocId is ever persisted onto a stack that doesn't have one yet.
+        _document = ScribeDocumentAttributes.TryReadFrom(stack, out var doc) && doc is not null
+            ? doc
+            : new ScribeDocument();
         _history = HistoryStore.Deserialize(stack.Attributes.GetBytes("scribeHistory"));
         // Read View filter pill + subtask-group collapse state (read-view-filter-and-collapse), the
         // item-hosted counterpart of the block entity's tree-attribute fields. Absent attributes (a
@@ -298,18 +301,21 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
             InGameDate      = FormatDate(sapi),
             InGameTimestamp = sapi.World.Calendar.TotalDays,
         });
-        if (added) Flush();
+        // FlushHistory, not Flush: this only ever mutates _history, never _document. Flush would also
+        // persist _document, which on a stack that had none yet would stamp a fresh DocId as a pure side
+        // effect of AttachServerContext being called (e.g. from the ambient OnHistoryScanTick sweep) —
+        // racing the player's own client for who mints the item's real DocId first
+        // (task-loss-on-tablet-close).
+        if (added) FlushHistory();
     }
 
     /// <summary>Records the one-time PickedUp entry directly on a held notebook's ItemStack — history
     /// ONLY, deliberately never touching the <c>scribeDocument</c> attribute. This is the path used by
     /// the notebook-opened network handler, where the server sees a notebook that was just picked up
     /// and opened but has never synced a document (a notebook's DocId is generated client-side and only
-    /// reaches the server on the first edit; crafting writes only <c>scribeHistory</c>). Constructing a
-    /// full <see cref="NotebookHost"/> here would be wrong: its ctor stamps a fresh server-random
-    /// document onto the stack, which <see cref="ScribeModSystem.OnServerReceivedNotebookSave"/> would
-    /// then reject the owner's real edits against (DocId mismatch). Working on the raw history attribute
-    /// avoids that entirely. Crafter is suppressed and other players are deduplicated per actor, exactly
+    /// reaches the server on the first edit; crafting writes only <c>scribeHistory</c>). Avoids
+    /// constructing a full <see cref="NotebookHost"/> (and the document read it would trigger) just to
+    /// touch history. Crafter is suppressed and other players are deduplicated per actor, exactly
     /// like <see cref="RecordPickedUpIfNew"/>. Returns the updated history bytes to push to the client
     /// (so an open dialog can refresh its History tab) when an entry was added, else null.</summary>
     public static byte[]? TryRecordPickedUpOnSlot(ICoreServerAPI sapi, ItemSlot slot, IServerPlayer player)

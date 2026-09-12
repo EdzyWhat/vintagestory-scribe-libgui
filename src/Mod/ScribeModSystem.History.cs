@@ -94,7 +94,11 @@ public sealed partial class ScribeModSystem
             {
                 if (slot.Itemstack?.Collectible is not IScribeDocumentItem) continue;
                 // TabletHost derives from NotebookHost, so a carried tablet records the same history
-                // (deaths, kills, storms) as a notebook through the identical write-through path.
+                // (deaths, kills, storms) as a notebook through the identical write-through path. This
+                // runs unconditionally every ~10s for every online player, including on a documentless
+                // stack (a brand-new notebook still needs to record Death/Storm/PvpKill/BossKill) — safe
+                // because neither constructing a host nor AttachServerContext's PickedUp bookkeeping
+                // writes a document to the stack (see NotebookHost.RecordPickedUpIfNew).
                 var host = slot.Itemstack.Collectible is ItemScribeTablet
                     ? new TabletHost(slot)
                     : new NotebookHost(slot);
