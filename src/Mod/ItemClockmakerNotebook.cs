@@ -79,7 +79,13 @@ public class ItemClockmakerNotebook : Item, IScribeDocumentItem
     public override void OnCreatedByCrafting(ItemSlot[] allInputSlots, ItemSlot outputSlot, IRecipeBase byRecipe)
     {
         base.OnCreatedByCrafting(allInputSlots, outputSlot, byRecipe);
-        if (api.Side != EnumAppSide.Server) return;
+        // Derive the side from the crafting grid's own inventory rather than this.api: under
+        // ImprovedHandbookRecipesFork's static-caching bug, this.api can hold the client's ICoreAPI
+        // even when the server is the one genuinely invoking this override (see
+        // clockmaker-carryover-loss-root-cause memory). outputSlot.Inventory is always the actual
+        // InventoryCraftingGrid driving the call, so its Api reports the true invoking side.
+        var craftApi = (outputSlot.Inventory as InventoryBase)?.Api;
+        if (craftApi is not ICoreServerAPI sapi) return;
         if (outputSlot.Itemstack is null) return;
 
         // Carry the source Notebook's document + history onto the fresh Clockmaker's output so
@@ -107,10 +113,9 @@ public class ItemClockmakerNotebook : Item, IScribeDocumentItem
 
         var playerUid = outputSlot.Inventory.openedByPlayerGUIds.FirstOrDefault();
         var playerName = (playerUid is not null
-            ? (api.World.PlayerByUid(playerUid) as IServerPlayer)?.PlayerName
+            ? (sapi.World.PlayerByUid(playerUid) as IServerPlayer)?.PlayerName
             : null) ?? "Unknown";
 
-        var sapi = (ICoreServerAPI)api;
         string date = NotebookHost.FormatDate(sapi);
         var history = HistoryStore.Deserialize(outputSlot.Itemstack.Attributes.GetBytes("scribeHistory"));
         history.TryAddEntry(new HistoryEntry
