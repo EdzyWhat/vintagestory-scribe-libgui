@@ -1013,6 +1013,25 @@ public class ScribeDocumentTests
         Assert.Same(placed, target.Blocks[1]);
     }
 
+    // --- AppendExternalBlock (add-external-mod-task-api placement) ---
+
+    [Fact]
+    public void AppendExternalBlock_AppendsToEnd_KeepingExistingBlocksAndTaskId()
+    {
+        var target = new ScribeDocument();
+        target.AddTask("existing task");
+        var placed = new ScribeBlock(ScribeBlockKind.Task, "external task", extraInfo: "posted by NoticeBoard");
+        var placedTaskId = placed.TaskId;
+
+        target.AppendExternalBlock(placed);
+
+        Assert.Equal(2, target.Blocks.Count);
+        Assert.Equal("existing task", target.Blocks[0].Text);
+        Assert.Same(placed, target.Blocks[1]);
+        Assert.Equal(placedTaskId, target.Blocks[1].TaskId);
+        Assert.Equal("posted by NoticeBoard", target.Blocks[1].ExtraInfo);
+    }
+
     // --- InsertIndexForBatch (refine-assignment-desk-inbox-ux triage 2026-08-31: keep a batch's
     // Accept-placed rows contiguous regardless of the order they were individually Accepted in) ---
 

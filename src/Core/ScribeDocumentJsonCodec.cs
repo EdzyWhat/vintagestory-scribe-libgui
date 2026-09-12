@@ -35,11 +35,15 @@ namespace Scribe.Core;
 /// any document with <c>v &gt;= <see cref="MinVersion"/></c> is accepted (a newer producer's extra fields are
 /// ignored by the DTO). A payload lacking a <c>v</c> is treated as "not a Scribe export" and rejected, so a
 /// foreign JSON object can't import as an empty document. See docs/CODEC-MIGRATION.md.</para>
+///
+/// <para>Field history: v2 added the optional <c>extraInfo</c> key (an external mod's opaque hover-detail
+/// string, via <c>ScribeModSystem.TryCreateExternalTask</c>, add-external-mod-task-api). Omitted when null;
+/// a v1 payload simply has no such key and deserializes with it null.</para>
 /// </summary>
 public static class ScribeDocumentJsonCodec
 {
     /// <summary>Current JSON format version. Bump (never reshuffle) when adding a field. See the class doc.</summary>
-    public const int Version = 1;
+    public const int Version = 2;
 
     /// <summary>Oldest JSON version still accepted. A payload with <c>v</c> below this — or with no <c>v</c>
     /// at all (parsed as 0) — is rejected as not a Scribe export.</summary>
@@ -84,6 +88,7 @@ public static class ScribeDocumentJsonCodec
                 LinkDescription = block.LinkDescription,
                 // Only a Craft carries a recipe binding; omit the empty string elsewhere.
                 RecipeSignature = string.IsNullOrEmpty(block.RecipeSignature) ? null : block.RecipeSignature,
+                ExtraInfo = block.ExtraInfo,
             });
         }
         return JsonSerializer.Serialize(dto, WriteOptions);
@@ -142,7 +147,8 @@ public static class ScribeDocumentJsonCodec
                     linkTarget: b.LinkTarget,
                     linkLabel: b.LinkLabel,
                     recipeSignature: b.RecipeSignature, // empty for non-Craft; Craft re-generates ingredients from it
-                    linkDescription: b.LinkDescription));
+                    linkDescription: b.LinkDescription,
+                    extraInfo: b.ExtraInfo));
             }
         }
 
@@ -184,5 +190,6 @@ public static class ScribeDocumentJsonCodec
         public string? LinkLabel { get; set; }
         public string? LinkDescription { get; set; }
         public string? RecipeSignature { get; set; }
+        public string? ExtraInfo { get; set; }
     }
 }

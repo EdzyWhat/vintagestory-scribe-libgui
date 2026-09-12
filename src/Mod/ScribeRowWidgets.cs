@@ -380,6 +380,47 @@ internal static class ScribeAssignedTaskIcon
     }
 }
 
+/// <summary>An external mod's opaque hover-detail marker (add-external-mod-task-api), shown after the
+/// checkbox/assignment marker on Read, Editor, and Pin Tab rows for any block carrying a non-empty
+/// <see cref="Scribe.Core.ScribeBlock.ExtraInfo"/>, regardless of kind. Deliberately parallel to, not
+/// derived from, <see cref="ScribeAssignedTaskIcon"/> — design.md's "ExtraInfo is a new, independent
+/// field, not a reuse of ScribeAssignment" decision. Never referenced by <c>HudScribePins.cs</c>, so it
+/// never appears in the HUD. The tooltip shows the caller's <c>extraInfo</c> string verbatim (Scribe
+/// never interprets or reformats it) rather than a lang-keyed template, since the content is opaque by
+/// contract.</summary>
+internal static class ScribeExternalInfoIcon
+{
+    /// <summary>The raster stamp asset for this marker, distinct from <see cref="ScribeAssignedTaskIcon.Asset"/>.</summary>
+    public static readonly AssetLocation Asset = new("scribe", "textures/gui/scribe-external-stamp.png");
+
+    /// <summary><paramref name="context"/>/<paramref name="currentShade"/> are only used to build the
+    /// hover tooltip (matching every other row/nav tooltip's illumination-correct shading), so they're
+    /// only required when a caller also passes a non-empty <paramref name="extraInfo"/> — a null/empty
+    /// value renders no icon at all (the caller gates this call on that already; see the doc above).</summary>
+    public static Widget Build(ScribeRowStyle style, Vector4 color, bool itemRow = false, SKBitmap? stampBitmap = null,
+        BuildContext? context = null, ScribeAmbientLightSampler.Shade? currentShade = null,
+        string? extraInfo = null)
+    {
+        Widget icon = new Padding(
+            EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(style, itemRow)),
+            child: stampBitmap is not null
+                ? new ScribeRasterIcon(stampBitmap, style.ControlSize)
+                : new ScribeVsIconGlyph("scribeinfo", style.ControlSize, color));
+
+        if (string.IsNullOrEmpty(extraInfo) || context is null || currentShade is null) return icon;
+
+        var theme = Theme.Of(context.Value);
+        return ScribeGlobalTint.ShadedTooltip(
+            child: icon,
+            content: new Padding(
+                EdgeInsets.All(6),
+                child: new Text(extraInfo,
+                    new TextStyle { FontSize = 13, SoftWrap = true, Color = theme.ColorScheme.OnBackground })),
+            baseTheme: theme,
+            shade: currentShade.Value);
+    }
+}
+
 /// <summary>Builds the leading icon for a Tracker/Link row. Normally an <see cref="ItemStackDisplay"/> of the
 /// referenced item; but a guide-page Link (a <c>"page:"</c>-prefixed <see cref="ScribeLinkTarget"/>) has no
 /// item to draw, so it renders the generic <c>scribebook</c> glyph tinted <paramref name="bookColor"/>

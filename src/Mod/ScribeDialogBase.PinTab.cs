@@ -74,7 +74,7 @@ public abstract partial class ScribeDialogBase
                     pinEditBuffer.TryGetValue(p.TaskId, out var buffered) ? buffered : p.LastKnownText,
                     Kind: p.Kind, DisplayStack: stack, DisplayName: name,
                     TargetQuantity: p.TargetQuantity, CurrentQuantity: p.CurrentQuantity, LinkTarget: iconLinkTarget,
-                    Depth: p.Depth, IsAcceptedAssignment: p.IsAcceptedAssignment,
+                    Depth: p.Depth, IsAcceptedAssignment: p.IsAcceptedAssignment, ExtraInfo: p.ExtraInfo,
                     AssignerName: assignerName, AssignedDate: p.IsAcceptedAssignment ? p.AssignedDate : null,
                     AcceptedDate: p.IsAcceptedAssignment ? p.AcceptedDate : null,
                     IsStaticVsQuestObjective: isStaticVsQuestObjective);
@@ -115,7 +115,8 @@ public abstract partial class ScribeDialogBase
             // Per-surface restyle of the policy picker's open menu (refine-chalkboard): the chalkboard fixes
             // its unreadable selected-row colors; every other surface passes the theme default through.
             decoratePolicyDropdownStyle: DecoratePolicyDropdownStyle,
-            assignedStampBitmap: modSystem.GetGuiTextureBitmap(ScribeAssignedTaskIcon.Asset));
+            assignedStampBitmap: modSystem.GetGuiTextureBitmap(ScribeAssignedTaskIcon.Asset),
+            externalStampBitmap: modSystem.GetGuiTextureBitmap(ScribeExternalInfoIcon.Asset));
     }
 
     /// <summary>Resolve a pinned Tracker/Link's item icon + display name from its snapshot code, or

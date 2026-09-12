@@ -27,7 +27,10 @@ namespace Scribe.Core;
 /// the blob's version is at least that high. This lets shipped v1 pins keep loading unchanged when v2
 /// (WIP-only, never released) and v3 add fields — a naive "current + immediately-prior" window would
 /// have dropped v1 pins (data loss) once v3 landed.
-///   Current : v7 — appended per-pin <see cref="ScribePinnedRef.AssignerUid"/> (string),
+///   Current : v8 — appended per-pin <see cref="ScribePinnedRef.ExtraInfo"/> (bool + optional string), an
+///                  external mod's opaque hover-detail string (add-external-mod-task-api), so the Pin
+///                  Tab can render the hover-info icon without resolving the source document.
+///   v7 — appended per-pin <see cref="ScribePinnedRef.AssignerUid"/> (string),
 ///                  <see cref="ScribePinnedRef.AssignedDate"/> (string), and
 ///                  <see cref="ScribePinnedRef.AcceptedDate"/> (bool + optional string), so the Pin Tab
 ///                  can render the assignment marker's tooltip without resolving the source document
@@ -56,19 +59,19 @@ namespace Scribe.Core;
 /// Per-pin field history (in serialized order): OwnerDocId, TaskId, PinnedAtTotalHours, Orphaned,
 /// LastKnownDone, LastKnownText (v1); Kind, LinkTarget (added v2); TargetItemCode, TargetQuantity,
 /// CurrentQuantity (added v3); LinkLabel (added v4); Depth (added v5); IsAcceptedAssignment (added v6);
-/// AssignerUid, AssignedDate, AcceptedDate (added v7).
+/// AssignerUid, AssignedDate, AcceptedDate (added v7); ExtraInfo (added v8).
 /// </summary>
 public static class ScribePinCodec
 {
     private static readonly byte[] ListMagic = "SPIN"u8.ToArray();
     private static readonly byte[] StoreMagic = "SPST"u8.ToArray();
 
-    /// <summary>Version of the pin-list blobs (SPIN/SPST). Bumped to 7 for the appended per-pin
-    /// assignment-provenance fields (<see cref="ScribePinnedRef.AssignerUid"/>/
-    /// <see cref="ScribePinnedRef.AssignedDate"/>/<see cref="ScribePinnedRef.AcceptedDate"/>,
-    /// assignment-icon-and-tab-defaults); v6 added the <see cref="ScribePinnedRef.IsAcceptedAssignment"/>
+    /// <summary>Version of the pin-list blobs (SPIN/SPST). Bumped to 8 for the appended per-pin
+    /// <see cref="ScribePinnedRef.ExtraInfo"/> (add-external-mod-task-api); v7 added the assignment-
+    /// provenance fields (<see cref="ScribePinnedRef.AssignerUid"/>/<see cref="ScribePinnedRef.AssignedDate"/>/
+    /// <see cref="ScribePinnedRef.AcceptedDate"/>); v6 added the <see cref="ScribePinnedRef.IsAcceptedAssignment"/>
     /// flag.</summary>
-    private const byte PinVersion = 7;
+    private const byte PinVersion = 8;
 
     /// <summary>
     /// The OLDEST pin-list version the reader still accepts. Reads are progressive (append-only): any
@@ -234,6 +237,12 @@ public static class ScribePinCodec
             bool hasAcceptedDate = pin.AcceptedDate != null;
             w.Write(hasAcceptedDate);
             if (hasAcceptedDate) w.Write(pin.AcceptedDate!);
+            // v8 appended field (add-external-mod-task-api): an external mod's opaque hover-detail
+            // string (nullable, presence bool + value), so the Pin Tab can render the hover-info icon
+            // without resolving the source document.
+            bool hasExtraInfo = pin.ExtraInfo != null;
+            w.Write(hasExtraInfo);
+            if (hasExtraInfo) w.Write(pin.ExtraInfo!);
         }
     }
 
@@ -325,6 +334,16 @@ public static class ScribePinCodec
                     string acceptedDate = r.ReadString();
                     if (acceptedDate.Length > ScribeDocumentCodec.MaxTextLength) return false;
                     pin.AcceptedDate = acceptedDate;
+                }
+            }
+            if (version >= 8)
+            {
+                bool hasExtraInfo = r.ReadBoolean();
+                if (hasExtraInfo)
+                {
+                    string extraInfo = r.ReadString();
+                    if (extraInfo.Length > ScribeDocumentCodec.MaxTaskTextLength) return false;
+                    pin.ExtraInfo = extraInfo;
                 }
             }
 

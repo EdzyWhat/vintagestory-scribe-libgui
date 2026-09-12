@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>add-external-mod-task-api — open decisions</title>
+<style>
+  :root {
+    --ink: #2b2620;
+    --paper: #f7f3ea;
+    --panel: #fffdf7;
+    --line: #cfc3a8;
+    --accent: #8a5a2b;
+    --accent2: #3a6b5c;
+    --warn: #a13d3d;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: Georgia, "Iowan Old Style", serif;
+    max-width: 880px;
+    margin: 2.5rem auto 6rem;
+    padding: 0 1.5rem;
+    line-height: 1.55;
+  }
+  h1 { font-size: 1.7rem; border-bottom: 3px double var(--accent); padding-bottom: .5rem; }
+  h2 {
+    font-size: 1.25rem;
+    color: var(--accent);
+    margin-top: 3rem;
+    border-left: 4px solid var(--accent);
+    padding-left: .6rem;
+  }
+  h3 { font-size: 1.05rem; color: var(--accent2); margin-top: 1.5rem; }
+  .status {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: .72rem;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    padding: .15rem .55rem;
+    border-radius: 3px;
+    margin-left: .5rem;
+    vertical-align: middle;
+  }
+  .decided { background: #dcecd8; color: #2c5a2c; border: 1px solid #a9cfa0; }
+  .open    { background: #f6e2c4; color: #7a4a12; border: 1px solid #e0b978; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 1rem 1.2rem;
+    margin: 1rem 0;
+  }
+  pre.diagram {
+    background: #efe8d8;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 1rem;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: .82rem;
+    line-height: 1.35;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    font-size: .93rem;
+  }
+  th, td {
+    border: 1px solid var(--line);
+    padding: .5rem .6rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #ece3cc; }
+  tr:nth-child(even) td { background: #fbf8ef; }
+  code {
+    font-family: var(--mono);
+    background: #ece3cc;
+    padding: .1rem .3rem;
+    border-radius: 3px;
+    font-size: .88em;
+  }
+  .rec {
+    border-left: 4px solid var(--accent2);
+    background: #eaf1ee;
+    padding: .7rem 1rem;
+    margin: .8rem 0;
+  }
+  .rec strong { color: var(--accent2); }
+  .question {
+    font-weight: bold;
+    font-size: 1.05rem;
+  }
+  ul { margin-top: .3rem; }
+  .toc {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 1rem 1.5rem;
+  }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  footer { margin-top: 4rem; font-size: .8rem; color: #7a7263; border-top: 1px solid var(--line); padding-top: 1rem; }
+</style>
+</head>
+<body>
+
+<h1>External-Mod Task API — remaining open decisions</h1>
+<p><em>Change: <code>add-external-mod-task-api</code> (Notice Board integration, first external-mod-facing API surface). This is a working note, not a spec — capturing where we landed and where we haven't, with diagrams for the parts that are hard to hold in your head at once.</em></p>
+
+<div class="toc">
+<strong>Settled this round</strong>
+<ul>
+  <li><a href="#pintab">Pin Tab yes / HUD no</a> — turns out this isn't a new pattern at all</li>
+  <li><a href="#cap">ExtraInfo length cap</a> — same as task text</li>
+</ul>
+<strong>Still open</strong>
+<ul>
+  <li><a href="#methods">The three-method surface — confirm shape</a></li>
+  <li><a href="#links">Links inside the body text</a></li>
+  <li><a href="#validation">Server-side item validation for bulk import</a></li>
+  <li><a href="#meta">Workflow housekeeping</a> (capture to design.md? unzip the reference?)</li>
+</ul>
+</div>
+
+<h2 id="pintab">1. Pin Tab yes, HUD no <span class="status decided">decided</span></h2>
+<p>You framed this as "even if it's a new pattern" — it isn't. The assignment stamp icon (<code>ScribeAssignedTaskIcon</code>) already works exactly this way today. I checked: <code>HudScribePins.cs</code> builds its own widget tree from scratch and never references <code>IsAcceptedAssignment</code>/<code>AssignerUid</code>/<code>AssignedDate</code> anywhere. The Pin Tab's row widget (<code>ScribePinnedContent</code>/<code>ScribePinRow</code>) is a <em>separate</em> renderer that does read those fields and does build the icon.</p>
+
+<pre class="diagram">
+                     ScribeBlock.Assignment
+                              |
+                              v
+                  ScribePinnedRef  (one shared snapshot,
+                  - IsAcceptedAssignment    persisted via the
+                  - AssignerUid             versioned pin codec)
+                  - AssignedDate
+                  - AcceptedDate
+                              |
+              +---------------+----------------+
+              |                                 |
+              v                                 v
+   ScribePinnedContent / ScribePinRow      HudScribePins
+   (feeds the Pin Tab)                     (feeds the HUD)
+              |                                 |
+              v                                 v
+   reads IsAcceptedAssignment,             never references those
+   renders ScribeAssignedTaskIcon          fields at all — builds its
+   + tooltip                               own simpler row, no icon
+</pre>
+
+<p>Both surfaces pull from the <strong>same</strong> stored snapshot; they just choose different subsets of it to render. That means for <code>ExtraInfo</code> the shape is identical: one new field on <code>ScribeBlock</code>, snapshotted into <code>ScribePinnedRef</code> (one codec version bump — same move as when <code>IsAcceptedAssignment</code> itself was added), read + rendered by the Pin Tab's row widget, and simply <em>never referenced</em> by <code>HudScribePins.cs</code>. No parallel system, no HUD-suppression flag needed — the data exists once, the HUD's own code just doesn't look at it.</p>
+
+<div class="rec"><strong>Net effect:</strong> the cost of "Pin Tab only" is exactly the cost of "Pin Tab + HUD" would have been for the <em>storage</em> side (one field, one codec bump) — the savings are entirely on the HUD's render code, which you skip writing.</div>
+
+<h2 id="cap">2. ExtraInfo length cap <span class="status decided">decided</span></h2>
+<p>Capped to <code>ScribeDocumentCodec.MaxTaskTextLength</code> — the same bound a normal task's own text gets. Clipped, not rejected, matching every other text field's convention (an overlong caller string degrades gracefully instead of failing the whole call).</p>
+
+<h2 id="methods">3. The three-method surface <span class="status open">open</span></h2>
+<p class="question">Does this three-tier split still feel right, now that provenance collapsed to one opaque string?</p>
+
+<pre class="diagram">
+TryCreateTask(player, title, bodyText = null)
+    -> the trivial case: one task, no stamp icon, no JSON
+
+TryCreateExternalTask(player, title, bodyText, extraInfo)
+    -> one task + the new hoverable-info icon
+    -> extraInfo is REQUIRED here (a stamp with nothing to show
+       would be a contradiction — the method itself enforces the
+       pairing instead of a doc comment saying "don't do that")
+
+TryImportTasks(player, documentJson, extraInfo = null)
+    -> hands off to the EXISTING ScribeDocumentJsonCodec +
+       ScribeImportValidator, for a caller with more than one task
+       (a quest mod dumping a multi-step checklist, say)
+    -> extraInfo applies to the WHOLE batch, once — it is not
+       embedded per-block in the JSON payload (that DTO is shared
+       with the human clipboard-export feature; provenance is a
+       property of the call, not of the format)
+
+   all three ultimately call one private core method, mirroring
+   TryCreate / TryCreateAccepted / TryCreateSent -> TryCreateCore
+   in ScribeAssignmentStore today.
+</pre>
+
+<table>
+<tr><th>Option</th><th>Pro</th><th>Con</th></tr>
+<tr><td><strong>Three methods (above)</strong></td><td>Each name signals intent; no meaningless parameter combos possible; mirrors an existing in-repo convention</td><td>Three things to document instead of one</td></tr>
+<tr><td>One method, everything optional</td><td>One signature to learn</td><td>Nothing stops a caller passing <code>extraInfo</code> with no <code>sourceLabel</code>-shaped context to hang it on; harder to see "batch" vs "single" at a glance</td></tr>
+</table>
+
+<div class="rec"><strong>Leaning:</strong> keep the three-method split. The main open sub-question is naming — <code>TryCreateExternalTask</code> vs. something that reads better next to <code>TryCreateTask</code> (e.g. <code>TryCreateTaskWithInfo</code>?). Cosmetic, but worth a beat before it's public API.</div>
+
+<h2 id="links">4. Links inside the stripped body text <span class="status open">open</span></h2>
+<p class="question">A Notice Board notice can contain links (web, handbook, command). What happens to them once the body is stripped to plain text?</p>
+
+<pre class="diagram">
+(a) subtask-per-link, new "url:" Link flavor
+    Depth 0  [ ] Fix the north fence
+    Depth 1    "Materials needed, see the board..."
+    Depth 1    -> https://example.com/fence-plan      &lt;- new Link kind
+                                                          + browser-open handler
+                                                          + "leaving the game" confirm
+
+(b) leave URLs as plain text inside the stripped body
+    Depth 0  [ ] Fix the north fence
+    Depth 1    "Materials needed, see the board...
+                https://example.com/fence-plan"        &lt;- visible, not clickable
+
+(c) inline clickable spans inside the body text itself
+    Depth 1    "Materials needed, see [the board]"      &lt;- [the board] is a live
+                                                             link INSIDE one Text
+                                                             block, VTML-lite
+</pre>
+
+<table>
+<tr><th>Option</th><th>New capability required</th><th>Fidelity to source</th><th>Risk</th></tr>
+<tr><td>(a) Link subtask per URL</td><td>New <code>LinkTarget</code> prefix + external-browser click handler + confirm dialog</td><td>High — each link is a first-class, clickable row</td><td>Opening arbitrary external URLs from game content is the first time Scribe would do that at all — needs a trust/confirm story</td></tr>
+<tr><td>(b) plain text, inline</td><td>None</td><td>Medium — visible, not actionable</td><td>None</td></tr>
+<tr><td>(c) clickable spans in body</td><td>Rich-text-within-a-Text-block renderer (a small VTML-lite span system)</td><td>Highest — closest to what the notice looked like</td><td>Biggest lift by far; touches the shared text-rendering widget every row uses</td></tr>
+</table>
+
+<div class="rec"><strong>Recommendation unchanged from before:</strong> ship (b) for v1. It costs nothing, and it doesn't foreclose (a) or (c) later — those become easier to justify once a second external caller actually wants clickable links, rather than building browser-opening machinery for Notice Board alone.</div>
+
+<h3>But — a wrinkle worth flagging</h3>
+<p>Notice Board's <em>message-list buttons</em> (bump / pin-parchment / etc.) already prove they're fine building UI affordances on their own side. If they wanted a live link back to the original notice, that's arguably <strong>their</strong> job to build (a "jump to source" affordance in their own GUI, keyed by a board position they already have), not something Scribe needs to carry. Worth remembering if this comes up again: Scribe doesn't have to solve every fidelity gap — some belong on the calling mod's side of the fence.</p>
+
+<h2 id="validation">5. Server-side item validation for <code>TryImportTasks</code> <span class="status open">open</span></h2>
+<p class="question">Is this in scope for the first version, or explicitly deferred?</p>
+<pre class="diagram">
+Scriptorium import today:
+   client (live registries) --resolves Tracker/Link item codes--> validated doc
+                                        |
+                                        v
+                              server RE-PARSES the JSON
+                              (trusts nothing, but does NOT
+                               re-run item-code resolution —
+                               the client already did that)
+
+External-mod TryImportTasks:
+   caller mod (server-side) --???--> Scribe (server-side)
+                                        |
+                                        v
+                              NO client round-trip exists here.
+                              Item-code resolution needs a SERVER-
+                              side equivalent of ScribeImportValidator
+                              that doesn't exist yet.
+</pre>
+<table>
+<tr><th>Option</th><th>Effect if an external caller's JSON references an unknown/typo'd item code</th></tr>
+<tr><td>Build the server-side validator now</td><td>Bad references degrade to a plain Task cleanly, exactly like every other import path</td></tr>
+<tr><td>Defer — skip validation for v1</td><td>An unresolvable Tracker/Link either renders broken (no icon/name) or needs a cruder fallback than the existing degrade-to-Task behavior</td></tr>
+</table>
+<div class="rec">Given <code>TryImportTasks</code> is the least urgent of the three methods (Notice Board only needs <code>TryCreateExternalTask</code> for its single-notice case), I'd lean toward <strong>deferring</strong> the server-side validator and the whole <code>TryImportTasks</code> method to a follow-up — ship the two single-task methods first, add bulk import once a caller actually needs it. That also buys time to decide whether the validator logic even belongs duplicated server-side, or whether it should move to a shared Core-callable form used by both paths.</div>
+
+<h2 id="meta">6. Workflow housekeeping <span class="status open">open</span></h2>
+<ul>
+  <li><strong>Capture now or keep exploring?</strong> We have enough settled (ExtraInfo shape, Pin-Tab-only precedent, the method split, the links call, the deferred-import call) that a <code>design.md</code> draft would hold up. The main thing still soft is the method <em>naming</em>.</li>
+  <li><strong>Notice Board reference zip.</strong> Still sitting in <code>~/Downloads/NoticeBoard_3.0.0-dev.1.zip</code>, unextracted. Proposed target: <code>reference/NoticeBoardInvestigations/</code>, gitignored, matching the existing <code>ProgressionInvestigations</code>/<code>BackpackInvestigations</code> convention for unpacked mod zips.</li>
+</ul>
+
+<footer>Generated during an <code>openspec-explore</code> session on the <code>add-external-mod-task-api</code> change. Nothing here is committed to a spec yet.</footer>
+
+</body>
+</html>

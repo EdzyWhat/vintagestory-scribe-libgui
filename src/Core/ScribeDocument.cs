@@ -141,6 +141,16 @@ public sealed class ScribeDocument
     public void InsertAssignedBlock(int index, ScribeBlock block) =>
         _blocks.Insert(Math.Clamp(index, 0, _blocks.Count), block);
 
+    /// <summary>Appends a fully-formed block onto the end verbatim, preserving its freshly-minted
+    /// <see cref="ScribeBlock.TaskId"/> — the placement primitive for
+    /// <see cref="ScribeExternalTaskMapper"/>'s output (add-external-mod-task-api). Deliberately a
+    /// separate method from <see cref="AppendAssignedBlock"/> even though both are a one-line
+    /// <c>_blocks.Add</c>: that method's contract is specifically an assignment MOVE (a pre-existing
+    /// TaskId correlated to an assignment record); this one has no such correlation, it simply places a
+    /// brand-new block. The caller is responsible for any capacity check (this method does not enforce
+    /// a block cap).</summary>
+    public void AppendExternalBlock(ScribeBlock block) => _blocks.Add(block);
+
     /// <summary>Deep-copy one block, minting a FRESH <see cref="ScribeBlock.TaskId"/> (the ctor's default when
     /// no taskId is supplied) so the copy is independent of the original on pins/completion resolution. Shared
     /// by <see cref="CloneWithNewIdentity"/> and <see cref="AppendClonedBlocksFrom"/>.</summary>

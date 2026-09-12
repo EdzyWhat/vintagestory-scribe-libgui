@@ -54,6 +54,38 @@ public class ScribeDocumentJsonCodecTests
     }
 
     [Fact]
+    public void RoundTrip_PreservesExtraInfo()
+    {
+        var doc = new ScribeDocument();
+        doc.AddTask("Check the notice board");
+        doc.Blocks[0].ExtraInfo = "posted by NoticeBoard";
+        doc.AddTask("No extra info here");
+
+        string json = ScribeDocumentJsonCodec.Serialize(doc);
+        bool ok = ScribeDocumentJsonCodec.TryDeserialize(json, out var restored);
+
+        Assert.True(ok);
+        Assert.Equal("posted by NoticeBoard", restored!.Blocks[0].ExtraInfo);
+        Assert.Null(restored.Blocks[1].ExtraInfo);
+    }
+
+    [Fact]
+    public void Deserialize_V1PayloadWithNoExtraInfoKey_DefaultsExtraInfoNull()
+    {
+        // v1 predates the v2 extraInfo key; a v1 export simply has no such key at all.
+        string json = """
+        { "v": 1, "title": "Old export", "blocks": [
+            { "kind": "task", "text": "still works", "done": false, "depth": 0 }
+        ] }
+        """;
+
+        bool ok = ScribeDocumentJsonCodec.TryDeserialize(json, out var doc);
+
+        Assert.True(ok);
+        Assert.Null(doc!.Blocks[0].ExtraInfo);
+    }
+
+    [Fact]
     public void Serialize_OmitsIdentityAssignmentAndLiveCount()
     {
         var doc = SampleDocument();

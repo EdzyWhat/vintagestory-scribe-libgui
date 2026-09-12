@@ -69,8 +69,69 @@ public sealed partial class ScribeModSystem
                     "Usage: /scribe tablet <wet|hard|fired>")
                 .WithArgs(parsers.WordRange("state", "wet", "hard", "fired"))
                 .HandleWith(OnTabletCommand)
+            .EndSubCommand()
+            .BeginSubCommand("external")
+                .WithDescription("[scribe dev] Call the public TryCreateExternalTask API as if another mod " +
+                    "invoked it, for iterating on / screenshotting the result. Usage: " +
+                    "/scribe external <title>|<bodyText>|<extraInfo> — pipe-separated; leave a segment blank " +
+                    "to pass null for it, e.g. \"/scribe external Feed the chickens||from Notice Board\". " +
+                    "Type \\n where you want a line break (chat has no real newline key).")
+                .WithArgs(parsers.OptionalAll("titleBodyExtra"))
+                .HandleWith(OnExternalTaskCommand)
             .EndSubCommand();
     }
+
+    /// <summary>Handler for <c>/scribe external &lt;title&gt;|&lt;bodyText&gt;|&lt;extraInfo&gt;</c> — a
+    /// dev-only harness that calls the real <see cref="TryCreateExternalTask"/> public API directly, so the
+    /// author (and, over a shared screen/Discord call, other mod authors) can see exactly what each
+    /// parameter produces without writing a throwaway calling mod. The three fields are pipe-separated on
+    /// one line since chat commands have no quoted-multi-word-argument parser; a blank segment (or a
+    /// missing trailing one) becomes <c>null</c>, matching what a real caller passing <c>null</c>/omitting
+    /// an argument would produce. Same double-gate as the other dev subcommands
+    /// (<c>controlserver</c> privilege on the root + creative-mode check here).</summary>
+    private TextCommandResult OnExternalTaskCommand(TextCommandCallingArgs args)
+    {
+        if (sapi is null) return TextCommandResult.Error("Server not ready.");
+        if (args.Caller.Player is not IServerPlayer player)
+            return TextCommandResult.Error("This command must be run by a player.");
+        if (player.WorldData.CurrentGameMode != EnumGameMode.Creative)
+            return TextCommandResult.Error("/scribe external is only available in creative mode.");
+
+        string raw = (args[0] as string ?? "").Trim();
+        if (raw.Length == 0)
+            return TextCommandResult.Error(
+                "Usage: /scribe external <title>|<bodyText>|<extraInfo> (pipe-separated, blank = null)");
+
+        string[] parts = raw.Split('|');
+        string? title = parts.Length > 0 ? UnescapeTypedNewlines(NullIfBlank(parts[0])) : null;
+        string? bodyText = parts.Length > 1 ? UnescapeTypedNewlines(NullIfBlank(parts[1])) : null;
+        string? extraInfo = parts.Length > 2 ? UnescapeTypedNewlines(NullIfBlank(parts[2])) : null;
+
+        bool ok = TryCreateExternalTask(player, title, bodyText, extraInfo);
+        return ok
+            ? TextCommandResult.Success(
+                $"[scribe] TryCreateExternalTask succeeded — title={FormatArgEcho(title)}, " +
+                $"bodyText={FormatArgEcho(bodyText)}, extraInfo={FormatArgEcho(extraInfo)}. " +
+                "Open your Scribe item to see the result.")
+            : TextCommandResult.Error(
+                "[scribe] TryCreateExternalTask returned false — see the in-game error notice for why " +
+                "(no Scribe item carried, all carried items locked, or the target is full).");
+    }
+
+    private static string? NullIfBlank(string s)
+    {
+        s = s.Trim();
+        return s.Length == 0 ? null : s;
+    }
+
+    /// <summary>Chat input has no way to type a real newline byte, so <c>/scribe external</c> asks the
+    /// caller to type the literal two-character escape <c>\n</c> where they want a line break — converted
+    /// here to a real <c>'\n'</c> before it ever reaches <see cref="TryCreateExternalTask"/>. Only this dev
+    /// harness needs the conversion: a real calling mod hands over a genuine multi-line C# string, which
+    /// already survives the mapper/codecs/render pipeline untouched (add-external-mod-task-api).</summary>
+    private static string? UnescapeTypedNewlines(string? s) => s?.Replace("\\n", "\n");
+
+    private static string FormatArgEcho(string? value) => value is null ? "null" : $"\"{value}\"";
 
     /// <summary>Handler for <c>/scribe tablet &lt;wet|hard|fired&gt;</c> (add-tablet-state-dev-command): set the
     /// calling player's HELD Scribe Tablet to the requested life-cycle state by swapping its <c>material</c>

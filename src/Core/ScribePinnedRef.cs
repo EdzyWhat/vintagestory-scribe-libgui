@@ -105,4 +105,10 @@ public sealed class ScribePinnedRef
     /// is itself null until Accept happens — though by the time <see cref="IsAcceptedAssignment"/> is
     /// true this should always be set).</summary>
     public string? AcceptedDate { get; set; }
+
+    /// <summary>Last-known <see cref="ScribeBlock.ExtraInfo"/> of the pinned task — an external mod's
+    /// opaque hover-detail string (add-external-mod-task-api). Snapshotted so the Pin Tab can render
+    /// the hover-info icon without resolving the (possibly unloaded) source document. Null when the
+    /// task carries none (the overwhelming majority of pins).</summary>
+    public string? ExtraInfo { get; set; }
 }

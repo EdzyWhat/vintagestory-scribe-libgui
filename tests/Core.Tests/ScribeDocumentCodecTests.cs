@@ -113,6 +113,68 @@ public class ScribeDocumentCodecTests
     }
 
     [Fact]
+    public void RoundTrip_PreservesExtraInfo()
+    {
+        var original = new ScribeDocument();
+        original.AddTask("Check the notice board");
+        original.Blocks[0].ExtraInfo = "posted by NoticeBoard, 2026-09-12";
+        original.AddTask("No extra info here"); // must default null, independent of the first block
+
+        byte[] bytes = ScribeDocumentCodec.Serialize(original);
+        bool ok = ScribeDocumentCodec.TryDeserialize(bytes, out ScribeDocument? restored);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        Assert.Equal("posted by NoticeBoard, 2026-09-12", restored!.Blocks[0].ExtraInfo);
+        Assert.Null(restored.Blocks[1].ExtraInfo);
+    }
+
+    [Fact]
+    public void TryDeserialize_V11Bytes_Succeeds_AndDefaultsExtraInfoNull()
+    {
+        // v11 carried LinkDescription but NOT the v12 ExtraInfo field. A hand-built v11 blob must
+        // still read via progressive reads, with ExtraInfo defaulting to null.
+        var docId = Guid.NewGuid();
+        var taskId = Guid.NewGuid();
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write(new byte[] { (byte)'S', (byte)'C', (byte)'R', (byte)'B' });
+            w.Write((byte)11);
+            w.Write(docId.ToByteArray());
+            w.Write(1); // blockCount
+            w.Write(taskId.ToByteArray());
+            w.Write((byte)ScribeBlockKind.Task);
+            w.Write(false); // done
+            w.Write(0);     // depth
+            w.Write(false); // hasAssignedToUid
+            w.Write("Existing v11 task");
+            // v6 Tracker/Link fields:
+            w.Write(false); // hasTargetItemCode
+            w.Write(1);     // targetQuantity
+            w.Write(0);     // currentQuantity
+            w.Write(false); // hasLinkTarget
+            // v7 LinkLabel:
+            w.Write(false); // hasLinkLabel
+            // v8 RecipeSignature:
+            w.Write("");
+            // v9 assignment:
+            w.Write(false); // hasAssignment
+            // v11 LinkDescription:
+            w.Write(false); // hasLinkDescription
+            // v11 has NO ExtraInfo field here — that's the point.
+            w.Write("V11 Notes"); // title
+        }
+
+        bool ok = ScribeDocumentCodec.TryDeserialize(ms.ToArray(), out ScribeDocument? restored);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        Assert.Equal("V11 Notes", restored!.Title);
+        Assert.Null(restored.Blocks[0].ExtraInfo);
+    }
+
+    [Fact]
     public void RoundTrip_PreservesDocIdAndTaskIds()
     {
         var original = new ScribeDocument();

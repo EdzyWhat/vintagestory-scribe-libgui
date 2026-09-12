@@ -41,7 +41,7 @@ internal readonly record struct ScribeReadRowData(
     int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null, int Depth = 0,
     bool IsAcceptedAssignment = false, string? QuestProgressText = null,
     string? AssignerName = null, string? AssignedDate = null, string? AcceptedDate = null,
-    bool IsStaticVsQuestObjective = false)
+    bool IsStaticVsQuestObjective = false, string? ExtraInfo = null)
 {
     public bool IsTask => Kind == ScribeBlockKind.Task;
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
@@ -95,6 +95,7 @@ internal sealed class ScribeReadContent : StatefulWidget
         bool completionAndPinLive = false,
         Action<Guid>? onTextEditRefused = null,
         SKBitmap? assignedStampBitmap = null,
+        SKBitmap? externalStampBitmap = null,
         bool supportsFilterPills = true,
         bool supportsTabHeader = true,
         bool showSubtitleRow = true,
@@ -119,6 +120,7 @@ internal sealed class ScribeReadContent : StatefulWidget
         CompletionAndPinLive = completionAndPinLive;
         OnTextEditRefused = onTextEditRefused;
         AssignedStampBitmap = assignedStampBitmap;
+        ExternalStampBitmap = externalStampBitmap;
         SupportsFilterPills = supportsFilterPills;
         SupportsTabHeader = supportsTabHeader;
         ShowSubtitleRow = showSubtitleRow;
@@ -184,6 +186,11 @@ internal sealed class ScribeReadContent : StatefulWidget
     /// widget stays API-free. Null on a pure server (no client bitmap to resolve) — the icon falls back
     /// to the plain SVG glyph in that case.</summary>
     public SKBitmap? AssignedStampBitmap { get; }
+    /// <summary>The external-mod hover-info stamp raster (see <see cref="ScribeExternalInfoIcon"/>),
+    /// resolved once by the dialog via <c>modSystem.GetGuiTextureBitmap</c> and passed down so this row
+    /// widget stays API-free. Null on a pure server, or when the asset failed to load — the icon falls
+    /// back to the plain SVG glyph in that case.</summary>
+    public SKBitmap? ExternalStampBitmap { get; }
     /// <summary>Whether to render the filter-pill row and any subtask-group collapse toggles
     /// (scribe-dialog-base's capability flag) — false only for the Tablet (tablet-dialog). When false,
     /// every row renders exactly as before this feature: unfiltered, full opacity, no toggle.</summary>
@@ -286,7 +293,7 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
         var items = visibleBlocks
             .Select(b => new ScribeAnimatedListItem(
                 Id: b.TaskId,
-                Child: new ScribeReadRow(b, Widget.OnToggleTask, Widget.OnTogglePinned, Widget.OnOpenLink, style, Widget.ReadOnly, Widget.CompletionAndPinLive, Widget.OnTextEditRefused, assignedStampBitmap: Widget.AssignedStampBitmap, currentShade: Widget.CurrentShade,
+                Child: new ScribeReadRow(b, Widget.OnToggleTask, Widget.OnTogglePinned, Widget.OnOpenLink, style, Widget.ReadOnly, Widget.CompletionAndPinLive, Widget.OnTextEditRefused, assignedStampBitmap: Widget.AssignedStampBitmap, externalStampBitmap: Widget.ExternalStampBitmap, currentShade: Widget.CurrentShade,
                     shadow: visibility is not null && visibility[b.TaskId] == ReadRowVisibility.Shadow,
                     showCollapseToggle: groupParentsWithRun is not null && groupParentsWithRun.Contains(b.TaskId),
                     collapsed: Widget.IsGroupCollapsed(b.TaskId),
@@ -425,7 +432,7 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
 /// </summary>
 internal sealed class ScribeReadRow : StatefulWidget
 {
-    public ScribeReadRow(ScribeReadRowData data, Action<Guid> onToggleTask, Action<Guid> onTogglePinned, Action<Guid> onOpenLink, ScribeRowStyle style, bool readOnly = false, bool completionAndPinLive = false, Action<Guid>? onTextEditRefused = null, SKBitmap? assignedStampBitmap = null, ScribeAmbientLightSampler.Shade currentShade = default, bool shadow = false, bool showCollapseToggle = false, bool collapsed = false, Action? onToggleCollapse = null, Gui.Widgets.Framework.Key? key = null)
+    public ScribeReadRow(ScribeReadRowData data, Action<Guid> onToggleTask, Action<Guid> onTogglePinned, Action<Guid> onOpenLink, ScribeRowStyle style, bool readOnly = false, bool completionAndPinLive = false, Action<Guid>? onTextEditRefused = null, SKBitmap? assignedStampBitmap = null, SKBitmap? externalStampBitmap = null, ScribeAmbientLightSampler.Shade currentShade = default, bool shadow = false, bool showCollapseToggle = false, bool collapsed = false, Action? onToggleCollapse = null, Gui.Widgets.Framework.Key? key = null)
         : base(key)
     {
         Data = data;
@@ -437,6 +444,7 @@ internal sealed class ScribeReadRow : StatefulWidget
         CompletionAndPinLive = completionAndPinLive;
         OnTextEditRefused = onTextEditRefused;
         AssignedStampBitmap = assignedStampBitmap;
+        ExternalStampBitmap = externalStampBitmap;
         CurrentShade = currentShade;
         Shadow = shadow;
         ShowCollapseToggle = showCollapseToggle;
@@ -465,6 +473,9 @@ internal sealed class ScribeReadRow : StatefulWidget
     /// <summary>The full-color assigned-task stamp raster, threaded down from the content widget (see
     /// <see cref="ScribeReadContent.AssignedStampBitmap"/>). Null falls back to the plain SVG glyph.</summary>
     public SKBitmap? AssignedStampBitmap { get; }
+    /// <summary>The external-mod hover-info stamp raster, threaded down from the content widget (see
+    /// <see cref="ScribeReadContent.ExternalStampBitmap"/>). Null falls back to the plain SVG glyph.</summary>
+    public SKBitmap? ExternalStampBitmap { get; }
     /// <summary>The live ambient-illumination shade, threaded down so the assignment marker's hover
     /// tooltip can match the body's shading (see <see cref="ScribeReadContent.CurrentShade"/>).</summary>
     public ScribeAmbientLightSampler.Shade CurrentShade { get; }
@@ -693,6 +704,12 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
             children.Add(ScribeAssignedTaskIcon.Build(style, colors.OnSurfaceVariant, Widget.Data.IsItemKind, Widget.AssignedStampBitmap,
                 context: context, currentShade: Widget.CurrentShade,
                 assignerName: Widget.Data.AssignerName, assignedDate: Widget.Data.AssignedDate, acceptedDate: Widget.Data.AcceptedDate));
+
+        // External-mod hover-info marker (add-external-mod-task-api) — independent of the assignment
+        // marker above; both can appear side by side on the same row.
+        if (!string.IsNullOrEmpty(Widget.Data.ExtraInfo))
+            children.Add(ScribeExternalInfoIcon.Build(style, colors.OnSurfaceVariant, Widget.Data.IsItemKind, Widget.ExternalStampBitmap,
+                context: context, currentShade: Widget.CurrentShade, extraInfo: Widget.Data.ExtraInfo));
 
         // The row text. On the cuneiform tablet path (add-tablet-firing-mechanic) render it as display-only
         // cuneiform strokes so a dried/fired tablet reads in the SAME glyphs the wet tablet types in —

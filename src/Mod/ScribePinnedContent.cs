@@ -38,7 +38,7 @@ internal readonly record struct ScribePinRowData(
     int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null, int Depth = 0,
     bool IsAcceptedAssignment = false,
     string? AssignerName = null, string? AssignedDate = null, string? AcceptedDate = null,
-    bool IsStaticVsQuestObjective = false)
+    bool IsStaticVsQuestObjective = false, string? ExtraInfo = null)
 {
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
     public bool IsLink => Kind == ScribeBlockKind.Link;
@@ -89,7 +89,8 @@ internal sealed class ScribePinnedContent : StatefulWidget
         ScribeAmbientLightSampler.Shade currentShade,
         System.Func<DropdownStyle, DropdownStyle>? decoratePolicyDropdownStyle = null,
         bool showSubtitleRow = true,
-        SKBitmap? assignedStampBitmap = null)
+        SKBitmap? assignedStampBitmap = null,
+        SKBitmap? externalStampBitmap = null)
     {
         Rows = rows;
         FocusNodes = focusNodes;
@@ -112,6 +113,7 @@ internal sealed class ScribePinnedContent : StatefulWidget
         DecoratePolicyDropdownStyle = decoratePolicyDropdownStyle;
         ShowSubtitleRow = showSubtitleRow;
         AssignedStampBitmap = assignedStampBitmap;
+        ExternalStampBitmap = externalStampBitmap;
     }
 
     public IReadOnlyList<ScribePinRowData> Rows { get; }
@@ -159,6 +161,10 @@ internal sealed class ScribePinnedContent : StatefulWidget
     /// resolved once by the dialog and passed down so this row widget stays API-free. Null falls back to
     /// the plain SVG glyph.</summary>
     public SKBitmap? AssignedStampBitmap { get; }
+    /// <summary>The external-mod hover-info stamp raster (see <see cref="ScribeExternalInfoIcon"/>),
+    /// resolved once by the dialog and passed down so this row widget stays API-free. Null falls back
+    /// to the plain SVG glyph.</summary>
+    public SKBitmap? ExternalStampBitmap { get; }
 
     public override State CreateState() => new ScribePinnedContentState();
 }
@@ -254,6 +260,7 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                     onDragEnd: OnRowDragEnd,
                     style: Widget.Style,
                     assignedStampBitmap: Widget.AssignedStampBitmap,
+                    externalStampBitmap: Widget.ExternalStampBitmap,
                     currentShade: Widget.CurrentShade,
                     // Key by TaskId (not index) so a row's field State + element identity track the pin
                     // across a reorder/resync rebuild rather than by list position.
@@ -268,8 +275,8 @@ internal sealed class ScribePinnedContentState : State<ScribePinnedContent>
                         TargetQuantity: r.TargetQuantity, CurrentQuantity: r.CurrentQuantity, LinkTarget: r.LinkTarget,
                         Depth: r.Depth, IsAcceptedAssignment: r.IsAcceptedAssignment,
                         AssignerName: r.AssignerName, AssignedDate: r.AssignedDate, AcceptedDate: r.AcceptedDate,
-                        IsStaticVsQuestObjective: r.IsStaticVsQuestObjective),
-                    Widget.Style, Widget.AssignedStampBitmap)))
+                        IsStaticVsQuestObjective: r.IsStaticVsQuestObjective, ExtraInfo: r.ExtraInfo),
+                    Widget.Style, Widget.AssignedStampBitmap, Widget.ExternalStampBitmap)))
             .ToList();
 
         Widget scrollBody = new ScribeAnimatedList(
@@ -431,6 +438,7 @@ internal sealed class ScribePinRow : StatefulWidget
         Action onDragEnd,
         ScribeRowStyle style,
         SKBitmap? assignedStampBitmap = null,
+        SKBitmap? externalStampBitmap = null,
         ScribeAmbientLightSampler.Shade currentShade = default,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
@@ -453,6 +461,7 @@ internal sealed class ScribePinRow : StatefulWidget
         OnDragEnd = onDragEnd;
         Style = style;
         AssignedStampBitmap = assignedStampBitmap;
+        ExternalStampBitmap = externalStampBitmap;
         CurrentShade = currentShade;
     }
 
@@ -485,6 +494,9 @@ internal sealed class ScribePinRow : StatefulWidget
     /// <summary>The full-color assigned-task stamp raster, threaded down from the content widget (see
     /// <see cref="ScribePinnedContent.AssignedStampBitmap"/>). Null falls back to the plain SVG glyph.</summary>
     public SKBitmap? AssignedStampBitmap { get; }
+    /// <summary>The external-mod hover-info stamp raster, threaded down from the content widget (see
+    /// <see cref="ScribePinnedContent.ExternalStampBitmap"/>). Null falls back to the plain SVG glyph.</summary>
+    public SKBitmap? ExternalStampBitmap { get; }
     public ScribeAmbientLightSampler.Shade CurrentShade { get; }
 
     public override State CreateState() => new ScribePinRowState();
@@ -665,6 +677,12 @@ internal sealed class ScribePinRowState : State<ScribePinRow>
             children.Add(ScribeAssignedTaskIcon.Build(style, colors.OnSurfaceVariant, data.IsItemKind, Widget.AssignedStampBitmap,
                 context: context, currentShade: Widget.CurrentShade,
                 assignerName: data.AssignerName, assignedDate: data.AssignedDate, acceptedDate: data.AcceptedDate));
+
+        // External-mod hover-info marker (add-external-mod-task-api) — independent of the assignment
+        // marker above; both can appear side by side on the same row.
+        if (!string.IsNullOrEmpty(data.ExtraInfo))
+            children.Add(ScribeExternalInfoIcon.Build(style, colors.OnSurfaceVariant, data.IsItemKind, Widget.ExternalStampBitmap,
+                context: context, currentShade: Widget.CurrentShade, extraInfo: data.ExtraInfo));
 
         // A Tracker/Link pin renders a non-editable item icon + name (+ a have/need counter for a Tracker),
         // NOT the editable text field — its own Text is empty, its content is the referenced item, exactly

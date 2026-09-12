@@ -38,7 +38,7 @@ internal readonly record struct ScribeEditRowData(
     int TargetQuantity = 1, int CurrentQuantity = 0, string? LinkTarget = null, int Depth = 0,
     bool ReadOnly = false, bool CompletionAndPinLive = true, bool IsAcceptedAssignment = false,
     string? AssignerName = null, string? AssignedDate = null, string? AcceptedDate = null,
-    bool IsStaticVsQuestObjective = false)
+    bool IsStaticVsQuestObjective = false, string? ExtraInfo = null)
 {
     public bool IsTask => Kind == ScribeBlockKind.Task;
     public bool IsTracker => Kind == ScribeBlockKind.Tracker;
@@ -79,12 +79,15 @@ internal sealed class ScribeFrozenEditorRow : StatelessWidget
     private readonly ScribeEditRowData data;
     private readonly ScribeRowStyle style;
     private readonly SKBitmap? assignedStampBitmap;
+    private readonly SKBitmap? externalStampBitmap;
 
-    public ScribeFrozenEditorRow(ScribeEditRowData data, ScribeRowStyle style, SKBitmap? assignedStampBitmap = null)
+    public ScribeFrozenEditorRow(ScribeEditRowData data, ScribeRowStyle style, SKBitmap? assignedStampBitmap = null,
+        SKBitmap? externalStampBitmap = null)
     {
         this.data = data;
         this.style = style;
         this.assignedStampBitmap = assignedStampBitmap;
+        this.externalStampBitmap = externalStampBitmap;
     }
 
     public override Widget Build(BuildContext context)
@@ -121,6 +124,10 @@ internal sealed class ScribeFrozenEditorRow : StatelessWidget
         // row actually was an accepted assignment.
         if (data.IsAcceptedAssignment)
             children.Add(ScribeAssignedTaskIcon.Build(style, colors.OnSurfaceVariant, data.IsItemKind, assignedStampBitmap));
+
+        // External-mod hover-info marker, same "only takes up space when present" contract as above.
+        if (!string.IsNullOrEmpty(data.ExtraInfo))
+            children.Add(ScribeExternalInfoIcon.Build(style, colors.OnSurfaceVariant, data.IsItemKind, externalStampBitmap));
 
         // Display-only field renderer (same as Read) so a collapsing Task/Note keeps Edit wrap + line-box.
         // Item kinds stay a padded label — they have no multiline field.
@@ -198,7 +205,8 @@ internal sealed class ScribeEditorContent : StatefulWidget
         System.Action<Guid>? onOpenLink = null,
         bool supportsTabHeader = true,
         bool showSubtitleRow = true,
-        SKBitmap? assignedStampBitmap = null)
+        SKBitmap? assignedStampBitmap = null,
+        SKBitmap? externalStampBitmap = null)
     {
         Blocks = blocks;
         FocusNodes = focusNodes;
@@ -238,6 +246,7 @@ internal sealed class ScribeEditorContent : StatefulWidget
         SupportsTabHeader = supportsTabHeader;
         ShowSubtitleRow = showSubtitleRow;
         AssignedStampBitmap = assignedStampBitmap;
+        ExternalStampBitmap = externalStampBitmap;
     }
 
     public IReadOnlyList<ScribeEditRowData> Blocks { get; }
@@ -361,6 +370,10 @@ internal sealed class ScribeEditorContent : StatefulWidget
     /// resolved once by the dialog and passed down so this row widget stays API-free. Null falls back to
     /// the plain SVG glyph.</summary>
     public SKBitmap? AssignedStampBitmap { get; }
+    /// <summary>The external-mod hover-info stamp raster (see <see cref="ScribeExternalInfoIcon"/>),
+    /// resolved once by the dialog and passed down so this row widget stays API-free. Null falls back
+    /// to the plain SVG glyph.</summary>
+    public SKBitmap? ExternalStampBitmap { get; }
 
     public override State CreateState() => new ScribeEditorContentState();
 }
@@ -510,6 +523,7 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                     onOpenLink: Widget.OnOpenLink,
                     style: Widget.Style,
                     assignedStampBitmap: Widget.AssignedStampBitmap,
+                    externalStampBitmap: Widget.ExternalStampBitmap,
                     currentShade: Widget.CurrentShade,
                     // Stable per-row identity (reconcile-animating-surfaces §3.2): keyed by the block's
                     // TaskId, NOT its list index. Under the in-place reconcile a RebuildBody() drives
@@ -523,7 +537,7 @@ internal sealed class ScribeEditorContentState : State<ScribeEditorContent>
                     // rows below in place; a delete/insert ABOVE the focused row still shifts + remounts it
                     // (the accepted positional caveat — text survives via the scratch write-through).
                     key: new ValueKey<Guid>(b.TaskId)),
-                Ghost: new ScribeFrozenEditorRow(b, Widget.Style, Widget.AssignedStampBitmap)))
+                Ghost: new ScribeFrozenEditorRow(b, Widget.Style, Widget.AssignedStampBitmap, Widget.ExternalStampBitmap)))
             .ToList();
 
         // Wrapped in a Scrollbar so a tall editor list shows a draggable track (task 8.15). AutoHide off
@@ -813,6 +827,7 @@ internal sealed class ScribeEditRow : StatefulWidget
         ScribeRowStyle style,
         System.Action<Guid>? onOpenLink = null,
         SKBitmap? assignedStampBitmap = null,
+        SKBitmap? externalStampBitmap = null,
         ScribeAmbientLightSampler.Shade currentShade = default,
         Gui.Widgets.Framework.Key? key = null)
         : base(key)
@@ -845,6 +860,7 @@ internal sealed class ScribeEditRow : StatefulWidget
         OnOpenLink = onOpenLink;
         Style = style;
         AssignedStampBitmap = assignedStampBitmap;
+        ExternalStampBitmap = externalStampBitmap;
         CurrentShade = currentShade;
     }
 
@@ -901,6 +917,9 @@ internal sealed class ScribeEditRow : StatefulWidget
     /// <summary>The full-color assigned-task stamp raster, threaded down from the content widget (see
     /// <see cref="ScribeEditorContent.AssignedStampBitmap"/>). Null falls back to the plain SVG glyph.</summary>
     public SKBitmap? AssignedStampBitmap { get; }
+    /// <summary>The external-mod hover-info stamp raster, threaded down from the content widget (see
+    /// <see cref="ScribeEditorContent.ExternalStampBitmap"/>). Null falls back to the plain SVG glyph.</summary>
+    public SKBitmap? ExternalStampBitmap { get; }
     /// <summary>The live ambient-illumination shade, threaded down so the assignment marker's hover
     /// tooltip can match the body's shading (see <see cref="ScribeEditorContent.CurrentShade"/>).</summary>
     public ScribeAmbientLightSampler.Shade CurrentShade { get; }
@@ -1174,6 +1193,12 @@ internal sealed class ScribeEditRowState : State<ScribeEditRow>
             children.Add(ScribeAssignedTaskIcon.Build(style, colors.OnSurfaceVariant, Widget.Data.IsItemKind, Widget.AssignedStampBitmap,
                 context: context, currentShade: Widget.CurrentShade,
                 assignerName: Widget.Data.AssignerName, assignedDate: Widget.Data.AssignedDate, acceptedDate: Widget.Data.AcceptedDate));
+
+        // External-mod hover-info marker (add-external-mod-task-api) — independent of the assignment
+        // marker above; both can appear side by side on the same row.
+        if (!string.IsNullOrEmpty(Widget.Data.ExtraInfo))
+            children.Add(ScribeExternalInfoIcon.Build(style, colors.OnSurfaceVariant, Widget.Data.IsItemKind, Widget.ExternalStampBitmap,
+                context: context, currentShade: Widget.CurrentShade, extraInfo: Widget.Data.ExtraInfo));
 
         // A Tracker/Link row has no editable text field — its content is the referenced item's icon + name,
         // and a Tracker additionally carries an inline +/- stepper for its target quantity

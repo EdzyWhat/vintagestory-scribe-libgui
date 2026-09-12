@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **A public API for other mods to create tasks.** `ScribeModSystem.TryCreateExternalTask(player,
+  title, bodyText, extraInfo)` lets another installed mod (taking Scribe as an optional soft
+  dependency) create a task on a player's behalf with one direct, server-side call — no networking,
+  no knowledge of Scribe's document model required. `title` becomes a checkbox task; `bodyText`, if
+  also given, becomes a note nested beneath it (or stands alone if there's no title). An optional
+  `extraInfo` string — shown to the player as hover detail on the created row, never interpreted by
+  Scribe — lets the calling mod attach its own context (source, author, a pointer back to its own
+  UI). The target is resolved the same way the Handbook's "Add to Scribe" does: the player's
+  last-opened writeable Scribe item, else their first writeable one; if none is available, the
+  player is notified directly why. Notice Board is the first mod using this.
+
 ## [1.4.1] - 2026-09-11
 
 ### Fixed

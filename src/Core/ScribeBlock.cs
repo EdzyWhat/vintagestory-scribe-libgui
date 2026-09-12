@@ -171,9 +171,17 @@ public sealed class ScribeBlock
     /// which then degrades to a plain output tracker). Stored as a plain string to keep Core API-free.</summary>
     public string RecipeSignature { get; set; } = "";
 
+    /// <summary>Opaque, caller-composed free-text detail attached by an external mod via
+    /// <c>TryCreateExternalTask</c> (add-external-mod-task-api). Kind-agnostic — any block kind may
+    /// carry it, since it is always placed on whichever block ends up at Depth 0 regardless of kind.
+    /// Content and format are never interpreted or parsed by Core or the Mod layer; it is shown to the
+    /// viewing player verbatim as hover text. Null when no external caller attached anything (the
+    /// overwhelming majority of blocks, including everything created inside Scribe itself).</summary>
+    public string? ExtraInfo { get; set; }
+
     public ScribeBlock(ScribeBlockKind kind, string text, bool done = false, int depth = 0, string? assignedToUid = null, Guid? taskId = null,
         string? targetItemCode = null, int targetQuantity = 1, int currentQuantity = 0, string? linkTarget = null, string? linkLabel = null,
-        string? recipeSignature = null, ScribeAssignment? assignment = null, string? linkDescription = null)
+        string? recipeSignature = null, ScribeAssignment? assignment = null, string? linkDescription = null, string? extraInfo = null)
     {
         Kind = kind;
         Text = text;
@@ -188,6 +196,7 @@ public sealed class ScribeBlock
         LinkLabel = linkLabel;
         RecipeSignature = recipeSignature ?? "";
         LinkDescription = linkDescription;
+        ExtraInfo = extraInfo;
     }
 
     public bool IsTask => Kind == ScribeBlockKind.Task;

@@ -11,7 +11,8 @@ public class ScribePinCodecTests
         ScribeBlockKind kind = ScribeBlockKind.Task, string? linkTarget = null,
         string? targetItemCode = null, int targetQuantity = 1, int currentQuantity = 0,
         string? linkLabel = null, int depth = 0, bool isAcceptedAssignment = false,
-        string assignerUid = "", string assignedDate = "", string? acceptedDate = null) => new()
+        string assignerUid = "", string assignedDate = "", string? acceptedDate = null,
+        string? extraInfo = null) => new()
     {
         OwnerDocId = Guid.NewGuid(),
         TaskId = Guid.NewGuid(),
@@ -30,6 +31,7 @@ public class ScribePinCodecTests
         AssignerUid = assignerUid,
         AssignedDate = assignedDate,
         AcceptedDate = acceptedDate,
+        ExtraInfo = extraInfo,
     };
 
     private static void AssertPinEqual(ScribePinnedRef expected, ScribePinnedRef actual)
@@ -51,6 +53,7 @@ public class ScribePinCodecTests
         Assert.Equal(expected.AssignerUid, actual.AssignerUid);
         Assert.Equal(expected.AssignedDate, actual.AssignedDate);
         Assert.Equal(expected.AcceptedDate, actual.AcceptedDate);
+        Assert.Equal(expected.ExtraInfo, actual.ExtraInfo);
     }
 
     // ---- SPIN: list round-trip ----
@@ -492,6 +495,67 @@ public class ScribePinCodecTests
         Assert.Equal("", pin.AssignerUid);      // defaulted by the progressive read
         Assert.Equal("", pin.AssignedDate);
         Assert.Null(pin.AcceptedDate);
+    }
+
+    [Fact]
+    public void List_RoundTrip_PreservesExtraInfo()
+    {
+        var pins = new List<ScribePinnedRef>
+        {
+            Pin("Check the notice board", extraInfo: "posted by NoticeBoard"),
+            Pin("Ordinary task"),
+        };
+
+        byte[] bytes = ScribePinCodec.SerializeList(pins);
+        bool ok = ScribePinCodec.TryDeserializeList(bytes, out var restored);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        AssertPinEqual(pins[0], restored![0]);
+        AssertPinEqual(pins[1], restored[1]);
+        Assert.Equal("posted by NoticeBoard", restored[0].ExtraInfo);
+        Assert.Null(restored[1].ExtraInfo);
+    }
+
+    [Fact]
+    public void TryDeserialize_V7Bytes_ExtraInfo_IsDefaulted()
+    {
+        // Hand-build a v7 SPIN blob (assignment provenance present, but no v8 ExtraInfo field) as the
+        // pre-ExtraInfo codec wrote it, and assert the progressive read stops after AcceptedDate and
+        // defaults ExtraInfo to null rather than mis-reading.
+        var docId = Guid.NewGuid();
+        var taskId = Guid.NewGuid();
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write("SPIN"u8.ToArray());
+            w.Write((byte)7);          // v7
+            w.Write(1);                // one pin
+            w.Write(docId.ToByteArray());
+            w.Write(taskId.ToByteArray());
+            w.Write(555.0);            // PinnedAtTotalHours
+            w.Write(false);            // Orphaned
+            w.Write(false);            // LastKnownDone
+            w.Write("Copper");         // LastKnownText
+            w.Write((byte)ScribeBlockKind.Task); // Kind
+            w.Write(false);            // hasLinkTarget
+            w.Write(false);            // hasTargetItemCode
+            w.Write(1);                // TargetQuantity
+            w.Write(0);                // CurrentQuantity
+            w.Write(false);            // hasLinkLabel
+            w.Write(0);                // Depth
+            w.Write(false);            // IsAcceptedAssignment
+            w.Write("");               // AssignerUid
+            w.Write("");               // AssignedDate
+            w.Write(false);            // hasAcceptedDate — v7 ends here, no ExtraInfo field
+        }
+
+        bool ok = ScribePinCodec.TryDeserializeList(ms.ToArray(), out var restored);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        var pin = Assert.Single(restored!);
+        Assert.Null(pin.ExtraInfo); // defaulted by the progressive read
     }
 
     [Fact]

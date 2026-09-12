@@ -7,7 +7,7 @@ namespace Scribe.Core;
 /// used for both world persistence and network sync, so the round-trip is exact and any
 /// malformed input fails safely (returns false) rather than throwing.
 ///
-/// Current format (v11, little-endian via <see cref="BinaryWriter"/>):
+/// Current format (v12, little-endian via <see cref="BinaryWriter"/>):
 ///   [4 bytes magic "SCRB"][1 byte version][16 bytes DocId][int blockCount]
 ///   [per block: 16 bytes TaskId, byte kind, bool done, int depth, bool hasAssignedToUid,
 ///    string assignedToUid (only if hasAssignedToUid), string text,
@@ -18,11 +18,12 @@ namespace Scribe.Core;
 ///    string recipeSignature (v8+; empty string when none),
 ///    bool hasAssignment, string assignerUid, byte state, string assignedDate, bool seen (v9+),
 ///    string targetPlayerUid (only when hasAssignment; v10+),
-///    bool hasLinkDescription, string linkDescription (only if hasLinkDescription; v11+)]
+///    bool hasLinkDescription, string linkDescription (only if hasLinkDescription; v11+),
+///    bool hasExtraInfo, string extraInfo (only if hasExtraInfo; v12+)]
 ///   [string title]
 ///
 /// Accepted-version window (PROGRESSIVE append-only reads, NOT a two-version window):
-///   Reads any version in [<see cref="MinVersion"/>=5, <see cref="Version"/>=11]; older/newer → fail-safe false.
+///   Reads any version in [<see cref="MinVersion"/>=5, <see cref="Version"/>=12]; older/newer → fail-safe false.
 ///   Each version-group's trailing fields are read only behind a <c>version &gt;=</c> threshold, so an
 ///   older blob simply stops reading before the fields it never wrote. Missing fields default via
 ///   <see cref="ApplyPreV6Defaults"/>. This departs from the strict two-version window because v5 docs
@@ -56,6 +57,10 @@ namespace Scribe.Core;
 ///        linkDescription): a quest Link's captured description (add-assignment-and-quest-support
 ///        10.1), resolved from the installed quest mod's catalog at creation time and never
 ///        re-derived. Null for every other Link flavor and non-Link kind.
+///   v12 — appended one per-block field after LinkDescription (hasExtraInfo?, extraInfo): an
+///        external mod's opaque hover-detail string, attached via
+///        <c>ScribeModSystem.TryCreateExternalTask</c> (add-external-mod-task-api). Null for every
+///        block not created through that entry point.
 ///
 /// A hand-rolled format keeps Core free of any external dependency. The version byte lets
 /// us evolve the format while still reading every prior save layout back to <see cref="MinVersion"/>.
@@ -63,7 +68,7 @@ namespace Scribe.Core;
 public static class ScribeDocumentCodec
 {
     private static readonly byte[] Magic = "SCRB"u8.ToArray();
-    private const byte Version = 11; // v11 adds a quest Link's captured LinkDescription.
+    private const byte Version = 12; // v12 adds an external caller's opaque ExtraInfo hover string.
 
     /// <summary>Oldest format version the reader still accepts. Progressive append-only reads accept
     /// any version in [<see cref="MinVersion"/>, <see cref="Version"/>]; v5 is the oldest because it is
@@ -146,6 +151,9 @@ public static class ScribeDocumentCodec
                 // v11: a quest Link's captured description, appended after the assignment block.
                 w.Write(block.LinkDescription is not null);
                 if (block.LinkDescription is not null) w.Write(block.LinkDescription);
+                // v12: an external mod's opaque ExtraInfo hover string, appended after LinkDescription.
+                w.Write(block.ExtraInfo is not null);
+                if (block.ExtraInfo is not null) w.Write(block.ExtraInfo);
             }
             w.Write(doc.Title); // v5+: document title appended after block list
         }
@@ -153,7 +161,7 @@ public static class ScribeDocumentCodec
     }
 
     /// <summary>
-    /// Deserializes a document. Accepts any version in [MinVersion=5, Version=11] via progressive reads;
+    /// Deserializes a document. Accepts any version in [MinVersion=5, Version=12] via progressive reads;
     /// any other version fails safely. Signature-stable for callers that don't need the legacy-pin out-param — routes through the
     /// three-arg overload and discards it.
     /// </summary>
@@ -261,11 +269,14 @@ public static class ScribeDocumentCodec
                 string? linkDescription = null;
                 if (version >= 11 && r.ReadBoolean()) linkDescription = r.ReadString();
 
+                string? extraInfo = null;
+                if (version >= 12 && r.ReadBoolean()) extraInfo = r.ReadString();
+
                 // The block's setters clamp TargetQuantity (≥ 1), CurrentQuantity ([0, target]),
                 // and Depth ([0, 1]).
                 blocks.Add(new ScribeBlock(kind, text, done, depth, assignedToUid, taskId,
                     targetItemCode, targetQuantity, currentQuantity, linkTarget, linkLabel, recipeSignature,
-                    assignment, linkDescription));
+                    assignment, linkDescription, extraInfo));
             }
 
             // Both accepted versions (v6 and v5) append a document title after the block list.

@@ -950,6 +950,7 @@ public abstract partial class ScribeDialogBase
                         TargetQuantity: b.TargetQuantity, CurrentQuantity: b.CurrentQuantity, LinkTarget: iconLinkTarget,
                         Depth: b.Depth,
                         IsAcceptedAssignment: b.Assignment?.State == ScribeAssignmentState.Accepted,
+                        ExtraInfo: b.ExtraInfo,
                         QuestProgressText: questProgress,
                         AssignerName: assignerName, AssignedDate: assignedDate, AcceptedDate: acceptedDate,
                         IsStaticVsQuestObjective: isStaticVsQuestObjective);
@@ -986,6 +987,7 @@ public abstract partial class ScribeDialogBase
             completionAndPinLive: ReadViewCompletionAndPinLive,
             onTextEditRefused: ReadViewTextEditRefused,
             assignedStampBitmap: modSystem.GetGuiTextureBitmap(ScribeAssignedTaskIcon.Asset),
+            externalStampBitmap: modSystem.GetGuiTextureBitmap(ScribeExternalInfoIcon.Asset),
             // Filter-pill row + subtask-collapse toggles (read-view-filter-and-collapse), gated as ONE
             // unit on the capability flag (scribe-dialog-base) — false only on the Tablet.
             supportsFilterPills: SupportsFilterPills,
@@ -1027,7 +1029,7 @@ public abstract partial class ScribeDialogBase
                     Index: i, Kind: b.Kind, Done: b.Done, Pinned: IsPinnedForMe(b.TaskId), TaskId: b.TaskId,
                     Text: b.Text, DisplayStack: stack, DisplayName: name,
                     TargetQuantity: b.TargetQuantity, CurrentQuantity: b.CurrentQuantity, LinkTarget: iconLinkTarget,
-                    Depth: b.Depth, IsAcceptedAssignment: isAcceptedAssignment,
+                    Depth: b.Depth, IsAcceptedAssignment: isAcceptedAssignment, ExtraInfo: b.ExtraInfo,
                     AssignerName: assignerName, AssignedDate: assignedDate, AcceptedDate: acceptedDate,
                     IsStaticVsQuestObjective: isStaticVsQuestObjective);
             })
@@ -1102,7 +1104,8 @@ public abstract partial class ScribeDialogBase
             onOpenLink: EditorRowsOpenLinks ? OpenRowLink : null,
             supportsTabHeader: SupportsTabHeader,
             showSubtitleRow: modSystem.VisualTuning.ShowSubtitleRow,
-            assignedStampBitmap: modSystem.GetGuiTextureBitmap(ScribeAssignedTaskIcon.Asset));
+            assignedStampBitmap: modSystem.GetGuiTextureBitmap(ScribeAssignedTaskIcon.Asset),
+            externalStampBitmap: modSystem.GetGuiTextureBitmap(ScribeExternalInfoIcon.Asset));
     }
 
     /// <summary>Whether the editor footer shows the "Done editing" (switch-to-read) button. True for the

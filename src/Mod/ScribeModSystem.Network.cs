@@ -499,6 +499,11 @@ public sealed partial class ScribeModSystem
         var slot = ResolveItemPacketSlot(fromPlayer, message.TargetInventoryId, message.TargetSlotId);
         if (slot is null) return;
 
+        // Server-side last-opened tracker (add-external-mod-task-api 4.1): piggybacks on this same
+        // open-notification message, independent of whether a history entry gets recorded below.
+        if (TryReadGuid(message.DocIdBytes, out var openedDocId))
+            NoteServerScribeItemOpened(fromPlayer.PlayerUID, openedDocId);
+
         var historyBytes = NotebookHost.TryRecordPickedUpOnSlot(sapi, slot, fromPlayer);
         if (historyBytes is null) return; // crafter, or this player already has a PickedUp entry
 
