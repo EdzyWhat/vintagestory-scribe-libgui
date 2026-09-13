@@ -206,10 +206,10 @@ public sealed class ScribePlayerSettings
     /// (refine-crafting-tasks-1-3-2); 11–30 now stick instead of clamping back to 10.</summary>
     public const int MaxHudMaxRows = 30;
 
-    /// <summary>Which screen corner/edge the HUD is pinned to (default <see cref="ScribeHudAnchor.TopRight"/>,
-    /// pre-offset left of the minimap by the Mod layer). A per-player display preference; the Mod layer
+    /// <summary>Which screen corner/edge the HUD is pinned to (default <see cref="ScribeHudAnchor.TopLeft"/>,
+    /// which needs no minimap-clearance pre-offset). A per-player display preference; the Mod layer
     /// maps it to a screen position. An unknown value falls back to the default on load.</summary>
-    public ScribeHudAnchor HudAnchor { get; set; } = ScribeHudAnchor.TopRight;
+    public ScribeHudAnchor HudAnchor { get; set; } = ScribeHudAnchor.TopLeft;
 
     /// <summary>Horizontal pixel nudge applied to the HUD from its <see cref="HudAnchor"/>, so it can be
     /// moved clear of another on-screen overlay (minimap / coordinate / block-info). Positive moves the
@@ -392,10 +392,10 @@ public sealed class ScribePlayerSettings
     }
 
     /// <summary>Maps a loaded HUD anchor value to a defined <see cref="ScribeHudAnchor"/>, falling back
-    /// to the default (<see cref="ScribeHudAnchor.TopRight"/>) for any unrecognized value so a
+    /// to the default (<see cref="ScribeHudAnchor.TopLeft"/>) for any unrecognized value so a
     /// hand-edited or corrupted config can't select an undefined anchor.</summary>
     public static ScribeHudAnchor NormalizeAnchor(ScribeHudAnchor value) =>
-        Enum.IsDefined(typeof(ScribeHudAnchor), value) ? value : ScribeHudAnchor.TopRight;
+        Enum.IsDefined(typeof(ScribeHudAnchor), value) ? value : ScribeHudAnchor.TopLeft;
 
     /// <summary>Maps a loaded completion-policy value to a defined <see cref="ScribeCompletionPolicy"/>,
     /// falling back to the default (<see cref="ScribeCompletionPolicy.Sink"/>) for any unrecognized

@@ -56,11 +56,13 @@ public sealed class HudScribePins : GuiBase
     /// <summary>Logical-pixel margin between the HUD content and the anchored screen edge(s).</summary>
     private const float CornerMargin = 8f;
 
-    /// <summary>Default leftward nudge applied to the <see cref="ScribeHudAnchor.TopRight"/> anchor
-    /// (only when the player hasn't set their own <see cref="ScribePlayerSettings.HudOffsetX"/>) so the
-    /// HUD sits left of, not under, the default top-right minimap. The vanilla minimap is a 250×250
-    /// square anchored top-right with a 10px screen pad (decompiled <c>GuiDialogWorldMap</c>), so ~260px
-    /// clears it. A player who has hidden/moved their minimap can zero this out via the config.</summary>
+    /// <summary>Fallback leftward nudge applied to the <see cref="ScribeHudAnchor.TopRight"/> anchor
+    /// when the live vanilla minimap HUD dialog isn't resolvable (see
+    /// <see cref="ResolveTopRightMinimapClearanceX"/>) — e.g. before it has composed, or the minimap is
+    /// off. The vanilla minimap is a 250×250 square anchored top-right with a 10px screen pad (decompiled
+    /// <c>GuiDialogWorldMap</c>), so ~260px clears it at the game's reference GUI Scale. This constant is
+    /// no longer the steady-state source of the clearance (it drifted at non-reference GUI Scale values,
+    /// see fix-hud-minimap-clearance-and-default-anchor) — it's a graceful-degradation value only.</summary>
     private const float DefaultTopRightMinimapClearanceX = 260f;
 
     /// <summary>The shared "pin window" (design D7): how long a just-checked completion is held on the
@@ -187,7 +189,9 @@ public sealed class HudScribePins : GuiBase
     /// covers the animating frames; this is the belt-and-suspenders clamp for the settling frame.</summary>
     private void OnHudDepartureSettled() => hoverRefreshLatch.Arm();
 
-    private record struct AnchorInputs(float ScreenW, float ScreenH, ScribeHudAnchor Anchor, float OffX, float OffY, bool MinimapOn);
+    private record struct AnchorInputs(
+        float ScreenW, float ScreenH, ScribeHudAnchor Anchor, float OffX, float OffY, bool MinimapOn,
+        float MinimapClearanceX, Vector2 WindowSize);
     private AnchorInputs? _lastAnchorInputs;
 
     /// <summary>Client-side interpolated remaining seconds for the timer, kept smooth between 1-second
@@ -353,8 +357,13 @@ public sealed class HudScribePins : GuiBase
         if (hoverRefreshLatch.Tick()) RefreshHoverAtCursor();
 
         // Keep positioned every frame (handles a game-window resize, which needn't re-run layout). Uses
-        // the last laid-out WindowSize; on the very first frame that is the shrink-wrap estimate,
-        // self-correcting once real content lays out.
+        // the last laid-out WindowSize; on the very first frame that is the shrink-wrap estimate. WindowSize
+        // is part of AnchorInputs (fix-hud-minimap-clearance-and-default-anchor investigation) specifically
+        // so that self-correction actually happens once real content lays out — it used to be read here
+        // without being a cache input, so a settled-but-otherwise-unchanged WindowSize never invalidated the
+        // cache and the window stayed stuck at the frame-1 estimate's position until some unrelated input
+        // (anchor, offset, screen resize) happened to change too. That is very likely the mechanism behind
+        // the pre-existing [[hud-pin-width-worldload-race-investigation]] ModDB report as well.
         ApplyAnchor();
         base.OnRenderGUI(deltaTime);
     }
@@ -372,6 +381,59 @@ public sealed class HudScribePins : GuiBase
         EventDispatcher.DispatchPointerMove(RootElement, new PointerEvent(local.X, local.Y));
     }
 
+    /// <summary>Live minimap-clearance width for the <see cref="ScribeHudAnchor.TopRight"/> anchor
+    /// (fix-hud-minimap-clearance-and-default-anchor 2.2). The old hardcoded
+    /// <see cref="DefaultTopRightMinimapClearanceX"/> only cleared the vanilla minimap at the game's
+    /// reference GUI Scale, drifting at any other value — instead of guessing a GUIScale conversion,
+    /// read the open vanilla minimap HUD dialog's actual rendered bounds (same
+    /// <c>capi.Gui.OpenedGuis.OfType&lt;T&gt;()</c> lookup pattern <see cref="DialogHeldTrackerDocs"/> already
+    /// uses for Scribe's own dialogs) and convert its width into this HUD's own GUIScale-normalized
+    /// logical units (dividing by <paramref name="scale"/>, mirroring how <c>screenW</c> is derived from
+    /// <c>capi.Render.FrameWidth</c>), plus the vanilla dialog-to-screen padding. Falls back to
+    /// <see cref="DefaultTopRightMinimapClearanceX"/> when the minimap HUD dialog isn't resolvable (not
+    /// yet composed, or the player has the full map open instead).</summary>
+    private float ResolveTopRightMinimapClearanceX(float scale)
+    {
+        var minimapBounds = capi.Gui.OpenedGuis
+            .OfType<GuiDialogWorldMap>()
+            .FirstOrDefault(dlg => dlg.DialogType == EnumDialogType.HUD)
+            ?.SingleComposer?.Bounds;
+        if (minimapBounds == null)
+        {
+            TraceMinimapClearance(scale, null, DefaultTopRightMinimapClearanceX);
+            return DefaultTopRightMinimapClearanceX;
+        }
+
+        float result = (float)(minimapBounds.OuterWidth / scale) + (float)GuiStyle.DialogToScreenPadding;
+        TraceMinimapClearance(scale, minimapBounds, result);
+        return result;
+    }
+
+    private float? _lastTracedMinimapClearance;
+
+    /// <summary>Diagnostic-only (fix-hud-minimap-clearance-and-default-anchor investigation): logs the raw
+    /// inputs behind <see cref="ResolveTopRightMinimapClearanceX"/> whenever the computed result changes,
+    /// so a reported clearance regression can be root-caused from the actual numbers instead of theory.
+    /// Watch with <c>build/scribe-log.sh --client</c>, filter <c>[scribe-hud-anchor]</c>.</summary>
+    [Conditional("DEBUG")]
+    private void TraceMinimapClearance(float scale, ElementBounds? minimapBounds, float result)
+    {
+        if (_lastTracedMinimapClearance == result) return;
+        _lastTracedMinimapClearance = result;
+
+        if (minimapBounds == null)
+        {
+            capi.Logger.Notification(
+                "[scribe-hud-anchor] scale={0} minimap=<unresolved> -> fallback clearanceX={1}", scale, result);
+            return;
+        }
+
+        capi.Logger.Notification(
+            "[scribe-hud-anchor] scale={0} minimap.OuterWidth={1} minimap.absX={2} minimap.absY={3} " +
+            "FrameWidth={4} -> clearanceX={5}",
+            scale, minimapBounds.OuterWidth, minimapBounds.absX, minimapBounds.absY, capi.Render.FrameWidth, result);
+    }
+
     /// <summary>
     /// Position the shrink-wrapped window per the player's <see cref="ScribePlayerSettings.HudAnchor"/>
     /// (one of seven corners/edges) plus their <see cref="ScribePlayerSettings.HudOffsetX"/>/
@@ -380,8 +442,8 @@ public sealed class HudScribePins : GuiBase
     /// a left anchor rightward; +Y pulls a bottom anchor upward and a top anchor downward — so a positive
     /// value reads as "further from the edge" regardless of which edge is anchored, and a middle anchor's
     /// offset shifts from center. The <see cref="ScribeHudAnchor.TopRight"/> default, when the player
-    /// hasn't set their own X offset, applies <see cref="DefaultTopRightMinimapClearanceX"/> so the HUD
-    /// clears the minimap out of the box.
+    /// hasn't set their own X offset, applies <see cref="ResolveTopRightMinimapClearanceX"/> so the HUD
+    /// clears the minimap out of the box, at any GUI Scale.
     /// </summary>
     private void ApplyAnchor()
     {
@@ -393,8 +455,12 @@ public sealed class HudScribePins : GuiBase
         var anchor = ScribePlayerSettings.NormalizeAnchor(settings.HudAnchor);
 
         bool minimapOn = !capi.Settings.Bool.Exists("showMinimapHud") || capi.Settings.Bool["showMinimapHud"];
-        float prebakeX = anchor == ScribeHudAnchor.TopRight && minimapOn ? DefaultTopRightMinimapClearanceX : 0f;
-        var key = new AnchorInputs(screenW, screenH, anchor, prebakeX + settings.HudOffsetX, settings.HudOffsetY, minimapOn);
+        float minimapClearanceX = anchor == ScribeHudAnchor.TopRight && minimapOn
+            ? ResolveTopRightMinimapClearanceX(scale)
+            : 0f;
+        var key = new AnchorInputs(
+            screenW, screenH, anchor, minimapClearanceX + settings.HudOffsetX, settings.HudOffsetY, minimapOn,
+            minimapClearanceX, WindowSize);
         if (_lastAnchorInputs == key) return;
         _lastAnchorInputs = key;
 

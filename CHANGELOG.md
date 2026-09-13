@@ -19,6 +19,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   player is notified directly why. Notice Board is the first mod using this.
 
 ### Fixed
+- **The HUD's default position now defaults to top-left instead of top-right**, so a fresh install
+  never needs to clear the vanilla minimap (which itself defaults to top-right) in the first place.
+  Existing players are unaffected by this default change — anyone who already has a saved HUD
+  position preference (including a `TopRight` value saved only because it *was* the old default)
+  keeps rendering at that position.
+- **The top-right HUD anchor's minimap-clearance offset was wrong at any GUI Scale other than the
+  game's reference value (10).** At other settings (e.g. 8), the HUD sat a visually inconsistent
+  distance from the vanilla minimap — the offset was a single hardcoded pixel constant derived from
+  the minimap's own reference-scale footprint. The HUD now reads the open vanilla minimap dialog's
+  actual on-screen width at runtime and computes the clearance from that, so the gap stays small and
+  consistent at any GUI Scale (falling back to the old constant only if the minimap dialog isn't
+  resolvable yet).
+- **The HUD could get stuck rendered too far from its anchored corner/edge until an unrelated
+  interaction "corrected" it** (e.g. changing an offset, the anchor, or resizing the window) — most
+  visibly with pins already pinned at world load. The position math used the HUD's laid-out size,
+  but that size wasn't one of the inputs gating whether the position gets recomputed; on the first
+  frame that size is only a shrink-wrap estimate, and once the real size settled the HUD kept the
+  stale position because nothing else had changed. The laid-out size is now part of that gate, so a
+  settle is itself recognized as a reason to re-anchor.
 - **Installing Scribe silently changed other `gui`-dependent mods' default font.** Scribe registered
   its own bundled typeface as LibGUI's shared `"sans-serif"` family — the framework-wide default
   every `gui`-dependent mod's unstyled text resolves through, not something scoped to Scribe. Scribe

@@ -263,7 +263,7 @@ public class ScribePlayerSettingsTests
         }.Normalized();
 
         Assert.Equal(ScribeCompletionPolicy.Sink, s.CompletionPolicy);
-        Assert.Equal(ScribeHudAnchor.TopRight, s.HudAnchor);
+        Assert.Equal(ScribeHudAnchor.TopLeft, s.HudAnchor);
         Assert.Equal(ScribePlayerSettings.MaxHudMaxRows, s.HudMaxRows);
         Assert.Equal(ScribePlayerSettings.MaxHudRowWidth, s.HudRowWidth);
     }

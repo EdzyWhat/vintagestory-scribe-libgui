@@ -654,22 +654,22 @@ public class ScribePinCodecTests
     // ---- HUD position preferences (add-pinned-task-hud 4.4) ----
 
     [Fact]
-    public void Settings_DefaultInstance_AnchorsTopRightAt250Wide()
+    public void Settings_DefaultInstance_AnchorsTopLeftAt250Wide()
     {
         var settings = new ScribePlayerSettings();
 
-        Assert.Equal(ScribeHudAnchor.TopRight, settings.HudAnchor);
+        Assert.Equal(ScribeHudAnchor.TopLeft, settings.HudAnchor);
         Assert.Equal(250, settings.HudRowWidth);
         Assert.Equal(0, settings.HudOffsetX);
         Assert.Equal(0, settings.HudOffsetY);
     }
 
     [Fact]
-    public void Settings_NormalizeAnchor_FallsUnknownBackToTopRight()
+    public void Settings_NormalizeAnchor_FallsUnknownBackToTopLeft()
     {
         Assert.Equal(ScribeHudAnchor.BottomLeft,
             ScribePlayerSettings.NormalizeAnchor(ScribeHudAnchor.BottomLeft));
-        Assert.Equal(ScribeHudAnchor.TopRight,
+        Assert.Equal(ScribeHudAnchor.TopLeft,
             ScribePlayerSettings.NormalizeAnchor((ScribeHudAnchor)99));
     }
 
@@ -696,7 +696,7 @@ public class ScribePinCodecTests
 
         settings.Normalized();
 
-        Assert.Equal(ScribeHudAnchor.TopRight, settings.HudAnchor);
+        Assert.Equal(ScribeHudAnchor.TopLeft, settings.HudAnchor);
         Assert.Equal(ScribePlayerSettings.MaxHudRowWidth, settings.HudRowWidth);
         Assert.Equal(-37, settings.HudOffsetX);   // untouched
         Assert.Equal(42, settings.HudOffsetY);    // untouched
