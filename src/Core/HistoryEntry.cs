@@ -7,8 +7,31 @@ public sealed class HistoryEntry
 {
     public HistoryEventKind Kind       { get; set; }
     public string ActorName            { get; set; } = "";   // player name; empty for world events
-    public string Detail               { get; set; } = "";   // death msg, storm strength, boss name, manual text
-    public string InGameDate           { get; set; } = "";   // formatted calendar date (Mod layer supplies)
+    public string Detail               { get; set; } = "";   // Manual body, or a legacy baked sentence
+    public string InGameDate           { get; set; } = "";   // formatted calendar date (legacy baked rows)
+
+    /// <summary>How this row should be displayed. Defaults to <see cref="HistorySchema.Baked"/> so
+    /// existing constructors and v1–v3 payloads stay finished-sentence rows until the Mod layer
+    /// starts writing live facts.</summary>
+    public HistorySchema Schema        { get; set; } = HistorySchema.Baked;
+
+    /// <summary>Live-schema subject (victim for Death/PvpKill, slayer for BossKill). Empty on baked
+    /// rows and on TemporalStorm.</summary>
+    public string SubjectName          { get; set; } = "";
+
+    /// <summary>Live-schema counterpart (killer for Death/PvpKill). Empty otherwise.</summary>
+    public string OtherName            { get; set; } = "";
+
+    /// <summary>Live-schema opaque token whose meaning depends on <see cref="Kind"/>: creature
+    /// entity code, environmental cause, <c>EnumTool</c> name, boss key, or storm strength.</summary>
+    public string RefCode              { get; set; } = "";
+
+    /// <summary>Second live-schema token (PvP <c>EnumDamageType</c> name). Empty for other kinds.</summary>
+    public string RefCode2             { get; set; } = "";
+
+    /// <summary>Live-schema seed mapped into the viewer's flavor/verb pool by remainder at display
+    /// time. Unused (0) on baked rows and on kinds that do not pick from a pool.</summary>
+    public int FlavorSeed              { get; set; }
 
     /// <summary>Sortable in-game timestamp captured at the moment the entry is recorded, distinct
     /// from the display-only <see cref="InGameDate"/> string. Supplied by the Mod layer from

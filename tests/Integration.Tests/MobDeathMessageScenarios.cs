@@ -7,14 +7,10 @@ using Vintagestory.API.Common;
 namespace Integration.Tests;
 
 /// <summary>
-/// fix-mob-death-message-probe-and-notebook-gate tasks 3.1-3.3: regression coverage for two
-/// independent fixes inside <c>OnEntityDeath</c>/<c>BuildDeathMessage</c>
-/// (<c>src/Mod/ScribeModSystem.History.cs</c>) --
-/// (1) discovering the <c>scribe-mob-death-N</c> flavor pool's size no longer formats a zero-arg
-/// template, which used to throw inside <c>TranslationService.TryFormat</c> and log an
-/// [Error]+[Warning] pair on every probe (design.md decision 1); and
-/// (2) Death/PvpKill message construction is skipped entirely when no relevant party (the victim,
-/// or the killer for a PvP kill) carries a Notebook (design.md decision 3).
+/// Regression coverage for creature-death / PvP History recording: the <c>scribe-mob-death-N</c>
+/// flavor pool is discovered without formatting a zero-arg template, Death/PvpKill fact capture is
+/// skipped when no relevant party carries a Notebook, and live-schema rows store facts (not a
+/// finished English sentence) that <see cref="HistoryDisplay"/> formats in the viewer locale.
 ///
 /// Each scenario watches <c>Api.Logger.EntryAdded</c> around the death for a Warning containing
 /// "Translation string format exception" -- the exact text <c>TryFormat</c>'s own catch block
@@ -22,10 +18,7 @@ namespace Integration.Tests;
 ///
 /// Deaths are induced directly via <c>Api.Event.TriggerEntityDeath</c> -- the same public entry
 /// point <c>Entity.Die()</c> uses internally, and the exact event
-/// <c>ScribeModSystem.OnEntityDeath</c> subscribes to in <c>StartServerSide</c> -- rather than
-/// draining real health through combat, which would be slow and non-deterministic in a headless
-/// suite for no added coverage: the fix under test lives entirely inside the event handler, not
-/// in how a death is triggered.
+/// <c>ScribeModSystem.OnEntityDeath</c> subscribes to in <c>StartServerSide</c>.
 /// </summary>
 public class MobDeathMessageScenarios : AtlasScenarioBase
 {
@@ -80,10 +73,26 @@ public class MobDeathMessageScenarios : AtlasScenarioBase
         var host = new NotebookHost(victim.Player.InventoryManager.ActiveHotbarSlot);
         var last = host.History.Entries[^1];
         Assert.Equal(HistoryEventKind.Death, last.Kind);
-        Assert.Contains("MobDeathVictim", last.Detail);
-        Assert.Contains("wolf", last.Detail);
-        Assert.DoesNotContain("{0}", last.Detail);
-        Assert.DoesNotContain("{1}", last.Detail);
+        Assert.Equal(HistorySchema.Live, last.Schema);
+        Assert.Equal("MobDeathVictim", last.SubjectName);
+        Assert.Contains("wolf", last.RefCode);
+        Assert.Equal("", last.Detail);
+        Assert.DoesNotContain("{0}", last.RefCode);
+
+        string sentence = HistoryDisplay.Sentence(last);
+        Assert.Contains("MobDeathVictim", sentence);
+        Assert.Contains("wolf", sentence, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("{0}", sentence);
+        Assert.DoesNotContain("{1}", sentence);
+
+        // A pre-v4 baked Death still shows its stored sentence, not a live re-format.
+        var baked = new HistoryEntry
+        {
+            Kind = HistoryEventKind.Death,
+            Schema = HistorySchema.Baked,
+            Detail = "Alice fell to her death.",
+        };
+        Assert.Equal("Alice fell to her death.", HistoryDisplay.Body(baked));
     }
 
     [AtlasScenario(RollbackWorld = true)]
@@ -124,7 +133,11 @@ public class MobDeathMessageScenarios : AtlasScenarioBase
         var killerHost = new NotebookHost(killer.Player.InventoryManager.ActiveHotbarSlot);
         var last = killerHost.History.Entries[^1];
         Assert.Equal(HistoryEventKind.PvpKill, last.Kind);
-        Assert.Contains("MobDeathVicNoNB", last.Detail);
+        Assert.Equal(HistorySchema.Live, last.Schema);
+        Assert.Equal("MobDeathVicNoNB", last.SubjectName);
+        Assert.Equal("MobDeathKillerNB", last.OtherName);
+        Assert.Equal("", last.Detail);
+        Assert.Contains("MobDeathVicNoNB", HistoryDisplay.Sentence(last));
 
         // The victim carries no Notebook, so there's nothing to inspect on their side -- the point
         // of this scenario is precisely that no Death entry is written for them anywhere.
@@ -148,7 +161,11 @@ public class MobDeathMessageScenarios : AtlasScenarioBase
         var victimHost = new NotebookHost(victim.Player.InventoryManager.ActiveHotbarSlot);
         var last = victimHost.History.Entries[^1];
         Assert.Equal(HistoryEventKind.Death, last.Kind);
-        Assert.Contains("MobDeathKilNoNB", last.Detail);
+        Assert.Equal(HistorySchema.Live, last.Schema);
+        Assert.Equal("MobDeathVicNB", last.SubjectName);
+        Assert.Equal("MobDeathKilNoNB", last.OtherName);
+        Assert.Equal("", last.Detail);
+        Assert.Contains("MobDeathKilNoNB", HistoryDisplay.Sentence(last));
 
         // The killer carries no Notebook, so there's nothing to inspect on their side -- the point
         // of this scenario is precisely that no PvpKill entry is written for them anywhere.

@@ -6,6 +6,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **Notebook History now records Death, PvP kill, boss kill, and temporal-storm facts instead of a finished English sentence**, and the History tab formats those rows in the viewing player's language. Dedicated servers stay English; that no longer stamps the chronicle. Existing notebooks keep their already-written lines as-is — only new events after this change are live-localized. Flavor pools may be shorter in another language than in English; the viewer never sees a mixed-language joke or an English PvP verb leaking into a translated template.
+
 ### Added
 - **A public API for other mods to create tasks.** `ScribeModSystem.TryCreateExternalTask(player,
   title, bodyText, extraInfo)` lets another installed mod (taking Scribe as an optional soft

@@ -90,7 +90,10 @@ public class HistoryInventoryRaceScenarios : AtlasScenarioBase
         var queued = mod.PendingHistoryStore!.TakeAll(docId);
         var entry = Assert.Single(queued);
         Assert.Equal(HistoryEventKind.Death, entry.Kind);
-        Assert.Contains("EvictedVictim", entry.Detail);
+        Assert.Equal(HistorySchema.Live, entry.Schema);
+        Assert.Equal("EvictedVictim", entry.SubjectName);
+        Assert.Equal("fall", entry.RefCode);
+        Assert.Equal("", entry.Detail);
     }
 
     [AtlasScenario(RollbackWorld = true)]
@@ -247,8 +250,8 @@ public class HistoryInventoryRaceScenarios : AtlasScenarioBase
         var host = new NotebookHost(slot);
         var deaths = host.History.Entries.Where(e => e.Kind == HistoryEventKind.Death).ToList();
         Assert.Equal(2, deaths.Count);
-        Assert.Contains("wolf", deaths[0].Detail);
-        Assert.Contains("SameDayKiller", deaths[1].Detail);
+        Assert.Contains("wolf", deaths[0].RefCode);
+        Assert.Equal("SameDayKiller", deaths[1].OtherName);
     }
 
     [AtlasScenario(RollbackWorld = true)]

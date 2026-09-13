@@ -476,4 +476,68 @@ public class HistoryStoreTests
         Assert.Contains(store.Entries, e => e.Kind == HistoryEventKind.Crafted);
         Assert.Equal(HistoryStore.MaxDeaths, store.Entries.Count(e => e.Kind == HistoryEventKind.Death));
     }
+
+    // ---- v4 live facts ----
+
+    [Fact]
+    public void RoundTrip_LiveFacts_Preserved()
+    {
+        var store = new HistoryStore();
+        store.TryAddEntry(new HistoryEntry
+        {
+            Kind = HistoryEventKind.Death,
+            Schema = HistorySchema.Live,
+            SubjectName = "Alice",
+            OtherName = "Bob",
+            RefCode = "bow",
+            RefCode2 = "piercing",
+            FlavorSeed = 17,
+            InGameDate = "",
+            InGameTimestamp = 12.5,
+        });
+
+        var restored = HistoryStore.Deserialize(store.Serialize());
+        var entry = Assert.Single(restored.Entries);
+        Assert.Equal(HistorySchema.Live, entry.Schema);
+        Assert.Equal("Alice", entry.SubjectName);
+        Assert.Equal("Bob", entry.OtherName);
+        Assert.Equal("bow", entry.RefCode);
+        Assert.Equal("piercing", entry.RefCode2);
+        Assert.Equal(17, entry.FlavorSeed);
+        Assert.Equal("", entry.Detail);
+        Assert.Equal(12.5, entry.InGameTimestamp);
+    }
+
+    [Fact]
+    public void Deserialize_V3Payload_IsBakedWithEmptyFacts()
+    {
+        // Hand-build a v3 payload: magic, version=3, count=1, one Death with the v3 field
+        // layout (EntryId + timestamp, no schema/facts).
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write("SHST"u8.ToArray());
+            w.Write((byte)3);
+            w.Write(1);
+            w.Write((byte)HistoryEventKind.Death);
+            w.Write("");
+            w.Write("Alice fell to her death.");
+            w.Write("Year 1, Day 1");
+            w.Write(Guid.Empty.ToByteArray());
+            w.Write(4.5);
+        }
+
+        var store = HistoryStore.Deserialize(ms.ToArray());
+        var entry = Assert.Single(store.Entries);
+        Assert.Equal(HistoryEventKind.Death, entry.Kind);
+        Assert.Equal("Alice fell to her death.", entry.Detail);
+        Assert.Equal("Year 1, Day 1", entry.InGameDate);
+        Assert.Equal(4.5, entry.InGameTimestamp);
+        Assert.Equal(HistorySchema.Baked, entry.Schema);
+        Assert.Equal("", entry.SubjectName);
+        Assert.Equal("", entry.OtherName);
+        Assert.Equal("", entry.RefCode);
+        Assert.Equal("", entry.RefCode2);
+        Assert.Equal(0, entry.FlavorSeed);
+    }
 }

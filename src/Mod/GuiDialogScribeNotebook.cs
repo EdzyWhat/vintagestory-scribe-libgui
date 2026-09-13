@@ -193,13 +193,10 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
                         new Expanded(
                             new Padding(EdgeInsets.Only(left: 6f), new Text(KindLabel(entry), kindStyle)),
                             flex: 1),
-                        new Text(entry.InGameDate, dateStyle),
+                        new Text(HistoryDisplay.Date(entry, capi.World), dateStyle),
                     }),
                     new Padding(EdgeInsets.Only(left: 8f),
-                        new Text(entry.ActorName.Length > 0
-                            ? $"{entry.ActorName}{(entry.Detail.Length > 0 ? " — " + entry.Detail : "")}"
-                            : entry.Detail,
-                            bodyStyle)),
+                        new Text(HistoryDisplay.Body(entry), bodyStyle)),
                 }));
         }
 

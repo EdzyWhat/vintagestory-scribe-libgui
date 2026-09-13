@@ -111,4 +111,80 @@ public class PendingHistoryStoreTests
         store.LoadFrom(new byte[] { 0x01, 0x02, 0x03 });
         Assert.Equal(0, store.PendingDocumentCount);
     }
+
+    [Fact]
+    public void RoundTrip_LiveFacts_Preserved()
+    {
+        var store = new PendingHistoryStore();
+        var docId = Guid.NewGuid();
+        store.Enqueue(docId, new HistoryEntry
+        {
+            Kind = HistoryEventKind.Death,
+            Schema = HistorySchema.Live,
+            SubjectName = "Alice",
+            RefCode = "game:wolf-eurasian-adult-male",
+            FlavorSeed = 9,
+            InGameTimestamp = 3.5,
+        });
+
+        var restored = new PendingHistoryStore();
+        restored.LoadFrom(store.SerializeStore());
+
+        var entry = Assert.Single(restored.TakeAll(docId));
+        Assert.Equal(HistorySchema.Live, entry.Schema);
+        Assert.Equal("Alice", entry.SubjectName);
+        Assert.Equal("game:wolf-eurasian-adult-male", entry.RefCode);
+        Assert.Equal(9, entry.FlavorSeed);
+        Assert.Equal("", entry.Detail);
+    }
+
+    [Fact]
+    public void LoadFrom_V1Blob_LoadsAsBaked()
+    {
+        var docId = Guid.NewGuid();
+        var entryId = Guid.NewGuid();
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write("SPHS"u8.ToArray());
+            w.Write((byte)1);
+            w.Write(1); // docCount
+            w.Write(docId.ToByteArray());
+            w.Write(1); // entryCount
+            w.Write((byte)HistoryEventKind.Death);
+            w.Write("");
+            w.Write("Alice was slain by Bob.");
+            w.Write("Year 1, Day 3");
+            w.Write(entryId.ToByteArray());
+            w.Write(3.5);
+        }
+
+        var store = new PendingHistoryStore();
+        store.LoadFrom(ms.ToArray());
+
+        var entry = Assert.Single(store.TakeAll(docId));
+        Assert.Equal(HistoryEventKind.Death, entry.Kind);
+        Assert.Equal("Alice was slain by Bob.", entry.Detail);
+        Assert.Equal(HistorySchema.Baked, entry.Schema);
+        Assert.Equal("", entry.SubjectName);
+        Assert.Equal(3.5, entry.InGameTimestamp);
+        Assert.Equal(entryId, entry.EntryId);
+    }
+
+    [Fact]
+    public void LoadFrom_V3Blob_LeavesStoreEmpty()
+    {
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write("SPHS"u8.ToArray());
+            w.Write((byte)3);
+            w.Write(0);
+        }
+
+        var store = new PendingHistoryStore();
+        store.Enqueue(Guid.NewGuid(), Entry("stale"));
+        store.LoadFrom(ms.ToArray());
+        Assert.Equal(0, store.PendingDocumentCount);
+    }
 }

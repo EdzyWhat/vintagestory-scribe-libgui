@@ -361,15 +361,14 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
     internal static string FormatCalendarDate(int dayOfMonth, EnumMonth monthName, int year)
         => Lang.Get("scribe:date-format", dayOfMonth, Lang.Get("month-" + monthName), year);
 
-    /// <summary>Formats the calendar date <paramref name="daysAgo"/> in-game days before now, so seeded
-    /// demo History/Guestbook entries span multiple days instead of all reading "today". Mirrors
-    /// <see cref="FormatDate"/> but derives month/year/day-of-month from <c>TotalDays - daysAgo</c>
-    /// (clamped at 0 so it never underflows into a negative calendar). Display-only; plausibility, not
-    /// calendar exactness, is the bar (see design decision 5).</summary>
-    internal static string FormatDateDaysAgo(ICoreServerAPI sapi, int daysAgo)
+    /// <summary>Formats the calendar date for a stored <c>Calendar.TotalDays</c> timestamp, so live
+    /// History rows can rebuild <c>scribe:date-format</c> in the viewing client's locale instead of
+    /// showing a server-baked date string. Same month/year/day-of-month math as
+    /// <see cref="FormatDateDaysAgo"/> (clamped at 0).</summary>
+    internal static string FormatDateFromTimestamp(IWorldAccessor world, double totalDays)
     {
-        var cal = sapi.World.Calendar;
-        double totalDays = CalendarTotalDaysAgo(sapi, daysAgo);
+        var cal = world.Calendar;
+        totalDays = Math.Max(0, totalDays);
         int monthsPerYear = Math.Max(1, cal.DaysPerYear / cal.DaysPerMonth);
         int dayOfMonth = (int)(totalDays % cal.DaysPerMonth) + 1;
         int monthIndex = (int)(totalDays / cal.DaysPerMonth) % monthsPerYear + 1;
@@ -377,6 +376,14 @@ public class NotebookHost : IScribeDocumentHost, IHistoryRecordable
         var monthName = (EnumMonth)monthIndex;
         return FormatCalendarDate(dayOfMonth, monthName, year);
     }
+
+    /// <summary>Formats the calendar date <paramref name="daysAgo"/> in-game days before now, so seeded
+    /// demo History/Guestbook entries span multiple days instead of all reading "today". Mirrors
+    /// <see cref="FormatDate"/> but derives month/year/day-of-month from <c>TotalDays - daysAgo</c>
+    /// (clamped at 0 so it never underflows into a negative calendar). Display-only; plausibility, not
+    /// calendar exactness, is the bar (see design decision 5).</summary>
+    internal static string FormatDateDaysAgo(ICoreServerAPI sapi, int daysAgo)
+        => FormatDateFromTimestamp(sapi.World, CalendarTotalDaysAgo(sapi, daysAgo));
 
     /// <summary>The raw <c>Calendar.TotalDays</c> value <paramref name="daysAgo"/> in-game days
     /// before now (clamped at 0), i.e. the sortable-timestamp counterpart of

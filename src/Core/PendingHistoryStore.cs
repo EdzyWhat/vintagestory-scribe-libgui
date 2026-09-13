@@ -17,6 +17,16 @@ namespace Scribe.Core;
 /// Game-agnostic (pure BCL) so it's unit-testable without a game install; the Mod layer's
 /// <c>OnHistoryScanTick</c> calls <see cref="TakeAll"/> and owns this store's savegame persistence,
 /// mirroring <see cref="ScribePlayerLocationStore"/>'s pattern.
+///
+/// Accepted-version window (progressive reads — see docs/CODEC-MIGRATION.md):
+///   Current : v2 — per-entry layout matches SHST v4 (schema + live fact fields)
+///   Min     : v1 — per-entry layout matches SHST v3 (baked sentences, no fact fields)
+///   Older / newer : rejected (fail-safe empty load)
+///
+/// Serialized format (SPHS v2, little-endian via <see cref="BinaryWriter"/>):
+///   [4 bytes magic "SPHS"][1 byte version][int docCount]
+///   [per document: 16 bytes docId, int entryCount, then that many entries via
+///    <see cref="HistoryEntryCodec"/>]
 /// </summary>
 public sealed class PendingHistoryStore
 {
@@ -50,7 +60,8 @@ public sealed class PendingHistoryStore
     // ---------------- Persistence ----------------
 
     private static readonly byte[] Magic = "SPHS"u8.ToArray();
-    private const byte Version = 1;
+    private const byte Version    = 2;
+    private const byte MinVersion = 1;
 
     /// <summary>Serializes every queued entry, for every document, for the savegame blob.</summary>
     public byte[] SerializeStore()
@@ -66,14 +77,7 @@ public sealed class PendingHistoryStore
                 w.Write(docId.ToByteArray());
                 w.Write(entries.Count);
                 foreach (var e in entries)
-                {
-                    w.Write((byte)e.Kind);
-                    w.Write(e.ActorName);
-                    w.Write(e.Detail);
-                    w.Write(e.InGameDate);
-                    w.Write(e.EntryId.ToByteArray());
-                    w.Write(e.InGameTimestamp);
-                }
+                    HistoryEntryCodec.WriteEntry(w, e);
             }
         }
         return ms.ToArray();
@@ -95,7 +99,10 @@ public sealed class PendingHistoryStore
             var magic = r.ReadBytes(Magic.Length);
             if (!magic.AsSpan().SequenceEqual(Magic)) return;
             byte version = r.ReadByte();
-            if (version != Version) return;
+            if (version < MinVersion || version > Version) return;
+
+            // SPHS v1 stored the SHST-v3 field set (entryId + timestamp, no facts); v2 matches SHST v4.
+            byte entryLayoutVersion = version >= 2 ? (byte)4 : (byte)3;
 
             int docCount = r.ReadInt32();
             if (docCount < 0 || docCount > bytes.Length) return;
@@ -108,17 +115,7 @@ public sealed class PendingHistoryStore
 
                 var list = new List<HistoryEntry>(entryCount);
                 for (int j = 0; j < entryCount; j++)
-                {
-                    list.Add(new HistoryEntry
-                    {
-                        Kind            = (HistoryEventKind)r.ReadByte(),
-                        ActorName       = r.ReadString(),
-                        Detail          = r.ReadString(),
-                        InGameDate      = r.ReadString(),
-                        EntryId         = new Guid(r.ReadBytes(16)),
-                        InGameTimestamp = r.ReadDouble(),
-                    });
-                }
+                    list.Add(HistoryEntryCodec.ReadEntry(r, entryLayoutVersion));
                 if (list.Count > 0) _pending[docId] = list;
             }
         }

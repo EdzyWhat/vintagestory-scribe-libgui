@@ -13,26 +13,30 @@ namespace Scribe.Core;
 /// instead.
 ///
 /// Accepted-version window (progressive reads — see docs/CODEC-MIGRATION.md):
-///   Current : v3 — adds a per-entry sortable <c>InGameTimestamp</c> (8-byte double)
+///   Current : v4 — adds per-entry schema + live fact fields (subject/other/ref/ref2/flavorSeed)
+///   v3      : adds a per-entry sortable <c>InGameTimestamp</c> (8-byte double)
 ///   v2      : adds a per-entry <c>EntryId</c> (16-byte Guid), used only by Manual entries
-///   Min     : v1 — no EntryId, no InGameTimestamp
+///   Min     : v1 — no EntryId, no InGameTimestamp, no live facts
 ///   Older   : rejected
 ///
 /// A v1 or v2 payload has no recorded timestamp, so <see cref="ApplyV2ToV3Migrations"/> assigns
 /// every entry a synthetic one from a strictly-increasing negative sequence in its existing list
-/// order — preserving relative order while sorting before anything recorded after this change.
+/// order — preserving relative order while sorting before anything recorded after the v3 change.
+/// A v1–v3 payload has no schema/fact fields, so <see cref="ApplyV3ToV4Migrations"/> marks every
+/// entry <see cref="HistorySchema.Baked"/> with empty facts.
 ///
-/// Serialized format (SHST v3, little-endian via <see cref="BinaryWriter"/>):
+/// Serialized format (SHST v4, little-endian via <see cref="BinaryWriter"/>):
 ///   [4 bytes magic "SHST"][1 byte version][int entryCount]
 ///   [per entry: byte kind, string actorName, string detail, string inGameDate, 16 bytes entryId,
-///    8 bytes inGameTimestamp]
+///    8 bytes inGameTimestamp, byte schema, string subjectName, string otherName, string refCode,
+///    string refCode2, int flavorSeed]
 ///
 /// See docs/CODEC-MIGRATION.md for the version-bump pattern.
 /// </summary>
 public sealed class HistoryStore
 {
     private static readonly byte[] Magic = "SHST"u8.ToArray();
-    private const byte Version    = 3;
+    private const byte Version    = 4;
     private const byte MinVersion = 1;
 
     public const int MaxDeaths    = 30;
@@ -169,14 +173,7 @@ public sealed class HistoryStore
             w.Write(Version);
             w.Write(_entries.Count);
             foreach (var e in _entries)
-            {
-                w.Write((byte)e.Kind);
-                w.Write(e.ActorName);
-                w.Write(e.Detail);
-                w.Write(e.InGameDate);
-                w.Write(e.EntryId.ToByteArray());
-                w.Write(e.InGameTimestamp);
-            }
+                HistoryEntryCodec.WriteEntry(w, e);
         }
         return ms.ToArray();
     }
@@ -202,22 +199,11 @@ public sealed class HistoryStore
             if (count < 0 || count > bytes.Length) return store;
 
             for (int i = 0; i < count; i++)
-            {
-                var entry = new HistoryEntry
-                {
-                    Kind       = (HistoryEventKind)r.ReadByte(),
-                    ActorName  = r.ReadString(),
-                    Detail     = r.ReadString(),
-                    InGameDate = r.ReadString(),
-                };
-                // v1 has neither field — its C# defaults (Guid.Empty / 0.0) apply until overwritten
-                // below by the migration step for anything older than the current version.
-                if (version >= 2) entry.EntryId = new Guid(r.ReadBytes(16));
-                if (version >= 3) entry.InGameTimestamp = r.ReadDouble();
-                store._entries.Add(entry);
-            }
+                store._entries.Add(HistoryEntryCodec.ReadEntry(r, version));
 
-            if (version < Version) ApplyV2ToV3Migrations(store._entries);
+            // Version-gated: a v3 payload already has real timestamps and must not be rewritten.
+            if (version < 3) ApplyV2ToV3Migrations(store._entries);
+            if (version < 4) ApplyV3ToV4Migrations(store._entries);
         }
         catch (Exception ex) when (ex is EndOfStreamException or IOException or FormatException)
         {
@@ -238,5 +224,14 @@ public sealed class HistoryStore
     {
         for (int i = 0; i < entries.Count; i++)
             entries[i].InGameTimestamp = i - entries.Count;
+    }
+
+    /// <summary>v1–v3 → v4 migration: none of those versions recorded a schema discriminator or
+    /// live fact fields, so every entry is marked <see cref="HistorySchema.Baked"/> with empty
+    /// facts (the C# defaults after a progressive read). Live rows are only written by v4+.</summary>
+    private static void ApplyV3ToV4Migrations(List<HistoryEntry> entries)
+    {
+        foreach (var e in entries)
+            e.Schema = HistorySchema.Baked;
     }
 }
