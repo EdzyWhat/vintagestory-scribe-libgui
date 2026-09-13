@@ -1557,7 +1557,7 @@ internal sealed class HudPinsContent : StatelessWidget
         // left-anchored HUD, RIGHT (End) otherwise (v1-playtest-fixes 5.3) — so the min-width header
         // ("Pinned" + gear) and footer ("+N more") hug the correct side. The task rows are Max-width
         // (they fill the column), so this alignment only visibly moves the header/footer.
-        return new SizedBox(
+        return ScribeTextDefaults.WrapChrome(new SizedBox(
             width: rowWidth,
             child: new Padding(
                 EdgeInsets.All(2),
@@ -1565,7 +1565,7 @@ internal sealed class HudPinsContent : StatelessWidget
                     spacing: 4,
                     mainAxisSize: MainAxisSize.Min,
                     crossAxisAlignment: leftAligned ? CrossAxisAlignment.Start : CrossAxisAlignment.End,
-                    children: children)));
+                    children: children))));
     }
 
     /// <summary>The collapse-toggle header: a clickable chevron (▾ expanded, ▸ collapsed) plus a small

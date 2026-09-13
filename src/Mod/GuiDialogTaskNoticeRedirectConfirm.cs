@@ -67,7 +67,7 @@ public sealed class GuiDialogTaskNoticeRedirectConfirm : GuiBase
             variant: ButtonVariant.Secondary,
             onTap: _ => TryClose());
 
-        return new WindowFrame(
+        return ScribeTextDefaults.WrapChrome(new WindowFrame(
             title: Lang.Get("scribe:scribe-tasknotice-redirect-confirm-title"),
             onClose: () => TryClose(),
             child: new Container(
@@ -88,6 +88,6 @@ public sealed class GuiDialogTaskNoticeRedirectConfirm : GuiBase
                                 mainAxisAlignment: MainAxisAlignment.End,
                                 mainAxisSize: MainAxisSize.Max,
                                 children: new Widget[] { cancelButton, confirmButton }),
-                        }))));
+                        })))));
     }
 }

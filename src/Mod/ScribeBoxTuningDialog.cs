@@ -125,7 +125,7 @@ public sealed class ScribeBoxTuningDialog : GuiBase
                 Field("z2", colors, t.ChalkboardZ2, "chalkboardz2", v => modSystem.UpdateBoxTuning(b => b.ChalkboardZ2 = v)),
             });
 
-        return new WindowFrame(
+        return ScribeTextDefaults.WrapChrome(new WindowFrame(
             title: "Block box tuning",
             onClose: () => TryClose(),
             fillHeight: true,
@@ -138,7 +138,7 @@ public sealed class ScribeBoxTuningDialog : GuiBase
                         child: new SingleChildScrollView(
                             controller: scrollController,
                             child: body))
-                    { AutoHide = false })));
+                    { AutoHide = false }))));
     }
 
     /// <summary>A labeled float field: caption over a <see cref="ScribeNumericField"/>, step 0.05, clamped

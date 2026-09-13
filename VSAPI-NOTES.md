@@ -1337,6 +1337,51 @@ registered only under `Normal`, so the Bold lookup missed and the title stayed s
 register the (single) TTF under Normal/SemiBold/Bold/Italic — Skia synthesizes bold/italic from a
 regular face. No size caveat like the old Cairo path — Skia sizing is handled by `TextLayoutHelper`.
 
+**Fact (fix-sans-serif-alias-leak, confirmed by decompiling shipped `Gui.dll`@3.1.0): what
+`"sans-serif"` actually resolves to with no mod touching it, and LibGUI has NO font picker
+anywhere.** `FontRegistry`'s static `FontMappings` dict ships with `"sans-serif"→"Arial"`,
+`"serif"→"Times New Roman"`, `"monospace"→"Courier New"` as literal system-font-name lookups — but
+`GuiModSystem.StartClientSide` immediately overwrites the first two:
+`RegisterFontAlias("sans-serif", GuiStyle.StandardFontName)` and `RegisterFontAlias("serif",
+GuiStyle.DecorativeFontName)`. `GuiStyle` (`VintagestoryAPI.dll`) sets `StandardFontName =
+"sans-serif"` (a **no-op self-alias**, confirming the theory in
+[[hudui-3digit-wrap-sans-serif-alias-root-cause]]) and `DecorativeFontName = "Lora"` — but LibGUI
+never registers a "Lora" custom typeface (`LoadFonts` only bundles Cormorant Unicase/JetBrains
+Mono/Playfair Display), so `"serif"` floats to a real *system* lookup for a font named "Lora" if
+one happens to be installed. Bottom line: with no mod aliasing it, `"sans-serif"` is a literal,
+un-mapped system-font-name request — on Linux fontconfig treats it as a real generic alias
+(resolves to the user's installed default sans font); on macOS/Windows nothing is actually named
+"sans-serif", so Skia's font manager fails to match and falls back to whatever its own default
+typeface is. **There is no font-choice setting anywhere in LibGUI's theme/settings system** —
+`ThemeData`/`ThemeApplier`/`SettingsDialog` control colors/spacing only, confirmed by decompile (no
+font-related member on any of them). Scribe's own Settings tab font selector
+(`scribe:settings-taskfont-default` et al.) is the only font-choice UI either mod ships.
+
+**Decision reversal (2026-09-12, same day as fix-sans-serif-alias-leak): every deliberately-not-task-
+-font Scribe surface now explicitly renders in Scribe's own bundled default face
+(`ScribeTaskFont.DefaultFamily`, "Noto Sans" in practice), NOT LibGUI's raw `"sans-serif"` default.**
+The original `adopt-libgui-31-improvements` decision ("leave HUD + Settings unwrapped" so they follow
+LibGUI's own theme font) briefly got its wires crossed with fix-sans-serif-alias-leak: `WrapSettingsChrome`/
+`ScribeSettingsContent.Pegged` read `ScribeTaskFont.DefaultFamily` for that "follow LibGUI's own
+default" need, safe only while `DefaultFamily` happened to literally BE `"sans-serif"` — once
+fix-sans-serif-alias-leak repointed `DefaultFamily` to a concrete bundled family for the *task-font*
+"Default" choice, Settings chrome got silently rebranded too, while HUD chrome (which never set
+`FontFamily` at all) correctly kept following LibGUI's raw default — so the two "unwrapped" surfaces
+diverged from EACH OTHER for an accidental reason. Once actually seen in-game side by side, the
+un-branded LibGUI look (a live, platform-dependent system-font lookup) read as visually inconsistent
+with the rest of Scribe's own UI, so the direction was reversed outright rather than just fixing the
+accident: **every** Scribe-owned surface — HUD chrome, Settings chrome, the dev-tuning dialogs
+(`ScribeGearTuningDialog`/`ScribeBoxTuningDialog`), and the Task Notice/quest-prompt popups
+(`GuiDialogTaskNotice`/`GuiDialogTaskNoticeRedirectConfirm`/`GuiDialogScribeQuestPrompt`) — now roots
+its whole `Build()` return in `ScribeTextDefaults.WrapChrome` (a bare `DefaultTextStyle` ancestor
+naming `FontFamily = ScribeTaskFont.DefaultFamily`, nothing else), so none of Scribe's own chrome ever
+floats to the raw sentinel again. Task-font-following surfaces (Notebook/Lectern/Guestbook/Inbox/etc,
+wrapped via `ScribeTextDefaults.Wrap`) are unaffected — they already resolve their *empty* selection to
+`DefaultFamily` too, so "Default" task font, Settings chrome, HUD chrome, and the popups all now
+render in the SAME face by construction. **Lesson:** a shared "default family" symbol with two
+different classes of consumers is a landmine the moment either consumer's resolution logic changes —
+but here the simpler fix was to make both classes want the same thing, not to split the symbol.
+
 ## Player groups (for multi-owner / faction-style block gating)
 
 **Question: does Vintage Story have any first-party faction/group concept for gating a block on
@@ -1786,9 +1831,12 @@ different input-row heights than Caudex (the face the Read/Edit geometry was loc
 `ScribeRowControlNudge.TextLineHeight` must NOT measure the selected family. Default/`sans-serif` is
 included. Tablet cuneiform stays on `CuneiformMetrics`; titles/buttons stay unscaled Caudex
 (`ButtonFamily` / `TitleFontFamily`). The pinned HUD keeps its own face and is not pegged. Settings
-chrome uses LibGUI `sans-serif` at 100% (`WrapSettingsChrome`) and does not follow Task Text Font or
-Window Text Size. Call `BuildMetrics` once after `RegisterCustomFonts`. Tune `OpticalScaleOf` /
-`OffsetEmOf` with `tools/task-font-optical-scale/index.html`.
+chrome renders at 100% (unpegged) and does not follow Task Text Font or Window Text Size — as of
+fix-sans-serif-alias-leak's reversal (see "Custom TTF fonts in the GUI" below) that face is Scribe's
+own `ScribeTaskFont.DefaultFamily` (`WrapSettingsChrome`), NOT LibGUI's raw `sans-serif`; the HUD's
+"own face" is the same `DefaultFamily` too, via `ScribeTextDefaults.WrapChrome`. Call `BuildMetrics`
+once after `RegisterCustomFonts`. Tune `OpticalScaleOf` / `OffsetEmOf` with
+`tools/task-font-optical-scale/index.html`.
 
 **Symptom (a05caret1): clicking a per-row control (delete / pin / drag grip) while a text field is focused
 makes the caret vanish — focus is lost and nothing re-homes it.** LibGUI clears focus on EVERY pointer

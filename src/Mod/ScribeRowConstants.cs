@@ -292,8 +292,17 @@ internal static class ScribeRowConstants
 /// and Caudex chrome (<see cref="ButtonFamily"/>) do not go through the scale table.</summary>
 internal static class ScribeTaskFont
 {
-    /// <summary>LibGUI's default <c>TextStyle.FontFamily</c>; the resting body face when no font is chosen.</summary>
-    public const string DefaultFamily = "sans-serif";
+    /// <summary>Scribe's own resting body face when nothing more specific is chosen: the task-font
+    /// "Default" selection, <see cref="BuildMetrics"/>'s Caudex-registration-failure fallback for
+    /// <see cref="referenceFamily"/>, AND every deliberately-not-task-font-following Scribe surface
+    /// (HUD chrome, Settings chrome, dev-tuning dialogs, Task Notice/quest-prompt popups) via
+    /// <see cref="ScribeTextDefaults.WrapChrome"/>/<see cref="ScribeTextDefaults.WrapSettingsChrome"/>.
+    /// Set once by <see cref="BuildMetrics"/> from <c>ScribeModSystem.RegisterCustomFonts</c>'s resolved
+    /// bundled family; falls back to the literal <c>"sans-serif"</c> (LibGUI's own shared default) only
+    /// if no bundled face loaded at all (fix-sans-serif-alias-leak — Scribe no longer aliases that shared
+    /// name, but still wants ITS OWN chrome branded consistently rather than floating to a live,
+    /// platform-dependent system-font lookup — see [[wrapsettingschrome-defaultfamily-regression]]).</summary>
+    public static string DefaultFamily { get; private set; } = "sans-serif";
 
     /// <summary>Fixed font family for the in-Lectern TEXT buttons (Edit / New Task / Done Editing) —
     /// Caudex, the same bundled face as the dialog title (v1-release-checklist §6.2). Deliberately NOT the
@@ -390,8 +399,12 @@ internal static class ScribeTaskFont
     /// entry plus the empty default → <see cref="DefaultFamily"/>) against Caudex and stores
     /// <c>SizeScale = caudexY / familyY</c>. Call once after typefaces are registered. Caudex is forced
     /// to identity (scale 1, offset 0). OffsetEm stays 0 until playtest fills it.</summary>
-    public static void BuildMetrics(ILogger logger, bool caudexRegistered)
+    /// <param name="resolvedDefaultFamily">The bundled family <c>ScribeModSystem.RegisterCustomFonts</c>
+    /// resolved as Scribe's own default (or the literal <c>"sans-serif"</c> if none loaded); becomes
+    /// <see cref="DefaultFamily"/> for the rest of the session.</param>
+    public static void BuildMetrics(ILogger logger, bool caudexRegistered, string resolvedDefaultFamily)
     {
+        DefaultFamily = resolvedDefaultFamily;
         referenceFamily = caudexRegistered ? ButtonFamily : DefaultFamily;
         if (!caudexRegistered)
         {
@@ -415,11 +428,12 @@ internal static class ScribeTaskFont
         }
 
         Metrics.Clear();
-        // This specific probe is the one fix-linux-sans-serif-font-crash targets: DefaultFamily is
-        // "sans-serif", which (absent the alias registered in RegisterCustomFonts) resolves to a live
-        // OS/fontconfig lookup. If a crash lands between this line and the next, the alias didn't
-        // land in time or didn't cover the actual resolved family -- re-check the alias registration,
-        // not this measurement.
+        // This specific probe is the one fix-linux-sans-serif-font-crash originally targeted:
+        // DefaultFamily now names a bundled, custom-registered family directly (resolved by
+        // RegisterCustomFonts and passed in above), so it never falls through to a live OS/fontconfig
+        // lookup by construction -- unless RegisterCustomFonts itself found no bundled face to resolve
+        // to, in which case DefaultFamily is the literal "sans-serif" and this probe IS that live
+        // lookup (fix-sans-serif-alias-leak's documented zero-bundled-faces edge case).
         logger.Notification("[scribe] measuring default family '{0}'", DefaultFamily);
         SeedFamily(DefaultFamily, referenceY);
         logger.Notification("[scribe] measured default family '{0}'; measuring selectable task fonts", DefaultFamily);

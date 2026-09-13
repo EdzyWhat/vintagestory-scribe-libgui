@@ -121,7 +121,7 @@ public sealed partial class ScribeModSystem
         // face after this change, that resolver quirk (not a missing/corrupt asset) is the first suspect;
         // verify the title stays bold and the subtitle descriptor renders slanted after restaging.
         // Tracks which bundled families actually registered, in preference order, so the
-        // "sans-serif" alias below (fix-linux-sans-serif-font-crash) can pick a real fallback
+        // default-family resolution below (fix-sans-serif-alias-leak) can pick a real fallback
         // instead of a family that itself failed to load.
         var registeredFamilies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -183,23 +183,25 @@ public sealed partial class ScribeModSystem
         }
         api.Logger.Notification("[scribe] bundled task-text fonts registered for the settings font selector");
 
-        // LibGUI's FontRegistry hardcodes "sans-serif" -> "Arial", which is not a custom-registered
-        // typeface, so resolving it falls through to a live SKTypeface.FromFamilyName OS/fontconfig
-        // lookup (followed by HarfBuzz shaping). On Linux systems with no/broken installed fonts that
-        // live lookup is a plausible native-abort site ("free(): invalid pointer", reported on
-        // rolling-release distros — see fix-linux-sans-serif-font-crash). "sans-serif" is Scribe's own
-        // DefaultFamily/task-font default AND LibGUI's own stock TextStyle default, so this alias must
-        // be registered before BuildMetrics (below) probes it. Pick the first bundled face that
-        // actually loaded, preferring a general-purpose sans body font.
+        // Resolve Scribe's own default family (task-font default, HUD chrome, Settings chrome,
+        // History/Timer/Guestbook metadata) to one of Scribe's bundled, custom-registered faces
+        // directly, rather than aliasing LibGUI's shared "sans-serif" family to it
+        // (fix-sans-serif-alias-leak). "sans-serif" is LibGUI's own framework-wide TextStyle default,
+        // consulted by every gui-dependent mod's unstyled text — aliasing it silently changed other
+        // mods' default font too (reported: HudUI's stat-number display wrapping once Scribe was
+        // installed). Pick the first bundled face that actually loaded, preferring a general-purpose
+        // sans body font; if none loaded, fall back to the literal "sans-serif" string, i.e. exactly
+        // what that text would resolve to without Scribe's font system at all.
+        string resolvedDefaultFamily = "sans-serif";
         foreach (var family in new[] { "Noto Sans", "Noto Serif", "Scapholene", "La Belle Aurore", "Caudex" })
         {
             if (!registeredFamilies.Contains(family)) continue;
-            FontRegistry.RegisterFontAlias("sans-serif", family);
-            api.Logger.Notification($"[scribe] \"sans-serif\" aliased to bundled font '{family}' (avoids a live OS font lookup)");
+            resolvedDefaultFamily = family;
             break;
         }
+        api.Logger.Notification($"[scribe] default family resolved to '{resolvedDefaultFamily}' (no global sans-serif alias)");
 
-        ScribeTaskFont.BuildMetrics(api.Logger, caudexRegistered);
+        ScribeTaskFont.BuildMetrics(api.Logger, caudexRegistered, resolvedDefaultFamily);
     }
 
     /// <summary>

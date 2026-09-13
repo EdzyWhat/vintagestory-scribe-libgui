@@ -194,7 +194,7 @@ public sealed class GuiDialogScribeQuestPrompt : GuiBase
             mainAxisSize: MainAxisSize.Max,
             children: new Widget[] { linkButton, dismissButton, settingsButton }));
 
-        return new WindowFrame(
+        return ScribeTextDefaults.WrapChrome(new WindowFrame(
             title: Lang.Get("scribe:scribe-questprompt-modal-title"),
             onClose: () => TryClose(), // closes the window only — see settingsButton's remarks above
             child: new Container(
@@ -205,7 +205,7 @@ public sealed class GuiDialogScribeQuestPrompt : GuiBase
                         crossAxisAlignment: CrossAxisAlignment.Center,
                         mainAxisSize: MainAxisSize.Min,
                         spacing: 10,
-                        children: body))));
+                        children: body)))));
     }
 
     public override void Dispose()

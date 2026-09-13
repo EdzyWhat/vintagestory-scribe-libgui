@@ -18,6 +18,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   last-opened writeable Scribe item, else their first writeable one; if none is available, the
   player is notified directly why. Notice Board is the first mod using this.
 
+### Fixed
+- **Installing Scribe silently changed other `gui`-dependent mods' default font.** Scribe registered
+  its own bundled typeface as LibGUI's shared `"sans-serif"` family — the framework-wide default
+  every `gui`-dependent mod's unstyled text resolves through, not something scoped to Scribe. Scribe
+  now names its own bundled family directly instead of aliasing the shared keyword, so other mods'
+  default text is unaffected by Scribe being installed. (A report of HudUI's temporal-stability stat
+  wrapping onto two lines prompted this fix; that specific symptom is still reproducing after this
+  change and is under separate investigation — see the next release for the resolution.)
+- **Scribe's own HUD chrome, Settings chrome, dev-tuning dialogs, and Task Notice/quest-prompt popups
+  now always render in Scribe's own bundled default face**, matching the rest of Scribe's UI, instead
+  of floating to whatever LibGUI's raw, platform-dependent `"sans-serif"` default happened to resolve
+  to on a given OS — which, once the alias above was removed, made those surfaces visibly inconsistent
+  with Scribe's own Notebook/Lectern text.
+
 ## [1.4.1] - 2026-09-11
 
 ### Fixed

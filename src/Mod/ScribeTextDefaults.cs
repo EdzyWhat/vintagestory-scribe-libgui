@@ -41,13 +41,24 @@ internal static class ScribeTextDefaults
     public static DefaultTextStyle Wrap(string? taskFontFamily, float baseFontSize, Widget child) =>
         new(Style(taskFontFamily, baseFontSize), child);
 
-    /// <summary>Settings chrome: the player's LibGUI default body face at the unscaled settings size.
-    /// Does NOT follow Task Text Font or Window Text Size — those knobs live on this form and must not
-    /// restyle the form itself (peg-task-fonts-to-caudex playtest).</summary>
+    /// <summary>Settings chrome: Scribe's own bundled default face (<see cref="ScribeTaskFont.DefaultFamily"/>)
+    /// at the unscaled settings size. Does NOT follow Task Text Font or Window Text Size — those knobs
+    /// live on this form and must not restyle the form itself (peg-task-fonts-to-caudex playtest).</summary>
     public static DefaultTextStyle WrapSettingsChrome(Widget child) =>
         new(new TextStyle
         {
             FontFamily = ScribeTaskFont.DefaultFamily,
             FontSize = ScribeRowConstants.BaseSettingsFontSize,
         }, child);
+
+    /// <summary>Roots a Scribe-owned surface that deliberately does NOT follow the player's Task Text
+    /// Font choice (HUD chrome, dev-tuning dialogs, Task Notice / quest-prompt popups) in Scribe's own
+    /// bundled default face (<see cref="ScribeTaskFont.DefaultFamily"/>) instead of leaving it to fall
+    /// through to LibGUI's raw, un-anchored <c>TextStyle</c> ctor default (the literal <c>"sans-serif"</c>
+    /// sentinel, which resolves to a live, platform-dependent system-font lookup —
+    /// [[wrapsettingschrome-defaultfamily-regression]]/VSAPI-NOTES.md "Custom TTF fonts in the GUI").
+    /// Carries ONLY <c>FontFamily</c> — every existing descendant <c>TextStyle</c> in these surfaces
+    /// already sets its own explicit <c>FontSize</c>, so there is nothing to peg here.</summary>
+    public static DefaultTextStyle WrapChrome(Widget child) =>
+        new(new TextStyle { FontFamily = ScribeTaskFont.DefaultFamily }, child);
 }

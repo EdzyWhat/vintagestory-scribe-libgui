@@ -186,7 +186,7 @@ public sealed class GuiDialogTaskNotice : GuiBase
             });
 
         return new Theme(theme,
-            child: WrapBackdrop(layout, BuildOuterArtBox(layout, colors, centerColumn)));
+            child: ScribeTextDefaults.WrapChrome(WrapBackdrop(layout, BuildOuterArtBox(layout, colors, centerColumn))));
     }
 
     /// <summary>Mirrors <see cref="ScribeDialogBase.Layout.WrapBackdrop"/>'s pattern (missing-asset

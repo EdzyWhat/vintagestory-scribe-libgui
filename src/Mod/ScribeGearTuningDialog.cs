@@ -152,7 +152,7 @@ public sealed class ScribeGearTuningDialog : GuiBase
 
             });
 
-        return new WindowFrame(
+        return ScribeTextDefaults.WrapChrome(new WindowFrame(
             title: "Gearworks tuning",
             onClose: () => TryClose(),
             fillHeight: true,
@@ -165,7 +165,7 @@ public sealed class ScribeGearTuningDialog : GuiBase
                         child: new SingleChildScrollView(
                             controller: scrollController,
                             child: body))
-                    { AutoHide = false })));
+                    { AutoHide = false }))));
     }
 
     /// <summary>A labeled float field: caption over a <see cref="ScribeNumericField"/>. Mirrors the settings
