@@ -38,8 +38,10 @@
 
 ## 3. Gate and hand back to add-player-locales
 
-- [x] 3.1 Run `python3 build/check-locales.py` and verify it reports clean (`✓ es-es.json`,
-      `✓ pt-br.json`, `✓ assets/game/lang`) with zero problems for both locales.
+- [ ] 3.1 Run `python3 build/check-locales.py` and verify it reports clean (`✓ es-es.json`,
+      `✓ pt-br.json`, `✓ assets/game/lang`) with zero problems for both locales. Currently fails:
+      11 problems in `es-es.json`, 5 in `pt-br.json` — quoted spans that no longer byte-match the
+      label they reference after the emphasis rewrite.
 - [x] 3.2 Restage (`./build/restage.sh`) and verify the staged mod's `en.json`/`es-es.json`/
       `pt-br.json` match the repo copies (spot-check one rewritten heading and one rewritten
       quoted reference in-game or via diff against the staged files).
