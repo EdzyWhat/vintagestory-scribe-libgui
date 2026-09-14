@@ -53,6 +53,9 @@ run_stage "Build mod (${CONFIG})" \
 run_stage "Core unit tests" \
   dotnet test tests/Core.Tests
 
+run_stage "Locale check" \
+  python3 build/check-locales.py
+
 # The Atlas suite boots a real headless server; the FixtureBuilders world-builder scenario is not
 # a pass/fail test, so it is excluded from a normal run (see README "Running the Atlas suite").
 run_stage "Atlas integration suite" \

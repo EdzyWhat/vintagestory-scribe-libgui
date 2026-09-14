@@ -843,3 +843,25 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
       at the notice's position after the scan tick, client-local to you only. *(add-assignment-physical-delivery-mode 7.1)*
       - **Still broken 2026-09-03:** (submission 2026-09-03T20-42-20) "I cannot see the particle effect at all for assigned Task Notices as the assignee. Perhaps the issue is that I'm the assigner and the assignee, and I've touched the Task Notice. Regardless, I'd like to still see the particle effect."
       - **Confirmed 2026-09-09** (submission 2026-09-09T17-15-17): "(no note)"
+
+## add-player-locales
+
+> Ship player-facing Scribe strings in the languages Vintage Story players actually use, as
+> locale files next to English, so a non-English client sees UI, handbook, hover text,
+> History sentences, and dates in its own language without mixing in stale or English leftover keys.
+
+- [ ] `000000c3` **Check Russian Lectern chrome.** Set client language to Russian — confirm Lectern
+      dialog chrome, tab titles, and a Scribe handbook page render in Russian with no raw keys or
+      untranslated labels. *(add-player-locales 4.3)*
+- [ ] `000000c4` **Check Portuguese tablet capacity.** In Brazilian Portuguese, confirm the tablet-full
+      error message says 15 (not 10), and open Getting Started in the handbook to confirm it matches the
+      current multi-tier tour. *(add-player-locales 4.3)*
+- [ ] `000000c5` **Check Spanish Lectern tour.** In Spanish (es-es), confirm the Lectern uses C4B's
+      established name, Getting Started describes the current mod (tablets/chalkboard/assignments), and
+      Inbox / Task Notice strings resolve in Spanish. *(add-player-locales 4.3)*
+- [ ] `000000c6` **Check CJK glyph rendering.** In Simplified Chinese or Japanese, open a Scribe
+      dialog and a handbook page — confirm characters render legibly (record any missing glyphs/tofu
+      as a follow-up; do not block). *(add-player-locales 4.3)*
+- [ ] `000000c7` **Check short-pool creature death.** In a short-pool locale (e.g. Russian or German),
+      die to a creature with a Notebook carried — confirm the new History row is a single coherent
+      translated sentence, not an English joke mixed into the template. *(add-player-locales 4.3)*

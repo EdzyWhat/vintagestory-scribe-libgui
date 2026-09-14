@@ -70,6 +70,9 @@ All fonts are shipped unmodified. License texts are included alongside the font 
 
 Scribe's task-pinning concept was inspired in part by **Wanderer's Sketchbook** by JeanPierre. Thanks to JeanPierre for the original mod.
 
-**Arquimago** — Brazilian Portuguese (pt-br) translation.
+### Translations
+
+- **Arquimago** — Brazilian Portuguese (`pt-br`) translation.
+- **C4BR3R4** — Spanish (`es-es`) translation seed (C4B Traducciones-ES).
 
 Scapholène was suggested for Scribe by **Artekuno** in the release teaser thread.
