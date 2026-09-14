@@ -92,12 +92,15 @@ def extract_spans(text):
 def build_label_lookup(en):
     """Maps an English label's exact string value back to its own key. Handbook/
     craftinginfo keys are excluded so a handbook essay never gets treated as the
-    canonical source of another handbook essay's quoted text."""
+    canonical source of another handbook essay's quoted text. blockhelp-* keys are
+    also excluded: they're generic one-word block-interaction hints (e.g. "Read",
+    shown when looking at a block), not clickable UI captions, and their short
+    generic verbs collide coincidentally with unrelated essay prose."""
     lookup = {}
     for k, v in en.items():
         if is_comment_key(k) or not isinstance(v, str):
             continue
-        if k.startswith("handbook-") or k.startswith("craftinginfo-"):
+        if k.startswith("handbook-") or k.startswith("craftinginfo-") or k.startswith("blockhelp-"):
             continue
         lookup.setdefault(v, k)
     return lookup
