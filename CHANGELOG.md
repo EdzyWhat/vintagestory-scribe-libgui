@@ -22,10 +22,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   UI). The target is resolved the same way the Handbook's "Add to Scribe" does: the player's
   last-opened writeable Scribe item, else their first writeable one; if none is available, the
   player is notified directly why. Notice Board is the first mod using this.
-- **Full translation support across twelve languages.** Scribe now ships complete locale files for English (`en`), Russian (`ru`), Ukrainian (`uk`), Polish (`pl`), German (`de`), Simplified Chinese (`zh-cn`), Japanese (`ja`), Spanish (`es-es`), Czech (`cs`), Swedish (`sv-se`), French (`fr`), Brazilian Portuguese (`pt-br`), and Italian (`it`), covering all UI surfaces, tabs, hover tooltips, and the full handbook guide.
-  - Spanish is seeded from **C4BR3R4**'s C4B Traducciones-ES pack; overlapping keys were meaning-audited against current English, rewritten where mechanics changed (such as Getting Started and tablet capacity), and filled with all recent additions (Chalkboard, Inbox, Assignment Desk, Task Notices). If C4B's translation pack is still installed alongside Scribe, the last-loaded `es-es.json` wins cleanly.
-  - Brazilian Portuguese was refreshed from **Arquimago**'s translation with the same meaning audit, updating rewritten handbook entries, correcting tablet capacity to 15, and filling missing keys.
-  - All non-English locales also include translated `worldattribute-scribeClockmakerRequiresTrait` in the game domain.
 
 ### Fixed
 - **The HUD's default position now defaults to top-left instead of top-right**, so a fresh install
