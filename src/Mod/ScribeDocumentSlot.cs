@@ -215,7 +215,8 @@ internal sealed class ScribeDocumentSlot : StatelessWidget
         string assignerName = modSystem.ResolvePlayerName(assignment.AssignerUid);
         string recipientName = modSystem.ResolvePlayerName(assignment.TargetPlayerUid);
 
-        lines.Add(new Text(Lang.Get("scribe:scribe-assignment-assigned-by", assignerName, assignment.AssignedDate), lineStyle));
+        lines.Add(new Text(Lang.Get("scribe:scribe-assignment-assigned-by", assignerName,
+            AssignmentDisplay.Date(assignment.AssignedDate, assignment.AssignedTimestamp, world)), lineStyle));
         lines.Add(new Text(Lang.Get("scribe:scribe-tasknotice-addressed-to", recipientName), lineStyle));
     }
 

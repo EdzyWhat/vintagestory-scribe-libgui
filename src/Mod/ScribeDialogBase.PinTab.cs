@@ -75,8 +75,13 @@ public abstract partial class ScribeDialogBase
                     Kind: p.Kind, DisplayStack: stack, DisplayName: name,
                     TargetQuantity: p.TargetQuantity, CurrentQuantity: p.CurrentQuantity, LinkTarget: iconLinkTarget,
                     Depth: p.Depth, IsAcceptedAssignment: p.IsAcceptedAssignment, ExtraInfo: p.ExtraInfo,
-                    AssignerName: assignerName, AssignedDate: p.IsAcceptedAssignment ? p.AssignedDate : null,
-                    AcceptedDate: p.IsAcceptedAssignment ? p.AcceptedDate : null,
+                    AssignerName: assignerName,
+                    AssignedDate: p.IsAcceptedAssignment
+                        ? AssignmentDisplay.Date(p.AssignedDate, p.AssignedTimestamp, capi.World)
+                        : null,
+                    AcceptedDate: p.IsAcceptedAssignment
+                        ? OptionalAssignmentDate(p.AcceptedDate, p.AcceptedTimestamp)
+                        : null,
                     IsStaticVsQuestObjective: isStaticVsQuestObjective);
             })
             .ToList();

@@ -132,7 +132,8 @@ public sealed class GuiDialogTaskNotice : GuiBase
 
         var first = document.Blocks.FirstOrDefault();
         string fromLine = first?.Assignment is { } assignment
-            ? Lang.Get("scribe:scribe-assignment-assigned-by", ResolvePlayerName(assignment.AssignerUid), assignment.AssignedDate)
+            ? Lang.Get("scribe:scribe-assignment-assigned-by", ResolvePlayerName(assignment.AssignerUid),
+                AssignmentDisplay.Date(assignment.AssignedDate, assignment.AssignedTimestamp, capi.World))
             : "";
 
         var rows = document.Blocks.Select((b, i) =>

@@ -8,6 +8,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 - **Notebook History now records Death, PvP kill, boss kill, and temporal-storm facts instead of a finished English sentence**, and the History tab formats those rows in the viewing player's language. Dedicated servers stay English; that no longer stamps the chronicle. Existing notebooks keep their already-written lines as-is — only new events after this change are live-localized. Flavor pools may be shorter in another language than in English; the viewer never sees a mixed-language joke or an English PvP verb leaking into a translated template.
+- **Crafted, PickedUp, and Manual History dates, and Lectern Guestbook visit dates, now follow the viewing player's calendar format** (`scribe:date-format` and vanilla month names). Pre-v3 History rows keep their baked date (their timestamps are sort-order only). Existing v1 guestbook visits keep their baked date until a new visit is recorded on that lectern.
+- **Assignment, pin, and Task Notice dates now follow the viewing player's calendar format** the same way. New sends, accepts, and the other transition stamps persist a numeric in-game timestamp next to the existing identity string; Inbox, Sent history, Pin Tab tooltips, editor/read “Assigned by”, and sealed Task Notice hover format from that timestamp. Records written before this change keep their baked date. Pin HUD sync still compares the stored identity strings, not the displayed locale form.
 
 ### Added
 - **A public API for other mods to create tasks.** `ScribeModSystem.TryCreateExternalTask(player,
@@ -20,6 +22,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   UI). The target is resolved the same way the Handbook's "Add to Scribe" does: the player's
   last-opened writeable Scribe item, else their first writeable one; if none is available, the
   player is notified directly why. Notice Board is the first mod using this.
+- **Full translation support across twelve languages.** Scribe now ships complete locale files for English (`en`), Russian (`ru`), Ukrainian (`uk`), Polish (`pl`), German (`de`), Simplified Chinese (`zh-cn`), Japanese (`ja`), Spanish (`es-es`), Czech (`cs`), Swedish (`sv-se`), French (`fr`), Brazilian Portuguese (`pt-br`), and Italian (`it`), covering all UI surfaces, tabs, hover tooltips, and the full handbook guide.
+  - Spanish is seeded from **C4BR3R4**'s C4B Traducciones-ES pack; overlapping keys were meaning-audited against current English, rewritten where mechanics changed (such as Getting Started and tablet capacity), and filled with all recent additions (Chalkboard, Inbox, Assignment Desk, Task Notices). If C4B's translation pack is still installed alongside Scribe, the last-loaded `es-es.json` wins cleanly.
+  - Brazilian Portuguese was refreshed from **Arquimago**'s translation with the same meaning audit, updating rewritten handbook entries, correcting tablet capacity to 15, and filling missing keys.
+  - All non-English locales also include translated `worldattribute-scribeClockmakerRequiresTrait` in the game domain.
 
 ### Fixed
 - **The HUD's default position now defaults to top-left instead of top-right**, so a fresh install

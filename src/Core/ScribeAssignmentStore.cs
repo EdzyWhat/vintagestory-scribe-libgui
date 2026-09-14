@@ -88,11 +88,12 @@ public sealed class ScribeAssignmentStore
         string assignedDate, out ScribeBlock? record,
         ScribeBlockKind kind = ScribeBlockKind.Task, string? targetItemCode = null, int targetQuantity = 1,
         string? linkTarget = null, string? linkLabel = null, string? linkDescription = null,
-        string? recipeSignature = null, int depth = 0, Guid batchId = default)
+        string? recipeSignature = null, int depth = 0, Guid batchId = default,
+        double? assignedTimestamp = null)
         => TryCreateCore(assignmentId, assignerUid, targetPlayerUid, taskText, assignedDate,
             ScribeAssignmentState.Unaccepted, seen: false, acceptedDate: null, out record,
             kind, targetItemCode, targetQuantity, linkTarget, linkLabel, linkDescription,
-            recipeSignature, depth, batchId);
+            recipeSignature, depth, batchId, assignedTimestamp, acceptedTimestamp: null);
 
     /// <summary>
     /// Task-Notice accept-time counterpart of <see cref="TryCreate"/> (`task-notice-item` capability):
@@ -109,11 +110,12 @@ public sealed class ScribeAssignmentStore
         string assignedDate, string acceptedDate, out ScribeBlock? record,
         ScribeBlockKind kind = ScribeBlockKind.Task, string? targetItemCode = null, int targetQuantity = 1,
         string? linkTarget = null, string? linkLabel = null, string? linkDescription = null,
-        string? recipeSignature = null, int depth = 0, Guid batchId = default)
+        string? recipeSignature = null, int depth = 0, Guid batchId = default,
+        double? assignedTimestamp = null, double? acceptedTimestamp = null)
         => TryCreateCore(assignmentId, assignerUid, targetPlayerUid, taskText, assignedDate,
             ScribeAssignmentState.Accepted, seen: true, acceptedDate, out record,
             kind, targetItemCode, targetQuantity, linkTarget, linkLabel, linkDescription,
-            recipeSignature, depth, batchId);
+            recipeSignature, depth, batchId, assignedTimestamp, acceptedTimestamp);
 
     /// <summary>
     /// Task-Notice send-time counterpart of <see cref="TryCreate"/> (refine-task-notice-ux, reversing the
@@ -128,17 +130,19 @@ public sealed class ScribeAssignmentStore
         string assignedDate, out ScribeBlock? record,
         ScribeBlockKind kind = ScribeBlockKind.Task, string? targetItemCode = null, int targetQuantity = 1,
         string? linkTarget = null, string? linkLabel = null, string? linkDescription = null,
-        string? recipeSignature = null, int depth = 0, Guid batchId = default)
+        string? recipeSignature = null, int depth = 0, Guid batchId = default,
+        double? assignedTimestamp = null)
         => TryCreateCore(assignmentId, assignerUid, targetPlayerUid, taskText, assignedDate,
             ScribeAssignmentState.Sent, seen: false, acceptedDate: null, out record,
             kind, targetItemCode, targetQuantity, linkTarget, linkLabel, linkDescription,
-            recipeSignature, depth, batchId);
+            recipeSignature, depth, batchId, assignedTimestamp, acceptedTimestamp: null);
 
     private bool TryCreateCore(Guid assignmentId, string assignerUid, string targetPlayerUid, string taskText,
         string assignedDate, ScribeAssignmentState state, bool seen, string? acceptedDate, out ScribeBlock? record,
         ScribeBlockKind kind, string? targetItemCode, int targetQuantity,
         string? linkTarget, string? linkLabel, string? linkDescription,
-        string? recipeSignature, int depth, Guid batchId)
+        string? recipeSignature, int depth, Guid batchId,
+        double? assignedTimestamp, double? acceptedTimestamp)
     {
         record = null;
         if (string.IsNullOrWhiteSpace(assignerUid) || string.IsNullOrWhiteSpace(targetPlayerUid)) return false;
@@ -153,6 +157,8 @@ public sealed class ScribeAssignmentStore
         var assignment = new ScribeAssignment(assignerUid, assignedDate, state, seen, targetPlayerUid, batchId)
         {
             AcceptedDate = acceptedDate,
+            AssignedTimestamp = assignedTimestamp,
+            AcceptedTimestamp = acceptedTimestamp,
         };
         var block = new ScribeBlock(kind, text, depth: depth, taskId: assignmentId, assignment: assignment,
             targetItemCode: targetItemCode, targetQuantity: targetQuantity, linkTarget: linkTarget,
@@ -195,13 +201,14 @@ public sealed class ScribeAssignmentStore
     /// other Unaccepted assignment. Returns false — record unchanged — for an unknown id or a record not
     /// currently in the Sent state (already received, or never a notice at all).
     /// </summary>
-    public bool TryMarkReceived(Guid assignmentId, string receivedDate)
+    public bool TryMarkReceived(Guid assignmentId, string receivedDate, double? receivedTimestamp = null)
     {
         if (!_records.TryGetValue(assignmentId, out var block) || block.Assignment is not { } assignment)
             return false;
         if (assignment.State != ScribeAssignmentState.Sent) return false;
         assignment.State = ScribeAssignmentState.Unaccepted;
         assignment.ReceivedDate = receivedDate;
+        assignment.ReceivedTimestamp = receivedTimestamp;
         return true;
     }
 
@@ -215,7 +222,8 @@ public sealed class ScribeAssignmentStore
     /// <paramref name="newTargetPlayerUid"/> already equals the current target, the record is unknown,
     /// or it isn't currently Unaccepted (a redirect only ever precedes an Accept).
     /// </summary>
-    public bool TryRedirectTarget(Guid assignmentId, string newTargetPlayerUid, string redirectedDate)
+    public bool TryRedirectTarget(Guid assignmentId, string newTargetPlayerUid, string redirectedDate,
+        double? redirectedTimestamp = null)
     {
         if (!_records.TryGetValue(assignmentId, out var block) || block.Assignment is not { } assignment)
             return false;
@@ -225,6 +233,7 @@ public sealed class ScribeAssignmentStore
         assignment.RedirectedFromUid = assignment.TargetPlayerUid;
         assignment.TargetPlayerUid = newTargetPlayerUid;
         assignment.RedirectedDate = redirectedDate;
+        assignment.RedirectedTimestamp = redirectedTimestamp;
         return true;
     }
 
@@ -300,13 +309,17 @@ public sealed class ScribeAssignmentStore
     // reached the Assignee's inventory and transitioned to Unaccepted.
     // v8 adds RedirectedFromUid/RedirectedDate (add-task-notice-redirect-confirm) — who a Task Notice
     // was originally addressed to and when a non-recipient holder's confirmed Accept redirected it.
+    // v9 adds eight optional numeric in-game timestamps (Assigned/Accepted/Declined/Cancelled/Discarded/
+    // Completed/Received/Redirected) so a viewing client can rebuild those dates via scribe:date-format.
+    // Written as bool has + double when present, so a missing timestamp (null, a pre-v9 row) is distinct
+    // from real Calendar.TotalDays == 0 (world day one).
     // Progressive append-only reads (matching ScribeDocumentCodec's convention): any version in
     // [MinVersion, Version] is accepted; a v1 blob simply predates Craft-kind assignments (which didn't
     // exist yet), so every one of its records is genuinely RecipeSignature-less — defaulting it to ""
     // on read is exactly correct, not a lossy guess. A pre-v3 blob predates BatchId entirely; its records
     // are synthesized a deterministic per-(assigner,target,date) id on read (DeriveLegacyBatchId) so
     // pre-existing multi-item batches keep grouping the same way they always displayed, without a real
-    // minted id ever having existed for them. A pre-v4 blob predates every transition timestamp — those
+    // minted id ever having existed for them. A pre-v4 blob predates every transition date string — those
     // genuinely never happened as far as the record can say, so defaulting all five to null on read is
     // exactly correct, not a lossy guess. A pre-v5 blob predates the destination label entirely — an
     // assignment it already Accepted simply has no recorded destination, which is also exactly correct
@@ -316,8 +329,10 @@ public sealed class ScribeAssignmentStore
     // received-but-unstamped under that version, so defaulting ReceivedDate to null on read is exactly
     // correct, not a lossy guess. A pre-v8 blob predates redirect entirely — no record was ever
     // redirected under that version, so defaulting both new fields to null on read is exactly correct,
-    // not a lossy guess.
-    private const byte Version = 8;
+    // not a lossy guess. A pre-v9 blob predates numeric timestamps — every date string it carries is a
+    // baked identity stamp with no timestamp to rebuild from, so defaulting all eight to null is exactly
+    // correct, not a lossy guess.
+    private const byte Version = 9;
     private const byte MinVersion = 1;
 
     /// <summary>Serializes a single player's view (<see cref="Sent"/> or <see cref="Received"/>) for the
@@ -442,6 +457,14 @@ public sealed class ScribeAssignmentStore
             WriteOptionalString(w, assignment.ReceivedDate); // v7+
             WriteOptionalString(w, assignment.RedirectedFromUid); // v8+
             WriteOptionalString(w, assignment.RedirectedDate);    // v8+
+            WriteOptionalDouble(w, assignment.AssignedTimestamp);   // v9+
+            WriteOptionalDouble(w, assignment.AcceptedTimestamp);   // v9+
+            WriteOptionalDouble(w, assignment.DeclinedTimestamp);   // v9+
+            WriteOptionalDouble(w, assignment.CancelledTimestamp);  // v9+
+            WriteOptionalDouble(w, assignment.DiscardedTimestamp);  // v9+
+            WriteOptionalDouble(w, assignment.CompletedTimestamp);  // v9+
+            WriteOptionalDouble(w, assignment.ReceivedTimestamp);   // v9+
+            WriteOptionalDouble(w, assignment.RedirectedTimestamp); // v9+
         }
     }
 
@@ -494,6 +517,14 @@ public sealed class ScribeAssignmentStore
                 ReceivedDate = ReadOptionalString(r, version, minVersion: 7),
                 RedirectedFromUid = ReadOptionalString(r, version, minVersion: 8),
                 RedirectedDate = ReadOptionalString(r, version, minVersion: 8),
+                AssignedTimestamp = ReadOptionalDouble(r, version),
+                AcceptedTimestamp = ReadOptionalDouble(r, version),
+                DeclinedTimestamp = ReadOptionalDouble(r, version),
+                CancelledTimestamp = ReadOptionalDouble(r, version),
+                DiscardedTimestamp = ReadOptionalDouble(r, version),
+                CompletedTimestamp = ReadOptionalDouble(r, version),
+                ReceivedTimestamp = ReadOptionalDouble(r, version),
+                RedirectedTimestamp = ReadOptionalDouble(r, version),
             };
 
             list.Add(new ScribeBlock(kind, text, depth: depth, taskId: taskId,
@@ -531,6 +562,20 @@ public sealed class ScribeAssignmentStore
     /// predates that version (no bytes were ever written for it).</summary>
     private static string? ReadOptionalString(BinaryReader r, int version, int minVersion = 4) =>
         version >= minVersion ? (r.ReadBoolean() ? r.ReadString() : null) : null;
+
+    /// <summary>Writes a nullable double as a has-value flag plus the value when present — the Guestbook
+    /// sentinel rule: missing bool = null, <c>0</c> is a real <c>Calendar.TotalDays</c>.</summary>
+    private static void WriteOptionalDouble(BinaryWriter w, double? value)
+    {
+        bool hasValue = value.HasValue;
+        w.Write(hasValue);
+        if (hasValue) w.Write(value!.Value);
+    }
+
+    /// <summary>Reads a <see cref="WriteOptionalDouble"/> value written starting at v9, or null when
+    /// this blob predates timestamps (no bytes were ever written for it).</summary>
+    private static double? ReadOptionalDouble(BinaryReader r, int version, int minVersion = 9) =>
+        version >= minVersion ? (r.ReadBoolean() ? r.ReadDouble() : null) : null;
 
     private static byte[] ReadExactly(BinaryReader r, int count)
     {

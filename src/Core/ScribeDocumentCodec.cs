@@ -7,7 +7,7 @@ namespace Scribe.Core;
 /// used for both world persistence and network sync, so the round-trip is exact and any
 /// malformed input fails safely (returns false) rather than throwing.
 ///
-/// Current format (v12, little-endian via <see cref="BinaryWriter"/>):
+/// Current format (v13, little-endian via <see cref="BinaryWriter"/>):
 ///   [4 bytes magic "SCRB"][1 byte version][16 bytes DocId][int blockCount]
 ///   [per block: 16 bytes TaskId, byte kind, bool done, int depth, bool hasAssignedToUid,
 ///    string assignedToUid (only if hasAssignedToUid), string text,
@@ -19,11 +19,12 @@ namespace Scribe.Core;
 ///    bool hasAssignment, string assignerUid, byte state, string assignedDate, bool seen (v9+),
 ///    string targetPlayerUid (only when hasAssignment; v10+),
 ///    bool hasLinkDescription, string linkDescription (only if hasLinkDescription; v11+),
-///    bool hasExtraInfo, string extraInfo (only if hasExtraInfo; v12+)]
+///    bool hasExtraInfo, string extraInfo (only if hasExtraInfo; v12+),
+///    bool hasAssignedTimestamp, double assignedTimestamp (only if hasAssignedTimestamp; v13+)]
 ///   [string title]
 ///
 /// Accepted-version window (PROGRESSIVE append-only reads, NOT a two-version window):
-///   Reads any version in [<see cref="MinVersion"/>=5, <see cref="Version"/>=12]; older/newer → fail-safe false.
+///   Reads any version in [<see cref="MinVersion"/>=5, <see cref="Version"/>=13]; older/newer → fail-safe false.
 ///   Each version-group's trailing fields are read only behind a <c>version &gt;=</c> threshold, so an
 ///   older blob simply stops reading before the fields it never wrote. Missing fields default via
 ///   <see cref="ApplyPreV6Defaults"/>. This departs from the strict two-version window because v5 docs
@@ -61,6 +62,11 @@ namespace Scribe.Core;
 ///        external mod's opaque hover-detail string, attached via
 ///        <c>ScribeModSystem.TryCreateExternalTask</c> (add-external-mod-task-api). Null for every
 ///        block not created through that entry point.
+///   v13 — appended one per-block field after ExtraInfo (hasAssignedTimestamp?, assignedTimestamp):
+///        the numeric in-game timestamp for an assigned block's AssignedDate (live-localize-assignment-dates).
+///        Cannot sit inside the v9 assignment sub-blob because v11 LinkDescription and v12 ExtraInfo
+///        already follow it. Unassigned blocks write false. A missing timestamp is distinct from
+///        real Calendar.TotalDays == 0.
 ///
 /// A hand-rolled format keeps Core free of any external dependency. The version byte lets
 /// us evolve the format while still reading every prior save layout back to <see cref="MinVersion"/>.
@@ -68,7 +74,7 @@ namespace Scribe.Core;
 public static class ScribeDocumentCodec
 {
     private static readonly byte[] Magic = "SCRB"u8.ToArray();
-    private const byte Version = 12; // v12 adds an external caller's opaque ExtraInfo hover string.
+    private const byte Version = 13; // v13 adds the assigned-block in-game timestamp after ExtraInfo.
 
     /// <summary>Oldest format version the reader still accepts. Progressive append-only reads accept
     /// any version in [<see cref="MinVersion"/>, <see cref="Version"/>]; v5 is the oldest because it is
@@ -154,6 +160,11 @@ public static class ScribeDocumentCodec
                 // v12: an external mod's opaque ExtraInfo hover string, appended after LinkDescription.
                 w.Write(block.ExtraInfo is not null);
                 if (block.ExtraInfo is not null) w.Write(block.ExtraInfo);
+                // v13: assigned timestamp, appended after ExtraInfo (not inside the v9 assignment
+                // sub-blob — v11/v12 already follow that). Unassigned blocks write false.
+                bool hasAssignedTimestamp = block.Assignment?.AssignedTimestamp is not null;
+                w.Write(hasAssignedTimestamp);
+                if (hasAssignedTimestamp) w.Write(block.Assignment!.AssignedTimestamp!.Value);
             }
             w.Write(doc.Title); // v5+: document title appended after block list
         }
@@ -161,7 +172,7 @@ public static class ScribeDocumentCodec
     }
 
     /// <summary>
-    /// Deserializes a document. Accepts any version in [MinVersion=5, Version=12] via progressive reads;
+    /// Deserializes a document. Accepts any version in [MinVersion=5, Version=13] via progressive reads;
     /// any other version fails safely. Signature-stable for callers that don't need the legacy-pin out-param — routes through the
     /// three-arg overload and discards it.
     /// </summary>
@@ -271,6 +282,16 @@ public static class ScribeDocumentCodec
 
                 string? extraInfo = null;
                 if (version >= 12 && r.ReadBoolean()) extraInfo = r.ReadString();
+
+                if (version >= 13)
+                {
+                    bool hasAssignedTimestamp = r.ReadBoolean();
+                    if (hasAssignedTimestamp)
+                    {
+                        double ts = r.ReadDouble();
+                        if (assignment is not null) assignment.AssignedTimestamp = ts;
+                    }
+                }
 
                 // The block's setters clamp TargetQuantity (≥ 1), CurrentQuantity ([0, target]),
                 // and Depth ([0, 1]).

@@ -4,10 +4,12 @@ using Vintagestory.API.Config;
 
 namespace Scribe;
 
-/// <summary>Formats live-schema History rows in the viewing client's locale. Baked / Manual /
-/// Crafted / PickedUp rows are not formatted here — the GUI keeps today's string concat for those.
-/// Pool and PvP-verb existence checks use <see cref="Lang.HasTranslation"/> (current locale only),
-/// never <see cref="Lang.Get"/>, so an English fallback cannot count as a hit in a short locale.</summary>
+/// <summary>Formats live-schema History sentences in the viewing client's locale, and calendar
+/// dates for any row whose <see cref="HistoryEntry.InGameTimestamp"/> is a real calendar day
+/// (<c>&gt;= 0</c>). Pre-v3 migrated rows keep their baked <see cref="HistoryEntry.InGameDate"/>
+/// (synthetic negative timestamps are sort-order only). Pool and PvP-verb existence checks use
+/// <see cref="Lang.HasTranslation"/> (current locale only), never <see cref="Lang.Get"/>, so an
+/// English fallback cannot count as a hit in a short locale.</summary>
 internal static class HistoryDisplay
 {
     private static readonly Dictionary<string, int> PoolSizeCache = new();
@@ -18,7 +20,7 @@ internal static class HistoryDisplay
             or HistoryEventKind.BossKill or HistoryEventKind.TemporalStorm;
 
     internal static string Date(HistoryEntry entry, IWorldAccessor world)
-        => IsLiveSystemRow(entry)
+        => entry.InGameTimestamp >= 0
             ? NotebookHost.FormatDateFromTimestamp(world, entry.InGameTimestamp)
             : entry.InGameDate;
 

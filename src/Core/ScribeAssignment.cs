@@ -59,6 +59,13 @@ public sealed class ScribeAssignment
 
     public ScribeAssignmentState State { get; set; }
     public string AssignedDate { get; set; }
+
+    /// <summary>Numeric in-game timestamp for <see cref="AssignedDate"/> (<c>Calendar.TotalDays</c>),
+    /// so a viewing client can rebuild that date via <c>scribe:date-format</c>. Null on a store/document
+    /// blob from before timestamps existed (those rows keep showing the baked identity string).
+    /// <c>0</c> is a real world-day-one value, not a missing sentinel.</summary>
+    public double? AssignedTimestamp { get; set; }
+
     public bool Seen { get; set; }
 
     /// <summary>In-game date this assignment reached the given transition, or null if it never has
@@ -74,11 +81,24 @@ public sealed class ScribeAssignment
     public string? DiscardedDate { get; set; }
     public string? CompletedDate { get; set; }
 
+    /// <summary>Numeric in-game timestamps matching the five transition date strings above. Null when
+    /// that transition never happened, or when the record predates timestamps. Same <c>0</c>-is-real
+    /// rule as <see cref="AssignedTimestamp"/>.</summary>
+    public double? AcceptedTimestamp { get; set; }
+    public double? DeclinedTimestamp { get; set; }
+    public double? CancelledTimestamp { get; set; }
+    public double? DiscardedTimestamp { get; set; }
+    public double? CompletedTimestamp { get; set; }
+
     /// <summary>In-game date a Task Notice's store record transitioned Sent → Unaccepted (refine-task-notice-ux):
     /// the moment the sealed notice actually entered the Assignee's own inventory, stamped by
     /// <see cref="ScribeAssignmentStore.TryMarkReceived"/>. Null for every assignment that never went
     /// through the Sent state (every non-notice send, and any notice sent before this change shipped).</summary>
     public string? ReceivedDate { get; set; }
+
+    /// <summary>Numeric in-game timestamp for <see cref="ReceivedDate"/>. Null when the assignment
+    /// never went through Sent, or when the record predates timestamps.</summary>
+    public double? ReceivedTimestamp { get; set; }
 
     /// <summary>UID of the player this assignment was originally addressed to, before a non-recipient
     /// holder of a Task Notice accepted it instead (add-task-notice-redirect-confirm). Stamped by
@@ -89,6 +109,10 @@ public sealed class ScribeAssignment
     /// <summary>In-game date <see cref="RedirectedFromUid"/> was stamped. Null unless a redirect
     /// happened.</summary>
     public string? RedirectedDate { get; set; }
+
+    /// <summary>Numeric in-game timestamp for <see cref="RedirectedDate"/>. Null unless a redirect
+    /// happened (and the record was written after timestamps existed).</summary>
+    public double? RedirectedTimestamp { get; set; }
 
     /// <summary>Short destination label (e.g. <c>Notebook "Book of Nick"</c>) captured once, at
     /// Accept-placement time, naming the Scribe item the task actually landed in. Null when the
@@ -134,14 +158,22 @@ public sealed class ScribeAssignment
 
     public ScribeAssignment Clone() => new(AssignerUid, AssignedDate, State, Seen, TargetPlayerUid, BatchId)
     {
+        AssignedTimestamp = AssignedTimestamp,
         AcceptedDate = AcceptedDate,
         DeclinedDate = DeclinedDate,
         CancelledDate = CancelledDate,
         DiscardedDate = DiscardedDate,
         CompletedDate = CompletedDate,
+        AcceptedTimestamp = AcceptedTimestamp,
+        DeclinedTimestamp = DeclinedTimestamp,
+        CancelledTimestamp = CancelledTimestamp,
+        DiscardedTimestamp = DiscardedTimestamp,
+        CompletedTimestamp = CompletedTimestamp,
         ReceivedDate = ReceivedDate,
+        ReceivedTimestamp = ReceivedTimestamp,
         RedirectedFromUid = RedirectedFromUid,
         RedirectedDate = RedirectedDate,
+        RedirectedTimestamp = RedirectedTimestamp,
         AcceptedIntoLabel = AcceptedIntoLabel,
         HiddenFromAssignee = HiddenFromAssignee,
         HiddenFromAssigner = HiddenFromAssigner,

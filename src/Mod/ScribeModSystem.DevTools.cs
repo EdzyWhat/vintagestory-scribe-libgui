@@ -408,11 +408,12 @@ public sealed partial class ScribeModSystem
     {
         if (sapi is null) return;
         var notes = new[] { "Fine work on the roof!", "Left three loaves in the chest.", null, "Back next season." };
-        var entries = new List<(string, string, string?)>();
+        var entries = new List<(string, string, string?, double)>();
         for (int i = 0; i < SeedVisitorNames.Length; i++)
         {
-            entries.Add((SeedVisitorNames[i], NotebookHost.FormatDateDaysAgo(sapi, (SeedVisitorNames.Length - i) * 2),
-                i < notes.Length ? notes[i] : null));
+            int daysAgo = (SeedVisitorNames.Length - i) * 2;
+            entries.Add((SeedVisitorNames[i], NotebookHost.FormatDateDaysAgo(sapi, daysAgo),
+                i < notes.Length ? notes[i] : null, NotebookHost.CalendarTotalDaysAgo(sapi, daysAgo)));
         }
         lectern.SeedGuestbook(entries);
     }

@@ -5,16 +5,24 @@ namespace Scribe.Core;
 /// <summary>
 /// Rolling visitor log for a Scribe block. Append-only from the game's perspective: entries are
 /// added by the Mod layer (one per player per in-game day), capped at <see cref="MaxEntries"/>.
-/// Core holds only plain-string data; the Mod layer supplies the formatted date-only string.
+/// Core holds only plain-string data plus an optional numeric timestamp; the Mod layer supplies
+/// the formatted identity date string and <c>Calendar.TotalDays</c>.
 ///
-/// Serialized format (SGBK, versioned binary):
+/// Accepted-version window (progressive reads — see docs/CODEC-MIGRATION.md):
+///   Current : v2 — per entry: playerName, inGameDate, note, bool hasTimestamp, optional double timestamp
+///   Min     : v1 — per entry: playerName, inGameDate, note (no timestamp; InGameTimestamp stays null)
+///   Older / newer : rejected (fail-safe empty load)
+///
+/// Serialized format (SGBK, little-endian via <see cref="BinaryWriter"/>):
 ///   [4 bytes magic "SGBK"][1 byte version][int entryCount]
-///   [per entry: string playerName, string inGameDate, string note]
+///   [per entry: string playerName, string inGameDate, string note,
+///    then if version &gt;= 2: bool hasTimestamp, double inGameTimestamp when true]
 /// </summary>
 public sealed class GuestbookStore
 {
     private static readonly byte[] Magic = "SGBK"u8.ToArray();
-    private const byte Version = 1;
+    private const byte Version = 2;
+    private const byte MinVersion = 1;
 
     public const int MaxEntries  = 100;
     public const int MaxNoteLength = 140;
@@ -37,8 +45,9 @@ public sealed class GuestbookStore
     /// <see cref="SoftMaxEntriesPerPlayer"/> cap, that player's OLDEST note-less entry is pruned to keep
     /// their log readable — entries carrying a note are never pruned (so a player who leaves a note every
     /// visit keeps all of them), and the just-added entry is never the one pruned. Returns true if an
-    /// entry was added.</summary>
-    public bool TryAddEntry(string playerName, string inGameDate)
+    /// entry was added. <paramref name="inGameTimestamp"/> is display-only and does not participate in
+    /// dedup; pass null for a v1-shaped row with no live date.</summary>
+    public bool TryAddEntry(string playerName, string inGameDate, double? inGameTimestamp = null)
     {
         if (_entries.Any(e => e.PlayerName == playerName && e.InGameDate == inGameDate))
             return false;
@@ -46,7 +55,12 @@ public sealed class GuestbookStore
         if (_entries.Count >= MaxEntries)
             _entries.RemoveAt(0);
 
-        var added = new GuestbookEntry { PlayerName = playerName, InGameDate = inGameDate };
+        var added = new GuestbookEntry
+        {
+            PlayerName = playerName,
+            InGameDate = inGameDate,
+            InGameTimestamp = inGameTimestamp,
+        };
         _entries.Add(added);
 
         // Soft per-player pruning: if this player now has more than SoftMaxEntriesPerPlayer entries,
@@ -96,6 +110,9 @@ public sealed class GuestbookStore
                 w.Write(e.PlayerName);
                 w.Write(e.InGameDate);
                 w.Write(e.Note);
+                bool hasTimestamp = e.InGameTimestamp.HasValue;
+                w.Write(hasTimestamp);
+                if (hasTimestamp) w.Write(e.InGameTimestamp!.Value);
             }
         }
         return ms.ToArray();
@@ -113,19 +130,26 @@ public sealed class GuestbookStore
 
             var magic = r.ReadBytes(Magic.Length);
             if (!magic.AsSpan().SequenceEqual(Magic)) return store;
-            if (r.ReadByte() != Version) return store;
+            byte version = r.ReadByte();
+            if (version < MinVersion || version > Version) return store;
 
             int count = r.ReadInt32();
             if (count < 0 || count > MaxEntries) return store;
 
             for (int i = 0; i < count; i++)
             {
-                store._entries.Add(new GuestbookEntry
+                var entry = new GuestbookEntry
                 {
                     PlayerName = r.ReadString(),
                     InGameDate = r.ReadString(),
                     Note       = r.ReadString(),
-                });
+                };
+                if (version >= 2)
+                {
+                    bool hasTimestamp = r.ReadBoolean();
+                    if (hasTimestamp) entry.InGameTimestamp = r.ReadDouble();
+                }
+                store._entries.Add(entry);
             }
         }
         catch (Exception ex) when (ex is EndOfStreamException or IOException or FormatException)

@@ -180,11 +180,12 @@ public sealed partial class ScribeModSystem
         }
 
         string date = NotebookHost.FormatDate(sapi);
+        double timestamp = sapi.World.Calendar.TotalDays;
         // Holding the sealed notice at all already proves physical receipt — ensure every row's store
         // record is out of Sent regardless of whether the proximity heartbeat's own inventory scan has
         // caught up yet (its per-chunk-crossing gate can lag a same-chunk pickup-then-immediate-Accept).
         foreach (var block in noticeDoc.Blocks)
-            assignmentStore.TryMarkReceived(block.TaskId, date);
+            assignmentStore.TryMarkReceived(block.TaskId, date, timestamp);
 
         var action = (ScribeAssignmentAction)message.Action;
         if (action == ScribeAssignmentAction.Decline)
@@ -204,7 +205,7 @@ public sealed partial class ScribeModSystem
                 if (!assignmentStore.TryApplyAction(block.TaskId, fromPlayer.PlayerUID, ScribeAssignmentAction.Decline))
                     continue;
                 declineAssignerUids.Add(block.Assignment!.AssignerUid);
-                StampTransitionDate(assignmentStore.TryGet(block.TaskId)!.Assignment!, date);
+                StampTransitionDate(assignmentStore.TryGet(block.TaskId)!.Assignment!, date, timestamp);
             }
 
             noticeSlot.Itemstack = null;
@@ -251,7 +252,7 @@ public sealed partial class ScribeModSystem
             // legally resolves them as Assignee instead of being rejected as an uninvolved player
             // (add-task-notice-redirect-confirm design D2).
             if (sourceAssignment.TargetPlayerUid != fromPlayer.PlayerUID)
-                assignmentStore.TryRedirectTarget(block.TaskId, fromPlayer.PlayerUID, date);
+                assignmentStore.TryRedirectTarget(block.TaskId, fromPlayer.PlayerUID, date, timestamp);
 
             // The record already exists (Unaccepted, from the TryMarkReceived pass above) — transition it
             // through the same actor-validated path a local-inbox Accept uses, instead of creating a fresh
@@ -264,7 +265,7 @@ public sealed partial class ScribeModSystem
             var record = assignmentStore.TryGet(block.TaskId);
             if (record?.Assignment is null) continue; // defensive — TryApplyAction just succeeded above
 
-            StampTransitionDate(record.Assignment, date);
+            StampTransitionDate(record.Assignment, date, timestamp);
             record.Assignment!.AcceptedIntoLabel = destinationLabel;
             var placed = new ScribeBlock(record.Kind, record.Text, depth: record.Depth, taskId: record.TaskId,
                 targetItemCode: record.TargetItemCode, targetQuantity: record.TargetQuantity,
@@ -376,6 +377,7 @@ public sealed partial class ScribeModSystem
     public void MarkReceivedForCarriedNotices(IServerPlayer player)
     {
         string date = NotebookHost.FormatDate(sapi!);
+        double timestamp = sapi!.World.Calendar.TotalDays;
         bool anyReceived = false;
         foreach (var slot in ScribeModSystem.EnumerateCarriedSlots(player))
         {
@@ -385,7 +387,7 @@ public sealed partial class ScribeModSystem
             foreach (var block in doc.Blocks)
             {
                 if (block.Assignment?.TargetPlayerUid != player.PlayerUID) continue;
-                if (assignmentStore!.TryMarkReceived(block.TaskId, date)) anyReceived = true;
+                if (assignmentStore!.TryMarkReceived(block.TaskId, date, timestamp)) anyReceived = true;
             }
         }
         if (anyReceived) PushAssignmentsTo(player);

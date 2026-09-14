@@ -141,6 +141,22 @@ public class ScribeAssignmentTests
     }
 
     [Fact]
+    public void Clone_RoundTripsAssignedTimestampZero()
+    {
+        // 0 is a real Calendar.TotalDays (world day one), not a missing sentinel — Clone must keep
+        // 0 rather than collapsing it to null.
+        var assignment = new ScribeAssignment("assigner", "Day 1")
+        {
+            AssignedTimestamp = 0d,
+            AcceptedTimestamp = 12.5,
+        };
+        var clone = assignment.Clone();
+        Assert.Equal(0d, clone.AssignedTimestamp);
+        Assert.Equal(12.5, clone.AcceptedTimestamp);
+        Assert.Null(clone.ReceivedTimestamp);
+    }
+
+    [Fact]
     public void RedirectFields_DefaultToNull()
     {
         var assignment = new ScribeAssignment("assigner", "Day 1");
@@ -207,5 +223,29 @@ public class ScribeAssignmentTests
         Assert.Equal("Year 1, Day 4", assignment.AssignedDate);
         Assert.Equal(ScribeAssignmentState.Accepted, assignment.State);
         Assert.True(assignment.Seen);
+        Assert.Null(assignment.AssignedTimestamp);
+    }
+
+    [Fact]
+    public void BinaryCodecRoundTripsAssignedTimestampIncludingZero()
+    {
+        var original = new ScribeDocument();
+        original.AddTask("unassigned");
+        original.AddTask("zero day");
+        original.Blocks[1].Assignment = new ScribeAssignment("player-123", "Year 1, Day 1")
+        {
+            AssignedTimestamp = 0d,
+        };
+        original.AddTask("later");
+        original.Blocks[2].Assignment = new ScribeAssignment("player-123", "Year 1, Day 4")
+        {
+            AssignedTimestamp = 12.5,
+        };
+
+        Assert.True(ScribeDocumentCodec.TryDeserialize(ScribeDocumentCodec.Serialize(original), out var restored));
+        Assert.Null(restored!.Blocks[0].Assignment);
+        Assert.Equal(0d, restored.Blocks[1].Assignment!.AssignedTimestamp);
+        Assert.Equal(12.5, restored.Blocks[2].Assignment!.AssignedTimestamp);
+        Assert.Equal("Year 1, Day 1", restored.Blocks[1].Assignment!.AssignedDate);
     }
 }

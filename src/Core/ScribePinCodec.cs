@@ -27,7 +27,12 @@ namespace Scribe.Core;
 /// the blob's version is at least that high. This lets shipped v1 pins keep loading unchanged when v2
 /// (WIP-only, never released) and v3 add fields — a naive "current + immediately-prior" window would
 /// have dropped v1 pins (data loss) once v3 landed.
-///   Current : v8 — appended per-pin <see cref="ScribePinnedRef.ExtraInfo"/> (bool + optional string), an
+///   Current : v9 — appended per-pin <see cref="ScribePinnedRef.AssignedTimestamp"/> and
+///                  <see cref="ScribePinnedRef.AcceptedTimestamp"/> (bool + optional double each), so
+///                  the Pin Tab / HUD can format those dates in the viewing player's locale
+///                  (live-localize-assignment-dates). A missing timestamp is distinct from real
+///                  <c>Calendar.TotalDays == 0</c>.
+///   v8 — appended per-pin <see cref="ScribePinnedRef.ExtraInfo"/> (bool + optional string), an
 ///                  external mod's opaque hover-detail string (add-external-mod-task-api), so the Pin
 ///                  Tab can render the hover-info icon without resolving the source document.
 ///   v7 — appended per-pin <see cref="ScribePinnedRef.AssignerUid"/> (string),
@@ -59,19 +64,21 @@ namespace Scribe.Core;
 /// Per-pin field history (in serialized order): OwnerDocId, TaskId, PinnedAtTotalHours, Orphaned,
 /// LastKnownDone, LastKnownText (v1); Kind, LinkTarget (added v2); TargetItemCode, TargetQuantity,
 /// CurrentQuantity (added v3); LinkLabel (added v4); Depth (added v5); IsAcceptedAssignment (added v6);
-/// AssignerUid, AssignedDate, AcceptedDate (added v7); ExtraInfo (added v8).
+/// AssignerUid, AssignedDate, AcceptedDate (added v7); ExtraInfo (added v8); AssignedTimestamp,
+/// AcceptedTimestamp (added v9).
 /// </summary>
 public static class ScribePinCodec
 {
     private static readonly byte[] ListMagic = "SPIN"u8.ToArray();
     private static readonly byte[] StoreMagic = "SPST"u8.ToArray();
 
-    /// <summary>Version of the pin-list blobs (SPIN/SPST). Bumped to 8 for the appended per-pin
-    /// <see cref="ScribePinnedRef.ExtraInfo"/> (add-external-mod-task-api); v7 added the assignment-
-    /// provenance fields (<see cref="ScribePinnedRef.AssignerUid"/>/<see cref="ScribePinnedRef.AssignedDate"/>/
+    /// <summary>Version of the pin-list blobs (SPIN/SPST). Bumped to 9 for the appended per-pin
+    /// assigned/accepted timestamps (live-localize-assignment-dates); v8 added ExtraInfo
+    /// (add-external-mod-task-api); v7 added the assignment-provenance fields
+    /// (<see cref="ScribePinnedRef.AssignerUid"/>/<see cref="ScribePinnedRef.AssignedDate"/>/
     /// <see cref="ScribePinnedRef.AcceptedDate"/>); v6 added the <see cref="ScribePinnedRef.IsAcceptedAssignment"/>
     /// flag.</summary>
-    private const byte PinVersion = 8;
+    private const byte PinVersion = 9;
 
     /// <summary>
     /// The OLDEST pin-list version the reader still accepts. Reads are progressive (append-only): any
@@ -243,6 +250,15 @@ public static class ScribePinCodec
             bool hasExtraInfo = pin.ExtraInfo != null;
             w.Write(hasExtraInfo);
             if (hasExtraInfo) w.Write(pin.ExtraInfo!);
+            // v9 appended fields (live-localize-assignment-dates): numeric timestamps for the assigned
+            // and accepted identity strings, so the Pin Tab can live-format those dates. Written as
+            // bool has + double when present so a missing timestamp is distinct from TotalDays == 0.
+            bool hasAssignedTimestamp = pin.AssignedTimestamp.HasValue;
+            w.Write(hasAssignedTimestamp);
+            if (hasAssignedTimestamp) w.Write(pin.AssignedTimestamp!.Value);
+            bool hasAcceptedTimestamp = pin.AcceptedTimestamp.HasValue;
+            w.Write(hasAcceptedTimestamp);
+            if (hasAcceptedTimestamp) w.Write(pin.AcceptedTimestamp!.Value);
         }
     }
 
@@ -345,6 +361,11 @@ public static class ScribePinCodec
                     if (extraInfo.Length > ScribeDocumentCodec.MaxTaskTextLength) return false;
                     pin.ExtraInfo = extraInfo;
                 }
+            }
+            if (version >= 9)
+            {
+                if (r.ReadBoolean()) pin.AssignedTimestamp = r.ReadDouble();
+                if (r.ReadBoolean()) pin.AcceptedTimestamp = r.ReadDouble();
             }
 
             list.Add(pin);

@@ -203,7 +203,88 @@ public class GuestbookStoreTests
         Assert.Equal("Alice", restored.Entries[0].PlayerName);
         Assert.Equal("1st of Harvestmonth", restored.Entries[0].InGameDate);
         Assert.Equal("Found iron!", restored.Entries[0].Note);
+        Assert.Null(restored.Entries[0].InGameTimestamp);
         Assert.Equal("Bob", restored.Entries[1].PlayerName);
+        Assert.Null(restored.Entries[1].InGameTimestamp);
+    }
+
+    [Fact]
+    public void TryAddEntry_StoresTimestampIncludingZero()
+    {
+        var store = new GuestbookStore();
+        Assert.True(store.TryAddEntry("Alice", "Day 0", 0d));
+        Assert.True(store.TryAddEntry("Bob", "Day 1", 12.5));
+        Assert.Equal(0d, store.Entries[0].InGameTimestamp);
+        Assert.Equal(12.5, store.Entries[1].InGameTimestamp);
+    }
+
+    [Fact]
+    public void TryAddEntry_DedupIgnoresTimestamp()
+    {
+        var store = new GuestbookStore();
+        store.TryAddEntry("Alice", "1st of Harvestmonth", 1d);
+        bool second = store.TryAddEntry("Alice", "1st of Harvestmonth", 99d);
+        Assert.False(second);
+        Assert.Single(store.Entries);
+        Assert.Equal(1d, store.Entries[0].InGameTimestamp);
+    }
+
+    [Fact]
+    public void Serialize_Deserialize_RoundTripsMixedTimestamps()
+    {
+        var store = new GuestbookStore();
+        store.TryAddEntry("Legacy", "old day");                 // null timestamp (v1-shaped)
+        store.TryAddEntry("Zero", "day one", 0d);
+        store.TryAddEntry("Live", "later", 42.25);
+        store.TrySetNote("Live", "later", "Came by.");
+
+        var restored = GuestbookStore.Deserialize(store.Serialize());
+
+        Assert.Equal(3, restored.Entries.Count);
+        Assert.Null(restored.Entries[0].InGameTimestamp);
+        Assert.Equal("Legacy", restored.Entries[0].PlayerName);
+        Assert.Equal(0d, restored.Entries[1].InGameTimestamp);
+        Assert.Equal("Zero", restored.Entries[1].PlayerName);
+        Assert.Equal(42.25, restored.Entries[2].InGameTimestamp);
+        Assert.Equal("Came by.", restored.Entries[2].Note);
+    }
+
+    [Fact]
+    public void Deserialize_V1Blob_LoadsWithNullTimestamp()
+    {
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write("SGBK"u8.ToArray());
+            w.Write((byte)1);
+            w.Write(1);
+            w.Write("Alice");
+            w.Write("8 August, Year 0");
+            w.Write("Left bread.");
+        }
+
+        var restored = GuestbookStore.Deserialize(ms.ToArray());
+        var entry = Assert.Single(restored.Entries);
+        Assert.Equal("Alice", entry.PlayerName);
+        Assert.Equal("8 August, Year 0", entry.InGameDate);
+        Assert.Equal("Left bread.", entry.Note);
+        Assert.Null(entry.InGameTimestamp);
+    }
+
+    [Fact]
+    public void Deserialize_V3Blob_ReturnsEmptyStore()
+    {
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write("SGBK"u8.ToArray());
+            w.Write((byte)3);
+            w.Write(1);
+            w.Write("should not load");
+        }
+
+        var restored = GuestbookStore.Deserialize(ms.ToArray());
+        Assert.Empty(restored.Entries);
     }
 
     [Fact]

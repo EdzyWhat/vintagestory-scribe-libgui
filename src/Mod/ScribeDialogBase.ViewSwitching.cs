@@ -439,13 +439,19 @@ public abstract partial class ScribeDialogBase
             .Select(b => new ScribeInboxRowData(
                 TaskId: b.TaskId, Text: b.Text, Depth: b.Depth,
                 State: b.Assignment!.State, AssignerUid: b.Assignment.AssignerUid,
-                TargetPlayerUid: b.Assignment.TargetPlayerUid, AssignedDate: b.Assignment.AssignedDate,
+                TargetPlayerUid: b.Assignment.TargetPlayerUid,
+                AssignedDate: AssignmentDisplay.Date(b.Assignment.AssignedDate, b.Assignment.AssignedTimestamp, capi.World),
                 Seen: b.Assignment.Seen, ViewerRole: ScribeAssignmentActor.Assignee,
-                DisplayName: ResolveRowItem(b).Name, AcceptedDate: b.Assignment.AcceptedDate,
-                DeclinedDate: b.Assignment.DeclinedDate, CancelledDate: b.Assignment.CancelledDate,
-                DiscardedDate: b.Assignment.DiscardedDate, CompletedDate: b.Assignment.CompletedDate,
-                AcceptedIntoLabel: b.Assignment.AcceptedIntoLabel, ReceivedDate: b.Assignment.ReceivedDate,
-                RedirectedFromUid: b.Assignment.RedirectedFromUid, RedirectedDate: b.Assignment.RedirectedDate))
+                DisplayName: ResolveRowItem(b).Name,
+                AcceptedDate: OptionalAssignmentDate(b.Assignment.AcceptedDate, b.Assignment.AcceptedTimestamp),
+                DeclinedDate: OptionalAssignmentDate(b.Assignment.DeclinedDate, b.Assignment.DeclinedTimestamp),
+                CancelledDate: OptionalAssignmentDate(b.Assignment.CancelledDate, b.Assignment.CancelledTimestamp),
+                DiscardedDate: OptionalAssignmentDate(b.Assignment.DiscardedDate, b.Assignment.DiscardedTimestamp),
+                CompletedDate: OptionalAssignmentDate(b.Assignment.CompletedDate, b.Assignment.CompletedTimestamp),
+                AcceptedIntoLabel: b.Assignment.AcceptedIntoLabel,
+                ReceivedDate: OptionalAssignmentDate(b.Assignment.ReceivedDate, b.Assignment.ReceivedTimestamp),
+                RedirectedFromUid: b.Assignment.RedirectedFromUid,
+                RedirectedDate: OptionalAssignmentDate(b.Assignment.RedirectedDate, b.Assignment.RedirectedTimestamp)))
             .ToList();
 
         return new ScribeInboxContent(
@@ -568,13 +574,23 @@ public abstract partial class ScribeDialogBase
 
     /// <summary>Resolves the (assigner name, assigned date, accepted date) triple for the assignment
     /// marker's hover tooltip on Read/Editor rows — null for a task that isn't an accepted assignment.
-    /// The Pin Tab has its own equivalent (<see cref="ScribePinnedRef"/>'s snapshotted fields; it has no
-    /// live <see cref="ScribeAssignment"/> to read from — assignment-icon-and-tab-defaults).</summary>
+    /// Dates with a timestamp follow the viewing player's locale; pre-timestamp records keep the baked
+    /// identity string. The Pin Tab has its own equivalent (<see cref="ScribePinnedRef"/>'s snapshotted
+    /// fields; it has no live <see cref="ScribeAssignment"/> to read from — assignment-icon-and-tab-defaults).</summary>
     private protected (string? name, string? assignedDate, string? acceptedDate) ResolveAssignmentTooltipInfo(
         ScribeAssignment? assignment)
         => assignment is { State: ScribeAssignmentState.Accepted }
-            ? (ResolvePlayerNameForInbox(assignment.AssignerUid), assignment.AssignedDate, assignment.AcceptedDate)
+            ? (ResolvePlayerNameForInbox(assignment.AssignerUid),
+                AssignmentDisplay.Date(assignment.AssignedDate, assignment.AssignedTimestamp, capi.World),
+                OptionalAssignmentDate(assignment.AcceptedDate, assignment.AcceptedTimestamp))
             : (null, null, null);
+
+    /// <summary>Viewer-locale calendar date when <paramref name="timestamp"/> is present; otherwise the
+    /// stored identity string (null stays null).</summary>
+    private protected string? OptionalAssignmentDate(string? baked, double? timestamp)
+        => timestamp is { } ts
+            ? AssignmentDisplay.Date(baked ?? "", ts, capi.World)
+            : baked;
 
     /// <summary>Sends a Decline/Cancel/Discard request for an assignment (§4.1's
     /// <see cref="ScribeAssignmentActionMessage"/>). Accept goes through <see cref="AcceptAssignment"/>
@@ -669,13 +685,18 @@ public abstract partial class ScribeDialogBase
             .Select(b => new ScribeInboxRowData(
                 TaskId: b.TaskId, Text: b.Text, Depth: b.Depth,
                 State: b.Assignment!.State, AssignerUid: b.Assignment.AssignerUid,
-                TargetPlayerUid: b.Assignment.TargetPlayerUid, AssignedDate: b.Assignment.AssignedDate,
+                TargetPlayerUid: b.Assignment.TargetPlayerUid,
+                AssignedDate: AssignmentDisplay.Date(b.Assignment.AssignedDate, b.Assignment.AssignedTimestamp, capi.World),
                 Seen: b.Assignment.Seen, ViewerRole: ScribeAssignmentActor.Assigner,
-                DisplayName: ResolveRowItem(b).Name, AcceptedDate: b.Assignment.AcceptedDate,
-                DeclinedDate: b.Assignment.DeclinedDate, CancelledDate: b.Assignment.CancelledDate,
-                DiscardedDate: b.Assignment.DiscardedDate, CompletedDate: b.Assignment.CompletedDate,
-                ReceivedDate: b.Assignment.ReceivedDate,
-                RedirectedFromUid: b.Assignment.RedirectedFromUid, RedirectedDate: b.Assignment.RedirectedDate))
+                DisplayName: ResolveRowItem(b).Name,
+                AcceptedDate: OptionalAssignmentDate(b.Assignment.AcceptedDate, b.Assignment.AcceptedTimestamp),
+                DeclinedDate: OptionalAssignmentDate(b.Assignment.DeclinedDate, b.Assignment.DeclinedTimestamp),
+                CancelledDate: OptionalAssignmentDate(b.Assignment.CancelledDate, b.Assignment.CancelledTimestamp),
+                DiscardedDate: OptionalAssignmentDate(b.Assignment.DiscardedDate, b.Assignment.DiscardedTimestamp),
+                CompletedDate: OptionalAssignmentDate(b.Assignment.CompletedDate, b.Assignment.CompletedTimestamp),
+                ReceivedDate: OptionalAssignmentDate(b.Assignment.ReceivedDate, b.Assignment.ReceivedTimestamp),
+                RedirectedFromUid: b.Assignment.RedirectedFromUid,
+                RedirectedDate: OptionalAssignmentDate(b.Assignment.RedirectedDate, b.Assignment.RedirectedTimestamp)))
             .ToList();
 
     /// <summary>Builds the Sent Assignment History tab (refine-assignment-desk-inbox-ux 12.2/12.3): this

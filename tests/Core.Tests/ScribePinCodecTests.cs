@@ -12,7 +12,7 @@ public class ScribePinCodecTests
         string? targetItemCode = null, int targetQuantity = 1, int currentQuantity = 0,
         string? linkLabel = null, int depth = 0, bool isAcceptedAssignment = false,
         string assignerUid = "", string assignedDate = "", string? acceptedDate = null,
-        string? extraInfo = null) => new()
+        string? extraInfo = null, double? assignedTimestamp = null, double? acceptedTimestamp = null) => new()
     {
         OwnerDocId = Guid.NewGuid(),
         TaskId = Guid.NewGuid(),
@@ -32,6 +32,8 @@ public class ScribePinCodecTests
         AssignedDate = assignedDate,
         AcceptedDate = acceptedDate,
         ExtraInfo = extraInfo,
+        AssignedTimestamp = assignedTimestamp,
+        AcceptedTimestamp = acceptedTimestamp,
     };
 
     private static void AssertPinEqual(ScribePinnedRef expected, ScribePinnedRef actual)
@@ -54,6 +56,8 @@ public class ScribePinCodecTests
         Assert.Equal(expected.AssignedDate, actual.AssignedDate);
         Assert.Equal(expected.AcceptedDate, actual.AcceptedDate);
         Assert.Equal(expected.ExtraInfo, actual.ExtraInfo);
+        Assert.Equal(expected.AssignedTimestamp, actual.AssignedTimestamp);
+        Assert.Equal(expected.AcceptedTimestamp, actual.AcceptedTimestamp);
     }
 
     // ---- SPIN: list round-trip ----
@@ -556,6 +560,82 @@ public class ScribePinCodecTests
         Assert.NotNull(restored);
         var pin = Assert.Single(restored!);
         Assert.Null(pin.ExtraInfo); // defaulted by the progressive read
+    }
+
+    [Fact]
+    public void TryDeserialize_V8Bytes_Timestamps_AreDefaulted()
+    {
+        var docId = Guid.NewGuid();
+        var taskId = Guid.NewGuid();
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write("SPIN"u8.ToArray());
+            w.Write((byte)8);
+            w.Write(1);
+            w.Write(docId.ToByteArray());
+            w.Write(taskId.ToByteArray());
+            w.Write(555.0);
+            w.Write(false);
+            w.Write(false);
+            w.Write("Copper");
+            w.Write((byte)ScribeBlockKind.Task);
+            w.Write(false);
+            w.Write(false);
+            w.Write(1);
+            w.Write(0);
+            w.Write(false);
+            w.Write(0);
+            w.Write(true);             // IsAcceptedAssignment
+            w.Write("assigner-uid");
+            w.Write("Year 1, Day 1");
+            w.Write(true);             // hasAcceptedDate
+            w.Write("Year 1, Day 2");
+            w.Write(false);            // hasExtraInfo — v8 ends here, no timestamps
+        }
+
+        bool ok = ScribePinCodec.TryDeserializeList(ms.ToArray(), out var restored);
+
+        Assert.True(ok);
+        var pin = Assert.Single(restored!);
+        Assert.Equal("Year 1, Day 1", pin.AssignedDate);
+        Assert.Equal("Year 1, Day 2", pin.AcceptedDate);
+        Assert.Null(pin.AssignedTimestamp);
+        Assert.Null(pin.AcceptedTimestamp);
+    }
+
+    [Fact]
+    public void List_RoundTrip_PreservesTimestampsIncludingZero()
+    {
+        var pins = new List<ScribePinnedRef>
+        {
+            Pin("Zero day", isAcceptedAssignment: true, assignerUid: "a", assignedDate: "Day 1",
+                acceptedDate: "Day 2", assignedTimestamp: 0d, acceptedTimestamp: 3.25),
+            Pin("Baked only", isAcceptedAssignment: true, assignerUid: "a", assignedDate: "Day 1",
+                acceptedDate: "Day 2"),
+        };
+
+        byte[] bytes = ScribePinCodec.SerializeList(pins);
+        bool ok = ScribePinCodec.TryDeserializeList(bytes, out var restored);
+
+        Assert.True(ok);
+        AssertPinEqual(pins[0], restored![0]);
+        AssertPinEqual(pins[1], restored[1]);
+        Assert.Equal(0d, restored[0].AssignedTimestamp);
+        Assert.Equal(3.25, restored[0].AcceptedTimestamp);
+        Assert.Null(restored[1].AssignedTimestamp);
+        Assert.Null(restored[1].AcceptedTimestamp);
+    }
+
+    [Fact]
+    public void TryDeserialize_V10Bytes_FailSafesFalse()
+    {
+        var pins = new List<ScribePinnedRef> { Pin("A") };
+        byte[] bytes = ScribePinCodec.SerializeList(pins);
+        bytes[4] = 10;
+
+        Assert.False(ScribePinCodec.TryDeserializeList(bytes, out var restored));
+        Assert.Null(restored);
     }
 
     [Fact]

@@ -106,6 +106,15 @@ public sealed class ScribePinnedRef
     /// true this should always be set).</summary>
     public string? AcceptedDate { get; set; }
 
+    /// <summary>Numeric in-game timestamp for <see cref="AssignedDate"/> when one was captured.
+    /// Null on a pre-v9 pin blob (those rows keep showing the baked identity string).
+    /// <c>0</c> is a real world-day-one value, not a missing sentinel.</summary>
+    public double? AssignedTimestamp { get; set; }
+
+    /// <summary>Numeric in-game timestamp for <see cref="AcceptedDate"/> when one was captured.
+    /// Null on a pre-v9 pin blob, or when the source assignment never stamped one.</summary>
+    public double? AcceptedTimestamp { get; set; }
+
     /// <summary>Last-known <see cref="ScribeBlock.ExtraInfo"/> of the pinned task — an external mod's
     /// opaque hover-detail string (add-external-mod-task-api). Snapshotted so the Pin Tab can render
     /// the hover-info icon without resolving the (possibly unloaded) source document. Null when the

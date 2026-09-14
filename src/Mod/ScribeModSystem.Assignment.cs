@@ -67,6 +67,7 @@ public sealed partial class ScribeModSystem
         }
 
         string date = NotebookHost.FormatDate(sapi);
+        double timestamp = sapi.World.Calendar.TotalDays;
         // One fresh id per SEND CALL, shared by every row it creates (refine-assignment-desk-inbox-ux
         // 12.2 root-cause fix) — see ScribeAssignment.BatchId's remarks on why `date` alone isn't a safe
         // batch-grouping key (two separate sends on the same in-game day would collide on it).
@@ -77,8 +78,8 @@ public sealed partial class ScribeModSystem
         bool viaNotice = ScribeDeliveryPolicy.RequiresNotice(deliveryMode, deliveryChoice);
 
         int createdCount = viaNotice
-            ? SendBatchViaNotice(fromPlayer, message, rows, targetUid, date, batchId)
-            : SendBatchViaLocalInboxes(fromPlayer, message, rows, targetUid, date, batchId);
+            ? SendBatchViaNotice(fromPlayer, message, rows, targetUid, date, timestamp, batchId)
+            : SendBatchViaLocalInboxes(fromPlayer, message, rows, targetUid, date, timestamp, batchId);
 
         if (createdCount == 0) return;
         Trace("send-assignment-batch from {0}: created {1} row(s) -> {2} (via {3})",
@@ -88,7 +89,7 @@ public sealed partial class ScribeModSystem
     /// <summary>The pre-existing Local Inboxes path: creates one <see cref="ScribeAssignmentStore"/> record
     /// per row directly (Unaccepted), then pushes both parties' Inbox/Sent views.</summary>
     private int SendBatchViaLocalInboxes(IServerPlayer fromPlayer, ScribeSendAssignmentBatchMessage message,
-        List<ScribeAssignmentBatchRow> rows, string targetUid, string date, Guid batchId)
+        List<ScribeAssignmentBatchRow> rows, string targetUid, string date, double timestamp, Guid batchId)
     {
         if (assignmentStore is null) return 0;
         var sentSourceTaskIds = new List<Guid>();
@@ -105,7 +106,8 @@ public sealed partial class ScribeModSystem
             if (!assignmentStore.TryCreate(assignmentId, fromPlayer.PlayerUID, targetUid, row.Text ?? "", date, out _,
                     kind: (ScribeBlockKind)row.Kind, targetItemCode: row.TargetItemCode, targetQuantity: row.TargetQuantity,
                     linkTarget: row.LinkTarget, linkLabel: row.LinkLabel, linkDescription: row.LinkDescription,
-                    recipeSignature: row.RecipeSignature, depth: row.Depth, batchId: batchId))
+                    recipeSignature: row.RecipeSignature, depth: row.Depth, batchId: batchId,
+                    assignedTimestamp: timestamp))
             {
                 Trace("send-assignment-batch from {0}: row rejected (duplicate id, blank text, or store full)", fromPlayer.PlayerName);
                 continue;
@@ -132,7 +134,7 @@ public sealed partial class ScribeModSystem
     /// output slot is already occupied — mirroring the client-side gate (task 4.5) but re-validated here as
     /// the actual authority.</summary>
     private int SendBatchViaNotice(IServerPlayer fromPlayer, ScribeSendAssignmentBatchMessage message,
-        List<ScribeAssignmentBatchRow> rows, string targetUid, string date, Guid batchId)
+        List<ScribeAssignmentBatchRow> rows, string targetUid, string date, double timestamp, Guid batchId)
     {
         if (assignmentStore is null) return 0;
         var pos = new Vintagestory.API.MathTools.BlockPos(message.X, message.Y, message.Z);
@@ -170,7 +172,10 @@ public sealed partial class ScribeModSystem
             if (!isItemKind && string.IsNullOrWhiteSpace(row.Text)) continue;
 
             var assignment = new ScribeAssignment(fromPlayer.PlayerUID, date, ScribeAssignmentState.Unaccepted,
-                seen: false, targetPlayerUid: targetUid, batchId: batchId);
+                seen: false, targetPlayerUid: targetUid, batchId: batchId)
+            {
+                AssignedTimestamp = timestamp,
+            };
             sealedDoc.AppendAssignedBlock(new ScribeBlock((ScribeBlockKind)row.Kind, row.Text ?? "", depth: row.Depth,
                 taskId: assignmentId, targetItemCode: row.TargetItemCode, targetQuantity: row.TargetQuantity,
                 linkTarget: row.LinkTarget, linkLabel: row.LinkLabel, recipeSignature: row.RecipeSignature,
@@ -183,7 +188,8 @@ public sealed partial class ScribeModSystem
             assignmentStore.TryCreateSent(assignmentId, fromPlayer.PlayerUID, targetUid, row.Text ?? "", date, out _,
                 kind: (ScribeBlockKind)row.Kind, targetItemCode: row.TargetItemCode, targetQuantity: row.TargetQuantity,
                 linkTarget: row.LinkTarget, linkLabel: row.LinkLabel, linkDescription: row.LinkDescription,
-                recipeSignature: row.RecipeSignature, depth: row.Depth, batchId: batchId);
+                recipeSignature: row.RecipeSignature, depth: row.Depth, batchId: batchId,
+                assignedTimestamp: timestamp);
 
             createdCount++;
             if (message.DeleteFromSource && TryReadGuid(row.SourceTaskId, out var sourceTaskId))
@@ -314,7 +320,7 @@ public sealed partial class ScribeModSystem
             Trace("assignment-action from {0}: illegal transition {1} on {2} — ignored", fromPlayer.PlayerName, action, assignmentId);
             return;
         }
-        StampTransitionDate(record.Assignment, NotebookHost.FormatDate(sapi));
+        StampTransitionDate(record.Assignment, NotebookHost.FormatDate(sapi), sapi.World.Calendar.TotalDays);
 
         if (action == ScribeAssignmentAction.Accept) TryPlaceAcceptedAssignment(fromPlayer, record, message);
 
@@ -488,13 +494,14 @@ public sealed partial class ScribeModSystem
         }
 
         string date = NotebookHost.FormatDate(sapi);
+        double timestamp = sapi.World.Calendar.TotalDays;
         if (assignmentOnBlock is { State: ScribeAssignmentState.Accepted } assignment)
         {
             ScribeAssignmentTransitions.TryMarkCompleted(assignment, true);
-            StampTransitionDate(assignment, date);
+            StampTransitionDate(assignment, date, timestamp);
         }
         ScribeAssignmentTransitions.TryMarkCompleted(storeAssignment, true);
-        StampTransitionDate(storeAssignment, date);
+        StampTransitionDate(storeAssignment, date, timestamp);
 
         PushAssignmentSyncToBothParties(storeAssignment.AssignerUid, storeAssignment.TargetPlayerUid);
     }
@@ -529,24 +536,39 @@ public sealed partial class ScribeModSystem
         if (assignmentOnBlock is not { State: ScribeAssignmentState.Accepted }) return;
         if (!assignmentStore.TryApplyAction(taskId, actingPlayerUid, ScribeAssignmentAction.Discard)) return;
         if (assignmentStore.TryGet(taskId)?.Assignment is { } storeAssignment)
-            StampTransitionDate(storeAssignment, NotebookHost.FormatDate(sapi));
+            StampTransitionDate(storeAssignment, NotebookHost.FormatDate(sapi), sapi.World.Calendar.TotalDays);
 
         PushAssignmentSyncToBothParties(assignmentOnBlock.AssignerUid, assignmentOnBlock.TargetPlayerUid);
     }
 
     /// <summary>Stamps the appropriate per-transition date field (refine-assignment-desk-inbox-ux triage
-    /// 2026-08-31) for whichever state <paramref name="assignment"/> is CURRENTLY in — call this
-    /// immediately after a transition actually succeeded, never speculatively. Core has no calendar
-    /// access, so this Mod-layer stamp is the only place these fields are ever set.</summary>
-    private static void StampTransitionDate(ScribeAssignment assignment, string date)
+    /// 2026-08-31) and its numeric in-game timestamp for whichever state <paramref name="assignment"/> is
+    /// CURRENTLY in — call this immediately after a transition actually succeeded, never speculatively.
+    /// Core has no calendar access, so this Mod-layer stamp is the only place these fields are ever set.</summary>
+    private static void StampTransitionDate(ScribeAssignment assignment, string date, double timestamp)
     {
         switch (assignment.State)
         {
-            case ScribeAssignmentState.Accepted: assignment.AcceptedDate = date; break;
-            case ScribeAssignmentState.Declined: assignment.DeclinedDate = date; break;
-            case ScribeAssignmentState.Cancelled: assignment.CancelledDate = date; break;
-            case ScribeAssignmentState.Discarded: assignment.DiscardedDate = date; break;
-            case ScribeAssignmentState.Completed: assignment.CompletedDate = date; break;
+            case ScribeAssignmentState.Accepted:
+                assignment.AcceptedDate = date;
+                assignment.AcceptedTimestamp = timestamp;
+                break;
+            case ScribeAssignmentState.Declined:
+                assignment.DeclinedDate = date;
+                assignment.DeclinedTimestamp = timestamp;
+                break;
+            case ScribeAssignmentState.Cancelled:
+                assignment.CancelledDate = date;
+                assignment.CancelledTimestamp = timestamp;
+                break;
+            case ScribeAssignmentState.Discarded:
+                assignment.DiscardedDate = date;
+                assignment.DiscardedTimestamp = timestamp;
+                break;
+            case ScribeAssignmentState.Completed:
+                assignment.CompletedDate = date;
+                assignment.CompletedTimestamp = timestamp;
+                break;
         }
     }
 

@@ -175,6 +175,65 @@ public class ScribeDocumentCodecTests
     }
 
     [Fact]
+    public void TryDeserialize_V12Bytes_Succeeds_AndDefaultsAssignedTimestampNull()
+    {
+        // v12 carried ExtraInfo but NOT the v13 assigned timestamp. A hand-built v12 assigned block
+        // must still read, with AssignedTimestamp defaulting to null.
+        var docId = Guid.NewGuid();
+        var taskId = Guid.NewGuid();
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write(new byte[] { (byte)'S', (byte)'C', (byte)'R', (byte)'B' });
+            w.Write((byte)12);
+            w.Write(docId.ToByteArray());
+            w.Write(1);
+            w.Write(taskId.ToByteArray());
+            w.Write((byte)ScribeBlockKind.Task);
+            w.Write(false); // done
+            w.Write(0);     // depth
+            w.Write(false); // hasAssignedToUid
+            w.Write("Existing v12 assigned task");
+            w.Write(false); // hasTargetItemCode
+            w.Write(1);
+            w.Write(0);
+            w.Write(false); // hasLinkTarget
+            w.Write(false); // hasLinkLabel
+            w.Write("");    // RecipeSignature
+            w.Write(true);  // hasAssignment
+            w.Write("assigner-uid");
+            w.Write((byte)ScribeAssignmentState.Unaccepted);
+            w.Write("Year 1, Day 1");
+            w.Write(false); // Seen
+            w.Write("target-uid");
+            w.Write(false); // hasLinkDescription
+            w.Write(false); // hasExtraInfo — v12 ends here, no assigned timestamp
+            w.Write("V12 Notes");
+        }
+
+        bool ok = ScribeDocumentCodec.TryDeserialize(ms.ToArray(), out ScribeDocument? restored);
+
+        Assert.True(ok);
+        Assert.NotNull(restored);
+        var assignment = restored!.Blocks[0].Assignment;
+        Assert.NotNull(assignment);
+        Assert.Equal("Year 1, Day 1", assignment!.AssignedDate);
+        Assert.Null(assignment.AssignedTimestamp);
+    }
+
+    [Fact]
+    public void TryDeserialize_V14Bytes_FailSafesFalse()
+    {
+        var original = new ScribeDocument();
+        original.AddTask("anything");
+        byte[] bytes = ScribeDocumentCodec.Serialize(original);
+        bytes[4] = 14;
+
+        Assert.False(ScribeDocumentCodec.TryDeserialize(bytes, out var restored));
+        Assert.Null(restored);
+    }
+
+    [Fact]
     public void RoundTrip_PreservesDocIdAndTaskIds()
     {
         var original = new ScribeDocument();

@@ -237,6 +237,38 @@ public class ScribeAssignmentStoreTests
     }
 
     [Fact]
+    public void TryCreate_StampsAssignedTimestampIncludingZero_AndOmittingLeavesNull()
+    {
+        var store = new ScribeAssignmentStore();
+        var withZero = Guid.NewGuid();
+        var omitted = Guid.NewGuid();
+        Assert.True(store.TryCreate(withZero, Assigner, Assignee, "Zero day", "Year 1, Day 1", out _,
+            assignedTimestamp: 0d));
+        Assert.True(store.TryCreate(omitted, Assigner, Assignee, "No stamp", "Year 1, Day 1", out _));
+
+        Assert.Equal(0d, store.TryGet(withZero)!.Assignment!.AssignedTimestamp);
+        Assert.Null(store.TryGet(omitted)!.Assignment!.AssignedTimestamp);
+    }
+
+    [Fact]
+    public void TryMarkReceivedAndRedirect_StampTimestampsIncludingZero()
+    {
+        var store = new ScribeAssignmentStore();
+        var id = Guid.NewGuid();
+        Assert.True(store.TryCreateSent(id, Assigner, Assignee, "Chop 10 logs", "Year 1, Day 1", out _,
+            assignedTimestamp: 0d));
+        Assert.True(store.TryMarkReceived(id, "Year 1, Day 2", receivedTimestamp: 3.25));
+        Assert.True(store.TryRedirectTarget(id, "new-target-uid", "Year 1, Day 3", redirectedTimestamp: 0d));
+
+        var assignment = store.TryGet(id)!.Assignment!;
+        Assert.Equal(0d, assignment.AssignedTimestamp);
+        Assert.Equal(3.25, assignment.ReceivedTimestamp);
+        Assert.Equal(0d, assignment.RedirectedTimestamp);
+        Assert.Equal("Year 1, Day 2", assignment.ReceivedDate);
+        Assert.Equal("Year 1, Day 3", assignment.RedirectedDate);
+    }
+
+    [Fact]
     public void TryMarkReceived_ThenAccept_BehavesLikeAnyOrdinaryUnacceptedAssignment()
     {
         var store = new ScribeAssignmentStore();
@@ -540,6 +572,90 @@ public class ScribeAssignmentStoreTests
         var record = Assert.Single(restored!);
         Assert.Null(record.Assignment!.RedirectedFromUid);
         Assert.Null(record.Assignment!.RedirectedDate);
+    }
+
+    [Fact]
+    public void TryDeserializeList_V8Blob_LoadsWithNullTimestamps()
+    {
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write("SASN"u8.ToArray());
+            w.Write((byte)8);
+            w.Write(1);
+            w.Write(Guid.NewGuid().ToByteArray());
+            w.Write((byte)ScribeBlockKind.Task);
+            w.Write("Chop 10 logs");
+            w.Write(false);
+            w.Write(1);
+            w.Write(0);
+            w.Write(false);
+            w.Write(false);
+            w.Write(false);
+            w.Write(0);
+            w.Write("");
+            w.Write(Assigner);
+            w.Write(Assignee);
+            w.Write((byte)ScribeAssignmentState.Unaccepted);
+            w.Write("Year 1, Day 1");
+            w.Write(false);
+            w.Write(Guid.NewGuid().ToByteArray());
+            w.Write(false); // AcceptedDate
+            w.Write(false);
+            w.Write(false);
+            w.Write(false);
+            w.Write(false);
+            w.Write(false); // AcceptedIntoLabel
+            w.Write(false); // HiddenFromAssignee
+            w.Write(false); // HiddenFromAssigner
+            w.Write(false); // ReceivedDate
+            w.Write(false); // RedirectedFromUid
+            w.Write(false); // RedirectedDate — v8 ends here, no timestamps
+        }
+
+        Assert.True(ScribeAssignmentStore.TryDeserializeList(ms.ToArray(), out var restored));
+        var assignment = Assert.Single(restored!).Assignment!;
+        Assert.Null(assignment.AssignedTimestamp);
+        Assert.Null(assignment.AcceptedTimestamp);
+        Assert.Null(assignment.ReceivedTimestamp);
+        Assert.Null(assignment.RedirectedTimestamp);
+        Assert.Equal("Year 1, Day 1", assignment.AssignedDate);
+    }
+
+    [Fact]
+    public void RoundTrip_SerializeList_PreservesMixedTimestampsIncludingZero()
+    {
+        var store = new ScribeAssignmentStore();
+        var live = Guid.NewGuid();
+        var zero = Guid.NewGuid();
+        var baked = Guid.NewGuid();
+        Assert.True(store.TryCreate(live, Assigner, Assignee, "Live", "Year 1, Day 2", out _,
+            assignedTimestamp: 12.5));
+        Assert.True(store.TryCreate(zero, Assigner, Assignee, "Zero", "Year 1, Day 1", out _,
+            assignedTimestamp: 0d));
+        Assert.True(store.TryCreate(baked, Assigner, Assignee, "Baked", "Year 1, Day 1", out _));
+
+        Assert.True(ScribeAssignmentStore.TryDeserializeList(
+            ScribeAssignmentStore.SerializeList(store.Received(Assignee)), out var restored));
+        Assert.Equal(3, restored!.Count);
+        Assert.Equal(12.5, restored.Single(b => b.TaskId == live).Assignment!.AssignedTimestamp);
+        Assert.Equal(0d, restored.Single(b => b.TaskId == zero).Assignment!.AssignedTimestamp);
+        Assert.Null(restored.Single(b => b.TaskId == baked).Assignment!.AssignedTimestamp);
+    }
+
+    [Fact]
+    public void TryDeserializeList_V10Blob_FailSafesEmpty()
+    {
+        using var ms = new MemoryStream();
+        using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write("SASN"u8.ToArray());
+            w.Write((byte)10);
+            w.Write(0);
+        }
+
+        Assert.False(ScribeAssignmentStore.TryDeserializeList(ms.ToArray(), out var restored));
+        Assert.Null(restored);
     }
 
     // ---- Delete (split-assignment-delete-by-viewer: per-side deletion) ----

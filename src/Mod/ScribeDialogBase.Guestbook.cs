@@ -117,7 +117,7 @@ public abstract partial class ScribeDialogBase
                                 children: new Widget[]
                                 {
                                     ScribeTaskFont.OffsetWrap(taskFont, bodySize, new Text(entry.PlayerName, bodyStyle)),
-                                    ScribeTaskFont.OffsetWrap(taskFont, dateSize, new Text(entry.InGameDate, dateStyle)),
+                                    ScribeTaskFont.OffsetWrap(taskFont, dateSize, new Text(GuestbookDisplayDate(entry), dateStyle)),
                                 })),
                         flex: 3),
                     noteSlot,
@@ -175,6 +175,13 @@ public abstract partial class ScribeDialogBase
     /// formatted date, so distinct entries never collide. Keys both the row's <see cref="ValueKey{T}"/>
     /// and its <see cref="_guestbookNoteFocusNodes"/> node.</summary>
     private static string GuestbookNoteKey(GuestbookEntry entry) => $"{entry.PlayerName}\0{entry.InGameDate}";
+
+    /// <summary>Viewer-locale calendar date when the entry carries a real timestamp; otherwise the
+    /// stored identity string (v1 blobs have no timestamp to rebuild from).</summary>
+    private string GuestbookDisplayDate(GuestbookEntry entry)
+        => entry.InGameTimestamp is { } ts
+            ? NotebookHost.FormatDateFromTimestamp(capi.World, ts)
+            : entry.InGameDate;
 
     /// <summary>Keep <see cref="_guestbookNoteFocusNodes"/> in sync with the local player's OWN entries:
     /// add a node for each new own-entry, dispose+drop nodes for entries that are gone, and reuse the rest

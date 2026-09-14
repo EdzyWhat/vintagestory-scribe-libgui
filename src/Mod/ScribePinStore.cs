@@ -103,7 +103,7 @@ public sealed class ScribePinStore
         string? targetItemCode = null, int targetQuantity = 1, int currentQuantity = 0, string? linkLabel = null,
         int depth = 0, ScribeDocument? source = null, ScribePinInsert insertEdge = ScribePinInsert.Bottom,
         bool isAcceptedAssignment = false, string assignerUid = "", string assignedDate = "",
-        string? acceptedDate = null)
+        string? acceptedDate = null, double? assignedTimestamp = null, double? acceptedTimestamp = null)
     {
         var list = _pins.TryGetValue(playerUid, out var existing) ? existing : _pins[playerUid] = new List<ScribePinnedRef>();
         if (list.Any(p => p.OwnerDocId == docId && p.TaskId == taskId)) return false; // idempotent
@@ -128,6 +128,8 @@ public sealed class ScribePinStore
             AssignerUid = assignerUid,
             AssignedDate = assignedDate,
             AcceptedDate = acceptedDate,
+            AssignedTimestamp = assignedTimestamp,
+            AcceptedTimestamp = acceptedTimestamp,
         };
         ScribePinOrdering.PlaceNewPin(list, pin, source, insertEdge);
         return true;
@@ -258,13 +260,22 @@ public sealed class ScribePinStore
             string blockAssignerUid = blockIsAcceptedAssignment ? block.Assignment!.AssignerUid : "";
             string blockAssignedDate = blockIsAcceptedAssignment ? block.Assignment!.AssignedDate : "";
             string? blockAcceptedDate = blockIsAcceptedAssignment ? block.Assignment!.AcceptedDate : null;
-            if (pin.LastKnownText != block.Text || pin.LastKnownDone != block.Done
+            double? blockAssignedTimestamp = blockIsAcceptedAssignment ? block.Assignment!.AssignedTimestamp : null;
+            double? blockAcceptedTimestamp = blockIsAcceptedAssignment ? block.Assignment!.AcceptedTimestamp : null;
+            bool identityDirty = pin.LastKnownText != block.Text || pin.LastKnownDone != block.Done
                 || pin.Kind != block.Kind || pin.LinkTarget != block.LinkTarget
                 || pin.TargetItemCode != block.TargetItemCode || pin.TargetQuantity != block.TargetQuantity
                 || pin.CurrentQuantity != block.CurrentQuantity || pin.LinkLabel != block.LinkLabel
                 || pin.Depth != block.Depth || pin.IsAcceptedAssignment != blockIsAcceptedAssignment
                 || pin.AssignerUid != blockAssignerUid || pin.AssignedDate != blockAssignedDate
-                || pin.AcceptedDate != blockAcceptedDate)
+                || pin.AcceptedDate != blockAcceptedDate;
+            // HUD dirty-check stays on identity strings so a viewing-locale date cannot desync pins.
+            // Still copy timestamps when they differ so a pre-v9 pin picks them up once the source
+            // document has them. AcceptedTimestamp is not persisted on the document, so keep the pin's
+            // existing value when the block doesn't carry one.
+            bool timestampsDirty = pin.AssignedTimestamp != (blockAssignedTimestamp ?? pin.AssignedTimestamp)
+                || pin.AcceptedTimestamp != (blockAcceptedTimestamp ?? pin.AcceptedTimestamp);
+            if (identityDirty || timestampsDirty)
             {
                 pin.LastKnownText = block.Text;
                 pin.LastKnownDone = block.Done;
@@ -284,6 +295,12 @@ public sealed class ScribePinStore
                 pin.AssignerUid = blockAssignerUid;
                 pin.AssignedDate = blockAssignedDate;
                 pin.AcceptedDate = blockAcceptedDate;
+                pin.AssignedTimestamp = blockIsAcceptedAssignment
+                    ? (blockAssignedTimestamp ?? pin.AssignedTimestamp)
+                    : null;
+                pin.AcceptedTimestamp = blockIsAcceptedAssignment
+                    ? (blockAcceptedTimestamp ?? pin.AcceptedTimestamp)
+                    : null;
                 changed = true;
             }
         }

@@ -885,7 +885,7 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     public void RecordVisitor(ICoreServerAPI sapi, IServerPlayer player)
     {
         var date = NotebookHost.FormatDate(sapi);
-        if (_guestbook.TryAddEntry(player.PlayerName, date))
+        if (_guestbook.TryAddEntry(player.PlayerName, date, sapi.World.Calendar.TotalDays))
         {
             MarkDirty();
             SendGuestbookSync(sapi, player);
@@ -895,17 +895,18 @@ public abstract class BlockEntityScribeWritingStation : BlockEntity, IRotatable,
     /// <summary>Server-only: seed fictional guestbook visitors for demo/screenshot capture. Mirrors
     /// <see cref="RecordVisitor"/> (append via <see cref="GuestbookStore.TryAddEntry"/>, optional note via
     /// <see cref="GuestbookStore.TrySetNote"/>), then persists + re-syncs the read view once via
-    /// <see cref="BlockEntity.MarkDirty"/>. Each entry is <c>(visitorName, inGameDate, note)</c>; a null/empty
-    /// note is skipped. No-op off the server. An open guestbook tab won't repaint live (a dev-tool trade-off —
-    /// reopen the block to see seeded entries); the read view refreshes via the block-entity packet.</summary>
-    public void SeedGuestbook(IEnumerable<(string VisitorName, string InGameDate, string? Note)> entries)
+    /// <see cref="BlockEntity.MarkDirty"/>. Each entry is <c>(visitorName, inGameDate, note, timestamp)</c>;
+    /// a null/empty note is skipped. No-op off the server. An open guestbook tab won't repaint live (a
+    /// dev-tool trade-off — reopen the block to see seeded entries); the read view refreshes via the
+    /// block-entity packet.</summary>
+    public void SeedGuestbook(IEnumerable<(string VisitorName, string InGameDate, string? Note, double InGameTimestamp)> entries)
     {
         if (Api is not ICoreServerAPI) return;
 
         bool changed = false;
-        foreach (var (name, date, note) in entries)
+        foreach (var (name, date, note, timestamp) in entries)
         {
-            if (_guestbook.TryAddEntry(name, date)) changed = true;
+            if (_guestbook.TryAddEntry(name, date, timestamp)) changed = true;
             if (!string.IsNullOrEmpty(note) && _guestbook.TrySetNote(name, date, note)) changed = true;
         }
 

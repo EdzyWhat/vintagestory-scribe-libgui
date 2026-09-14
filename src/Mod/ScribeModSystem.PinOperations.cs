@@ -49,6 +49,8 @@ public sealed partial class ScribeModSystem
             string assignerUid = "";
             string assignedDate = "";
             string? acceptedDate = null;
+            double? assignedTimestamp = null;
+            double? acceptedTimestamp = null;
             ScribeDocument? source = null;
             // Prefer the server's own authoritative document when available; fall back to the
             // client-supplied snapshot for items whose host is not registered server-side (e.g. Notebooks).
@@ -76,12 +78,14 @@ public sealed partial class ScribeModSystem
                         assignerUid = block.Assignment!.AssignerUid;
                         assignedDate = block.Assignment!.AssignedDate;
                         acceptedDate = block.Assignment!.AcceptedDate;
+                        assignedTimestamp = block.Assignment!.AssignedTimestamp;
+                        acceptedTimestamp = block.Assignment!.AcceptedTimestamp;
                     }
                 }
             }
             changed = pinStore.SetPin(player.PlayerUID, docId, taskId, sapi.World.Calendar.TotalHours, text, done, kind, linkTarget,
                 targetItemCode, targetQuantity, currentQuantity, linkLabel, depth, source, insertEdge, isAcceptedAssignment,
-                assignerUid, assignedDate, acceptedDate);
+                assignerUid, assignedDate, acceptedDate, assignedTimestamp, acceptedTimestamp);
         }
         else
         {

@@ -170,7 +170,7 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
                 bool isAuthor = entry.ActorName == myName;
                 Guid entryId = entry.EntryId;
                 rowContents.Add(new ScribeManualHistoryRow(
-                    entryId: entryId, actorName: entry.ActorName, inGameDate: entry.InGameDate,
+                    entryId: entryId, actorName: entry.ActorName, inGameDate: HistoryDisplay.Date(entry, capi.World),
                     detailText: isAuthor ? _manualLiveText.GetValueOrDefault(entryId, entry.Detail) : entry.Detail,
                     isAuthor: isAuthor, autoFocus: false,
                     focusNode: isAuthor ? _manualFocusNodes[entryId] : null, focusBorderColor: InputFocusBorderColor(colors),
