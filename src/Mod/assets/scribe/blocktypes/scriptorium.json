@@ -64,10 +64,6 @@
 				{
 					title: "scribe:handbook-scriptorium-views-title",
 					text: "scribe:handbook-scriptorium-views-text"
-				},
-				{
-					title: "scribe:handbook-scribe-hud-ref-title",
-					text: "scribe:handbook-scribe-hud-ref-text"
 				}
 			]
 		}
