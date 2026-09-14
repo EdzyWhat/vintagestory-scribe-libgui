@@ -14,20 +14,20 @@
 
 Short History flavor only (`scribe-mob-death-0`, optional `-1` literal, `scribe-pvp-verb-generic-0`, the two PvP message templates). Also write `src/Mod/assets/game/lang/<code>.json` for the Clockmaker line. Verify each file with `python3 build/check-locales.py`.
 
-- [ ] 3.1 Add `src/Mod/assets/scribe/lang/ru.json` (Russian) and `src/Mod/assets/game/lang/ru.json`; checker accepts them.
-- [ ] 3.2 Add `src/Mod/assets/scribe/lang/uk.json` (Ukrainian) and `src/Mod/assets/game/lang/uk.json`; checker accepts them.
-- [ ] 3.3 Add `src/Mod/assets/scribe/lang/pl.json` (Polish) and `src/Mod/assets/game/lang/pl.json`; checker accepts them.
-- [ ] 3.4 Add `src/Mod/assets/scribe/lang/de.json` (German) and `src/Mod/assets/game/lang/de.json`; checker accepts them.
-- [ ] 3.5 Add `src/Mod/assets/scribe/lang/zh-cn.json` (Simplified Chinese) and `src/Mod/assets/game/lang/zh-cn.json`; checker accepts them.
-- [ ] 3.6 Add `src/Mod/assets/scribe/lang/ja.json` (Japanese) and `src/Mod/assets/game/lang/ja.json`; checker accepts them.
-- [ ] 3.7 Add `src/Mod/assets/scribe/lang/cs.json` (Czech) and `src/Mod/assets/game/lang/cs.json`; checker accepts them.
-- [ ] 3.8 Add `src/Mod/assets/scribe/lang/sv-se.json` (Swedish; filename `sv-se`, not `sv`) and `src/Mod/assets/game/lang/sv-se.json`; checker accepts them.
-- [ ] 3.9 Add `src/Mod/assets/scribe/lang/fr.json` (French) and `src/Mod/assets/game/lang/fr.json`; checker accepts them.
-- [ ] 3.10 Add `src/Mod/assets/scribe/lang/it.json` (Italian) and `src/Mod/assets/game/lang/it.json`; checker accepts them.
+- [x] 3.1 Add `src/Mod/assets/scribe/lang/ru.json` (Russian) and `src/Mod/assets/game/lang/ru.json`; checker accepts them.
+- [x] 3.2 Add `src/Mod/assets/scribe/lang/uk.json` (Ukrainian) and `src/Mod/assets/game/lang/uk.json`; checker accepts them.
+- [x] 3.3 Add `src/Mod/assets/scribe/lang/pl.json` (Polish) and `src/Mod/assets/game/lang/pl.json`; checker accepts them.
+- [x] 3.4 Add `src/Mod/assets/scribe/lang/de.json` (German) and `src/Mod/assets/game/lang/de.json`; checker accepts them.
+- [x] 3.5 Add `src/Mod/assets/scribe/lang/zh-cn.json` (Simplified Chinese) and `src/Mod/assets/game/lang/zh-cn.json`; checker accepts them.
+- [x] 3.6 Add `src/Mod/assets/scribe/lang/ja.json` (Japanese) and `src/Mod/assets/game/lang/ja.json`; checker accepts them.
+- [x] 3.7 Add `src/Mod/assets/scribe/lang/cs.json` (Czech) and `src/Mod/assets/game/lang/cs.json`; checker accepts them.
+- [x] 3.8 Add `src/Mod/assets/scribe/lang/sv-se.json` (Swedish; filename `sv-se`, not `sv`) and `src/Mod/assets/game/lang/sv-se.json`; checker accepts them.
+- [x] 3.9 Add `src/Mod/assets/scribe/lang/fr.json` (French) and `src/Mod/assets/game/lang/fr.json`; checker accepts them.
+- [x] 3.10 Add `src/Mod/assets/scribe/lang/it.json` (Italian) and `src/Mod/assets/game/lang/it.json`; checker accepts them.
 
 ## 4. Docs, credits, playtest
 
 - [x] 4.1 Add CHANGELOG Unreleased notes: twelve shipped locales; C4BR3R4 Spanish seed (overlapping keys meaning-audited against current English, then filled); Arquimago Portuguese refreshed the same way; if C4B's pack is still installed last-loaded `es-es.json` wins. Verify the entry names both translators.
 - [x] 4.2 Credit C4BR3R4 on `docs/media/wiki/Home.md` next to Arquimago. Verify both names appear under translation credits.
 - [x] 4.3 Add TESTING.md items (via the what-to-test loop, or as tasks here): (a) client language Russian — Lectern chrome + a handbook page are Russian; (b) Brazilian Portuguese — tablet-full says 15, not 10, and Getting Started matches the current tour; (c) Spanish — C4B Lectern name, Getting Started is the current article (not Lectern-only), plus a previously-missing Inbox/Task Notice string; (d) Japanese or Chinese — dialog and handbook glyphs render (record tofu as a follow-up, do not block); (e) a short-pool locale — a new creature-death History row is one translated sentence, not an English joke. Verify the items exist under this change's heading.
-- [ ] 4.4 Restage (`./build/restage.sh`) so the new lang files are in the staged mod, and run `python3 build/check-locales.py` as the final gate. Verify the staged zip/folder contains all twelve `scribe/lang` files plus matching `game/lang` files.
+- [x] 4.4 Restage (`./build/restage.sh`) so the new lang files are in the staged mod, and run `python3 build/check-locales.py` as the final gate. Verify the staged zip/folder contains all twelve `scribe/lang` files plus matching `game/lang` files.
