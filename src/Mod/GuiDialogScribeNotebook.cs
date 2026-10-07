@@ -70,6 +70,12 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
     /// to a block position, so we never want the dialog to auto-close based on distance.</summary>
     protected override double InteractionRange => double.MaxValue;
 
+    /// <summary>Opt out of LibGUI's immersive-mouse-mode "floaty" positioning. The base projects a world
+    /// anchor onto the screen every frame, and with no block to anchor to our dummy <c>BlockPos(0)</c>
+    /// would pin the window to the world origin, so it drifts as the camera turns. Null = plain
+    /// screen-space placement (pin-carried-dialogs-in-immersive-mode). Inherited by the Clockmaker Notebook.</summary>
+    protected override WorldAnchor? Anchor => null;
+
     protected override string EmptyHintLangKey => "scribe:scribe-gui-edit-hint-notebook";
 
     /// <summary>The Notebook grants editor access immediately without a server round-trip — there is

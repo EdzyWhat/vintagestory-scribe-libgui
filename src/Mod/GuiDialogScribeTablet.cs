@@ -1,4 +1,5 @@
 using System;                    // Action (footer Settings gear seam)
+using Gui.Rendering;             // WorldAnchor (Anchor opt-out)
 using Gui.Rendering.Text;        // TextStyle (cuneiform title seam overrides)
 using Gui.Widgets.Framework;     // Widget, ThemeData, ColorScheme
 using Gui.Widgets.Layout;        // SizedBox
@@ -82,6 +83,12 @@ public class GuiDialogScribeTablet : ScribeDialogBase
     /// <summary>Disable the engine's frame-by-frame range check. The tablet is a carried item, not bound to
     /// a block position, so distance must never auto-close it (matches the Notebook).</summary>
     protected override double InteractionRange => double.MaxValue;
+
+    /// <summary>Opt out of LibGUI's immersive-mouse-mode "floaty" positioning. The base projects a world
+    /// anchor onto the screen every frame, and with no block to anchor to our dummy <c>BlockPos(0)</c>
+    /// would pin the window to the world origin, so it drifts as the camera turns. Null = plain
+    /// screen-space placement (pin-carried-dialogs-in-immersive-mode). Same opt-out as the Notebook.</summary>
+    protected override WorldAnchor? Anchor => null;
 
     /// <summary>The centered empty-document message. A WET tablet shows the editable "write here" hint; a
     /// read-only tablet's empty document (e.g. pulled blank from Creative, or fired without writing) shows a

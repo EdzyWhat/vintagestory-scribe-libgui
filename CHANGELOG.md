@@ -6,6 +6,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-10-07
+
+### Fixed
+- **With Immersive Mouse Mode on, the Notebook, Clockmaker Notebook, and Clay Tablet no longer drift across the screen as you look around.** They were being positioned from a point in the world rather than a point on the screen, so turning the camera slid them toward the screen edge. They now stay where you put them, can be dragged, and reopen at the spot you last dragged them to. Block windows (Lectern, Chalkboard, Scriptorium, Assignment Desk, Inbox) still float above their block, and nothing changes with Immersive Mouse Mode off.
+
 ## [1.4.2] - 2026-09-13
 
 ### Changed
@@ -16,49 +21,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 - **Scribe now ships translations for ten more languages, and a mechanical checker to keep them accurate.** Russian, Ukrainian, Polish, German, Simplified Chinese, Japanese, Czech, Swedish, French, and Italian join the existing Brazilian Portuguese and a newly-added Spanish. Everything read through `Lang.Get` is covered — handbook pages, buttons, item/block names, settings, empty states, and the Clockmaker's worldconfig trait line; a key a locale doesn't yet have falls back to English rather than showing raw text. Spanish is seeded from C4B Traducciones-ES's existing pack (with permission) and Portuguese from Arquimago's existing file, both meaning-audited against current English rather than copied through with stale wording — including keys the seed already had, since some had drifted from a since-rewritten English source. A new `build/check-locales.py` catches placeholder/VTML mismatches, stale or missing keys, and drift between a translated UI label and the quoted/bolded prose that references it, so a shipped file can't rot silently the way the old `pt-br.json` had.
-- **A public API for other mods to create tasks.** `ScribeModSystem.TryCreateExternalTask(player,
-  title, bodyText, extraInfo)` lets another installed mod (taking Scribe as an optional soft
-  dependency) create a task on a player's behalf with one direct, server-side call — no networking,
-  no knowledge of Scribe's document model required. `title` becomes a checkbox task; `bodyText`, if
-  also given, becomes a note nested beneath it (or stands alone if there's no title). An optional
-  `extraInfo` string — shown to the player as hover detail on the created row, never interpreted by
-  Scribe — lets the calling mod attach its own context (source, author, a pointer back to its own
-  UI). The target is resolved the same way the Handbook's "Add to Scribe" does: the player's
-  last-opened writeable Scribe item, else their first writeable one; if none is available, the
-  player is notified directly why. Notice Board is the first mod using this.
+- **A public API for other mods to create tasks.** `ScribeModSystem.TryCreateExternalTask(player, title, bodyText, extraInfo)` lets another installed mod (taking Scribe as an optional soft dependency) create a task on a player's behalf with one direct, server-side call — no networking, no knowledge of Scribe's document model required. `title` becomes a checkbox task; `bodyText`, if also given, becomes a note nested beneath it (or stands alone if there's no title). An optional `extraInfo` string — shown to the player as hover detail on the created row, never interpreted by Scribe — lets the calling mod attach its own context (source, author, a pointer back to its own UI). The target is resolved the same way the Handbook's "Add to Scribe" does: the player's last-opened writeable Scribe item, else their first writeable one; if none is available, the player is notified directly why. Notice Board is the first mod using this.
 
 ### Fixed
-- **The HUD's default position now defaults to top-left instead of top-right**, so a fresh install
-  never needs to clear the vanilla minimap (which itself defaults to top-right) in the first place.
-  Existing players are unaffected by this default change — anyone who already has a saved HUD
-  position preference (including a `TopRight` value saved only because it *was* the old default)
-  keeps rendering at that position.
-- **The top-right HUD anchor's minimap-clearance offset was wrong at any GUI Scale other than the
-  game's reference value (10).** At other settings (e.g. 8), the HUD sat a visually inconsistent
-  distance from the vanilla minimap — the offset was a single hardcoded pixel constant derived from
-  the minimap's own reference-scale footprint. The HUD now reads the open vanilla minimap dialog's
-  actual on-screen width at runtime and computes the clearance from that, so the gap stays small and
-  consistent at any GUI Scale (falling back to the old constant only if the minimap dialog isn't
-  resolvable yet).
-- **The HUD could get stuck rendered too far from its anchored corner/edge until an unrelated
-  interaction "corrected" it** (e.g. changing an offset, the anchor, or resizing the window) — most
-  visibly with pins already pinned at world load. The position math used the HUD's laid-out size,
-  but that size wasn't one of the inputs gating whether the position gets recomputed; on the first
-  frame that size is only a shrink-wrap estimate, and once the real size settled the HUD kept the
-  stale position because nothing else had changed. The laid-out size is now part of that gate, so a
-  settle is itself recognized as a reason to re-anchor.
-- **Installing Scribe silently changed other `gui`-dependent mods' default font.** Scribe registered
-  its own bundled typeface as LibGUI's shared `"sans-serif"` family — the framework-wide default
-  every `gui`-dependent mod's unstyled text resolves through, not something scoped to Scribe. Scribe
-  now names its own bundled family directly instead of aliasing the shared keyword, so other mods'
-  default text is unaffected by Scribe being installed. (A report of HudUI's temporal-stability stat
-  wrapping onto two lines prompted this fix; that specific symptom is still reproducing after this
-  change and is under separate investigation — see the next release for the resolution.)
-- **Scribe's own HUD chrome, Settings chrome, dev-tuning dialogs, and Task Notice/quest-prompt popups
-  now always render in Scribe's own bundled default face**, matching the rest of Scribe's UI, instead
-  of floating to whatever LibGUI's raw, platform-dependent `"sans-serif"` default happened to resolve
-  to on a given OS — which, once the alias above was removed, made those surfaces visibly inconsistent
-  with Scribe's own Notebook/Lectern text.
+- **The HUD's default position now defaults to top-left instead of top-right**, so a fresh install never needs to clear the vanilla minimap (which itself defaults to top-right) in the first place. Existing players are unaffected by this default change — anyone who already has a saved HUD position preference (including a `TopRight` value saved only because it *was* the old default) keeps rendering at that position.
+- **The top-right HUD anchor's minimap-clearance offset was wrong at any GUI Scale other than the game's reference value (10).** At other settings (e.g. 8), the HUD sat a visually inconsistent distance from the vanilla minimap — the offset was a single hardcoded pixel constant derived from the minimap's own reference-scale footprint. The HUD now reads the open vanilla minimap dialog's actual on-screen width at runtime and computes the clearance from that, so the gap stays small and consistent at any GUI Scale (falling back to the old constant only if the minimap dialog isn't resolvable yet).
+- **The HUD could get stuck rendered too far from its anchored corner/edge until an unrelated interaction "corrected" it** (e.g. changing an offset, the anchor, or resizing the window) — most visibly with pins already pinned at world load. The position math used the HUD's laid-out size, but that size wasn't one of the inputs gating whether the position gets recomputed; on the first frame that size is only a shrink-wrap estimate, and once the real size settled the HUD kept the stale position because nothing else had changed. The laid-out size is now part of that gate, so a settle is itself recognized as a reason to re-anchor.
+- **Installing Scribe silently changed other `gui`-dependent mods' default font.** Scribe registered its own bundled typeface as LibGUI's shared `"sans-serif"` family — the framework-wide default every `gui`-dependent mod's unstyled text resolves through, not something scoped to Scribe. Scribe now names its own bundled family directly instead of aliasing the shared keyword, so other mods' default text is unaffected by Scribe being installed. (A report of HudUI's temporal-stability stat wrapping onto two lines prompted this fix; that specific symptom is still reproducing after this change and is under separate investigation — see the next release for the resolution.)
+- **Scribe's own HUD chrome, Settings chrome, dev-tuning dialogs, and Task Notice/quest-prompt popup, now always render in Scribe's own bundled default face**, matching the rest of Scribe's UI, instead of floating to whatever LibGUI's raw, platform-dependent `"sans-serif"` default happened to resolve to on a given OS — which, once the alias above was removed, made those surfaces visibly inconsistent with Scribe's own Notebook/Lectern text.
 
 ## [1.4.1] - 2026-09-11
 

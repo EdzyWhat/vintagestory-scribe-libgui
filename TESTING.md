@@ -865,3 +865,24 @@ set stay applied while it's collapsed — you only need it expanded to *move* a 
 - [ ] `000000c7` **Check short-pool creature death.** In a short-pool locale (e.g. Russian or German),
       die to a creature with a Notebook carried — confirm the new History row is a single coherent
       translated sentence, not an English joke mixed into the template. *(add-player-locales 4.3)*
+
+## pin-carried-dialogs-in-immersive-mode
+
+> In Immersive Mouse Mode, carried-item dialogs (Notebook, Tablet, Clockmaker Notebook) stay fixed
+> on screen instead of drifting as the camera turns; block dialogs keep floating above their block.
+
+- [x] `000000c8` **Notebook stays put in Immersive Mouse Mode.** Enable Immersive Mouse Mode, open a
+      Notebook, then look around in every direction — confirm the window stays at the same screen
+      position and never slides toward an edge. *(pin-carried-dialogs-in-immersive-mode 2.2)*
+      - **Confirmed 2026-10-07** (user playtest): "Notebook static in Immersive Mouse Mode; reopens at the last dragged position."
+- [x] `000000c9` **Tablet and Clockmaker Notebook stay put; drag works.** In Immersive Mouse Mode, open a
+      Tablet and a Clockmaker Notebook and confirm both stay fixed while looking around; drag each by its
+      title bar and confirm it follows the cursor and stays where released. Note where each first opens
+      (probably centered) and whether it covers the crosshair. *(pin-carried-dialogs-in-immersive-mode 2.2)*
+      - **Confirmed 2026-10-07** (user playtest): "Tablet static and draggable. Clockmaker Notebook not separately reported (inherits the Notebook override)."
+- [x] `000000ca` **Block dialogs still float.** In Immersive Mouse Mode, open a Lectern (and a Chalkboard)
+      and turn the camera — confirm the window still tracks above its block. *(pin-carried-dialogs-in-immersive-mode 2.2)*
+      - **Confirmed 2026-10-07** (user playtest): "Reported as "old interfaces unchanged" (block dialogs not individually called out)."
+- [x] `000000cb` **No change with Immersive Mouse Mode off.** Turn it off and open a Notebook, Tablet, and
+      Lectern — confirm they open and behave as before. *(pin-carried-dialogs-in-immersive-mode 2.2)*
+      - **Confirmed 2026-10-07** (user playtest): "Reported as "old interfaces unchanged"."
