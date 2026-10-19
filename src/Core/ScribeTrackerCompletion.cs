@@ -1,8 +1,8 @@
 namespace Scribe.Core;
 
 /// <summary>
-/// What happens to a Tracker task when its carried-inventory count reaches its target
-/// (add-tracker-link-tasks D6). A per-player, client-local preference
+/// What happens to a Tracker task when its carried-inventory count reaches its target.
+/// A per-player, client-local preference
 /// (<see cref="ScribePlayerSettings.TrackerCompletion"/>): the client's count engine detects
 /// target-met and issues the matching edit through the normal server-authoritative path.
 ///

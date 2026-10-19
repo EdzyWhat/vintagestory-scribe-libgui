@@ -1,8 +1,8 @@
 namespace Scribe.Core;
 
 /// <summary>
-/// Zalgo-style text corruption for the pinned-task HUD's temporal-instability effect
-/// (hud-temporal-storm-corruption). Reproduces vanilla's "crazed" temporal-storm chat effect —
+/// Zalgo-style text corruption for the pinned-task HUD's temporal-instability effect.
+/// Reproduces vanilla's "crazed" temporal-storm chat effect —
 /// <c>EntityBehaviorTemporalStabilityAffected.destabilizeText</c> in VSSurvivalMod, which is
 /// <c>private</c> and so not callable — by walking the string and, per base character, with
 /// probability equal to the corruption strength, appending one random combining diacritic mark from
