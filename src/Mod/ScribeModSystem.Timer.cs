@@ -67,9 +67,7 @@ public sealed partial class ScribeModSystem
         };
         MyTimerChanged?.Invoke();
 
-        // Start the alarm sound when the timer first transitions to Fired, but only if
-        // the clip would still be in its natural playing window (i.e. a relog with a near-
-        // expired fire should not restart the alarm from the beginning).
+        // Start the alarm on the first transition to Fired, only while the clip is still in its playing window (a relog near expiry must not restart it).
         if (capi is not null
             && message.Status == TimerStatus.Fired
             && previousStatus != TimerStatus.Fired
@@ -80,7 +78,6 @@ public sealed partial class ScribeModSystem
             _activeAlarm = new ScribeAlarmSound(capi, () => MySettings.TimerAlarmVolume / 100f);
         }
 
-        // Refresh the Timer tab in any open Clockmaker's Notebook dialog.
         if (capi is not null)
         {
             foreach (var dialog in capi.Gui.OpenedGuis.OfType<GuiDialogClockmakerNotebook>())
@@ -88,24 +85,19 @@ public sealed partial class ScribeModSystem
         }
     }
 
-    /// <summary>Called by both dismiss paths (HUD fired-row click and Stop Timer button) to begin the
-    /// alarm sound's 500 ms easeInOutSine fade-out. Safe to call when no alarm is playing.</summary>
+    /// <summary>Begins the alarm's 500 ms fade-out; called by both dismiss paths (HUD fired-row click, Stop Timer). Safe when no alarm is playing.</summary>
     public void DismissAlarm()
     {
         _activeAlarm?.Dismiss();
     }
 
-    /// <summary>1-second server tick: decrement running timers and fire at zero. A timer's
-    /// <c>RemainingSeconds</c> is stored in the unit the player entered. In RealTime mode it counts down
-    /// one-per-real-second; in InGame mode it drains at the world's in-game time rate, so an entered
-    /// in-game duration fires when that much in-game time has actually passed (≈30× faster than real time
-    /// by default). This also means InGame timers pause exactly when the world does.
+    /// <summary>1-second server tick: decrements running timers and fires at zero. <c>RemainingSeconds</c> is in
+    /// the unit entered: RealTime counts one per real second; InGame drains at the world's in-game rate (so it
+    /// pauses when the world does).
     ///
-    /// <para>The server does NOT auto-clear a fired timer: the 30 s auto-disappear is governed by the
-    /// player's client-local <see cref="ScribePlayerSettings.TimerAutoDisappear"/> preference, which only
-    /// the client knows, so the client drives the clear. The server merely
-    /// accumulates <see cref="TimerStore.FiredElapsedSeconds"/> on the fired store so the flash window is
-    /// persisted and resumes (not restarts) across a relog.</para></summary>
+    /// <para>The server does NOT auto-clear a fired timer: auto-disappear depends on the client-local
+    /// <see cref="ScribePlayerSettings.TimerAutoDisappear"/>, so the client drives the clear. The server only
+    /// accumulates <see cref="TimerStore.FiredElapsedSeconds"/> so the flash window resumes across a relog.</para></summary>
     private void OnTimerTick(float _)
     {
         if (sapi is null || timerStores is null) return;
@@ -129,9 +121,7 @@ public sealed partial class ScribeModSystem
             }
             else if (store.Status == TimerStatus.Fired)
             {
-                // Keep the persisted fired-elapsed advancing (real seconds — the flash window is real-time
-                // regardless of the timer's countdown mode). No auto-removal here: the client sends the
-                // clear when its "Timer disappears" preference is on and the window elapses.
+                // Real seconds regardless of countdown mode; no auto-removal (the client sends the clear).
                 store.FiredElapsedSeconds += 1.0;
             }
         }
