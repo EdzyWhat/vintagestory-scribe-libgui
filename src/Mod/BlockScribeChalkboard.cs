@@ -3,14 +3,10 @@ using Vintagestory.API.Common;
 namespace Scribe;
 
 /// <summary>
-/// The Chalkboard block. A thin subclass of <see cref="BlockScribeWritingStation"/> — the same shared
-/// placed document as the Lectern (lock, autosave, guestbook, all task kinds) — differing only in its
-/// interaction-hint lang keys and, unlike the floor-standing Lectern/Scriptorium, in placement: the
-/// chalkboard hangs on a wall like a vanilla painting. Wall attachment + the north/east/south/west
-/// facing come from the <c>HorizontalAttachable</c> behavior and the <c>side</c> block variant declared
-/// in <c>chalkboard.json</c>; here we only opt out of the base's floor requirement and player-facing
-/// mesh rotation. Its distinct model/textures/theme/background live in the
-/// asset JSON, <see cref="BlockEntityScribeChalkboard"/>, and <see cref="GuiDialogScribeChalkboard"/>.
+/// The Chalkboard block, a thin subclass of <see cref="BlockScribeWritingStation"/> that hangs on a wall
+/// like a vanilla painting. Wall attachment and facing come from the <c>HorizontalAttachable</c> behavior
+/// and the <c>side</c> variant in <c>chalkboard.json</c>; this class only opts out of the base's floor
+/// requirement and player-facing mesh rotation.
 /// </summary>
 public sealed class BlockScribeChalkboard : BlockScribeWritingStation
 {

@@ -12,27 +12,20 @@ using Vintagestory.API.Server;
 namespace Scribe;
 
 /// <summary>
-/// Zero-compile-dependency bridge to the CarryOn mod family (modid <c>carryon</c>), so a Notebook
-/// or Tablet stored inside a block the player is currently carrying (e.g. a chest on their back)
-/// still participates in Death/PvpKill/TemporalStorm history recording.
+/// Zero-compile-dependency bridge to the CarryOn mod family (modid <c>carryon</c>), so a Notebook or
+/// Tablet inside a block the player is carrying still participates in Death/PvpKill/TemporalStorm history.
 ///
-/// CarryOn freezes a carried container's entire block-entity state — including its own inventory
-/// — into a raw <see cref="ITreeAttribute"/> (<c>CarriedBlock.BlockEntityData</c>) rather than a
-/// live <see cref="IInventory"/>, so it needs an entirely separate detection path from
-/// <c>ScribeModSystem.History.cs</c>'s <see cref="InventoryBasePlayer"/> scan. Project convention
-/// (see this repo's CLAUDE.md "no new mod dependencies" guardrail) forbids a compile-time reference
-/// to CarryOnLib, so every CarryOn-specific type is reached only via reflection: <c>IsModEnabled</c>
-/// and <c>GetModSystem(string)</c> are vanilla API, and once a <c>CarryOn.API.Common.Models.CarriedBlock</c>
-/// instance is in hand its <c>ItemStack</c> and <c>BlockEntityData</c> properties are themselves
-/// vanilla types (<see cref="ItemStack"/>, <see cref="ITreeAttribute"/>), so the recursive
-/// notebook-finding walk below is ordinary, fully-typed vanilla code — reflection is isolated to the
-/// handful of members touched in <see cref="EnsureInitialized"/>/<see cref="FindCarriedNotebooks"/>/
-/// <see cref="TrySetCarried"/>.
+/// CarryOn freezes a carried container's block-entity state, including its inventory, into a raw
+/// <see cref="ITreeAttribute"/> (<c>CarriedBlock.BlockEntityData</c>) rather than a live
+/// <see cref="IInventory"/>, so this needs a detection path separate from the <see cref="InventoryBasePlayer"/>
+/// scan in <c>ScribeModSystem.History.cs</c>. The "no new mod dependencies" guardrail forbids a
+/// compile-time reference to CarryOnLib, so CarryOn types are reached only via reflection (confined to
+/// <see cref="EnsureInitialized"/>/<see cref="FindCarriedNotebooks"/>/<see cref="TrySetCarried"/>); the
+/// nested tree walk uses vanilla types.
 ///
-/// Every reflected call is wrapped in try/catch. The first failure (CarryOn not installed, or a
-/// future version whose API shape has moved) permanently disables the bridge for the rest of the
-/// session after a single log line — this only runs on rare events (death, PvP kill, storm rising
-/// edge), never per-tick, so there is no per-event exception risk to guard against beyond the first.
+/// Every reflected call is wrapped in try/catch. The first failure (CarryOn missing, or an API shape that
+/// moved) permanently disables the bridge for the session after one log line. It only runs on rare events
+/// (death, PvP kill, storm rising edge), never per-tick.
 /// </summary>
 internal sealed class CarryOnBridge
 {
@@ -48,9 +41,8 @@ internal sealed class CarryOnBridge
 
     public CarryOnBridge(ICoreServerAPI sapi) => _sapi = sapi;
 
-    /// <summary>Whether a usable CarryOn install was found. False both when CarryOn isn't installed
-    /// and when reflection failed against an installed CarryOn — callers treat both the same way:
-    /// skip this detection path entirely.</summary>
+    /// <summary>Whether a usable CarryOn install was found. False both when CarryOn isn't installed and
+    /// when reflection failed; callers skip this detection path either way.</summary>
     private bool IsActive => !_disabled && _carryManager is not null;
 
     private void EnsureInitialized()
@@ -95,10 +87,9 @@ internal sealed class CarryOnBridge
             reason);
     }
 
-    /// <summary>Finds every Notebook/Tablet stack (recursively, including inside attached blocks —
-    /// e.g. a sign on a carried chest) inside anything <paramref name="entity"/> is currently
-    /// carrying via CarryOn. Never throws; a reflection failure disables the bridge and yields
-    /// nothing, for this call and every one after it this session.</summary>
+    /// <summary>Finds every Notebook/Tablet stack (recursively, including inside attached blocks) inside
+    /// anything <paramref name="entity"/> is carrying via CarryOn. Never throws; a reflection failure
+    /// disables the bridge and yields nothing from then on.</summary>
     public IEnumerable<CarriedNotebookRef> FindCarriedNotebooks(Entity entity)
     {
         EnsureInitialized();
@@ -123,11 +114,9 @@ internal sealed class CarryOnBridge
         return results;
     }
 
-    /// <summary>Re-persists and re-syncs a mutated carried-block graph through CarryOn's own
-    /// SetCarried, so an in-place edit to one of its nested trees (via
-    /// <see cref="CarriedNotebookRef.FlushHistory"/>) actually sticks rather than being silently
-    /// discarded on the next save/sync. Always passes the OUTERMOST carried block for a given
-    /// CarrySlot — SetCarried has no way to address a nested attached block independently.</summary>
+    /// <summary>Re-persists and re-syncs a mutated carried-block graph through CarryOn's SetCarried so an
+    /// in-place edit to a nested tree (via <see cref="CarriedNotebookRef.FlushHistory"/>) sticks. Always
+    /// passes the OUTERMOST carried block for a CarrySlot: SetCarried cannot address a nested block.</summary>
     private void TrySetCarried(Entity entity, object rootCarriedBlock)
     {
         if (!IsActive) return;
@@ -141,10 +130,9 @@ internal sealed class CarryOnBridge
         }
     }
 
-    /// <summary>Walks one carried block's own frozen data plus every attached block's, recursively
-    /// (an attached block can itself have further attachments). All persistence for anything found
-    /// anywhere in this graph routes back through <paramref name="rootCarriedBlock"/> — the single
-    /// object CarryOn's SetCarried actually knows how to re-save.</summary>
+    /// <summary>Walks one carried block's frozen data plus every attached block's, recursively. Persistence
+    /// for anything found routes back through <paramref name="rootCarriedBlock"/>, the only object
+    /// SetCarried can re-save.</summary>
     private void CollectFrom(object rootCarriedBlock, object carriedBlockObj, Entity entity, List<CarriedNotebookRef> results)
     {
         if (GetProp(carriedBlockObj, "BlockEntityData") is ITreeAttribute tree)
@@ -161,14 +149,10 @@ internal sealed class CarryOnBridge
 
     private static object? GetProp(object obj, string name) => obj.GetType().GetProperty(name)?.GetValue(obj);
 
-    /// <summary>Generic recursive search for a Notebook/Tablet ItemStack inside a frozen
-    /// block-entity tree — ordinary vanilla-typed code, no reflection. There is no single universal
-    /// "the inventory" key (each container BlockEntity serializes its own slots), so this recurses
-    /// into every nested <see cref="ITreeAttribute"/> value and checks every
-    /// <see cref="ItemstackAttribute"/> leaf — matching how vanilla's own
-    /// <c>InventoryBase.SlotsToTreeAttributes</c> nests slots (an inventory sub-tree, itself holding
-    /// an individually-keyed <c>"slots"</c> sub-tree of per-slot <c>ItemstackAttribute</c>s), without
-    /// needing to know either key name in advance.</summary>
+    /// <summary>Recursively searches a frozen block-entity tree for Notebook/Tablet ItemStacks. Container
+    /// block entities serialize their slots under differing keys, so this recurses into every nested
+    /// <see cref="ITreeAttribute"/> and checks every <see cref="ItemstackAttribute"/> leaf rather than
+    /// relying on key names.</summary>
     private void WalkTree(ITreeAttribute tree, object rootCarriedBlock, Entity entity, List<CarriedNotebookRef> results)
     {
         foreach (var kv in tree)
@@ -186,11 +170,9 @@ internal sealed class CarryOnBridge
         }
     }
 
-    /// <summary>A Notebook/Tablet found inside a CarryOn-carried block, with everything needed to
-    /// record and persist a history entry on it. Deliberately NOT a <see cref="NotebookHost"/>: that
-    /// class assumes a live <see cref="ItemSlot"/> to mark dirty and push a network sync through, and
-    /// there is no such slot here — the stack lives inside a frozen attribute tree, not an open
-    /// inventory. Persistence instead goes through CarryOn's own SetCarried via
+    /// <summary>A Notebook/Tablet found inside a CarryOn-carried block. Deliberately NOT a
+    /// <see cref="NotebookHost"/>: that assumes a live <see cref="ItemSlot"/> to mark dirty and sync, but
+    /// this stack lives in a frozen attribute tree. Persistence goes through
     /// <see cref="CarryOnBridge.TrySetCarried"/>.</summary>
     public sealed class CarriedNotebookRef : IHistoryRecordable
     {
@@ -216,11 +198,9 @@ internal sealed class CarryOnBridge
 
         public HistoryStore History { get; }
 
-        /// <summary>Writes the mutated history back into the stack, writes the stack back into its
-        /// parent tree (never assume in-place mutation of a retrieved ItemStack persists — the same
-        /// explicit write-back discipline <see cref="NotebookHost.Flush"/> follows), then re-persists
-        /// and re-syncs the whole carried-block graph through CarryOn's own SetCarried so the change
-        /// actually sticks rather than being silently dropped on the next save.</summary>
+        /// <summary>Writes the mutated history into the stack and the stack back into its parent tree
+        /// (in-place mutation of a retrieved ItemStack is not assumed to persist, as in
+        /// <see cref="NotebookHost.Flush"/>), then re-persists the whole carried-block graph via SetCarried.</summary>
         public void FlushHistory()
         {
             _stack.Attributes.SetBytes("scribeHistory", History.Serialize());

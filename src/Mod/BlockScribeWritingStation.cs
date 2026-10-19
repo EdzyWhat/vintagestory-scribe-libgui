@@ -7,10 +7,9 @@ using Vintagestory.API.Util;
 namespace Scribe;
 
 /// <summary>
-/// Shared base for Scribe's placed writing-station blocks (the Lectern and the Scriptorium). Stays thin —
-/// all interaction/document logic lives on <see cref="BlockEntityScribeWritingStation"/>, mirroring the
-/// vanilla Sign block/block-entity split. Subclasses supply only their own interaction-hint lang keys and
-/// the object-cache key for those hints.
+/// Shared base for Scribe's placed writing-station blocks (Lectern, Scriptorium, ...). Stays thin: all
+/// interaction/document logic lives on <see cref="BlockEntityScribeWritingStation"/>, mirroring the vanilla
+/// Sign block/block-entity split.
 /// </summary>
 public abstract class BlockScribeWritingStation : Block
 {
@@ -18,8 +17,7 @@ public abstract class BlockScribeWritingStation : Block
 
     // ── Per-block config supplied by the concrete subclass ────────────────
 
-    /// <summary>Object-cache key for this block's cached world-interaction hints. MUST be distinct per
-    /// block type so the Lectern and Scriptorium do not share a cache entry.</summary>
+    /// <summary>Object-cache key for this block's cached world-interaction hints; MUST be distinct per block type.</summary>
     protected abstract string InteractionsCacheKey { get; }
 
     /// <summary>Lang code for the plain right-click "open/read" hint.</summary>
@@ -28,28 +26,21 @@ public abstract class BlockScribeWritingStation : Block
     /// <summary>Lang code for the shift+right-click "edit/quick-add" hint.</summary>
     protected abstract string EditHintLangCode { get; }
 
-    /// <summary>Whether the placement described by <paramref name="blockSel"/> is standing furniture that
-    /// requires a solid ground cell below it (the Lectern/Scriptorium/Assignment Desk default, true for
-    /// every placement). A wall-mounted-only variant (the Chalkboard) overrides this to always
-    /// <c>false</c> so <see cref="CanPlaceBlock"/> skips the below-floor test and lets a wall-attach
-    /// behavior (vanilla <c>HorizontalAttachable</c>) place it against a vertical face instead. Takes the
-    /// selection (rather than being a fixed per-class bool) because a dual-mode block (the Inbox) needs
-    /// this to vary per placement attempt, not per block class — see <see cref="BlockInbox"/>.</summary>
+    /// <summary>Whether the placement needs a solid ground cell below it (default true). A wall-mounted
+    /// variant overrides this to <c>false</c> so <see cref="CanPlaceBlock"/> skips the floor test and
+    /// <c>HorizontalAttachable</c> can place it on a vertical face. Takes the selection because a dual-mode
+    /// block (the Inbox) varies per placement attempt — see <see cref="BlockInbox"/>.</summary>
     protected virtual bool RequiresSolidGround(BlockSelection blockSel) => true;
 
-    /// <summary>Whether placing this block rotates it to face the player via
-    /// <see cref="BlockEntityScribeWritingStation.MeshAngleRad"/> (the Lectern/Scriptorium default). A
-    /// wall-mounted variant overrides this to <c>false</c>: its facing comes from the <c>side</c> block
-    /// variant (+ <c>rotateYByType</c> on the shape), so no per-instance mesh angle is stored and the
-    /// base's <c>RotatedBox</c> stays null (collision/selection fall back to the JSON boxes, which carry
-    /// their own <c>rotateYByType</c>).</summary>
+    /// <summary>Whether placing rotates the block to face the player via
+    /// <see cref="BlockEntityScribeWritingStation.MeshAngleRad"/> (default true). A wall-mounted variant
+    /// overrides this to <c>false</c>: its facing comes from the <c>side</c> variant + the shape's
+    /// <c>rotateYByType</c>, so no mesh angle is stored and <c>RotatedBox</c> stays null.</summary>
     protected virtual bool OrientTowardPlayerOnPlace => true;
 
-    /// <summary>Whether the placed/held-item tooltip appends a "Title: ..." line at all (the
-    /// Lectern/Scriptorium default — they carry a real, renamable document title). The Inbox and
-    /// Assignment Desk blocks override this to <c>false</c> — they share this base's
-    /// placement/interaction/carry-over plumbing, but have no document title a player can ever set, so
-    /// the line would only ever read as a permanent "(untitled)" placeholder.</summary>
+    /// <summary>Whether the placed/held-item tooltip appends a "Title: ..." line (default true). The Inbox
+    /// and Assignment Desk override this to <c>false</c>: they have no settable title, so the line would
+    /// only ever read "(untitled)".</summary>
     protected virtual bool ShowsDocumentTitleInTooltip => true;
 
     public override void OnLoaded(ICoreAPI api)
@@ -58,9 +49,7 @@ public abstract class BlockScribeWritingStation : Block
 
         if (api.Side != EnumAppSide.Client) return;
 
-        // Two hints, one per view mode -- matches the tooltip pattern vanilla containers use
-        // (e.g. BlockLabeledChest's "shift+right-click: write" hint) so looking at the block
-        // explains both interactions, not just its name.
+        // Two hints, one per view mode, matching vanilla container tooltips (e.g. BlockLabeledChest).
         interactions = ObjectCacheUtil.GetOrCreate(api, InteractionsCacheKey, () => new WorldInteraction[]
         {
             new WorldInteraction
@@ -82,9 +71,8 @@ public abstract class BlockScribeWritingStation : Block
         return interactions.Append(base.GetPlacedBlockInteractionHelp(world, selection, forPlayer));
     }
 
-    /// <summary>Append the document's title (quoted, or an untitled placeholder) to the placed-block
-    /// look-at tooltip, read live from the block entity's document. A missing block entity falls back
-    /// to the placeholder via <see cref="ScribeTooltip.FormatTitleLine"/> (null → untitled).</summary>
+    /// <summary>Appends the document's title (or an untitled placeholder) to the look-at tooltip, read live
+    /// from the block entity; a missing block entity yields the placeholder.</summary>
     public override string GetPlacedBlockInfo(IWorldAccessor world, BlockPos pos, IPlayer forPlayer)
     {
         string baseInfo = base.GetPlacedBlockInfo(world, pos, forPlayer);
@@ -96,10 +84,8 @@ public abstract class BlockScribeWritingStation : Block
         return baseInfo + ScribeTooltip.FormatTitleLine(title) + "\n";
     }
 
-    /// <summary>Append the title to the block's held/inventory tooltip too, matching the Notebook items.
-    /// A broken-and-picked-up writing station carries its document in the stack (see <see cref="GetDrops"/>
-    /// / <see cref="OnPickBlock"/>), so the title reads via <see cref="ScribeDocumentAttributes.TryReadFrom"/>;
-    /// a freshly-crafted block with no stored document shows the untitled placeholder.</summary>
+    /// <summary>Appends the title to the held/inventory tooltip too. A picked-up station carries its document
+    /// in the stack (see <see cref="GetDrops"/>); a freshly-crafted block shows the untitled placeholder.</summary>
     public override void GetHeldItemInfo(ItemSlot inSlot, StringBuilder dsc, IWorldAccessor world, bool withDebugInfo)
     {
         base.GetHeldItemInfo(inSlot, dsc, world, withDebugInfo);
@@ -116,11 +102,8 @@ public abstract class BlockScribeWritingStation : Block
     {
         if (world.BlockAccessor.GetBlockEntity(blockSel.Position) is BlockEntityScribeWritingStation station)
         {
-            // Shift+right-click is the unified quick-add gesture:
-            // take the editor lock AND drop a fresh empty task at the top with the caret focused. Plain
-            // right-click opens Read; the plain-editor view is still reachable via the Editor nav tab.
-            // (A placed writing station is furniture, so there is no Ctrl+Shift ground-place branch here —
-            // that only applies to the carried Notebook/Tablet items.)
+            // Shift+right-click is the unified quick-add gesture: take the editor lock AND drop a fresh
+            // empty task at the top with the caret focused. Plain right-click opens Read.
             bool quickAdd = byPlayer.Entity?.Controls?.ShiftKey == true;
             station.OnRightClick(byPlayer, wantEditor: quickAdd, quickAdd: quickAdd);
         }
@@ -128,25 +111,19 @@ public abstract class BlockScribeWritingStation : Block
     }
 
     /// <summary>
-    /// Floor-only placement: the block is a standing piece of furniture, so it may only be placed on a
-    /// solid ground surface — never a wall or ceiling. We check the cell directly BELOW the placement for
-    /// a solid up-face (via <see cref="Block.CanAttachBlockAt"/>, the same test vanilla furniture's
-    /// <c>UnstableFalling</c> behavior uses), rather than testing which face was clicked — a player can
-    /// click a side face yet still be placing onto a valid floor cell. We deliberately do NOT use the
-    /// <c>UnstableFalling</c> behavior, which would also turn the block into a falling physics entity
-    /// when its support is mined — undesirable for a block that stores a document and resolves pins by
-    /// position. <c>base.TryPlaceBlock</c> invokes this before placing, so a rejection here also
-    /// short-circuits the orientation logic below. The failure toast reuses the vanilla lang key
-    /// <c>placefailure-requiresolidground</c> ("Cannot place this block here. Requires a solid ground").
+    /// Floor-only placement: requires a solid up-face in the cell directly BELOW the placement (via
+    /// <see cref="Block.CanAttachBlockAt"/>, as vanilla furniture's <c>UnstableFalling</c> does), not a check
+    /// of the clicked face — a side-face click can still place onto a valid floor cell. Deliberately does NOT
+    /// use <c>UnstableFalling</c>, which would turn the block into a falling entity when its support is mined.
+    /// <c>base.TryPlaceBlock</c> invokes this first. The failure toast reuses the vanilla key
+    /// <c>placefailure-requiresolidground</c>.
     /// </summary>
     public override bool CanPlaceBlock(IWorldAccessor world, IPlayer byPlayer, BlockSelection blockSel, ref string failureCode)
     {
         if (!base.CanPlaceBlock(world, byPlayer, blockSel, ref failureCode)) return false;
 
-        // A wall-mounted variant (chalkboard) opts out of the floor requirement: its attach-to-wall
-        // check is handled by the HorizontalAttachable behavior instead. A
-        // dual-mode block (the Inbox) opts out only for a horizontal-face placement, since it still needs
-        // this exact floor check for its own ground mode.
+        // A wall-mounted variant opts out (HorizontalAttachable handles it); a dual-mode block (the
+        // Inbox) opts out only for a horizontal-face placement and keeps this floor check for ground mode.
         if (!RequiresSolidGround(blockSel)) return true;
 
         var posBelow = blockSel.Position.DownCopy();
@@ -161,21 +138,18 @@ public abstract class BlockScribeWritingStation : Block
     }
 
     /// <summary>
-    /// Place the block, then turn it to face the player — the vanilla Sign/clutter idiom. We compute
-    /// the horizontal angle from the player toward the block and snap it to 22.5° steps (matching the
-    /// vanilla <c>BlockClutter</c> that authored these shapes), then store it as the block entity's
-    /// <see cref="BlockEntityScribeWritingStation.MeshAngleRad"/>. The reused shape's authored front is
-    /// SOUTH (+Z) at angle 0, so this raw angle points the reading face at the player with no extra
-    /// offset (see VSAPI-NOTES "Block placement orientation").
+    /// Places the block, then turns it to face the player (vanilla Sign/clutter idiom): the horizontal
+    /// angle toward the player, snapped to 22.5° steps (as <c>BlockClutter</c>), stored as
+    /// <see cref="BlockEntityScribeWritingStation.MeshAngleRad"/>. The shape's authored front is SOUTH (+Z)
+    /// at angle 0, so no extra offset is needed (see VSAPI-NOTES "Block placement orientation").
     /// </summary>
     public override bool TryPlaceBlock(IWorldAccessor world, IPlayer byPlayer, ItemStack itemstack, BlockSelection blockSel, ref string failureCode)
     {
         if (!base.TryPlaceBlock(world, byPlayer, itemstack, blockSel, ref failureCode)) return false;
 
-        // A wall-mounted variant takes its facing from the `side` block variant + shape rotateYByType,
-        // so it stores no per-instance mesh angle. Skipping this also avoids
-        // reading a block entity at blockSel.Position that the HorizontalAttachable behavior may have
-        // placed at an offset cell.
+        // A wall-mounted variant takes its facing from the `side` variant and stores no mesh angle.
+        // Skipping also avoids reading a block entity at blockSel.Position that HorizontalAttachable
+        // may have placed at an offset cell.
         if (!OrientTowardPlayerOnPlace) return true;
 
         if (world.BlockAccessor.GetBlockEntity(blockSel.Position) is BlockEntityScribeWritingStation station
@@ -192,8 +166,7 @@ public abstract class BlockScribeWritingStation : Block
         return true;
     }
 
-    /// <summary>Surface the block entity's rotated collision/selection box so the hitbox tracks the
-    /// placed facing (vanilla Sign pattern); falls back to the JSON box before an angle is set.</summary>
+    /// <summary>Surfaces the block entity's rotated collision box so the hitbox tracks the facing; falls back to the JSON box.</summary>
     public override Cuboidf[] GetCollisionBoxes(IBlockAccessor blockAccessor, BlockPos pos)
     {
         if (blockAccessor.GetBlockEntity(pos) is BlockEntityScribeWritingStation { RotatedBox: { } box }) return box;
@@ -207,11 +180,8 @@ public abstract class BlockScribeWritingStation : Block
     }
 
     /// <summary>
-    /// Carry the block's document (with its stable ids) onto the item produced when the block is
-    /// broken, so a break→re-place round-trip restores the same content and pins keep resolving. Both
-    /// drop paths run while the block entity is still alive (before RemoveBlockEntity), so the document
-    /// is readable here. Precedent: vanilla clutter-book / falling-block "carry BE data onto the item".
-    /// Content is only truly lost if the dropped item despawns.
+    /// Carries the block's document (with its stable ids) onto the dropped item so break→re-place restores
+    /// content and pins. Both drop paths run while the block entity is still alive (before RemoveBlockEntity).
     /// </summary>
     public override ItemStack[] GetDrops(IWorldAccessor world, BlockPos pos, IPlayer byPlayer, float dropQuantityMultiplier = 1f)
     {
@@ -223,13 +193,11 @@ public abstract class BlockScribeWritingStation : Block
         return drops;
     }
 
-    /// <summary>Middle-click pick: the picked stack also carries the current document, so picking and
-    /// re-placing (creative) preserves content and ids just like break→re-place.</summary>
+    /// <summary>Middle-click pick: the picked stack also carries the current document, like break→re-place.</summary>
     public override ItemStack OnPickBlock(IWorldAccessor world, BlockPos pos)
     {
         var stack = base.OnPickBlock(world, pos);
-        // base can return null (nothing to pick); the API declares the return non-nullable, so match
-        // that and only stamp a real stack.
+        // base can return null (nothing to pick) though the API declares non-nullable; only stamp a real stack.
         if (stack is not null && world.BlockAccessor.GetBlockEntity(pos) is BlockEntityScribeWritingStation station)
         {
             ScribeDocumentAttributes.WriteTo(stack, station.Document);
