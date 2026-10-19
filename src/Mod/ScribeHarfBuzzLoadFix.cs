@@ -11,9 +11,8 @@ using Vintagestory.API.Common;
 namespace Scribe;
 
 /// <summary>Bounded classification of the current process's ability to attempt the glibc
-/// <c>RTLD_DEEPBIND</c> isolation (broaden-linux-harfbuzz-fix design.md's "platform gating,"
-/// tested independently of the actual native/Harmony machinery in
-/// <c>ScribeHarfBuzzLoadFixTests</c>).</summary>
+/// <c>RTLD_DEEPBIND</c> isolation (platform gating, tested independently of the actual
+/// native/Harmony machinery in <c>ScribeHarfBuzzLoadFixTests</c>).</summary>
 internal enum HarfBuzzPlatformSupport
 {
     /// <summary>Not Linux (macOS, Windows) — the symbol-interposition bug this fix targets doesn't
@@ -37,17 +36,10 @@ internal enum HarfBuzzPlatformSupport
 /// libharfbuzz already resident in the process (confirmed via coredumpctl backtrace on KDE Plasma:
 /// <c>hb_font_create</c> in the bundled <c>.so</c> landing in the system's <c>.so</c> instead,
 /// corrupting the heap until <c>free()</c> aborts — GTK and Qt desktops can both preload a system
-/// HarfBuzz the same way, so this isn't KDE-specific). See
-/// <c>openspec/changes/fix-linux-harfbuzz-symbol-collision</c>,
-/// <c>broaden-linux-harfbuzz-fix/design.md</c>, and this fix's own
-/// <c>strengthen-harfbuzz-linux-fix/design.md</c> for the evidence trail and the reasoning below.
+/// HarfBuzz the same way, so this isn't KDE-specific).
 ///
-/// <para><b>Deterministic replacement, not a startup-order race.</b> An earlier version of this fix
-/// raced <c>gui</c>'s own loader: it raw-<c>dlopen</c>'d the bundled <c>.so</c> itself, before
-/// <c>gui</c>'s <c>StartClientSide</c> ran, relying on the OS deduping <c>dlopen</c> calls by
-/// canonical path so <c>gui</c>'s later, unflagged load of the same path transparently reused the
-/// already-deep-bound handle. That only protected users because Scribe's own startup order was
-/// tuned to beat <c>gui</c>'s. This version instead Harmony-patches
+/// <para><b>Deterministic replacement, not a startup-order race.</b> The fix does not race
+/// <c>gui</c>'s own loader; it Harmony-patches
 /// <c>Gui.NativeLibraryLoader.Register()</c> — an <c>internal</c>, parameterless, single-purpose
 /// method (confirmed by decompiling the shipped <c>Gui.dll</c>: its entire body registers exactly
 /// one <see cref="NativeLibrary.SetDllImportResolver(System.Reflection.Assembly, System.Runtime.InteropServices.DllImportResolver)"/>
@@ -73,13 +65,11 @@ internal enum HarfBuzzPlatformSupport
 /// Vintage Story auto-discovers every <see cref="ModSystem"/> in a mod's assembly, so a second small
 /// ModSystem class alongside <see cref="ScribeModSystem"/> is a normal, supported pattern — and it
 /// keeps this fix's lifecycle (its own <see cref="Harmony"/> instance, patched/unpatched here) fully
-/// isolated from Scribe's own startup sequence. An earlier version of this fix lived inside
-/// <see cref="ScribeModSystem"/> itself at a very low <c>ExecuteOrder</c>, which dragged Scribe's
-/// WHOLE <c>StartClientSide</c> ahead of <c>gui</c>'s own — crashing macOS startup outright (see the
-/// git history on this file for that regression). This version's patch is applied in
-/// <see cref="StartPre"/>, which runs before ANY mod's <c>StartClientSide</c> — since the patch only
-/// needs to be IN PLACE before <c>gui</c>'s <c>StartClientSide</c> calls <c>Register()</c>, not
-/// racing anything, there is no <c>ExecuteOrder</c> tuning to get wrong here.</para>
+/// isolated from Scribe's own startup sequence (a low <c>ExecuteOrder</c> on <see cref="ScribeModSystem"/>
+/// would drag Scribe's whole <c>StartClientSide</c> ahead of <c>gui</c>'s). The patch is applied in
+/// <see cref="StartPre"/>, which runs before ANY mod's <c>StartClientSide</c> — the patch only
+/// needs to be IN PLACE before <c>gui</c>'s <c>StartClientSide</c> calls <c>Register()</c>, so there is
+/// no <c>ExecuteOrder</c> tuning involved.</para>
 /// </summary>
 public sealed class ScribeHarfBuzzLoadFix : ModSystem
 {
@@ -216,8 +206,7 @@ public sealed class ScribeHarfBuzzLoadFix : ModSystem
     }
 
     /// <summary>Locates the bundled <c>native/&lt;rid&gt;/native/</c> directory relative to the loaded
-    /// HarfBuzzSharp assembly — the same layout the fix's prior dlopen-race version already confirmed
-    /// works in production.</summary>
+    /// HarfBuzzSharp assembly.</summary>
     private static string? FindNativeDir(Assembly assembly)
     {
         string? assemblyDir = Path.GetDirectoryName(assembly.Location);

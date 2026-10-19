@@ -19,9 +19,8 @@ using Vintagestory.API.Config;   // Lang
 namespace Scribe;
 
 /// <summary>One assignment record as rendered by the shared Inbox tab, plus the viewing player's role
-/// relative to it (Assignee for a Received-list row, Assigner for a Sent-list row — design.md Decision
-/// 5: one shared row shape for both, not a divergent one-off). A value snapshot, mirroring
-/// <see cref="ScribeReadRowData"/>'s discipline.</summary>
+/// relative to it (Assignee for a Received-list row, Assigner for a Sent-list row; one shared row shape serves both).
+/// A value snapshot, mirroring <see cref="ScribeReadRowData"/>.</summary>
 internal readonly record struct ScribeInboxRowData(
     Guid TaskId, string Text, int Depth, ScribeAssignmentState State, string AssignerUid,
     string TargetPlayerUid, string AssignedDate, bool Seen, ScribeAssignmentActor ViewerRole,
@@ -30,27 +29,24 @@ internal readonly record struct ScribeInboxRowData(
     string? AcceptedIntoLabel = null, string? ReceivedDate = null,
     string? RedirectedFromUid = null, string? RedirectedDate = null)
 {
-    /// <summary>What this row actually shows (playtest 2026-08-31 bug fix): a Task/Text row's own
-    /// authored <see cref="Text"/> is blank by convention for a Tracker/Link/Craft row (its label lives
-    /// on <see cref="ScribeBlock.TargetItemCode"/>/<see cref="ScribeBlock.LinkTarget"/> instead — see
-    /// <see cref="ScribeAssignmentStore.TryCreate"/>'s remarks) — this Inbox/Sent-history row previously
-    /// rendered <see cref="Text"/> unconditionally and showed those kinds blank. The caller resolves
+    /// <summary>What this row shows: <see cref="Text"/> is blank by convention for a
+    /// Tracker/Link/Craft row (its label lives on
+    /// <see cref="ScribeBlock.TargetItemCode"/>/<see cref="ScribeBlock.LinkTarget"/> instead — see
+    /// <see cref="ScribeAssignmentStore.TryCreate"/>'s remarks), so the row shows <see cref="DisplayName"/>
+    /// when present. The caller resolves
     /// <see cref="DisplayName"/> the same way the read view does (<c>ScribeDialogBase.ResolveRowItem</c>)
     /// and this falls back to <see cref="Text"/> when it's null (every Task/Text row).</summary>
     public string Label => DisplayName ?? Text;
 }
 
 /// <summary>
-/// The shared Inbox tab content (add-assignment-and-quest-support §7 / <c>inbox-tab</c> spec): a state
+/// The shared Inbox tab content: a state
 /// filter-chip row, always visible, above a scrollable list of expand/collapse rows. One implementation,
 /// shared by the standalone Inbox block, the Assignment Desk's Inbox tab, and the nav-button-opened Inbox
-/// view on Lectern/Scriptorium/Chalkboard (§7.5) — none of them fork this widget.
+/// view on Lectern/Scriptorium/Chalkboard — none of them fork this widget.
 ///
-/// <para>NOT YET WIRED (§7.1 note): a row has no completable checkbox/tracker control yet, because the
-/// assignment store (<see cref="Scribe.Core.ScribeAssignmentStore"/>) doesn't track a Done flag at all —
-/// that only exists once the assigned content is placed into the Assignee's own document at Accept time
-/// (§9.1, not yet built). Until then a row shows only its text, depth indent, and state chip, per the
-/// spec's "if applicable" carve-out.</para>
+/// <para>A row has no completable checkbox/tracker control: it shows only its text, depth indent, and
+/// state chip.</para>
 /// </summary>
 internal sealed class ScribeInboxContent : StatefulWidget
 {
@@ -103,7 +99,7 @@ internal sealed class ScribeInboxContent : StatefulWidget
     /// locally-applied change; the row updates once the server's resync arrives.</summary>
     public Action<Guid, ScribeAssignmentAction> OnAction { get; }
     /// <summary>Requests an Accept transition naming the resolved placement target
-    /// (assignment-state-machine's placement requirement). Defaults to a no-op — irrelevant for a
+    /// (the Accept transition requires a placement). Defaults to a no-op — irrelevant for a
     /// Sent-history view (<see cref="ScribeAssignmentActor.Assigner"/> never renders an Accept control).</summary>
     public Action<Guid, ScribeAcceptCandidate> OnAccept { get; }
     /// <summary>This player's current Accept-placement candidates (held item alone, or every eligible
@@ -112,33 +108,32 @@ internal sealed class ScribeInboxContent : StatefulWidget
     /// empty — irrelevant for a Sent-history view.</summary>
     public IReadOnlyList<ScribeAcceptCandidate> AcceptCandidates { get; }
     /// <summary>Requests permanent deletion of a terminal-state assignment record
-    /// (manage-terminal-assignment-records). The server re-validates the terminal-state and
+    /// The server re-validates the terminal-state and
     /// Assigner-or-Assignee restrictions — this is a request, not a locally-applied change; the row
     /// disappears once the server's resync arrives. Defaults to a no-op.</summary>
     public Action<Guid> OnDelete { get; }
-    /// <summary>Which filter-chip group is active — lifted out of this widget's own State (manage-terminal-
-    /// assignment-records) so the dialog's title-bar expand/collapse-all toggle can compute "currently
+    /// <summary>Which filter-chip group is active — lifted out of this widget's own State so the dialog's title-bar expand/collapse-all toggle can compute "currently
     /// visible rows" the same way this content does. Owned and persisted by the dialog; a filter tap routes
     /// through <see cref="OnFilterGroupChanged"/> rather than a local <c>SetState</c>.</summary>
     public ScribeAssignmentFilterGroup ActiveFilterGroup { get; }
     public Action<ScribeAssignmentFilterGroup> OnFilterGroupChanged { get; }
     /// <summary>Whether the row for the given TaskId is currently expanded — lifted out of each row's own
-    /// State (manage-terminal-assignment-records) into one dialog-owned set, for the same reason as
+    /// State into one dialog-owned set, for the same reason as
     /// <see cref="ActiveFilterGroup"/>: the title-bar toggle needs to read and bulk-mutate it.</summary>
     public Func<Guid, bool> IsExpanded { get; }
     public Action<Guid> OnToggleExpand { get; }
     public ScribeRowStyle Style { get; }
     /// <summary>Dialog-owned scroll controller — NOT disposed here, matching <see cref="ScribeReadContent"/>.</summary>
     public ScrollController ScrollController { get; }
-    /// <summary>Row 2 subtitle label/descriptor lang keys (unify-tab-header-layout 2.5) — this class renders
-    /// both the shared Inbox tab AND the Sent Assignment History tab, which are otherwise byte-identical
+    /// <summary>Row 2 subtitle label/descriptor lang keys — this class renders
+    /// both the shared Inbox tab AND the Sent Assignment History tab, which are otherwise identical
     /// (same filter-pill row, same list layout), so the caller supplies distinct text for each rather than
     /// this widget guessing which role it's playing.</summary>
     public string LabelLangKey { get; }
     public string DescriptorLangKey { get; }
     public string EmptyHintLangKey { get; }
     /// <summary>Whether <see cref="ScribeTabHeader.Build"/> renders its Row 2 subtitle line, read from
-    /// <c>modSystem.VisualTuning.ShowSubtitleRow</c> (add-subtitle-row-configkit-toggle).</summary>
+    /// <c>modSystem.VisualTuning.ShowSubtitleRow</c>.</summary>
     public bool ShowSubtitleRow { get; }
 
     public override State CreateState() => new ScribeInboxContentState();
@@ -169,10 +164,8 @@ internal sealed class ScribeInboxContentState : State<ScribeInboxContent>
             ? new Center(child: new Text(
                 Lang.Get(Widget.EmptyHintLangKey),
                 new TextStyle { Color = colors.OnSurfaceVariant, SoftWrap = true, Align = TextAlignment.Center }))
-            // 8-unit top padding lives INSIDE the scroll region (unify-tab-header-layout §7, doubled from
-            // 4 per 2026-09-09 playtest feedback) so the durable divider above sits flush against the
-            // viewport and this breathing room scrolls away with the content, instead of the old fixed gap
-            // outside the scroll region.
+            // The 8-unit top padding lives INSIDE the scroll region so the divider above sits flush
+            // against the viewport and this breathing room scrolls away with the content.
             : new Scrollbar(
                 controller: Widget.ScrollController,
                 child: new SingleChildScrollView(
@@ -192,15 +185,12 @@ internal sealed class ScribeInboxContentState : State<ScribeInboxContent>
                             .ToList()))))
             { AutoHide = false };
 
-        // Shared Row 2 subtitle + Row 3 (the filter-pill row, already on the target divider spacing) + the
-        // durable divider (unify-tab-header-layout 2.5).
+        // Shared Row 2 subtitle + Row 3 (the filter-pill row) + the divider.
         Widget header = ScribeTabHeader.Build(colors, style, Widget.LabelLangKey, Widget.DescriptorLangKey, Widget.ShowSubtitleRow, filterRow);
 
         // Rooted in the same Task Text Font + inset every other tab uses (ScribeReadContent/
-        // ScribePinnedContent/the Guestbook/the Timer tab) — this tab used to return its Column bare, so
-        // its Divider spanned edge-to-edge instead of sitting inset like theirs (refine-assignment-desk-
-        // inbox-ux 11.1). Top inset reduced from 10 to 4 (2026-09-08 playtest feedback: 6px less gap
-        // between the title bar and the Row 2 subtitle); left/right/bottom stay 10 like every other tab.
+        // ScribePinnedContent/the Guestbook/the Timer tab), so the Divider sits inset like theirs. The top
+        // inset is 4 (a tighter gap between the title bar and the Row 2 subtitle); left/right/bottom are 10.
         return ScribeTextDefaults.Wrap(style.TaskFontFamily, style.FontSize, new Padding(
             EdgeInsets.Ltrb(10, 4, 10, 10),
             child: new Column(
@@ -213,9 +203,8 @@ internal sealed class ScribeInboxContentState : State<ScribeInboxContent>
                 })));
     }
 
-    /// <summary>One radio-button-style pill per filter group (inbox-tab: "the active/inactive state of
-    /// every chip is visible without opening any additional control") — filled when it's the sole active
-    /// group, outlined otherwise. Tapping one selects it exclusively (triage 2026-08-31).</summary>
+    /// <summary>One radio-button-style pill per filter group — filled when it's the sole active
+    /// group, outlined otherwise. Tapping one selects it exclusively.</summary>
     private Widget BuildFilterChip(ScribeAssignmentFilterGroup group, ColorScheme colors, int count)
     {
         bool active = Widget.ActiveFilterGroup == group;
@@ -243,9 +232,9 @@ internal sealed class ScribeInboxContentState : State<ScribeInboxContent>
 }
 
 /// <summary>Lang key + thematic color for an assignment state's chip, shared by every row's own compact
-/// state chip (inbox-tab requirements). The filter-CHIP row's own labels/colors are a separate, coarser
-/// grouping — see <see cref="ScribeAssignmentFilterGroups"/> — since triage 2026-08-31 combined three of
-/// these six states into one filter pill while keeping their per-row chips visually distinct.</summary>
+/// state chip. The filter-CHIP row's own labels/colors are a separate, coarser
+/// grouping — see <see cref="ScribeAssignmentFilterGroups"/> — which combines three of
+/// these states into one filter pill while keeping their per-row chips visually distinct.</summary>
 internal static class ScribeAssignmentChip
 {
     public static (string LangKey, Vector4 Color) For(ScribeAssignmentState state, ColorScheme colors) => state switch
@@ -261,9 +250,9 @@ internal static class ScribeAssignmentChip
     };
 }
 
-/// <summary>The Inbox/Sent-history filter-chip row's groups (triage 2026-08-31): coarser than
+/// <summary>The Inbox/Sent-history filter-chip row's groups: coarser than
 /// <see cref="ScribeAssignmentState"/> — <see cref="RejectedGroup"/> combines Declined/Cancelled/Discarded
-/// into one pill, and <see cref="All"/> is a new group with no per-row-chip equivalent. The pill row acts
+/// into one pill, and <see cref="All"/> is a group with no per-row-chip equivalent. The pill row acts
 /// as radio buttons (<see cref="ScribeInboxContentState"/>): exactly one group is visible at a time.</summary>
 internal enum ScribeAssignmentFilterGroup
 {
@@ -296,9 +285,8 @@ internal static class ScribeAssignmentFilterGroups
 
     /// <summary>Lang key + representative swatch color for the pill itself (distinct from any one row's
     /// own state-chip color for <see cref="ScribeAssignmentFilterGroup.RejectedGroup"/>, which spans three
-    /// visually-different per-row chips). Uses Declined's red (glance feedback on 14.10, 2026-08-31: "mark
-    /// this complete, but update color of the combined pill to Declined") rather than the blended
-    /// Discarded color a per-row Discarded chip still uses on its own.</summary>
+    /// visually-different per-row chips). Uses Declined's red rather than the blended
+    /// Discarded color a per-row Discarded chip uses on its own.</summary>
     public static (string LangKey, Vector4 Color) LabelAndColor(ScribeAssignmentFilterGroup group) => group switch
     {
         ScribeAssignmentFilterGroup.All => ("scribe:scribe-assignment-filter-all", ScribeRowConstants.AssignmentChipAll),
@@ -310,10 +298,10 @@ internal static class ScribeAssignmentFilterGroups
     };
 }
 
-/// <summary>One Inbox row: a leading chevron (the sole expand/collapse trigger — inbox-tab), the task
+/// <summary>One Inbox row: a leading chevron (the sole expand/collapse trigger), the task
 /// text, depth indent, and a compact state chip when collapsed; assigner name, in-game date, and any
-/// legal state-change action(s) additionally when expanded. Its expanded/collapsed state (§7.1) is lifted
-/// out of this widget's own State (manage-terminal-assignment-records) into <see cref="Expanded"/>/
+/// legal state-change action(s) additionally when expanded. Its expanded/collapsed state is lifted
+/// out of this widget's own State into <see cref="Expanded"/>/
 /// <see cref="OnToggleExpand"/>, owned by the dialog, so the title-bar expand/collapse-all toggle can read
 /// and bulk-mutate it. Still keyed by the assignment's stable TaskId so its OTHER State (the Accept
 /// picker) survives a data refresh (see <see cref="ScribeInboxContentState"/>'s remarks on reconcile).</summary>
@@ -357,10 +345,9 @@ internal sealed class ScribeInboxRowState : State<ScribeInboxRow>
     /// <summary>Selected index into <see cref="ScribeInboxRow.AcceptCandidates"/> when more than one
     /// exists (the placement picker). Lives on this State so it survives a data-only reconcile.</summary>
     private int selectedCandidateIndex;
-    /// <summary>Whether the placement picker is currently revealed (playtest fix 2026-08-30: the picker
-    /// used to render unconditionally alongside the Accept button, which could crowd/overflow the row's
-    /// narrow content width and leave the Accept button unreachable). Accept is now a two-step tap when
-    /// there's more than one candidate: the first tap reveals the picker + a second Accept to confirm.</summary>
+    /// <summary>Whether the placement picker is currently revealed. With more than one candidate, Accept is
+    /// a two-step tap: the first tap reveals the picker + a second Accept to confirm, so the picker never
+    /// crowds the row's narrow content width.</summary>
     private bool showAcceptPicker;
 
     public override Widget Build(BuildContext context)
@@ -369,9 +356,8 @@ internal sealed class ScribeInboxRowState : State<ScribeInboxRow>
         var data = Widget.Data;
         var style = Widget.Style;
 
-        // Leading chevron — the SOLE expand/collapse trigger (inbox-tab: "no other click target on the
-        // row ... toggles expand/collapse"). Reuses the existing triangle glyphs registered for the
-        // editor's subtask/drag affordances rather than a new asset.
+        // Leading chevron — the SOLE expand/collapse trigger. Reuses the triangle glyphs registered for
+        // the editor's subtask/drag affordances.
         Widget chevron = new ScribeRowButton(
             iconName: Widget.Expanded ? "scribetriangledown" : "scribetriangleright",
             iconColor: colors.OnSurfaceVariant,
@@ -415,7 +401,7 @@ internal sealed class ScribeInboxRowState : State<ScribeInboxRow>
     }
 
     /// <summary>Assigner, in-game date, and any legal state-change action(s) for the viewing player's role
-    /// (inbox-tab: "An expanded row shows assigner, date, and legal actions"). A terminal state shows the
+    /// A terminal state shows the
     /// metadata but no action row.</summary>
     private Widget BuildExpandedDetail(BuildContext context, ScribeInboxRowData data, ColorScheme colors, ScribeRowStyle style)
     {
@@ -425,14 +411,13 @@ internal sealed class ScribeInboxRowState : State<ScribeInboxRow>
         {
             new Text(Lang.Get("scribe:scribe-assignment-assigned-by", assignerName, data.AssignedDate), metaStyle),
         };
-        // Received stub (refine-task-notice-ux): the moment a Task Notice's Sent-state record actually
+        // Received stub: the moment a Task Notice's Sent-state record actually
         // reached the Assignee's inventory. Precedes AcceptedDate chronologically and can coexist with it
         // (an Accepted/terminal row was Received first) — only absent for a non-notice assignment, which
         // never passes through the Sent/Received states at all.
         if (data.ReceivedDate is { } receivedDate)
             metaLines.Add(new Text(Lang.Get("scribe:scribe-assignment-received-on", receivedDate), metaStyle));
-        // Per-transition history stubs (triage 2026-08-31: "we should also see stubs for when it was
-        // accepted, discarded, etc."). AcceptedDate can coexist with a terminal date (Accepted always
+        // Per-transition date stubs. AcceptedDate can coexist with a terminal date (Accepted always
         // precedes Completed/Discarded); the four terminal dates are mutually exclusive by construction.
         if (data.AcceptedDate is { } acceptedDate)
             metaLines.Add(new Text(data.AcceptedIntoLabel is { } acceptedIntoLabel
@@ -446,7 +431,7 @@ internal sealed class ScribeInboxRowState : State<ScribeInboxRow>
             metaLines.Add(new Text(Lang.Get("scribe:scribe-assignment-discarded-on", discardedDate), metaStyle));
         if (data.CompletedDate is { } completedDate)
             metaLines.Add(new Text(Lang.Get("scribe:scribe-assignment-completed-on", completedDate), metaStyle));
-        // Redirect trace (add-task-notice-redirect-confirm design D5): a non-recipient holder's confirmed
+        // Redirect trace: a non-recipient holder's confirmed
         // Accept redirected this record's target — not gated by ViewerRole, so it also shows (harmlessly)
         // in the redirected-to player's own Inbox view of the same record.
         if (data.RedirectedFromUid is { } redirectedFromUid && data.RedirectedDate is { } redirectedDate)
@@ -475,7 +460,7 @@ internal sealed class ScribeInboxRowState : State<ScribeInboxRow>
                 () => Widget.OnAction(data.TaskId, ScribeAssignmentAction.Cancel), colors));
         }
 
-        // Terminal-record deletion (manage-terminal-assignment-records): the ONE control a terminal row
+        // Terminal-record deletion: the ONE control a terminal row
         // shows when expanded, for either party (Assigner or Assignee) — never a state-change action, so
         // it's independent of the ViewerRole/State branches above, which only ever populate Unaccepted/
         // Accepted actions.
@@ -508,11 +493,11 @@ internal sealed class ScribeInboxRowState : State<ScribeInboxRow>
     }
 
     /// <summary>The Accept control, gated by <see cref="ScribeInboxRow.AcceptCandidates"/>
-    /// (assignment-state-machine's placement requirement): disabled with an explanatory tooltip when
+    /// (the Accept transition requires a placement): disabled with an explanatory tooltip when
     /// nothing is eligible; a plain Accept button naming the sole candidate when exactly one is (the held
     /// item always wins outright and never reaches the multi-candidate branch — see
     /// <c>ScribeDialogBase.ComputeAcceptCandidates</c>). With more than one candidate, Accept is a TWO-STEP
-    /// tap (playtest fix 2026-08-30): the first tap only reveals the picker (stacked above a second Accept
+    /// tap: the first tap only reveals the picker (stacked above a second Accept
     /// that actually confirms) rather than rendering picker + button side by side, which could overflow the
     /// row's width in the Assignment Desk/Inbox's narrow 1:1 content region and leave Accept unreachable.</summary>
     private Widget BuildAcceptControl(BuildContext context, ScribeInboxRowData data, ColorScheme colors)
@@ -521,11 +506,9 @@ internal sealed class ScribeInboxRowState : State<ScribeInboxRow>
         if (candidates.Count == 0)
         {
             return new Tooltip(
-                // Secondary (transparent + bordered), not Primary (triage 2026-08-31: a disabled Primary
-                // button still paints its full amber fill — LibGUI's Button has no disabled-background
-                // variant, only a 45%-opacity dim on the label — so grey-text-on-solid-amber read as
-                // active, not inert). Secondary's own dim label plus its transparent fill together read
-                // clearly as "can't tap this" without needing a custom style override.
+                // Secondary (transparent + bordered), not Primary: LibGUI's Button has no disabled-background
+                // variant, only a 45%-opacity dim on the label, so a disabled Primary would still paint its
+                // full amber fill and read as active. Secondary's dim label plus transparent fill read as inert.
                 child: new Button(
                     child: new Text(Lang.Get("scribe:scribe-assignment-action-accept"),
                         new TextStyle { FontSize = 13, Color = colors.OnSurfaceVariant, FontFamily = ScribeTaskFont.ButtonFamily }),

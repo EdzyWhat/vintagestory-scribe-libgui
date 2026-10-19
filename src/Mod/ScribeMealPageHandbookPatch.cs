@@ -9,7 +9,7 @@ namespace Scribe;
 
 /// <summary>
 /// Client-side Harmony postfix that appends a single "Add Link" clickable link to the bottom of every
-/// cooked-meal (and pie) Handbook page (add-meal-page-scribe-link, playtest 6.4). Cooked meals render
+/// cooked-meal (and pie) Handbook page. Cooked meals render
 /// through <see cref="GuiHandbookMealRecipePage"/>, a different page class than ordinary items — its text
 /// is built by <c>GetPageText</c>, which NEVER calls
 /// <c>CollectibleBehaviorHandbookTextAndExtraInfo.GetHandbookInfo</c> (the method the item-page patch

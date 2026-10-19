@@ -36,55 +36,48 @@ public sealed partial class ScribeModSystem
         RegisterSvgIcon(api, "scribeclose", new AssetLocation("scribe", "textures/icons/close.svg"));
         RegisterSvgIcon(api, "scribeedit", new AssetLocation("scribe", "textures/icons/edit.svg"));
         RegisterSvgIcon(api, "scribegear", new AssetLocation("scribe", "textures/icons/gear.svg"));
-        // Pinned-HUD-only gear-ring variant (feedback 2026-08-16): the dialog Settings tabs keep the solid
-        // "scribegear" above; only ScribeHudGearButton uses this hollow-ring gear.
+        // Pinned-HUD-only gear-ring variant: the dialog Settings tabs use the solid "scribegear" above;
+        // only ScribeHudGearButton uses this hollow-ring gear.
         RegisterSvgIcon(api, "scribegearhud", new AssetLocation("scribe", "textures/icons/gear-hud.svg"));
         RegisterSvgIcon(api, "scribecheck", new AssetLocation("scribe", "textures/icons/check.svg"));
         RegisterSvgIcon(api, "scribeguest",   new AssetLocation("scribe", "textures/icons/guestbook.svg"));
-        // Sent Assignment History nav icon (triage 2026-09-01: "correct icon, but I want the open-book
-        // glyph used for task Links instead") — same book.svg as scribebook below.
+        // Sent Assignment History nav icon — same book.svg as scribebook below.
         RegisterSvgIcon(api, "scribehistory", new AssetLocation("scribe", "textures/icons/book.svg"));
         RegisterSvgIcon(api, "scribetimer",   new AssetLocation("scribe", "textures/icons/timer.svg"));
         RegisterSvgIcon(api, "scribeinfo",    new AssetLocation("scribe", "textures/icons/info.svg"));
-        // Inbox Inventory tab only (feedback 2026-09-06): a 2x2 grid of outlined squares, replacing the
-        // borrowed open-book glyph placeholder. The Scriptorium's Transcribe tab keeps scribebook below
-        // (2026-09-06 fix: an earlier pass here accidentally swapped it to this grid icon too).
+        // Inbox Inventory tab only: a 2x2 grid of outlined squares. The Scriptorium's Transcribe tab
+        // uses scribebook below.
         RegisterSvgIcon(api, "scribeinventory", new AssetLocation("scribe", "textures/icons/grid.svg"));
-        // Guide-page Link icon (add-tracker-link-tasks 7.6): a guide/explainer page has no item to draw, so
+        // Guide-page Link icon: a guide/explainer page has no item to draw, so
         // its Link row shows this generic open-book glyph instead of an ItemStackDisplay. Also the
         // Scriptorium's Transcribe tab icon (see scribeinventory comment above).
         RegisterSvgIcon(api, "scribebook",    new AssetLocation("scribe", "textures/icons/book.svg"));
-        // Quest Link marker (quest-link-icon-and-color): an exclamation mark in a circle, distinct from the
+        // Quest Link marker: an exclamation mark in a circle, distinct from the
         // book glyph a guide-page Link shows — a rotated derivative of info.svg (see quest.svg).
         RegisterSvgIcon(api, "scribequest",   new AssetLocation("scribe", "textures/icons/quest.svg"));
         // Static VS Quest objective marker: a bullseye communicates a target/criterion without implying
         // that the row opens the quest dialog or a guide page.
         RegisterSvgIcon(api, "scribeobjective", new AssetLocation("scribe", "textures/icons/bullseye.svg"));
-        // Drag-reorder feedback glyphs (replace-drag-wash-with-grip-arrows): the grabbed row's grip
-        // becomes ◀ and the prospective drop row's grip becomes ▶, replacing the old row-background washes.
+        // Drag-reorder feedback glyphs: the grabbed row's grip becomes ◀ and the prospective drop row's
+        // grip becomes ▶.
         RegisterSvgIcon(api, "scribetriangleleft",  new AssetLocation("scribe", "textures/icons/triangle-left.svg"));
         RegisterSvgIcon(api, "scribetriangleright", new AssetLocation("scribe", "textures/icons/triangle-right.svg"));
-        // Add-kind picker caret (add-note-kind-picker D1): the footer's segmented add button carries a caret
+        // Add-kind picker caret: the footer's segmented add button carries a caret
         // that opens/closes a floating drop-up menu of kinds. It points ▲ when closed (the menu expands
         // UPWARD, over the scroll body) and flips ▼ when open (tap again to collapse).
         RegisterSvgIcon(api, "scribetriangleup",   new AssetLocation("scribe", "textures/icons/triangle-up.svg"));
         RegisterSvgIcon(api, "scribetriangledown", new AssetLocation("scribe", "textures/icons/triangle-down.svg"));
-        // Accepted-assignment leading-icon marker (add-assignment-and-quest-support §13.4): a rolled
-        // scroll, distinct from the guestbook/book glyphs it previously borrowed as a placeholder.
+        // Accepted-assignment leading-icon marker: a rolled scroll, distinct from the guestbook/book glyphs.
         RegisterSvgIcon(api, "scribeassignment", new AssetLocation("scribe", "textures/icons/scroll.svg"));
-        // Shared Inbox tab nav button (refine-assignment-desk-inbox-ux 1.3/1.4): a dedicated
-        // inbox-with-down-arrow glyph, replacing the borrowed "scribeinventory" (book) icon.
+        // Shared Inbox tab nav button: an inbox-with-down-arrow glyph.
         RegisterSvgIcon(api, "scribeinboxarrow", new AssetLocation("scribe", "textures/icons/inbox-arrow.svg"));
-        // Assignment Desk's Create Assignments nav button (refine-assignment-desk-inbox-ux 1.3/1.4): a
-        // plus glyph, replacing the borrowed "scribeassignment" (scroll) icon on that one nav button.
-        // Swapped to a thinner stroke (TESTING.md 0000007a feedback 2026-09-01: the original read too
-        // thick/heavy).
+        // Assignment Desk's Create Assignments nav button: a thin-stroke plus glyph.
         RegisterSvgIcon(api, "scribeplus", new AssetLocation("scribe", "textures/icons/plus-thin.svg"));
     }
 
     /// <summary>
     /// Registers Scribe's bundled typeface(s) with LibGUI's Skia font registry so the mod's own text can
-    /// name them via <c>TextStyle.FontFamily</c> (prove-bundled-font-seam). This mirrors how LibGUI itself
+    /// name them via <c>TextStyle.FontFamily</c> This mirrors how LibGUI itself
     /// bundles + registers its faces in <c>GuiModSystem.LoadFonts</c>: load the <c>.ttf</c> asset bytes to an
     /// <c>SKTypeface</c> via <see cref="SkiaAssetLoader.LoadFont"/>, then hand it to
     /// <c>FontRegistry.RegisterCustomFont(family, weight, typeface)</c>. Once registered,
@@ -99,30 +92,22 @@ public sealed partial class ScribeModSystem
     /// (the same one our SVG icons use) avoids that dance entirely. Unlike the icons, we do NOT need a
     /// <c>loadAsset: true</c> re-fetch guard: <see cref="SkiaAssetLoader.LoadFont"/> reads the bytes into an
     /// <c>SKTypeface</c> HERE at client init, before <c>UnloadAssets</c> nulls the asset data, and the
-    /// typeface (not the asset) is what the registry keeps. See VSAPI-NOTES.md (§LibGUI).</para>
+    /// typeface (not the asset) is what the registry keeps. See VSAPI-NOTES.md (LibGUI section).</para>
     /// </summary>
     private static void RegisterCustomFonts(ICoreClientAPI api)
     {
         var loader = new SkiaAssetLoader(api);
         // AssetLocation is lowercased by LoadFont (path.ToLower()), so the asset filename must be lowercase.
-        // Originally shipped ONLY the bold cut, registered under every weight slot: Caudex's one consumer
-        // (the lectern dialog title) requests FontWeight.Bold, and loading a real regular face alongside it
-        // (registered under Normal) once rendered REGULAR for the Bold title in-game — the resolver picked
-        // the Normal-weight face despite the Bold request (both faces loaded fine; the mismatch was in the
-        // resolver, not the assets). Registering the ONE bold face under every weight sidestepped that by
-        // construction: whatever weight the resolver landed on, it got the bold cut back. That all-one-face
-        // choice also doubled as the deliberate heavier-Caudex-everywhere look, on top of the original
-        // storage-size reasoning (now moot — see below).
+        // The bold cut is registered under every non-italic weight slot: Caudex's one consumer (the lectern
+        // dialog title) requests FontWeight.Bold, and registering a real regular face under Normal alongside
+        // it makes the resolver pick the Normal face for a Bold request. Mapping the one bold face to every
+        // weight means whatever weight the resolver lands on, it gets the bold cut.
         //
-        // The Italic slot now diverges from that: a genuinely italic, lighter-weight cut
-        // (unify-tab-header-layout's subtitle descriptor wants a real slant, not upright bold at an angle).
-        // This reintroduces the same shape of risk the Normal-vs-Bold bug above was about — two distinct
-        // real faces on two weight slots of the same family — so if the title ever renders in the wrong
-        // face after this change, that resolver quirk (not a missing/corrupt asset) is the first suspect;
-        // verify the title stays bold and the subtitle descriptor renders slanted after restaging.
-        // Tracks which bundled families actually registered, in preference order, so the
-        // default-family resolution below (fix-sans-serif-alias-leak) can pick a real fallback
-        // instead of a family that itself failed to load.
+        // The Italic slot holds a genuinely italic, lighter cut (the subtitle descriptor wants a real
+        // slant). That is two distinct real faces on two weight slots of one family, so if the title ever
+        // renders in the wrong face, suspect that resolver quirk before a missing/corrupt asset.
+        // Tracks which bundled families actually registered so the default-family resolution below can
+        // pick a real fallback instead of a family that itself failed to load.
         var registeredFamilies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         var bold = loader.LoadFont("scribe", "textures/fonts/caudex-bold.ttf");
@@ -153,7 +138,7 @@ public sealed partial class ScribeModSystem
             api.Logger.Warning("[scribe] bundled font 'Caudex' italic cut failed to load; italic text falls back to the bold cut");
         }
 
-        // Task-text font selector faces (v1-release-checklist §6): the player picks one of these for the
+        // Task-text font selector faces: the player picks one of these for the
         // Lectern's task/note rows. Each is a single-cut regular TTF registered under ALL weights (same
         // reasoning as Caudex above — the resolver may land on any weight, so map them all to the one face).
         // "Playfair Display" / "Cormorant Unicase" are NOT here: the LibGUI (`gui`) dependency already
@@ -185,11 +170,9 @@ public sealed partial class ScribeModSystem
 
         // Resolve Scribe's own default family (task-font default, HUD chrome, Settings chrome,
         // History/Timer/Guestbook metadata) to one of Scribe's bundled, custom-registered faces
-        // directly, rather than aliasing LibGUI's shared "sans-serif" family to it
-        // (fix-sans-serif-alias-leak). "sans-serif" is LibGUI's own framework-wide TextStyle default,
-        // consulted by every gui-dependent mod's unstyled text — aliasing it silently changed other
-        // mods' default font too (reported: HudUI's stat-number display wrapping once Scribe was
-        // installed). Pick the first bundled face that actually loaded, preferring a general-purpose
+        // directly, with no alias of LibGUI's shared "sans-serif" family. "sans-serif" is LibGUI's
+        // framework-wide TextStyle default, consulted by every gui-dependent mod's unstyled text, so
+        // aliasing it would change other mods' default font too. Pick the first bundled face that actually loaded, preferring a general-purpose
         // sans body font; if none loaded, fall back to the literal "sans-serif" string, i.e. exactly
         // what that text would resolve to without Scribe's font system at all.
         string resolvedDefaultFamily = "sans-serif";

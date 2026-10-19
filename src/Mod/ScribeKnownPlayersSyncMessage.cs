@@ -4,8 +4,8 @@ namespace Scribe;
 
 /// <summary>
 /// Server → client: broadcasts the FULL known-players registry to every online player
-/// (persist-known-players-for-assignment) — the first genuinely shared/broadcast-shaped message on
-/// this channel, as opposed to every other message's per-player-only push (see design.md Decision 3).
+/// — the one shared/broadcast-shaped message on
+/// this channel, as opposed to the per-player-only pushes.
 /// The payload is a <see cref="Scribe.Core.ScribeKnownPlayersStore.Serialize"/> blob, decoded
 /// client-side with <see cref="Scribe.Core.ScribeKnownPlayersStore.LoadFrom"/>. Sent on join and
 /// re-broadcast to every online player whenever a new/updated entry is upserted, so an already-open
