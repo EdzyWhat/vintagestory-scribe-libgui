@@ -24,10 +24,8 @@ public class SingleEditorLockScenarios : AtlasScenarioBase
 
         lectern!.OnRightClick(first.Player, wantEditor: true, quickAdd: false);
 
-        // The second player's edit must be rejected: they never held the lock, because the
-        // server never granted them one (OnRightClick only replies to the requester; the
-        // effect we can observe here is that their ApplyEdit is a no-op, exactly like the
-        // non-holder case in ServerAuthoritativeEditScenarios).
+        // The second player never held the lock (OnRightClick only replies to the requester), so
+        // their ApplyEdit is a no-op, as in the non-holder case of ServerAuthoritativeEditScenarios.
         lectern.OnRightClick(second.Player, wantEditor: true, quickAdd: false);
 
         var doc = new Scribe.Core.ScribeDocument();
@@ -74,8 +72,8 @@ public class SingleEditorLockScenarios : AtlasScenarioBase
 
         lectern!.OnRightClick(first.Player, wantEditor: true, quickAdd: false);
 
-        // A genuine disconnect, exercising the real ICoreServerAPI.Event.PlayerDisconnect
-        // path BlockEntityScribeLectern subscribes to in Initialize -- not a simulation.
+        // A genuine disconnect through ICoreServerAPI.Event.PlayerDisconnect, which
+        // BlockEntityScribeLectern subscribes to in Initialize.
         first.Player.Disconnect();
         await World.Until(() => !first.IsConnected);
 

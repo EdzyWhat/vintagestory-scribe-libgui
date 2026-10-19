@@ -5,11 +5,9 @@ using Xunit;
 namespace Integration.Tests;
 
 /// <summary>
-/// Pure Mod-layer logic for the read-view filter and collapse — no Vintage
-/// Story API surface is touched by <see cref="ScribeReadViewFilter"/>, so these run as plain xUnit
-/// facts (no Atlas world boot), the same way <c>Core.Tests</c> exercises pure logic, just living
-/// alongside the rest of this feature's tests since the code under test is `internal` to the Mod
-/// assembly (see <c>AssemblyInfo.cs</c>'s <c>InternalsVisibleTo</c>).
+/// Pure Mod-layer logic for the read-view filter and collapse. Runs as plain xUnit facts (no Atlas
+/// world boot); lives here because <see cref="ScribeReadViewFilter"/> is `internal` to the Mod assembly
+/// (<c>InternalsVisibleTo</c>).
 /// </summary>
 public class ScribeReadViewFilterTests
 {
@@ -18,10 +16,8 @@ public class ScribeReadViewFilterTests
 
     // ── category mapping across every ScribeBlockKind, and Pinned's independence ─────────
 
-    // xUnit test methods must be public, and a public method's signature can't expose the `internal`
-    // ReadViewFilterCategory as a [Theory]/[InlineData] parameter (CS0051) even with InternalsVisibleTo
-    // (that grant permits ACCESS, not an accessibility-rule exception) — so this drives its cases from
-    // a private local table instead of [InlineData].
+    // A public test method can't expose the `internal` ReadViewFilterCategory as a [Theory] parameter
+    // (CS0051), so cases come from a private local table instead of [InlineData].
     [Fact]
     public void Each_block_kind_maps_to_exactly_one_Active_Completed_Other_category()
     {
@@ -211,9 +207,8 @@ public class ScribeReadViewFilterTests
     [Fact]
     public void A_pending_pick_rejects_a_still_stale_host_mirror()
     {
-        // The player just selected Completed, but a row mutation's synchronous
-        // RefreshReadView lands before the server's echo — the host mirror is still whatever it was before
-        // (e.g. All) — so the pending pick must NOT be overwritten by that stale value.
+        // The player just selected Completed; a row mutation's synchronous RefreshReadView lands before
+        // the server's echo, so the pending pick must NOT be overwritten by the stale host mirror.
         bool accept = ScribeReadViewFilter.ShouldAcceptHostFilterCategory(ReadViewFilterCategory.Completed, ReadViewFilterCategory.All);
 
         Assert.False(accept);
