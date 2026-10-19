@@ -10,7 +10,7 @@ public enum ScribeAssignmentState : byte
     Discarded = 4,
     Completed = 5,
 
-    /// <summary>Store-only pre-receipt state for a Task Notice sealed at send time (refine-task-notice-ux):
+    /// <summary>Store-only pre-receipt state for a Task Notice sealed at send time:
     /// a record exists (visible to the Assigner as "Sent") before the Assignee has physically received the
     /// notice. Never reached via <see cref="ScribeAssignmentTransitions.CanApply"/>'s normal matrix — only
     /// <see cref="ScribeAssignmentStore.TryCreateSent"/> creates it, and only
@@ -69,9 +69,8 @@ public sealed class ScribeAssignment
     public bool Seen { get; set; }
 
     /// <summary>In-game date this assignment reached the given transition, or null if it never has
-    /// (refine-assignment-desk-inbox-ux triage 2026-08-31: "we should also see stubs for when it was
-    /// accepted, discarded, etc."). <see cref="AcceptedDate"/> can coexist with any terminal date (an
-    /// assignment passes through Accepted before Completed/Discarded); the other four are mutually
+    /// (so the UI can show stubs for accepted, discarded, etc.).
+    /// <see cref="AcceptedDate"/> can coexist with any terminal date (an assignment passes through Accepted before Completed/Discarded); the other four are mutually
     /// exclusive since a state transition is one-way and terminal. Stamped by the Mod layer (which has
     /// calendar access this game-agnostic type does not) immediately after a transition actually
     /// happens — see <c>ScribeModSystem</c>'s assignment-action handlers.</summary>
@@ -90,7 +89,7 @@ public sealed class ScribeAssignment
     public double? DiscardedTimestamp { get; set; }
     public double? CompletedTimestamp { get; set; }
 
-    /// <summary>In-game date a Task Notice's store record transitioned Sent → Unaccepted (refine-task-notice-ux):
+    /// <summary>In-game date a Task Notice's store record transitioned Sent → Unaccepted:
     /// the moment the sealed notice actually entered the Assignee's own inventory, stamped by
     /// <see cref="ScribeAssignmentStore.TryMarkReceived"/>. Null for every assignment that never went
     /// through the Sent state (every non-notice send, and any notice sent before this change shipped).</summary>
@@ -101,7 +100,7 @@ public sealed class ScribeAssignment
     public double? ReceivedTimestamp { get; set; }
 
     /// <summary>UID of the player this assignment was originally addressed to, before a non-recipient
-    /// holder of a Task Notice accepted it instead (add-task-notice-redirect-confirm). Stamped by
+    /// holder of a Task Notice accepted it instead. Stamped by
     /// <see cref="ScribeAssignmentStore.TryRedirectTarget"/> from the current <see cref="TargetPlayerUid"/>
     /// right before that field is overwritten with the new target. Null unless a redirect happened.</summary>
     public string? RedirectedFromUid { get; set; }
@@ -120,9 +119,9 @@ public sealed class ScribeAssignment
     public string? AcceptedIntoLabel { get; set; }
 
     /// <summary>Identifies which single send call created this record, alongside any sibling rows sent
-    /// in the same batch (refine-assignment-desk-inbox-ux 12.2 root-cause fix). <see cref="AssignedDate"/>
+    /// in the same batch. <see cref="AssignedDate"/>
     /// is a coarse, human-readable in-game-day string that two SEPARATE batches sent on the same day can
-    /// share — grouping the Inbox/Sent-history lists by it (the original approach) could silently merge
+    /// share — grouping the Inbox/Sent-history lists by it could silently merge
     /// two unrelated batches into one run. This is a fresh <see cref="Guid"/> minted once per send call
     /// (<c>ScribeModSystem.OnServerReceivedSendAssignmentBatch</c>) and stamped on every row it creates,
     /// giving the client an unambiguous batch boundary to group and newest-first-sort by, independent of
@@ -131,9 +130,8 @@ public sealed class ScribeAssignment
     /// which is harmless since nothing in Core itself groups by it.</summary>
     public Guid BatchId { get; set; }
 
-    /// <summary>Whether the Assignee has deleted their own side of a terminal record
-    /// (split-assignment-delete-by-viewer) — once true, this record no longer appears in that
-    /// player's Inbox (<see cref="ScribeAssignmentStore.Received"/>), even though the Assigner's Sent
+    /// <summary>Whether the Assignee has deleted their own side of a terminal record;
+    /// once true, this record no longer appears in that player's Inbox (<see cref="ScribeAssignmentStore.Received"/>), even though the Assigner's Sent
     /// Assignment History is unaffected. The record is only actually removed from the store once
     /// BOTH this and <see cref="HiddenFromAssigner"/> are true.</summary>
     public bool HiddenFromAssignee { get; set; }
@@ -183,7 +181,7 @@ public sealed class ScribeAssignment
     public void MarkSeen() => Seen = true;
 
     /// <summary>True when this assignment still warrants the ambient "unseen assignment" block particle
-    /// (fix-offline-assignment-send-validation): unseen, AND never delivered as a physical Task Notice that
+    ///: unseen, AND never delivered as a physical Task Notice that
     /// has already reached the recipient's inventory. A notice-delivered assignment gives the player an
     /// in-hand signal the moment <see cref="ReceivedDate"/> is stamped, so the world-space particle nudge
     /// becomes redundant for it even while it's still otherwise unseen. Local-Inboxes assignments never

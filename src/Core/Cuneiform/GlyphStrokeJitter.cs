@@ -25,9 +25,8 @@ public static class GlyphStrokeJitter
     /// <summary>Maximum endpoint displacement, per axis, at <c>strength == 1</c>, as a fraction of the
     /// glyph's grid size. Kept small: a few percent of an em reads as a hand-wobble without turning legible
     /// glyphs into scribbles. The actual offset is uniform in [-max, +max] and scales linearly with strength.
-    /// <para>Tuning history: started at <c>0.05</c>; reduced to <c>0.0375</c> (25% less endpoint displacement)
-    /// once whole-character rotation was added (tune-tablet-jitter-add-rotation) — the two effects stack, so a
-    /// tighter per-endpoint wobble plus a rigid per-glyph tilt reads better than a large wobble alone.</para></summary>
+    /// <para>Kept tight because it stacks with whole-character rotation: a small per-endpoint wobble plus a
+    /// rigid per-glyph tilt reads better than a large wobble alone.</para></summary>
     public const double MaxPositionFraction = 0.0375;
 
     /// <summary>Maximum weight (width) variation at <c>strength == 1</c>, as a fraction of the stroke's own

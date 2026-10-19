@@ -7,7 +7,7 @@ namespace Scribe.Core;
 /// install; the editor widget (<c>ScribeMultilineFieldState</c>) is a thin caller that swaps in the
 /// returned text/caret.
 ///
-/// <para>Design notes (add-arrow-substitution-and-cuneiform-glyphs):</para>
+/// <para>Design notes:</para>
 /// <list type="bullet">
 /// <item>The table is deliberately FIXED to exactly these two horizontal arrows — this is not a general
 /// autocorrect/emoji engine. Vertical/bidirectional arrows and the <c>&lt;-&gt;</c> triple are out of
@@ -60,7 +60,7 @@ public static class ScribeArrowDigraph
         {
             // Replace the first digraph char (at caret-1) with the arrow; the just-typed char is consumed
             // into it rather than inserted. One char removed and one added at the same spot, so every
-            // offset from the caret onward is unchanged and the caret index stays put — now just past the
+            // offset from the caret onward is unchanged and the caret index stays put, just past the
             // arrow.
             newText = text.Remove(caret - 1, 1).Insert(caret - 1, arrow.ToString());
             newCaret = caret;

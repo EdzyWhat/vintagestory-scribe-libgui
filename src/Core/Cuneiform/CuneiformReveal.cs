@@ -1,13 +1,12 @@
 namespace Scribe.Core.Cuneiform;
 
 /// <summary>
-/// Timing carrier for the "text presses in as you type" reveal (add-cuneiform-handwriting-feel). Time is a
+/// Timing carrier for the "text presses in as you type" reveal. Time is a
 /// pure running total of STROKES: the clock advances <see cref="PerStrokeMs"/> per stroke-unit, so a
 /// complex 5-stroke letter genuinely takes longer to press in than a simple 2-stroke one, and a space is a
 /// fixed <see cref="CuneiformReveal.SpaceStrokeUnits"/>-unit pause that draws nothing. There is no per-letter
-/// slot — the earlier fixed-slot model (which made every letter take the same wall-clock time regardless of
-/// its stroke count) was replaced because it read as flat and un-hand-like. Kept data-only; the Mod passes in
-/// the tuned <see cref="PerStrokeMs"/> (from <see cref="CuneiformReveal.PerStrokeMs"/>).
+/// slot, so letter duration follows stroke count rather than a fixed wall-clock time. Kept data-only; the
+/// Mod passes in the tuned <see cref="PerStrokeMs"/> (from <see cref="CuneiformReveal.PerStrokeMs"/>).
 /// </summary>
 public readonly struct RevealSchedule
 {
@@ -36,7 +35,7 @@ public static class CuneiformReveal
 {
     /// <summary>The tuned press-in speed (ms per stroke-unit), shared by the editor rows and the title band
     /// so the two can't drift. This is the ONE home for the reveal speed (the Mod field/title states and the
-    /// render object all read it). Slowed to 80 ms/stroke per the 2026-08-05 playtest ask.</summary>
+    /// render object all read it).</summary>
     public const double PerStrokeMs = 80.0;
 
     /// <summary>Stroke-units a space (or any whitespace) contributes — a fixed pause that draws nothing, so a
@@ -92,7 +91,7 @@ public static class CuneiformReveal
     /// <summary>
     /// How long revealing the run from <paramref name="baselineChars"/> to the end takes: the stroke-units in
     /// that run × <see cref="RevealSchedule.PerStrokeMs"/>. The last stroke reveals at exactly this time
-    /// (the sum already covers every stroke — no extra tail is needed, unlike the old fixed-slot model).
+    /// (the sum already covers every stroke, so no extra tail is needed).
     /// Returns 0 when nothing new needs revealing (baseline at or past the end).
     /// </summary>
     public static double TotalDurationMs(int baselineChars, IReadOnlyList<int> cumulativeStrokeUnits, RevealSchedule schedule)

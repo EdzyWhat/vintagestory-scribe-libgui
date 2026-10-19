@@ -155,10 +155,9 @@ public sealed class CuneiformLineLayout
     /// The map is pure DATA so entries are trivial to add/remove without touching layout logic. Entries are
     /// grouped by dependency:
     ///   • Ship-now (target already authored): the bracket/brace forms reuse the parenthesis glyphs.
-    ///   • Was waits-on-art, now shippable: <c>&amp; → +</c>. The <c>+</c> glyph landed with the glyph-forge
-    ///     symbol sync (the shipped bundle now carries + / = % # * @), so the ampersand alias resolves to a
-    ///     real glyph today. If a target is ever absent, its alias simply falls through to the safe
-    ///     missing-glyph gap (no crash), so an alias to an unauthored target is harmless but pointless.
+    ///   • <c>&amp; → +</c>: the shipped bundle carries the <c>+</c> glyph (alongside = % # * @), so the
+    ///     ampersand alias resolves to a real glyph. If a target is absent, its alias falls through to the
+    ///     safe missing-glyph gap (no crash), so an alias to an unauthored target is harmless but pointless.
     /// </summary>
     private static readonly IReadOnlyDictionary<char, char> Aliases = new Dictionary<char, char>
     {
@@ -242,7 +241,7 @@ public sealed class CuneiformLineLayout
     /// Soft-wraps a single paragraph (no interior <c>'\n'</c>) into <paramref name="outLines"/>, stamping
     /// each line's <see cref="CuneiformLine.SourceStart"/> with its ABSOLUTE index (<paramref name="globalStart"/>
     /// plus the in-paragraph offset). When <paramref name="noSoftWrap"/> is set, the whole paragraph is one
-    /// line. The final line runs to the paragraph end so trailing whitespace is kept (task 8.3).
+    /// line. The final line runs to the paragraph end so trailing whitespace is kept.
     /// </summary>
     private void WrapParagraph(
         string paragraph, int globalStart, double maxWidthGridUnits, bool noSoftWrap, List<CuneiformLine> outLines)

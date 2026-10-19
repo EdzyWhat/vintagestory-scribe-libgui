@@ -5,14 +5,14 @@ namespace Scribe.Core;
 /// <summary>
 /// Server-side queue of <see cref="HistoryEntry"/> records that could not be written immediately
 /// because the document they belong to was evicted from its holder's inventory by something else
-/// during the same event dispatch (see fix-death-history-inventory-race design.md — today, only the
+/// during the same event dispatch (today, only the
 /// Death branch of <c>OnEntityDeath</c> enqueues here). Keyed by the target document's own
 /// <c>ScribeDocument.DocId</c>, never by player: a queued entry is written into the exact document
 /// it was queued against the next time that document is observed in a live carried slot, regardless
 /// of who is carrying it by then — never redirected to a different document.
 ///
 /// No pruning: an entry for a document that is genuinely never seen again persists indefinitely
-/// (explicit decision — see design.md's "Pending store: no pruning").
+/// (deliberate).
 ///
 /// Game-agnostic (pure BCL) so it's unit-testable without a game install; the Mod layer's
 /// <c>OnHistoryScanTick</c> calls <see cref="TakeAll"/> and owns this store's savegame persistence,
