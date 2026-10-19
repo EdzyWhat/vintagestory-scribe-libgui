@@ -15,171 +15,114 @@ using Vintagestory.API.MathTools;
 namespace Scribe;
 
 /// <summary>
-/// The Assignment Desk block's dialog — a thin sealed subclass of <see cref="ScribeDialogBase"/>. All
-/// view state, build methods, lock orchestration, autosave, title editing, and scroll management live
-/// in the base class; this dialog's own real work is the Create Assignments tab's staging-and-select
-/// flow plus its right-column nav, which replaces the base's default Read/Editor/Pinned trio with its
-/// own five-tab layout: Create Assignments, Sent Assignment History, Inbox, Editor, Settings. There is
-/// no Read tab and no Pinned tab (the Desk's own document isn't a personal pin target). Defaults to the
-/// Assignment tab on open.
+/// The Assignment Desk block's dialog: a thin subclass of <see cref="ScribeDialogBase"/> whose own work is the
+/// Create Assignments staging-and-select flow and a five-tab nav (Create Assignments, Sent History, Inbox, Editor,
+/// Settings; no Read or Pinned tab). Defaults to the Assignment tab on open.
 /// </summary>
 public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
 {
-    /// <summary>The owning block-entity, kept typed so the staging slot can reach its
-    /// <see cref="BlockEntityAssignmentDesk.Inventory"/> (the base only stores the untyped
-    /// <see cref="IScribeDocumentHost"/>).</summary>
+    /// <summary>The owning block-entity, typed so the staging slot can reach its inventory.</summary>
     private readonly BlockEntityAssignmentDesk assignmentDesk;
 
-    /// <summary>Bridges the staging slot widget to the block-entity inventory — same lifecycle contract as
-    /// <see cref="GuiDialogScribeScriptorium.slotController"/>: created lazily on first build, disposed in
-    /// <see cref="OnGuiClosed"/>, and subscribed to <see cref="ScribeDialogBase.RebuildBody"/> so a staged
-    /// item change (placing/removing the source document) actually re-renders the picker.</summary>
+    /// <summary>Bridges the staging slot widget to the block-entity inventory. Created lazily on first build,
+    /// disposed in <see cref="OnGuiClosed"/>, and subscribed to <see cref="ScribeDialogBase.RebuildBody"/> so a
+    /// staged item change re-renders the picker (same contract as the Scriptorium's).</summary>
     private SlotController? slotController;
 
-    /// <summary>Selected staged-row identities — UI-only, cleared on every successful
-    /// send and pruned to whatever the currently-staged document actually contains on each build (so
-    /// swapping the staged item drops stale selections instead of silently carrying them over).</summary>
+    /// <summary>Selected staged-row identities (UI-only). Cleared on send and pruned to the staged document's
+    /// contents each build, so swapping the staged item drops stale selections.</summary>
     private readonly HashSet<Guid> selectedTaskIds = new();
 
-    /// <summary>"Delete from source on send" — UI-only session state, never persisted;
-    /// reset to false on every successful send.</summary>
+    /// <summary>"Delete from source on send": UI-only, reset to false on every successful send.</summary>
     private bool deleteFromSource;
 
-    /// <summary>"Pull from Desk" active-source opt-in — a
-    /// sticky, UI-only session bool in the same family as <see cref="deleteFromSource"/>: set true by
-    /// <see cref="OnPullFromDesk"/>, reset to false in <see cref="OnGuiClosed"/>, never persisted. A staged
-    /// item in the slot always overrides it (see <see cref="BuildAssignmentContent"/>'s source-priority
-    /// resolution) without needing to clear this flag — it naturally resumes once the item is removed.</summary>
+    /// <summary>"Pull from Desk" source opt-in: UI-only, set by <see cref="OnPullFromDesk"/>, reset in
+    /// <see cref="OnGuiClosed"/>. A staged item overrides it without clearing it, so it resumes once the item is
+    /// removed.</summary>
     private bool deskSourceActive;
 
-    /// <summary>Whether the empty-state "pull from Desk" button should render this build — computed fresh
-    /// in <see cref="BuildAssignmentContent"/>, read by <see cref="ScribeAssignmentFormContent"/>.</summary>
+    /// <summary>Whether the empty-state "pull from Desk" button renders this build.</summary>
     private bool canPullFromDesk;
 
-    /// <summary>Whether <see cref="stagedBlocksCache"/> was resolved from the Desk's own document rather
-    /// than a staged item, as of the last build — read by
-    /// <see cref="OnSendAssignmentBatch"/> to tell the server which removal path to use on send, without
-    /// re-deriving the source-priority decision <see cref="BuildAssignmentContent"/> already made.</summary>
+    /// <summary>Whether <see cref="stagedBlocksCache"/> came from the Desk's own document rather than a staged
+    /// item; tells the server which removal path to use on send.</summary>
     private bool sourceIsDeskDocument;
 
-    /// <summary>Dialog-owned target selection, lifted out of <see cref="ScribeAssignmentFormContent"/>'s
-    /// own State so a selection CHANGE can fire the Hybrid range
-    /// check and reset any manual delivery-toggle override. UI-only session state, like
-    /// <see cref="deleteFromSource"/> — never persisted.</summary>
+    /// <summary>Dialog-owned target selection (UI-only), lifted out of the form's State so a change can fire the
+    /// Hybrid range check and reset the delivery-toggle override.</summary>
     private string? selectedTargetUid;
 
-    /// <summary>The Hybrid range check's last-received result for <see cref="selectedTargetUid"/>
-    /// — <c>null</c> while a request is pending/not yet sent, treated as out-of-range
-    /// (the safer default, matching the server's own offline-target fallback in
-    /// <see cref="ScribeModSystem.OnServerReceivedDeliveryRangeCheckRequest"/>).</summary>
+    /// <summary>Last Hybrid range-check result for <see cref="selectedTargetUid"/>; <c>null</c> while pending,
+    /// treated as out-of-range (matches the server's offline-target fallback).</summary>
     private bool? rangeCheckInRange;
 
-    /// <summary>Set once the player taps either half of the Local Inboxes / Send a Notice toggle for the
-    /// CURRENT target selection (freely overridable). Reset to null whenever the target
-    /// selection changes, so a fresh target starts from the recomputed range-check default again.</summary>
+    /// <summary>Set when the player taps the Local Inboxes / Send a Notice toggle for the current target; reset
+    /// to null when the target changes so the range-check default applies again.</summary>
     private ScribeDeliveryChoice? deliveryChoiceOverride;
 
-    /// <summary>The staged document's raw blocks from the last build, keyed by TaskId — the source of
-    /// truth <see cref="OnSendAssignmentBatch"/> reads to build the wire message (a
-    /// <see cref="ScribeReadRowData"/> is a display-only projection that drops the raw
-    /// TargetItemCode/LinkTarget/RecipeSignature fields a Tracker/Link/Craft row needs to reconstruct).</summary>
+    /// <summary>The staged document's raw blocks from the last build, keyed by TaskId. The send path reads these,
+    /// since <see cref="ScribeReadRowData"/> is a display-only projection that drops fields Tracker/Link/Craft
+    /// rows need.</summary>
     private List<ScribeBlock> stagedBlocksCache = new();
 
-    /// <summary>The staged document's rows from the last build, in display order — read by
-    /// <see cref="OnToggleStagedRowSelected"/> to resolve a toggled row's Depth for the cascade.</summary>
+    /// <summary>The staged document's rows from the last build, in display order (used for the selection cascade).</summary>
     private List<ScribeReadRowData> stagedRowsCache = new();
 
-    /// <summary>Slot edge length in pixels — matches the Scriptorium's inventory slots
-    /// (<see cref="GuiDialogScribeScriptorium.SlotSize"/>) so the staging slot reads identically.</summary>
+    /// <summary>Slot edge length in pixels; matches the Scriptorium's slots.</summary>
     private const float SlotSize = 48f;
 
-    /// <summary>The staging slot's watermark glyph size as a fraction of <see cref="SlotSize"/> — matches
-    /// <see cref="GuiDialogScribeScriptorium.WatermarkScale"/>, so the slot is styled with the same
-    /// adornments as the Scriptorium's inventory slots (veil background + book watermark).</summary>
+    /// <summary>Watermark glyph size as a fraction of <see cref="SlotSize"/>; matches the Scriptorium.</summary>
     private const float WatermarkScale = 0.66f;
 
-    /// <summary>The pixel-art wooden stamp PNG, matching <see cref="GuiDialogScribeScriptorium.StampAsset"/>
-    /// (same asset, same art) — duplicated rather than shared since it's a one-line constant, not tuned
-    /// state that could drift.</summary>
+    /// <summary>Wooden stamp PNG; same asset as the Scriptorium's.</summary>
     private static readonly AssetLocation StampAsset = new("scribe", "textures/gui/scribe-copy-stamp.png");
 
-    /// <summary>Owns the "Submitted to Player" stamp flourish's animation controller — mirrors
-    /// <see cref="GuiDialogScribeScriptorium.stampRegistry"/>, simplified to one slot/one label since this
-    /// dialog has neither a second stampable slot nor a second imprint word to choose between.</summary>
+    /// <summary>Owns the "Submitted to Player" stamp animation controller (one slot, one label).</summary>
     private readonly ScribeAnimationRegistry stampRegistry = new();
     private int stampGeneration;
-    /// <summary>Whether the stamp is currently playing over the staging slot — gates both the overlay
-    /// (<see cref="BuildStampOverlay"/>) and the Send button (unclickable for the animation's
-    /// duration).</summary>
+    /// <summary>Whether the stamp is playing over the staging slot; gates the overlay and disables Send.</summary>
     private bool stampActive;
 
     public GuiDialogScribeAssignmentDesk(BlockPos pos, IScribeDocumentHost host, ICoreClientAPI capi)
-        // Pass the BE's staging inventory to the inventory-carrying base ctor (mirrors the Scriptorium)
-        // so OpenInventory / CloseInventoryAndSync fire automatically on open/close.
+        // Passes the BE's staging inventory to the inventory-carrying base ctor so open/close sync fires.
         : base(pos, host, capi, ((BlockEntityAssignmentDesk)host).Inventory)
     {
         assignmentDesk = (BlockEntityAssignmentDesk)host;
-        // Only the Assignment Desk dialog ever sets viewMode to Assignment —
-        // and it does so as its DEFAULT view, not merely a reachable one. Safe here: TryOpen's first
-        // Build() runs after this ctor returns.
+        // Create Assignments is this dialog's default view; safe because TryOpen's first Build() runs after the ctor.
         DefaultToAssignmentView();
         modSystem.DeliveryRangeCheckReplied += OnDeliveryRangeCheckReplied;
     }
 
-    /// <summary>The Assignment Desk is a shared placed block: editor access requires a server lock
-    /// round-trip, same as the Lectern/Scriptorium/Chalkboard. Retained even though no nav button here
-    /// currently opens the editor view, so any future/incidental editor-access grant (e.g. a Handbook
-    /// append targeting this host) behaves consistently with every other writing station.</summary>
+    /// <summary>Editor access needs a server lock round-trip, as on the other writing stations. Kept even though
+    /// no nav button opens the editor, so incidental grants (e.g. a Handbook append) behave consistently.</summary>
     protected override bool EditorAccessIsAsync => true;
 
-    /// <summary>A plain access grant, the ordinary reply every right-click on the block gets, must leave
-    /// whichever tab is already selected alone rather than being force-switched to some default view —
-    /// matching the base's own doc-comment reasoning for every Read/Editor-capable surface, just applied
-    /// to this dialog's five-tab set (Assignment/Sent-History/Inbox/Editor all count as "already selected
-    /// and legitimate"; only <see cref="DefaultToAssignmentView"/> in the ctor picks Create Assignments as
-    /// the FIRST-open default). Overriding the base's <c>EnterReadMode()</c> default this way remains
-    /// necessary even with no Read tab here, because Create Assignments — not Read — is this dialog's
-    /// intended landing tab.</summary>
+    /// <summary>A plain access grant leaves the selected tab alone rather than forcing a default view. Overrides the
+    /// base's <c>EnterReadMode()</c> because this dialog's landing tab is Create Assignments, not Read.</summary>
     public override void EnterGrantedView()
     {
         LeaveEditorIfActive();
         if (IsOpened()) ForceRebuild();
     }
 
-    /// <summary>The Desk has no Read view, so the editor footer's "Done
-    /// editing" button — kept visible and clickable, unlike <see cref="GuiDialogScribeTablet"/>'s always-edit
-    /// case — must not land on the base's default `isEditorMode`-false-branch destination (Read, a tab this
-    /// dialog's nav column has no button for). Every path that tears down the editor (that button,
-    /// and the incidental teardown inside <see cref="ScribeDialogBase.LeaveEditorIfActive"/>) funnels through
-    /// this one hook, so redirecting it back to Create Assignments — matching this dialog's own default-open
-    /// landing tab — covers both without needing to special-case either caller.</summary>
+    /// <summary>The Desk has no Read tab, so leaving the editor (the Done button and the teardown inside
+    /// <see cref="ScribeDialogBase.LeaveEditorIfActive"/> both funnel here) returns to Create Assignments.</summary>
     protected override void OnLeftEditorMode() => DefaultToAssignmentView();
 
-    /// <summary>Replaces the base's default Read/Editor/Pinned/Settings column with this dialog's own
-    /// five-tab layout — Create Assignments, Sent Assignment History, Inbox, Editor, Settings, in that nav
-    /// order — no Read tab and no Pinned tab (the Desk's own document isn't a personal pin
-    /// target). The Editor button wires straight to the base's own entry point
-    /// (<see cref="ScribeDialogBase.TryEnterEditor"/>) and reuses its exact icon codes/tooltip
-    /// keys/active-color/dimming conventions (<see cref="ScribeDialogBase.IsEditorView"/>/
-    /// <see cref="ScribeDialogBase.EditLockedByOther"/>) — no new view code. Mirrors
-    /// <see cref="GuiDialogScribeTablet"/>'s precedent for replacing this seam wholesale rather than
-    /// layering onto <see cref="GetExtraNavButtons"/>, which is reserved for surfaces that keep the base
-    /// column and only ADD to it.</summary>
+    /// <summary>Replaces the base nav column wholesale with this dialog's five tabs. The Editor button reuses the
+    /// base's entry point (<see cref="ScribeDialogBase.TryEnterEditor"/>) and its icon, tooltip and active-color
+    /// conventions; <see cref="GetExtraNavButtons"/> is only for surfaces that add to the base column.</summary>
     protected override Widget BuildRightColNav()
     {
         var colors = ResolveTheme(modSystem.MySettings.PixelArtDisplay).ColorScheme;
         float size = NavButtonSize;
         var navColor = NavIconColor(colors);
 
-        // Plus glyph — the Create Assignments tab is this dialog's
-        // sole create-and-send surface, distinct from the rolled-scroll glyph the row-level accepted-
-        // assignment marker still uses (ScribeAssignedTaskIcon, unrelated to this nav button).
+        // Plus glyph, distinct from the rolled-scroll glyph used by the row-level accepted-assignment marker.
         Widget assignmentBtn = TitleButton("scribeplus", "scribe-tab-assignment", navColor,
             size: size, onTap: OnClickSwitchToAssignment, boxShadows: NavButtonShadow,
             activeColor: IsAssignmentView ? ScribeRowConstants.NavActiveEdit : null);
-        // History glyph — the "scribehistory" icon code is aliased to guestbook.svg; a guestbook/journal glyph
-        // reads unambiguously as "history". NavActiveHistory (warm amber) is the same constant every other
-        // History-flavored nav button in this codebase uses.
+        // "scribehistory" is aliased to guestbook.svg; NavActiveHistory is shared with other History nav buttons.
         Widget sentHistoryBtn = TitleButton("scribehistory", "scribe-tab-senthistory", navColor,
             size: size, onTap: OnClickSwitchToSentHistory, boxShadows: NavButtonShadow,
             activeColor: IsSentHistoryView ? ScribeRowConstants.NavActiveHistory : null);
@@ -187,9 +130,7 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
             size: size, onTap: OnClickSwitchToInbox, boxShadows: NavButtonShadow,
             activeColor: IsInboxView ? ScribeRowConstants.NavActiveGuestbook : null,
             shimmer: ShowInboxShimmer);
-        // Editor — same icon codes/tooltip keys/active-color as the
-        // base's own default BuildRightColNav, just rebuilt here since this dialog replaces that seam
-        // wholesale rather than extending it.
+        // Same icon codes, tooltip keys and active color as the base's default editor button.
         Widget editorBtn = TitleButton("scribeedit", "scribe-gui-nav-edit",
             EditLockedByOther ? navColor with { W = 0.4f } : navColor,
             size: size, onTap: TryEnterEditor, boxShadows: NavButtonShadow,
@@ -209,14 +150,10 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
             children: new Widget[] { assignmentBtn, sentHistoryBtn, inboxBtn, editorBtn, settingsBtn });
     }
 
-    /// <summary>The Create Assignments tab (staging-and-select only): a staging slot for an existing
-    /// Scribe item, its rows rendered Read-view-style with independent Selected checkboxes, an optional
-    /// "Delete from source on send" toggle, and the target-player picker + batch-Send button — all composed
-    /// by <see cref="ScribeAssignmentFormContent"/>. This player's own Sent history lives on its own tab
-    /// (<see cref="ScribeDialogBase.BuildSentAssignmentHistoryContent"/>). Resolves the staged item's rows
-    /// fresh on every build (mirroring <see cref="BuildReadContent"/>'s own per-build resolution) rather
-    /// than caching them across rebuilds, since the staged item can change underneath this tab at any time
-    /// (another client swaps it, or this player pulls/places it).</summary>
+    /// <summary>The Create Assignments tab: a staging slot, its rows with independent Selected checkboxes, a
+    /// "Delete from source on send" toggle, and the target picker + batch Send, composed by
+    /// <see cref="ScribeAssignmentFormContent"/>. Rows are resolved fresh each build because the staged item can
+    /// change at any time (another client, or this player pulling/placing it).</summary>
     protected override Widget BuildAssignmentContent()
     {
         var controller = EnsureSlotController();
@@ -227,10 +164,7 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
         bool slotHasItem = slot.Itemstack != null
             && ScribeDocumentAttributes.TryReadFrom(slot.Itemstack, out stagedDoc) && stagedDoc is not null;
 
-        // Active-source priority: a staged item always wins
-        // (unchanged); otherwise, if the "pull from Desk" source has been activated, fall back to the
-        // Desk's own document; otherwise empty. Re-resolved fresh every build exactly like the staged-item
-        // path always has, so this needs no new caching/diffing.
+        // Source priority: staged item, else the Desk's own document if "pull from Desk" is active, else empty.
         List<ScribeBlock> deskEligibleBlocks = EligibleDeskBlocks();
         stagedBlocksCache = slotHasItem
             ? stagedDoc!.Blocks.ToList()
@@ -239,13 +173,10 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
                 : new List<ScribeBlock>();
         sourceIsDeskDocument = !slotHasItem && deskSourceActive;
 
-        // Whether the empty-state's "pull from Desk" button should show: only when nothing is staged yet,
-        // the Desk source isn't already active, and the Desk's own document actually has something to offer.
+        // The pull button shows only when nothing is staged, the Desk source is inactive, and the Desk has eligible blocks.
         canPullFromDesk = !slotHasItem && !deskSourceActive && deskEligibleBlocks.Count > 0;
 
-        // Resolve rows exactly like the read view (ResolveRowItem + the same empty-Task-text filter), so a
-        // staged item's (or the Desk's own pulled-in document's) picker looks like its own Read tab minus
-        // the checkbox's completion meaning.
+        // Resolve rows like the read view (ResolveRowItem + the empty-Task-text filter).
         stagedRowsCache = stagedBlocksCache
             .Select((b, i) =>
             {
@@ -259,14 +190,11 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
             .Where(r => !r.IsTask || !string.IsNullOrWhiteSpace(r.Text))
             .ToList();
 
-        // Prune any selection the current staged document no longer contains (a different item got staged,
-        // or this row disappeared from it) — never carry a stale selection across a staged-item swap.
+        // Prune selections the current staged document no longer contains.
         selectedTaskIds.IntersectWith(stagedRowsCache.Select(r => r.TaskId));
 
-        // Veil background + book watermark, matching
-        // GuiDialogScribeScriptorium.BuildWatermarkedSlot: the book glyph paints UNDER the slot at full
-        // Primary, then the slot's own semi-opaque parchment fill sits on top of it as a veil, muting it to
-        // a faint watermark rather than a bold icon.
+        // Veil background + book watermark, as in GuiDialogScribeScriptorium.BuildWatermarkedSlot: the glyph paints
+        // under the slot, whose semi-opaque fill mutes it to a faint watermark.
         Vector4 bookColor = colors.Primary;
         Vector4 veilColor = colors.Surface with { W = 0.66f };
         float watermarkGlyph = SlotSize * WatermarkScale;
@@ -289,11 +217,8 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
             });
         }
 
-        // Delivery-mode target selection: seed a default and fire the ONE-time range check the moment
-        // there's a real target to check, without needing a rebuild to react to its own seeding. The
-        // default prefers this Assigner's last-successfully-assigned target when it's still present in the
-        // current list, falling back to the first (alphabetically-ordered, per ComputeAssignmentTargetPlayers)
-        // entry otherwise.
+        // Seed the default target (last-assigned target if still listed, else the first) and fire the one-time
+        // range check immediately, so the seeding needs no rebuild.
         var targetPlayers = ComputeAssignmentTargetPlayers();
         if (selectedTargetUid is null || !targetPlayers.Any(p => p.Uid == selectedTargetUid))
         {
@@ -344,28 +269,20 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
             showSubtitleRow: modSystem.VisualTuning.ShowSubtitleRow);
     }
 
-    /// <summary>The Desk's own persisted document's rows eligible to pull into the Create Assignments tab
-    /// — the same empty-Task-text filter every Read-style
-    /// row list already applies, so a blank in-progress Task row is never offered. Reads
-    /// <see cref="ScribeDialogBase.host"/>'s <c>Document</c> — the persisted document, never the Editor
-    /// tab's in-progress scratch buffer — so this always reflects the last COMMITTED edit.</summary>
+    /// <summary>The Desk's persisted document rows eligible to pull in (blank Task rows excluded). Reads the
+    /// committed <c>Document</c>, never the Editor's scratch buffer.</summary>
     private List<ScribeBlock> EligibleDeskBlocks() =>
         host.Document.Blocks.Where(b => !b.IsTask || !string.IsNullOrWhiteSpace(b.Text)).ToList();
 
-    /// <summary>The empty-state "pull from Desk" button's click handler: activates the
-    /// Desk's own document as the Create Assignments tab's task source and rebuilds. Mirrors
-    /// <see cref="OnToggleDeleteFromSource"/>'s shape — a plain session-flag flip plus a rebuild.</summary>
+    /// <summary>Activates the Desk's own document as the task source and rebuilds.</summary>
     private void OnPullFromDesk()
     {
         deskSourceActive = true;
         RebuildBody();
     }
 
-    /// <summary>The "Submitted to Player" stamp flourish overlaid on the staging slot after a successful
-    /// send — mirrors
-    /// <see cref="GuiDialogScribeScriptorium.BuildStampOverlay"/>'s shape (a fresh <see cref="ScribeStamp"/>
-    /// per generation so a re-play remounts and replays), simplified since there's only ever one slot and
-    /// one label here.</summary>
+    /// <summary>The "Submitted to Player" stamp overlaid on the staging slot after a send. A fresh
+    /// <see cref="ScribeStamp"/> per generation remounts and replays.</summary>
     private Widget? BuildStampOverlay()
     {
         if (!stampActive) return null;
@@ -386,9 +303,7 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
             key: new ValueKey<string>(id));
     }
 
-    /// <summary>Fired once when the stamp play completes: release its controller and drop the overlay
-    /// (and re-enable the Send button) so the staged slot returns to normal. Mirrors
-    /// <see cref="GuiDialogScribeScriptorium.OnStampEnded"/>.</summary>
+    /// <summary>Releases the stamp controller, drops the overlay and re-enables Send.</summary>
     private void OnStampEnded(string id)
     {
         stampRegistry.Release(id);
@@ -401,11 +316,8 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
 
     private static string StampId(int generation) => $"assignment-submit-stamp:{generation}";
 
-    /// <summary>Toggle one staged row's selection. Selecting a Depth-0 (parent) row
-    /// additionally selects every immediately-following Depth&gt;0 row up to the next Depth-0 row — ONCE,
-    /// at the moment of selection. After that every row (parent and subtasks alike) toggles independently:
-    /// deselecting the parent does not deselect its subtasks, and toggling a subtask never touches the
-    /// parent. Deselecting never cascades.</summary>
+    /// <summary>Toggles one staged row. Selecting a Depth-0 row also selects its following Depth&gt;0 rows once, at
+    /// selection time; afterwards every row toggles independently, and deselecting never cascades.</summary>
     private void OnToggleStagedRowSelected(Guid taskId)
     {
         if (selectedTaskIds.Remove(taskId))
@@ -430,20 +342,15 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
         RebuildBody();
     }
 
-    /// <summary>Sends the selected staged rows as one independent assignment each: mints
-    /// a fresh <c>AssignmentId</c> per row client-side, carries each row's full raw block shape (read from
-    /// <see cref="stagedBlocksCache"/>, NOT the display-only <see cref="stagedRowsCache"/>) so the server can
-    /// reconstruct a Task/Tracker/Link/Craft assignment with no per-kind special-casing, and clears the
-    /// selection + resets the delete-from-source flag on send (never a saved preference). Reads
-    /// <see cref="selectedTargetUid"/> directly rather than taking a parameter, since that's
-    /// dialog-owned.</summary>
+    /// <summary>Sends each selected staged row as an independent assignment with a fresh client-minted
+    /// <c>AssignmentId</c>. Reads raw blocks from <see cref="stagedBlocksCache"/> (not the display-only rows) so the
+    /// server can rebuild any kind, then clears the selection and the delete-from-source flag.</summary>
     private void OnSendAssignmentBatch()
     {
         string? targetUid = selectedTargetUid;
         if (targetUid is null) return;
 
-        // Delivery-mode gate: a send that needs a notice but has no blank one loaded is
-        // refused with a clear message rather than silently doing nothing or crafting a bad request.
+        // A send needing a notice with no blank one loaded is refused with a message.
         var deliveryMode = ScribeDeliveryConfig.ReadMode(capi);
         var deliveryChoice = EffectiveDeliveryChoice(deliveryMode);
         bool requiresNotice = ScribeDeliveryPolicy.RequiresNotice(deliveryMode, deliveryChoice);
@@ -486,9 +393,7 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
             DeliveryChoice = (byte)deliveryChoice,
         });
 
-        // Set optimistically the moment the send fires — the picker's default for this Assigner's NEXT
-        // visit becomes this target, without
-        // waiting on a server round-trip (matching the stamp flourish below, which also plays optimistically).
+        // Set optimistically so the next visit defaults to this target, like the stamp flourish below.
         modSystem.UpdateMySettings(s => s.LastAssignmentTargetUid = targetUid);
 
         selectedTaskIds.Clear();
@@ -498,10 +403,7 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
         if (IsOpened()) RebuildBody();
     }
 
-    /// <summary>Lazily create the slot controller and start watching the staging inventory — same
-    /// idempotent-create + rebuild-on-change contract as
-    /// <see cref="GuiDialogScribeScriptorium.EnsureSlotController"/>, minus that dialog's copy/import
-    /// confirm-state resets (this dialog has no analogous armed-confirm state to clear).</summary>
+    /// <summary>Lazily creates the slot controller and watches the staging inventory (idempotent).</summary>
     private SlotController EnsureSlotController()
     {
         if (slotController == null)
@@ -513,12 +415,11 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
         return slotController;
     }
 
-    /// <summary>Tear down the slot controller when the dialog closes so its <c>SlotModified</c> subscription
-    /// doesn't outlive the dialog. Mirrors <see cref="GuiDialogScribeScriptorium.OnGuiClosed"/>.</summary>
+    /// <summary>Tears down the slot controller so its <c>SlotModified</c> subscription does not outlive the dialog.</summary>
     public override void OnGuiClosed()
     {
         base.OnGuiClosed();
-        deskSourceActive = false; // UI-only session state (design.md D3) — never persisted across opens
+        deskSourceActive = false;
         if (slotController != null)
         {
             slotController.UnwatchInventory(assignmentDesk.Inventory);
@@ -530,12 +431,10 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
         modSystem.DeliveryRangeCheckReplied -= OnDeliveryRangeCheckReplied;
     }
 
-    // ── Physical delivery ────────────
+    // Physical delivery
 
-    /// <summary>Target-picker selection changed: reset any manual toggle override and fire a
-    /// fresh Hybrid range check for the new target. A non-Hybrid mode never reads
-    /// <see cref="rangeCheckInRange"/> at all (<see cref="ScribeDeliveryPolicy.ResolveDefault"/> ignores it
-    /// outside Hybrid), so the request is skipped for those modes to spare a needless round-trip.</summary>
+    /// <summary>Resets the manual toggle override and fires a fresh Hybrid range check; other modes never read the
+    /// result, so the request is skipped.</summary>
     private void OnTargetSelected(string uid)
     {
         selectedTargetUid = uid;
@@ -546,9 +445,7 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
         RebuildBody();
     }
 
-    /// <summary>A range-check reply arrived — apply it only if it still matches the CURRENTLY
-    /// selected target; a reply for a since-superseded selection (the player picked someone else before
-    /// this arrived) is stale and ignored.</summary>
+    /// <summary>Applies a range-check reply only if it matches the current target; superseded replies are ignored.</summary>
     private void OnDeliveryRangeCheckReplied(ScribeDeliveryRangeCheckReplyMessage message)
     {
         if (message.TargetPlayerUid != selectedTargetUid) return;
@@ -556,24 +453,19 @@ public sealed class GuiDialogScribeAssignmentDesk : ScribeDialogBase
         if (IsOpened()) RebuildBody();
     }
 
-    /// <summary>The toggle's tap handler (freely overridable with no blocked/grayed state).</summary>
+    /// <summary>Toggle tap handler; always freely overridable.</summary>
     private void OnDeliveryChoiceChanged(ScribeDeliveryChoice choice)
     {
         deliveryChoiceOverride = choice;
         RebuildBody();
     }
 
-    /// <summary>The effective delivery choice for this build: a manual override if the player already set
-    /// one for the current target, otherwise the Core-computed default from the current mode + the last
-    /// range-check result (pending/unknown treated as out-of-range, the safer default).</summary>
+    /// <summary>The manual override if set, else the Core default for the mode and last range-check result.</summary>
     private ScribeDeliveryChoice EffectiveDeliveryChoice(ScribeDeliveryMode mode) =>
         deliveryChoiceOverride ?? ScribeDeliveryPolicy.ResolveDefault(mode, rangeCheckInRange == true);
 
-    /// <summary>Builds one notice slot widget, matching <see cref="BuildAssignmentContent"/>'s own staging
-    /// slot veil/watermark treatment but with the "tasknotice" glyph instead of the book glyph, so the two
-    /// slot families read as visually related but distinct. Delegates to the shared
-    /// <see cref="ScribeInventorySlotStyle"/> helper so the Inbox block's own
-    /// restricted slots render identically rather than duplicating this styling a second time.</summary>
+    /// <summary>Builds a notice slot with the staging slot's veil/watermark treatment but the "tasknotice" glyph,
+    /// via the shared <see cref="ScribeInventorySlotStyle"/> helper (also used by the Inbox block).</summary>
     private Widget BuildNoticeSlot(ItemSlot slot, SlotController controller, ColorScheme colors) =>
         ScribeInventorySlotStyle.Build(slot, controller, colors, CurrentShade, "scribeassignment");
 }
