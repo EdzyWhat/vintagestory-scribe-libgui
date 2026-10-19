@@ -41,11 +41,11 @@ public abstract partial class ScribeDialogBase
         TraceScroll($"text-changed {index}");
     }
 
-    /// <summary>A Tracker row's inline +/- stepper changed its target quantity (add-tracker-link-tasks 5.2).
+    /// <summary>A Tracker row's inline +/- stepper changed its target quantity.
     /// Mirrors <see cref="NotifyTextChanged"/>: write straight through to the scratch block and mark dirty so
     /// the normal editor flush persists it — the codec already serializes <see cref="ScribeBlock.TargetQuantity"/>,
-    /// so no dedicated packet is needed. The Core setter clamps the value to ≥ 1 (lowering the target no longer
-    /// touches CurrentQuantity — the live carried count may exceed it, 7.14). Deliberately does NOT rebuild: the stepper is an uncontrolled field
+    /// so no dedicated packet is needed. The Core setter clamps the value to ≥ 1 (lowering the target does not
+    /// touch CurrentQuantity — the live carried count may exceed it). Deliberately does NOT rebuild: the stepper is an uncontrolled field
     /// that already reflects its own value, and a rebuild would drop its focus mid-step; the target's only
     /// editor-side mutation is this stepper, so scratch stays consistent without one.</summary>
     private void SetEditorTrackerTargetQuantity(int index, int qty)
@@ -56,8 +56,8 @@ public abstract partial class ScribeDialogBase
         block.TargetQuantity = qty; // clamps ≥ 1 in the Core setter
         isDirty = true;
 
-        // A Craft parent owns generated ingredient subtasks whose targets scale with its own (add-crafting-tasks
-        // 6.4): re-heal the depth-1 run so the children rescale in place (and any deleted child is recreated),
+        // A Craft parent owns generated ingredient subtasks whose targets scale with its own:
+        // re-heal the depth-1 run so the children rescale in place (and any deleted child is recreated),
         // then rebuild so the changed child rows are visible. Unlike a plain Tracker's stepper (which
         // deliberately avoids a rebuild to keep its caret), a Craft target change is an intentional, infrequent
         // action whose whole point is the visible rescaling of the ingredient list, so the rebuild is warranted.
@@ -68,8 +68,8 @@ public abstract partial class ScribeDialogBase
         }
     }
 
-    /// <summary>A single tap on a row's grip toggles its subtask depth between 0 and 1 (task-subtasks 5.3),
-    /// the one-level nesting the whole change is bounded to (<see cref="ScribeBlock.Depth"/> clamps to
+    /// <summary>A single tap on a row's grip toggles its subtask depth between 0 and 1,
+    /// the one-level nesting limit (<see cref="ScribeBlock.Depth"/> clamps to
     /// <c>[0, 1]</c>). Kind-agnostic — any row (Task/Note/Tracker/Link/Craft) can be indented or promoted.
     /// Mirrors the other editor mutations (mutate scratch → mark dirty → rebuild); the codec already
     /// round-trips <see cref="ScribeBlock.Depth"/>, so the normal editor flush persists it with no dedicated
@@ -86,9 +86,9 @@ public abstract partial class ScribeDialogBase
     }
 
     /// <summary>A focused row's caret moved by KEYBOARD navigation (arrows / Home / End / word-jump) with no
-    /// text change (scroll-follow-caret-in-editor issue #1). Text edits already arm the scroll-follow via
-    /// <see cref="NotifyTextChanged"/>, but a bare caret move does not go through <c>OnChanged</c> — so without
-    /// this an arrow key that carries the caret off-screen never scrolled it back. Arms the same
+    /// text change. Text edits already arm the scroll-follow via
+    /// <see cref="NotifyTextChanged"/>, but a bare caret move does not go through <c>OnChanged</c>, so this
+    /// callback is what scrolls an off-screen caret back into view. Arms the same
     /// <see cref="pendingEnsureVisible"/> flag the render loop services with <see cref="EnsureCaretVisible"/>.
     /// (No scratch write — the text is unchanged.)</summary>
     private void NotifyCaretMoved(int index)
@@ -98,7 +98,7 @@ public abstract partial class ScribeDialogBase
         TraceScroll($"caret-moved {index}");
     }
 
-    /// <summary>A row was focused by a MOUSE CLICK (scroll-follow-caret-in-editor issue #3). A click always
+    /// <summary>A row was focused by a MOUSE CLICK. A click always
     /// lands on a visible pixel, so the caret is already in view where the player clicked — the view must not
     /// move at all. Two things could move it: (a) our own scroll-follow, which we cancel by clearing
     /// <see cref="pendingEnsureVisible"/>; and (b) the shipped gui's <c>FocusManager.RequestFocus</c>, which
@@ -143,19 +143,19 @@ public abstract partial class ScribeDialogBase
     /// <summary>Enter: commit the focused row, then insert a new EMPTY task directly beneath it and focus
     /// it (so the player types straight into the new row). Rebuilds because the row set changed.
     ///
-    /// <para>Q5 (add-empty-task-lifecycle): Enter on a row that is itself empty/whitespace-only is a
-    /// no-op on the row set — it does NOT stack a second empty task. Without this, empty-init would let
-    /// Enter-Enter-Enter spam a column of empty rows; instead the caret just stays where it is.</para></summary>
+    /// <para>Enter on a row that is itself empty/whitespace-only is a
+    /// no-op on the row set — it does NOT stack a second empty task, so repeated Enter cannot spam a
+    /// column of empty rows; the caret just stays where it is.</para></summary>
     private void EditorInsertTaskBelow(int index)
     {
         if (scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
         TraceScroll($"insert-below {index}");
 
-        // Q5: don't stack another empty task beneath an already-empty task row.
+        // Don't stack another empty task beneath an already-empty task row.
         var current = scratch.Blocks[index];
         if (current.IsTask && string.IsNullOrWhiteSpace(current.Text)) return;
 
-        // Tier cap (scribe-document-policy): the Enter=new-task gesture also stops at the tablet cap.
+        // Tier cap: the Enter=new-task gesture also stops at the tablet cap.
         if (!CanAddTaskUnderPolicy()) { NotifyTabletFull(); return; }
 
         NormalizeRowOnCommit(index);
@@ -180,7 +180,7 @@ public abstract partial class ScribeDialogBase
         }
     }
 
-    /// <summary>Quick-add seam (add-unified-quick-add-interaction): insert a fresh EMPTY task at the
+    /// <summary>Quick-add seam: insert a fresh EMPTY task at the
     /// player's New Task Insert edge (Top = index 0, Bottom = append) and focus its caret, so the
     /// Shift+right-click capture gesture drops the player straight into that new row. Called AFTER the
     /// editor view is already active (the lectern's server round-trip lands here via
@@ -197,7 +197,7 @@ public abstract partial class ScribeDialogBase
         if (!isEditorMode || scratch is null) return;
         TraceScroll("quick-add");
 
-        // Tier cap (scribe-document-policy): mirror OnClickAdd / EditorInsertTaskBelow — open the editor
+        // Tier cap: mirror OnClickAdd / EditorInsertTaskBelow — open the editor
         // but refuse the insert at the cap, surfacing the same transient "document full" notice.
         if (!CanAddTaskUnderPolicy()) { NotifyTabletFull(); return; }
 
@@ -217,12 +217,9 @@ public abstract partial class ScribeDialogBase
         }
     }
 
-    /// <summary>A row's editable field lost focus (add-empty-task-lifecycle D3; generalized to notes by
-    /// add-note-kind-picker D3). If the block at <paramref name="index"/> — a task OR note — is
+    /// <summary>A row's editable field lost focus. If the block at <paramref name="index"/> — a task OR note — is
     /// empty/whitespace-only, schedule its removal: the self-destruct that turns "clear the text and click
-    /// away" (or Tab off an untyped new row) into a keyboard-only delete. (This reverses the earlier
-    /// "empty text section is never removed" behavior; empty notes were only creatable via dev tools, so no
-    /// shipped player flow relied on a lingering blank note.)
+    /// away" (or Tab off an untyped new row) into a keyboard-only delete.
     ///
     /// <para>The actual delete is DEFERRED to <see cref="OnRenderGUI"/> (<see cref="pendingEmptyRowRemoval"/>)
     /// rather than run here: blur fires from inside the field's focus-notification, and on a row→row move
@@ -234,14 +231,13 @@ public abstract partial class ScribeDialogBase
     private void OnRowBlurred(int index)
     {
         if (!isEditorMode || scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
-        // add-note-kind-picker D3: an abandoned empty row of EITHER kind self-destructs (previously task-only).
-        // add-tracker-link-tasks: Tracker/Link rows are excluded (they carry empty Text by design) — see
-        // IsAbandonableEmptyBlock.
+        // An abandoned empty row of EITHER kind (task or note) self-destructs. Tracker/Link rows are
+        // excluded (they carry empty Text by design) — see IsAbandonableEmptyBlock.
         if (!IsAbandonableEmptyBlock(scratch.Blocks[index])) return;
         pendingEmptyRowRemoval = index;
     }
 
-    /// <summary>A row's editor field hit its per-kind character cap (add-note-kind-picker §8) — the field
+    /// <summary>A row's editor field hit its per-kind character cap — the field
     /// already clamped the input; here we just explain it. Surfaces the same transient in-game error path the
     /// tablet-full / lock notices use, with a per-kind message whose character count is pulled from the limit
     /// constant (so the message and the enforced cap can't drift). Tasks cap at
@@ -259,11 +255,10 @@ public abstract partial class ScribeDialogBase
     }
 
     /// <summary>Editor checkbox toggle — completes a task under the player's completion policy so the
-    /// editor behaves IDENTICALLY to the read/pinned views and the HUD (scribe-lectern-view-consistency
-    /// §4). The row flips its own checkbox optimistically before this runs.
+    /// editor behaves IDENTICALLY to the read/pinned views and the HUD. The row flips its own checkbox
+    /// optimistically before this runs.
     ///
-    /// <para><b>Why the policy is enacted in <c>scratch</c>, not via <see cref="ScribeCompleteTaskMessage"/>
-    /// (design Decision 2 fallback, chosen):</b> the editor holds the edit lock and autosaves the WHOLE
+    /// <para><b>Why the policy is enacted in <c>scratch</c>, not via <see cref="ScribeCompleteTaskMessage"/>:</b> the editor holds the edit lock and autosaves the WHOLE
     /// scratch document authoritatively (<see cref="FlushIfDirty"/> → lock-gated <c>ApplyEdit</c>). A
     /// lock-free completion message writes the shared document out-of-band, so the very next whole-doc
     /// flush would clobber its Sink reorder / Delete. Enacting the policy directly in scratch keeps
@@ -273,10 +268,10 @@ public abstract partial class ScribeDialogBase
     /// surface. The one pin effect the flush does NOT cover is <c>Unpin</c> (the task survives, so the
     /// snapshot reconcile keeps the pin); that is sent explicitly via the identity pin path.</para>
     ///
-    /// <para>Focus preservation (8.5 "toggling a checkbox should NOT disturb the caret in another focused
-    /// row"): clicking the checkbox blurs whatever field was focused via LibGUI's
-    /// <c>DispatchPointerDown</c> focus-clear (same root cause as the delete/pin/reorder controls —
-    /// a05caret1). (In gui@3.1.0 the checkbox IS focusable — <c>CheckboxState : FocusableState</c> — but it's
+    /// <para>Focus preservation (toggling a checkbox must not disturb the caret in another focused
+    /// row): clicking the checkbox blurs whatever field was focused via LibGUI's
+    /// <c>DispatchPointerDown</c> focus-clear (same root cause as the delete/pin/reorder controls).
+    /// (In gui@3.1.0 the checkbox IS focusable — <c>CheckboxState : FocusableState</c> — but it's
     /// deliberately excluded from Tab traversal by <see cref="ScribeFieldOnlyTraversalPolicy"/>, so it's
     /// still mouse-only from the keyboard's point of view.) Keep/Unpin do no rebuild (the checkbox flips
     /// optimistically in its own State, leaving
@@ -315,11 +310,9 @@ public abstract partial class ScribeDialogBase
         }
 
         // Keep/Unpin (and any un-check): no rebuild happened, so re-home the caret to the row that held
-        // focus (a05caret1). Re-request focus WITHOUT the scroll-into-view that FocusEditorRow schedules:
+        // focus. Re-request focus WITHOUT the scroll-into-view that FocusEditorRow schedules:
         // clicking a checkbox on some other (possibly off-screen) row must not yank the viewport to the
-        // still-focused edit row. That pendingEnsureVisible was the "unchecking a task under Keep/Sink
-        // jumps the view" race (trace: complete N done=False → ensure-visible → changed to the focused
-        // row's offset). The caret is already where the player left it; only the focus token needs re-
+        // still-focused edit row. The caret is already where the player left it; only the focus token needs re-
         // granting after DispatchPointerDown's press-clear, so RequestFocus alone is right.
         if (focusedEditIndex is { } held && held < editorFocusNodes.Count)
         {
@@ -330,8 +323,7 @@ public abstract partial class ScribeDialogBase
     /// <summary>Per-row delete: remove the block from the scratch document and rebuild. Mirrors
     /// <see cref="OnClickAddTask"/> (mutate scratch -> mark dirty -> resync focus nodes -> rebuild),
     /// with focus cleanup so no path is left focusing a removed row: if the focused row was deleted
-    /// or shifted, clear/adjust <see cref="focusedEditIndex"/> before the rebuild (spec "deleting the
-    /// focused row does not break focus"). An empty document falls back to the editor's empty-state
+    /// or shifted, clear/adjust <see cref="focusedEditIndex"/> before the rebuild. An empty document falls back to the editor's empty-state
     /// hint, which needs no focus.</summary>
     private void DeleteEditorBlock(int index)
     {
@@ -355,15 +347,15 @@ public abstract partial class ScribeDialogBase
 
         // Re-home the caret after the reconcile. Pressing the (non-IFocusable) delete button already blurred
         // the field via LibGUI's DispatchPointerDown focus-clear, so even a surviving edited row needs its
-        // focus re-requested — nothing re-grants it otherwise, which is why the caret vanished (a05caret1).
-        // If we deleted the focused row, land on the neighbor per design Q1: the row above (index-1), or the
+        // focus re-requested — nothing re-grants it otherwise.
+        // If we deleted the focused row, land on the neighbor: the row above (index-1), or the
         // new first row when the top row was deleted; an emptied document gets no focus (empty-state hint).
-        // Reconcile path (§3.1): a delete never MOUNTS a new row, so the focus target is always a REUSED row
+        // A delete never MOUNTS a new row, so the focus target is always a REUSED row
         // whose field skips its mount-only autoFocus — re-home via pendingFocusRow (the deferred RequestFocus
         // on the persistent node), NOT autoFocusRowOnRebuild. Because the departing ghost holds the deleted
         // slot while it collapses, rows below keep their slots and stay reused with their caret intact FOR
         // THE COLLAPSE; the below rows only remount (losing caret POSITION, text preserved via write-through)
-        // when the ghost retires and they shift up — the accepted positional caveat re-armed in the cleanup.
+        // when the ghost retires and they shift up — an accepted positional caveat.
         if (scratch.Blocks.Count > 0)
         {
             int target = focusedEditIndex ?? Math.Max(0, index - 1);
@@ -380,14 +372,14 @@ public abstract partial class ScribeDialogBase
         pendingEnsureVisible = false;
         // The re-clamp to the shrunk extent is DEFERRED to when the collapse completes: during the collapse
         // the container's ghost still occupies (shrinking) height, so the content extent doesn't actually
-        // shrink until the row reaches zero — clamping now would fight the collapsing height
-        // (scribe-list-collapse). The container fires OnDepartureSettled → RequestClampToExtent once the
-        // ghost retires (D0), and §3.10's collapse-pin glides the viewport down meanwhile.
+        // shrink until the row reaches zero — clamping now would fight the collapsing height.
+        // The container fires OnDepartureSettled → RequestClampToExtent once the
+        // ghost retires, and the collapse-pin glides the viewport down meanwhile.
         RebuildBody();
     }
 
     /// <summary>Per-row pin toggle (any block kind, including Text notes). Pinning is a per-player
-    /// action now, NOT document state: fire a lock-free <see cref="ScribeSetPinMessage"/> keyed by the
+    /// action, NOT document state: fire a lock-free <see cref="ScribeSetPinMessage"/> keyed by the
     /// task's stable id, toggled against the client's own pin cache. It never touches the scratch
     /// document, the edit lock, or autosave. The server re-pushes this player's set, which lands in
     /// <see cref="OnMyPinsChanged"/> and repaints the row.</summary>
@@ -395,7 +387,7 @@ public abstract partial class ScribeDialogBase
     {
         if (scratch is null || index < 0 || index >= scratch.Blocks.Count) return;
         var block = scratch.Blocks[index];
-        // Tier cap (scribe-document-policy): the tablet tier allows only 1 pin. Unpinning is always
+        // Tier cap: the tablet tier allows only 1 pin. Unpinning is always
         // allowed; pinning a new task at the cap seamlessly SWAPS — the older pin is released so the
         // new one fits. Uncapped tiers (Lectern/Notebook) just pin.
         TogglePinWithPolicy(block.TaskId);
@@ -406,7 +398,7 @@ public abstract partial class ScribeDialogBase
     /// from a future HUD). The server derives the snapshot from its own document.
     ///
     /// <para>Also records the SAME snapshot as an optimistic overlay entry on <see cref="modSystem"/>
-    /// (update-pins-1-3-3) before the packet goes out, so the HUD/Pin Tab/dialog rows all show the
+    /// before the packet goes out, so the HUD/Pin Tab/dialog rows all show the
     /// pin/unpin at once rather than waiting for the server round-trip — which in singleplayer stalls for
     /// as long as the Handbook holds the embedded server paused.</para></summary>
     private void SendSetPin(Guid taskId, bool pinned)
@@ -438,24 +430,23 @@ public abstract partial class ScribeDialogBase
             Pinned = pinned,
             // Supply a client-side snapshot so the server can record it even when the host is not
             // registered server-side (e.g. Notebook items — only the client holds the document). Includes
-            // the kind + a Link's target so a pinned Link reaches the HUD as a hyperlink (5.5).
+            // the kind + a Link's target so a pinned Link reaches the HUD as a hyperlink.
             SnapshotText = block?.Text ?? "",
             SnapshotDone = block?.Done ?? false,
             SnapshotKind = (byte)(block?.Kind ?? Scribe.Core.ScribeBlockKind.Task),
             SnapshotLinkTarget = block?.LinkTarget,
             // A Tracker's target item + have/need counts, so a pinned Tracker renders its icon + name +
-            // counter on the HUD/Pin Tab even for an item host the server can't resolve (7.8).
+            // counter on the HUD/Pin Tab even for an item host the server can't resolve.
             SnapshotTargetItemCode = block?.TargetItemCode,
             SnapshotTargetQuantity = block?.TargetQuantity ?? 1,
             SnapshotCurrentQuantity = block?.CurrentQuantity ?? 0,
             // A guide-page Link's display title, so a pinned guide-page Link renders its name on the
-            // HUD/Pin Tab (a "page:" target has no item to resolve a name from) (7.6).
+            // HUD/Pin Tab (a "page:" target has no item to resolve a name from).
             SnapshotLinkLabel = block?.LinkLabel,
-            // The subtask depth, so a pinned subtask indents on the HUD/Pin Tab like the other surfaces
-            // (add-crafting-tasks / task-subtasks 5.1).
+            // The subtask depth, so a pinned subtask indents on the HUD/Pin Tab like the other surfaces.
             SnapshotDepth = block?.Depth ?? 0,
             // Where an unrelated (no pinned-parent) new pin lands — Top or Bottom — per the player's
-            // client-local Pin Insert setting (update-pins-1-3-3). Only meaningful when pinned; the
+            // client-local Pin Insert setting. Only meaningful when pinned; the
             // server ignores it on an unpin.
             PinInsert = (byte)insertEdge,
         });
@@ -470,10 +461,9 @@ public abstract partial class ScribeDialogBase
     /// A drag-reorder (false) chases the moved row with <see cref="pendingEnsureVisible"/> — the player
     /// dragged it, so following it into view is expected. A <b>Sink completion</b> (true) instead HOLDS
     /// the viewport where it was: completing a mid-list task should not yank the viewport to the bottom
-    /// where the row sinks to (Phase 2 trace: Sink was scrolling to the end). We capture the offset before
-    /// the rebuild and let the <see cref="OnRenderGUI"/> restore loop re-apply it — the same "hold still"
-    /// mechanism Pin uses via <see cref="OnMyPinsChanged"/>. Note a <c>ForceRebuild</c> resets the editor's
-    /// <c>SingleChildScrollView</c> offset to 0, so the capture+restore is required, not optional.</para>
+    /// where the row sinks to. The reconcile preserves the shared scroll controller's offset in place,
+    /// so the viewport holds still without any capture/restore — the same "hold still" behavior Pin gets via
+    /// <see cref="OnMyPinsChanged"/>.</para>
     ///
     /// <para><paramref name="preserveFocusedRow"/> chooses what happens to keyboard focus. A LOCAL move
     /// (false) grabs focus onto the moved row, because the player just acted on that row (dragged it, or
@@ -481,7 +471,7 @@ public abstract partial class ScribeDialogBase
     /// <see cref="RefreshReadView"/> while the player is editing a DIFFERENT row — must instead keep focus
     /// on whatever row is being edited, recomputing that row's index across the shift, so the external
     /// completion of one task doesn't yank the caret out of the task the player is typing in
-    /// (sync-editor-view-on-external-completion). A row above the moved one is unshifted and stays reused
+    /// A row above the moved one is unshifted and stays reused
     /// with its caret intact; a row below inherits the same accepted positional caret caveat as any
     /// reorder (its slot shifts by one, so it remounts with text preserved).</para></summary>
     private void ReorderEditorBlock(int from, int to, bool anchorViewport = false, bool preserveFocusedRow = false)
@@ -507,7 +497,7 @@ public abstract partial class ScribeDialogBase
             // Released in place (or a grip click that never dragged, drop onto own children, or an
             // invalid cross-depth drop): no edit — but the grip press already blurred the focused field
             // via LibGUI's DispatchPointerDown focus-clear (the grip isn't IFocusable), so re-home the
-            // caret to the row that was being edited or nothing else will (a05caret1). No rebuild is
+            // caret to the row that was being edited or nothing else will. No rebuild is
             // needed to move the doc; RequestFocus alone re-grants focus.
             if (focusedEditIndex is { } held && held < editorFocusNodes.Count) FocusEditorRow(held);
             return;
@@ -543,11 +533,10 @@ public abstract partial class ScribeDialogBase
         }
         focusedEditIndex = focusTarget >= 0 ? focusTarget : (int?)null;
         SyncFocusNodesToScratch();
-        // Re-home focus through the persistent node (§3.1). A reorder shifts every slot between from and to,
+        // Re-home focus through the persistent node. A reorder shifts every slot between from and to,
         // so a remounted row loses its granted focus under the positional reconciler — drive focus via
-        // pendingFocusRow (the deferred RequestFocus) rather than the field's mount-only autoFocus, per the
-        // finalized reconcile decision: robust whether the row is reused or remounted, one focus path for
-        // delete/reorder. Skip the re-grant on an external move whose edited row did NOT change slot: that
+        // pendingFocusRow (the deferred RequestFocus) rather than the field's mount-only autoFocus:
+        // robust whether the row is reused or remounted, one focus path for delete/reorder. Skip the re-grant on an external move whose edited row did NOT change slot: that
         // row is reused and still focused, so re-requesting would needlessly reset its caret to the end.
         if (preserveFocusedRow)
         {
@@ -559,9 +548,8 @@ public abstract partial class ScribeDialogBase
         }
         if (anchorViewport)
         {
-            // Sink: reconcile preserves the shared controller's scroll offset in place (no ForceRebuild
-            // resets it to 0 anymore), so the "hold the viewport still" behavior is now inherent — no
-            // capture-restore needed. (§3.5 revisits whether the capture apparatus can be removed wholesale.)
+            // Sink: reconcile preserves the shared controller's scroll offset in place, so the
+            // "hold the viewport still" behavior is inherent — nothing to do.
         }
         else
         {
@@ -571,10 +559,10 @@ public abstract partial class ScribeDialogBase
         RebuildBody();
     }
 
-    /// <summary>Footer add-picker action (add-note-kind-picker D2): insert an EMPTY block of the chosen
+    /// <summary>Footer add-picker action: insert an EMPTY block of the chosen
     /// <paramref name="kind"/> (Task or Note) at the player's New Task Insert edge, grow the focus-node
     /// list, and rebuild with the new row auto-focused so the player types straight into it (no boilerplate
-    /// to clear — add-empty-task-lifecycle). A task field renders a dimmed "New task…" ghost hint while
+    /// to clear). A task field renders a dimmed "New task…" ghost hint while
     /// empty, a note "New note…"; either row, if abandoned without typing, is removed on blur (see
     /// <see cref="OnRowBlurred"/>). The picker's primary button passes its current kind (defaults to Task,
     /// so one click still adds a task); picking from the inline kind list passes that kind. Kinds and their
@@ -583,14 +571,13 @@ public abstract partial class ScribeDialogBase
     private void OnClickAdd(ScribeAddKind kind)
     {
         if (scratch is null) return;
-        // Tier cap (scribe-document-policy): a finite tier (tablet, chalkboard) stops at 10 blocks of ANY kind
-        // — tasks, notes, trackers, links, and craft parents all count equally (refine-chalkboard §12). Every
+        // Tier cap: a finite tier (tablet, chalkboard) stops at 10 blocks of ANY kind
+        // — tasks, notes, trackers, links, and craft parents all count equally. Every
         // add kind is gated, so a note trips the cap just like a task. Uncapped tiers (Lectern, Notebook) never
         // trip this. Cap check runs FIRST so a footer tap on Add Link / Tracker / Craft at the cap surfaces
-        // the "full" notice rather than the Handbook guide (those kinds can't be added from the footer anyway,
-        // and 12.9 wants every Add affordance to explain the cap). The picker dims at the cap but stays
-        // clickable so this path is reachable (zero-point-three-fixes §7.2).
-        // add-tracker-link-tasks 3.7: Tracker/Link/Craft can't be created from a bare footer click — they need
+        // the "full" notice rather than the Handbook guide (every Add affordance explains the cap). The
+        // picker dims at the cap but stays clickable so this path is reachable.
+        // Tracker/Link/Craft can't be created from a bare footer click — they need
         // a target item/recipe, which only a Handbook page's "Add to Scribe" link supplies. Below the cap, a
         // footer click on one of these is a GUIDE gesture, not an add: open the explainer entry (Handbook
         // closed) or point the player at the per-item link (Handbook open). Nothing is mutated. See
@@ -605,14 +592,14 @@ public abstract partial class ScribeDialogBase
         isDirty = true;
         SyncFocusNodesToScratch();
         // The new row MOUNTS at `at`, so its field's mount-only autoFocus fires; rows above keep their
-        // slots (carets intact). Reconcile path — see EditorInsertTaskBelow.
+        // slots (carets intact). See EditorInsertTaskBelow.
         autoFocusRowOnRebuild = at;
         focusedEditIndex = at;
         pendingEnsureVisible = true;
         RebuildBody();
     }
 
-    /// <summary>Footer add-picker action for a chosen quest (add-assignment-and-quest-support 10.1): insert
+    /// <summary>Footer add-picker action for a chosen quest: insert
     /// a quest Link at the player's New Task Insert edge, exactly like <see cref="OnClickAdd"/>'s tail, but
     /// with no text field to auto-focus (a Link has no player-editable text — same reason
     /// <see cref="ApplyGuideLinkAppend"/> never autofocuses). The kind list's cap check
@@ -653,9 +640,8 @@ public abstract partial class ScribeDialogBase
         RebuildBody();
     }
 
-    /// <summary>The Quest Link picker's catalog, read once per dialog session (add-assignment-and-quest-support
-    /// 10.1/10.2, extended add-progression-framework-quest-support 7.2 to merge every installed backend's
-    /// catalog into one list): empty — and the picker's "Quest Link" option hidden — when neither backend
+    /// <summary>The Quest Link picker's catalog, read once per dialog session (merges every installed
+    /// backend's catalog into one list): empty — and the picker's "Quest Link" option hidden — when neither backend
     /// is installed or both catalogs are empty/unparseable; with both installed, entries from each appear
     /// together, tagged with their own <see cref="ScribeQuestCatalogEntry.Source"/>. Not re-read on every
     /// footer open: the installed catalog cannot change while the game is running, so a lazily-cached read
@@ -667,15 +653,15 @@ public abstract partial class ScribeDialogBase
             .OrderBy(e => e.Title, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-    /// <summary>The picker's actual candidate list (filter-quest-link-picker): <see cref="QuestCatalogForPicker"/>
+    /// <summary>The picker's actual candidate list: <see cref="QuestCatalogForPicker"/>
     /// narrowed to quests the player has been observed to start this session, re-filtered fresh on every read
-    /// (design.md Decision 2) so a quest accepted mid-session appears the next time the footer's Quest Link
+    /// so a quest accepted mid-session appears the next time the footer's Quest Link
     /// option is opened — the cache above stays the full static catalog, unfiltered.</summary>
     private IReadOnlyList<ScribeQuestCatalogEntry> StartedQuestCatalogForPicker
         => QuestCatalogForPicker.Where(e => modSystem.HasStartedQuest(e.QuestCode)).ToList();
 
     /// <summary>Moves editor focus to <paramref name="index"/> by requesting focus on that row's node
-    /// (the row stays mounted — the editor uses a non-virtualized scroll container, design D2 — so its
+    /// (the row stays mounted — the editor uses a non-virtualized scroll container — so its
     /// node is always live) and scheduling a scroll-into-view.</summary>
     private void FocusEditorRow(int index)
     {
@@ -686,7 +672,7 @@ public abstract partial class ScribeDialogBase
     }
 
     /// <summary>Cmd/Ctrl+Up: commit the current row and jump focus to the FIRST row, caret at its start
-    /// (macOS document-top navigation — scroll-follow-caret-in-editor Cmd/Ctrl row-nav). The scroll-follow
+    /// (macOS document-top navigation). The scroll-follow
     /// then carries the top of the document into view (caret at offset 0 → scrolls to the very top).</summary>
     private void EditorJumpToFirstRow(int index) => JumpToEditorEdge(index, toFirst: true);
 
@@ -745,8 +731,8 @@ public abstract partial class ScribeDialogBase
     }
 
     /// <summary>True when the currently-focused editor row is a task OR note whose text is
-    /// empty/whitespace-only — a transiently-empty row the player is (or just was) editing
-    /// (add-empty-task-lifecycle; generalized to notes by add-note-kind-picker D3). The autosave tick uses
+    /// empty/whitespace-only — a transiently-empty row the player is (or just was) editing.
+    /// The autosave tick uses
     /// this to avoid serializing that transient empty row; leaving the row / closing removes it.</summary>
     private bool FocusedRowIsEmptyBlock()
     {
@@ -758,15 +744,14 @@ public abstract partial class ScribeDialogBase
     /// (<see cref="ScribeBlockKind.Text"/>) whose text is blank/whitespace-only. Tracker and Link rows are
     /// EXCLUDED — they legitimately carry empty <see cref="ScribeBlock.Text"/> (their content is the bound
     /// item plus a counter/link, not typed text), so the abandoned-empty-row sweep must never purge a
-    /// freshly-added Tracker/Link the moment it loses focus (add-tracker-link-tasks). Centralizes the
+    /// freshly-added Tracker/Link the moment it loses focus. Centralizes the
     /// predicate shared by <see cref="OnRowBlurred"/>, <see cref="FocusedRowIsEmptyBlock"/>, and
     /// <see cref="PurgeEmptyRowsFromScratch"/>.</summary>
     private static bool IsAbandonableEmptyBlock(ScribeBlock b) =>
         (b.IsTask || b.Kind == ScribeBlockKind.Text) && string.IsNullOrWhiteSpace(b.Text);
 
     /// <summary>Removes every empty/whitespace-only block (task OR note) from the scratch document, marking
-    /// dirty if any were removed (add-empty-task-lifecycle D5; generalized to notes by add-note-kind-picker
-    /// D3 — an abandoned empty note self-destructs just like an empty task). Called at the terminal commit
+    /// dirty if any were removed (an abandoned empty note self-destructs just like an empty task). Called at the terminal commit
     /// paths (switch-to-read, close) so an abandoned empty row the blur-removal hadn't yet swept is never
     /// flushed or shown in the read view. No rebuild/collapse — the caller tears the editor down or rebuilds
     /// into the read view immediately after.</summary>
@@ -799,7 +784,7 @@ public abstract partial class ScribeDialogBase
     }
 
     /// <summary>Autosave tick. Skips a flush while the focused row is a transiently-empty task OR note
-    /// (add-empty-task-lifecycle; add-note-kind-picker D3): the player is mid-typing an empty new row, and
+    /// the player is mid-typing an empty new row, and
     /// serializing it would round-trip an empty block into the shared document a beat before its blur removes
     /// it. Any OTHER dirty edit still flushes on the next tick once the focused row has content or focus has
     /// moved.</summary>
@@ -864,8 +849,8 @@ public abstract partial class ScribeDialogBase
     /// Notebook and Tablet dialogs. Stamps the host's bound slot identity (inventory id + slot index) onto
     /// the packet WHEN the host exposes one, so the server writes the document back to the exact slot the
     /// dialog is editing rather than re-deriving it from the player's active hand — the misroute that let a
-    /// Handbook add land on a different in-hand item (add-tracker-link-tasks 7.16). A host with no resolvable
-    /// slot identity sends none, and the server falls back to the active-hand slot (legacy behavior).</summary>
+    /// Handbook add land on a different in-hand item. A host with no resolvable
+    /// slot identity sends none, and the server falls back to the active-hand slot.</summary>
     protected ScribeNotebookSaveMessage BuildItemSavePacket(byte[] documentBytes)
     {
         var msg = new ScribeNotebookSaveMessage
@@ -941,7 +926,7 @@ public abstract partial class ScribeDialogBase
 
     /// <summary>The field focus nodes Tab / Shift+Tab may visit in the CURRENT view, in on-screen row
     /// order — the allow-list consulted by <see cref="ScribeFieldOnlyTraversalPolicy"/>
-    /// (exclude-checkboxes-from-tab-focus). Returns the editor rows' nodes in the Editor view and the pin
+    /// Returns the editor rows' nodes in the Editor view and the pin
     /// rows' nodes (ordered to match the visible rows via <see cref="OrderedPinsForDisplay"/>) in the
     /// Pinned view; empty in every other view, so Tab does nothing there rather than landing on a
     /// checkbox. Only nodes with a live <c>Owner</c> (currently mounted) are returned, so a node awaiting
