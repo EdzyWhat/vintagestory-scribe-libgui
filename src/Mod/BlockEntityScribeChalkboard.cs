@@ -20,7 +20,7 @@ public sealed class BlockEntityScribeChalkboard : BlockEntityScribeWritingStatio
 
     protected override string DefaultDocumentTitleKey => "scribe:doctitle-chalkboard";
 
-    /// <summary>Selection-only box-tuning target (add-scribe-block-box-tuning): <see cref="
+    /// <summary>Selection-only box-tuning target: <see cref="
     /// ScribeBoxTuning.HasCollisionBox"/> excludes <see cref="ScribeBoxTuningTarget.Chalkboard"/>, so
     /// this only makes <c>RotatedSelectionBox</c> live-tunable — the board's collision stays fixed at
     /// <c>null</c> (walk-through) regardless of the tuned selection slab.</summary>
@@ -28,8 +28,8 @@ public sealed class BlockEntityScribeChalkboard : BlockEntityScribeWritingStatio
 
     protected override string MeshCacheKeyPrefix => "scribechalkboardmesh";
 
-    /// <summary>Cap the chalkboard at <see cref="ScribeDocumentPolicy.StandardMaxBlocks"/> task blocks
-    /// (refine-chalkboard), enforced through the shared <see cref="ScribeDocumentPolicy.CanAdd"/> path the
+    /// <summary>Cap the chalkboard at <see cref="ScribeDocumentPolicy.StandardMaxBlocks"/> task blocks,
+    /// enforced through the shared <see cref="ScribeDocumentPolicy.CanAdd"/> path the
     /// wax tablet already uses. Deliberately NOT the <see cref="ScribeDocumentPolicy.Tablet"/> preset: that
     /// also caps pins at 1, but the chalkboard is a shared placed block whose pins are per-player, so it
     /// leaves <c>MaxPins</c> null (uncapped) and caps tasks only — the block cap itself is shared via the
@@ -76,15 +76,15 @@ public sealed class BlockEntityScribeChalkboard : BlockEntityScribeWritingStatio
     }
 
     /// <summary>The Chalkboard's container proportions — the single place to refine how the wood-framed slate
-    /// art divides into the title band, side margins, tasks column, and bottom title/button bar. Seeded to the
-    /// shared <see cref="ScribeLayoutProportions.Default"/> values so nothing moves until tuned; adjust a field
+    /// art divides into the title band, side margins, tasks column, and bottom title/button bar. Starts from the
+    /// shared <see cref="ScribeLayoutProportions.Default"/> values; adjust a field
     /// here (e.g. <c>Default with { SideColFrac = 0.14f }</c> to pull the tasks column in off the wood frame)
     /// to reshape ONLY the Chalkboard dialog. See <see cref="ScribeLayout"/> for what each fraction drives.</summary>
     protected override ScribeLayoutProportions? LayoutProportions => ScribeLayoutProportions.Default with
     {
-        // TitleBarFrac/InnerHFrac shifted by the same 0.015 as the shared Default (unify-tab-header-layout
-        // 1.3 — see its remarks), keeping the Chalkboard's Read/Edit/Pinned tabs visually consistent with
-        // every other surface now that they all render the new Row 2 subtitle. Sum unchanged (0.90).
+        // TitleBarFrac/InnerHFrac are offset by the same 0.015 as the shared Default, keeping the
+        // Chalkboard's Read/Edit/Pinned tabs consistent with every other surface's Row 2 subtitle.
+        // TitleBarFrac + InnerHFrac sums to 0.90.
         TitleBarFrac   = 0.135f,  // top drag band height, as a fraction of window height
         InnerHFrac     = 0.765f,  // content region height (title band + tasks), fraction of window height
         SideColFrac    = 0.078f,  // EACH side margin/nav column width, fraction of window width

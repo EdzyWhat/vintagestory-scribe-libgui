@@ -35,7 +35,7 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
 {
     private IInventory? _hotbar;
 
-    // ── Manual History entry state (add-custom-history-entries) ──────────────────────────────
+    // ── Manual History entry state ──────────────────────────────
     // One FocusNode per Manual entry the local player currently owns AND may edit — the pending
     // unsent draft (if any) plus every already-created Manual entry authored by this player.
     // Mirrors ScribeDialogBase's _guestbookNoteFocusNodes, keyed by EntryId instead of a natural
@@ -73,7 +73,7 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
     /// <summary>Opt out of LibGUI's immersive-mouse-mode "floaty" positioning. The base projects a world
     /// anchor onto the screen every frame, and with no block to anchor to our dummy <c>BlockPos(0)</c>
     /// would pin the window to the world origin, so it drifts as the camera turns. Null = plain
-    /// screen-space placement (pin-carried-dialogs-in-immersive-mode). Inherited by the Clockmaker Notebook.</summary>
+    /// screen-space placement. Inherited by the Clockmaker Notebook.</summary>
     protected override WorldAnchor? Anchor => null;
 
     protected override string EmptyHintLangKey => "scribe:scribe-gui-edit-hint-notebook";
@@ -94,7 +94,7 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
     /// because <see cref="_manualFocusNodes"/> lives on this subclass and the base
     /// <see cref="ScribeDialogBase.CaptureAllInputs"/> only knows about editor rows, Pin Tab rows, and
     /// Guestbook notes. Still gated on <see cref="Vintagestory.API.Client.GuiDialog.Focused"/> for the
-    /// same reason the base override is (fix-settings-numeric-arrow-focus-leak).</summary>
+    /// same reason the base override is.</summary>
     public override bool CaptureAllInputs()
         => base.CaptureAllInputs()
         || (Focused && _manualFocusNodes.Values.Any(n => n.HasFocus));
@@ -114,7 +114,7 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
     }
 
     /// <summary>Builds the History tab content for the Notebook — a newest-first list of automatically
-    /// recorded (read-only) and player-authored <c>Manual</c> (add-custom-history-entries) entries, plus
+    /// recorded (read-only) and player-authored <c>Manual</c> entries, plus
     /// a persistent "Add Entry" control.</summary>
     protected override Widget BuildHistoryContent()
     {
@@ -143,7 +143,7 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
         _manualDraftAutoFocus = false; // one-shot
 
         // Family inherited from the tab's DefaultTextStyle ancestor (below): bodyStyle drops its explicit
-        // FontFamily; kind/date carried no family and now follow the task font too (approved change).
+        // FontFamily; kind/date follow the task font too.
         string taskFont = modSystem.MySettings.TaskFontFamily;
         var bodyStyle = new TextStyle { FontSize = ScribeTaskFont.LayoutSize(taskFont, bodySize), Color = colors.OnSurface };
         var kindStyle = new TextStyle { FontSize = ScribeTaskFont.LayoutSize(taskFont, kindSize), Color = colors.OnSurface with { W = colors.OnSurface.W * 0.65f }, Weight = FontWeight.SemiBold };
@@ -211,7 +211,7 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
         // Each non-last row gets its OWN 6px gap between its content and the divider line (so the text
         // never touches the line it's sitting above), on top of the pre-existing 6px gap after the line
         // (before the next row's subtitle) — 12px total between one row's text and the next row's
-        // subtitle, 6px between one row's text and its own divider (2026-08-30 playtest feedback).
+        // subtitle, 6px between one row's text and its own divider.
         Vector4 dividerColor = colors.OnSurface with { W = 0.15f };
         var rows = new List<Widget>(rowContents.Count);
         for (int idx = 0; idx < rowContents.Count; idx++)
@@ -225,11 +225,9 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
         }
 
         // A pending draft counts as "not empty" so the compose row never flashes under the empty-state
-        // prompt (add-custom-history-entries 4.7).
-        // 8-unit top padding lives INSIDE the scroll region (unify-tab-header-layout §7, doubled from 4
-        // per 2026-09-09 playtest feedback) so the durable divider above sits flush against the viewport
-        // and this breathing room scrolls away with the content, instead of the old fixed gap outside the
-        // scroll region.
+        // prompt.
+        // 8-unit top padding lives INSIDE the scroll region so the durable divider above sits flush
+        // against the viewport and this breathing room scrolls away with the content.
         Widget body = rows.Count == 0
             ? new Center(child: new Text(Lang.Get("scribe:scribe-gui-history-empty"), bodyStyle))
             : new Scrollbar(controller: sharedScrollController,
@@ -258,17 +256,17 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
                 right: 0.04f * host.GetLayout(modSystem.MySettings.PixelArtSize).W),
             child: addEntryButton);
 
-        // Shared Row 2 subtitle + durable divider (unify-tab-header-layout 2.4) — the History tab has no
+        // Shared Row 2 subtitle + durable divider — the History tab has no
         // Row 3 controls of its own, so the divider follows directly after the subtitle. Replaces the old
         // bare leading Divider + uniform Column(spacing: 8) gap.
         Widget header = ScribeTabHeader.Build(colors, RowStyle,
             "scribe:scribe-gui-nav-history", "scribe:scribe-gui-subtitle-history",
             modSystem.VisualTuning.ShowSubtitleRow);
 
-        // Root the History tab subtree in the player's Task Text Font + window-scaled base size
-        // (adopt-libgui-31-improvements). Body/kind/date Text widgets all inherit the family from here.
-        // Top inset reduced from 10 to 4 (2026-09-08 playtest feedback: 6px less gap between the title bar
-        // and the Row 2 subtitle); left/right/bottom stay 10 like every other tab.
+        // Root the History tab subtree in the player's Task Text Font + window-scaled base size.
+        // Body/kind/date Text widgets all inherit the family from here.
+        // Top inset is 4 (small gap between the title bar and the Row 2 subtitle); left/right/bottom
+        // are 10 like every other tab.
         return ScribeTextDefaults.Wrap(modSystem.MySettings.TaskFontFamily, bodySize, new Padding(
             EdgeInsets.Ltrb(10, 4, 10, 10),
             new Column(
@@ -304,8 +302,7 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
     }
 
     /// <summary>"Add Entry": mints a new local-only draft and rebuilds so it renders autofocused, or —
-    /// if a draft is already pending — just reclaims focus on it rather than ever starting a second one
-    /// (add-custom-history-entries 4.2).</summary>
+    /// if a draft is already pending — just reclaims focus on it rather than ever starting a second one.</summary>
     private void StartNewManualEntryDraft()
     {
         if (_manualDraftId is { } existingId)
@@ -324,7 +321,7 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
     /// <see cref="ScribeAddHistoryEntryMessage"/> the first time the pending draft commits non-empty
     /// text, else <see cref="ScribeSetHistoryEntryTextMessage"/> for every later edit to an
     /// already-created entry. A draft that never receives any text is simply never sent — nothing to
-    /// discard server-side (add-custom-history-entries Decision 4).</summary>
+    /// discard server-side.</summary>
     private void CommitManualEntry(Guid entryId)
     {
         if (!_manualLiveText.TryGetValue(entryId, out var live)) return;
@@ -421,10 +418,10 @@ public class GuiDialogScribeNotebook : ScribeDialogBase
     private void OnHotbarSlotModified(int slotId)
     {
         // An in-place content re-sync of the STILL-HELD active slot (not a hand-switch) must use a
-        // presence-only check, NOT the strict DocId identity guard OnActiveSlotChanged runs
-        // (fix-item-dialog-first-open-flicker). A first open of a not-yet-crafted item makes the server
+        // presence-only check, NOT the strict DocId identity guard OnActiveSlotChanged runs.
+        // A first open of a not-yet-crafted item makes the server
         // re-sync the stack WITHOUT the client-generated document, so its DocId no longer matches — the
-        // strict guard closed the dialog one frame after opening, and only a second right-click stuck.
+        // strict guard would close the dialog one frame after opening.
         // Since the physical item never left the hand, close only if it stopped being a Scribe item at all.
         // See ActiveHandHoldsAnyScribeDocumentItem for the full rationale.
         if (slotId == capi.World.Player.InventoryManager.ActiveHotbarSlotNumber
@@ -571,8 +568,7 @@ internal sealed class ScribeManualHistoryRowState : State<ScribeManualHistoryRow
         }
 
         // Hover region wraps ONLY the text/input line, not the kind/date line above it — a player asked
-        // for the button to appear specifically when hovering the text, not "anywhere on the entry"
-        // (2026-08-30 AskUserQuestion).
+        // for the button to appear specifically when hovering the text, not "anywhere on the entry".
         Widget textLineRegion = w.IsAuthor
             ? new MouseRegion(
                 onEnter: _ => { if (!hovered) SetState(() => hovered = true); },

@@ -25,10 +25,10 @@ public sealed class ScribeNotebookSaveMessage
     public byte[]? HistoryBytes { get; set; }
 
     /// <summary>Client → server only: the <c>InventoryID</c> of the slot the dialog was actually editing,
-    /// so the server writes the document back to the EXACT chosen slot instead of re-deriving it from the
-    /// player's active hand. The Handbook "Add to Scribe" flow can legitimately open a carried book that is
-    /// NOT the in-hand item (e.g. while a read-only tablet sits in the hand); addressing the save by the
-    /// active hand then misroutes the write onto that other item (add-tracker-link-tasks 7.16). Null on
+    /// so the server writes the document back to the EXACT chosen slot rather than the player's active hand.
+    /// The Handbook "Add to Scribe" flow can open a carried book that is NOT the in-hand item (e.g. while a
+    /// read-only tablet sits in the hand), so addressing the save by the active hand would misroute the write
+    /// onto that other item. Null on
     /// server→client echoes and on legacy clients, where the server falls back to the active-hand slot.</summary>
     [ProtoMember(4)]
     public string? TargetInventoryId { get; set; }

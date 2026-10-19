@@ -5,7 +5,7 @@ namespace Scribe;
 /// <summary>
 /// Client → server: copy the <see cref="Scribe.Core.ScribeDocument"/> stored on the Scriptorium's
 /// Original (source) inventory slot onto its Duplicate (target) slot — the Transcribe view's
-/// "stamp to copy" gesture (add-transcribe-copy-paste D2). Addressed by the Scriptorium's block
+/// "stamp to copy" gesture. Addressed by the Scriptorium's block
 /// <b>position</b> (X/Y/Z), not a DocId: the copy operates on whole items in a specific block's
 /// inventory, so the server resolves the <see cref="BlockEntityScriptorium"/> at that position and
 /// reads/writes its slots directly.
@@ -40,7 +40,7 @@ public sealed class ScribeTranscribeCopyMessage
     /// <see cref="Append"/> is set — appending is non-destructive, so there is nothing to overwrite-gate.</summary>
     [ProtoMember(6)] public bool AllowOverwrite { get; set; }
 
-    /// <summary>Copy MODE (add-transcribe-copy-paste, 2026-08-17). When false (default) the copy REPLACES the
+    /// <summary>Copy MODE . When false (default) the copy REPLACES the
     /// target document (guarded by <see cref="AllowOverwrite"/>). When true the source's tasks are APPENDED onto
     /// the target's existing document instead — non-destructive, so it needs no overwrite confirm. The server
     /// re-checks the target's capacity against target-count + source-count either way.</summary>

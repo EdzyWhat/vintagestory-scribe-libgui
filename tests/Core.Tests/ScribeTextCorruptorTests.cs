@@ -2,8 +2,8 @@ using Scribe.Core;
 
 namespace Scribe.Core.Tests;
 
-// Tests for the pure Zalgo-style text corruptor backing the HUD's temporal-instability effect
-// (hud-temporal-storm-corruption). All game-agnostic: the corruptor is seed-driven, so its behavior is
+// Tests for the pure Zalgo-style text corruptor backing the HUD's temporal-instability effect.
+// All game-agnostic: the corruptor is seed-driven, so its behavior is
 // fully deterministic and testable without a game install.
 public class ScribeTextCorruptorTests
 {

@@ -19,10 +19,8 @@ public readonly record struct ScribeLayoutProportions
 
     public ScribeLayoutProportions()
     {
-        // TitleBarFrac tightened / InnerHFrac grown by the same 0.015 (unify-tab-header-layout 1.3): Row 1
-        // gives back a sliver of height to the tab content area, to help offset the new Row 2 subtitle
-        // every tab now renders. The two fracs' SUM is unchanged (0.93), so the ~7% bottom margin below the
-        // inner box is unaffected — only the title/content SPLIT shifts.
+        // TitleBarFrac is kept small so the tab content area gets height to offset the Row 2 subtitle
+        // every tab renders. The two fracs sum to 0.93, leaving a ~7% bottom margin below the inner box.
         TitleBarFrac   = 0.115f;
         InnerHFrac     = 0.815f;
         SideColFrac    = 0.10f;
@@ -105,7 +103,7 @@ public interface IScribeDocumentHost
     /// (<see cref="TabletHost"/>) overrides it. The dialog consults <see cref="ScribeDocumentPolicy.CanAdd"/>
     /// before adding a task and <see cref="ScribeDocumentPolicy.CanPin"/> before pinning one, so the cap
     /// is applied at the editor mutation boundary rather than inside the shared <see cref="ScribeDocument"/>
-    /// model (scribe-document-policy).</summary>
+    /// model.</summary>
     ScribeDocumentPolicy Policy => ScribeDocumentPolicy.Unlimited;
 
     // ── Server-side document write-through (lock-free, called from completion/pin handlers) ──
@@ -132,17 +130,16 @@ public interface IScribeDocumentHost
     bool SetTaskTextFromReader(Guid taskId, string text);
 
     /// <summary>Server-side: set a Tracker's live <c>CurrentQuantity</c> by stable TaskId (clamped only to
-    /// ≥ 0 by the Core model — overflow above the target is preserved, 7.14). Returns true if it changed. The client-side count
-    /// engine drives this from the viewing player's carried inventory (add-tracker-link-tasks D5/4.3), so
+    /// ≥ 0 by the Core model — overflow above the target is preserved). Returns true if it changed. The client-side count
+    /// engine drives this from the viewing player's carried inventory, so
     /// the count is server-persisted and multiplayer viewers converge — exactly like the Done flag.
     /// No-op for a non-Tracker or unknown TaskId. For block hosts: marks dirty and resyncs. For item hosts:
     /// writes to the ItemStack.</summary>
     bool SetTrackerCurrentQuantityFromReader(Guid taskId, int currentQuantity);
 
     /// <summary>Server-side: set a QuestObjective's live backend-reported progress by stable TaskId, clamped
-    /// into <c>[0, TargetQuantity]</c> by the Core model (add-progression-framework-quest-objective-subtasks
-    /// — unlike a Tracker's overflow-visible count, an objective's progress cannot exceed its required count
-    /// in Progression Framework's own model). Returns true if it changed. The client-side quest watcher
+    /// into <c>[0, TargetQuantity]</c> by the Core model (unlike a Tracker's overflow-visible count, an
+    /// objective's progress cannot exceed its required count in Progression Framework's own model). Returns true if it changed. The client-side quest watcher
     /// drives this from the backend's own reported state, never from carried inventory, so the count is
     /// server-persisted and multiplayer viewers converge — exactly like a Tracker's
     /// <see cref="SetTrackerCurrentQuantityFromReader"/>, but gated on <c>IsQuestObjective</c> rather than
@@ -150,7 +147,7 @@ public interface IScribeDocumentHost
     /// For block hosts: marks dirty and resyncs. For item hosts: writes to the ItemStack.</summary>
     bool SetQuestObjectiveProgressFromReader(Guid taskId, int currentQuantity);
 
-    // ── Read View filter-pill + subtask-collapse persisted state (read-view-filter-and-collapse) ──
+    // ── Read View filter-pill + subtask-collapse persisted state ──
 
     /// <summary>The last-selected Read View filter pill for THIS Scribe item/block instance (a
     /// <see cref="ReadViewFilterCategory"/> cast to byte), defaulting to <c>0</c> (All) when never set.

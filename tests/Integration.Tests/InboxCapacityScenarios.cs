@@ -7,10 +7,9 @@ using Vintagestory.API.Datastructures;
 namespace Integration.Tests;
 
 /// <summary>
-/// redesign-inbox-block-placement-and-capacity tasks.md 1.2/1.3: the Inbox's inventory grew from 8
-/// slots (4 restricted + 4 open) to 12 (8 restricted + 4 open). Both scenarios exercise the real
+/// The Inbox's inventory has 12 slots (8 restricted + 4 open). Both scenarios exercise the real
 /// slot-restriction path (<see cref="ItemSlot.TryPutInto"/>, which invokes <c>CanHold</c>/<c>CanTakeFrom</c>)
-/// rather than assigning <c>Itemstack</c> directly, so a regression in the restriction itself would
+/// rather than assigning <c>Itemstack</c> directly, so a break in the restriction itself would
 /// actually fail these tests, not just a miscounted slot total.
 /// </summary>
 public class InboxCapacityScenarios : AtlasScenarioBase

@@ -6,8 +6,7 @@ using Vintagestory.API.MathTools;
 namespace Scribe;
 
 /// <summary>
-/// Ambient particle indicator for an unseen assignment (add-assignment-and-quest-support §8.4,
-/// design.md Decision 9): a sparse field of warm amber motes, with an occasional full-hue "rainbow"
+/// Ambient particle indicator for an unseen assignment: a sparse field of warm amber motes, with an occasional full-hue "rainbow"
 /// accent, floating above an Inbox-capable block entity while the local player has at least one unseen
 /// received assignment. Player-specific and client-side only — <see cref="IWorldAccessor.SpawnParticles"/>
 /// is called with no <c>dualCallByPlayer</c>, so nothing is broadcast to (or influenced by) any other
@@ -16,7 +15,7 @@ namespace Scribe;
 ///
 /// <para>Uses <see cref="AdvancedParticleProperties"/> (not <see cref="SimpleParticleProperties"/>)
 /// specifically for its <c>HsvaColor</c> field — a <c>NatFloat[4]</c> (H/S/V/A) resampled per spawned
-/// particle, giving the "mean ± variance" color spread design.md calls for. The 1-in-5 full-range-hue
+/// particle, giving a "mean ± variance" color spread. The full-range-hue
 /// accent can't be expressed as a single continuous distribution (no bimodal <c>NatFloat</c>
 /// distribution fits "mostly narrow amber, occasionally anywhere on the wheel"), so each tick's total
 /// mote count is split into two separate <see cref="IWorldAccessor.SpawnParticles(IParticlePropertiesProvider,IPlayer)"/>
@@ -25,32 +24,27 @@ namespace Scribe;
 public sealed class ScribeAssignmentParticleEmitter
 {
     /// <summary>How close (blocks) the player must be to a block entity for its indicator to consider
-    /// spawning. Widened 6 → 12 (playtest feedback 2026-08-31: the old range felt too short to notice
-    /// the indicator before walking right up to the block) — author-tunable via
-    /// <see cref="ScribeVisualTuning"/> (add-configkit-visual-tuning).</summary>
+    /// spawning. Author-tunable via <see cref="ScribeVisualTuning"/>.</summary>
     public readonly double DetectionRadius;
 
-    // Base (amber/gold) HSV band, 0-255 scale matching VS's own range (design.md Decision 9).
+    // Base (amber/gold) HSV band, 0-255 scale matching VS's own range.
     private const float BaseHue = 32f, BaseHueVar = 8f;
     private const float BaseSat = 200f, BaseSatVar = 25f;
     private const float BaseVal = 250f, BaseValVar = 20f;
     private const float BaseAlpha = 180f, BaseAlphaVar = 40f;
 
     /// <summary>Fraction of each tick's spawned motes that get a randomized full-range hue instead of
-    /// the base amber band. Started at ~1-in-5 (0.2); playtest feedback (2026-08-31) settled on a flat
-    /// 50/50 split after discussion. Author-tunable via <see cref="ScribeVisualTuning"/>.</summary>
+    /// the base amber band. Author-tunable via <see cref="ScribeVisualTuning"/>.</summary>
     private readonly float RainbowRatio;
 
-    /// <summary>Scales the base 1-3-per-tick mote count. Playtest feedback (2026-08-31) tried +30%
-    /// (1.3), settled back on the original count (1.0), then — after living with the widened detection
-    /// radius and lower spawn origin — asked for a sparser field overall: 1.0 → 0.6. Author-tunable via
+    /// <summary>Scales the base 1-3-per-tick mote count. Author-tunable via
     /// <see cref="ScribeVisualTuning"/>.</summary>
     private readonly float CountMultiplier;
 
     /// <summary>One-time multiplier applied on the tick a player's proximity+unseen-assignment trigger
     /// first turns true this session (see <see cref="BlockEntityScribeWritingStation"/>'s tick
     /// listener), so the ambient field looks already-established the moment the player turns toward the
-    /// block instead of visibly accruing over the first several ticks (playtest feedback 2026-08-31).
+    /// block instead of visibly accruing over the first several ticks.
     /// Sized to roughly fill the steady-state population in one shot: steady-state count is
     /// approximately (mean per-tick spawn) × (mean lifetime ÷ tick interval) ≈ 2.6 × (2s ÷ 1.5s) ≈ 3.5×
     /// a single tick's spawn. Author-tunable via <see cref="ScribeVisualTuning"/>.</summary>
@@ -67,26 +61,24 @@ public sealed class ScribeAssignmentParticleEmitter
     private const float LifeLengthAvg = 2f, LifeLengthVar = 0.5f;
     private const float SizeAvg = 0.12f, SizeVar = 0.04f;
 
-    /// <summary>Slight NEGATIVE gravity so motes float upward rather than fall/drip (design.md Decision 9).
-    /// Scaled to 2/3 of its original magnitude alongside <see cref="Velocity"/>'s Y component (playtest
-    /// feedback 2026-08-31: "runs too tall" — shrink vertical travel, not particle lifetime) so the field
-    /// covers roughly 2/3 of its previous vertical distance over the same <see cref="LifeLengthAvg"/>.</summary>
+    /// <summary>Slight NEGATIVE gravity so motes float upward rather than fall/drip.
+    /// Together with the Y velocity (<see cref="VelocityYAvg"/>) it sets how far the field rises over
+    /// <see cref="LifeLengthAvg"/>.</summary>
     private const float GravityEffect = -0.004f;
 
-    /// <summary>Upward drift speed (mean, variance) — see <see cref="GravityEffect"/>'s remarks; scaled to
-    /// 2/3 of its original 0.01 mean/variance alongside it.</summary>
+    /// <summary>Upward drift speed (mean, variance) — see <see cref="GravityEffect"/>'s remarks.</summary>
     private const float VelocityYAvg = 0.0067f, VelocityYVar = 0.0067f;
 
     private static readonly Random Rand = new();
 
     /// <summary>Spawns this tick's mote batch centered around <paramref name="pos"/>'s vertical midpoint
-    /// (moved down from just-above-the-block per playtest feedback 2026-08-31: something blocking the
-    /// top half of the block no longer hides the whole field). Call only after confirming the trigger
+    /// (inside the block's own cell, so something blocking the top half of the block does not hide the
+    /// whole field). Call only after confirming the trigger
     /// condition (an unseen assignment) and proximity — this method itself does no gating, so a
     /// caller-side gate (see <see cref="BlockEntityScribeWritingStation"/>'s tick listener) controls WHEN
     /// it fires. <paramref name="seedBurst"/> is set on the first tick after the trigger turns true,
     /// spawning a larger one-time batch so the field doesn't need several ticks to build up to its
-    /// steady-state density (playtest feedback 2026-08-31).</summary>
+    /// steady-state density.</summary>
     public void SpawnAt(ICoreClientAPI capi, BlockPos pos, bool seedBurst = false)
     {
         var minPos = new Vec3d(pos.X + 0.2, pos.Y + 0.35, pos.Z + 0.2);
@@ -95,7 +87,7 @@ public sealed class ScribeAssignmentParticleEmitter
     }
 
     /// <summary>Same field, centered on an arbitrary world position rather than a block's own cell —
-    /// used by the Task Notice proximity ping (tasks.md 5.4), whose found position may be a dropped
+    /// used by the Task Notice proximity ping, whose found position may be a dropped
     /// <c>EntityItem</c>'s fractional coordinates rather than a block-aligned one.</summary>
     public void SpawnAt(ICoreClientAPI capi, Vec3d center, bool seedBurst = false)
     {
@@ -106,7 +98,7 @@ public sealed class ScribeAssignmentParticleEmitter
 
     private void SpawnBatch(ICoreClientAPI capi, Vec3d minPos, Vec3d maxPos, bool seedBurst)
     {
-        // 1-3 sparse motes per tick (design.md: "low spawn quantity — sparse motes, not a fountain"),
+        // 1-3 sparse motes per tick (low spawn quantity — sparse motes, not a fountain),
         // scaled by CountMultiplier and, on entry, SeedBurstMultiplier.
         float scale = CountMultiplier * (seedBurst ? SeedBurstMultiplier : 1f);
         int total = (int)MathF.Round((1 + Rand.Next(3)) * scale);

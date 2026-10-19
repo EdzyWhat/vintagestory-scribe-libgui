@@ -82,8 +82,7 @@ public sealed class ItemScribeTaskNotice : Item, IScribeDocumentItem
         => IsSealed(inSlot.Itemstack) ? _interactions.Append(base.GetHeldInteractionHelp(inSlot)) : base.GetHeldInteractionHelp(inSlot);
 
     /// <summary>Internal (not private) so <see cref="ScribeDocumentSlot.BuildSummaryCard"/> can reuse this
-    /// same check for its Task-Notice hover-card exception rather than re-deriving it
-    /// (signal-tasknotice-inbox-presence).</summary>
+    /// same check for its Task-Notice hover-card exception rather than re-deriving it.</summary>
     internal static bool IsSealed(ItemStack? stack) =>
         stack is not null && ScribeDocumentAttributes.TryReadFrom(stack, out var doc) && doc is not null && doc.Blocks.Count > 0;
 

@@ -17,7 +17,7 @@ namespace Scribe;
 
 /// <summary>
 /// Scribe's numeric-entry control: a text field with +/- buttons, plus <b>up/down arrow-key stepping</b>
-/// while the field is focused (scribe-settings-followups 3.4). It is a near-clone of LibGUI's stock
+/// while the field is focused. It is a near-clone of LibGUI's stock
 /// <see cref="NumericField"/>, which we could not extend for this: the stock field owns its inner
 /// <see cref="TextField"/> privately and passes no key hook, and <see cref="TextField"/> marks every
 /// non-Alt key <c>Handled</c> before it bubbles to any ancestor — so there is no way to add arrow
@@ -31,10 +31,10 @@ namespace Scribe;
 /// <paramref name="initialValue"/> in <c>InitState</c> only — the caller remounts it via a
 /// <c>ValueKey</c> when the persisted/clamped value changes) and reverts unparseable text.</para>
 ///
-/// <para><b>Clamp on unfocus (refine-settings-and-window-chrome).</b> Typing NO LONGER writes through on
+/// <para><b>Clamp on unfocus.</b> Typing does not write through on
 /// every keystroke: it only edits locally, so the caller's <c>onChanged</c> → <c>Normalized()</c> →
-/// <c>ValueKey</c> remount can't snap the field to a bound mid-edit (the pre-existing
-/// <c>add-settings-tab</c> defect that made select-all-and-retype impossible). Instead the value is
+/// <c>ValueKey</c> remount can't snap the field to a bound mid-edit (which would make
+/// select-all-and-retype impossible). Instead the value is
 /// committed once on BLUR: the field parses its text, applies the optional <see cref="Clamp"/> callback
 /// (the Core <c>Clamp*</c> static — Core stays the range source of truth), rewrites its own text to the
 /// clamped result, and fires <c>onChanged</c> a single time (only when the committed value actually
@@ -44,7 +44,7 @@ namespace Scribe;
 /// </summary>
 /// <summary>
 /// Host-owned focus state for a settings form's numeric fields, so focus survives the form's write-through
-/// <c>ForceRebuild</c> (scribe-settings-followups focus fix). The dialog owns one of these for the lifetime
+/// <c>ForceRebuild</c>. The dialog owns one of these for the lifetime
 /// of the form and passes it into <see cref="ScribeSettingsContent"/> on every rebuild; the content asks it
 /// for a per-field persistent <see cref="FocusNode"/> (created once, keyed by a stable field id) and whether
 /// each field should auto-focus on mount. When a field is stepped it calls <see cref="ArmAutoFocus"/> with
@@ -130,7 +130,7 @@ public sealed class ScribeNumericField : StatefulWidget
     /// <summary>Optional host-owned focus node. When supplied it survives the host's write-through
     /// <c>ForceRebuild</c> (which unmounts this widget), so paired with <see cref="AutoFocus"/> the field
     /// can re-grab focus after the rebuild — the same persistent-node pattern the lectern editor uses to
-    /// keep the caret across rebuilds (scribe-settings-followups focus fix). Null = internal node (focus
+    /// keep the caret across rebuilds. Null = internal node (focus
     /// won't survive a rebuild, fine for a field the host doesn't refocus).</summary>
     public FocusNode? FocusNode { get; }
 
@@ -170,30 +170,29 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
 
         // Prefer a host-owned focus node so focus survives the host's write-through ForceRebuild; fall back
         // to an internal one otherwise. RequestFocus resolves its manager via Owner?.Owner?.FocusManager,
-        // so the node needs an Owner or focus never takes (banked lesson from ScribeMultilineField).
+        // so the node needs an Owner or focus never takes (same as ScribeMultilineField).
         _focusNode = Widget.FocusNode ?? (_internalFocusNode = new FocusNode());
         _focusNode.Owner = Element;
 
-        // Detect focus-lost to commit + clamp the typed value (refine-settings-and-window-chrome). LibGUI's
+        // Detect focus-lost to commit + clamp the typed value. LibGUI's
         // TextField exposes no onBlur, so — like TextFieldState itself does — we listen on the focus node and
         // check HasFocus in the handler. The node may be host-owned and reused across remounts, so the
         // listener is removed in Dispose to avoid duplicates.
         _hadFocus = _focusNode.HasFocus;
         _focusNode.AddListener(OnFocusChanged);
 
-        // Re-grab focus after a rebuild for the field the player just stepped (scribe-settings-followups
-        // focus fix), so repeated arrow/button presses keep working without re-clicking the field.
+        // Re-grab focus after a rebuild for the field the player just stepped, so repeated arrow/button presses keep working without re-clicking the field.
         if (Widget.AutoFocus) _focusNode.RequestFocus();
     }
 
     /// <summary>Resync the displayed value when an in-place reconcile hands this state a NEW widget whose
-    /// bound <see cref="ScribeNumericField.Value"/> changed — the fix for the Craft ingredient-subtask
-    /// live-rescale bug (fix-craft-subtask-live-rescale). The field is uncontrolled: it seeds
+    /// bound <see cref="ScribeNumericField.Value"/> changed (e.g. the Craft ingredient-subtask
+    /// live rescale). The field is uncontrolled: it seeds
     /// <see cref="_currentValue"/> + controller text from <c>Widget.Value</c> in <see cref="InitState"/>
     /// ONLY, on the assumption the host remounts it via a <c>ValueKey</c> when the value changes. The editor
     /// reconcile is keyed by <c>TaskId</c>, so a Craft parent's target step REUSES every ingredient row (and
-    /// its inner numeric field) rather than remounting it — with no <c>UpdateWidget</c> the reused field kept
-    /// painting its stale count until a view swap forced a remount. This mirrors
+    /// its inner numeric field) rather than remounting it, so without this <c>UpdateWidget</c> a reused field would
+    /// paint a stale count. This mirrors
     /// <c>ScribeEditRowState.UpdateWidget</c>'s optimistic-<c>done</c> resync: on reuse, re-seed from the
     /// authoritative value, gated on it actually CHANGING.
     ///
@@ -204,7 +203,7 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
     /// the caret stays put. Callers that remount via a <c>ValueKey</c> (the Settings form) never reach here
     /// (a new element runs <c>InitState</c>, not <c>UpdateWidget</c>); a plain Tracker stepper holds focus
     /// while stepping (gate skips) and has no other path that changes its value (guard finds no change), so it
-    /// is byte-identical to before.</para></summary>
+    /// is unaffected.</para></summary>
     public override void UpdateWidget(ScribeNumericField oldWidget)
     {
         base.UpdateWidget(oldWidget);
@@ -219,10 +218,10 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
         }
     }
 
-    /// <summary>While the field is focused, typing edits ONLY the local text — it does NOT write through
-    /// (refine-settings-and-window-chrome). Writing on every keystroke fired the host's <c>Normalized()</c>
-    /// + <c>ValueKey</c> remount, which re-seeded the uncontrolled field to the clamped value mid-edit and
-    /// made select-all-and-retype impossible. The commit (parse → clamp → onChanged) is deferred to blur
+    /// <summary>While the field is focused, typing edits ONLY the local text — it does NOT write through.
+    /// Writing on every keystroke would fire the host's <c>Normalized()</c>
+    /// + <c>ValueKey</c> remount, which would re-seed the uncontrolled field to the clamped value mid-edit.
+    /// The commit (parse → clamp → onChanged) is deferred to blur
     /// (<see cref="OnFocusChanged"/>). Unparseable junk (not a partial-number prefix) still snaps back to the
     /// last good value so the field never holds garbage.</summary>
     private void OnTextChanged()
@@ -244,18 +243,18 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
     /// fire <c>onChanged</c> so the host writes + persists it. No-op transitions are ignored (the node
     /// notifies on every change; we act only on the focus edge).
     ///
-    /// <para><b>The +/- step-button unfocus fix (§8.2).</b> A step button is a bare
+    /// <para><b>Step-button unfocus guard.</b> A step button is a bare
     /// <see cref="GestureDetector"/>, not <see cref="Gui.Widgets.Framework.IFocusable"/>, so pressing it
     /// blurs this field on pointer-DOWN (LibGUI's <c>EventDispatcher.DispatchPointerDown</c> calls
-    /// <c>RequestFocus(null)</c> whenever the hit path has no focusable — the <c>a05caret1</c> note). That
+    /// <c>RequestFocus(null)</c> whenever the hit path has no focusable). That
     /// blur lands here and, if it fires <c>onChanged</c>, triggers the host's SYNCHRONOUS
     /// <c>ForceRebuild</c> — which unmounts the step button mid-press, so its pointer-UP tap
-    /// (<see cref="Adjust"/>, which re-requests focus) never runs and focus is lost. The guard below is the
-    /// fix: on a blur where the committed value is UNCHANGED from what the field was mounted with (the
+    /// (<see cref="Adjust"/>, which re-requests focus) never runs and focus would be lost. The guard below
+    /// prevents that: on a blur where the committed value is UNCHANGED from what the field was mounted with (the
     /// common case — the player didn't retype, they just clicked +/-), we skip <c>onChanged</c> entirely, so
     /// no rebuild happens, the button survives its own click, and <see cref="Adjust"/> re-homes focus. When
     /// the player DID retype an out-of-range value, the committed value differs, <c>onChanged</c> fires, and
-    /// the write-through remount settles the field on the clamped value as before.</para></summary>
+    /// the write-through remount settles the field on the clamped value.</para></summary>
     private void OnFocusChanged()
     {
         bool has = _focusNode.HasFocus;
@@ -277,7 +276,7 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
 
             // Only write through (and thus rebuild) when the value actually changed from the mounted value. A
             // step-button press blurs us with the value unchanged; skipping onChanged there keeps the host from
-            // rebuilding out from under the button before its tap fires (§8.2 — see the doc comment above).
+            // rebuilding out from under the button before its tap fires (see the doc comment above).
             if (Math.Abs(committed - Widget.Value) > 0.0001f)
             {
                 Widget.OnChanged?.Invoke(committed);
@@ -296,7 +295,7 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
     {
         _focusNode.RequestFocus();
         // Tell the host to arm auto-focus for THIS field before the value write, since onChanged triggers a
-        // rebuild that unmounts us; on remount InitState re-requests focus (scribe-settings-followups).
+        // rebuild that unmounts us; on remount InitState re-requests focus.
         Widget.OnStepped?.Invoke();
         _currentValue += delta;
         _controller.Text = _currentValue.ToString();
@@ -305,7 +304,7 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
     }
 
     /// <summary>The <see cref="TextField"/> key-intercept seam: Up/Down step the value by the field's
-    /// increment (scribe-settings-followups 3.4). Marking the event Handled stops the field from also
+    /// increment. Marking the event Handled stops the field from also
     /// treating the arrow as caret movement. All other keys fall through to the field unchanged.</summary>
     private void OnFieldKeyDown(KeyboardEvent e)
     {
@@ -355,13 +354,12 @@ internal sealed class ScribeNumericFieldState : State<ScribeNumericField>
                         }),
                         new Vector2(0f, -buttonSize * 0.04f)))));
 
-        // The clamp still fires on blur (in OnFocusChanged); the visible valid-range feedback line was
-        // dropped as unwanted (§8.2), so the field is just the input + its +/- step column.
+        // The clamp still fires on blur (in OnFocusChanged); the field has no valid-range feedback line;
+        // it is just the input + its +/- step column.
         // Use caller-supplied fill color if the BoxStyle has one, otherwise fall back to the theme's raised
         // input tone. SurfaceHigh (not Background) is the "writing" surface the multiline TEXT field paints
         // its box with (ScribeMultilineField boxColor), so an unstyled numeric field — e.g. the Tracker's
-        // target-quantity stepper — now matches a text input's background on every theme instead of reading
-        // a shade darker (the chalkboard divergence the user flagged).
+        // target-quantity stepper — matches a text input's background on every theme.
         var fillColor = Widget.Style.Color.W > 0
             ? Widget.Style.Color
             : colors.SurfaceHigh;

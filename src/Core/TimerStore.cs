@@ -36,13 +36,13 @@ public sealed class TimerStore
     /// <summary>Seconds this timer has spent in the <see cref="TimerStatus.Fired"/> state (0 while
     /// Idle/Running). The server accumulates it on its 1 Hz tick after the timer fires; it is the single
     /// persisted source of truth for how long a fired timer has been flashing, so a client-driven
-    /// auto-disappear resumes rather than restarts across a relog (timer-auto-disappear-setting). Added
-    /// in codec v2; a v1 blob loads it as 0.</summary>
+    /// auto-disappear resumes rather than restarts across a relog. Added in codec v2; a v1 blob
+    /// loads it as 0.</summary>
     public double FiredElapsedSeconds { get; set; }
 
     /// <summary>How long (seconds) a fired timer flashes before it auto-disappears from the HUD, when the
     /// player's "Timer disappears" preference is on (<see cref="ScribePlayerSettings.TimerAutoDisappear"/>).
-    /// The canonical home for the value that was previously a bare <c>30.0</c> literal in the server tick;
+    /// The canonical home for this value;
     /// the client compares <see cref="FiredElapsedSeconds"/> against it to decide when to auto-clear.</summary>
     public const double FiredAutoClearSeconds = 30.0;
 

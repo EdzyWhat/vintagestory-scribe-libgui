@@ -20,7 +20,7 @@ namespace Scribe;
 
 /// <summary>
 /// A compact replacement for LibGUI's <see cref="FlatItemSlot"/> in the Scriptorium's Scribe-items-only
-/// inventory (refine-scribe-hover-tooltips D3). It renders the same slot box + item stack, but swaps the
+/// inventory. It renders the same slot box + item stack, but swaps the
 /// stock item tooltip — a fixed 350px panel of name/description/durability/quantity, baked un-injectably into
 /// <c>ItemSlotGestureLayer</c> — for a small Scribe <b>document summary card</b> (name, title, per-kind
 /// counts, or a "No contents" state; see <see cref="BuildSummaryCard"/>).
@@ -37,18 +37,17 @@ namespace Scribe;
 /// vanilla model: left-click grabs/places against the mouse-held stack, right-click places-one/splits; the
 /// wheel forwards <see cref="SlotController.WheelSlot"/>. We intentionally omit
 /// <c>BeginDrag</c>/<c>DragEnterSlot</c>/<c>EndDrag</c> — click-hold-drag distribution is not the inventory
-/// mechanic here (user decision): a click grabs, a second click places. The Scribe-only accept filter is
+/// mechanic here (a click grabs, a second click places). The Scribe-only accept filter is
 /// unaffected — it lives on the inventory's <c>CanHold</c> (server-authoritative) and on the controller's
 /// <see cref="SlotController.CanClickSlot"/> predicate, both of which <see cref="SlotController.ClickSlot"/>
 /// already honors.</para>
 ///
-/// <para>The cosmetic hover-bounce/punch animation the stock slot plays is dropped (not load-bearing).</para>
+/// <para>The cosmetic hover-bounce/punch animation the stock slot plays is not reproduced.</para>
 /// </summary>
 internal sealed class ScribeDocumentSlot : StatelessWidget
 {
-    /// <summary>How long the pointer must rest on the slot before the summary card appears. Halved from the
-    /// stock item tooltip's 350ms to 175ms (refinement) so the Scriptorium's document cards pop up in half the
-    /// time — the slot summary is the whole point of these slots, so a snappier reveal is wanted here.</summary>
+    /// <summary>How long the pointer must rest on the slot before the summary card appears: 175ms, half the
+    /// stock item tooltip's 350ms, since the slot summary is the whole point of these slots.</summary>
     private static readonly TimeSpan CardDelay = TimeSpan.FromMilliseconds(175);
 
     private readonly ItemSlot? slot;
@@ -96,12 +95,9 @@ internal sealed class ScribeDocumentSlot : StatelessWidget
             onPress: OnPress,
             onWheel: OnWheel);
 
-        // Only a FILLED slot gets a hover card. An empty slot returns the bare gesture with NO Tooltip wrapper
-        // at all (refine-scribe-hover-tooltips / transcribe refinement #9). The earlier "empty content + 1h
-        // wait" trick still MOUNTED a Tooltip, so grabbing the item out of a slot left a stale, empty, tiny
-        // bubble hanging (the dialog rebuilds on the slot change, but the mounted-but-idle Tooltip's already-
-        // shown bubble persisted until the pointer left). A Tooltip that never exists can't leave that ghost:
-        // when the slot empties, the widget at this position changes type (ShadedTooltip → GestureDetector), so
+        // Only a FILLED slot gets a hover card. An empty slot returns the bare gesture with NO Tooltip wrapper:
+        // a mounted-but-idle Tooltip would leave its already-shown bubble hanging after the item is grabbed.
+        // When the slot empties, the widget at this position changes type (ShadedTooltip → GestureDetector), so
         // the reconciler unmounts the tooltip subtree and its overlay entry goes with it.
         ItemStack? stack = slot?.Itemstack;
         bool hasItem = stack?.Collectible != null;
@@ -109,7 +105,7 @@ internal sealed class ScribeDocumentSlot : StatelessWidget
 
         // ShadedTooltip shades the summary-card bubble (Background/Border) AND its content by the live
         // illumination shade, so the card tracks the body in low light instead of the bubble "sticking out"
-        // full-bright (refine-scribe-hover-tooltips bug-1). It wraps content in ForHover internally, so we pass
+        // full-bright. It wraps content in ForHover internally, so we pass
         // the raw card.
         return ScribeGlobalTint.ShadedTooltip(
             child: gesture,
@@ -146,16 +142,15 @@ internal sealed class ScribeDocumentSlot : StatelessWidget
         if (slot != null && controller.WheelSlot(slot, e.Delta > 0f ? 1 : -1)) e.Handled = true;
     }
 
-    /// <summary>Build the compact summary card for a filled Scribe slot (refine-scribe-hover-tooltips D4).
-    /// A pure read of the stack's stored document, so the copy/paste change can reuse it as the
-    /// import/export preview rather than re-deriving counts:
+    /// <summary>Build the compact summary card for a filled Scribe slot.
+    /// A pure read of the stack's stored document, reusable as an import/export preview:
     /// <list type="bullet">
     /// <item><b>No document</b> (freshly crafted, or opened but never edited): item name + a plain "No contents"
     /// line. We deliberately do NOT say "not yet opened" — a document is only persisted on first edit, so an
     /// opened-but-untouched item carries no bytes and is indistinguishable from a never-opened one; "No contents"
     /// is the honest label for both. Also NOT a title placeholder + all-zero counts, which would imply an
     /// opened-but-empty document.</item>
-    /// <item><b>Sealed Task Notice</b> (signal-tasknotice-inbox-presence): a Task Notice's document is
+    /// <item><b>Sealed Task Notice</b>: a Task Notice's document is
     /// blocks-only and never carries a custom title, so the generic Title + per-kind-count lines below
     /// would be meaningless. Shown instead: who assigned it and who it's addressed to, mirroring
     /// <see cref="ItemScribeTaskNotice.GetHeldItemInfo"/>'s own "Addressed to" line and

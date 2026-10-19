@@ -5,7 +5,7 @@ namespace Scribe;
 
 /// <summary>
 /// Client -&gt; server: persist this Scribe item/block instance's Read View filter pill + subtask-group
-/// collapse state (read-view-filter-and-collapse), addressed by the document's stable <c>DocId</c> —
+/// collapse state, addressed by the document's stable <c>DocId</c> —
 /// never a block position or item slot, mirroring <see cref="ScribeSetTrackerQuantityMessage"/>. Both
 /// pieces of state always ride together (the dialog owns one combined write path — see
 /// <c>ScribeDialogBase.PersistReadViewState</c>), so this carries the FULL current state rather than a

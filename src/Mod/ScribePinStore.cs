@@ -11,7 +11,7 @@ namespace Scribe;
 /// save game); the <see cref="ScribeModSystem"/> owns persistence I/O and the network push, calling
 /// into this store and pushing whichever players a mutation reports as affected.
 ///
-/// Design invariants (see the add-pinned-task-foundation change):
+/// Design invariants:
 /// <list type="bullet">
 /// <item>The durable reference is <c>(DocId, TaskId)</c>, never a block position. The
 /// <see cref="_docPositions"/> index is only a runtime resolver for snapshotting a pin's text/done;
@@ -21,8 +21,7 @@ namespace Scribe;
 /// Breaking the lectern block is
 /// NOT a deletion (the dropped item carries the document, and a re-place restores it), and neither is
 /// a chunk unload or a resolution miss — in those cases the pin stays live-but-unresolvable and the
-/// last-known snapshot keeps it renderable. (The add-pinned-task-hud change replaced the earlier
-/// soft-orphan-and-keep behavior, so nothing uncompletable lingers on the HUD.)</item>
+/// last-known snapshot keeps it renderable.</item>
 /// <item>Unpin (<see cref="RemovePin"/>) needs no block resolution, so it works when the owning
 /// lectern is broken or unloaded.</item>
 /// </list>
@@ -47,8 +46,7 @@ public sealed class ScribePinStore
 
     /// <summary>The player's pin for this task, or null if they have none — exposes the pin's snapshot
     /// (Kind/LinkTarget etc.) to callers that need it without a block resolution (e.g. detecting a
-    /// completed pin is a Quest Link even when its source document is unresolvable —
-    /// fix-quest-prompt-persistence-and-auto-pin 3.3).</summary>
+    /// completed pin is a Quest Link even when its source document is unresolvable).</summary>
     public ScribePinnedRef? GetPin(string playerUid, Guid docId, Guid taskId)
         => Find(playerUid, docId, taskId);
 
@@ -229,7 +227,7 @@ public sealed class ScribePinStore
 
     /// <summary>
     /// Reconcile the <b>acting player's</b> pins into a document after THAT player edited it — the
-    /// grief-proof rule (see <see cref="ScribePinStore"/> invariants + the add-pinned-task-hud change):
+    /// grief-proof rule (see <see cref="ScribePinStore"/> invariants):
     /// a pin is the player's own copy, so only the player's own edit may change or remove it. For each
     /// of <paramref name="actingPlayerUid"/>'s pins into <paramref name="docId"/>: refresh its
     /// text/done snapshot from the authoritative document, and REMOVE it if the player deleted that task
@@ -253,9 +251,9 @@ public sealed class ScribePinStore
             var block = document.FindByTaskId(pin.TaskId);
             if (block is null) continue; // just removed above; defensive
             // Refresh the snapshot fields the HUD/Pin Tab render from — text/done, the Kind + LinkTarget the
-            // Link hyperlink needs (a Link's target can be edited, so keep it in sync — add-tracker-link-tasks 5.5),
+            // Link hyperlink needs (a Link's target can be edited, so keep it in sync),
             // and the Tracker's target item + have/need counts, which change as the player edits the target
-            // quantity or collects/drops items while a dialog is open (add-tracker-link-tasks 7.8).
+            // quantity or collects/drops items while a dialog is open.
             bool blockIsAcceptedAssignment = block.Assignment?.State == ScribeAssignmentState.Accepted;
             string blockAssignerUid = blockIsAcceptedAssignment ? block.Assignment!.AssignerUid : "";
             string blockAssignedDate = blockIsAcceptedAssignment ? block.Assignment!.AssignedDate : "";
@@ -270,7 +268,7 @@ public sealed class ScribePinStore
                 || pin.AssignerUid != blockAssignerUid || pin.AssignedDate != blockAssignedDate
                 || pin.AcceptedDate != blockAcceptedDate;
             // HUD dirty-check stays on identity strings so a viewing-locale date cannot desync pins.
-            // Still copy timestamps when they differ so a pre-v9 pin picks them up once the source
+            // Still copy timestamps when they differ so a pin lacking them picks them up once the source
             // document has them. AcceptedTimestamp is not persisted on the document, so keep the pin's
             // existing value when the block doesn't carry one.
             bool timestampsDirty = pin.AssignedTimestamp != (blockAssignedTimestamp ?? pin.AssignedTimestamp)
@@ -286,12 +284,12 @@ public sealed class ScribePinStore
                 pin.CurrentQuantity = block.CurrentQuantity;
                 pin.LinkLabel = block.LinkLabel;
                 // Keep the pinned subtask depth in sync so a grip-tap depth change on the source reflects
-                // in the HUD/Pin Tab indent (add-crafting-tasks / task-subtasks 5.1).
+                // in the HUD/Pin Tab indent.
                 pin.Depth = block.Depth;
                 // Keep the leading-icon assignment marker in sync — e.g. a Discard/Complete transition
-                // (add-assignment-and-quest-support 9.3) that fires alongside this same edit round-trip.
+                // that fires alongside this same edit round-trip.
                 pin.IsAcceptedAssignment = blockIsAcceptedAssignment;
-                // Keep the marker's tooltip provenance in sync alongside it (assignment-icon-and-tab-defaults).
+                // Keep the marker's tooltip provenance in sync alongside it.
                 pin.AssignerUid = blockAssignerUid;
                 pin.AssignedDate = blockAssignedDate;
                 pin.AcceptedDate = blockAcceptedDate;

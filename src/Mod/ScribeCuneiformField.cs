@@ -1,4 +1,4 @@
-// Live cuneiform INPUT render object (add-tablet-cuneiform-chrome). This is the render half of the
+// Live cuneiform INPUT render object. This is the render half of the
 // tablet's "type in cuneiform" chrome: it is driven by the SAME ScribeMultilineFieldState that drives
 // the normal editable field (buffer + all keyboard/caret/navigation handling), but instead of drawing
 // a TTF typeface it paints the buffer as filled cuneiform STROKES (like CuneiformText) and draws a
@@ -13,7 +13,7 @@
 //
 // Selection (shift-arrow / drag / double-click word / triple-click line) is owned by the shared
 // ScribeMultilineFieldState — the same range that drives the normal field. This render object paints a
-// highlight box behind the strokes for that range (explore-cuneiform-text-selection), reusing the same
+// highlight box behind the strokes for that range, reusing the same
 // per-character CaretXAt map the caret uses (a selection is just two boundaries).
 
 using System;
@@ -47,8 +47,7 @@ internal interface IScribeEditableTextRender
     /// <paramref name="localTop"/> is the top edge and <paramref name="height"/> the line height, matching
     /// the bar the field paints. Returns <c>false</c> before a layout pass has produced line metrics (so
     /// the caller skips scrolling that frame). Used by the editor to scroll so the CARET stays visible
-    /// (following the caret, not the whole row — a row taller than the viewport must not bounce the scroll).
-    /// scroll-follow-caret-in-editor.</summary>
+    /// (following the caret, not the whole row — a row taller than the viewport must not bounce the scroll).</summary>
     bool TryGetCaretRect(out float localTop, out float height);
 }
 
@@ -73,38 +72,35 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     private float padX = 8f;
     private float padY = 6f;
     private bool singleLine;
-    // Per-stroke hand-written jitter (add-cuneiform-handwriting-feel). 0 = crisp authored geometry. The seed
+    // Per-stroke hand-written jitter. 0 = crisp authored geometry. The seed
     // is a FIXED per-field value (not derived from the buffer), so typing a character does not reseed — and
     // thus does not re-wobble — the letters already on screen.
     private float jitterStrength;
     private int jitterSeed;
-    // Whole-character rotation (tune-tablet-jitter-add-rotation). 0 = upright; each glyph tilts by a
+    // Whole-character rotation. 0 = upright; each glyph tilts by a
     // deterministic angle in [-max, +max]° about its box center, applied AFTER jitter, paint-time only.
     private float rotationDegrees;
-    // Per-stroke outer glow (add-tablet-clay-type-themes). Default disabled — non-tablet fields pay nothing.
+    // Per-stroke outer glow. Default disabled — non-tablet fields pay nothing.
     private CuneiformGlow glow;
-    // Per-view multiplier on each stroke's authored weight (adopt-glyph-forge-tablet-themes). 1 = the exact
+    // Per-view multiplier on each stroke's authored weight. 1 = the exact
     // Core weight (every non-tablet field). The tablet firms the strokes up as the clay dries (wet<hard<fired).
     private float strokeWeightScale = 1f;
-    // Paint-time-only shrink/grow on the grid-to-pixel scale (tablet-cuneiform-glyph-scale). 1 = today's
-    // behavior exactly; applied only in DrawStrokePass's stroke-corner-to-pixel conversion, which also
-    // re-centers the smaller glyph per line — never in PerformLayout, caret, selection, or hit-testing.
     private float glyphDrawScale = 1f;
-    // Paint-time-only shrink on the synthetic caret bar's drawn height, relative to its lineHeightPx band
-    // (tablet-cuneiform-glyph-scale). 1 = today's full-band caret exactly; never touches layout, hit-
-    // testing, or the caret's X — only how tall the drawn bar is and how far it insets from the band top.
+    // Paint-time-only shrink on the synthetic caret bar's drawn height, relative to its lineHeightPx band.
+    // 1 = the full-band caret; never touches layout, hit-testing, or the caret's X — only how tall the
+    // drawn bar is and how far it insets from the band top.
     private float caretHeightScale = 1f;
-    // Per-letter stroke-progression reveal (add-cuneiform-handwriting-feel). When active, strokes appear over
-    // time: characters below the baseline are already fully pressed; characters at/after it press in on the
-    // schedule as elapsed advances. Inactive (the default) paints every stroke immediately, as today.
+    // Per-letter stroke-progression reveal. When active, strokes appear over time: characters below the
+    // baseline are already fully pressed; characters at/after it press in on the schedule as elapsed
+    // advances. Inactive (the default) paints every stroke immediately.
     private bool revealActive;
     private int revealBaselineChars;
     private double revealElapsedMs;
 
-    /// <summary>Ghost lead-in opacity, as a fraction of the ink alpha (add-cuneiform-handwriting-feel 5.1/7.7).
+    /// <summary>Ghost lead-in opacity, as a fraction of the ink alpha.
     /// While the reveal is active, the strokes that have NOT yet pressed in are drawn once at this faint alpha
-    /// so the full typed word is visible immediately and the crisp progressive fill catches up to it — the
-    /// playtest ask ("a fast typist sees the whole word ahead"). It reuses the same reveal gate as the press-in,
+    /// so the full typed word is visible immediately and the crisp progressive fill catches up to it, so a fast
+    /// typist sees the whole word ahead. It reuses the same reveal gate as the press-in,
     /// so it only shows when stroke-progression is on; there is no separate setting. 0 would disable the ghost.</summary>
     private const float GhostLeadInOpacity = 0.22f;
 
@@ -140,7 +136,7 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     public float PadY { get => padY; set => SetProperty(ref padY, value, relayout: true); }
     /// <summary>Single-line mode (the title band): lay the whole buffer out as ONE line (never word-wrap)
     /// and keep a fixed one-line height, so a long title is hard-clipped at the band's inner width by the
-    /// enclosing clip rather than growing the band taller (design D5/D-Q1). Default false = the auto-growing
+    /// enclosing clip rather than growing the band taller. Default false = the auto-growing
     /// multi-line row behavior.</summary>
     public bool SingleLine { get => singleLine; set => SetProperty(ref singleLine, value, relayout: true); }
     /// <summary>Hand-written jitter strength (0..1; 0 = crisp authored geometry). Repaint only — jitter is a
@@ -156,24 +152,23 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     /// tablet sets a per-material glow. Repaint only — a paint-time effect that never touches layout, caret,
     /// selection, or hit-testing.</summary>
     public CuneiformGlow Glow { get => glow; set => SetProperty(ref glow, value, repaint: true); }
-    /// <summary>Per-view multiplier on each stroke's authored weight (adopt-glyph-forge-tablet-themes); 1 = the
+    /// <summary>Per-view multiplier on each stroke's authored weight; 1 = the
     /// exact Core weight. A paint-time transform applied at fill only — it never touches layout, caret,
     /// selection, or hit-testing (those read the un-scaled advance metrics). Repaint only.</summary>
     public float StrokeWeightScale { get => strokeWeightScale; set => SetProperty(ref strokeWeightScale, value <= 0f ? 1f : value, repaint: true); }
-    /// <summary>Multiplier on the em height fed into `PerformLayout`'s line-height formula
-    /// (tablet-cuneiform-glyph-scale, corrected 2026-09-07). A non-positive value is treated as 1
+    /// <summary>Multiplier on the em height fed into `PerformLayout`'s line-height formula. A non-positive value is treated as 1
     /// (matching <see cref="StrokeWeightScale"/>'s guard). Relayouts — this shrinks `lineHeightPx`/`scale`
     /// so the tablet's editable row/title can sit shorter than a checkbox/control sized off the SAME
     /// `FontSize` with this factor left out; caret/selection/hit-testing read that same shrunk `scale` so
-    /// they stay exactly in sync with the (now smaller) drawn ink — no separate paint-only multiplier.</summary>
+    /// they stay exactly in sync with the drawn ink — there is no separate paint-only multiplier.</summary>
     public float GlyphDrawScale { get => glyphDrawScale; set => SetProperty(ref glyphDrawScale, value <= 0f ? 1f : value, relayout: true); }
-    /// <summary>Multiplier on the synthetic caret bar's drawn height, relative to its `lineHeightPx` band
-    /// (tablet-cuneiform-glyph-scale). A non-positive value is treated as 1 (matching
+    /// <summary>Multiplier on the synthetic caret bar's drawn height, relative to its `lineHeightPx` band.
+    /// A non-positive value is treated as 1 (matching
     /// <see cref="StrokeWeightScale"/>'s guard). Repaint only — the caret shrinks toward the vertical
     /// center of its band; layout, hit-testing, and the caret's X position are unaffected.</summary>
     public float CaretHeightScale { get => caretHeightScale; set => SetProperty(ref caretHeightScale, value <= 0f ? 1f : value, repaint: true); }
     /// <summary>Whether the stroke-progression reveal is active. When false (the default), every stroke is
-    /// painted immediately (today's behaviour). Repaint only.</summary>
+    /// painted immediately. Repaint only.</summary>
     public bool RevealActive { get => revealActive; set => SetProperty(ref revealActive, value, repaint: true); }
     /// <summary>Characters (absolute index in the buffer) already fully revealed and never re-animated —
     /// the run that existed before the current reveal began. Repaint only.</summary>
@@ -186,9 +181,8 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
         lines.Clear();
 
         // Match the rendered cuneiform height to adjacent readable text's line-height, not its raw em, so
-        // the tablet's live rows/title read at the same height as normal text (D7 — same global ratio the
-        // display CuneiformText uses), then apply the tablet's glyph-draw-scale on top (tablet-cuneiform-
-        // glyph-scale) so cuneiform rows can read shorter than a checkbox/control sized off the same
+        // the tablet's live rows/title read at the same height as normal text (same global ratio the
+        // display CuneiformText uses), then apply the tablet's glyph-draw-scale on top so cuneiform rows can read shorter than a checkbox/control sized off the same
         // FontSize without this factor. One em of grid maps to this boosted-then-scaled height; use the
         // fixed default grid size for the scale so it is stable and independent of the (circular) laid-out
         // line height.
@@ -265,7 +259,7 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
 
         SKPaint paint = context.SharedPaint;
         SKPaintStyle prevStyle = paint.Style;
-        bool prevAntialias = paint.IsAntialias;   // pre-existing leak: restore this too (task 4.2).
+        bool prevAntialias = paint.IsAntialias;
         paint.Style = SKPaintStyle.Fill;
         paint.IsAntialias = true;
 
@@ -275,14 +269,14 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
         // Pass 1 (optional): every revealed stroke's blurred HALO, in the glow color, across ALL wrapped
         // lines before any crisp ink. The crisp fills in pass 2 then overwrite the halos inside each glyph,
         // so overlapping strokes never double their glow — it shows only where it spills onto the backdrop
-        // (design D3). Shared cached blur mask (D4). Every stroke uses the SAME jitter + reveal test the
+        // Shared cached blur mask. Every stroke uses the SAME jitter + reveal test the
         // crisp pass uses, so the halo tracks exactly what the ink draws.
         if (glow.Enabled && CuneiformGlowMask.ForSigma(fontSizeEm * glow.BlurFraction) is { } mask)
         {
             paint.Color = glow.Color.ToSkColor();
             paint.MaskFilter = mask;
             // Optional directional offset (a fraction of the em): translate ONLY the blurred halo pass so the
-            // glow reads as a seated drop rather than a symmetric aura (design D3). The crisp ink pass below
+            // glow reads as a seated drop rather than a symmetric aura. The crisp ink pass below
             // draws un-offset, so the ink registers over the shifted halo. A zero offset is a centered halo.
             float glowOffX = fontSizeEm * glow.OffsetXFraction;
             float glowOffY = fontSizeEm * glow.OffsetYFraction;
@@ -301,8 +295,8 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
         }
 
         // Ghost lead-in: while the reveal is running, paint the NOT-yet-pressed strokes once at a faint alpha
-        // so the full typed text shows immediately and the crisp fill catches up to it (design 5.1/7.7, expanded
-        // per playtest to the whole tail rather than only the current letter). Drawn BEFORE the crisp pass, and
+        // so the full typed text shows immediately and the crisp fill catches up to it (the whole tail, not
+        // only the current letter). Drawn BEFORE the crisp pass, and
         // over a stroke set disjoint from it (revealed vs. un-revealed), so nothing double-draws. Skipped
         // entirely when the reveal is inactive — there is no tail to lead. No halo on the ghost (crisp ink only
         // haloes). The ghost tints the ink color's own alpha so it tracks the material's ink hue.
@@ -320,12 +314,11 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
 
         // Leave the shared paint OPAQUE, not restored to the color we inherited. That inherited color came
         // from `base.PaintInternal` having just drawn this row's resting box at boxColor alpha 0 — restoring
-        // it would leave PaintingContext.SharedPaint.Color at alpha 0 for the NEXT draw op. That bit the
-        // read-only tablet backdrop: DrawMaskedBox (the clay-texture draw) is the one framework draw op that
-        // reuses SharedPaint.Color without re-setting it, and DrawBitmap modulates the texture by the paint's
-        // alpha — so an alpha-0 leftover rendered the whole clay backdrop transparent, but ONLY once glow rows
-        // (the sole painters that reach this teardown) were present. Resetting to opaque white matches the
-        // neutral every sibling draw (DrawBox/DrawImage/DrawNineSlice) sets before it paints. (tablet-firing.)
+        // it would leave PaintingContext.SharedPaint.Color at alpha 0 for the NEXT draw op. DrawMaskedBox (the
+        // clay-texture draw) is the one framework draw op that reuses SharedPaint.Color without re-setting
+        // it, and DrawBitmap modulates the texture by the paint's alpha — so an alpha-0 leftover would render
+        // the whole clay backdrop transparent. Resetting to opaque white matches the neutral every sibling
+        // draw (DrawBox/DrawImage/DrawNineSlice) sets before it paints.
         paint.Color = SKColors.White;
         paint.Style = prevStyle;
         paint.IsAntialias = prevAntialias;
@@ -403,7 +396,7 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
                         GlyphStrokeRotation.SeedFor(jitterSeed, ps.SourceCharIndex),
                         rotationDegrees);
                 }
-                // Per-view weight scale (adopt-glyph-forge-tablet-themes): firm the stroke up (or thin it) by
+                // Per-view weight scale: firm the stroke up (or thin it) by
                 // rebuilding it with a scaled weight before it becomes a quad. Applied AFTER jitter/rotation so
                 // it composes with them, and only when it actually differs from 1 to keep the common path
                 // allocation-free. Corners() derives the quad half-width from Weight, so this changes only the
@@ -414,11 +407,10 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
                 }
                 Scribe.Core.Cuneiform.Vec2[] corners = drawStroke.Corners();
 
-                // GlyphDrawScale (tablet-cuneiform-glyph-scale) now lives entirely in PerformLayout's
-                // lineHeightPx/scale — it is NOT re-applied here. `scale` already carries the shrink, so
-                // this is the same plain grid→pixel conversion as before that change ever existed; caret,
-                // selection, and hit-testing read that same shrunk `scale`/`lineHeightPx` and stay exactly
-                // in sync with the drawn ink, with no separate paint-only multiplier to keep in agreement.
+                // GlyphDrawScale lives entirely in PerformLayout's lineHeightPx/scale — it is NOT re-applied
+                // here. `scale` already carries the shrink, so this is a plain grid→pixel conversion; caret,
+                // selection, and hit-testing read that same `scale`/`lineHeightPx` and stay exactly in sync
+                // with the drawn ink.
                 path.Reset();
                 path.MoveTo(originX + (float)(corners[0].X * scale), originY + (float)(corners[0].Y * scale));
                 path.LineTo(originX + (float)(corners[1].X * scale), originY + (float)(corners[1].Y * scale));
@@ -517,8 +509,7 @@ internal sealed class ScribeCuneiformFieldRender : Gui.Core.Framework.RenderBox,
     }
 
     /// <summary>Caret vertical extent in LOCAL space (top + height), matching the (possibly shrunk) bar
-    /// <see cref="PaintInternal"/> draws. Returns false before layout has produced a line height.
-    /// scroll-follow-caret-in-editor.</summary>
+    /// <see cref="PaintInternal"/> draws. Returns false before layout has produced a line height.</summary>
     public bool TryGetCaretRect(out float localTop, out float height)
     {
         if (lineHeightPx <= 0f)

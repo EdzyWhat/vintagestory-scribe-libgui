@@ -2,7 +2,7 @@ using Scribe.Core;
 
 namespace Scribe.Core.Tests;
 
-// Tests for the pure identity diff behind ScribeAnimatedList (extract-animated-task-list): given the
+// Tests for the pure identity diff behind ScribeAnimatedList: given the
 // previous rendered order, which of those were live, the incoming live order, and the ghosts still
 // animating, it computes departures (+ their slots), revivals, appearances, and the full spliced render
 // order. Pure/game-agnostic — no LibGUI, no widgets. Guids are made deterministic per-name so a scenario
@@ -152,7 +152,7 @@ public class ScribeListDiffTests
     public void RowAppearsAtNonEndSlot_IsReportedAppeared_RenderKeepsOrder()
     {
         // A new row "x" arrives in the MIDDLE of the live order (e.g. insert-below, or a Sink-style reorder
-        // that presents an add at a non-end slot — animate-row-insertion open question db3c8ff4). It must
+        // that presents an add at a non-end slot). It must
         // still be reported appeared, and the render order must place it where the live order does — so the
         // container's grow reads correctly for a non-last row, not just an append.
         var r = Compute(prevRender: "ab", prevLive: "ab", newLive: "axb");

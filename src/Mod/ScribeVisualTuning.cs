@@ -1,8 +1,7 @@
 namespace Scribe;
 
 /// <summary>
-/// Author-facing client-local tuning knobs for two purely-cosmetic rendering subsystems that have been
-/// hand-tuned repeatedly across playtests, plus one layout toggle:
+/// Author-facing client-local tuning knobs for two purely-cosmetic rendering subsystems, plus one layout toggle:
 /// <see cref="ScribeAmbientLightSampler"/>'s quantization/smoothing
 /// (<see cref="BrightnessSteps"/>, <see cref="HueSteps"/>, <see cref="TintStrength"/>,
 /// <see cref="SmoothingTau"/>), <see cref="ScribeAssignmentParticleEmitter"/>'s detection/color/density
@@ -14,9 +13,7 @@ namespace Scribe;
 /// <see cref="ScribeGearTuning"/>/<see cref="Scribe.Core.ScribePlayerSettings"/>), so a config-library mod
 /// reading the shared <c>configlib-patches.json</c> manifest format (ConfigKit, ConfigLib) can optionally
 /// provide a settings GUI that edits the same file — no assembly reference, no <c>IsModEnabled</c> check,
-/// no new mod dependency of any kind (add-configkit-visual-tuning). Every default below matches the value
-/// each constant held before this change, so an absent/never-touched config file reproduces today's
-/// behavior exactly.
+/// no new mod dependency of any kind. An absent/never-touched config file yields the defaults below.
 ///
 /// <para>Not a player-facing feature: not documented in the handbook, not surfaced in Scribe Settings. Not
 /// live-reloaded — loaded once at client startup, matching <see cref="ScribeGearTuning"/>'s precedent; a
@@ -58,7 +55,6 @@ public sealed class ScribeVisualTuning
     /// <c>ScribeTabHeader.Build</c>). Off hides the subtitle uniformly across every tab.</summary>
     public bool ShowSubtitleRow { get; set; } = DefaultShowSubtitleRow;
 
-    // Defaults = the exact values each constant held before add-configkit-visual-tuning.
     public const int DefaultBrightnessSteps = 32;
     public const int DefaultHueSteps = 32;
     public const float DefaultTintStrength = 2f / 3f;

@@ -14,11 +14,10 @@ using Vintagestory.API.Config;    // Lang
 namespace Scribe;
 
 /// <summary>
-/// The "this notice isn't addressed to you" warning popup (add-task-notice-redirect-confirm design D4):
-/// shown when a player holding a sealed Task Notice taps Accept but isn't its recorded recipient.
+/// The "this notice isn't addressed to you" warning popup: shown when a player holding a sealed Task Notice taps Accept but isn't its recorded recipient.
 /// Layered over the already-open <see cref="GuiDialogTaskNotice"/> (same <see cref="DrawOrder"/> band —
 /// same-band dialogs stack fine by open-order, per <see cref="GuiDialogScribeQuestPrompt"/>'s own doc
-/// comment). A purpose-built, one-shot dialog — not a reusable "Yes/No modal" primitive (Non-Goal): it
+/// comment). A purpose-built, one-shot dialog — not a reusable "Yes/No modal" primitive: it
 /// exists only for the duration of one Accept click's decision, constructed on demand and disposed on
 /// either button, mirroring <see cref="ItemScribeTaskNotice"/>'s own on-demand construction of
 /// <see cref="GuiDialogTaskNotice"/> rather than <see cref="GuiDialogScribeQuestPrompt"/>'s self-managing

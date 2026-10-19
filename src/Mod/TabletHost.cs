@@ -18,10 +18,8 @@ namespace Scribe;
 /// keep the default uncapped policy, so this caps the tablet tier without touching them.</item>
 /// </list>
 ///
-/// <para>Layout aspect is inherited unchanged (<c>1160/1024</c>, same as the notebook), and the interim
-/// backdrop is the notebook page: a tablet crafted in this change opens the existing
-/// <c>GuiDialogScribeNotebook</c> so it is testable before the bespoke tablet dialog (Proposal C) exists.
-/// Proposal C supplies the tablet theme + backdrop.</para>
+/// <para>Layout aspect is inherited unchanged (<c>1160/1024</c>, same as the notebook), and the default
+/// backdrop is the notebook page unless the caller passes a tablet backdrop.</para>
 /// </summary>
 public sealed class TabletHost : NotebookHost
 {
@@ -39,8 +37,7 @@ public sealed class TabletHost : NotebookHost
 
     /// <param name="slot">The player's held tablet slot. Passed straight to the base
     /// <see cref="NotebookHost"/> ctor, which reads/initializes the document + history on the stack.</param>
-    /// <param name="backdrop">Interim backdrop; defaults to the notebook page since this change reuses the
-    /// notebook dialog. Proposal C passes the tablet's own backdrop.</param>
+    /// <param name="backdrop">The backdrop; defaults to the notebook page. The tablet dialog passes the tablet's own.</param>
     /// <param name="material">The tablet's base material, used only to pick the interior layout proportions.</param>
     public TabletHost(ItemSlot slot, ScribeBackdropSpec? backdrop = null, string? material = null) : base(slot, backdrop)
     {
@@ -52,8 +49,8 @@ public sealed class TabletHost : NotebookHost
 
     /// <summary>The document policy enforced at the editor's add/pin mutation boundary. A WET tablet reports
     /// the scratch-tier cap (10 task blocks, 1 pin); a HARD or FIRED tablet reports
-    /// <see cref="ScribeDocumentPolicy.UneditableTablet"/> so <c>CanAdd</c>/<c>CanPin</c> deny outright
-    /// (tablet-firing Decision 8). This is the policy half of the same read-only switch the dialog keys off
+    /// <see cref="ScribeDocumentPolicy.UneditableTablet"/> so <c>CanAdd</c>/<c>CanPin</c> deny outright.
+    /// This is the policy half of the same read-only switch the dialog keys off
     /// <see cref="ItemScribeTablet.IsEditable"/> — belt-and-suspenders with the dialog dropping every edit
     /// affordance, so a mutation can't slip through even if some path reached the boundary.</summary>
     public override ScribeDocumentPolicy Policy =>
@@ -79,10 +76,10 @@ public sealed class TabletHost : NotebookHost
     /// buffer by eye even though the fractions differ.</para></summary>
     public override ScribeLayout GetLayout(float pixelArtSize)
     {
-        // TitleBtnsWFrac is the tablet title-band WIDTH knob (wrap-titles-all-surfaces): the fraction of window
+        // TitleBtnsWFrac is the tablet title-band WIDTH knob: the fraction of window
         // width used by the title+buttons row, which sets where a long title wraps to a second line. Higher =
-        // wider row = wraps later. Both materials override the shared 0.80f default to wrap later (values chosen
-        // in-game 2026-08-20): clay 0.86f, wax 0.82f (wax's art frames a narrower panel, so it wraps a touch sooner).
+        // wider row = wraps later. Both materials override the shared 0.80f default to wrap later:
+        // clay 0.86f, wax 0.82f (wax's art frames a narrower panel, so it wraps a touch sooner).
         var props = _material == "wax"
             ? ScribeLayoutProportions.Default with
               {

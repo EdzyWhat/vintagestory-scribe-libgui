@@ -30,15 +30,14 @@ public abstract partial class ScribeDialogBase
     // ---------------- Build ----------------
 
     protected override Widget Build() =>
-        // Wrap the whole dialog body in the single persistent-root StatefulWidget
-        // (reconcile-animating-surfaces §3.1). GuiBase runs this Build() only once per open (and again on
+        // Wraps the whole dialog body in the single persistent-root StatefulWidget. GuiBase runs this Build() only once per open (and again on
         // each ForceRebuild); the body it returns then persists, so an in-place update reconciles the body
         // via RebuildBody() (reusing the live editor rows + fields) rather than tearing the tree down. The
         // body tree itself is BuildBodyTree(), re-invoked on every reconcile so it re-reads live state.
         new ScribeDialogBody(bodyKey, BuildBodyTree);
 
     /// <summary>The dialog body subtree, re-invoked on every reconcile by <see cref="ScribeDialogBody"/>
-    /// (reconcile-animating-surfaces §3.1) so it reflects the dialog's current live state. Reads the
+    /// so it reflects the dialog's current live state. Reads the
     /// Pixel-Art Display preference AND the Pixel Art Size (W) fresh each build (mirrors how RowStyle reads
     /// WindowFontScale fresh) so toggling either relays out this dialog on the MyPinsChanged/UpdateMySettings
     /// rebuild with no reopen. On = Scribe's light theme + notebook art; off = the player's global LibGUI
@@ -46,7 +45,7 @@ public abstract partial class ScribeDialogBase
     /// from the same W in CreateWindowConfig (applied at open).
     ///
     /// <para>The OuterArtBox is the notebook art itself (or a bare box when Pixel-Art Display is OFF, or the
-    /// flat placeholder color when the PNG is missing — the existing gate + fallback, now at the root).
+    /// flat placeholder color when the PNG is missing).
     /// Sized to W × H so the stretch-to-fill backdrop is a uniform, distortion-free scale. There is no
     /// WindowFrame: the tree below IS the header + content, so the art frames everything rather than
     /// sitting as a strip beneath a stock bar.</para></summary>
@@ -56,12 +55,12 @@ public abstract partial class ScribeDialogBase
         var layout = host.GetLayout(modSystem.MySettings.PixelArtSize);
 
         // Shade the ENTIRE composed dialog (backdrop + chrome + text) by the light reaching the player
-        // (respect-local-illumination D2/D4). Wrapping OUTSIDE the Theme means the SaveLayer flattens the
+        // Wrapping OUTSIDE the Theme means the SaveLayer flattens the
         // whole tree and the one brightness/tint matrix applies uniformly to every surface, with no per-dialog
         // wiring. currentShade is refreshed each frame in OnRenderGUI; when it stays in the same quantized
-        // bucket the widget is configured identically, so LibGUI's paint cache is undisturbed (D3). A
+        // bucket the widget is configured identically, so LibGUI's paint cache is undisturbed. A
         // full-bright neutral shade (the seed, and full daylight) is the identity — ScribeGlobalTint skips the
-        // layer entirely then, so the fully-lit dialog is pixel-for-pixel the pre-illumination look.
+        // layer entirely then.
         return new ScribeGlobalTint(
             new Theme(
                 ResolveTheme(pixelArt),
@@ -75,19 +74,18 @@ public abstract partial class ScribeDialogBase
     /// <summary>The <see cref="ThemeData"/> this dialog wraps its tree in — <c>protected virtual</c> so a
     /// subclass can pick its own palette without forking <see cref="Build"/> (the tablet returns the
     /// earthen <see cref="ScribeTheme.Tablet"/> instead of the parchment <see cref="ScribeTheme.Light"/>).
-    /// The default selects the shared parchment/global theme, so the three incumbents are unchanged
-    /// (add-tablet-dialog D6).</summary>
+    /// The default selects the shared parchment/global theme.</summary>
     protected virtual ThemeData ResolveTheme(bool pixelArt) => ScribeTheme.For(pixelArt);
 
     /// <summary>Tint color for the title-bar chrome glyphs (the editor pencil and the drag grip) —
     /// <c>private protected virtual</c> so a subclass can restyle them without forking
     /// <see cref="BuildTitleBar"/>. The default is the global theme's mid-gray <c>OnSurfaceVariant</c>;
-    /// the three incumbent dialogs are unchanged (add-tablet-clay-type-themes 8.5). The tablet overrides
+    /// The tablet overrides
     /// this to a semi-transparent dark material ink so the clay texture bleeds faintly through the strokes
     /// and the glyphs read as darkened/engraved rather than a washed-out gray. The tint is applied the same
     /// way every <see cref="VsIcon"/> applies it — <see cref="SKBlendMode.SrcIn"/>, glyph-only — so a
     /// partial-alpha color fades the STROKES, never fills the transparent icon tile (a Multiply color-filter
-    /// WOULD paint the whole quad; that was the 2026-08-03 "pale tile" regression). Does NOT apply to the
+    /// would paint the whole quad). Does NOT apply to the
     /// close button, which keeps its <c>Error</c> color.</summary>
     private protected virtual Vector4 TitleChromeGlyphColor(ColorScheme colors) => colors.OnSurfaceVariant;
 
@@ -116,7 +114,7 @@ public abstract partial class ScribeDialogBase
     /// virtual</c> so a subclass can retint just the tick without forking the row widget. Default is
     /// <c>null</c> = unchanged everywhere. The chalkboard overrides it (gated on its Pixel-Art Display) to a
     /// chalk-white so the completed-task tick matches its row text instead of the forest-green <c>Primary</c>
-    /// — the playtest verdict that superseded the brighter-green tick (refine-chalkboard §11). Seeded onto
+    /// Seeded onto
     /// <see cref="ScribeRowStyle.CheckTickColor"/> in <c>RowStyle</c>, so all four row surfaces (read, editor,
     /// frozen, pinned) consume this single seam and can't drift.</summary>
     private protected virtual Vector4? CheckTickColor(ColorScheme colors) => null;
@@ -124,7 +122,7 @@ public abstract partial class ScribeDialogBase
     /// <summary>Horizontal placement of the right-column nav-button stack within its <c>SideColW</c> column,
     /// resolved from the already-computed column width and single nav-button box width (both passed in by
     /// <see cref="BuildRightColNav"/>, which owns the layout math). <c>private protected virtual</c> so a
-    /// subclass can pick its surface family's placement rule without forking the nav build (refine-nav-button-placement).
+    /// subclass can pick its surface family's placement rule without forking the nav build.
     /// <para>Default = the <b>Pages group</b> (Lectern, Notebook, Scriptorium, Clockmaker's Notebook):
     /// <see cref="CrossAxisAlignment.Start"/>, buttons hugging the left/inner edge of the column — the layout
     /// their paper-margin art was tuned for. The <b>Hard Border group</b> (the Chalkboard) overrides this with
@@ -140,12 +138,12 @@ public abstract partial class ScribeDialogBase
     /// paints the selected row's fill from <c>StateSelected</c> (a translucent <c>Primary</c> tint) and its
     /// selected LABEL from <c>SelectionAccentColor = Primary</c> — i.e. dark-green text on a see-through
     /// dark-green wash over the dark slate, which is unreadable. Every light surface reads fine, so only the
-    /// chalkboard opts in (refine-chalkboard).</summary>
+    /// chalkboard opts in.</summary>
     private protected virtual DropdownStyle DecoratePolicyDropdownStyle(DropdownStyle style) => style;
 
     /// <summary>Wrap the layout tree in the OuterArtBox: the notebook backdrop <see cref="Container"/> sized to
     /// <c>W × H</c> when Pixel-Art Display is ON, or the tree in a bare same-sized box when OFF (the existing
-    /// gate — scribe-gui-backdrops D5). The single <see cref="host.BackdropSpec"/> spec backs both
+    /// gate). The single <see cref="host.BackdropSpec"/> spec backs both
     /// views; a missing PNG degrades to the flat tan placeholder (existing fallback).
     /// <see cref="ScribeModSystem.GetBackdropBitmap"/> caches the bitmap, so this re-reads a cached reference
     /// each build (no reload). The size is pinned here (not only via the window Size) so the art fills the
@@ -173,16 +171,15 @@ public abstract partial class ScribeDialogBase
     }
 
     /// <summary>The OuterArtBox's contents: a vertical stack of the draggable TitleBar band and the
-    /// three-column SectionInnerBox, framed by the notebook art (scribe-notebook-frame). The ~7% of H below
+    /// three-column SectionInnerBox, framed by the notebook art. The ~7% of H below
     /// the inner box is bottom margin (the Column is top-aligned by default).</summary>
     private Widget BuildOuterArtBox(ScribeLayout layout)
     {
-        // The title/subtitle gap (2026-09-09 playtest feedback: "reduce by 35%", then "another 10%" —
-        // 45% total): the title's content box (layout.TitleBtnsH) is taller than the title's actual
+        // The title/subtitle gap: the title's content box (layout.TitleBtnsH) is taller than the title's actual
         // single-line text (TitleLineHeight) — that leftover slack is what currently separates the title's
         // own bottom from the subtitle immediately below it in SectionInnerBox, since BuildTitleBar's title
-        // now sits flush at the TOP of its content box (CrossAxisAlignment.Start, fixed top-anchor fix
-        // above) rather than centered, leaving ALL of that slack below the text instead of half. This gap
+        // sits flush at the TOP of its content box (CrossAxisAlignment.Start)
+        // rather than centered, leaving ALL of that slack below the text instead of half. This gap
         // is the SAME regardless of title line count (a wrapped 2-line title's box grows by exactly the
         // same delta as the text within it — see BuildTitleBar's contentBoxH/bandH comment), so it's safe
         // to compute once here without knowing how many lines the title currently wraps to. Closed by 45%
@@ -210,7 +207,7 @@ public abstract partial class ScribeDialogBase
     /// transparent gaps onto the world; when ON, the notebook art is the background, so return the child
     /// unwrapped. Uses <c>ThemeData.Default.ColorScheme.Surface</c> — the same fill (and reason) as the
     /// standalone Scribe Settings window's body — since the OFF Lectern follows the player's global LibGUI
-    /// theme (scribe-themed-toggle). Deliberately panels only these two regions, not the whole window.</summary>
+    /// theme. Deliberately panels only these two regions, not the whole window.</summary>
     private Widget FlatPanel(Widget child)
     {
         if (modSystem.MySettings.PixelArtDisplay) return child;
@@ -219,9 +216,8 @@ public abstract partial class ScribeDialogBase
             child: child);
     }
 
-    /// <summary>The title's live font size — 1.5× the window body text size ("50% larger", v1-playtest-fixes
-    /// 5.1), WindowFontScale-aware. Shared by <see cref="BuildTitleBar"/> (the title's own <see cref="TextStyle"/>)
-    /// and <see cref="TitleLineHeight"/> below, so the two can never drift apart.</summary>
+    /// <summary>The title's live font size — 1.5× the window body text size, WindowFontScale-aware. Shared by
+    /// <see cref="BuildTitleBar"/> (the title's own <see cref="TextStyle"/>) and <see cref="TitleLineHeight"/> below, so the two can never drift apart.</summary>
     private float TitleFontSize => ScribeRowConstants.BaseWindowFontSize
         * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale) * 1.5f;
 
@@ -247,7 +243,7 @@ public abstract partial class ScribeDialogBase
     private Widget BuildTitleBar(ScribeLayout layout)
     {
         var colors = ResolveTheme(modSystem.MySettings.PixelArtDisplay).ColorScheme;
-        // Title is 1.5× the window body text size — "50% larger" (v1-playtest-fixes 5.1). The body size is
+        // Title is 1.5× the window body text size. The body size is
         // BaseWindowFontSize × the player's WindowFontScale, so the title tracks a live font-scale change too.
         float titleFont = TitleFontSize;
 
@@ -258,15 +254,14 @@ public abstract partial class ScribeDialogBase
         var displayTitle = (rawTitle == ScribeDocument.DefaultTitle ? null : rawTitle) ?? host.DefaultDocumentTitle;
 
         // Pencil + grip chrome tint — the default is the global gray; the tablet overrides it to a
-        // semi-transparent dark material ink so the strokes read as engraved (add-tablet-clay-type-themes 8.5).
+        // semi-transparent dark material ink so the strokes read as engraved.
         Vector4 chromeColor = TitleChromeGlyphColor(colors);
 
         int titleMaxLines = TitleMaxLines;
 
         const float titleBtnSpacing = 6f;
         // Left-padded so the leading grip (below) has visible breathing room from the title text — mirrors
-        // the pencil's own left margin in the trailing group. Halved from titleBtnSpacing*1.5 (2026-09-08
-        // playtest feedback: too much space between the grip and the title).
+        // the pencil's own left margin in the trailing group.
         Widget titleSlot = new Expanded(child: new Padding(
             EdgeInsets.Only(left: titleBtnSpacing * 0.75f),
             child: _isTitleEditing
@@ -274,7 +269,7 @@ public abstract partial class ScribeDialogBase
                 : BuildTitleDisplay(displayTitle, titleStyle)));
 
         // Pencil — icon-only (no chrome), same visual weight as the grip glyph.
-        // Shown ONLY on the Edit tab (2026-09-10 3rd playtest pass, explicit ask) — `scratch` is non-null
+        // Shown ONLY on the Edit tab — `scratch` is non-null
         // exactly while `viewMode == Editor` on every tabbed dialog (LeaveEditorMode nulls it and lands
         // viewMode back on Read the instant any OTHER tab is selected — see ViewSwitching.cs), so this
         // single check already IS the Edit-tab gate; hidden on every other tab. The always-edit Tablet has
@@ -300,7 +295,7 @@ public abstract partial class ScribeDialogBase
                         child: new ScribeVsIconGlyph("scribeedit", pencilSize, chromeColor))))
             : null;
 
-        // Expand/collapse-all toggle (manage-terminal-assignment-records): only while the Inbox or Sent
+        // Expand/collapse-all toggle: only while the Inbox or Sent
         // History view is active — never simultaneously with the pencil, which only shows in Editor view —
         // so it never contends with the pencil for the same slot. Reuses the per-row chevron's own glyphs
         // and direction convention (right = something to expand, down = fully open) rather than a new SVG.
@@ -314,30 +309,26 @@ public abstract partial class ScribeDialogBase
                 onTap: ToggleAllVisibleAssignmentRows)
             : null;
 
-        // Leading drag-grip (unify-tab-header-layout §8) — moved out of the trailing group to sit to the
-        // LEFT of the title, matching the original exploration mockup. The whole TitleBar band is already
+        // Leading drag-grip, to the LEFT of the title. The whole TitleBar band is already
         // the drag zone via WindowConfig.DragHandleHeight; the grip is a discoverability affordance on top
-        // of that, not the only way to drag the window. A press landing ON the grip used to be (and still
-        // is) swallowed instead of moving the window if left to band-drag alone: the tooltip wraps its
+        // of that, not the only way to drag the window. A press landing ON the grip is
+        // swallowed instead of moving the window if left to band-drag alone: the tooltip wraps its
         // child in a MouseRegion (needed for hover), which is an active hit target, so GuiBase captures the
         // pointer-down before its band-drag check runs — and click-through can't coexist with the tooltip
         // (an IgnorePointer would kill the MouseRegion's hover too). So the grip owns its OWN window drag
         // via a GestureDetector nested INSIDE the tooltip: the outer MouseRegion still fires hover, and
-        // press→move→release moves the window just like the band (§8.1; see the gripDragging fields +
-        // VSAPI-NOTES.md §LibGUI). This is a REPOSITION of that exact mechanism, not a new one — the
-        // GestureDetector/Tooltip/glyph are unchanged. A "drag to move" tooltip labels it.
+        // press→move→release moves the window just like the band (see the gripDragging fields +
+        // VSAPI-NOTES.md §LibGUI). A "drag to move" tooltip labels it.
         // Chrome (grip + trailing buttons) is anchored to a FIXED top offset — the same one the title
-        // itself sits at — rather than centered/bottom-anchored against the title's own box (see the
-        // 2026-09-09 title-wrap-vertical-position investigation: Center-vs-End cross-alignment made a
-        // wrapped 2-line title's top position drift relative to a 1-line title, dragging this chrome
-        // down with it). A small nudge shifts the chrome down off that flush top edge, centering it on
+        // itself sits at — rather than centered/bottom-anchored against the title's own box (Center-vs-End
+        // cross-alignment would make a wrapped 2-line title's top position drift relative to a 1-line
+        // title, dragging this chrome down with it). A small nudge shifts the chrome down off that flush top edge, centering it on
         // the title's FIRST line, independent of how many lines the title wraps to. This is a
-        // Transform.Translate (paint-only), NOT Padding — Padding didn't visibly move the glyph in-game
-        // (verified via the title-wrap-vertical-position mockup), matching the existing paint-only-nudge
+        // Transform.Translate (paint-only), NOT Padding — Padding doesn't visibly move the glyph in-game,
+        // matching the existing paint-only-nudge
         // convention used for this exact class of problem elsewhere (ScribeGearTuning's trim-box-Y,
         // ScribeRowConstants' OpticalScale nudge). Scaled by WindowFontScale so it tracks a live
-        // font-scale change the same way the title font does; 6px at the default 1.0 scale was the
-        // playtest-picked value (2026-09-09) against the mockup's ~24px title font.
+        // font-scale change the same way the title font does; 6px at the default 1.0 scale suits a ~24px title font.
         const float ChromeTopNudgeBase = 6f;
         float chromeTopNudge = ChromeTopNudgeBase * ScribePlayerSettings.ClampFontScale(modSystem.MySettings.WindowFontScale);
         Widget gripSlot = Transform.Translate(
@@ -350,7 +341,7 @@ public abstract partial class ScribeDialogBase
             new Vector2(0f, chromeTopNudge));
 
         // Trailing group: pencil (editor only) · expand/collapse-all (Inbox/Sent History only) · close
-        // button (refine-settings-and-window-chrome). Close reuses the delete SVG at 1.4× the per-row size.
+        // button. Close reuses the delete SVG at 1.4× the per-row size.
         var trailingGroup = new List<Widget>();
         if (pencilSlot is not null) trailingGroup.Add(pencilSlot);
         if (expandCollapseAllSlot is not null) trailingGroup.Add(expandCollapseAllSlot);
@@ -359,7 +350,7 @@ public abstract partial class ScribeDialogBase
 
         // Only used below to estimate how many lines the title wraps to, which drives how much the band
         // grows (see the return statement's comment) — an occasional off-by-one-character guess here just
-        // risks growing the band a line early/late, never a wrong cross-alignment (that's now fixed, below).
+        // risks growing the band a line early/late, never a wrong cross-alignment.
         float gripWidth = ScribeRowConstants.RowCheckboxSize * 1.1f;
         float trailingWidth = titleBtnSpacing * (trailingGroup.Count - 1);
         if (pencilSlot is not null) trailingWidth += titleBtnSpacing * 1.5f + pencilSize;
@@ -375,10 +366,9 @@ public abstract partial class ScribeDialogBase
 
         // Explicit fixed top-anchor (Start) for every child, always — regardless of line count. The
         // title's top position is then invariant across 1-line and wrapped 2-line titles (the content
-        // box's top edge itself never moves; see contentBoxH/bandH below), which was the actual bug: the
-        // previous Center-for-1-line/End-for-2-lines split gave a wrapped title HALF its slack above vs.
-        // ALL its slack above, bumping it down. Chrome no longer tracks the title's own box height at
-        // all — it gets its own independent chromeTopNudge (above) instead.
+        // box's top edge itself never moves; see contentBoxH/bandH below), (a Center-for-1-line/End-for-2-lines
+        // split would give a wrapped title HALF its slack above vs. ALL its slack above, bumping it down).
+        // Chrome does not track the title's own box height; it has its own independent chromeTopNudge (above).
         Widget titleRow = new Row(
             mainAxisAlignment: MainAxisAlignment.SpaceBetween,
             crossAxisAlignment: CrossAxisAlignment.Start,
@@ -396,36 +386,22 @@ public abstract partial class ScribeDialogBase
                     new Vector2(0f, chromeTopNudge)),
             });
 
-        // 2026-09-10 (3rd/4th playtest passes — REVERTED): both the self-sizing ConstrainedBox rewrite
-        // (Round 6) and its Align-removal correction (Round 6 correction) are reverted here. Round 6's
-        // rewrite dropped BOTH the outer fixed-size SizedBox AND the Align(BottomCenter) that horizontally
-        // CENTERS the fixed-width (TitleBtnsW) inner box within the full-width (W) outer band — without
-        // Align, a plain Padding/ConstrainedBox chain has no horizontal-centering step at all, so the whole
-        // grip+title+buttons group collapsed against the LEFT edge instead of sitting centered with a
-        // symmetric margin (2026-09-10, 5th playtest pass: "ruined the orientation left and right"). The
-        // Round 6 correction's fix for the OTHER regression (Align filling the whole dialog height because
-        // the outer box's max-height was unbounded) is no longer needed once the outer box is back to an
-        // EXPLICIT, bounded height (bandH below) rather than a minimum-only ConstrainedBox with an
-        // unbounded max — Align only fills to whatever ambient max it's handed, and a fixed-height SizedBox
-        // hands it exactly bandH, not the dialog's total H.
-        //
-        // Back to Round 5's structure: two nested, EXACTLY-sized SizedBoxes (not self-sizing) — an outer
-        // W × bandH band, and an inner TitleBtnsW × contentBoxH box centered/bottom-anchored within it via
-        // Align(BottomCenter). Both grow from their single-line baselines by the SAME delta
-        // (extraLines * titleLineH) so the inner box's top edge — and thus Row 2/3 below it — never moves;
-        // only the bottom extends. Round 5/6's actual titleLineH bug (using CuneiformMetrics.LineHeightRatio,
-        // tuned for the Tablet's cuneiform glyphs, as a stand-in for ordinary Latin/Caudex RichText line
-        // height — the real cause of the "discrete downward jump" that motivated Round 6's rewrite) is fixed
-        // here directly: titleLineH now uses the title's own real font metrics (TitleLineHeight, shared
-        // with BuildOuterArtBox's title/subtitle gap nudge) instead of the mismatched cuneiform ratio.
+        // Two nested, EXACTLY-sized SizedBoxes: an outer W × bandH band, and an inner TitleBtnsW × contentBoxH
+        // box centered/bottom-anchored within it via Align(BottomCenter). The Align is what horizontally
+        // CENTERS the fixed-width inner box within the full-width outer band; a plain Padding/ConstrainedBox
+        // chain has no horizontal-centering step and would collapse the group against the LEFT edge. The outer
+        // box has an EXPLICIT, bounded height (bandH) so the Align fills only bandH, not the dialog's total H.
+        // Both boxes grow from their single-line baselines by the SAME delta (extraLines * titleLineH) so the
+        // inner box's top edge — and thus Row 2/3 below it — never moves; only the bottom extends. titleLineH
+        // uses the title's own real font metrics (TitleLineHeight, shared with BuildOuterArtBox's
+        // title/subtitle gap nudge), not the cuneiform line-height ratio.
         float titleLineH = TitleLineHeight;
         int extraLines = actualTitleLines - 1;
         float contentBoxH = layout.TitleBtnsH + extraLines * titleLineH;
         float bandH = layout.TitleBarH + extraLines * titleLineH;
 
         // Paint-only downward nudge for the WHOLE title section (background panel + grip + title +
-        // chrome) — a fixed 1.2% of the full pixel-art display's height (2026-09-09 playtest feedback:
-        // 0.4%, then "another 0.2%" (0.6% total), then moved to 1.2%). Transform.Translate, not
+        // chrome) — a fixed 1.2% of the full pixel-art display's height. Transform.Translate, not
         // Padding/EdgeInsets, for the same reason as chromeTopNudge above: it doesn't touch
         // bandH/contentBoxH, so the band's own sizing (and Row 2/3 below it) is unaffected — only where
         // this content PAINTS moves.
@@ -442,10 +418,8 @@ public abstract partial class ScribeDialogBase
                     height: contentBoxH,
                     // Panel behind the title row when Pixel-Art is OFF (no art backdrop) so it isn't
                     // transparent onto the world; unchanged when ON (the art is the background). Right inset
-                    // stays 0.04·W (unify-tab-header-layout §8); the left inset is HALVED to 0.02·W
-                    // (2026-09-08 playtest feedback: still too much space left of the grip+title after the
-                    // earlier flat-10px removal), now that the leading grip (plus its own spacing from the
-                    // title) occupies that space instead.
+                    // stays 0.04·W; the left inset is 0.02·W
+                    // because the leading grip (plus its own spacing from the title) occupies that space.
                     child: Transform.Translate(
                         FlatPanel(new Padding(
                             EdgeInsets.Only(left: 0.02f * layout.W, right: 0.04f * layout.W),
@@ -484,21 +458,20 @@ public abstract partial class ScribeDialogBase
     }
 
     /// <summary>The resting (non-editing) title widget, sized to fill the title slot's Expanded. Default is a
-    /// <see cref="RichText"/> that wraps to <see cref="TitleMaxLines"/> lines (two by default; wrap-titles-all-surfaces),
+    /// <see cref="RichText"/> that wraps to <see cref="TitleMaxLines"/> lines (two by default),
     /// with ellipsis overflow past the last line. The tablet overrides this to render the title as display-only
-    /// cuneiform (add-tablet-cuneiform-chrome D2), but its cuneiform-OFF path returns to this base wrapping.
+    /// cuneiform, but its cuneiform-OFF path returns to this base wrapping.
     /// <paramref name="displayTitle"/> is the already-resolved title text (host default substituted for the codec's
     /// "Untitled"); <paramref name="titleStyle"/> carries the resolved size/family/weight/color so an override can
     /// match the band metrics.</summary>
     private protected virtual Widget BuildTitleDisplay(string displayTitle, TextStyle titleStyle) =>
         new RichText(new TextSpan(displayTitle), titleStyle, maxLines: TitleMaxLines, overflow: TextOverflow.Ellipsis);
 
-    /// <summary>Maximum number of lines the title band shows before clipping. Default 2 (wrap-titles-all-surfaces):
+    /// <summary>Maximum number of lines the title band shows before clipping. Default 2:
     /// a long title on every surface (Lectern/Notebook/Scriptorium/Chalkboard, and the cuneiform-OFF tablet) wraps
     /// into the band's existing vertical slack instead of clipping off the right. <see cref="BuildTitleBar"/> reads
     /// this to grow the title slot to that many line-heights; a title that fits on one line is byte-identical to the
-    /// old single-line layout. Previously defaulted to 1 (tablet-only override); generalized to the shared default
-    /// once the tablet's two-line wrap was proven in-game.</summary>
+    /// single-line layout.</summary>
     private protected virtual int TitleMaxLines => 2;
 
     /// <summary>The active (editing) title widget — a live text input bound to <see cref="_titleController"/>
@@ -507,12 +480,12 @@ public abstract partial class ScribeDialogBase
     /// shared commit machinery (<see cref="CommitTitleIfEditing"/>) is untouched by an override. The tablet
     /// overrides this to a single-line cuneiform input driven by the SAME controller/focus node, so its
     /// <see cref="_isTitleEditing"/> / <see cref="_pendingTitleEditRebuild"/> / <see cref="_pendingTitleFocus"/>
-    /// deferral all still apply (add-tablet-cuneiform-chrome D2).</summary>
+    /// deferral all still apply.</summary>
     private protected virtual Widget BuildTitleField(TextStyle titleStyle)
     {
-        // Height explicitly matched to the title's own line height (2026-09-09 playtest feedback) instead
-        // of TextFieldStyle's default fixed 40px, which visibly grew the title band the instant editing
-        // started. Mirrors how the Tablet's cuneiform title field already renders with zero padding/border
+        // Height explicitly matched to the title's own line height instead
+        // of TextFieldStyle's default fixed 40px, which would visibly grow the title band the instant editing
+        // starts. Mirrors how the Tablet's cuneiform title field already renders with zero padding/border
         // via its own custom renderer (ScribeCuneiformFieldRenderWidget's padX/padY/borderThickness all 0).
         // BorderThickness is already 0 here. The stock TextField's horizontal text inset (a fixed 10px baked
         // into RenderTextField.PaintInternal, not exposed on TextFieldStyle) can't be zeroed without forking
@@ -539,17 +512,17 @@ public abstract partial class ScribeDialogBase
         if (e.KeyCode is (int)GlKeys.Enter or (int)GlKeys.KeypadEnter or (int)GlKeys.Escape)
         {
             CommitTitleIfEditing();
-            // Swap the title slot back from inline-input to display via an in-place reconcile
-            // (reconcile-animating-surfaces §3.1). RebuildBody marks the body dirty for the NEXT frame's
+            // Swap the title slot back from inline-input to display via an in-place reconcile.
+            // RebuildBody marks the body dirty for the NEXT frame's
             // build pass rather than unmounting the tree synchronously, so it also sidesteps the
-            // mid-dispatch orphan-button NPE the old ForceRebuild had to defer around (see
+            // mid-dispatch orphan-button NPE that a synchronous ForceRebuild would hit (see
             // _pendingTitleEditRebuild) — and the editor rows are reused, so any focused row keeps its caret.
             RebuildBody();
             e.Handled = true;
         }
     }
 
-    // ---------------- Title-bar grip drag (§8.1) ----------------
+    // ---------------- Title-bar grip drag ----------------
     // The grip glyph moves the window itself, because a press on it is captured by the tooltip's
     // MouseRegion before GuiBase's title-band drag can fire (see the gripDragging fields' comment and
     // the BuildTitleBar grip note). We reproduce GuiBase's band-drag math here: capture the mouse and
@@ -588,7 +561,7 @@ public abstract partial class ScribeDialogBase
     }
 
     /// <summary>Re-dispatch a synthetic pointer-move at the current cursor position so LibGUI re-runs its
-    /// hit-test and updates hover (fix-list-collapse-stale-hover). Called each frame while a list collapse
+    /// hit-test and updates hover. Called each frame while a list collapse
     /// is animating, because LibGUI otherwise only recomputes hover on real mouse motion — so a row that
     /// slides under a stationary cursor keeps stale hover and its delete/pin controls stay hidden until the
     /// mouse moves. This reuses LibGUI's own idiom (GuiBase.OnMouseMove itself synthesizes a PointerEvent to
@@ -624,18 +597,17 @@ public abstract partial class ScribeDialogBase
 
     /// <summary>SectionRightCol: a vertical stack of tooltipped nav buttons — Settings (gear → the shared
     /// standalone settings window), Read view (check glyph), Edit view (pencil), Pinned tasks (pin). All
-    /// reuse the mod's registered SVGs (scribe-notebook-frame D3). Read/Edit switch the dialog's own view;
-    /// Pinned switches to the Pin Tab (scribe-pin-editor).</summary>
+    /// reuse the mod's registered SVGs. Read/Edit switch the dialog's own view;
+    /// Pinned switches to the Pin Tab.</summary>
     /// <summary>SectionRightCol builder — <c>protected virtual</c> so a subclass may replace the entire
     /// right column (the tablet returns an empty, nav-less column whose <c>SideColW</c> width still
-    /// preserves the symmetric side margin). The default body builds the baseline nav stack; the three
-    /// incumbent dialogs (Lectern + both Notebooks) override nothing and take this path unchanged
-    /// (add-tablet-dialog D2).</summary>
+    /// preserves the symmetric side margin). The default body builds the baseline nav stack, used by the
+    /// Lectern and both Notebooks.</summary>
     protected virtual Widget BuildRightColNav()
     {
         var colors = ResolveTheme(modSystem.MySettings.PixelArtDisplay).ColorScheme;
-        // Sidebar nav buttons enlarged (v1-playtest-fixes 5.6): the base was RowCheckboxSize × 1.2; ×1.7 on
-        // top of that grows BOTH the button box and its inscribed SVG, since ScribeRowButton derives its box
+        // Sidebar nav buttons are RowCheckboxSize × 1.7, which grows BOTH the button box
+        // and its inscribed SVG, since ScribeRowButton derives its box
         // size AND glyph size from this one `size` value.
         float size = ScribeRowConstants.RowCheckboxSize * 1.7f;
 
@@ -643,13 +615,13 @@ public abstract partial class ScribeDialogBase
         // dragging muted body text down with them — see NavIconColor). The active tab uses its own activeColor.
         Vector4 navColor = NavIconColor(colors);
 
-        // Whether the editor lock is held by ANOTHER player (fix-multiplayer-editor-lock §4.1). When true
+        // Whether the editor lock is held by ANOTHER player. When true
         // the Edit nav button reads as unavailable (dimmed glyph) and its tap surfaces the native error
         // instead of entering the editor — TryEnterEditor enforces the no-entry; this only styles it.
         bool editLockedByOther = host.IsLockedByOther(capi.World.Player.PlayerUID);
 
         // A soft drop shadow so the enlarged nav buttons read as raised chrome floating over the notebook
-        // art (v1-playtest-fixes 5.6). Semi-transparent black, nudged down-right, gently blurred.
+        // art. Semi-transparent black, nudged down-right, gently blurred.
         var navShadow = new[]
         {
             new BoxShadow(
@@ -667,11 +639,11 @@ public abstract partial class ScribeDialogBase
             editLockedByOther ? navColor with { W = 0.4f } : navColor,
             size: size, onTap: TryEnterEditor, boxShadows: navShadow,
             activeColor: viewMode == ScribeLecternView.Editor ? ScribeRowConstants.NavActiveEdit : null);
-        // Pinned enlarged +15% (§10.2): the pin glyph reads a touch larger than the others.
+        // Pinned enlarged +15%: the pin glyph reads a touch larger than the others.
         Widget pinBtn = TitleButton("scribepin", "scribe-gui-nav-pinned", navColor,
             size: size, onTap: OnClickSwitchToPinned, iconScale: 1.15f, boxShadows: navShadow,
             activeColor: viewMode == ScribeLecternView.Pinned ? ScribeRowConstants.NavActivePinned : null);
-        // Settings gear LAST in the group (§10.1), always after any extra buttons.
+        // Settings gear LAST in the group, always after any extra buttons.
         Widget settingsBtn = TitleButton("scribegear", "scribe-gui-nav-settings", navColor,
             size: size, onTap: modSystem.OpenSettings, boxShadows: navShadow,
             activeColor: modSystem.IsSettingsOpen ? ScribeRowConstants.NavActiveSettings : null);
@@ -683,7 +655,7 @@ public abstract partial class ScribeDialogBase
             .ToArray();
 
         // Horizontal placement of the buttons within their SideColW column, resolved through the
-        // NavButtonAlignment seam (refine-nav-button-placement). The base owns the layout math — the column
+        // NavButtonAlignment seam. The base owns the layout math — the column
         // width and the single drawn nav-button box width (NavButtonSize == this size, minus the
         // ScribeRowButton BoxShrink) — and the seam maps them to a CrossAxisAlignment for this surface family.
         // Default (Pages group) is Start/left-hugging, the layout the paper-margin art was tuned for; the
@@ -701,11 +673,11 @@ public abstract partial class ScribeDialogBase
     }
 
     /// <summary>A tooltipped icon button reusing the per-row button chrome (<see cref="ScribeRowButton"/>).
-    /// <paramref name="iconScale"/> grows just the glyph (not the box) — used to enlarge the pin +15%
-    /// (§10.2). <paramref name="boxShadows"/> passes an optional drop shadow through to the button's
-    /// <c>BoxStyle</c> (the sidebar nav buttons use one to read as raised chrome — v1-playtest-fixes 5.6).
+    /// <paramref name="iconScale"/> grows just the glyph (not the box) — used to enlarge the pin +15%.
+    /// <paramref name="boxShadows"/> passes an optional drop shadow through to the button's
+    /// <c>BoxStyle</c> (the sidebar nav buttons use one to read as raised chrome).
     /// <paramref name="shimmer"/> wraps the button in the Inbox nav-button shimmer sweep
-    /// (<see cref="ScribeShimmerWrap"/>, §8.5) when true — every caller except the four Inbox nav
+    /// (<see cref="ScribeShimmerWrap"/>) when true — every caller except the four Inbox nav
     /// buttons leaves it false, in which case the wrap is a costless pass-through.
     /// Protected so subclasses can build matching nav buttons in <see cref="GetExtraNavButtons"/>.</summary>
     protected Widget TitleButton(string iconName, string tooltipKey, Vector4 color, float size, Action onTap, float iconScale = 1f, BoxShadow[]? boxShadows = null, Vector4? activeColor = null, bool shimmer = false) =>
@@ -716,7 +688,7 @@ public abstract partial class ScribeDialogBase
     /// overlay so it isn't clipped by the surrounding boxes. The bubble fills with the theme's
     /// <c>Background</c> (Tooltip renders it that way), so the content text uses its partner
     /// <c>OnBackground</c> — the same dark ink the Lectern's body text uses when Pixel-Art Display paints
-    /// the light parchment theme. Without an explicit color the content defaulted to white, which washed
+    /// the light parchment theme. Without an explicit color the content would default to white, which washes
     /// out against the light bubble; resolving through <see cref="ScribeTheme.For"/> keeps it correct in
     /// both modes (dark ink on light paper when pixel-art is on, light text on the dark global theme when
     /// off).</summary>
@@ -724,9 +696,9 @@ public abstract partial class ScribeDialogBase
     {
         var theme = ScribeTheme.For(modSystem.MySettings.PixelArtDisplay);
         // Shade the whole tooltip — bubble AND content — by the live illumination shade at reduced hover
-        // strength (refine-scribe-hover-tooltips D2 + bug-1). Tooltips render in the global Overlay layer —
+        // strength. Tooltips render in the global Overlay layer —
         // OUTSIDE the body's own ScribeGlobalTint wrap (BuildBodyTree) — so without ShadedTooltip the bubble
-        // (and, before bug-1, its text) stays full-brightness while the body is dimmed by low light and
+        // (and its text) stays full-brightness while the body is dimmed by low light and
         // visibly "sticks out." ShadedTooltip shades the bubble Background/Border via a Theme sandwich and the
         // content via ForHover; see its remarks. NOTE: this is the shared entry point for every
         // nav-button/title-bar tooltip, so Scribe Settings is excluded BY CONSTRUCTION — its dialog
@@ -749,9 +721,7 @@ public abstract partial class ScribeDialogBase
     /// <summary>The tasks column's content builder — <c>protected virtual</c> so a subclass may supply
     /// its own single-view center instead of the <see cref="viewMode"/>-switched view (the tablet returns
     /// a cuneiform title banner over the inherited editable task list). The default body routes on
-    /// <see cref="viewMode"/>; the three incumbent dialogs override nothing and take this path unchanged
-    /// (add-tablet-dialog D2). Its former gear-header chrome row moved to the SectionRightCol nav stack
-    /// (scribe-notebook-frame), so this is now just the active view filling the column.</summary>
+    /// <see cref="viewMode"/> and fills the column with the active view.</summary>
     protected virtual Widget BuildCentralRegion() => viewMode switch
     {
         ScribeLecternView.Editor   => BuildEditorContent(),
@@ -768,14 +738,14 @@ public abstract partial class ScribeDialogBase
     };
 
     /// <summary>The live row style for this build, derived from the player's current settings (NOT cached
-    /// at open — add-settings-tab D4), so a window-font-scale change from the settings view repaints the
+    /// at open), so a window-font-scale change from the settings view repaints the
     /// open dialog on the next rebuild. Passes through <see cref="DecorateRowStyle"/> so a subclass may
     /// layer tier-specific row behavior (the tablet flips on the cuneiform row path) without duplicating
     /// the settings-derivation.</summary>
     private protected ScribeRowStyle RowStyle => DecorateRowStyle(ScribeRowStyle.FromSettings(modSystem.MySettings)
         // Subtask indent depends on the window width (not a settings-only size), so it's layered on here from
         // the live layout rather than in FromSettings: 10px + 3%·W, mirroring the 0.04·W footer inset idiom
-        // (task-subtasks 5.1). Applied before DecorateRowStyle so a subclass's `with` tweaks still compose.
+        // Applied before DecorateRowStyle so a subclass's `with` tweaks still compose.
         // Focus-border color is seeded from the InputFocusBorderColor seam (default Primary; chalkboard →
         // chalk-white) so every editable row shares the guestbook field's resolved focus color.
         with
@@ -788,13 +758,13 @@ public abstract partial class ScribeDialogBase
     /// <summary>Hook to adjust the settings-derived <see cref="ScribeRowStyle"/> for this dialog tier. The
     /// default returns it unchanged (Lectern/Notebook). The tablet overrides it to set
     /// <see cref="ScribeRowStyle.UseCuneiform"/> + the glyph bundle under the single cuneiform branch, so
-    /// its editable rows type in cuneiform (add-tablet-cuneiform-chrome).</summary>
+    /// its editable rows type in cuneiform.</summary>
     private protected virtual ScribeRowStyle DecorateRowStyle(ScribeRowStyle style) => style;
 
     /// <summary>Action for the editor footer's Settings gear, or null to omit it. The default is null: the
     /// Lectern/Notebook reach Scribe Settings through their nav column, so their footer has no gear. The
-    /// tablet — which drops the nav column (D3) — overrides this to <c>modSystem.OpenSettings</c> so a gear
-    /// appears right of the ⓘ info button, styled identically (add-tablet-cuneiform-chrome).</summary>
+    /// tablet — which drops the nav column — overrides this to <c>modSystem.OpenSettings</c> so a gear
+    /// appears right of the ⓘ info button, styled identically.</summary>
     private protected virtual Action? EditorSettingsGearAction => null;
 
     /// <summary>Lang key for the empty-document hint shown in the Read and Edit views. Notebook
@@ -815,45 +785,41 @@ public abstract partial class ScribeDialogBase
     }
 
     /// <summary>Whether the read view is a permanently-read-only surface: the "switch to editor" footer
-    /// button is dropped and TEXT editing is blocked (a hard or fired tablet — tablet-firing).
+    /// button is dropped and TEXT editing is blocked (a hard or fired tablet).
     /// The default is false, so the Lectern/Notebook read view keeps its Edit button. The tablet overrides it
     /// to true when the stack is not editable.
     ///
-    /// <para>NOTE (zero-point-three-fixes §7.3): read-only no longer forces the checkbox/pin inert — that is
+    /// <para>NOTE: read-only does not force the checkbox/pin inert — that is
     /// governed by <see cref="ReadViewCompletionAndPinLive"/>, so a hard/fired tablet keeps completion + pin
     /// live while its text stays locked.</para></summary>
     private protected virtual bool ReadViewIsReadOnly => false;
 
-    /// <summary>Whether a read-only read view keeps its checkbox and pin INTERACTIVE (zero-point-three-fixes
-    /// §7.3). Default false: irrelevant on the Lectern/Notebook (they are not read-only, so their toggles are
+    /// <summary>Whether a read-only read view keeps its checkbox and pin INTERACTIVE. Default false: irrelevant on the Lectern/Notebook (they are not read-only, so their toggles are
     /// live off <see cref="ReadViewIsReadOnly"/> = false anyway). The tablet overrides it true so a hard/fired
     /// tablet can still complete and unpin — preventing a fired tablet's pin from being stranded on the HUD.</summary>
     private protected virtual bool ReadViewCompletionAndPinLive => false;
 
     /// <summary>Invoked when the player taps a locked row's text on a read-only tablet, so the surface can
-    /// raise its material-specific "soften it / cannot be changed" in-game message (zero-point-three-fixes
-    /// §7.4). Null on the Lectern/Notebook and on a wet tablet, where a text tap is not a blocked edit.</summary>
+    /// raise its material-specific "soften it / cannot be changed" in-game message. Null on the Lectern/Notebook and on a wet tablet, where a text tap is not a blocked edit.</summary>
     private protected virtual Action<Guid>? ReadViewTextEditRefused => null;
 
-    /// <summary>Whether this dialog's Read View renders the filter-pill row (<c>read-view-filter-pills</c>)
-    /// and any subtask-group collapse toggles (<c>read-view-subtask-collapse</c>) — one flag gates both
-    /// features together, since they are excluded from the same surfaces as a unit (scribe-dialog-base).
+    /// <summary>Whether this dialog's Read View renders the filter-pill row and any subtask-group collapse toggles
+    /// — one flag gates both
+    /// features together, since they are excluded from the same surfaces as a unit.
     /// Defaults to <c>true</c> so every existing subclass (Lectern, Notebook, Clockmaker's Notebook,
     /// Chalkboard, Scriptorium, Assignment Desk, Inbox) gets both features with no per-subclass change.
-    /// Only <see cref="GuiDialogScribeTablet"/> overrides this to <c>false</c> (tablet-dialog), keeping its
+    /// Only <see cref="GuiDialogScribeTablet"/> overrides this to <c>false</c>, keeping its
     /// pared-down read-view intentional rather than an oversight.</summary>
     private protected virtual bool SupportsFilterPills => true;
 
     /// <summary>Whether this dialog's Read View / Editor renders the shared Row 2 subtitle + Row 3 tab
-    /// header at all (unify-tab-header-layout). Defaults to <c>true</c> for every tabbed dialog. Only
-    /// <see cref="GuiDialogScribeTablet"/> overrides this to <c>false</c>: an earlier pass let the tablet
-    /// inherit the subtitle purely because it reuses these same shared content widgets, which read as the
-    /// unification going further than intended — the tablet keeps its pared-down header with neither row
-    /// (reversed 2026-09-08 playtest feedback; design.md Non-Goals).</summary>
+    /// header at all. Defaults to <c>true</c> for every tabbed dialog. Only
+    /// <see cref="GuiDialogScribeTablet"/> overrides this to <c>false</c>: the tablet reuses the same shared content widgets
+    /// but keeps its pared-down header with neither row.</summary>
     private protected virtual bool SupportsTabHeader => true;
 
     /// <summary>Whether this surface's EDITOR rows opt into the read view's click-to-open-Handbook affordance
-    /// on their Link/Tracker/Craft name label (enable-tablet-row-links). Default false: every surface with a
+    /// on their Link/Tracker/Craft name label. Default false: every surface with a
     /// distinct read view (Lectern/Notebook/Scriptorium) activates links there, so its editor names stay plain
     /// editable regions. Only the tablet — which has no read/edit split, so a wet tablet always renders the
     /// editor path — overrides it true, wiring link activation directly onto the always-edit rows.</summary>
@@ -863,16 +829,15 @@ public abstract partial class ScribeDialogBase
     /// <c>(null, null)</c> for a Task/Text block (which render their authored text instead). A Tracker uses
     /// its <see cref="ScribeBlock.TargetItemCode"/>, a Link its <see cref="ScribeBlock.LinkTarget"/>; both are
     /// plain code strings that Core stores API-free, so the parse against the live registries happens here in
-    /// the Mod layer (add-tracker-link-tasks Group 5). Kept off the row widgets so they stay <c>capi</c>-free.
+    /// the Mod layer. Kept off the row widgets so they stay <c>capi</c>-free.
     /// Protected (not private): takes any <see cref="ScribeBlock"/>, not just one from <c>host.Document</c> —
-    /// <see cref="GuiDialogScribeAssignmentDesk"/> reuses it to resolve rows from a STAGED item's document
-    /// (assignment-multi-item-creation design.md D10).</summary>
+    /// <see cref="GuiDialogScribeAssignmentDesk"/> reuses it to resolve rows from a STAGED item's document.</summary>
     protected (ItemStack? Stack, string? Name) ResolveRowItem(ScribeBlock b)
     {
         if (b.IsQuestObjective)
         {
             // An objective's own match code lives in LinkTarget (a raw key, never a "page:"/"quest:"-scheme
-            // Link target — add-progression-framework-quest-objective-subtasks 1.3), so it never routes
+            // Link target), so it never routes
             // through ResolveDisplay's scheme dispatch below. Item-backed (TargetItemCode set) resolves
             // exactly like a Tracker; label-only has no item to draw and falls back to the captured
             // LinkLabel (or, failing that, the raw match code) with a generic icon (rendered by the caller
@@ -883,7 +848,7 @@ public abstract partial class ScribeDialogBase
         }
         if (!b.IsTracker && !b.IsLink && !b.IsCraft) return (null, null);
         // A Link resolves its LinkTarget; a Tracker AND a Craft parent both resolve the item they count —
-        // the Craft parent's TargetItemCode is its recipe OUTPUT (add-crafting-tasks 9.1), so it shows the
+        // the Craft parent's TargetItemCode is its recipe OUTPUT, so it shows the
         // output item's icon + name exactly like a Tracker, differing only in the "Craft …" label framing.
         string? code = b.IsLink ? b.LinkTarget : b.TargetItemCode;
         return ScribeItemRef.ResolveDisplay(capi.World, code, b.LinkLabel);
@@ -894,8 +859,7 @@ public abstract partial class ScribeDialogBase
     /// identically on every path. A Link opens its <see cref="ScribeBlock.LinkTarget"/>; a Tracker AND a Craft
     /// parent open their <see cref="ScribeBlock.TargetItemCode"/> (the Craft parent's is its recipe OUTPUT — see
     /// <see cref="ResolveRowItem"/>). An item-backed QuestObjective opens its own <see cref="ScribeBlock.TargetItemCode"/>
-    /// the same way; a label-only QuestObjective has no page to open and falls through to the no-op below (task
-    /// add-progression-framework-quest-objective-subtasks 7.2 — not an exception, the intended fallthrough).
+    /// the same way; a label-only QuestObjective has no page to open and falls through to the no-op below (the intended fallthrough, not an exception).
     /// Keyed by TaskId off the live document, so it works regardless of which view
     /// dispatched it and mirrors the Pin-tab dispatch (<see cref="OnPinOpenLink"/>). A plain Task/Note has no
     /// item code, so it no-ops here (and its editor label is never wrapped in the gesture — see BuildItemEditorContent).</summary>
@@ -916,7 +880,7 @@ public abstract partial class ScribeDialogBase
             // reference), so a later mutation of the authoritative document can't alias into a built
             // row — a re-sync rebuilds instead. Pinned is a per-player query (IsPinnedForMe), not a
             // document field, so each row carries its TaskId and is tinted from the client cache.
-            // Belt-and-suspenders (add-empty-task-lifecycle D5): the editor's blur-removal + terminal purge
+            // Belt-and-suspenders: the editor's blur-removal + terminal purge
             // keep an empty task out of the persisted document, so this filter should rarely matter — but
             // if an empty task ever reaches the read view (e.g. an older doc, or an autosave that raced a
             // clear), never render it as a blank checkbox row. Task-only: an empty note is valid. The
@@ -925,7 +889,7 @@ public abstract partial class ScribeDialogBase
                 .Select((b, i) =>
                 {
                     var (stack, name) = ResolveRowItem(b);
-                    // A quest Link's live kill/block-place/block-break progress (§11.3) — null for every
+                    // A quest Link's live kill/block-place/block-break progress — null for every
                     // other row kind, a plain/guide-page Link, or when the watcher has nothing for this
                     // quest yet (see ScribeModSystem.TryGetQuestProgressText's doc-comment).
                     string? questProgress = ScribeLinkTarget.QuestCode(b.LinkTarget) is { } questCode
@@ -935,7 +899,7 @@ public abstract partial class ScribeDialogBase
                     // A label-only QuestObjective (no resolved item — ResolveRowItem's stack came back null)
                     // draws the generic book glyph rather than a blank ItemStackDisplay: the row widget's icon
                     // dispatch (ScribeLinkIcon) keys off a "page:"/"quest:"-scheme LinkTarget, and a
-                    // QuestObjective's real LinkTarget is a bare match code (never scheme-prefixed — 1.3), so a
+                    // QuestObjective's real LinkTarget is a bare match code (never scheme-prefixed), so a
                     // synthetic guide-page-scheme string is substituted here purely to route the SAME icon
                     // fallback a guide-page Link already uses. This is display-only: OpenRowLink re-reads the
                     // LIVE block by TaskId rather than this snapshot, so it's never mistaken for a real page.
@@ -963,8 +927,8 @@ public abstract partial class ScribeDialogBase
             onToggleTask: OnReadViewCompleteTask,
             onTogglePinned: OnReadViewTogglePinned,
             // A Link row's item name is a hyperlink: tapping it opens the referenced Handbook page and never
-            // touches completion (add-tracker-link-tasks 5.3). A Tracker's name opens its TARGET item's page and
-            // a Craft parent its OUTPUT item's page the same way (feedback 6.5 — the count target IS a real item
+            // touches completion. A Tracker's name opens its TARGET item's page and
+            // a Craft parent its OUTPUT item's page the same way (the count target IS a real item
             // with a Handbook entry). Shared with the editor path via OpenRowLink so all three resolve identically.
             onOpenLink: OpenRowLink,
             onSwitchToEditor: TryEnterEditor,
@@ -973,7 +937,7 @@ public abstract partial class ScribeDialogBase
                 horizontal: 0.04f * host.GetLayout(modSystem.MySettings.PixelArtSize).W),
             style: RowStyle,
             scrollController: sharedScrollController,
-            // Host-owned collapse registry (reconcile-animating-surfaces §5.5): a task removed by a Delete-policy
+            // Host-owned collapse registry: a task removed by a Delete-policy
             // completion collapses out via ScribeAnimatedList instead of vanishing. Lives on the dialog so the
             // motion survives the RefreshReadView reconcile, and so OnRenderGUI reads AnyAnimating to pin the
             // scroll + refresh hover — mirroring the editor/Pin Tab wiring.
@@ -988,8 +952,8 @@ public abstract partial class ScribeDialogBase
             onTextEditRefused: ReadViewTextEditRefused,
             assignedStampBitmap: modSystem.GetGuiTextureBitmap(ScribeAssignedTaskIcon.Asset),
             externalStampBitmap: modSystem.GetGuiTextureBitmap(ScribeExternalInfoIcon.Asset),
-            // Filter-pill row + subtask-collapse toggles (read-view-filter-and-collapse), gated as ONE
-            // unit on the capability flag (scribe-dialog-base) — false only on the Tablet.
+            // Filter-pill row + subtask-collapse toggles, gated as ONE
+            // unit on the capability flag — false only on the Tablet.
             supportsFilterPills: SupportsFilterPills,
             supportsTabHeader: SupportsTabHeader,
             showSubtitleRow: modSystem.VisualTuning.ShowSubtitleRow,
@@ -1000,7 +964,7 @@ public abstract partial class ScribeDialogBase
 
     /// <summary>The editable task list for the current scratch document. Promoted from <c>private</c> to
     /// <c>protected</c> so a subclass may reuse the inherited editor rather than fork it — the tablet
-    /// stacks it under a display-only cuneiform title banner (add-tablet-dialog D4). Bound to the same
+    /// stacks it under a display-only cuneiform title banner. Bound to the same
     /// <see cref="scratch"/>, focus nodes, and mutation handlers, so task add/edit/check/pin behave
     /// identically wherever it is rebuilt.</summary>
     protected Widget BuildEditorContent()
@@ -1009,12 +973,11 @@ public abstract partial class ScribeDialogBase
             .Select((b, i) =>
             {
                 var (stack, name) = ResolveRowItem(b);
-                // Leading-icon marker only (add-assignment-and-quest-support 9.3) — NOT yet wiring
-                // ReadOnly=true here for an accepted assignment's text (design.md Decision 5's "frozen
-                // text" half): ScribeEditRow's ScribeMultilineField wiring (focus-node indexing, tablet
+                // Leading-icon marker only — an accepted assignment's text is NOT set ReadOnly=true here:
+                // ScribeEditRow's ScribeMultilineField wiring (focus-node indexing, tablet
                 // cuneiform, jump-navigation) has no read-only branch yet, and swapping it for the static
-                // display renderer without checking every one of those interactions risked a subtly broken
-                // Tab/Enter row-navigation experience. Deferred as a disclosed follow-up (see tasks.md 9.3).
+                // display renderer without checking every one of those interactions risks a subtly broken
+                // Tab/Enter row-navigation experience.
                 bool isAcceptedAssignment = b.Assignment?.State == ScribeAssignmentState.Accepted;
                 var (assignerName, assignedDate, acceptedDate) = ResolveAssignmentTooltipInfo(b.Assignment);
                 // Same synthetic guide-page-scheme substitution as the read view's row construction (see
@@ -1056,17 +1019,17 @@ public abstract partial class ScribeDialogBase
             onDeleteBlock: DeleteEditorBlock,
             onTogglePinned: TogglePinnedEditorTask,
             // A Tracker row's inline stepper edits its target quantity in scratch; the normal editor flush
-            // persists it (the codec serializes TargetQuantity, so no dedicated packet — add-tracker-link-tasks 5.2).
+            // persists it (the codec serializes TargetQuantity, so no dedicated packet).
             onTrackerQuantityChanged: SetEditorTrackerTargetQuantity,
-            // A single grip tap toggles the row's subtask depth 0↔1 (task-subtasks 5.3); press-hold-drag
+            // A single grip tap toggles the row's subtask depth 0↔1; press-hold-drag
             // still reorders (the dispatcher fires the tap only on a genuine click).
             onGripTap: OnGripTap,
             // Drag-reorder follows the moved row into view (anchorViewport defaults false); only a Sink
             // completion passes anchorViewport: true to hold the viewport still.
             onReorderBlock: (from, to) => ReorderEditorBlock(from, to),
             onAdd: OnClickAdd,
-            // Quest Link picker (add-assignment-and-quest-support 10.1/10.2): an empty catalog hides the
-            // option entirely (vsquest not installed, installed with no quests, or — filter-quest-link-picker —
+            // Quest Link picker: an empty catalog hides the
+            // option entirely (vsquest not installed, installed with no quests, or
             // the player hasn't started any cataloged quest yet this session) — the footer never shows a
             // Quest Link tile that would do nothing.
             questCatalog: StartedQuestCatalogForPicker,
@@ -1074,8 +1037,8 @@ public abstract partial class ScribeDialogBase
             onSwitchToRead: OnClickSwitchToRead,
             onOpenEditorReference: ToggleEditorReferenceHandbook,
             // Footer gear (tablet only). The base returns null so the Lectern/Notebook footer omits it —
-            // those dialogs reach Settings through their nav column, which the tablet drops (D3). The tablet
-            // overrides EditorSettingsGearAction to return modSystem.OpenSettings (add-tablet-cuneiform-chrome).
+            // those dialogs reach Settings through their nav column, which the tablet drops. The tablet
+            // overrides EditorSettingsGearAction to return modSystem.OpenSettings.
             onOpenSettings: EditorSettingsGearAction,
             // Symmetric 0.04·W horizontal inset on the footer button row, from the same ScribeLayout width.
             footerButtonPadding: EdgeInsets.Symmetric(
@@ -1085,22 +1048,22 @@ public abstract partial class ScribeDialogBase
             collapseRegistry: editorCollapseRegistry,
             // A departing row finished collapsing → re-clamp the (now shorter) scroll extent, mirroring the
             // Pin Tab / Read view (RequestClampToExtent). The container retires the ghost itself; the dialog
-            // no longer owns departing-row bookkeeping (D0 — replaces OnEditorRowCollapsed).
+            // owns no departing-row bookkeeping.
             onDepartureSettled: RequestClampToExtent,
             // Current illumination shade: threaded so the footer add-kind picker can tint its floating drop-up
             // menu to match the window (the menu paints in the Overlay, outside this body's ScribeGlobalTint).
             currentShade: currentShade,
             hintLangKey: EmptyHintLangKey,
-            // Tier cap (scribe-document-policy): dim the add-picker at a finite tier's 10-entry cap.
+            // Tier cap: dim the add-picker at a finite tier's 10-entry cap.
             // Buttons stay clickable so the tap surfaces NotifyTabletFull. Uncapped tiers always pass true.
             addTaskEnabled: CanAddTaskUnderPolicy(),
             // Whether the "Done editing" (switch-to-read) footer button renders. True for the tabbed
             // dialogs; the always-edit tablet overrides ShowEditorSwitchToRead to false since it has no
-            // Read view (add-tablet-dialog D4).
+            // Read view.
             showSwitchToRead: ShowEditorSwitchToRead,
             // Click-to-open-Handbook on an item row's name label — the SAME dispatch the read view uses, but
             // only where EditorRowsOpenLinks is on (the tablet, which has no read view). Every other surface
-            // passes null, so its editor names stay plain editable regions and render byte-identical to before.
+            // passes null, so its editor names stay plain editable regions and render as plain editable regions.
             onOpenLink: EditorRowsOpenLinks ? OpenRowLink : null,
             supportsTabHeader: SupportsTabHeader,
             showSubtitleRow: modSystem.VisualTuning.ShowSubtitleRow,
@@ -1111,14 +1074,13 @@ public abstract partial class ScribeDialogBase
     /// <summary>Whether the editor footer shows the "Done editing" (switch-to-read) button. True for the
     /// tabbed dialogs (Lectern/Notebook), which have a Read view to return to. The always-edit tablet
     /// overrides this to false: it has no Read view, and leaving editor mode would null the scratch the
-    /// central region reads (add-tablet-dialog D4).</summary>
+    /// central region reads.</summary>
     protected virtual bool ShowEditorSwitchToRead => true;
 
     /// <summary>Footer "Editor Features" (ⓘ) button: TOGGLE the "Scribe Editor Features" handbook page
-    /// (v1-release-checklist 9.5 — surfaces the keyboard-navigation reference at the point of use;
-    /// add-info-button-handbook-toggle — a 2026-08-02 playtester wanted ⓘ to also dismiss the panel).
+    /// (surfaces the keyboard-navigation reference at the point of use).
     ///
-    /// <para>Behavior (design D3, "focus, don't hide"): if no handbook dialog is open, fire the game's
+    /// <para>Behavior ("focus, don't hide"): if no handbook dialog is open, fire the game's
     /// registered <c>"handbook"</c> link protocol to OPEN it on our reference page; if a handbook IS
     /// already open, CLOSE it. Re-firing the link protocol while it is open on a different entry would
     /// merely navigate it to our page, so the observable flow is "open ⇒ toggles closed; closed ⇒ opens
@@ -1148,14 +1110,13 @@ public abstract partial class ScribeDialogBase
 
         if (openHandbook != null)
         {
-            // Open ⇒ close it (D3: any open handbook toggles closed). TryClose runs the dialog's normal
-            // OnGuiClosed path (D-Q3: its own close sound/animation, no extra work needed here).
+            // Open ⇒ close it (any open handbook toggles closed). TryClose runs the dialog's normal
+            // OnGuiClosed path (its own close sound/animation).
             openHandbook.TryClose();
             return;
         }
 
-        // Closed ⇒ open to the requested page via the registered link protocol (unchanged from the
-        // open-only original). Absent survival mod ⇒ no "handbook" protocol ⇒ graceful no-op.
+        // Closed ⇒ open to the requested page via the registered link protocol. Absent survival mod ⇒ no "handbook" protocol ⇒ graceful no-op.
         if (capi.LinkProtocols.TryGetValue("handbook", out var open))
             open(new LinkTextComponent("handbook://" + pageCode));
     }
@@ -1168,15 +1129,14 @@ public abstract partial class ScribeDialogBase
     {
         var policy = modSystem.MySettings.CompletionPolicy;
 
-        // Optimistic-then-confirm (reconcile-animating-surfaces D9): apply the completion to a LOCAL copy of
-        // the document and refresh the read view immediately, then send to the server. This is why the
-        // editor feels instant — it never waits for the round-trip — and it fixes the read view's real gap:
-        // an UNPINNED completion had no pin push to ride, so its Delete/Sink result stayed invisible until
+        // Optimistic-then-confirm: apply the completion to a LOCAL copy of
+        // the document and refresh the read view immediately, then send to the server. An UNPINNED completion has no
+        // pin push to ride, so without this its Delete/Sink result would stay invisible until
         // some unrelated rebuild. The authoritative resync (BlockEntityScribeLectern.FromTreeAttributes →
         // RefreshReadView) supersedes this shortly, exactly as it supersedes the editor's optimistic edit.
         //
         // EXCEPTION — a permanently read-only source (hard/fired tablet): the SERVER collapses every
-        // document-mutating policy to a plain Unpin there (CollapsePolicyForReadOnlySource, §7.5), so
+        // document-mutating policy to a plain Unpin there (CollapsePolicyForReadOnlySource), so
         // predicting a delete/sink locally would flash a removal the server refuses. Skip the optimistic
         // document apply on that surface and let the (pin-push-driven) resync drive the visible change.
         if (!ReadViewIsReadOnly)
@@ -1205,24 +1165,24 @@ public abstract partial class ScribeDialogBase
         });
     }
 
-    /// <summary>Read-view pin toggle (scribe-lectern-view-consistency §2): pin/unpin the task by its
+    /// <summary>Read-view pin toggle: pin/unpin the task by its
     /// stable identity, reusing the same lock-free <see cref="SendSetPin"/> path the editor row uses.
     /// The read view holds no scratch document, so it addresses the pin purely by TaskId.
     ///
     /// <para>Scroll preservation is handled in <see cref="OnMyPinsChanged"/> immediately before the
-    /// rebuild — capturing here (pre-network-round-trip) was too early and the restore loop expired
-    /// before the async callback arrived (v1-playtest-fixes second pass).</para></summary>
+    /// rebuild — capturing earlier (before the network round-trip) is too early, since the restore loop would expire
+    /// before the async callback arrives.</para></summary>
     private void OnReadViewTogglePinned(Guid taskId)
-        // Tier cap (scribe-document-policy): honor the tablet's 1-pin cap on the read view too, with the
+        // Tier cap: honor the tablet's 1-pin cap on the read view too, with the
         // same seamless swap as the editor — pinning a new task at the cap releases the older pin.
         => TogglePinWithPolicy(taskId);
 }
 
 /// <summary>The shared Row 2 (subtitle) + Row 3 (per-tab controls) + durable-divider header anatomy every
-/// non-tablet <see cref="ScribeDialogBase"/> tab renders above its scrollable/general content
-/// (unify-tab-header-layout). One helper enforces the fixed 8-units-above/4-below divider spacing
-/// structurally instead of it being copy-pasted (and drifting) across nine call sites — the root cause of
-/// the pre-unification inconsistency. A <c>static</c> class (not a member of <see cref="ScribeDialogBase"/>
+/// non-tablet <see cref="ScribeDialogBase"/> tab renders above its scrollable/general content.
+/// One helper enforces the fixed 8-units-above/4-below divider spacing
+/// structurally instead of it being copy-pasted (and drifting) across nine call sites. A <c>static</c> class
+/// (not a member of <see cref="ScribeDialogBase"/>
 /// itself) because several callers (<see cref="ScribeReadContent"/>, <see cref="ScribeEditorContent"/>,
 /// <see cref="ScribePinnedContent"/>, <see cref="ScribeInboxContent"/>) are plain widgets, not dialog
 /// subclasses.</summary>
@@ -1239,7 +1199,7 @@ internal static class ScribeTabHeader
     /// instead, and MUST place it INSIDE its own scrollable content (e.g. wrapping the <c>Column</c> living
     /// inside a <c>SingleChildScrollView</c>, not the <c>Scrollbar</c>/scroll-view widget from outside — see
     /// <see cref="ScribeReadContent"/> for the established idiom) so it scrolls away with the content
-    /// (unify-tab-header-layout §7) rather than sitting as permanent chrome under the divider.</para>
+    /// rather than sitting as permanent chrome under the divider.</para>
     ///
     /// <para>Small-caps isn't a supported <see cref="TextStyle"/> feature on this LibGUI version (no
     /// font-feature/letter-casing field exists), so it's approximated with two uppercase runs sharing one
@@ -1250,8 +1210,7 @@ internal static class ScribeTabHeader
     /// <para><c>RenderRichText</c> does NOT baseline-align mixed-size runs sharing one line — every run
     /// draws at <c>y = line.Y - run's own font.Metrics.Ascent</c> (confirmed against the shipped 3.1.0
     /// <c>Gui.dll</c>, not just the 2.0.0 reference clone), which TOP-aligns each run to the line regardless
-    /// of its own size, not baseline-aligns them (2026-09-08 playtest feedback: the small-caps tail floated
-    /// above the baseline instead of sitting on it). Every text run here is therefore wrapped in a
+    /// of its own size, not baseline-aligns them. Every text run here is therefore wrapped in a
     /// <see cref="WidgetSpan"/> whose box is forced to the tallest run's own natural line-height, with just
     /// enough top padding pushing its OWN baseline down to that shared reference baseline — see the local
     /// <c>BaselineRun</c> function. A plain space between words needs no such wrapping (no visible glyph to
@@ -1263,13 +1222,11 @@ internal static class ScribeTabHeader
     /// weight slot resolves to.</para>
     ///
     /// <para>The durable divider (and the leading one, if requested) drop to an invisible <see cref="SizedBox"/>
-    /// under <see cref="ScribeRowStyle.UseCuneiform"/>, mirroring the pre-existing per-tab divider-hiding
+    /// under <see cref="ScribeRowStyle.UseCuneiform"/>, mirroring the per-tab divider-hiding
     /// rule (a hard rule reads wrong against the tablet's clay/wax backdrop) rather than inventing a new
     /// tablet-specific gate.</para>
     ///
-    /// <para>The Tablet host renders NEITHER Row 2 nor Row 3 at all (design.md Non-Goals; reversed
-    /// 2026-09-08 — an earlier pass let the Tablet inherit the subtitle since it reuses these same shared
-    /// content widgets, which read as unification going further than intended). Callers gate the ENTIRE
+    /// <para>The Tablet host renders NEITHER Row 2 nor Row 3 at all. Callers gate the ENTIRE
     /// call to this method on their own <c>SupportsTabHeader</c>-equivalent flag rather than this method
     /// gating itself, since only <see cref="ScribeReadContent"/>/<see cref="ScribeEditorContent"/> are ever
     /// reachable from the Tablet (it has no Pinned/Inbox/Guestbook/History/etc. tabs).</para></summary>
@@ -1289,8 +1246,7 @@ internal static class ScribeTabHeader
             Weight = FontWeight.Bold,
             Color = colors.OnSurfaceVariant,
         };
-        // ~82.5% of the cap size (2026-09-10 playtest feedback: 87.5% read as too close to the cap size —
-        // pulled back down, still above the original 75%) — reads as small caps (bigger capital, smaller
+        // ~82.5% of the cap size — reads as small caps (bigger capital, smaller
         // capitals) rather than a second full-size letter.
         var smallCapStyle = capStyle with { FontSize = capStyle.FontSize * 0.825f };
         var descriptorStyle = new TextStyle

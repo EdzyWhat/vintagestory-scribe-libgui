@@ -4,15 +4,14 @@ namespace Scribe;
 
 /// <summary>
 /// The single <c>(material, state)</c>-keyed source of truth for how tablet cuneiform text is made
-/// readable over its clay backdrop (adopt-glyph-forge-tablet-themes). One bundle carries every readability
+/// readable over its clay backdrop. One bundle carries every readability
 /// dimension for one tablet view: the body <see cref="BodyInk"/> (the theme's <c>OnSurface</c>/<c>OnBackground</c>
 /// ink), the <see cref="LinkInk"/> for Link/Tracker/Craft row names (the <c>ScribeRowStyle.LinkColor</c>), a
 /// per-view <see cref="StrokeWeightScale"/> multiplier on the cuneiform stroke weight, and the outer
 /// <see cref="Glow"/> halo (color/strength/blur/offset).
 ///
-/// <para>This replaces four separate switches that keyed the same view differently (theme by material, link
-/// by material, glow by material+state, stroke not at all) — the long-deferred "one bundle per view" refactor
-/// (<c>[[tablet-styling-fragmentation-refactor]]</c>). <see cref="GuiDialogScribeTablet"/> resolves the bundle
+/// <para>One bundle per view replaces separate per-dimension switches (theme, link, glow, stroke).
+/// <see cref="GuiDialogScribeTablet"/> resolves the bundle
 /// ONCE per build and decomposes it into those existing seams, so a view is internally consistent by
 /// construction and can never drift across the four dimensions again.</para>
 ///
@@ -29,20 +28,12 @@ internal readonly record struct TabletReadability(
     // glow STRENGTH and its blur/offset are fractions of the em.
     //
     // IMPORTANT — each cell is authored INDEPENDENTLY. The table permits any (material, state) cell to differ
-    // from any other, including two views in the same state. This is DATA, NOT A RULE: the 2026-08-21 retune
-    // proved it in practice — the three wet clays, which once shared one near-black seating halo, now each
-    // carry their OWN tinted glow, and the stroke-weight scale, which once ran wet 0.9 / hard 1.0 / fired 1.1,
-    // now runs wet 1.2 / hard 1.0 / fired 0.95 (wet heaviest, fired lightest) — all without any code or
-    // structure change, because nothing here factors "wet" or "state" into a shared constant that would couple
-    // the cells. The only surviving coincidences are the hard/fired glow offsets (~0.04–0.05) and offset
+    // from any other, including two views in the same state. This is DATA, NOT A RULE: each wet clay carries
+    // its OWN tinted glow, and the stroke-weight scale runs wet 1.2 / hard 1.0 / fired 0.95 (wet heaviest,
+    // fired lightest), because nothing here factors "wet" or "state" into a shared constant that would couple
+    // the cells. The only coincidences are the hard/fired glow offsets (~0.04–0.05) and offset
     // X == offset Y in every export; wet + wax offsets stay near-zero. Do not "simplify" any apparent overlap
-    // into a shared field — the next retune may diverge it again.
-    //
-    // A second, PARTIAL glyph-forge retune (same day, 2026-08-21, ~12:15–12:18) re-exported only 5 of the 10
-    // views — BlueWet, BlueHard, RedWet, FireWet, WaxWet — with new ink/link/glow values (wax's ink/link held,
-    // only its glow strength/blur moved). BlueFired/RedHard/RedFired/FireHard/FireFired were NOT re-exported and
-    // still carry the first retune's values. Re-verify the 5 changed views in-game (§9); the other 5 are
-    // unaffected.
+    // into a shared field — a retune may diverge it.
     // ---------------------------------------------------------------------------------------------------
 
     private static readonly TabletReadability BlueWet = new(

@@ -24,33 +24,32 @@ public sealed partial class ScribeModSystem
         => SendAssignmentBatch(fromPlayer, message);
 
     /// <summary>Send a multi-item assignment batch from the Create Assignments tab's staging slot
-    /// (assignment-multi-item-creation, design.md D8-D13). Creates one independent assignment per row via
-    /// the D12-broadened <see cref="ScribeAssignmentStore.TryCreate"/> — a malformed or store-rejected row
-    /// is skipped, not fatal to the rest of the batch (matches "each row behaves exactly like any other
-    /// assignment" — one bad row shouldn't sink the others). When
+    /// Creates one independent assignment per row via
+    /// <see cref="ScribeAssignmentStore.TryCreate"/> — a malformed or store-rejected row
+    /// is skipped, not fatal to the rest of the batch (each row behaves like any other
+    /// assignment). When
     /// <see cref="ScribeSendAssignmentBatchMessage.DeleteFromSource"/> is set, every successfully-created
     /// row is also removed from the staged document afterward via <see cref="TryRemoveStagedRows"/>.
     ///
-    /// <para>Delivery-mode branch (add-assignment-physical-delivery-mode, tasks.md 4.5): the server
+    /// <para>Delivery-mode branch: the server
     /// re-derives whether a Task Notice is required from its OWN current `DeliveryMode`
     /// (<see cref="ScribeDeliveryPolicy.RequiresNotice"/>), never trusting <see
     /// cref="ScribeSendAssignmentBatchMessage.DeliveryChoice"/> alone. When required, NO
     /// <see cref="ScribeAssignmentStore"/> record is created for any row yet — the notice item itself is
-    /// the pending record until Accept (Core 2.2/2.3) — instead every row is sealed as one
+    /// the pending record until Accept — instead every row is sealed as one
     /// <see cref="ScribeBlock"/> (each carrying its own Unaccepted <see cref="ScribeAssignment"/>) onto a
     /// fresh notice consumed from the supply slot and placed in the output slot.</para>
     ///
     /// <para>Public — matches the <see cref="ScribeModSystem.PinOperations"/>-file precedent
     /// (<c>SetPinForPlayer</c>/<c>CompleteTaskForPlayer</c>) of a domain-named method the network handler
-    /// delegates to and the integration suite drives directly (refine-task-notice-ux 2.5).</para></summary>
+    /// delegates to and the integration suite drives directly.</para></summary>
     public void SendAssignmentBatch(IServerPlayer fromPlayer, ScribeSendAssignmentBatchMessage message)
     {
         if (sapi is null || assignmentStore is null) return;
 
         // Accept an online (or session-connected) target via the cheap PlayerByUid check first; a miss
         // there falls back to the persisted known-players registry so a currently-offline but previously-
-        // known target (persist-known-players-for-assignment) isn't wrongly rejected — see proposal.md's
-        // root-cause: this guard predates offline targeting and never learned about that registry.
+        // known target isn't rejected.
         string? targetUid = message.TargetPlayerUid;
         if (string.IsNullOrWhiteSpace(targetUid)
             || (sapi.World.PlayerByUid(targetUid) is null && !(knownPlayersStore?.Contains(targetUid) ?? false)))
@@ -68,9 +67,9 @@ public sealed partial class ScribeModSystem
 
         string date = NotebookHost.FormatDate(sapi);
         double timestamp = sapi.World.Calendar.TotalDays;
-        // One fresh id per SEND CALL, shared by every row it creates (refine-assignment-desk-inbox-ux
-        // 12.2 root-cause fix) — see ScribeAssignment.BatchId's remarks on why `date` alone isn't a safe
-        // batch-grouping key (two separate sends on the same in-game day would collide on it).
+        // One fresh id per SEND CALL, shared by every row it creates — see ScribeAssignment.BatchId's
+        // remarks on why `date` alone isn't a safe batch-grouping key (two separate sends on the same
+        // in-game day would collide on it).
         var batchId = Guid.NewGuid();
 
         var deliveryMode = ScribeDeliveryConfig.ReadMode(sapi);
@@ -86,7 +85,7 @@ public sealed partial class ScribeModSystem
             fromPlayer.PlayerName, createdCount, targetUid, viaNotice ? "notice" : "local inbox");
     }
 
-    /// <summary>The pre-existing Local Inboxes path: creates one <see cref="ScribeAssignmentStore"/> record
+    /// <summary>The Local Inboxes path: creates one <see cref="ScribeAssignmentStore"/> record
     /// per row directly (Unaccepted), then pushes both parties' Inbox/Sent views.</summary>
     private int SendBatchViaLocalInboxes(IServerPlayer fromPlayer, ScribeSendAssignmentBatchMessage message,
         List<ScribeAssignmentBatchRow> rows, string targetUid, string date, double timestamp, Guid batchId)
@@ -126,12 +125,12 @@ public sealed partial class ScribeModSystem
         return createdCount;
     }
 
-    /// <summary>The physical-delivery path (`task-notice-item` capability): seals every row into ONE
+    /// <summary>The physical-delivery path: seals every row into ONE
     /// notice document (no store record yet — see the caller's remarks), consumed from
     /// <see cref="BlockEntityAssignmentDesk.NoticeSupplySlotIndex"/> and placed into
     /// <see cref="BlockEntityAssignmentDesk.NoticeOutputSlotIndex"/>. Refuses the whole batch (rather than
     /// partially sealing it) if the Desk can't be resolved, the supply slot has no blank notice, or the
-    /// output slot is already occupied — mirroring the client-side gate (task 4.5) but re-validated here as
+    /// output slot is already occupied — mirroring the client-side gate but re-validated here as
     /// the actual authority.</summary>
     private int SendBatchViaNotice(IServerPlayer fromPlayer, ScribeSendAssignmentBatchMessage message,
         List<ScribeAssignmentBatchRow> rows, string targetUid, string date, double timestamp, Guid batchId)
@@ -181,9 +180,8 @@ public sealed partial class ScribeModSystem
                 linkTarget: row.LinkTarget, linkLabel: row.LinkLabel, recipeSignature: row.RecipeSignature,
                 linkDescription: row.LinkDescription, assignment: assignment));
 
-            // A parallel Sent-state store record, same assignmentId as the block just sealed above
-            // (refine-task-notice-ux — reverses the earlier "no record until Accept" behavior): visible to
-            // the Assigner as "Sent" immediately, hidden from the Assignee's Inbox until the notice
+            // A parallel Sent-state store record, same assignmentId as the block just sealed above: visible
+            // to the Assigner as "Sent" immediately, hidden from the Assignee's Inbox until the notice
             // physically reaches their inventory (OnTaskNoticeProximityTick -> TryMarkReceived).
             assignmentStore.TryCreateSent(assignmentId, fromPlayer.PlayerUID, targetUid, row.Text ?? "", date, out _,
                 kind: (ScribeBlockKind)row.Kind, targetItemCode: row.TargetItemCode, targetQuantity: row.TargetQuantity,
@@ -210,17 +208,16 @@ public sealed partial class ScribeModSystem
         outputSlot.Itemstack = notice;
         outputSlot.MarkDirty();
         desk.MarkDirty(true);
-        // The proximity heartbeat's cheap "does this player have anything to scan for" gate
-        // (task-notice-proximity-signal 5.1) — one notice sealed, regardless of how many rows it carries.
+        // The proximity heartbeat's cheap "does this player have anything to scan for" gate — one notice
+        // sealed, regardless of how many rows it carries.
         AdjustOutstandingNoticeCount(targetUid, +1);
         // Refresh the Assigner's own Sent Assignment History so the just-created Sent-state rows show up
-        // immediately (refine-task-notice-ux) — the Assignee gets no push here, since their Inbox stays
-        // silent until receipt.
+        // immediately — the Assignee gets no push here, since their Inbox stays silent until receipt.
         PushAssignmentsTo(fromPlayer);
         return createdCount;
     }
 
-    /// <summary>"Delete from source on send" routing shared by both delivery paths (design.md D13/D6).</summary>
+    /// <summary>"Delete from source on send" routing shared by both delivery paths.</summary>
     private void RemoveSentSourceRows(ScribeSendAssignmentBatchMessage message, List<Guid> sentSourceTaskIds)
     {
         if (!message.DeleteFromSource || sentSourceTaskIds.Count == 0) return;
@@ -230,7 +227,7 @@ public sealed partial class ScribeModSystem
             TryRemoveStagedRows(message.X, message.Y, message.Z, message.StagingSlot, sentSourceTaskIds);
     }
 
-    /// <summary>"Delete from source on send" (design.md D13): removes the sent rows (matched by their
+    /// <summary>"Delete from source on send": removes the sent rows (matched by their
     /// staged-document TaskId) from the Assignment Desk's staged item, then re-syncs the slot. A no-op if
     /// the block/slot/item/document can no longer be resolved — the assignments were already created
     /// server-authoritatively regardless, so a lost staging item never loses the send itself, only the
@@ -255,8 +252,8 @@ public sealed partial class ScribeModSystem
         slot.MarkDirty();
     }
 
-    /// <summary>"Delete from source on send" (design.md D13), Desk-own-document sibling of
-    /// <see cref="TryRemoveStagedRows"/> (add-assignment-desk-own-tasks design.md D6): removes the sent
+    /// <summary>"Delete from source on send", Desk-own-document sibling of
+    /// <see cref="TryRemoveStagedRows"/>: removes the sent
     /// rows from the Assignment Desk block entity's OWN persisted document rather than a staged item's
     /// embedded one. Reuses <see cref="BlockEntityScribeWritingStation.DeleteTaskFromReader"/> — the same
     /// lock-free mutate-and-persist-and-sync path a normal viewer action (e.g. the Delete completion
@@ -286,14 +283,13 @@ public sealed partial class ScribeModSystem
     /// sender and re-validates the transition through <see cref="ScribeAssignmentStore.TryApplyAction"/> —
     /// the action byte on the wire is never trusted as proof of authorization. On a successful Accept, also
     /// resolves Accept-time placement (<see cref="TryPlaceAcceptedAssignment"/>) — moving the assigned
-    /// content into the Assignee's own document, per the `assignment-state-machine` capability's placement
-    /// requirement.
+    /// content into the Assignee's own document.
     ///
     /// <para>Public — matches the <see cref="ScribeModSystem.PinOperations"/>-file precedent
     /// (<c>SetPinForPlayer</c>/<c>CompleteTaskForPlayer</c>) of a domain-named method the network handler
-    /// delegates to and the integration suite drives directly (consume-tasknotice-on-inbox-accept tasks.md
-    /// 4.1 — exercising this path is the only way to distinguish it from <see
-    /// cref="ApplyTaskNoticeAction"/>, since Atlas does not round-trip real network packets).</para></summary>
+    /// delegates to and the integration suite drives directly (exercising this path is the only way to
+    /// distinguish it from <see cref="ApplyTaskNoticeAction"/>, since Atlas does not round-trip real network
+    /// packets).</para></summary>
     public void ApplyAssignmentAction(IServerPlayer fromPlayer, ScribeAssignmentActionMessage message)
     {
         if (sapi is null || assignmentStore is null) return;
@@ -325,8 +321,8 @@ public sealed partial class ScribeModSystem
         if (action == ScribeAssignmentAction.Accept) TryPlaceAcceptedAssignment(fromPlayer, record, message);
 
         // The Inbox tab (and any other surface hitting this generic path) has no notion of "this record
-        // arrived as a physical notice" — proactively find and consume one if it's still lying around
-        // (consume-tasknotice-on-inbox-accept), rather than leaving it stale and falsely-interactive.
+        // arrived as a physical notice" — proactively find and consume one if it's still lying around,
+        // rather than leaving it stale and falsely-interactive.
         ConsumeMatchingTaskNotice(assignmentId, targetUid);
 
         Trace("assignment-action from {0}: {1} on {2} -> {3}", fromPlayer.PlayerName, action, assignmentId, record.Assignment.State);
@@ -335,7 +331,7 @@ public sealed partial class ScribeModSystem
     }
 
     /// <summary>Client → server: delete the sender's own side of a terminal-state assignment record
-    /// (manage-terminal-assignment-records / split-assignment-delete-by-viewer). Re-validates through
+    /// Re-validates through
     /// <see cref="ScribeAssignmentStore.TryDelete"/> — an unknown id, a non-terminal state, or a sender
     /// who doesn't actually hold the claimed side is silently ignored. On success, re-syncs both parties;
     /// each party's own resync naturally excludes what's now hidden from THEM (the other side's view is
@@ -372,7 +368,7 @@ public sealed partial class ScribeModSystem
     }
 
     /// <summary>Client → server: mark every one of the sender's currently-unseen received assignments as
-    /// seen (design.md Decision 4), sent when the client's Inbox tab becomes the active view
+    /// seen, sent when the client's Inbox tab becomes the active view
     /// (<see cref="ScribeDialogBase.OnClickSwitchToInbox"/>). Only re-pushes the sender when something
     /// actually flipped, sparing an idle re-sync on every repeat visit.</summary>
     private void OnServerReceivedMarkAssignmentsSeen(IServerPlayer fromPlayer, ScribeMarkAssignmentsSeenMessage message)
@@ -381,7 +377,7 @@ public sealed partial class ScribeModSystem
         if (assignmentStore.MarkAllSeen(fromPlayer.PlayerUID)) PushAssignmentsTo(fromPlayer);
     }
 
-    /// <summary>Accept-time placement resolution (assignment-state-machine's placement requirement): moves
+    /// <summary>Accept-time placement resolution: moves
     /// the store's now-Accepted record into the Assignee's own document, onto the exact slot the client
     /// resolved (held item, or the single/chosen inventory candidate — see
     /// <see cref="ScribeAssignmentActionMessage.TargetInventoryId"/>/<see cref="ScribeAssignmentActionMessage.TargetSlotId"/>).
@@ -413,38 +409,32 @@ public sealed partial class ScribeModSystem
             return;
         }
 
-        // Capture the destination label on the canonical store record (capture-assignment-accept-
-        // destination) — only once placement is actually going to succeed (design.md Risk mitigation:
-        // an "Accepted but unplaced" assignment, from either early-return branch above, has no
-        // destination to name and stays label-less).
+        // Capture the destination label on the canonical store record — only once placement is actually
+        // going to succeed (an "Accepted but unplaced" assignment, from either early-return branch above,
+        // has no destination to name and stays label-less).
         record.Assignment!.AcceptedIntoLabel = ScribeAssignmentDestinationLabel.Format(slot.Itemstack!);
 
-        // Carry every kind-specific field, not just Kind/Text (playtest 2026-08-31 bug fix): a
-        // Tracker/Link/Craft assignment's real content lives on TargetItemCode/LinkTarget/RecipeSignature
-        // (its own Text is blank by convention — see ScribeAssignmentStore.TryCreate's remarks), and Depth
-        // positions a subtask under its parent. Dropping these silently placed a blank, un-indented block
-        // that looked nothing like what was accepted.
+        // Carry every kind-specific field, not just Kind/Text: a Tracker/Link/Craft assignment's real
+        // content lives on TargetItemCode/LinkTarget/RecipeSignature (its own Text is blank by convention —
+        // see ScribeAssignmentStore.TryCreate's remarks), and Depth positions a subtask under its parent.
         var placed = new ScribeBlock(record.Kind, record.Text, depth: record.Depth, taskId: record.TaskId,
             targetItemCode: record.TargetItemCode, targetQuantity: record.TargetQuantity,
             currentQuantity: record.CurrentQuantity, linkTarget: record.LinkTarget, linkLabel: record.LinkLabel,
             recipeSignature: record.RecipeSignature, linkDescription: record.LinkDescription,
             assignment: record.Assignment!.Clone());
-        // Follow the accepting player's own New Task Insert preference (refine-assignment-desk-inbox-ux
-        // 13.1) instead of always appending to the bottom — the byte on the wire since this preference
-        // is client-local and never server state (see ScribeModSystem.MySettings's remarks). Prefer
-        // landing next to an already-placed sibling from the same batch (triage 2026-08-31: accepting a
-        // batch's rows one at a time was scattering subtasks away from their parent) over the raw
-        // Top/Bottom preference — see ScribeDocument.InsertIndexForBatch's remarks.
+        // Follow the accepting player's own New Task Insert preference — carried as a byte on the wire
+        // since the preference is client-local and never server state (see ScribeModSystem.MySettings's
+        // remarks). Prefer landing next to an already-placed sibling from the same batch (so subtasks
+        // accepted one at a time stay with their parent) over the raw Top/Bottom preference — see
+        // ScribeDocument.InsertIndexForBatch's remarks.
         doc.InsertAssignedBlock(
             doc.InsertIndexForBatch(placed.Assignment!.BatchId, (ScribeNewTaskInsert)message.NewTaskInsert),
             placed);
         ScribeDocumentAttributes.WriteTo(slot.Itemstack!, doc);
         slot.MarkDirty();
 
-        // Diagnostic for the accept-destination-remembers-a-dropped-item investigation (2026-09-01):
-        // pinpoints exactly which item/slot a placement landed on, since the only other trace lines here
-        // cover the two FAILURE branches above — a successful placement was previously silent. Drop once
-        // the investigation concludes (or demote to VerboseDebug).
+        // Diagnostic: records which item/slot a successful placement landed on (the other trace lines here
+        // cover the two failure branches above).
         Trace("assignment-action from {0}: Accept placed onto {1} (doc {2} \"{3}\") at inv={4} slot={5}",
             assignee.PlayerName, slot.Itemstack!.Collectible.Code, doc.DocId, doc.Title,
             message.TargetInventoryId, message.TargetSlotId);
@@ -459,15 +449,15 @@ public sealed partial class ScribeModSystem
         }, assignee);
     }
 
-    /// <summary>Derived-completion hook (assignment-state-machine: "Completed is derived from the task's
-    /// own completion flag, never a manual transition"). Called after any server-side Done→true toggle on a
+    /// <summary>Derived-completion hook: Completed is derived from the task's own completion flag, never a
+    /// manual transition. Called after any server-side Done→true toggle on a
     /// completable block (<see cref="ScribeModSystem.CompleteTaskForPlayer"/> and
     /// <see cref="ScribeModSystem.CompleteUnpinnedTaskAtSource"/> — the two choke points every completion
     /// trigger, Read/Editor/Pinned/HUD alike, funnels through), called UNCONDITIONALLY regardless of
     /// whether the caller could resolve the task's owning document — the canonical
     /// <see cref="ScribeAssignmentStore"/> record is addressed by <paramref name="taskId"/> alone and never
-    /// needed the document (fix-assignment-completion-doc-resolution: a Notebook not currently in the
-    /// completing player's inventory used to make this derivation silently never run).
+    /// needs the document (so a Notebook not currently in the completing player's inventory
+    /// does not prevent the derivation).
     ///
     /// Gates on the CANONICAL store record's state, not <paramref name="assignmentOnBlock"/>'s — the block
     /// can be stale in either direction: the Inbox's manual Discard action (legal from Accepted, <see
@@ -506,7 +496,7 @@ public sealed partial class ScribeModSystem
         PushAssignmentSyncToBothParties(storeAssignment.AssignerUid, storeAssignment.TargetPlayerUid);
     }
 
-    /// <summary>Whole-document-flush hook (fix-editor-assignment-completion-sync): the Editor view's own
+    /// <summary>Whole-document-flush hook: the Editor view's own
     /// checkbox mutates a block's <c>Done</c> locally and relies on the ordinary whole-document autosave to
     /// persist it, rather than sending a dedicated completion message — so the two whole-document flush
     /// handlers (<see cref="BlockEntityScribeWritingStation.ApplyEdit"/> for a Lectern,
@@ -516,7 +506,7 @@ public sealed partial class ScribeModSystem
     ///
     /// <para>Walks the SAVED document unconditionally — no diff against a prior document — because
     /// <see cref="NotifyAssignmentDoneChanged"/> already gates on the canonical store record's current state
-    /// (must be Accepted) and is a cheap no-op otherwise; see design.md for why diffing was rejected.</para></summary>
+    /// (must be Accepted) and is a cheap no-op otherwise.</para></summary>
     public void NotifyDoneAssignmentsInDocument(ScribeDocument doc)
     {
         foreach (var block in doc.Blocks)
@@ -526,8 +516,8 @@ public sealed partial class ScribeModSystem
         }
     }
 
-    /// <summary>Delete-on-Accepted hook (assignment-state-machine: "Deleting an Accepted assigned task
-    /// performs the Discard transition"). Called after a document Delete removes a block that carried an
+    /// <summary>Delete-on-Accepted hook: deleting an Accepted assigned task performs the Discard
+    /// transition. Called after a document Delete removes a block that carried an
     /// Accepted assignment; applies Discard to the canonical store record through the same actor-validated
     /// path a wire Discard action would use, then pushes a fresh sync to both parties.</summary>
     public void NotifyAssignmentDiscardOnDelete(Guid taskId, ScribeAssignment? assignmentOnBlock, string actingPlayerUid)
@@ -541,8 +531,7 @@ public sealed partial class ScribeModSystem
         PushAssignmentSyncToBothParties(assignmentOnBlock.AssignerUid, assignmentOnBlock.TargetPlayerUid);
     }
 
-    /// <summary>Stamps the appropriate per-transition date field (refine-assignment-desk-inbox-ux triage
-    /// 2026-08-31) and its numeric in-game timestamp for whichever state <paramref name="assignment"/> is
+    /// <summary>Stamps the appropriate per-transition date field and its numeric in-game timestamp for whichever state <paramref name="assignment"/> is
     /// CURRENTLY in — call this immediately after a transition actually succeeded, never speculatively.
     /// Core has no calendar access, so this Mod-layer stamp is the only place these fields are ever set.</summary>
     private static void StampTransitionDate(ScribeAssignment assignment, string date, double timestamp)

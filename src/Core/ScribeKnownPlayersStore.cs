@@ -7,8 +7,7 @@ namespace Scribe.Core;
 /// their most-recently-observed display name (persist-known-players-for-assignment). Backs the
 /// Assignment Desk's target-player picker so a player who has disconnected — regardless of how they
 /// connected (direct join, singleplayer opened to LAN, or a dedicated server) — remains a selectable
-/// target across sessions, unlike the live-only <c>capi.World.AllOnlinePlayers</c> the picker used to
-/// build its list from alone.
+/// target across sessions, unlike the live-only <c>capi.World.AllOnlinePlayers</c>.
 ///
 /// Game-agnostic (pure BCL) so it's unit-testable without a game install; the Mod layer's
 /// <c>OnPlayerNowPlaying</c> hook upserts into it and owns its savegame persistence, mirroring

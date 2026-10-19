@@ -104,7 +104,7 @@ public static class ScribeDocumentCodec
     /// <summary>Soft length limit for a checkbox Task's text, in characters. Unlike <see cref="MaxTextLength"/>
     /// (a hard reject bound for freeform notes), an over-long Task is CLIPPED to this length on read rather
     /// than rejecting the whole edit — so a paste or a runaway task can never silently drop an entire
-    /// document (the pre-2026-07-26 behavior where an oversized edit was refused with no feedback). The
+    /// document. The
     /// editor field also enforces this as a maxlength so the clip is rarely reached; the codec clip is the
     /// server-authoritative backstop. Tasks are meant to be short one-liners; freeform prose belongs in a
     /// Text section, which keeps the larger cap.</summary>
@@ -180,8 +180,8 @@ public static class ScribeDocumentCodec
         => TryDeserialize(bytes, out document, out _);
 
     /// <summary>
-    /// Deserializes a document. <paramref name="legacyPinnedTaskIds"/> is always empty (v3, which
-    /// carried per-block pin flags, is no longer accepted). Kept for call-site compatibility.
+    /// Deserializes a document. <paramref name="legacyPinnedTaskIds"/> is always empty (the v3
+    /// format, which carried per-block pin flags, is not accepted). Kept for call-site compatibility.
     /// </summary>
     public static bool TryDeserialize(byte[]? bytes, out ScribeDocument? document, out IReadOnlyList<Guid> legacyPinnedTaskIds)
     {

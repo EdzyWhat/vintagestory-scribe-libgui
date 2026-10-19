@@ -3,7 +3,7 @@ using System;
 namespace Scribe.Core;
 
 /// <summary>What a completion does to the document itself, once a task has transitioned INTO done under
-/// a policy. The <em>decision</em> is shared (reconcile-animating-surfaces D9); how it is applied differs
+/// a policy. The <em>decision</em> is shared; how it is applied differs
 /// by layer — the server routes it through its persistence-aware write-through (marks the block dirty /
 /// writes the ItemStack), a client view applies it optimistically to a local document copy.</summary>
 public enum ScribeCompletionDocAction : byte
@@ -23,7 +23,7 @@ public enum ScribeCompletionDocAction : byte
 /// The single definition of what completing a task means under a <see cref="ScribeCompletionPolicy"/> —
 /// shared by the server (applying to the authoritative document through its write-through) and every
 /// client view (applying optimistically to a local copy), so no surface derives its own policy behavior
-/// (reconcile-animating-surfaces D9). Pure data; no VS API.
+/// Pure data; no VS API.
 ///
 /// <para>Two layers, deliberately separated so each caller owns <em>application</em> while the
 /// <em>decision</em> stays in one place:</para>
@@ -50,7 +50,7 @@ public static class ScribeCompletion
     /// never sinks, deletes, or unpins.</summary>
     public readonly record struct Decision(ScribeCompletionDocAction DocAction, bool ShouldRemovePin);
 
-    /// <summary>The pure policy table (reconcile-animating-surfaces D9). <paramref name="nowDone"/> is the
+    /// <summary>The pure policy table. <paramref name="nowDone"/> is the
     /// task's done state AFTER the toggle; the policy applies only on a transition INTO done, so a false
     /// value yields an inert decision. This is the one place the Delete/Sink/UnpinSink/Unpin/Keep mapping
     /// lives — both the server and client dispatch off it.</summary>

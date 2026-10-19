@@ -7,7 +7,7 @@ namespace Scribe;
 /// <summary>
 /// The one-shot stamp-thump cue shared by every <see cref="ScribeStamp"/> flourish — the Scriptorium's
 /// Copy/Import/Export stamps and the Assignment Desk's "Submitted to Player" stamp
-/// (refine-assignment-desk-inbox-ux 10.3) — extracted so the sound-load boilerplate isn't duplicated per
+/// — extracted so the sound-load boilerplate isn't duplicated per
 /// dialog. Wire it to <see cref="ScribeStamp.OnDescend"/> so it plays only when the flourish is actually
 /// mounted and seen by this client.
 ///
@@ -31,7 +31,7 @@ internal static class ScribeStampSound
             SoundType        = EnumSoundType.Sound,
             RelativePosition = true,
             Position         = new Vec3f(0f, 0f, 0f),
-            Volume           = 1f,   // level baked into stamp.ogg; unmapped from the alarm slider (2026-08-20)
+            Volume           = 1f,   // level baked into stamp.ogg; not mapped to the alarm slider
         });
 
         if (sound == null)

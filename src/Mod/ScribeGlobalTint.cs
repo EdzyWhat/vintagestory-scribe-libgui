@@ -10,8 +10,7 @@ using SkiaSharp;                  // SKPaint, SKColorFilter, SKColors
 namespace Scribe;
 
 /// <summary>
-/// Shades the whole composed Scribe dialog by the light reaching the player (respect-local-illumination
-/// D2/D6). A transparent single-child wrapper placed once at the shared body/backdrop wrap point in
+/// Shades the whole composed Scribe dialog by the light reaching the player. A transparent single-child wrapper placed once at the shared body/backdrop wrap point in
 /// <see cref="ScribeDialogBase"/>: it renders its child subtree into an offscreen layer
 /// (<c>SaveLayer</c>) and applies ONE <see cref="SKColorFilter.CreateColorMatrix"/> on composite — a single
 /// filter that both scales brightness and skews color temperature. Because the filter runs on the flattened
@@ -28,16 +27,14 @@ namespace Scribe;
 /// <para><b>Brightness comes pre-shaped.</b> The <c>brightness</c> and <c>tint</c> passed in are already the
 /// output of the author-drawn non-linear response curve + the sampler's quantization
 /// (<see cref="ScribeAmbientLightSampler"/>); this widget only turns them into a matrix. Full brightness with
-/// a neutral (1,1,1) tint is the identity — the pre-illumination look, so a fully-lit dialog is visually
-/// unchanged.</para>
+/// a neutral (1,1,1) tint is the identity, so a fully-lit dialog is visually unchanged.</para>
 ///
-/// <para><b>Paint-cache discipline (D3/D6).</b> The parent only reconfigures this widget (and thus marks it
+/// <para><b>Paint-cache discipline.</b> The parent only reconfigures this widget (and thus marks it
 /// needing paint, forcing LibGUI to re-record its <c>SKPicture</c>) when the QUANTIZED shade changes — on a
 /// static scene the value is stable and the cache stays valid. Color filters are cached by their quantized
 /// key and NEVER disposed (disposing a filter mid-record corrupts the recording canvas — the
 /// <see cref="ScribeGearEffect"/> discipline). The <c>SaveLayer</c> uses its OWN cached paint, so it never
-/// mutates <c>SharedPaint</c> and can't leak paint state into sibling draws (the
-/// tablet-transparent-backdrop-sharedpaint-leak class).</para>
+/// mutates <c>SharedPaint</c> and can't leak paint state into sibling draws.</para>
 /// </summary>
 internal sealed class ScribeGlobalTint : SingleChildWidget
 {
@@ -61,7 +58,7 @@ internal sealed class ScribeGlobalTint : SingleChildWidget
     /// <summary>Fraction of the illumination shade applied to Scribe hover/overlay surfaces (tooltips,
     /// drop-up-style menus), versus the dialog body's full <c>1.0</c>. <c>0.9</c> = keep 90% of the shade
     /// delta, i.e. 10% less darkening — a deliberate legibility bump for transient text floating above the
-    /// body (user decision, refine-scribe-hover-tooltips D1). This is the single tunable knob; every hover
+    /// body. This is the single tunable knob; every hover
     /// wrap goes through <see cref="ForHover"/> so they all share it.</summary>
     public const float HoverStrength = 0.9f;
 
@@ -103,8 +100,8 @@ internal sealed class ScribeGlobalTint : SingleChildWidget
     /// The stock <see cref="Tooltip"/> draws its own bubble <c>Container</c>, reading <c>Background</c> and
     /// <c>Border</c> from the nearest <see cref="Theme"/> ABOVE the tooltip in the MAIN tree — colors that sit
     /// outside the body's <see cref="ScribeGlobalTint"/> layer AND outside <see cref="ForHover"/> (which shades
-    /// only the content). So before this, in low light the bubble text dimmed while the parchment bubble behind
-    /// it stayed full-brightness and visibly "stuck out" (refine-scribe-hover-tooltips bug-1).
+    /// only the content). Without this, in low light the bubble text would dim while the parchment bubble behind
+    /// it stayed full-brightness and visibly "stuck out".
     ///
     /// <para>The fix is a Theme "sandwich": wrap the whole Tooltip in a Theme whose scheme is
     /// <paramref name="baseTheme"/> with <c>Background</c>+<c>Border</c> pushed through <see cref="ShadeColor"/>,
@@ -115,8 +112,7 @@ internal sealed class ScribeGlobalTint : SingleChildWidget
     /// shade it directly via <see cref="ForHover"/> here, and callers pass RAW content.</para>
     ///
     /// <para>At full daylight the hover shade is the identity, so both the content <see cref="ForHover"/> and the
-    /// bubble colors are unchanged — we skip the sandwich entirely and return a plain Tooltip, matching the
-    /// pre-illumination look with zero extra widgets.</para></summary>
+    /// bubble colors are unchanged — we skip the sandwich entirely and return a plain Tooltip with zero extra widgets.</para></summary>
     public static Widget ShadedTooltip(Widget child, Widget content, ThemeData baseTheme,
         ScribeAmbientLightSampler.Shade shade, TimeSpan? waitDuration = null)
     {
@@ -156,8 +152,7 @@ internal sealed class ScribeGlobalTint : SingleChildWidget
     private static readonly SKPaint LayerPaint = new() { Color = SKColors.White };
 
     /// <summary>Whether this shade is the identity (full brightness, neutral tint) — then we skip the
-    /// SaveLayer entirely and paint the child directly, so a fully-lit dialog pays nothing and looks exactly
-    /// as it did pre-illumination.</summary>
+    /// SaveLayer entirely and paint the child directly, so a fully-lit dialog pays nothing.</summary>
     private static bool IsIdentity(float brightness, float r, float g, float b) =>
         brightness >= 0.999f && r >= 0.999f && g >= 0.999f && b >= 0.999f;
 
@@ -198,17 +193,14 @@ internal sealed class ScribeGlobalTint : SingleChildWidget
 
         public void Configure(float brightness, float r, float g, float b)
         {
-            // Repaint only when a channel ACTUALLY changed — and, crucially, mark ourselves needing paint when
-            // one does. LibGUI's RenderObjectElement.Update calls UpdateRenderObject (→ here) on EVERY reconcile
-            // (any RebuildBody, for any reason) but does NOT itself invalidate the render object; a render object
+            // Repaint only when a channel ACTUALLY changed — and mark ourselves needing paint when one does.
+            // LibGUI's RenderObjectElement.Update calls UpdateRenderObject (→ here) on EVERY reconcile (any
+            // RebuildBody, for any reason) but does NOT itself invalidate the render object; a render object
             // must mark its own cached SKPicture dirty when a VISUAL field changes. Without the MarkNeedsPaint
-            // below, a shade change on a dialog whose child tree is otherwise unchanged silently kept the OLD
-            // tint: the picture never re-recorded. Animated surfaces (a wet tablet's live cuneiform/caret, the
-            // Lectern's row animations) mark needs-paint every frame anyway, so they picked up the new tint for
-            // free — which is exactly why the "never darkens" bug showed ONLY on a STATIC read-only (hard/fired)
-            // tablet, most visibly one pulled empty from Creative: nothing else marked it dirty, so it stayed at
-            // the bright shade it first recorded. The equality guard keeps unrelated rebuilds (which re-run this
-            // with the same shade) from forcing needless re-records, preserving the paint-cache discipline (D3).
+            // below, a shade change on a static dialog (e.g. a read-only hard/fired tablet, which nothing else
+            // repaints) would keep the OLD tint because the picture never re-records. The equality guard keeps
+            // unrelated rebuilds (which re-run this with the same shade) from forcing needless re-records,
+            // preserving the paint-cache discipline.
             if (brightness == this.brightness && r == tintR && g == tintG && b == tintB) return;
             this.brightness = brightness;
             tintR = r; tintG = g; tintB = b;

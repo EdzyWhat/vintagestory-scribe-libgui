@@ -119,8 +119,8 @@ public sealed partial class ScribeModSystem
             // Persist Running AND fired-but-undismissed timers. A fired timer is a notification the player
             // may not have acknowledged yet; dropping it on save would silently lose it across a relog.
             // Its FiredElapsedSeconds (codec v2) is persisted with it, so the client-driven auto-disappear
-            // resumes the remaining window on rejoin rather than restarting a fresh 30 s
-            // (timer-auto-disappear-setting). Idle timers are still dropped.
+            // resumes the remaining window on rejoin rather than restarting a fresh 30 s.
+            // Idle timers are dropped.
             var persisted = timerStores
                 .Where(kv => kv.Value.Status is TimerStatus.Running or TimerStatus.Fired)
                 .ToList();

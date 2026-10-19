@@ -9,17 +9,16 @@ using Vintagestory.API.Server;
 namespace Scribe;
 
 /// <summary>
-/// The standalone Inbox block's placed-block entity (add-assignment-and-quest-support §6). A thin
+/// The standalone Inbox block's placed-block entity. A thin
 /// subclass of <see cref="BlockEntityScribeWritingStation"/>: it shares all document, persistence,
 /// editor-lock, and guestbook logic with the Lectern/Scriptorium/Assignment Desk and supplies only its
 /// own identity/config.
 ///
-/// <para>Reuses the Lectern's GUI page art as a placeholder backdrop (§13.2 tracks the dedicated Inbox
-/// art), and its physical block model/textures are cloned from the Scriptorium's shape (see
-/// <c>inbox.json</c>) pending its own §13.2 asset.</para>
+/// <para>Reuses the Lectern's GUI page art as a placeholder backdrop, and its physical block
+/// model/textures are cloned from the Scriptorium's shape (see <c>inbox.json</c>).</para>
 ///
-/// <para><see cref="PageAspect"/> is fixed at the design's Decision 8 ratio (<c>W × 1.2W</c>), same as
-/// <see cref="BlockEntityAssignmentDesk"/> — see design.md Decision 8.</para>
+/// <para><see cref="PageAspect"/> is a fixed <c>W × 1.2W</c> ratio, same as
+/// <see cref="BlockEntityAssignmentDesk"/>.</para>
 /// </summary>
 public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
 {
@@ -47,7 +46,7 @@ public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
     /// room where the Inbox is placed. So an inbox variant of "south" means the wall is to the NORTH: the
     /// inverse of the Chalkboard's variant meaning. The angles below are the Chalkboard's own
     /// north/east/south/west→degree mapping with north/south and east/west swapped to account for that
-    /// inversion — a first-pass guess pending an in-game visual check, same as the collision box tuning.</para>
+    /// inversion.</para>
     /// </summary>
     protected override float? WallMountAngleRad
     {
@@ -68,8 +67,8 @@ public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
         }
     }
 
-    /// <summary>Resolves which of the 2 Inbox box-tuning targets this placed instance reads from
-    /// (add-scribe-block-box-tuning), via the exact same ground-vs-wall variant check as
+    /// <summary>Resolves which of the 2 Inbox box-tuning targets this placed instance reads from,
+    /// via the exact same ground-vs-wall variant check as
     /// <see cref="WallMountAngleRad"/> above.</summary>
     protected override ScribeBoxTuningTarget? TuningTarget
     {
@@ -80,29 +79,25 @@ public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
         }
     }
 
-    // ── Mixed restricted/open inventory (add-inbox-inventory-tab) ────────────
+    // ── Mixed restricted/open inventory ──────────────────────────────────────
     //
-    // The Inbox's own 8-slot inventory: slots 0-3 accept only Scribe items, slots 4-7 accept
-    // anything. Mirrors BlockEntityScriptorium's inventory verbatim — same lazy-init/persistence/
-    // packet-routing shape AND the same Scribe-items-only slot restriction (ItemSlotScribeDocument)
-    // for the first row, just with a mixed slot factory instead of a uniform one.
+    // The Inbox's own inventory: the first RestrictedSlotCount slots accept only Scribe items
+    // (ItemSlotScribeDocument), the rest accept anything. Same lazy-init/persistence/packet-routing
+    // shape as BlockEntityScriptorium's inventory, with a mixed slot factory.
 
     /// <summary>12 slots: the first 8 (indices 0-7) are Scribe-items-only, the last 4 (8-11) are open —
     /// see <see cref="EnsureInventory"/>'s slot factory. Public (like
     /// <see cref="BlockEntityAssignmentDesk"/>'s slot-index constants) so both
     /// <see cref="GuiDialogScribeInbox"/> and the Atlas integration tests can reference the split
-    /// without re-declaring it. Grew from 8→12 (redesign-inbox-block-placement-and-capacity); a block
-    /// saved under the old 8-slot count loads via the same additive tree round-trip below with no
-    /// migration code.</summary>
+    /// without re-declaring it.</summary>
     public const int SlotCount = 12;
 
     /// <summary>Restricted slots (any Scribe item — see <see cref="ItemSlotScribeDocument"/>) occupy
-    /// indices below this bound; open slots occupy the rest. Grew from 4→8 alongside <see cref="SlotCount"/>.</summary>
+    /// indices below this bound; open slots occupy the rest.</summary>
     public const int RestrictedSlotCount = 8;
 
     /// <summary>Tree sub-key under which the inventory persists, kept separate from the document/lock
-    /// keys so persistence is additive: an Inbox saved before this change simply lacks this sub-tree
-    /// and loads with 8 empty slots.</summary>
+    /// keys. A block whose tree lacks this sub-tree loads with empty slots.</summary>
     private const string InventoryTreeKey = "inboxInventory";
 
     /// <summary>Created lazily via <see cref="EnsureInventory"/> so it exists before whichever of
@@ -139,8 +134,7 @@ public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
         inventory!.LateInitialize("scribeinbox-" + Pos, api);
         inventory.Pos = Pos;
 
-        // Inbox-instance presence signal (signal-tasknotice-inbox-presence) — additional to, not a
-        // replacement of, the base class's own OnAssignmentParticleTick (already registered by
+        // Inbox-instance presence signal — additional to the base class's own OnAssignmentParticleTick (already registered by
         // base.Initialize above, for the coarse "any unseen assignment" field every writing station gets).
         if (api is ICoreClientAPI)
         {
@@ -148,16 +142,16 @@ public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
         }
     }
 
-    /// <summary>Matches the base class's own <c>AssignmentParticleTickIntervalMs</c> (§8.4) for visual
+    /// <summary>Matches the base class's own <c>AssignmentParticleTickIntervalMs</c> for visual
     /// consistency between the two ambient fields a writing station (here, specifically an Inbox) can
     /// show at once.</summary>
     private const int InboxNoticeParticleTickIntervalMs = 1500;
 
     /// <summary>True when <paramref name="slot"/> holds a sealed Task Notice addressed to
     /// <paramref name="targetUid"/> — the presence-signal trigger shared by this block's own particle
-    /// tick and <see cref="GuiDialogScribeInbox"/>'s tab/slot shimmer (signal-tasknotice-inbox-presence).
-    /// No separate "discovered"/seen flag is needed or used: <see cref="ScribeAssignment.Seen"/> is NOT a
-    /// fit here (design.md Decision 2) — it flips true the moment the player opens ANY Inbox view
+    /// tick and <see cref="GuiDialogScribeInbox"/>'s tab/slot shimmer.
+    /// No separate "discovered"/seen flag is used: <see cref="ScribeAssignment.Seen"/> is not a
+    /// fit here — it flips true the moment the player opens ANY Inbox view
     /// (<c>ScribeDialogBase.MarkInboxSeenIfNeeded</c>), well before the physical notice itself is
     /// actually resolved. Accept/Decline consumes the notice item, so the moment it's gone this predicate
     /// is naturally false again — no explicit "off" transition to write.</summary>
@@ -215,7 +209,7 @@ public sealed class BlockEntityInbox : BlockEntityScribeWritingStation
     {
         EnsureInventory();
         base.FromTreeAttributes(tree, worldForResolving);
-        // Additive: an Inbox saved before this change has no inventory sub-tree → slots stay empty.
+        // A tree without the inventory sub-tree leaves the slots empty.
         if (tree.GetTreeAttribute(InventoryTreeKey) is { } invTree)
         {
             inventory!.FromTreeAttributes(invTree);

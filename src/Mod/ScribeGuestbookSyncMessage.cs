@@ -3,8 +3,7 @@ using ProtoBuf;
 namespace Scribe;
 
 /// <summary>Server → client: delivers the current guestbook state for a specific lectern. Payload
-/// is a <see cref="Scribe.Core.GuestbookStore"/> binary blob. Addressed by <see cref="DocIdBytes"/>
-/// (replacing the former PosX/Y/Z fields).</summary>
+/// is a <see cref="Scribe.Core.GuestbookStore"/> binary blob. Addressed by <see cref="DocIdBytes"/>.</summary>
 [ProtoContract]
 public sealed class ScribeGuestbookSyncMessage
 {

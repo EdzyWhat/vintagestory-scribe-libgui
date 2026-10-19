@@ -6,7 +6,7 @@ using Scribe.Core;
 namespace Integration.Tests;
 
 /// <summary>
-/// Loading a pre-v4 (v3) world: the codec no longer accepts v3 bytes (PriorVersion = 4), so the
+/// Loading a pre-v4 (v3) world: the codec does not accept v3 bytes (PriorVersion = 4), so the
 /// lectern falls back to a fresh empty document. No pin drain occurs. "fixtures/lectern-v3.vcdbs"
 /// is the world the original FixtureBuilders produced under the v3 codec — it is checked in as-is
 /// and is IRREPLACEABLE. See the README's fixtures note.

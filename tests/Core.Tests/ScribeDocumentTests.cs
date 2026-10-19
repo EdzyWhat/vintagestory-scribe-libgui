@@ -65,7 +65,7 @@ public class ScribeDocumentTests
     [InlineData("\t\n")]
     public void AddTask_AcceptsBlankText_StoredVerbatim(string blank)
     {
-        // A new task now starts empty (the player types into it); the model no longer rejects
+        // A new task starts empty (the player types into it); the model does not reject
         // blank task text. Removing an abandoned empty task is the editing layer's job.
         var doc = new ScribeDocument();
 
@@ -392,7 +392,7 @@ public class ScribeDocumentTests
     [InlineData("   ")]
     public void InsertTask_AcceptsBlankText_StoredVerbatim(string blank)
     {
-        // Enter=insert-below and "Add task" both seed an empty task now; InsertTask must accept it.
+        // Enter=insert-below and "Add task" both seed an empty task; InsertTask must accept it.
         var doc = new ScribeDocument();
         doc.AddTask("A");
 
@@ -738,8 +738,8 @@ public class ScribeDocumentTests
 
     // --- TaskCount (diagnostic task-only tally; NOT the cap measure) ---
     // Distinct from CompletableCount (Task+Tracker+Link) and from BlockCount (all kinds). TaskCount counts
-    // ONLY Task-kind blocks. Since refine-chalkboard §12 the tier cap counts ALL blocks (BlockCount), so
-    // TaskCount is no longer the cap/capacity measure — it survives only for diagnostics and this coverage.
+    // ONLY Task-kind blocks. The tier cap counts ALL blocks (BlockCount), so
+    // TaskCount is not the cap/capacity measure — it exists only for diagnostics.
 
     [Fact]
     public void TaskCount_CountsTaskKindOnly_NotTrackerLinkOrText()
@@ -767,7 +767,7 @@ public class ScribeDocumentTests
         Assert.Equal(0, noTasks.TaskCount);
     }
 
-    // --- BlockCount (the tier-cap measure: "N of anything", refine-chalkboard §12) ---
+    // --- BlockCount (the tier-cap measure: "N of anything") ---
     // Every kind counts equally — tasks, notes, trackers, links, craft parents — so a finite tier
     // (Tablet, Chalkboard: MaxBlocks = 15) is full at 15 blocks of ANY mix and refuses a 16th of any kind.
 
@@ -1013,7 +1013,7 @@ public class ScribeDocumentTests
         Assert.Same(placed, target.Blocks[1]);
     }
 
-    // --- AppendExternalBlock (add-external-mod-task-api placement) ---
+    // --- AppendExternalBlock (external mod task placement) ---
 
     [Fact]
     public void AppendExternalBlock_AppendsToEnd_KeepingExistingBlocksAndTaskId()
@@ -1032,8 +1032,8 @@ public class ScribeDocumentTests
         Assert.Equal("posted by NoticeBoard", target.Blocks[1].ExtraInfo);
     }
 
-    // --- InsertIndexForBatch (refine-assignment-desk-inbox-ux triage 2026-08-31: keep a batch's
-    // Accept-placed rows contiguous regardless of the order they were individually Accepted in) ---
+    // --- InsertIndexForBatch (keeps a batch's Accept-placed rows contiguous regardless of the
+    // order they were individually Accepted in) ---
 
     [Fact]
     public void InsertIndexForBatch_NoSiblingPlacedYet_FallsBackToInsertIndex()

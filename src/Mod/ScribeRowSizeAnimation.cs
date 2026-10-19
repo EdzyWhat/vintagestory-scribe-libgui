@@ -1,32 +1,31 @@
-// A reusable "animate a list row's height" primitive (gui-row-animation-harness) — the ONE harness
+// A reusable "animate a list row's height" primitive — the ONE harness
 // every Scribe animating row shares, in either direction:
 //   • Collapse (exit): a departing row shrinks its height 1→0 so the rows below slide up to meet it,
 //     then it is removed once the collapse finishes (a HUD unpin/delete completion, a lectern editor
 //     delete).
 //   • Reveal (enter): a freshly-mounted row grows its height 0→1 so it slides into place instead of
-//     popping in. No removal — the row just settles at full height (the "ScribeRevealable" sketch in
-//     docs/animation-lessons-learned.md).
+//     popping in. No removal — the row just settles at full height.
 //
-// The load-bearing constraint (verified against LibGUI source): the HUD and the lectern both push
-// content via GuiBase.ForceRebuild, which UNMOUNTS and recreates the whole widget tree rather than
-// reconciling it. Any stock/implicit animation widget (AnimatedSize/AnimatedContainer/…) recreated
-// fresh inits Begin==End==target and SNAPS to the end — no motion. So, exactly like ScribeFadeText,
-// this is a self-ticking StatefulWidget that drives its own AnimationController. And because EACH
-// ForceRebuild remounts the widget, a State-owned controller would restart from zero every rebuild
-// and stutter/never finish — so the controller is owned by a host-held ScribeAnimationRegistry,
-// keyed by the row's stable identity, and RESUMED on remount (mirrors the ScribeNumericFocusRegistry
-// persistent-node pattern used for the settings fields). The identity-keyed registry is exactly what
-// lets a motion resume across BOTH a ForceRebuild AND a reconcile SetState (design D5): the same
-// controller is found by id no matter how the row's element was rebuilt.
+// The load-bearing constraint: the HUD and the lectern both push content via GuiBase.ForceRebuild,
+// which UNMOUNTS and recreates the whole widget tree rather than reconciling it. Any stock/implicit
+// animation widget (AnimatedSize/AnimatedContainer/…) recreated fresh inits Begin==End==target and
+// SNAPS to the end — no motion. So, exactly like ScribeFadeText, this is a self-ticking
+// StatefulWidget that drives its own AnimationController. And because EACH ForceRebuild remounts
+// the widget, a State-owned controller would restart from zero every rebuild and stutter/never
+// finish — so the controller is owned by a host-held ScribeAnimationRegistry, keyed by the row's
+// stable identity, and RESUMED on remount (mirrors the ScribeNumericFocusRegistry persistent-node
+// pattern used for the settings fields). The identity-keyed registry lets a motion resume across
+// BOTH a ForceRebuild AND a reconcile SetState: the same controller is found by id no matter how
+// the row's element was rebuilt.
 //
-// Harness shape (design Open Question, resolved 2026-08-09): ONE widget with a direction enum over
-// ONE shared registry, NOT a family. The substrate (ScribeHeightFactorRender/Widget, the registry)
-// is direction-neutral; only the Build factor mapping and whether the terminal callback removes the
-// row differ between Collapse and Reveal, and both live in the single ScribeRowSizeAnimationState so
-// the load-bearing survival logic (registry lookup, resume-on-remount, fire-if-already-completed,
-// detach-but-don't-dispose) can't drift between the two motions.
+// Harness shape: ONE widget with a direction enum over ONE shared registry, NOT a family. The
+// substrate (ScribeHeightFactorRender/Widget, the registry) is direction-neutral; only the Build
+// factor mapping and whether the terminal callback removes the row differ between Collapse and
+// Reveal, and both live in the single ScribeRowSizeAnimationState so the load-bearing survival
+// logic (registry lookup, resume-on-remount, fire-if-already-completed, detach-but-don't-dispose)
+// can't drift between the two motions.
 //
-// This file is Mod-side only (LibGUI + AnimationController); Core stays API-free and untouched.
+// This file is Mod-side only (LibGUI + AnimationController); Core stays API-free.
 
 using System;
 using System.Collections.Generic;
@@ -41,9 +40,8 @@ using SkiaSharp;                  // SKRect
 namespace Scribe;
 
 /// <summary>
-/// Pure coordinate math for the collapse-time hover refresh (fix-list-collapse-stale-hover), factored
-/// out of the two hosts so the load-bearing conversion has one definition (and could be unit-tested
-/// without a game if it ever needs to be — it touches no VS API).
+/// Pure coordinate math for the collapse-time hover refresh, factored
+/// out of the two hosts so the load-bearing conversion has one definition (it touches no VS API).
 /// </summary>
 internal static class ScribeHoverRefresh
 {
@@ -57,7 +55,7 @@ internal static class ScribeHoverRefresh
 
 /// <summary>
 /// A tiny frame countdown that keeps a synthetic hover refresh running for a few frames PAST whatever
-/// triggered it (fix-list-collapse-stale-hover). Its whole reason to exist is the <c>ForceRebuild</c>
+/// triggered it. Its whole reason to exist is the <c>ForceRebuild</c>
 /// after-effect: <c>GuiBase.ForceRebuild</c> unmounts the tree and mounts a brand-new one where every
 /// element is <c>hovered = false</c>, and that rebuilt tree isn't laid out until a LATER frame — so a
 /// single same-frame refresh hit-tests nothing (the new tree has no geometry yet) and the row under a
@@ -183,7 +181,7 @@ internal sealed class ScribeHeightFactorWidget : SingleChildWidget
 }
 
 /// <summary>
-/// A transparent pass-through (animate-row-reposition) that reports its child's real measured layout
+/// A transparent pass-through that reports its child's real measured layout
 /// size back to the caller after every layout pass, so <see cref="ScribeAnimatedList"/> can learn each
 /// row's actual rendered height without altering that row's layout at all — the same
 /// <see cref="RenderProxyBox"/>-subclass technique <see cref="ScribeHeightFactorRender"/> already proves
@@ -203,7 +201,7 @@ internal sealed class ScribeSizeReportRender : RenderProxyBox
     }
 }
 
-/// <summary>The create/update bridge for <see cref="ScribeSizeReportRender"/> (animate-row-reposition).</summary>
+/// <summary>The create/update bridge for <see cref="ScribeSizeReportRender"/>.</summary>
 internal sealed class ScribeSizeReportWidget : SingleChildWidget
 {
     public ScribeSizeReportWidget(Action<Vector2> onMeasured, Widget child, Gui.Widgets.Framework.Key? key = null)
@@ -221,7 +219,7 @@ internal sealed class ScribeSizeReportWidget : SingleChildWidget
 }
 
 /// <summary>
-/// Host-owned animation state for a list's animating rows (gui-row-animation-harness). The host (HUD or
+/// Host-owned animation state for a list's animating rows. The host (HUD or
 /// lectern dialog) owns one registry for its lifetime and passes it into each <see cref="ScribeRowSizeAnimation"/>,
 /// which looks up its <see cref="AnimationController"/> by the row's stable id. Because the controller
 /// lives here — not in the transient widget's <c>State</c> — it SURVIVES the host's <c>ForceRebuild</c>
@@ -237,8 +235,8 @@ internal sealed class ScribeAnimationRegistry
 {
     private readonly Dictionary<string, AnimationController> controllers = new();
 
-    /// <summary>Per-id seed values for a motion's fixed starting parameter (animate-row-reposition
-    /// task 3.4) — e.g. <see cref="ScribeRowReposition"/>'s <c>TargetOffsetY</c>. Lives here, not on the
+    /// <summary>Per-id seed values for a motion's fixed starting parameter — e.g.
+    /// <see cref="ScribeRowReposition"/>'s <c>TargetOffsetY</c>. Lives here, not on the
     /// transient <c>State</c>, for the SAME reason the <see cref="AnimationController"/> does: LibGUI's
     /// reconciler is positional (<c>MultiChildElement.Update</c> matches slots by index, not by id — see
     /// <c>VSAPI-NOTES.md</c> § LibGUI), so a row whose Column index shifts gets its Element unmounted and
@@ -285,7 +283,7 @@ internal sealed class ScribeAnimationRegistry
     /// <summary>Whether ANY owned animation is still running (has not reached
     /// <see cref="AnimationStatus.Completed"/>). While this is true the list geometry is still reflowing
     /// each frame, so a row can slide under a stationary cursor — the host uses this to drive a per-frame
-    /// hover refresh (fix-list-collapse-stale-hover) since LibGUI only recomputes hover on real mouse
+    /// hover refresh since LibGUI only recomputes hover on real mouse
     /// motion. False (the steady state) means the host skips the refresh entirely.</summary>
     public bool AnyAnimating
     {
@@ -313,24 +311,22 @@ internal sealed class ScribeAnimationRegistry
     }
 }
 
-/// <summary>Which way a <see cref="ScribeRowSizeAnimation"/> drives its height (gui-row-animation-harness).
+/// <summary>Which way a <see cref="ScribeRowSizeAnimation"/> drives its height.
 /// The underlying controller always runs 0→1; the direction only changes how that value maps to the
 /// rendered height factor and what the terminal state means.</summary>
 internal enum ScribeRowSizeDirection
 {
     /// <summary>Exit: shrink 1→0 (factor <c>1 − value</c>), then fire <c>onEnd</c> so the host removes the
-    /// row. The load-bearing original case (a departing list row sliding closed).</summary>
+    /// row (a departing list row sliding closed).</summary>
     Collapse,
 
     /// <summary>Enter: grow 0→1 (factor <c>value</c>). A freshly-mounted row slides into place instead of
-    /// popping in; there is nothing to remove, so <c>onEnd</c> is optional (a settle hook). The
-    /// "ScribeRevealable" sketch (docs/animation-lessons-learned.md) — the on-ramp for future
-    /// enter animations; no caller ships in this change.</summary>
+    /// popping in; there is nothing to remove, so <c>onEnd</c> is optional (a settle hook).</summary>
     Reveal,
 }
 
 /// <summary>
-/// Wraps a list row so its height animates in one direction (gui-row-animation-harness): a
+/// Wraps a list row so its height animates in one direction: a
 /// <see cref="ScribeRowSizeDirection.Collapse"/> shrinks it 1→0 (rows below slide up to meet it) then
 /// fires <see cref="OnEnd"/> so the host can remove it; a <see cref="ScribeRowSizeDirection.Reveal"/>
 /// grows it 0→1 so it slides into place, with <see cref="OnEnd"/> an optional settle hook.
@@ -345,8 +341,7 @@ internal enum ScribeRowSizeDirection
 /// </summary>
 internal sealed class ScribeRowSizeAnimation : StatefulWidget
 {
-    /// <summary>Default animation duration. Short enough to feel snappy, long enough to read as motion;
-    /// tunable if playtest wants a different feel.</summary>
+    /// <summary>Default animation duration. Short enough to feel snappy, long enough to read as motion.</summary>
     public const int DefaultDurationMs = 200;
 
     public ScribeRowSizeAnimation(
@@ -439,8 +434,8 @@ internal sealed class ScribeRowSizeAnimationState : State<ScribeRowSizeAnimation
 }
 
 /// <summary>
-/// Slides a row IN by translating its content into place while fading it up (gui-row-animation-harness /
-/// animate-row-insertion). The entry motion for a freshly-added row: the row takes its FULL height in its
+/// Slides a row IN by translating its content into place while fading it up. The entry motion for a
+/// freshly-added row: the row takes its FULL height in its
 /// slot from the first frame (the translate is paint-only — <see cref="Transform"/> passes layout constraints
 /// through unchanged), so unlike <see cref="ScribeRowSizeDirection.Reveal"/> (which grows the row's height and
 /// so shrinks/mislocates a variable-height row's caret mid-animation) the caret, pointer hit-tests, and
@@ -448,7 +443,7 @@ internal sealed class ScribeRowSizeAnimationState : State<ScribeRowSizeAnimation
 /// it starts offset upward and settles to rest, cross-fading in as it arrives.
 ///
 /// <para>Translation is the primary read (a moving row is unmistakable where a same-position fade is too
-/// subtle — the 2026-08-12 playtest of the fade-only entry "appeared instantly"); the fade is layered polish
+/// subtle); the fade is layered polish
 /// off the SAME controller value, so there is one controller and no per-row bookkeeping doubling.
 /// <see cref="RenderTransform.GlobalToChild"/> inverts the matrix for hit-testing, so a click lands where the
 /// row is DRAWN mid-slide, not where it will rest.</para>
@@ -456,7 +451,7 @@ internal sealed class ScribeRowSizeAnimationState : State<ScribeRowSizeAnimation
 /// <para>Same load-bearing survival discipline as <see cref="ScribeRowSizeAnimation"/>, and deliberately NOT
 /// <c>AnimatedSlide</c>/<c>AnimatedOpacity</c>/<c>ScribeFadeText</c> (all snap on <c>ForceRebuild</c>: the
 /// implicit widgets re-init Begin==End==target on a fresh mount, <c>ScribeFadeText</c> owns its controller in
-/// its own transient State — see the resolved Open Question in animate-row-insertion/design.md). The
+/// its own transient State). The
 /// controller lives in the host-owned <see cref="ScribeAnimationRegistry"/>, keyed by the row id, so the
 /// slide RESUMES across a <c>ForceRebuild</c> remount AND a reconcile <c>SetState</c> instead of restarting.</para>
 ///
@@ -577,7 +572,7 @@ internal sealed class ScribeSlideInState : State<ScribeSlideIn>
 
 /// <summary>
 /// Displaces a surviving row from its real previous rendered position to its new one
-/// (animate-row-reposition) — a third self-ticking, registry-keyed row motion alongside
+/// — a third self-ticking, registry-keyed row motion alongside
 /// <see cref="ScribeRowSizeAnimation"/> (departure/entry height) and <see cref="ScribeSlideIn"/> (entry
 /// translate+fade). Unlike <see cref="ScribeSlideIn"/>'s FIXED slide distance — safe there only because a
 /// brand-new row has no prior on-screen position to match — this widget's <see cref="TargetOffsetY"/> is
@@ -587,18 +582,17 @@ internal sealed class ScribeSlideInState : State<ScribeSlideIn>
 ///
 /// <para><see cref="TargetOffsetY"/> is captured ONCE, the moment a fresh generation starts (mirroring
 /// <see cref="ScribeSlideIn"/>'s fixed <c>SlideDistance</c>), NOT re-read from the widget prop on every
-/// build. This was a deliberate change from an earlier "recompute every build" design: the container
+/// build. The container
 /// (<c>ScribeAnimatedList</c>) does not reliably rebuild every animation tick — its own `Build` only
 /// runs when something calls `SetState`/`MarkNeedsBuild` on ITS Element, which the reposition motion
 /// itself never does (unlike collapse/entry, which call back in on completion). If a LATER, unrelated
 /// rebuild of the container happened to occur mid-animation, re-reading `TargetOffsetY` from that build
 /// would recompute a near-zero delta (the order has already caught up to itself) and SNAP the animation
-/// to rest early — a real regression found in playtest. Seeding once and holding it locally makes the
+/// to rest early. Seeding once and holding it locally makes the
 /// motion immune to how many times (or how few) the container itself rebuilds while it eases.</para>
 ///
 /// <para>The seed itself is stored in <see cref="ScribeAnimationRegistry.Seed"/>, not just a private
-/// field (task 3.4, found via a Sink completion: the sinking row instant-jumped instead of animating,
-/// while merely-displaced siblings animated fine). LibGUI's reconciler matches Column slots by INDEX,
+/// field. LibGUI's reconciler matches Column slots by INDEX,
 /// not by id (<c>MultiChildElement.Update</c> — see <c>VSAPI-NOTES.md</c> § LibGUI); any row whose slot
 /// shifts gets its Element unmounted and a fresh one mounted, which re-runs <see cref="ScribeRowRepositionState.InitState"/>.
 /// A private field alone would be reseeded from whatever that build happens to pass — fine on the
@@ -667,7 +661,7 @@ internal sealed class ScribeRowRepositionState : State<ScribeRowReposition>
     /// <summary>The displacement captured once, when the current generation attached (the class doc
     /// comment explains why this is NOT re-read from <see cref="ScribeRowReposition.TargetOffsetY"/> on
     /// every build) — mirrored from <see cref="ScribeAnimationRegistry.Seed"/> so it also survives an
-    /// Element remount forced by the positional reconciler mid-animation (task 3.4: seeding into a
+    /// Element remount forced by the positional reconciler mid-animation (seeding into a
     /// State-local field alone isn't enough, since a remount re-runs <see cref="InitState"/> with
     /// whatever the CURRENT build passes — often a stale zero — discarding this field entirely).</summary>
     private float seededOffset;

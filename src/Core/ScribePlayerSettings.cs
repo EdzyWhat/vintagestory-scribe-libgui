@@ -150,8 +150,8 @@ public sealed class ScribePlayerSettings
     public bool CuneiformTablets { get; set; } = true;
 
     /// <summary>Whether newly-typed cuneiform text presses in stroke-by-stroke — within a letter the strokes
-    /// lay down fast, with a longer pause between letters (add-cuneiform-handwriting-feel). Default
-    /// <c>false</c> (instant reveal) per the 2026-08-03 playtest: the progression is a playful extra, opt-in
+    /// lay down fast, with a longer pause between letters. Default
+    /// <c>false</c> (instant reveal): the progression is a playful extra, opt-in
     /// rather than on by default. A per-player, client-local preference, never server-synced; only has an
     /// effect while <see cref="CuneiformTablets"/> is also on (it animates the cuneiform glyphs). A plain
     /// bool, so <see cref="Normalized"/> leaves it untouched.</summary>
@@ -182,7 +182,7 @@ public sealed class ScribePlayerSettings
 
     /// <summary>The player UID this Assigner most recently sent an assignment to, successfully, from any
     /// Assignment Desk — the Create Assignments tab's target-player picker default
-    /// (persist-known-players-for-assignment). Empty string (the default) means no prior send, or a prior
+    /// Empty string (the default) means no prior send, or a prior
     /// target no longer present in the current list; either way the picker falls back to the first entry
     /// in its alphabetically-ordered list. Set optimistically on the client the moment a send succeeds. A
     /// per-player, client-local preference: never server-synced. A plain string, so <see cref="Normalized"/>
@@ -202,8 +202,8 @@ public sealed class ScribePlayerSettings
     public const int MinHudMaxRows = 1;
 
     /// <summary>Inclusive upper bound clamped on load, so a hand-edited or garbled preference file
-    /// can't request an unbounded number of rows. A saved value above 30 re-clamps to 30 on next load
-    /// (refine-crafting-tasks-1-3-2); 11–30 now stick instead of clamping back to 10.</summary>
+    /// can't request an unbounded number of rows. A saved value above 30 re-clamps to 30 on next load;
+    /// 11–30 are kept as-is.</summary>
     public const int MaxHudMaxRows = 30;
 
     /// <summary>Which screen corner/edge the HUD is pinned to (default <see cref="ScribeHudAnchor.TopLeft"/>,
@@ -280,7 +280,7 @@ public sealed class ScribePlayerSettings
     /// chokepoint. Clamped and snapped on load.</summary>
     public float WindowFontScale { get; set; } = DefaultFontScale;
 
-    /// <summary>Font family for the Lectern's task/note ROW text (v1-release-checklist §6). Empty string
+    /// <summary>Font family for the Lectern's task/note ROW text. Empty string
     /// (the default) means "use the built-in body font" — the existing sans-serif look, so a player who
     /// never touches the selector is unchanged. A non-empty value must be one of <see cref="KnownTaskFonts"/>
     /// (the bundled/registered families); an unrecognized value falls back to the default on load
@@ -298,7 +298,7 @@ public sealed class ScribePlayerSettings
     /// no light source still sees the GUI at least this dim. Default <see cref="DefaultIlluminationFloor"/>
     /// (dim-but-faintly-legible); lowerable toward <see cref="MinIlluminationFloor"/> (effectively
     /// unreadable) for players who want the punishing end, or raised to <see cref="MaxIlluminationFloor"/>
-    /// (=1.0, the pre-illumination always-full-bright behavior) to opt out entirely. A per-player,
+    /// (=1.0, always full brightness) to opt out entirely. A per-player,
     /// client-local preference: never server-synced. Clamped on load (<see cref="ClampIlluminationFloor"/>);
     /// an absent key → this code default (so an old config file just gets the default floor). This is the
     /// ONLY persisted state this feature adds — the sampled light itself is transient render-only.</summary>

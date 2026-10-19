@@ -4,8 +4,7 @@ using Vintagestory.API.Client;
 namespace Scribe;
 
 /// <summary>
-/// A no-op <see cref="ISoundPlayer"/> that silences Scribe's OWN LibGUI UI click sounds
-/// (scribe-mute-ui-sounds). Swapped onto a Scribe dialog's <c>BuildOwner</c> in place of the stock
+/// A no-op <see cref="ISoundPlayer"/> that silences Scribe's OWN LibGUI UI click sounds. Swapped onto a Scribe dialog's <c>BuildOwner</c> in place of the stock
 /// <see cref="SoundPlayer"/> when the player's <c>MuteUiSounds</c> preference is on; widgets pull the
 /// player via <c>BuildContext.GetSoundPlayer()</c>, so this covers every Scribe control that plays a
 /// sound (today only LibGUI's <c>Button</c> — the Lectern action buttons and numeric +/- steppers) and

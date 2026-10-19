@@ -8,7 +8,7 @@ namespace Scribe;
 /// (<see cref="ScribeDialogBase"/>'s tracker partial) recomputes a Tracker's count from the viewing
 /// player's carried inventory and sends this when the count changes, so the value is persisted
 /// server-side and other viewers converge — exactly like <see cref="ScribeCompleteTaskMessage"/> carries
-/// the Done flag (add-tracker-link-tasks D5/4.3).
+/// the Done flag.
 ///
 /// <see cref="DocId"/>/<see cref="TaskId"/> are the raw 16-byte forms of the <c>Guid</c>s (protobuf-net's
 /// own <c>Guid</c> handling is version-fragile, so raw byte arrays are used, matching the sibling task

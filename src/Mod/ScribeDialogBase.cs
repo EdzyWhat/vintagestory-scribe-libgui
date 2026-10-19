@@ -32,10 +32,9 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// <summary>Whether the player's active hand item is still the SAME document this dialog opened, keyed
     /// by the stable <see cref="ScribeDocument.DocId"/>. The item-hosted dialogs (Notebook, Clockmaker's
     /// Notebook, Tablet) close when the player switches hotbar slots away from the item they opened — but
-    /// the switch guard must compare document IDENTITY, not merely "is the new hand item some Scribe item."
-    /// An earlier guard tested <c>ActiveHandItemSlot is IScribeDocumentItem</c>, which wrongly kept the
-    /// dialog OPEN when the player scrolled/keyed the hotbar to a DIFFERENT Scribe item (e.g. a second
-    /// notebook, or a tablet): the old dialog stayed up, still bound to the now-unheld document. Comparing
+    /// the switch guard must compare document IDENTITY, not merely "is the new hand item some Scribe item"
+    /// (which would keep the dialog open, still bound to the now-unheld document, after switching to a
+    /// second notebook or a tablet). Comparing
     /// the DocId closes on any real switch-away while still tolerating a hotbar reorder that keeps the same
     /// item active (its DocId is unchanged). A non-Scribe hand item (or an empty hand) has no document, so
     /// this returns false and the dialog closes. Reads the doc straight off the stack attributes — the same
@@ -55,19 +54,19 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// content re-sync), NOT by the real hand-switch path (<c>OnActiveSlotChanged</c>), which keeps the
     /// strict DocId identity check above.
     ///
-    /// <para>Why the two triggers need different rules (fix-item-dialog-first-open-flicker): opening a
+    /// <para>Why the two triggers need different rules: opening a
     /// not-yet-crafted item makes the client generate a fresh <see cref="ScribeDocument"/>/<c>DocId</c>
     /// locally and notify the server. The server records the one-time "Picked up" history entry,
     /// <c>MarkDirty()</c>s the slot, and re-syncs the stack back — deliberately WITHOUT the client's
     /// document (it can't know the client-generated DocId). That re-sync fires <c>SlotModified</c> on the
-    /// STILL-HELD slot; the strict guard read a stack whose DocId no longer matched and closed the dialog
-    /// one frame after it opened (the "first open flickers closed, second sticks" bug). A slot-number change
+    /// STILL-HELD slot; the strict guard would read a stack whose DocId no longer matches and close the
+    /// dialog one frame after it opened. A slot-number change
     /// asks "am I still holding the item this dialog is for?" — identity is right. An in-place content
     /// rewrite of the slot I'm still holding asks "did the thing in my hand stop being a Scribe item?" —
     /// presence is right, because the physical item didn't change, only its bytes were re-synced. The tablet's
     /// legitimate wet→hard/fired transition also rides <c>SlotModified</c> but carries the document (same
-    /// DocId, same <c>IScribeDocumentItem</c>), so it passes the presence check just as it passed the strict
-    /// one — the fix is additive there.</para></summary>
+    /// DocId, same <c>IScribeDocumentItem</c>), so it passes the presence check as well as the strict
+    /// one.</para></summary>
     private protected bool ActiveHandHoldsAnyScribeDocumentItem()
         => capi.World.Player?.Entity?.ActiveHandItemSlot?.Itemstack?.Collectible is IScribeDocumentItem;
 
@@ -83,28 +82,27 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
 
     // ---- View state ----
     /// <summary>The Lectern dialog's central-region view. Read and Editor are the original two views;
-    /// Pinned is the Pin Tab (scribe-pin-editor) — a peer view listing the player's pins, selected from the
+    /// Pinned is the Pin Tab — a peer view listing the player's pins, selected from the
     /// <c>scribepin</c> nav button. <see cref="BuildCentralRegion"/> chooses the body from this.</summary>
     private enum ScribeLecternView { Read, Editor, Pinned, Visitors, History, Timer, Inventory, Assignment, Inbox, SentHistory, InboxInventory }
 
     private ScribeLecternView viewMode = ScribeLecternView.Read;
 
     /// <summary>TaskIds of assignment rows currently expanded in the Inbox/Sent History view
-    /// (manage-terminal-assignment-records) — lifted out of each row's own <c>StatefulWidget</c> field
-    /// (<see cref="ScribeInboxRowState"/> used to own a private per-row <c>bool</c>) into one dialog-owned
-    /// set, so the title-bar expand/collapse-all toggle (built in <see cref="BuildTitleBar"/>, a different
+    /// — dialog-owned rather than held in each row's own <c>StatefulWidget</c> field
+    /// (<see cref="ScribeInboxRowState"/>), so the title-bar expand/collapse-all toggle (built in <see cref="BuildTitleBar"/>, a different
     /// class/build pass than the content) can read and bulk-mutate it in the same rebuild. Shared by BOTH
     /// tabs rather than one set per view — a TaskId is globally unique, so there's no collision risk, and
     /// carrying expand state over when switching tabs is a harmless (arguably nicer) side effect.</summary>
     private readonly HashSet<Guid> expandedAssignmentIds = new();
 
-    /// <summary>Which Inbox/Sent-History filter-chip group is active (triage 2026-08-31) — lifted out of
-    /// <see cref="ScribeInboxContentState"/>'s own private field for the same reason as
+    /// <summary>Which Inbox/Sent-History filter-chip group is active — dialog-owned rather than in
+    /// <see cref="ScribeInboxContentState"/>'s own field, for the same reason as
     /// <see cref="expandedAssignmentIds"/>: the title-bar toggle needs to know which rows currently pass the
     /// filter to compute whether they're all expanded. Shared by both tabs, like that set.</summary>
     private ScribeAssignmentFilterGroup assignmentFilterGroup = ScribeAssignmentFilterGroup.All;
 
-    /// <summary>Read View's active filter pill (read-view-filter-and-collapse) — dialog-owned, mirroring
+    /// <summary>Read View's active filter pill — dialog-owned, mirroring
     /// <see cref="assignmentFilterGroup"/>'s reasoning, and seeded from/written back through
     /// <see cref="host"/>'s per-instance persisted state (<see cref="IScribeDocumentHost.ReadViewFilterCategory"/>)
     /// rather than staying purely in-memory. Irrelevant on a surface where <see cref="SupportsFilterPills"/>
@@ -113,14 +111,13 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
 
     /// <summary>Set by <see cref="OnReadViewFilterCategoryChanged"/> to the just-locally-selected pill,
     /// and cleared once <see cref="RefreshReadView"/> observes the host mirror catch up to that same
-    /// value (read-view-collapse-affordance-fixes). While set, <see cref="RefreshReadView"/> must NOT
+    /// value. While set, <see cref="RefreshReadView"/> must NOT
     /// overwrite <see cref="readViewFilterCategory"/> from the (still-stale) host mirror — otherwise a
     /// row mutation's synchronous refresh (e.g. completing a task) lands between the local pill pick and
     /// the server's echo, and stomps the just-picked pill back to whatever the mirror still holds.</summary>
     private ReadViewFilterCategory? pendingReadViewFilterCategory;
 
-    /// <summary>TaskIds of Read View subtask-group PARENTS currently collapsed (read-view-filter-and-
-    /// collapse), the collapse-toggle counterpart of <see cref="readViewFilterCategory"/> — same
+    /// <summary>TaskIds of Read View subtask-group PARENTS currently collapsed, the collapse-toggle counterpart of <see cref="readViewFilterCategory"/> — same
     /// persistence source, same seeding/write-back path.</summary>
     private readonly HashSet<Guid> collapsedReadViewGroupIds = new();
 
@@ -144,7 +141,7 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     protected bool IsTimerView => viewMode == ScribeLecternView.Timer;
 
     /// <summary>True when the Inventory tab is the active view (the Scriptorium's Scribe-items-only
-    /// storage — add-scriptorium-inventory). Exposed so the Scriptorium subclass can apply the active
+    /// storage). Exposed so the Scriptorium subclass can apply the active
     /// color to its Inventory nav button in <see cref="GetExtraNavButtons"/>.</summary>
     protected bool IsInventoryView => viewMode == ScribeLecternView.Inventory;
 
@@ -153,12 +150,12 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     protected bool IsInboxView => viewMode == ScribeLecternView.Inbox;
 
     /// <summary>True when the Inbox Inventory tab is the active view (the standalone Inbox block's own
-    /// mixed restricted/open storage — add-inbox-inventory-tab). Exposed so the Inbox dialog can apply
+    /// mixed restricted/open storage). Exposed so the Inbox dialog can apply
     /// the active color to its own Inbox Inventory nav button.</summary>
     protected bool IsInboxInventoryView => viewMode == ScribeLecternView.InboxInventory;
 
     /// <summary>True when the Read tab is the active view. Exposed so a subclass that rebuilds its own nav
-    /// column (e.g. the Assignment Desk, add-assignment-desk-own-tasks) can apply the active color to its
+    /// column (e.g. the Assignment Desk) can apply the active color to its
     /// own Read nav button without the base's default <see cref="BuildRightColNav"/>.</summary>
     protected bool IsReadView => viewMode == ScribeLecternView.Read;
 
@@ -168,40 +165,36 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
 
     /// <summary>Whether the editor lock is held by ANOTHER player right now — the base's default
     /// <see cref="BuildRightColNav"/> uses this inline to dim its own Edit button; exposed so a subclass
-    /// building its own Edit nav button (add-assignment-desk-own-tasks) can match the same styling.</summary>
+    /// building its own Edit nav button can match the same styling.</summary>
     protected bool EditLockedByOther => host.IsLockedByOther(capi.World.Player.PlayerUID);
 
-    /// <summary>True when the Sent Assignment History tab is the active view (refine-assignment-desk-
-    /// inbox-ux 12.2 — split out of the Create Assignments tab, which now shows staging-and-select
-    /// only). Exposed so the Assignment Desk can apply the active color to its own nav button.</summary>
+    /// <summary>True when the Sent Assignment History tab is the active view. Exposed so the Assignment Desk can apply the active color to its own nav button.</summary>
     protected bool IsSentHistoryView => viewMode == ScribeLecternView.SentHistory;
 
-    /// <summary>Whether this dialog's Inbox nav button should shimmer right now (design.md Decision 9b,
-    /// §8.5): the viewing player has an unseen received assignment AND the Inbox tab is not already the
+    /// <summary>Whether this dialog's Inbox nav button should shimmer right now: the viewing player has an unseen received assignment AND the Inbox tab is not already the
     /// active view (so it never plays redundantly while Inbox is open). Exposed so the four subclasses
     /// with a non-default Inbox nav button (Lectern/Scriptorium/Chalkboard/Assignment Desk) can pass it
     /// straight into their <see cref="TitleButton"/> call.</summary>
     protected bool ShowInboxShimmer => modSystem.HasUnseenAssignment && !IsInboxView;
 
     /// <summary>Called from the Assignment Desk dialog's constructor to select the Assignment tab as
-    /// this dialog's initial view instead of the default Read view (design.md Decision 1 — "Only the
-    /// Assignment Desk dialog ever sets viewMode to Assignment"). Safe to call from a subclass ctor:
+    /// this dialog's initial view instead of the default Read view (only the
+    /// Assignment Desk dialog sets viewMode to Assignment). Safe to call from a subclass ctor:
     /// <c>GuiBase.TryOpen</c> calls <see cref="Build"/> before <c>OnGuiOpened</c> runs, and the ctor runs
     /// before <c>TryOpen</c>, so this always lands before the first tree is inflated.</summary>
     protected void DefaultToAssignmentView() => viewMode = ScribeLecternView.Assignment;
 
     /// <summary>Called from the standalone Inbox block's dialog constructor to select the Inbox tab as
-    /// this dialog's initial (and, per its spec, only ever) view instead of the default Read view — the
+    /// this dialog's initial (and only) view instead of the default Read view — the
     /// Inbox block exposes no other tab to switch away to, so this view never changes after open.</summary>
     protected void DefaultToInboxView() => viewMode = ScribeLecternView.Inbox;
 
     /// <summary>Called from the Scriptorium dialog's constructor to select the Transcribe (Inventory)
-    /// tab as this dialog's initial view instead of the default Read view
-    /// (assignment-icon-and-tab-defaults D6) — Read remains reachable via its own nav button afterward.</summary>
+    /// tab as this dialog's initial view instead of the default Read view — Read remains reachable via its own nav button afterward.</summary>
     protected void DefaultToInventoryView() => viewMode = ScribeLecternView.Inventory;
 
     /// <summary>Called from the Lectern dialog's constructor to select the Guest Book (Visitors) tab as
-    /// this dialog's initial view instead of the default Read view (assignment-icon-and-tab-defaults D6) —
+    /// this dialog's initial view instead of the default Read view —
     /// Read remains reachable via its own nav button afterward.</summary>
     protected void DefaultToVisitorsView() => viewMode = ScribeLecternView.Visitors;
 
@@ -219,7 +212,7 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// <summary>Whether the central region is in the (lock-gated) EDITOR view. Backed by
     /// <see cref="viewMode"/> so all the editor-lifecycle code that toggled a bool keeps working unchanged:
     /// setting it true selects the Editor view; setting it false returns to the Read view (Editor is the
-    /// only view that ever sets this, so false → Read matches the original semantics). Switching to the
+    /// only view that ever sets this). Switching to the
     /// Pin Tab sets <see cref="viewMode"/> directly (via <see cref="EnterPinnedMode"/>) after tearing the
     /// editor down.</summary>
     private bool isEditorMode
@@ -246,7 +239,7 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// field does not re-init, so <see cref="pendingFocusRow"/> covers those (see its remarks).</summary>
     private int? autoFocusRowOnRebuild;
     /// <summary>Row index to re-request keyboard focus on AFTER the next reconcile lays out
-    /// (reconcile-animating-surfaces §3.1), or null. The reconcile-path counterpart to
+    /// or null. The reconcile-path counterpart to
     /// <see cref="autoFocusRowOnRebuild"/>: a mutation that REUSES the target row's element (delete/reorder
     /// re-home, pin-tint repaint) can't rely on the field's <c>autoFocus</c>, which fires only in the
     /// field's <c>InitState</c> (on mount) — a reused field never re-inits. Instead we drive focus through
@@ -263,8 +256,7 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// the shipped gui's <c>FocusManager.RequestFocus</c> calls <c>Scrollable.EnsureVisible(focusedElement)</c>
     /// on focus, which bounces a taller-than-viewport row to its top/bottom. A click already landed on a
     /// visible pixel, so <see cref="NotifyPointerFocus"/> jumps back to this pre-click offset in the same
-    /// input-phase call (before the next render), so the focus-scroll is never seen (scroll-follow-caret-in-editor
-    /// issue #3).</summary>
+    /// input-phase call (before the next render), so the focus-scroll is never seen.</summary>
     private float lastStableScrollOffset;
 
     // ---- Document title editing ----
@@ -273,7 +265,7 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     private TextEditingController? _titleController;
     private FocusNode? _titleFocusNode;
     /// <summary>The shared title editing controller/focus node, exposed to a subclass that supplies its own
-    /// title input widget (the tablet's cuneiform title, add-tablet-cuneiform-chrome). A subclass MUST bind
+    /// title input widget (the tablet's cuneiform title). A subclass MUST bind
     /// its input to these — the commit machinery (<see cref="CommitTitleIfEditing"/>) and the blur listener
     /// key off them — rather than creating its own. Non-null once <c>OnGuiOpened</c> has run.</summary>
     private protected TextEditingController TitleController => _titleController!;
@@ -301,23 +293,23 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// <see cref="SyncGuestbookFocusNodes"/> on each Guestbook rebuild; disposed in <see cref="OnGuiClosed"/>.</summary>
     private readonly Dictionary<string, FocusNode> _guestbookNoteFocusNodes = new();
 
-    // ---- Title-bar grip drag (§8.1) ----
+    // ---- Title-bar grip drag ----
     // The title-bar band is the drag zone (WindowConfig.DragHandleHeight), but a press ON the grip glyph
     // was swallowed instead of moving the window: the grip's Tooltip wraps its child in a MouseRegion,
     // which is an ACTIVE hit target (it handles enter/exit for hover), so GuiBase.OnMouseDown's
     // EventDispatcher.DispatchPointerDown captures it and returns BEFORE the IsInDragZone band check ever
-    // runs (see GuiBase.cs). Click-through can't coexist with the tooltip — an IgnorePointer wrapper makes
+    // runs. Click-through can't coexist with the tooltip — an IgnorePointer wrapper makes
     // the WHOLE subtree invisible to hit-testing, which would also kill the MouseRegion's hover and thus
     // the tooltip. So the grip drives its OWN window drag: a GestureDetector nested INSIDE the tooltip (so
     // hover still fires on the outer MouseRegion) moves the window from press→move→release, mirroring what
-    // GuiBase's band drag does. See VSAPI-NOTES.md (§LibGUI). These track the drag in progress.
+    // GuiBase's band drag does. See VSAPI-NOTES.md (LibGUI). These track the drag in progress.
     private bool gripDragging;
     private int gripDragStartMouseX;
     private int gripDragStartMouseY;
     private Vector2 gripDragStartWindowPos;
 
     /// <summary>Set by <see cref="OnRowBlurred"/> when a task row lost focus while empty, so the row's
-    /// removal + rebuild is deferred to the next <see cref="OnRenderGUI"/> (add-empty-task-lifecycle).
+    /// removal + rebuild is deferred to the next <see cref="OnRenderGUI"/>.
     /// The blur fires from inside the field's focus-notification (and, on a row→row move, mid-way
     /// through <c>FocusManager.RequestFocus</c> — the old node blurs before the new one focuses), so
     /// removing the row synchronously would dispose focus nodes mid-transition and strand the pending
@@ -326,15 +318,14 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     private int? pendingEmptyRowRemoval;
 
     /// <summary>Host-owned collapse controllers for the editor's row list, keyed by TaskId so a collapse
-    /// RESUMES (not restarts) across the dialog's rebuild remounts (scribe-list-collapse). Passed into
+    /// RESUMES (not restarts) across the dialog's rebuild remounts. Passed into
     /// <see cref="ScribeAnimatedList"/>, which diffs the editor's TaskId-keyed row set and animates
-    /// departures against it (D0 / extract-animated-task-list §6.1 — the editor no longer hand-wires its own
-    /// departing-row map or collapse-cleanup flag). Disposed with the dialog.</summary>
+    /// departures against it. Disposed with the dialog.</summary>
     private readonly ScribeAnimationRegistry editorCollapseRegistry = new();
 
     /// <summary>Keeps the collapse-time hover refresh running a few frames past the last animating frame so a
     /// refresh lands AFTER the completion-triggered <see cref="ForceRebuild"/> re-lays-out the fresh tree
-    /// (fix-list-collapse-stale-hover); without it the row under a stationary cursor loses its hover controls
+    /// without it the row under a stationary cursor loses its hover controls
     /// exactly when the collapse ends. See <see cref="ScribeHoverRefreshLatch"/>.</summary>
     private readonly ScribeHoverRefreshLatch hoverRefreshLatch = new();
 
@@ -363,7 +354,7 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// settling window so it doesn't run every frame forever.</summary>
     private int clampToExtentFrames;
 
-    // ---- Lost-lock autosave recovery (task 8.6) ----
+    // ---- Lost-lock autosave recovery ----
     /// <summary>Max consecutive autosave failures to auto-recover from before giving up, so a lock
     /// permanently held elsewhere can't spin the re-request/resend loop forever.</summary>
     private const int MaxSaveFailureRetries = 3;
@@ -374,7 +365,7 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// keeps the unsaved scratch instead of reseeding it from the authoritative document.</summary>
     private bool recoveringLostLock;
 
-    // ---- Pin Tab state (inert unless in the Pinned view — scribe-pin-editor) ----
+    // ---- Pin Tab state (inert unless in the Pinned view) ----
     /// <summary>In-progress (uncommitted) text edits for Pin Tab rows, keyed by the pin's stable
     /// <see cref="ScribeBlock.TaskId"/>, written through on every keystroke. This is the Pin Tab's
     /// equivalent of the editor's <see cref="scratch"/> write-through: because a <see cref="ForceRebuild"/>
@@ -390,15 +381,15 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// in sync with the current pin set by <see cref="SyncPinFocusNodes"/>; disposed in <see cref="OnGuiClosed"/>.</summary>
     private readonly Dictionary<Guid, FocusNode> pinFocusNodes = new();
 
-    /// <summary>Host-owned collapse controllers for the Pin Tab's departing rows (extract-animated-task-list),
+    /// <summary>Host-owned collapse controllers for the Pin Tab's departing rows,
     /// passed to <see cref="ScribePinnedContent"/>'s <see cref="ScribeAnimatedList"/> so a removed pin's row
     /// collapses out instead of snapping. Owned by the dialog (like <see cref="editorCollapseRegistry"/>) so a
     /// collapse RESUMES across the resync reconcile, and so <see cref="OnRenderGUI"/> can read
     /// <c>AnyAnimating</c> to pin the scroll + refresh hover while a pin row collapses. Disposed with the dialog.</summary>
     private readonly ScribeAnimationRegistry pinCollapseRegistry = new();
 
-    /// <summary>Host-owned collapse controllers for the read view's departing rows (reconcile-animating-surfaces
-    /// §5.5), passed to <see cref="ScribeReadContent"/>'s <see cref="ScribeAnimatedList"/> so a Delete-policy
+    /// <summary>Host-owned collapse controllers for the read view's departing rows,
+    /// passed to <see cref="ScribeReadContent"/>'s <see cref="ScribeAnimatedList"/> so a Delete-policy
     /// completion collapses the removed row out instead of vanishing it. Owned by the dialog (like
     /// <see cref="editorCollapseRegistry"/> / <see cref="pinCollapseRegistry"/>) so a collapse RESUMES across the
     /// RefreshReadView reconcile, and so <see cref="OnRenderGUI"/> can read <c>AnyAnimating</c> to pin the scroll +
@@ -409,8 +400,7 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// running. Only one of these surfaces is mounted at a time, so at most one registry is ever non-idle — but
     /// OR-ing all three is safe and lets the two <see cref="OnRenderGUI"/> collapse loops (the scroll-pin and the
     /// hover-refresh latch) share one gate instead of repeating the three-way check. Folding a future surface's
-    /// registry in here updates both loops at once, so neither can be silently left out of step
-    /// (reconcile-animating-surfaces §6.3).</summary>
+    /// registry in here updates both loops at once, so neither can be silently left out of step.</summary>
     private bool AnyRowAnimating =>
         editorCollapseRegistry.AnyAnimating || pinCollapseRegistry.AnyAnimating || readCollapseRegistry.AnyAnimating;
 
@@ -423,12 +413,11 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// <summary>Pin row to auto-focus on the next Pin Tab rebuild (caret restore across a
     /// <see cref="ForceRebuild"/>), or null. One-shot: consumed in <see cref="BuildPinnedContent"/>. Rides
     /// the field's mount-only <c>autoFocus</c>, so it only re-homes a genuinely-NEW (freshly-mounted) row —
-    /// reserved for the view-switch/fresh-mount path. An in-place pin resync (reconcile-animating-surfaces
-    /// §4.3) REUSES the focused row's field instead, so it re-homes via <see cref="pendingFocusPinTaskId"/>.</summary>
+    /// reserved for the view-switch/fresh-mount path. An in-place pin resync REUSES the focused row's field instead, so it re-homes via <see cref="pendingFocusPinTaskId"/>.</summary>
     private Guid? autoFocusPinTaskId;
 
     /// <summary>Pin row (by TaskId) to re-home keyboard focus onto after an in-place Pin Tab reconcile
-    /// (reconcile-animating-surfaces §4.3), or null. The Pin Tab equivalent of the editor's
+    /// or null. The Pin Tab equivalent of the editor's
     /// <see cref="pendingFocusRow"/>: pressing a per-row pin control (checkbox/unpin/delete — none are
     /// <c>IFocusable</c>) blurs the focused field via <c>DispatchPointerDown</c>, and the async
     /// <see cref="OnMyPinsChanged"/> resync lands a frame or more later. Under reconcile the focused row's
@@ -441,7 +430,7 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     protected readonly ScribeModSystem modSystem;
 
     /// <summary>Samples the light reaching the player each frame and folds it into a quantized (brightness,
-    /// tint) shade the whole dialog is rendered at (respect-local-illumination). Constructed once per dialog;
+    /// tint) shade the whole dialog is rendered at. Constructed once per dialog;
     /// read only on the render thread in <see cref="OnRenderGUI"/>. Bound to the live
     /// <see cref="ScribeModSystem.MySettings"/> so a floor change takes effect on the next sample.</summary>
     private readonly ScribeAmbientLightSampler lightSampler;
@@ -452,39 +441,39 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// it with a real <see cref="ScribeAmbientLightSampler.Sample"/> BEFORE the tree is built, so the very first
     /// frame already paints at the correct local brightness (no open-in-darkness bright-flash). When the quantized
     /// value later CHANGES, <see cref="OnRenderGUI"/> calls <see cref="RebuildBody"/> so LibGUI re-records the
-    /// paint cache with the new shade; on a static scene it never changes, so the cache stays valid (D3).</summary>
+    /// paint cache with the new shade; on a static scene it never changes, so the cache stays valid.</summary>
     private ScribeAmbientLightSampler.Shade currentShade = new(1f, 1f, 1f, 1f, changed: false);
 
     /// <summary>The live illumination shade, exposed to subclasses that build their own Overlay-layer hover
     /// surfaces (e.g. the Scriptorium's <see cref="ScribeDocumentSlot"/> card) so they can shade them at the
-    /// reduced hover strength like the shared tooltip path (refine-scribe-hover-tooltips D2/D3).</summary>
+    /// reduced hover strength like the shared tooltip path.</summary>
     // private protected: the Shade type is internal, so this can't be a public-surface `protected` member;
     // subclasses live in this assembly, so derived-and-same-assembly access is all we need.
     private protected ScribeAmbientLightSampler.Shade CurrentShade => currentShade;
 
     /// <summary>Stable identity of the single persistent-root <see cref="ScribeDialogBody"/> that wraps the
-    /// dialog body (reconcile-animating-surfaces §3.1). Allocated ONCE here (never in <see cref="Build"/>,
+    /// dialog body. Allocated ONCE here (never in <see cref="Build"/>,
     /// per the <see cref="GlobalKey"/> contract) so <see cref="RebuildBody"/> can reach the live body State
     /// and reconcile the tree in place instead of tearing it down with <see cref="GuiBase.ForceRebuild"/>.
     /// A <c>GlobalKey</c> re-registers itself on mount, so it stays valid across a <c>ForceRebuild</c> too.</summary>
     private readonly GlobalKey bodyKey = new();
 
-    /// <summary>Reconcile the dialog body in place (reconcile-animating-surfaces §3.1): the modern
-    /// replacement for <see cref="GuiBase.ForceRebuild"/> at every in-place update site — a structural row
+    /// <summary>Reconcile the dialog body in place, the alternative to <see cref="GuiBase.ForceRebuild"/>
+    /// at every in-place update site — a structural row
     /// edit (add/delete/reorder) or a chrome repaint (pin tint, nav active-color, title display⇄input swap).
     /// A no-op <c>SetState</c> on the persistent body State marks it dirty, so the next frame's
     /// <c>BuildOwner.BuildDirtyElements()</c> re-runs <see cref="BuildBodyTree"/> and reconciles the subtree,
     /// REUSING matching elements — the central editor content, its rows, and each row's live
     /// <c>ScribeMultilineField</c> (caret + unsaved buffer intact) — rather than unmounting and rebuilding
     /// them. Reserve <c>ForceRebuild()</c> for the genuinely-new-tree cases (view switches, fresh editor
-    /// seed, lost-lock recovery — §3.3). A no-op before the body has mounted (defensive).</summary>
+    /// seed, lost-lock recovery). A no-op before the body has mounted (defensive).</summary>
     private protected void RebuildBody() => bodyKey.CurrentState<ScribeDialogBody.BodyState>()?.Rebuild();
 
     /// <param name="inventory">The block-entity inventory to bind this dialog to, or <c>null</c> for the
     /// document-only surfaces (Lectern/Notebook/Tablet). When non-null, the base
     /// <see cref="Gui.GuiDialogBlockEntityBase"/> ctor auto-fires <c>OpenInventory</c> on open and
     /// <c>CloseInventoryAndSync</c> on close, so a slot tab (Scriptorium) can host live LibGUI slot widgets.
-    /// The null path is byte-identical to the old inventory-less ctor (same by-pos duplicate-open guard).</param>
+    /// The null path behaves as an inventory-less ctor (same by-pos duplicate-open guard).</param>
     protected ScribeDialogBase(BlockPos pos, IScribeDocumentHost host, ICoreClientAPI capi, InventoryBase? inventory = null)
         : base(pos, inventory, capi)
     {
@@ -492,28 +481,27 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
         modSystem = capi.ModLoader.GetModSystem<ScribeModSystem>();
 
         // Seed the Read View filter pill + collapsed-group set from this instance's persisted state
-        // (read-view-filter-and-collapse task 4.3/7.2) — defaults to All / fully expanded when the host
+        // — defaults to All / fully expanded when the host
         // has never had either set.
         readViewFilterCategory = (ReadViewFilterCategory)host.ReadViewFilterCategory;
         collapsedReadViewGroupIds.UnionWith(host.CollapsedGroupIds);
 
-        // Light sampler for the ambient-illumination shade (respect-local-illumination). Bound to the live
+        // Light sampler for the ambient-illumination shade. Bound to the live
         // MySettings so a floor change is picked up on the next frame's sample; only read on the render thread.
         lightSampler = new ScribeAmbientLightSampler(capi, modSystem.MySettings, modSystem.VisualTuning);
 
         // Prime the shade from the light at the player RIGHT NOW, before TryOpen inflates the widget tree
         // (GuiBase.TryOpen calls Build() before OnGuiOpened runs — see GuiDialogScribeTablet's scratch seed).
         // Without this the first build uses the identity seed above, so a dialog opened in local darkness paints
-        // ONE bright frame before OnRenderGUI's first Sample darkens it — the "flash of bright then adjust to
-        // dark" that was reported. The sampler's first Sample snaps straight to the target (it does NOT ease up
+        // ONE bright frame before OnRenderGUI's first Sample darkens it. The sampler's first Sample snaps straight to the target (it does NOT ease up
         // from identity — see its hasSmoothed branch), so this is the correct resting shade, not a transition
         // start; the first OnRenderGUI sample then reports Changed=false and skips the redundant rebuild. A fresh
         // dialog is built per open (BlockEntity.OpenDialog / the item open paths both `new` one every time), so
         // this runs on every open. dt=0 is fine — the first-frame branch ignores it.
         currentShade = lightSampler.Sample(0f);
 
-        // Install the real-or-silent UI sound player for this player's current mute preference
-        // (scribe-mute-ui-sounds); GuiBase's ctor already set a real SoundPlayer, so this only needs to
+        // Install the real-or-silent UI sound player for this player's current mute preference;
+        // GuiBase's ctor already set a real SoundPlayer, so this only needs to
         // swap in the silent one when muted. Re-applied in OnMyPinsChanged so a live toggle takes effect.
         ApplyUiSoundPreference();
 
@@ -522,24 +510,24 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
         modSystem.MyPinsChanged += OnMyPinsChanged;
 
         // Recolor the Settings nav button live when the standalone settings window opens/closes
-        // (add-active-tab-nav-colors) — it can be toggled from the HUD gear while the lectern is open,
+        // — it can be toggled from the HUD gear while the lectern is open,
         // so we can't rely on a lectern interaction to trigger the rebuild. Unsubscribed in OnGuiClosed.
         modSystem.SettingsVisibilityChanged += OnSettingsVisibilityChanged;
 
         // Refresh an open Inbox/Assignment tab when this player's Sent/Received assignment views resync
-        // (add-assignment-and-quest-support §7.5) — e.g. after this player (or the other party) applies a
+        // — e.g. after this player (or the other party) applies a
         // state transition, or a brand-new assignment arrives. Unsubscribed in OnGuiClosed.
         modSystem.MyAssignmentsChanged += OnMyAssignmentsChanged;
 
         // Refresh an open Create Assignments tab when a fresh known-players sync arrives
-        // (persist-known-players-for-assignment) — e.g. another player just joined — so the target
+        // — e.g. another player just joined — so the target
         // picker reflects it without needing a reopen. Unsubscribed in OnGuiClosed.
         modSystem.KnownPlayersChanged += OnKnownPlayersChanged;
 
-        // Restrict Tab / Shift+Tab to this dialog's own editable text fields (exclude-checkboxes-from-tab-focus).
-        // gui@3.1.0 made every checkbox focusable AND made GuiBase.OnKeyDown drive Tab through
-        // FocusManager.TraversalPolicy, so the stock ReadingOrderTraversalPolicy began stopping Tab on each
-        // row's completion checkbox before its text field. There's no public seam to mark the checkbox's
+        // Restrict Tab / Shift+Tab to this dialog's own editable text fields. gui@3.1.0 makes every checkbox
+        // focusable AND drives Tab through FocusManager.TraversalPolicy, so the stock
+        // ReadingOrderTraversalPolicy would stop Tab on each row's completion checkbox before its text
+        // field. There's no public seam to mark the checkbox's
         // node non-traversable, so we install an allow-list policy that returns ONLY our field nodes, in the
         // active view's row order (see EditorFieldTraversalNodes). The Settings window is a separate dialog
         // with its own FocusManager, so it's unaffected.
@@ -568,7 +556,7 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// <summary>
     /// Override to supply nav buttons inserted BEFORE the Read tab — for a subclass whose own tab
     /// (Transcribe on the Scriptorium, Guest Book on the Lectern) should read as the first item in nav
-    /// order (assignment-icon-and-tab-defaults D5), without forking the rest of
+    /// order, without forking the rest of
     /// <see cref="ScribeDialogBase.BuildRightColNav"/>'s layout/shadow/alignment plumbing. The base
     /// implementation returns an empty sequence (no leading buttons — Read stays first).
     /// </summary>
@@ -603,8 +591,8 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
             clampToExtentFrames);
     }
 
-    /// <summary>Swap the LibGUI UI sound player to match this player's <c>MuteUiSounds</c> preference
-    /// (scribe-mute-ui-sounds): the shared no-op <see cref="ScribeModSystem.SilentSoundPlayer"/> when
+    /// <summary>Swap the LibGUI UI sound player to match this player's <c>MuteUiSounds</c> preference:
+    /// the shared no-op <see cref="ScribeModSystem.SilentSoundPlayer"/> when
     /// muted, else the stock <c>SoundPlayer</c> LibGUI's <c>GuiBase</c> installs. Called from the ctor
     /// and on every settings change (via <see cref="OnMyPinsChanged"/>), so flipping the toggle while the
     /// dialog is open re-installs the correct player without a reopen.</summary>
@@ -613,8 +601,7 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
 
     /// <summary>Whether THIS player has pinned the given task in this lectern's document. Drives the
     /// resting pin tint and the pin-glyph accent in both views. Delegates straight to
-    /// <see cref="ScribeModSystem.IsPinnedForMe"/>, which is itself optimism-aware (add-tracker-link-tasks
-    /// 7.11b / update-pins-1-3-3) — a pin/unpin this player just requested reads through the SAME overlay
+    /// <see cref="ScribeModSystem.IsPinnedForMe"/>, which is itself optimism-aware — a pin/unpin this player just requested reads through the SAME overlay
     /// the HUD and Pin Tab consume, so every surface agrees the instant the request is made rather than
     /// waiting for the server round-trip (in singleplayer, that round-trip stalls for as long as the
     /// Handbook holds the embedded server paused).</summary>
@@ -626,7 +613,7 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// every add gesture routes through this one gate. Counted against the live scratch document while
     /// editing (falls back to the host document if scratch is not yet initialized). Uncapped tiers
     /// (Lectern, Notebook — <see cref="ScribeDocumentPolicy.Unlimited"/>) always return true, so this
-    /// gates only the finite tiers (tablet + chalkboard — scribe-document-policy).</summary>
+    /// gates only the finite tiers (tablet + chalkboard).</summary>
     private bool CanAddTaskUnderPolicy()
     {
         var doc = scratch ?? host.Document;
@@ -642,17 +629,17 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     }
 
     /// <summary>Lang key for the "task cap reached" in-game notice raised by <see cref="NotifyTabletFull"/>.
-    /// <c>protected virtual</c> so a capped surface can word the notice for its own object
-    /// (refine-chalkboard). Default is the tablet's <c>scribe:tablet-full</c> ("A tablet holds at most 10
+    /// <c>protected virtual</c> so a capped surface can word the notice for its own object.
+    /// Default is the tablet's <c>scribe:tablet-full</c> ("A tablet holds at most 10
     /// tasks."); the chalkboard overrides it to <c>scribe:chalkboard-full</c> so a board never says
     /// "tablet". Uncapped tiers never reach this notice, so the default is inert for them.</summary>
     protected virtual string TaskCapReachedLangKey => "scribe:tablet-full";
 
-    /// <summary>Surface the "task cap reached" in-game error when an add is refused by a FINITE task cap
-    /// (zero-point-three-fixes §7.2). Only fires for a capped tier (the tablet's / chalkboard's
+    /// <summary>Surface the "task cap reached" in-game error when an add is refused by a FINITE task cap.
+    /// Only fires for a capped tier (the tablet's / chalkboard's
     /// <see cref="ScribeDocumentPolicy.MaxBlocks"/> is set) — uncapped tiers (Lectern, Notebook) never
-    /// refuse, so this is inert there. Called from the add-task gestures right where they used to return
-    /// silently, so the dimmed "Add task" button and the Enter-insert gesture now both explain themselves
+    /// refuse, so this is inert there. Called from the add-task gestures when they are refused, so the
+    /// dimmed "Add task" button and the Enter-insert gesture both explain themselves
     /// via the same transient-error path the lock notice uses. The notice wording routes through the
     /// <see cref="TaskCapReachedLangKey"/> seam so each capped surface names its own object. Keeps Core
     /// pure: the refusal is decided by the boolean <see cref="ScribeDocumentPolicy.CanAdd"/>; only the
@@ -721,20 +708,20 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     {
         if (!IsOpened()) return;
         TraceScroll("pins-changed");
-        // The optimistic pin overlay (7.11b / update-pins-1-3-3) reconciles itself inside
+        // The optimistic pin overlay reconciles itself inside
         // ScribeModSystem (ReconcileOptimisticPins), before it fires this event — IsPinnedForMe already
         // reads the settled state by the time this rebuild runs.
         // A settings change may have flipped the mute preference — re-install the matching sound player
-        // so a live toggle takes effect on this already-open dialog (scribe-mute-ui-sounds).
+        // so a live toggle takes effect on this already-open dialog.
         ApplyUiSoundPreference();
-        // Editor view (reconcile-animating-surfaces §3.1): the pin set is per-player, NOT part of scratch,
+        // Editor view: the pin set is per-player, NOT part of scratch,
         // so a pin change is a pure chrome repaint — the row set is structurally identical, so an in-place
         // RebuildBody reconcile REUSES every row (each ScribeMultilineField keeps its caret + buffer) and
         // just re-tints the pin indicators. The pin control isn't IFocusable, so pressing it blurred the
         // focused field via DispatchPointerDown; re-home focus onto that still-focused row via the deferred
         // RequestFocus (pendingFocusRow) — the reused field skips its mount-only autoFocus, so
         // autoFocusRowOnRebuild wouldn't fire. Reconcile preserves the shared scroll offset in place, so no
-        // capture-restore is needed here (that was only to survive the old ForceRebuild's offset reset).
+        // capture-restore is needed here.
         if (isEditorMode)
         {
             if (focusedEditIndex is { } idx && idx < editorFocusNodes.Count) pendingFocusRow = idx;
@@ -742,7 +729,7 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
             return;
         }
 
-        // Pin Tab (reconcile-animating-surfaces §4.3): like the editor, the pin resync is an in-place
+        // Pin Tab: like the editor, the pin resync is an in-place
         // reconcile — ScribePinnedContent keys every row by ValueKey<Guid>(TaskId), owns its drag state
         // internally, and re-seeds each field from pinEditBuffer, so RebuildBody REUSES every row (each
         // ScribeMultilineField keeps its caret + unsaved buffer) and just re-tints/re-orders. Re-home the
@@ -750,8 +737,7 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
         // control (none IFocusable) blurred the focused field via DispatchPointerDown, and a reused field
         // skips its mount-only autoFocus, so autoFocusPinTaskId wouldn't re-fire here. A blur doesn't clear
         // focusedPinTaskId, so it still names the row; re-arm only if that pin still exists in the new set.
-        // Reconcile preserves the shared scroll offset in place, so no capture-restore (that was only for
-        // the old ForceRebuild's offset reset).
+        // Reconcile preserves the shared scroll offset in place, so no capture-restore.
         if (viewMode == ScribeLecternView.Pinned)
         {
             if (focusedPinTaskId is { } pinId && modSystem.MyPins.Any(p => p.TaskId == pinId))
@@ -760,18 +746,17 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
             // cursor. Unlike a ForceRebuild (fresh hovered=false tree caught by ArmIfRebuilt), a reconcile
             // leaves RootElement unchanged and REUSES rows with their stale hovered flag — so arm the hover
             // latch to re-dispatch a synthetic pointer-move and re-home the hover-gated delete/unpin controls
-            // without a mouse wiggle (fix-list-collapse-stale-hover). Harmless no-op when no row moved.
+            // without a mouse wiggle. Harmless no-op when no row moved.
             hoverRefreshLatch.Arm();
             RebuildBody();
             return;
         }
 
-        // Read view (reconcile-animating-surfaces §5): the pin set is per-player, NOT part of the document,
+        // Read view: the pin set is per-player, NOT part of the document,
         // so a pin change is a pure chrome repaint — the read row set is structurally identical, so an
         // in-place RebuildBody reconcile REUSES every row (preserving the shared scroll offset inherently)
-        // and just re-tints the pin indicators. This replaces the old ForceRebuild + capture-restore dance:
-        // the read list is now non-virtualized + TaskId-keyed (see ScribeReadContent), so it reconciles like
-        // the editor and Pin Tab. A completion elsewhere can slide a row under a stationary cursor; arm the
+        // and just re-tints the pin indicators. The read list is non-virtualized + TaskId-keyed (see
+        // ScribeReadContent), so it reconciles like the editor and Pin Tab. A completion elsewhere can slide a row under a stationary cursor; arm the
         // hover latch so the hover-gated pin control re-homes without a mouse wiggle.
         if (viewMode == ScribeLecternView.Read)
         {
@@ -779,32 +764,32 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
             RebuildBody();
             return;
         }
-        // Any remaining non-editor view (History/Timer/Visitors) still ForceRebuilds; capture the offset so
+        // Any remaining non-editor view (History/Timer/Visitors) ForceRebuilds; capture the offset so
         // the OnRenderGUI restore loop re-applies it once content height settles.
         CaptureScrollForRestore();
         ForceRebuild();
     }
 
     /// <summary>Rebuild when the standalone settings window opens/closes so the Settings nav button picks
-    /// up or drops its active color (add-active-tab-nav-colors). Scroll position must be captured before
+    /// up or drops its active color. Scroll position must be captured before
     /// the rebuild — ForceRebuild re-derives content height and clamps the offset toward 0.</summary>
     private void OnSettingsVisibilityChanged()
     {
         if (!IsOpened()) return;
         TraceScroll("settings-vis");
-        // Editor view (§3.1): the nav column (with the Settings button) lives inside the persistent body, so
+        // Editor view: the nav column (with the Settings button) lives inside the persistent body, so
         // an in-place reconcile re-tints the button while REUSING the editor rows — no caret/scroll loss, no
         // capture-restore needed (reconcile keeps the shared offset). Re-home the focused row's caret in case
-        // an earlier press cleared focus. Non-editor views keep ForceRebuild until §4/§5.
+        // an earlier press cleared focus.
         if (isEditorMode)
         {
             if (focusedEditIndex is { } idx && idx < editorFocusNodes.Count) pendingFocusRow = idx;
             RebuildBody();
             return;
         }
-        // Pin Tab (§4.3): the nav column lives inside the persistent body, so an in-place reconcile re-tints
+        // Pin Tab: the nav column lives inside the persistent body, so an in-place reconcile re-tints
         // the Settings button while REUSING the pin rows — no caret/scroll loss. Re-home the focused row via
-        // the deferred pendingFocusPinTaskId in case an earlier press cleared focus. Read stays on ForceRebuild.
+        // the deferred pendingFocusPinTaskId in case an earlier press cleared focus.
         if (viewMode == ScribeLecternView.Pinned)
         {
             if (focusedPinTaskId is { } pinId && modSystem.MyPins.Any(p => p.TaskId == pinId))
@@ -812,9 +797,9 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
             RebuildBody();
             return;
         }
-        // Read view (§5): the nav column (with the Settings button) lives inside the persistent body, so an
+        // Read view: the nav column (with the Settings button) lives inside the persistent body, so an
         // in-place reconcile re-tints the button while REUSING the read rows — no scroll loss, no
-        // capture-restore. Now reachable because the read list is non-virtualized + TaskId-keyed.
+        // capture-restore (the read list is non-virtualized + TaskId-keyed).
         if (viewMode == ScribeLecternView.Read)
         {
             RebuildBody();
@@ -827,7 +812,7 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     protected override WindowConfig CreateWindowConfig()
     {
         // The whole dialog is the notebook art's OuterArtBox: size it to W × H (art aspect) so the
-        // stretch-to-fill backdrop renders un-distorted (scribe-notebook-frame). W is the player's Pixel
+        // stretch-to-fill backdrop renders un-distorted. W is the player's Pixel
         // Art Size preference, read fresh at open (TryOpen calls this per open, after the ctor set
         // modSystem). Non-resizable so the aspect (hence the art) can never be stretched off-square; the
         // title-bar band is the drag zone, so DragHandleHeight matches its height instead of the stock 24.
@@ -842,32 +827,28 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     }
 
     /// <summary>
-    /// The native dialog overrode <c>IsInRangeOfBlock</c> to fix a Creative-mode walk-away bug: the
-    /// engine inflates <c>PickingRange</c> to ~100 blocks in Creative, so the base's pick-range
-    /// auto-close never fired. LibGUI's <see cref="GuiDialogBlockEntityBase"/> uses a different
-    /// override point -- <c>OnFinalizeFrame</c> calls <c>IsOutOfRange(playerPos, pos,
-    /// InteractionRange)</c>, and <c>InteractionRange</c> defaults to the same mode-inflated
-    /// <c>PickingRange</c>. Pin it to the fixed survival interaction distance so walk-away
+    /// LibGUI's <see cref="GuiDialogBlockEntityBase"/> auto-closes via <c>OnFinalizeFrame</c>, which calls
+    /// <c>IsOutOfRange(playerPos, pos, InteractionRange)</c>; <c>InteractionRange</c> defaults to
+    /// <c>PickingRange</c>, which the engine inflates to ~100 blocks in Creative. Pin it to the fixed survival interaction distance so walk-away
     /// auto-close fires in every game mode, including while a row is being edited.
     /// </summary>
     protected override double InteractionRange => GlobalConstants.DefaultPickingRange + 0.5;
 
     /// <summary>
-    /// Match the vanilla Inventory/Handbook/chest <c>DrawOrder</c> band (0.2) instead of <c>GuiBase</c>'s
+    /// Matches the vanilla Inventory/Handbook/chest <c>DrawOrder</c> band (0.2) rather than <c>GuiBase</c>'s
     /// unset default (vanilla <c>GuiDialog</c>'s 0.1), so Scribe surfaces stack correctly against OTHER
     /// LibGUI windows in the same band — e.g. PlayerInvUI's <c>SurvivalInventoryDialog</c>, which itself
     /// overrides to 0.2. Both windows paint through the SAME shared Skia surface, so within this band
     /// pixels and hit-tests agree and <c>RequestFocus</c> correctly brings whichever one opened/focused
     /// last to the top. This does NOT fix overlap with vanilla Cairo/GL dialogs (real Handbook/Inventory):
     /// that failure mode is a different pipeline-ordering problem (PostSkiaPipeline flushes before
-    /// GuiManager) and is a deliberately parked, harder fix — see the DrawOrder notes in VSAPI-NOTES.md.
+    /// GuiManager) and has no fix here — see the DrawOrder notes in VSAPI-NOTES.md.
     /// </summary>
     public override double DrawOrder => 0.2;
 
     /// <summary>
     /// Decline a click that lands inside a vanilla Cairo/GL dialog's own bounds
-    /// (<see cref="ScribeVanillaDialogGuard.IsVanillaDialogAt"/>, fix-libgui-click-draw-order-mismatch) —
-    /// a new consumer of that change's guard. Opening a Quest Link or Handbook link from a Scribe row
+    /// (<see cref="ScribeVanillaDialogGuard.IsVanillaDialogAt"/>). Opening a Quest Link or Handbook link from a Scribe row
     /// pushes exactly this kind of vanilla dialog on top of Scribe's own window; per the <c>DrawOrder</c>
     /// doc above, that overlap is a pipeline-ordering mismatch (vanilla always paints on top; click
     /// dispatch does not follow paint order) with no real z-order fix available. Returning early here
@@ -875,20 +856,14 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// <c>LoadedGuis</c> past Scribe to whatever vanilla dialog actually owns that point, instead of Scribe
     /// swallowing the click.
     ///
-    /// <para><b>Revision (2026-09-07):</b> the first version of this fix overrode
-    /// <see cref="Vintagestory.API.Client.GuiDialog.ShouldReceiveMouseEvents"/> to return false whenever ANY
-    /// vanilla dialog was open ANYWHERE on screen — a blanket check with no click position at all (that
-    /// method takes none). This made Scribe's own window impossible to click back into focus for as long as
-    /// the vanilla dialog stayed open, even for a click that landed squarely on Scribe and nowhere near the
-    /// vanilla dialog — the opposite of what was wanted. Moving the check into <c>OnMouseDown</c> (which DOES
-    /// receive <paramref name="args"/>'s <c>X</c>/<c>Y</c>) makes it point-specific: a click outside every
-    /// open vanilla dialog's bounds falls through to <c>base.OnMouseDown</c> normally, hits Scribe's own
-    /// composer, and lets <c>GuiManager</c> call <c>RequestFocus</c> on Scribe exactly as before this change
-    /// existed — so clicking back on Scribe regains focus/interactivity immediately, vanilla dialog or not.</para>
+    /// <para>The check lives in <c>OnMouseDown</c> rather than <see cref="Vintagestory.API.Client.GuiDialog.ShouldReceiveMouseEvents"/>
+    /// because only <c>OnMouseDown</c> receives <paramref name="args"/>'s <c>X</c>/<c>Y</c>, so the decision is
+    /// point-specific: a click outside every open vanilla dialog's bounds falls through to
+    /// <c>base.OnMouseDown</c> normally, hits Scribe's own composer, and lets <c>GuiManager</c> call
+    /// <c>RequestFocus</c> on Scribe, so clicking back on Scribe regains focus immediately, vanilla dialog open or not.</para>
     ///
-    /// <para>Considered and rejected: relying on <c>GuiBase</c>'s own private <c>IsBlockedByFrontDialog</c>
-    /// (which yields to another FOCUSED LibGUI-visible dialog at the click point) instead of a dedicated
-    /// check. That method is inaccessible outside `Gui.dll`, and per this project's own confirmed finding
+    /// <para>This does not rely on <c>GuiBase</c>'s own private <c>IsBlockedByFrontDialog</c>
+    /// (which yields to another FOCUSED LibGUI-visible dialog at the click point). That method is inaccessible outside `Gui.dll`, and per this project's own confirmed finding
     /// (`VSAPI-NOTES.md`, also documented at <c>DrawOrder</c> above) it was never confirmed reliable across
     /// the vanilla-Cairo/GL-vs-LibGUI/Skia pipeline boundary in the first place. This override also does NOT
     /// require the vanilla dialog to be "focused" the way that method would — per the same finding, a
@@ -907,16 +882,15 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// <summary>
     /// Capture ALL keyboard/mouse input ONLY while an editor or Pin-Tab field actually holds focus, so
     /// typed keys don't leak to the game (movement, hotbar, keybinds). Gated on a field being focused
-    /// rather than on <c>isEditorMode</c> alone (v1-playtest-fixes): when the editor view is open but
+    /// rather than on <c>isEditorMode</c> alone: when the editor view is open but
     /// no field holds focus (e.g. after "New Task" → click away), global hotkeys must still fire.
     ///
-    /// <para>v1-playtest-fixes (second pass): <see cref="OnRowFocusChanged"/> only fires on focus-gained,
+    /// <para><see cref="OnRowFocusChanged"/> only fires on focus-gained,
     /// so <see cref="focusedEditIndex"/> stays non-null after a click-away, keeping capture live after
     /// unfocus. Guard with a live <see cref="FocusNode.HasFocus"/> check so capture drops the moment no
     /// field holds the active focus token.</para>
     ///
-    /// <para><b>Gate on <see cref="Vintagestory.API.Client.GuiDialog.Focused"/>
-    /// (fix-settings-numeric-arrow-focus-leak).</b> <c>GuiManager.OnKeyDown</c> runs a FIRST pass over
+    /// <para><b>Gate on <see cref="Vintagestory.API.Client.GuiDialog.Focused"/>.</b> <c>GuiManager.OnKeyDown</c> runs a FIRST pass over
     /// every open dialog whose <see cref="CaptureAllInputs"/> is true — BEFORE the normal focused-dialog
     /// pass — and stops on the first that marks the key Handled. Each LibGUI <see cref="GuiBase"/> owns its
     /// OWN <c>FocusManager</c>, so when the standalone Scribe Settings window is on top and a document
@@ -924,9 +898,9 @@ public abstract partial class ScribeDialogBase : GuiDialogBlockEntityBase
     /// manager even though the editor is no longer the focused VS dialog (clicking the settings field ran
     /// <c>capi.Gui.RequestFocus(settingsDialog)</c>, which <c>UnFocus()</c>es the editor but never touches
     /// the editor's LibGUI focus). Ungated, the editor therefore CAPTURED the settings window's Up/Down
-    /// arrow presses in that first pass and drove the row's caret instead of stepping the numeric field —
-    /// the arrow-key focus-leak. Requiring <c>Focused</c> means an editor that is not the active dialog no
-    /// longer pre-empts keyboard input, so the key reaches the focused settings dialog. This cannot regress
+    /// arrow presses in that first pass and drive the row's caret instead of stepping the numeric field.
+    /// Requiring <c>Focused</c> means an editor that is not the active dialog does not
+    /// pre-empt keyboard input, so the key reaches the focused settings dialog. This keeps
     /// the capture's real job (blocking movement/hotbar keys from the game WHILE typing into the editor),
     /// which only applies when the editor IS the focused dialog.</para>
     /// </summary>

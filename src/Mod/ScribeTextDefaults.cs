@@ -8,7 +8,7 @@ namespace Scribe;
 /// Roots a <b>task-text</b> tab's widget subtree in a <see cref="DefaultTextStyle"/> carrying the
 /// player's Task Text Font and window-scaled pegged size, so descendant <c>Text</c> widgets inherit
 /// them instead of each threading <c>FontFamily = ScribeTaskFont.Resolve(...)</c> by hand
-/// (adopt-libgui-31-improvements). Settings chrome uses <see cref="WrapSettingsChrome"/> instead.
+/// Settings chrome uses <see cref="WrapSettingsChrome"/> instead.
 /// 3.1.0's <c>Text.Build</c> does <c>StyleOverride?.Merge(DefaultTextStyle.Of(context))</c>, so a partial
 /// per-widget override (e.g. just <c>Color</c>) inherits family + size from this ancestor.
 ///
@@ -17,8 +17,7 @@ namespace Scribe;
 /// from <c>base</c>. So a widget that sets a field to its DEFAULT value (<c>SoftWrap = false</c>,
 /// <c>Align = <zero></c>, <c>FontSize = 0</c>) would silently inherit instead. To keep every per-widget
 /// non-default override winning, this ancestor carries ONLY <see cref="TextStyle.FontFamily"/> and a base
-/// <see cref="TextStyle.FontSize"/> — never <c>SoftWrap</c>/<c>Align</c>/etc. See design.md for the
-/// field-by-field confirmation.</para>
+/// <see cref="TextStyle.FontSize"/> — never <c>SoftWrap</c>/<c>Align</c>/etc.</para>
 /// </summary>
 internal static class ScribeTextDefaults
 {
@@ -43,7 +42,7 @@ internal static class ScribeTextDefaults
 
     /// <summary>Settings chrome: Scribe's own bundled default face (<see cref="ScribeTaskFont.DefaultFamily"/>)
     /// at the unscaled settings size. Does NOT follow Task Text Font or Window Text Size — those knobs
-    /// live on this form and must not restyle the form itself (peg-task-fonts-to-caudex playtest).</summary>
+    /// live on this form and must not restyle the form itself.</summary>
     public static DefaultTextStyle WrapSettingsChrome(Widget child) =>
         new(new TextStyle
         {
@@ -56,7 +55,7 @@ internal static class ScribeTextDefaults
     /// bundled default face (<see cref="ScribeTaskFont.DefaultFamily"/>) instead of leaving it to fall
     /// through to LibGUI's raw, un-anchored <c>TextStyle</c> ctor default (the literal <c>"sans-serif"</c>
     /// sentinel, which resolves to a live, platform-dependent system-font lookup —
-    /// [[wrapsettingschrome-defaultfamily-regression]]/VSAPI-NOTES.md "Custom TTF fonts in the GUI").
+    /// see VSAPI-NOTES.md "Custom TTF fonts in the GUI").
     /// Carries ONLY <c>FontFamily</c> — every existing descendant <c>TextStyle</c> in these surfaces
     /// already sets its own explicit <c>FontSize</c>, so there is nothing to peg here.</summary>
     public static DefaultTextStyle WrapChrome(Widget child) =>

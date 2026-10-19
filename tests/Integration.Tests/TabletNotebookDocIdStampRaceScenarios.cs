@@ -8,11 +8,9 @@ using Vintagestory.API.Datastructures;
 namespace Integration.Tests;
 
 /// <summary>
-/// fix-tablet-notebook-docid-stamp-race: regression coverage for the confirmed root cause of a
-/// Discord report (2026-09-11, 220ish-mod server) — "whatever task in the clay tablet goes away
-/// when closing the interface and re-opening it, however the pinned task remains." Diagnostic
-/// logging shipped to the reporter and their returned server log showed two independent server-side
-/// paths that stamped a fresh, uncoordinated <c>DocId</c> onto a documentless stack: (1)
+/// Regression coverage for a race where a task in the clay tablet is lost when the interface is
+/// closed and re-opened while the pinned task remains. Two independent server-side
+/// paths stamp a fresh, uncoordinated <c>DocId</c> onto a documentless stack: (1)
 /// <see cref="NotebookHost"/>'s constructor writing a placeholder document as a side effect of being
 /// constructed, and (2) <c>RecordPickedUpIfNew</c>'s one-time PickedUp-history bookkeeping flushing
 /// the document as a side effect of recording history it never touched. Both are reachable from
@@ -21,10 +19,6 @@ namespace Integration.Tests;
 /// DocId when it opens the same fresh item. Whichever side stamps first "wins"; the loser's client
 /// then has every save silently refused by <see cref="ScribeModSystem.OnServerReceivedNotebookSave"/>'s
 /// DocId-mismatch guard, with no error surfaced back to the player.
-///
-/// Replaces the earlier diagnostic-only <c>TabletTaskLossDiagnosticScenarios.cs</c>, which
-/// reproduced two candidate mechanisms (a competing re-stamp, and hardening mid-edit) that turned
-/// out NOT to be what actually happened — this file tests the real, confirmed mechanism instead.
 /// </summary>
 public class TabletNotebookDocIdStampRaceScenarios : AtlasScenarioBase
 {
@@ -50,7 +44,7 @@ public class TabletNotebookDocIdStampRaceScenarios : AtlasScenarioBase
         });
     }
 
-    // ── 1.3: constructing a host over a documentless stack writes nothing ──
+    // ── constructing a host over a documentless stack writes nothing ──
 
     [AtlasScenario(RollbackWorld = true)]
     public async Task Constructing_a_notebook_host_over_a_documentless_stack_writes_nothing()
@@ -68,7 +62,7 @@ public class TabletNotebookDocIdStampRaceScenarios : AtlasScenarioBase
         Assert.False(ScribeDocumentAttributes.TryReadFrom(slot.Itemstack!, out _));
     }
 
-    // ── 2.3/2.4: the ambient sweep records PickedUp normally, without stamping a document ──
+    // ── the ambient sweep records PickedUp normally, without stamping a document ──
 
     [AtlasScenario(RollbackWorld = true)]
     public async Task Ambient_sweep_records_pickedup_on_a_documentless_notebook_without_stamping_it()
@@ -78,7 +72,7 @@ public class TabletNotebookDocIdStampRaceScenarios : AtlasScenarioBase
         Mod.OnHistoryScanTick(0f);
 
         // The sweep still visited and recorded on this stack (proving it isn't skipped just because
-        // it has no document -- design.md Decision 2, which rejected guarding the sweep itself)...
+        // it has no document; the sweep itself is not guarded)...
         var history = HistoryStore.Deserialize(slot.Itemstack!.Attributes.GetBytes("scribeHistory"));
         Assert.Contains(history.Entries, e => e.Kind == HistoryEventKind.PickedUp && e.ActorName == player.Player.PlayerName);
         // ...but recording that entry did not stamp a document as a side effect.
@@ -97,7 +91,7 @@ public class TabletNotebookDocIdStampRaceScenarios : AtlasScenarioBase
         Assert.False(ScribeDocumentAttributes.TryReadFrom(slot.Itemstack!, out _));
     }
 
-    // ── 3.1/3.2: the actual end-to-end race is fixed -- a save after the ambient sweep is accepted ──
+    // ── the end-to-end race: a save after the ambient sweep is accepted ──
 
     [AtlasScenario(RollbackWorld = true)]
     public async Task Notebook_save_after_the_ambient_sweep_races_it_and_is_accepted()
@@ -105,9 +99,9 @@ public class TabletNotebookDocIdStampRaceScenarios : AtlasScenarioBase
         var (player, slot) = await SeedDocumentlessItem("RaceFixed1", "scribenotebook");
 
         // The exact confirmed sequence from the reporter's log: the player opens a brand-new,
-        // documentless notebook (constructing a NotebookHost -- fix 1.1 means this writes nothing),
-        // the ambient sweep fires in the same window and records this player's PickedUp entry (fix
-        // 2.1 means this writes only history, not a document either), and only THEN does the
+        // documentless notebook (constructing a NotebookHost -- this writes nothing),
+        // the ambient sweep fires in the same window and records this player's PickedUp entry (this
+        // writes only history, not a document either), and only THEN does the
         // player's own client flush its first edit under a DocId it minted itself when it opened.
         var clientDoc = new ScribeDocument();
         clientDoc.AddTask("Find copper");
@@ -116,9 +110,8 @@ public class TabletNotebookDocIdStampRaceScenarios : AtlasScenarioBase
         Mod.OnHistoryScanTick(0f);
         FlushNotebookSave(player, slot, clientDoc);
 
-        // Before this fix, the ambient sweep would have already stamped a DIFFERENT DocId onto the
-        // stack, and this save would have been silently refused (DocId mismatch). Now nothing raced
-        // it, so the save lands.
+        // Nothing has stamped a different DocId onto the stack, so the save is not refused for a
+        // DocId mismatch and lands.
         Assert.True(ScribeDocumentAttributes.TryReadFrom(slot.Itemstack!, out var onStack));
         Assert.Equal(clientDocId, onStack!.DocId);
         Assert.Contains(onStack.Blocks, b => b.Text == "Find copper");

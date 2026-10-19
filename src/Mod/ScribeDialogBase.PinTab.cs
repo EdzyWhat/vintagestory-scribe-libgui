@@ -27,7 +27,7 @@ namespace Scribe;
 
 public abstract partial class ScribeDialogBase
 {
-    // ---------------- Pin Tab (scribe-pin-editor) ----------------
+    // ---------------- Pin Tab ----------------
 
     /// <summary>The Pin Tab body: the player's pins across every document (in pin-list order, no row cap),
     /// each row editable by default reusing the editor's <see cref="ScribeEditRow"/> rendering but sourced
@@ -54,12 +54,12 @@ public abstract partial class ScribeDialogBase
             {
                 // A pinned Tracker/Link carries its item code in the snapshot (TargetItemCode / LinkTarget),
                 // so resolve the icon + name here (where capi lives) and render item-shaped — mirroring the
-                // read/editor views (add-tracker-link-tasks 7.8). A plain Task resolves to (null, null) and
+                // read/editor views. A plain Task resolves to (null, null) and
                 // keeps its editable text field.
                 var (stack, name) = ResolvePinItem(p);
                 // Unlike Read/Editor (which read a live ScribeAssignment via ResolveAssignmentTooltipInfo),
                 // the pin snapshot carries its own assignment provenance directly (no source document to
-                // read from — assignment-icon-and-tab-defaults), so only the assigner's uid needs resolving.
+                // read from), so only the assigner's uid needs resolving.
                 string? assignerName = p.IsAcceptedAssignment ? ResolvePlayerNameForInbox(p.AssignerUid) : null;
                 // Same synthetic guide-page-scheme substitution as the read/editor row construction — routes
                 // a label-only QuestObjective's icon through the existing book-glyph fallback. Display-only.
@@ -97,7 +97,7 @@ public abstract partial class ScribeDialogBase
             onUnpin: OnPinUnpinTask,
             // A pinned Tracker/Link's name is a hyperlink: open its target's Handbook page, keyed off the
             // snapshot code the pin carries (Link→LinkTarget, Tracker→TargetItemCode), so it works even when
-            // the source document is unloaded. Never touches completion (add-tracker-link-tasks 7.8).
+            // the source document is unloaded. Never touches completion.
             onOpenLink: OnPinOpenLink,
             onReorder: OnPinReorder,
             completionPolicy: modSystem.MySettings.CompletionPolicy,
@@ -108,16 +108,16 @@ public abstract partial class ScribeDialogBase
             style: RowStyle,
             scrollController: sharedScrollController,
             showSubtitleRow: modSystem.VisualTuning.ShowSubtitleRow,
-            // Host-owned collapse registry (extract-animated-task-list): a removed pin's row collapses out
+            // Host-owned collapse registry: a removed pin's row collapses out
             // via ScribeAnimatedList instead of snapping. Lives on the dialog so the motion survives the
             // resync reconcile, and so OnRenderGUI can read AnyAnimating to pin the scroll + refresh hover.
             collapseRegistry: pinCollapseRegistry,
             // A departing row finished collapsing → re-clamp the (now shorter) scroll extent, mirroring the
-            // editor's OnEditorRowCollapsed → RequestClampToExtent. The container retires the ghost itself.
+            // editor and read view (RequestClampToExtent). The container retires the ghost itself.
             onDepartureSettled: RequestClampToExtent,
-            // Live shade so the policy-caption hover tooltip dims with the body in low light (D2).
+            // Live shade so the policy-caption hover tooltip dims with the body in low light.
             currentShade: currentShade,
-            // Per-surface restyle of the policy picker's open menu (refine-chalkboard): the chalkboard fixes
+            // Per-surface restyle of the policy picker's open menu: the chalkboard fixes
             // its unreadable selected-row colors; every other surface passes the theme default through.
             decoratePolicyDropdownStyle: DecoratePolicyDropdownStyle,
             assignedStampBitmap: modSystem.GetGuiTextureBitmap(ScribeAssignedTaskIcon.Asset),
@@ -128,14 +128,13 @@ public abstract partial class ScribeDialogBase
     /// <c>(null, null)</c> for a plain Task pin (which keeps its editable text field). Mirrors
     /// <see cref="ResolveRowItem"/> but reads the pin's own snapshot (a Tracker's
     /// <see cref="ScribePinnedRef.TargetItemCode"/> / a Link's <see cref="ScribePinnedRef.LinkTarget"/>)
-    /// rather than a live document block, so a pinned item row renders even when its source is unloaded
-    /// (add-tracker-link-tasks 7.8).</summary>
+    /// rather than a live document block, so a pinned item row renders even when its source is unloaded.</summary>
     private (ItemStack? Stack, string? Name) ResolvePinItem(ScribePinnedRef p)
     {
         if (p.Kind == ScribeBlockKind.QuestObjective)
         {
             // Mirrors ResolveRowItem's QuestObjective branch (ScribeDialogBase.Layout.cs) — the objective's
-            // own match code lives in LinkTarget (never a "page:"/"quest:"-scheme target — 1.3), so it never
+            // own match code lives in LinkTarget (never a "page:"/"quest:"-scheme target), so it never
             // routes through ResolveDisplay's scheme dispatch below.
             return p.TargetItemCode is { } objItemCode
                 ? ScribeItemRef.ResolveDisplay(capi.World, objItemCode, null)
@@ -144,7 +143,7 @@ public abstract partial class ScribeDialogBase
         string? code = p.Kind switch
         {
             // A Craft parent renders its recipe OUTPUT item, carried in the same TargetItemCode slot a
-            // Tracker uses (add-crafting-tasks 9.1), so both resolve identically here.
+            // Tracker uses, so both resolve identically here.
             ScribeBlockKind.Tracker or ScribeBlockKind.Craft => p.TargetItemCode,
             ScribeBlockKind.Link => p.LinkTarget,
             _ => null,
@@ -155,7 +154,7 @@ public abstract partial class ScribeDialogBase
 
     /// <summary>Pin Tab hyperlink: open a pinned Tracker/Link's target Handbook page, keyed off the code the
     /// pin snapshot carries so it resolves without the source document loaded. Never touches completion —
-    /// the row's checkbox is a separate control (add-tracker-link-tasks 7.8).</summary>
+    /// the row's checkbox is a separate control.</summary>
     private void OnPinOpenLink(Guid taskId)
     {
         var pin = modSystem.MyPins.FirstOrDefault(p => p.TaskId == taskId);
@@ -218,7 +217,7 @@ public abstract partial class ScribeDialogBase
     /// <para>Sink ordering is applied only when the policy actually sinks done pins; under Keep, done pins
     /// hold their position, and Unpin/Delete remove the pin entirely so ordering is moot and raw order is
     /// fine. The HUD's <c>BuildOrderedRows</c> applies this identical rule with no overlay, so the two
-    /// surfaces render one and the same order (sync-pinned-order-per-player D1).</para></summary>
+    /// surfaces render one and the same order.</para></summary>
     private IReadOnlyList<ScribePinnedRef> OrderedPinsForDisplay()
     {
         var policy = modSystem.MySettings.CompletionPolicy;
@@ -238,7 +237,7 @@ public abstract partial class ScribeDialogBase
 
     /// <summary>Commit a Pin Tab row's buffered text edit: send the identity-addressed edit if the text
     /// changed from the server snapshot and is non-blank, then drop the buffer. A blank/whitespace-only
-    /// edit is dropped WITHOUT sending (the server would reject it anyway — spec "blank edit is rejected");
+    /// edit is dropped WITHOUT sending (the server would reject it anyway);
     /// the field re-seeds from the unchanged snapshot on the next rebuild. Called on blur, Enter, and a
     /// row→row focus move.</summary>
     private void CommitPinTextEdit(Guid taskId)
@@ -293,7 +292,7 @@ public abstract partial class ScribeDialogBase
 
     /// <summary>Pin Tab unpin control: remove only the pin (the task survives), via the existing
     /// <see cref="ScribeSetPinMessage"/> with <c>Pinned = false</c> — no block resolution needed. Also
-    /// records the optimistic removal (update-pins-1-3-3) so the row disappears from every surface at
+    /// records the optimistic removal so the row disappears from every surface at
     /// once rather than waiting for the server round-trip.</summary>
     private void OnPinUnpinTask(Guid docId, Guid taskId)
     {
@@ -313,7 +312,7 @@ public abstract partial class ScribeDialogBase
     /// <see cref="ScribeModSystem.MyPins"/>'s raw storage order. Building the working copy from the raw list
     /// would silently apply the drag to the wrong rows whenever a done pin is mixed in with not-done ones — so
     /// this must start from the SAME list <see cref="BuildPinnedContent"/> rendered the rows from. The
-    /// permutation itself is computed by <see cref="ScribePinOrdering.Reorder"/> (same-depth-reorder): a
+    /// permutation itself is computed by <see cref="ScribePinOrdering.Reorder"/>: a
     /// depth-0 pin moves together with its already-pinned depth-1 children, and a cross-depth drop (or a
     /// move-to-same index) is a no-op — no packet is sent. The server permutes only this player's list and
     /// re-pushes.</summary>

@@ -15,14 +15,13 @@ using Vintagestory.API.Config;   // Lang
 namespace Scribe;
 
 /// <summary>
-/// One selectable row of a staged document on the Create Assignments tab (assignment-multi-item-creation
-/// design.md D10). Reuses <see cref="ScribeReadRowData"/> as its data model and
+/// One selectable row of a staged document on the Create Assignments tab. Reuses <see cref="ScribeReadRowData"/> as its data model and
 /// <see cref="ScribeReadRow.BuildItemContent"/>'s per-kind rendering shape (task text, or an item
 /// icon+name with a Tracker/Craft have-need counter) — but NOT <see cref="ScribeReadRow"/> itself: this is
 /// a picker surface, not an editable/completable one, so it drops the pin affordance, the "switch to
 /// editor" footer, cuneiform display, and the Done checkbox entirely, swapping in an independent Selected
 /// checkbox instead. Stateless: selection lives on the dialog (<see cref="GuiDialogScribeAssignmentDesk"/>)
-/// because the parent-cascades-to-subtasks rule (D11) needs to touch several rows' selection at once,
+/// because the parent-cascades-to-subtasks rule needs to touch several rows' selection at once,
 /// which a self-contained per-row State couldn't do.
 /// </summary>
 internal sealed class ScribeAssignmentStageRow : StatelessWidget
@@ -48,10 +47,10 @@ internal sealed class ScribeAssignmentStageRow : StatelessWidget
     {
         float iconSize = ScribeRowConstants.ItemIconSize * (style.ControlSize / ScribeRowConstants.RowCheckboxSize);
         float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
-        // This row's leading-slot checkbox is a SELECTION control (design.md D1a), not a completion toggle —
-        // unlike the other four surfaces, that slot isn't available for the quest-marker icon here, so a
-        // Quest Link instead shows the quest-marker icon INLINE, replacing the generic book-glyph
-        // ScribeLinkIcon.Build would otherwise render (quest-link-icon-and-color).
+        // This row's leading-slot checkbox is a SELECTION control, not a completion toggle — unlike the
+        // other surfaces, that slot isn't available for the quest-marker icon here, so a Quest Link
+        // instead shows the quest-marker icon INLINE, replacing the generic book-glyph
+        // ScribeLinkIcon.Build would otherwise render.
         bool isQuestLink = ScribeLinkTarget.IsQuest(Data.LinkTarget);
         float bandHeight = ScribeLinkIcon.VisualSize(iconSize, Data.LinkTarget);
         Vector4 linkColor = isQuestLink
@@ -149,8 +148,7 @@ internal sealed class ScribeAssignmentStageContent : StatelessWidget
     public IReadOnlyList<ScribeReadRowData> Rows { get; }
     public ISet<System.Guid> SelectedTaskIds { get; }
     public System.Action<System.Guid> OnToggleSelected { get; }
-    /// <summary>Whether the Desk's own document has an eligible task to pull in (add-assignment-desk-own-
-    /// tasks design.md D3) — gates the empty-state's "pull from Desk" button below.</summary>
+    /// <summary>Whether the Desk's own document has an eligible task to pull in — gates the empty-state's "pull from Desk" button below.</summary>
     public bool CanPullFromDesk { get; }
     /// <summary>Enters the Desk's local Editor through the dialog-owned lock-aware path.</summary>
     public System.Action OnCreateTasks { get; }

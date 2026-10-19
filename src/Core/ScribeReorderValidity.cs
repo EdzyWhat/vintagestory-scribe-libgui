@@ -1,7 +1,7 @@
 namespace Scribe.Core;
 
 /// <summary>
-/// Shared same-depth drag-reorder rule (same-depth-reorder), used by both the document editor's
+/// Shared same-depth drag-reorder rule, used by both the document editor's
 /// block reorder and the Pin Tab's pin reorder so the grip-handle's drop-target arrow (the
 /// player-visible signal) and the commit logic that actually moves rows can never disagree. Works
 /// over a plain list of <c>Depth</c> values rather than a <see cref="ScribeDocument"/> or a pin

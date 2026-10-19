@@ -8,7 +8,7 @@ namespace Scribe;
 
 /// <summary>
 /// Client-side Harmony postfix that appends a single "Add Link" clickable link to the bottom of every
-/// non-item Handbook <b>guide/explainer</b> page (add-tracker-link-tasks 7.6). The item-page patch
+/// non-item Handbook <b>guide/explainer</b> page. The item-page patch
 /// (<see cref="ScribeHandbookPatch"/>) offers Add Tracker + Add Link on pages with an item behind them;
 /// a guide page has no item, so only a <b>Link</b> makes sense (there is nothing to count for a Tracker).
 /// Clicking it calls <see cref="ScribeModSystem.AddGuideLinkFromHandbook"/> with the guide's page code and
@@ -18,7 +18,7 @@ namespace Scribe;
 /// <para>Patches <see cref="GuiHandbookTextPage.Init"/> (the survival mod's text-page builder). Init runs
 /// <c>comps = VtmlUtil.Richtextify(...)</c>, freshly rebuilding the component array each call, so appending in
 /// a postfix can never accumulate duplicates across repeated opens. The postfix only APPENDS — it never
-/// mutates existing components — so a page is byte-identical to vanilla apart from the trailing link. As with
+/// mutates existing components — so a page matches vanilla apart from the trailing link. As with
 /// <see cref="ScribeHandbookPatch"/>, Harmony and the survival mod both ship with the base game, so this adds
 /// no mod dependency.</para>
 ///

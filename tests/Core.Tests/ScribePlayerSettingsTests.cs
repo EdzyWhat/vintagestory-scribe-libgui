@@ -3,8 +3,8 @@ using Scribe.Core;
 namespace Scribe.Core.Tests;
 
 // Tests for the per-player settings normalization: the font-scale clamps/snaps and the HUD-offset
-// clamps added by add-settings-tab, plus a regression guard that the existing enum/numeric
-// normalization still holds when consolidated into one config. Pure/game-agnostic.
+// clamps, plus a guard that the enum/numeric
+// normalization holds when consolidated into one config. Pure/game-agnostic.
 public class ScribePlayerSettingsTests
 {
     [Fact]
@@ -38,7 +38,7 @@ public class ScribePlayerSettingsTests
     [Fact]
     public void Default_AutoPinOnQuestAccept_IsOn()
     {
-        // fix-quest-prompt-persistence-and-auto-pin: a fresh profile (and, since it's a plain new property,
+        // A fresh profile (and, since it's a plain new property,
         // an old config JSON predating this field — the deserializer just leaves the initializer's default
         // in place) auto-pins on quest accept; Normalized() leaves a plain bool untouched.
         Assert.True(new ScribePlayerSettings().AutoPinOnQuestAccept);
@@ -59,7 +59,7 @@ public class ScribePlayerSettingsTests
     [Fact]
     public void Default_LastAssignmentTargetUid_IsEmpty()
     {
-        // persist-known-players-for-assignment: an old config JSON missing the key defaults to "" (no
+        // An old config JSON missing the key defaults to "" (no
         // prior send), and Normalized() leaves the plain string untouched.
         Assert.Equal("", new ScribePlayerSettings().LastAssignmentTargetUid);
         Assert.Equal("", new ScribePlayerSettings().Normalized().LastAssignmentTargetUid);
@@ -71,7 +71,7 @@ public class ScribePlayerSettingsTests
     public void Default_TimerAutoDisappear_IsOn()
     {
         // A fresh profile (no saved preference) keeps the original behavior: a fired timer disappears
-        // from the HUD after ~30 s (timer-auto-disappear-setting). Normalized() leaves a bool untouched
+        // from the HUD after ~30 s. Normalized() leaves a bool untouched
         // (nothing to clamp), so a stored value round-trips unchanged — including an explicit false.
         Assert.True(new ScribePlayerSettings().TimerAutoDisappear);
         Assert.True(new ScribePlayerSettings().Normalized().TimerAutoDisappear);
@@ -160,7 +160,7 @@ public class ScribePlayerSettingsTests
     [Fact]
     public void NormalizePolicy_Keep_IsPreserved()
     {
-        // Keep (=3) is a defined policy and must survive normalization (regression against the new value).
+        // Keep (=3) is a defined policy and must survive normalization.
         Assert.Equal(ScribeCompletionPolicy.Keep,
             ScribePlayerSettings.NormalizePolicy(ScribeCompletionPolicy.Keep));
 
@@ -253,7 +253,7 @@ public class ScribePlayerSettingsTests
     [Fact]
     public void Normalized_UnknownEnums_FallBackToDefault()
     {
-        // Regression: consolidating the config must not change the enum/numeric normalization contract.
+        // Consolidating the config must not change the enum/numeric normalization contract.
         var s = new ScribePlayerSettings
         {
             CompletionPolicy = (ScribeCompletionPolicy)200,
@@ -334,7 +334,7 @@ public class ScribePlayerSettingsTests
     [InlineData(ScribeHudAnchor.TopMiddle, false)]
     public void IsLeftAnchored_ClassifiesHorizontalSide(ScribeHudAnchor anchor, bool expected)
     {
-        // Drives the HUD header/footer text alignment (v1-playtest-fixes 5.3): only the three Left anchors
+        // Drives the HUD header/footer text alignment: only the three Left anchors
         // are left-aligned; center and both Right anchors hug the right edge, matching the ApplyAnchor
         // X-position switch (only Left anchors add the offset from the left margin).
         Assert.Equal(expected, anchor.IsLeftAnchored());
@@ -343,7 +343,7 @@ public class ScribePlayerSettingsTests
     [Fact]
     public void KnownTaskFonts_CoversTheCaudexPegLineup()
     {
-        // peg-task-fonts-to-caudex: Mod-side BuildMetrics iterates this allowlist (plus the empty
+        // Mod-side BuildMetrics iterates this allowlist (plus the empty
         // default → sans-serif). Keep the names here so a removed/renamed face cannot silently drop
         // out of the metrics table. No Skia in Core — this is the string set only.
         Assert.Contains("Caudex", ScribePlayerSettings.KnownTaskFonts);
@@ -365,7 +365,7 @@ public class ScribePlayerSettingsTests
         Assert.Equal(expected, ScribePlayerSettings.NormalizeTaskFontFamily(raw));
     }
 
-    // ---- Illumination floor (respect-local-illumination) ----
+    // ---- Illumination floor ----
 
     [Fact]
     public void Default_IlluminationFloor_MatchesDrawnCurveFloor()
@@ -387,7 +387,7 @@ public class ScribePlayerSettingsTests
         Assert.Equal(expected, s.IlluminationFloor, 4);
     }
 
-    // ---- Quest Accept Policy (rework-quest-accept-notification-styles) ----
+    // ---- Quest Accept Policy ----
 
     [Fact]
     public void Default_QuestAcceptPolicy_IsPromptHud()

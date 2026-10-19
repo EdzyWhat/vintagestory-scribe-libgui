@@ -27,7 +27,7 @@ public class ScribeQuestDecisionTests
     public void Set_IsIndependentPerIsCompletion()
     {
         // An accept-prompt decision and that same quest's completion-prompt decision are independent keys
-        // (quest-auto-detect's "Decisions are independent per prompt kind" scenario).
+        //.
         var set = new ScribeQuestDecisionSet();
         set.Set(ScribeQuestSource.VsQuest, "quest-freeghost", isCompletion: false, ScribeQuestDecision.Dismissed);
         Assert.Null(set.Lookup(ScribeQuestSource.VsQuest, "quest-freeghost", isCompletion: true));

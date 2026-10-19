@@ -9,8 +9,7 @@ namespace Scribe;
 /// (<see cref="BlockScribeWritingStation"/> — the Lectern and the Scriptorium itself), whose stack
 /// carries a Scribe document just the same. Every other item is refused at the slot itself, so the
 /// accept rule is enforced server-side on every move path (drag, shift-click auto-merge,
-/// hopper/automation), not just in the dialog — a dialog-only filter would be bypassable
-/// (add-scriptorium-inventory D3).
+/// hopper/automation), not just in the dialog — a dialog-only filter would be bypassable.
 ///
 /// <para>Only <em>incoming</em> moves are gated: <see cref="CanHold"/> (drag/place onto the slot) and
 /// <see cref="CanTakeFrom"/> (merge a source stack into the slot) both require a Scribe item. Taking an

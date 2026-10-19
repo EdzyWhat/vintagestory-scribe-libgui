@@ -135,7 +135,7 @@ public sealed partial class ScribeModSystem
     }
 
     /// <summary>Client → server: persist a Read View filter pill + subtask-group collapse change
-    /// (read-view-filter-and-collapse), addressed by DocId. A malformed DocId is a silent no-op; each
+    /// addressed by DocId. A malformed DocId is a silent no-op; each
     /// malformed collapsed-group id is simply dropped rather than rejecting the whole packet.</summary>
     private void OnServerReceivedSetReadViewState(IServerPlayer fromPlayer, ScribeSetReadViewStateMessage message)
     {
@@ -183,7 +183,7 @@ public sealed partial class ScribeModSystem
 
     /// <summary>Client → server: perform the Transcribe copy on a Scriptorium's inventory (D2). The copy is
     /// server-authoritative — the client only requests it. We resolve the Scriptorium at the packet's block
-    /// position, read the Original (source) slot's document, clone it with a FRESH identity (§1.1) so the two
+    /// position, read the Original (source) slot's document, clone it with a FRESH identity so the two
     /// items never collide on pins/block-doc resolution, and write it onto the Duplicate (target) item, letting
     /// the standard inventory sync propagate. Guards: valid slot indices, both slots hold a Scribe document, and
     /// — the defensive overwrite gate — if the target already has completable contents and
@@ -414,8 +414,7 @@ public sealed partial class ScribeModSystem
     /// (inventory id + slot index — the surface the dialog was actually editing, which the Handbook add flow
     /// may have chosen over the active-hand item), and falls back to the active hand only for legacy packets
     /// that carry no identity. This is the single place the server answers "which slot does this item packet
-    /// address"; before, <see cref="OnServerReceivedNotebookSave"/> re-derived it as the active hand and so
-    /// misrouted a Handbook add onto a different in-hand item (add-tracker-link-tasks 7.16). Returns null
+    /// address". Returns null
     /// unless the resolved slot holds an <see cref="IScribeDocumentItem"/>. Does NOT check writeability — the
     /// open/history path targets read-only tablets too; callers that mutate the document add that guard.</summary>
     private static ItemSlot? ResolveItemPacketSlot(IServerPlayer fromPlayer, string? inventoryId, int slotId)
@@ -440,8 +439,7 @@ public sealed partial class ScribeModSystem
         if (sapi is null || !TryReadGuid(message.DocIdBytes, out var docId)) return;
         // Write to the EXACT slot the client dialog was editing (its stamped identity), not the active hand:
         // a Handbook "Add to Scribe" add can open a carried book that is not in hand, and resolving by active
-        // hand then wrote the document onto whatever the player happened to be holding — e.g. a read-only
-        // tablet — corrupting it and dropping the task from the real target (add-tracker-link-tasks 7.16).
+        // hand would write onto whatever the player is holding — e.g. a read-only tablet.
         // Both notebook item classes flush through this handler, so the Clockmaker's Notebook is accepted too.
         var slot = ResolveItemPacketSlot(fromPlayer, message.TargetInventoryId, message.TargetSlotId);
         if (slot?.Itemstack?.Collectible is not IScribeDocumentItem item) return;
@@ -499,7 +497,7 @@ public sealed partial class ScribeModSystem
         var slot = ResolveItemPacketSlot(fromPlayer, message.TargetInventoryId, message.TargetSlotId);
         if (slot is null) return;
 
-        // Server-side last-opened tracker (add-external-mod-task-api 4.1): piggybacks on this same
+        // Server-side last-opened tracker: piggybacks on this same
         // open-notification message, independent of whether a history entry gets recorded below.
         if (TryReadGuid(message.DocIdBytes, out var openedDocId))
             NoteServerScribeItemOpened(fromPlayer.PlayerUID, openedDocId);
@@ -575,7 +573,7 @@ public sealed partial class ScribeModSystem
         }
     }
 
-    /// <summary>Server → client (watcher-stamp-sync): a copy or import wrote to a Scriptorium that another
+    /// <summary>Server → client: a copy or import wrote to a Scriptorium that another
     /// player is also viewing. Find our OWN open dialog on that exact block and replay the IMPRINT flourish so
     /// the watching player sees what the acting player saw. A no-op if we have no Scriptorium dialog open on
     /// that position — the common case, since most players aren't watching. The slot item is updated separately

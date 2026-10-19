@@ -10,15 +10,14 @@ namespace Scribe;
 /// <summary>
 /// Client-side Harmony postfix that appends a small "Add to Scribe" section — an <b>Add Tracker</b> and an
 /// <b>Add Link</b> clickable link — to the bottom of every item/block Handbook page
-/// (add-tracker-link-tasks 3.1). This is the ONLY way to create a Tracker or Link task: both need a target
+/// This is the ONLY way to create a Tracker or Link task: both need a target
 /// item code, which the Handbook page uniquely provides (the item whose page is open). Clicking a link calls
 /// <see cref="ScribeModSystem.AddFromHandbook"/>, which resolves an open/openable Scribe surface and appends
 /// the block through that dialog's existing save path.
 ///
 /// <para>Patches <see cref="CollectibleBehaviorHandbookTextAndExtraInfo.GetHandbookInfo"/> (the survival
 /// mod's handbook-page builder) rather than reimplementing handbook rendering. Harmony/the survival mod both
-/// ship with the base game, so this adds no mod dependency (see the "Harmony ships with the base game" and
-/// VSSurvivalMod project notes). The postfix only APPENDS to the returned component array — it never mutates
+/// ship with the base game, so this adds no mod dependency. The postfix only APPENDS to the returned component array — it never mutates
 /// existing entries — so a page with no Scribe items installed is byte-identical to vanilla.</para>
 ///
 /// <para>Client-only: the Handbook is a client GUI, so the owning <see cref="Harmony"/> instance is created
@@ -38,8 +37,7 @@ internal static class ScribeHandbookPatch
     {
         // Carry the page's OWN attributed stack (not a bare code): its meaningful attributes (a lantern's
         // material/glass/lining) are what make the recipe probe match and the target resolve to the correct
-        // name (support-attribute-encoded-items). Bail on the odd empty page. Encode() collapses to the bare
-        // code for a common attribute-less item, so those targets are byte-identical to before.
+        // name. Bail on the odd empty page. Encode() collapses to the bare code for an attribute-less item.
         var stack = inSlot?.Itemstack;
         if (stack?.Collectible?.Code is null || capi is null) return;
         string itemCode = ScribeItemRef.Encode(stack);
@@ -52,22 +50,22 @@ internal static class ScribeHandbookPatch
 
         var appended = new List<RichTextComponentBase>
         {
-            // A little vertical gap, then a bold section heading, matching the vanilla page's own spacing idiom.
+            // A little vertical gap, then a bold section heading, matching the vanilla page's spacing.
             new ClearFloatTextComponent(capi, 14f),
             new RichTextComponent(capi, Lang.Get("scribe:scribe-gui-additem-heading") + "\n", headingFont),
 
-            // Link → Tracker → Craft (handbook-only labels; the editor Add ▾ keeps scribe-gui-add*).
+            // Link, Tracker, then Craft links (handbook-only labels; the editor Add menu uses scribe-gui-add*).
             new LinkTextComponent(capi, Lang.Get("scribe:scribe-gui-handbook-addlink") + "\n", linkFont,
                 _ => modSystem.AddFromHandbook(ScribeAddKinds.Link, itemCode)),
             new LinkTextComponent(capi, Lang.Get("scribe:scribe-gui-handbook-addtracker") + "\n", linkFont,
                 _ => modSystem.AddFromHandbook(ScribeAddKinds.Tracker, itemCode)),
         };
 
-        // One "Add Crafting Task" link per grid recipe that produces this item (add-crafting-tasks 8.2). Probed
-        // from the live recipe registry: an item with no grid recipe adds none (only Tracker/Link show), a lone
-        // recipe adds a single plain-labeled link, and a multi-recipe item adds one distinguished link each. The
-        // signature the link carries lets the generator/self-heal re-resolve the exact variant later (D3). Each
-        // variant's Label is already localized by the probe.
+        // One "Add Crafting Task" link per grid recipe that produces this item. Probed from the live recipe
+        // registry: an item with no grid recipe adds none (only Tracker/Link show), a lone recipe adds a single
+        // plain-labeled link, and a multi-recipe item adds one distinguished link each. The signature the link
+        // carries lets the generator/self-heal re-resolve the exact variant later. Each variant's Label is
+        // already localized by the probe.
         foreach (var variant in ScribeCraftRecipeProbe.ProbeVariants(capi, stack))
         {
             string signature = variant.Signature;

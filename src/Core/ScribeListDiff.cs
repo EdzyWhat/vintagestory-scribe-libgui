@@ -73,8 +73,8 @@ public static class ScribeListDiff
         }
 
         // Render order: live rows in order, then splice every ghost (kept + newly departed) back at its slot,
-        // ascending by slot and clamped to the current length — byte-for-byte the editor's ghost-splice so
-        // the playtested slot behavior is preserved. A ghost id is never in newLiveIds (a reappearing id was
+        // ascending by slot and clamped to the current length — byte-for-byte the editor's ghost-splice, so
+        // both place ghosts at the same slots. A ghost id is never in newLiveIds (a reappearing id was
         // revived above), so no id is duplicated.
         var render = new List<Guid>(newLiveIds);
         var allGhosts = new List<ScribeListDeparture>(keptGhosts.Count + departed.Count);

@@ -8,9 +8,8 @@ using SkiaSharp;                // SKShader, SKBlendMode
 namespace Scribe;
 
 /// <summary>
-/// The Inbox nav-button shimmer (add-assignment-and-quest-support §8.5, design.md Decision 9b): a
-/// periodic highlight sweep across a nav button's icon while <see cref="Active"/> is true, matching
-/// the Flutter shimmer-loading cookbook pattern the design doc cites almost exactly —
+/// The Inbox nav-button shimmer: a periodic highlight sweep across a nav button's icon while
+/// <see cref="Active"/> is true, following the Flutter shimmer-loading cookbook pattern —
 /// <see cref="ShaderMask"/> wrapping the icon, painted with a <see cref="LinearGradient"/>-built
 /// <see cref="SKShader"/> (built ONCE, not rebuilt every frame) whose visible position is animated
 /// purely by translating <see cref="ShaderMask.OffsetX"/> — <see cref="RenderShaderMask"/> draws an
@@ -21,16 +20,13 @@ namespace Scribe;
 /// glyph) toward the highlight, leaving the surrounding transparent box untouched — the same trick the
 /// cookbook's gradient overlay relies on.</para>
 ///
-/// <para>Driven by a plain <see cref="AnimationController"/> — the SAME primitive
-/// <c>ScribeRowSizeAnimation</c>/<c>ScribeAnimatedList</c> use (design.md: "reuse whichever looping/
-/// continuous-tick animation-driving pattern... rather than inventing a new ticker") — restarted from
-/// 0 on <see cref="AnimationStatus.Completed"/> to loop. UNLIKE those, this controller is owned locally
+/// <para>Driven by a plain <see cref="AnimationController"/> — the same primitive
+/// <c>ScribeRowSizeAnimation</c>/<c>ScribeAnimatedList</c> use — restarted from
+/// 0 on <see cref="AnimationStatus.Completed"/> to loop. Unlike those, this controller is owned locally
 /// by this widget's own <c>State</c>, not the shared <c>ScribeAnimationRegistry</c>: a row collapse/
 /// reveal's direction and end-state are meaningful and must survive a host <c>ForceRebuild</c> remount
 /// intact, but a shimmer is a purely decorative, perpetually-looping sweep — a remount simply
-/// restarting its phase from 0 is imperceptible, so the extra registry plumbing (threading an id +
-/// the registry instance through every <c>TitleButton</c> call site across four dialog subclasses)
-/// isn't justified here.</para>
+/// restarts its phase from 0, which is imperceptible.</para>
 /// </summary>
 internal sealed class ScribeShimmerWrap : StatefulWidget
 {
@@ -50,7 +46,7 @@ internal sealed class ScribeShimmerWrap : StatefulWidget
 
 internal sealed class ScribeShimmerWrapState : State<ScribeShimmerWrap>
 {
-    /// <summary>One full sweep cycle — playtest-tunable, not final.</summary>
+    /// <summary>One full sweep cycle.</summary>
     private static readonly TimeSpan SweepDuration = TimeSpan.FromMilliseconds(1600);
 
     /// <summary>Gradient axis angle (degrees) — a slight diagonal, matching the typical shimmer look.</summary>

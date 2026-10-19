@@ -103,7 +103,7 @@ public sealed partial class ScribeModSystem
     ///
     /// <para>The server does NOT auto-clear a fired timer: the 30 s auto-disappear is governed by the
     /// player's client-local <see cref="ScribePlayerSettings.TimerAutoDisappear"/> preference, which only
-    /// the client knows, so the client drives the clear (timer-auto-disappear-setting). The server merely
+    /// the client knows, so the client drives the clear. The server merely
     /// accumulates <see cref="TimerStore.FiredElapsedSeconds"/> on the fired store so the flash window is
     /// persisted and resumes (not restarts) across a relog.</para></summary>
     private void OnTimerTick(float _)

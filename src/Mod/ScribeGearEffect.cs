@@ -9,8 +9,7 @@ namespace Scribe;
 /// <summary>
 /// A transparent single-child wrapper that repaints its child (a rotated gear texture) as a solid-colour
 /// SILHOUETTE — every non-transparent pixel replaced by <paramref name="tint"/>, the gear's own alpha shape
-/// preserved — and optionally BLURRED. Used by the Timer-tab gearworks for two cheap 3D effects (design
-/// D12/D13):
+/// preserved — and optionally BLURRED. Used by the Timer-tab gearworks for two cheap 3D effects:
 ///
 /// <list type="bullet">
 /// <item><b>Cast shadow</b> — a dark, slightly-blurred silhouette drawn offset beneath each gear, so the

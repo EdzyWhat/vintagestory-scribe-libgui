@@ -9,9 +9,8 @@ public sealed class BlockScribeLectern : BlockScribeWritingStation
 {
     protected override string InteractionsCacheKey => "scribeLecternBlockInteractions";
 
-    // Right-click now opens Guest Book (assignment-icon-and-tab-defaults D6/D7) — the help text reuses
-    // Guest Book's own tab-title lang key (self-match) rather than a bespoke "open" string, so it
-    // inherits multi-language support automatically.
+    // Right-click opens Guest Book — the help text reuses Guest Book's own tab-title lang key
+    // rather than a bespoke "open" string.
     protected override string OpenHintLangCode => "scribe:scribe-tab-guestbook";
 
     protected override string EditHintLangCode => "scribe:blockhelp-scribelectern-edit";

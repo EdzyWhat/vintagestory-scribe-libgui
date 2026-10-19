@@ -5,14 +5,14 @@ using Xunit;
 namespace Integration.Tests;
 
 /// <summary>
-/// broaden-linux-harfbuzz-fix task 3.1: platform gating and RID outcome classification for
+/// Platform gating and RID outcome classification for
 /// <see cref="ScribeHarfBuzzLoadFix"/>, run as plain xUnit facts (no Atlas world boot) the same
 /// way <see cref="ScribeReadViewFilterTests"/> exercises other pure Mod-layer logic — neither
 /// <see cref="ScribeHarfBuzzLoadFix.ClassifyPlatform"/> nor <see cref="ScribeHarfBuzzLoadFix.GetLinuxRid"/>
 /// touch the Vintage Story API, Harmony, or an actual native library, so both are testable on any
 /// host OS without a real glibc/non-glibc Linux machine. The remaining native dlopen/Harmony-patch
-/// behavior is inherently host- and platform-dependent and stays covered by the manual Linux
-/// verification in tasks 3.3-3.5, not here.
+/// behavior is inherently host- and platform-dependent and is not covered here; it needs manual
+/// verification on Linux.
 /// </summary>
 public class ScribeHarfBuzzLoadFixTests
 {

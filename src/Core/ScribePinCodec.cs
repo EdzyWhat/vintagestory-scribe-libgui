@@ -39,24 +39,21 @@ namespace Scribe.Core;
 ///                  <see cref="ScribePinnedRef.AssignedDate"/> (string), and
 ///                  <see cref="ScribePinnedRef.AcceptedDate"/> (bool + optional string), so the Pin Tab
 ///                  can render the assignment marker's tooltip without resolving the source document
-///                  (assignment-icon-and-tab-defaults).
 ///   v6 — appended per-pin <see cref="ScribePinnedRef.IsAcceptedAssignment"/> (bool), so the HUD
 ///                  and Pin Tab can render the leading-icon assignment marker without resolving the
-///                  source document (add-assignment-and-quest-support 9.3).
+///                  source document.
 ///   v5 — appended per-pin <see cref="ScribePinnedRef.Depth"/> (int), the pinned task's subtask
 ///                  depth, so the HUD and Pin Tab indent a pinned subtask like the other surfaces
-///                  (add-crafting-tasks / task-subtasks 5.1).
 ///   v4 — appended per-pin <see cref="ScribePinnedRef.LinkLabel"/> (bool + optional string), the
 ///                  display title of a guide-page Link, so the HUD and Pin Tab can render a pinned
 ///                  guide-page Link (a "page:"-prefixed LinkTarget has no item to resolve a name from)
-///                  (add-tracker-link-tasks 7.6).
 ///   v3 — appended per-pin <see cref="ScribePinnedRef.TargetItemCode"/> (bool + optional string),
 ///                  <see cref="ScribePinnedRef.TargetQuantity"/> (int) and
 ///                  <see cref="ScribePinnedRef.CurrentQuantity"/> (int), so the HUD and Pin Tab can render a
-///                  pinned Tracker's icon + name + have/need counter (add-tracker-link-tasks 7.8).
+///                  pinned Tracker's icon + name + have/need counter.
 ///   v2 — appended per-pin <see cref="ScribePinnedRef.Kind"/> (1 byte) and
 ///                  <see cref="ScribePinnedRef.LinkTarget"/> (bool + optional string), for pinned Links
-///                  (add-tracker-link-tasks 5.5). Never shipped (WIP branch only).
+///                  Never shipped (WIP branch only).
 ///   Older   : v1 — no per-pin Kind/LinkTarget/Tracker/LinkLabel fields; migrated by <see cref="ApplyPreV2Defaults"/>
 ///                  (Kind→Task, everything else null/default). Still accepted (this is the shipped format).
 ///   Older still : rejected.
@@ -210,13 +207,13 @@ public static class ScribePinCodec
             w.Write(pin.Orphaned);
             w.Write(pin.LastKnownDone);
             w.Write(pin.LastKnownText);
-            // v2 appended fields (add-tracker-link-tasks 5.5): the pin's kind, and — only for a Link — its
+            // v2 appended fields: the pin's kind, and — only for a Link — its
             // link target (a nullable string, written as a presence bool + the value when present).
             w.Write((byte)pin.Kind);
             bool hasLinkTarget = pin.LinkTarget != null;
             w.Write(hasLinkTarget);
             if (hasLinkTarget) w.Write(pin.LinkTarget!);
-            // v3 appended fields (add-tracker-link-tasks 7.8): a Tracker's target item code (nullable string,
+            // v3 appended fields: a Tracker's target item code (nullable string,
             // presence bool + value) plus its target/current quantities so a pinned Tracker renders its
             // icon + name + have/need counter without the source document loaded.
             bool hasTargetItemCode = pin.TargetItemCode != null;
@@ -224,18 +221,18 @@ public static class ScribePinCodec
             if (hasTargetItemCode) w.Write(pin.TargetItemCode!);
             w.Write(pin.TargetQuantity);
             w.Write(pin.CurrentQuantity);
-            // v4 appended field (add-tracker-link-tasks 7.6): a guide-page Link's display title (nullable
+            // v4 appended field: a guide-page Link's display title (nullable
             // string, presence bool + value) so a pinned guide-page Link renders its name without an item.
             bool hasLinkLabel = pin.LinkLabel != null;
             w.Write(hasLinkLabel);
             if (hasLinkLabel) w.Write(pin.LinkLabel!);
-            // v5 appended field (add-crafting-tasks / task-subtasks 5.1): the pinned task's subtask depth,
+            // v5 appended field: the pinned task's subtask depth,
             // so a pinned subtask indents on the HUD/Pin Tab like the other surfaces.
             w.Write(pin.Depth);
-            // v6 appended field (add-assignment-and-quest-support 9.3): whether the pinned task carries an
+            // v6 appended field: whether the pinned task carries an
             // Accepted assignment, so the HUD/Pin Tab can render the leading-icon marker.
             w.Write(pin.IsAcceptedAssignment);
-            // v7 appended fields (assignment-icon-and-tab-defaults): the assigner's uid and the
+            // v7 appended fields: the assigner's uid and the
             // assigned date (plain strings, empty when not an assignment) plus the accepted date
             // (nullable string, presence bool + value) — so the Pin Tab can render the assignment
             // marker's tooltip without resolving the source document.

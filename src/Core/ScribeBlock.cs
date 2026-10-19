@@ -70,7 +70,7 @@ public enum ScribeBlockKind : byte
 /// across every mutation and through serialization. Nothing in the document references a block
 /// by list position durably (the index shifts on move/insert/delete); external references (the
 /// per-player pin store) name a block by its owning document's <see cref="ScribeDocument.DocId"/>
-/// plus this id. Pinning is no longer a field on the block — it moved to a per-player store.
+/// plus this id. Pinning is not stored on the block; it lives in a per-player store.
 /// </summary>
 public sealed class ScribeBlock
 {
@@ -129,7 +129,7 @@ public sealed class ScribeBlock
     /// <summary>For a Tracker: how many of <see cref="TargetItemCode"/> are currently carried (the live
     /// have-count). Clamped only to ≥ 0 on set — it is NOT capped at <see cref="TargetQuantity"/>, so a
     /// player carrying more than the target reads the true overflow (e.g. <c>100 / 8</c>), not a clamped
-    /// <c>8 / 8</c> (feedback 7.14). "Satisfied" is therefore <c>CurrentQuantity &gt;= TargetQuantity</c>
+    /// <c>8 / 8</c>. "Satisfied" is therefore <c>CurrentQuantity &gt;= TargetQuantity</c>
     /// everywhere it's tested. Defaults to 0.</summary>
     public int CurrentQuantity
     {

@@ -16,7 +16,7 @@ using Vintagestory.API.Client;
 namespace Scribe;
 
 /// <summary>
-/// DEV-ONLY live-tuning window for the 5 Scribe writing-station box targets (add-scribe-block-box-tuning).
+/// DEV-ONLY live-tuning window for the 5 Scribe writing-station box targets.
 /// A structural clone of <see cref="ScribeGearTuningDialog"/>: 5 groups (Inbox, Inbox-Wall, Scriptorium,
 /// Assignment Desk, Chalkboard) of 6 labeled <see cref="ScribeNumericField"/>s each, writing straight through
 /// <see cref="ScribeModSystem.UpdateBoxTuning"/> (which persists + raises <c>BoxTuningChanged</c>) — the

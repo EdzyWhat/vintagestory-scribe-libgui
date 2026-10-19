@@ -63,7 +63,7 @@ public class TimerStoreTests
     public void RoundTrip_Fired_PreservesFiredElapsed()
     {
         // A fired timer persists its FiredElapsedSeconds (codec v2) so the client-driven auto-disappear
-        // resumes the remaining window on rejoin rather than restarting (timer-auto-disappear-setting).
+        // resumes the remaining window on rejoin rather than restarting.
         var store = new TimerStore
         {
             Status = TimerStatus.Fired,

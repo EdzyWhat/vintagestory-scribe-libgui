@@ -83,7 +83,7 @@ public class ScribePinOrderingTests
         Assert.Equal(new[] { "a", "b" }, pins.Select(p => p.LastKnownText));
     }
 
-    // ---- PlaceNewPin (refine-crafting-tasks-1-3-2 D6) ----
+    // ---- PlaceNewPin ----
 
     [Fact]
     public void PlaceNewPin_ChildUnderPinnedParent_InsertsAfterCluster()
@@ -278,7 +278,7 @@ public class ScribePinOrderingTests
     [Fact]
     public void Reorder_ParentWithChildren_MovingForwardOntoAnotherParentWithChildren_KeepsBothClustersIntact()
     {
-        // Regression: dragging an EARLIER pinned parent (with its own pinned child) forward past a
+        // Dragging an EARLIER pinned parent (with its own pinned child) forward past a
         // LATER pinned parent that ALSO has a pinned child must not wedge the dragged cluster between
         // the target parent and its child -- both clusters must stay intact and contiguous.
         var parentA = Pin("parentA", done: false);

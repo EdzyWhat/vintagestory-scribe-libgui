@@ -39,9 +39,9 @@ public abstract partial class ScribeDialogBase
             // We already hold a live scratch that the authoritative document must NOT overwrite, and this grant
             // just confirms the lock is ours — so keep the scratch and re-flush it rather than reseeding. Two
             // callers land here:
-            //   • the lost-lock recovery re-acquire after a save failure (task 8.6), which must preserve the
+            //   • the lost-lock recovery re-acquire after a save failure, which must preserve the
             //     player's unsaved edits;
-            //   • a singleplayer-optimistic Handbook append (feedback 7.13 follow-up): we entered the editor
+            //   • a singleplayer-optimistic Handbook append: we entered the editor
             //     locally and applied the append while the server was paused, and THIS is the delayed grant
             //     reply (carrying the pre-flush document) arriving on unpause — reseeding would drop the
             //     optimistic append, so keep our scratch and re-flush it to persist it authoritatively.
@@ -62,13 +62,12 @@ public abstract partial class ScribeDialogBase
             ? doc
             : new ScribeDocument();
         isDirty = false;
-        // Enforce the "empty tasks are never persisted" invariant (add-empty-task-lifecycle D5) at the LOAD
-        // boundary, not only at the leave boundary. The leave paths (EnterReadMode / switch / close) already
-        // purge + flush, but the seed bytes we re-enter on can still contain an empty task: on the lectern a
-        // re-entry round-trips to the server (EnterEditorMode(message.DocumentBytes)), so a purge-flush and
-        // the re-access request can cross on the wire and the grant carries the PRE-purge doc. Reconcile made
-        // this visible — the reappearing empties were the symptom behind reconcile-animating-surfaces §3.9 —
-        // but the race is host/path-independent, so heal it here for every seed. PurgeEmptyRowsFromScratch
+        // Enforce the "empty tasks are never persisted" invariant at the LOAD boundary, not only at the leave
+        // boundary. The leave paths (EnterReadMode / switch / close) already purge + flush, but the seed bytes
+        // we enter on can still contain an empty task: on the lectern a re-entry round-trips to the server
+        // (EnterEditorMode(message.DocumentBytes)), so a purge-flush and the re-access request can cross on
+        // the wire and the grant carries the PRE-purge doc. The race is host/path-independent, so every seed
+        // is healed here. PurgeEmptyRowsFromScratch
         // sets isDirty=true iff it removed anything, so a stale seed is re-flushed clean (self-healing) and a
         // clean seed stays isDirty=false. Runs BEFORE SyncFocusNodesToScratch so the node count matches the
         // trued-up block list, and touches only empty TASK blocks (empty text sections are valid, untouched).
@@ -81,19 +80,16 @@ public abstract partial class ScribeDialogBase
         SyncFocusNodesToScratch();
         StartAutosaveTick();
 
-        // add-tracker-link-tasks 3.4 (Case B): a Handbook "Add to Scribe" click that arrived while this
+        // A Handbook "Add to Scribe" click that arrived while this
         // dialog was NOT editing stashed its append and requested editor access; now that access has landed
         // (synchronous for items, or the async server grant for blocks), apply the deferred append and flush.
         // The recovery branch above returns early, so this fires only on a genuine editor entry — never on a
         // lost-lock re-acquire (which must preserve the player's own in-flight scratch untouched).
         //
-        // Apply the append BEFORE the ForceRebuild below, so the fresh editor tree is built from the
-        // already-mutated scratch and the new Tracker/Link row is visible immediately — landing the player in
-        // a live editor view where they can set the count. Applying it AFTER the rebuild (as this once did)
-        // left the row out of the just-built tree, and ApplyHandbookAppend's in-place RebuildBody can't recover
-        // it: the body's GlobalKey state isn't resolvable in the same synchronous call right after Mount, so
-        // RebuildBody no-ops and the row only appeared on the NEXT full rebuild — i.e. a manual view swap. That
-        // was the Lectern "task created but invisible until a view swap" bug (feedback 7.13).
+        // The append is applied BEFORE the ForceRebuild below, so the fresh editor tree is built from the
+        // already-mutated scratch and the new Tracker/Link row is visible immediately. Applying it after the
+        // rebuild would not work: ApplyHandbookAppend's in-place RebuildBody no-ops because the body's
+        // GlobalKey state isn't resolvable in the same synchronous call right after Mount.
         FlushPendingHandbookAppend();
 
         if (IsOpened())
@@ -119,8 +115,7 @@ public abstract partial class ScribeDialogBase
     /// lock if one is held, without touching <c>viewMode</c>. Full editor teardown, matching
     /// OnClickSwitchToPinned/History and the editor footer's OnClickSwitchToRead: flush the last edit
     /// AND release the server-held lock before leaving (LeaveEditorMode itself does NOT release, by
-    /// contract — the missing release here was the exact asymmetry reported in
-    /// fix-transient-lectern-editor-lock). Exposed so <see cref="EnterGrantedView"/> overrides that have
+    /// contract). Exposed so <see cref="EnterGrantedView"/> overrides that have
     /// no Read view to land on (Assignment Desk, Inbox) can tear down an editor session without being
     /// forced onto Read.</summary>
     protected void LeaveEditorIfActive()
@@ -138,17 +133,16 @@ public abstract partial class ScribeDialogBase
     /// <summary>Called by <see cref="BlockEntityScribeWritingStation.HandleServerReply"/> for every
     /// non-editor access grant/refusal — the ordinary reply a plain right-click gets. The base lands this
     /// on the Read view, matching every Read/Editor/Pinned surface (Lectern, Notebook, Scriptorium,
-    /// Chalkboard). The Assignment Desk and Inbox have no Read view in their nav model at all (design.md
-    /// Decision 1 / <c>inbox-block</c>'s spec) — routing them through <see cref="EnterReadMode"/>
-    /// force-switched them to a tab that doesn't exist for them every time the block was opened, which is
-    /// what a plain right-click always triggers. They override this to tear down an editor session if one
+    /// Chalkboard). The Assignment Desk and Inbox have no Read view in their nav model at all, so routing
+    /// them through <see cref="EnterReadMode"/> would force a tab that doesn't exist for them on every
+    /// plain right-click. They override this to tear down an editor session if one
     /// was (rarely, incidentally) active without reasserting any particular tab, leaving whatever view is
     /// already selected — the constructor's <see cref="DefaultToAssignmentView"/>/
     /// <see cref="DefaultToInboxView"/> on first open, or the player's own last nav-button pick on a
     /// re-open of an already-open dialog.</summary>
     public virtual void EnterGrantedView() => EnterReadMode();
 
-    /// <summary>Switch to the Pin Tab view (scribe-pin-editor). Wired to the <c>scribepin</c> nav button —
+    /// <summary>Switch to the Pin Tab view. Wired to the <c>scribepin</c> nav button —
     /// a real entry method, not an inline flag flip (the nav discipline the editor's
     /// <see cref="RequestEditorAccess"/> / <see cref="EnterReadMode"/> follow). If the editor view is
     /// active, tear it down first (flush + release the lock) exactly like <see cref="OnClickSwitchToRead"/>,
@@ -219,26 +213,20 @@ public abstract partial class ScribeDialogBase
 
     /// <summary>Rebuilds the Inbox/Assignment view if either is currently active, in place (reconcile,
     /// not <see cref="GuiBase.ForceRebuild"/>) so each row's expanded state and the filter-chip selection
-    /// (both dialog-owned — <see cref="expandedAssignmentIds"/>/<see cref="assignmentFilterGroup"/> — since
-    /// manage-terminal-assignment-records lifted them out of <see cref="ScribeInboxContent"/>'s own State)
-    /// survive the refresh — mirroring how a pin/settings change reconciles the Read/Editor/Pinned views
-    /// rather than remounting them. Called on every <see cref="ScribeModSystem.MyAssignmentsChanged"/> push
-    /// (§7.5).</summary>
+    /// (both dialog-owned — <see cref="expandedAssignmentIds"/>/<see cref="assignmentFilterGroup"/>, not
+    /// <see cref="ScribeInboxContent"/>'s own State) survive the refresh — mirroring how a pin/settings change reconciles the Read/Editor/Pinned views
+    /// rather than remounting them. Called on every <see cref="ScribeModSystem.MyAssignmentsChanged"/> push.</summary>
     private void OnMyAssignmentsChanged()
     {
         if (!IsOpened()) return;
-        // SentHistory added here (triage 2026-08-31: "we aren't updating Completed or Discarded properly")
-        // — its own tab was split out by 13.2 after this check was written and was never added to it, so a
-        // sync arriving while that tab was the open view updated modSystem.MySentAssignments correctly but
-        // never told this dialog to repaint; the stale chip only refreshed on the next unrelated rebuild
-        // (e.g. navigating away and back).
+        // SentHistory is included so a sync arriving while that tab is open repaints it rather than leaving
+        // a stale chip until the next unrelated rebuild.
         if (viewMode is ScribeLecternView.Inbox or ScribeLecternView.Assignment or ScribeLecternView.SentHistory)
             RebuildBody();
     }
 
     /// <summary>Rebuilds the Create Assignments tab if it is currently active, so its target picker
-    /// reflects a just-arrived known-players sync without needing a reopen (persist-known-players-for-
-    /// assignment spec: "A brand-new player is assignable immediately upon joining"). Only the Assignment
+    /// reflects a just-arrived known-players sync without needing a reopen. Only the Assignment
     /// Desk ever has this tab, so this is inert on every other surface — mirrors
     /// <see cref="OnMyAssignmentsChanged"/>'s own view-gated shape.</summary>
     private void OnKnownPlayersChanged()
@@ -303,8 +291,8 @@ public abstract partial class ScribeDialogBase
             new Center(child: new Text(Lang.Get("scribe:scribe-gui-timer-empty"), bodyStyle)));
     }
 
-    /// <summary>Switches to the Inventory tab (the Scriptorium's Scribe-items-only storage —
-    /// add-scriptorium-inventory), tearing down the editor first if active. Called from the Inventory nav
+    /// <summary>Switches to the Inventory tab (the Scriptorium's Scribe-items-only storage),
+    /// tearing down the editor first if active. Called from the Inventory nav
     /// button in the Scriptorium subclass that exposes the tab. Mirrors the Guestbook/History/Timer
     /// teardown template exactly.</summary>
     protected void OnClickSwitchToInventory()
@@ -331,7 +319,7 @@ public abstract partial class ScribeDialogBase
     }
 
     /// <summary>Switches to the Inbox Inventory tab (the standalone Inbox block's own mixed
-    /// restricted/open storage — add-inbox-inventory-tab), tearing down the editor first if active.
+    /// restricted/open storage), tearing down the editor first if active.
     /// Scoped in effect to <see cref="GuiDialogScribeInbox"/> — no other surface has this tab — but
     /// defined here alongside its peers (<see cref="OnClickSwitchToInventory"/>,
     /// <see cref="OnClickSwitchToAssignment"/>) since only <c>private</c>/<c>private protected</c>
@@ -362,8 +350,8 @@ public abstract partial class ScribeDialogBase
     }
 
     /// <summary>Switches to the Assignment tab, tearing down the editor first if active. Called from the
-    /// Assignment Desk's own Assignment nav button — no other surface ever calls this (design.md
-    /// Decision 1: "Only the Assignment Desk dialog ever sets viewMode to Assignment").</summary>
+    /// Assignment Desk's own Assignment nav button — no other surface ever calls this (only the
+    /// Assignment Desk dialog sets viewMode to Assignment).</summary>
     protected void OnClickSwitchToAssignment()
     {
         CommitTitleIfEditing();
@@ -397,7 +385,7 @@ public abstract partial class ScribeDialogBase
         if (IsOpened()) ForceRebuild();
     }
 
-    /// <summary>Switches to the Sent Assignment History tab (refine-assignment-desk-inbox-ux 12.2) —
+    /// <summary>Switches to the Sent Assignment History tab —
     /// mirrors <see cref="OnClickSwitchToAssignment"/>'s editor-teardown; only the Assignment Desk's own
     /// nav button ever calls this.</summary>
     protected void OnClickSwitchToSentHistory()
@@ -416,22 +404,19 @@ public abstract partial class ScribeDialogBase
         if (IsOpened()) ForceRebuild();
     }
 
-    /// <summary>Sends the mark-seen request (design.md Decision 4: "Opening the Inbox flips [Seen]
-    /// server-side"). The request is unconditional — the server no-ops/skips the re-push when nothing
+    /// <summary>Sends the mark-seen request (opening the Inbox flips Seen server-side). The request is unconditional — the server no-ops/skips the re-push when nothing
     /// was actually unseen — so it is safe to call from every path that makes the Inbox view active,
-    /// not only <see cref="OnClickSwitchToInbox"/>'s nav-button click (refine-assignment-desk-inbox-ux
-    /// D2): the standalone Inbox block's dialog also calls this from its constructor and its
+    /// not only <see cref="OnClickSwitchToInbox"/>'s nav-button click: the standalone Inbox block's dialog also calls this from its constructor and its
     /// <c>EnterGrantedView()</c> override, since it lands on (and stays on) the Inbox view without ever
     /// going through <see cref="OnClickSwitchToInbox"/>.</summary>
     protected void MarkInboxSeenIfNeeded() =>
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeMarkAssignmentsSeenMessage());
 
-    /// <summary>Builds the shared Inbox tab (add-assignment-and-quest-support §7): the viewing player's
+    /// <summary>Builds the shared Inbox tab: the viewing player's
     /// RECEIVED assignments (<see cref="ScribeModSystem.MyReceivedAssignments"/>), rendered by
-    /// <see cref="ScribeInboxContent"/> — one implementation reused by every Inbox-capable surface
-    /// (§7.5). Sent-history rendering is the Assignment Desk's separate Sent Assignment History tab
-    /// (<see cref="BuildSentAssignmentHistoryContent"/>, design.md Decision 3, split out by
-    /// refine-assignment-desk-inbox-ux 12.2); this is Received-only, viewed as the Assignee.</summary>
+    /// <see cref="ScribeInboxContent"/> — one implementation reused by every Inbox-capable surface.
+    /// Sent-history rendering is the Assignment Desk's separate Sent Assignment History tab
+    /// (<see cref="BuildSentAssignmentHistoryContent"/>); this is Received-only, viewed as the Assignee.</summary>
     protected virtual Widget BuildInboxContent()
     {
         var received = modSystem.MyReceivedAssignments.Where(b => b.Assignment is not null);
@@ -494,7 +479,7 @@ public abstract partial class ScribeDialogBase
 
     /// <summary>Every assignment TaskId currently visible in whichever of the Inbox/Sent History views is
     /// active, after the shared filter-chip selection — the "visible rows" the title-bar expand/collapse-all
-    /// toggle operates on (manage-terminal-assignment-records). Empty (and thus inert) for any other view.</summary>
+    /// toggle operates on. Empty (and thus inert) for any other view.</summary>
     private List<Guid> CurrentlyVisibleAssignmentRowIds()
     {
         IEnumerable<ScribeBlock> source = viewMode switch
@@ -519,7 +504,7 @@ public abstract partial class ScribeDialogBase
         return ids.Count > 0 && ids.All(expandedAssignmentIds.Contains);
     }
 
-    /// <summary>The title-bar expand/collapse-all toggle's tap handler (manage-terminal-assignment-records):
+    /// <summary>The title-bar expand/collapse-all toggle's tap handler:
     /// expands every currently-visible row if any is collapsed, else collapses all of them. A no-op when
     /// nothing is currently visible (filtered out, or an empty list).</summary>
     private void ToggleAllVisibleAssignmentRows()
@@ -536,7 +521,7 @@ public abstract partial class ScribeDialogBase
     }
 
     /// <summary>Requests deletion of the CURRENT viewer's own side of a terminal-state assignment
-    /// record (manage-terminal-assignment-records / split-assignment-delete-by-viewer). The delete
+    /// record. The delete
     /// control only ever renders while <see cref="viewMode"/> is <see cref="ScribeLecternView.Inbox"/> or
     /// <see cref="ScribeLecternView.SentHistory"/>, so which side to claim is unambiguous from that alone
     /// — Inbox is always the Assignee's view, Sent History always the Assigner's. The server
@@ -556,8 +541,8 @@ public abstract partial class ScribeDialogBase
         });
     }
 
-    /// <summary>Newest-batch-first ordering shared by the Inbox and Sent Assignment History tabs
-    /// (refine-assignment-desk-inbox-ux 12.2 / triage 2026-08-31 general notes): groups by
+    /// <summary>Newest-batch-first ordering shared by the Inbox and Sent Assignment History tabs:
+    /// groups by
     /// <see cref="ScribeAssignment.BatchId"/> (every row one send call created shares one id — see its
     /// remarks), preserving each group's own internal creation order (parent-before-subtask), then
     /// reverses the GROUP order so the most-recently-sent batch surfaces at the top intact. <c>GroupBy</c>
@@ -576,7 +561,7 @@ public abstract partial class ScribeDialogBase
     /// marker's hover tooltip on Read/Editor rows — null for a task that isn't an accepted assignment.
     /// Dates with a timestamp follow the viewing player's locale; pre-timestamp records keep the baked
     /// identity string. The Pin Tab has its own equivalent (<see cref="ScribePinnedRef"/>'s snapshotted
-    /// fields; it has no live <see cref="ScribeAssignment"/> to read from — assignment-icon-and-tab-defaults).</summary>
+    /// fields; it has no live <see cref="ScribeAssignment"/> to read from).</summary>
     private protected (string? name, string? assignedDate, string? acceptedDate) ResolveAssignmentTooltipInfo(
         ScribeAssignment? assignment)
         => assignment is { State: ScribeAssignmentState.Accepted }
@@ -592,8 +577,8 @@ public abstract partial class ScribeDialogBase
             ? AssignmentDisplay.Date(baked ?? "", ts, capi.World)
             : baked;
 
-    /// <summary>Sends a Decline/Cancel/Discard request for an assignment (§4.1's
-    /// <see cref="ScribeAssignmentActionMessage"/>). Accept goes through <see cref="AcceptAssignment"/>
+    /// <summary>Sends a Decline/Cancel/Discard request for an assignment
+    /// (<see cref="ScribeAssignmentActionMessage"/>). Accept goes through <see cref="AcceptAssignment"/>
     /// instead — it needs a placement target. Purely a request — the server re-validates and the row
     /// updates once its resync (<see cref="ScribeModSystem.MyAssignmentsChanged"/>) arrives.</summary>
     private protected void SendAssignmentAction(Guid taskId, ScribeAssignmentAction action)
@@ -605,15 +590,13 @@ public abstract partial class ScribeDialogBase
         });
     }
 
-    /// <summary>Sends an Accept request naming the resolved placement target (assignment-state-machine's
-    /// placement requirement) — the currently-held document, or the single/chosen inventory candidate the
+    /// <summary>Sends an Accept request naming the resolved placement target — the currently-held document, or the single/chosen inventory candidate the
     /// row's Accept control resolved via <see cref="ComputeAcceptCandidates"/>. The server re-validates and
     /// re-resolves the slot itself; this is a request, not a locally-applied placement.</summary>
     private void AcceptAssignment(Guid taskId, ScribeAcceptCandidate target)
     {
-        // Diagnostic for the accept-destination-remembers-a-dropped-item investigation (2026-09-01):
-        // records what the CLIENT resolved (label, inv/slot) right before sending, to compare against the
-        // server's own "assignment-action ... Accept placed onto ..." trace. Drop once concluded.
+        // Diagnostic: records what the CLIENT resolved (label, inv/slot) right before sending, to compare
+        // against the server's own "assignment-action ... Accept placed onto ..." trace.
         capi.Logger.Notification("[scribe] Accept sent for {0}: target=\"{1}\" inv={2} slot={3}",
             taskId, target.Label, target.InventoryId, target.SlotId);
         capi.Network.GetChannel(ScribeModSystem.NetworkChannelName).SendPacket(new ScribeAssignmentActionMessage
@@ -626,10 +609,9 @@ public abstract partial class ScribeDialogBase
         });
     }
 
-    /// <summary>This player's current Accept-placement candidates (assignment-state-machine's placement
-    /// requirement) — thin wrapper over the shared <see cref="ScribeAcceptCandidates.Compute"/> helper
-    /// (add-progression-framework-quest-support Decision 3, extracted so Quest auto-link's Accept flow can
-    /// reuse the exact same eligibility rule and ordering instead of diverging), preferring the last-opened
+    /// <summary>This player's current Accept-placement candidates — thin wrapper over the
+    /// shared <see cref="ScribeAcceptCandidates.Compute"/> helper (also used by Quest auto-link's Accept
+    /// flow, so both share one eligibility rule and ordering), preferring the last-opened
     /// Scribe item as the picker's convenience default. Recomputed on each Inbox/Assignment rebuild — a
     /// stale list (inventory changed without a rebuild trigger) is harmless, since the server re-validates
     /// the resolved slot itself regardless.</summary>
@@ -637,9 +619,8 @@ public abstract partial class ScribeDialogBase
         => ScribeAcceptCandidates.Compute(capi, modSystem.LastOpenedScribeItemDocId);
 
     /// <summary>Builds the Assignment Desk's Create Assignments tab. Only
-    /// <see cref="GuiDialogScribeAssignmentDesk"/> ever routes <c>viewMode</c> here (design.md Decision 1),
-    /// and its real content (the staging slot + multi-select row list + batch-send form, per
-    /// assignment-multi-item-creation design.md D8-D13) needs that dialog's typed
+    /// <see cref="GuiDialogScribeAssignmentDesk"/> ever routes <c>viewMode</c> here,
+    /// and its real content (the staging slot + multi-select row list + batch-send form) needs that dialog's typed
     /// <see cref="BlockEntityAssignmentDesk"/>/slot-controller access — mirroring how
     /// <see cref="BuildInventoryContent"/> is a base placeholder overridden by the one surface that
     /// actually has that tab. The base placeholder is never seen in practice.</summary>
@@ -652,7 +633,7 @@ public abstract partial class ScribeDialogBase
 
     /// <summary>Every player who has ever connected to this world, unioned with anyone currently online,
     /// as (uid, display name) — the target-player picker's options, shared by the Create Assignments
-    /// form (persist-known-players-for-assignment). Self-assignment is deliberately allowed
+    /// form. Self-assignment is deliberately allowed
     /// (<c>ScribeAssignmentStore.TryApplyAction</c> already resolves it correctly — a self-assignment
     /// matches both the Assigner and Assignee role checks) so the list is never empty in singleplayer,
     /// where the local player is the only "online" player; their own entry is labeled distinctly so it
@@ -677,9 +658,9 @@ public abstract partial class ScribeDialogBase
             .ToList();
     }
 
-    /// <summary>This player's own Sent assignments (design.md Decision 3's read-only history), as
+    /// <summary>This player's own Sent assignments (read-only history), as
     /// <see cref="ScribeInboxRowData"/> for <see cref="ScribeInboxContent"/>. Newest-batch-first, matching
-    /// the Inbox tab (triage 2026-08-31 general notes: "Both ... should have the same ordering").</summary>
+    /// the Inbox tab.</summary>
     private protected List<ScribeInboxRowData> ComputeSentAssignmentRows() =>
         NewestBatchFirst(modSystem.MySentAssignments.Where(b => b.Assignment is not null))
             .Select(b => new ScribeInboxRowData(
@@ -699,10 +680,10 @@ public abstract partial class ScribeDialogBase
                 RedirectedDate: OptionalAssignmentDate(b.Assignment.RedirectedDate, b.Assignment.RedirectedTimestamp)))
             .ToList();
 
-    /// <summary>Builds the Sent Assignment History tab (refine-assignment-desk-inbox-ux 12.2/12.3): this
-    /// player's own read-only Sent history — state pills + the historical row list — split OUT of the
-    /// Create Assignments tab, which now shows staging-and-select only (12.1). Only the Assignment Desk
-    /// routes <c>viewMode</c> here (mirrors <see cref="BuildAssignmentContent"/>'s Decision-1 scoping),
+    /// <summary>Builds the Sent Assignment History tab: this
+    /// player's own read-only Sent history — state pills + the historical row list — separate from the
+    /// Create Assignments tab, which shows staging-and-select only. Only the Assignment Desk
+    /// routes <c>viewMode</c> here (mirrors <see cref="BuildAssignmentContent"/>'s scoping),
     /// but unlike that method this needs nothing Desk-specific — every piece
     /// (<see cref="ComputeSentAssignmentRows"/>, <see cref="ResolvePlayerNameForInbox"/>,
     /// <see cref="SendAssignmentAction"/>) already lives on the base — so this is a real implementation,
@@ -737,7 +718,7 @@ public abstract partial class ScribeDialogBase
             new Center(child: new Text(Lang.Get("scribe:scribe-gui-inventory-empty"), bodyStyle)));
     }
 
-    /// <summary>Builds the Inbox Inventory tab content (add-inbox-inventory-tab). Only the standalone
+    /// <summary>Builds the Inbox Inventory tab content. Only the standalone
     /// Inbox block exposes this tab, so the base returns an empty placeholder; <see cref="GuiDialogScribeInbox"/>
     /// overrides it to place the 8-slot mixed restricted/open grid. Mirrors <see cref="BuildInventoryContent"/>.</summary>
     protected virtual Widget BuildInboxInventoryContent()
@@ -759,7 +740,7 @@ public abstract partial class ScribeDialogBase
     {
         if (focusedEditIndex is { } idx) NormalizeRowOnCommit(idx);
         // Drop any abandoned empty task before flushing so the read view / persisted doc never shows one
-        // (add-empty-task-lifecycle D5) — the focused row may be an untyped new task the blur hasn't swept.
+        // — the focused row may be an untyped new task the blur hasn't swept.
         PurgeEmptyRowsFromScratch();
         pendingEmptyRowRemoval = null; // superseded by the purge; don't act on it after the editor tears down
         FlushIfDirty();
@@ -800,14 +781,14 @@ public abstract partial class ScribeDialogBase
     /// incidental teardown inside <see cref="LeaveEditorIfActive"/>) — the one choke point both paths share.
     /// The default is a no-op: <see cref="isEditorMode"/>'s setter already landed <see cref="viewMode"/> on
     /// Read just above, matching every Read/Editor-capable surface (Lectern/Notebook/Scriptorium/Chalkboard).
-    /// The Assignment Desk has no Read view (remove-assignment-desk-read-tab) and overrides this to land back
+    /// The Assignment Desk has no Read view and overrides this to land back
     /// on Create Assignments instead, so leaving the editor never strands the dialog on a tab with no nav
     /// button to show it.</summary>
     protected virtual void OnLeftEditorMode() { }
 
     /// <summary>
     /// Called by <see cref="BlockEntityScribeLectern.HandleServerReply"/> when an autosave was rejected
-    /// because this client lost the editor lock (task 8.6). The failing <see cref="FlushIfDirty"/>
+    /// because this client lost the editor lock. The failing <see cref="FlushIfDirty"/>
     /// already cleared <see cref="isDirty"/> optimistically, so without recovery the unsaved edit
     /// would be silently dropped. Instead we re-request the editor lock (keeping the scratch intact via
     /// <see cref="recoveringLostLock"/>); a re-grant lands back in <see cref="EnterEditorMode"/>, which
@@ -833,14 +814,14 @@ public abstract partial class ScribeDialogBase
     }
 
     /// <summary>The user-facing "switch to editor" entry point for both affordances (read-view footer
-    /// button and the right-column Edit nav button) — fix-multiplayer-editor-lock §4. If the synced lock
+    /// button and the right-column Edit nav button). If the synced lock
     /// state shows another player already holds the editor lock, this does NOT round-trip to the server:
     /// it surfaces the native in-game error and stays put (the affordance is also rendered inert in that
     /// state — see BuildRightColNav / the read-view footer). Otherwise it requests access normally; the
     /// server refusal remains the authoritative backstop for the render→click race. Distinct from
     /// <see cref="RequestEditorAccess"/>, which is the raw request also used by the lost-lock recovery
     /// re-acquire (<see cref="HandleSaveFailed"/>) and must NOT be gated. Protected (not private) so a
-    /// subclass building its own Edit nav button (the Assignment Desk, add-assignment-desk-own-tasks) can
+    /// subclass building its own Edit nav button (the Assignment Desk) can
     /// wire directly to it instead of duplicating the lock-check.</summary>
     protected void TryEnterEditor()
     {
@@ -853,8 +834,8 @@ public abstract partial class ScribeDialogBase
         RequestEditorAccess();
     }
 
-    /// <summary>"Switch to editor" button in the read view: request editor access from the server
-    /// (design D2 flow, unchanged). A granted reply round-trips back to
+    /// <summary>"Switch to editor" button in the read view: request editor access from the server.
+    /// A granted reply round-trips back to
     /// <see cref="BlockEntityScribeLectern.HandleServerReply"/>, which calls
     /// <see cref="EnterEditorMode"/>. Callers that gate on the synced lock go through
     /// <see cref="TryEnterEditor"/>; this raw form is also the lost-lock recovery re-acquire.
@@ -877,8 +858,7 @@ public abstract partial class ScribeDialogBase
     /// effects ARE propagated into scratch, because they are orthogonal to the text being edited:
     /// <list type="bullet">
     /// <item>a task the fresh authoritative document no longer contains (e.g. this player completed it via
-    /// the HUD under a destructive policy) is dropped from the editor, without disturbing other rows' edits
-    /// (add-pinned-task-hud follow-up — <c>80777b7b</c>);</item>
+    /// the HUD under a destructive policy) is dropped from the editor, without disturbing other rows' edits;</item>
     /// <item>a task whose authoritative <see cref="ScribeBlock.Done"/> flipped externally (e.g. a HUD
     /// completion under Keep/Sink, where the task stays in the document) has its scratch done-state synced,
     /// so the open editor's checkbox reflects it live;</item>
@@ -886,10 +866,9 @@ public abstract partial class ScribeDialogBase
     /// the editor too, matching the Read/Pinned views.</item>
     /// </list>
     /// Syncing done-state + order (never text) also makes scratch consistent with the live document, so the
-    /// next autosave <c>ApplyEdit</c> flush no longer reverts the external completion — closing the
-    /// last-write-wins data-loss window for the completion case (sync-editor-view-on-external-completion).
+    /// next autosave <c>ApplyEdit</c> flush does not revert the external completion.
     /// </summary>
-    /// <summary>Read View filter-pill tap handler (read-view-filter-pills 3.3/4.3): updates the
+    /// <summary>Read View filter-pill tap handler: updates the
     /// dialog-owned selection, persists it to the host's per-instance state, and rebuilds so
     /// <see cref="BuildReadContent"/> re-filters immediately. A no-op tap on the already-active pill
     /// skips the round-trip.</summary>
@@ -897,7 +876,7 @@ public abstract partial class ScribeDialogBase
     {
         if (readViewFilterCategory == category) return;
         readViewFilterCategory = category;
-        // Mark this pill pick pending until the server's echo lands (read-view-collapse-affordance-fixes):
+        // Mark this pill pick pending until the server's echo lands:
         // RefreshReadView() must not stomp it back to the still-stale host mirror if a row mutation (e.g.
         // completing a task) synchronously refreshes before the round trip below completes.
         pendingReadViewFilterCategory = category;
@@ -905,7 +884,7 @@ public abstract partial class ScribeDialogBase
         if (IsOpened()) ForceRebuild();
     }
 
-    /// <summary>Read View subtask-group collapse toggle (read-view-subtask-collapse 5.3/7.1): flips the
+    /// <summary>Read View subtask-group collapse toggle: flips the
     /// given group's (identified by its parent row's stable TaskId) collapsed state and persists it the
     /// same way as the filter pill.</summary>
     private void OnReadViewToggleGroupCollapsed(Guid groupParentTaskId)
@@ -919,7 +898,7 @@ public abstract partial class ScribeDialogBase
     }
 
     /// <summary>Sends the current filter pill + collapsed-group set to the server so the host's persisted
-    /// per-instance state (read-view-filter-pills / read-view-subtask-collapse) stays in sync — lock-free,
+    /// per-instance state stays in sync — lock-free,
     /// mirroring the Tracker-quantity write-through (a viewer preference, not a document edit).</summary>
     private void PersistReadViewState()
     {
@@ -934,12 +913,11 @@ public abstract partial class ScribeDialogBase
     public void RefreshReadView()
     {
         // Re-derive the dialog's Read View filter/collapse fields from the host's now-current persisted
-        // state on EVERY resync (read-view-filter-and-collapse) — cheap, and mirrors how the whole
+        // state on EVERY resync — cheap, and mirrors how the whole
         // Document itself is fully replaced each resync: keeps this dialog converged with a change made
         // by this same client's own request echo, another client's edit, or a save/load round trip.
         // Only accept the host mirror's pill/collapse state when this client has no local selection still
-        // in flight, or the mirror has caught up to exactly that selection (read-view-collapse-affordance-
-        // fixes) — otherwise a row mutation's synchronous refresh (e.g. completing a task) would land
+        // in flight, or the mirror has caught up to exactly that selection — otherwise a row mutation's synchronous refresh (e.g. completing a task) would land
         // between a just-made local pick and the server's echo, and stomp the pick back to the stale
         // mirror. Multiplayer/concurrent changes from OTHER clients still flow in on every refresh once
         // this client's own pending pick (if any) is confirmed.
@@ -959,22 +937,21 @@ public abstract partial class ScribeDialogBase
         if (!isEditorMode)
         {
             if (!IsOpened()) return;
-            // Read view (reconcile-animating-surfaces §5): the read list is now non-virtualized and keyed by
+            // Read view: the read list is non-virtualized and keyed by
             // ValueKey<Guid>(TaskId), so an external document change (another client toggled a task, or the
             // Delete completion policy removed one) reconciles in place — surviving rows are REUSED, the
             // deleted row's element unmounts, and the shared scroll offset is preserved inherently, so no
             // capture-restore is needed. A completion under a stationary cursor can slide a different row up;
-            // arm the hover latch so the hover-gated pin control re-homes without a mouse wiggle
-            // (fix-list-collapse-stale-hover), harmless when nothing moved.
+            // arm the hover latch so the hover-gated pin control re-homes without a mouse wiggle,
+            // harmless when nothing moved.
             if (viewMode == ScribeLecternView.Read)
             {
                 hoverRefreshLatch.Arm();
                 RebuildBody();
                 return;
             }
-            // Other non-editor views (Pinned/History/Timer/Visitors) still ForceRebuild here. Pinned keeps its
-            // offset via reconcile through OnMyPinsChanged; the rest have no scroll state worth capturing, so
-            // capture-restore is gated to the (now Pinned-excluded) remaining cases as before.
+            // Other non-editor views (Pinned/History/Timer/Visitors) ForceRebuild here. Pinned keeps its
+            // offset via reconcile through OnMyPinsChanged, so scroll capture-restore is skipped for it.
             if (viewMode != ScribeLecternView.Pinned) CaptureScrollForRestore();
             ForceRebuild();
             return;
@@ -996,9 +973,7 @@ public abstract partial class ScribeDialogBase
             // task this editor JUST created that hasn't reached the server yet: EditorInsertTaskBelow
             // flushes the pre-insert doc, and autosave is throttled (~1s) and skips an empty focused row,
             // so a brand-new row lives locally-only for a beat. A resync landing in that window must NOT
-            // yank the new row out from under the player — that was the "Enter makes a task that self-
-            // destructs a few frames later" race (trace signature: insert-below N → delete N+1 with no
-            // sweep guard tripping, because the delete comes from HERE, not the empty-row sweep). Tell the
+            // yank the new row out from under the player. Tell the
             // two apart: never drop the row currently being edited, and never drop an empty task (empty
             // tasks are never persisted by design — see PurgeEmptyRowsFromScratch — so their absence from
             // the server is always expected, never a server-side deletion). The empty-text protection is
@@ -1025,7 +1000,7 @@ public abstract partial class ScribeDialogBase
             if (!b.IsCompletable || !serverDone.TryGetValue(b.TaskId, out bool serverBlockDone)) continue;
             if (b.Done == serverBlockDone) continue;
             scratch.ToggleTask(i);
-            isDirty = true; // carry the synced done-state into the next flush so it isn't reverted (D4)
+            isDirty = true; // carry the synced done-state into the next flush so it isn't reverted
             doneChanged = true;
             // A task that just completed AND is now last server-side was sunk by a Sink/UnpinSink policy;
             // mirror the move to the bottom of scratch. Only the just-completed row is moved, so a local

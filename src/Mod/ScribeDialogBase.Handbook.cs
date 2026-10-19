@@ -7,15 +7,14 @@ using Vintagestory.API.Config;   // Lang
 
 namespace Scribe;
 
-// Handbook "Add to Scribe" entry point (add-tracker-link-tasks Group 3). A Handbook page's injected
+// Handbook "Add to Scribe" entry point. A Handbook page's injected
 // "Add to Scribe" link (ScribeHandbookPatch) carries the collectible code; ScribeModSystem.AddFromHandbook
 // resolves a live/openable Scribe surface and calls TryAddFromHandbook here. The whole flow REUSES the
-// dialog's existing per-surface save path (scratch → FlushIfDirty → SendFlushPacket) rather than adding a
-// dedicated handbook packet/server handler — the only persistence change is the v6 document bytes shipped in
-// Group 2, so this is backwards compatible (a ScribeAddKind is never serialized).
+// dialog's existing per-surface save path (scratch → FlushIfDirty → SendFlushPacket) rather than using a
+// dedicated handbook packet/server handler (a ScribeAddKind is never serialized).
 public abstract partial class ScribeDialogBase
 {
-    /// <summary>A Handbook-originated append waiting for this dialog to reach editor mode (Case B). Stashed
+    /// <summary>A Handbook-originated append waiting for this dialog to reach editor mode. Stashed
     /// as the deferred apply action when a "Add to Scribe"/"Add Link" click lands while the dialog is NOT
     /// editing, then invoked by <see cref="FlushPendingHandbookAppend"/> at the end of
     /// <see cref="EnterEditorMode"/> once editor access is granted (immediately for item surfaces, or on the
@@ -35,7 +34,7 @@ public abstract partial class ScribeDialogBase
     /// carries the PRE-flush document — must KEEP our optimistic scratch and re-flush it, exactly like the
     /// lost-lock recovery branch, rather than reseeding scratch and dropping the append. Gated to
     /// pure-singleplayer (not LAN/dedicated) so multiplayer keeps the authoritative async grant, where the
-    /// server isn't paused and the lock can genuinely be refused (feedback 7.13 follow-up).</summary>
+    /// server isn't paused and the lock can genuinely be refused.</summary>
     private bool optimisticEditorEntry;
 
     /// <summary>True when this surface's editor access requires a server round-trip (a block surface —
@@ -51,18 +50,18 @@ public abstract partial class ScribeDialogBase
     /// merely locked by another player still counts, because it becomes editable once the lock frees). False
     /// ONLY for a permanently read-only surface (a fired/hardened tablet), where <see cref="TryHandbookAppend"/>
     /// surfaces <see cref="NotifyHandbookAppendReadOnly"/> instead of stashing an append that could never apply
-    /// — the fix for the silent no-feedback drop when a read-only item is open (feedback 7.13).</summary>
+    /// so a read-only open item always gives feedback.</summary>
     protected virtual bool CanEditFromHandbook => true;
 
     /// <summary>Surface the "this document can't be written in" notice when a Handbook append targets a
     /// permanently read-only OPEN surface (<see cref="CanEditFromHandbook"/> is false). The base uses the
     /// generic locked-Scribe-items message; the tablet overrides it with its material-specific fired/hardened
-    /// wording, reusing the same keys as its row-text-edit refusal (feedback 7.13).</summary>
+    /// wording, reusing the same keys as its row-text-edit refusal.</summary>
     protected virtual void NotifyHandbookAppendReadOnly()
         => capi.TriggerIngameError(this, "scribe-gui-all-locked", Lang.Get("scribe:scribe-gui-all-locked"));
 
     /// <summary>Create a Tracker/Link task on THIS dialog from a Handbook "Add to Scribe" click, reusing the
-    /// dialog's own save path (add-tracker-link-tasks 3.4). Two cases:
+    /// dialog's own save path. Two cases:
     /// <list type="bullet">
     /// <item><b>Already editing</b> — the scratch document is live, so append + flush immediately
     /// (<see cref="ApplyHandbookAppend"/>).</item>
@@ -81,7 +80,7 @@ public abstract partial class ScribeDialogBase
         => TryHandbookAppend(() => ApplyHandbookAppend(kind, itemCode));
 
     /// <summary>Create a guide-page <b>Link</b> task on THIS dialog from a Handbook guide/explainer page's
-    /// injected "Add Link" click (add-tracker-link-tasks 7.6). Same two-case deferral as
+    /// injected "Add Link" click. Same two-case deferral as
     /// <see cref="TryAddFromHandbook"/>, but the target is a <c>"page:"</c>-prefixed guide code rather than an
     /// item — so it carries the guide's <paramref name="pageCode"/> and its display <paramref name="title"/>
     /// (captured at click time because a guide page has no item to resolve a name from). Tracker does not
@@ -90,7 +89,7 @@ public abstract partial class ScribeDialogBase
         => TryHandbookAppend(() => ApplyGuideLinkAppend(pageCode, title));
 
     /// <summary>Create a <b>Crafting Task</b> on THIS dialog from a Handbook item page's "Add Crafting Task"
-    /// click (add-crafting-tasks D5). Same two-case deferral as <see cref="TryAddFromHandbook"/>. The click
+    /// click. Same two-case deferral as <see cref="TryAddFromHandbook"/>. The click
     /// carries the output <paramref name="itemCode"/> and the chosen grid recipe's stable
     /// <paramref name="signature"/> (<see cref="ScribeCraftRecipeProbe"/>); the applied action creates the
     /// <see cref="ScribeBlockKind.Craft"/> parent and generates its ingredient subtasks.</summary>
@@ -120,13 +119,13 @@ public abstract partial class ScribeDialogBase
     }
 
     /// <summary>Re-resolve a Craft parent's bound recipe (by its persisted signature) against the live recipe
-    /// registry and reconcile its depth-1 ingredient run to the current batch size (add-crafting-tasks 6.3/6.4).
+    /// registry and reconcile its depth-1 ingredient run to the current batch size.
     /// Shared by the create path (<see cref="ApplyCraftHandbookAppend"/>) and the target-change path
     /// (<see cref="SetEditorTrackerTargetQuantity"/>). Handbook create uses
     /// <see cref="ScribeDocument.ReconcileCraftIngredients"/> (insert missing); the stepper uses
     /// <see cref="ScribeDocument.RescaleCraftIngredients"/> (update targets only). An unresolvable
     /// signature degrades gracefully — the parent stays a plain output tracker and its existing children
-    /// are left untouched (D3 risk mitigation). Returns whether the block list changed size (a child was
+    /// are left untouched. Returns whether the block list changed size (a child was
     /// created), so callers can decide whether to re-flush.</summary>
     private bool ReconcileCraftFromSignature(ScribeDocument doc, ScribeBlock craftBlock)
     {
@@ -167,7 +166,7 @@ public abstract partial class ScribeDialogBase
 
         // The open surface is permanently read-only (a fired/hardened tablet, or any future "uneditable"
         // document): it can never reach editor mode, so surface the surface-specific read-only notice rather
-        // than silently dropping the append — the bug where an open locked item gave NO feedback (feedback 7.13).
+        // than silently dropping the append.
         if (!CanEditFromHandbook)
         {
             NotifyHandbookAppendReadOnly();
@@ -210,9 +209,9 @@ public abstract partial class ScribeDialogBase
     private bool IsPureSingleplayer => capi.IsSinglePlayer && !capi.OpenedToLan;
 
     /// <summary>Insert the Handbook-originated Tracker/Link block at the player's New Task Insert edge
-    /// and flush it through the dialog's existing save path (add-tracker-link-tasks 3.4/3.5). Enforces the
-    /// block-cap gate for every kind (the cap is "N of anything" — Tracker and Link both count,
-    /// refine-chalkboard §12) exactly as the footer add does, so a full tablet/chalkboard refuses with the
+    /// and flush it through the dialog's existing save path. Enforces the
+    /// block-cap gate for every kind (the cap is "N of anything" — Tracker and Link both count)
+    /// exactly as the footer add does, so a full tablet/chalkboard refuses with the
     /// same notice. No-op unless the editor is live.</summary>
     private void ApplyHandbookAppend(ScribeAddKind kind, string itemCode)
     {
@@ -221,26 +220,26 @@ public abstract partial class ScribeDialogBase
         if (!kind.Add(scratch, itemCode, NewTaskInsertIndex())) return;
         isDirty = true;
         SyncFocusNodesToScratch();
-        // NOTE (feedback 6.4, round 2): we do NOT auto-focus the new Tracker's stepper. The add originates
+        // We do NOT auto-focus the new Tracker's stepper. The add originates
         // from a click inside the Handbook window, and VS keeps real keyboard focus on the window last
         // clicked — so arming the stepper's caret only PAINTED a caret here while typing still went to the
         // Handbook, misleading the player. Cross-window focus hand-off isn't worth forcing; the player taps
         // the stepper themselves. (The ScribeNumericField autoFocus seam remains for in-dialog use.)
-        // Persist immediately (Case A appends + flushes at once); the autosave tick would otherwise carry it
+        // Persist immediately; the autosave tick would otherwise carry it
         // within ~1s, but the player clicked in the Handbook and expects the task to exist right away.
         FlushIfDirty();
         // Reconcile the editor list so the new row appears. This is the live path when the append arrives
-        // while ALREADY editing (Case A): the body is mounted, so the in-place reconcile shows the new row at
-        // once. In the deferred Case B (append stashed, then applied from EnterEditorMode) this is a harmless
+        // while ALREADY editing: the body is mounted, so the in-place reconcile shows the new row at
+        // once. In the deferred path (append stashed, then applied from EnterEditorMode) this is a harmless
         // no-op — that path applies the append BEFORE its ForceRebuild, which then builds the whole tree from
         // the now-mutated scratch, so the row is present regardless of whether this reconcile resolved.
         RebuildBody();
     }
 
     /// <summary>Insert a guide-page Link block at the player's New Task Insert edge and flush it through
-    /// the dialog's existing save path (add-tracker-link-tasks 7.6) — the guide-page sibling of
+    /// the dialog's existing save path — the guide-page sibling of
     /// <see cref="ApplyHandbookAppend"/>. A guide link is a block like any other, so it counts against a
-    /// finite tier's "N of anything" cap (refine-chalkboard §12): a full tablet/chalkboard refuses it with
+    /// finite tier's "N of anything" cap: a full tablet/chalkboard refuses it with
     /// the same notice the item insert and footer add use. No-op unless the editor is live.</summary>
     private void ApplyGuideLinkAppend(string pageCode, string title)
     {
@@ -265,15 +264,14 @@ public abstract partial class ScribeDialogBase
         pending();
     }
 
-    /// <summary>The footer add-picker guide action for an item-bound kind (add-tracker-link-tasks 3.7). A
+    /// <summary>The footer add-picker guide action for an item-bound kind. A
     /// Tracker/Link can't be created from a bare footer click — it needs a target item code that only a
     /// Handbook page's "Add to Scribe" link supplies — so instead of adding a row we GUIDE the player there:
     /// <list type="bullet">
     /// <item>Handbook <b>closed</b> → open the Handbook overview with the search box already focused (via the
     /// survival mod's <c>"handbooksearch"</c> link protocol), so the player can immediately type the item
-    /// they want to track/link. Speed-to-entry is the priority (2026-08-15 feedback): opening our explainer
-    /// entry instead dead-ended the player, who then had to navigate back to search anyway. The explainer
-    /// stays discoverable via cross-links from the other top-level Scribe guides, not on this add path.</item>
+    /// they want to track/link. Speed-to-entry is the priority, so this path does not open the explainer
+    /// entry; that stays discoverable via cross-links from the other top-level Scribe guides.</item>
     /// <item>Handbook <b>open</b> (already on some item's page) → a transient error telling them to scroll to
     /// the bottom of the current entry and click "Add to Scribe".</item>
     /// </list>

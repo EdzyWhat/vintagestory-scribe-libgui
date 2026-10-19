@@ -48,7 +48,7 @@ public sealed partial class ScribeModSystem
     /// server-authoritative, so this must be a server command. Double-gated: the <c>controlserver</c>
     /// privilege plus an in-handler creative-mode check. History seeds only the Notebook and Guestbook
     /// only the Lectern (they are hosted asymmetrically); inapplicable combinations are skipped and
-    /// reported, never errored (design decisions 1–3).</summary>
+    /// reported, never errored.</summary>
     private void RegisterSeedCommand(ICoreServerAPI api)
     {
         var parsers = api.ChatCommands.Parsers;
@@ -128,12 +128,12 @@ public sealed partial class ScribeModSystem
     /// caller to type the literal two-character escape <c>\n</c> where they want a line break — converted
     /// here to a real <c>'\n'</c> before it ever reaches <see cref="TryCreateExternalTask"/>. Only this dev
     /// harness needs the conversion: a real calling mod hands over a genuine multi-line C# string, which
-    /// already survives the mapper/codecs/render pipeline untouched (add-external-mod-task-api).</summary>
+    /// already survives the mapper/codecs/render pipeline untouched.</summary>
     private static string? UnescapeTypedNewlines(string? s) => s?.Replace("\\n", "\n");
 
     private static string FormatArgEcho(string? value) => value is null ? "null" : $"\"{value}\"";
 
-    /// <summary>Handler for <c>/scribe tablet &lt;wet|hard|fired&gt;</c> (add-tablet-state-dev-command): set the
+    /// <summary>Handler for <c>/scribe tablet &lt;wet|hard|fired&gt;</c> set the
     /// calling player's HELD Scribe Tablet to the requested life-cycle state by swapping its <c>material</c>
     /// variant to the corresponding sibling and carrying the document/history across
     /// (<see cref="ItemScribeTablet.BuildStateVariant"/>). Server-authoritative — the held item lives in the
@@ -141,7 +141,7 @@ public sealed partial class ScribeModSystem
     /// natural <c>Soften</c>/<c>DoSmelt</c> paths. Double-gated identically to <c>/scribe seed</c>
     /// (<c>controlserver</c> privilege on the root + this in-handler creative check). Reaching a
     /// <c>wet</c>/<c>hard</c> state from a FIRED tablet bypasses the normally-permanent fired rule; that is an
-    /// intentional testing override and is reported as such (D3).</summary>
+    /// intentional testing override and is reported as such.</summary>
     private TextCommandResult OnTabletCommand(TextCommandCallingArgs args)
     {
         if (sapi is null) return TextCommandResult.Error("Server not ready.");

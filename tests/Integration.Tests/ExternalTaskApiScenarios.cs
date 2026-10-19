@@ -7,7 +7,7 @@ using Vintagestory.API.Common;
 namespace Integration.Tests;
 
 /// <summary>
-/// add-external-mod-task-api tasks.md §5/§6: end-to-end coverage of the public
+/// End-to-end coverage of the public
 /// <see cref="ScribeModSystem.TryCreateExternalTask"/> entry point — the title/bodyText/extraInfo mapping,
 /// the silent last-opened-or-first-writeable target resolution, and the three failure reasons (no Scribe
 /// item, all locked, target full), against a real player and real carried items.

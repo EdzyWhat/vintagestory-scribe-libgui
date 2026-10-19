@@ -9,12 +9,12 @@ using Vintagestory.API.Config;
 
 namespace Scribe;
 
-// Client-side entry point for the Handbook "Add to Scribe" flow (add-tracker-link-tasks Group 3). The
+// Client-side entry point for the Handbook "Add to Scribe" flow. The
 // Harmony postfix ScribeHandbookPatch injects "Add as Tracker"/"Add as Link" links onto an item's Handbook
 // page; clicking one calls AddFromHandbook here with the chosen ScribeAddKind and the item's collectible
 // code. AddFromHandbook resolves WHICH Scribe surface receives the new block (three tiers) and hands off to
-// ScribeDialogBase.TryAddFromHandbook, which reuses the dialog's own save path — no new packet/server
-// handler (the only persistence change is the v6 document bytes shipped in Group 2).
+// ScribeDialogBase.TryAddFromHandbook, which reuses the dialog's own save path, so no dedicated packet or server
+// handler exists for it.
 public sealed partial class ScribeModSystem
 {
     /// <summary>Harmony id for the client-side Handbook postfix. Patched in <see cref="StartClientSide"/> and
@@ -34,14 +34,13 @@ public sealed partial class ScribeModSystem
     private Guid? lastOpenedScribeItemDocId;
 
     /// <summary>Public read-only view of <see cref="lastOpenedScribeItemDocId"/> — used by
-    /// <see cref="ScribeDialogBase.ComputeAcceptCandidates"/> (refine-assignment-desk-inbox-ux triage
-    /// 2026-08-31) to prefer the same "book the player was just using" target that the Handbook's "Add to
-    /// Scribe" flow already does, instead of listing every writeable Scribe item across ALL registered
+    /// <see cref="ScribeDialogBase.ComputeAcceptCandidates"/> to prefer the same "book the player was just using" target that the Handbook's "Add to
+    /// Scribe" flow does, rather than listing every writeable Scribe item across ALL registered
     /// inventories (which could include an open chest's).</summary>
     internal Guid? LastOpenedScribeItemDocId => lastOpenedScribeItemDocId;
 
     /// <summary>Record that the player just opened this item-hosted Scribe document, so a later Handbook
-    /// "Add to Scribe" click with no dialog open re-targets the same book (add-tracker-link-tasks 3.2). Called
+    /// "Add to Scribe" click with no dialog open re-targets the same book. Called
     /// from each Scribe item's dialog-open path. No-op semantics off the client (it only ever runs there).</summary>
     public void NoteScribeItemDialogOpened(Guid docId) => lastOpenedScribeItemDocId = docId;
 
@@ -61,14 +60,14 @@ public sealed partial class ScribeModSystem
     }
 
     /// <summary>Create a Tracker/Link on a Scribe surface from an <b>item</b> Handbook page's "Add to Scribe"
-    /// click (add-tracker-link-tasks 3.3). Resolves the target surface via <see cref="AddFromHandbookCore"/>
+    /// click. Resolves the target surface via <see cref="AddFromHandbookCore"/>
     /// and hands the chosen dialog to <see cref="ScribeDialogBase.TryAddFromHandbook"/>. <paramref name="itemCode"/>
     /// is the collectible code the injected link carried (e.g. <c>"game:ingot-copper"</c>).</summary>
     internal void AddFromHandbook(ScribeAddKind kind, string itemCode)
         => AddFromHandbookCore(dialog => dialog.TryAddFromHandbook(kind, itemCode));
 
     /// <summary>Create a <b>Crafting Task</b> on a Scribe surface from an item Handbook page's "Add Crafting
-    /// Task" click (add-crafting-tasks D5). Same three-tier surface resolution as <see cref="AddFromHandbook"/>,
+    /// Task" click. Same three-tier surface resolution as <see cref="AddFromHandbook"/>,
     /// but hands off to <see cref="ScribeDialogBase.TryAddCraftFromHandbook"/> with the output
     /// <paramref name="itemCode"/> and the chosen grid recipe's stable <paramref name="recipeSignature"/>
     /// (from <see cref="ScribeCraftRecipeProbe"/>), which creates the Craft parent and generates its ingredient
@@ -77,7 +76,7 @@ public sealed partial class ScribeModSystem
         => AddFromHandbookCore(dialog => dialog.TryAddCraftFromHandbook(itemCode, recipeSignature));
 
     /// <summary>Create a guide-page <b>Link</b> on a Scribe surface from a Handbook guide/explainer page's
-    /// injected "Add Link" click (add-tracker-link-tasks 7.6). Same three-tier surface resolution as
+    /// injected "Add Link" click. Same three-tier surface resolution as
     /// <see cref="AddFromHandbook"/>, but hands off to <see cref="ScribeDialogBase.TryAddGuideLinkFromHandbook"/>
     /// with the guide's <paramref name="pageCode"/> and display <paramref name="title"/> (a guide page has no
     /// item to resolve a name from, so the title is captured here at click time).</summary>
@@ -85,14 +84,14 @@ public sealed partial class ScribeModSystem
         => AddFromHandbookCore(dialog => dialog.TryAddGuideLinkFromHandbook(pageCode, title));
 
     /// <summary>Resolve which Scribe surface receives a Handbook-originated add and run <paramref name="apply"/>
-    /// against it (add-tracker-link-tasks 3.3 / 7.6). Both the item path (<see cref="AddFromHandbook"/>) and the
+    /// against it. Both the item path (<see cref="AddFromHandbook"/>) and the
     /// guide-page path (<see cref="AddGuideLinkFromHandbook"/>) share this three-tier resolution, differing only
     /// in what they do with the chosen dialog:
     /// <list type="number">
     /// <item>An <b>already-open</b> Scribe dialog (the player is looking at a book/lectern) — apply to it.</item>
     /// <item>Else <b>open a carried WRITEABLE Scribe item</b> (the last-opened one, or the first in inventory)
     /// and apply to the freshly-opened dialog. Read-only tablets (hardened/fired) are skipped so the append
-    /// never silently no-ops against one (feedback 6.2).</item>
+    /// never silently no-ops against one.</item>
     /// <item>Else a transient error: "only read-only Scribe items" and "no Scribe item at all" are distinct.</item>
     /// </list>
     /// Client-only (the Handbook is a client GUI).</summary>
@@ -113,7 +112,7 @@ public sealed partial class ScribeModSystem
         // Tier 2: no dialog open — open a carried WRITEABLE Scribe item and add to it. OpenScribeDialog
         // returns the dialog it opened; item surfaces grant editor access synchronously, so the deferred
         // append runs immediately. ResolveWriteableCarriedSlot skips read-only tablets (hardened/fired) so the
-        // append never silently no-ops against one — it lands on the next editable book instead (feedback 6.2).
+        // append never silently no-ops against one — it lands on the next editable book instead.
         var writeable = ResolveWriteableCarriedSlot(out bool anyScribeItem);
         if (writeable is { Itemstack.Collectible: IScribeDocumentItem item })
         {
@@ -123,7 +122,7 @@ public sealed partial class ScribeModSystem
         }
 
         // The player carries Scribe items but every one is read-only (hardened or fired tablets): a single
-        // clear error rather than one per item, per feedback 6.2.
+        // clear error rather than one per item.
         if (anyScribeItem)
         {
             capi.TriggerIngameError(this, "scribe-item-locked", Lang.Get("scribe:scribe-gui-all-locked"));
@@ -138,7 +137,7 @@ public sealed partial class ScribeModSystem
     /// document is the <see cref="lastOpenedScribeItemDocId"/> (the book the player was just using) IF it is
     /// writeable, else the first writeable carried Scribe item. A read-only item (a hardened/fired tablet —
     /// <see cref="IScribeDocumentItem.IsSlotWriteable"/> false) is skipped so the append never lands on a
-    /// surface that would silently drop it (add-tracker-link-tasks feedback 6.2). Scans only the player's own
+    /// surface that would silently drop it. Scans only the player's own
     /// hotbar + backpack (not ground/creative). <paramref name="anyScribeItem"/> reports whether ANY Scribe
     /// item was carried at all (writeable or not), so the caller can tell "no Scribe item" (guide the player)
     /// apart from "only read-only Scribe items" (a distinct locked error). Returns null when no writeable
@@ -175,9 +174,8 @@ public sealed partial class ScribeModSystem
     /// <summary>Enumerate the player's own hotbar and backpack slots that hold a stack (the inventories a
     /// "carried" Scribe item can live in). Skips empty slots. Used by <see cref="ResolveCarriedScribeItemSlot"/>
     /// and by the Tracker count engine (<see cref="ScribeTrackerCounter"/>), which sums matching stacks over
-    /// exactly these carried-only inventories (add-tracker-link-tasks D5 — chest/ground items are ignored).
-    /// Typed to the base <see cref="IPlayer"/> (widened from <c>IClientPlayer</c> by refine-task-notice-ux)
-    /// since <see cref="IPlayer.InventoryManager"/>/<c>GetOwnInventory</c> resolve identically for a
+    /// exactly these carried-only inventories (chest/ground items are ignored).
+    /// Typed to the base <see cref="IPlayer"/> since <see cref="IPlayer.InventoryManager"/>/<c>GetOwnInventory</c> resolve identically for a
     /// server-side <c>IServerPlayer</c> — the proximity heartbeat's own-inventory scan
     /// (<see cref="ScribeModSystem.OnTaskNoticeProximityTick"/>) reuses this exact enumeration server-side.</summary>
     internal static IEnumerable<ItemSlot> EnumerateCarriedSlots(IPlayer player)

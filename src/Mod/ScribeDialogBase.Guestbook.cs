@@ -39,7 +39,7 @@ public abstract partial class ScribeDialogBase
         string taskFont = modSystem.MySettings.TaskFontFamily;
         var headerStyle = new TextStyle { FontFamily = ScribeRowControlNudge.TitleFontFamily, Weight = FontWeight.Bold, FontSize = bodySize, Color = colors.OnSurface };
         // Visitor names inherit the tab's pegged layout size; date/note are intentionally smaller so
-        // they set LayoutSize at their own nominal (peg-task-fonts-to-caudex).
+        // they set LayoutSize at their own nominal.
         var bodyStyle   = new TextStyle { Color = colors.OnSurface };
         var dateStyle   = new TextStyle { FontSize = ScribeTaskFont.LayoutSize(taskFont, dateSize), Color = colors.OnSurface with { W = colors.OnSurface.W * 0.8f } };
         var myName = capi.World.Player.PlayerName;
@@ -124,10 +124,8 @@ public abstract partial class ScribeDialogBase
                 })));
         }
 
-        // 8-unit top padding lives INSIDE the scroll region (unify-tab-header-layout §7, doubled from 4
-        // per 2026-09-09 playtest feedback) so the durable divider above sits flush against the viewport
-        // and this breathing room scrolls away with the content, instead of the old fixed gap outside the
-        // scroll region.
+        // 8-unit top padding lives INSIDE the scroll region so the durable divider above sits flush
+        // against the viewport and this breathing room scrolls away with the content.
         Widget body = entries.Count == 0
             ? new Center(child: ScribeTaskFont.OffsetWrap(taskFont, bodySize,
                 new Text(Lang.Get("scribe:scribe-guestbook-empty"), bodyStyle)))
@@ -137,9 +135,9 @@ public abstract partial class ScribeDialogBase
               { AutoHide = false };
 
         // Shared Row 2 subtitle + Row 3 (the "Visitor / Note" column headers) + the durable divider
-        // (unify-tab-header-layout 3.1) — Guest Book is the ONE exception with an EXTRA leading divider
+        // — Guest Book is the ONE exception with an EXTRA leading divider
         // directly above its column headers (the ledger-style flourish), on top of the durable divider
-        // below them. Replaces the old divider-header-divider sandwich.
+        // below them.
         Widget columnHeaders = new Row(children: new Widget[]
         {
             new Expanded(new Padding(EdgeInsets.Only(left: 10f), new Text(Lang.Get("scribe:scribe-guestbook-col-visitor"), headerStyle)), flex: 3),
@@ -151,12 +149,12 @@ public abstract partial class ScribeDialogBase
             columnHeaders, hasLeadingDivider: true);
 
         // Root the Guestbook tab subtree in the player's Task Text Font + window-scaled base size
-        // (adopt-libgui-31-improvements). Visitor names/dates/other-players' notes inherit the family
-        // here (approved change). headerStyle keeps its explicit Caudex (TitleFontFamily) — a non-default
+        // Visitor names/dates/other-players' notes inherit the family
+        // here. headerStyle keeps its explicit Caudex (TitleFontFamily) — a non-default
         // family wins over the inherited one under Merge. The own-note ScribeMultilineField keeps its
         // explicit task font (custom RenderBox that doesn't read DefaultTextStyle).
-        // Top inset reduced from 10 to 4 (2026-09-08 playtest feedback: 6px less gap between the title bar
-        // and the Row 2 subtitle); left/right/bottom stay 10 like every other tab.
+        // The top inset is 4 to keep the gap between the title bar and the Row 2 subtitle tight;
+        // left/right/bottom are 10 like every other tab.
         return ScribeTextDefaults.Wrap(modSystem.MySettings.TaskFontFamily, bodySize, new Padding(
             EdgeInsets.Ltrb(10, 4, 10, 10),
             new Column(

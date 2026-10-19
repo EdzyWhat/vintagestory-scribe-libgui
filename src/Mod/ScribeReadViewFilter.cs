@@ -95,7 +95,7 @@ internal static class ScribeReadViewFilter
     /// <summary>
     /// The contiguous depth-1 run owned by <paramref name="rows"/>[<paramref name="parentIndex"/>]:
     /// half-open <c>[start, end)</c>, mirroring <see cref="ScribeDocument.OwnedRun"/> exactly but over this
-    /// already-rendered row snapshot (task 5.1). An invalid index or a parent with no following depth-1
+    /// already-rendered row snapshot. An invalid index or a parent with no following depth-1
     /// rows yields an empty run (<c>start == end</c>).
     /// </summary>
     public static (int Start, int End) OwnedRun(IReadOnlyList<ScribeReadRowData> rows, int parentIndex)

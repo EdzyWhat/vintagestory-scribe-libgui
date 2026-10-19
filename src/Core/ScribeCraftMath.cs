@@ -52,7 +52,7 @@ public static class ScribeCraftMath
     }
 
     /// <summary>
-    /// The integer litre target for a liquid ingredient subtask (add-liquid-ingredient-tracker D3):
+    /// The integer litre target for a liquid ingredient subtask:
     /// <c>ceil(litresPerCraft × craftsNeeded)</c>, clamped to ≥ 1. Ceiling is applied to the BATCH TOTAL,
     /// never per craft — a 0.1 L × 10-craft recipe is <c>ceil(1.0) = 1</c> L, not <c>ceil(0.1) × 10 = 10</c>.
     /// Non-positive inputs (zero/negative litres or crafts) clamp to a target of <c>1</c>, so a degenerate

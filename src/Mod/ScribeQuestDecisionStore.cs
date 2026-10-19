@@ -5,8 +5,7 @@ namespace Scribe;
 /// <summary>
 /// Server-side owner of every player's quest-decision ledger — mirrors <see cref="ScribePinStore"/>'s
 /// shape (a per-player collection, a serialize/deserialize bridge to a Core codec, no network/persistence
-/// I/O of its own). Persisted with the save game and synced to its owning player
-/// (fix-quest-prompt-persistence-and-auto-pin Decision 1); the <see cref="ScribeModSystem"/> owns the
+/// I/O of its own). Persisted with the save game and synced to its owning player; the <see cref="ScribeModSystem"/> owns the
 /// actual save-game read/write and the network push, calling into this store.
 /// </summary>
 public sealed class ScribeQuestDecisionStore
@@ -44,7 +43,7 @@ public sealed class ScribeQuestDecisionStore
 
     /// <summary>Replaces the in-memory state from the persisted blob (called on world load). A
     /// null/malformed blob leaves the store empty rather than throwing — a corrupt save degrades to
-    /// "no recorded decisions" instead of crashing the load.</summary>
+    /// "no recorded decisions" rather than crashing the load.</summary>
     public void LoadFrom(byte[]? bytes)
     {
         _sets.Clear();

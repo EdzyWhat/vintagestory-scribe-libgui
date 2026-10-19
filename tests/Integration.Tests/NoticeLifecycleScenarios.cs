@@ -7,7 +7,7 @@ using Vintagestory.API.Common;
 namespace Integration.Tests;
 
 /// <summary>
-/// refine-task-notice-ux tasks.md 2.5: the full Task Notice send -> receive -> accept/decline path,
+/// The full Task Notice send -> receive -> accept/decline path,
 /// exercised through the real production entry points (<see cref="ScribeModSystem.SendAssignmentBatch"/>,
 /// <see cref="ScribeModSystem.MarkReceivedForCarriedNotices"/>, <see cref="ScribeModSystem.ApplyTaskNoticeAction"/>)
 /// rather than the underlying <see cref="ScribeAssignmentStore"/> directly (that state-machine coverage
@@ -62,7 +62,7 @@ public class NoticeLifecycleScenarios : AtlasScenarioBase
         Assert.Empty(store.Received(assignee.Player.PlayerUID));
 
         // Hand-deliver: move the freshly-sealed notice out of the Desk's output slot and into the
-        // Assignee's own inventory (the "synthetic inventory move" the design calls for), then run the
+        // Assignee's own inventory (a synthetic inventory move), then run the
         // same own-inventory scan the proximity heartbeat runs every tick.
         var outputSlot = desk.Inventory[BlockEntityAssignmentDesk.NoticeOutputSlotIndex];
         var sealedNotice = outputSlot.Itemstack;
@@ -98,7 +98,7 @@ public class NoticeLifecycleScenarios : AtlasScenarioBase
         Assert.Null(assigneeHotbar[0]!.Itemstack); // the sealed notice was consumed on Accept
         Assert.True(ScribeDocumentAttributes.TryReadFrom(notebookSlot.Itemstack!, out var placedDoc));
         Assert.Contains(placedDoc!.Blocks, b => b.TaskId == assignmentId && b.Text == "Chop 10 logs");
-        // add-task-notice-redirect-confirm 2.3: the recipient-matches-already path leaves no redirect trace.
+        // The recipient-matches-already path leaves no redirect trace.
         Assert.Null(store.TryGet(assignmentId)!.Assignment!.RedirectedFromUid);
     }
 
@@ -159,8 +159,8 @@ public class NoticeLifecycleScenarios : AtlasScenarioBase
         Assert.Single(store.Sent(assigner.Player.PlayerUID)); // Assigner's history still shows it, now Declined
     }
 
-    /// <summary>add-task-notice-redirect-confirm 2.1: Decline keeps today's non-recipient rejection
-    /// exactly as it was — a physical holder who isn't the recorded recipient still can't decline it
+    /// <summary>Decline keeps the non-recipient rejection:
+    /// a physical holder who isn't the recorded recipient still can't decline it
     /// away from them.</summary>
     [AtlasScenario(RollbackWorld = true)]
     public async Task NonRecipientDecline_StillSilentlyIgnored()
@@ -218,7 +218,7 @@ public class NoticeLifecycleScenarios : AtlasScenarioBase
         Assert.Null(store.TryGet(assignmentId)!.Assignment!.RedirectedFromUid);
     }
 
-    /// <summary>add-task-notice-redirect-confirm 2.2: a non-recipient holder's confirmed Accept succeeds,
+    /// <summary>A non-recipient holder's confirmed Accept succeeds,
     /// redirecting the assignment's target to them and stamping RedirectedFromUid with the original
     /// recipient.</summary>
     [AtlasScenario(RollbackWorld = true)]
@@ -286,8 +286,8 @@ public class NoticeLifecycleScenarios : AtlasScenarioBase
         Assert.Contains(placedDoc!.Blocks, b => b.TaskId == assignmentId && b.Text == "Chop 10 logs");
     }
 
-    /// <summary>fix-offline-assignment-send-validation §5/§6: locks in the server-side data precondition
-    /// the new <see cref="ScribeAssignment.NeedsAmbientParticle"/> predicate depends on — once a Task Notice
+    /// <summary>Locks in the server-side data precondition
+    /// the <see cref="ScribeAssignment.NeedsAmbientParticle"/> predicate depends on — once a Task Notice
     /// physically reaches the recipient's inventory, the resulting record has <c>ReceivedDate</c> stamped
     /// while <c>Seen</c> is still false (it hasn't been opened in an Inbox yet). Actual particle rendering
     /// is client-only and out of reach of a headless Atlas scenario; this proves the data shape instead.</summary>
@@ -353,7 +353,7 @@ public class NoticeLifecycleScenarios : AtlasScenarioBase
         return (assignmentId, assigneeHotbar);
     }
 
-    /// <summary>consume-tasknotice-on-inbox-accept 2.1/3.1: accepting through the generic Inbox-tab action
+    /// <summary>Accepting through the generic Inbox-tab action
     /// path (<see cref="ScribeModSystem.ApplyAssignmentAction"/>, NOT the notice's own dialog) proactively
     /// consumes the sealed notice still carried in the Assignee's own hotbar.</summary>
     [AtlasScenario(RollbackWorld = true)]
@@ -384,7 +384,7 @@ public class NoticeLifecycleScenarios : AtlasScenarioBase
         Assert.Equal(0, Mod.OutstandingNoticeCount(assignee.Player.PlayerUID)); // bookkeeping parity (3.2)
     }
 
-    /// <summary>consume-tasknotice-on-inbox-accept 2.1 (multi-row gating): a two-row notice is NOT
+    /// <summary>Multi-row gating: a two-row notice is NOT
     /// consumed while only one of its rows has resolved -- it's still a live carrier for the other row --
     /// and IS consumed once every row has resolved, even though each row resolved through a different
     /// path (one via the Inbox tab, one via the notice's own dialog).</summary>
@@ -465,7 +465,7 @@ public class NoticeLifecycleScenarios : AtlasScenarioBase
         Assert.Equal(0, Mod.OutstandingNoticeCount(assignee.Player.PlayerUID));
     }
 
-    /// <summary>consume-tasknotice-on-inbox-accept 2.1/3.1: declining through the generic Inbox-tab action
+    /// <summary>Declining through the generic Inbox-tab action
     /// path consumes the sealed notice even after it moved out of the Assignee's hands into a nearby
     /// container, as long as that container is within the discovery ping's own scan radius of them.</summary>
     [AtlasScenario(RollbackWorld = true)]
@@ -499,7 +499,7 @@ public class NoticeLifecycleScenarios : AtlasScenarioBase
         Assert.Equal(0, Mod.OutstandingNoticeCount(assignee.Player.PlayerUID));
     }
 
-    /// <summary>consume-tasknotice-on-inbox-accept 2.1/3.1: an Assigner-initiated Cancel still anchors the
+    /// <summary>An Assigner-initiated Cancel anchors the
     /// search on the Assignee (the only party who could ever be physically carrying the notice), not the
     /// player who sent the action packet.</summary>
     [AtlasScenario(RollbackWorld = true)]
@@ -522,10 +522,10 @@ public class NoticeLifecycleScenarios : AtlasScenarioBase
         Assert.Equal(0, Mod.OutstandingNoticeCount(assignee.Player.PlayerUID));
     }
 
-    /// <summary>consume-tasknotice-on-inbox-accept: a notice sitting in a container well outside
-    /// NoticeScanRadius of the Assignee's live position is left untouched by the proactive search --
-    /// exactly today's behavior -- and still self-consumes the moment anyone directly interacts with it
-    /// (<see cref="ScribeModSystem.ApplyTaskNoticeAction"/>'s pre-existing unconditional slot-clear).</summary>
+    /// <summary>A notice sitting in a container well outside
+    /// NoticeScanRadius of the Assignee's live position is left untouched by the proactive search
+    /// and still self-consumes the moment anyone directly interacts with it
+    /// (<see cref="ScribeModSystem.ApplyTaskNoticeAction"/>'s unconditional slot-clear).</summary>
     [AtlasScenario(RollbackWorld = true)]
     public async Task AcceptViaInbox_NoticeOutOfScanRange_LeftForLazySelfConsumption()
     {
@@ -561,8 +561,8 @@ public class NoticeLifecycleScenarios : AtlasScenarioBase
         Assert.NotNull(farChest.Inventory[0]!.Itemstack);
         Assert.Equal(1, Mod.OutstandingNoticeCount(assignee.Player.PlayerUID));
 
-        // Direct interaction with the stale notice still self-consumes it unconditionally, exactly as
-        // before this change (the documented fallback, not a regression) -- simulated here by the
+        // Direct interaction with the stale notice still self-consumes it unconditionally (the documented
+        // fallback) -- simulated here by the
         // Assignee walking back and picking it up (ApplyTaskNoticeAction resolves its held-slot identity
         // through the player's OWN InventoryManager, so the source slot must be one they've actually
         // carried, not an unopened remote chest -- see ResolveTaskNoticeSlot).

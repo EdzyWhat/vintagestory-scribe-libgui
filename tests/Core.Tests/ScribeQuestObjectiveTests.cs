@@ -2,7 +2,7 @@ using Scribe.Core;
 
 namespace Scribe.Core.Tests;
 
-// Tests for the QuestObjective block kind (add-progression-framework-quest-objective-subtasks): a
+// Tests for the QuestObjective block kind: a
 // depth-1 subtask modeling one Progression Framework quest objective under its parent Quest Link.
 // Carries target/current like a Tracker but is excluded from carried-inventory counting and from
 // completion (no checkbox) — its progress is driven exclusively by the reconcile/progress-write ops
@@ -105,7 +105,7 @@ public class ScribeQuestObjectiveTests
     [Fact]
     public void ReconcileQuestObjectives_PlayerDeletedChildIsNotResurrected()
     {
-        // Mirrors the real calling discipline (task 5.3/5.4): objectives are reconciled with
+        // Mirrors the real calling discipline: objectives are reconciled with
         // createMissing:true exactly ONCE at accept time; every later tick only pushes progress via
         // SetQuestObjectiveProgress (TaskId-addressed, so a deleted child can never come back — see
         // SetQuestObjectiveProgress_ReturnsFalse_ForUnknownTaskId). A createMissing:false reconcile
@@ -177,7 +177,7 @@ public class ScribeQuestObjectiveTests
         bool ok = doc.SetQuestObjectiveProgress(block.TaskId, 15); // backend can't over-report, but clamp anyway
 
         Assert.True(ok);
-        Assert.Equal(10, doc.Blocks[0].CurrentQuantity); // clamped to target, unlike Tracker's overflow (7.14)
+        Assert.Equal(10, doc.Blocks[0].CurrentQuantity); // clamped to target, unlike Tracker's overflow
     }
 
     [Fact]

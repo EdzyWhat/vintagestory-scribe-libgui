@@ -3,7 +3,7 @@ using ProtoBuf;
 namespace Scribe;
 
 /// <summary>Client → server: delete the sender's OWN side of a terminal-state assignment record
-/// (manage-terminal-assignment-records / split-assignment-delete-by-viewer), addressed by
+/// addressed by
 /// <see cref="AssignmentId"/>. <see cref="Side"/> names which side the delete came from (the client
 /// always knows this unambiguously — the delete control only ever renders inside the Inbox view or
 /// the Sent Assignment History view, never both). The server still independently re-verifies the

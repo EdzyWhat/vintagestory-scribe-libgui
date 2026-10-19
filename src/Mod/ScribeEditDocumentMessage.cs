@@ -12,7 +12,7 @@ namespace Scribe;
 public sealed class ScribeEditDocumentMessage
 {
     /// <summary>The owning document's <c>DocId</c> as 16 raw bytes. Used to route the message to the
-    /// correct host (lectern or notebook) via the host registry, replacing the former PosX/Y/Z fields.</summary>
+    /// correct host (lectern or notebook) via the host registry.</summary>
     [ProtoMember(1)]
     public byte[]? DocIdBytes { get; set; }
 
@@ -38,8 +38,7 @@ public sealed class ScribeEditDocumentMessage
     /// <summary>
     /// Server → client only: whether the requesting interaction was the quick-add gesture
     /// (Shift+right-click). When true, the client — after entering the editor view — inserts a
-    /// fresh empty task at the top of the document and focuses its caret (add-unified-quick-add-
-    /// interaction). Threaded through the open round-trip because the client dialog does not exist
+    /// fresh empty task at the top of the document and focuses its caret. Threaded through the open round-trip because the client dialog does not exist
     /// yet at block-interaction time. Meaningless on a read-view reply or an edit submission.
     /// </summary>
     [ProtoMember(8)]

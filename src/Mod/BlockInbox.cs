@@ -4,12 +4,12 @@ using Vintagestory.API.MathTools;
 namespace Scribe;
 
 /// <summary>
-/// The standalone Inbox block (add-assignment-and-quest-support §6) — a thin subclass of
+/// The standalone Inbox block — a thin subclass of
 /// <see cref="BlockScribeWritingStation"/>, mirroring <see cref="BlockScriptorium"/>/
 /// <see cref="BlockAssignmentDesk"/>: interaction, tooltip, and document carry-over logic is shared with
 /// the Lectern/Scriptorium. Placement is its own concern (see <see cref="TryPlaceBlock"/>): unlike every
 /// other writing station (ground-only) or the Chalkboard (wall-only), the Inbox supports BOTH modes from
-/// one item (redesign-inbox-block-placement-and-capacity).
+/// one item.
 /// </summary>
 public sealed class BlockInbox : BlockScribeWritingStation
 {
@@ -19,7 +19,7 @@ public sealed class BlockInbox : BlockScribeWritingStation
 
     protected override string EditHintLangCode => "scribe:blockhelp-scribeinbox-edit";
 
-    /// <summary>The Inbox has no renamable document — see the base's doc comment (triage 2026-08-31).</summary>
+    /// <summary>The Inbox has no renamable document — see the base's doc comment.</summary>
     protected override bool ShowsDocumentTitleInTooltip => false;
 
     /// <summary>Only the ground placement mode (a click on a top face) needs a solid floor below; a
@@ -28,14 +28,13 @@ public sealed class BlockInbox : BlockScribeWritingStation
     protected override bool RequiresSolidGround(BlockSelection blockSel) => blockSel.Face == BlockFacing.UP;
 
     /// <summary>
-    /// Dual-mode placement. Ground placement (a click on a top face) is unchanged: delegates to the
-    /// shared base's existing floor-check + player-facing rotation, same as the Lectern/Scriptorium/
-    /// Assignment Desk. Wall-mounted placement (a click on a horizontal face) is new: mirrors the vanilla
-    /// wood torch's <c>BlockGroundAndSideAttachable.TryAttachTo</c> — confirmed by reading both that class
-    /// and the base <c>Block.TryPlaceBlock</c>/<c>DoPlaceBlock</c> that this class hierarchy does NOT
-    /// inherit that automatic face→variant resolution (it always places `this` block's own id), so it
-    /// needs its own override here (design.md Decision 1 / tasks.md 3.3) — checks for a solid block
-    /// behind the clicked face, then places the matching "-&lt;direction&gt;" wall variant instead of this
+    /// Dual-mode placement. Ground placement (a click on a top face) delegates to the shared base's
+    /// floor-check + player-facing rotation, same as the Lectern/Scriptorium/Assignment Desk.
+    /// Wall-mounted placement (a click on a horizontal face) mirrors the vanilla wood torch's
+    /// <c>BlockGroundAndSideAttachable.TryAttachTo</c>: this class hierarchy does NOT inherit the
+    /// automatic face→variant resolution (the base <c>Block.TryPlaceBlock</c>/<c>DoPlaceBlock</c> always
+    /// places `this` block's own id), so it is done here — checks for a solid block
+    /// behind the clicked face, then places the matching "-&lt;direction&gt;" wall variant rather than this
     /// item's own ("-up") block id.
     /// </summary>
     public override bool TryPlaceBlock(IWorldAccessor world, IPlayer byPlayer, ItemStack itemstack, BlockSelection blockSel, ref string failureCode)

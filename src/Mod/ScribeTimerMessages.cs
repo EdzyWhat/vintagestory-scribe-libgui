@@ -27,6 +27,6 @@ public sealed class ScribeTimerStateMessage
 
     /// <summary>Seconds the timer has been in the Fired state (0 while Idle/Running). The client seeds its
     /// own auto-disappear accumulator from this so a fired timer restored on rejoin resumes the remaining
-    /// window rather than restarting (timer-auto-disappear-setting).</summary>
+    /// window rather than restarting.</summary>
     [ProtoMember(5)] public double      FiredElapsedSeconds { get; set; }
 }

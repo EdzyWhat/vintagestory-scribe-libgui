@@ -9,7 +9,7 @@ namespace Scribe;
 /// <see cref="ScribeAutoLinkQuestMessage.Title"/>/<see cref="ScribeAutoLinkQuestMessage.Description"/>
 /// already travel this way) so the server can seed the Quest Link's QuestObjective children immediately
 /// after adding it. Progression Framework supplies live progress; VS Quest supplies a one-shot static
-/// criteria snapshot (add-vsquest-criteria-subtask). Trusted-but-client input, like every other field on
+/// criteria snapshot. Trusted-but-client input, like every other field on
 /// the carrying message.</summary>
 [ProtoContract]
 public sealed class ScribeAutoLinkObjectiveWire
@@ -40,13 +40,11 @@ public sealed class ScribeAutoLinkObjectiveWire
 
 /// <summary>
 /// Client → server: create a Quest Link for a quest the client's <see cref="ScribeQuestWatcher"/> just
-/// detected as accepted (add-assignment-and-quest-support §11.2, Quest Accept Policy = Always/Prompt).
+/// detected as accepted (Quest Accept Policy = Always/Prompt).
 /// The server resolves the DESTINATION at <see cref="TargetInventoryId"/>/<see cref="TargetSlotId"/> and
 /// re-validates it (writeable, has capacity) exactly like <c>TryPlaceAcceptedAssignment</c> does — never
-/// trusting the client's choice as proof of eligibility (add-progression-framework-quest-support Decision
-/// 3) — falling back to the sending player's first carried Notebook/Tablet
-/// (<c>ScribeModSystem.History.cs</c>'s <c>FindNotebookInInventory</c>) only when no target was sent, for
-/// backward compatibility with any in-flight message shape. Is authoritative for whether the Link is
+/// trusting the client's choice as proof of eligibility — falling back to the sending player's first carried Notebook/Tablet
+/// (<c>ScribeModSystem.History.cs</c>'s <c>FindNotebookInInventory</c>) only when no target was sent. Is authoritative for whether the Link is
 /// actually added: it silently no-ops if the player carries no Scribe document, has no capacity, or
 /// already has a Link for this exact (source, quest code) (idempotent under repeat detection — see
 /// <c>ScribeQuestWatcher</c>'s doc-comment on session-only dedup).
@@ -54,10 +52,8 @@ public sealed class ScribeAutoLinkObjectiveWire
 [ProtoContract]
 public sealed class ScribeAutoLinkQuestMessage
 {
-    /// <summary>Which backend mod this quest came from (<see cref="Scribe.Core.ScribeQuestSource"/> —
-    /// add-progression-framework-quest-support Decision 1). Null/absent defensively falls back to
-    /// <see cref="Scribe.Core.ScribeQuestSource.VsQuest"/> server-side, the only backend that could have
-    /// created an in-flight message predating this field.</summary>
+    /// <summary>Which backend mod this quest came from (<see cref="Scribe.Core.ScribeQuestSource"/>).
+    /// Null/absent falls back to <see cref="Scribe.Core.ScribeQuestSource.VsQuest"/> server-side.</summary>
     [ProtoMember(4)]
     public string? Source { get; set; }
 
@@ -75,11 +71,10 @@ public sealed class ScribeAutoLinkQuestMessage
     [ProtoMember(3)]
     public string? Description { get; set; }
 
-    /// <summary>Accept-time placement target (assignment-state-machine's placement requirement, extended
-    /// to Quest auto-link — Decision 3) — the <c>InventoryID</c> of the slot the client resolved to receive
+    /// <summary>Accept-time placement target — the <c>InventoryID</c> of the slot the client resolved to receive
     /// the linked quest (the sole eligible carried Scribe document, or the player's picker choice among
     /// 2+). Null falls back to server-side resolution (<c>FindNotebookInInventory</c>), mirroring
-    /// <see cref="ScribeAssignmentActionMessage.TargetInventoryId"/>'s existing convention.</summary>
+    /// <see cref="ScribeAssignmentActionMessage.TargetInventoryId"/>'s convention.</summary>
     [ProtoMember(5)]
     public string? TargetInventoryId { get; set; }
 
@@ -98,17 +93,17 @@ public sealed class ScribeAutoLinkQuestMessage
     public List<ScribeAutoLinkObjectiveWire>? Objectives { get; set; }
 
     /// <summary>The client's <see cref="Scribe.Core.ScribePlayerSettings.AutoPinOnQuestAccept"/> preference
-    /// at send time (fix-quest-prompt-persistence-and-auto-pin Decision 5). When true, the server pins the
+    /// at send time. When true, the server pins the
     /// newly-created Link's task right after adding it, through the same pin-add path a manual pin uses.
-    /// Defaults to false for an old client that never sets it (today's behavior: link but don't pin).</summary>
+    /// Defaults to false (link but don't pin).</summary>
     [ProtoMember(8)]
     public bool AutoPin { get; set; }
 
     /// <summary>The client's <see cref="Scribe.Core.ScribePlayerSettings.PinInsert"/> preference (as a
     /// byte), read only when <see cref="AutoPin"/> is true — where the newly-pinned task lands in the pin
-    /// list, mirroring <c>ScribeSetPinMessage.PinInsert</c>'s own convention exactly (the player-pins
-    /// requirement that an auto-pin follow "the same insertion rules" as a manual pin). Defaults to 0
-    /// (<see cref="Scribe.Core.ScribePinInsert.Bottom"/>) for an old client.</summary>
+    /// list, mirroring <c>ScribeSetPinMessage.PinInsert</c>'s own convention exactly (an auto-pin follows
+    /// the same insertion rules as a manual pin). Defaults to 0
+    /// (<see cref="Scribe.Core.ScribePinInsert.Bottom"/>).</summary>
     [ProtoMember(9)]
     public byte PinInsert { get; set; }
 }

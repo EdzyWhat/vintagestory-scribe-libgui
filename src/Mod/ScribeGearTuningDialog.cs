@@ -16,8 +16,8 @@ using Vintagestory.API.Client;
 namespace Scribe;
 
 /// <summary>
-/// DEV-ONLY live-tuning window for the Timer-tab gearworks layout (add-timer-gearworks art follow-up).
-/// A near-clone of <see cref="ScribeSettingsDialog"/>: a small draggable window hosting four
+/// DEV-ONLY live-tuning window for the Timer-tab gearworks layout.
+/// A near-clone of <see cref="ScribeSettingsDialog"/>: a small draggable window hosting
 /// <see cref="ScribeNumericField"/>s that write straight through <see cref="ScribeModSystem.UpdateGearTuning"/>
 /// (which persists + raises <c>GearTuningChanged</c>), so nudging a number re-lays-out an open Clockmaker's
 /// Notebook Timer tab instantly — no rebuild/relaunch. Opened by the <c>.geartune</c> client command.

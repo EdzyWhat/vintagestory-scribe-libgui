@@ -2,7 +2,7 @@ using Scribe.Core;
 
 namespace Scribe.Core.Tests;
 
-// Tests for the typed-arrow substitution rule (add-arrow-substitution-and-cuneiform-glyphs). The whole
+// Tests for the typed-arrow substitution rule. The whole
 // transform — the digraph table AND the caret math — is pure Core, so it is exercised here without the
 // editor widget or a game install. The editor is a thin caller that swaps in TryApply's returned
 // text/caret; only the in-game render is left to a manual smoke test.

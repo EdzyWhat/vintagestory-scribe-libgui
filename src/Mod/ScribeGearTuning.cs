@@ -3,13 +3,13 @@ using System;
 namespace Scribe;
 
 /// <summary>
-/// DEV-ONLY live-tuning knobs for the Timer-tab gearworks layout (add-timer-gearworks art follow-up). A
+/// DEV-ONLY live-tuning knobs for the Timer-tab gearworks layout. A
 /// tiny client-local JSON bag (persisted to <c>ScribeModSystem.GearTuningConfigFileName</c>) mirroring the
-/// four hand-placement constants in <see cref="ScribeGearworks"/>'s <c>Build</c>, so the author can nudge
+/// hand-placement constants in <see cref="ScribeGearworks"/>'s <c>Build</c>, so the author can nudge
 /// gear positions live from the <c>.geartune</c> window while working on the art instead of edit → rebuild
 /// → relaunch. Values are in the SAME UNSCALED pixel units as the code constants (Build multiplies each by
-/// the Pixel-Art-Size <c>scale</c>), so the defaults below are exactly the current baked-in values and a
-/// never-touched config renders identically to the hardcoded layout.
+/// the Pixel-Art-Size <c>scale</c>), so the defaults below are the shipping values and a
+/// never-touched config renders the shipping layout.
 ///
 /// <para>Not part of the real data model — this is a throwaway tuning aid, so it lives in the Mod layer
 /// (not Core) and has no unit tests. When the layout is finalized, fold the chosen numbers back into the
@@ -17,21 +17,21 @@ namespace Scribe;
 /// </summary>
 public sealed class ScribeGearTuning
 {
-    /// <summary>Horizontal overlap of EACH flanking small gear toward the centered teal gear (the old
+    /// <summary>Horizontal overlap of EACH flanking small gear toward the centered teal gear (the code's
     /// <c>toothKiss</c>). Higher = both smalls tuck further under the teal gear's teeth (more mesh); lower =
     /// they float further out to the sides. Symmetric (applies equally to the left and right small).</summary>
     public float SmallGearOverlapX { get; set; } = DefaultSmallGearOverlapX;
 
-    /// <summary>Vertical position of BOTH flanking small gears from the top of the region (the old
+    /// <summary>Vertical position of BOTH flanking small gears from the top of the region (the code's
     /// <c>smallTop</c>). Higher = the smalls sit LOWER on screen. At the default their midpoint sits just
     /// below the teal gear's midpoint.</summary>
     public float SmallGearY { get; set; } = DefaultSmallGearY;
 
-    /// <summary>How far the escape (great) wheel peeks up from the bottom edge while IDLE (the old
+    /// <summary>How far the escape (great) wheel peeks up from the bottom edge while IDLE (the code's
     /// <c>restingPeek</c>). Higher = more of the wheel shows when no timer is running.</summary>
     public float WheelIdlePeek { get; set; } = DefaultWheelIdlePeek;
 
-    /// <summary>How far the escape (great) wheel peeks up while a timer is RUNNING/engaged (the old
+    /// <summary>How far the escape (great) wheel peeks up while a timer is RUNNING/engaged (the code's
     /// <c>livePeek</c>). The wheel slides between the idle and active peek on Start/Fire. Higher = the wheel
     /// rides further up (deeper under the teal gear) while the timer runs.</summary>
     public float WheelActivePeek { get; set; } = DefaultWheelActivePeek;
@@ -45,16 +45,16 @@ public sealed class ScribeGearTuning
     /// their own width), so expect to re-touch <see cref="SmallGearOverlapX"/> after changing this.</summary>
     public float SmallGearScale { get; set; } = DefaultSmallGearScale;
 
-    /// <summary>Vertical position of the teal temporal gear from the top of the region (the old hardcoded
-    /// <c>largeTop</c> = 30). Higher = the teal gear sits LOWER on screen (deeper over the escape wheel).</summary>
+    /// <summary>Vertical position of the teal temporal gear from the top of the region (the code's
+    /// <c>largeTop</c>). Higher = the teal gear sits LOWER on screen (deeper over the escape wheel).</summary>
     public float LargeGearY { get; set; } = DefaultLargeGearY;
 
-    /// <summary>Width of the gearworks clipping/trim box (the old hardcoded <c>regionW</c> = 200). The box is
+    /// <summary>Width of the gearworks clipping/trim box (the code's <c>regionW</c>). The box is
     /// centered in the Timer tab; the horizontal gear placement is derived from it, so widening it spreads
     /// the train.</summary>
     public float TrimBoxWidth { get; set; } = DefaultTrimBoxWidth;
 
-    /// <summary>Height of the gearworks clipping/trim box (the old hardcoded <c>regionH</c> = 130). Anything
+    /// <summary>Height of the gearworks clipping/trim box (the code's <c>regionH</c>). Anything
     /// painted past this (the escape wheel's hidden body, shadows) is clipped away. Taller = more of the
     /// wheel shows from below.</summary>
     public float TrimBoxHeight { get; set; } = DefaultTrimBoxHeight;
@@ -78,18 +78,17 @@ public sealed class ScribeGearTuning
     /// <summary>Number of teeth on the procedurally-generated large escape/great wheel (the code's
     /// <c>ScribeGearTexture.Teeth</c>). Live-tunable so the author can try tooth counts in-game; the wheel is
     /// regenerated per (teeth, spacing) combo. Stored as a float for the numeric field but rounded to an int at
-    /// generation. Default 30.</summary>
+    /// generation. Default 32.</summary>
     public float WheelTeeth { get; set; } = DefaultWheelTeeth;
 
     /// <summary>Tooth-SPACING reference count for the great wheel (the code's
     /// <c>ScribeGearTexture.ToothSizeReferenceTeeth</c>): each tooth is sized as if the wheel had THIS many, so
     /// setting it ABOVE <see cref="WheelTeeth"/> keeps the teeth small and widens the gaps between them. Rounded
-    /// to an int at generation. Default 36.</summary>
+    /// to an int at generation. Default 38.</summary>
     public float WheelToothSpacing { get; set; } = DefaultWheelToothSpacing;
 
-    // Defaults = the values the author dialed in via .geartune and locked as the shipping layout (baked
-    // 2026-08-11). An untouched config now renders the FINAL tuned gearworks, not a placeholder. .geartune
-    // stays in the build (author kept it) so these can still be re-tuned live.
+    // Defaults = the shipping layout, dialed in via .geartune. An untouched config renders the tuned
+    // gearworks; .geartune stays in the build so these can still be re-tuned live.
     public const float DefaultSmallGearOverlapX = 15f;
     public const float DefaultSmallGearY        = 39f;
     public const float DefaultWheelIdlePeek     = 40f;
@@ -105,7 +104,7 @@ public sealed class ScribeGearTuning
     public const float DefaultWheelTeeth        = 32f;   // = ScribeGearTexture.Teeth
     public const float DefaultWheelToothSpacing = 38f;   // = ScribeGearTexture.ToothSizeReferenceTeeth
 
-    // Generous experimentation ranges (unscaled px within the ~200×130 region). Wide on purpose — this is a
+    // Generous experimentation ranges (unscaled px within the gearworks region). Wide on purpose — this is a
     // tuning tool, so let the author overshoot and dial back rather than fight a tight clamp.
     public const float MinX = -40f,  MaxX = 140f;   // overlap can go negative (gap) or deep
     public const float MinY = -40f,  MaxY = 140f;   // small-gear + large-gear vertical

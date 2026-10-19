@@ -3,7 +3,7 @@ using Scribe.Core;
 namespace Scribe.Core.Tests;
 
 // Tests for the same-depth drag-reorder rule shared by the editor's block reorder and the Pin
-// Tab's pin reorder (same-depth-reorder). Pure/game-agnostic: operates on plain depth lists.
+// Tab's pin reorder. Pure/game-agnostic: operates on plain depth lists.
 public class ScribeReorderValidityTests
 {
     [Fact]

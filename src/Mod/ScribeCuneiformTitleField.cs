@@ -1,4 +1,4 @@
-// Live cuneiform single-line title input (add-tablet-cuneiform-chrome). The tablet's title bar reads and
+// Live cuneiform single-line title input. The tablet's title bar reads and
 // edits in cuneiform like its rows, but the base dialog's title uses a stock LibGUI TextField driven by a
 // shared TextEditingController + FocusNode — NOT the ScribeMultilineField State. So this is a purpose-built
 // single-line input that is a DROP-IN for that TextField: same controller, same focus node, same OnKeyDown
@@ -8,9 +8,8 @@
 //
 // It renders through ScribeCuneiformFieldRender in single-line mode by default (a long title is hard-clipped
 // by an enclosing Clip at the band width, since cuneiform has no '…' glyph); with SingleLine=false it WRAPS
-// to the band width and the title slot caps it at two lines (wrap-tablet-title-band). Keyboard handling mirrors LibGUI's
-// TextField (typing, Backspace/Delete, Left/Right/Home/End, clipboard) minus selection — caret-only for v1,
-// matching the row field's accepted scope-cut (selection over cuneiform is the deferred explore stub).
+// to the band width and the title slot caps it at two lines. Keyboard handling mirrors LibGUI's
+// TextField (typing, Backspace/Delete, Left/Right/Home/End, clipboard) minus selection: it is caret-only.
 
 using System;
 using Gui.Core.Framework;         // RenderObject
@@ -29,7 +28,7 @@ namespace Scribe;
 /// <see cref="FocusNode"/> — a drop-in for the base dialog's stock <see cref="Gui.Widgets.Input.TextField"/>
 /// title editor, so <see cref="ScribeDialogBase"/>'s title commit/blur/deferred-rebuild machinery (all keyed
 /// off the shared controller and focus node) is untouched. Renders via <see cref="ScribeCuneiformFieldRender"/>
-/// in single-line mode with a synthetic caret. Caret-only (no selection highlight) for v1.
+/// in single-line mode with a synthetic caret. Caret-only (no selection gestures).
 /// </summary>
 public sealed class ScribeCuneiformTitleField : StatefulWidget, IFocusable
 {
@@ -72,21 +71,21 @@ public sealed class ScribeCuneiformTitleField : StatefulWidget, IFocusable
     /// <summary>Fixed base seed for the title jitter, so the title wobbles consistently and typing does not
     /// reseed the letters already on screen.</summary>
     public int JitterSeed { get; }
-    /// <summary>Whole-character rotation in degrees for the title glyphs (tune-tablet-jitter-add-rotation);
+    /// <summary>Whole-character rotation in degrees for the title glyphs;
     /// 0 = upright. Applied after jitter, at paint time only.</summary>
     public float RotationDegrees { get; }
     /// <summary>Whether newly-typed title text presses in stroke-by-stroke. When false (the default), the
     /// title reveals instantly. Gated by the player's client setting, mirroring the rows.</summary>
     public bool Progression { get; }
-    /// <summary>Per-material outer glow behind the title strokes (add-tablet-clay-type-themes); default
+    /// <summary>Per-material outer glow behind the title strokes; default
     /// disabled. Lifts the editing title off the clay backdrop the same way the resting title and rows do.</summary>
     public CuneiformGlow Glow { get; }
-    /// <summary>Per-view cuneiform stroke-weight scale (adopt-glyph-forge-tablet-themes); 1 = base weight.
+    /// <summary>Per-view cuneiform stroke-weight scale; 1 = base weight.
     /// Passed straight to the title render object so the editing title firms up/thins with the drying
     /// state exactly like the rows and resting title.</summary>
     public float StrokeWeightScale { get; }
     /// <summary>When true (default) the title is one hard-clipped line; when false it WRAPS to the band width
-    /// (wrap-tablet-title-band) — the enclosing title slot caps the visible height at two lines. Caret nav is
+    /// — the enclosing title slot caps the visible height at two lines. Caret nav is
     /// by character index either way, so wrapping is purely a render/layout property of the same text buffer.</summary>
     public bool SingleLine { get; }
     /// <summary>Parent key hook, invoked BEFORE this field acts on a key (mirrors LibGUI's TextField). The
@@ -102,10 +101,9 @@ internal sealed class ScribeCuneiformTitleFieldState : State<ScribeCuneiformTitl
     private TextEditingController Controller => Widget.Controller;
     private FocusNode FocusNode => Widget.FocusNode;
 
-    // Stroke-progression reveal (add-cuneiform-handwriting-feel), mirroring the row field: only a pure
-    // APPEND to the tracked title animates its new suffix; any other change snaps to fully revealed. Active
-    // only when the field carries a non-zero jitter/progression config (Widget.JitterStrength gates jitter;
-    // progression is enabled whenever the tablet builds this field).
+    // Stroke-progression reveal, mirroring the row field: only a pure APPEND to the tracked title animates
+    // its new suffix; any other change snaps to fully revealed. The reveal controller exists only when
+    // Widget.Progression is set.
     /// <summary>The shared stroke-count reveal schedule (same single Core speed knob as the rows, so the
     /// title band can't drift from them).</summary>
     private static readonly Scribe.Core.Cuneiform.RevealSchedule RevealScheduleShared =

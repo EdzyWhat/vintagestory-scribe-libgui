@@ -62,8 +62,8 @@ public class ItemScribeNotebook : Item, IScribeDocumentItem
     {
         if (!firstEvent) return;
         // Ctrl+Shift+right-click: let base run CollectibleBehaviors (including GroundStorable) for ground
-        // placement, following the vanilla spear convention (add-unified-quick-add-interaction). We verified
-        // the base ground-storable gate keys on ShiftKey ONLY, so requiring BOTH modifiers here means a
+        // placement, following the vanilla spear convention. The base ground-storable gate keys on
+        // ShiftKey ONLY, so requiring BOTH modifiers here means a
         // Shift-only press never reaches it — no double-action with the quick-add branch below.
         if (byEntity.Controls.CtrlKey && byEntity.Controls.ShiftKey)
         {
@@ -104,8 +104,8 @@ public class ItemScribeNotebook : Item, IScribeDocumentItem
         outputSlot.Itemstack.Attributes.SetBytes("scribeHistory", history.Serialize());
     }
 
-    /// <summary>Open this carried Notebook's Scribe dialog for the Handbook "Add to Scribe" fallback
-    /// (add-tracker-link-tasks 3.3). Delegates to the same <see cref="OpenNotebookDialog"/> the right-click
+    /// <summary>Open this carried Notebook's Scribe dialog for the Handbook "Add to Scribe" fallback.
+    /// Delegates to the same <see cref="OpenNotebookDialog"/> the right-click
     /// path uses, so host registration, last-opened tracking, and the server pickup notice are identical.</summary>
     public ScribeDialogBase? OpenScribeDialog(ItemSlot slot, ICoreClientAPI capi)
         => OpenNotebookDialog(slot, capi);
@@ -119,7 +119,7 @@ public class ItemScribeNotebook : Item, IScribeDocumentItem
         // (opening the dialog is client-only; the server never sees it otherwise).
         modSystem.NotifyServerNotebookOpened(host.Document.DocId, slot);
         // Remember this as the last-opened Scribe item so a later Handbook "Add to Scribe" click with no
-        // dialog open re-targets it rather than an arbitrary carried item (add-tracker-link-tasks 3.2).
+        // dialog open re-targets it rather than an arbitrary carried item.
         modSystem.NoteScribeItemDialogOpened(host.Document.DocId);
 
         var dialog = new GuiDialogScribeNotebook(host, capi);
@@ -127,7 +127,7 @@ public class ItemScribeNotebook : Item, IScribeDocumentItem
         dialog.TryOpen();
         // Quick-add (Shift+right-click): the Notebook grants editor access immediately (no server lock),
         // so enter the editor and drop a fresh empty top task with the caret focused — right after TryOpen
-        // has built the tree (add-unified-quick-add-interaction).
+        // has built the tree.
         if (quickAdd)
         {
             dialog.EnterEditorMode(ScribeDocumentCodec.Serialize(host.Document));

@@ -6,7 +6,7 @@ using Scribe.Core;
 namespace Integration.Tests;
 
 /// <summary>
-/// Task 4.5a: server-authoritative edit round trip. A submitted edit is only applied when
+/// Server-authoritative edit round trip. A submitted edit is only applied when
 /// it comes from the current lock holder, and applying it marks the block entity dirty
 /// (persist + re-sync). RollbackWorld resets the world in place between scenarios, which is
 /// enough here -- these scenarios only assert on in-memory server state right after the

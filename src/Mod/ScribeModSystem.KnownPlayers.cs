@@ -6,11 +6,10 @@ using Vintagestory.API.Server;
 namespace Scribe;
 
 /// <summary>
-/// The world-scoped known-players registry (persist-known-players-for-assignment): every player who
+/// The world-scoped known-players registry: every player who
 /// has ever connected stays a selectable Assignment Desk target, regardless of current online state.
 /// Populated on <c>OnPlayerNowPlaying</c> (wired from <c>ScribeModSystem.ServerLifecycle.cs</c>) and
-/// broadcast in full to every online client on each change — see design.md Decision 3 for why this is
-/// the channel's first broadcast-shaped message rather than a per-player push.
+/// broadcast in full to every online client on each change; this is a broadcast-shaped message rather than a per-player push.
 /// </summary>
 public sealed partial class ScribeModSystem
 {
@@ -36,13 +35,13 @@ public sealed partial class ScribeModSystem
 
     /// <summary>Raised on the client whenever a fresh known-players sync arrives, so an open Assignment
     /// Desk dialog's Create Assignments tab can repaint its target picker with the newly-known player —
-    /// the spec's "no reopen required" scenario.</summary>
+    /// with no reopen required.</summary>
     public event System.Action? KnownPlayersChanged;
 
     /// <summary>Upserts the joining player into the registry (refreshing their display name in case it
     /// changed) and broadcasts the updated full snapshot to every online client, so an already-open
-    /// Assignment Desk dialog observes the addition live without a reopen (spec's "brand-new player is
-    /// assignable immediately" scenario). Called from <c>OnPlayerNowPlaying</c>.</summary>
+    /// Assignment Desk dialog observes the addition live without a reopen, so a brand-new player is
+    /// assignable immediately. Called from <c>OnPlayerNowPlaying</c>.</summary>
     private void UpsertKnownPlayerAndBroadcast(IServerPlayer player)
     {
         if (sapi is null || knownPlayersStore is null) return;
@@ -50,7 +49,7 @@ public sealed partial class ScribeModSystem
         BroadcastKnownPlayers();
     }
 
-    /// <summary>Sends the full registry snapshot to every currently online player (design.md Decision 3).</summary>
+    /// <summary>Sends the full registry snapshot to every currently online player</summary>
     private void BroadcastKnownPlayers()
     {
         if (sapi is null || knownPlayersStore is null) return;
@@ -70,13 +69,9 @@ public sealed partial class ScribeModSystem
 
     /// <summary>Client-side UID→display-name resolution, the one place every dialog/tooltip that shows a
     /// player name for a uid should go through. Prefers the currently-online player's live name; a target
-    /// who isn't online this session (the exact "sent a Task Notice to an offline player" case
-    /// fix-offline-assignment-send-validation unblocked server-side) falls back to this client's synced
-    /// <see cref="MyKnownPlayers"/> snapshot instead of degrading straight to the raw uid — every prior
-    /// call site (<c>GuiDialogTaskNotice.ResolvePlayerName</c>, <c>ScribeDialogBase.
-    /// ResolvePlayerNameForInbox</c>, and the inline lookups in <c>ItemScribeTaskNotice</c>/
-    /// <c>ScribeDocumentSlot</c>) only checked the online case and showed the bare uid otherwise — the
-    /// "confirmation message full of random letters" bug. Only degrades to the raw uid for a target this
+    /// who isn't online this session (e.g. a Task Notice sent to an offline player) falls back to this
+    /// client's synced <see cref="MyKnownPlayers"/> snapshot instead of degrading straight to the raw uid.
+    /// Only degrades to the raw uid for a target this
     /// client has truly never seen (never online, never synced as known).</summary>
     public string ResolvePlayerName(string uid)
     {

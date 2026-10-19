@@ -69,7 +69,7 @@ public sealed partial class ScribeModSystem
                     currentQuantity = block.CurrentQuantity;
                     linkLabel = block.LinkLabel;
                     depth = block.Depth;
-                    // Snapshot the leading-icon assignment marker (add-assignment-and-quest-support 9.3) —
+                    // Snapshot the leading-icon assignment marker —
                     // no client-supplied fallback exists for this field since it's always resolvable here
                     // (the same document that resolves every other field above).
                     isAcceptedAssignment = block.Assignment?.State == ScribeAssignmentState.Accepted;
@@ -109,7 +109,7 @@ public sealed partial class ScribeModSystem
     /// Removal/unpin fires only on a transition INTO done, so unchecking a done task never removes it.</item>
     /// </list>
     /// The <paramref name="policy"/> is the acting player's client-local completion preference, carried
-    /// in the completion request and already normalized by the caller; it is no longer server-side
+    /// in the completion request and already normalized by the caller; the server holds no completion-policy
     /// state. Re-pushes the acting player once at the end when their set changed. Public for the same
     /// reason as <see cref="SetPinForPlayer"/> — the block-entity layer and the integration suite drive
     /// the exact production path.
@@ -126,13 +126,13 @@ public sealed partial class ScribeModSystem
         {
             // Not pinned by this player — a plain checkbox on an unpinned document task. Toggle the
             // shared document directly and apply the policy there too (the policy is not limited to
-            // pinned tasks — scribe-lectern-view-consistency): Sink→bottom, Delete→remove.
+            // pinned tasks): Sink→bottom, Delete→remove.
             CompleteUnpinnedTaskAtSource(player, docId, taskId, policy, behavior);
             return;
         }
         bool nowDone = !current.Value;
 
-        // Decision 3 (fix-quest-prompt-persistence-and-auto-pin): a completion-prompt's "accept" is
+        // A completion-prompt's "accept" is
         // marking the linked task done. Captured from the pin's OWN snapshot (not the source document) so
         // it works even when the source is unresolvable, mirroring every other snapshot read in this
         // method. Only a transition INTO done counts — unchecking a completed quest task never re-records.
@@ -179,7 +179,7 @@ public sealed partial class ScribeModSystem
         {
             // The document is unresolvable right now (e.g. the Notebook isn't in this player's
             // inventory) — there's no block to mutate or write through to, but the canonical
-            // assignment-store derivation (fix-assignment-completion-doc-resolution) is addressed by
+            // assignment-store derivation is addressed by
             // taskId alone and does not need it, so it still runs here.
             Trace("  complete: doc {0} unresolvable for task {1} — deriving assignment completion from the store only", docId, taskId);
             NotifyAssignmentDoneChanged(taskId, nowDone, null);
@@ -277,7 +277,7 @@ public sealed partial class ScribeModSystem
 
     /// <summary>
     /// Server-side write-through of a Tracker's live <c>CurrentQuantity</c> by identity, driven by a client
-    /// count engine's <see cref="ScribeSetTrackerQuantityMessage"/> (add-tracker-link-tasks D5/4.3). Resolves
+    /// count engine's <see cref="ScribeSetTrackerQuantityMessage"/>. Resolves
     /// the owning document (registry, or by scanning the acting player's inventory for an item host) and
     /// writes the clamped count lock-free via <see cref="IScribeDocumentHost.SetTrackerCurrentQuantityFromReader"/>,
     /// which marks the source dirty and resyncs every viewer. A best-effort no-op when the source is
@@ -293,8 +293,8 @@ public sealed partial class ScribeModSystem
 
     /// <summary>
     /// Server-side write-through of a QuestObjective's live <c>CurrentQuantity</c> by identity, driven by
-    /// the client-side quest watcher's <see cref="ScribeSetQuestObjectiveProgressMessage"/>
-    /// (add-progression-framework-quest-objective-subtasks). Mirrors <see cref="SetTrackerQuantityForPlayer"/>
+    /// the client-side quest watcher's <see cref="ScribeSetQuestObjectiveProgressMessage"/>.
+    /// Mirrors <see cref="SetTrackerQuantityForPlayer"/>
     /// exactly, but through the dedicated <see cref="IScribeDocumentHost.SetQuestObjectiveProgressFromReader"/>
     /// path so it never shares a gate with the Tracker/Craft carried-inventory engine. A best-effort no-op
     /// when the source is unresolvable, the task is gone, or it isn't a QuestObjective. No pin involvement.
@@ -323,7 +323,7 @@ public sealed partial class ScribeModSystem
     }
 
     /// <summary>Collapses a completion policy to <see cref="ScribeCompletionPolicy.Unpin"/> when the target
-    /// document is a read-only (hard/fired) tablet (zero-point-three-fixes §7.5 / D8). A read-only source can
+    /// document is a read-only (hard/fired) tablet. A read-only source can
     /// neither be reordered (<c>Sink</c>/<c>UnpinSink</c>) nor have tasks removed (<c>Delete</c>), and firing
     /// a tablet with a pinned task must not strand that pin on the HUD — so every document-mutating policy
     /// becomes a plain unpin. <c>Keep</c> is left alone (leaving the pin is a valid read-only outcome), and
@@ -376,7 +376,7 @@ public sealed partial class ScribeModSystem
 
     /// <summary>Completes (toggles) an UNPINNED document task straight on the shared source — a plain
     /// checkbox on a task nobody has pinned. There is no pin, so there is no store involvement, but the
-    /// completion policy still applies to the document itself (scribe-lectern-view-consistency): on a
+    /// completion policy still applies to the document itself: on a
     /// transition INTO done, <c>Sink</c> moves the task to the document bottom and <c>Delete</c> removes
     /// it from the source; <c>Keep</c>/<c>Unpin</c> just toggle (there is nothing to unpin). A no-op when
     /// the source is unresolvable (nothing to toggle without a document).</summary>
@@ -397,7 +397,7 @@ public sealed partial class ScribeModSystem
         bool nowDone = !block.Done;
 
         // A read-only (hard/fired) tablet can't be reordered or have tasks removed; collapse every
-        // document-mutating policy to Unpin (zero-point-three-fixes §7.5). With no pin here that leaves a
+        // document-mutating policy to Unpin. With no pin here that leaves a
         // plain toggle, so a hardened tablet's checkbox flips done-state without disturbing the document.
         policy = CollapsePolicyForReadOnlySource(policy, docHost);
 

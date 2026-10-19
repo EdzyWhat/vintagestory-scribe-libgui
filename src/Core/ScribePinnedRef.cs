@@ -37,56 +37,54 @@ public sealed class ScribePinnedRef
 
     /// <summary>The pinned task's kind, snapshotted so a client can render/act on the pin by kind even
     /// when the owning block is unloaded — most importantly so the HUD can treat a pinned Link's label as
-    /// a Handbook hyperlink (add-tracker-link-tasks 5.5). Defaults to <see cref="ScribeBlockKind.Task"/>
+    /// a Handbook hyperlink. Defaults to <see cref="ScribeBlockKind.Task"/>
     /// (the value pre-v2 pin blobs migrate to), so an ordinary pinned task is unaffected.</summary>
     public ScribeBlockKind Kind { get; set; } = ScribeBlockKind.Task;
 
     /// <summary>For a <see cref="ScribeBlockKind.Link"/> pin, the last-known link target (the collectible
     /// code its Handbook hyperlink opens); null for every other kind. Snapshotted alongside
     /// <see cref="Kind"/> so the HUD can open the page without resolving the (possibly unloaded) source
-    /// document (add-tracker-link-tasks 5.5).</summary>
+    /// document.</summary>
     public string? LinkTarget { get; set; }
 
     /// <summary>For a <see cref="ScribeBlockKind.Tracker"/> pin, the last-known target item code (the
     /// collectible the tracker counts and whose icon/name the pin renders); null for every other kind.
     /// Snapshotted alongside <see cref="Kind"/> so the HUD and Pin Tab can render a pinned Tracker's
     /// icon + name + counter without resolving the (possibly unloaded) source document
-    /// (add-tracker-link-tasks 7.8). Distinct from <see cref="LinkTarget"/> so a future kind that carries
+    /// Distinct from <see cref="LinkTarget"/> so a future kind that carries
     /// both a link and a counted item stays unambiguous.</summary>
     public string? TargetItemCode { get; set; }
 
     /// <summary>For a <see cref="ScribeBlockKind.Tracker"/> pin, the last-known target quantity (the
     /// "need" side of the have/need counter). Defaults to 1; snapshotted alongside
-    /// <see cref="TargetItemCode"/> and refreshed on edit so the pin's counter stays current
-    /// (add-tracker-link-tasks 7.8).</summary>
+    /// <see cref="TargetItemCode"/> and refreshed on edit so the pin's counter stays current.</summary>
     public int TargetQuantity { get; set; } = 1;
 
     /// <summary>For a <see cref="ScribeBlockKind.Tracker"/> pin, the last-known current quantity (the
     /// "have" side of the have/need counter). Defaults to 0; refreshed from the authoritative document on
     /// edit — this snapshot is the persisted fallback. The live counter is recomputed continuously by
     /// whichever client-side engine is watching the viewer's carried inventory: a Scribe dialog's read view
-    /// when one is open (add-tracker-link-tasks 7.8), or the HUD's own count engine when a pinned Tracker is
-    /// shown with no dialog open (7.10). This field reflects the last value the document held between those
+    /// when one is open, or the HUD's own count engine when a pinned Tracker is
+    /// shown with no dialog open. This field reflects the last value the document held between those
     /// live updates.</summary>
     public int CurrentQuantity { get; set; }
 
     /// <summary>For a guide-page <see cref="ScribeBlockKind.Link"/> pin (a <c>"page:"</c>-prefixed
     /// <see cref="LinkTarget"/>), the last-known display title of the guide — snapshotted because a guide
     /// page has no item to resolve a name from, so without it the HUD/Pin Tab could only show a bare book
-    /// icon. Null for an item Link (whose name resolves live from the item) and for every other kind
-    /// (add-tracker-link-tasks 7.6).</summary>
+    /// icon. Null for an item Link (whose name resolves live from the item) and for every other kind.</summary>
     public string? LinkLabel { get; set; }
 
     /// <summary>The pinned task's last-known subtask depth (0 = top-level, 1 = a one-level subtask;
     /// clamped to <c>[0, 1]</c> like <see cref="ScribeBlock.Depth"/>). Snapshotted so the HUD and Pin Tab
-    /// indent a pinned subtask identically to the editor/read surfaces (add-crafting-tasks / task-subtasks
-    /// 5.1). Defaults to 0, so a pin from an old blob (or a top-level task) is unaffected.</summary>
+    /// indent a pinned subtask identically to the editor/read surfaces. Defaults to 0, so a pin from an old blob
+    /// (or a top-level task) is unaffected.</summary>
     public int Depth { get; set; }
 
     /// <summary>True when the pinned task carries an Accepted player-to-player assignment
     /// (<see cref="ScribeBlock.Assignment"/>'s <see cref="ScribeAssignmentState.Accepted"/>), snapshotted
     /// so the HUD and Pin Tab can render the leading-icon assignment marker without resolving the
-    /// (possibly unloaded) source document (add-assignment-and-quest-support 9.3). Defaults to false, so a
+    /// (possibly unloaded) source document. Defaults to false, so a
     /// pin from an old blob (or an un-assigned task) is unaffected.</summary>
     public bool IsAcceptedAssignment { get; set; }
 

@@ -6,7 +6,7 @@ using Scribe.Core;
 namespace Integration.Tests;
 
 /// <summary>
-/// Tasks 5.1-5.7 (two-view redesign): read access is always granted and never touches the
+/// Read access is always granted and never touches the
 /// editor lock; the mid-session toggle (<see cref="BlockEntityScribeLectern.OnRequestAccess"/>)
 /// makes the same grant/refuse decision as the initial right-click
 /// (<see cref="BlockEntityScribeLectern.OnRightClick"/>), since both funnel into the same

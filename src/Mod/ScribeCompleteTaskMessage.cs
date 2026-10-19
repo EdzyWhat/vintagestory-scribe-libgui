@@ -5,19 +5,18 @@ namespace Scribe;
 
 /// <summary>
 /// Client -&gt; server: mark a task complete (toggle its done state), addressed by stable identity
-/// rather than a block position + list index. This replaces the retired position-addressed
-/// <c>ScribeToggleTaskMessage</c>: the same server op drives the lectern read-view checkbox today
-/// and a future pinned-task HUD/tab checkbox, neither of which knows a block position (a synced pin
-/// carries only <c>(DocId, TaskId)</c>).
+/// rather than a block position + list index. The same server op drives the lectern read-view
+/// checkbox and the pinned-task HUD/tab checkbox, neither of which needs a block position (a synced
+/// pin carries only <c>(DocId, TaskId)</c>).
 ///
-/// Lock-free, like the old read-view toggle: any viewer may tick a task off even while another
+/// Lock-free: any viewer may tick a task off even while another
 /// player holds the editor lock. The per-player pin store is authoritative for a pinned task's
 /// done-state: the server toggles the acting player's pin done, writes through to the source
 /// document's task when it resolves (reconciling only the acting player), then applies the completion
 /// policy the client carried in <see cref="Policy"/> (Sink keeps the pin; Unpin removes it; Delete
 /// removes the task + pin). An unresolvable/destroyed source still completes via the store alone.
 ///
-/// The completion policy is a client-local preference (no longer server-side state), so the client
+/// The completion policy is a client-local preference (not server-side state), so the client
 /// sends its current policy here and the server normalizes it (unknown → Sink) before applying —
 /// see <see cref="ScribePlayerSettings.NormalizePolicy"/>.
 /// </summary>

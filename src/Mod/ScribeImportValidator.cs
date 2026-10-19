@@ -5,7 +5,7 @@ using Vintagestory.API.Common;
 namespace Scribe;
 
 /// <summary>
-/// Mod-layer best-effort reconstruction for an imported document (add-scriptorium-import-export D5). Core's
+/// Mod-layer best-effort reconstruction for an imported document. Core's
 /// codecs are VS-API-free, so they produce blocks carrying only the parsed reference STRINGS — they can't tell
 /// whether a <c>tracker</c>/<c>link</c> code names a real item in THIS game. This validator runs on the client
 /// (which has the live registries) before the import is sent: an item-bound block whose reference resolves to a
@@ -17,7 +17,7 @@ namespace Scribe;
 /// page to prove existence is expensive, and a dangling guide link degrades gracefully anyway — clicking it is a
 /// no-op (<see cref="ScribeItemRef.OpenHandbookPage"/>) rather than an error. Quest Links (<c>"quest:"</c>-prefixed)
 /// are exempted the same way: they carry no item to resolve and render from their own captured
-/// label/description regardless of whether the quest mod is installed (add-assignment-and-quest-support 10.3).
+/// label/description regardless of whether the quest mod is installed.
 /// Only ITEM references are resolved.</para>
 /// </summary>
 internal static class ScribeImportValidator
