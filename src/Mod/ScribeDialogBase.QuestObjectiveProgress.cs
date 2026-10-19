@@ -5,20 +5,13 @@ using Vintagestory.API.Client;   // ICoreClientAPI, GuiDialog
 
 namespace Scribe;
 
-// Quest objective progress engine. While a
-// Scribe surface is open in the read view, this keeps every QuestObjective child's live CurrentQuantity
-// in sync with Progression Framework's own cached per-objective progress (never carried inventory —
-// that's the Tracker/Craft engine in ScribeDialogBase.TrackerCount.cs, which a QuestObjective is
-// deliberately excluded from via IsCarriedCountTracked). Reuses that file's poll-tick listener
-// (trackerPollListenerId) rather than registering a second one, since both engines share the exact same
-// read-view-only gating and lifetime.
+// Quest objective progress engine: while in the read view, keeps each QuestObjective child's CurrentQuantity in sync with Progression Framework's
+// cached per-objective progress (never carried inventory; IsCarriedCountTracked excludes it from the Tracker engine in ScribeDialogBase.TrackerCount.cs).
+// Shares that engine's poll-tick listener (trackerPollListenerId) since gating and lifetime match.
 public abstract partial class ScribeDialogBase
 {
-    /// <summary>Recount every QuestObjective from Progression Framework's cached progress and reconcile:
-    /// push a changed count through the server (persist + converge) and refresh the read view once.
-    /// No-op outside the read view, when the document has no QuestObjective, or for a QuestObjective
-    /// whose parent Quest Link isn't a Progression Framework quest (a plain VS Quest Link has no
-    /// per-objective numeric progress to read, only status — see <see cref="ScribeModSystem.TryGetQuestProgressText"/>).</summary>
+    /// <summary>Recounts every QuestObjective from Progression Framework's cached progress, pushes a changed count through the server and refreshes the read view once.
+    /// No-op outside the read view, without QuestObjectives, or when the parent Quest Link isn't a Progression Framework quest (a plain VS quest has only status, see <see cref="ScribeModSystem.TryGetQuestProgressText"/>).</summary>
     private void RecomputeQuestObjectiveProgress()
     {
         if (isEditorMode || viewMode != ScribeLecternView.Read || !IsOpened()) return;
