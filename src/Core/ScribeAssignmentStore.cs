@@ -5,84 +5,57 @@ namespace Scribe.Core;
 
 /// <summary>
 /// Server-side owner of every player-to-player assignment record. One <see cref="ScribeBlock"/> per
-/// assignment — its Kind/Text/TargetItemCode/LinkTarget fields are the assigned content (a Task,
-/// Tracker, or Quest Link — the same shape any other block uses, so no separate content schema is
-/// needed), and its <see cref="ScribeBlock.Assignment"/> is the lifecycle state — keyed by the block's
-/// own <see cref="ScribeBlock.TaskId"/>, which doubles as the wire "AssignmentId" the send/action
-/// messages reference.
+/// assignment: its content fields are the assigned content and its <see cref="ScribeBlock.Assignment"/> is
+/// the lifecycle state, keyed by <see cref="ScribeBlock.TaskId"/> (the wire "AssignmentId").
 ///
-/// <b>Append-only, one canonical object — with one deliberate exception.</b> A record is never
-/// removed once created except via <see cref="TryDelete"/> (manage-terminal-assignment-records /
-/// split-assignment-delete-by-viewer): a terminal-state record's Assigner and Assignee may each
-/// delete their OWN side independently (hiding it from only their own <see cref="Sent"/>/
-/// <see cref="Received"/> view), and the record is only actually removed from the store once both
-/// sides have done so. Every other mutation only ever changes <see cref="ScribeAssignment.State"/>
-/// (and, once terminal, the two hidden-flags) — the Assigner's Assignment-tab history and the
-/// Assignee's Inbox are both just filtered views over this same store, so the two sides can never
-/// desync into independently-MUTATED copies (locked-on-send); deletion is the one axis where each
-/// side's VISIBILITY is allowed to diverge. Accept-time placement (moving a copy of the content into
-/// the Assignee's own document — see the `assignment-state-machine` capability's placement
-/// requirement) is a SEPARATE step the Mod layer performs after a successful Accept here; this
-/// store's record keeps tracking lifecycle state regardless, so the Assigner's read-only view stays
-/// correct.
+/// Records are only removed via <see cref="TryDelete"/>: each side of a terminal record hides its own view
+/// independently, and the record is removed once both have. Every other mutation changes only
+/// <see cref="ScribeAssignment.State"/>, so <see cref="Sent"/> and <see cref="Received"/> are filtered views
+/// of one canonical object and cannot desync. Accept-time placement into the Assignee's document is a
+/// separate step the Mod layer performs after a successful Accept here.
 ///
-/// Game-agnostic (pure BCL) so the state-machine wiring is unit-testable without a game install; the
-/// Mod layer owns the network push and save-game persistence, calling into this store the same way
-/// <c>ScribeModSystem</c> already calls into <c>ScribePinStore</c>.
+/// Game-agnostic (pure BCL) so it is unit-testable without a game install; the Mod layer owns the network
+/// push and save-game persistence.
 /// </summary>
 public sealed class ScribeAssignmentStore
 {
-    /// <summary>Hard upper bound on the number of assignment records the whole store may ever hold — an
-    /// allocation guard against a runaway/hostile client, mirroring <see cref="ScribePinCodec.MaxPlayers"/>-
-    /// style caps elsewhere. Generous relative to any realistic playgroup's lifetime assignment history.</summary>
+    /// <summary>Upper bound on records the store may hold — an allocation guard against a runaway or
+    /// hostile client.</summary>
     public const int MaxAssignments = 5000;
 
     private readonly Dictionary<Guid, ScribeBlock> _records = new();
 
     // ---------------- Reads ----------------
 
-    /// <summary>Every assignment this player SENT (their Assignment-tab history), in creation order —
-    /// excluding any record this player has deleted their own side of (split-assignment-delete-by-viewer;
-    /// <see cref="ScribeAssignment.HiddenFromAssigner"/>).</summary>
+    /// <summary>Assignments this player SENT, in creation order, excluding records whose assigner side was
+    /// deleted (<see cref="ScribeAssignment.HiddenFromAssigner"/>).</summary>
     public IReadOnlyList<ScribeBlock> Sent(string playerUid)
         => _records.Values.Where(b => b.Assignment?.AssignerUid == playerUid && !b.Assignment.HiddenFromAssigner).ToList();
 
-    /// <summary>Every assignment this player RECEIVED (their Inbox), in creation order — excluding any
-    /// record this player has deleted their own side of (<see cref="ScribeAssignment.HiddenFromAssignee"/>),
-    /// and excluding a <see cref="ScribeAssignmentState.Sent"/> Task Notice record that hasn't actually
-    /// reached this player's inventory yet (refine-task-notice-ux: the Inbox stays silent until
-    /// <see cref="TryMarkReceived"/> transitions it to Unaccepted).</summary>
+    /// <summary>Assignments this player RECEIVED, in creation order, excluding records whose assignee side
+    /// was deleted and Task Notice records still in <see cref="ScribeAssignmentState.Sent"/> (not yet
+    /// received; see <see cref="TryMarkReceived"/>).</summary>
     public IReadOnlyList<ScribeBlock> Received(string playerUid)
         => _records.Values.Where(b => b.Assignment?.TargetPlayerUid == playerUid && !b.Assignment.HiddenFromAssignee
             && b.Assignment.State != ScribeAssignmentState.Sent).ToList();
 
-    /// <summary>Resolves a single record by its id (= its <see cref="ScribeBlock.TaskId"/>), or null if
-    /// unknown.</summary>
+    /// <summary>Resolves a record by id (= <see cref="ScribeBlock.TaskId"/>), or null if unknown.</summary>
     public ScribeBlock? TryGet(Guid assignmentId)
         => _records.TryGetValue(assignmentId, out var block) ? block : null;
 
     // ---------------- Create ----------------
 
     /// <summary>
-    /// Creates a new assignment record, server-authoritative aside from the client-minted
-    /// <paramref name="assignmentId"/> (which must be fresh — a collision is rejected rather than
-    /// overwriting an existing record). Rejects blank uids and enforces <see cref="MaxAssignments"/>.
-    /// Text is clipped to <see cref="ScribeDocumentCodec.MaxTaskTextLength"/>, matching every other
-    /// Task-kind text path. Returns the created record via <paramref name="record"/> on success.
+    /// Creates a new assignment record. <paramref name="assignmentId"/> is client-minted and must be fresh
+    /// (a collision is rejected, never overwritten). Rejects blank uids and enforces
+    /// <see cref="MaxAssignments"/>. Text is clipped to <see cref="ScribeDocumentCodec.MaxTaskTextLength"/>.
     ///
-    /// <para><b>Trailing optional parameters (assignment-multi-item-creation, design.md D12):</b> the
-    /// original Task-only shape is <paramref name="kind"/>'s default, so the single-item quick-send path
-    /// (<c>OnServerReceivedSendAssignment</c>) keeps calling this with only the first six arguments,
-    /// behavior-identical to before. The batch-send path (<c>OnServerReceivedSendAssignmentBatch</c>)
-    /// supplies the rest to carry a Tracker/Link/Craft row's full shape. <paramref name="taskText"/> is
-    /// required non-blank ONLY for a Task/Text-kind row — a Tracker/Link/Craft row's label lives on
-    /// <paramref name="targetItemCode"/>/<paramref name="linkTarget"/> instead, exactly like any other
-    /// <see cref="ScribeBlock"/> of that kind (its own <c>Text</c> is blank by convention).</para>
+    /// <para><paramref name="taskText"/> must be non-blank only for Task/Text-kind rows; a Tracker/Link/Craft
+    /// row's label lives on <paramref name="targetItemCode"/>/<paramref name="linkTarget"/> and its own
+    /// Text is blank.</para>
     ///
-    /// <para><paramref name="batchId"/> (refine-assignment-desk-inbox-ux 12.2 root-cause fix): the
-    /// caller mints ONE fresh <see cref="Guid"/> per send call and passes it for every row that call
-    /// creates, so the client can group/newest-first-sort a batch by an unambiguous id instead of the
-    /// coarse, collidable <paramref name="assignedDate"/> string. See <see cref="ScribeAssignment.BatchId"/>.</para>
+    /// <para><paramref name="batchId"/>: one fresh <see cref="Guid"/> per send call, shared by every row that
+    /// call creates, so clients can group a batch unambiguously. See <see cref="ScribeAssignment.BatchId"/>.</para>
     /// </summary>
     public bool TryCreate(Guid assignmentId, string assignerUid, string targetPlayerUid, string taskText,
         string assignedDate, out ScribeBlock? record,
@@ -96,15 +69,11 @@ public sealed class ScribeAssignmentStore
             recipeSignature, depth, batchId, assignedTimestamp, acceptedTimestamp: null);
 
     /// <summary>
-    /// Task-Notice accept-time counterpart of <see cref="TryCreate"/> (`task-notice-item` capability):
-    /// creates a record already in the <see cref="ScribeAssignmentState.Accepted"/> state, never
-    /// passing through a store-tracked Unaccepted one — the physical Task Notice item carried the
-    /// pending decision beforehand, not a store record (see the `assignment-state-machine` capability's
-    /// notice-originated-lifecycle requirement). <paramref name="acceptedDate"/> stamps
-    /// <see cref="ScribeAssignment.AcceptedDate"/> immediately, since the Mod layer's usual
-    /// post-transition stamping never runs for a transition that didn't happen through
-    /// <see cref="TryApplyAction"/>. The record starts already <see cref="ScribeAssignment.Seen"/> (the
-    /// Assignee just acted on the physical item directly, not via their Inbox).
+    /// Accept-time counterpart of <see cref="TryCreate"/> for Task Notices: creates a record already
+    /// <see cref="ScribeAssignmentState.Accepted"/> (the physical notice carried the pending decision, not a
+    /// store record). <paramref name="acceptedDate"/> is stamped immediately because
+    /// <see cref="TryApplyAction"/> never runs for this transition. The record starts
+    /// <see cref="ScribeAssignment.Seen"/>.
     /// </summary>
     public bool TryCreateAccepted(Guid assignmentId, string assignerUid, string targetPlayerUid, string taskText,
         string assignedDate, string acceptedDate, out ScribeBlock? record,
@@ -118,13 +87,10 @@ public sealed class ScribeAssignmentStore
             recipeSignature, depth, batchId, assignedTimestamp, acceptedTimestamp);
 
     /// <summary>
-    /// Task-Notice send-time counterpart of <see cref="TryCreate"/> (refine-task-notice-ux, reversing the
-    /// earlier "no record until Accept" behavior): creates a record already in the
-    /// <see cref="ScribeAssignmentState.Sent"/> state, using the SAME <paramref name="assignmentId"/>
-    /// already embedded in the sealed notice's own document — one logical record, two carriers during the
-    /// pre-receipt window. Visible immediately in the Assigner's <see cref="Sent"/> view; excluded from the
-    /// Assignee's <see cref="Received"/> view until <see cref="TryMarkReceived"/> transitions it to
-    /// Unaccepted.
+    /// Send-time counterpart of <see cref="TryCreate"/> for Task Notices: creates a record in the
+    /// <see cref="ScribeAssignmentState.Sent"/> state using the assignment id embedded in the sealed notice.
+    /// Visible in the Assigner's <see cref="Sent"/> view at once; hidden from the Assignee's
+    /// <see cref="Received"/> view until <see cref="TryMarkReceived"/>.
     /// </summary>
     public bool TryCreateSent(Guid assignmentId, string assignerUid, string targetPlayerUid, string taskText,
         string assignedDate, out ScribeBlock? record,
@@ -173,10 +139,8 @@ public sealed class ScribeAssignmentStore
     /// <summary>
     /// Applies a requested action, resolving the acting player's role from whichever of
     /// <see cref="ScribeAssignment.AssignerUid"/>/<see cref="ScribeAssignment.TargetPlayerUid"/> matches
-    /// <paramref name="actingPlayerUid"/> (a player who assigned to themselves matches both — tried as
-    /// Assignee first, then Assigner, so whichever role the action is actually legal for succeeds).
-    /// Returns false for an unknown id, a player who is neither party, or an illegal transition; the
-    /// record's state is untouched on any false return.
+    /// (a self-assignment matches both: Assignee is tried first, then Assigner). Returns false, with the
+    /// state untouched, for an unknown id, a non-party player, or an illegal transition.
     /// </summary>
     public bool TryApplyAction(Guid assignmentId, string actingPlayerUid, ScribeAssignmentAction action)
     {
@@ -195,11 +159,9 @@ public sealed class ScribeAssignmentStore
     }
 
     /// <summary>
-    /// Transitions a <see cref="ScribeAssignmentState.Sent"/> Task Notice record to Unaccepted the moment
-    /// the sealed notice actually reaches the Assignee's own inventory (refine-task-notice-ux), stamping
-    /// <see cref="ScribeAssignment.ReceivedDate"/>. From this point the record behaves exactly like any
-    /// other Unaccepted assignment. Returns false — record unchanged — for an unknown id or a record not
-    /// currently in the Sent state (already received, or never a notice at all).
+    /// Transitions a <see cref="ScribeAssignmentState.Sent"/> Task Notice record to Unaccepted when the
+    /// sealed notice reaches the Assignee's inventory, stamping <see cref="ScribeAssignment.ReceivedDate"/>.
+    /// Returns false, record unchanged, for an unknown id or a record not in the Sent state.
     /// </summary>
     public bool TryMarkReceived(Guid assignmentId, string receivedDate, double? receivedTimestamp = null)
     {
@@ -213,14 +175,11 @@ public sealed class ScribeAssignmentStore
     }
 
     /// <summary>
-    /// Rewrites an Unaccepted record's <see cref="ScribeAssignment.TargetPlayerUid"/> to a different
-    /// player (add-task-notice-redirect-confirm, design D1) — used when a non-recipient holder of a
-    /// sealed Task Notice confirms accepting it anyway, right before the normal
-    /// <see cref="TryApplyAction"/> Accept call that follows. Stamps
-    /// <see cref="ScribeAssignment.RedirectedFromUid"/> from the current target and
-    /// <see cref="ScribeAssignment.RedirectedDate"/>. No-ops (returns false, record unchanged) if
-    /// <paramref name="newTargetPlayerUid"/> already equals the current target, the record is unknown,
-    /// or it isn't currently Unaccepted (a redirect only ever precedes an Accept).
+    /// Rewrites an Unaccepted record's <see cref="ScribeAssignment.TargetPlayerUid"/> to a different player,
+    /// for a non-recipient holder confirming a sealed Task Notice, just before the Accept call. Stamps
+    /// <see cref="ScribeAssignment.RedirectedFromUid"/> and <see cref="ScribeAssignment.RedirectedDate"/>.
+    /// Returns false, record unchanged, if the target is unchanged, the id is unknown, or the record is not
+    /// Unaccepted.
     /// </summary>
     public bool TryRedirectTarget(Guid assignmentId, string newTargetPlayerUid, string redirectedDate,
         double? redirectedTimestamp = null)
@@ -238,17 +197,12 @@ public sealed class ScribeAssignmentStore
     }
 
     /// <summary>
-    /// Deletes a terminal-state record (Declined, Cancelled, Discarded, or Completed) from the
-    /// requesting <paramref name="side"/>'s own view only (split-assignment-delete-by-viewer) — sets
-    /// <see cref="ScribeAssignment.HiddenFromAssignee"/> or <see cref="ScribeAssignment.HiddenFromAssigner"/>
-    /// so the record drops out of that side's <see cref="Received"/>/<see cref="Sent"/> list, leaving the
-    /// other side's view unaffected. <paramref name="actingPlayerUid"/> must actually hold the claimed
-    /// <paramref name="side"/> (Assignee → <see cref="ScribeAssignment.TargetPlayerUid"/>, Assigner →
-    /// <see cref="ScribeAssignment.AssignerUid"/>) — a self-assignment matches both roles but still only
-    /// ever deletes the ONE side named by <paramref name="side"/>, one request at a time. Once BOTH sides
-    /// have deleted their own view, the record is permanently removed from the store — the one deliberate
-    /// hole in its otherwise append-only contract (see class doc). Returns false — record unchanged — for
-    /// an unknown id, a non-terminal state, or a player who doesn't actually hold the claimed side.
+    /// Deletes a terminal-state record (Declined, Cancelled, Discarded, Completed) from the requesting
+    /// <paramref name="side"/>'s view only, by setting <see cref="ScribeAssignment.HiddenFromAssignee"/> or
+    /// <see cref="ScribeAssignment.HiddenFromAssigner"/>. <paramref name="actingPlayerUid"/> must hold the
+    /// claimed side; a self-assignment still deletes only the ONE named side per request. When BOTH sides
+    /// have deleted, the record is removed from the store. Returns false, record unchanged, for an unknown
+    /// id, a non-terminal state, or a player who doesn't hold the side.
     /// </summary>
     public bool TryDelete(Guid assignmentId, string actingPlayerUid, ScribeAssignmentActor side)
     {
@@ -271,8 +225,8 @@ public sealed class ScribeAssignmentStore
         return true;
     }
 
-    /// <summary>Marks a received assignment seen — only the actual recipient may do so. No-op (returns
-    /// false) for an unknown id, a non-recipient, or one already seen.</summary>
+    /// <summary>Marks a received assignment seen; only the recipient may. Returns false for an unknown id,
+    /// a non-recipient, or one already seen.</summary>
     public bool TryMarkSeen(Guid assignmentId, string viewingPlayerUid)
     {
         if (!_records.TryGetValue(assignmentId, out var block) || block.Assignment is not { } assignment)
@@ -282,9 +236,8 @@ public sealed class ScribeAssignmentStore
         return true;
     }
 
-    /// <summary>Marks EVERY currently-unseen assignment this player received as seen (design.md Decision 4:
-    /// "opening the Inbox flips it server-side"). Returns true if anything actually changed, so the caller
-    /// can skip a re-push when nothing was unseen.</summary>
+    /// <summary>Marks every unseen assignment this player received as seen. Returns true if anything
+    /// changed, so the caller can skip a re-push otherwise.</summary>
     public bool MarkAllSeen(string viewingPlayerUid)
     {
         bool changed = false;
@@ -297,46 +250,18 @@ public sealed class ScribeAssignmentStore
 
     private static readonly byte[] ListMagic = "SASN"u8.ToArray();
     private static readonly byte[] StoreMagic = "SAST"u8.ToArray();
-    // v2 adds RecipeSignature (assignment-multi-item-creation D12 — a Craft row's recipe binding).
-    // v3 adds BatchId (refine-assignment-desk-inbox-ux 12.2 root-cause fix — see ScribeAssignment.BatchId).
-    // v4 adds AcceptedDate/DeclinedDate/CancelledDate/DiscardedDate/CompletedDate (refine-assignment-
-    // desk-inbox-ux triage 2026-08-31 — per-transition history stubs, see ScribeAssignment's remarks).
-    // v5 adds AcceptedIntoLabel (capture-assignment-accept-destination) — the destination Scribe item's
-    // display label, captured once at Accept-placement time.
-    // v6 adds HiddenFromAssignee/HiddenFromAssigner (split-assignment-delete-by-viewer) — each side's
-    // independent "I deleted my own view of this" flag.
-    // v7 adds ReceivedDate (refine-task-notice-ux) — the date a Task Notice's Sent-state record actually
-    // reached the Assignee's inventory and transitioned to Unaccepted.
-    // v8 adds RedirectedFromUid/RedirectedDate (add-task-notice-redirect-confirm) — who a Task Notice
-    // was originally addressed to and when a non-recipient holder's confirmed Accept redirected it.
-    // v9 adds eight optional numeric in-game timestamps (Assigned/Accepted/Declined/Cancelled/Discarded/
-    // Completed/Received/Redirected) so a viewing client can rebuild those dates via scribe:date-format.
-    // Written as bool has + double when present, so a missing timestamp (null, a pre-v9 row) is distinct
-    // from real Calendar.TotalDays == 0 (world day one).
-    // Progressive append-only reads (matching ScribeDocumentCodec's convention): any version in
-    // [MinVersion, Version] is accepted; a v1 blob simply predates Craft-kind assignments (which didn't
-    // exist yet), so every one of its records is genuinely RecipeSignature-less — defaulting it to ""
-    // on read is exactly correct, not a lossy guess. A pre-v3 blob predates BatchId entirely; its records
-    // are synthesized a deterministic per-(assigner,target,date) id on read (DeriveLegacyBatchId) so
-    // pre-existing multi-item batches keep grouping the same way they always displayed, without a real
-    // minted id ever having existed for them. A pre-v4 blob predates every transition date string — those
-    // genuinely never happened as far as the record can say, so defaulting all five to null on read is
-    // exactly correct, not a lossy guess. A pre-v5 blob predates the destination label entirely — an
-    // assignment it already Accepted simply has no recorded destination, which is also exactly correct
-    // (the label was never captured, not lost). A pre-v6 blob predates both hidden-flags — nothing was
-    // ever deleted-by-one-side under that version, so defaulting both to false on read is exactly
-    // correct, not a lossy guess. A pre-v7 blob predates the Sent state entirely — no record was ever
-    // received-but-unstamped under that version, so defaulting ReceivedDate to null on read is exactly
-    // correct, not a lossy guess. A pre-v8 blob predates redirect entirely — no record was ever
-    // redirected under that version, so defaulting both new fields to null on read is exactly correct,
-    // not a lossy guess. A pre-v9 blob predates numeric timestamps — every date string it carries is a
-    // baked identity stamp with no timestamp to rebuild from, so defaulting all eight to null is exactly
-    // correct, not a lossy guess.
+    // Format versions (each appends fields; see the "vN+" tags in WriteRecordList):
+    // v2 RecipeSignature, v3 BatchId, v4 per-transition date strings, v5 AcceptedIntoLabel,
+    // v6 HiddenFromAssignee/Assigner, v7 ReceivedDate, v8 RedirectedFromUid/Date,
+    // v9 eight optional numeric timestamps (bool has + double, so null is distinct from day 0).
+    // Reads accept any version in [MinVersion, Version]. A field absent from an older blob defaults to
+    // null/false/"" because it genuinely did not exist then; only BatchId (pre-v3) is synthesized, by
+    // DeriveLegacyBatchId, so old multi-item batches keep grouping.
     private const byte Version = 9;
     private const byte MinVersion = 1;
 
-    /// <summary>Serializes a single player's view (<see cref="Sent"/> or <see cref="Received"/>) for the
-    /// server→client push.</summary>
+    /// <summary>Serializes one player's view (<see cref="Sent"/> or <see cref="Received"/>) for the
+    /// server-to-client push.</summary>
     public static byte[] SerializeList(IReadOnlyList<ScribeBlock> records)
     {
         using var ms = new MemoryStream();
@@ -349,7 +274,7 @@ public sealed class ScribeAssignmentStore
         return ms.ToArray();
     }
 
-    /// <summary>Deserializes a single player's pushed view.</summary>
+    /// <summary>Deserializes a pushed per-player view.</summary>
     public static bool TryDeserializeList(byte[]? bytes, out List<ScribeBlock>? records)
     {
         records = null;
@@ -371,7 +296,7 @@ public sealed class ScribeAssignmentStore
         }
     }
 
-    /// <summary>Serializes the whole store (every record, regardless of player) for the savegame blob.</summary>
+    /// <summary>Serializes the whole store for the savegame blob.</summary>
     public byte[] SerializeStore()
     {
         using var ms = new MemoryStream();
@@ -384,8 +309,8 @@ public sealed class ScribeAssignmentStore
         return ms.ToArray();
     }
 
-    /// <summary>Replaces the in-memory store from the persisted blob (called on world load). A
-    /// null/malformed blob leaves the store empty rather than throwing.</summary>
+    /// <summary>Replaces the in-memory store from the persisted blob (world load). A null or malformed
+    /// blob leaves the store empty.</summary>
     public void LoadFrom(byte[]? bytes)
     {
         _records.Clear();
@@ -437,8 +362,7 @@ public sealed class ScribeAssignmentStore
             w.Write(block.Depth);
             w.Write(block.RecipeSignature); // v2+ (never null — ScribeBlock defaults it to "")
 
-            // Every store record carries an Assignment by construction; a defensive empty default guards
-            // against a hand-built ScribeBlock without one rather than throwing.
+            // Every store record carries an Assignment; the empty default guards a hand-built block.
             var assignment = block.Assignment ?? new ScribeAssignment("", "");
             w.Write(assignment.AssignerUid);
             w.Write(assignment.TargetPlayerUid);
@@ -489,7 +413,7 @@ public sealed class ScribeAssignmentStore
             string? linkLabel = r.ReadBoolean() ? r.ReadString() : null;
             string? linkDescription = r.ReadBoolean() ? r.ReadString() : null;
             int depth = r.ReadInt32();
-            // v1 predates Craft-kind assignments, so a v1 record genuinely has no recipe binding to lose.
+            // v1 predates Craft-kind assignments, so there is no recipe binding to lose.
             string recipeSignature = version >= 2 ? r.ReadString() : "";
 
             string assignerUid = r.ReadString();
@@ -497,8 +421,7 @@ public sealed class ScribeAssignmentStore
             var state = (ScribeAssignmentState)r.ReadByte();
             string assignedDate = r.ReadString();
             bool seen = r.ReadBoolean();
-            // v1/v2 predate BatchId entirely — synthesize a stable one so a pre-existing multi-item batch
-            // still groups together after upgrading (see the Version-constant remarks above).
+            // Pre-v3 records have no BatchId; synthesize a stable one so old batches still group.
             Guid batchId = version >= 3
                 ? new Guid(ReadExactly(r, 16))
                 : DeriveLegacyBatchId(assignerUid, targetPlayerUid, assignedDate);
@@ -510,8 +433,7 @@ public sealed class ScribeAssignmentStore
                 DiscardedDate = ReadOptionalString(r, version),
                 CompletedDate = ReadOptionalString(r, version),
                 AcceptedIntoLabel = ReadOptionalString(r, version, minVersion: 5),
-                // v1-v5 predate both hidden-flags — nothing was ever deleted-by-one-side under those
-                // versions, so false is the correct default (not lossy).
+                // v1-v5 predate the hidden-flags; false is the correct default.
                 HiddenFromAssignee = version >= 6 && r.ReadBoolean(),
                 HiddenFromAssigner = version >= 6 && r.ReadBoolean(),
                 ReceivedDate = ReadOptionalString(r, version, minVersion: 7),
@@ -536,20 +458,16 @@ public sealed class ScribeAssignmentStore
         return true;
     }
 
-    /// <summary>Synthesizes a stable <see cref="ScribeAssignment.BatchId"/> for a pre-v3 record that never
-    /// had a real one, from the same three fields the old (buggy) grouping used — so a pre-existing
-    /// multi-item batch keeps grouping together after upgrading rather than exploding into one "batch"
-    /// per row. Not security-sensitive (a display-grouping key only), so SHA-256 truncated to 16 bytes is
-    /// just a convenient stable hash, not a cryptographic use.</summary>
+    /// <summary>Synthesizes a stable <see cref="ScribeAssignment.BatchId"/> for a pre-v3 record from
+    /// (assigner, target, date), so old multi-item batches keep grouping. A display-grouping key only, so
+    /// truncated SHA-256 is just a convenient stable hash.</summary>
     private static Guid DeriveLegacyBatchId(string assignerUid, string targetPlayerUid, string assignedDate)
     {
         byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes($"{assignerUid} {targetPlayerUid} {assignedDate}"));
         return new Guid(hash.AsSpan(0, 16));
     }
 
-    /// <summary>Writes a nullable string as a has-value flag plus the string when present — the same
-    /// pattern already used inline for TargetItemCode/LinkTarget/LinkLabel/LinkDescription, extracted here
-    /// because v4 repeats it five times for the new per-transition timestamp fields.</summary>
+    /// <summary>Writes a nullable string as a has-value flag plus the string when present.</summary>
     private static void WriteOptionalString(BinaryWriter w, string? value)
     {
         bool hasValue = value is not null;
@@ -557,14 +475,13 @@ public sealed class ScribeAssignmentStore
         if (hasValue) w.Write(value!);
     }
 
-    /// <summary>Reads a <see cref="WriteOptionalString"/> value written starting at <paramref
-    /// name="minVersion"/> (default v4, the first version to use this helper), or null when this blob
-    /// predates that version (no bytes were ever written for it).</summary>
+    /// <summary>Reads a <see cref="WriteOptionalString"/> value written from <paramref name="minVersion"/>
+    /// on, or null when the blob predates it.</summary>
     private static string? ReadOptionalString(BinaryReader r, int version, int minVersion = 4) =>
         version >= minVersion ? (r.ReadBoolean() ? r.ReadString() : null) : null;
 
-    /// <summary>Writes a nullable double as a has-value flag plus the value when present — the Guestbook
-    /// sentinel rule: missing bool = null, <c>0</c> is a real <c>Calendar.TotalDays</c>.</summary>
+    /// <summary>Writes a nullable double as a has-value flag plus the value, so null stays distinct from a
+    /// real <c>Calendar.TotalDays</c> of 0.</summary>
     private static void WriteOptionalDouble(BinaryWriter w, double? value)
     {
         bool hasValue = value.HasValue;
@@ -572,8 +489,8 @@ public sealed class ScribeAssignmentStore
         if (hasValue) w.Write(value!.Value);
     }
 
-    /// <summary>Reads a <see cref="WriteOptionalDouble"/> value written starting at v9, or null when
-    /// this blob predates timestamps (no bytes were ever written for it).</summary>
+    /// <summary>Reads a <see cref="WriteOptionalDouble"/> value (written from v9), or null when the blob
+    /// predates timestamps.</summary>
     private static double? ReadOptionalDouble(BinaryReader r, int version, int minVersion = 9) =>
         version >= minVersion ? (r.ReadBoolean() ? r.ReadDouble() : null) : null;
 

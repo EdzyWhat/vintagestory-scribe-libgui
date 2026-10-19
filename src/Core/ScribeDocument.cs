@@ -1,42 +1,35 @@
 namespace Scribe.Core;
 
 /// <summary>
-/// The game-agnostic model of a Scribe document: an ordered sequence of <see cref="ScribeBlock"/>s.
-/// Each block is one of five kinds — a checkbox task, a freeform text section, a Tracker
-/// ("gather N of item X"), a Link (a reference to an item's Handbook page), or a Craft (a
-/// recipe-bound "craft N of item X" task that generates ingredient subtasks) — so they can be
-/// interspersed and reordered freely. All mutation methods return <c>true</c> on success and
-/// <c>false</c> for invalid input (out-of-range index), never throwing to the caller. Task text
-/// is stored verbatim, including empty/whitespace-only text — the model enforces no non-blank
-/// content invariant; removing an abandoned or cleared empty task is the editing layer's job.
-/// This type has no dependency on the Vintage Story API.
+/// The game-agnostic model of a Scribe document: an ordered sequence of <see cref="ScribeBlock"/>s of any
+/// kind, interspersed and reorderable. Mutation methods return <c>true</c> on success and <c>false</c> for
+/// invalid input (out-of-range index), never throwing. Text is stored verbatim, including empty text; the
+/// model enforces no non-blank invariant (removing an abandoned empty task is the editing layer's job).
+/// No Vintage Story API dependency.
 /// </summary>
 public sealed class ScribeDocument
 {
-    /// <summary>Default title shown for a Lectern that has never had a title set.</summary>
+    /// <summary>Default title for a Lectern that has never had one set.</summary>
     public const string DefaultTitle = "Untitled";
 
-    /// <summary>Maximum number of characters in a Lectern title.</summary>
+    /// <summary>Maximum characters in a Lectern title.</summary>
     public const int MaxTitleLength = 50;
 
     private readonly List<ScribeBlock> _blocks = new();
 
-    /// <summary>The display title of this document. Defaults to <see cref="DefaultTitle"/>;
-    /// the editing layer normalizes empty/whitespace titles back to the default before saving.</summary>
+    /// <summary>The display title. The editing layer normalizes empty/whitespace titles back to
+    /// <see cref="DefaultTitle"/> before saving.</summary>
     public string Title { get; set; } = DefaultTitle;
 
-    /// <summary>The blocks, in order. Read-only to callers; mutate via the methods below.</summary>
+    /// <summary>The blocks, in order. Read-only; mutate via the methods below.</summary>
     public IReadOnlyList<ScribeBlock> Blocks => _blocks;
 
-    /// <summary>The total number of blocks of ANY kind — tasks, notes, trackers, links, and craft parents
-    /// all count equally. This is the measure the tier cap counts (<see cref="ScribeDocumentPolicy.MaxBlocks"/>,
-    /// the editor's add gate, and the Transcribe capacity check): a capped surface holds "N of anything", so
-    /// adding any kind advances this count and is refused once it reaches the cap. Pure data.</summary>
+    /// <summary>The number of blocks of ANY kind. This is the measure the tier cap counts
+    /// (<see cref="ScribeDocumentPolicy.MaxBlocks"/>, the editor's add gate, the Transcribe capacity check).</summary>
     public int BlockCount => _blocks.Count;
 
-    /// <summary>The number of completable blocks — Task, Tracker, and Link (everything except a
-    /// free-text section, matching <see cref="ScribeBlock.IsCompletable"/>). This is the "N tasks"
-    /// the Transcribe overwrite confirm reports before replacing a target document. Pure data.</summary>
+    /// <summary>The number of completable blocks (see <see cref="ScribeBlock.IsCompletable"/>), the "N tasks"
+    /// the Transcribe overwrite confirm reports.</summary>
     public int CompletableCount
     {
         get
@@ -48,11 +41,8 @@ public sealed class ScribeDocument
         }
     }
 
-    /// <summary>The number of TASK-kind blocks only (excluding Trackers, Links, and free-text sections).
-    /// NOTE: this is NOT the tier-cap measure — the cap counts blocks of ANY kind via
-    /// <see cref="BlockCount"/>. This property remains for
-    /// diagnostics/tests that want the task-only tally; it is distinct from <see cref="CompletableCount"/>
-    /// (which also counts Trackers/Links) and from <see cref="BlockCount"/> (the total). Pure data.</summary>
+    /// <summary>The number of TASK-kind blocks only. NOT the tier-cap measure (see <see cref="BlockCount"/>);
+    /// kept for diagnostics and tests.</summary>
     public int TaskCount
     {
         get
@@ -64,38 +54,25 @@ public sealed class ScribeDocument
         }
     }
 
-    /// <summary>Stable identifier for this document. Assigned once when the document is created
-    /// (a fresh <see cref="Guid"/>) and preserved through serialization, so a reference to a task
-    /// in this document — a per-player pin — keeps resolving even after the document's owning
-    /// block is broken and re-placed elsewhere (the id rides inside the serialized bytes). Set by
-    /// the codec on the deserialization path via <see cref="SetDocId"/>.</summary>
+    /// <summary>Stable identifier, assigned once at creation and preserved through serialization, so a
+    /// per-player pin keeps resolving after the owning block is broken and re-placed. Set by the codec via
+    /// <see cref="SetDocId"/>.</summary>
     public Guid DocId { get; private set; } = Guid.NewGuid();
 
-    /// <summary>Overwrites the document id with a persisted one. Used only by the codec when
-    /// rebuilding a document from bytes that carry an id (the current format); callers never
-    /// reassign a document's identity.</summary>
+    /// <summary>Overwrites the document id with a persisted one. Used only by the codec.</summary>
     internal void SetDocId(Guid docId) => DocId = docId;
 
-    /// <summary>Assigns this document a brand-new identity (a fresh <see cref="Guid"/>). Used ONLY for
-    /// the creative "clone a placed block" case: a middle-click pick carries the source block's
-    /// serialized DocId onto the copy, but the copy must not share identity with the still-live original —
-    /// the DocId keys the mod's host and pin registries, so two live blocks under one id collide (the
-    /// copy's dialog/lock/pin traffic resolves to the original). This is deliberately distinct from the
-    /// load-path <see cref="SetDocId"/>, which RESTORES a persisted id; here we intentionally break the
-    /// carried-over identity to forge a unique one.</summary>
+    /// <summary>Assigns a brand-new identity. Used ONLY for the creative "clone a placed block" case: a
+    /// middle-click pick carries the source's DocId onto the copy, but DocId keys the mod's host and pin
+    /// registries, so two live blocks under one id would collide. Distinct from <see cref="SetDocId"/>,
+    /// which RESTORES a persisted id.</summary>
     public void ReassignNewDocId() => DocId = Guid.NewGuid();
 
     /// <summary>
-    /// Produces a deep, independent copy of this document with a brand-new identity: a fresh
-    /// <see cref="DocId"/> and a fresh <see cref="ScribeBlock.TaskId"/> for every block. Every other
-    /// field — title, and each block's kind, text, done flag, depth, assignment, and Tracker/Link
-    /// references — is copied verbatim. The source document is NOT modified.
-    ///
-    /// <para>This is the Transcribe copy primitive. A verbatim byte-copy of a serialized document would
-    /// duplicate its identity, so two live items would collide on the mod's per-player pin store and
-    /// block-doc resolution (which key off <see cref="DocId"/> + <see cref="ScribeBlock.TaskId"/> — see
-    /// <see cref="ReassignNewDocId"/>). Regenerating all ids here keeps the copy fully independent: pins,
-    /// completion, and later edits on one item never touch the other. Pure data; no VS API.</para>
+    /// Deep, independent copy with a fresh <see cref="DocId"/> and a fresh <see cref="ScribeBlock.TaskId"/>
+    /// for every block; all other fields are copied verbatim. The source is not modified. This is the
+    /// Transcribe copy primitive: a byte-copy would duplicate identity and collide on the pin store and
+    /// block-doc resolution.
     /// </summary>
     public ScribeDocument CloneWithNewIdentity()
     {
@@ -108,13 +85,9 @@ public sealed class ScribeDocument
     }
 
     /// <summary>
-    /// Appends fresh-identity copies of every block in <paramref name="other"/> onto the END of this
-    /// document, leaving this document's existing blocks (and its <see cref="DocId"/>/title) untouched — the
-    /// Transcribe "append" copy mode (add-transcribe-copy-paste). Each appended block gets a NEW
-    /// <see cref="ScribeBlock.TaskId"/> (via <see cref="CloneBlockWithNewTaskId"/>), exactly like
-    /// <see cref="CloneWithNewIdentity"/>, so the appended tasks never collide with either the source's or
-    /// this document's existing ids on pins/completion. Pure data; no VS API. The caller is responsible for
-    /// any capacity check (this method does not enforce a block cap).
+    /// Appends fresh-identity copies of every block in <paramref name="other"/> to the END (the Transcribe
+    /// "append" mode), leaving existing blocks, <see cref="DocId"/> and title untouched. The caller owns any
+    /// capacity check.
     /// </summary>
     public void AppendClonedBlocksFrom(ScribeDocument other)
     {
@@ -123,37 +96,26 @@ public sealed class ScribeDocument
             _blocks.Add(CloneBlockWithNewTaskId(block));
     }
 
-    /// <summary>Appends a fully-formed block onto the end VERBATIM, preserving its
-    /// <see cref="ScribeBlock.TaskId"/> as-is — the one path that intentionally reuses an external id
-    /// rather than minting a fresh one (contrast <see cref="AppendClonedBlocksFrom"/>). Used for Accept-time
-    /// assignment placement (assignment-state-machine's placement requirement): the placed block must keep
-    /// the SAME TaskId as the assignment record it correlates to, since it is a MOVE of one canonical
-    /// assignment into the Assignee's document, not a copy. The caller is responsible for any capacity
-    /// check (this method does not enforce a block cap).</summary>
+    /// <summary>Appends a fully-formed block VERBATIM, preserving its <see cref="ScribeBlock.TaskId"/>
+    /// (contrast <see cref="AppendClonedBlocksFrom"/>). Used for Accept-time assignment placement: the block
+    /// is a MOVE of one canonical assignment and must keep the record's TaskId. The caller owns any
+    /// capacity check.</summary>
     public void AppendAssignedBlock(ScribeBlock block) => _blocks.Add(block);
 
-    /// <summary>Same contract as <see cref="AppendAssignedBlock"/> (a verbatim MOVE, TaskId preserved),
-    /// but at an explicit position rather than always the end — Accept-time placement follows the
-    /// accepting player's own New Task Insert preference rather
-    /// than always landing at the bottom. <paramref name="index"/> is clamped into
-    /// <c>[0, Blocks.Count]</c> so an out-of-range value (a stale index from a settings change mid-flight)
-    /// degrades to the nearest valid position rather than throwing.</summary>
+    /// <summary>Same contract as <see cref="AppendAssignedBlock"/> but at an explicit position (the
+    /// accepting player's New Task Insert preference). <paramref name="index"/> is clamped into
+    /// <c>[0, Blocks.Count]</c> so a stale index degrades rather than throws.</summary>
     public void InsertAssignedBlock(int index, ScribeBlock block) =>
         _blocks.Insert(Math.Clamp(index, 0, _blocks.Count), block);
 
-    /// <summary>Appends a fully-formed block onto the end verbatim, preserving its freshly-minted
-    /// <see cref="ScribeBlock.TaskId"/> — the placement primitive for
-    /// <see cref="ScribeExternalTaskMapper"/>'s output (add-external-mod-task-api). Deliberately a
-    /// separate method from <see cref="AppendAssignedBlock"/> even though both are a one-line
-    /// <c>_blocks.Add</c>: that method's contract is specifically an assignment MOVE (a pre-existing
-    /// TaskId correlated to an assignment record); this one has no such correlation, it simply places a
-    /// brand-new block. The caller is responsible for any capacity check (this method does not enforce
-    /// a block cap).</summary>
+    /// <summary>Appends a fully-formed block verbatim, preserving its freshly-minted TaskId; the placement
+    /// primitive for <see cref="ScribeExternalTaskMapper"/> output. Separate from
+    /// <see cref="AppendAssignedBlock"/> because that contract is an assignment MOVE of a pre-existing,
+    /// correlated TaskId. The caller owns any capacity check.</summary>
     public void AppendExternalBlock(ScribeBlock block) => _blocks.Add(block);
 
-    /// <summary>Deep-copy one block, minting a FRESH <see cref="ScribeBlock.TaskId"/> (the ctor's default when
-    /// no taskId is supplied) so the copy is independent of the original on pins/completion resolution. Shared
-    /// by <see cref="CloneWithNewIdentity"/> and <see cref="AppendClonedBlocksFrom"/>.</summary>
+    /// <summary>Deep-copies one block with a FRESH <see cref="ScribeBlock.TaskId"/>. Shared by
+    /// <see cref="CloneWithNewIdentity"/> and <see cref="AppendClonedBlocksFrom"/>.</summary>
     private static ScribeBlock CloneBlockWithNewTaskId(ScribeBlock block) => new(
         block.Kind,
         block.Text,
@@ -169,28 +131,23 @@ public sealed class ScribeDocument
         assignment: block.Assignment?.Clone(),
         linkDescription: block.LinkDescription);
 
-    /// <summary>The index a document-level create should use for <paramref name="pos"/>: 0 for
-    /// <see cref="ScribeNewTaskInsert.Top"/>, <see cref="Blocks"/>.Count for Bottom. Unknown values
-    /// follow <see cref="ScribePlayerSettings.NormalizeNewTaskInsert"/> (Top).</summary>
+    /// <summary>The index a document-level create uses for <paramref name="pos"/>: 0 for Top,
+    /// <see cref="Blocks"/>.Count for Bottom. Unknown values follow
+    /// <see cref="ScribePlayerSettings.NormalizeNewTaskInsert"/> (Top).</summary>
     public int InsertIndex(ScribeNewTaskInsert pos) =>
         ScribePlayerSettings.NormalizeNewTaskInsert(pos) == ScribeNewTaskInsert.Bottom
             ? _blocks.Count
             : 0;
 
-    /// <summary>The index Accept-time placement should use for a row carrying <paramref name="batchId"/>
-    /// — if a sibling from the same batch is already
-    /// placed in this document, insert directly after its cluster (its own owned run, if it's a depth-0
-    /// parent with children already placed) so the batch's rows stay contiguous regardless of which order
-    /// they were individually Accepted in — each Accept is a separate round-trip with no other batch
-    /// coordination. Falls back to <paramref name="fallback"/>'s <see cref="InsertIndex"/> when no sibling
-    /// is placed yet (the first row of a batch to be Accepted) or <paramref name="batchId"/> is the shared
-    /// <see cref="Guid.Empty"/> default some callers use (see <see cref="ScribeAssignment.BatchId"/>'s
-    /// remarks) — gluing together every such caller's unrelated rows would be wrong, not helpful.
+    /// <summary>The index Accept-time placement uses for a row carrying <paramref name="batchId"/>: directly
+    /// after the cluster (its owned run, for a depth-0 parent) of a sibling from the same batch already placed,
+    /// so a batch stays contiguous whatever order its rows are Accepted in. Falls back to
+    /// <paramref name="fallback"/>'s <see cref="InsertIndex"/> when no sibling is placed yet or
+    /// <paramref name="batchId"/> is <see cref="Guid.Empty"/> (see <see cref="ScribeAssignment.BatchId"/>);
+    /// gluing unrelated rows together would be wrong.
     ///
-    /// <para>Known limitation: a subtask Accepted BEFORE its parent has no sibling to find yet and falls
-    /// back to Top/Bottom; when the parent is Accepted afterward it lands next to that already-placed
-    /// subtask rather than ahead of it. Fixing that fully needs deferring placement until a whole batch is
-    /// resolved, which this does not attempt.</para></summary>
+    /// <para>Known limitation: a subtask Accepted BEFORE its parent falls back to Top/Bottom, and the parent
+    /// then lands next to it rather than ahead of it.</para></summary>
     public int InsertIndexForBatch(Guid batchId, ScribeNewTaskInsert fallback)
     {
         if (batchId != Guid.Empty)
@@ -204,18 +161,15 @@ public sealed class ScribeDocument
         return InsertIndex(fallback);
     }
 
-    /// <summary>Adds a checkbox task to the end. Any text is accepted and stored verbatim,
-    /// including empty/whitespace-only text (a new task starts empty and the player types into it).
-    /// Whitespace normalization (trimming) and removal of an abandoned empty task are the editing
-    /// layer's responsibility, not the model's -- see <see cref="SetBlockText"/>.</summary>
+    /// <summary>Adds a checkbox task to the end. Any text is accepted verbatim, including empty (a new task
+    /// starts empty); trimming and removal of an abandoned empty task belong to the editing layer, see
+    /// <see cref="SetBlockText"/>.</summary>
     public bool AddTask(string text) => InsertTask(_blocks.Count, text);
 
     /// <summary>
-    /// Inserts a checkbox task at <paramref name="index"/>, shifting later blocks down (so passing
-    /// <c>currentIndex + 1</c> puts the new task directly under the current one — the editor's
-    /// Enter=new-task gesture). <paramref name="index"/> may equal <see cref="Blocks"/>.Count to append.
-    /// Any text is accepted and stored verbatim, including empty/whitespace-only text; an
-    /// out-of-range index fails safely (see <see cref="AddTask"/>).
+    /// Inserts a checkbox task at <paramref name="index"/>, shifting later blocks down (<c>currentIndex + 1</c>
+    /// puts it under the current one). <paramref name="index"/> may equal <see cref="Blocks"/>.Count to
+    /// append. Text is stored verbatim; an out-of-range index fails safely.
     /// </summary>
     public bool InsertTask(int index, string text) =>
         TryInsert(index, new ScribeBlock(ScribeBlockKind.Task, text));
@@ -227,10 +181,9 @@ public sealed class ScribeDocument
     public bool InsertTextSection(int index, string? text) =>
         TryInsert(index, new ScribeBlock(ScribeBlockKind.Text, text ?? ""));
 
-    /// <summary>Adds a Tracker task ("gather N of item X") to the end and gives it a fresh stable
-    /// <see cref="ScribeBlock.TaskId"/>. <paramref name="itemCode"/> is the plain item code to count
-    /// (may be null and set later); <paramref name="targetQuantity"/> is clamped to ≥ 1 by the block.
-    /// The row's display label is derived by the Mod layer from the code, so Text starts empty.</summary>
+    /// <summary>Adds a Tracker ("gather N of item X") to the end. <paramref name="itemCode"/> may be null and
+    /// set later; <paramref name="targetQuantity"/> is clamped to ≥ 1. Text starts empty (the Mod layer derives
+    /// the label from the code).</summary>
     public bool AddTracker(string? itemCode, int targetQuantity) =>
         InsertTracker(_blocks.Count, itemCode, targetQuantity);
 
@@ -239,19 +192,16 @@ public sealed class ScribeDocument
         TryInsert(index, new ScribeBlock(ScribeBlockKind.Tracker, "",
             targetItemCode: itemCode, targetQuantity: targetQuantity));
 
-    /// <summary>Adds a Craft task ("craft N of item X") to the end and gives it a fresh stable
-    /// <see cref="ScribeBlock.TaskId"/>, returning that id so the caller can immediately reconcile its
-    /// ingredient subtasks (see <see cref="ReconcileCraftIngredients"/>). <paramref name="outputItemCode"/>
-    /// is the recipe's output item code (the count target, like a Tracker's); <paramref name="targetQuantity"/>
-    /// is clamped to ≥ 1 by the block; <paramref name="recipeSignature"/> binds the grid recipe variant the
-    /// ingredients are generated from (empty when unresolved). The row's display label is derived by the Mod
-    /// layer from the code, so Text starts empty.</summary>
+    /// <summary>Adds a Craft task ("craft N of item X") to the end and returns its
+    /// <see cref="ScribeBlock.TaskId"/> so the caller can reconcile ingredient subtasks (see
+    /// <see cref="ReconcileCraftIngredients"/>). <paramref name="outputItemCode"/> is the recipe's output;
+    /// <paramref name="recipeSignature"/> binds the grid recipe variant (empty when unresolved). Text starts
+    /// empty.</summary>
     public Guid AddCraft(string? outputItemCode, int targetQuantity, string recipeSignature) =>
         InsertCraft(_blocks.Count, outputItemCode, targetQuantity, recipeSignature);
 
-    /// <summary>Inserts a Craft parent at <paramref name="index"/> and returns its <see cref="ScribeBlock.TaskId"/>
-    /// so the caller can reconcile ingredient children into the owned run under it. Out-of-range returns
-    /// <see cref="Guid.Empty"/> and inserts nothing.</summary>
+    /// <summary>Inserts a Craft parent at <paramref name="index"/> and returns its TaskId. Out-of-range
+    /// returns <see cref="Guid.Empty"/> and inserts nothing.</summary>
     public Guid InsertCraft(int index, string? outputItemCode, int targetQuantity, string recipeSignature)
     {
         var block = new ScribeBlock(ScribeBlockKind.Craft, "",
@@ -259,20 +209,19 @@ public sealed class ScribeDocument
         return TryInsert(index, block) ? block.TaskId : Guid.Empty;
     }
 
-    /// <summary>Adds an <b>item</b> Link task (a reference to an item's Handbook page) to the end and gives
-    /// it a fresh stable <see cref="ScribeBlock.TaskId"/>. <paramref name="target"/> is the plain collectible
-    /// code (may be null). The row's display label is derived live by the Mod layer from the item, so Text
-    /// and <see cref="ScribeBlock.LinkLabel"/> start empty.</summary>
+    /// <summary>Adds an <b>item</b> Link (a reference to an item's Handbook page) to the end.
+    /// <paramref name="target"/> is the plain collectible code (may be null). Text and
+    /// <see cref="ScribeBlock.LinkLabel"/> start empty; the label is derived live from the item.</summary>
     public bool AddLink(string? target) => InsertLink(_blocks.Count, target);
 
     /// <summary>Inserts an item Link at <paramref name="index"/>. Out-of-range fails safely.</summary>
     public bool InsertLink(int index, string? target) =>
         TryInsert(index, new ScribeBlock(ScribeBlockKind.Link, "", linkTarget: target));
 
-    /// <summary>Adds a <b>guide-page</b> Link task (a reference to a non-item Handbook guide/explainer page)
-    /// to the end. <paramref name="pageCode"/> is the bare Handbook page code (stored <c>"page:"</c>-prefixed
-    /// via <see cref="ScribeLinkTarget.ForPage"/>); <paramref name="label"/> is the guide's title, captured at
-    /// creation because a guide page has no item to resolve a name from later (add-tracker-link-tasks 7.6).</summary>
+    /// <summary>Adds a <b>guide-page</b> Link to the end. <paramref name="pageCode"/> is the bare Handbook
+    /// page code (stored <c>"page:"</c>-prefixed via <see cref="ScribeLinkTarget.ForPage"/>);
+    /// <paramref name="label"/> is the guide's title, captured at creation because a page has no item to
+    /// resolve a name from.</summary>
     public bool AddGuideLink(string pageCode, string? label) =>
         InsertGuideLink(_blocks.Count, pageCode, label);
 
@@ -281,14 +230,12 @@ public sealed class ScribeDocument
         TryInsert(index, new ScribeBlock(ScribeBlockKind.Link, "",
             linkTarget: ScribeLinkTarget.ForPage(pageCode), linkLabel: label));
 
-    /// <summary>Adds a <b>quest</b> Link task (a reference to an installed quest mod's catalog entry) to the
-    /// end. <paramref name="source"/> is the backend mod that owns the quest (e.g.
-    /// <see cref="ScribeQuestSource.VsQuest"/>/<see cref="ScribeQuestSource.ProgressionFramework"/> —
-    /// add-progression-framework-quest-support Decision 1); <paramref name="questCode"/> is the quest's own
-    /// (already domain-qualified) id, stored <c>"quest:"</c>-prefixed via <see cref="ScribeLinkTarget.ForQuest"/>;
-    /// <paramref name="title"/> and <paramref name="description"/> are captured at creation time
-    /// (add-assignment-and-quest-support 10.1) and never re-derived, so the Link still renders correctly if
-    /// the quest mod is later uninstalled (design.md Decision 10's orphan handling).</summary>
+    /// <summary>Adds a <b>quest</b> Link to the end. <paramref name="source"/> is the owning backend mod
+    /// (e.g. <see cref="ScribeQuestSource.VsQuest"/>/<see cref="ScribeQuestSource.ProgressionFramework"/>);
+    /// <paramref name="questCode"/> is the quest's domain-qualified id, stored <c>"quest:"</c>-prefixed via
+    /// <see cref="ScribeLinkTarget.ForQuest"/>. <paramref name="title"/> and <paramref name="description"/>
+    /// are captured at creation and never re-derived, so the Link renders even if the quest mod is later
+    /// uninstalled.</summary>
     public bool AddQuestLink(string source, string questCode, string? title, string? description) =>
         InsertQuestLink(_blocks.Count, source, questCode, title, description);
 
@@ -306,11 +253,9 @@ public sealed class ScribeDocument
 
     /// <summary>
     /// The contiguous depth-1 run owned by the block at <paramref name="parentIndex"/>: half-open
-    /// <c>[start, end)</c> starting at the row after the parent and stopping at the first row that is
-    /// not depth 1 (a depth-0 gap, a later parent, or the document end). Kind-agnostic — any depth-0
-    /// row can own the run, not only Craft. An invalid index or a parent with no following depth-1
-    /// rows yields an empty run (<c>start == end</c>). Completing a depth-1 row is a leaf; callers that
-    /// treat only depth-0 as a parent should check <see cref="ScribeBlock.Depth"/> first.
+    /// <c>[start, end)</c> from the row after the parent to the first non-depth-1 row (or the document end).
+    /// Kind-agnostic. An invalid index or a parent with no depth-1 rows yields an empty run
+    /// (<c>start == end</c>). A depth-1 row is a leaf; check <see cref="ScribeBlock.Depth"/> first.
     /// </summary>
     public (int Start, int End) OwnedRun(int parentIndex)
     {
@@ -332,9 +277,8 @@ public sealed class ScribeDocument
     }
 
     /// <summary>
-    /// Walks backward from a depth-1 row to the depth-0 parent that owns its contiguous run. Returns
-    /// -1 when the index is invalid, the row is not depth 1, or no depth-0 row sits above it.
-    /// Parent identity is this walk-back, never "any depth-0 from the same document."
+    /// Walks backward from a depth-1 row to the depth-0 parent owning its contiguous run. Returns -1 when
+    /// the index is invalid, the row is not depth 1, or no depth-0 row sits above it.
     /// </summary>
     public int FindParentIndex(int childIndex)
     {
@@ -346,11 +290,10 @@ public sealed class ScribeDocument
         return -1;
     }
 
-    /// <summary>Moves the half-open slice <c>[startInclusive, endExclusive)</c> so its first row lands
-    /// at <paramref name="destIndex"/>, preserving relative order inside the slice. <paramref name="destIndex"/>
-    /// uses the same convention as <see cref="MoveBlock"/> (a row index in the list before the move).
-    /// Dropping onto a row inside the slice is a successful no-op. Returns false when the range or dest
-    /// is invalid.</summary>
+    /// <summary>Moves the half-open slice <c>[startInclusive, endExclusive)</c> so its first row lands at
+    /// <paramref name="destIndex"/> (same convention as <see cref="MoveBlock"/>: an index before the move),
+    /// preserving order within the slice. Dropping onto a row inside the slice is a successful no-op.
+    /// Returns false for an invalid range or dest.</summary>
     public bool MoveRange(int startInclusive, int endExclusive, int destIndex)
     {
         if (startInclusive < 0 || endExclusive > _blocks.Count || startInclusive >= endExclusive)
@@ -368,10 +311,9 @@ public sealed class ScribeDocument
     }
 
     /// <summary>
-    /// Moves the half-open slice <c>[startInclusive, endExclusive)</c> to the end of the document as
-    /// one block, preserving relative order inside the slice. Returns false (unchanged) when the
-    /// range is empty/invalid or already at the bottom. Used for Bound Sink so parent+children stay
-    /// contiguous (parent first) rather than N independent <see cref="MoveTaskToBottom"/> calls.
+    /// Moves the half-open slice <c>[startInclusive, endExclusive)</c> to the end as one block, preserving
+    /// order. Returns false (unchanged) for an empty/invalid range or one already at the bottom. Keeps
+    /// parent and children contiguous for Bound Sink.
     /// </summary>
     public bool MoveRangeToBottom(int startInclusive, int endExclusive)
     {
@@ -386,8 +328,7 @@ public sealed class ScribeDocument
     }
 
     /// <summary>
-    /// Removes the half-open slice <c>[startInclusive, endExclusive)</c>. Returns false when the
-    /// range is empty or out of bounds.
+    /// Removes the half-open slice <c>[startInclusive, endExclusive)</c>. False when empty or out of bounds.
     /// </summary>
     public bool DeleteRange(int startInclusive, int endExclusive)
     {
@@ -398,27 +339,23 @@ public sealed class ScribeDocument
     }
 
     /// <summary>
-    /// Loosely self-heals the ingredient subtasks of the Craft task identified by <paramref name="craftTaskId"/>
-    /// (craft-task capability). Reconciles ONLY the contiguous run of <see cref="ScribeBlock.Depth"/>-1 rows
-    /// directly below the parent — the rows it owns — against the freshly derived ingredient list:
+    /// Loosely self-heals the ingredient subtasks of the Craft task <paramref name="craftTaskId"/>,
+    /// reconciling ONLY its owned depth-1 run against the derived ingredient list:
     /// <list type="bullet">
     /// <item>For each counting <paramref name="ingredients"/> entry, sets the matched child Tracker's
-    /// <see cref="ScribeBlock.TargetQuantity"/> to <c>PerCraftQuantity × craftsNeeded</c> (matching by item
-    /// code, preserving the child's id and live progress). When <paramref name="createMissing"/> is true
-    /// (Handbook create-once), a Tracker child is inserted at depth 1 when none matches; when false
-    /// (the parent-target stepper) a missing ingredient is left missing — never inserted.</item>
-    /// <item>For each non-counting <paramref name="notes"/> entry (e.g. a liquid ingredient in v1), ensures a
-    /// depth-1 Text note with that exact text exists, creating it when missing <b>only</b> when
-    /// <paramref name="createMissing"/> is true.</item>
+    /// <see cref="ScribeBlock.TargetQuantity"/> to <c>PerCraftQuantity × craftsNeeded</c> (matched by item
+    /// code, preserving id and progress). A missing child is inserted at depth 1 only when
+    /// <paramref name="createMissing"/> is true (Handbook create-once); the parent-target stepper passes false.</item>
+    /// <item>For each non-counting <paramref name="notes"/> entry (e.g. a liquid), ensures a depth-1 Text
+    /// note with that exact text exists, creating it only when <paramref name="createMissing"/>.</item>
     /// </list>
-    /// It NEVER deletes a row (a player who removed or edited a subtask keeps their choice) and NEVER touches
-    /// anything below depth 1 (one level only). New children (create-once only) append to the END of the owned
-    /// run, keeping the group contiguous. Returns false (document unchanged) when no Craft block has that id.
+    /// It NEVER deletes a row (a player's removal or edit is kept) and never touches anything below depth 1.
+    /// New children append to the END of the owned run. Returns false (unchanged) when no Craft block has
+    /// that id.
     ///
-    /// <para>Expects DISTINCT item codes across <paramref name="ingredients"/> (the Mod layer merges a recipe's
-    /// duplicate ingredients before calling); a repeated code would resolve to the first unclaimed match.
-    /// <paramref name="craftsNeeded"/> is the batch multiplier from <see cref="ScribeCraftMath.CraftsNeeded"/>
-    /// (clamped to ≥ 1 here). Pure data; no VS API.</para>
+    /// <para>Expects DISTINCT item codes in <paramref name="ingredients"/> (the Mod layer merges duplicates);
+    /// a repeated code would resolve to the first unclaimed match. <paramref name="craftsNeeded"/> comes
+    /// from <see cref="ScribeCraftMath.CraftsNeeded"/> and is clamped to ≥ 1 here.</para>
     /// </summary>
     public bool ReconcileCraftIngredients(Guid craftTaskId,
         IReadOnlyList<ScribeCraftIngredient> ingredients, IReadOnlyList<string> notes, int craftsNeeded,
@@ -432,17 +369,14 @@ public sealed class ScribeDocument
         if (parentIndex < 0) return false;
         if (craftsNeeded < 1) craftsNeeded = 1;
 
-        // The owned run: the contiguous depth-1 rows immediately below the parent. runEnd is exclusive and
-        // grows as we append new children so they stay inside (and at the end of) the run.
+        // runEnd is exclusive and grows as children are appended, so they stay at the end of the run.
         var (runStart, runEnd) = OwnedRun(parentIndex);
 
-        var claimed = new HashSet<int>(); // rows already matched this pass, so duplicate codes don't double-claim
+        var claimed = new HashSet<int>(); // rows matched this pass, so duplicate codes don't double-claim
 
         foreach (var ing in ingredients)
         {
-            // A liquid ingredient counts in litres, so its target bypasses the integer per-craft multiply and
-            // ceils the batch litre total instead. A solid stays
-            // PerCraftQuantity × craftsNeeded.
+            // A liquid counts in litres: ceil the batch litre total instead of the integer per-craft multiply.
             int target = ing.IsLiquid
                 ? ScribeCraftMath.LitreTarget(ing.LitresPerCraft, craftsNeeded)
                 : (ing.PerCraftQuantity < 1 ? 1 : ing.PerCraftQuantity) * craftsNeeded;
@@ -496,9 +430,8 @@ public sealed class ScribeDocument
     }
 
     /// <summary>
-    /// Stepper-only reconcile: update <see cref="ScribeBlock.TargetQuantity"/> on item-code matches
-    /// inside the owned run. Never inserts, never deletes. Handbook create still uses
-    /// <see cref="ReconcileCraftIngredients"/> with <c>createMissing: true</c> (the default).
+    /// Stepper-only reconcile: rescales <see cref="ScribeBlock.TargetQuantity"/> on item-code matches inside
+    /// the owned run. Never inserts, never deletes.
     /// </summary>
     public bool RescaleCraftIngredients(Guid craftTaskId,
         IReadOnlyList<ScribeCraftIngredient> ingredients, IReadOnlyList<string> notes, int craftsNeeded)
@@ -506,19 +439,14 @@ public sealed class ScribeDocument
 
     /// <summary>
     /// Loosely self-heals the <see cref="ScribeBlockKind.QuestObjective"/> subtasks of the quest Link
-    /// identified by <paramref name="questLinkTaskId"/> (add-progression-framework-quest-objective-subtasks),
-    /// mirroring <see cref="ReconcileCraftIngredients"/>'s owned-run shape but matching by the objective's own
-    /// stable <c>Code</c> (via <see cref="ScribeBlock.LinkTarget"/>) rather than an item code, since two
-    /// objectives could share one. The parent must be a Link whose <see cref="ScribeBlock.LinkTarget"/> is a
-    /// quest target (<see cref="ScribeLinkTarget.IsQuest"/>) — a plain item/guide-page Link never owns
-    /// QuestObjective children. For each <paramref name="objectives"/> entry: a matched existing child has its
-    /// <see cref="ScribeBlock.TargetQuantity"/> rescaled to <c>Required</c> in place (id + live
-    /// <see cref="ScribeBlock.CurrentQuantity"/> preserved); when <paramref name="createMissing"/> is true and
-    /// no match exists, a new child is appended to the end of the owned run carrying <c>ItemCode</c> (a real
-    /// item icon, when the objective resolves to exactly one) and <c>Label</c> (the captured fallback display
-    /// text, used when it doesn't). Never deletes a row (a player who removed an objective subtask keeps that
-    /// choice) and never touches anything below depth 1. Returns false (document unchanged) when no matching
-    /// quest Link exists. Pure data; no VS API.
+    /// <paramref name="questLinkTaskId"/>, mirroring <see cref="ReconcileCraftIngredients"/>'s owned-run
+    /// shape but matching by the objective's stable <c>Code</c> (via <see cref="ScribeBlock.LinkTarget"/>),
+    /// since two objectives could share an item. The parent must be a quest Link
+    /// (<see cref="ScribeLinkTarget.IsQuest"/>). A matched child has its TargetQuantity rescaled to
+    /// <c>Required</c> (id and progress preserved); when <paramref name="createMissing"/> and no match
+    /// exists, a child is appended to the run carrying <c>ItemCode</c> (item icon) and <c>Label</c>
+    /// (fallback text). Never deletes a row and never touches anything below depth 1. Returns false
+    /// (unchanged) when no matching quest Link exists.
     /// </summary>
     public bool ReconcileQuestObjectives(Guid questLinkTaskId,
         IReadOnlyList<(string Code, string? ItemCode, string? Label, int Required)> objectives,
@@ -537,7 +465,7 @@ public sealed class ScribeDocument
         if (parentIndex < 0) return false;
 
         var (runStart, runEnd) = OwnedRun(parentIndex);
-        var claimed = new HashSet<int>(); // rows already matched this pass, so a duplicate code can't double-claim
+        var claimed = new HashSet<int>(); // rows matched this pass, so a duplicate code can't double-claim
 
         foreach (var obj in objectives)
         {
@@ -573,16 +501,12 @@ public sealed class ScribeDocument
     }
 
     /// <summary>
-    /// Sets the live backend-reported progress (<see cref="ScribeBlock.CurrentQuantity"/>) of the
-    /// <see cref="ScribeBlockKind.QuestObjective"/> with the given stable <see cref="ScribeBlock.TaskId"/> —
-    /// the identity-addressed op the quest watcher uses to push an updated count without knowing the block's
-    /// index (add-progression-framework-quest-objective-subtasks). Deliberately gated on
-    /// <see cref="ScribeBlock.IsQuestObjective"/>, NOT the shared <see cref="ScribeBlock.IsCarriedCountTracked"/>-gated
-    /// <see cref="SetTrackerCurrentQuantity"/> — a QuestObjective's count is never carried-inventory-driven.
-    /// Unlike a Tracker's overflow-visible current count, an objective's progress cannot exceed its required
-    /// count in Progression Framework's own model, so <paramref name="currentQuantity"/> is clamped into
-    /// <c>[0, TargetQuantity]</c> here (tighter than the block's own ≥ 0-only setter). Returns false (document
-    /// unchanged) when no block has that id or the id belongs to a non-QuestObjective block. Pure data; no VS API.
+    /// Sets the backend-reported progress (<see cref="ScribeBlock.CurrentQuantity"/>) of the
+    /// <see cref="ScribeBlockKind.QuestObjective"/> with the given TaskId. Gated on
+    /// <see cref="ScribeBlock.IsQuestObjective"/>, not <see cref="SetTrackerCurrentQuantity"/>'s carried-count
+    /// gate, since an objective is never inventory-driven. Progress is clamped into <c>[0, TargetQuantity]</c>
+    /// (tighter than the block's ≥ 0 setter) because it cannot exceed the requirement. Returns false
+    /// (unchanged) for an unknown id or a non-QuestObjective block.
     /// </summary>
     public bool SetQuestObjectiveProgress(Guid taskId, int currentQuantity)
     {
@@ -598,14 +522,11 @@ public sealed class ScribeDocument
     }
 
     /// <summary>
-    /// Changes a block's text. Both Task and Text blocks may be set to any value, including
-    /// empty/whitespace-only — the text is stored verbatim and the model does NOT trim surrounding
-    /// whitespace or reject blank task text. This lets a task go transiently empty while the player
-    /// clears it (the field writes through on every keystroke); removing a task left empty is the
-    /// editing layer's job. Whitespace normalization (e.g. stripping a trailing blank line from a
-    /// committed edit) is likewise the editing layer's job (the lectern dialog's NormalizeRowOnCommit),
-    /// so the live in-place editor can keep a just-typed trailing newline long enough for the row to
-    /// grow. The Done flag and kind are unchanged.
+    /// Changes a block's text, stored verbatim (no trimming; blank allowed). This lets a task go
+    /// transiently empty while the player clears it (the field writes through per keystroke), and lets the
+    /// live editor keep a just-typed trailing newline long enough for the row to grow. Removing an empty
+    /// task and whitespace normalization (the lectern dialog's NormalizeRowOnCommit) are the editing
+    /// layer's job. Done flag and kind are unchanged.
     /// </summary>
     public bool SetBlockText(int index, string? text)
     {
@@ -614,8 +535,7 @@ public sealed class ScribeDocument
         return true;
     }
 
-    /// <summary>Flips the completed flag of a completable block (Task, Tracker, or Link). Fails on a
-    /// Text section (which has no Done flag) or a bad index.</summary>
+    /// <summary>Flips the completed flag of a completable block. Fails on a Text section or a bad index.</summary>
     public bool ToggleTask(int index)
     {
         if (!IsValidIndex(index)) return false;
@@ -627,10 +547,9 @@ public sealed class ScribeDocument
         return true;
     }
 
-    /// <summary>Removes the block at <paramref name="index"/>, preserving the order of the rest,
-    /// and reports the removed block's <see cref="ScribeBlock.TaskId"/> so a caller can react to
-    /// that specific task's removal (e.g. orphan a pin referencing it). On an invalid index the
-    /// document is unchanged and <paramref name="deletedTaskId"/> is null.</summary>
+    /// <summary>Removes the block at <paramref name="index"/>, preserving order, and reports its
+    /// <see cref="ScribeBlock.TaskId"/> so the caller can react (e.g. orphan a pin). On an invalid index
+    /// the document is unchanged and <paramref name="deletedTaskId"/> is null.</summary>
     public bool DeleteBlock(int index, out Guid? deletedTaskId)
     {
         if (!IsValidIndex(index))
@@ -646,19 +565,14 @@ public sealed class ScribeDocument
         return true;
     }
 
-    /// <summary>Removes the block at <paramref name="index"/>, preserving the order of the rest.
-    /// Thin overload for callers that don't need the removed task's id.</summary>
+    /// <summary>Removes the block at <paramref name="index"/>; overload for callers that don't need the id.</summary>
     public bool DeleteBlock(int index) => DeleteBlock(index, out _);
 
     /// <summary>
-    /// Changes the text of the task with the given stable <see cref="ScribeBlock.TaskId"/> — the
-    /// identity-addressed convenience the pin editor uses to edit a task without knowing its index or
-    /// block position (over <see cref="FindByTaskId"/> + <see cref="SetBlockText"/>). Unlike the raw
-    /// <see cref="SetBlockText"/>, this HONORS the editing-layer content invariant: blank or
-    /// whitespace-only <paramref name="text"/> is REJECTED (returns false, document unchanged) so a pin
-    /// edit can never blank a task out. Also returns false when no task with that id exists or the id
-    /// belongs to a non-task block. Text is otherwise stored verbatim (no trimming — same as
-    /// <see cref="SetBlockText"/>). Pure data; no VS API.
+    /// Changes the text of the task with the given TaskId (the pin editor's identity-addressed edit).
+    /// Unlike <see cref="SetBlockText"/>, blank or whitespace-only <paramref name="text"/> is REJECTED
+    /// (returns false, unchanged) so a pin edit can never blank a task. Also false for an unknown id or a
+    /// non-task block. Otherwise stored verbatim.
     /// </summary>
     public bool SetTaskText(Guid taskId, string? text)
     {
@@ -675,13 +589,10 @@ public sealed class ScribeDocument
     }
 
     /// <summary>
-    /// Sets the live carried count (<see cref="ScribeBlock.CurrentQuantity"/>) of the carried-count-tracked
-    /// block (a Tracker or a Craft parent) with the given stable <see cref="ScribeBlock.TaskId"/> — the
-    /// identity-addressed op the count engine uses to push an updated have-count without knowing the block's
-    /// index. The value is clamped only to ≥ 0 by the block's setter (NOT capped at <c>TargetQuantity</c> —
-    /// overflow is meaningful, 7.14). Returns false (document unchanged) when no block has that id or the id
-    /// belongs to a block whose count is not carried-driven (see <see cref="ScribeBlock.IsCarriedCountTracked"/>).
-    /// Pure data; no VS API.
+    /// Sets the carried count (<see cref="ScribeBlock.CurrentQuantity"/>) of the carried-count-tracked block
+    /// (Tracker or Craft parent) with the given TaskId. Clamped only to ≥ 0 by the setter, NOT capped at
+    /// <c>TargetQuantity</c> (overflow is meaningful). Returns false (unchanged) for an unknown id or a
+    /// block that is not <see cref="ScribeBlock.IsCarriedCountTracked"/>.
     /// </summary>
     public bool SetTrackerCurrentQuantity(Guid taskId, int currentQuantity)
     {
@@ -689,15 +600,14 @@ public sealed class ScribeDocument
         {
             if (_blocks[i].TaskId == taskId && _blocks[i].IsCarriedCountTracked)
             {
-                _blocks[i].CurrentQuantity = currentQuantity; // clamped to ≥ 0 in the setter (may exceed target, 7.14)
+                _blocks[i].CurrentQuantity = currentQuantity; // clamped to ≥ 0 in the setter
                 return true;
             }
         }
         return false;
     }
 
-    /// <summary>Returns the block with the given <see cref="ScribeBlock.TaskId"/>, or null if no
-    /// block in this document has that id.</summary>
+    /// <summary>Returns the block with the given <see cref="ScribeBlock.TaskId"/>, or null.</summary>
     public ScribeBlock? FindByTaskId(Guid taskId)
     {
         foreach (var block in _blocks)
@@ -708,11 +618,9 @@ public sealed class ScribeDocument
     }
 
     /// <summary>
-    /// Moves the task with the given stable <see cref="ScribeBlock.TaskId"/> to the END of the block
-    /// list, preserving the relative order of every other block — the identity-addressed "sink to the
-    /// bottom" a completion under the Sink policy performs (scribe-lectern-view-consistency). Returns
-    /// false (document unchanged) when no block has that id, the id belongs to a non-completable (Text)
-    /// block, or the task is already last. Pure data; no VS API.
+    /// Moves the task with the given TaskId to the END, preserving the order of all others (the "sink to the
+    /// bottom" of the Sink policy). Returns false (unchanged) for an unknown id, a non-completable (Text)
+    /// block, or a task already last.
     /// </summary>
     public bool MoveTaskToBottom(Guid taskId)
     {
@@ -720,7 +628,7 @@ public sealed class ScribeDocument
         {
             if (_blocks[i].TaskId == taskId && _blocks[i].IsCompletable)
             {
-                if (i == _blocks.Count - 1) return false; // already last — nothing to do
+                if (i == _blocks.Count - 1) return false; // already last
                 var block = _blocks[i];
                 _blocks.RemoveAt(i);
                 _blocks.Add(block);
@@ -741,21 +649,17 @@ public sealed class ScribeDocument
         return true;
     }
 
-    /// <summary>
-    /// Replaces all blocks in one shot (used by the codec when rebuilding a document).
-    /// </summary>
+    /// <summary>Replaces all blocks in one shot (used by the codec).</summary>
     internal void SetBlocks(IEnumerable<ScribeBlock> blocks)
     {
         _blocks.Clear();
         _blocks.AddRange(blocks);
     }
 
-    /// <summary>Replaces this document's blocks wholesale with <paramref name="blocks"/> (order preserved),
-    /// leaving <see cref="Title"/> and <see cref="DocId"/> untouched. This is the import validator's degrade
-    /// primitive: after deserialization the client rewrites any block whose
-    /// Tracker/Link reference doesn't resolve to a real item in THIS game as a plain Task, then installs the
-    /// reconciled sequence here. Exposed publicly (unlike the codec-only internal <see cref="SetBlocks"/>)
-    /// because that validator lives in the mod assembly, across the Core boundary. Pure data; no VS API.</summary>
+    /// <summary>Replaces this document's blocks wholesale (order preserved), leaving <see cref="Title"/> and
+    /// <see cref="DocId"/> untouched. The import validator's degrade primitive: it rewrites any block whose
+    /// Tracker/Link reference doesn't resolve in THIS game as a plain Task, then installs the result here.
+    /// Public (unlike the codec-only <see cref="SetBlocks"/>) because the validator lives in the mod assembly.</summary>
     public void ReplaceBlocks(IEnumerable<ScribeBlock> blocks) => SetBlocks(blocks);
 
     private bool IsValidIndex(int index) => index >= 0 && index < _blocks.Count;

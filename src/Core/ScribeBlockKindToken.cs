@@ -1,24 +1,21 @@
 namespace Scribe.Core;
 
 /// <summary>
-/// The stable string tokens the human-readable codecs (<see cref="ScribeDocumentJsonCodec"/> and
-/// <see cref="ScribeDocumentTsvCodec"/>) use to name a <see cref="ScribeBlockKind"/>, kept in one place so
-/// the two export lanes can never drift. The tokens are part of the shared/exported format contract:
-/// they are ADDITIVE (a new kind adds a new token) and MUST stay stable, exactly like the byte-enum values.
+/// The stable string tokens the JSON and TSV codecs use to name a <see cref="ScribeBlockKind"/>, kept in
+/// one place so the two export lanes cannot drift. Part of the exported format contract: additive and
+/// MUST stay stable.
 ///
-/// <para>The token for <see cref="ScribeBlockKind.Text"/> is <c>"note"</c> — the player-facing name for a
-/// free-text section — not "text", so an exported table reads the way the UI labels it.</para>
+/// <para><see cref="ScribeBlockKind.Text"/> is <c>"note"</c>, the player-facing name.</para>
 ///
-/// <para>The TSV lane also uses the reserved row type <see cref="TitleRow"/> ("title"), which is NOT a block
-/// kind — it carries the document title as a leading row (see <see cref="ScribeDocumentTsvCodec"/>). It is
-/// intentionally absent from <see cref="TryParse"/> so a body row typed "title" never becomes a block.</para>
+/// <para>The TSV lane also uses the reserved row type <see cref="TitleRow"/>, which is not a block kind and
+/// is deliberately absent from <see cref="TryParse"/> so a body row typed "title" never becomes a block.</para>
 /// </summary>
 public static class ScribeBlockKindToken
 {
     /// <summary>Reserved TSV row type carrying the document title (not a <see cref="ScribeBlockKind"/>).</summary>
     public const string TitleRow = "title";
 
-    /// <summary>The stable export token for a block kind. Additive and stable — never renumber/rename.</summary>
+    /// <summary>The stable export token for a block kind.</summary>
     public static string ToToken(ScribeBlockKind kind) => kind switch
     {
         ScribeBlockKind.Task => "task",
@@ -31,9 +28,8 @@ public static class ScribeBlockKindToken
     };
 
     /// <summary>
-    /// Parses an export token back to a <see cref="ScribeBlockKind"/>. Case-insensitive and
-    /// whitespace-trimmed. Returns false for an unknown/blank token OR the reserved <see cref="TitleRow"/>
-    /// type, so callers can degrade an unrecognized row to a plain Task (the loose-import tenet) while
+    /// Parses an export token (case-insensitive, trimmed). Returns false for an unknown/blank token or the
+    /// reserved <see cref="TitleRow"/>, so callers can degrade an unrecognized row to a plain Task while
     /// still treating a title row specially.
     /// </summary>
     public static bool TryParse(string? token, out ScribeBlockKind kind)

@@ -3,9 +3,8 @@ using System.Text;
 namespace Scribe.Core;
 
 /// <summary>
-/// Serializes a <see cref="ScribeDocument"/> to a byte array and back. The same bytes are
-/// used for both world persistence and network sync, so the round-trip is exact and any
-/// malformed input fails safely (returns false) rather than throwing.
+/// Serializes a <see cref="ScribeDocument"/> to bytes and back. The same bytes serve world persistence and
+/// network sync; malformed input fails safely (returns false) rather than throwing.
 ///
 /// Current format (v13, little-endian via <see cref="BinaryWriter"/>):
 ///   [4 bytes magic "SCRB"][1 byte version][16 bytes DocId][int blockCount]
@@ -23,91 +22,48 @@ namespace Scribe.Core;
 ///    bool hasAssignedTimestamp, double assignedTimestamp (only if hasAssignedTimestamp; v13+)]
 ///   [string title]
 ///
-/// Accepted-version window (PROGRESSIVE append-only reads, NOT a two-version window):
-///   Reads any version in [<see cref="MinVersion"/>=5, <see cref="Version"/>=13]; older/newer → fail-safe false.
-///   Each version-group's trailing fields are read only behind a <c>version &gt;=</c> threshold, so an
-///   older blob simply stops reading before the fields it never wrote. Missing fields default via
-///   <see cref="ApplyPreV6Defaults"/>. This departs from the strict two-version window because v5 docs
-///   are SHIPPED and live in real saves (v1.1.1), while v6 lived only on the WIP branch — a naive
-///   {v7, v6} window would silently drop every shipped v5 document. Same rationale as ScribePinCodec's
-///   v2→v3 switch; see <see href="../docs/CODEC-MIGRATION.md">docs/CODEC-MIGRATION.md</see>.
+/// Accepted-version window: progressive append-only reads of any version in
+/// [<see cref="MinVersion"/>, <see cref="Version"/>]; anything else fails safe. Each version-group's fields
+/// are read behind a <c>version &gt;=</c> gate, so an older blob stops before fields it never wrote, and
+/// missing fields default via <see cref="ApplyPreV6Defaults"/>. v5 is the floor because it is the last
+/// shipped layout still live in saves; see <see href="../docs/CODEC-MIGRATION.md">docs/CODEC-MIGRATION.md</see>.
 ///
-/// APPEND-ONLY VERSION DISCIPLINE: <see cref="Version"/> is a single global counter and new
-/// fields append in version order (never interleave; never two "v7"s). See
-/// docs/specs/README.md convention #1. When adding v8, append its fields after v7's layout behind a
-/// new <c>version &gt;= 8</c> read gate — do not reorder existing fields.
+/// APPEND-ONLY: <see cref="Version"/> is a single global counter; new fields append after the previous
+/// version's layout behind a new <c>version &gt;= N</c> gate. Never reorder or interleave. See
+/// docs/specs/README.md convention #1.
 ///
-/// Field history:
-///   v4 — added a 16-byte document id (after the version byte) and a 16-byte per-block id
-///        (first field of each block); dropped the v3 per-block `pinned` bool (pinning moved
-///        to a per-player store).
-///   v5 — appended a document title string after the block list.
-///   v6 — appended four per-block fields after text (TargetItemCode?, TargetQuantity,
-///        CurrentQuantity, LinkTarget?) for the Tracker and Link task kinds.
-///   v7 — appended one per-block field after LinkTarget (LinkLabel?), the display title of a
-///        guide-page Link (a "page:"-prefixed LinkTarget has no item to resolve a name from).
-///        Switched to progressive reads so shipped v5 docs stay readable (see the window note above).
-///   v8 — appended one per-block field after LinkLabel (RecipeSignature, a plain string; empty when
-///        none), the grid-recipe binding of a Craft task (kind 4). Written for every block (empty for
-///        non-Craft); a pre-v8 blob simply stops before it and defaults to empty.
-///   v9 — appended the optional assignment state after RecipeSignature.
-///   v10 — appended the assignment's TargetPlayerUid, written only when an assignment is present
-///        (right after Seen). Added when the assignment store needed to know who an assignment was
-///        sent to, not just who sent it.
-///   v11 — appended one per-block field after the (optional) assignment block (hasLinkDescription?,
-///        linkDescription): a quest Link's captured description (add-assignment-and-quest-support
-///        10.1), resolved from the installed quest mod's catalog at creation time and never
-///        re-derived. Null for every other Link flavor and non-Link kind.
-///   v12 — appended one per-block field after LinkDescription (hasExtraInfo?, extraInfo): an
-///        external mod's opaque hover-detail string, attached via
-///        <c>ScribeModSystem.TryCreateExternalTask</c> (add-external-mod-task-api). Null for every
-///        block not created through that entry point.
-///   v13 — appended one per-block field after ExtraInfo (hasAssignedTimestamp?, assignedTimestamp):
-///        the numeric in-game timestamp for an assigned block's AssignedDate (live-localize-assignment-dates).
-///        Cannot sit inside the v9 assignment sub-blob because v11 LinkDescription and v12 ExtraInfo
-///        already follow it. Unassigned blocks write false. A missing timestamp is distinct from
-///        real Calendar.TotalDays == 0.
-///
-/// A hand-rolled format keeps Core free of any external dependency. The version byte lets
-/// us evolve the format while still reading every prior save layout back to <see cref="MinVersion"/>.
+/// Per-version additions:
+///   v4 document id and per-block id; v5 document title after the block list; v6 TargetItemCode,
+///   TargetQuantity, CurrentQuantity, LinkTarget; v7 LinkLabel; v8 RecipeSignature (written for every
+///   block, empty for non-Craft); v9 optional assignment state; v10 assignment TargetPlayerUid;
+///   v11 LinkDescription; v12 ExtraInfo (external-mod hover string); v13 assigned timestamp (cannot sit
+///   inside the v9 assignment sub-blob because v11/v12 already follow it; a missing timestamp is distinct
+///   from Calendar.TotalDays == 0).
 /// </summary>
 public static class ScribeDocumentCodec
 {
     private static readonly byte[] Magic = "SCRB"u8.ToArray();
-    private const byte Version = 13; // v13 adds the assigned-block in-game timestamp after ExtraInfo.
+    private const byte Version = 13;
 
-    /// <summary>Oldest format version the reader still accepts. Progressive append-only reads accept
-    /// any version in [<see cref="MinVersion"/>, <see cref="Version"/>]; v5 is the oldest because it is
-    /// the last SHIPPED layout (v1.1.1) still live in player saves. Replaces the former two-version
-    /// <c>PriorVersion</c> gate — see the class doc-comment's window note.</summary>
+    /// <summary>Oldest accepted format version: the last SHIPPED layout still live in player saves.</summary>
     private const byte MinVersion = 5;
 
     /// <summary>
-    /// Hard upper bound on the number of blocks a single document may hold. A document is edited by
-    /// whoever holds the lectern's edit lock and submitted to the server as raw bytes, so it is
-    /// trusted-but-client input: the server persists and re-syncs whatever deserializes. These caps
-    /// bound that trust so a malformed or hostile payload can't bloat a block entity's saved tree
-    /// attributes (and every client's re-sync) without limit. Enforced in <see cref="TryDeserialize"/>,
-    /// which fails the whole payload (returns false) when either is exceeded — the codec is the single
-    /// chokepoint for both the network path and world-persistence load, so one check covers both.
-    /// Generous relative to any realistic hand-authored checklist.
+    /// Upper bound on blocks in one document. Documents arrive as raw bytes from a client, so this caps
+    /// what a malformed or hostile payload can bloat in a block entity's saved attributes and every client's
+    /// re-sync. Enforced in <see cref="TryDeserialize"/>, the single chokepoint for both the network path
+    /// and world-persistence load; exceeding it fails the whole payload.
     /// </summary>
     public const int MaxBlocks = 1000;
 
-    /// <summary>Upper bound on a freeform Text/note block's text length, in characters. See
-    /// <see cref="MaxBlocks"/>. An over-long note is CLIPPED to this length on read (the same backstop Task
-    /// blocks get via <see cref="MaxTaskTextLength"/>); the editor field also enforces it live as a
-    /// maxlength, so the clip is rarely reached. Larger than the Task cap because notes hold freeform prose,
-    /// not one-liners.</summary>
+    /// <summary>Upper bound on a freeform Text/note block's length in characters. An over-long note is
+    /// CLIPPED on read (the backstop Task blocks get via <see cref="MaxTaskTextLength"/>); the editor also
+    /// enforces it live. Larger than the Task cap because notes hold prose.</summary>
     public const int MaxTextLength = 10_000;
 
-    /// <summary>Soft length limit for a checkbox Task's text, in characters. Unlike <see cref="MaxTextLength"/>
-    /// (a hard reject bound for freeform notes), an over-long Task is CLIPPED to this length on read rather
-    /// than rejecting the whole edit — so a paste or a runaway task can never silently drop an entire
-    /// document. The
-    /// editor field also enforces this as a maxlength so the clip is rarely reached; the codec clip is the
-    /// server-authoritative backstop. Tasks are meant to be short one-liners; freeform prose belongs in a
-    /// Text section, which keeps the larger cap.</summary>
+    /// <summary>Soft length limit for a Task's text. An over-long Task is CLIPPED on read rather than
+    /// rejecting the document, so a paste can never silently drop a whole document. The editor also enforces
+    /// it live; the codec clip is the server-authoritative backstop.</summary>
     public const int MaxTaskTextLength = 1000;
 
     public static byte[] Serialize(ScribeDocument doc)
@@ -117,33 +73,30 @@ public static class ScribeDocumentCodec
         {
             w.Write(Magic);
             w.Write(Version);
-            w.Write(doc.DocId.ToByteArray()); // 16 bytes; raw not string to keep the format compact
+            w.Write(doc.DocId.ToByteArray()); // raw 16 bytes, not a string, to keep the format compact
             w.Write(doc.Blocks.Count);
             foreach (var block in doc.Blocks)
             {
-                w.Write(block.TaskId.ToByteArray()); // 16 bytes, first per-block field
+                w.Write(block.TaskId.ToByteArray());
                 w.Write((byte)block.Kind);
                 w.Write(block.Done);
                 w.Write(block.Depth);
-                // This legacy slot remains in the layout for v5-v8 readers. New assignments use
-                // the richer v9 field below and never populate the old bare UID slot.
+                // Legacy slot kept in the layout for v5-v8 readers; never populated by new assignments.
                 w.Write(false);
                 w.Write(block.Text);
-                // v6: Tracker/Link fields, appended after text (see the format table above).
+                // v6: Tracker/Link fields.
                 w.Write(block.TargetItemCode is not null);
                 if (block.TargetItemCode is not null) w.Write(block.TargetItemCode);
                 w.Write(block.TargetQuantity);
                 w.Write(block.CurrentQuantity);
                 w.Write(block.LinkTarget is not null);
                 if (block.LinkTarget is not null) w.Write(block.LinkTarget);
-                // v7: LinkLabel, appended after LinkTarget — the display title of a guide-page Link.
+                // v7: LinkLabel.
                 w.Write(block.LinkLabel is not null);
                 if (block.LinkLabel is not null) w.Write(block.LinkLabel);
-                // v8: RecipeSignature, appended after LinkLabel — the grid-recipe binding of a Craft
-                // task. Always written (empty string for non-Craft blocks), so it is a plain string,
-                // not a has/value pair.
+                // v8: RecipeSignature; always written, so a plain string rather than a has/value pair.
                 w.Write(block.RecipeSignature);
-                // v9: optional assignment state, appended after RecipeSignature.
+                // v9: optional assignment state.
                 w.Write(block.Assignment is not null);
                 if (block.Assignment is { } assignment)
                 {
@@ -151,37 +104,35 @@ public static class ScribeDocumentCodec
                     w.Write((byte)assignment.State);
                     w.Write(assignment.AssignedDate);
                     w.Write(assignment.Seen);
-                    // v10: the recipient's uid, appended after Seen.
+                    // v10: recipient uid.
                     w.Write(assignment.TargetPlayerUid);
                 }
-                // v11: a quest Link's captured description, appended after the assignment block.
+                // v11: quest Link description.
                 w.Write(block.LinkDescription is not null);
                 if (block.LinkDescription is not null) w.Write(block.LinkDescription);
-                // v12: an external mod's opaque ExtraInfo hover string, appended after LinkDescription.
+                // v12: external mod's ExtraInfo hover string.
                 w.Write(block.ExtraInfo is not null);
                 if (block.ExtraInfo is not null) w.Write(block.ExtraInfo);
-                // v13: assigned timestamp, appended after ExtraInfo (not inside the v9 assignment
-                // sub-blob — v11/v12 already follow that). Unassigned blocks write false.
+                // v13: assigned timestamp, outside the v9 assignment sub-blob because v11/v12 follow it.
                 bool hasAssignedTimestamp = block.Assignment?.AssignedTimestamp is not null;
                 w.Write(hasAssignedTimestamp);
                 if (hasAssignedTimestamp) w.Write(block.Assignment!.AssignedTimestamp!.Value);
             }
-            w.Write(doc.Title); // v5+: document title appended after block list
+            w.Write(doc.Title); // v5+
         }
         return ms.ToArray();
     }
 
     /// <summary>
-    /// Deserializes a document. Accepts any version in [MinVersion=5, Version=13] via progressive reads;
-    /// any other version fails safely. Signature-stable for callers that don't need the legacy-pin out-param — routes through the
-    /// three-arg overload and discards it.
+    /// Deserializes a document, accepting any version in [MinVersion, Version] via progressive reads and
+    /// failing safely otherwise. Routes through the three-arg overload and discards its out-param.
     /// </summary>
     public static bool TryDeserialize(byte[]? bytes, out ScribeDocument? document)
         => TryDeserialize(bytes, out document, out _);
 
     /// <summary>
-    /// Deserializes a document. <paramref name="legacyPinnedTaskIds"/> is always empty (the v3
-    /// format, which carried per-block pin flags, is not accepted). Kept for call-site compatibility.
+    /// Deserializes a document. <paramref name="legacyPinnedTaskIds"/> is always empty (the pin-flag v3
+    /// format is not accepted); kept for call-site compatibility.
     /// </summary>
     public static bool TryDeserialize(byte[]? bytes, out ScribeDocument? document, out IReadOnlyList<Guid> legacyPinnedTaskIds)
     {
@@ -197,18 +148,15 @@ public static class ScribeDocumentCodec
             var magic = r.ReadBytes(Magic.Length);
             if (!magic.AsSpan().SequenceEqual(Magic)) return false;
 
-            // Progressive append-only reads: accept any version in [MinVersion, Version]; each
-            // version-group's trailing fields are read behind a `version >=` gate below. See the
-            // class doc-comment's window note and docs/CODEC-MIGRATION.md.
+            // Progressive append-only reads; see the class doc-comment's window note.
             byte version = r.ReadByte();
             if (version < MinVersion || version > Version) return false;
 
             Guid docId = new Guid(ReadExactly(r, 16));
 
             int blockCount = r.ReadInt32();
-            // Reject a negative count, a count that can't physically fit in the buffer (a tiny
-            // payload claiming billions of blocks — an allocation guard), or one over the hard
-            // MaxBlocks cap on document size.
+            // Reject a negative count, one that can't physically fit in the buffer (allocation guard),
+            // or one over MaxBlocks.
             if (blockCount < 0 || blockCount > bytes.Length || blockCount > MaxBlocks) return false;
 
             var blocks = new List<ScribeBlock>(blockCount);
@@ -222,12 +170,8 @@ public static class ScribeDocumentCodec
                 bool hasAssignedToUid = r.ReadBoolean();
                 string? assignedToUid = hasAssignedToUid ? r.ReadString() : null;
                 string text = r.ReadString();
-                // Length backstop: CLIP an over-long row to its kind's cap rather than rejecting, so a
-                // single over-long row can never silently drop the entire document. Tasks clip to the soft
-                // task cap; freeform Text/note sections clip to the larger note cap. (The editor field also
-                // enforces these live as a maxlength, so this server-side clip is rarely reached.) This
-                // replaced an earlier reject-whole-document guard on the Text path, which became a
-                // data-loss trap once notes were user-creatable via the kind picker.
+                // Length backstop: CLIP an over-long row to its kind's cap rather than rejecting, so one
+                // row can never silently drop the whole document.
                 if (kind == ScribeBlockKind.Task)
                 {
                     if (text.Length > MaxTaskTextLength) text = text.Substring(0, MaxTaskTextLength);
@@ -237,10 +181,7 @@ public static class ScribeDocumentCodec
                     text = text.Substring(0, MaxTextLength);
                 }
 
-                // Tracker/Link fields were added across v6 (item/quantity/linkTarget) and v7 (linkLabel).
-                // Seed all of them to defaults, then read each version-group behind a `version >=` gate,
-                // so an older blob simply stops reading before the fields it never wrote (progressive
-                // append-only reads — see the class doc-comment's window note).
+                // Seed Tracker/Link fields to defaults, then read each version-group behind a gate.
                 ApplyPreV6Defaults(out string? targetItemCode, out int targetQuantity,
                     out int currentQuantity, out string? linkTarget, out string? linkLabel,
                     out string recipeSignature);
@@ -260,7 +201,7 @@ public static class ScribeDocumentCodec
                 }
                 if (version >= 8)
                 {
-                    recipeSignature = r.ReadString(); // always written from v8; empty when none
+                    recipeSignature = r.ReadString();
                 }
                 ScribeAssignment? assignment = null;
                 if (version >= 9 && r.ReadBoolean())
@@ -269,9 +210,7 @@ public static class ScribeDocumentCodec
                     var state = (ScribeAssignmentState)r.ReadByte();
                     string assignedDate = r.ReadString();
                     bool seen = r.ReadBoolean();
-                    // v10: TargetPlayerUid, read only when this v9+ block actually has an assignment.
-                    // A pre-v10 blob (v9 only) simply has no such field to read; default to "" — v9 never
-                    // shipped, so this is a same-cycle addition, not a real migration gap.
+                    // v10: TargetPlayerUid. A v9 blob lacks it; v9 never shipped, so "" is not a migration gap.
                     string targetPlayerUid = version >= 10 ? r.ReadString() : "";
                     assignment = new ScribeAssignment(assignerUid, assignedDate, state, seen, targetPlayerUid);
                 }
@@ -293,14 +232,13 @@ public static class ScribeDocumentCodec
                     }
                 }
 
-                // The block's setters clamp TargetQuantity (≥ 1), CurrentQuantity ([0, target]),
-                // and Depth ([0, 1]).
+                // The block's setters clamp TargetQuantity (≥ 1), CurrentQuantity (≥ 0), and Depth ([0, 1]).
                 blocks.Add(new ScribeBlock(kind, text, done, depth, assignedToUid, taskId,
                     targetItemCode, targetQuantity, currentQuantity, linkTarget, linkLabel, recipeSignature,
                     assignment, linkDescription, extraInfo));
             }
 
-            // Both accepted versions (v6 and v5) append a document title after the block list.
+            // Every accepted version appends the title after the block list.
             string title = r.ReadString();
             if (string.IsNullOrWhiteSpace(title)) title = ScribeDocument.DefaultTitle;
             if (title.Length > ScribeDocument.MaxTitleLength) title = title[..ScribeDocument.MaxTitleLength];
@@ -314,7 +252,7 @@ public static class ScribeDocumentCodec
         }
         catch (Exception ex) when (ex is EndOfStreamException or IOException or FormatException)
         {
-            // Truncated or malformed input — fail safely.
+            // Truncated or malformed input.
             document = null;
             legacyPinnedTaskIds = Array.Empty<Guid>();
             return false;
@@ -322,11 +260,9 @@ public static class ScribeDocumentCodec
     }
 
     /// <summary>
-    /// True when <paramref name="bytes"/> are a readable document written in an OLDER-than-current but
-    /// still-accepted format version (any version in [<see cref="MinVersion"/>, <see cref="Version"/>)).
-    /// Such a document deserializes fine but lacks fields the current layout carries, so the block
-    /// entity can choose to re-save it immediately to upgrade it forward. Returns false for
-    /// current-version bytes (nothing to upgrade), and for null/malformed/unsupported bytes.
+    /// True when <paramref name="bytes"/> are a readable document in an OLDER but still-accepted version
+    /// (in [<see cref="MinVersion"/>, <see cref="Version"/>)), so the block entity can re-save it to upgrade
+    /// it. False for current-version, null, malformed or unsupported bytes.
     /// </summary>
     public static bool IsPriorVersion(byte[]? bytes)
     {
@@ -340,15 +276,11 @@ public static class ScribeDocumentCodec
     }
 
     /// <summary>
-    /// Seeds the per-block Tracker/Link fields to their defaults before the version-gated progressive
-    /// reads overwrite whatever a given blob actually carried: no target/link code
-    /// (<paramref name="targetItemCode"/> / <paramref name="linkTarget"/> / <paramref name="linkLabel"/> = null),
-    /// <paramref name="targetQuantity"/> = 1 (satisfies the <see cref="ScribeBlock"/> ≥ 1 invariant),
-    /// <paramref name="currentQuantity"/> = 0, and <paramref name="recipeSignature"/> = "" (empty; the
-    /// v8-only Craft recipe binding). These are the values a pre-v6 block (always Task or Text, for which
-    /// they're meaningless) reads with, and also the baseline a v6/v7 block gets for the later
-    /// LinkLabel/RecipeSignature fields. This is the single documented home for the "fields a pre-current block lacks"
-    /// defaulting; the naming mirrors ScribePinCodec's <c>ApplyPreV2Defaults</c>. See docs/CODEC-MIGRATION.md.
+    /// Seeds the per-block Tracker/Link fields to defaults before the version-gated reads overwrite what a
+    /// blob actually carried: null codes/label, <paramref name="targetQuantity"/> = 1 (the
+    /// <see cref="ScribeBlock"/> ≥ 1 invariant), <paramref name="currentQuantity"/> = 0,
+    /// <paramref name="recipeSignature"/> = "". Mirrors ScribePinCodec's <c>ApplyPreV2Defaults</c>. See
+    /// docs/CODEC-MIGRATION.md.
     /// </summary>
     private static void ApplyPreV6Defaults(out string? targetItemCode, out int targetQuantity,
         out int currentQuantity, out string? linkTarget, out string? linkLabel, out string recipeSignature)
@@ -358,13 +290,12 @@ public static class ScribeDocumentCodec
         currentQuantity = 0;
         linkTarget = null;
         linkLabel = null;
-        recipeSignature = ""; // v8+ field; a pre-v8 block (never a Craft) reads with no recipe binding
+        recipeSignature = "";
     }
 
-    /// <summary>Reads exactly <paramref name="count"/> bytes or throws <see cref="EndOfStreamException"/>
-    /// (which the caller catches as a malformed-input failure). <see cref="BinaryReader.ReadBytes"/>
-    /// can return fewer bytes than requested at end-of-stream without throwing, which would let a
-    /// truncated id slip through as a wrong-but-valid Guid — this guards that.</summary>
+    /// <summary>Reads exactly <paramref name="count"/> bytes or throws <see cref="EndOfStreamException"/>.
+    /// <see cref="BinaryReader.ReadBytes"/> can return fewer bytes at end-of-stream without throwing, which
+    /// would let a truncated id pass as a wrong-but-valid Guid.</summary>
     private static byte[] ReadExactly(BinaryReader r, int count)
     {
         var buffer = r.ReadBytes(count);
