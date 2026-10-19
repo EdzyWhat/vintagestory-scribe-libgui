@@ -50,7 +50,7 @@ public sealed class ScribeDocument
 
     /// <summary>The number of TASK-kind blocks only (excluding Trackers, Links, and free-text sections).
     /// NOTE: this is NOT the tier-cap measure — the cap counts blocks of ANY kind via
-    /// <see cref="BlockCount"/> (refine-chalkboard §12, "N of anything"). This property remains for
+    /// <see cref="BlockCount"/>. This property remains for
     /// diagnostics/tests that want the task-only tally; it is distinct from <see cref="CompletableCount"/>
     /// (which also counts Trackers/Links) and from <see cref="BlockCount"/> (the total). Pure data.</summary>
     public int TaskCount
@@ -133,11 +133,11 @@ public sealed class ScribeDocument
     public void AppendAssignedBlock(ScribeBlock block) => _blocks.Add(block);
 
     /// <summary>Same contract as <see cref="AppendAssignedBlock"/> (a verbatim MOVE, TaskId preserved),
-    /// but at an explicit position instead of always the end — Accept-time placement follows the
-    /// accepting player's own New Task Insert preference (refine-assignment-desk-inbox-ux 13.1) rather
+    /// but at an explicit position rather than always the end — Accept-time placement follows the
+    /// accepting player's own New Task Insert preference rather
     /// than always landing at the bottom. <paramref name="index"/> is clamped into
     /// <c>[0, Blocks.Count]</c> so an out-of-range value (a stale index from a settings change mid-flight)
-    /// degrades to the nearest valid position instead of throwing.</summary>
+    /// degrades to the nearest valid position rather than throwing.</summary>
     public void InsertAssignedBlock(int index, ScribeBlock block) =>
         _blocks.Insert(Math.Clamp(index, 0, _blocks.Count), block);
 
@@ -178,7 +178,7 @@ public sealed class ScribeDocument
             : 0;
 
     /// <summary>The index Accept-time placement should use for a row carrying <paramref name="batchId"/>
-    /// (refine-assignment-desk-inbox-ux triage 2026-08-31): if a sibling from the same batch is already
+    /// — if a sibling from the same batch is already
     /// placed in this document, insert directly after its cluster (its own owned run, if it's a depth-0
     /// parent with children already placed) so the batch's rows stay contiguous regardless of which order
     /// they were individually Accepted in — each Accept is a separate round-trip with no other batch
@@ -441,7 +441,7 @@ public sealed class ScribeDocument
         foreach (var ing in ingredients)
         {
             // A liquid ingredient counts in litres, so its target bypasses the integer per-craft multiply and
-            // ceils the batch litre total instead (add-liquid-ingredient-tracker D3). A solid stays
+            // ceils the batch litre total instead. A solid stays
             // PerCraftQuantity × craftsNeeded.
             int target = ing.IsLiquid
                 ? ScribeCraftMath.LitreTarget(ing.LitresPerCraft, craftsNeeded)
@@ -752,7 +752,7 @@ public sealed class ScribeDocument
 
     /// <summary>Replaces this document's blocks wholesale with <paramref name="blocks"/> (order preserved),
     /// leaving <see cref="Title"/> and <see cref="DocId"/> untouched. This is the import validator's degrade
-    /// primitive (add-scriptorium-import-export D5): after deserialization the client rewrites any block whose
+    /// primitive: after deserialization the client rewrites any block whose
     /// Tracker/Link reference doesn't resolve to a real item in THIS game as a plain Task, then installs the
     /// reconciled sequence here. Exposed publicly (unlike the codec-only internal <see cref="SetBlocks"/>)
     /// because that validator lives in the mod assembly, across the Core boundary. Pure data; no VS API.</summary>
