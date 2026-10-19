@@ -6,7 +6,7 @@ namespace Scribe;
 /// The server authorizes by matching the packet sender's display name to the entry's PlayerName, and
 /// addresses the specific entry by <see cref="InGameDate"/> — a player may have one entry per in-game
 /// day visited, so the date discriminator routes the edit to the intended day rather than the player's
-/// first entry. Addressed by <see cref="DocIdBytes"/> (replacing the former PosX/Y/Z fields).</summary>
+/// first entry. Addressed by <see cref="DocIdBytes"/>.</summary>
 [ProtoContract]
 public sealed class ScribeEditGuestbookNoteMessage
 {

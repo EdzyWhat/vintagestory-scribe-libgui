@@ -4,16 +4,16 @@ using Gui.Widgets.Framework;     // Widget, StatefulWidget, State, GlobalKey
 namespace Scribe;
 
 /// <summary>
-/// The dialog's single persistent-root body (reconcile-animating-surfaces §3.1). LibGUI's
+/// The dialog's single persistent-root body. LibGUI's
 /// <c>GuiBase</c> calls a dialog's <c>Build()</c> exactly ONCE per open (<c>GuiBase.BuildRootTree</c>);
 /// the whole tree then persists until <c>ForceRebuild()</c> unmounts it. Wrapping the entire dialog
 /// body in this one <see cref="StatefulWidget"/> and reconciling it in place via <see cref="BodyState.Rebuild"/>
 /// (a no-op <c>SetState</c>) lets a repaint REUSE the live element tree — the central editor content, its
 /// rows, and each row's <c>ScribeMultilineField</c> State — instead of destroying and rebuilding it. A
 /// reused field keeps its caret + unsaved buffer; a reused row keeps its hover; the shared scroll
-/// controller keeps its offset. This is the mechanism that replaces <c>ForceRebuild()</c> for every
-/// in-place update (structural row edits AND chrome repaints), leaving <c>ForceRebuild()</c> only for the
-/// genuinely-new-tree cases (view switches, fresh editor seed, lost-lock recovery — reconcile-animating-surfaces §3.3).
+/// controller keeps its offset. This is the mechanism for every in-place update (structural row edits
+/// AND chrome repaints); <c>ForceRebuild()</c> is reserved for the genuinely-new-tree cases (view
+/// switches, fresh editor seed, lost-lock recovery).
 ///
 /// <para>The body content is supplied as a <see cref="Func{Widget}"/> the dialog owns
 /// (<c>ScribeDialogBase.BuildBodyTree</c>), re-invoked on every <see cref="BodyState.Build"/> so it always

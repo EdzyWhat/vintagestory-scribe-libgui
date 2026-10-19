@@ -7,7 +7,7 @@ namespace Scribe;
 /// completion), keyed the same way <see cref="ScribeQuestPrompt"/>/the decision ledger key itself is —
 /// <see cref="Source"/> + <see cref="QuestCode"/> + <see cref="IsCompletion"/>. The server records a
 /// <see cref="Scribe.Core.ScribeQuestDecision.Dismissed"/> decision so the same prompt is never re-raised
-/// across a relog (fix-quest-prompt-persistence-and-auto-pin Decision 3). Sent from
+/// across a relog. Sent from
 /// <see cref="ScribeModSystem.DismissQuestPrompt"/> only for a genuine dismiss action — the accept flow's
 /// own cleanup removes the pending prompt locally without sending this, since accepting already records
 /// its own <see cref="Scribe.Core.ScribeQuestDecision.Accepted"/> decision via the existing
@@ -27,7 +27,7 @@ public sealed class ScribeDismissQuestPromptMessage
     public string? QuestCode { get; set; }
 
     /// <summary>Whether the dismissed prompt was a completion-prompt (true) or an accept-prompt (false) —
-    /// the two are independent decisions (quest-auto-detect's "Decisions are independent per prompt kind").</summary>
+    /// the two are independent decisions.</summary>
     [ProtoMember(3)]
     public bool IsCompletion { get; set; }
 }
