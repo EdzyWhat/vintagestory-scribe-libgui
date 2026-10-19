@@ -16,31 +16,23 @@ namespace Scribe;
 
 /// <summary>
 /// The center-screen "Add this Quest to Scribe?" modal — the <see cref="ScribeQuestAcceptPolicy.PromptPopup"/>
-/// accept-prompt presentation style, an alternative to the HUD banner.
-/// Mirrors <see cref="ScribeSettingsDialog"/>'s WindowFrame-hosted
-/// construction and <see cref="DrawOrder"/> band. Reuses <see cref="ScribeQuestPromptActions"/> for its
-/// Link/Dismiss/Settings buttons so this presentation style can never drift from the polished HUD banner's
-/// colors/behavior.
+/// alternative to the HUD banner. Reuses <see cref="ScribeQuestPromptActions"/> for its buttons so it
+/// matches the banner's colors/behavior.
 ///
-/// <para><b>Self-managing visibility</b> (mirrors <see cref="HudScribePins"/>'s own pattern): constructed
-/// once in <see cref="ScribeModSystem.StartClientSide"/> and owns its own subscription + tick for its
-/// whole lifetime, deciding on every trigger whether it should be open right now and for which prompt —
-/// see <see cref="Refresh"/>. There is deliberately no "already shown, don't reopen" suppression: a
-/// player-closed-without-resolving modal (e.g. via its own Settings button) simply reopens on the next
-/// guard-check tick if it's still eligible, which the design's own Risks section discloses as the accepted
-/// trade-off of choosing the more intrusive Popup style over the HUD banner.</para>
+/// <para>Self-managing: constructed once in <see cref="ScribeModSystem.StartClientSide"/>, owns its own
+/// subscription + tick, and decides in <see cref="Refresh"/> whether it should be open. There is no
+/// "already shown" suppression: a modal closed without resolving (e.g. via Settings) reopens on the
+/// next tick while its prompt is still eligible.</para>
 /// </summary>
 public sealed class GuiDialogScribeQuestPrompt : GuiBase
 {
-    /// <summary>Guard/eligibility re-check cadence, matching <c>ScribeQuestWatcher</c>'s own detection
-    /// tick — "check on the same tick cadence as detection".</summary>
+    /// <summary>Guard/eligibility re-check cadence, same as <c>ScribeQuestWatcher</c>'s detection tick.</summary>
     private const int GuardCheckIntervalMs = 1000;
 
     private readonly ScribeModSystem modSystem;
     private long tickListenerId;
 
-    /// <summary>The prompt this dialog is currently showing (or last showed) — set immediately before
-    /// opening/rebuilding in <see cref="Refresh"/>, read by <see cref="Build"/>. Meaningless while closed.</summary>
+    /// <summary>The prompt being shown (or last shown); set in <see cref="Refresh"/>, read by <see cref="Build"/>.</summary>
     private ScribeQuestPrompt shownPrompt;
 
     private bool showAcceptPicker;
@@ -55,14 +47,12 @@ public sealed class GuiDialogScribeQuestPrompt : GuiBase
 
     public override string DialogCode => "scribequestpromptmodal";
 
-    /// <summary>Matches <see cref="ScribeSettingsDialog"/>'s band — this can open over a Lectern/Notebook/
-    /// Tablet (whose own Settings gear sits there too).</summary>
+    /// <summary>Same band as <see cref="ScribeSettingsDialog"/>; this can open over a Lectern/Notebook/Tablet.</summary>
     public override double DrawOrder => 0.2;
 
     protected override WindowConfig CreateWindowConfig() => new()
     {
-        // Fixed size (no explicit Position — the base auto-centers a freshly-opened dialog with no
-        // persisted position, which is exactly the "center-screen" placement this style needs).
+        // No explicit Position: the base auto-centers a dialog with no persisted position.
         Size = new Vector2(380, 210),
         Draggable = true,
         Resizable = false,
@@ -71,11 +61,9 @@ public sealed class GuiDialogScribeQuestPrompt : GuiBase
     private void OnQuestPromptsChanged() => Refresh();
     private void OnTick(float dt) => Refresh();
 
-    /// <summary>Recompute whether this dialog should be open right now, and for which prompt, from the
-    /// live pending set + the player's current Quest Accept Policy + the vanilla-dialog guard. Called on
-    /// every prompt-list change AND on <see cref="GuardCheckIntervalMs"/> cadence, so a prompt deferred by
-    /// an open vanilla dialog opens automatically once it closes — with no player action required
-    /// (spec: "SHALL NEVER be silently dropped").</summary>
+    /// <summary>Recomputes whether to be open, and for which prompt, from the pending set, the Quest Accept
+    /// Policy, and the vanilla-dialog guard. Runs on every prompt-list change and on the
+    /// <see cref="GuardCheckIntervalMs"/> tick, so a prompt deferred by a vanilla dialog opens once it closes.</summary>
     private void Refresh()
     {
         var next = NextEligiblePrompt();
@@ -87,9 +75,7 @@ public sealed class GuiDialogScribeQuestPrompt : GuiBase
 
         if (!IsOpened())
         {
-            // Only the OPEN transition needs the guard — an already-open modal isn't newly contesting a
-            // click against a vanilla dialog that opens later (the guard exists for the open race,
-            // not as an ongoing z-order arbiter).
+            // Only the open transition needs the guard (it prevents an open race, not ongoing z-order).
             if (ScribeVanillaDialogGuard.IsAnyVanillaDialogOpen(capi)) return; // deferred; re-checked next trigger
             ShowPrompt(next.Value);
             TryOpen();
@@ -103,11 +89,9 @@ public sealed class GuiDialogScribeQuestPrompt : GuiBase
         }
     }
 
-    /// <summary>The oldest pending, non-completion prompt while the player's Quest Accept Policy is
-    /// <see cref="ScribeQuestAcceptPolicy.PromptPopup"/> — this modal's ONLY concern; a completion-prompt
-    /// or a PromptHud-policy accept-prompt always renders via the HUD banner instead (Non-Goal: no modal
-    /// style for completions). Routing happens here at read-time off the live policy, matching
-    /// <c>HudScribePins</c>' own routing (no style tag on the queued prompt).</summary>
+    /// <summary>The oldest pending non-completion prompt while the policy is
+    /// <see cref="ScribeQuestAcceptPolicy.PromptPopup"/>; completions and PromptHud prompts always use
+    /// the HUD banner. Routing is read from the live policy, not tagged on the queued prompt.</summary>
     private ScribeQuestPrompt? NextEligiblePrompt()
     {
         if (modSystem.MySettings.QuestAcceptPolicy != ScribeQuestAcceptPolicy.PromptPopup) return null;
@@ -119,9 +103,7 @@ public sealed class GuiDialogScribeQuestPrompt : GuiBase
     private static bool PromptEquals(ScribeQuestPrompt a, ScribeQuestPrompt b)
         => a.Source == b.Source && a.QuestCode == b.QuestCode && a.IsCompletion == b.IsCompletion;
 
-    /// <summary>Adopt a (possibly new) prompt to show, resetting the picker so a resolved prompt's
-    /// candidate selection never leaks onto the next one queued behind it (mirrors
-    /// <c>HudScribePins.OnQuestPromptsChanged</c>'s own picker reset).</summary>
+    /// <summary>Adopts a prompt and resets the picker so a resolved prompt's selection doesn't leak to the next.</summary>
     private void ShowPrompt(ScribeQuestPrompt prompt)
     {
         shownPrompt = prompt;
@@ -134,10 +116,8 @@ public sealed class GuiDialogScribeQuestPrompt : GuiBase
         var colors = ThemeData.Default.ColorScheme;
         var candidates = modSystem.ComputeQuestAcceptCandidates();
 
-        // The accept/dismiss labels render in the HUD's own standard near-white row-text color, decoupled
-        // from their own accent color — matches the HUD banner's treatment so the two presentation styles never drift apart. No glow here (unlike the
-        // banner): this modal has an opaque dialog backdrop, not an in-world overlay, so the glow's
-        // legibility-over-the-world purpose doesn't apply.
+        // Labels use the HUD's near-white row-text color, as the banner does. No glow (unlike the banner):
+        // the opaque backdrop doesn't need legibility-over-the-world help.
         Vector4 promptActionTextColor = ScribeRowConstants.HudStandardTextColor;
         var (picker, linkButton) = ScribeQuestPromptActions.BuildLinkControl(
             shownPrompt, candidates, showAcceptPicker, selectedCandidateIndex,
@@ -170,10 +150,7 @@ public sealed class GuiDialogScribeQuestPrompt : GuiBase
                 TryClose();
             }, textColor: promptActionTextColor);
 
-        // Settings closes only THIS WINDOW, never the underlying prompt (tasks.md 3.2: "matching the
-        // banner's existing action semantics exactly" — the banner's own Settings shortcut never dismisses
-        // its prompt either). If the prompt is still pending and eligible, Refresh() reopens this on its
-        // next trigger — see the class doc comment's disclosed trade-off.
+        // Settings closes only this window, never the prompt (as with the banner); Refresh() may reopen it.
         Widget settingsButton = ScribeQuestPromptActions.AccentButton(
             Lang.Get("scribe:scribe-hud-questprompt-settings-button"), ScribeRowConstants.QuestPromptSettingsColor,
             14f, () =>
@@ -195,7 +172,7 @@ public sealed class GuiDialogScribeQuestPrompt : GuiBase
 
         return ScribeTextDefaults.WrapChrome(new WindowFrame(
             title: Lang.Get("scribe:scribe-questprompt-modal-title"),
-            onClose: () => TryClose(), // closes the window only — see settingsButton's remarks above
+            onClose: () => TryClose(), // closes the window only, not the prompt
             child: new Container(
                 style: new BoxStyle { Color = colors.Surface },
                 child: new Padding(
