@@ -3582,6 +3582,36 @@ Tablet's cuneiform title field (`ScribeCuneiformFieldRenderWidget`, which expose
 `borderThickness` as real constructor params) if true zero-padding is required. Applied to
 `ScribeDialogBase.BuildTitleField` (unify-tab-header-layout Round 3).
 
+## Sweep-collected engine facts (comment-sweep, general API/LibGUI gotchas)
+
+### Symptom: Skia blur glow corrupts the recorded picture or crashes mid-frame (`SKMaskFilter` lifetime)
+
+An `SKMaskFilter` must outlive the `SKPictureRecorder` canvas that references it. Disposing one mid-record
+corrupts the recorder's canvas.
+
+**Fix pattern:** cache `SKMaskFilter.CreateBlur(...)` by sigma and never dispose it per frame. See `src/Mod/CuneiformGlow.cs`.
+
+### Symptom: a tinted `VsIcon` paints a pale filled tile instead of just the glyph
+
+`VsIcon` applies its tint as a color FILTER. With `SKBlendMode.Multiply` that fills the whole transparent quad;
+`SKBlendMode.SrcIn` tints only the glyph strokes.
+
+**Fix pattern:** use `SrcIn` (with a dark alpha if you want a partial tint). See `src/Mod/GuiDialogScribeTablet.cs`.
+
+### Symptom: a row that shifted position remounts (loses state/focus) on rebuild
+
+LibGUI's reconciler is positional: `MultiChildElement.Update` matches old and new children by index, not by id,
+so a row that moves to a different slot has its Element replaced (see also the `ValueKey` notes above).
+
+### Symptom: mixed font sizes in one `RichText` line sit top-aligned, not on a shared baseline
+
+`RenderRichText` draws each run at `line.Y - font.Metrics.Ascent`, so runs of different size are top-aligned.
+
+### Symptom: server code needs to show the player an in-game error
+
+`IServerPlayer.SendIngameError(code, message, ...)` is the server-side call (also `ICoreServerAPI.SendIngameError`);
+`ICoreClientAPI.TriggerIngameError` is client-only.
+
 ## Entry template
 
 ```
