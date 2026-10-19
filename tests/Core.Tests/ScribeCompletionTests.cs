@@ -2,7 +2,7 @@ using Scribe.Core;
 
 namespace Scribe.Core.Tests;
 
-// Tests for the shared completion-policy semantics (reconcile-animating-surfaces D9). The pure Decide()
+// Tests for the shared completion-policy semantics. The pure Decide()
 // table is the single definition both the server and client dispatch off; ApplyLocal() is the client's
 // optimistic apply built on it. Each test maps to a policy's document consequence.
 public class ScribeCompletionTests
@@ -190,7 +190,7 @@ public class ScribeCompletionTests
         Assert.Single(doc.Blocks);
     }
 
-    // --- Parent range (refine-crafting-tasks-1-3-2) ---
+    // --- Parent range ---
 
     private static ScribeDocument ParentWithTwoChildren()
     {

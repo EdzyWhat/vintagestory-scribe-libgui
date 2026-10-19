@@ -99,8 +99,8 @@ public class ScribeAssignmentTests
     [Fact]
     public void QuestLinkTargetWithNoSourceSeparatorFallsBackToVsQuest()
     {
-        // A pre-existing target saved before the backend tag existed (add-progression-framework-quest-support
-        // Decision 1) — vsquest was the only backend that could have created it.
+        // A pre-existing target saved before the backend tag existed — vsquest was the only backend that
+        // could have created it.
         const string legacyTarget = "quest:vsquest:quest-freeghost";
         Assert.Equal(ScribeQuestSource.VsQuest, ScribeLinkTarget.QuestSource(legacyTarget));
         Assert.Equal("vsquest:quest-freeghost", ScribeLinkTarget.QuestCode(legacyTarget));
@@ -130,7 +130,7 @@ public class ScribeAssignmentTests
     [Fact]
     public void Clone_RoundTripsReceivedDate()
     {
-        // refine-task-notice-ux: ReceivedDate mirrors AcceptedDate/CompletedDate's pattern, so Clone()
+        // ReceivedDate mirrors AcceptedDate/CompletedDate's pattern, so Clone()
         // must carry it forward exactly like those (see TryPlaceAcceptedAssignment's use of Clone()).
         var assignment = new ScribeAssignment("assigner", "Day 1", ScribeAssignmentState.Unaccepted)
         {

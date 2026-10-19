@@ -2,7 +2,7 @@ using Scribe.Core;
 
 namespace Scribe.Core.Tests;
 
-// Tests for the Craft task kind (add-crafting-tasks): the recipe-bound composite generator's model
+// Tests for the Craft task kind: the recipe-bound composite generator's model
 // fields, its persistence across all three codecs, the one-level subtask depth, the batch math, and the
 // loose self-healing ingredient reconciliation. All pure-Core (no game install).
 public class ScribeCraftTaskTests

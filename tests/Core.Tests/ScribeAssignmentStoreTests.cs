@@ -51,7 +51,7 @@ public class ScribeAssignmentStoreTests
     public void TryCreate_ItemKindRowAllowsBlankText()
     {
         // A Tracker/Link/Craft row's label lives on TargetItemCode/LinkTarget, not Text (matching every
-        // other ScribeBlock of that kind) — assignment-multi-item-creation design.md D12.
+        // other ScribeBlock of that kind).
         var store = new ScribeAssignmentStore();
         Assert.True(store.TryCreate(Guid.NewGuid(), Assigner, Assignee, "", "Year 1, Day 1", out var record,
             kind: ScribeBlockKind.Tracker, targetItemCode: "game:log-oak", targetQuantity: 10));
@@ -80,7 +80,7 @@ public class ScribeAssignmentStoreTests
         Assert.Equal("recipe-sig-abc", record!.RecipeSignature);
     }
 
-    // ---- TryCreateAccepted (task-notice-item: accept-time record creation) ----
+    // ---- TryCreateAccepted (accept-time record creation) ----
 
     [Fact]
     public void TryCreateAccepted_CreatesDirectlyAtAccepted_NeverUnaccepted()
@@ -139,7 +139,7 @@ public class ScribeAssignmentStoreTests
     [Fact]
     public void TryCreateAccepted_CanThenComplete_LikeAnyInRangeAssignment()
     {
-        // Post-accept behavior is otherwise unchanged (assignment-state-machine capability): Discard is
+        // Post-accept behavior is otherwise unchanged: Discard is
         // legal from Accepted exactly as it would be for a normal record.
         var store = new ScribeAssignmentStore();
         var id = Guid.NewGuid();
@@ -153,14 +153,14 @@ public class ScribeAssignmentStoreTests
     public void Decline_CreatesNoRecord_NoStoreCallInvolved()
     {
         // Declining a Task Notice consumes the item client/server-side with no ScribeAssignmentStore
-        // interaction at all (task-notice-item capability) — there is nothing for this store to do, so
+        // interaction at all — there is nothing for this store to do, so
         // this test documents the invariant: an empty store stays empty.
         var store = new ScribeAssignmentStore();
         Assert.Empty(store.Sent(Assigner));
         Assert.Empty(store.Received(Assignee));
     }
 
-    // ---- TryCreateSent / TryMarkReceived (refine-task-notice-ux: Sent-at-creation, Received-on-inventory-entry) ----
+    // ---- TryCreateSent / TryMarkReceived (Sent-at-creation, Received-on-inventory-entry) ----
 
     [Fact]
     public void TryCreateSent_CreatesDirectlyAtSent_NotUnaccepted()
@@ -295,7 +295,7 @@ public class ScribeAssignmentStoreTests
     [Fact]
     public void FullTaskNoticeLifecycle_SentThenReceivedThenAccepted()
     {
-        // End-to-end (refine-task-notice-ux 2.5): sent -> visible in Sent History as Sent, invisible in the
+        // End-to-end: sent -> visible in Sent History as Sent, invisible in the
         // Inbox -> a synthetic inventory move marks it Received (now visible in the Inbox) -> Accept
         // transitions it exactly like any in-range assignment would.
         var store = new ScribeAssignmentStore();
@@ -448,7 +448,7 @@ public class ScribeAssignmentStoreTests
         Assert.Equal(ScribeAssignmentState.Discarded, store.TryGet(id)!.Assignment!.State);
     }
 
-    // ---- TryRedirectTarget (add-task-notice-redirect-confirm: non-recipient Accept) ----
+    // ---- TryRedirectTarget (non-recipient Accept) ----
 
     [Fact]
     public void TryRedirectTarget_RewritesTargetAndStampsRedirectFields()
@@ -497,8 +497,8 @@ public class ScribeAssignmentStoreTests
     [Fact]
     public void TryRedirectTarget_ThenAccept_LegallySucceeds_ProvingTheTransitionMatrixNeedsNoChanges()
     {
-        // design D1/Goals: redirect is target-identity resolution ahead of the existing Accept
-        // transition, not a new transition — TryApplyAction needs no changes to legally accept from
+        // Redirect is target-identity resolution ahead of the existing Accept
+        // transition, not a new transition — TryApplyAction legally accepts from
         // the new target immediately after a redirect.
         var store = NewStoreWithOneAssignment(out var id);
         const string newTarget = "new-target-uid";
@@ -658,7 +658,7 @@ public class ScribeAssignmentStoreTests
         Assert.Null(restored);
     }
 
-    // ---- Delete (split-assignment-delete-by-viewer: per-side deletion) ----
+    // ---- Delete (per-side deletion) ----
 
     [Fact]
     public void TryDelete_AssigneeDeletingHidesOnlyFromReceived()
@@ -741,7 +741,7 @@ public class ScribeAssignmentStoreTests
         Assert.True(store.TryApplyAction(id, Assigner, ScribeAssignmentAction.Cancel));
 
         // The Assignee claims the Assigner's side — they don't hold it, so this must be rejected,
-        // not silently authorized via the "OR" logic the old single-role signature used to have.
+        // not silently authorized via an "OR" over the actor's roles.
         Assert.False(store.TryDelete(id, Assignee, ScribeAssignmentActor.Assigner));
         Assert.NotNull(store.TryGet(id));
         Assert.Single(store.Sent(Assigner));
@@ -838,7 +838,7 @@ public class ScribeAssignmentStoreTests
     public void TryDeserializeList_AcceptsAPriorVersionBlob_DefaultingRecipeSignatureToEmpty()
     {
         // Hand-build a v1 blob (no RecipeSignature field) to prove a save/sync predating that field still
-        // loads — the whole point of the MinVersion/Version window (design.md D12's serializer note).
+        // loads — the point of the MinVersion/Version window.
         using var ms = new MemoryStream();
         using (var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
         {

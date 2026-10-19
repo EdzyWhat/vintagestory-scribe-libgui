@@ -2,7 +2,7 @@ using Scribe.Core;
 
 namespace Scribe.Core.Tests;
 
-// Tests for the author-drawn, non-linear brightness response curve (respect-local-illumination). Pin the
+// Tests for the author-drawn, non-linear brightness response curve. Pin the
 // exact control points the user plotted, the piecewise-linear interpolation between them, the floor
 // semantics (x=0 anchor + monotonic lift), and the clamping of out-of-range inputs. Pure/game-agnostic.
 public class ScribeBrightnessCurveTests
