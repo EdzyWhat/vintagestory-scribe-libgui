@@ -22,8 +22,13 @@ architecture, not this file.
 - **Persistence/sync follows the vanilla Sign block pattern** (`ToTreeAttributes` /
   `FromTreeAttributes`, `SendBlockEntityPacket`, `MarkDirty`, server-authoritative). Match
   this pattern for new synced state rather than inventing a new one.
-- Secondary goal is the author building dev skills — favor clear, conventional,
-  well-explained solutions over clever/terse ones.
+- Secondary goal is the author building dev skills — favor clear, conventional solutions
+  over clever/terse ones, and explain the reasoning in the conversation and commit message.
+- **Comments describe current behavior, not history.** State what the code does and any
+  still-true constraint, in the present tense. No dates, OpenSpec change names, spec/design IDs
+  (`§5.4`, `D6`), commit hashes, or "used to / no longer / regression / playtest" narration —
+  that history lives in git and `openspec/changes/archive/`. Don't restate what the code says
+  plainly. Durable API/engine facts go in `VSAPI-NOTES.md`, not in a code comment.
 
 ## Modding references
 

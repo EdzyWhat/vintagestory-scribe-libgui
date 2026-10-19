@@ -27,14 +27,13 @@ using Vintagestory.API.MathTools;  // BlockPos
 namespace Scribe;
 
 /// <summary>A value snapshot of one read-view row. <see cref="Kind"/> distinguishes Task / Text / Tracker /
-/// Link (add-tracker-link-tasks Group 5); the Tracker/Link icon + name are resolved by the dialog (where
-/// <c>capi</c> lives) and passed in as <see cref="DisplayStack"/> / <see cref="DisplayName"/> so the pure
-/// LibGUI row widget stays API-free. Tracker rows carry the live <see cref="CurrentQuantity"/>/
-/// <see cref="TargetQuantity"/> counter; Link rows carry the <see cref="LinkTarget"/> code to open. A
-/// quest Link row additionally carries <see cref="QuestProgressText"/> — pre-formatted kill/block-place/
-/// block-break progress from <see cref="ScribeQuestWatcher"/>, or null when unavailable (vsquest absent,
-/// the quest's own dialog never read this session, or a non-quest/plain Link) — add-assignment-and-quest-support
-/// §11.3. Resolved by the dialog (where <c>modSystem</c> lives) so this stays API-free.</summary>
+/// Link; the Tracker/Link icon and name are resolved by the dialog (where <c>capi</c> lives) and passed in as
+/// <see cref="DisplayStack"/> / <see cref="DisplayName"/> so the row widget stays API-free. Tracker rows carry
+/// the live <see cref="CurrentQuantity"/>/<see cref="TargetQuantity"/> counter; Link rows carry the
+/// <see cref="LinkTarget"/> code to open. A quest Link row also carries <see cref="QuestProgressText"/> —
+/// pre-formatted kill/block-place/block-break progress from <see cref="ScribeQuestWatcher"/>, or null when
+/// unavailable (vsquest absent, the quest's own dialog never read this session, or a non-quest Link). The
+/// dialog resolves it (where <c>modSystem</c> lives) so this stays API-free.</summary>
 internal readonly record struct ScribeReadRowData(
     int Index, ScribeBlockKind Kind, bool Done, bool Pinned, Guid TaskId, string Text,
     ItemStack? DisplayStack = null, string? DisplayName = null,
@@ -49,18 +48,16 @@ internal readonly record struct ScribeReadRowData(
     public bool IsCraft => Kind == ScribeBlockKind.Craft;
     public bool IsQuestObjective => Kind == ScribeBlockKind.QuestObjective;
     /// <summary>Kinds rendered as an item icon + name (their own Text is empty): Tracker, Link, the Craft
-    /// parent (which shows its recipe output — add-crafting-tasks 9.1), and a QuestObjective (item-backed or
-    /// a generic-icon label fallback — add-progression-framework-quest-objective-subtasks 7.1/7.3).</summary>
+    /// parent (which shows its recipe output), and a QuestObjective (item-backed, or a generic-icon label
+    /// fallback).</summary>
     public bool IsItemKind => IsTracker || IsLink || IsCraft || IsQuestObjective;
     /// <summary>Kinds whose row carries a live have/need counter driven from the viewer's carried inventory:
-    /// Tracker and the Craft parent (add-crafting-tasks 9.2). Deliberately excludes QuestObjective — its
-    /// counter (rendered via the shared !IsLink branch below since it's still <see cref="IsItemKind"/>) is
-    /// driven by Progression Framework's own reported progress instead, never carried inventory. Mirrors
-    /// <see cref="ScribeBlock.IsCarriedCountTracked"/>.</summary>
+    /// Tracker and the Craft parent. Excludes QuestObjective, whose counter is driven by Progression
+    /// Framework's own reported progress. Mirrors <see cref="ScribeBlock.IsCarriedCountTracked"/>.</summary>
     public bool IsCarriedCountTracked => IsTracker || IsCraft;
-    /// <summary>Task, Tracker, and Link all carry a Done flag, so all three get a completion checkbox; a
-    /// freeform Text section and a QuestObjective (not player-completable — add-progression-framework-quest-
-    /// objective-subtasks 1.3) don't. Mirrors <see cref="ScribeBlock.IsCompletable"/>.</summary>
+    /// <summary>Task, Tracker, and Link carry a Done flag, so they get a completion checkbox; a freeform Text
+    /// section and a QuestObjective (not player-completable) don't. Mirrors
+    /// <see cref="ScribeBlock.IsCompletable"/>.</summary>
     public bool Completable => Kind is not ScribeBlockKind.Text and not ScribeBlockKind.QuestObjective;
     /// <summary>The row's display label: a Craft parent frames its output name ("Craft Iron Ingot"), a
     /// Tracker/Link shows its resolved item name (its own Text is empty), while a Task/Text shows its authored
@@ -70,11 +67,11 @@ internal readonly record struct ScribeReadRowData(
 }
 
 /// <summary>
-/// The read view's content tree: the document rendered as a NON-virtualized scrollable
-/// <see cref="SingleChildScrollView"/> + <see cref="Column"/> of all rows (reconcile-animating-surfaces
-/// §5 — mirroring the editor), with a "switch to editor" control below. The interactive per-row state
-/// lives in the row widgets themselves (design D4), not here. Rows are keyed by stable identity so an
-/// external resync reconciles in place rather than tearing the list down.
+/// The read view's content tree: the document rendered as a non-virtualized scrollable
+/// <see cref="SingleChildScrollView"/> + <see cref="Column"/> of all rows (mirroring the editor), with a
+/// "switch to editor" control below. The interactive per-row state lives in the row widgets themselves, not
+/// here. Rows are keyed by stable identity so an external resync reconciles in place rather than tearing the
+/// list down.
 /// </summary>
 internal sealed class ScribeReadContent : StatefulWidget
 {
@@ -133,10 +130,10 @@ internal sealed class ScribeReadContent : StatefulWidget
     public IReadOnlyList<ScribeReadRowData> Blocks { get; }
     /// <summary>Complete a task by its stable id (the read view completes by identity, not index).</summary>
     public Action<Guid> OnToggleTask { get; }
-    /// <summary>Pin/unpin a task by its stable id (scribe-lectern-view-consistency §2).</summary>
+    /// <summary>Pin/unpin a task by its stable id.</summary>
     public Action<Guid> OnTogglePinned { get; }
-    /// <summary>Open a Link row's referenced Handbook page by the row's stable id (add-tracker-link-tasks 5.3).
-    /// Never changes completion — it is a hyperlink, distinct from the row's checkbox.</summary>
+    /// <summary>Open a Link row's referenced Handbook page by the row's stable id. Never changes
+    /// completion — it is a hyperlink, distinct from the row's checkbox.</summary>
     public Action<Guid> OnOpenLink { get; }
     public Action OnSwitchToEditor { get; }
     /// <summary>Horizontal breathing room applied around the footer button (Edit), 0.04·W each side, so it
@@ -146,11 +143,10 @@ internal sealed class ScribeReadContent : StatefulWidget
     /// <summary>Dialog-owned scroll controller shared by both views (see the dialog field); NOT disposed
     /// here — the dialog owns its lifetime so the scroll offset survives the view-switch rebuild.</summary>
     public ScrollController ScrollController { get; }
-    /// <summary>Host-owned collapse controllers for the read view's departing rows (extract-animated-task-list),
-    /// passed to the <see cref="ScribeAnimatedList"/> so a policy-removed read row collapses out instead of
-    /// vanishing instantly (reconcile-animating-surfaces §5.5). The dialog owns its lifetime (survives the
-    /// RefreshReadView reconcile) and reads its <c>AnyAnimating</c> to drive scroll-pin/hover in <c>OnRenderGUI</c>;
-    /// NOT disposed here.</summary>
+    /// <summary>Host-owned collapse controllers for the read view's departing rows, passed to the
+    /// <see cref="ScribeAnimatedList"/> so a policy-removed row collapses out instead of vanishing instantly.
+    /// The dialog owns its lifetime (it survives the RefreshReadView reconcile) and reads its
+    /// <c>AnyAnimating</c> to drive scroll-pin/hover in <c>OnRenderGUI</c>; NOT disposed here.</summary>
     public ScribeAnimationRegistry CollapseRegistry { get; }
     /// <summary>Fired (deferred) when a departing read row's collapse completes and the list has shrunk, so the
     /// dialog can re-clamp the shared scroll extent — see <see cref="ScribeAnimatedList.OnDepartureSettled"/>.</summary>
@@ -160,26 +156,22 @@ internal sealed class ScribeReadContent : StatefulWidget
     /// <see cref="ScribeEditorContent.CurrentShade"/>/<see cref="ScribePinnedContent.CurrentShade"/>).</summary>
     public ScribeAmbientLightSampler.Shade CurrentShade { get; }
     public string HintLangKey { get; }
-    /// <summary>When true this is a permanently-read-only surface (a hard or fired tablet — tablet-firing):
-    /// the "switch to editor" footer button is omitted. It also gates row text-editing affordances (there are
-    /// none in the read view, so this is mostly about the footer). The tabbed Lectern/Notebook read view
-    /// passes false, so it keeps its "Edit" footer button exactly as before.
+    /// <summary>When true this is a permanently-read-only surface (a hard or fired tablet): the "switch to
+    /// editor" footer button is omitted and row text stays locked. The tabbed Lectern/Notebook read view
+    /// passes false and keeps its "Edit" footer button.
     ///
-    /// <para>NOTE (zero-point-three-fixes §7.3): read-only no longer implies inert checkbox/pin. Whether a
-    /// read-only row's checkbox and pin stay interactive is governed by <see cref="CompletionAndPinLive"/>,
-    /// decoupled so a hard/fired TABLET keeps completion + pin live (so a fired tablet's pin is never stranded
-    /// on the HUD) while its text stays locked.</para></summary>
+    /// <para>Read-only does not imply an inert checkbox/pin. Whether a read-only row's checkbox and pin stay
+    /// interactive is governed by <see cref="CompletionAndPinLive"/>, so a hard/fired tablet keeps completion
+    /// and pin live (a fired tablet's pin is never stranded on the HUD) while its text stays locked.</para></summary>
     public bool ReadOnly { get; }
     /// <summary>When true, each task row's completion checkbox and hover pin stay INTERACTIVE even on a
-    /// read-only surface (a hard/fired tablet — zero-point-three-fixes §7.3). The tabbed Lectern/Notebook read
-    /// view leaves this false: it is already <see cref="ReadOnly"/> = false and drives its checkbox/pin off
-    /// that, so its behavior is unchanged. Only the tablet's read view sets this true alongside
-    /// <see cref="ReadOnly"/> = true, to keep toggles live while blocking text.</summary>
+    /// read-only surface (a hard/fired tablet). The tabbed Lectern/Notebook read view leaves this false:
+    /// <see cref="ReadOnly"/> = false already keeps its checkbox and pin live. Only the tablet's read view sets
+    /// this true alongside <see cref="ReadOnly"/> = true, to keep toggles live while blocking text.</summary>
     public bool CompletionAndPinLive { get; }
-    /// <summary>Invoked when the player taps a locked row's TEXT on a read-only tablet (zero-point-three-fixes
-    /// §7.4), carrying the row's TaskId, so the dialog can surface the material-specific "soften it / cannot
-    /// be changed" in-game message. Null on the tabbed read view (and on a wet tablet), where the text isn't a
-    /// blocked-edit affordance.</summary>
+    /// <summary>Invoked when the player taps a locked row's TEXT on a read-only tablet, carrying the row's
+    /// TaskId, so the dialog can surface the material-specific "cannot be changed" in-game message. Null on the
+    /// tabbed read view and on a wet tablet, where the text isn't a blocked-edit affordance.</summary>
     public Action<Guid>? OnTextEditRefused { get; }
     /// <summary>The full-color assigned-task stamp raster (see <see cref="ScribeAssignedTaskIcon"/>),
     /// resolved once by the dialog via <c>modSystem.GetGuiTextureBitmap</c> and passed down so this row
@@ -191,26 +183,24 @@ internal sealed class ScribeReadContent : StatefulWidget
     /// widget stays API-free. Null on a pure server, or when the asset failed to load — the icon falls
     /// back to the plain SVG glyph in that case.</summary>
     public SKBitmap? ExternalStampBitmap { get; }
-    /// <summary>Whether to render the filter-pill row and any subtask-group collapse toggles
-    /// (scribe-dialog-base's capability flag) — false only for the Tablet (tablet-dialog). When false,
-    /// every row renders exactly as before this feature: unfiltered, full opacity, no toggle.</summary>
+    /// <summary>Whether to render the filter-pill row and any subtask-group collapse toggles. False only for
+    /// the Tablet, where every row renders unfiltered, at full opacity, with no toggle.</summary>
     public bool SupportsFilterPills { get; }
-    /// <summary>Whether this surface renders the shared Row 2 subtitle / Row 3 tab header at all
-    /// (unify-tab-header-layout) — false only for the Tablet, which keeps its own pared-down title-bar
-    /// chrome instead. When false, <see cref="ScribeTabHeader.Build"/> is never called and the durable
-    /// divider it would have drawn is omitted too.</summary>
+    /// <summary>Whether this surface renders the shared Row 2 subtitle / Row 3 tab header at all. False only
+    /// for the Tablet, which keeps its own pared-down title-bar chrome instead. When false,
+    /// <see cref="ScribeTabHeader.Build"/> is never called and the durable divider it would have drawn is
+    /// omitted too.</summary>
     public bool SupportsTabHeader { get; }
     /// <summary>Whether <see cref="ScribeTabHeader.Build"/> renders its Row 2 subtitle line, read from
-    /// <c>modSystem.VisualTuning.ShowSubtitleRow</c> (add-subtitle-row-configkit-toggle). Has no effect
-    /// when <see cref="SupportsTabHeader"/> is false (the Tablet, which never calls into
-    /// <see cref="ScribeTabHeader.Build"/> at all).</summary>
+    /// <c>modSystem.VisualTuning.ShowSubtitleRow</c>. Has no effect when <see cref="SupportsTabHeader"/> is
+    /// false (the Tablet, which never calls into <see cref="ScribeTabHeader.Build"/> at all).</summary>
     public bool ShowSubtitleRow { get; }
-    /// <summary>The currently-selected filter pill (read-view-filter-pills), owned/persisted by the dialog.</summary>
+    /// <summary>The currently-selected filter pill, owned and persisted by the dialog.</summary>
     public ReadViewFilterCategory ActiveFilterCategory { get; }
     /// <summary>Requests a different pill become active.</summary>
     public Action<ReadViewFilterCategory> OnFilterCategoryChanged { get; }
-    /// <summary>Whether the subtask group whose parent is the given TaskId is currently collapsed
-    /// (read-view-subtask-collapse), owned/persisted by the dialog.</summary>
+    /// <summary>Whether the subtask group whose parent is the given TaskId is currently collapsed, owned and
+    /// persisted by the dialog.</summary>
     public System.Func<Guid, bool> IsGroupCollapsed { get; }
     /// <summary>Requests a subtask group's collapsed state be flipped, by its parent's TaskId.</summary>
     public Action<Guid> OnToggleGroupCollapsed { get; }
@@ -227,53 +217,41 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
         TextStyle switchTextStyle = new() { FontSize = 14, Color = colors.OnPrimary, FontFamily = ScribeTaskFont.ButtonFamily };
 
         var style = Widget.Style;
-        // The scrollable row list. Each row is a self-stateful widget keyed by its stable block identity
-        // (ValueKey<Guid>(TaskId)) so an external resync reconciles rows in place instead of remounting
-        // (reconcile-animating-surfaces §5). Wrapped in a Scrollbar so a list taller than the viewport
-        // shows a draggable track (task 8.15).
+        // The scrollable row list: a Column of ALL rows inside a SingleChildScrollView (mirroring the editor,
+        // ScribeEditorContent), wrapped in a Scrollbar. It is deliberately not a virtualized ListView: LibGUI's
+        // ListView unmounts off-screen rows and ties its reconcile-reset token to the ScrollController, so an
+        // external resync (another client toggled a task, a HUD Delete removed one) would remount the list and
+        // clamp the shared scroll offset toward 0. Keeping every row mounted and keyed by ValueKey<Guid>(TaskId)
+        // lets RefreshReadView reconcile in place: surviving rows are reused (the scroll offset is preserved
+        // inherently) and only changed rows repaint. The Column also sums the exact per-row heights the editor
+        // does, so read and editor content heights match by construction. AutoHide is off: the bar is always
+        // visible, matching the editor.
         //
-        // NON-virtualized list (reconcile-animating-surfaces §5): a Column of ALL rows inside a
-        // SingleChildScrollView, mirroring the editor (ScribeEditorContent). It used to be a virtualized
-        // ListView, but LibGUI's ListView unmounts off-screen rows AND hardwires its internal
-        // reconcile-reset token to the ScrollController (no public data-identity seam — see ListView.cs;
-        // Tier 1 rejected 2026-08-10 because reaching it would fork `gui`). So an external resync (another
-        // client toggled a task, or a HUD-Delete removed one) had to ForceRebuild, which remounted the
-        // list and clamped the shared scroll offset toward 0. Keeping every row mounted and keyed by
-        // ValueKey<Guid>(TaskId) lets RefreshReadView reconcile in place: surviving rows are REUSED (the
-        // scroll offset is preserved inherently) and only changed rows repaint. It also drops the old
-        // estimatedItemHeight guess — the Column sums the exact per-row heights the editor already does,
-        // so the read/editor content heights now match by construction (subsumes fixes 18cd5c60).
-        // AutoHide off: bar permanently visible, matching the editor + the pre-LibGUI native GUI, and
-        // avoids the fade flicker a rebuild used to re-trigger (task 5.7).
+        // Rows go through ScribeAnimatedList, as on the Pin Tab: the container diffs the TaskId-keyed set
+        // frame-to-frame, so a task removed by a Delete-policy completion (it lands here as a now-absent row on
+        // the RefreshReadView reconcile, after the optimistic OnReadViewCompleteTask deleted it from the local
+        // doc) collapses out with the rows below sliding up. The container owns MOTION only: it decides row ORDER
+        // (live rows plus collapsing ghosts spliced at their old slots) and hands that list to OUR layoutBuilder,
+        // which keeps the read view's own Scrollbar > SingleChildScrollView > Column shape. The policy is
+        // Immediate (no undo window): a read-view completion is an affirmative tap, matching the editor and pin
+        // surfaces.
         //
-        // Route the rows through ScribeAnimatedList (reconcile-animating-surfaces §5.5), exactly as the
-        // Pin Tab does: the container diffs the TaskId-keyed set frame-to-frame, so a task removed by a
-        // Delete-policy completion — which lands here as a now-absent row on the RefreshReadView reconcile
-        // (the optimistic OnReadViewCompleteTask deleted it from the local doc, §5.4) — collapses out with
-        // rows below sliding up, instead of disappearing instantly (the playtest gap e5abb165). The
-        // container abstracts MOTION only: it decides row ORDER (live rows + collapsing ghosts spliced at
-        // their old slots) and hands that list to OUR layoutBuilder, which keeps the read view's own
-        // Scrollbar > SingleChildScrollView > Column shape. Immediate policy (no undo window — the read
-        // view's completion is an affirmative tap, matching the editor/pin surfaces).
-        //
-        // Each departing row supplies an explicit frozen ghost: a live read row is unsafe to freeze in
-        // place (its checkbox/pin/hover gestures would stay live mid-collapse), so we snapshot it as a
-        // static ScribeFrozenEditorRow — the same [grip-spacer][checkbox][text] shape the editor and Pin
-        // Tab ghosts use, so all three surfaces collapse identically. A read-only (hard/fired) tablet
-        // never reaches here as a departure: the server collapses Delete→Unpin there and the dialog skips
-        // the optimistic mutation (§5.4d), so no row is ever removed on that surface — the plain-Text ghost
-        // (which does not render cuneiform strokes) is therefore only ever used on the readable Lectern/
-        // Notebook, where it matches the live row exactly.
-        // Filter-pill row + subtask-group collapse (read-view-filter-and-collapse), gated on the ONE
-        // capability flag — false only for the Tablet, which renders every row exactly as before this
-        // feature (no filtering, no shadow opacity, no collapse toggle).
+        // Each departing row supplies an explicit frozen ghost: a live read row is unsafe to freeze in place
+        // (its checkbox/pin/hover gestures would stay live mid-collapse), so it is snapshotted as a static
+        // ScribeFrozenEditorRow, the same [grip-spacer][checkbox][text] shape the editor and Pin Tab ghosts use,
+        // so all three surfaces collapse identically. A read-only (hard/fired) tablet never produces a
+        // departure: the server collapses Delete to Unpin there and the dialog skips the optimistic mutation.
+        // The plain-Text ghost (which does not render cuneiform strokes) is therefore only ever used on the
+        // readable Lectern/Notebook, where it matches the live row exactly.
+
+        // Filter pills and subtask-group collapse, gated on the one capability flag (false only on the Tablet,
+        // which renders every row unfiltered, at full opacity, with no collapse toggle).
         IReadOnlyDictionary<Guid, ReadRowVisibility>? visibility = Widget.SupportsFilterPills
             ? ScribeReadViewFilter.ComputeVisibility(Widget.Blocks, Widget.ActiveFilterCategory, Widget.IsGroupCollapsed)
             : null;
 
-        // Every depth-0 row with a non-empty owned run gets a collapse toggle (5.2) — computed once here
-        // over the FULL block list (before any filter hides rows), since a group's shape is structural,
-        // not filter-dependent.
+        // Every depth-0 row with a non-empty owned run gets a collapse toggle. Computed once over the FULL
+        // block list (before any filter hides rows), since a group's shape is structural, not filter-dependent.
         HashSet<Guid>? groupParentsWithRun = null;
         if (Widget.SupportsFilterPills)
         {
@@ -313,25 +291,22 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
             registry: Widget.CollapseRegistry,
             policy: ScribeListRemovalPolicy.Immediate,
             onDepartureSettled: Widget.OnDepartureSettled,
-            // Our layout wrapper (D6 seam): the container passes the ordered widget list (live rows + any
-            // collapsing ghosts) and we wrap it in the read view's existing Scrollbar > scroll > Column,
-            // spacing 0 (all inter-row gap lives in each row's own padding, so read and editor stay
-            // pixel-aligned across a view switch). When that list is empty — no live rows AND no ghost still
-            // collapsing — show the empty-state hint. Checking HERE (not on Widget.Blocks.Count outside) keeps
-            // the hint from popping in before the LAST removed row has finished collapsing (mirrors the Pin
-            // Tab); the hint's font/size inherit the tab's DefaultTextStyle ancestor, only color + centered
-            // wrap stay explicit.
+            // Our layout wrapper: the container passes the ordered widget list (live rows + any collapsing
+            // ghosts) and we wrap it in the read view's Scrollbar > scroll > Column, spacing 0 (all inter-row
+            // gap lives in each row's own padding, so read and editor stay pixel-aligned across a view switch).
+            // When that list is empty (no live rows AND no ghost still collapsing) show the empty-state hint.
+            // Checking HERE, not on Widget.Blocks.Count outside, keeps the hint from appearing before the LAST
+            // removed row has finished collapsing (as on the Pin Tab). The hint's font and size inherit the
+            // tab's DefaultTextStyle ancestor; only color + centered wrap are explicit.
             layoutBuilder: rows => rows.Count == 0
                 ? new Center(child: new Text(
                     Lang.Get(Widget.HintLangKey),
                     new TextStyle { Color = colors.OnSurfaceVariant, SoftWrap = true, Align = TextAlignment.Center }))
                 : new Scrollbar(
                     controller: Widget.ScrollController,
-                    // 8-unit top padding lives INSIDE the scroll region (unify-tab-header-layout §7,
-                    // doubled from 4 per 2026-09-09 playtest feedback) so the durable divider above sits
-                    // flush against the viewport and this breathing room scrolls away with the content,
-                    // instead of the old fixed gap outside the scroll region. Skipped on the Tablet (no
-                    // header, so no divider to sit flush against).
+                    // The 8-unit top padding lives INSIDE the scroll region so the durable divider above sits
+                    // flush against the viewport and this breathing room scrolls away with the content. Skipped
+                    // on the Tablet (no header, so no divider to sit flush against).
                     child: new SingleChildScrollView(
                         controller: Widget.ScrollController,
                         child: new Padding(EdgeInsets.Only(top: Widget.SupportsTabHeader ? 8f : 0f), child: new Column(
@@ -341,19 +316,13 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
                             children: rows))))
                 { AutoHide = false });
 
-        // The "switch to editor" footer button — the read view's only edit affordance. A permanently
-        // read-only surface (hard/fired tablet — tablet-firing) omits it entirely so there is no path back
-        // into the editor; the tabbed Lectern/Notebook keep it. Built as a list so the whole footer slot
-        // (Padding + Button) drops out cleanly rather than rendering an empty gap.
-        // Shared Row 2 subtitle + Row 3 (the filter-pill row, omitted entirely on a surface where
-        // SupportsFilterPills is false — the Tablet, so its Read View keeps its pared-down header) + the
-        // durable divider (unify-tab-header-layout 2.1) — replaces the old uniform Column(spacing: 8) gap,
-        // which let the divider drift away from the pills it was supposed to sit against.
+        // Row 3: the filter-pill row. Omitted on a surface where SupportsFilterPills is false (the Tablet,
+        // which keeps its pared-down header).
         Widget? row3 = Widget.SupportsFilterPills ? BuildFilterPillRow(colors) : null;
 
-        // The Tablet renders neither Row 2 nor Row 3 at all (unify-tab-header-layout design.md Non-Goals) —
-        // its own title-bar chrome is the whole header, so the call to ScribeTabHeader.Build is skipped
-        // entirely rather than passed empty content.
+        // The Tablet renders neither Row 2 nor Row 3: its own title-bar chrome is the whole header, so the call
+        // to ScribeTabHeader.Build is skipped entirely rather than passed empty content. The header owns the
+        // Row 2 subtitle, Row 3, and the durable divider that sits against the pills.
         var children = new List<Widget>();
         if (Widget.SupportsTabHeader)
         {
@@ -361,6 +330,10 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
                 "scribe:scribe-gui-nav-read", "scribe:scribe-gui-subtitle-read", Widget.ShowSubtitleRow, row3));
         }
         children.Add(new Expanded(child: rowList));
+        // The "switch to editor" footer button is the read view's only edit affordance. A permanently
+        // read-only surface (hard/fired tablet) omits it entirely so there is no path back into the editor;
+        // the tabbed Lectern/Notebook keep it. It is a list entry so the whole footer slot (Padding + Button)
+        // drops out cleanly rather than leaving an empty gap.
         if (!Widget.ReadOnly)
         {
             children.Add(new Padding(
@@ -370,13 +343,11 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
                     onTap: _ => Widget.OnSwitchToEditor())));
         }
 
-        // Root the whole tab subtree in the player's Task Text Font + window-scaled base size, so the
-        // row text and empty hint inherit them (adopt-libgui-31-improvements). The row widgets live in
-        // the ListView below, which is a descendant of this ancestor. The switch/Edit button keeps its
-        // own explicit Caudex button font (a deliberate non-task face), so it is unaffected.
-        // Top inset reduced from 10 to 4 (2026-09-08 playtest feedback: 6px less gap between the title bar
-        // and the Row 2 subtitle); left/right/bottom stay 10 like every other tab. The Tablet has no Row 2
-        // to close the gap against, so it keeps the original full 10 top inset.
+        // Root the whole tab subtree in the player's Task Text Font + window-scaled base size, so the row text
+        // and empty hint inherit them. The switch/Edit button keeps its own explicit Caudex button font (a
+        // deliberate non-task face), so it is unaffected. The top inset is 4 under a Row 2 subtitle and the full
+        // 10 on the Tablet, which has no Row 2 to close the gap against; left/right/bottom are 10 like every
+        // other tab.
         return ScribeTextDefaults.Wrap(Widget.Style.TaskFontFamily, Widget.Style.FontSize, new Padding(
             EdgeInsets.Ltrb(10, Widget.SupportsTabHeader ? 4 : 10, 10, 10),
             child: new Column(
@@ -386,9 +357,9 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
                 children: children)));
     }
 
-    /// <summary>The All/Active/Completed/Pinned/Other pill row (read-view-filter-pills 3.2), same visual
-    /// shape as the Assignment Inbox's <c>BuildFilterChip</c> (radio-select, bracketed count only when
-    /// > 0) but this feature's own category set/colors.</summary>
+    /// <summary>The All/Active/Completed/Pinned/Other pill row, same visual shape as the Assignment Inbox's
+    /// <c>BuildFilterChip</c> (radio-select, bracketed count only when > 0) but with its own category set and
+    /// colors.</summary>
     private Widget BuildFilterPillRow(ColorScheme colors)
     {
         return new Wrap(
@@ -428,7 +399,7 @@ internal sealed class ScribeReadContentState : State<ScribeReadContent>
 
 /// <summary>
 /// One read-view row: a task checkbox (reflecting/toggling Done) or a note, plus wrapped text.
-/// Self-stateful and keyed (design D4). Only the checkbox is interactive.
+/// Self-stateful and keyed. Only the checkbox and the hover pin are interactive.
 /// </summary>
 internal sealed class ScribeReadRow : StatefulWidget
 {
@@ -458,17 +429,17 @@ internal sealed class ScribeReadRow : StatefulWidget
     /// <summary>Open this row's Link target (Link rows only); never toggles completion.</summary>
     public Action<Guid> OnOpenLink { get; }
     public ScribeRowStyle Style { get; }
-    /// <summary>Permanently-read-only surface (hard/fired tablet — tablet-firing): the "switch to editor"
-    /// footer is dropped and text stays locked. Whether the checkbox/pin stay live is governed separately by
-    /// <see cref="CompletionAndPinLive"/> (zero-point-three-fixes §7.3), not by this flag alone.</summary>
+    /// <summary>Permanently-read-only surface (hard/fired tablet): the "switch to editor" footer is dropped
+    /// and text stays locked. Whether the checkbox/pin stay live is governed separately by
+    /// <see cref="CompletionAndPinLive"/>, not by this flag alone.</summary>
     public bool ReadOnly { get; }
     /// <summary>When true, keep the checkbox and hover pin INTERACTIVE even though <see cref="ReadOnly"/> is
-    /// true — the hard/fired tablet case (§7.3), so completion and unpin stay reachable. False on the tabbed
-    /// read view, which drives its live controls off <see cref="ReadOnly"/> = false instead (unchanged).</summary>
+    /// true — the hard/fired tablet case, so completion and unpin stay reachable. False on the tabbed read
+    /// view, which drives its live controls off <see cref="ReadOnly"/> = false instead.</summary>
     public bool CompletionAndPinLive { get; }
     /// <summary>Tapping the row's TEXT on a read-only tablet surfaces the material-specific locked message
-    /// through this callback (§7.4). Null where a text tap is not a blocked-edit affordance (tabbed read view,
-    /// wet tablet).</summary>
+    /// through this callback. Null where a text tap is not a blocked-edit affordance (tabbed read view, wet
+    /// tablet).</summary>
     public Action<Guid>? OnTextEditRefused { get; }
     /// <summary>The full-color assigned-task stamp raster, threaded down from the content widget (see
     /// <see cref="ScribeReadContent.AssignedStampBitmap"/>). Null falls back to the plain SVG glyph.</summary>
@@ -479,12 +450,12 @@ internal sealed class ScribeReadRow : StatefulWidget
     /// <summary>The live ambient-illumination shade, threaded down so the assignment marker's hover
     /// tooltip can match the body's shading (see <see cref="ScribeReadContent.CurrentShade"/>).</summary>
     public ScribeAmbientLightSampler.Shade CurrentShade { get; }
-    /// <summary>True when this row renders at reduced ("shadow", read-view-subtask-collapse) opacity: it
-    /// is showing only because it shares a subtask group with a row that matches the active filter pill,
-    /// not because it matches itself. Purely visual — the row stays fully interactive.</summary>
+    /// <summary>True when this row renders at reduced ("shadow") opacity: it is showing only because it
+    /// shares a subtask group with a row that matches the active filter pill, not because it matches itself.
+    /// Purely visual — the row stays fully interactive.</summary>
     public bool Shadow { get; }
     /// <summary>True when this row is a subtask-group parent with a non-empty owned run, so it shows the
-    /// collapse/expand toggle (read-view-subtask-collapse 5.2).</summary>
+    /// collapse/expand toggle.</summary>
     public bool ShowCollapseToggle { get; }
     /// <summary>Whether this row's owned run is currently collapsed (hidden). Only meaningful when
     /// <see cref="ShowCollapseToggle"/> is true.</summary>
@@ -503,7 +474,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
 {
     private bool done;
     /// <summary>True while the pointer is over this row: the pin control is hidden until then, mirroring
-    /// the editor row's hover-conditional icons (lectern-gui-shell "Row icons are hover-conditional").</summary>
+    /// the editor row's hover-conditional icons.</summary>
     private bool hovered;
 
     public override void InitState()
@@ -513,42 +484,39 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
     }
 
     /// <summary>Resync the optimistic <see cref="done"/> when an external change flips this row's authoritative
-    /// completion (reconcile-animating-surfaces §5). The read list is now non-virtualized + TaskId-keyed, so a
-    /// server resync REUSES this row's state rather than remounting it — without this, an external toggle
-    /// (another client, or a HUD completion) would leave the checkbox showing the stale local value that
-    /// <see cref="InitState"/> seeded. Gate on the authoritative value actually CHANGING (compare old vs new
+    /// completion (another client, or a HUD completion). Rows are TaskId-keyed, so a server resync REUSES this
+    /// row's state rather than remounting it; without this, the checkbox would keep the stale local value that
+    /// <see cref="InitState"/> seeded. Gated on the authoritative value actually CHANGING (compare old vs new
     /// <c>Data.Done</c>): a pure chrome reconcile (e.g. a pin re-tint) leaves <c>Data.Done</c> untouched, so it
-    /// must not stomp an in-flight optimistic tick the player just made — matching the old ForceRebuild path,
-    /// which only re-seeded <c>done</c> when it genuinely remounted on a document change.</summary>
+    /// must not overwrite an in-flight optimistic tick the player just made.</summary>
     public override void UpdateWidget(ScribeReadRow oldWidget)
     {
         base.UpdateWidget(oldWidget);
         if (oldWidget.Data.Done != Widget.Data.Done) done = Widget.Data.Done;
     }
 
-    /// <summary>The content of a Tracker/Link read row: the referenced item's icon + name, plus a live
-    /// have/need counter for a Tracker (add-tracker-link-tasks 5.1/5.3). A Link's name is a hyperlink —
-    /// tapping it opens the item's Handbook page via <see cref="ScribeReadRow.OnOpenLink"/> and never touches
-    /// the row's checkbox (distinct from the completion control). The icon/name are the dialog-resolved
-    /// snapshot carried on the row data, so this stays <c>capi</c>-free.</summary>
+    /// <summary>The content of an item-kind read row (Tracker, Link, Craft parent, QuestObjective): the
+    /// referenced item's icon + name, plus a live have/need counter for the count-tracked kinds. The name is a
+    /// hyperlink — tapping it opens the item's Handbook page via <see cref="ScribeReadRow.OnOpenLink"/> and
+    /// never touches the row's checkbox (distinct from the completion control). The icon/name are the
+    /// dialog-resolved snapshot carried on the row data, so this stays <c>capi</c>-free.</summary>
     private Widget BuildItemContent(ColorScheme colors, ScribeRowStyle style)
     {
         float iconSize = ScribeRowConstants.ItemIconSize
             * (style.ControlSize / ScribeRowConstants.RowCheckboxSize);
         float lineHeight = ScribeRowControlNudge.TextLineHeight(style.FontSize);
-        // A Quest Link's icon renders in the row's leading slot instead (quest-link-icon-and-color), so this
-        // inline slot has no icon for it and the name's band height falls back to a plain text line.
+        // A Quest Link's icon renders in the row's leading slot instead, so this inline slot has no icon for
+        // it and the name's band height falls back to a plain text line.
         bool isQuestLink = ScribeLinkTarget.IsQuest(Widget.Data.LinkTarget);
-        // Cuneiform-aware on the tablet (quest-link-icon-and-color task 8.3b): the plain Latin lineHeight
-        // used here previously left the quest icon's CheckboxAndGripTop band shorter than the tablet's
-        // actual cuneiform text line, so the icon rode high against the row's top edge.
+        // Cuneiform-aware on the tablet: the band height accounts for the tablet's cuneiform text line, which is
+        // taller than the plain Latin lineHeight, so the quest icon doesn't ride high against the row's top edge.
         float bandHeight = ScribeRowControlNudge.ItemVisualBandHeight(
             style, Widget.Data.LinkTarget, Widget.Data.IsStaticVsQuestObjective, Widget.Data.DisplayStack);
-        // Link accent: the theme's Primary on light surfaces (a dark accent that reads as a colored link),
-        // or a row-supplied override where Primary would be illegible as text (the Chalkboard's dark slate —
-        // see ScribeRowStyle.LinkColor). The guide-page book glyph renders in it (not the near-black
-        // OnSurface) so it reads against the surface (feedback 7.11d); the item icon ignores the color. A
-        // Quest Link uses the separate QuestLinkColor seam instead, so it reads distinct from a plain Link.
+        // Link accent: the theme's Primary on light surfaces (a dark accent that reads as a colored link), or a
+        // row-supplied override where Primary would be illegible as text (the Chalkboard's dark slate — see
+        // ScribeRowStyle.LinkColor). The guide-page book glyph renders in it (not the near-black OnSurface) so
+        // it reads against the surface; the item icon ignores the color. A Quest Link uses the separate
+        // QuestLinkColor seam, so it reads distinct from a plain Link.
         Vector4 linkColor = Widget.Data.IsStaticVsQuestObjective
             ? colors.OnSurface
             : isQuestLink
@@ -562,9 +530,8 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         if (Widget.Data.IsStaticVsQuestObjective)
             icon = ScribeCenterIfShort.InBand(icon, bandHeight);
 
-        // The name is a hyperlink that opens the referenced item's Handbook page and never touches completion
-        // (feedback 6.5 — the Tracker, like a Link, "should also open the notebook entry"). Accent-colored to
-        // read as tappable. Shared by both kinds so future Crafting tasks inherit the same affordance.
+        // The name is a hyperlink that opens the referenced item's Handbook page and never touches completion.
+        // Accent-colored to read as tappable. Shared by every item kind.
         Widget name = ScribeCenterIfShort.Name(
             ScribeItemLabel.Build(Widget.Data.Label, linkColor, style), style, bandHeight);
         bool canOpen = !Widget.Data.IsStaticVsQuestObjective || Widget.Data.DisplayStack is not null;
@@ -578,21 +545,18 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
 
         if (Widget.Data.IsLink)
         {
-            // A Quest Link's icon already renders in the row's leading slot (quest-link-icon-and-color) — no
-            // second icon here.
+            // A Quest Link's icon already renders in the row's leading slot — no second icon here.
             if (!isQuestLink) rowChildren.Add(icon);
             rowChildren.Add(nameLink);
         }
-        else // Tracker, Craft parent, or QuestObjective: a live "have / need" counter on the LEFT, then the
-             // item icon + name — a QuestObjective's counter is fed by Progression Framework's own reported
-             // progress rather than carried inventory (see IsCarriedCountTracked's doc-comment), but the
-             // rendering is identical.
+        else // Tracker, Craft parent, or QuestObjective
         {
             bool satisfied = Widget.Data.CurrentQuantity >= Widget.Data.TargetQuantity;
-            // Counter on the LEFT (feedback: "the tracked number on the left of the Tracker task"; future
-            // Crafting tasks inherit this). Emphasis is INVERTED (feedback 7.11g): an in-progress count reads
-            // STRONG (Primary/bold — the thing you're still collecting), a satisfied count reads FADED
-            // (muted) with a faint strikethrough over the number (7.11h). Shared helper so read/Pin/HUD match.
+            // A live "have / need" counter on the LEFT, then the item icon + name. Emphasis is INVERTED: an
+            // in-progress count reads STRONG (Primary/bold — the thing you're still collecting), a satisfied
+            // count reads FADED (muted) with a faint strikethrough over the number. A QuestObjective's counter
+            // is fed by Progression Framework's own reported progress rather than carried inventory (see
+            // IsCarriedCountTracked), but renders identically. Shared helper so read/Pin/HUD match.
             rowChildren.Add(ScribeCenterIfShort.InBand(
                 ScribeTrackerCounterText.Build(
                     Widget.Data.CurrentQuantity, Widget.Data.TargetQuantity, satisfied,
@@ -603,9 +567,9 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
             rowChildren.Add(nameLink);
         }
 
-        // Read-only item rows (Tracker/Craft counter, Link icon) sit flush against the checkbox after
-        // FieldPadX was dropped so the *editor* stepper could line up with a Task field. A 4px left
-        // inset is read-only — the editor ScribeNumericField path is unchanged.
+        // Read-only item rows (Tracker/Craft counter, Link icon) sit flush against the checkbox: the left inset
+        // is a fixed 4px rather than FieldPadX, so the *editor* stepper can line up with a Task field. The
+        // editor's ScribeNumericField path is separate.
         Widget content = new Padding(
             EdgeInsets.Only(left: 4f, right: style.FieldPadX),
             child: new Row(
@@ -614,8 +578,8 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                 mainAxisSize: MainAxisSize.Max,
                 children: rowChildren));
 
-        // A quest Link's live kill/block-place/block-break progress (§11.3), when the watcher has any —
-        // a second, smaller line under the icon/name row rather than crowding the hyperlink itself.
+        // A quest Link's live kill/block-place/block-break progress, when the watcher has any: a second,
+        // smaller line under the icon/name row rather than crowding the hyperlink itself.
         if (!string.IsNullOrEmpty(Widget.Data.QuestProgressText))
         {
             content = new Column(
@@ -646,17 +610,15 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
 
         var children = new List<Widget>();
 
-        // The far-left grip column the editor row draws (f07783f7) — one slot, so read and edit rows stay
-        // column-identical and align seamlessly across a view switch. A depth-0 row with a non-empty owned
-        // run (a Quest Link with objectives, a Craft parent with generated Trackers) shows a subtask-group
-        // collapse toggle here (read-view-subtask-collapse 5.2) as a bare caret glyph — no button chrome,
-        // clickable via a bare GestureDetector wrapper (read-view-collapse-affordance-fixes), matching the
-        // title bar's own drag-grip glyph precedent (ScribeDialogBase.Layout.cs's BuildTitleBar). Every
-        // other row shows the same invisible grip glyph as before: zero opacity, no gesture wrapper —
-        // purely a spacer, uninteractable and invisible (the read view exposes no reorder; dragging is a
-        // lock-gated authoring action, design D4). Uses the SAME GripInsets in both cases (top nudge + the
-        // -CheckboxTextGap trailing cancel, §10.4) so the reserved column — and thus the text's left edge —
-        // stays aligned row-for-row across a switch, and identical whether or not a toggle is shown.
+        // The far-left grip column, one slot shared with the editor row so read and edit rows stay
+        // column-identical and align across a view switch. A depth-0 row with a non-empty owned run (a Quest
+        // Link with objectives, a Craft parent with generated Trackers) shows a subtask-group collapse toggle
+        // here: a bare caret glyph with no button chrome, clickable via a bare GestureDetector wrapper, matching
+        // the title bar's own drag-grip glyph precedent (ScribeDialogBase.Layout.cs's BuildTitleBar). Every
+        // other row shows the same invisible grip glyph: zero opacity, no gesture wrapper, purely a spacer
+        // (the read view exposes no reorder; dragging is a lock-gated authoring action). Both cases use the SAME
+        // GripInsets (top nudge + the -CheckboxTextGap trailing cancel) so the reserved column, and thus the
+        // text's left edge, stays aligned row-for-row across a switch whether or not a toggle is shown.
         children.Add(new Padding(
             ScribeRowControlNudge.GripInsets(style, Widget.Data.IsItemKind, Widget.Data.LinkTarget,
                 Widget.Data.IsStaticVsQuestObjective, Widget.Data.DisplayStack),
@@ -671,23 +633,22 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                     opacity: 0f,
                     child: new ScribeVsIconGlyph("scribegrip", style.ControlSize, colors.OnSurfaceVariant))));
 
-        // Task, Tracker, AND Link all carry a Done flag, so all three show a completion checkbox (only a
-        // freeform Text section doesn't — Completable). A Tracker's checkbox also flips automatically when its
-        // count fills up under the Complete policy (the count engine issues the same toggle); a Link's is an
-        // independent manual completion (opening the page never touches it, 5.3).
+        // Task, Tracker, AND Link all carry a Done flag, so all three show a completion checkbox (a freeform
+        // Text section and a QuestObjective don't: see Completable). A Tracker's checkbox also flips
+        // automatically when its count fills up under the Complete policy (the count engine issues the same
+        // toggle); a Link's is an independent manual completion, and opening the page never touches it.
         if (Widget.Data.Completable)
         {
             children.Add(new Padding(
                 EdgeInsets.Only(top: ScribeRowControlNudge.CheckboxAndGripTop(
                     style, Widget.Data.IsItemKind, Widget.Data.LinkTarget,
                     Widget.Data.IsStaticVsQuestObjective, Widget.Data.DisplayStack)),
-                // The checkbox stays interactive whenever toggles are live: on any editable read view AND
-                // on a hard/fired tablet, which keeps completion live so a pinned task can still be
-                // completed/unpinned (zero-point-three-fixes §7.3). A null onChanged (only when toggles
-                // are NOT live — not currently reached, but the safe inert fallback) reflects Done and
-                // ignores taps. Tick color routes through the row style's CheckTickColor seam (§11). A Quest
-                // Link's checkbox is misleading (toggling it doesn't affect the quest), so its slot renders
-                // the quest-marker icon instead (quest-link-icon-and-color) via BuildLeadingControl.
+                // The checkbox stays interactive whenever toggles are live: on any editable read view AND on a
+                // hard/fired tablet, which keeps completion live so a pinned task can still be completed or
+                // unpinned. A null onChanged (only when toggles are NOT live; not currently reached, but the
+                // safe inert fallback) reflects Done and ignores taps. Tick color routes through the row
+                // style's CheckTickColor seam. A Quest Link's checkbox would be misleading (toggling it doesn't
+                // affect the quest), so BuildLeadingControl renders the quest-marker icon in its slot instead.
                 child: ScribeRowControlNudge.BuildLeadingControl(
                     context, style, Widget.Data.LinkTarget, done,
                     !Widget.TogglesLive ? null : _ =>
@@ -697,30 +658,30 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                     })));
         }
 
-        // Assignment marker — unlike the grip spacer above, this column is NOT reserved for an ordinary
-        // row: it's only added (and only then takes up width/gap) when the task actually IS an accepted
+        // Assignment marker: unlike the grip spacer above, this column is NOT reserved for an ordinary row.
+        // It is only added (and only then takes up width/gap) when the task actually IS an accepted
         // assignment. Placed inside the checkbox, to its right.
         if (Widget.Data.IsAcceptedAssignment)
             children.Add(ScribeAssignedTaskIcon.Build(style, colors.OnSurfaceVariant, Widget.Data.IsItemKind, Widget.AssignedStampBitmap,
                 context: context, currentShade: Widget.CurrentShade,
                 assignerName: Widget.Data.AssignerName, assignedDate: Widget.Data.AssignedDate, acceptedDate: Widget.Data.AcceptedDate));
 
-        // External-mod hover-info marker (add-external-mod-task-api) — independent of the assignment
-        // marker above; both can appear side by side on the same row.
+        // External-mod hover-info marker: independent of the assignment marker above; both can appear side by
+        // side on the same row.
         if (!string.IsNullOrEmpty(Widget.Data.ExtraInfo))
             children.Add(ScribeExternalInfoIcon.Build(style, colors.OnSurfaceVariant, Widget.Data.IsItemKind, Widget.ExternalStampBitmap,
                 context: context, currentShade: Widget.CurrentShade, extraInfo: Widget.Data.ExtraInfo));
 
-        // The row text. On the cuneiform tablet path (add-tablet-firing-mechanic) render it as display-only
-        // cuneiform strokes so a dried/fired tablet reads in the SAME glyphs the wet tablet types in —
-        // reusing the editable field's wrapping render object with focus/caret OFF (no new rendering code),
-        // seeded off the same TaskId so a row wobbles identically whether wet-editable or read-only. Off the
-        // cuneiform path (Lectern/Notebook, or cuneiform disabled) it uses the same Latin field renderer as
-        // Edit (display-only: no caret, no box) so wrap, Caudex line-box, and optical draw size match across
-        // a view switch. Stock Text + OffsetWrap Scale crushed multi-line Read rows.
-        // A Tracker/Link/Craft row swaps its text for an item icon + name (+ a have/need counter for the
-        // count-tracked kinds): the block's own Text is empty, its content is the referenced item
-        // (add-tracker-link-tasks 5.1/5.3; add-crafting-tasks 9.1 — a Craft parent shows its recipe output).
+        // The row text. On the cuneiform tablet path it renders as display-only cuneiform strokes, so a
+        // dried/fired tablet reads in the SAME glyphs the wet tablet types in: it reuses the editable field's
+        // wrapping render object with focus/caret OFF, seeded off the same TaskId so a row wobbles identically
+        // whether wet-editable or read-only. Off the cuneiform path (Lectern/Notebook, or cuneiform disabled) it
+        // uses the same Latin field renderer as Edit (display-only: no caret, no box) so wrap, Caudex line-box,
+        // and optical draw size match across a view switch. Stock Text + OffsetWrap Scale crushes multi-line
+        // Read rows.
+        // An item-kind row (Tracker/Link/Craft/QuestObjective) swaps its text for an item icon + name (+ a
+        // have/need counter for the count-tracked kinds): the block's own Text is empty, its content is the
+        // referenced item.
         Widget textChild = Widget.Data.IsItemKind
             ? BuildItemContent(colors, style)
             : style.UseCuneiform
@@ -736,7 +697,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                 bundle: style.CuneiformBundle,
                 padX: style.FieldPadX,
                 // Matches the editor row's cuneiform-only inset reduction (ScribeMultilineField.cs) so a
-                // row's box height agrees between Read and Editor (tablet-cuneiform-glyph-scale).
+                // row's box height agrees between Read and Editor.
                 padY: style.FieldPadY * CuneiformMetrics.FieldPadYScale,
                 // Resting (unfocused) box is transparent, exactly like a resting editable cuneiform row.
                 boxColor: Vector4.Zero,
@@ -753,12 +714,11 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                 caretHeightScale: CuneiformMetrics.CaretHeightScale)
             : ScribeTaskTextDisplay.Build(Widget.Data.Text, style, colors.OnSurface);
 
-        // On a read-only tablet, tapping the row TEXT is the "I want to edit this" gesture — there is no text
-        // field to click into, so this is where the material-specific locked message is surfaced
-        // (zero-point-three-fixes §7.4). Tasks only (a text-tap on a note has no completion/pin alternative to
-        // disambiguate from, and the note is equally locked); the checkbox and pin sit in their own hit
-        // regions, so this doesn't intercept them. Null callback (tabbed read view, wet tablet) leaves the
-        // text inert as before.
+        // On a read-only tablet, tapping the row TEXT is the "I want to edit this" gesture (there is no text
+        // field to click into), so this is where the material-specific locked message is surfaced. Tasks only:
+        // a note is equally locked, but a text-tap on it has no completion/pin alternative to disambiguate from.
+        // The checkbox and pin sit in their own hit regions, so this doesn't intercept them. A null callback
+        // (tabbed read view, wet tablet) leaves the text inert.
         if (Widget.OnTextEditRefused is { } onTextEditRefused && Widget.Data.IsTask)
         {
             textChild = new GestureDetector(
@@ -769,7 +729,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
         children.Add(new Expanded(child: textChild));
 
         // A Depth-1 subtask adds a left inset so it reads as nested under its parent, matching the editor row
-        // so the indent is identical across a view switch (task-subtasks 5.1); depth-0 rows are unchanged.
+        // so the indent is identical across a view switch; depth-0 rows get none.
         float subtaskIndent = Widget.Data.Depth > 0 ? style.SubtaskIndent : 0f;
         Widget rowBody = new Padding(
             EdgeInsets.Only(
@@ -783,12 +743,11 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                 mainAxisSize: MainAxisSize.Max,
                 children: children));
 
-        // Resting pinned indicator (lectern-gui-shell "Pinned tasks show a resting indicator"): a
-        // pinned task carries the same subtle tint the editor row uses, drawn under the row content, so
-        // it reads as pinned without hovering. Unpinned tasks and text sections get no tint. The
-        // Container is ALWAYS present (transparent fill when unpinned) so the read row's index-0 child
-        // stays structurally identical across hover — the same reconciler-stability rule the editor row
-        // documents, so revealing the hover pin never remounts the row subtree.
+        // Resting pinned indicator: a pinned task carries the same subtle tint the editor row uses, drawn under
+        // the row content, so it reads as pinned without hovering. Unpinned tasks and text sections get no tint.
+        // The Container is ALWAYS present (transparent fill when unpinned) so the read row's index-0 child stays
+        // structurally identical across hover (the same reconciler-stability rule the editor row follows), so
+        // revealing the hover pin never remounts the row subtree.
         rowBody = new Container(
             style: new BoxStyle
             {
@@ -796,12 +755,10 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
             },
             child: rowBody);
 
-        // Pin toggle floats on the right, task-only, shown on hover — mirroring the editor row's pin
-        // button (scribe-lectern-view-consistency §2). The read view still exposes no edit/delete/drag;
-        // only pin + the checkbox are interactive here.
-        // The hover pin follows the same live-toggle rule as the checkbox: offered on any editable read view
-        // AND on a hard/fired tablet (zero-point-three-fixes §7.3 — pin/unpin stays reachable so a fired
-        // tablet's pin is never stranded on the HUD). Only a non-live surface would hide it.
+        // The pin toggle floats on the right, task-only, shown on hover, mirroring the editor row's pin button.
+        // The read view exposes no edit/delete/drag; only pin and the checkbox are interactive. The pin follows
+        // the same live-toggle rule as the checkbox: offered on any editable read view AND on a hard/fired
+        // tablet (so a fired tablet's pin is never stranded on the HUD). Only a non-live surface hides it.
         var stackChildren = new List<Widget> { rowBody };
         if (hovered && Widget.TogglesLive)
         {
@@ -812,7 +769,7 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
                     iconColor: Widget.Data.Pinned ? colors.Primary : colors.OnSurfaceVariant,
                     size: style.ControlSize,
                     onTap: () => Widget.OnTogglePinned(Widget.Data.TaskId),
-                    iconScale: 1.15f))); // pin glyph +15%, matching the editor (§10.2)
+                    iconScale: 1.15f))); // pin glyph +15%, matching the editor
         }
 
         Widget row = new MouseRegion(
@@ -820,17 +777,9 @@ internal sealed class ScribeReadRowState : State<ScribeReadRow>
             onExit: _ => { if (hovered) SetState(() => hovered = false); },
             child: new Stack(stackChildren));
 
-        // Shadow opacity (read-view-subtask-collapse): a row shown only for its group's context, not
-        // because it matches the active filter itself, renders deemphasized. Opacity is paint-only — it
-        // does not intercept hit-testing, so the row's checkbox/pin/text stay fully interactive.
+        // Shadow opacity: a row shown only for its group's context, not because it matches the active filter
+        // itself, renders deemphasized. Opacity is paint-only and does not intercept hit-testing, so the row's
+        // checkbox/pin/text stay fully interactive.
         return Widget.Shadow ? new Opacity(opacity: 0.5f, child: row) : row;
     }
 }
-
-// ============================================================================
-// Editor view content
-// ============================================================================
-
-/// <summary>A value snapshot of one editable block plus its index. The live text lives in the
-/// dialog's scratch document (the field writes through on every keystroke); this is only the seed
-/// for building the row.</summary>
