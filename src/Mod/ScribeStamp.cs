@@ -12,7 +12,7 @@ namespace Scribe;
 
 /// <summary>
 /// A one-shot, paint-only "rubber stamp" flourish played over the Scriptorium's Duplicate slot when a
-/// Transcribe copy lands (add-transcribe-copy-paste D4). A pixel-art wooden stamp
+/// Transcribe copy lands. A pixel-art wooden stamp
 /// (<c>scribe-copy-stamp.png</c>, baked by <c>build/gen-copy-stamp.py</c>) fades in above the slot,
 /// descends onto it, gives a little squash-and-tilt press, then lifts and fades out — leaving a briefly
 /// visible, slightly-tilted "COPIED" imprint (rendered procedurally here, not from an asset) that then fades
@@ -33,11 +33,8 @@ namespace Scribe;
 /// </summary>
 internal sealed class ScribeStamp : StatefulWidget
 {
-    /// <summary>Total play time. Retimed 850 → 2400 → 3000 → 2100ms (refinements 2026-08-16): every stamp beat
-    /// runs slower than the original so the descend/press/lift reads clearly, but the last pass trimmed the whole
-    /// thing 30% (3000 × 0.7) for a snappier flourish. The "COPIED" imprint still pops in as the stamp lifts,
-    /// HOLDS, then fades. Long enough to savour, still short enough that a re-copy remounts a fresh play. Tunable
-    /// if playtest wants a different feel.</summary>
+    /// <summary>Total play time. Slow enough that the descend/press/lift reads clearly, short enough that a
+    /// re-copy remounts a fresh play. The "COPIED" imprint appears as the stamp lands, HOLDS, then fades.</summary>
     public const int DefaultDurationMs = 2100;
 
     public ScribeStamp(
@@ -72,8 +69,7 @@ internal sealed class ScribeStamp : StatefulWidget
     public SKBitmap? StampBitmap { get; }
     public string CopyLabel { get; }
     public Vector4 ImprintColor { get; }
-    /// <summary>The parchment page-background colour used for the "COPIED" imprint's outer glow (refinement
-    /// 2026-08-17). Passed in from the active theme's <c>Surface</c> so the glow tracks the palette; the
+    /// <summary>The parchment page-background colour used for the "COPIED" imprint's outer glow. Passed in from the active theme's <c>Surface</c> so the glow tracks the palette; the
     /// transparent-filled imprint box lets this blurred parchment blob back the letters AND halo outward.</summary>
     public Vector4 GlowColor { get; }
     /// <summary>The slot's edge length — the fixed, layout-affecting FOOTPRINT of this overlay, so the
@@ -85,8 +81,8 @@ internal sealed class ScribeStamp : StatefulWidget
     public float ArtWidth { get; }
     public Action? OnEnd { get; }
     /// <summary>Fired ONCE at the descend-complete / contact frame (when the stamp finishes translating down,
-    /// <see cref="ScribeStampState.DescendEnd"/>) — the natural moment for an audible stamp thump
-    /// (add-transcribe-stamp-sound). Because this widget is only ever mounted when its slot's Transcribe view
+    /// <see cref="ScribeStampState.DescendEnd"/>) — the natural moment for an audible stamp thump.
+    /// Because this widget is only ever mounted when its slot's Transcribe view
     /// is the active body, wiring a sound here plays it only when the flourish is actually seen — a multiplayer
     /// watcher on another tab never mounts the widget and so hears nothing. A late remount that has already
     /// passed the descend does NOT fire it (see InitState), so the cue never plays for motion the viewer missed.</summary>
@@ -149,44 +145,41 @@ internal sealed class ScribeStampState : State<ScribeStamp>
         float art = Widget.ArtWidth;
 
         // Descend/lift distances scale with the art so the motion reads the same at any Pixel Art Size.
-        // The lift travels back up EXACTLY the distance it descended (refinement 2026-08-16), so the stamp
-        // retreats the way it arrived instead of appearing to just fade in place.
-        // Travel bumped 30% (0.45 → 0.585; feedback 2026-08-16): the stamp enters from — and retreats to —
-        // 30% farther above the slot, so it traverses more distance in and out.
+        // The lift travels back up EXACTLY the distance it descended, so the stamp retreats the way it arrived
+        // instead of appearing to just fade in place.
         float descendDistance = art * 0.585f;
         float liftDistance = descendDistance;
 
         // ---- Wooden stamp: fade-in + descend, a squash press, then lift + fade-out (NO tilt) ----
         // DescendEnd (the contact frame) is a state-level const so the sound cue in OnValueChanged shares it.
-        // Press window shortened 15% (0.115 → 0.09775; refinement 2026-08-16). The lift begins the instant the
-        // press ends so the beats stay contiguous.
+        // The lift begins the instant the press ends so the beats stay contiguous.
         const float PressLen = 0.115f * 0.85f;
         const float PressEnd = DescendEnd + PressLen;
         const float LiftStart = PressEnd;
-        // Leaving-translation duration (was the shared "FadeSpan"; the fades are now HALF-windows tied to the
-        // translations, so this only sizes the lift travel).
+        // Leaving-translation duration; the fades are half-windows tied to the translations, so this only sizes
+        // the lift travel.
         const float LiftSpan = 0.155f;
         const float LiftEnd = LiftStart + LiftSpan;
         // Descend (0 → DescendEnd): drop from DescendDistance above to rest. easeInSine — accelerates INTO the
-        // page (refinement 2026-08-16).
+        // page.
         float descend = EaseInSine(Seg(t, 0f, DescendEnd));
         // Fade-in over the FIRST HALF of the entering translation ([0, DescendEnd/2]) so the stamp is fully
         // opaque by the time it's halfway down; fade-out over the SECOND HALF of the leaving translation
         // ([LiftStart + LiftSpan/2, LiftEnd]) so it holds opaque until it's halfway back up, then vanishes as it
-        // finishes retreating (refinement 2026-08-16).
+        // finishes retreating.
         float fadeIn = Seg(t, 0f, DescendEnd * 0.5f);
         // Press: a sine bump 0→1→0 that peaks at the bottom of the travel — a slight squash as the stamp meets
         // the page, easing back out as it settles.
         float press = Sine01(Seg(t, DescendEnd, PressEnd));
         // Lift (LiftStart → LiftEnd): rise back up the full descend distance. easeInOutSine — eases out of the
-        // press and back to a stop (refinement 2026-08-16).
+        // press and back to a stop.
         float lift = EaseInOutSine(Seg(t, LiftStart, LiftEnd));
         float fadeOut = Seg(t, LiftStart + LiftSpan * 0.5f, LiftEnd);
 
         // Persistent downward nudge: the whole stamp (at every phase) sits 1% of the pixel-art width lower on
-        // the page (feedback 2026-08-16), so the imprint lands slightly further down.
+        // the page, so the imprint lands slightly further down.
         float offsetY = Lerp(-descendDistance, 0f, descend) + Lerp(0f, -liftDistance, lift) + art * 0.01f;
-        // Squash magnitude reduced 40% (0.05/0.08 → 0.03/0.048; refinement 2026-08-16) and anchored to the
+        // Squash is anchored to the
         // BOTTOM edge (see Alignment.BottomCenter below) so the stamp presses DOWN into the page rather than
         // squashing symmetrically about its centre.
         float squashX = 1f + 0.03f * press;
@@ -195,22 +188,21 @@ internal sealed class ScribeStampState : State<ScribeStamp>
 
         // ---- "COPIED" imprint: APPEARS INSTANTLY (no fade-in, no pop) the moment the stamp finishes its
         // entering translation — i.e. the descend completes at t = DescendEnd — as if pressed onto the page in
-        // one contact. It then HOLDS and fades out at the very end (feedback 2026-08-16). No pop-scale either;
-        // it just snaps to full opacity on contact. The fade-OUT window is unchanged from before. ----
-        // Fade-OUT window halved (0.8536 → 0.9268; refinement 2026-08-17): the imprint fades out over HALF the
-        // time it used to — same end point (t = 1), but twice as fast, so it lingers longer at full then snaps away.
+        // one contact. It then HOLDS and fades out at the very end. No pop-scale; it just snaps to full opacity
+        // on contact. ----
+        // The imprint fades out over the last stretch ending at t = 1, so it lingers at full then snaps away.
         const float ImprintFadeStart = 0.9268f;
         const float ImprintEnd = 1f;
         float imprintOut = Seg(t, ImprintFadeStart, ImprintEnd);
         float imprintScale = 1f; // no pop — appears at rest size
         float imprintOpacity = t >= DescendEnd ? Clamp01(1f - imprintOut) : 0f;
-        const float ImprintTilt = -0.06f; // subtle lean, ~ -3.4° (feedback 2026-08-16)
-        const float ImprintSizeScale = 0.92f; // scales the imprint box + text; bumped 0.8 → 0.92 (15% larger, refinement 2026-08-17)
+        const float ImprintTilt = -0.06f; // subtle lean, ~ -3.4°
+        const float ImprintSizeScale = 0.92f; // scales the imprint box + text
 
         var children = new System.Collections.Generic.List<Widget>();
 
         // "COPIED" imprint — a bordered, tilted block-text mark centred on the slot. Added to the Stack FIRST so
-        // it paints UNDERNEATH the wooden stamp (feedback 2026-08-16): the imprint is the ink left ON THE PAGE,
+        // it paints UNDERNEATH the wooden stamp: the imprint is the ink left ON THE PAGE,
         // so the descending/lifting stamp passes OVER it, not the other way round. (It only reaches full opacity
         // as the stamp lifts and fades, so the stamp rarely occludes it in practice.)
         if (imprintOpacity > 0.001f)
@@ -218,7 +210,7 @@ internal sealed class ScribeStampState : State<ScribeStamp>
             // The border HUGS the label: the Container carries no explicit Width/Height, so it shrink-wraps to the
             // Caudex text + padding (Center lays the child out with loosened constraints — see RenderPositionedBox),
             // and the outline sizes itself to whatever the text measures. This keeps the mark correctly framed when
-            // the font metrics change (feedback 2026-08-16 — switched the label to Caudex, the mod's title face).
+            // the font metrics change (the label uses Caudex, the mod's title face).
             var imprint = new Container(
                 style: new BoxStyle
                 {
@@ -227,7 +219,7 @@ internal sealed class ScribeStampState : State<ScribeStamp>
                     BorderThickness = 2f,
                     BorderColor = Widget.ImprintColor,
                     Padding = Gui.Rendering.EdgeInsets.Symmetric(horizontal: 6f, vertical: 3f),
-                    // OUTER GLOW in the parchment page colour (refinement 2026-08-17): a zero-offset, blurred,
+                    // OUTER GLOW in the parchment page colour: a zero-offset, blurred,
                     // slightly-spread rounded-rect behind the mark. Because the box fill is transparent, this
                     // parchment blob shows THROUGH the interior too — backing the dark-red letters so they read
                     // over whatever content sits under the slot — and haloes outward past the border to lift the
@@ -266,7 +258,7 @@ internal sealed class ScribeStampState : State<ScribeStamp>
         }
 
         // ---- Landing shadow: a static, soft, dark rounded-rect "contact shadow" marking WHERE the stamp will
-        // land (refinement 2026-08-17). It NEVER moves or scales — it only FADES IN over the stamp's entering
+        // land. It NEVER moves or scales — it only FADES IN over the stamp's entering
         // translation (the descend, [0, DescendEnd]) and FADES OUT over the leaving translation (the lift,
         // [LiftStart, LiftEnd]), holding at full through the press in between. Added to the Stack AFTER the
         // imprint but BEFORE the wooden stamp, so it paints ABOVE the "COPIED" ink and BELOW the descending
@@ -303,8 +295,7 @@ internal sealed class ScribeStampState : State<ScribeStamp>
             float stampW = art;
             float stampH = stampW * bmp.Height / bmp.Width;
             // Squash (no tilt) anchored to the stamp's BOTTOM edge, so the base stays planted on the page and
-            // only the top compresses downward — the impression of pressing INTO the paper (refinement
-            // 2026-08-16). Translate is applied by the outer Transform.
+            // only the top compresses downward — the impression of pressing INTO the paper. Translate is applied by the outer Transform.
             var m = SKMatrix.CreateScale(squashX, squashY);
             children.Add(new Positioned(
                 left: (slot - stampW) / 2f,

@@ -3,7 +3,7 @@ using ProtoBuf;
 namespace Scribe;
 
 /// <summary>
-/// Server → client (watcher-stamp-sync): play the Transcribe "stamp" flourish over a Scriptorium slot for
+/// Server → client: play the Transcribe "stamp" flourish over a Scriptorium slot for
 /// players OTHER than the one who performed the copy/import. The acting client stamps locally the instant it
 /// presses the button (snappy, no round-trip); the server sends this broadcast — ONLY after a copy or import
 /// actually writes and marks the block dirty — to every OTHER player, so anyone with the same shared block's

@@ -4,7 +4,7 @@ using OpenTK.Mathematics;        // Vector4
 namespace Scribe;
 
 /// <summary>
-/// Scribe's GUI theme selector (scribe-themed-toggle). LibGUI ships exactly one built-in preset —
+/// Scribe's GUI theme selector. LibGUI ships exactly one built-in preset —
 /// <see cref="ColorScheme.Default"/>, a DARK parchment palette — so a LIGHT theme is net-new; this file
 /// authors it. <see cref="For"/> is the single place the pixel-art-vs-global choice is made for Scribe's
 /// three CORE views (Lectern read + editor, pinned-task HUD): each wraps its <c>Build()</c> output in
@@ -15,7 +15,7 @@ namespace Scribe;
 /// LibGUI's own <c>GuiModSystem</c> sets from the player's <c>libgui.json</c> (their custom global theme
 /// if they authored one, else the stock dark default). So "off" means "follow my global game theme,"
 /// NOT "force stock dark." The standalone settings window is never wrapped at all (it always follows the
-/// global theme); only the core views consult this selector. See the 2026-07-25 pivot.</para>
+/// global theme); only the core views consult this selector.</para>
 ///
 /// <para>Only the 17 <see cref="ColorScheme"/> roles are authored. The per-widget style structs
 /// (<c>ButtonStyle</c>, <c>CheckboxStyle</c>, <c>DropdownStyle</c>, …) all cascade from the scheme via
@@ -40,27 +40,27 @@ internal static class ScribeTheme
     /// legible against light parchment, where the dark theme's bright gold would wash out.</summary>
     private static readonly Vector4 Accent = new(0.58f, 0.40f, 0.13f, 1.0f);
 
-    /// <summary>The default Quest Link accent (quest-link-icon-and-color): a steel-blue,
+    /// <summary>The default Quest Link accent: a steel-blue,
     /// <c>rgb(66,107,183)</c>, chosen specifically because the parchment/Light palette has ZERO blue
     /// anywhere else — every other role above is warm (ochre/tan/cream/red) — so it reads as a clean,
     /// deliberate "this points at a quest" accent rather than clashing. Used directly as the Light theme's
     /// default (via <c>ScribeRowStyle.QuestLinkColor ?? QuestLinkAccent</c> at each render call site) and as
     /// the base the chalkboard/tablet variants below are derived from. A starting default, not a final
-    /// value — see design.md D4; finalize exact per-surface values via in-game playtest.</summary>
+    /// value.</summary>
     internal static readonly Vector4 QuestLinkAccent = new(0.259f, 0.420f, 0.718f, 1.0f);
 
-    /// <summary>HUD-only Quest Link accent (quest-link-icon-and-color D6): unlike every other surface, the
+    /// <summary>HUD-only Quest Link accent: unlike every other surface, the
     /// world-overlay HUD renders theme-independently over the live game world rather than any parchment/
-    /// clay/chalk backdrop, so a playtester found the shared <see cref="QuestLinkAccent"/> under-saturated
-    /// there specifically. This value is HUD-only and already finalized in-game (2026-09-06, third and
-    /// final pass, <c>rgb(172,207,255)</c>) — not a placeholder like the other constants above.</summary>
+    /// clay/chalk backdrop, so the shared <see cref="QuestLinkAccent"/> reads under-saturated
+    /// there. This value (<c>rgb(172,207,255)</c>) is HUD-only and final — not a placeholder like the other
+    /// constants above.</summary>
     internal static readonly Vector4 HudQuestLinkAccent = new(0.675f, 0.812f, 1.0f, 1.0f);
 
     /// <summary>The net-new light parchment theme: dark ink on warm light paper. Authored role-by-role
     /// (see the class remarks for the two semantic — not mechanical — inversions).</summary>
     internal static readonly ThemeData Light = new(new ColorScheme
     {
-        // Accent + its content. OnPrimary/OnSecondary are LIGHT because Primary/Secondary are now
+        // Accent + its content. OnPrimary/OnSecondary are LIGHT because Primary/Secondary are
         // saturated dark-ish fills (inverse of the dark theme, where the gold fill carried dark text).
         Primary = Accent,
         OnPrimary = new Vector4(0.97f, 0.93f, 0.82f, 1.0f),
@@ -96,7 +96,7 @@ internal static class ScribeTheme
         // Focused-input outline for STOCK LibGUI controls (numeric field's TextField, checkboxes, dropdowns).
         // Point it at the accent (Primary) so a focused stock input matches the hand-drawn
         // ScribeMultilineField, which lights its focus border with Primary; unset, it would fall back to
-        // LibGUI's stock bright gold and diverge from the parchment accent (refine-chalkboard field-consistency).
+        // LibGUI's stock bright gold and diverge from the parchment accent.
         FocusOutlineColor = Accent,
     };
 
@@ -107,11 +107,9 @@ internal static class ScribeTheme
 
     /// <summary>The chalkboard accent (button fills, carets, selection, and the task-row CHECKBOX tick). A
     /// strong FOREST GREEN — the classic schoolroom "greenboard" colour, complementary to the warm brown-slate
-    /// palette so buttons pop without clashing (it replaced an earlier chalk-yellow that read as UI gold).
-    /// Brightened by +10 HSV Value points (refine-chalkboard): the original <c>(0.17, 0.42, 0.24)</c> sat at
-    /// V≈0.42, which was too dark to read as a checkbox tick on the dark slate; lifting V→0.52 (a uniform ×
-    /// 0.52/0.42 scale on all three channels, which holds hue + saturation constant) keeps the exact same
-    /// green while making the accent legible. To try the NAVY alternative the author floated, swap this for
+    /// palette so buttons pop without clashing (a chalk-yellow would read as UI gold).
+    /// Its Value is lifted to V≈0.52 (a uniform scale on all three channels, holding hue + saturation constant)
+    /// so it reads as a checkbox tick on the dark slate. To try the NAVY alternative the author floated, swap this for
     /// <c>new Vector4(0.16f, 0.24f, 0.46f, 1.0f)</c> — its content (<c>OnPrimary</c>) stays the same
     /// chalk-white.</summary>
     private static readonly Vector4 ChalkAccent = new(0.210f, 0.520f, 0.297f, 1.0f);
@@ -125,11 +123,11 @@ internal static class ScribeTheme
     /// it; every other surface keeps <c>Primary</c> for links (its accent is dark-on-light, legible for free).</summary>
     internal static readonly Vector4 ChalkboardLinkText = new(0.52f, 0.80f, 0.58f, 1.0f);
 
-    /// <summary>The chalkboard's Quest Link accent (quest-link-icon-and-color): a lightened variant of
+    /// <summary>The chalkboard's Quest Link accent: a lightened variant of
     /// <see cref="QuestLinkAccent"/>, for the same reason <see cref="ChalkboardLinkText"/> lightens the dark
     /// forest-green <see cref="ChalkAccent"/> — a mid-value color doesn't read as small text on the dark
     /// slate surface. A pale sky-blue, distinct from both the chalkboard's own green Primary/link colors and
-    /// its chalk-white body text. A starting default — finalize via in-game playtest (design.md D4).</summary>
+    /// its chalk-white body text. A starting default.</summary>
     internal static readonly Vector4 ChalkboardQuestLinkText = new(0.55f, 0.68f, 0.85f, 1.0f);
 
     /// <summary>Resting tint for the INACTIVE right-column nav glyphs on the chalkboard (<c>#645c52</c>, a
@@ -151,14 +149,13 @@ internal static class ScribeTheme
     /// SAGE GREEN — a desaturated sibling of the forest-green <see cref="ChalkAccent"/> <c>Primary</c>
     /// (<c>≈#5C8566</c>). This follows the pattern the Notebook/Lectern (Light theme) uses, where
     /// <c>Secondary</c> (<c>#A07F4D</c>) is a lighter, desaturated sibling of that theme's gold <c>Primary</c>
-    /// (<c>#955F21</c>) — same hue family, not an unrelated color. The chalkboard originally used an unrelated
-    /// stained-wood brown (<c>0.42,0.31,0.22</c>) here, which — because <see cref="ScribeRowConstants.PinnedTint"/>
-    /// derives the pinned-row wash from <c>Secondary</c> (boosted ×1.35 saturation at 0.55 alpha) — read as a
-    /// discordant muddy amber over the dark slate (refine-chalkboard). A green-family sage keeps the pinned wash
+    /// (<c>#955F21</c>) — same hue family, not an unrelated color. An unrelated brown would — because
+    /// <see cref="ScribeRowConstants.PinnedTint"/> derives the pinned-row wash from <c>Secondary</c> (boosted
+    /// ×1.35 saturation at 0.55 alpha) — read as a discordant muddy amber over the dark slate. A green-family sage keeps the pinned wash
     /// harmonious with the accent, legible over slate, and still distinct enough from the focus cue.</summary>
     private static readonly Vector4 ChalkSecondary = new(0.36f, 0.52f, 0.40f, 1.0f);
 
-    /// <summary>The chalkboard theme (add-chalkboard-block D3): chalk-light text on a dark slate surface.
+    /// <summary>The chalkboard theme: chalk-light text on a dark slate surface.
     /// Unlike <see cref="Light"/> and the clay palettes — which are light surfaces and therefore DARKEN on
     /// hover/select — this is a DARK scheme, so its <c>StateHover</c>/<c>StateSelected</c> overlays LIGHTEN
     /// (light tints at low alpha), the same mechanical direction as LibGUI's stock dark default. Only the 17
@@ -180,8 +177,7 @@ internal static class ScribeTheme
         // board ≈#665f5c). Background is the deepest — the dark stained-wood frame behind the panels; Surface
         // the brown-slate board panel; SurfaceHigh raised (lighter, the input-field "writing" tone, seeded to
         // the sampled board colour); SurfaceLow recessed (darker). Raised/recessed ordering kept correct for a
-        // dark scheme (raised = lighter). All warm (R ≥ G ≥ B) so the palette reads brown-slate, not the
-        // earlier green-grey.
+        // dark scheme (raised = lighter). All warm (R ≥ G ≥ B) so the palette reads brown-slate, not green-grey.
         Surface = new Vector4(0.30f, 0.27f, 0.25f, 1.0f),
         OnSurface = Chalk,
         OnSurfaceVariant = new Vector4(0.68f, 0.66f, 0.62f, 1.0f),
@@ -209,25 +205,23 @@ internal static class ScribeTheme
         // a jarring gold focus ring on the dark slate and — for the numeric field — diverged from the
         // hand-drawn ScribeMultilineField's chalk-white focus border. Point it at the same chalk tone the
         // multiline field uses (ChalkboardInputFocusBorder) so both input types light their focus border the
-        // same, and every stock focus ring drops the gold (refine-chalkboard field-consistency).
+        // same, and every stock focus ring drops the gold.
         FocusOutlineColor = ChalkboardInputFocusBorder,
     };
 
     /// <summary>HSV <b>Value</b> points (Skia's 0–100 scale) the muted-text role (<c>OnSurfaceVariant</c>)
     /// is lifted ABOVE each clay palette's own <c>ink</c> — the single shared knob governing muted/hint/
-    /// placeholder contrast across fire, red, and blue (tune-tablet-clay-text-contrast D1). Because every
+    /// placeholder contrast across fire, red, and blue. Because every
     /// clay <c>ink</c> is near-black, lifting Value by a fixed amount produces a consistent perceptual
-    /// muted-vs-ink step per hue. The three previously hand-authored <c>onSurfaceVariant</c> colors all sat
-    /// at exactly +20 above their ink; this seeds LOWER (darker) than that so the empty-list hint reads on
-    /// the mid-tone clay backdrops (the screenshot symptom). Lower this to darken the muted text further,
-    /// raise it toward 20 to lighten — one edit moves all three palettes in lockstep. Finalized in-game
-    /// (D3). Muted must stay clearly above ink so it still reads as SECONDARY text, not body ink.</summary>
+    /// muted-vs-ink step per hue. The value sits below +20 so the empty-list hint reads on
+    /// the mid-tone clay backdrops. Lower this to darken the muted text further,
+    /// raise it toward 20 to lighten — one edit moves all three palettes in lockstep. Muted must stay clearly above ink so it still reads as SECONDARY text, not body ink.</summary>
     private const float MutedTextValueLift = 14f;
 
     /// <summary>
     /// Author one clay-tablet <see cref="ThemeData"/> from the roles that carry a material's identity, filling
     /// the material-NEUTRAL roles (error, and the two translucent state overlays) from shared clay rules so
-    /// the three clay palettes can't drift apart on those (add-tablet-clay-type-themes D1/D2). Every clay
+    /// the three clay palettes can't drift apart on those. Every clay
     /// palette is a sibling of <see cref="Light"/> — a light-ish surface with dark ink — so it inherits the
     /// same two SEMANTIC (not mechanical) inversions the class remarks describe: <c>StateHover</c>/
     /// <c>StateSelected</c> DARKEN the surface (ink/accent tints at low alpha), and <c>SurfaceHigh</c> is
@@ -239,8 +233,8 @@ internal static class ScribeTheme
     /// (<c>+0.1</c>) / press (<c>−0.08</c>) states, the caret, the focused-input border, and text selection —
     /// so authoring this per material recolors all of them at once.</param>
     /// <param name="onAccent">Light content drawn on the accent fill (<c>OnPrimary</c>/<c>OnSecondary</c>).</param>
-    /// <param name="secondary">The <c>Secondary</c> tone that now drives the pinned-row wash
-    /// (<c>ScribeRowConstants.PinnedTint</c>, remapped off <c>Primary</c> in this change). MUST read clearly
+    /// <param name="secondary">The <c>Secondary</c> tone that drives the pinned-row wash
+    /// (<c>ScribeRowConstants.PinnedTint</c>). MUST read clearly
     /// distinct from <paramref name="accent"/> so a focused input's accent border stays legible against the
     /// pinned wash on the same row.</param>
     /// <param name="surface">The tablet face panel tone.</param>
@@ -250,7 +244,7 @@ internal static class ScribeTheme
     /// <param name="border">Input/divider border, RGBA with its own alpha; <c>OutlineVariant</c> reuses the
     /// same RGB at a fainter alpha.</param>
     /// <remarks>The body <paramref name="ink"/> is passed SEPARATELY from the material's <paramref name="c"/>
-    /// color set because ink is now per-<c>(material, state)</c> (sourced from the <see cref="TabletReadability"/>
+    /// color set because ink is per-<c>(material, state)</c> (sourced from the <see cref="TabletReadability"/>
     /// bundle in <see cref="ForTablet"/>) while every other role is state-independent and authored once per
     /// material. Because <see cref="ThemeData"/> derives all per-widget styles (text/caret/field colors) from
     /// the <c>ColorScheme</c> at construction, the theme is rebuilt per view with the correct ink rather than
@@ -270,7 +264,7 @@ internal static class ScribeTheme
             Surface = surface,
             OnSurface = ink,
             // Muted/secondary text (hints, placeholders) is DERIVED from this palette's own ink by one
-            // shared HSV Value lift (tune-tablet-clay-text-contrast D1), not authored per clay. Lifting the
+            // shared HSV Value lift, not authored per clay. Lifting the
             // near-black ink UP by MutedTextValueLift points yields a muted tone that tracks each clay's own
             // ink/surface relationship, so the muted-vs-ink contrast step is a perceptually equal amount
             // across fire/red/blue. To darken the muted text everywhere, lower the one constant below.
@@ -295,25 +289,25 @@ internal static class ScribeTheme
         {
             // Focused-input outline for STOCK LibGUI controls: the clay accent, matching the hand-drawn
             // ScribeMultilineField's Primary focus border (unset it would fall back to LibGUI's stock gold,
-            // which diverges from each clay's own accent) — refine-chalkboard field-consistency.
+            // which diverges from each clay's own accent).
             FocusOutlineColor = accent,
         };
     }
 
     /// <summary>The state-INDEPENDENT color roles that carry one clay material's identity — everything a
-    /// <see cref="ClayPalette"/> needs EXCEPT the body ink, which is now per-<c>(material, state)</c> and comes
+    /// <see cref="ClayPalette"/> needs EXCEPT the body ink, which is per-<c>(material, state)</c> and comes
     /// from the <see cref="TabletReadability"/> bundle. Authored once per material below; <see cref="ForTablet"/>
     /// pairs it with the state ink to build the view's <see cref="ThemeData"/>.</summary>
     private readonly record struct ClayColors(
         Vector4 Accent, Vector4 OnAccent, Vector4 Secondary,
         Vector4 Surface, Vector4 SurfaceLow, Vector4 SurfaceHigh, Vector4 Background, Vector4 Border);
 
-    /// <summary>Fire-clay tablet colors — warm tan earthenware. The original single-tablet palette
-    /// (add-tablet-dialog, Proposal C) rebased through <see cref="ClayPalette"/>; also the fallback for
+    /// <summary>Fire-clay tablet colors — warm tan earthenware. Built through
+    /// <see cref="ClayPalette"/>; also the fallback for
     /// <c>wax</c> and unknown materials, matching its interim backdrop twin. Seeded to sit against the fire
     /// <c>-soft.png</c> backdrop (sampled center ≈ <c>#ccaf89</c>). <c>Secondary</c> is a deep umber, pulled
-    /// off the terracotta <c>Primary</c> so the pinned wash and the focus border read apart. (Body ink is now
-    /// state-keyed via <see cref="TabletReadability"/>, so it no longer lives here.)</summary>
+    /// off the terracotta <c>Primary</c> so the pinned wash and the focus border read apart. (Body ink is
+    /// state-keyed via <see cref="TabletReadability"/>, so it does not live here.)</summary>
     private static readonly ClayColors FireColors = new(
         Accent:           new Vector4(0.55f, 0.30f, 0.15f, 1.0f),
         OnAccent:         new Vector4(0.96f, 0.90f, 0.78f, 1.0f),
@@ -324,13 +318,12 @@ internal static class ScribeTheme
         Background:       new Vector4(0.72f, 0.57f, 0.41f, 1.0f),
         Border:           new Vector4(0.36f, 0.24f, 0.12f, 0.55f));
 
-    /// <summary>Red-clay tablet colors — dusty rose, NOT brick terracotta. The accent was retuned to match
-    /// the red <c>-soft.png</c> backdrop after playtest: the art's writing panel samples ≈<c>#926f6d</c>
-    /// (HSV ≈3° / 25 % sat — a muted mauve-rose), but the old <c>Primary</c> was a brick-orange
-    /// (HSV ≈9° / 67 % sat) that read too orange and too saturated against it. The accent now sits at
-    /// ≈4° / 50 % sat (<c>#8e4c47</c>) — same rosy family as the backdrop, a shade deeper/more saturated than
-    /// the panel so a button fill still reads as a distinct element. Surfaces already tracked the backdrop and
-    /// are unchanged. <c>Secondary</c> (the pinned-row wash) stays a desaturated rosy-taupe, distinct from the
+    /// <summary>Red-clay tablet colors — dusty rose, NOT brick terracotta. The accent is tuned to match
+    /// the red <c>-soft.png</c> backdrop: the art's writing panel samples ≈<c>#926f6d</c>
+    /// (HSV ≈3° / 25 % sat — a muted mauve-rose), and a brick-orange accent would read too orange and too
+    /// saturated against it. The accent sits at ≈4° / 50 % sat (<c>#8e4c47</c>) — same rosy family as the backdrop, a shade deeper/more saturated than
+    /// the panel so a button fill still reads as a distinct element. Surfaces track the backdrop.
+    /// <c>Secondary</c> (the pinned-row wash) stays a desaturated rosy-taupe, distinct from the
     /// accent so a focused input's accent border reads apart on a pinned row.</summary>
     private static readonly ClayColors RedColors = new(
         Accent:           new Vector4(0.56f, 0.30f, 0.28f, 1.0f),
@@ -356,9 +349,8 @@ internal static class ScribeTheme
         Background:       new Vector4(0.66f, 0.73f, 0.78f, 1.0f),
         Border:           new Vector4(0.20f, 0.30f, 0.36f, 0.55f));
 
-    /// <summary>Wax tablet colors — pale honey/beeswax, NOT the terracotta the clay palettes use. Wax rode
-    /// the fire colors as a stopgap while it shared the fire backdrop, but that terracotta accent
-    /// (HSV ≈22° / 73 % sat) read too orange against the bespoke wax GUI art, whose beige writing panel
+    /// <summary>Wax tablet colors — pale honey/beeswax, NOT the terracotta the clay palettes use. A terracotta accent
+    /// (HSV ≈22° / 73 % sat) would read too orange against the bespoke wax GUI art, whose beige writing panel
     /// samples ≈<c>#dfc8a9</c> (HSV ≈34° / 24 % sat — a much paler, less saturated warm tan). These colors
     /// pull the whole scheme toward that hue: a soft honey <c>Primary</c> at far lower saturation and surfaces
     /// seeded just off the sampled panel tone so the flat-panel fallback and the art agree. Authored through
@@ -392,11 +384,11 @@ internal static class ScribeTheme
     public static ThemeData For(bool pixelArt) => pixelArt ? Light : ThemeData.Default;
 
     /// <summary>The tablet-tier selector: a per-clay-type palette when Pixel-Art Display is on, keyed to the
-    /// item's <c>material</c> variant (add-tablet-clay-type-themes D1) AND its drying <paramref name="state"/>.
+    /// item's <c>material</c> variant AND its drying <paramref name="state"/>.
     /// The state-independent color roles come from <see cref="ClayColorsFor"/> (<c>clay-blue</c>/<c>clay-red</c>/
     /// <c>clay-fire</c>/<c>wax</c>, default → fire — the fire backdrop twin, so theme and backdrop always agree,
     /// mirroring <c>ScribeBackdrops.ForTablet</c>'s default arm), while the body ink is the per-view
-    /// <see cref="TabletReadability.BodyInk"/> for <c>(material, state)</c> (adopt-glyph-forge-tablet-themes) —
+    /// <see cref="TabletReadability.BodyInk"/> for <c>(material, state)</c> —
     /// the ONE state-varying role, cascading page-wide (caret, muted text, all labels) through the rebuilt
     /// <see cref="ThemeData"/>. When Pixel-Art Display is off it returns the player's global theme
     /// (<see cref="ThemeData.Default"/>), same off-path rule as <see cref="For"/> — per-clay coloring applies
@@ -409,14 +401,13 @@ internal static class ScribeTheme
         return ClayPalette(ink, ClayColorsFor(material));
     }
 
-    /// <summary>The per-<c>(material, state)</c> tablet LINK ink (adopt-glyph-forge-tablet-themes; originally
-    /// tablet-text-visibility, Option C). A Link/Tracker/Craft row's tappable name resolves its color as
+    /// <summary>The per-<c>(material, state)</c> tablet LINK ink A Link/Tracker/Craft row's tappable name resolves its color as
     /// <c>style.LinkColor ?? colors.Primary</c>. Each clay palette's <c>Primary</c> (accent) is a MID-VALUE fill
     /// color — legible as a button fill with light <c>onAccent</c> text on it, but as small dark-ish TEXT on the
     /// same-value clay ground it fails AA. So the link decouples from <c>Primary</c> onto the deeper, more
     /// saturated <see cref="TabletReadability.LinkInk"/> authored per view — the SAME decouple-from-Primary
     /// reasoning the chalkboard's <c>ChalkboardLinkText</c> documents, pushed DARKER here because the clay
-    /// grounds are light-mid (chalk is dark, so its link went lighter), and now varying by state so it tracks
+    /// grounds are light-mid (chalk is dark, so its link goes lighter), and varying by state so it tracks
     /// the state-darkened ink/backdrop.
     ///
     /// <para>This stays a <c>ScribeRowStyle.LinkColor</c> value, NOT a <c>ColorScheme</c> role — "link" is a
@@ -431,7 +422,7 @@ internal static class ScribeTheme
     /// grounds — the same reasoning <see cref="ForTabletLink"/> documents for why <c>Primary</c> needs
     /// darkening on these light-mid clay surfaces (a mid-value color fails AA as small text there). Shared
     /// across fire/red/wax rather than authored per-material, since all three are similarly light-mid
-    /// grounds; split them apart if playtest shows otherwise (design.md D4).</summary>
+    /// grounds.</summary>
     private static readonly Vector4 TabletQuestLinkDark = new(0.16f, 0.28f, 0.50f, 1.0f);
 
     /// <summary>The Blue-clay tablet's Quest Link accent: a distinct warm amber/gold, deliberately NOT a
@@ -441,11 +432,10 @@ internal static class ScribeTheme
     /// alternate rather than a lightened/darkened variant of the shared blue identity.</summary>
     private static readonly Vector4 BlueClayQuestLinkGold = new(0.62f, 0.46f, 0.14f, 1.0f);
 
-    /// <summary>The tablet Quest Link accent per clay <paramref name="material"/> (quest-link-icon-and-color) —
+    /// <summary>The tablet Quest Link accent per clay <paramref name="material"/> —
     /// mirrors <see cref="ForTabletLink"/>'s per-material decoupling, but keyed only on material (not
     /// <paramref name="state"/>, unlike <see cref="ForTabletLink"/>'s per-state ink lookup) since these are
-    /// starting-default placeholders, not yet state-tuned; revisit if playtest shows a state-driven backdrop
-    /// needs its own variant (design.md D4). <c>clay-blue</c> gets the distinct <see cref="BlueClayQuestLinkGold"/>
+    /// starting-default placeholders, not state-tuned. <c>clay-blue</c> gets the distinct <see cref="BlueClayQuestLinkGold"/>
     /// alternate (see its own doc-comment); every other material (including unrecognized ones, matching
     /// <see cref="ClayColorsFor"/>'s fallback) gets the shared darkened <see cref="TabletQuestLinkDark"/>.</summary>
     public static Vector4 ForTabletQuestLink(string? material, TabletState state) => material switch

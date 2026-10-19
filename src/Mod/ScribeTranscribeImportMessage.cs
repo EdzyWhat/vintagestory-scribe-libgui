@@ -5,7 +5,7 @@ namespace Scribe;
 /// <summary>
 /// Client → server: import a <see cref="Scribe.Core.ScribeDocument"/> — parsed from the player's clipboard
 /// (JSON or TSV) and validated against the running game on the client — onto the Scriptorium's Import/Export
-/// slot (add-scriptorium-import-export D6). The sibling of <see cref="ScribeTranscribeCopyMessage"/>: same
+/// slot. The sibling of <see cref="ScribeTranscribeCopyMessage"/>: same
 /// Scriptorium-block addressing (X/Y/Z) and same Overwrite/Append + AllowOverwrite gating, but instead of a
 /// source SLOT it carries the already-parsed document as a <b>JSON payload string</b> (the client serializes
 /// the validated document with <see cref="Scribe.Core.ScribeDocumentJsonCodec"/>).
@@ -15,7 +15,7 @@ namespace Scribe;
 /// mints a FRESH <c>TaskId</c> per block (and a fresh <c>DocId</c> on overwrite), re-checks the target's
 /// capacity/writeability, writes onto the slot's item, and lets inventory sync propagate. Because every id is
 /// fresh and pins live in a separate <c>(DocId, TaskId)</c> store, an import can never create or resurrect a
-/// pin (D6).</para>
+/// pin.</para>
 ///
 /// <para><see cref="AllowOverwrite"/> gates replacing a non-empty target (the client's confirm UX sets it, the
 /// server re-checks it); <see cref="Append"/> selects non-destructive append mode, which needs no overwrite
