@@ -39,7 +39,7 @@ public class ScribeTsvSafeTests
     {
         string escaped = ScribeTsvSafe.Escape(original);
 
-        // A defanged cell no longer begins with the formula trigger (a spreadsheet won't evaluate it)...
+        // A defanged cell does not begin with the formula trigger (a spreadsheet won't evaluate it)...
         Assert.StartsWith("'", escaped.TrimStart('"'));
         // ...and the original text comes back on import.
         Assert.Equal(original, ScribeTsvSafe.Unescape(escaped));
